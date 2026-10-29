@@ -1,5 +1,8 @@
 # Ingestion worker: plan
 
+**Detailed design**: [`design-engine.md`](design-engine.md) (6a: engine, nodes, jobs, runs, preview, publish);
+`design-connectors.md` (6b) and `design-processing.md` (6c) to follow. Where they differ, the designs win.
+
 Background service that keeps the document store and collection indexes in step with their sources: it runs
 connectors, executes each source's pipeline (a typed DAG), decides how to parse each document, embeds through the
 gateway, writes chunks and runs evaluations. It is the largest service and the one where the other platforms fail
@@ -192,3 +195,18 @@ Answered (2026-10-29):
 4. **Crawl politeness**: municipal (allow-listed) hosts up to 10 requests/s, external sites 1 request/s with one
    connection; robots.txt always respected; full crawls of large sites scheduled at night. Per-host limits are shared
    by all sources through the crawl frontier.
+
+Answered (2026-10-29, step 6 questions):
+
+5. **Detail design split** into three sub-steps: 6a engine + node catalogue + jobs/runs/preview/publish
+   (`design-engine.md`), 6b connectors + change detection + deletion guard (`design-connectors.md`), 6c auto-parse,
+   chunking, embedding, personal-data detection and evaluation (`design-processing.md`).
+6. **Names in *Detect personal data***: patterns (personnummer with checksum, phone, email) in the .NET worker; names
+   by a Swedish NER model baked into the parser image behind a new parser endpoint (on-prem, no gateway call).
+7. **Default re-sync schedule**: URL lists nightly (conditional GET), website crawls weekly at night, uploads on
+   change only; adjustable per source.
+8. **Default chunking**: split by headings, then ≈ 400 BGE-M3 tokens with ≈ 15 % overlap, heading path prepended;
+   tables as row groups with the header repeated; flat chunks (no parent-child) in P1.
+9. **Shared documents across departments** (6a): when one department's sync finds new content in a document another
+   department also indexes, the other collection is re-processed at once in its own follow run, charged to its team
+   (parse shared; only chunking and embedding repeat).

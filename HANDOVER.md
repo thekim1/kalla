@@ -1,6 +1,6 @@
 # Handover
 
-Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 2, steps 3–5).
+Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 2, steps 3–6a).
 
 ## What this is
 
@@ -23,6 +23,7 @@ and a "kitchen sink" monolith.
 | `plans/platform/repo-and-deployment.md` | **Detail step 2** (done): repo layout, build, roles, Aspire/Keycloak/FakeGateway, images, compose and resource zones, release, backup, GitHub Actions, observability, P0 checklist |
 | `plans/gateway-changes/design.md`, `adr-drafts.md` | **Detail step 4** (done): residency ceiling (B), member groups + tenant/guest refusal (C), delegation (A), FakeLlm dimensions, run headers, tool tests; releases B → C → A; ADR rows 018–020 to copy into the gateway repo |
 | `plans/parser/design.md` | **Detail step 5** (done): routing worker vs parser, `/v1/inspect`, Docling native legacy/ODF/email backends behind a sandboxed `soffice` wrapper, attachment splitter → child documents, multipart contract, stored DoclingDocument, page ranges + stitching, OCR modes and bake-off, supervisor process model, security, image, tests. Docling claims checked against `docling-slim` 2.145.0 |
+| `plans/ingestion-worker/design-engine.md` | **Detail step 6a** (done): engine model, definition format + validator + Merkle hashes (`Ume.Rag.Pipelines`), node interface and P1 catalogue, execution with segments and fence, cache, jobs/fairness/scheduler, runs, preview, publish/rollback, templates, index writer, config mid-run, observability, capacity, tests |
 | `plans/postponed-decisions.md` | **Register of postponed decisions** (K1 key service, T1 sensitive tier, A1 archive law, R1 runner, ...), with stopgap, deadline, owner. Review at each phase start; add new postponements here |
 
 Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{dify,ragflow,onyx,open-webui,kernel-memory,bifrost}`.
@@ -55,7 +56,9 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | 3. Identity detail | `plans/identity/design.md` | done, reviewed | `ffdccaf` |
 | 4. Gateway changes | `plans/gateway-changes/design.md`, `adr-drafts.md` (drafts; gateway repo untouched) | done, reviewed | `11908e4` |
 | 5. Parser | `plans/parser/design.md` | done, reviewed | `5c9e414` |
-| **6. Ingestion worker** (largest; consider splitting: engine + nodes, connectors, auto-parse + evaluation) | `plans/ingestion-worker/` | **next** | – |
+| 6a. Ingestion engine | `plans/ingestion-worker/design-engine.md` | done, reviewed | see `git log` |
+| **6b. Connectors** | `plans/ingestion-worker/design-connectors.md` | **next** | – |
+| 6c. Processing (auto-parse, chunking, embedding, PII, evaluation) | `plans/ingestion-worker/design-processing.md` | todo | – |
 | 7. Knowledge API | `plans/knowledge-api/` | todo | – |
 | 8. Chat API (decide C1 chat attachments here) | `plans/chat-api/` | todo | – |
 | 9. Tools (skills, tool hub, MCP server, template) | `plans/tools/` | todo | – |
@@ -86,14 +89,23 @@ After step 10: a consistency pass across all detail documents, then P0 implement
 - R1 self-hosted runner (IT security), A1 archive law (owner to be named), N1 product name: see the register.
 - Nothing else is waiting on the user right now.
 
-## Next step in detail: step 6, ingestion worker
+## Next step in detail: step 6b, connectors
 
-The largest area. Propose to the user splitting it into sub-steps, each its own subagent and document under
-`plans/ingestion-worker/`: **6a** engine + node catalogue + job classes (queue use, leases, two-stage engine, node
-manifest, caching, preview, publish plan, run records), **6b** connectors (URL list, crawl with frontier and renderer,
-upload incl. child documents for email attachments, SharePoint P2) and change detection/deletion guard, **6c**
-auto-parse, chunking (heading paths, row-group tables, stitching from parser design §8), embedding profile and
-evaluation sets + publish gate. Inputs fixed by earlier steps: data-model (queue, outbox, document store, blobs),
-parser design (contract, inspect, error mapping, ranges, stitching), gateway design (residency ceiling, team id, run
-headers), identity design (classification, security events). Before briefing, ask the user anything only they can
-decide (e.g. chunk size defaults, crawl politeness limits, which evaluation thresholds gate a publish).
+Brief a subagent to write `plans/ingestion-worker/design-connectors.md`, consuming the contracts of
+`design-engine.md` (root nodes `http-fetch`/`crawl`/`upload`, `sync`/`fetch` jobs, `EnsureCurrent`, run outcomes,
+index writer `SoftDeleteReferencesAsync`). Cover: the capability interfaces (plan §3) as C# contracts; canonical
+identity and URL normalisation; URL list with conditional GET; website crawl (sitemap, include/exclude, depth/page
+limits, robots.txt, user agent, the **shared crawl frontier** and per-host politeness in `CrawlHosts`, answered 4),
+SSRF/egress guard (`IEgressGuard`, firewall rules, redirects, DNS rebinding), the `rag-renderer` (when to render,
+JavaScript-only detection, and **how rendered and non-rendered raw content of the same URL coexist** — open item from
+6a §13.1); uploads (admin → blob → ClamAV → sync), **email attachments as child documents** (parser design §5,
+data-model `ParentDocumentId`, depth ≤ 2); change detection (ETag/Last-Modified, content hash), source-setting effect
+tags (identity/scope/behaviour/cosmetic) and the smallest re-sync; the **deletion guard** (20 %, empty source, 14-day
+grace, confirm/reject commands); malware handling and quarantine; checkpoints and resume; SharePoint (P2) design
+outline with the Onyx/Eneo issues as acceptance tests; observability, tests. Before briefing, ask the user anything only
+they can decide (e.g. crawler user-agent text and contact, whether to honour `noindex`/`nofollow`, max pages per site).
+
+Then **6c** (`design-processing.md`): auto-parse heuristics and range planning (parser design §6, §8), stitching,
+cleaning, split + chunk (answered 8), PII detection incl. the **parser NER endpoint with its own lane** (answered 6,
+engine §18/§21), embedding (profile, cache, batching, AIMD), and evaluation sets + publish gate (agree with the
+engine's **shadow chunk sets**, engine §12.1).

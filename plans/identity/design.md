@@ -766,6 +766,8 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 | 5008 | `rag.key.unexpected_use` | api | a key in grace period used after its replacement was used (leak signal), once per key | `KeyId`, `KeyPrefix`, `RotatedToKeyId`, `SourceAddress` |
 | 5009 | `rag.mcp.client_refused` | api | delegated token from an `azp` not registered as an enabled `mcp-client` | `ClientId` (azp), `SubjectId`, `SourceAddress` |
 | 5010 | `rag.obo.refused` | tools (P3) | OBO exchange failed (`claims_required`, `consent_required`, `assertion_expired`, `error`) | `Reason`, `ToolServerId`, `SubjectId`, `ClientId` |
+| 5104 | `rag.parser.limit_exceeded` | worker | parser refused a file for a bomb or size limit (parser design §7.5) | `DocumentId`, `Limit` |
+| 5105 | `rag.pipeline.refused` | worker | refused to run a published pipeline version that fails validation (engine design §17); SIEM alerts on any | `PipelineId`, `PipelineVersionId`, `Reason` |
 | 5101–5103 | `rag.egress.blocked`, `rag.malware.detected`, `rag.pii.flagged` | worker | unchanged (repo-and-deployment §9) | – |
 | 6001 | `rag.admin.change` | admin | every audit entry (gateway 2001) | `Actor`, `Action`, `EntityType`, `EntityId` |
 | 6002 | `rag.admin.signin` | admin | sign-in, not extension (gateway 2002, `AdminAuthentication.cs:100-107`) | `Actor`, `SourceAddress`, `Roles`, `Departments`, `SessionId`, **`DepartmentLookup`** |
