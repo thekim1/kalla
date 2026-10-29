@@ -58,7 +58,7 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | 4. Gateway changes | `plans/gateway-changes/design.md`, `adr-drafts.md` (drafts; gateway repo untouched) | done, reviewed | `11908e4` |
 | 5. Parser | `plans/parser/design.md` | done, reviewed | `5c9e414` |
 | 6a. Ingestion engine | `plans/ingestion-worker/design-engine.md` | done, reviewed | `080d4bd` |
-| 6b. Connectors | `plans/ingestion-worker/design-connectors.md` | done, reviewed | see `git log` |
+| 6b. Connectors | `plans/ingestion-worker/design-connectors.md` | done, reviewed | `e2a99d9` |
 | **6c. Processing** (auto-parse, chunking, embedding, PII, evaluation) | `plans/ingestion-worker/design-processing.md` | **next** | – |
 | 7. Knowledge API | `plans/knowledge-api/` | todo | – |
 | 8. Chat API (decide C1 chat attachments here) | `plans/chat-api/` | todo | – |
