@@ -1,6 +1,6 @@
 # Handover
 
-Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 2).
+Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 2, steps 3 and 4).
 
 ## What this is
 
@@ -21,6 +21,7 @@ and a "kitchen sink" monolith.
 | `plans/platform/data-model.md` | **Detail step 1** (done): schemas, roles, every table, Swedish FTS, hybrid SQL, queue, outbox, tiers, encryption, retention, blobs, migrations |
 | `plans/identity/design.md` | **Detail step 3** (done): BFF copied from the gateway, feature C, `RagPrincipal`, `IAccessPolicy` (13 ordered steps), Open WebUI JWT trust, keys, OAuth, MCP metadata, OBO (P3), security events 5001–6007, Keycloak realm, Bicep package 1, tests |
 | `plans/platform/repo-and-deployment.md` | **Detail step 2** (done): repo layout, build, roles, Aspire/Keycloak/FakeGateway, images, compose and resource zones, release, backup, GitHub Actions, observability, P0 checklist |
+| `plans/gateway-changes/design.md`, `adr-drafts.md` | **Detail step 4** (done): residency ceiling (B), member groups + tenant/guest refusal (C), delegation (A), FakeLlm dimensions, run headers, tool tests; releases B → C → A; ADR rows 018–020 to copy into the gateway repo |
 | `plans/postponed-decisions.md` | **Register of postponed decisions** (K1 key service, T1 sensitive tier, A1 archive law, R1 runner, ...), with stopgap, deadline, owner. Review at each phase start; add new postponements here |
 
 Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{dify,ragflow,onyx,open-webui,kernel-memory,bifrost}`.
@@ -48,8 +49,8 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | 2. Platform repo, local dev, deployment | `plans/platform/repo-and-deployment.md` | done, reviewed | `320fc82`, `d329b8d` |
 | Postpone Key Vault, postponed-decisions register | `plans/postponed-decisions.md` | done | `d2fcff3` |
 | 3. Identity detail | `plans/identity/design.md` | done, reviewed | `ffdccaf` |
-| **4. Gateway changes**: ADR + design in the gateway repo's format | `plans/gateway-changes/` (ADR draft; do not modify `~/git/llmgateway` without asking) | **next** | – |
-| 5. Parser | `plans/parser/` | todo | – |
+| 4. Gateway changes | `plans/gateway-changes/design.md`, `adr-drafts.md` (drafts; gateway repo untouched) | done, reviewed | `11908e4` |
+| **5. Parser** | `plans/parser/` | **next** | – |
 | 6. Ingestion worker (largest; consider splitting: engine + nodes, connectors, auto-parse + evaluation) | `plans/ingestion-worker/` | todo | – |
 | 7. Knowledge API | `plans/knowledge-api/` | todo | – |
 | 8. Chat API (decide C1 chat attachments here) | `plans/chat-api/` | todo | – |
@@ -81,14 +82,14 @@ After step 10: a consistency pass across all detail documents, then P0 implement
 - R1 self-hosted runner (IT security), A1 archive law (owner to be named), N1 product name: see the register.
 - Nothing else is waiting on the user right now.
 
-## Next step in detail: step 4, gateway changes
+## Next step in detail: step 5, parser
 
-Brief a subagent to write the gateway-side design as drafts under `plans/gateway-changes/` (an ADR in the format of
-`~/git/llmgateway/docs/adr.md` plus a design document), **without touching `~/git/llmgateway`**. Scope: feature A
-(delegated attribution, `x-ume-on-behalf-of`), feature B (residency ceiling, `x-ume-max-residency: OnPrem | EU | Any`
-mapped to the gateway's residency enum), feature C and the tenant/guest refusal (`plans/identity/design.md` §1.7, §2,
-work items §2.7, event 2007), the FakeLlm `dimensions` item (§3c) and the small items in §3a. For each: the gateway
-files and classes touched (cite `path:line`), migrations, settings (`UME_*` / `Gateway:*`), Data API changes,
-security events, tests and benchmarks (the gateway's performance rules), docs pages to update, and the order of
-release. Before briefing, ask the user anything only they can decide (for example whether one ADR or one per
-feature, and whether the RAG team or the gateway team ships it — it's the same team).
+Brief a subagent to write `plans/parser/design.md`: the stateless Python + Docling sidecar (`plans/parser/plan.md`).
+Cover at least: the HTTP contract with the ingestion worker (request/response schema, streaming or job-style, size and
+page limits, timeouts, cancellation, error codes), supported formats and their Docling pipelines, OCR (postponed P1:
+Tesseract `swe` vs Docling default, both baked in), table/heading/structure output feeding chunking, the auto-parse
+heuristics and confidence signals the worker needs, resource limits inside the `parser` zone (no network, memory/CPU
+caps, one document per worker process, crash isolation), the image (models baked, licences P2, versions V1), health
+and `/v1/info`, observability (FastAPI OTel, no content in telemetry), security (malicious files after ClamAV,
+decompression bombs, PDF JavaScript), tests with a Swedish document corpus, and performance targets per page. Before
+briefing, ask the user anything only they can decide (for example which formats the pilot must support).
