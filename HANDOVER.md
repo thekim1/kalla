@@ -47,7 +47,7 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | 1. Platform data model | `plans/platform/data-model.md` | done, reviewed | `d889cd9` |
 | 2. Platform repo, local dev, deployment | `plans/platform/repo-and-deployment.md` | done, reviewed | `320fc82`, `d329b8d` |
 | Postpone Key Vault, postponed-decisions register | `plans/postponed-decisions.md` | done | `d2fcff3` |
-| 3. Identity detail | `plans/identity/design.md` | done, reviewed | see `git log` |
+| 3. Identity detail | `plans/identity/design.md` | done, reviewed | `ffdccaf` |
 | **4. Gateway changes**: ADR + design in the gateway repo's format | `plans/gateway-changes/` (ADR draft; do not modify `~/git/llmgateway` without asking) | **next** | – |
 | 5. Parser | `plans/parser/` | todo | – |
 | 6. Ingestion worker (largest; consider splitting: engine + nodes, connectors, auto-parse + evaluation) | `plans/ingestion-worker/` | todo | – |
