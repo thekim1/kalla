@@ -121,7 +121,7 @@ Detailed in [`../identity/plan.md`](../identity/plan.md). In short:
   trusted front end such as Open WebUI. Each client has a **classification ceiling** and a data-handling profile.
 - One `IAccessPolicy` in `Ume.Rag.Domain` decides (subject, client, resource, action) for every service.
 - **Organisation data** (departments, teams, codes) is read from the gateway, the single source of truth, because
-  gateway delegation (R4) charges budgets by team code.
+  gateway delegation (R4) charges budgets by team (the team id is sent; gateway design §5.2).
 
 ## 6. Classification
 
@@ -136,13 +136,14 @@ Levels `public` < `internal` < `sensitive` on sources, collections, skills, tool
   | Level | Allowed processing | Ceiling header sent |
   |---|---|---|
   | `public` | Any provider the gateway allows | none |
-  | `internal` | On-prem or EU providers | `x-ume-max-residency: EU` |
+  | `internal` | On-prem or EU providers | `x-ume-max-residency: Eu` |
   | `sensitive` | On-prem only | `x-ume-max-residency: OnPrem` |
 
   Enforced in three layers (R4): the gateway request carries the ceiling header, the response's `x-ume-residency` is
   checked before any byte is streamed (or before an ingestion result is stored), and the call is aborted (fail closed)
   if it is above the ceiling. The level of a call is the highest level of the data in it (e.g. an `internal`
-  assistant answering from a `public` collection still sends `EU`).
+  assistant answering from a `public` collection still sends `Eu`). Values are the gateway's `DataResidency` names
+  (`OnPrem`, `Eu`, `External`; case-insensitive); the response check compares by that order (gateway design §3.1).
 - **Embeddings are always on-prem** (R3): the platform embedding profile is an on-prem multilingual model, so
   indexing never sends content out of the municipality, whatever its classification.
 
@@ -150,11 +151,13 @@ Levels `public` < `internal` < `sensitive` on sources, collections, skills, tool
 
 Detailed in [`../gateway-changes/plan.md`](../gateway-changes/plan.md):
 
-- One **platform service key** with delegated attribution (`x-ume-on-behalf-of: <team code>`): gateway budgets,
+- One **platform service key** with delegated attribution (`x-ume-on-behalf-of: <team id>`): gateway budgets,
   policies and usage reports stay per team, and we hold one secret instead of one per team.
 - A **per-request residency ceiling** (`x-ume-max-residency: OnPrem`) that can only narrow what the key allows.
-- **Interim**, until the gateway release ships: per-team linked keys (encrypted with Data Protection), plus the
-  `x-ume-residency` response check, which already catches a key whose residencies were widened later.
+- **Interim**, until the gateway releases ship: per-team linked keys (encrypted with Data Protection), plus the
+  `x-ume-residency` response check, which already catches a key whose residencies were widened later. Gateway
+  releases B → C → A (gateway design §13): after B the separate `onprem` linked keys go; after A all linked keys go
+  and the platform service key is used.
 
 ## 8. Retention and personal data
 

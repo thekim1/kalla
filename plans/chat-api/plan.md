@@ -49,12 +49,13 @@ Every request resolves to a **client** from the client registry, which sets a cl
       calling the model.
    5. *Prompt*: system prompt + numbered sources (marked as untrusted content) + history window + question.
 4. Call the gateway (`/v1/chat/completions`, stream) with the platform service key on behalf of the assistant's team
-   (`x-ume-on-behalf-of`) and the residency ceiling of the assistant's level: `EU` for `internal`, `OnPrem` for
-   `sensitive` (platform plan §6; R4; interim: the team's
-   linked key).
+   (`x-ume-on-behalf-of: <team id>`) and the residency ceiling of the assistant's level: `Eu` for `internal`, `OnPrem`
+   for `sensitive` (platform plan §6; R4; gateway design §3, §5). Interim: the team's linked key; after gateway
+   release B only the default linked key, after release A none.
 5. **Residency check before the first byte (R4)**: for `internal` and `sensitive` assistants, read the gateway's
-   `x-ume-residency` response header; anything above the level's ceiling aborts the request with an error and a
-   security event. No content
+   `x-ume-residency` response header, compared case-insensitively by order `OnPrem < Eu < External` (the gateway
+   writes `Eu`); anything above the level's ceiling, or (after release A) a missing `x-ume-on-behalf-of` echo, aborts
+   the request with an error and a security event. No content
    is streamed first.
 6. Stream to the client. Parse `[n]` markers and emit citations only for sources actually used: OpenAI
    `url_citation` annotations and Open WebUI `source` events (`../../platforms/open-webui.md` §9). External image

@@ -149,7 +149,8 @@ model** (Keycloak client `ume-rag-admin`, §11), so both stacks run side by side
 
 ### 1.7 Tenant and guests (new, both systems)
 
-Run in `OnTokenValidated` before claim mapping; a refusal ends the sign-in with 403 and event 5001 (`Reason`
+Run in `OnTokenValidated` before claim mapping; a refusal ends the OIDC callback with a redirect to an explanatory
+page (no session; same in both systems, gateway design §4.6) and event 5001 (`Reason`
 `wrong_tenant` / `guest_refused`):
 
 - `Oidc:TenantId` set ⇒ `tid` must equal it. (The v2 issuer already contains the tenant; this also covers a
@@ -223,8 +224,9 @@ Because the result is written as ordinary `departmentCodes` claims, every scoped
 - **Call**: `POST https://graph.microsoft.com/v1.0/users/{oid}/checkMemberGroups` with up to 20 `groupIds` per call
   (chunked), application permission `GroupMember.Read.All` (package 1; whether `User.ReadBasic.All` is also needed for
   the `/users/{id}` path is *to verify*, §12.3). It is transitive, which matches how departments nest groups.
-  Token by client credentials with the same registration and our own credential (`Microsoft.Identity.Client`
-  confidential client, token cached by MSAL in memory).
+  Token by client credentials with the same registration and our own credential, through the gateway's small
+  `GraphTokenClient` copied as is (no MSAL; token cached until 5 minutes before expiry; gateway design §4.4).
+  `GroupLookup = Graph` requires `Oidc:TenantId` (validated at start).
 - **Cache**: Redis `ume-rag:groups:{oid}` (data-model §11), 10 minutes, value `{ checked: [ids], member: [ids] }`.
   A later lookup only asks Graph for ids not in `checked` (a new member group added to config is checked at once). The
   gateway uses its own prefix (`ume:groups:{oid}`; the gateway's `RedisKeys.cs` decides the exact name).
@@ -251,17 +253,18 @@ down; claims-only can only **narrow** a user's scope compared to a successful lo
 closed with respect to access. The banner and the event make the narrowing visible. On the data plane a narrowed
 answer would look like "no access" to the user, so a retryable 503 is honest.
 
-### 2.7 Gateway work items for feature C (input to detail step 4)
+### 2.7 Gateway work items for feature C (detailed in `../gateway-changes/design.md` §4)
 
-1. Migration: `Departments.MemberGroups varchar(256)[] NOT NULL DEFAULT '{}'` + GIN index.
+1. Migration: `Departments.MemberGroups varchar(256)[] NOT NULL DEFAULT '{}'` (no index: never queried by group).
 2. Admin API/UI *Organisation*: edit member groups (gateway admins; department admins read them); Graph search when
    `GroupLookup = Graph`, free text otherwise; audit `Update Department`.
 3. `OidcOptions`: `GroupLookup`, `TenantId`, `RefuseGuests` (§1.4, §1.7). `DepartmentMembershipResolver` +
    `GraphGroupClient` in `AdminApi`, called from `OnTokenValidated` after `ApplyClaimMapping`
    (`AdminAuthentication.cs:123-127`).
 4. `/bff/user`: `departmentSources`, `departmentLookup`. `admin.signin` (2002): attribute `DepartmentLookup`
-   (attributes are only ever added, `docs/data-access.md:60-62`). New event 2007 `admin.group_lookup.failed`.
-5. Data API: `memberGroups` on `/v1/catalog/departments`.
+   (attributes are only ever added, `docs/data-access.md:60-62`). New events 2007 `admin.group_lookup.failed`,
+   2008 `admin.signin.refused` and Data API 3003 `data.token.refused` (tenant/guest refusals).
+5. Data API: `memberGroups` on `/v1/catalog/departments`; `code` on `/v1/catalog/teams` (missing today).
 6. Redis key `ume:groups:{oid}`; `UME_OIDC_GROUP_LOOKUP`, `UME_OIDC_TENANT_ID`, `UME_OIDC_REFUSE_GUESTS` in
    `compose.prod.yaml` and the Portainer templates.
 7. Docs: `identity-and-roles.md` (Entra step 4 alternative "member groups"), runbook *Identity provider*.
@@ -444,13 +447,16 @@ Data-plane errors use the OpenAI error shape like the gateway's `GatewayErrors` 
 | Effective level | `x-ume-max-residency` | Interim (no feature B) |
 |---|---|---|
 | `public` | none | default team key |
-| `internal` | `EU` | `x-ume-residency` response check |
+| `internal` | `Eu` | `x-ume-residency` response check |
 | `sensitive` | `OnPrem` | linked `onprem` key + response check |
 
 Effective level for chat = the assistant's level (≥ all its collections, skills and tool servers, validated on
 save); for condense and title calls inside a conversation the same; for P2 agent runs the highest of the assistant
 and every tool result's server level so far. The Chat API sends the header from `AccessDecision.MaxResidency` and
-`x-ume-on-behalf-of` = the assistant's team code; the gateway answer's `x-ume-residency` is checked against the same
+`x-ume-on-behalf-of` = the assistant's team **id** (gateway design §5.2; codes can change), and the echo of that header
+is required once gateway release A is in use. Header values are the gateway's `DataResidency` names (`Eu`, `OnPrem`,
+case-insensitive). The gateway answer's `x-ume-residency` is checked, case-insensitively by order
+`OnPrem < Eu < External`, against the same
 value (chat-api §4).
 
 ### 4.8 Internal callers
@@ -774,6 +780,9 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 `user_jwt_missing`, `user_jwt_invalid`, `user_jwt_expired`, `user_jwt_role`, `user_jwt_mismatch`, `token_invalid`,
 `token_expired`, `wrong_tenant`, `guest_refused`, `client_unknown`, `permission_missing`. 5002 `Reason` = §4.3 reasons.
 
+Gateway counterparts (gateway design §10): our 5001 with `wrong_tenant`/`guest_refused` = gateway 2008 (admin) or
+3003 (Data API); our 5007 = gateway 2007.
+
 SIEM alerts to add to the gateway's list (`docs/security-events.md:29-34`): any 5008; 5005 from one client repeatedly
 (a client probing above its ceiling); 5004 for more than a minute (config monitor broken); 5007 bursts (Graph outage
 or permission removed); 5001 `user_jwt_invalid` at all (Open WebUI secret mismatch or forgery).
@@ -921,7 +930,7 @@ by IaC.
   (`internal`) never sees a `sensitive` assistant; MCP client at `public` never sees `internal`; anonymous never sees
   `internal`; `StoresHistory` client refused where the level requires no-history clients; app subject never matches a
   department audience; empty audience list denies everybody; unconfirmed snapshot denies everything with 503.
-- Residency derivation: `public` → none, `internal` → `EU`, `sensitive` → `OnPrem`; agent run level rises with a tool
+- Residency derivation: `public` → none, `internal` → `Eu`, `sensitive` → `OnPrem`; agent run level rises with a tool
   result.
 - `Filter` returns exactly the resources `Decide` allows (property test over random snapshots).
 - Feature C resolver (§2.8). Tenant and guest checks (`acct=1`, foreign `idp`, wrong `tid`).

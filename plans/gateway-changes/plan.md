@@ -1,5 +1,8 @@
 # Gateway changes: plan
 
+**Detailed design: [`design.md`](design.md)** (step 4) and ADR drafts 018–020 in [`adr-drafts.md`](adr-drafts.md);
+where they differ from this plan, they win (header values, error codes, the team id, events, releases).
+
 Two small features in the LLM gateway (`~/git/llmgateway`, our own code) so the RAG platform does not have to store
 one gateway key per team, and so the `sensitive` → on-prem rule is enforced by the gateway on every request rather
 than by key settings checked once (review R4, `../../02-architecture-review.md`).
@@ -16,24 +19,27 @@ than by key settings checked once (review R4, `../../02-architecture-review.md`)
 
 - A key can be marked **delegating** by a gateway admin (only gateway admins), with an explicit **list of teams** it
   may act for (decision: listed teams, not whole departments); new teams are added explicitly.
-- Requests from such a key may carry `x-ume-on-behalf-of: <team code>`. The gateway then:
+- Requests from such a key may carry `x-ume-on-behalf-of: <team id or code>` (Ume.Rag sends the id; codes can change). The gateway then:
   - applies that team's budgets, quotas and request policies, and the key's own allowed models/residencies, taking
     the **intersection** (delegation can never widen access);
   - records usage against the team, with the delegating key id (no content and no end-user id: per-user limits and
     statistics stay in the RAG platform);
-  - refuses unknown team codes or teams outside the delegation list (403, security event).
+  - refuses unknown or inactive teams and teams outside the delegation list (`403 delegation_not_allowed`, event 1006);
+  - echoes `x-ume-on-behalf-of` so the caller can verify delegation was applied;
+  - every change to a delegating key is gateway-admin only (rotate/revoke excepted); a listed team cannot be deleted.
 - Without the header the key behaves as a normal key of its own team.
 - Admin UI: the key page shows the delegation scope; usage reports can be filtered by delegating key.
 
 ## 3. Feature B: per-request residency ceiling
 
-- Header `x-ume-max-residency: OnPrem | EU | Any` (names to match the gateway's residency enum). It removes every
+- Header `x-ume-max-residency: OnPrem | Eu | External` (the `DataResidency` names, case-insensitive; omit for no
+  ceiling; malformed `400 invalid_request`). It removes every
   candidate provider above the ceiling before routing, after routing rules and fallback lists are computed, like the
   existing hard constraints in `IRouteResolver`. It can only narrow.
-- If no candidate remains: 4xx with a clear error code (no silent fallback to a wider residency).
+- If the ceiling removes every candidate: `403 max_residency_not_met` (no silent fallback to a wider residency).
 - The response's existing `x-ume-residency` header (`GatewayHeaders.cs:15`) reports where the request actually went,
   so callers can verify (the Chat API does, before streaming).
-- Applies to every endpoint: chat, responses, messages, embeddings.
+- Applies to every endpoint: chat, responses, messages, embeddings, audio, images, realtime and `GET /v1/models`.
 
 ## 3b. Feature C: department scope from groups (shared with the RAG platform)
 
@@ -110,7 +116,7 @@ gateway but has the drawbacks above.
 | Phase | Deliverable |
 |---|---|
 | P0 | ADR and design agreed in the gateway repo |
-| P1 | Features A, B and C released; RAG platform switches from interim keys to the platform service key before the pilot if ready |
+| P1 | Three releases B → C → A (design §13), with FakeLlm `dimensions` and tool-passthrough tests in B and run grouping headers in A; RAG platform drops the `onprem` linked keys after B, syncs member groups after C, and switches to the platform service key after A, before the pilot if ready |
 
 ## 7. Open questions
 
@@ -119,3 +125,14 @@ Answered (2026-10-29):
 1. **Delegation scope**: an explicit list of teams.
 2. **End-user id at the gateway**: no. The gateway only sees teams; per-user rate limits and statistics are done in
    the RAG platform.
+3. **Budgets under delegation** (2026-10-29): a delegated request is checked against and charged to the effective
+   team's and its department's budgets, **and** the delegating key's own key budget and rate limit apply as an
+   overall cap on the platform key.
+4. **Who may send `x-ume-max-residency`**: any key (it can only narrow); documented as a general gateway feature.
+5. **Release order**: three separate, rolling-update-safe releases: B (residency ceiling) → C (department scope from
+   groups, with tenant/guest refusal) → A (delegation).
+6. **Step 4 output**: drafts in this repo (`plans/gateway-changes/`: ADR rows in the gateway's table format + a design
+   document), copied into the gateway repo when implementation starts.
+
+7. **Guests refused by default** for every gateway adopter (`RefuseGuests = true`), with an upgrade-guide note.
+8. **Delegating keys** are editable by gateway admins only (rotate and revoke excepted).

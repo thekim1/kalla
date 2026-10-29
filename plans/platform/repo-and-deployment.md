@@ -269,14 +269,15 @@ streaming code, and adds:
 |---|---|
 | `POST /v1/embeddings`: **1024 dimensions**, L2-normalised feature hashing of word unigrams and character trigrams | texts that share words are close, so retrieval and evaluation tests mean something |
 | `POST /v1/chat/completions` (stream and not), answers built from the last user message and any `[n]` context, so citation tests can assert | chat, condense, evaluation generation and judging |
-| `GET /v1/models`; per-model residency in `appsettings.json` (`OnPrem`, `EU`, `Global`) | – |
-| Response header `x-ume-residency`; honours `x-ume-max-residency` (403 if no model fits) and records `x-ume-on-behalf-of` | fail-closed tests (plan §6, §7) |
-| `GET /v1/catalog/departments` (Data API shape incl. `memberGroups`; department 3000 lists `Byggnadsnämnden`) | organisation sync without the gateway |
+| `GET /v1/models`; per-model residency in `appsettings.json` (`OnPrem`, `Eu`, `External`: the gateway's `DataResidency` names) | – |
+| Response header `x-ume-residency`; honours `x-ume-max-residency` (case-insensitive names; other values 400 `invalid_request`; `403 max_residency_not_met` if no model fits); records `x-ume-on-behalf-of` and echoes it (gateway design §3, §5.2) | fail-closed tests (plan §6, §7) |
+| `GET /v1/catalog/departments` (Data API shape incl. `memberGroups`; department 3000 lists `Byggnadsnämnden`) and `/v1/catalog/teams` (incl. `code`, gateway release C) | organisation sync without the gateway |
 | Fault injection: model names `fake-fail-500`, `fake-slow`, `fake-wrong-residency` | resilience and residency tests |
 | `FakeGateway:Upstream:Embeddings=http://ollama…` | real BGE-M3 vectors from Ollama when enabled |
 
-Feature request for the gateway (§12.2): let FakeLlm honour the OpenAI `dimensions` parameter, so the gateway's own
-fake serves 1024-dim vectors when we run against a real local gateway.
+Feature request for the gateway (§12.2), delivered in gateway release B (gateway design §6): FakeLlm honours the
+OpenAI `dimensions` parameter and a `fake-embed-<n>` model-name suffix, so the gateway's own fake serves 1024-dim
+vectors when we run against a real local gateway.
 
 ### 4.4 Start scripts, seed data, real gateway
 
@@ -291,8 +292,8 @@ fake serves 1024-dim vectors when we run against a real local gateway.
 - **Against a real local gateway** (gateway AppHost running): AppHost user secrets `FakeGateway:Enabled=false`,
   `Gateway:BaseUrl=https://localhost:<gateway port>`, `Gateway:ServiceKey=<gateway dev key>`. In the gateway's admin,
   add the Ollama provider with model `bge-m3` (the gateway's `Ollama:Enabled` brings `qwen2.5:0.5b` for chat) and an
-  alias matching our profile's model name. Without the gateway feature in §12.2 its FakeLlm embeddings (8 dims) are
-  refused by our dimension check with a clear error.
+  alias matching our profile's model name, or (from gateway release B) point that alias at FakeLlm model
+  `fake-embed-1024`. Older gateways' FakeLlm embeddings (8 dims) are refused by our dimension check with a clear error.
 
 ## 5. Container images
 
@@ -689,7 +690,7 @@ Review fix: Chromium keeps its sandbox via a seccomp profile (§5.4).
 | # | Topic | Finding | Recommendation |
 |---|---|---|---|
 | 1 | FakeLlm reuse (plan §1 "or reuse gateway FakeLlm") | FakeLlm embeddings are 8-dim and it sends no residency header | Own `Ume.Rag.FakeGateway` (§4.3), copying `FakeLatency.cs`; update plan §1 wording |
-| 2 | Real local gateway | Its FakeLlm cannot feed our 1024-dim profile | Ask the gateway (small item in `gateway-changes`) for FakeLlm to honour `dimensions`; until then use Ollama `bge-m3` in the gateway |
+| 2 | Real local gateway | Its FakeLlm cannot feed our 1024-dim profile | Delivered in gateway release B (`../gateway-changes/design.md` §6: `dimensions`, `fake-embed-1024`); before it, Ollama `bge-m3` in the gateway |
 | 3 | Connection caps vs rolling slots (data-model §1.1) | `ume_rag_admin` limit 15 but two admin slots × (10 + 1) = 22; `ume_rag_tools` 12 vs 2 × 9 = 18 (P2); the API fits (2 × 26 = 52 ≤ 60) | Admin pool 6 (+1) per slot, or raise the admin limit to 24 (sum stays ≤ 150); same for tools in P2. Worker: stop-then-start (§7.3). Decide in the R1 test |
 | 4 | Self-hosted runner | BGE-M3 and the test gateway are on-prem; GitHub-hosted runners cannot reach them | **Open: IT security must approve** one ephemeral, environment-protected runner on the test host for `perf.yml`/`evaluation.yml`. Fallback: run both manually on the test host with a script |
 | 5 | Entra IaC tool | Bicep vs Terraform | **Decided: Bicep** with the Microsoft Graph extension in `infra/entra/` |

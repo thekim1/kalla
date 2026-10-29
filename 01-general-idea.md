@@ -234,7 +234,7 @@ and must stay a small fraction of Eneo's.
 | Staff-facing apps (Open WebUI, intranet) | OIDC user token, or a RAG API key | Internal assistants their team/department allows |
 | Integrations | RAG API key (team-scoped) | Named assistants and collections |
 | Public web widget | No login; origin allow-list + rate limit | Only assistants marked `public` |
-| These services → gateway | One platform service key with `x-ume-on-behalf-of: <team>` (interim: per-team keys) | Gateway budgets, PII routing, residency and usage per team |
+| These services → gateway | One platform service key with `x-ume-on-behalf-of: <team id>` and `x-ume-max-residency: Eu \| OnPrem` (interim: per-team keys; gateway releases B → C → A) | Gateway budgets, PII routing, residency and usage per team |
 
 The RAG services issue **their own keys** in the gateway's style rather than reusing gateway keys: the two systems
 stay independently deployable and their key stores do not couple. Cost attribution uses the gateway's new delegated
@@ -319,6 +319,7 @@ stated reason, which is itself audited.
 | Skills timing | P2, with agent assistants; P1 assistants are prompt + collections. |
 | Identity compatibility | Same identity model as the gateway: same OIDC/BFF, claims, config keys (`UME_RAG_OIDC_*`), key and Data API patterns, security events; preferably one shared admin registration with `rag-*` roles. Department scope from groups is added to both systems. No registration needed before the pilot. |
 | Identity detail (step 3) | `plans/identity/design.md`. Member groups are group claim values (Entra object ids; names on Keycloak/AD FS); Graph lookup failure narrows to claims-only, never fails open. `ume-rag/infra/entra/` (Bicep) owns the shared admin registration incl. the gateway's roles; consent, role assignments and secrets stay manual. The RAG BFF uses its own client secret, as the gateway (certificates later, for both). Policy denials above ceiling or outside audience answer 404. |
+| Gateway changes (step 4 questions) | Delegated requests charge the effective team + department budgets, with the platform key's own budget and rate limit as an overall cap; any key may send the residency ceiling; three releases B → C → A; drafts stay in this repo until implementation. |
 
 Sections 3–9 above describe the original idea; where they differ from the plans, the plans and this table win.
 
