@@ -57,7 +57,7 @@ Scoped by `departmentCodes` / `teamCodes` claims, as in the gateway.
 | Skills | Versioned skill packages: instructions, references, linked collections and tools, test questions, classification; import/export in Agent Skills format (`../tools/plan.md`) |
 | Tool servers | Registered MCP servers: URL, auth mode, classification, allowed tools, pinned tool definitions with re-approval on change |
 | Clients | Client registry (R5): Entra app registrations, keys, Open WebUI and widget instances; classification ceiling; data-handling profile (stores history? retention? task model?) |
-| Keys | `sk_`/`pk_` keys per team: scopes, origins, rotation, revoke |
+| Keys | `ume-rag-sk-`/`ume-rag-pk-` keys per team: scopes, origins, rotation, revoke |
 | Gateway | Platform service key status and delegation check; interim per-team key links; residency verification for sensitive use (R4) |
 | Embedding profiles | Platform admins: the on-prem default profile, exceptions, migration status (R3) |
 | Conversations | Feedback review; reading a conversation requires a reason, audited; for `sensitive` also a second approver before content is decrypted |

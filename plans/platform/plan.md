@@ -61,17 +61,22 @@ zones** from day one, even when they share a host:
 - **Release test**: chat p95 time to first token is measured during a full crawl plus an OCR batch, with the
   gateway's benchmark harness, and must stay within 10% of the idle figure.
 
-Our Postgres and Redis are **separate instances** from the gateway's (recommended): our Postgres needs a custom
-image and holds content, while the gateway's must not.
+**Decided (2026-10-29): our Postgres and Redis are separate instances from the gateway's**, each system with its own
+database. Reasons: the gateway's ADR 015 (other teams' data goes through interfaces, never the database; we read
+organisation data through the gateway's API); the gateway stores no content while ours holds documents and chat
+logs, so backups, admin access and retention must not be shared; our Postgres needs a custom image (pgvector,
+Swedish Hunspell); ingestion load must never reach the gateway's database (R1); and a later `sensitive` tier has its
+own keys and hosting. Operations reuse the gateway's backup/restore scripts, migrator/role pattern and runbook.
 
 ## 3. Data ownership
 
-One Postgres database, one schema per owner, one DB role per service with least privilege (gateway pattern):
+One Postgres database, one schema per owner, one DB role per service with least privilege (gateway pattern).
+Tables, roles, indexes, queue, encryption, retention and blob layout in detail: [`data-model.md`](data-model.md).
 
 | Schema | Written by | Read by | Contents |
 |---|---|---|---|
 | `config` | admin | api, tools, worker | collections, sources, pipeline versions, assistants, skills, tool servers, clients, keys, embedding profiles, settings, **config outbox** |
-| `content` | worker | api (read-only), admin (read) | **document store** (platform-wide), collection index (chunks, embeddings), runs, jobs, parse observations, parse profiles, evaluation sets and results, node catalogue manifest |
+| `content` | worker (admin only inserts `Jobs`, incl. `command` jobs for its decisions; api only via the retrieval-counter function) | api (read-only), admin (read) | **document store** (platform-wide), collection index (chunks, embeddings), runs, jobs, parse observations, parse profiles, evaluation sets and results, node catalogue manifest |
 | `chat` | api | admin (audited read) | conversations, messages, feedback, tool-call records |
 | `audit` | all (append-only) | admin | audit entries |
 
@@ -110,7 +115,7 @@ Detailed in [`../identity/plan.md`](../identity/plan.md). In short:
   from department member groups, a feature added to both systems (`../gateway-changes/plan.md` feature C).
 - No Entra registration is needed for P0 or development (Keycloak + keys); admin and Open WebUI sign-in must be
   approved before the pilot.
-- Every caller is a **client** from the client registry (R5): an Entra app registration, an `sk_`/`pk_` key, or a
+- Every caller is a **client** from the client registry (R5): an Entra app registration, an `ume-rag-sk-`/`ume-rag-pk-` key, or a
   trusted front end such as Open WebUI. Each client has a **classification ceiling** and a data-handling profile.
 - One `IAccessPolicy` in `Ume.Rag.Domain` decides (subject, client, resource, action) for every service.
 - **Organisation data** (departments, teams, codes) is read from the gateway, the single source of truth, because
@@ -160,6 +165,12 @@ Detailed in [`../gateway-changes/plan.md`](../gateway-changes/plan.md):
 | Other intermediate node outputs | 30 days | Platform setting |
 | Uploads | while the source exists | – |
 | Evaluation sets and results | per collection, until removed | Collection |
+| Jobs (terminal) / run items / runs | 7 days / 90 days / 13 months (proposed) | Platform setting |
+| Parse observations / retrieval statistics | 180 days / 13 months (proposed) | Platform setting |
+| Embedding cache entries | unused for 30 days (proposed) | Platform setting |
+| Quarantined files (ClamAV) | 30 days (proposed) | Platform setting |
+| Config outbox | 30 days (proposed) | Platform setting |
+| Assistant daily totals (statistics without content) | 3 years (proposed) | Platform setting |
 | Audit | separate, longer (e.g. 2 years) | Platform setting |
 
 Copies held by clients are covered by the client's data-handling profile (R5): e.g. Open WebUI's own chat database is
@@ -198,8 +209,12 @@ encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, t
   `sensitive` data that lives on-prem, the master key is on-prem too.
 - Only the Chat API (a user's own history) and the admin review path (audited, with reason and, for `sensitive`, a
   second approver) can unwrap data keys. Database admins, a dumped table or a stolen backup see ciphertext only.
-- **Crypto-shredding**: retention deletes the conversation's wrapped data key, which makes every copy unreadable,
-  including copies in backups. This is how the 90-day (or shorter) rule reaches backups.
+- **Crypto-shredding**: retention deletes the conversation's wrapped data keys in the live database. Backups still
+  hold those key rows, so to reach backups the wrapping master keys are **monthly shred buckets** per level (by
+  latest possible expiry): once a month's last conversation has expired, its bucket key is destroyed in the key
+  service, and every backup copy becomes unreadable. Data keys rotate per 7-day epoch per conversation, so every
+  message is gone within retention + 7 days. Key Vault purge protection delays destruction by its configured days
+  (7–90); OpenBao key deletion must be enabled (`data-model.md` §7).
 - Unwrapped keys are cached in memory for minutes only; encryption cost is negligible next to model latency.
 - Consequence: no server-side full-text search in other people's chats; a user's own history list shows decrypted
   titles through the Chat API.

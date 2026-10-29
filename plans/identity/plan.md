@@ -28,7 +28,7 @@ invented on one side.
 |---|---|---|
 | Development and CI | Yes: Keycloak with the same claims | never |
 | Platform → gateway | Yes: gateway virtual key (delegating) | never |
-| Open WebUI → Chat API | Yes: `sk_`-style key for the connection + Open WebUI's signed user JWT | never |
+| Open WebUI → Chat API | Yes: gateway-style key (`ume-rag-sk-…`) for the connection + Open WebUI's signed user JWT | never |
 | Integrations → our APIs | Yes: keys | only if an app prefers OAuth tokens |
 | URL lists, crawling, uploads | Yes | never |
 | **Staff sign-in to the admin UI** | Only with Keycloak/local accounts | **pilot** |
@@ -118,7 +118,7 @@ are looked up via Graph for display; there is no naming convention, so admins pi
 |---|---|---|---|---|
 | Open WebUI | Connection key + HS256 JWT forwarded by Open WebUI (`X-OpenWebUI-User-Jwt`) | User (email/`sub` from Open WebUI) | The Open WebUI instance | P1 |
 | Integrations | **Keys** created by admins (gateway virtual-key style) or **OAuth client-credentials tokens** (gateway Data API style) | Application | The key or `azp` | P1 keys / P2 tokens |
-| Public widget | `pk_` key + allowed origin | Anonymous session | The widget instance | P2 |
+| Public widget | `ume-rag-pk-` key + allowed origin | Anonymous session | The widget instance | P2 |
 | Our chat client / Teams | Entra access token, `aud = rag-api`, scope `Chat.Use` | User (`oid`) | `azp` | P2/P3 |
 | MCP clients | Entra access token, scope `Mcp.Use` (§6) | User | `azp` | P2 |
 
@@ -184,7 +184,7 @@ systems to the SIEM. Every denial is a security event.
 |---|---|
 | P0 | Keycloak realm with the gateway's claims for dev and CI; OIDC and claim mapping copied from the gateway (`UME_RAG_OIDC_*`); keys in gateway style; package 1 submitted |
 | P1 | Admin sign-in on the municipal IdP (shared or twin registration); department scope from groups (feature C, both systems); Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; security events; package 2 submitted |
-| P2 | `rag-api` tokens and OAuth machine clients, department/group audiences, MCP server authorisation, `rag-ingestion`, `rag-tools`, `pk_` widget keys |
+| P2 | `rag-api` tokens and OAuth machine clients, department/group audiences, MCP server authorisation, `rag-ingestion`, `rag-tools`, `ume-rag-pk-` widget keys |
 | P3 | OBO for user-delegated tools, Teams client, claims-challenge handling |
 
 ## 9. Answered questions (2026-10-29)

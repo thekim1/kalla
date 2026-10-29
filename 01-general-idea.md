@@ -296,6 +296,7 @@ stated reason, which is itself audited.
 | First version | URL lists, website crawl, file uploads; Chat API + Knowledge API; Open WebUI for one pilot department. |
 | Search backend | Postgres only for the MVP behind our own search interface; OpenSearch as an optional backend when a measured trigger fires (section 6). |
 | Postgres hosting | Our own Postgres container everywhere, Azure included (needed for the Swedish Hunspell dictionary). |
+| Database separation | Own Postgres instance and own Redis, separate from the gateway's; no shared database or server (`plans/platform/` §2). |
 | Classification | Levels `public`, `internal`, `sensitive`; the highest (`sensitive`) may only use on-prem models through the gateway. |
 | Swedish benchmark | Postponed. Until then a small smoke set of questions made by the team; chunking and backend choices are revisited when the benchmark exists. |
 | Plans | One folder per service under `plans/`, each with a `plan.md`; detailed per service later. |

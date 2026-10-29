@@ -37,7 +37,7 @@ Response: results with `chunk_id`, `text`, `score`, `scores` (vector, keyword, f
 (`ok` / `low`). OpenAPI and Scalar as in the gateway.
 
 Authentication and authorisation follow `../identity/plan.md`: Entra access tokens (delegated `Knowledge.Read` or
-app role `Knowledge.Read.All`), `sk_` keys scoped to collections, or the in-process call from the Chat API carrying
+app role `Knowledge.Read.All`), `ume-rag-sk-` keys scoped to collections, or the in-process call from the Chat API carrying
 the original caller. The client's classification ceiling (R5) and the caller's access are checked, at the current
 config version, before any query runs (R7).
 
@@ -58,9 +58,11 @@ config version, before any query runs (R7).
   text hash).
 - **Parent-child**: children are searched; with `expand=parent` the parent section text is returned once per parent.
 - **Query embedding** through the gateway on the on-prem profile (attribution: the assistant's or caller's team);
-  cached in Redis by (profile, normalised query hash) for a few minutes.
-- **No-answer signal**: `coverage: low` when the best fused score is under a per-collection threshold, so callers can
-  say "I don't know" without guessing.
+  cached by (profile, normalised query hash) for a few minutes: in Redis for `public`/`internal` queries, in process
+  memory only for `sensitive` (embeddings partly reveal text).
+- **No-answer signal**: `coverage: low` when the best hit's **cosine distance** is above a per-collection threshold
+  (RRF scores are rank-only, so they cannot signal coverage), so callers can say "I don't know" without guessing.
+- Exact SQL of the hybrid query and its indexes: `../platform/data-model.md` §3.
 - **Rerank**: interface only in P1; implemented in P3 if the gateway serves a reranker and evaluation shows a gain.
 
 ## 4. Performance and isolation

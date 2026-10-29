@@ -49,7 +49,9 @@ department attribute in Entra today. Added to the gateway first, and implemented
   `GroupMember.Read.All` on the admin registration).
 - No change for adopters that have a department attribute: the claim alone still works.
 - The member groups travel with the organisation data the RAG platform reads from the gateway, so both systems
-  always agree on who belongs to which department.
+  always agree on who belongs to which department: the Data API's `catalog.read` endpoint
+  `GET /v1/catalog/departments` gains a `memberGroupIds` field (the RAG admin syncs from it every 5 minutes with its
+  own Data API client).
 
 ## 3a. Small additions (from the Bifrost analysis)
 

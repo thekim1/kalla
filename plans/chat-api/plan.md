@@ -25,7 +25,7 @@ execution and credentials (tool hub), model routing or budgets (gateway).
 | `POST` | `/v1/feedback` | Thumbs up/down + comment on a message |
 
 Callers and clients follow `../identity/plan.md`: Entra access tokens (delegated `Chat.Use`), the signed user JWT
-from Open WebUI, `sk_` keys for integrations, `pk_` keys + allowed origin + IP rate limit for the public widget.
+from Open WebUI, `ume-rag-sk-` keys for integrations, `ume-rag-pk-` keys + allowed origin + IP rate limit for the public widget.
 Every request resolves to a **client** from the client registry, which sets a classification ceiling (R5).
 
 ## 3. Assistant modes
@@ -98,7 +98,7 @@ Registered as a client with ceiling **`internal`**; `sensitive` assistants never
 | Phase | Deliverable |
 |---|---|
 | P1 | `/v1/models` filtered by caller and client, streaming RAG completions, citations (both formats), not-found answers, residency check, issued conversation ids, history + retention, Open WebUI pilot with its data-handling profile |
-| P2 | Agent assistants with skills and read-only tools via the tool hub, public widget (`pk_` keys, origins, rate limits), feedback review, condense tuning behind the evaluation gate |
+| P2 | Agent assistants with skills and read-only tools via the tool hub, public widget (`ume-rag-pk-` keys, origins, rate limits), feedback review, condense tuning behind the evaluation gate |
 | P3 | Rerank, query-side canvas (if evaluation shows it helps), Teams client, user-delegated tools (OBO), write tools with confirmation |
 
 ## 8. Open questions

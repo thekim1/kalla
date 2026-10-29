@@ -33,7 +33,9 @@ plane, a small capped Postgres connection pool and its own `statement_timeout`.
 | Evaluator | Generates and runs evaluation sets; computes gates (R6) |
 | Run recorder | One run per sync, one run item per document with outcome, reason, strategy chosen, cost |
 
-**Job classes**, in priority order: `preview` (interactive, always first), `sync`, `fetch`, `parse`, `embed`, `eval`.
+**Job classes**, in priority order: `preview` (interactive, always first), `command` (admin decisions applied by the
+worker: clear a PII flag, confirm a deletion, approve or roll back a profile, edit human evaluation questions), `sync`,
+`fetch`, `parse`, `embed`, `eval`. Table design: `../platform/data-model.md` §4.
 `parse` concurrency equals the parser sidecar's capacity, so the sidecar is never overloaded.
 
 ## 3. Connector contract
@@ -75,7 +77,7 @@ and Eneo's SharePoint issues (#13583, #16590; #427, #521, #522, #429, #1081) bec
 - **Port types**: `RawContent` → `ParsedDocument` (Markdown + structure + pages) → `Sections` → `Chunks` (flat or
   parent-child) → `EmbeddedChunks`. Validated server-side on save and publish.
 - **Node catalogue manifest (R7)**: at startup the worker registers its node types, versions and parameter schemas in
-  `content.node_manifest`. The admin validates pipelines and generates forms from the registered manifest; pipelines
+  `content."NodeManifest"` (with live support per instance in `content."WorkerNodeSupport"`). The admin validates pipelines and generates forms from the registered manifest; pipelines
   pin `typeVersion`; publishing is refused if no running worker supports a node version (safe rolling updates).
 - **Node interface**: `IPipelineNode { Type; Version; Inputs; Outputs; ParamsSchema; EstimateCost(); ExecuteAsync(ctx, inputs) }`
   returning `Success | TransientError | FatalError`.
