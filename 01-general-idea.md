@@ -297,7 +297,7 @@ stated reason, which is itself audited.
 | Search backend | Postgres only for the MVP behind our own search interface; OpenSearch as an optional backend when a measured trigger fires (section 6). |
 | Postgres hosting | Our own Postgres container everywhere, Azure included (needed for the Swedish Hunspell dictionary). |
 | CI/CD | GitHub Actions for everything, as the gateway does (build, test, release, and the app-registration workflows). |
-| Key service | Azure Key Vault for all master keys (all levels); on-prem key service for `sensitive` re-decided with the `sensitive` tier. |
+| Key service | **Postponed**: the pilot stores master keys as protected files (file key provider, no `sensitive` data); Azure Key Vault is the target, adopted later with a re-wrap (`plans/postponed-decisions.md` K1). |
 | Entra IaC | Bicep with the Microsoft Graph extension, applied by a GitHub Actions workflow. |
 | ClamAV updates | Directly from database.clamav.net; no internal mirror. |
 | Self-hosted runner | Open: IT security to approve one runner on the test host for the R1 test and nightly evaluation. |

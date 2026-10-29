@@ -208,11 +208,22 @@ encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, t
   assistant, user `oid`, token counts, cost, outcome) stays readable for statistics and retention.
 - Data keys are stored wrapped by a **master key per level** held in a key service behind `IKeyProvider`: Azure Key
   Vault / Managed HSM in Azure, OpenBao/HashiCorp Vault or an HSM on-prem, a local key file in development.
-  **Decided (2026-10-29): Azure Key Vault** holds the master keys for every level, `sensitive` included, also for
-  on-prem installations. Consequences: soft-delete retention set to the minimum (7 days), since it delays destroying
-  shred-bucket keys; on-prem hosts need network access to Key Vault for new chat writes and history reads (unwrapped
-  keys are cached 5 minutes, so short outages pass). Whether `sensitive` needs an on-prem key service is re-decided
-  together with the separate `sensitive` tier (§8a), before the first `sensitive` source.
+  **Postponed (2026-10-29): the pilot uses the file key provider**; Azure Key Vault is the intended target (see
+  `../postponed-decisions.md`, item K1). Pilot rules for file keys:
+  - master keys (one per level and shred month) are 256-bit random files in the deployment secrets directory
+    (`secrets/keys/<key name>`, mode 0400), mounted only into `rag-api` and `rag-admin`, never into Postgres or the
+    worker's blob paths; created by `init-deployment.sh --key-provider file --allow-file-keys`;
+  - backed up **separately** from database backups, and those key backups kept **no longer than the shred schedule**
+    (≤ 30 days), otherwise destroyed bucket keys come back from backup;
+  - destroying a shred bucket = deleting its key file, logged in `audit."AuditLog"`;
+  - the host disk is LUKS-encrypted (baseline), so a stolen disk or a database backup alone reveals nothing;
+  - **no `sensitive` data** while file keys are used.
+
+  Switching to Key Vault later: create the keys in Key Vault, run the `rewrap` command (unwraps every data key with the
+  file key and re-wraps it with Key Vault; no message is re-encrypted), then delete the key files. When Key Vault is
+  adopted: soft-delete retention at the minimum (7 days), since it delays destroying shred-bucket keys; on-prem hosts
+  need network access to Key Vault (unwrapped keys are cached 5 minutes). Whether `sensitive` needs an on-prem key
+  service is decided together with the separate `sensitive` tier (§8a).
 - Only the Chat API (a user's own history) and the admin review path (audited, with reason and, for `sensitive`, a
   second approver) can unwrap data keys. Database admins, a dumped table or a stolen backup see ciphertext only.
 - **Crypto-shredding**: retention deletes the conversation's wrapped data keys in the live database. Backups still

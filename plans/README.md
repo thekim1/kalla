@@ -7,6 +7,9 @@ gets more detailed documents later (API specs, data model, test plans). Backgrou
 Kernel Memory and OpenSearch) and [`../02-architecture-review.md`](../02-architecture-review.md) (improvements R1–R7,
 now applied to these plans).
 
+Decisions put off on purpose, with their stopgaps and deadlines: [`postponed-decisions.md`](postponed-decisions.md)
+(reviewed at the start of every phase).
+
 Working name for the platform and its code: **Ume.Rag** (placeholder, to be renamed).
 
 | Folder | Area | Plane | Owns |

@@ -675,7 +675,7 @@ References: plan §11 items 1–7, identity §8 (P0), [`../README.md`](../README
 
 **Review (2026-10-29):** accepted 1, 2 (added to `gateway-changes` §3c), 3 (pools 6+1 admin, 5+1 tools per slot,
 data-model §1.1), 6 (measured in P0), 7 (plan §11.7 fixed), 8, 9, 10 (as a proposal for both repos), 12, 13, 14.
-User decisions: 5 Bicep, 11 Azure Key Vault, 15 ClamAV direct without a mirror; 4 (self-hosted runner) waits for IT security.
+User decisions: 5 Bicep, 11 postponed (file keys in the pilot, Key Vault later), 15 ClamAV direct without a mirror; 4 (self-hosted runner) waits for IT security.
 Review fix: Chromium keeps its sandbox via a seccomp profile (§5.4).
 
 | # | Topic | Finding | Recommendation |
@@ -690,7 +690,7 @@ Review fix: Chromium keeps its sandbox via a seccomp profile (§5.4).
 | 8 | Open WebUI hosting | Chat-api §6 configures it but no plan says where it runs or what database it uses | Separate Compose project `compose.openwebui.yaml` on the pilot host (24 GB) or its own VM, own SQLite on an encrypted volume (never in `ragdb`), pruning job as a sidecar; ceiling `internal` |
 | 9 | Portainer | The gateway ships `compose.portainer.yaml`; operations may expect it | Skip in P0/P1 (init-deployment covers the pilot host); add if operations ask |
 | 10 | Supply chain in both repos | Gateway pins actions by tag and signs nothing | Propose for both repos together (compatibility): actions pinned by SHA, `attest-build-provenance` on images |
-| 11 | Pilot key service | Envelope encryption needs a production `IKeyProvider` from P1 | **Decided: Azure Key Vault** for all levels (plan §8a): soft-delete 7 days, purge protection settings recorded in the runbook; on-prem key service for `sensitive` re-decided with the `sensitive` tier |
+| 11 | Pilot key service | Envelope encryption needs a production `IKeyProvider` from P1 | **Postponed: file key provider in the pilot** with the rules in plan §8a (`--key-provider file --allow-file-keys`, key files only in api/admin, key backups ≤ 30 days, no `sensitive` data); Azure Key Vault later via the `rewrap` command (`../postponed-decisions.md` K1) |
 | 12 | Package versions | Docling, FastAPI, Vue Flow, MCP SDK, Playwright, Cronos, Azure Key Vault SDK, `Aspire.Hosting.Python`, pgvector 0.8.x latest, ClamAV tag, Open WebUI tag | Fix at P0 step 2/12 with the npm/uv 7-day rule; record here |
 | 13 | Aspire minor | `kernel-memory-and-dotnet.md` lists `Aspire.Hosting.PostgreSQL` 13.6.4; the gateway pins 13.6.1 | Stay on 13.6.1 with the gateway; upgrade both together |
 | 14 | Blob volume shared by admin and worker | File volume works only on one host; uploads arrive at the admin | Accepted for the pilot (plan §12.1); S3/Azure Blob is a precondition of §6.4 |

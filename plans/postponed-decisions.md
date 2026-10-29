@@ -1,0 +1,25 @@
+# Postponed decisions
+
+Decisions deliberately put off, each with the stopgap used until then and the point by which it must be made.
+Review this list at the start of every phase (P0 → P1 → P2 → P3). When an item is decided, move it to the Decisions
+table in `../01-general-idea.md` and strike it here with the date.
+
+| ID | Decision | Stopgap until then | Decide by | Owner | Details |
+|---|---|---|---|---|---|
+| K1 | **Key service for master keys** (target: Azure Key Vault) | File key provider: master keys as protected files in the secrets directory, only in `rag-api`/`rag-admin`, key backups ≤ 30 days, no `sensitive` data | Before the first `sensitive` source, and before rollout beyond the pilot | Platform team | `platform/plan.md` §8a; switch with the `rewrap` command |
+| K2 | **On-prem key service for `sensitive`** (instead of Key Vault) | Not needed while there is no `sensitive` data | Together with T1 | Platform team + IT security | `platform/plan.md` §8a |
+| T1 | **Separate data tier for `sensitive`** (own on-prem Postgres, volume, keys) | One tier; tier resolver and schema rules keep the split cheap | Before the first `sensitive` source is onboarded | Platform team | `platform/plan.md` §8a, `platform/data-model.md` §6, §10 |
+| A1 | **Archive law**: are chat logs allmänna handlingar, and does 90-day deletion need a gallringsbeslut? | 90-day retention with crypto-shredding as designed | **Before the pilot** (pilot blocker) | To be named (registrar/archivist contact) | `../01-general-idea.md` §11.1 |
+| N1 | **User-facing product name** | Working name `Ume.Rag` | Before the pilot | Product owner | `platform/plan.md` §12.3 |
+| R1 | **Self-hosted GitHub runner** on the test host for the R1 performance test and nightly evaluation | Run both manually on the test host by script | Before the first release performance test (P0 checklist #16) | IT security | `platform/repo-and-deployment.md` §12.4 |
+| B1 | **Swedish retrieval benchmark** (curated question set) | Generated evaluation sets + 30-question smoke set | P3 (measured improvements) | To be named | `ingestion-worker/plan.md` §7 |
+| P1 | **OCR engine for Swedish** (Tesseract `swe` vs Docling's default) | Both baked into the parser image | During P1, by test on real scanned documents | Platform team | `parser/plan.md` §5 |
+| P2 | **Licences** of Docling's bundled models and the `sv_SE` Hunspell dictionary | – | Before the pilot | Platform team | `parser/plan.md` §5, `platform/repo-and-deployment.md` §5.2 |
+| H1 | **Hunspell memory per Postgres backend** (may not fit with many connections) | – | P0 measurement (`images/postgres/test.sh`); fallback: decompound in the worker | Platform team | `platform/repo-and-deployment.md` §12.6, `platform/data-model.md` §12.18 |
+| V1 | **Package versions marked "to verify"** (Docling, FastAPI, Vue Flow, MCP SDK, Playwright, Cronos, pgvector 0.8.x, ClamAV and Open WebUI tags) | – | P0, applying the 7-day package rule | Platform team | `platform/repo-and-deployment.md` §12.12 |
+| S1 | **Supply-chain hardening in both repos** (actions pinned by SHA, build provenance on images) | Gateway practice (actions by tag, no signing) | Proposed for both repos together; decide with the gateway team | Platform team | `platform/repo-and-deployment.md` §12.10 |
+| O1 | **OpenSearch** as a search backend | Postgres only | When a trigger fires (recall, > 2–3M chunks, latency, facets) | Platform team | `knowledge-api/plan.md` §3, `../platforms/opensearch.md` |
+| O2 | **Real tools** (fee calculator, address lookup, contact directory) and their data sources | One mock tool server | P2, after inventorying the data sources | Departments + platform team | `tools/plan.md` §7 |
+| M1 | **MCP and skills unknowns**: MCP C# SDK maturity, Agent Skills format details, Client ID Metadata Documents support in Entra and MCP clients | – | Start of P2 | Platform team | `tools/plan.md`, `identity/plan.md` §6 |
+| E1 | **OBO through Open WebUI** (`auth_type: system_oauth` forwarding a real Entra token) | OBO tools only through clients that send a real Entra token | P2 test, before P3 OBO work | Platform team | `identity/plan.md` §7 |
+| C1 | **Chat attachments** (temporary per-conversation collections) | Not in P1 | Chat API detail round | Platform team | `chat-api/plan.md` §8, `platform/data-model.md` §12.23 |
