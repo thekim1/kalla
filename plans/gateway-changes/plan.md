@@ -41,17 +41,29 @@ Both systems get a user's department scope only from the `departmentCodes` claim
 department attribute in Entra today. Added to the gateway first, and implemented identically in the RAG platform
 (`../identity/plan.md` §3):
 
-- A department gets an optional list of **member groups** (Entra object ids), edited on the *Organisation* page by
-  gateway admins.
+- A department gets an optional list of **member groups** (`MemberGroups varchar(256)[]`: group claim values, i.e.
+  Entra object ids or Keycloak/AD FS group names, matched case-insensitively like `Oidc:RoleGroups`), edited on the
+  *Organisation* page by gateway admins.
 - At sign-in, department scope = `departmentCodes` claim values **plus** departments whose member groups the user is
   in. Roles still come from `roles` (or `UME_OIDC_GROUPS_<ROLE>`).
-- Membership from the `groups` claim, or on overage a Graph `checkMemberGroups` call cached for 10 minutes (needs
-  `GroupMember.Read.All` on the admin registration).
+- Membership from the group claim, plus (with `UME_OIDC_GROUP_LOOKUP=Graph`) a Graph `checkMemberGroups` call for
+  member groups the claim does not show (overage, or groups not assigned to the app), cached 10 minutes in
+  `ume:groups:{oid}` (needs `GroupMember.Read.All` on the admin registration). If Graph fails, sign-in continues with
+  claims only (scope can only narrow), `/bff/user` shows `departmentLookup: "failed"` and event 2007
+  `admin.group_lookup.failed` is logged.
 - No change for adopters that have a department attribute: the claim alone still works.
 - The member groups travel with the organisation data the RAG platform reads from the gateway, so both systems
   always agree on who belongs to which department: the Data API's `catalog.read` endpoint
-  `GET /v1/catalog/departments` gains a `memberGroupIds` field (the RAG admin syncs from it every 5 minutes with its
-  own Data API client).
+  `GET /v1/catalog/departments` gains a `memberGroups` field (the RAG admin syncs from it every 5 minutes with a Data
+  API key, `catalog.read` only).
+- `/bff/user` gains `departmentSources` (claim or group per code) and `departmentLookup`; `admin.signin` (2002) gains
+  the attribute `DepartmentLookup`.
+- Full design, shared by both systems (`DepartmentMembershipResolver`, work items, tests):
+  `../identity/design.md` §2.
+
+**Small item with feature C: tenant and guest refusal.** `UME_OIDC_TENANT_ID` (when set, `tid` must match) and
+`UME_OIDC_REFUSE_GUESTS` (default on: refuse `acct = 1` or a foreign `idp`) for admin sign-in and the Data API, so a
+guest assigned by mistake to the shared registration reaches neither system (`../identity/design.md` §1.7).
 
 ## 3c. FakeLlm: honour the `dimensions` parameter
 
@@ -90,6 +102,8 @@ gateway but has the drawbacks above.
 5. Tests: intersection rules, unknown team, ceiling removes all candidates, fallback never exceeds ceiling, budgets
    charged to the right team, benchmarks unchanged.
 6. Docs: routing rules, identity and roles, ADR for delegation.
+7. Feature C and tenant/guest refusal: the work items in `../identity/design.md` §2.7 (migration, Organisation page,
+   `OidcOptions`, resolver + Graph client, `/bff/user`, event 2007, Data API field, settings, docs, tests).
 
 ## 6. Milestones
 

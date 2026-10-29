@@ -1,6 +1,6 @@
 # Handover
 
-Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 1).
+Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 2).
 
 ## What this is
 
@@ -19,6 +19,7 @@ and a "kitchen sink" monolith.
 | `plans/README.md` | Index of plan folders and phases P0–P3 |
 | `plans/*/plan.md` | First-level plan per area: `platform`, `identity`, `knowledge-api`, `chat-api`, `tools`, `ingestion-worker`, `parser`, `admin`, `gateway-changes`. Each ends with answered and open questions |
 | `plans/platform/data-model.md` | **Detail step 1** (done): schemas, roles, every table, Swedish FTS, hybrid SQL, queue, outbox, tiers, encryption, retention, blobs, migrations |
+| `plans/identity/design.md` | **Detail step 3** (done): BFF copied from the gateway, feature C, `RagPrincipal`, `IAccessPolicy` (13 ordered steps), Open WebUI JWT trust, keys, OAuth, MCP metadata, OBO (P3), security events 5001–6007, Keycloak realm, Bicep package 1, tests |
 | `plans/platform/repo-and-deployment.md` | **Detail step 2** (done): repo layout, build, roles, Aspire/Keycloak/FakeGateway, images, compose and resource zones, release, backup, GitHub Actions, observability, P0 checklist |
 | `plans/postponed-decisions.md` | **Register of postponed decisions** (K1 key service, T1 sensitive tier, A1 archive law, R1 runner, ...), with stopgap, deadline, owner. Review at each phase start; add new postponements here |
 
@@ -46,8 +47,8 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | 1. Platform data model | `plans/platform/data-model.md` | done, reviewed | `d889cd9` |
 | 2. Platform repo, local dev, deployment | `plans/platform/repo-and-deployment.md` | done, reviewed | `320fc82`, `d329b8d` |
 | Postpone Key Vault, postponed-decisions register | `plans/postponed-decisions.md` | done | `d2fcff3` |
-| **3. Identity detail** | `plans/identity/` (e.g. `design.md`) | **next** | – |
-| 4. Gateway changes: ADR + design in the gateway repo's format | `plans/gateway-changes/` (ADR draft; do not modify `~/git/llmgateway` without asking) | todo | – |
+| 3. Identity detail | `plans/identity/design.md` | done, reviewed | see `git log` |
+| **4. Gateway changes**: ADR + design in the gateway repo's format | `plans/gateway-changes/` (ADR draft; do not modify `~/git/llmgateway` without asking) | **next** | – |
 | 5. Parser | `plans/parser/` | todo | – |
 | 6. Ingestion worker (largest; consider splitting: engine + nodes, connectors, auto-parse + evaluation) | `plans/ingestion-worker/` | todo | – |
 | 7. Knowledge API | `plans/knowledge-api/` | todo | – |
@@ -80,12 +81,14 @@ After step 10: a consistency pass across all detail documents, then P0 implement
 - R1 self-hosted runner (IT security), A1 archive law (owner to be named), N1 product name: see the register.
 - Nothing else is waiting on the user right now.
 
-## Next step in detail: step 3, identity
+## Next step in detail: step 4, gateway changes
 
-Brief a subagent to write `plans/identity/design.md`, covering at least: claim mapping and role resolution copied from
-the gateway's admin API (cite `src/Ume.LlmGateway.AdminApi/AdminAuthentication.cs` and related), feature C (member
-groups) in both systems, the client registry and `IAccessPolicy` evaluation (inputs, order, fail-closed, caching at
-config version), Open WebUI JWT trust and user mapping, key authentication (gateway virtual-key code paths), OAuth
-machine clients (Data API pattern), MCP protected-resource metadata, the OBO design for P3, security events
-(numbers 5001–6999), Keycloak realm details, the Bicep sketch for approval package 1, and test cases. Before
-briefing, ask the user any identity questions that the plans leave open (there may be none).
+Brief a subagent to write the gateway-side design as drafts under `plans/gateway-changes/` (an ADR in the format of
+`~/git/llmgateway/docs/adr.md` plus a design document), **without touching `~/git/llmgateway`**. Scope: feature A
+(delegated attribution, `x-ume-on-behalf-of`), feature B (residency ceiling, `x-ume-max-residency: OnPrem | EU | Any`
+mapped to the gateway's residency enum), feature C and the tenant/guest refusal (`plans/identity/design.md` §1.7, §2,
+work items §2.7, event 2007), the FakeLlm `dimensions` item (§3c) and the small items in §3a. For each: the gateway
+files and classes touched (cite `path:line`), migrations, settings (`UME_*` / `Gateway:*`), Data API changes,
+security events, tests and benchmarks (the gateway's performance rules), docs pages to update, and the order of
+release. Before briefing, ask the user anything only they can decide (for example whether one ADR or one per
+feature, and whether the RAG team or the gateway team ships it — it's the same team).

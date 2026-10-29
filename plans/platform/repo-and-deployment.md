@@ -248,11 +248,15 @@ Realm `ume` (same name as the gateway's, so issuer paths look the same), adapted
 
 | Element | Content |
 |---|---|
+| User profile | declares `departmentCodes`, `teamCodes` (Keycloak ≥ 24 drops undeclared attributes) |
 | Client `ume-rag-admin` | confidential, code + PKCE, redirect URIs `https://localhost:5174/signin-oidc` and the adminapi https port; mappers copied: `roles` (realm role mapper), `departmentCodes`, `teamCodes` (user attribute mappers); **new** `groups` mapper (group membership, full path off, for feature C) |
-| Client `ume-rag-api-dev` | client credentials, audience mapper `ume-rag-api`, roles mapper (`Knowledge.Read.All`, `Chat.Use`) for integration and machine-token tests |
+| Client `ume-rag-api-dev` | client credentials (as the gateway's `ume-data-dev`), audience mapper `ume-rag-api`, roles mapper; service-account roles `Knowledge.Read.All`, `Chat.Invoke.All` for integration and machine-token tests |
+| Client `ume-rag-chat-dev` | public, code + PKCE, loopback redirect; default scope `Chat.Use`, optional `Knowledge.Read`, `Mcp.Use`; delegated-token and MCP tests |
 | Client `open-webui-dev` | for `OpenWebUi:Enabled` with OIDC login |
-| Realm roles | `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-viewer`, `rag-editor` (identity §3), plus `Knowledge.Read.All`, `Chat.Use` |
-| Users | `rag-platform-admin` (`departmentCodes` 1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), `rag-viewer` (1000), `rag-group-member` (no attribute; member of group `Byggnadsnämnden` whose id is a member group of department 3000, tests feature C) — codes as the gateway's demo data |
+| Client scopes | `Chat.Use`, `Knowledge.Read`, `Mcp.Use` (optional, audience mapper `ume-rag-api`, in `scope`) |
+| Realm roles | `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-viewer`, `rag-editor` (identity §3), plus app permissions `Knowledge.Read.All`, `Chat.Invoke.All` |
+| Groups | `Byggnadsnämnden`, `rag-pilot-users` (all test users) |
+| Users | `rag-platform-admin` (`departmentCodes` 1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), `rag-viewer` (1000), `rag-group-member` (no attribute; member of group `Byggnadsnämnden`, a member group of department 3000, tests feature C), `rag-no-role` (1000, no role: every `/api` call 403), `rag-chat-user` (no admin role; delegated chat tokens) — codes as the gateway's demo data. Full realm: identity design §11 |
 | Passwords / secrets | from `UME_RAG_DEV_USER_PASSWORD`, `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_API_CLIENT_SECRET` (realm import placeholders, as the gateway) |
 
 ### 4.3 FakeGateway (not the gateway's FakeLlm)
@@ -267,7 +271,7 @@ streaming code, and adds:
 | `POST /v1/chat/completions` (stream and not), answers built from the last user message and any `[n]` context, so citation tests can assert | chat, condense, evaluation generation and judging |
 | `GET /v1/models`; per-model residency in `appsettings.json` (`OnPrem`, `EU`, `Global`) | – |
 | Response header `x-ume-residency`; honours `x-ume-max-residency` (403 if no model fits) and records `x-ume-on-behalf-of` | fail-closed tests (plan §6, §7) |
-| `GET /v1/catalog/departments` (Data API shape incl. `memberGroupIds`) | organisation sync without the gateway |
+| `GET /v1/catalog/departments` (Data API shape incl. `memberGroups`; department 3000 lists `Byggnadsnämnden`) | organisation sync without the gateway |
 | Fault injection: model names `fake-fail-500`, `fake-slow`, `fake-wrong-residency` | resilience and residency tests |
 | `FakeGateway:Upstream:Embeddings=http://ollama…` | real BGE-M3 vectors from Ollama when enabled |
 
@@ -389,7 +393,7 @@ Fixed subnets so the host firewall (`deploy/host/docker-user-firewall.sh`, `DOCK
 
 | Network | Subnet | `internal` | Members | Egress |
 |---|---|---|---|---|
-| `edge` | 172.30.1.0/24 | no | rag-api(+b), rag-admin(+b) | admin: OIDC authority, Graph (feature C) |
+| `edge` | 172.30.1.0/24 | no | rag-api(+b), rag-admin(+b) | admin: OIDC authority, Graph (feature C); api from P2: OIDC authority (JWKS), Graph (P2 audiences), OBO (P3) (identity design §7–§9) |
 | `data` | 172.30.2.0/24 | **yes** | postgres, redis, rag-api(+b), rag-admin(+b), rag-worker, rag-migrate | none |
 | `llm` | 172.30.3.0/24 | no | rag-api(+b), rag-worker, rag-admin(+b) | firewall: only the gateway's address and port (gateway's `llm` name) |
 | `ingestion` | 172.30.4.0/24 | **yes** | rag-worker, rag-clamav, rag-renderer | none |
@@ -446,7 +450,7 @@ busy. The R1 release test (§8.3) confirms or corrects these numbers.
 
 Secrets and certificates are files, never environment variables (gateway `compose.prod.yaml`): `${UME_RAG_SECRETS_DIR}/<service>`
 → `/run/app-secrets` (key-per-file: `ConnectionStrings__ragdb`, `ConnectionStrings__redis`, `Security__KeyPepper`,
-`Gateway__ServiceKey`, `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `KeyProvider__*`), `${UME_RAG_CERTS_DIR}/<service>`
+`Gateway__ServiceKey`, `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`), `${UME_RAG_CERTS_DIR}/<service>`
 → `/run/certs` (service cert/key, `ca.pem`, `data-protection.pfx`), Postgres secrets → `/run/postgres-secrets`.
 
 Hardening: every service uses the `x-hardened` anchor (`read_only`, `cap_drop: [ALL]`, `no-new-privileges`, tmpfs
@@ -481,6 +485,7 @@ the worker's secrets only).
 | `--oidc-client-secret-file FILE` | – | `secrets/admin/Oidc__ClientSecret` (own credential, never the gateway's) |
 | `--api-host`, `--admin-host` | prompted (examples: `rag-api.intern.umea.se`, `rag-admin.intern.umea.se`) | certificates, `UME_RAG_API_PUBLIC_URL`, `UME_RAG_ADMIN_PUBLIC_HOST` |
 | `--gateway-url URL` | prompted | `UME_RAG_GATEWAY_URL` (HTTPS; its CA appended with `--ca-file`) |
+| `--org-sync-key-file FILE` | – | `secrets/admin/OrgSync__DataApiKey` (gateway Data API key `ume-dk-…`, `catalog.read` only; identity design §2.1) |
 | `--gateway-service-key-file FILE` | – (interim: per-team keys entered in the admin UI) | `secrets/{api,worker,admin}/Gateway__ServiceKey` |
 | `--key-provider file\|openbao\|azure` + `--openbao-addr`, `--openbao-role-file` / `--keyvault-uri` | `file` refuses Production unless `--allow-file-keys` (test hosts) | `KeyProvider__*` |
 | `--clamav-mirror URL`, `--crawl-allow CIDR[,…]` | prompted / none | `.env` and `deploy/host/` firewall input |
@@ -564,7 +569,7 @@ then the gateway's six-step *Upgrade procedure* and *Certificate and secret rota
 | `flake-hunt.yml` | weekly Mon 03:17, dispatch | copy | 5 runs incl. `Category=Flaky` |
 | `perf.yml` | weekly + before each release (dispatch) | new | R1 release test (§8.3) |
 | `evaluation.yml` | nightly, dispatch | new | evaluation sets against the **test** deployment with real BGE-M3 (self-hosted runner, §12.4) |
-| `entra.yml` | dispatch, PR touching `infra/entra/**` (plan only) | new | `azure/login` with OIDC federation (no stored secret) → `what-if`/plan on PR → apply after approval by the GitHub environment `entra-test` / `entra-prod` (required reviewers = the municipality's approvers, or a link to their change ticket); Bicep with the Microsoft Graph extension (or Terraform `azuread`, §12.5) in `infra/entra/` |
+| `entra.yml` | dispatch, PR touching `infra/entra/**` (plan only) | new | `azure/login` with OIDC federation (no stored secret) → `what-if`/plan on PR → apply after approval by the GitHub environment `entra-test` / `entra-prod` (required reviewers = the municipality's approvers, or a link to their change ticket); Bicep with the Microsoft Graph extension (or Terraform `azuread`, §12.5) in `infra/entra/`, which owns the **shared** admin registration's definition incl. the gateway's roles and redirect URIs (decided 2026-10-29); deployer identity `Application.ReadWrite.OwnedBy` + `Group.Create` only, so admin consent, role assignments and client secrets stay manual steps (identity design §12) |
 
 ### 8.2 What runs on every PR (`verify.yml`)
 
@@ -616,7 +621,10 @@ connection refusals. Output: a Markdown report as the gateway's `latency_report.
   1001–3002; ours **5001–6999**: `5001 rag.auth.failed`, `5002 rag.access.denied`, `5003 rag.residency.refused`,
   `5004 rag.config.stale_refused`, `5005 rag.ceiling.refused`, `5101 rag.egress.blocked` (SSRF), `5102
   rag.malware.detected`, `5103 rag.pii.flagged`, `6001 rag.admin.change`, `6002 rag.admin.signin`, `6003
-  rag.admin.signout`, `6004 rag.conversation.access`. Names and ids are a public contract (add, never rename).
+  rag.admin.signout`, `6004 rag.conversation.access`; identity adds `5006 rag.auth.throttled`, `5007
+  rag.identity.lookup_failed`, `5008 rag.key.unexpected_use`, `5009 rag.mcp.client_refused`, `5010 rag.obo.refused`,
+  `6005 rag.admin.session.extended`, `6006 rag.admin.access.denied`, `6007 rag.admin.data.read` and the attribute
+  `DepartmentLookup` on 6002 (full table: identity design §10). Names and ids are a public contract (add, never rename).
 - **Log scopes** (`BeginScope` in middleware and job runner): `ConfigVersion` (every service, every request and job),
   `RunId`, `JobId`, `JobClass`, `DocumentId`, `SourceId` (worker), `AssistantId`, `ClientId`, `Classification`,
   `ConversationId` hash (api), `Tier`.

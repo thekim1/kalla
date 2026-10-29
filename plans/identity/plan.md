@@ -2,7 +2,8 @@
 
 How people, applications, chat clients, MCP clients and downstream systems are identified and authorised across the
 platform. The municipality uses **Entra ID**; Keycloak is used for local development and CI, as in the gateway.
-Cross-cutting: used by every service.
+Cross-cutting: used by every service. **Detailed design: [`design.md`](design.md)** (step 3); where they differ,
+the design wins.
 
 **Guiding rule (2026-10-29): be as compatible as possible with the LLM gateway.** Same identity model, same claim
 names and meanings, same configuration keys, same session and audit behaviour, same patterns for keys, machine
@@ -44,7 +45,7 @@ invented on one side.
     adds:
     - the RAG admin's redirect URIs (`https://<rag admin host>/signin-oidc`, `/signout-callback-oidc`);
     - the `rag-*` app roles (§3);
-    - **its own client secret or certificate** for the RAG BFF, so the two systems rotate credentials independently
+    - **its own client secret** (decided; created by an operator, as the gateway's) for the RAG BFF, so the two systems rotate credentials independently
       and never share a secret;
     - `GroupMember.Read.All` for feature C.
 
@@ -104,12 +105,14 @@ mapping, the same small feature is added to **both systems** (see `../gateway-ch
   gateway) may list **member groups** (Entra object ids).
 - At sign-in, a user's department scope = codes from the `departmentCodes` claim **plus** departments whose member
   groups the user is in. Their *role* still comes from `roles`.
-- Group membership comes from the `groups` claim (groups assigned to the application) or, on overage, a Graph
-  `checkMemberGroups` call, cached for 10 minutes. This needs `GroupMember.Read.All` (application) on the admin
+- Group membership comes from the `groups` claim (groups assigned to the application) plus a Graph
+  `checkMemberGroups` call for member groups the claim does not show (overage, or groups not assigned to the app),
+  cached for 10 minutes; if Graph fails, sign-in continues with claims only (design §2.6). This needs `GroupMember.Read.All` (application) on the admin
   registration, requested in package 1.
 - When IT later adds a department attribute, the claim takes over without any code change.
 
-Groups are stored by object id (works for cloud groups now and synced AD groups later, answered question 1); names
+Groups are stored as group claim values: Entra object ids (works for cloud groups now and synced AD groups later,
+answered question 1), group names on Keycloak/AD FS (design §2.2); names
 are looked up via Graph for display; there is no naming convention, so admins pick groups by search (question 5).
 
 ## 4. Callers of the data-plane APIs
@@ -117,7 +120,7 @@ are looked up via Graph for display; there is no naming convention, so admins pi
 | Caller | Credential | Subject | Client (for ceiling) | Phase |
 |---|---|---|---|---|
 | Open WebUI | Connection key + HS256 JWT forwarded by Open WebUI (`X-OpenWebUI-User-Jwt`) | User (email/`sub` from Open WebUI) | The Open WebUI instance | P1 |
-| Integrations | **Keys** created by admins (gateway virtual-key style) or **OAuth client-credentials tokens** (gateway Data API style) | Application | The key or `azp` | P1 keys / P2 tokens |
+| Integrations | **Keys** created by admins (gateway virtual-key style) or **OAuth client-credentials tokens** (gateway Data API style, app roles `Chat.Invoke.All` / `Knowledge.Read.All`) | Application | The key or `azp` | P1 keys / P2 tokens |
 | Public widget | `ume-rag-pk-` key + allowed origin | Anonymous session | The widget instance | P2 |
 | Our chat client / Teams | Entra access token, `aud = rag-api`, scope `Chat.Use` | User (`oid`) | `azp` | P2/P3 |
 | MCP clients | Entra access token, scope `Mcp.Use` (§6) | User | `azp` | P2 |
@@ -199,3 +202,7 @@ systems to the SIEM. Every denial is a security event.
 
 7. **Admin registration**: add the RAG admin to the gateway's existing admin registration (easiest), with its own
    credential; a twin `rag-admin` registration only as a fallback.
+8. **Who owns the shared registration as code**: `ume-rag/infra/entra/` (Bicep), including the gateway's roles and
+   redirect URIs on it; admin consent, role assignments and client secrets stay manual approval steps (design §12).
+9. **Admin credential type**: a client secret of our own, identical to the gateway's setup; certificates later for
+   both systems together.

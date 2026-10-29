@@ -82,6 +82,7 @@ listed here (copied from the gateway's file header). `S` select, `I` insert, `U`
 | `audit."AuditLog"` | S I | I | I | I |
 | `audit."ConversationAccess"` | S I | – | – | – |
 | `audit."ToolCallEvents"`, `"ToolDefinitionObservations"` | S | – | I | – |
+| `audit."AuthFailures"` | S I | I | – | – |
 | Functions (§4, §5, §8) | X `chat.rag_retention_chat_step`, `audit.rag_retention_audit_step`, `config.rag_retention_config_step` | X `content.rag_count_retrievals` | – | X `content.rag_partition_maintain`, `content.rag_ensure_profile_index` |
 | Sequences | `USAGE, SELECT ON ALL SEQUENCES` in the schemas each role writes | | | |
 
@@ -99,7 +100,7 @@ FK** (config is main-only).
 
 | Table | Purpose | Key columns | Keys and indexes | Classification rules |
 |---|---|---|---|---|
-| `Departments` | Mirror of gateway departments, incl. feature C member groups | `Id uuid` (= gateway id), `Name varchar(200)`, `CostCenterCode varchar(50)`, `MemberGroupIds uuid[]`, `IsActive bool`, `SyncedAt` | PK `Id`; U `CostCenterCode`; GIN `MemberGroupIds` | – |
+| `Departments` | Mirror of gateway departments, incl. feature C member groups | `Id uuid` (= gateway id), `Name varchar(200)`, `CostCenterCode varchar(50)`, `MemberGroups varchar(256)[]` (group claim values: Entra object ids, Keycloak/AD FS names; identity design §2.2), `IsActive bool`, `SyncedAt` | PK `Id`; U `CostCenterCode`; GIN `MemberGroups` | – |
 | `Teams` | Mirror of gateway teams (attribution `x-ume-on-behalf-of`) | `Id uuid` (= gateway), `DepartmentId`, `Name`, `Code varchar(100)`, `IsActive`, `SyncedAt` | FK `DepartmentId` → `Departments` (Restrict, as gateway); U `Code` | – |
 | `Settings` | Singleton: platform defaults (deletion guard 20 %, crawl politeness, gate threshold 3 points, auto-apply ≥ 0.9 / ≥ 20 docs / 10 % trial, **parse auto-apply kill switch**, retention values from §8, `AuditRetentionDays` 730, `RetentionLastRun*`) | `Id smallint` | `CK_Settings_Singleton` (`"Id" = 1`), range checks like `CK_GatewaySettings_*` | – |
 | `DataTiers` | Data tiers known to the tier resolver | `Name varchar(30)` (`main`, `sensitive`), `ConnectionName varchar(50)` (`ragdb`, `ragdb-sensitive`: names of connection strings in env, never secrets), `BlobContainer varchar(63)`, `State` (`active`/`migrating`) | PK `Name` | – |
@@ -113,7 +114,7 @@ FK** (config is main-only).
 | `Assistants` | Assistant = OpenAI model | `Id`, `Slug varchar(100)` (model name), `Name`, `DepartmentId`, `OwnerTeamId`, `Mode` (`rag`/`agent`), `Classification`, `GatewayModel`, `SystemPrompt text`, `QuerySteps jsonb`, `HistoryMode`, `RetentionDays int`, `AllowedOrigins text[]`, `NotFoundText`, `RiskAcceptance jsonb` (tools §6 rule 2), `State` | U `Slug` | ≥ linked collections, skills, tool servers; history/retention within the level's policy |
 | `AssistantCollections` | Direct collections | `AssistantId`, `CollectionId` | PK both; FKs Cascade/Restrict | as above |
 | `AssistantSkills` | Skills of an assistant | `AssistantId`, `SkillId`, `PinnedVersionId` (null = follow served) | PK (`AssistantId`, `SkillId`) | as above |
-| `AssistantAudiences` | Who may use it | `AssistantId`, `Kind` (`client`/`department`/`group`), `SubjectId uuid` | PK all three | P1 uses `client` only |
+| `AssistantAudiences` | Who may use it | `AssistantId`, `Kind` (`client`/`department`/`group`), `SubjectId uuid` (client or department id; null for `group`), `GroupValue varchar(256)` (`group` only; identity design §2.2) | U (`AssistantId`, `Kind`, `coalesce(SubjectId::text, GroupValue)`); `CK_` exactly one of `SubjectId`/`GroupValue` | P1 uses `client` only |
 | `Skills` | Skill identity and **served pointer** | `Id`, `Slug`, `Name`, `DepartmentId` (null = platform), `Classification`, `ServedVersionId` FK → `SkillVersions` | U `Slug` | – |
 | `SkillVersions` | Immutable SemVer versions | `Id`, `SkillId` FK, `Version varchar(50)`, `VersionMajor/Minor/Patch int`, `Description`, `Instructions text`, `Manifest jsonb`, `ReferenceBlobPrefix`, `TestQuestions jsonb`, `State`, `PublishedAt`, `GateRunId` | U (`SkillId`, `Version`); `CK_` increasing via app | – |
 | `SkillVersionLinks` | Linked collections and tools | `SkillVersionId`, `Kind` (`collection`/`tool`), `TargetId` | PK all three | skill level ≥ links |
@@ -121,7 +122,7 @@ FK** (config is main-only).
 | `Tools` | One tool | `Id`, `ToolServerId` FK, `Name`, `RiskLevel` (`read`/`write`), `IsAllowed`, `RunsWithoutConfirmation`, `PinnedDefinitionId` FK, `State` (`active`/`pending-approval`/`disabled-changed`) | U (`ToolServerId`, `Name`) | `write` refused while write tools are off |
 | `ToolDefinitions` | Pinned definitions | `Id`, `ToolId` FK, `DefinitionHash bytea` (SHA-256 of canonical JSON), `Description text`, `InputSchema jsonb`, `OutputSchema jsonb`, `CapturedAt` | U (`ToolId`, `DefinitionHash`) | – |
 | `ToolApprovals` | Two approvals per definition (tools §9.2) | `ToolDefinitionId` FK, `ApproverKind` (`platform-admin`/`system-owner`), `Approver` (`sub`), `ApprovedAt` | PK (`ToolDefinitionId`, `ApproverKind`) | tool usable only with both rows |
-| `Clients` | Client registry (R5) | `Id`, `Name`, `Kind` (`open-webui`/`widget`/`integration`/`entra-app`/`mcp-client`/`own-client`/`teams`), `EntraAppId uuid` (`azp`), `ClassificationCeiling`, `StoresHistory bool`, `ClientRetentionDays int`, `TaskModel`, `TaskModelResidency`, `AllowedOrigins text[]`, `IsEnabled` | U `EntraAppId` (nulls distinct); `CK_Clients_History` (`StoresHistory` ⇒ ceiling ≠ `sensitive`); `CK_Clients_Mcp` (`mcp-client` ⇒ ceiling ≠ `sensitive`) | ceiling caps every assistant it may use |
+| `Clients` | Client registry (R5) | `Id`, `Name`, `Kind` (`open-webui`/`widget`/`integration`/`entra-app`/`mcp-client`/`own-client`/`teams`/`internal`), `OAuthClientId varchar(200)` (`azp`/`appid`/`client_id`; strings for Keycloak), `ClassificationCeiling`, `StoresHistory bool`, `ClientRetentionDays int`, `TaskModel`, `TaskModelResidency`, `AllowedOrigins text[]`, `ResolveUsersByEmail bool` (P2, identity design §5.4), `IsEnabled` | U `OAuthClientId` (nulls distinct); `CK_Clients_History` (`StoresHistory` ⇒ ceiling ≠ `sensitive`); `CK_Clients_Mcp` (`mcp-client` ⇒ ceiling ≠ `sensitive`) | ceiling caps every assistant it may use |
 | `Keys` | Gateway-style keys | as gateway `VirtualKey`: `Id`, `ClientId` FK, `TeamId`, `Kind` (`sk`/`pk`), `Name`, `Prefix varchar(20)` (`ume-rag-sk-AbC1`), `KeyHash varchar(64)` (hex HMAC-SHA256, pepper `Security__KeyPepper`), `EncryptedSecret`, `Scopes jsonb` (assistants/collections), `AllowedOrigins`, `AllowedIpRanges`, `RequestsPerMinute`, `IsEnabled`, `CreatedAt`, `CreatedBy`, `ExpiresAt`, `RevokedAt`, `GraceUntil`, `RotatedToKeyId` | U `KeyHash`; concurrency tokens `RotatedToKeyId`, `RevokedAt` (as gateway) | key's client ceiling applies |
 | `KeyLastUse` | `LastUsedAt` split out so key use never bumps the config version | `KeyId` PK, `LastUsedAt` | – | – |
 | `GatewayKeyLinks` | Interim per-team gateway keys (R4 interim) | `Id`, `TeamId`, `Purpose` (`default`/`onprem`), `EncryptedKey` (Data Protection), `Prefix`, `VerifiedAt` | U (`TeamId`, `Purpose`) | `onprem` used for `sensitive` |
@@ -192,6 +193,7 @@ depend on rows that retention later removes.
 | `AuditLog` | Changes and privileged reads | gateway `AuditLogEntry` columns (`Id bigint identity`, `Timestamp`, `Actor`, `Action`, `EntityType`, `EntityId`, `Details jsonb` masked, `ActorName`, `ActorRoles`, `ActorDepartments`, `SourceAddress`, `SessionId`, `RequestId`, `UserAgent`, `RecordedAt`) + `Service varchar(30)`, `Reason varchar(1000)`, `ConfigVersion bigint`, `Classification` | IX `Timestamp`; IX (`EntityType`, `EntityId`) |
 | `ConversationAccess` | Admin review workflow as append-only events: `requested` (reason), `approved` (second approver, `sensitive`), `decrypted` | `Id bigint identity`, `RequestId uuid`, `Event`, `ConversationId`, `Classification`, `Actor`, `Reason`, `Timestamp` | IX `RequestId`; `CK_` approver ≠ requester enforced by app + test |
 | `ToolCallEvents` | Tool hub audit (tools §3): metadata and HMAC of arguments | `Id bigint identity`, `Timestamp`, `AssistantId`, `ToolId`, `SubjectId`, `ClientId`, `ConversationId`, `DurationMs`, `Outcome`, `ArgumentsBytes`, `ResultBytes`, `ArgumentsHmac bytea` | IX `Timestamp`; IX (`ToolId`, `Timestamp`) |
+| `AuthFailures` | Refused credentials, aggregated per 10 s bucket (identity design §6.3) | gateway `AuthFailure` columns + `Credential varchar(20)`, `ClientId uuid`; never the presented value | IX `FirstSeen` |
 | `ToolDefinitionObservations` | Tool hub saw a definition differing from the pinned one (tool disabled in memory at once, re-approval shown in admin) | `Id bigint identity`, `ToolId`, `ObservedHash bytea`, `Definition jsonb`, `ObservedAt` | IX (`ToolId`, `ObservedAt`) |
 
 Security events are not stored: like the gateway (ADR 015) they go to OpenTelemetry in `Ume.Rag.Security`.
@@ -619,7 +621,8 @@ Prefix `ume-rag:`, ACL user limited to `~ume-rag:*`; no publish channels (change
 | `ume-rag:admin-session:{sessionId}` | session |
 | `ume-rag:rl:req:{keyId}:{minute}`, `ume-rag:rl:user:{subjectHash}:{minute}`, `ume-rag:rl:tool:{toolId}:{minute}`, `ume-rag:rl:ip:{ipHash}:{minute}` | 120 s (`RateWindowSeconds`, as gateway) |
 | `ume-rag:qemb:{profileId}:{queryHash}` (embedding only; `public`/`internal` queries only, §12.14) | 5 min |
-| `ume-rag:groups:{oid}` (feature C `checkMemberGroups` result, ids only) | 10 min |
+| `ume-rag:groups:{oid}` (feature C `checkMemberGroups` result `{checked, member}`, ids only) | 10 min |
+| `ume-rag:owui-oid:{hmac(email)}` (P2, Open WebUI email → Entra `oid`, identity design §5.4) | 1 h |
 
 ## 12. Open decisions and contradictions found
 
@@ -638,7 +641,7 @@ chunk sets is stated (§2.2); `GatewayKeyLinks` is security-relevant (§5).
 | 6 | Retention granularity | 90 days per conversation from last activity would keep old messages of long conversations | 7-day key epochs per conversation; every message gone ≤ retention + 7 days |
 | 7 | Shared chunks vs dedup | Plan §3 "one set of chunks" vs knowledge §3 "deduplicated by document and chunk text hash" | Chunk sets shared via `CollectionIds uuid[]`; dedup still needed when two pipelines differ |
 | 8 | Chunk tier | "Classification lives on collections" vs tier split | Tier placement by document (source) level; access by collection (§6.4) |
-| 9 | Organisation sync | Data API `catalog.read` has departments and teams but no member groups | Gateway feature C adds `memberGroupIds` to `/v1/catalog/departments`; admin syncs every 5 min with a `rag-sync` Data API client; add to `gateway-changes` |
+| 9 | Organisation sync | Data API `catalog.read` has departments and teams but no member groups | Gateway feature C adds `memberGroups` (strings) to `/v1/catalog/departments`; admin syncs every 5 min with a gateway Data API key (`ume-dk-`, `catalog.read` only; identity design §2.1); in `gateway-changes` |
 | 10 | Encryption below `sensitive` | §8a requires encryption for `internal`/`sensitive`, optional for `public`; blob encryption only stated for `sensitive` | Encrypt chat at every level by default and all blobs at every level (same code path, negligible cost) |
 | 11 | Retention values missing in §8 | Jobs, run items, runs, observations, caches, outbox, stats, quarantine | Values marked *proposed* in §8–9; add to `Settings` and platform §8 |
 | 12 | Job classes | Worker §2 lists six classes | Add `command` (§12.2) |

@@ -40,7 +40,10 @@ read here). Assistant audiences by group (P2) are picked by searching Entra grou
 | `rag-editor` (from P2) | Sources, collections, assistants and skills in own departments; template forms, not the canvas |
 | `rag-viewer` | Read status, runs, evaluation results and usage in own departments |
 
-Scoped by `departmentCodes` / `teamCodes` claims, as in the gateway.
+Scoped by `departmentCodes` / `teamCodes` claims, as in the gateway. A signed-in user with no `rag-*` role gets 403 on
+every page and API call (the gateway shows such users its catalogue; we have no public page). The organisation page
+shows member groups read-only and links to the gateway's *Organisation* page to edit them. Sign-in, sessions, keys page
+and security events: `../identity/design.md` §1, §6.4, §10.
 
 ## 4. Admin UI pages
 

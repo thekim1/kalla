@@ -70,7 +70,7 @@ against a fake gateway, idle and during the R1 ingestion load test.
 
 - **Conversation id**: required from the client (Open WebUI chat id, widget session id) or issued by us on the first
   response (`x-rag-conversation-id`) for clients to send back. No derivation from history hashes.
-- Stored per user (Entra `oid`), or per anonymous widget session.
+- Stored per subject (`SubjectId`: Entra `oid`, Open WebUI user id, or anonymous widget session; identity design §3).
 - **History mode, retention and encryption follow the assistant's level policy** (`../platform/plan.md` §8a):
   `stored`, `session` (24 h) or `none` (metadata only); retention within the level's limits; content
   envelope-encrypted with a per-conversation data key before the background writer stores it. Retention destroys the
@@ -105,7 +105,8 @@ Registered as a client with ceiling **`internal`**; `sensitive` assistants never
 
 1. ~~Does Open WebUI forward a stable chat id?~~ **Answered**: yes, `X-OpenWebUI-Chat-Id` when user-info forwarding
    is on (`open-webui/backend/open_webui/utils/headers.py:198`). It is not inside the signed JWT, so a conversation is
-   keyed by (user `oid`, chat id): a guessed id can never reach another user's conversation.
+   keyed by (client, Open WebUI user id from the JWT `sub`, chat id) (identity design §3, §5): a guessed id can never
+   reach another user's conversation.
 2. ~~File attachments in P1?~~ **Answered**: not in P1. Ad-hoc files arrive in P2 through our own upload endpoint
    (temporary per-conversation collection, level-based retention).
 3. ~~Language?~~ **Answered**: answer in the user's language (sources are mostly Swedish); an assistant setting can

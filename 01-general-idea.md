@@ -318,6 +318,7 @@ stated reason, which is itself audited.
 | Feedback in evaluation | Only as editor-rewritten questions without personal data. |
 | Skills timing | P2, with agent assistants; P1 assistants are prompt + collections. |
 | Identity compatibility | Same identity model as the gateway: same OIDC/BFF, claims, config keys (`UME_RAG_OIDC_*`), key and Data API patterns, security events; preferably one shared admin registration with `rag-*` roles. Department scope from groups is added to both systems. No registration needed before the pilot. |
+| Identity detail (step 3) | `plans/identity/design.md`. Member groups are group claim values (Entra object ids; names on Keycloak/AD FS); Graph lookup failure narrows to claims-only, never fails open. `ume-rag/infra/entra/` (Bicep) owns the shared admin registration incl. the gateway's roles; consent, role assignments and secrets stay manual. The RAG BFF uses its own client secret, as the gateway (certificates later, for both). Policy denials above ceiling or outside audience answer 404. |
 
 Sections 3–9 above describe the original idea; where they differ from the plans, the plans and this table win.
 
