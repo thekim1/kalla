@@ -410,7 +410,7 @@ Fixed subnets so the host firewall (`deploy/host/docker-user-firewall.sh`, `DOCK
 | `llm` | 172.30.3.0/24 | no | rag-api(+b), rag-worker, rag-admin(+b) | firewall: only the gateway's address and port (gateway's `llm` name) |
 | `ingestion` | 172.30.4.0/24 | **yes** | rag-worker, rag-clamav, rag-renderer | none |
 | `parser` | 172.30.5.0/24 | **yes** | rag-worker, rag-parser | none (parser has no other network) |
-| `crawl` | 172.30.6.0/24 | no | rag-worker, rag-renderer | firewall: drop RFC 1918, link-local, loopback, the host's own addresses except the allow-list `UME_RAG_CRAWL_ALLOW` (municipal hosts); app-level `IEgressGuard` in addition |
+| `crawl` | 172.30.6.0/24 | no | rag-worker (rag-renderer is **not** on it: the worker fetches and fulfils every browser request, connectors design §8.3) | firewall: drop RFC 1918, link-local, loopback, the host's own addresses except the allow-list `UME_RAG_CRAWL_ALLOW` (municipal hosts); app-level `IEgressGuard` in addition |
 | `mirror` | 172.30.7.0/24 | no | rag-clamav | firewall: only `database.clamav.net` (decided: no internal mirror); was `CLAMAV_MIRROR_URL`'s host |
 
 Ports, as the gateway (`${…_BIND:-127.0.0.1}`): `rag-api` `127.0.0.1:8543`, `rag-api-b` `:8544`, `rag-admin`
@@ -633,7 +633,7 @@ connection refusals. Output: a Markdown report as the gateway's `latency_report.
   1001–3002; ours **5001–6999**: `5001 rag.auth.failed`, `5002 rag.access.denied`, `5003 rag.residency.refused`,
   `5004 rag.config.stale_refused`, `5005 rag.ceiling.refused`, `5101 rag.egress.blocked` (SSRF), `5102
   rag.malware.detected`, `5103 rag.pii.flagged`, `6001 rag.admin.change`, `6002 rag.admin.signin`, `6003
-  rag.admin.signout`, `6004 rag.conversation.access`; the engine design adds `5105 rag.pipeline.refused` (SIEM alert on any) and log scopes `ExecutionId`, `NodeId`; the parser design adds `5104 rag.parser.limit_exceeded` (worker); identity adds `5006 rag.auth.throttled`, `5007
+  rag.admin.signout`, `6004 rag.conversation.access`; 5101/5102 attributes per connectors design §7, §11 (SIEM: any 5102; 5101 from `Render`); the engine design adds `5105 rag.pipeline.refused` (SIEM alert on any) and log scopes `ExecutionId`, `NodeId`; the parser design adds `5104 rag.parser.limit_exceeded` (worker); identity adds `5006 rag.auth.throttled`, `5007
   rag.identity.lookup_failed`, `5008 rag.key.unexpected_use`, `5009 rag.mcp.client_refused`, `5010 rag.obo.refused`,
   `6005 rag.admin.session.extended`, `6006 rag.admin.access.denied`, `6007 rag.admin.data.read` and the attribute
   `DepartmentLookup` on 6002 (full table: identity design §10). Names and ids are a public contract (add, never rename).

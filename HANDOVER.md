@@ -1,6 +1,6 @@
 # Handover
 
-Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 2, steps 3–6a).
+Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 2, steps 3–6b).
 
 ## What this is
 
@@ -24,6 +24,7 @@ and a "kitchen sink" monolith.
 | `plans/gateway-changes/design.md`, `adr-drafts.md` | **Detail step 4** (done): residency ceiling (B), member groups + tenant/guest refusal (C), delegation (A), FakeLlm dimensions, run headers, tool tests; releases B → C → A; ADR rows 018–020 to copy into the gateway repo |
 | `plans/parser/design.md` | **Detail step 5** (done): routing worker vs parser, `/v1/inspect`, Docling native legacy/ODF/email backends behind a sandboxed `soffice` wrapper, attachment splitter → child documents, multipart contract, stored DoclingDocument, page ranges + stitching, OCR modes and bake-off, supervisor process model, security, image, tests. Docling claims checked against `docling-slim` 2.145.0 |
 | `plans/ingestion-worker/design-engine.md` | **Detail step 6a** (done): engine model, definition format + validator + Merkle hashes (`Ume.Rag.Pipelines`), node interface and P1 catalogue, execution with segments and fence, cache, jobs/fairness/scheduler, runs, preview, publish/rollback, templates, index writer, config mid-run, observability, capacity, tests |
+| `plans/ingestion-worker/design-connectors.md` | **Detail step 6b** (done): connector contracts and checkpoints, URL identity, URL list, crawl (robots, sitemaps, scope, traps, traversals), shared frontier with claims and releaser, egress guard, renderer fed by worker fetches, variants, uploads, attachments, ClamAV, change detection and effect tags, deletion guard with reconcile phase, SharePoint P2 outline |
 | `plans/postponed-decisions.md` | **Register of postponed decisions** (K1 key service, T1 sensitive tier, A1 archive law, R1 runner, ...), with stopgap, deadline, owner. Review at each phase start; add new postponements here |
 
 Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{dify,ragflow,onyx,open-webui,kernel-memory,bifrost}`.
@@ -57,8 +58,8 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | 4. Gateway changes | `plans/gateway-changes/design.md`, `adr-drafts.md` (drafts; gateway repo untouched) | done, reviewed | `11908e4` |
 | 5. Parser | `plans/parser/design.md` | done, reviewed | `5c9e414` |
 | 6a. Ingestion engine | `plans/ingestion-worker/design-engine.md` | done, reviewed | `080d4bd` |
-| **6b. Connectors** | `plans/ingestion-worker/design-connectors.md` | **next** | – |
-| 6c. Processing (auto-parse, chunking, embedding, PII, evaluation) | `plans/ingestion-worker/design-processing.md` | todo | – |
+| 6b. Connectors | `plans/ingestion-worker/design-connectors.md` | done, reviewed | see `git log` |
+| **6c. Processing** (auto-parse, chunking, embedding, PII, evaluation) | `plans/ingestion-worker/design-processing.md` | **next** | – |
 | 7. Knowledge API | `plans/knowledge-api/` | todo | – |
 | 8. Chat API (decide C1 chat attachments here) | `plans/chat-api/` | todo | – |
 | 9. Tools (skills, tool hub, MCP server, template) | `plans/tools/` | todo | – |
@@ -89,23 +90,20 @@ After step 10: a consistency pass across all detail documents, then P0 implement
 - R1 self-hosted runner (IT security), A1 archive law (owner to be named), N1 product name: see the register.
 - Nothing else is waiting on the user right now.
 
-## Next step in detail: step 6b, connectors
+## Next step in detail: step 6c, processing
 
-Brief a subagent to write `plans/ingestion-worker/design-connectors.md`, consuming the contracts of
-`design-engine.md` (root nodes `http-fetch`/`crawl`/`upload`, `sync`/`fetch` jobs, `EnsureCurrent`, run outcomes,
-index writer `SoftDeleteReferencesAsync`). Cover: the capability interfaces (plan §3) as C# contracts; canonical
-identity and URL normalisation; URL list with conditional GET; website crawl (sitemap, include/exclude, depth/page
-limits, robots.txt, user agent, the **shared crawl frontier** and per-host politeness in `CrawlHosts`, answered 4),
-SSRF/egress guard (`IEgressGuard`, firewall rules, redirects, DNS rebinding), the `rag-renderer` (when to render,
-JavaScript-only detection, and **how rendered and non-rendered raw content of the same URL coexist** — open item from
-6a §13.1); uploads (admin → blob → ClamAV → sync), **email attachments as child documents** (parser design §5,
-data-model `ParentDocumentId`, depth ≤ 2); change detection (ETag/Last-Modified, content hash), source-setting effect
-tags (identity/scope/behaviour/cosmetic) and the smallest re-sync; the **deletion guard** (20 %, empty source, 14-day
-grace, confirm/reject commands); malware handling and quarantine; checkpoints and resume; SharePoint (P2) design
-outline with the Onyx/Eneo issues as acceptance tests; observability, tests. Before briefing, ask the user anything only
-they can decide (e.g. crawler user-agent text and contact, whether to honour `noindex`/`nofollow`, max pages per site).
-
-Then **6c** (`design-processing.md`): auto-parse heuristics and range planning (parser design §6, §8), stitching,
-cleaning, split + chunk (answered 8), PII detection incl. the **parser NER endpoint with its own lane** (answered 6,
-engine §18/§21), embedding (profile, cache, batching, AIMD), and evaluation sets + publish gate (agree with the
-engine's **shadow chunk sets**, engine §12.1).
+Brief a subagent to write `plans/ingestion-worker/design-processing.md`, consuming `design-engine.md` (node
+contracts, cache classes, segments, `IPublishGate` and **shadow chunk sets** §12.1, index writer §14) and
+`design-connectors.md` (variants, `ContentHashVersion`, attachments). Cover: *Detect* and *Auto-parse* (inspect
+signals and thresholds, parser design §6; range planning and adaptive sizing §8.1; profiles P1 heuristics only),
+stitching (§8.2), *Clean* (furniture, dehyphenation, learned cleanup rules P2), *Split by headings* (re-levelling
+layout headings by numbering), *Chunk* (answered 8: ≈ 400 BGE-M3 tokens, 15 % overlap, heading path, row-group
+tables; tokenizer in .NET), *Metadata from path*, *Quality check* metrics; *Detect personal data* (patterns incl.
+personnummer checksum and samordningsnummer in the worker; names via a new parser NER endpoint **with its own lane**
+— answered 6; a change to parser design to list; model choice and licence; how flags block `public` collections and
+the clear command); *Embed* (platform profile BGE-M3 1024, batching, `EmbeddingCache`, AIMD from engine §18,
+residency `OnPrem`); evaluation (generated sets, filtering, metrics recall@k/MRR, sampling, the publish gate with the
+3-point threshold, behaviour for new collections without a baseline, overrides, auto-apply gate for P2 profiles,
+cost); noise-only content changes (6b §12.2 left open whether they create new chunk sets); observability, tests.
+Before briefing, ask the user anything only they can decide (e.g. which NER model and licence, gate override rights,
+evaluation sample size and cost budget).

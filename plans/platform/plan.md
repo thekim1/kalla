@@ -161,6 +161,9 @@ Detailed in [`../gateway-changes/plan.md`](../gateway-changes/plan.md):
 
 ## 8. Retention and personal data
 
+Ingestion additions (connectors design §9.3, §11): quarantined files kept 30 days, metadata only; deleted upload blobs
+purged 14 days after deletion.
+
 | Data | Default | Where set |
 |---|---|---|
 | Conversations, messages, tool-call records | 90 days (`sensitive`: 30 days); see §8a | Assistant within the per-level limits (§8a) |

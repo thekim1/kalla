@@ -210,3 +210,29 @@ Answered (2026-10-29, step 6 questions):
 9. **Shared documents across departments** (6a): when one department's sync finds new content in a document another
    department also indexes, the other collection is re-processed at once in its own follow run, charged to its team
    (parse shared; only chunking and embedding repeat).
+
+Answered (2026-10-29, step 6b questions):
+
+10. **Crawler user agent**: `UmeaKommunBot/1.0 (+<about page URL on umea.se>)`, product-neutral (N1 still open);
+    robots.txt rules match `UmeaKommunBot`.
+11. **Page-level `noindex`/`nofollow`** (meta robots, `X-Robots-Tag`): honoured on external hosts; **ignored on
+    allow-listed municipal hosts**, where `noindex` usually only means "keep out of public search engines".
+    robots.txt is always honoured (answered 4).
+12. **Crawl size defaults**: 10 000 pages, depth 10 per source; hitting the limit marks the run degraded with a clear
+    reason; admins can raise it per source.
+13. **Off-site links**: never followed by default; a crawl stays on its start host(s) and listed extra hosts;
+    off-site documents only through an explicit allow pattern.
+14. **Own crawler, not a self-hosted Firecrawl** (2026-10-29): Firecrawl (AGPL-3.0; own API, workers, Playwright,
+    Redis, RabbitMQ, Postgres queue) would cover fetch, render and Markdown only; the shared frontier, change
+    detection, deletion guard, crawl rules, SSRF guard and pipeline integration would still be ours. Revisit only as a
+    backend behind the renderer contract if sites with anti-bot protection must be crawled.
+
+Answered (2026-10-29, step 6b review):
+
+15. **External sites**: any department may crawl any public external host (robots.txt, 1 req/s); platform admins
+    can block hosts.
+16. **SharePoint permissions (P2)**: not mirrored; preflight warns about unique permissions; mirroring is a P3 option.
+17. **Malware**: SIEM alert, metadata-only view, no download or release in P1, quarantine purged after 30 days.
+
+The upload types of answered 3 are superseded by the pilot list in §3 (parser design §3). Connector details:
+[`design-connectors.md`](design-connectors.md).

@@ -449,6 +449,12 @@ Data-model §4.2 holds order, leases and attempts. Concurrency defaults below ar
 
 ### 9.2 How a sync fans out
 
+> **Refined by 6b** (`design-connectors.md` §2, §6, §13): URL-list and crawl items become frontier **claims**
+> released per host by the frontier releaser instead of eager `fetch` jobs; the `sync` payload carries a `phase`
+> (`list`/`fetch`/`reconcile`) and a checkpoint reference; deletions run in a **reconcile phase** after all
+> fetches, enqueued by the finalizer; new `preview` kinds `preflight` and `hierarchy`. Where this section differs,
+> 6b wins.
+
 1. `sync` job: resolve source and pipeline version at the confirmed snapshot; open or reuse the `Runs` row; run the
    connector's listing and change detection (6b), checkpointed, yielding after 1,000 items or 2 minutes (re-enqueued
    as a continuation, no attempt).
@@ -706,7 +712,8 @@ The `render` branch: when the source does not enable rendering, *Headless render
 fact `render.not_enabled`; `html2` then re-runs on the same bytes (a cache miss, because the added fact changes the
 input's `OutputHash`; cheap, in-process) and the document is indexed as `degraded`. Whether the crawl root renders
 up front instead (JavaScript-only pages, plan answered 2) and how rendered and non-rendered raw content of one URL
-coexist is 6b's to decide; this branch stays as the fallback. Unsupported media types leave through `route.default` (unconnected) → `unsupported`.
+coexist is decided in 6b (`design-connectors.md` §8.4: `Documents.Variant` `origin`/`rendered` in the document
+key); this branch stays as the fallback and sets `RenderRecommendedAt`. Unsupported media types leave through `route.default` (unconnected) → `unsupported`.
 
 **`files`** (upload): root `upload`; same `route` cases; `route.html` goes straight to `html` → `clean` (no render
 branch: an uploaded file is never re-fetched); otherwise as `website`. Email (`.eml`/`.msg`) is listed under
