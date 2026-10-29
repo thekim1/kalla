@@ -47,8 +47,8 @@ allows only `hostssl ragdb ume_rag_migrator,ume_rag_admin,ume_rag_api,ume_rag_to
 |---|---|---|---|---|---|---|
 | `ume_rag_migrator` | `rag-migrate` (DDL, owner of everything) | 3 | 2 | 0 (none; index builds) | 10s | 0 |
 | `ume_rag_api` | `rag-api` (knowledge, chat, MCP) | 60 | 25 (+1 LISTEN) | 5s | 1s | 10s |
-| `ume_rag_tools` | `rag-tools` | 12 | 8 (+1 LISTEN) | 5s | 1s | 10s |
-| `ume_rag_admin` | `rag-admin` | 15 | 10 (+1 LISTEN) | 30s | 5s | 60s |
+| `ume_rag_tools` | `rag-tools` | 12 | 5 (+1 LISTEN) per slot (two rolling slots fit) | 5s | 1s | 10s |
+| `ume_rag_admin` | `rag-admin` | 15 | 6 (+1 LISTEN) per slot (two rolling slots fit) | 30s | 5s | 60s |
 | `ume_rag_worker` | `rag-worker` | 14 | 10 (+1 LISTEN) | 60s | 5s | 60s |
 
 `max_connections = 150`; the role limits sum to 104, so the data plane can always connect (R1). Pool sizes are

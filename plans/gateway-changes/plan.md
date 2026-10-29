@@ -53,6 +53,14 @@ department attribute in Entra today. Added to the gateway first, and implemented
   `GET /v1/catalog/departments` gains a `memberGroupIds` field (the RAG admin syncs from it every 5 minutes with its
   own Data API client).
 
+## 3c. FakeLlm: honour the `dimensions` parameter
+
+The gateway's FakeLlm returns 8-dimensional embeddings (`Vector()` in `src/Ume.LlmGateway.FakeLlm/Program.cs`), so the
+RAG platform (1024-dim BGE-M3 profile) cannot run against a real local gateway with the fake provider. Small change:
+honour OpenAI's optional `dimensions` request parameter (default stays 8), using deterministic feature hashing so
+similar texts get similar vectors. Until then, developers add Ollama `bge-m3` to the local gateway
+(`../platform/repo-and-deployment.md` §4.4).
+
 ## 3a. Small additions (from the Bifrost analysis)
 
 - **Run grouping headers** (metadata only): `x-ume-run-id` and `x-ume-step` stored on usage records, so the many

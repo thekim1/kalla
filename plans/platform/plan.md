@@ -20,7 +20,7 @@ src/
   Ume.Rag.AdminApi/          control plane: BFF + admin endpoints, serves the admin UI
   Ume.Rag.MigrationService/  one-shot migrator (DDL role), dev seeder
   Ume.Rag.AppHost/           Aspire orchestration for local dev
-  Ume.Rag.FakeGateway/       OpenAI-compatible fake for chat + embeddings (or reuse gateway FakeLlm)
+  Ume.Rag.FakeGateway/       OpenAI-compatible fake gateway: chat, 1024-dim embeddings, residency headers, catalog (the gateway's FakeLlm returns 8-dim vectors, so it cannot be reused)
   admin-ui/                  Vue 3 + Pinia + Vue Flow, gateway design system
   parser/                    Python sidecar (Docling), own Dockerfile
 templates/mcp-server/        template for municipal MCP servers (see ../tools)
@@ -28,6 +28,8 @@ tests/
 deploy/                      compose files, Postgres image, init and backup scripts (gateway style)
 docs/
 ```
+
+Full tree, build conventions, images, Compose, release and CI: [`repo-and-deployment.md`](repo-and-deployment.md).
 
 `Ume.Rag.Api` runs Knowledge, Chat and the MCP server as endpoint groups selected by a role setting, so the MVP is
 one container and they can be split later without code changes. Chat calls retrieval through an `IRetriever`
@@ -263,7 +265,7 @@ worker plan (§7) and admin plan. The postponed Swedish benchmark becomes the cu
 4. AppHost running everything locally with the fake gateway and Keycloak (Entra in test/prod).
 5. ServiceDefaults, health endpoints, OpenTelemetry; config-version propagation library.
 6. Compose files with resource zones for a single host; deploy to a test host.
-7. Entra app registrations for test (see identity plan).
+7. Approval package 1 submitted (see identity plan §2); no Entra registration is needed for P0 itself.
 
 ## 12. Answered questions (2026-10-29)
 
