@@ -1,6 +1,6 @@
 # Handover
 
-Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 2, steps 3 and 4).
+Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 2, steps 3–5).
 
 ## What this is
 
@@ -22,6 +22,7 @@ and a "kitchen sink" monolith.
 | `plans/identity/design.md` | **Detail step 3** (done): BFF copied from the gateway, feature C, `RagPrincipal`, `IAccessPolicy` (13 ordered steps), Open WebUI JWT trust, keys, OAuth, MCP metadata, OBO (P3), security events 5001–6007, Keycloak realm, Bicep package 1, tests |
 | `plans/platform/repo-and-deployment.md` | **Detail step 2** (done): repo layout, build, roles, Aspire/Keycloak/FakeGateway, images, compose and resource zones, release, backup, GitHub Actions, observability, P0 checklist |
 | `plans/gateway-changes/design.md`, `adr-drafts.md` | **Detail step 4** (done): residency ceiling (B), member groups + tenant/guest refusal (C), delegation (A), FakeLlm dimensions, run headers, tool tests; releases B → C → A; ADR rows 018–020 to copy into the gateway repo |
+| `plans/parser/design.md` | **Detail step 5** (done): routing worker vs parser, `/v1/inspect`, Docling native legacy/ODF/email backends behind a sandboxed `soffice` wrapper, attachment splitter → child documents, multipart contract, stored DoclingDocument, page ranges + stitching, OCR modes and bake-off, supervisor process model, security, image, tests. Docling claims checked against `docling-slim` 2.145.0 |
 | `plans/postponed-decisions.md` | **Register of postponed decisions** (K1 key service, T1 sensitive tier, A1 archive law, R1 runner, ...), with stopgap, deadline, owner. Review at each phase start; add new postponements here |
 
 Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{dify,ragflow,onyx,open-webui,kernel-memory,bifrost}`.
@@ -39,6 +40,9 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
   security-event scheme; when something is missing, add it to both systems (see `gateway-changes`).
 - Commit only when asked or at the end of a reviewed step; the repo is `~/research/rag` (branch `master`).
 - A formatter in the user's editor sometimes realigns markdown tables: **re-read a file before editing it**.
+- **Check library claims against real source**: when a subagent cannot find a library locally, download the package
+  into the scratchpad (`pip download --no-deps`, extract, read only) and verify. In step 5 this showed Docling 2.145
+  already reads legacy Office, ODF and email, which the draft had assumed it did not.
 
 ## Progress
 
@@ -50,8 +54,8 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | Postpone Key Vault, postponed-decisions register | `plans/postponed-decisions.md` | done | `d2fcff3` |
 | 3. Identity detail | `plans/identity/design.md` | done, reviewed | `ffdccaf` |
 | 4. Gateway changes | `plans/gateway-changes/design.md`, `adr-drafts.md` (drafts; gateway repo untouched) | done, reviewed | `11908e4` |
-| **5. Parser** | `plans/parser/` | **next** | – |
-| 6. Ingestion worker (largest; consider splitting: engine + nodes, connectors, auto-parse + evaluation) | `plans/ingestion-worker/` | todo | – |
+| 5. Parser | `plans/parser/design.md` | done, reviewed | see `git log` |
+| **6. Ingestion worker** (largest; consider splitting: engine + nodes, connectors, auto-parse + evaluation) | `plans/ingestion-worker/` | **next** | – |
 | 7. Knowledge API | `plans/knowledge-api/` | todo | – |
 | 8. Chat API (decide C1 chat attachments here) | `plans/chat-api/` | todo | – |
 | 9. Tools (skills, tool hub, MCP server, template) | `plans/tools/` | todo | – |
@@ -82,14 +86,14 @@ After step 10: a consistency pass across all detail documents, then P0 implement
 - R1 self-hosted runner (IT security), A1 archive law (owner to be named), N1 product name: see the register.
 - Nothing else is waiting on the user right now.
 
-## Next step in detail: step 5, parser
+## Next step in detail: step 6, ingestion worker
 
-Brief a subagent to write `plans/parser/design.md`: the stateless Python + Docling sidecar (`plans/parser/plan.md`).
-Cover at least: the HTTP contract with the ingestion worker (request/response schema, streaming or job-style, size and
-page limits, timeouts, cancellation, error codes), supported formats and their Docling pipelines, OCR (postponed P1:
-Tesseract `swe` vs Docling default, both baked in), table/heading/structure output feeding chunking, the auto-parse
-heuristics and confidence signals the worker needs, resource limits inside the `parser` zone (no network, memory/CPU
-caps, one document per worker process, crash isolation), the image (models baked, licences P2, versions V1), health
-and `/v1/info`, observability (FastAPI OTel, no content in telemetry), security (malicious files after ClamAV,
-decompression bombs, PDF JavaScript), tests with a Swedish document corpus, and performance targets per page. Before
-briefing, ask the user anything only they can decide (for example which formats the pilot must support).
+The largest area. Propose to the user splitting it into sub-steps, each its own subagent and document under
+`plans/ingestion-worker/`: **6a** engine + node catalogue + job classes (queue use, leases, two-stage engine, node
+manifest, caching, preview, publish plan, run records), **6b** connectors (URL list, crawl with frontier and renderer,
+upload incl. child documents for email attachments, SharePoint P2) and change detection/deletion guard, **6c**
+auto-parse, chunking (heading paths, row-group tables, stitching from parser design §8), embedding profile and
+evaluation sets + publish gate. Inputs fixed by earlier steps: data-model (queue, outbox, document store, blobs),
+parser design (contract, inspect, error mapping, ranges, stitching), gateway design (residency ceiling, team id, run
+headers), identity design (classification, security events). Before briefing, ask the user anything only they can
+decide (e.g. chunk size defaults, crawl politeness limits, which evaluation thresholds gate a publish).

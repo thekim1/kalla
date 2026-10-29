@@ -61,7 +61,10 @@ produces the smallest re-sync.
 - *Website crawl*: start URL or sitemap, include/exclude patterns, max depth/pages, robots.txt, identifying user
   agent, SSRF protection, crawl report with failure reasons. Sources crawling the same host share the frontier and
   its rate limit. Optional headless rendering via the `rag-renderer` container (P1, decided).
-- *File upload*: files from the admin API through blob storage; size/type limits.
+- *File upload*: files from the admin API through blob storage; size/type limits. Pilot types (parser design §3):
+  PDF, DOCX/PPTX/XLSX, legacy `.doc`/`.xls`/`.ppt`, `.odt`/`.ods`/`.odp`, `.rtf`, `.jpg`/`.png`/`.tif(f)`,
+  `.eml`/`.msg`, `.txt`/`.md`/`.csv`, HTML. Archives and macro-enabled Office files are refused in P1 (postponed Z1).
+  Email attachments become **child documents** (depth ≤ 2), each scanned by ClamAV and routed like any file.
 
 **P2: SharePoint** via Microsoft Graph (`Sites.Selected`, see identity plan): drive delta with `deleted` facets and
 moves handled, 410 → full resync, change subscriptions with a renewal schedule, pre-flight check for grants. Onyx's
@@ -115,7 +118,13 @@ clears them. Masking stays an optional P2 node a source can enable.
 
 1. **Profiles** (learned or made by admins), matched on domain/path/document type → strategy.
 2. **Per-page heuristics**: clean PDF text layer → PdfPig; empty/garbled → Docling OCR; nothing found → re-render;
-   table-dense → Docling tables. Garbled-text detectors (after RAGFlow) also feed the Quality check.
+   table-dense → Docling tables. Signals come from the parser's cheap `/v1/inspect` (page count, per-page text-layer
+   facts, garble score; parser design §6) with starting thresholds in parser design §6.1. Pages with the same
+   strategy are grouped into ranges of ≤ 20 pages sized from measured time per page, and the worker stitches heading
+   paths, cross-page tables and hyphenation (parser design §8). Parse concurrency is read from the parser's
+   `/v1/info`; `busy`, `not_ready` and `duplicate_in_flight` requeue without counting an attempt; other errors map
+   per parser design §7.5. Spreadsheets and CSV are tables: chunked as row groups with the header row repeated.
+   Text, Markdown and CSV are parsed in the worker, never sent to the parser.
 3. **Try and score** (P2): two or three strategies on uncertain documents, scored by the Quality check (text yield,
    empty chunks, OCR confidence, duplicates) and optionally a small LLM judge via the gateway (on-prem).
 4. **Learning** (P2): observations per pattern; above the confidence threshold a profile is **auto-applied** after a

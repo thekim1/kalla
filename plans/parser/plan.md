@@ -1,5 +1,7 @@
 # Parser sidecar: plan
 
+**Detailed design: [`design.md`](design.md)** (step 5); where they differ, the design wins.
+
 A small, stateless Python service that converts hard formats (PDF, Office, scanned documents) into structured
 Markdown. It exists because Python's document tools (Docling) are far ahead of .NET's for this job; everything else
 stays in .NET.
@@ -15,7 +17,8 @@ passes options).
 
 | Method | Path                            | Purpose                                                            |
 | ------ | ------------------------------- | ------------------------------------------------------------------ |
-| `POST` | `/v1/convert`                   | Multipart file + options → parsed document                         |
+| `POST` | `/v1/convert`                   | Multipart file + options → `multipart/mixed` (result JSON, DoclingDocument, attachments, crops) |
+| `POST` | `/v1/inspect`                   | Cheap page count and per-page text-layer signals (no models)       |
 | `GET`  | `/health/live`, `/health/ready` | Probes                                                             |
 | `GET`  | `/v1/info`                      | Versions of Docling, models and OCR engine (recorded in run items) |
 
@@ -47,8 +50,8 @@ signals (characters per page, OCR confidence, pages with no text), timings and v
 | Phase | Deliverable                                                                                                                                                 |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P0    | Image builds with models baked in; health; contract skeleton                                                                                                |
-| P1    | `/v1/convert` for PDF, DOCX, PPTX, XLSX, HTML fallback; OCR auto/force with Swedish; quality signals; contract tests; timings on a sample of Umeå documents |
-| P2    | Table modes, re-render scale, page ranges for per-page strategies; GPU variant if needed                                                                    |
+| P1    | `/v1/convert` and `/v1/inspect` for all pilot formats (answered 4) incl. legacy/ODF and email attachments; OCR auto/force/off with Swedish; table modes; page ranges; quality signals; contract tests; OCR bake-off; timings on a sample of Umeå documents (design §16) |
+| P2    | Describe-pictures node on crops; OCR of pictures inside DOCX/PPTX; archives and macro-enabled formats (Z1); GPU variant if needed |
 
 ## 5. Open questions
 
@@ -58,3 +61,11 @@ signals (characters per page, OCR confidence, pages with no text), timings and v
    share of the pilot host is enough; revisit sizing when archives are onboarded.
 
 Questions 1 and 2 are P1 test and verification tasks, not decisions.
+
+Answered (2026-10-29, step 5 questions):
+
+4. **Pilot formats** beyond PDF, DOCX, PPTX, XLSX, HTML: images (JPG/PNG/TIFF, OCR), legacy Office (.doc/.xls/.ppt),
+   OpenDocument (.odt/.ods/.odp) and RTF (via LibreOffice headless inside the parser sandbox), email (.eml/.msg: body
+   plus attachments as separate documents), and plain text/Markdown/CSV.
+5. **Pictures inside documents**: P1 keeps captions and OCR'd text only; the contract can return picture crops on
+   request so a P2 "describe pictures" node (worker → gateway, residency rules) needs no contract change.
