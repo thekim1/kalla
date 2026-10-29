@@ -50,7 +50,7 @@ zones** from day one, even when they share a host:
 | ingestion | `rag-worker` | Ume.Rag.Worker | Hard CPU/memory limits, lower CPU priority |
 | ingestion | `rag-parser` | parser | Hard limits; no egress; internal network only; first to move to its own host |
 | ingestion | `rag-renderer` | Playwright + Chromium | Headless rendering for JavaScript-only pages (P1); crawler egress rules apply |
-| ingestion | `rag-clamav` | ClamAV | Scans uploads and fetched files before parsing; signature updates through a controlled mirror |
+| ingestion | `rag-clamav` | ClamAV | Scans uploads and fetched files before parsing; signatures updated directly from database.clamav.net (decided: no mirror) |
 | – | `rag-migrate` | Ume.Rag.MigrationService | One-shot on deploy |
 
 - **Pilot**: one host is allowed: **8 vCPU / 16 GB minimum, 24 GB recommended** (Docling models, ClamAV signatures
@@ -207,8 +207,12 @@ encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, t
   results, and the snapshot of cited source text are encrypted before they reach the database. Metadata (times,
   assistant, user `oid`, token counts, cost, outcome) stays readable for statistics and retention.
 - Data keys are stored wrapped by a **master key per level** held in a key service behind `IKeyProvider`: Azure Key
-  Vault / Managed HSM in Azure, OpenBao/HashiCorp Vault or an HSM on-prem, a local key file in development. For
-  `sensitive` data that lives on-prem, the master key is on-prem too.
+  Vault / Managed HSM in Azure, OpenBao/HashiCorp Vault or an HSM on-prem, a local key file in development.
+  **Decided (2026-10-29): Azure Key Vault** holds the master keys for every level, `sensitive` included, also for
+  on-prem installations. Consequences: soft-delete retention set to the minimum (7 days), since it delays destroying
+  shred-bucket keys; on-prem hosts need network access to Key Vault for new chat writes and history reads (unwrapped
+  keys are cached 5 minutes, so short outages pass). Whether `sensitive` needs an on-prem key service is re-decided
+  together with the separate `sensitive` tier (§8a), before the first `sensitive` source.
 - Only the Chat API (a user's own history) and the admin review path (audited, with reason and, for `sensitive`, a
   second approver) can unwrap data keys. Database admins, a dumped table or a stolen backup see ciphertext only.
 - **Crypto-shredding**: retention deletes the conversation's wrapped data keys in the live database. Backups still

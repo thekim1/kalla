@@ -373,7 +373,7 @@ concurrency 1 (worker §11.2).
 
 ### 5.5 ClamAV image (`images/clamav/Dockerfile`)
 
-Official ClamAV LTS image plus our `freshclam.conf` and `clamd.conf`: `DatabaseMirror` and `PrivateMirror` =
+Official ClamAV LTS image plus our `freshclam.conf` and `clamd.conf`. **Decided: no internal mirror**; freshclam uses the official `database.clamav.net` directly (the settings below that mention a mirror are replaced by that). Original proposal: `DatabaseMirror` and `PrivateMirror` =
 `${CLAMAV_MIRROR_URL}` (an internal mirror, filled by `cvdupdate` on a host with internet access; owned by IT
 operations), `ScriptedUpdates no`, checks 4 times a day; `clamd` on TCP 3310 for the worker (`INSTREAM`),
 `StreamMaxLength 60M` (uploads are ≤ 50 MB), `MaxFileSize 60M`, `MaxScanSize 200M`, `ConcurrentDatabaseReload no` on a
@@ -395,7 +395,7 @@ Fixed subnets so the host firewall (`deploy/host/docker-user-firewall.sh`, `DOCK
 | `ingestion` | 172.30.4.0/24 | **yes** | rag-worker, rag-clamav, rag-renderer | none |
 | `parser` | 172.30.5.0/24 | **yes** | rag-worker, rag-parser | none (parser has no other network) |
 | `crawl` | 172.30.6.0/24 | no | rag-worker, rag-renderer | firewall: drop RFC 1918, link-local, loopback, the host's own addresses except the allow-list `UME_RAG_CRAWL_ALLOW` (municipal hosts); app-level `IEgressGuard` in addition |
-| `mirror` | 172.30.7.0/24 | no | rag-clamav | firewall: only `CLAMAV_MIRROR_URL`'s host |
+| `mirror` | 172.30.7.0/24 | no | rag-clamav | firewall: only `database.clamav.net` (decided: no internal mirror); was `CLAMAV_MIRROR_URL`'s host |
 
 Ports, as the gateway (`${…_BIND:-127.0.0.1}`): `rag-api` `127.0.0.1:8543`, `rag-api-b` `:8544`, `rag-admin`
 `127.0.0.1:9543`, `rag-admin-b` `:9544` → container 8443. The municipal reverse proxy terminates public TLS and
@@ -675,7 +675,7 @@ References: plan §11 items 1–7, identity §8 (P0), [`../README.md`](../README
 
 **Review (2026-10-29):** accepted 1, 2 (added to `gateway-changes` §3c), 3 (pools 6+1 admin, 5+1 tools per slot,
 data-model §1.1), 6 (measured in P0), 7 (plan §11.7 fixed), 8, 9, 10 (as a proposal for both repos), 12, 13, 14.
-Asked the user: 4 (self-hosted runner), 5 (Bicep or Terraform), 11 (pilot key service), 15 (ClamAV mirror owner).
+User decisions: 5 Bicep, 11 Azure Key Vault, 15 ClamAV direct without a mirror; 4 (self-hosted runner) waits for IT security.
 Review fix: Chromium keeps its sandbox via a seccomp profile (§5.4).
 
 | # | Topic | Finding | Recommendation |
@@ -683,15 +683,15 @@ Review fix: Chromium keeps its sandbox via a seccomp profile (§5.4).
 | 1 | FakeLlm reuse (plan §1 "or reuse gateway FakeLlm") | FakeLlm embeddings are 8-dim and it sends no residency header | Own `Ume.Rag.FakeGateway` (§4.3), copying `FakeLatency.cs`; update plan §1 wording |
 | 2 | Real local gateway | Its FakeLlm cannot feed our 1024-dim profile | Ask the gateway (small item in `gateway-changes`) for FakeLlm to honour `dimensions`; until then use Ollama `bge-m3` in the gateway |
 | 3 | Connection caps vs rolling slots (data-model §1.1) | `ume_rag_admin` limit 15 but two admin slots × (10 + 1) = 22; `ume_rag_tools` 12 vs 2 × 9 = 18 (P2); the API fits (2 × 26 = 52 ≤ 60) | Admin pool 6 (+1) per slot, or raise the admin limit to 24 (sum stays ≤ 150); same for tools in P2. Worker: stop-then-start (§7.3). Decide in the R1 test |
-| 4 | Self-hosted runner | BGE-M3 and the test gateway are on-prem; GitHub-hosted runners cannot reach them, and the R1 test needs a pilot-shaped host | One self-hosted runner on the test host (ephemeral, only for `perf.yml`/`evaluation.yml`, environment-protected); PR CI stays on GitHub-hosted runners |
-| 5 | Entra IaC tool | Bicep with the Microsoft Graph extension vs Terraform `azuread` | Bicep + Graph extension if the municipality's Azure team already uses Bicep (*to verify*); otherwise Terraform with remote state in their storage account |
+| 4 | Self-hosted runner | BGE-M3 and the test gateway are on-prem; GitHub-hosted runners cannot reach them | **Open: IT security must approve** one ephemeral, environment-protected runner on the test host for `perf.yml`/`evaluation.yml`. Fallback: run both manually on the test host with a script |
+| 5 | Entra IaC tool | Bicep vs Terraform | **Decided: Bicep** with the Microsoft Graph extension in `infra/entra/` |
 | 6 | Hunspell memory per backend | Ispell dictionaries load per backend (data-model §3.1); with ~60–90 backends using FTS this can be GBs inside a 3 GB Postgres limit | Measure in P0 (§5.2 test). If > 15 MB per backend: lower API pool sizes, or the `shared_ispell` extension (PG 17 support *to verify*), or decompound in the worker (data-model §12.18) |
 | 7 | P0 Entra registrations | Plan §11.7 says "Entra app registrations for test" in P0; identity §2/§9.6 say none is needed for P0 and package 1 is only *submitted* in P0 | Follow identity: P0 = package 1 submitted (checklist #17); change plan §11.7 wording |
 | 8 | Open WebUI hosting | Chat-api §6 configures it but no plan says where it runs or what database it uses | Separate Compose project `compose.openwebui.yaml` on the pilot host (24 GB) or its own VM, own SQLite on an encrypted volume (never in `ragdb`), pruning job as a sidecar; ceiling `internal` |
 | 9 | Portainer | The gateway ships `compose.portainer.yaml`; operations may expect it | Skip in P0/P1 (init-deployment covers the pilot host); add if operations ask |
 | 10 | Supply chain in both repos | Gateway pins actions by tag and signs nothing | Propose for both repos together (compatibility): actions pinned by SHA, `attest-build-provenance` on images |
-| 11 | Pilot key service | Envelope encryption needs a production `IKeyProvider` from P1; plans name OpenBao/Vault/Key Vault but not which one exists on-prem | Use an existing municipal Vault/OpenBao if there is one; otherwise an OpenBao instance **not** on the data-plane host. Decide before P1 chat history; affects §7.4 |
+| 11 | Pilot key service | Envelope encryption needs a production `IKeyProvider` from P1 | **Decided: Azure Key Vault** for all levels (plan §8a): soft-delete 7 days, purge protection settings recorded in the runbook; on-prem key service for `sensitive` re-decided with the `sensitive` tier |
 | 12 | Package versions | Docling, FastAPI, Vue Flow, MCP SDK, Playwright, Cronos, Azure Key Vault SDK, `Aspire.Hosting.Python`, pgvector 0.8.x latest, ClamAV tag, Open WebUI tag | Fix at P0 step 2/12 with the npm/uv 7-day rule; record here |
 | 13 | Aspire minor | `kernel-memory-and-dotnet.md` lists `Aspire.Hosting.PostgreSQL` 13.6.4; the gateway pins 13.6.1 | Stay on 13.6.1 with the gateway; upgrade both together |
 | 14 | Blob volume shared by admin and worker | File volume works only on one host; uploads arrive at the admin | Accepted for the pilot (plan §12.1); S3/Azure Blob is a precondition of §6.4 |
-| 15 | ClamAV mirror owner | Plan §2 requires a controlled mirror; nobody owns it yet | IT operations run `cvdupdate` on a host with internet access; until then the pilot host's `mirror` network may reach `database.clamav.net` only |
+| 15 | ClamAV updates | Plan §2 assumed a controlled mirror | **Decided: direct, no mirror**: freshclam updates from `database.clamav.net`, allowed through the host firewall for the `mirror` network only |

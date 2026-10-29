@@ -297,6 +297,10 @@ stated reason, which is itself audited.
 | Search backend | Postgres only for the MVP behind our own search interface; OpenSearch as an optional backend when a measured trigger fires (section 6). |
 | Postgres hosting | Our own Postgres container everywhere, Azure included (needed for the Swedish Hunspell dictionary). |
 | CI/CD | GitHub Actions for everything, as the gateway does (build, test, release, and the app-registration workflows). |
+| Key service | Azure Key Vault for all master keys (all levels); on-prem key service for `sensitive` re-decided with the `sensitive` tier. |
+| Entra IaC | Bicep with the Microsoft Graph extension, applied by a GitHub Actions workflow. |
+| ClamAV updates | Directly from database.clamav.net; no internal mirror. |
+| Self-hosted runner | Open: IT security to approve one runner on the test host for the R1 test and nightly evaluation. |
 | Database separation | Own Postgres instance and own Redis, separate from the gateway's; no shared database or server (`plans/platform/` §2). |
 | Classification | Levels `public`, `internal`, `sensitive`; the highest (`sensitive`) may only use on-prem models through the gateway. |
 | Swedish benchmark | Postponed. Until then a small smoke set of questions made by the team; chunking and backend choices are revisited when the benchmark exists. |
