@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Ume.Rag.Domain.Admin;
 using Ume.Rag.Infrastructure.Persistence;
 using Ume.Rag.Infrastructure.Security;
 
@@ -188,15 +189,11 @@ public static class AdminAuthentication
         });
         builder.Services.AddAuthorization(o =>
         {
-            // identity design §1.3: several roles add up; Review and FeedbackComments are not implied by Admin.
-            o.AddPolicy(AdminPolicies.Admin, p => p.RequireRole(RagAdminRoles.PlatformAdmin));
-            o.AddPolicy(AdminPolicies.Manage, p => p.RequireRole(RagAdminRoles.PlatformAdmin, RagAdminRoles.DepartmentAdmin));
-            o.AddPolicy(AdminPolicies.EditPipelines, p => p.RequireRole(RagAdminRoles.PlatformAdmin, RagAdminRoles.DepartmentAdmin, RagAdminRoles.PipelineEditor));
-            o.AddPolicy(AdminPolicies.EditSkills, p => p.RequireRole(RagAdminRoles.PlatformAdmin, RagAdminRoles.DepartmentAdmin, RagAdminRoles.SkillEditor));
-            o.AddPolicy(AdminPolicies.Edit, p => p.RequireRole(RagAdminRoles.PlatformAdmin, RagAdminRoles.DepartmentAdmin, RagAdminRoles.Editor));
-            o.AddPolicy(AdminPolicies.Review, p => p.RequireRole(RagAdminRoles.Reviewer));
-            o.AddPolicy(AdminPolicies.FeedbackComments, p => p.RequireRole(RagAdminRoles.DepartmentAdmin, RagAdminRoles.Reviewer));
-            o.AddPolicy(AdminPolicies.Read, p => p.RequireRole(RagAdminRoles.All));
+            // From the permission matrix (admin design §3.1): several roles add up.
+            foreach (var policy in AdminPolicies.All)
+            {
+                o.AddPolicy(policy, p => p.RequireRole(PermissionMatrix.RolesFor(policy)));
+            }
         });
         // Sessions live on the server: the cookie only names one, and signing out deletes it (a copied cookie stops working).
         builder.Services.AddSingleton<ITicketStore, AdminTicketStore>();
@@ -292,25 +289,6 @@ public static class AdminCookies
     public const string XsrfToken = "RAG-XSRF-TOKEN";
 }
 
-/// <summary>Admin roles from the identity provider's role claim (identity design §1.3). Other values are ignored.</summary>
-public static class RagAdminRoles
-{
-    public const string PlatformAdmin = "rag-platform-admin";
-    public const string DepartmentAdmin = "rag-department-admin";
-    public const string PipelineEditor = "rag-pipeline-editor";
-    public const string Reviewer = "rag-reviewer";
-
-    /// <summary>P2 (tools design §3.6).</summary>
-    public const string SkillEditor = "rag-skill-editor";
-
-    /// <summary>P2.</summary>
-    public const string Editor = "rag-editor";
-
-    public const string Viewer = "rag-viewer";
-
-    public static string[] All { get; } = [PlatformAdmin, DepartmentAdmin, PipelineEditor, Reviewer, SkillEditor, Editor, Viewer];
-}
-
 /// <summary>Claims the admin API reads from the signed-in user, after <see cref="AdminAuthentication.ApplyClaimMapping"/>.</summary>
 public static class AdminClaims
 {
@@ -328,29 +306,6 @@ public static class AdminClaims
 
     /// <summary>A random id given at sign-in and kept while the session lasts (audit entries and security events).</summary>
     public const string Session = "ume_session";
-}
-
-/// <summary>Authorization policy names (identity design §1.3).</summary>
-public static class AdminPolicies
-{
-    /// <summary>Platform admins only.</summary>
-    public const string Admin = "admin";
-
-    /// <summary>Platform and department admins (department admins within their departments).</summary>
-    public const string Manage = "manage";
-
-    public const string EditPipelines = "edit-pipelines";
-    public const string EditSkills = "edit-skills";
-    public const string Edit = "edit";
-
-    /// <summary>Open a conversation for review (reviewers only; no administrative role grants conversation content).</summary>
-    public const string Review = "review";
-
-    /// <summary>Reveal one feedback comment.</summary>
-    public const string FeedbackComments = "feedback-comments";
-
-    /// <summary>Every rag-* role. A user without one gets 403 on every <c>/api</c> call.</summary>
-    public const string Read = "read";
 }
 
 /// <summary>Copied from the gateway: CSRF protection for state-changing calls to <c>/api</c> and <c>/bff</c>.</summary>
