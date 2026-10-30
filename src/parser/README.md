@@ -44,12 +44,13 @@ uv run ruff check . && uv run ruff format --check .
 uv run pytest
 ```
 
-Outside the image `test_convert.py` and `test_offline.py` are skipped. To run them, build the test target and run it
-with no network:
+Outside the image `test_convert.py` and `test_offline.py` are skipped. To run them, build the test target: the tests
+run during the build with no network (`RUN --network=none`), and a failing test fails the build. CI's `parser-image`
+job (`.github/workflows/parser.yml`) does the same.
 
 ```bash
 docker build --target test -t ume-rag/parser:test .
-docker run --rm --network none ume-rag/parser:test
+docker run --rm --network none ume-rag/parser:test   # runs them again
 ```
 
 ## Contract
