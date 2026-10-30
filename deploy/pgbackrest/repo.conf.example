@@ -1,0 +1,23 @@
+# pgBackRest repository settings for one deployment, written to ${UME_RAG_SECRETS_DIR}/pgbackrest/repo.conf and mounted
+# read-only at /etc/pgbackrest/conf.d/repo.conf in the postgres container only (repo-and-deployment §6.3, §7.4).
+# It holds the repository passphrase, which is escrowed by escrow-keys.sh; keep the file mode 0640, readable by uid 999.
+# Use one of the two repository kinds below. The backup target is chosen with IT (to-verify #145).
+
+[global]
+# Encrypted client-side whatever the target (§7.4). Generate with: openssl rand -base64 48
+repo1-cipher-type=aes-256-cbc
+repo1-cipher-pass=<passphrase>
+
+# Share mounted into the container at /var/lib/pgbackrest (pgBackRest's default repository path).
+repo1-type=posix
+repo1-path=/var/lib/pgbackrest
+
+# S3-compatible object store reached over the backup network.
+# repo1-type=s3
+# repo1-path=/ume-rag
+# repo1-s3-endpoint=<host>
+# repo1-s3-bucket=<bucket>
+# repo1-s3-region=<region>
+# repo1-s3-key=<access key>
+# repo1-s3-key-secret=<secret key>
+# repo1-s3-uri-style=path

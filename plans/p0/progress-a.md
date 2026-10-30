@@ -8,7 +8,7 @@ item and come back. Tick each box in the PR that does the work and put the PR nu
 Record every `to-verify` row in [`results-a.md`](results-a.md) before ticking it here.
 
 ## Waiting on (tick when it lands)
-- [ ] **H1** Stage 0 merged ([`progress-stage-0.md`](progress-stage-0.md))
+- [x] **H1** Stage 0 merged ([`progress-stage-0.md`](progress-stage-0.md)) (#1, `84dedbe`)
 - [ ] **H2** B's migrations of #6 merged (needed for item 6)
 - [ ] **H5** service images build and every probe answers (needed for item 5)
 - [ ] **H6** user: test-host access, backup target, key escrow location (`to-verify` #145)
@@ -16,10 +16,10 @@ Record every `to-verify` row in [`results-a.md`](results-a.md) before ticking it
 
 ## 1. Postgres image (#5)
 Refs: [repo-and-deployment §5.1–§5.2](../platform/repo-and-deployment.md), [data-model §14](../platform/data-model.md), [simplification-pass §3, §14](../simplification-pass.md)
-- [ ] `images/postgres/Dockerfile`: digest-pinned stock `pgvector/pgvector` (pgvector 0.8.7, PostgreSQL 17) + PGDG `pgbackrest`
-- [ ] `deploy/postgres/postgresql.conf`, `deploy/pgbackrest/pgbackrest.conf`
-- [ ] `deploy/postgres/test.sh` image test + CI image job
-- [ ] to-verify #127, #161, #122 recorded
+- [x] `images/postgres/Dockerfile`: digest-pinned stock `pgvector/pgvector` (pgvector 0.8.7, PostgreSQL 17) + PGDG `pgbackrest`
+- [x] `deploy/postgres/postgresql.conf`, `deploy/pgbackrest/pgbackrest.conf`
+- [x] `deploy/postgres/test.sh` image test + CI image job
+- [x] to-verify #127, #161, #122 recorded
 - [ ] **Hand-off H3:** image published by CI; issue to stream B
 
 ## 2. Parser and its contract (#13, #12)
