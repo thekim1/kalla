@@ -147,6 +147,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.HasIndex("KeyHash")
                         .IsUnique();
 
+                    b.HasIndex("TeamId");
+
                     b.ToTable("Keys", "config", t =>
                         {
                             t.HasCheckConstraint("CK_Keys_Kind", "\"Kind\" IN ('sk', 'pk')");
@@ -688,6 +690,11 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ClientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Ume.Rag.Domain.Entities.Team", null)
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Client");
                 });

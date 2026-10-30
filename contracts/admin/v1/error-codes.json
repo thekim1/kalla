@@ -35,6 +35,16 @@
       "code": "config_busy",
       "status": 503,
       "message": "Another change is being saved. Try again in a moment."
+    },
+    {
+      "code": "sync_off",
+      "status": 409,
+      "message": "The sync with the AI gateway is not configured."
+    },
+    {
+      "code": "sync_failed",
+      "status": 502,
+      "message": "The sync with the AI gateway failed ({error}). The last synced data is kept."
     }
   ]
 }

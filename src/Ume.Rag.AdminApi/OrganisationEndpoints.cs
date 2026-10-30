@@ -19,6 +19,17 @@ public static class OrganisationEndpoints
                 .ToListAsync(ct))
             .RequireAuthorization(AdminPolicies.Read).WithName("ListDepartments").WithSummary("Departments and teams in scope");
 
+        // Sync now, and the last runs for the overview (admin design §3.4: platform admins).
+        organisation.MapPost("/sync", async (HttpContext http, OrganisationSync sync, CancellationToken ct) =>
+            !sync.Enabled
+                ? throw AdminFaults.Of(AdminErrorCodes.SyncOff)
+                : await sync.RunAsync(AdminActor.Of(http), ct) is { } result
+                    ? Results.Ok(result)
+                    : throw AdminFaults.Of(AdminErrorCodes.SyncFailed, new Dictionary<string, string> { ["error"] = sync.Status.LastError ?? "" }))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("SyncOrganisation").WithSummary("Sync departments and teams from the gateway now");
+        organisation.MapGet("/sync", (OrganisationSync sync) => sync.Status)
+            .RequireAuthorization(AdminPolicies.Admin).WithName("OrganisationSyncStatus").WithSummary("The organisation sync's last runs");
+
         return api;
     }
 }
