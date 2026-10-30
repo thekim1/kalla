@@ -69,7 +69,7 @@ Refs: [admin/design.md](../admin/design.md) §2–§4, §11, §12
 
 ## 8. Scale seams, your part (#21)
 Refs: [performance-pass §8](../performance-pass.md)
-- [ ] Pooler-safe SQL rules + scan test over all SQL (no forbidden session-state SQL)
+- [x] Pooler-safe SQL rules + scan test over all SQL (no forbidden session-state SQL) (#53)
 
 ## 9. Docs (#19, your part)
 - [ ] `docs/security-events.md` ([identity/design.md §10](../identity/design.md))
