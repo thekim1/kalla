@@ -199,6 +199,14 @@ dropped).
 - `MarkCited` receives only the ranks actually cited.
 - Interactive gateway header timeout lowered (proposed 15 s) so a stuck model gives an error, not a long spinner.
 
+**Later change ([weakness review §2](weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)).** A **pilot gold set** (100–150 answerable, 30–50
+unanswerable, ≥ 10 temporal questions, written with the pilot department, stored as `human` questions) is built in
+P1a; reports lead with it and generated questions are a regression signal only. A one-time **go-live gate** graded by
+people (four starting thresholds) decides the pilot's go-live; publish stays advisory. Until `coverageMinKeywordScore`
+is calibrated, `low` is decided by the vector side alone; both thresholds are set from answerable and unanswerable
+questions together. In P1a the gold set is run vector-only, hybrid, and hybrid without the decompounder; hybrid and
+the decompounder stay only if they beat vector-only.
+
 ## 9. Degrade gracefully
 
 - **Config grace window**: security-relevant decisions use the last confirmed snapshot for up to
@@ -263,7 +271,7 @@ dropped).
 | Z1 | Joined by legacy Office, RTF and email (P2) |
 | New: D1 standby | Streaming replica before production beyond the pilot (§4) |
 | New: W1, W2 | Existing chat on umea.se; Open WebUI chat-copy retention (§11a) |
-| B1 benchmark | Unchanged; feeds the advisory harness |
+| B1 benchmark | Unchanged; feeds the advisory harness (later: starts with the pilot gold set, weakness review §2) |
 | O1, S2, R1, N1, U1, P2, V1, S1, M1, E1, K1 | Unchanged (K1 key backups follow §4's two key classes) |
 
 ## 11a. Settled during the rewrite

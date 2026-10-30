@@ -38,7 +38,7 @@ F1 0.922 on SUC 3.0).
 | 12 | Re-flag | A cleared set's clearance carries to its successor unless a flagging type's count rises above its count at clearance; values are never stored (§9.5) |
 | 13 | Embed | Platform profile only; ≤ 64 inputs and ≤ 16k tokens per request; cache by (level, profile, `TextHash`); a canary embedding detects a silently changed gateway model (§11) |
 | 14 | Noise-only changes | **No new chunk set**: when the chunk-stage input hash equals the live set's, the set is re-keyed in one row update (§12) |
-| 15 | Evaluation | **Advisory harness**: questions point at **documents**; recall@10 and MRR@10 with counts on the full collection after each publish and nightly, compared with the previous run; never blocks (§13, §14) |
+| 15 | Evaluation | **Advisory harness**: questions point at **documents**; recall@10 and MRR@10 with counts on the full collection after each publish and nightly, compared with the previous run; never blocks (§13, §14). Reports lead with the `human` gold-set results; generated questions are a regression signal only (weakness review §2, §13.4) |
 | 16 | Retrieval in evaluation | A shared `Ume.Rag.Retrieval` library runs the Knowledge API's statements, fusion and diversity for both the API and the evaluator (§13.5) |
 
 ## 2. *Detect*
@@ -589,10 +589,21 @@ charged to the collection's owner team; shown before generation.
 
 - **P1**: editors add questions with expected documents and edit or retire generated ones (`edit-eval-question`
   command, 6a §9.1); `Layer = human`. Every run includes all human questions.
+- **Pilot gold set** (P1a, before go-live; [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): 100–150 answerable real questions
+  (expected source URL(s) as `ExpectedDocumentIds`, the facts a correct answer contains as `ExpectedAnswer`), 30–50
+  unanswerable off-topic and near-miss questions (no expected documents; expected outcome "not found") and at least
+  10 temporal questions where an outdated document competes. Stored as `human` questions through the same command
+  (in P1a through Scalar, no journey pages); owned by the pilot department with the platform team; the start of
+  register item B1. Unanswerable questions do not count in recall@10 and MRR@10; for them the run records the coverage
+  status, best distance and best keyword score (§13.6).
+- **P1a three-way run** (weakness review §2): an `on-demand` run of the gold set in three variants: vector-only (mode
+  `vector`), hybrid, and hybrid without the decompounder on the query side. The result is recorded; hybrid and the
+  decompounder stay only if they beat vector-only.
 - **P2**: questions rewritten from flagged chat feedback (plan §7: only the rewritten, personal-data-free question is
   kept, with the collection's classification); skill test questions run by the skill gate in `rag-admin` as the
   tools design specifies.
-- Results are reported per layer.
+- Results are reported per layer, and **reports lead with the gold-set (`human`) results**; the generated layer is a
+  regression signal only (weakness review §2).
 
 ### 13.5 Running retrieval as the Knowledge API does
 
@@ -616,6 +627,12 @@ top 10). `recall@10` = share with a rank, reported with its counts (`found / que
 open the lost ones. No intervals or significance tests; a blocking gate is reconsidered only when measured run-to-run
 variance shows the numbers can tell versions apart (§14.2). With retrieval deterministic for a fixed index, a re-run
 reproduces every number (test, §17).
+
+Coverage (weakness review §2): per question the run also records the coverage status, best distance and best keyword
+score (knowledge design §7). Over `human` questions the report shows false not-found (answerable questions with `low`)
+and not-found on unanswerable questions, and proposes `coverageMaxDistance` and `coverageMinKeywordScore` as the
+values that separate answerable from unanswerable questions best. These are retrieval-level numbers; the go-live gate
+(`../README.md`) is graded by people on the answers.
 
 ## 14. Evaluation runs (advisory)
 
@@ -748,7 +765,7 @@ pages, so the parser path dominates its first full crawl. Evaluation uses the in
 
 | Phase | Deliverable |
 |---|---|
-| P1 | *Detect* with inspect; parse routing, per-page rules, ranges (fixed sizes from configuration), joining, re-render; built-in and admin parse rules, observations; HTML extraction with site profiles and presets (Sitevision first), breadcrumb, date, description and keywords; text and CSV parsers; *Clean*; split with re-levelling; *Chunk* with the BGE-M3 tokenizer, breadcrumb prefix, row groups, `SearchText`; metadata; quality facts; *Personal data* with patterns, gated `/v1/ner`, flag rules, `held` sets, clear command, carry-over and re-flag, 5103; *Embed* with cache and canary; noise re-key; generated sets with filtering; human questions; `Ume.Rag.Retrieval`; publish reports, nightly runs, on-demand settings comparison; umea.se acceptance corpus; tests of §17 |
+| P1 | *Detect* with inspect; parse routing, per-page rules, ranges (fixed sizes from configuration), joining, re-render; built-in and admin parse rules, observations; HTML extraction with site profiles and presets (Sitevision first), breadcrumb, date, description and keywords; text and CSV parsers; *Clean*; split with re-levelling; *Chunk* with the BGE-M3 tokenizer, breadcrumb prefix, row groups, `SearchText`; metadata; quality facts; *Personal data* with patterns, gated `/v1/ner`, flag rules, `held` sets, clear command, carry-over and re-flag, 5103; *Embed* with cache and canary; noise re-key; generated sets with filtering; human questions (P1a: the pilot gold set, its three-way run and the coverage-threshold proposal, weakness review §2); `Ume.Rag.Retrieval`; publish reports, nightly runs, on-demand settings comparison; umea.se acceptance corpus; tests of §17 |
 | P2 | from weakness review §1: answer-level nightly run (in `rag-admin`), range sizing by EWMA (§3.3), AIMD embed concurrency (§11); parse-rule proposals from observations (approval required); `pii-mask`; feedback-derived questions; parent-child chunks only if §5.3's condition is met; `halfvec` evaluation (data-model §12.16); legacy Office, RTF and email (with child documents); describe pictures; WordPress and Episerver/Optimizely presets |
 | P3 | embedding-profile migration tooling; keyed PII fingerprints if count-based re-flagging proves too weak |
 
@@ -765,6 +782,7 @@ applied then and are not repeated.
 | `platform/data-model.md` §2.2 `Chunks`, `Documents` | `Chunks.SearchText text` (worker-computed, §6.5) and `SearchVector` over it with built-in `swedish`; `Documents.Description text NULL`, `Documents.Keywords text[] NULL`, `Documents.SiteProfileVersionId` (the last extraction) |
 | `platform/data-model.md` §2.2 profiles, evaluation | `ParseProfiles.Origin` `builtin`/`admin` with versions; `EvaluationRuns`: `Kind` (`publish-report`/`nightly`/`on-demand`/`answers`), `QuestionCount`, `Found`, `Wins`, `Losses`, `ComparedRunId`, `Faithfulness`, `CitationPrecision`; no statistics, decision or override columns: drop `McNemarP`, CI columns, `Decision`, override columns, `Scope = sub-corpus`; `Collections.PublishedAt` stays as the owner's publish, `PublishGateRunId` and `Settings.GateFloor`/`GateSampleSize` removed |
 | `platform/data-model.md` §4.1 | `Jobs.Class` CHECK without `ner` |
+| `platform/data-model.md` §2.2 evaluation (weakness review §2) | `EvaluationResults` records per question the coverage status, best distance and best keyword score (§13.6); `EvaluationRuns` records the retrieval variant of an `on-demand` run (`hybrid`, `vector`, `hybrid-no-decompounder`) for the three-way run (§13.4) |
 | `platform/repo-and-deployment.md` §1, §2 | `SwedishDecompounder` (in `Ume.Rag.Retrieval` or `Ume.Rag.Text`) used by the worker; the worker references neither `Ume.Rag.Answering` nor `Ume.Rag.Tools` (answer-level run and skill gate in `rag-admin`); `tests/fixtures/umea/` |
 | `ingestion-worker/design-connectors.md` | site profiles: storage, versions, learning, auto-apply check (uses 6c §3.7 extraction in preview mode), commands `approve-site-profile`, `reject-site-profile`, `edit-site-profile`, `rollback-site-profile`, re-learning trigger from `quality.boilerplateShare`/`emptyRoot` (§8); reliability of `lastmod` feeds §7's date order |
 | `knowledge-api/*` | scope by scalar `CollectionId` and live sets only; query side runs `SwedishDecompounder`; citations may show `Documents.Description`; no `building` collections |

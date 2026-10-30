@@ -485,7 +485,7 @@ kept so references stay stable.
 | V13 | lethal trifecta false — a hard refusal, no acceptance in P2 | `lethal_trifecta` | publish; skill serve; tool approval/grant; `ContainsThirdPartyText` changed | tools §5.4 |
 | V14 | assistant that uses tools (a linked skill's served version links a tool): `SupportsTools`, synced price; limits ≤ `AgentDefaults` unless `Admin`, always ≤ `AgentHardCaps` | `model_no_tools`, `price_unknown`, `limit_above_default`, `limit_above_cap` | publish; skill serve (it can switch an assistant to tools); settings change | tools §6.4–§6.5 |
 | V15 | not-found texts ≤ 1,000 characters each, ≤ 5 links, `https`, host matches `Settings.Chat.AllowedLinkHosts` | `link_host_not_allowed` | publish; allow-list narrowed | chat §9.4, §10.1 |
-| V16 | `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–400, `efSearch` 40–400, `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows) | `retrieval_settings_invalid` | collection settings save | knowledge §12.1 |
+| V16 | `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–400, `efSearch` 40–400, `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `coverageMinKeywordScore` null or > 0 (weakness review §2), `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows) | `retrieval_settings_invalid` | collection settings save | knowledge §12.1 |
 | V17 | `QuerySteps`: `topK` 1–50, history 0–20 messages / ≤ 8,000 tokens, `contextTokens` ≤ the model's `ContextWindow` when known, `maxOutputTokens` 64–4,096, temperature 0–1, language `auto`/`sv`; condense model on-prem | `query_steps_invalid` | publish; model sync | chat §5–§6, §10.3 |
 | V18 | skill version label > every existing; **serve** only after the version's gate run finished, and only if V4–V6, V12–V14 and V19 hold for every assistant whose published version links the skill | `version_not_increasing`, `gate_not_finished`, `serve_breaks_assistants` | skill publish/serve/rollback | tools §3.5 |
 | V19 | skill tool links need a `ToolDepartmentGrant` for the skill's department; platform skills only `AllDepartments` tools; sharing never grants: a linking assistant of another department sees a shared skill's tool only with its own grant (warning lists the tools) | `tool_grant_missing` | skill draft; grant revoked (lists skills); share list widened | tools §3.6 |
@@ -979,6 +979,13 @@ demonstrably need custom flows (§16).
   retired.
 - Reports: latest runs (after publish, nightly, after a retrieval-settings change, on demand **Kör utvärdering**), each
   as the §7.2 card; trend of recall@10 and MRR (`TimeSeriesChart`, table view); per-question drill-down (rank per run).
+- **Headline metric** ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): the card and the trend lead with the `human` layer (the
+  pilot gold set: recall@10 on answerable questions, false not-found, unanswerable questions answered "not found");
+  the generated layer follows as a regression signal only.
+- **Coverage-threshold proposal** (P1, weakness review §2): the run proposes `coverageMaxDistance` and
+  `coverageMinKeywordScore` as the values that best separate the `human` answerable and unanswerable questions
+  (processing §13.6, knowledge design §7), shown as numbers on the card; the editor saves them in Sökinställningar. The
+  histogram stays P2 (§16). Until `coverageMinKeywordScore` is set, not-found is decided by the vector side alone.
 - Retrieval settings form (Sökinställningar tab): all values within V16 ranges saved directly; the following
   evaluation report shows the effect; the previous values can be restored from the report.
 
@@ -986,7 +993,10 @@ demonstrably need custom flows (§16).
 
 ```
 Utvärdering · Webbplats umea.se/bygga, publicering 30 okt. 11:02 (jämfört med 29 okt.)
-  Träffsäkerhet (recall@10)  0,74 → 0,68   (−6 punkter)    MRR 0,61 → 0,55
+  Testfrågor från verksamheten (human) · 140 frågor
+    Träffsäkerhet (recall@10)  0,81 → 0,79   Felaktigt "hittar inget" 6 %   Ovidkommande frågor besvarade "hittar inget" 84 %
+  Genererade frågor (regression)
+    Träffsäkerhet (recall@10)  0,74 → 0,68   (−6 punkter)    MRR 0,61 → 0,55
   86 frågor · 9 sämre, 3 bättre · hela kunskapsbanken
   ▸ Frågor som blev sämre (9)   ▸ Frågor som blev bättre (3)   ▸ Om utvärderingen
   [Behåll]  [Återställ till förra versionen]
@@ -1234,9 +1244,9 @@ component axe checks.
 | Phase | Deliverable |
 |---|---|
 | P0 | BFF against `ume-rag-admin` + roles (incl. `rag-reviewer` in the realm and Bicep), design system and shell in Swedish, `labels.ts`/`messages.ts` skeleton, `AdminContext` write path (version lock + rules + audit + outbox + version), `PermissionMatrix` with generated role tests, org sync, error-code export |
-| P1a (walking skeleton, weakness review §1) | none of the journey pages: the pilot's collection, sources and one assistant are created through the write path with Scalar and generic forms; the umea.se site profile as a manual profile JSON; `GatewayModels` sync; clients |
+| P1a (walking skeleton, weakness review §1) | none of the journey pages: the pilot's collection, sources and one assistant are created through the write path with Scalar and generic forms; the umea.se site profile as a manual profile JSON; `GatewayModels` sync; clients; the pilot gold set entered as `human` questions through Scalar (weakness review §2) |
 | P1b (1) | collections (incl. documents tab, PII view/clear), sources (URL list, crawl, upload batches), preflight, preview with site-profile before/after, impact, runs and crawl report, deletion decisions, template parameters, publish (plan of every document → re-process → report → keep or roll back), rollback |
-| P1b (2) | evaluation set and reports, retrieval settings, collection publish, share lists, assistants (draft → publish, versions with restore, archive, description and contact), test panel on the draft (`Ume.Rag.Answering`, same release as `rag-api`), impact lines, V8 `/v1/models` check, audiences (clients), retention, generic forms (settings, data protection, clients, keys, templates, site profiles, embedding profiles, gateway models, organisation), audit list, explain access |
+| P1b (2) | evaluation set and reports (led by the gold set; coverage-threshold proposal as numbers, weakness review §2), retrieval settings, collection publish, share lists, assistants (draft → publish, versions with restore, archive, description and contact), test panel on the draft (`Ume.Rag.Answering`, same release as `rag-api`), impact lines, V8 `/v1/models` check, audiences (clients), retention, generic forms (settings, data protection, clients, keys, templates, site profiles, embedding profiles, gateway models, organisation), audit list, explain access |
 | P1b (3) | feedback page, comment reveal, conversation review behind feedback (`public`/`internal`), access log, import health; accessibility pass and tillgänglighetsredogörelse; pilot journey E2E green |
 | P2 | from weakness review §1: assistant templates and copy, version diff, assistant test questions and `AssistantTestRunner`, department map, unused-assistant attention item, latest answer evaluation (`AnswerEvaluationService`), site-profile proposals with learning, effect-tag publish plans; skills (share lists, gate report, serve); tool servers (registration, approvals, pre-registration, grants, drift leader); tool use through skills (the derived **Använder verktyg**, limits, tool calls in the test panel); owner-team scoping; parse-profile proposals; SharePoint; crawl hierarchy tree; parameter diff; coverage histogram and proposal; audit diff viewer and Historik tabs; conversation search and `sensitive` two-person flow; feedback → test question; widget keys; dedicated pages where generic forms prove too thin |
 | P3 | analytics, OBO configuration, risk acceptance, skill import/export, embedding profile changes |
@@ -1354,7 +1364,7 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 | P1 node editor, node palette, ports, locks, JSON definition view, rules 1–12 (§6.2) | Removed: template + parameters (§2) |
 | Version diff (§6.5), rebase, bulk rebase, `locked_node_below_min` | Parameter diff P2 if needed; a source moves to the latest template on its next publish (§10) |
 | `gating` state, `PlanJobId`, blocking pipeline/collection/retrieval gates, gate cards with intervals, escalation and McNemar, collection floor (V27), `building` state, platform-admin overrides (§7.3), `gate.override` | Removed; advisory evaluation report, keep or roll back (§8) |
-| Coverage-threshold proposal and histogram | P2 (§10) |
+| Coverage-threshold proposal and histogram | P2 (§10); later change (weakness review §2): the proposal as numbers on the report card is P1, only the histogram stays P2 (§7.1) |
 | Crawl hierarchy tree (`hierarchy` preview job) | P2 (§10) |
 | Audit field-level diff viewer, Historik tabs | P2 (§10); the audit list stays |
 | Dedicated P1 pages for settings, data protection, clients, keys, gateway, embedding profiles, organisation | Generic schema-driven forms + Scalar (§10) |

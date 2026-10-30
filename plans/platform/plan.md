@@ -312,6 +312,16 @@ the collection report (run kind `assistant-tests`, data-model §2.2). A blocking
 run-to-run variance shows it can tell versions apart. The postponed Swedish benchmark becomes the curated part of
 these sets.
 
+**Pilot gold set and go-live gate** ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)). In P1a the pilot department and the platform
+team write 100–150 answerable, 30–50 unanswerable and at least 10 temporal questions, stored as `human` questions
+(the start of register B1). Reports lead with their results; generated questions are a regression signal only. The
+same set calibrates both not-found thresholds (vector side alone until `coverageMinKeywordScore` is calibrated) and
+decides, run three ways, whether hybrid and the decompounder beat vector-only. The pilot goes live when department
+reviewers, grading the gold-set answers by hand, find correct answers ≥ 80 %, citation precision ≥ 90 %, false
+not-found ≤ 10 % and off-topic questions answered "not found" ≥ 80 % (starting thresholds, confirmed by the
+department when the set is written). This gate applies once; publish stays advisory. **Pilot success** = the gate is
+met at go-live and still met at the end of the pilot (re-run monthly), and the department decides to continue.
+
 ## 10. Cross-cutting engineering
 
 - **.NET 10, Aspire 13**, minimal APIs, EF Core with Npgsql + `Pgvector.EntityFrameworkCore`, central package

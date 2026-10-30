@@ -15,7 +15,7 @@ Document names are relative to `plans/`; "gateway design" is `gateway-changes/de
 simplification pass ([`simplification-pass.md`](simplification-pass.md)) removed are struck with "dropped
 (simplification pass)"; its new checks are rows 127–140, the follow-up round of that pass added rows 141–160, the container cut (§14
 there: six containers, no Redis in P1, pgBackRest inside the Postgres image) added rows 161–163, and many assistants per
-department (§15 there: assistant versions, test questions, derived mode) added rows 164–166. Rows only verifiable for features the
+department (§15 there: assistant versions, test questions, derived mode) added rows 164–166. The [weakness review §2](weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch) (pilot gold set) added rows 168–169. Rows only verifiable for features the
 [weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer) moved out of P1
 (site-profile learning, answer judge, assistant tests, adaptive range sizing) carry phase "P2 (weakness review §1)".
 
@@ -41,7 +41,9 @@ department (§15 there: assistant versions, test questions, derived mode) added 
 | 130 | Managed Postgres (Azure Database for PostgreSQL) with pgvector ≥ 0.8 and the needed settings (`shared_preload_libraries`, HNSW settings, `performance-pass.md` §3.2) | `simplification-pass.md` §3; `performance-pass.md` §3.2 | P2 | source |
 | 141 | Swap transaction: flipping `DeletedAt` on a set's chunks is a non-HOT update that inserts every newly visible chunk into the partial HNSW and GIN indexes inside the swap; duration and WAL p95 per document for sets of 50–500 chunks during a large publish beside chat traffic, and for the largest sets (20,000 chunks) | `platform/data-model.md` §14; `ingestion-worker/design-engine.md` §23 | P1 | measure |
 | 142 | `content.rag_or_query` and the `rag_tsquery_or_agg` aggregate over the built-in `tsquery_or` on the stock image: an OR query, `NULL` for stop words only; `plainto_tsquery('simple', lexeme)` accepts every lexeme the `swedish` parser emits (hosts, URLs, paths, hyphens, `'`, `\`), fuzzed over the test corpus | `platform/data-model.md` §14; `knowledge-api/design.md` §6.2, §20 | P0 | test |
-| 143 | `coverageMinKeywordScore` default: `ts_rank_cd` of on-topic vs off-topic questions on the pilot collections, calibrated from the coverage log events of the first pilot weeks | `knowledge-api/design.md` §7, §20 | P1 | measure (pilot data) |
+| 143 | `coverageMinKeywordScore` default: `ts_rank_cd` of the pilot gold set's answerable vs unanswerable questions, the best-separating value (weakness review §2; until then `low` is vector-side only), checked against the coverage log events of the first pilot weeks | `knowledge-api/design.md` §7, §20 | P1a | measure (gold set, pilot data) |
+| 168 | Three-way run of the pilot gold set: vector-only vs hybrid vs hybrid without the decompounder (recall@10 and MRR on answerable questions, coverage outcomes on unanswerable ones); hybrid and the decompounder stay only if they beat vector-only; result recorded (weakness review §2) | `knowledge-api/design.md` §1, §20; `ingestion-worker/design-processing.md` §13.4 | P1a | measure (gold set) |
+| 169 | Not-found thresholds from the gold set: `coverageMaxDistance` and `coverageMinKeywordScore` at the values that best separate answerable from unanswerable questions (replaces "95th percentile of answerable + 0.03"); resulting false not-found ≤ 10 % and off-topic not-found ≥ 80 % before the go-live gate (weakness review §2) | `knowledge-api/design.md` §7; `ingestion-worker/design-processing.md` §13.6 | P1a | measure (gold set) |
 | 144 | Chat bucket-key creation race: one `DataKeys` row per (level, expiry month) under concurrent first writes | `platform/data-model.md` §14 | P1 | test |
 
 ## .NET, Npgsql, EF Core and NuGet packages

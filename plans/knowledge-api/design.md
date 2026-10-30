@@ -36,12 +36,12 @@ materialised CTE); NuGet **`Pgvector` 0.3.2** (depends on `Npgsql` ≥ 8.0.5; co
 | 3 | Errors | RFC 9457 problem details as the gateway's Data API (`ApiFaultException` + `code` extension); the OpenAI error shape stays for the chat role (§3.6) |
 | 4 | `top_k` | Default **10**, max **50** (answered 1); candidates 100 per list |
 | 5 | Query handling | Query used as given: no rewriting, no instruction prefix; NFC, whitespace collapsed, 1–2,000 characters (answered 3) |
-| 6 | Statements | Three short statements instead of one: **keyword** candidates run **in parallel with the query embedding**, then **vector** candidates, then one batched **hydrate** (chunks, sections, documents); fusion in .NET (§6) |
+| 6 | Statements | Three short statements instead of one: **keyword** candidates run **in parallel with the query embedding**, then **vector** candidates, then one batched **hydrate** (chunks, sections, documents); fusion in .NET (§6). Hybrid and the decompounder stay only if they beat vector-only on the pilot gold set, run three ways in P1a (weakness review §2, §20) |
 | 7 | Exact vs HNSW | Scopes of ≤ 10,000 chunks are searched **exactly** (B-tree on the scalar `CollectionId` + sort), larger ones through HNSW with `relaxed_order` iterative scan unless the scope is too selective; HNSW settings are role defaults, no per-query `SET`; same rule in the evaluator (§6.4) |
 | 8 | Fusion | RRF k = 60, weights from `RetrievalSettings` (default 1.0 / 1.0); multi-collection queries use the platform defaults unless all collections agree; deterministic tie-breaks (§6.5) |
 | 9 | Embedding failure | `hybrid` degrades to keyword-only with `degraded: "embedding_unavailable"` and coverage `unknown`; `vector` answers 503; the evaluator never degrades (§5.5) |
 | 10 | Embedding cache | In-process cache for every level (P1 has no Redis); from the first multi-host deployment (P2) a shared Redis L2 only for `public`/`internal` behind `ISharedCache`; key is an **HMAC** of the normalised query, 5 min (§5.4) |
-| 11 | Coverage | `low` only when the vector side is weak (best cosine distance above every searched collection's `coverageMaxDistance`, default 0.50) **and** the keyword side is weak (no candidate at or above `coverageMinKeywordScore`); keyword-only → `unknown`; outcomes and near-threshold margins are metrics for calibration, never query text (§7) |
+| 11 | Coverage | `low` only when the vector side is weak (best cosine distance above every searched collection's `coverageMaxDistance`, default 0.50) **and** the keyword side is weak (no candidate at or above `coverageMinKeywordScore`); until that floor is calibrated (`null`), `low` is decided by the vector side alone; both thresholds are set from the pilot gold set's answerable and unanswerable questions together (weakness review §2); keyword-only → `unknown`; outcomes and near-threshold margins are metrics for calibration, never query text (§7) |
 | 12 | Diversity | Dedup `(DocumentId, TextHash)`; documents of different sources with the same identity (URL) collapse to one; **max 3 chunks per document** (configurable 1–10) (§8) |
 | 13 | Section expansion | From **neighbouring chunks in Postgres** (`ChunkSetId`, `Ordinal`, heading path), not from blobs; overlap stripped by a new `Chunks.OverlapChars`; ≤ 1,500 tokens per section, ≤ 8,000 per response; hits in one section merged (§9) |
 | 14 | Citations | Title, page range, heading path and modified date always; public `url` or an access-checked **download link**; upload titles from the document's `DisplayName` (§10) |
@@ -708,7 +708,8 @@ order, `degraded: "rerank_unavailable"`.
   coverageMaxDistance(C)`. A collection without any candidate among the 100 nearest overall counts as uncovered.
 - **Keyword side**: covered when the best keyword candidate's `ts_rank_cd` score is ≥ `coverageMinKeywordScore` of
   its collection (an empty list is never covered). The floor exists because OR semantics match some chunk for almost
-  any query.
+  any query. While `coverageMinKeywordScore` is `null` (not yet calibrated) the keyword side counts as uncovered, so
+  `low` is decided by the **vector side alone** ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)).
 - **Status**: `low` only when **both** sides are uncovered (a wording the embedding misses but a diarienummer or form
   name matches is still answered); `ok` otherwise; `low` also with no searchable collection; `unknown` in `keyword`
   mode and when degraded. The response reports the best distance, its threshold, its collection and the best keyword
@@ -716,13 +717,16 @@ order, `degraded: "rerank_unavailable"`.
 - **Why distance, not RRF**: RRF is rank-only and always produces a "best" result (data-model §12.15).
 - **Multi-collection rule** (any covered collection counts): an assistant over a broad and a narrow collection must
   not say "I don't know" because the broad one has a strict threshold.
-- **Thresholds**: `RetrievalSettings.coverageMaxDistance`, default **0.50**, and `coverageMinKeywordScore` (default to
-  be calibrated, §20) from `Settings.Retrieval`. Calibration: the evaluation page shows the distribution of `best(C)`
-  for the collection's evaluation questions (all answerable by construction) and proposes the 95th percentile plus
-  0.03; an editor saves it (it does not change ranking). On real traffic, coverage outcomes and the margin `best(C) −
+- **Thresholds**: `RetrievalSettings.coverageMaxDistance`, default **0.50**, and `coverageMinKeywordScore` (default
+  `null` until calibrated, §20) from `Settings.Retrieval`. Calibration ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)):
+  both thresholds are set from the collection's `human` evaluation questions, answerable **and** unanswerable together
+  (for the pilot: the gold set, processing §13.4). The evaluation report proposes, per side (the histogram of both
+  groups is P2, admin design §16), the value that **separates them best** (fewest
+  misclassified questions), not a percentile of answerable questions only (this replaces "95th percentile of answerable
+  questions + 0.03"); an editor saves it (it does not change ranking). Generated questions, all answerable by
+  construction, are not used for the proposal. On real traffic, coverage outcomes and the margin `best(C) −
   threshold` are metrics, and a per-retrieval log event carries collection id, best distance, threshold, best keyword
-  score and status, **never the query** (§15). P2 adds generated off-topic control questions so the proposal can also
-  bound false "ok".
+  score and status, **never the query** (§15). P2 adds generated off-topic control questions next to the human ones.
 - Filters apply before coverage: "nothing modified after 2026-01-01 about this" is `low`, which is correct.
 - Chat decides what `low` means for a turn (conversational messages skip the gate, a failed condense never turns into
   the not-found text; chat §6.2).
@@ -1041,7 +1045,8 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
   BGE-M3 quality.
 - `evaluation.yml` nightly (P1, before the pilot) on the test host with real BGE-M3 (self-hosted runner, open item R1
   in the register): the evaluation sets of every published collection plus the smoke set; advisory trend in
-  `rag.evaluation.recall_at_10`, no gate.
+  `rag.evaluation.recall_at_10`, no gate. Reports lead with the `human` gold-set results; generated questions are a
+  regression signal only (weakness review §2). The pilot's go-live gate is graded by people, not by CI.
 
 ### 16.5 Performance
 
@@ -1066,7 +1071,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | Phase | Deliverable |
 |---|---|
 | P0 | `Ume.Rag.Retrieval` skeleton; stock pgvector image (0.8.7); role defaults for `hnsw.*`; `SwedishDecompounder` unit tests and one Postgres match test |
-| P1 | In-process `IRetriever` for the chat role; K (lexeme OR query) / V / H+D statements with the exact/HNSW selectivity rule on the halfvec index (recall vs exact measured with the evaluation sets); RRF, dedup, identity-group collapse, cap 3; coverage (vector and keyword) with per-collection thresholds and calibration metrics; `IReranker` seam (no-op, FakeGateway implementation); section expansion with `OverlapChars`; citations incl. upload names and attachment parents; download grants and `/content` streaming with envelope decryption; query embedding with L1/L2 cache, circuit and degrade; `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; problem details, OpenAPI/Scalar; counters; metrics, traces; contract test; evaluation smoke; interaction audit; retrieval load test |
+| P1 | In-process `IRetriever` for the chat role; K (lexeme OR query) / V / H+D statements with the exact/HNSW selectivity rule on the halfvec index (recall vs exact measured with the evaluation sets); RRF, dedup, identity-group collapse, cap 3; coverage (vector and keyword; vector side alone until the keyword floor is calibrated) with per-collection thresholds calibrated from the pilot gold set (weakness review §2) and calibration metrics; `IReranker` seam (no-op, FakeGateway implementation); section expansion with `OverlapChars`; citations incl. upload names and attachment parents; download grants and `/content` streaming with envelope decryption; query embedding with L1/L2 cache, circuit and degrade; `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; problem details, OpenAPI/Scalar; counters; metrics, traces; contract test; evaluation smoke; interaction audit; retrieval load test |
 | P2 | `/mcp` early with `search_knowledge` and `list_collections` (ceiling `public`); HTTP access for integrations and tokens (`CollectionAudiences`, key scopes, rate limits); gateway-served rerank (§6.7) per assistant when the evaluation shows a gain; coverage calibration with control questions; tuning per collection with the advisory evaluation report; range requests if a PDF viewer needs them; optional Entra sign-in for downloads (§4.6) |
 | P3 | MCP `get_document`, `document://` resources; multi-query/HyDE behind evaluation (answered 3); cross-profile fusion during an embedding-profile migration; OpenSearch behind `ISearchIndex` if a trigger fires |
 
@@ -1133,8 +1138,11 @@ None.
 - `content.rag_or_query`: the built-in `tsquery_or` can back a custom aggregate on the stock image, and
   `plainto_tsquery('simple', lexeme)` accepts every lexeme the `swedish` parser emits (hosts, URLs, file paths,
   hyphenated words, `'`, `\`) without error; fuzz test over the lexemes of the test corpus.
-- `coverageMinKeywordScore` default: `ts_rank_cd` values of on-topic and off-topic questions on the pilot collections
-  (the keyword floor of §7 has no measured value yet); calibrate from the coverage log events of the first pilot weeks.
+- `coverageMinKeywordScore` default: `ts_rank_cd` values of the pilot gold set's answerable and unanswerable questions
+  (the keyword floor of §7 has no measured value yet; until then `low` is vector-side only); the best-separating
+  value, checked against the coverage log events of the first pilot weeks (weakness review §2).
+- Hybrid against vector-only on the pilot gold set (weakness review §2): run three ways in P1a (vector-only, hybrid,
+  hybrid without the decompounder); hybrid and the decompounder stay only if they beat vector-only.
 - Pool of 12 with 4 concurrent searches per instance (§6.6): pool waits when K and V overlap on cache hits, measured in
   P0 next to the chat writer and the stats flush.
 - Exact-scan cost at 10,000 chunks of `vector(1024)` (TOASTed 4 KB values): detoast + distance within 25 ms p95; else

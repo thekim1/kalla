@@ -77,6 +77,16 @@ needs both sides weak, but the keyword floor started as `null` and the OR query 
   separates them best, not a percentile of answerable questions only.
 - **Hybrid has to earn its place.** In P1a the gold set is run three ways: vector-only, hybrid, and hybrid without
   the decompounder. The result is recorded. Hybrid and the decompounder stay only if they beat vector-only.
+- **Settled while applying:**
+  - **Three-way comparison.** "Without the decompounder" means on both sides: a scratch copy of the collection whose
+    `SearchText` is recomputed by `reindex-fts` without compound parts, plus queries without them.
+  - **Hand grading.** A script sends each gold-set question through the chat API as the pilot assistant and writes
+    question, answer, citations and coverage to a CSV. Reviewers grade it in a spreadsheet, and the graded file is
+    attached to the go-live decision. P1 has no grading UI.
+  - **P1a scope.** Retrieval evaluation runs over the `human` layer move into P1a. Generated sets stay in P1b.
+  - **Threshold proposal.** The threshold proposal is shown as numbers in P1. The histogram stays in P2.
+  - **Data model.** `EvaluationRuns.Variant` and per-question coverage fields are added. A `human` question with no
+    expected documents means "not found".
 
 ## 3. Outdated or removed content keeps being answered
 

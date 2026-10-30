@@ -324,7 +324,7 @@ client ceiling and levels, and returns sections ≤ 8,000 tokens in total (knowl
 |---|---|---|---|
 | – (conversational) | – | no retrieval; the model answers with the no-sources frame (§7.3) | `answered` (`Coverage = skipped`) |
 | `Ok` | ≥ 1 | answer from sources | `answered` |
-| `Low` (vector and keyword both weak, knowledge §7) | any | §10.1 fixed not-found text, **no model call** | `not-found` |
+| `Low` (vector and keyword both weak, knowledge §7; vector side alone until the keyword floor is calibrated, weakness review §2) | any | §10.1 fixed not-found text, **no model call** | `not-found` |
 | `Low` after a failed or timed-out condense | any | answer from what was found (the frame tells the model to say when sources do not suffice); a failed rewrite of a follow-up must not turn into "not found" | `answered` |
 | `Unknown` (`degraded` set) | ≥ 1 | answer from the keyword results; caveat line first (§10.2); system prompt adds "källorna kommer från en förenklad textsökning och kan vara ofullständiga" | `answered` (+ `Degraded` column) |
 | `Unknown` | 0 | §10.2 "search unavailable" text, no model call; **never** the not-found text | `unavailable` |

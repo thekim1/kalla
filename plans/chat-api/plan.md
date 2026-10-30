@@ -63,7 +63,8 @@ are drafts tested in the admin test panel until published (data-model §2.1). Th
    3. *Rerank*: `IReranker` seam in P1 (off); gateway-served rerank per assistant in P2 when the evaluation shows a
       gain (knowledge design §6.7).
    4. *Coverage check*: coverage is `Low` only when the vector **and** the keyword side are both weak (knowledge
-      design §7); then answer with the configured "not found" text and contact links, without calling the model. A
+      design §7; until the keyword floor is calibrated from the pilot gold set, the vector side alone, weakness review
+      §2); then answer with the configured "not found" text and contact links, without calling the model. A
       condense failure or timeout never produces the not-found text: retrieval runs on the raw question and the model
       answers. If coverage is `Unknown` (degraded to keyword-only because the query embedding failed, knowledge design
       §5.5), answer from the keyword results with a caveat and **never** with the not-found text; `Unknown` with zero

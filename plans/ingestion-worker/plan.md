@@ -181,13 +181,30 @@ child documents.
      directly: an editor turns a flagged chat into a **rewritten test question without personal data**, and only the
      rewritten question is kept, with the collection's classification (decision 2026-10-29). The original chat still
      expires under its own retention. The postponed Swedish benchmark becomes this curated layer.
+     **Pilot gold set** (P1a, before go-live; [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): 100–150 answerable real questions
+     written with the pilot department (its FAQ, contact-centre questions and, if W1 allows, the existing umea.se
+     chat), each with expected source URL(s) and the facts a correct answer contains; 30–50 unanswerable off-topic and
+     near-miss questions whose expected outcome is "not found"; at least 10 temporal questions where an outdated
+     document competes. Stored as `human` questions, so this harness runs them; owned by the pilot department with the
+     platform team; the start of register item B1.
   3. *Skill tests*: questions shipped with skills, run by the skill gate (`../tools/plan.md`).
 - **Metrics**: recall@10 and MRR@10 for retrieval (expected **document** found?) with counts, measured through the
   shared `Ume.Rag.Retrieval` engine with the Knowledge API's fusion, dedup, variant collapse and per-document cap
-  (design-processing §13.5), compared with the previous run (questions won and lost).
+  (design-processing §13.5), compared with the previous run (questions won and lost). **Reports lead with the
+  gold-set (`human`) results; generated questions are a regression signal only** (weakness review §2).
+- **Three-way run** (P1a, weakness review §2): the gold set is run vector-only, hybrid, and hybrid without the
+  decompounder (on both sides: a scratch copy of the collection whose `SearchText` is recomputed by `reindex-fts`
+  without compound parts, and queries without them); the result is recorded, and hybrid and the decompounder stay only if they beat vector-only. The same
+  run supplies the coverage-threshold proposal from answerable and unanswerable questions together
+  (`../knowledge-api/design.md` §7).
 - **Advisory, not a gate**: runs on the **full collection** after each publish and nightly; the result is shown on the
   publish screen and the evaluation page and never blocks. A collection goes live when its owner publishes it. A gate
   is reconsidered only when measured run-to-run variance shows it can tell versions apart (design-processing §14).
+  The pilot's **go-live gate** (weakness review §2) is a separate, one-time check by people: department reviewers
+  grade the gold-set answers by hand (`../README.md`, P1b); publish stays advisory. The answers come from a script
+  that sends each gold-set question through the chat API as the pilot assistant (the real path) and writes question,
+  answer, citations and coverage to a CSV; reviewers grade it in a spreadsheet, and the graded file and its totals are
+  attached to the go-live decision (no grading UI in P1).
 - **Answer-level evaluation** (P2, weakness review §1): a nightly on-prem judge over the evaluation sets through
   `Ume.Rag.Answering` measuring faithfulness and citation precision per assistant, run by `rag-admin` (run kind
   `answers`; design-processing §14.8). The worker runs retrieval evaluation only and references neither
@@ -230,8 +247,8 @@ child documents.
 | Phase | Deliverable |
 |---|---|
 | P0 | worker dispatcher skeleton: `Jobs` (unpartitioned), leases, heartbeat, reaper, one `command` kind end to end |
-| P1a (weakness review §1) | Queue + LISTEN/NOTIFY, scheduler, document store per source, one crawl frontier per source, URL list + crawl (incremental by `lastmod`) + upload connectors, the umea.se site profile as a hand-checked Sitevision preset (manual profile JSON), fixed pipelines with templates per source type, stage manifest, auto-parse rules with built-in rules, personal-data detection (patterns + gated NER, flag rules, held sets), platform embedding profile with fixed concurrency and range sizes from configuration, change detection, deletion guard, run records |
-| P1b | preview, publish (every document of the collection re-processed) + swap + report + rollback, admin parse rules, site-profile edit and rollback, generated and human evaluation sets, advisory reports and nightly runs, `perf.yml` |
+| P1a (weakness review §1) | Queue + LISTEN/NOTIFY, scheduler, document store per source, one crawl frontier per source, URL list + crawl (incremental by `lastmod`) + upload connectors, the umea.se site profile as a hand-checked Sitevision preset (manual profile JSON), fixed pipelines with templates per source type, stage manifest, auto-parse rules with built-in rules, personal-data detection (patterns + gated NER, flag rules, held sets), platform embedding profile with fixed concurrency and range sizes from configuration, change detection, deletion guard, run records; human evaluation set (the pilot gold set) and retrieval evaluation runs with the three-way comparison (weakness review §2) |
+| P1b | preview, publish (every document of the collection re-processed) + swap + report + rollback, admin parse rules, site-profile edit and rollback, generated evaluation sets, advisory reports (led by the gold set) and nightly runs, `perf.yml` |
 | P2 | from weakness review §1: site-profile learning and re-learning, shared crawl frontier (claims, releaser), publish plans from effect tags, adaptive embedding concurrency (AIMD) and moving-average range sizing, nightly answer judge; SharePoint, renderer if needed, parse-rule proposals, per-department fairness and the multi-host queue features, P2 stages, legacy Office/RTF/email, retrieval-signal feedback loop, skill test questions in evaluation |
 | P3 | More connectors, embedding-profile migration tooling, OpenSearch indexing if adopted |
 

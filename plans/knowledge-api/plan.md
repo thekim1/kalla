@@ -77,7 +77,12 @@ version** links directly, and only those: skills carry no collections (design §
 - **No-answer signal**: `coverage: low` only when the best hit's **cosine distance** is above a per-collection
   threshold **and** the keyword list is empty or below its floor (RRF scores are rank-only, so they cannot signal
   coverage), so callers can say "I don't know" without guessing; outcomes and near-threshold distances are metrics
-  (never query text) for calibration (design §7).
+  (never query text) for calibration (design §7). Until the keyword floor is calibrated, `low` is decided by the
+  vector side alone; both thresholds are set from the pilot gold set's answerable and unanswerable questions together,
+  at the value that separates them best ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)).
+- **Hybrid has to earn its place** ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): in P1a the pilot gold set is run three ways
+  (vector-only, hybrid, hybrid without the decompounder) and the result recorded; hybrid and the decompounder stay
+  only if they beat vector-only.
 - Exact SQL of the statements: design §6; indexes: `../platform/data-model.md` §3.
 - **Rerank**: `IReranker` seam in P1 (FakeGateway implementation, off for every assistant); a gateway rerank endpoint
   for `bge-reranker-v2-m3` on-prem in P2, enabled per assistant when the evaluation shows a gain; coverage then uses
@@ -98,7 +103,7 @@ version** links directly, and only those: skills carry no collections (design §
 | Phase | Deliverable |
 |---|---|
 | P0 | `Ume.Rag.Retrieval` skeleton on the stock pgvector image; `SwedishDecompounder` compound tests in .NET plus one Postgres match test |
-| P1 | `/v1/retrieve` hybrid + filters + section expansion (HTTP for `internal` clients and download grants only), access + ceiling checks, single-profile query embedding + cache, coverage signal (vector and keyword), document dedup, `IReranker` seam, retrieval counters, evaluation set run in CI |
+| P1 | `/v1/retrieve` hybrid + filters + section expansion (HTTP for `internal` clients and download grants only), access + ceiling checks, single-profile query embedding + cache, coverage signal (vector and keyword; vector side alone until the keyword floor is calibrated), document dedup, `IReranker` seam, retrieval counters, evaluation set run in CI; P1a: three-way gold-set run (vector-only, hybrid, hybrid without decompounder) and thresholds calibrated from the gold set (weakness review §2) |
 | P2 | Gateway-served rerank per assistant (advisory evaluation shows the gain); tuning per collection (weights, thresholds) with the advisory evaluation report; `search_knowledge` and `list_collections` through `/mcp` |
 | P3 | Cross-profile fusion if any exception profile exists, OpenSearch implementation if a trigger fires |
 
