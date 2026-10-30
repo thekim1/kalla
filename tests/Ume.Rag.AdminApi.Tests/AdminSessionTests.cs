@@ -41,6 +41,23 @@ public sealed class AdminDatabaseFixture : RagDatabase, IAsyncLifetime
     /// <summary>An HTTPS client: the session and antiforgery cookies are Secure.</summary>
     public static HttpClient HttpsClient(WebApplicationFactory<Program> factory, bool allowAutoRedirect = true) =>
         factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = allowAutoRedirect });
+
+    /// <summary>The admin API with every request signed in as the user its <see cref="HeaderAuthenticationHandler"/> headers describe.</summary>
+    public WebApplicationFactory<Program> HeaderFactory() => Factory().WithWebHostBuilder(web =>
+        web.ConfigureTestServices(services => services.AddHeaderAuthentication()));
+
+    /// <summary>
+    /// A client of <paramref name="factory"/> signed in with <paramref name="roles"/> (none: a user without a rag-* role) and
+    /// <paramref name="departments"/>, holding the XSRF token as the admin UI does.
+    /// </summary>
+    public static async Task<HttpClient> UserAsync(WebApplicationFactory<Program> factory, string roles, string departments = "")
+    {
+        var client = factory.CreateHttpsClient();
+        // A user without a role is still signed in: the handler treats an empty role header as anonymous.
+        client.DefaultRequestHeaders.Add(HeaderAuthenticationHandler.RoleHeader, roles.Length == 0 ? "none" : roles);
+        client.DefaultRequestHeaders.Add(HeaderAuthenticationHandler.DepartmentHeader, departments);
+        return await client.WithXsrfTokenAsync();
+    }
 }
 
 [CollectionDefinition(Name)]

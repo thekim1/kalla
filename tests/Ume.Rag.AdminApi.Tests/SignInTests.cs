@@ -150,8 +150,10 @@ public sealed class BffTests(AdminDatabaseFixture database)
     [Fact]
     public async Task A_state_changing_call_without_the_csrf_header_is_refused()
     {
-        await using var factory = database.Factory();
-        using var client = AdminDatabaseFixture.HttpsClient(factory);
+        // Signed in: authorization runs before the antiforgery check (the gateway's order), so an anonymous call is challenged first.
+        await using var factory = database.HeaderFactory();
+        using var client = factory.CreateHttpsClient();
+        client.DefaultRequestHeaders.Add(HeaderAuthenticationHandler.RoleHeader, Ume.Rag.Domain.Admin.RagRoles.Viewer);
         using var response = await client.PostAsync("/bff/session/extend", null, Ct);
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }

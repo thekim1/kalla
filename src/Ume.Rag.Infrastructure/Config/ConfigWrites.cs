@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Ume.Rag.Infrastructure.Persistence;
 
 namespace Ume.Rag.Infrastructure.Config;
@@ -10,6 +11,11 @@ namespace Ume.Rag.Infrastructure.Config;
 /// </summary>
 public static class ConfigWrites
 {
+    /// <summary>How long a config write waits for the version lock before it answers <c>config_busy</c> (admin design §4.4).</summary>
+    public static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(5);
+
+    private const string SetLockTimeout = "SET LOCAL lock_timeout = '5s'";
+
     /// <summary>
     /// Runs <paramref name="work"/> in one transaction that holds the config version lock, through the context's execution
     /// strategy, and commits. <paramref name="work"/> gets the version before the change; it runs the cross-rules, saves
@@ -33,12 +39,26 @@ public static class ConfigWrites
             // A failed attempt leaves its entities tracked (added, or unchanged after a save that was rolled back).
             db.ChangeTracker.Clear();
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var version = await db.Database
-                .SqlQueryRaw<long>("""SELECT "Version" AS "Value" FROM config."ConfigVersion" WHERE "Id" = 1 FOR UPDATE""")
-                .SingleAsync(ct);
+            await db.Database.ExecuteSqlRawAsync(SetLockTimeout, ct);
+            long version;
+            try
+            {
+                version = await db.Database
+                    .SqlQueryRaw<long>("""SELECT "Version" AS "Value" FROM config."ConfigVersion" WHERE "Id" = 1 FOR UPDATE""")
+                    .SingleAsync(ct);
+            }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+            {
+                // Not retried: the caller answers config_busy at once instead of queueing behind the lock again.
+                throw new ConfigBusyException(ex);
+            }
+
             var result = await work(version, ct);
             await transaction.CommitAsync(ct);
             return result;
         }, cancellationToken);
     }
 }
+
+/// <summary>The config version lock was not granted within <see cref="ConfigWrites.LockTimeout"/>; the caller may retry.</summary>
+public sealed class ConfigBusyException(Exception inner) : Exception("Another config change holds the version lock.", inner);
