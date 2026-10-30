@@ -112,7 +112,7 @@ added by hand. After the first run the files belong to the containers' users, so
 | Option | Default | Effect |
 |---|---|---|
 | `--oidc-authority URL` | prompted | the admin BFF's identity provider (HTTPS): `UME_RAG_OIDC_AUTHORITY` |
-| `--oidc-client-id ID` | `ume-rag-admin` | the admin's own Entra registration, never the gateway's |
+| `--oidc-client-id ID` | `ume-rag-admin` | the admin's own OIDC client (Keycloak in the pilot, Entra from P2), never the gateway's |
 | `--oidc-client-secret-file FILE` | – | the admin registration's secret: `secrets/admin/Oidc__ClientSecret` |
 | `--api-host HOST`, `--admin-host HOST` | prompted (the host name; the admin defaults to the api's) | public host names, in the listener certificates, `UME_RAG_API_PUBLIC_URL` and `UME_RAG_ADMIN_PUBLIC_HOST` |
 | `--api-port N`, `--admin-port N` | 8543, 9543 | host ports of the two listeners |
@@ -148,14 +148,20 @@ When it is done the script prints the next steps. If it did not run as root, ste
 script's: the host units come **before** the first `up`, because the ingestion containers run below the slice they
 install.
 
-### 3. Entra
+### 3. Sign-in (OIDC)
 
-Register the two redirect URIs the script prints for the admin's client (code + PKCE):
-`https://<admin host>[:<admin port>]/signin-oidc` and `/signout-callback-oidc`. RAG's own registrations
-(`ume-rag-admin`, `ume-rag-open-webui`), their app roles and groups are Bicep in `infra/entra/`, applied by a
-GitHub workflow after approval: see [`infra/entra/README.md`](../infra/entra/README.md). The client secrets are
-created by an operator and handed to `--oidc-client-secret-file` and Open WebUI's `OAUTH_CLIENT_SECRET`, never
-committed.
+**The pilot signs in with Keycloak** (decided 2026-10-30, `01-general-idea.md` §10 "P1 pilot sign-in"): a Keycloak
+container in the pilot Compose holds the admins' and pilot users' accounts, with the `rag-*` roles and the
+`departmentCodes` attribute. The `keycloak` service and its production realm arrive with P1; until then point
+`--oidc-authority` at a Keycloak you run yourself, with a realm like `dev/keycloak/` without its test users.
+
+Give the admin's client the two redirect URIs the script prints (code + PKCE):
+`https://<admin host>[:<admin port>]/signin-oidc` and `/signout-callback-oidc`. The client secrets go to
+`--oidc-client-secret-file` and Open WebUI's `OAUTH_CLIENT_SECRET`, never into the repository.
+
+**Entra ID from P2:** RAG's own registrations (`ume-rag-admin`, `ume-rag-open-webui`), their app roles and groups are
+Bicep in `infra/entra/`, applied by a GitHub workflow after IT's approval: see
+[`infra/entra/README.md`](../infra/entra/README.md). Switching is configuration (`Oidc:*`), not code.
 
 ### 4. Host units
 
@@ -277,7 +283,7 @@ sudo systemctl start rag-firewall.service   # allow the openwebui network its de
 ```
 
 It has one connection only, to `rag-api` (`OPENAI_API_KEYS` is the `ume-rag-sk-` key of its client, issued in the admin
-UI), signs in only through its own Entra registration, and listens on plain HTTP on port 3000 of the listeners' bind
+UI), signs in only through its own OIDC client (Keycloak in the pilot), and listens on plain HTTP on port 3000 of the listeners' bind
 address (loopback unless `--proxy`), so the reverse proxy terminates TLS. Its settings come from the Compose file on
 every start; an admin's edit in Open WebUI lasts until the next restart. Its fixed input warning (`WEBUI_BANNERS`) still
 shows a close button: a closed banner returns on the next reload.
