@@ -194,8 +194,8 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
 
 | PR / branch | What | State |
 |---|---|---|
-| #49 (`../rag-a12`) | `verify.yml` admin-ui job + `scripts/admin-ui-size-budget.mjs` (fixes #44) | reviewed; ask the user to merge when green |
-| `a/3-parser-ci-speed` (`../rag-a13`, stacked on #49) | Parser CI speed-up, user's choice A + B: own `parser.yml` with a narrow trigger (not `verify.yml`, not the blob tests), pytest inside the image build (`RUN --network=none`) so the parser job needs no load and no disk cleanup | agent at work or done; measure on GitHub against today's ≈ 7 min (parser 6.3–7.4 min, contract 4.3–6.0 min) |
+| #49 (`../rag-a12`) | `verify.yml` admin-ui job + `scripts/admin-ui-size-budget.mjs` (fixes #44) | green, **merge approved**, blocked by the token's missing `workflow` scope (see below) |
+| #50 (`../rag-a13`, stacked on #49) | Parser CI speed-up (A + B): own `parser.yml` with a narrow trigger, pytest inside the image build (`RUN --network=none`), jobs `parser`, `parser-image`, `contract` | green, measured ≈ 4.2 min (was ≈ 7); **merge approved** after #49 |
 
 **Later in session 7 (all on `main`, see the Decisions table rows of 2026-10-30):**
 - **P1a is planned:** `plans/p1/` (22-item checklist in its README, stream briefs, progress files, prompts). P1 code
@@ -209,8 +209,16 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
 - **Done for the user's items:** U1 (robots.txt checked, about page drafted in
   `plans/ingestion-worker/u1-crawler-about-page.md`); P2 (licence review, no blockers,
   `plans/licence-review-p2.md`, obligations in issues #51 and #52); W1 (Team Turkos built `chat.umea.se`).
-- **Parser CI:** #50 (stacked on #49) measured ≈ 4.2 min for a parser PR (was ≈ 7), 5 s otherwise. Merge #49 first,
-  then retarget #50 to `main`.
+- **Parser CI:** #50 (stacked on #49) measured ≈ 4.2 min for a parser PR (was ≈ 7), 5 s otherwise.
+- **First thing in session 8:** the user approved merging #49 then #50, but `gh pr merge 49` was refused:
+  *"refusing to allow an OAuth App to create or update workflow `.github/workflows/verify.yml` without `workflow`
+  scope"*. Ask the user to run `! gh auth refresh -h github.com -s workflow` (or merge in the browser). Then:
+  merge #49 (green, merges cleanly); `gh pr edit 50 --base main`; in `../rag-a13` merge `origin/main` and push;
+  merge #50 once `Verify` and `Parser` are green; close #44 if it did not auto-close; remove worktrees `../rag-a12`,
+  `../rag-a13`.
+- **Still needed from the user:** start the gateway session; the platform's own licence (EUPL-1.2 suggested, only
+  before distribution); names and dates for A1, N1, U1 (page URL/owner from the web editors) and the gold-set owner
+  in the pilot department; a browser check of the admin UI once stream B's stack (#39, #45, #46 left) is merged.
 
  (user, 2026-10-30; Decisions table "P1 pilot sign-in"; identity plan §1).
 The Keycloak is **shared with the gateway**: its own Compose project on the gateway's production host, defined in the
@@ -272,7 +280,7 @@ a fresh build), and they run only when parser paths change. A single combined jo
 (PR #19, closed). The hosted runner needs the "Free runner disk" step for that image. Testcontainers needs locally
 built images to carry a registry part with a dot (`ume-rag.local/...`), or the Docker Hub mirror prefix rewrites them.
 
-**Worktrees:** `../rag-a7` (#36), `../rag-a8` (#37), `../rag-a9` (#40), `../rag-a10` (#42), `../rag-a11` (#43);
+**Worktrees:** `../rag-a12` (#49), `../rag-a13` (#50);
 remove each with `git worktree remove` once its PR has
 merged. The Aspire CLI is at `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on
 PATH; `start`, `describe`, `otel traces <resource>`, `stop`). On WSL its first run asks to trust the dev certificate in
