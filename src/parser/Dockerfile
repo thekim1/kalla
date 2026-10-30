@@ -98,5 +98,10 @@ COPY tests ./tests
 USER 10001
 CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
 
+# The same tests as a build step without network, so CI runs them while building and never loads the test image:
+#   docker build --target test-run src/parser
+FROM test AS test-run
+RUN --network=none python -m pytest -q -p no:cacheprovider
+
 # The default target is the runtime image.
 FROM runtime

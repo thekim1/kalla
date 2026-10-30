@@ -1,7 +1,7 @@
 name: Verify
 # A pull request is verified on the merge with main (pull_request); a push only verifies main, so a branch with a pull
 # request is not built twice. A branch without one can be verified from the Actions tab (workflow_dispatch).
-# Jobs: ownership and backend (Stage 0), images (P0 checklist #5), parser and contract (P0 checklist #13). Stream A adds
+# Jobs: ownership and backend (Stage 0), images (P0 checklist #5), parser with its contract tests (P0 checklist #13). Stream A adds
 # the ui and deploy-checks jobs (P0 checklist #3, plans/platform/repo-and-deployment.md §8.2).
 on:
   push:
@@ -100,11 +100,13 @@ jobs:
         run: bash deploy/postgres/test.sh ume-rag/postgres:ci
 
   parser:
-    # The parser sidecar (plans/parser/design.md §15.1, repo-and-deployment §8.2): lock, lint, unit and supervisor tests
-    # and the schema export on the runner; then the image's test target (real Docling, models and Tesseract, including
-    # test_offline.py) with no network at all. Runs only when the parser or its contract changed (changes.parser); a
-    # skipped job counts as passed for required checks. The image layers come from the GitHub Actions cache, shared with
-    # the contract job (the blobs are content-addressed, so the two scopes store them once).
+    # The parser sidecar and its contract (plans/parser/design.md §15.1, §15.2; repo-and-deployment §8.2), in one job so
+    # the 3 GB image is built once: lock, lint, unit and supervisor tests and the schema export on the runner; the image's
+    # own tests (real Docling, models and Tesseract, including test_offline.py) as a build step without network (target
+    # test-run, never loaded); then the runtime image is loaded and Ume.Rag.ContractTests run the worker's parser client
+    # against it (responses and errors validated against contracts/parser/v1/, compared with the goldens). Runs only when
+    # the parser or its contract changed (changes.parser); a skipped job counts as passed for required checks. The backend
+    # job runs ContractTests without the image, so there the image tests skip.
     needs: changes
     if: needs.changes.outputs.parser == 'true'
     runs-on: ubuntu-latest
@@ -144,56 +146,33 @@ jobs:
         run: |
           uv export --frozen --no-emit-project --format requirements.txt -o "$RUNNER_TEMP/requirements.txt"
           uv run pip-audit -r "$RUNNER_TEMP/requirements.txt" --require-hashes --disable-pip --progress-spinner off
-      - uses: docker/setup-buildx-action@v4
-      - name: Build the image's test target
-        uses: docker/build-push-action@v7
-        with:
-          context: src/parser
-          target: test
-          build-args: REVISION=${{ github.sha }}
-          tags: ume-rag/parser:test
-          load: true
-          cache-from: |
-            type=gha,scope=parser-test
-            type=gha,scope=parser-runtime
-          cache-to: type=gha,scope=parser-test,mode=max
-      - name: Tests in the image without network
-        run: docker run --rm --network none ume-rag/parser:test
-
-  contract:
-    # Ume.Rag.ContractTests (parser design §15.2): the worker's parser client against the parser image built from this
-    # commit; responses and error cases validated against contracts/parser/v1/ and compared with the goldens. Same
-    # trigger and cache as the parser job. The backend job runs the same project without the image, so there the
-    # image tests skip.
-    needs: changes
-    if: needs.changes.outputs.parser == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Free runner disk
-        # The parser image is about 3 GB and buildx keeps a second copy while loading it; the hosted runner's free space
-        # is not enough without removing preinstalled toolchains this job does not use.
-        run: |
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
-          docker system prune -af >/dev/null
-          df -h / | tail -1
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.401
       - uses: docker/setup-buildx-action@v4
-      - name: Build the parser image
-        # The name has a registry part with a dot, so Testcontainers does not prefix it with the Docker Hub mirror below.
+      - name: Tests in the image without network
+        # Builds the runtime and test stages and runs pytest in them with RUN --network=none; nothing is loaded. The cache
+        # export (mode=max) covers every stage, so the next run restores the runtime layers too.
+        uses: docker/build-push-action@v7
+        with:
+          context: src/parser
+          target: test-run
+          build-args: REVISION=${{ github.sha }}
+          outputs: type=cacheonly
+          cache-from: type=gha,scope=parser
+          cache-to: type=gha,scope=parser,mode=max
+      - name: Load the runtime image
+        # Same builder, so the runtime stage comes from the step above. The name has a registry part with a dot, so
+        # Testcontainers does not prefix it with the Docker Hub mirror below.
         uses: docker/build-push-action@v7
         with:
           context: src/parser
           build-args: REVISION=${{ github.sha }}
           tags: ume-rag.local/parser:ci
           load: true
-          cache-from: |
-            type=gha,scope=parser-runtime
-            type=gha,scope=parser-test
-          cache-to: type=gha,scope=parser-runtime,mode=max
+          cache-from: type=gha,scope=parser
       - name: Contract tests
+        working-directory: .
         env:
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
           UME_RAG_TEST_PARSER_IMAGE: ume-rag.local/parser:ci
