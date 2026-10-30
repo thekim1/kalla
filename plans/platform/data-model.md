@@ -428,8 +428,9 @@ CREATE INDEX "IX_Jobs_RunId" ON content."Jobs" ("RunId") WHERE "State" IN ('queu
   ([`../performance-pass.md`](../performance-pass.md) §3.4).
 - **Capacity refusals** (parser `busy`/`not_ready`, gateway 429 or 503 with `Retry-After`, unconfirmed config) requeue
   with `Attempts − 1`, so they never use up attempts (engine design §7.3).
-- **Leases**: dequeue sets `LeaseOwner`, `LeaseUntil`, `Attempts + 1`; a reaper (every 30 s) returns expired leases to
-  `queued`, and also jobs of instances without a heartbeat for 45 s. A reclaim after an instance died sets
+- **Leases**: dequeue sets `LeaseOwner`, `LeaseUntil`, `Attempts + 1`; a reaper (every 10 s) returns expired leases to
+  `queued`, and also jobs of instances without a heartbeat for 30 s (two missed 15 s heartbeats; a killed worker's jobs are
+  back within 40 s, P0 #20, settled 2026-10-30). A reclaim after an instance died sets
   `Attempts − 1` and `Reclaims + 1`; a job reclaimed 3 times is dead-lettered as a poison suspect
   (`LastError = 'poison-suspect'`). A worker restart loses no work (worker §9).
 - **Dedup**: enqueue is `INSERT … ON CONFLICT ("DedupKey") WHERE "State" IN ('queued','running') DO NOTHING` against
