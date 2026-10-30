@@ -230,6 +230,17 @@ public sealed partial class ConfigVersionTests(RagDatabaseFixture database) : IA
     }
 
     [Theory]
+    [InlineData(-5.0, null)]
+    [InlineData(0.0, null)]
+    [InlineData(0.4, null)]   // a sub-millisecond remainder would truncate to 0 = wait forever
+    [InlineData(9.99, null)]
+    [InlineData(10.0, 10)]
+    [InlineData(10.2, 11)]    // rounded up, never down
+    [InlineData(1999.6, 2000)]
+    public void A_remainder_never_becomes_an_infinite_wait(double remainingMs, int? expected) =>
+        ConfigVersionMonitor.WaitMilliseconds(TimeSpan.FromMilliseconds(remainingMs)).ShouldBe(expected);
+
+    [Theory]
     [InlineData("rag-jobs")]
     [InlineData("Rag_Jobs")]
     [InlineData("jobs; DROP TABLE x")]

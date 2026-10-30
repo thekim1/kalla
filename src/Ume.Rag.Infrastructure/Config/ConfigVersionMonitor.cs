@@ -145,17 +145,23 @@ public sealed partial class ConfigVersionMonitor(
         var started = Stopwatch.GetTimestamp();
         while (Volatile.Read(ref _notified) == 0)
         {
-            // Npgsql takes the timeout in whole milliseconds and 0 means "wait forever"; its timer may also return a little
-            // early. A remainder under MinimumWait therefore counts as the deadline reached, never as a near-zero wait.
-            var remaining = PollInterval - Stopwatch.GetElapsedTime(started);
-            if (remaining < MinimumWait)
+            if (WaitMilliseconds(PollInterval - Stopwatch.GetElapsedTime(started)) is not { } milliseconds)
             {
                 return;
             }
 
-            await connection.WaitAsync(remaining, cancellationToken);
+            await connection.WaitAsync(milliseconds, cancellationToken);
         }
     }
+
+    /// <summary>
+    /// The timeout to pass to Npgsql's <c>WaitAsync(int)</c> for <paramref name="remaining"/>, or null when the deadline
+    /// counts as reached. Npgsql takes whole milliseconds and treats 0 (or less) as an infinite wait, and its timer may
+    /// return a little early, so a remainder under <see cref="MinimumWait"/> is "reached" and the rest is rounded up,
+    /// never down to 0 (review of #24).
+    /// </summary>
+    internal static int? WaitMilliseconds(TimeSpan remaining) =>
+        remaining < MinimumWait ? null : (int)Math.Ceiling(remaining.TotalMilliseconds);
 
     private void OnNotification(string channel, string payload)
     {
