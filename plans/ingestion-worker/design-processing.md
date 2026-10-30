@@ -627,8 +627,16 @@ seed, judge scores), `Strata` (document type, kind) (§19).
 - **P1**: editors add questions with expected documents and edit or retire generated ones (`edit-eval-question`
   command, 6a §9.1); `Layer = human`. Human questions are always part of a gate sample (all of them, up to 50 more).
 - **P2**: questions rewritten from flagged chat feedback (plan §7: only the rewritten, personal-data-free question
-  is kept, with the collection's classification); **skill tests** (`SkillVersions.TestQuestions`, tools plan
-  `../tools/plan.md:33`) as `Layer = skill`, run on skill publish (`skill-publish` trigger) and in scheduled runs.
+  is kept, with the collection's classification); **skill tests** (`SkillVersions.TestQuestions` = the skill's
+  `evals/evals.json`, tools design §3.2) as `Layer = skill` with `SkillVersionId`, run on skill publish (`eval` job
+  `skill-gate`, `GateKind.SkillPublish`) and in scheduled runs. The skill gate has two layers (tools design §3.7):
+  a **retrieval** layer (questions with expected documents; recall@10 in a `Collections` scope of the version's linked
+  collections; first version ≥ `GateFloor`, later versions with changed links the §14.2 relative rule; < 5 such
+  questions → `not-measurable`) and a **routing** layer (all questions, positive and negative: does
+  `Settings.Tools.SkillGateModel`, on-prem and tool-capable, call `load_skill` for this skill, and for questions with
+  expected tools name an expected tool with valid arguments; accuracy ≥ `Settings.Tools.SkillRoutingFloor` 0.80 and net
+  loss < 2 against the served version). **No tool is executed** by the gate: no side effects, no tool credentials in
+  the worker.
 - **P3**: answer faithfulness by an on-prem judge for assistants (`EvaluationResults.Faithfulness`). Results are
   reported per layer; gates decide on the combined sample.
 
@@ -761,6 +769,7 @@ document stage without changing the pipeline hash (P1 built-ins avoid this by ve
 | Pipeline publish, parse changed | ≤ 600 parser pages + NER + embedding | ≤ 40 min with OCR (parser §14) |
 | Retrieval change | 2 × 100 queries | < 1 min |
 | Collection publish | set generation (≈ 200k on-prem LLM tokens) + 100 queries | model-bound, ≈ 10–20 min |
+| Skill publish (P2) | ≤ 100 retrieval queries + ≤ 2 × 100 on-prem routing calls (≈ 3,000 tokens each), no tool calls | model-bound, minutes |
 
 The forecast (6a §12.2 style) is shown before the gate starts; the `eval` class (concurrency 1) runs only planning and
 measuring, while shadow builds use the normal classes at priority 5, so a gate does not wait behind a full crawl.
@@ -769,7 +778,9 @@ measuring, while shadow builds use the normal classes at priority 5, so a gate d
 
 Weekly per published collection: full set, `Collections` scope, trigger `scheduled`; feeds the trend on the admin
 evaluation page and `rag.evaluation.recall_at_10` (repo-and-deployment §9). Alert (admin overview) when recall@10 falls
-below the floor or 5 points below the 4-week median. Onyx found an ingestion bug only through poor evaluation scores
+below the floor or 5 points below the 4-week median. P2: every served skill version is re-run on the routing layer
+weekly and whenever a linked tool's definition is re-approved (tools design §3.7); failures warn, they do not unserve.
+Onyx found an ingestion bug only through poor evaluation scores
 (`../../platforms/onyx.md:322`); this makes that routine.
 
 ## 15. Observability

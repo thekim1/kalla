@@ -15,7 +15,7 @@ src/
   Ume.Rag.Infrastructure/    EF Core DbContexts, Postgres queue + outbox, Redis keys, gateway client, blob storage
   Ume.Rag.ServiceDefaults/   OpenTelemetry, health, problem responses, security headers (copy of gateway's)
   Ume.Rag.Api/               data plane: Knowledge API + Chat API + MCP server endpoint groups (role setting)
-  Ume.Rag.Tools/             tool hub: MCP client, tool policy, credentials, skills runtime (see ../tools)
+  Ume.Rag.Tools/             tool hub: MCP client, tool policy re-check, credentials, audit (skills runtime is in the chat role; see ../tools)
   Ume.Rag.Worker/            ingestion worker: connectors, pipeline engine, scheduler, evaluation runs
   Ume.Rag.AdminApi/          control plane: BFF + admin endpoints, serves the admin UI
   Ume.Rag.MigrationService/  one-shot migrator (DDL role), dev seeder
@@ -38,12 +38,13 @@ interface: in-process when co-deployed, HTTP when split.
 ## 2. Deployables and resource zones (R1)
 
 Ingestion must never compete with chat for CPU or database capacity, so containers are placed in two **resource
-zones** from day one, even when they share a host:
+zones** from day one, even when they share a host (P2 adds a third, `tools-hosted`, for hosted MCP servers):
 
 | Zone | Container | Image | Notes |
 |---|---|---|---|
 | data plane | `rag-api` | Ume.Rag.Api | Knowledge + Chat + MCP server roles |
-| data plane | `rag-tools` | Ume.Rag.Tools | P2; tool hub |
+| data plane | `rag-tools` | Ume.Rag.Tools | P2; tool hub, the only holder of tool credentials; `cpus` 1.0, `cpu_shares` 1024, `mem_reservation` 192m, `mem_limit` 512m, `pids_limit` 256 (tools design §2.2) |
+| tools-hosted | `ume-mcp-<name>` | one per hosted MCP server | P2; own zone (`cpu_shares` 256, `cpus` 0.5, `mem_limit` 384m each), networks `mcp` and its own `mcp-<name>-egress` (tools design §2.2, §8.3); first: mock fee calculator `ume-mcp-avgifter` |
 | data plane | `postgres` | Postgres 17 + pgvector + Hunspell `sv_SE` | **Our own image**, Azure and on-prem alike (decision) |
 | data plane | `redis` | Redis | Rate limits, caches |
 | control | `rag-admin` | Ume.Rag.AdminApi | Admin API + static admin UI |
@@ -128,7 +129,11 @@ Detailed in [`../identity/plan.md`](../identity/plan.md). In short:
 Levels `public` < `internal` < `sensitive` on sources, collections, skills, tool servers, assistants and clients.
 
 - A collection's level is at least the highest level of its sources; an assistant's level is at least that of every
-  linked collection, skill and tool server. A `public` assistant (widget) can only link `public` content.
+  linked collection and skill. A `public` assistant (widget) can only link `public` content.
+- **Tool servers have two levels** (tools design §5.3): **clearance** (highest level of conversation data the server may
+  receive; assistant level ≤ clearance, and clearance is residency-bound: `sensitive` ⇒ `OnPrem`, `internal` ⇒ `OnPrem`
+  or `Eu`, `External` ⇒ `public`) and **result level** (level of what it returns; assistant level ≥ result level). So
+  the effective level of an agent run is fixed at its start and never rises with tool results.
 - A client may only use assistants at or below its ceiling (R5).
 - **Residency matrix** (decision 2026-10-29), for every model call: chat, condense, LLM pipeline steps, evaluation
   generation and judging, tool servers:

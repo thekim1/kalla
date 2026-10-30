@@ -3,7 +3,7 @@
 How assistants gain know-how (skills) and capabilities (tools), how the platform speaks MCP in both directions, and
 how municipal MCP servers are built and hosted. Decisions (2026-10-29): skills are **both** know-how packages and
 tool bundles; all three MCP roles are in scope; tools are **read-only first**; user-delegated access (Entra OBO) is
-**designed now, built later** (`../identity/plan.md` §7).
+**designed now, built later** (`../identity/plan.md` §7). Detail: [`design.md`](design.md) (detail step 9).
 
 ## 1. Concepts
 
@@ -21,44 +21,57 @@ lookups, 30 test questions) used by both the citizen-facing and the internal bui
 ## 2. Skills
 
 - **Format**: compatible with the Agent Skills format (a folder with `SKILL.md`: name, description, instruction body,
-  plus reference files), so skills can be exported to and imported from other tools that support it (format details
-  to verify). A platform manifest adds what the format does not cover: linked collections, linked tools,
-  classification, owner department, test questions.
+  plus reference files), so skills can be exported to and imported from other tools that support it (format checked
+  against the spec, design §3.1). A platform manifest (`ume-rag.json`) adds what the format does not cover: linked
+  collections, linked tools, classification, owner department; test questions in `evals/evals.json` (the spec's eval
+  convention). `allowed-tools` is ignored on import: tool access comes only from manifest links and the tool policy.
+- **Storage**: everything in `config` (instructions, manifest, test questions, text reference files in
+  `SkillVersionFiles`); no blobs (design §3.3).
 - **Progressive loading**: the agent sees only each skill's name and description; the model calls `load_skill` to get
   the full instructions, and the skill's tools become callable once it is loaded. Keeps prompts short and makes
   many skills per assistant affordable. RAG-mode assistants include their skills' instructions statically instead.
-- **No executable scripts** in skills at first: running scripts needs a sandbox, which is a separate decision (P3+).
+- **No executable scripts** in skills at first: `scripts/` is refused on save and import; running scripts needs a
+  sandbox, which is a separate decision (P3+).
 - **Versioning**: immutable published versions with increasing SemVer numbers, plus a separate **served** pointer per
   skill (as in Bifrost), so rollback is moving the pointer; assistants pin a version or follow the served one.
-  Publishing runs the skill's test questions through the evaluation gate (`../ingestion-worker/plan.md` §7).
+  Serving a new MAJOR **auto-pins other departments' following assistants** to the previous version (design §3.5).
+  Publishing runs the skill's test questions through the evaluation gate (`../ingestion-worker/plan.md` §7): a
+  retrieval layer (recall of expected documents) and a routing layer (does the model load the skill and choose the
+  expected tool); no tool is executed by the gate (design §3.7).
 - **Skills are never served unauthenticated** (Bifrost serves its skill marketplace publicly); export requires the
   same access as editing.
-- **Ownership**: department-owned; platform skills (e.g. "Klarspråk", "Hänvisa till kontaktcenter") shared by all.
+- **Ownership**: department-owned, edited and published by the new role `rag-skill-editor` (own departments); platform
+  skills (e.g. "Klarspråk", "Hänvisa till kontaktcenter") owned by the platform team and shared by all (answered 6).
 
 ## 3. Tool hub (new service, `Ume.Rag.Tools`)
 
 A small data-plane service between assistants and tool servers, so the Chat API stays lean and no other service holds
-tool credentials.
+tool credentials. The skills runtime (catalogue, `load_skill`) is **not** in the hub but in the chat role, which already
+holds skills in its config snapshot (design §2.1).
 
-- **Registry**: tool servers, their tools, auth mode, classification, allowed tools, risk levels, timeouts.
+- **Registry**: tool servers, their tools, auth mode, two levels (below), allowed tools, risk levels, timeouts.
+  Hosting kinds `hosted` (our compose), `municipal` (another municipal team, internal network), `external` (internet);
+  tools are usable by a department only with a **department grant** (design §4.5).
 - **Pinned definitions**: tool names, descriptions and schemas are stored at approval; if a server changes them, the
   changed tools are disabled until re-approved (protects against tool poisoning and "rug pulls").
-- **Policy enforcement** on every call: assistant may use the tool, skill loaded, subject and client allowed, tool
-  server classification ≥ the conversation's data (no `internal` data sent to a `public` tool server), risk `read`
-  only (until write is enabled), rate limits per user and per tool.
+- **Policy enforcement** on every call: assistant may use the tool, skill loaded, department grant, subject and
+  client allowed, tool server **clearance** ≥ the conversation's data (no `internal` data sent to a `public` tool
+  server) and **result level** ≤ the assistant's level (design §5.3), risk `read` only (until write is enabled), rate
+  limits per user and per tool.
 - **Credentials**: service identity (`rag-tools` client credentials or an API key held encrypted) in P2; OBO tokens in
   P3. Credentials never reach the model or the Chat API.
 - **Execution**: MCP client (official MCP C# SDK, to verify its version and maturity), timeouts, response size
   limits, output normalised and labelled as **untrusted** before it reaches the model.
 - **Audit**: every call recorded (assistant, tool, subject, client, duration, outcome, argument and result sizes,
   hashed arguments); full arguments/results only in the conversation record, under the same 90-day retention.
-- **Agent loop limits** enforced by the Chat API with the tool hub: max tool calls per message, wall-clock time,
-  and cost per message.
+- **Agent loop limits** enforced by the Chat API with the tool hub: per user message **8 tool calls, 60 s, $0.05**;
+  assistants may lower, platform admins raise to ≤ 20 / 120 s / $0.25 (answered 5).
 - **Where the loop lives**: in the Chat API, as the P2 `AgentAnswerStrategy` behind `IAnswerStrategy`
   (`../chat-api/design.md` §2.2). It yields the same `AnswerEvent`s as the RAG strategy (text deltas, usage,
   failures) plus `ToolCall` events (shown as Open WebUI `status` events, stored as `chat."ToolCalls"` rows), so
   residency checks, output filter, citations and the writer are reused; `search_knowledge` maps to `IRetriever`, and
-  the effective level rises to the highest level of every tool server called.
+  the effective level is fixed at the start of the run and never rises, because every reachable tool server's result
+  level is ≤ the assistant's level (design §5.3).
 
 **Lessons from Bifrost** (`../../platforms/bifrost.md`), adopted:
 
@@ -70,7 +83,8 @@ tool credentials.
   (Bifrost `schemas/mcp.go:825-837`). With read-only first, the second list equals the first; it becomes the
   confirmation mechanism once write tools arrive.
 - **Credential resolvers** per auth mode (none, API key, client credentials, OBO), and user-scoped calls use a fresh
-  connection per call, so one user's token never reaches another user's request.
+  connection per call, so one user's token never reaches another user's request; so do all calls to `municipal` and
+  `external` servers, which may keep session state (design §4.3).
 - **Upstream MCP server `instructions` are never passed to the model as a system message** (Bifrost does this); they
   are shown to the approving admin only. Tool results get the untrusted label and a size cap (Bifrost has neither).
 - **Only the tools of loaded skills are sent**, never everything the caller could reach (Bifrost's default adds all).
@@ -79,14 +93,15 @@ tool credentials.
 
 ## 4. Platform as MCP server
 
-Endpoint group `/mcp` in `Ume.Rag.Api` (Streamable HTTP), authorised with Entra (`../identity/plan.md` §6):
+Endpoint group `/mcp` in `Ume.Rag.Api` (stateless Streamable HTTP), authorised with Entra (`../identity/plan.md` §6):
 
 | Tool / resource | Purpose |
 |---|---|
 | `search_knowledge(query, collections?, top_k?, document_types?, modified_after?)` | Knowledge API retrieval with citations; schema and output shaping in knowledge design §14 (`top_k` ≤ 20, no section expansion, each text ≤ 2,000 and total ≤ 24,000 characters, results wrapped as untrusted `<source>` blocks plus `structuredContent` with `coverage`) |
 | `list_collections()` | Collections the user may search through this client |
+| `get_document(id)` | Citation metadata of one document (design §7.2), for clients that use tools but not resources |
 | `ask_assistant(assistant, question, conversation_id?)` | Run an assistant and return the answer with sources |
-| Resource `document://{id}` | Document metadata and the cited text |
+| Resource `document://{id}` | Document metadata (no cited text: a stateless server cannot know which hit was cited) |
 
 Everything is capped by the MCP client's classification ceiling, like any other client: **`public` by default**,
 because the MCP client's own model receives the results outside our residency rules; a platform admin may raise a
@@ -95,7 +110,8 @@ agent frameworks use municipal knowledge without their own RAG.
 
 **Per-skill endpoints** (after Bifrost's "virtual MCPs"): each published skill can also be exposed at
 `/mcp/skills/<slug>`, offering only that skill's knowledge search and tools. A department can give an MCP client
-exactly "Bygglov" and nothing else, with the same authorisation.
+exactly "Bygglov" and nothing else, with the same authorisation; the audience is `SkillAudiences` (no rows ⇒ nobody).
+Tool-hub tools are offered **only** on per-skill endpoints, never on plain `/mcp` (design §7.2, §7.4).
 
 Citation download links returned over MCP are signed grants bound to the MCP client with a lifetime of **1 hour**
 (knowledge design §4.6, §14).
@@ -105,14 +121,17 @@ Citation download links returned over MCP are signed grants bound to the MCP cli
 The platform hosts in-house MCP servers that wrap internal systems (case management, GIS, booking, the
 municipality's open data), without becoming a general code runner:
 
-- **Template** (`templates/mcp-server/`): .NET project with the MCP C# SDK, Entra token validation (`aud` = the
-  server's own app registration), OpenTelemetry, health endpoints, read-only tool conventions, contract tests and a
-  Dockerfile.
+- **Template** (`templates/mcp-server/`), **.NET only** (answered 7): project with the MCP C# SDK (stateless), Entra
+  token validation (`aud` = the server's own app registration, app-only tokens with app role `Tools.Invoke` assigned
+  only to `rag-tools`), OpenTelemetry, health endpoints, read-only tool conventions, golden `tools/list`, contract
+  tests and a Dockerfile. Other stacks use the generator.
 - **OpenAPI → MCP generator** (after Bifrost): many municipal systems already have OpenAPI descriptions; a generator
-  produces a server from one, marking `GET` operations `read` and everything else `write` (disabled until write tools
-  are allowed). The generated tool list still goes through normal review and pinning.
+  produces a server project from one as **code** (reviewed, compiled, tested; not runtime interpretation of the spec),
+  marking `GET` operations `read` and everything else `write` (disabled until write tools are allowed). The generated
+  tool list still goes through normal review and pinning.
 - **Deployment**: each server is its own container in the platform's compose/Kubernetes setup, on an internal
-  network reachable only by the tool hub, with egress only to the system it wraps.
+  network (`mcp`) reachable only by the tool hub, with egress only to the system it wraps through its own
+  `mcp-<name>-egress` network (design §8.3).
 - **Registration**: deployed servers are registered in the tool hub like external ones (same review, pinning and
   classification); a catalogue page in the admin shows owner, systems wrapped and tools.
 - **Ownership**: the team owning the wrapped system owns its MCP server; the platform team owns the template and the
@@ -129,7 +148,8 @@ Retrieved web pages, documents and tool results are untrusted text that may cont
    send data out (write tools, tools that call external services with model-chosen arguments, fetching model-chosen
    URLs), unless a platform admin records an explicit risk acceptance.
 3. **Data-flow classification**: tool arguments can carry conversation data, so a tool server may only be used by
-   assistants whose classification is ≤ the tool server's classification.
+   assistants whose classification is ≤ the tool server's clearance; results flow into the answer, so the server's
+   result level must be ≤ the assistant's classification (design §5.3).
 4. **Output channels**: external images and auto-loaded links are stripped from answers (common exfiltration path).
 5. **Write tools (later)**: always behind explicit user confirmation shown by the client (MCP elicitation or our own
    UI), with idempotency keys and audit; never available to `public` assistants.
@@ -184,3 +204,11 @@ Answered (2026-10-29):
 3. **Anonymous MCP**: no. The MCP server always requires Entra login; citizens reach public assistants through the web
    widget.
 4. **Open WebUI's own tools/MCP**: always off. Every tool call goes through the tool hub.
+
+Answered (2026-10-30; detail in design.md §14.1):
+
+5. **Agent loop limits** per user message: 8 tool calls (built-ins included), 60 s until the final answer starts, $0.05
+   model cost; assistants may lower; platform admins raise up to 20 / 120 s / $0.25.
+6. **Skill authors**: department skill editors (`rag-skill-editor`) draft and publish behind the evaluation gate;
+   linking a tool needs a department grant for it; the platform team owns platform skills.
+7. **MCP server template**: .NET only; other stacks via the OpenAPI → MCP generator.

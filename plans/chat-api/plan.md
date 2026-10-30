@@ -34,8 +34,10 @@ Every request resolves to a **client** from the client registry, which sets a cl
 
 - **RAG assistant** (P1): fixed query steps, one model call. Fast and predictable; the default.
 - **Agent assistant** (P2): built from skills; the model may call `search_knowledge`, `load_skill` and the read-only
-  tools of its skills in a bounded loop (max steps, time and cost per message). Tool calls go to the tool hub
-  (`../tools/plan.md`).
+  tools of its skills in a bounded loop: per user message 8 tool calls, 60 s until the final answer starts and $0.05
+  model cost by default (assistants may lower; platform admins raise to ≤ 20 / 120 s / $0.25; tools design §6.5,
+  answered 1). No condense in agent mode: the model writes its own `search_knowledge` queries. Tool calls go to the
+  tool hub (`../tools/plan.md`, `../tools/design.md` §6).
 
 ## 4. Request path (RAG assistant)
 

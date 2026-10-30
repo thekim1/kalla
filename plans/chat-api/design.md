@@ -71,7 +71,7 @@ public abstract record AnswerEvent
     public sealed record Started(GatewayResponseInfo Gateway) : AnswerEvent;        // headers checked (§8.2)
     public sealed record TextDelta(string Text) : AnswerEvent;                      // raw model text, before §9
     public sealed record FixedText(string Text, ChatOutcome Outcome) : AnswerEvent; // not-found, unavailable (§10)
-    public sealed record ToolCall(string Server, string Tool, ToolCallState State) : AnswerEvent;   // P2
+    public sealed record ToolCall(string Server, string Tool, ToolCallState State) : AnswerEvent;   // P2: started, succeeded, failed, denied
     public sealed record Usage(int InputTokens, int OutputTokens, decimal? CostUsd) : AnswerEvent;
     public sealed record Failed(ChatError Error, bool AfterFirstByte) : AnswerEvent;
 }
@@ -85,9 +85,11 @@ public sealed record ChatContext(
 `CitationEmitter` (§9) into `ChatStreamWriter` (SSE or JSON per client kind) and hands the finished `ChatTurn` to the
 `ConversationWriter` (§12). The P2 agent strategy reuses everything except the middle: a bounded loop of gateway calls
 with `tools`, tool calls through the tool hub (`../tools/plan.md` §3), `search_knowledge` mapped to `IRetriever`, limits
-on steps/time/cost, and the effective level raised to the highest level of every tool server it has called (identity
-§4.7). Tool calls become `ToolCall` events (Open WebUI `status` events; nothing for OpenAI clients) and `chat."ToolCalls"`
-rows. No P2 code is written in P1; the seam is the interface and the event type.
+on calls/time/cost (tools design §6.5), and the effective level **fixed at the start of the run** and never raised:
+every reachable tool server has clearance ≥ and result level ≤ that level (tools design §5.3, identity §4.7). Tool calls
+become `ToolCall` events (`ToolCallState` `started`/`succeeded`/`failed`/`denied`; Open WebUI `status` events; nothing
+for OpenAI clients) and `chat."ToolCalls"` rows; P3 adds a `ConfirmationRequired(callId, tool, arguments)` event for
+write tools (tools design §5.5). No P2 code is written in P1; the seam is the interface and the event type.
 
 ## 3. API contract
 
@@ -402,7 +404,9 @@ Du behöver bygglov för att bygga ett skärmtak eller en altan som …
   with `"`, `<`, `>`, `&` escaped and length-capped (title 200, path 300).
 - Text neutralisation: `</source`, `<source`, `</sources`, `<sources` (any case, also with spaces) are replaced by the
   same text with a zero-width space after `<`; C0/C1 controls removed; runs of > 3 blank lines collapsed. Nothing else
-  is rewritten (the model must see the real text).
+  is rewritten (the model must see the real text). P2 extends the list with the skill and tool tags (`<skill_content`,
+  `</skill_content`, `<skill_file`, `<skill_resources`, `<skill_tools`, `<available_skills`, `<tool_result`,
+  `</tool_result`; tools design §3.8), applied to every untrusted text (sources, tool results, tool descriptions).
 
 ### 7.3 Platform frame (system prompt template, Swedish, locked)
 
@@ -418,7 +422,9 @@ Svara på samma språk som användarens senaste fråga{ForceSwedish ? ", men all
 ```
 
 The editor's `SystemPrompt` follows (tone, audience, domain rules); it cannot remove the frame (the admin API stores
-it separately and the frame is prepended at run time). Skills' instructions are appended in P2 (tools plan §2).
+it separately and the frame is prepended at run time). P2: each linked skill's body is appended after it as a
+`<skill_content name="…">…</skill_content>` block in link order, counted in the mandatory part `M` (§6.3); skills over
+6,000 estimated tokens in total are refused on assistant save (tools design §3.9).
 
 ### 7.4 Injection defences (necessary, not sufficient; tools plan §6)
 
@@ -429,7 +435,7 @@ it separately and the frame is prepended at run time). Skills' instructions are 
 | Exfiltration through rendered output | §9.4: images removed, links to non-allowed hosts de-linked, HTML stripped |
 | Marker spoofing (a source says "see [7]" or lists fake numbers) | only numbers 1..N of this prompt map to citations; others are removed (§9.2); links come from our metadata, never from text |
 | Forged history (a client sends invented assistant turns) | the history is the caller's own; it can mislead only the caller; it never adds sources or citations (markers stripped) and never raises access |
-| Lethal trifecta | P1 has no output channel besides the answer; P2 admin rule of tools plan §6 rule 2 |
+| Lethal trifecta | P1 has no output channel besides the answer; P2: computed per assistant composition and refused without a platform admin's risk acceptance (tools design §5.4) |
 
 ## 8. Gateway call
 
@@ -928,6 +934,9 @@ totals).
   `AssistantId`, `TeamId`, `GatewayRequestId`); SIEM alerts on any 5003 or 5011 from the chat role.
 - **Dashboard** *Data plane*: TTFT and overhead p50/p95, outcome shares per level, condense outcomes, citation
   validity, writer queue, feedback import health.
+- **P2 agent and tools**: `rag.agent.*`, `rag.tools.*`, `rag.mcp.requests`, `rag.skills.*`, the trace spans
+  `rag.agent.step`/`rag.agent.tool` and the *Tools* dashboard are defined in tools design §10; events 5012–5015 in tools
+  design §9.3.
 
 ## 18. Tests
 
@@ -1000,7 +1009,7 @@ answers; follow-up with history on a `public` assistant from Open WebUI carries 
 | Phase | Deliverable |
 |---|---|
 | P1 | `/v1/models`; `/v1/chat/completions` stream and JSON; task requests via `owui-tasks`; condense on follow-ups; retrieval with coverage handling; token budget; prompt frame; residency and echo checks; marker renumbering, Open WebUI `source` events and `url_citation`; output filter; not-found and degraded texts; signed conversation ids; writer with encryption, epochs and daily totals; conversation endpoints; user delete; `/v1/feedback`; Open WebUI feedback import; Open WebUI pruning job and configuration; P1 refusal of attachments; metrics, traces, events 5003/5011; benchmarks, audit, overhead run, R1 |
-| P2 | Agent assistants (`AgentAnswerStrategy`, tool hub, skills); chat attachments (§15.2); public widget (`pk` keys, sessions, server-side history); cost reconciliation from the gateway usage feed; condense tuning behind the evaluation gate; feedback review workflow beyond P1 |
+| P2 | Agent assistants (`AgentAnswerStrategy`, tool hub, skills; detail in `../tools/design.md` §6, milestones §12); chat attachments (§15.2); public widget (`pk` keys, sessions, server-side history); cost reconciliation from the gateway usage feed; condense tuning behind the evaluation gate; feedback review workflow beyond P1 |
 | P3 | Rerank (via the knowledge role); Teams client; OBO tools; write tools with confirmation |
 
 ## 20. Changes to other documents

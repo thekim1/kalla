@@ -91,7 +91,12 @@ public sealed record RetrievalRequest(
     ExpandMode Expand = ExpandMode.None,
     RetrievalPurpose Purpose = RetrievalPurpose.Chat,
     bool AllowDegraded = true,
-    Guid? RunId = null);                       // sent as x-ume-run-id (chat: the message id)
+    Guid? RunId = null)                        // sent as x-ume-run-id (chat: the message id)
+{
+    // P2 (tools design §6.3, §7.4): skill versions whose linked collections join the scope: the run's loaded skills
+    // (agent), or the served version for a per-skill MCP endpoint (AssistantId = null); validated against the snapshot
+    public IReadOnlyList<Guid>? SkillVersionIds { get; init; }
+}
 
 public sealed record RetrievalFilters(
     IReadOnlyList<string>? Tags, IReadOnlyList<string>? DocumentTypes, DateTimeOffset? ModifiedAfter);
@@ -325,11 +330,12 @@ Steps 0–5 run in memory against one snapshot; nothing touches Postgres or the 
 
 | Caller | Collections searched |
 |---|---|
-| Chat (in process) and `rag-internal` (`assistant_id`) | the assistant's `AssistantCollections` from the snapshot; P2 agent assistants: plus the collections of loaded skills (`SkillVersionLinks`, kind `collection`); `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
+| Chat (in process) and `rag-internal` (`assistant_id`) | the assistant's `AssistantCollections` from the snapshot; P2 RAG assistants: plus the collections of all linked skills (pinned or served version, tools design §3.9); P2 agent assistants: plus the collections of loaded skills (`SkillVersionLinks`, kind `collection`; `SkillVersionIds`, §2.2); `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
 | Integration key (P2) | requested slugs, each in `Keys.Scopes`; no slugs → all collections in the key's scope |
 | Token caller (P2) | requested slugs, each allowed by `CollectionAudiences` (new P2 table, §18) for the client, department or group; no slugs → `Filter` over all |
 | Admin test panel | the assistant's or the chosen collections, **including `building`**, checked with the admin's role scope (identity §4.8); runs in the admin process on `Ume.Rag.Retrieval` |
 | Download grant | exactly the grant's collection (§4.6) |
+| Per-skill MCP endpoint (P2, `/mcp/skills/<slug>`, `AssistantId = null`) | the served skill version's linked collections (`SkillVersionIds = [served]`); audience = `SkillAudiences` (tools design §7.4) |
 
 At most 20 collections per query (an assistant with more is refused on save by the admin API).
 
@@ -887,7 +893,8 @@ public sealed record Candidate(Guid ChunkId, Guid DocumentId, Guid ChunkSetId, i
 
 ## 14. MCP exposure (P2 outline)
 
-`/mcp` in `Ume.Rag.Api` (role `mcp`), MCP C# SDK 2.3.0: `AddMcpServer().WithHttpTransport(o => o.Stateless = true)`,
+`/mcp` in `Ume.Rag.Api` (role `mcp`), MCP C# SDK 2.3.0: `AddMcpServer().WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)` (the default as of protocol
+2026-07-28; tools design §7.1),
 `MapMcp("/mcp")`, tools as `[McpServerTool(Name = "search_knowledge", ReadOnly = true, Idempotent = true,
 OpenWorld = false, UseStructuredContent = true)]` methods calling `IRetriever` in process with `Purpose = Mcp`.
 Authentication and metadata: identity §8 (delegated `Mcp.Use`, pre-registered `mcp-client` rows).
@@ -916,10 +923,10 @@ Authentication and metadata: identity §8 (delegated `Mcp.Use`, pre-registered `
 | Topic | Rule |
 |---|---|
 | Ceiling | the `mcp-client` row's ceiling: `public` by default, a platform admin may raise to `internal`, never `sensitive` (`CK_Clients_Mcp`, identity §4.1); the client's model receives results outside our residency rules, which is why |
-| Collections | `CollectionAudiences` for the user's client, department or group (§4.2); per-skill endpoints `/mcp/skills/<slug>` restrict to that skill's collections (tools plan §4) |
+| Collections | `CollectionAudiences` for the user's client, department or group (§4.2); per-skill endpoints `/mcp/skills/<slug>` restrict to the served version's collections, audience `SkillAudiences` (tools design §7.4) |
 | Output shaping | `structuredContent` = the §3.2 response without `scores` and `config_version`, `top_k` ≤ 20, `expand` off, each `text` ≤ 2,000 characters, total ≤ 24,000 characters; `content` = one text block per result wrapped as `<source n="…" title="…" url="…">…</source>` with the untrusted-content label (tools plan §3 rule 1), plus `ResourceLinkBlock`s for `document://{id}` |
 | Links | `download_url` grants bound to the MCP client (`cl`), lifetime 1 hour |
-| Other tools | `list_collections()` = §3.3; resource `document://{id}` = §3.4 + the cited text; `ask_assistant` belongs to the chat role (tools plan §4) |
+| Other tools | `list_collections()` = §3.3; tool `get_document({ id })` and resource `document://{id}` = §3.4 (without "the cited text": a stateless server cannot know which hit was cited); `ask_assistant` and the per-skill endpoints per tools design §7 |
 | Attribution | query embeddings charged to the first searched collection's owner team (§5.2) |
 | Coverage | returned as `coverage` in `structuredContent`, so agents can say "not found" too |
 

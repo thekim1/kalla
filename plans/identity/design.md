@@ -78,10 +78,11 @@ groups intersect the group claim (`:40-48`).
 
 | Role value | Policy membership | Scope |
 |---|---|---|
-| `rag-platform-admin` | `Admin`, `Manage`, `EditPipelines`, `Edit`, `Read` | every department (like `gateway-admin`, `AdminContext.cs:81-86`) |
-| `rag-department-admin` | `Manage`, `EditPipelines`, `Edit`, `Read` | `departmentCodes` (+ feature C) |
+| `rag-platform-admin` | `Admin`, `Manage`, `EditPipelines`, `EditSkills`, `Edit`, `Read` | every department (like `gateway-admin`, `AdminContext.cs:81-86`) |
+| `rag-department-admin` | `Manage`, `EditPipelines`, `EditSkills`, `Edit`, `Read` | `departmentCodes` (+ feature C) |
 | `rag-pipeline-editor` | `EditPipelines`, `Read` | same |
-| `rag-editor` (P2) | `Edit`, `Read` | same |
+| `rag-skill-editor` (P2) | `EditSkills`, `Read` | same (draft, publish, serve, roll back skills; tools design §3.6) |
+| `rag-editor` (P2) | `Edit`, `Read` | same; links published skills to assistants, cannot edit skills (tools design §3.6) |
 | `rag-viewer` | `Read` | same |
 | none | nothing: every `/api` call is 403 (the gateway allows the catalogue to role-less users, `docs/identity-and-roles.md:18`; we have no public page) | – |
 
@@ -108,6 +109,7 @@ with the `UME_RAG_` prefix; for local runs the same keys as `Oidc:<Setting>` in 
 | `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | `Oidc:RoleGroups:rag-platform-admin` | – | `;`-separated, case-insensitive |
 | `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN` | `Oidc:RoleGroups:rag-department-admin` | – | |
 | `UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR` | `Oidc:RoleGroups:rag-pipeline-editor` | – | |
+| `UME_RAG_OIDC_GROUPS_SKILL_EDITOR` | `Oidc:RoleGroups:rag-skill-editor` | – | P2 (tools design §3.6) |
 | `UME_RAG_OIDC_GROUPS_EDITOR` | `Oidc:RoleGroups:rag-editor` | – | P2 |
 | `UME_RAG_OIDC_GROUPS_VIEWER` | `Oidc:RoleGroups:rag-viewer` | – | |
 | `UME_RAG_OIDC_EXTRA_SCOPE` | `Oidc:ExtraScopes:0` | `email` | |
@@ -318,9 +320,11 @@ public sealed record RagPrincipal(
 | Integration with a token | client-credentials token (§7) | `Application` | `app:{azp}` | `Clients.OAuthClientId = azp` | P2 |
 | Public widget | `ume-rag-pk-` key + `Origin` + issued session (§6.5) | `Anonymous` | `anon:{HMAC(session)}` | the key's `ClientId` (kind `widget`) | P2 |
 | Own chat client, Teams | delegated token, `scp` `Chat.Use` (§7) | `EntraUser` | `oid` (Keycloak: `sub`) | `azp` | P2/P3 |
-| MCP client | delegated token, `scp` `Mcp.Use` (§8) | `EntraUser` | `oid` | `azp` (kind `mcp-client`) | P2 |
+| MCP client (`/mcp` and `/mcp/skills/<slug>`, same principal) | delegated token, `scp` `Mcp.Use` (§8) | `EntraUser` | `oid` | `azp` (kind `mcp-client`) | P2 |
 | Worker → API internal attachment route (`POST /internal/attachments/{id}/chunks`, chat design §15.2) | internal service key, internal network only | `Application` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P2 |
 | Chat role → knowledge role over HTTP (`Retrieval:Mode=Http`) | internal `ume-rag-sk-` service key | `Application` + forwarded decision | `svc:{keyId}` | client `rag-internal` (kind `internal`) | when split |
+| Chat and `mcp` roles → tool hub (`/internal/v1/tool-calls`, tools design §2.4) | **mTLS** client certificate **and** internal `ume-rag-sk-` service key (tools design §2.2) | `Application` + forwarded `ToolCallContext` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P2 |
+| Admin → tool hub (discovery, connection test) | mTLS **and** service key | `Application` | `svc:{keyId}` | client `admin-console` (kind `internal`) | P2 |
 | Admin test panel | admin session (in-process, no HTTP) | `EntraUser` | admin `sub` | client `admin-console` (kind `internal`) | P1 |
 | Browser following a citation link (`GET /v1/documents/{id}` and `/content` only) | signed download grant `?grant=g1.…` (knowledge design §4.6) | none (no subject; the grant carries ids only) | – | the grant's `cl` (client that received the citation) | P1 |
 
@@ -352,6 +356,7 @@ Rules:
 | `AllowedOrigins` | widget | – |
 | `AllowedSubjectKinds` (derived from `Kind`, not stored) | §4.3 step 3 | – |
 | `ResolveUsersByEmail bool` | P2: Open WebUI users mapped to Entra by email (§5.4) | new (§14) |
+| `ToolPolicy varchar(10)` | P2: client layer of the tool policy, `none`/`read` (P3 `confirm`); defaults `read` for `open-webui`, `own-client`, `teams`, `widget`, `none` for `integration`, `entra-app`, `mcp-client`, `internal` (tools design §5.1) | new (tools design §13) |
 
 Database checks stay as designed: `StoresHistory ⇒ ceiling ≠ sensitive`, `mcp-client ⇒ ceiling ≠ sensitive`.
 Pilot rows (seeded by the migration service in dev, created by a platform admin in production):
@@ -410,7 +415,7 @@ Infrastructure into `MembershipFacts { Departments, Groups, Known: bool }`, so t
 | 9 | **Data handling**: level policy `ClientsWithoutHistoryOnly` ⇒ `!client.StoresHistory`; `AllowedHistoryModes` contains the assistant's mode | `client_stores_history` | 404 |
 | 10 | **Audience** (assistants; collections via the assistant, or via `Knowledge.Read` audiences in P2): any `AssistantAudiences` row matches: `client` = this client; `department` ∈ `Membership.Departments`; `group` ∈ `Membership.Groups`. Application subjects match only `client` rows | `audience_mismatch` | 404 |
 | 11 | Step 10 needs a department/group row and `Membership.Known = false` | `membership_unavailable` | 503 |
-| 12 | Tools (P2): tool policy (`tools/plan.md` §3, intersection server → skill → assistant → client) | `tool_not_allowed` | 403 |
+| 12 | Tools (P2): tool policy = tools design §5.1 (server → skill → assistant → client, `ToolPolicy.Visible`/`Authorize`); inside an agent loop a denial is a `denied` tool message + 5002, not an HTTP 403; on `/mcp` the SDK's unknown-tool error (tools design §5.2) | `tool_not_allowed` | 403 / tool message |
 | ✓ | Allowed: `EffectiveLevel` = resource level; `MaxResidency` per §4.7 | – | – |
 
 Steps 5–10 answer **404** (`model_not_found` in the OpenAI error shape for chat), so a caller cannot probe which
@@ -459,8 +464,9 @@ reason in the `code` extension; knowledge design §3.6); the in-process path car
 | `sensitive` | `OnPrem` | linked `onprem` key + response check |
 
 Effective level for chat = the assistant's level (≥ all its collections, skills and tool servers, validated on
-save); for condense and title calls inside a conversation the same; for P2 agent runs the highest of the assistant
-and every tool result's server level so far. The Chat API sends the header from `AccessDecision.MaxResidency` and
+save); for condense and title calls inside a conversation the same; for P2 agent runs it is fixed at the run's start
+and never rises: tool servers are bounded by clearance (assistant level ≤ clearance) and result level (result level ≤
+assistant level) (tools design §5.3). The Chat API sends the header from `AccessDecision.MaxResidency` and
 `x-ume-on-behalf-of` = the assistant's team **id** (gateway design §5.2; codes can change), and the echo of that header
 is required once gateway release A is in use. Header values are the gateway's `DataResidency` names (`Eu`, `OnPrem`,
 case-insensitive). The gateway answer's `x-ume-residency` is checked, case-insensitively by order
@@ -715,7 +721,11 @@ scope value on one registration. This is stricter than the Data API's "any confi
   Entra application id) must be in `config."Clients"` with `Kind = mcp-client`, ceiling `public` by default, raised to
   `internal` only by a platform admin (never `sensitive`, `CK_Clients_Mcp`); unknown `azp` ⇒ 403 `client_unknown`.
   Consent for `Mcp.Use` is granted by an admin per client (or `preAuthorizedApplications` on `rag-api`), not by users.
-- Per-skill endpoints narrow further: only that skill's tools and collections, same principal and policy.
+- Per-skill endpoints narrow further: only that skill's tools and collections, same principal and policy; their audience
+  is `config."SkillAudiences"` (tools design §7.4).
+- Both kinds of metadata document and the challenge are served by the MCP SDK's `McpAuthenticationHandler` at its
+  default `ResourceMetadataUri` (same paths as above); our JWT bearer configuration (§7) authenticates (tools design
+  §7.3; composition *to verify*).
 - **M1 unknowns** (postponed-decisions M1, decide at P2 start): whether MCP clients accept Entra's OIDC discovery
   document in place of RFC 8414 metadata; whether Entra v2 rejects the RFC 8707 `resource` parameter that MCP clients
   send (AADSTS error) or ignores it; Client ID Metadata Documents support in Entra and clients; which first-party client
@@ -789,6 +799,10 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 | 5009 | `rag.mcp.client_refused` | api | delegated token from an `azp` not registered as an enabled `mcp-client` | `ClientId` (azp), `SubjectId`, `SourceAddress` |
 | 5010 | `rag.obo.refused` | tools (P3) | OBO exchange failed (`claims_required`, `consent_required`, `assertion_expired`, `error`) | `Reason`, `ToolServerId`, `SubjectId`, `ClientId` |
 | 5011 | `rag.gateway.delegation_missing` | api (Warning) | after gateway release A: the response lacks the `x-ume-on-behalf-of` echo of the team sent; call aborted before the first byte (chat design §8.2) | `Step`, `AssistantId`, `TeamId`, `GatewayRequestId` |
+| 5012 | `rag.tool.definition_changed` | tools (Warning, P2) | tool definition drift observed, once per (tool, observed hash) (tools design §4.4) | `ToolServerId`, `ToolId`, `ToolName`, `Kind` (`changed`/`removed`/`added`/`instructions-changed`), `PinnedHash`, `ObservedHash` |
+| 5013 | `rag.tool.upstream_refused` | tools (Warning, P2) | a tool server refused our credential or it could not be used, once a minute per (server, reason) with `Count` | `ToolServerId`, `Reason` (`unauthorized`, `forbidden`, `token_failed`, `credential_unavailable`, `tls`), `Status`, `Count` |
+| 5014 | `rag.content.tag_neutralised` | api, tools (Information, P2) | reserved tags (tools design §3.8) neutralised in untrusted text, once a minute per (kind, resource) with `Count` | `SourceKind` (`source`, `tool_result`, `tool_description`, `skill_description`), `ResourceId`, `Count` |
+| 5015 | `rag.tool.result_refused` | tools (Warning, P2) | a tool result refused: `too_large`, `level_refused`, `protocol_error` | `ToolServerId`, `ToolId`, `Reason`, `ResultBytes`, `ResultLevel`, `EffectiveLevel` |
 | 5104 | `rag.parser.limit_exceeded` | worker | parser refused a file for a bomb or size limit (parser design §7.5) | `DocumentId`, `Limit` |
 | 5105 | `rag.pipeline.refused` | worker | refused to run a published pipeline version that fails validation (engine design §17); SIEM alerts on any | `PipelineId`, `PipelineVersionId`, `Reason` |
 | 5101–5103 | `rag.egress.blocked`, `rag.malware.detected`, `rag.pii.flagged` | worker | 5101/5102: connectors design §7, §11; 5103 on every transition to flagged (processing design §9.5) | 5103: `DocumentId`, `Classification`, `Types`, `Counts` (numbers only), `SourceId`, `RunId`, `Reflag`; SIEM rule for public references with a personnummer. Admin audit actions `pii.clear`, `gate.override` |
@@ -805,7 +819,10 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 `user_jwt_missing`, `user_jwt_invalid`, `user_jwt_expired`, `user_jwt_role`, `user_jwt_mismatch`, `token_invalid`,
 `token_expired`, `wrong_tenant`, `guest_refused`, `client_unknown`, `permission_missing`, `grant_invalid`,
 `grant_expired` (download grants, knowledge design §4.6). 5002 `Reason` = §4.3 reasons plus `conversation_not_owned`
-(an issued conversation id whose MAC does not match the caller's client and subject, chat design §11.1). The MAC key
+(an issued conversation id whose MAC does not match the caller's client and subject, chat design §11.1) and, for tool
+policy denials (P2, `ResourceType` `tool`/`skill`, attributes + `ToolId`, `SkillId`), `tool_not_allowed`,
+`tool_grant_missing`, `tool_clearance`, `tool_unapproved`, `tool_drifted`, `tool_write_disabled`, `client_tool_policy`,
+`skill_audience` (tools design §9.3). The MAC key
 is `Security:ConversationIdKeys` (secret files `Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, made by
 `init-deployment.sh`; newest signs, all verify, as the download-grant keys).
 
@@ -814,7 +831,9 @@ Gateway counterparts (gateway design §10): our 5001 with `wrong_tenant`/`guest_
 
 SIEM alerts to add to the gateway's list (`docs/security-events.md:29-34`): any 5008; 5005 from one client repeatedly
 (a client probing above its ceiling); any 5003 or 5011 from the chat role; 5004 for more than a minute (config monitor broken); 5007 bursts (Graph outage
-or permission removed); 5001 `user_jwt_invalid` at all (Open WebUI secret mismatch or forgery).
+or permission removed); 5001 `user_jwt_invalid` at all (Open WebUI secret mismatch or forgery); P2 (tools design §9.3): any 5012 (definition
+changed without a planned release), 5013 bursts, any 5015 `level_refused`, 5014 from one tool or document repeatedly
+(planted markup).
 
 ## 11. Keycloak realm (dev and CI)
 
@@ -825,14 +844,14 @@ from the gateway's file; passwords and secrets are import placeholders like `${U
 | Element | Content |
 |---|---|
 | User profile | declares `departmentCodes`, `teamCodes` (Keycloak ≥ 24 drops undeclared attributes, `docs/identity-and-roles.md:148-149`) |
-| Realm roles | `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-editor`, `rag-viewer`; app permissions `Knowledge.Read.All`, `Chat.Invoke.All` |
+| Realm roles | `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-skill-editor` (P2), `rag-editor`, `rag-viewer`; app permissions `Knowledge.Read.All`, `Chat.Invoke.All` |
 | Client scopes | `Chat.Use`, `Knowledge.Read`, `Mcp.Use` (optional client scopes, each with an audience mapper `ume-rag-api`, `include.in.token.scope` on, so they appear in `scope`) |
 | Client `ume-rag-admin` | confidential, standard flow only, PKCE S256, redirect and post-logout URIs for `https://localhost:5174` and the adminapi https port (as `ume-realm.json:28-37`); mappers copied: `roles` realm-role mapper (`:41-52`), `departmentCodes` and `teamCodes` attribute mappers (`:54-79`), all to the ID token; **`groups`** group-membership mapper (full path off, ID token on) |
 | Client `ume-rag-api-dev` | client credentials only (as `ume-data-dev`, `:84-107`); audience mapper `ume-rag-api`; realm-role mapper to `roles` (access token); service account roles `Knowledge.Read.All`, `Chat.Invoke.All` |
 | Client `ume-rag-chat-dev` | **new**: public client, code + PKCE, redirect `http://localhost:*` style loopback for test tools; default scope `Chat.Use`, optional `Knowledge.Read`, `Mcp.Use`; for delegated-token and MCP tests |
 | Client `open-webui-dev` | confidential, code flow, redirect `http://localhost:<owui port>/oauth/oidc/callback`; `email` in ID token; used when `OpenWebUi:Enabled` |
 | Groups | `Byggnadsnämnden` (member: `rag-group-member`), `rag-pilot-users` (members: all test users) |
-| Users | `rag-platform-admin` (1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), `rag-viewer` (1000), `rag-group-member` (no attribute; via `Byggnadsnämnden` → department 3000), **`rag-no-role`** (1000, no role: every `/api` call 403), **`rag-chat-user`** (no admin role; for delegated chat tokens) |
+| Users | `rag-platform-admin` (1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), **`rag-skill-editor`** (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute; via `Byggnadsnämnden` → department 3000), **`rag-no-role`** (1000, no role: every `/api` call 403), **`rag-chat-user`** (no admin role; for delegated chat tokens) |
 | Seed | the FakeGateway catalogue (repo-and-deployment §4.3) returns department 3000 with `memberGroups: ["Byggnadsnämnden"]`, so the org sync fills the mirror in dev |
 
 Development uses `Oidc:GroupLookup = Claims`; the Graph path is covered by unit tests with a fake
@@ -849,7 +868,8 @@ Development uses `Oidc:GroupLookup = Claims`; the Graph path is covered by unit 
 | `open-webui` registration (new) | Web redirect `https://<owui host>/oauth/oidc/callback`; ID-token optional claims `email`, `acct`; delegated Graph `openid profile email` (user consent is enough, but granted tenant-wide by admin to avoid prompts); its own client secret (§12.2) | admin consent for the delegated scopes (recommended) |
 | Its service principal | `appRoleAssignmentRequired = true` | no |
 | Pilot groups (new) | `Ume.Rag pilot users` (Open WebUI access), `Ume.Rag platform admins`, `Ume.Rag department admins – <pilot department>` (names agreed with IT; no convention exists, plan answered question 5) | `Group.Create` for the deployer |
-| App role assignments | pilot users group → `open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin` on the shared registration | assigning on an app the deployer does not own needs `AppRoleAssignment.ReadWrite.All` or app ownership |
+| `rag-tools` credential and MCP server registrations (P2) | a certificate credential (`keyCredentials`) for `rag-tools` client credentials (`/run/certs/rag-tools-entra.pfx`, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-avgifter`) with app role `Tools.Invoke` (Application) and its assignment to `rag-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
+| App role assignments | pilot users group → `open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin` (P2: skill editor groups → `rag-skill-editor`) on the shared registration | assigning on an app the deployer does not own needs `AppRoleAssignment.ReadWrite.All` or app ownership |
 
 ### 12.2 Credentials
 
@@ -886,6 +906,7 @@ var ragRoles = [
   { id: guid('rag-pipeline-editor'),  value: 'rag-pipeline-editor',  displayName: 'RAG pipeline editor',  allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: pipelines' }
   { id: guid('rag-viewer'),           value: 'rag-viewer',           displayName: 'RAG viewer',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: read' }
   { id: guid('rag-editor'),           value: 'rag-editor',           displayName: 'RAG editor',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: forms in own departments (P2)' }
+  { id: guid('rag-skill-editor'),     value: 'rag-skill-editor',     displayName: 'RAG skill editor',     allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: skills in own departments (P2)' }
 ]
 
 resource adminApp 'Microsoft.Graph/applications@v1.0' = {
@@ -959,8 +980,8 @@ by IaC.
   (`internal`) never sees a `sensitive` assistant; MCP client at `public` never sees `internal`; anonymous never sees
   `internal`; `StoresHistory` client refused where the level requires no-history clients; app subject never matches a
   department audience; empty audience list denies everybody; unconfirmed snapshot denies everything with 503.
-- Residency derivation: `public` → none, `internal` → `Eu`, `sensitive` → `OnPrem`; agent run level rises with a tool
-  result.
+- Residency derivation: `public` → none, `internal` → `Eu`, `sensitive` → `OnPrem`; agent run level fixed at the
+  run's start whatever the tool results (tools design §5.3).
 - `Filter` returns exactly the resources `Decide` allows (property test over random snapshots).
 - Feature C resolver (§2.8). Tenant and guest checks (`acct=1`, foreign `idp`, wrong `tid`).
 - Role resolution: several roles add up; non-`rag-*` roles ignored; no role ⇒ every policy fails.
