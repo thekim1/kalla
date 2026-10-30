@@ -2,7 +2,7 @@ name: Verify
 # A pull request is verified on the merge with main (pull_request); a push only verifies main, so a branch with a pull
 # request is not built twice. A branch without one can be verified from the Actions tab (workflow_dispatch).
 # Jobs: ownership and backend (Stage 0), images (P0 checklist #5), parser and contract (P0 checklist #13), deploy-checks
-# (P0 checklist #14). Stream A adds the ui job (P0 checklist #3, plans/platform/repo-and-deployment.md §8.2).
+# (P0 checklist #14), admin-ui (P0 checklist #3, plans/platform/repo-and-deployment.md §2.3, §8.2).
 on:
   push:
     branches: [main]
@@ -37,6 +37,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       parser: ${{ steps.filter.outputs.parser }}
       deploy: ${{ steps.filter.outputs.deploy }}
+      adminui: ${{ steps.filter.outputs.adminui }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,9 +48,12 @@ jobs:
           BEFORE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
           if [ "${{ github.event_name }}" = pull_request ]; then range="$BEFORE...HEAD"; else range="$BEFORE..HEAD"; fi
+          # The admin UI job has nothing to build in a tree without src/admin-ui (main before stream B's #45), even when
+          # contracts/admin/ or this workflow changed.
+          ui=false; [ -f src/admin-ui/package-lock.json ] && ui=true
           if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            printf 'code=true\nparser=true\ndeploy=true\n' >> "$GITHUB_OUTPUT"; exit 0
+            printf 'code=true\nparser=true\ndeploy=true\nadminui=%s\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
           fi
           flag() { [ -n "$1" ] && echo true || echo false; }
           code="$(git diff --name-only "$range" | grep -vE '^(plans/|platforms/)|^[^/]+\.md$' || true)"
@@ -57,7 +61,10 @@ jobs:
           parser="$(git diff --name-only "$range" | grep -E '^(src/parser/|contracts/parser/|tests/Ume\.Rag\.ContractTests/|tests/fixtures/parser/|src/Ume\.Rag\.Worker/Parsing/|\.github/workflows/verify\.yml$)' || true)"
           # The production Compose files and init-deployment.sh, or this workflow.
           deploy="$(git diff --name-only "$range" | grep -E '^(deploy/|\.github/workflows/verify\.yml$)' || true)"
-          { echo "code=$(flag "$code")"; echo "parser=$(flag "$parser")"; echo "deploy=$(flag "$deploy")"; } >> "$GITHUB_OUTPUT"
+          # The admin UI, the error codes its Swedish texts are checked against, its size budget script, or this workflow.
+          adminui="$(git diff --name-only "$range" | grep -E '^(src/admin-ui/|contracts/admin/|scripts/admin-ui-size-budget\.mjs$|\.github/workflows/verify\.yml$)' || true)"
+          [ "$ui" = true ] || adminui=""
+          { echo "code=$(flag "$code")"; echo "parser=$(flag "$parser")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"; } >> "$GITHUB_OUTPUT"
 
   backend:
     needs: changes
@@ -148,6 +155,42 @@ jobs:
           done
       - name: Deployment scripts pass shellcheck
         run: shellcheck deploy/*.sh deploy/postgres/*.sh
+
+  admin-ui:
+    # The admin UI (repo-and-deployment §2.3, §8.2; admin design §10.2), as the gateway's "Verify UI" step: npm ci from
+    # the lock only (src/admin-ui/.npmrc: ignore-scripts, min-release-age, allow-git=none; never npm install), npm audit
+    # failing on any advisory, lint, typecheck, unit tests, build, then the gzip size budget and the design-system drift
+    # report, which only warns. Node 24 as every gateway workflow; package.json engines asks for >= 22.
+    needs: changes
+    if: needs.changes.outputs.adminui == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/admin-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/admin-ui/package-lock.json
+      - name: Install from the lock
+        run: npm ci
+      - name: Audit dependencies
+        run: npm audit --audit-level=low
+      - name: Lint, typecheck, test and build
+        # messages.spec.ts checks every code in contracts/admin/v1/error-codes.json has a Swedish text.
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Size budget
+        # Initial JS (shell + Översikt) <= 200 kB gzip, each lazy route <= 100 kB gzip (admin design §10.2).
+        run: node ../../scripts/admin-ui-size-budget.mjs dist --landing OverviewView --initial-kb 200 --lazy-kb 100
+      - name: Design-system drift (warning only)
+        # Without a gateway checkout it compares the copies with design-system.lock only; it always exits 0.
+        run: node scripts/design-system-drift.mjs
 
   parser:
     # The parser sidecar (plans/parser/design.md §15.1, repo-and-deployment §8.2): lock, lint, unit and supervisor tests
