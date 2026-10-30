@@ -1,0 +1,38 @@
+# Overlay for a 24 GB pilot host (plans/platform/repo-and-deployment.md §6.2): the 24 GB memory limits, the parser
+# with two slots of two threads, and the 24 GB Postgres memory settings, given on the command line so they override
+# the 16 GB values in postgresql.conf. Use it with compose.prod.yaml and compose.ingestion.yaml, together with
+# compose.clamav-conf.yaml (ConcurrentDatabaseReload and TestDatabases yes, which need the 3g limit below);
+# `init-deployment.sh --host-memory 24` writes those confs and lists all four files in COMPOSE_FILE.
+# The rag-ingestion.slice cap goes from MemoryMax=7G to 11G (deploy/host/).
+
+services:
+  postgres:
+    mem_limit: 5g
+    command: !override
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - shared_buffers=1536MB
+      - -c
+      - effective_cache_size=3500MB
+      - -c
+      - maintenance_work_mem=1GB
+
+  rag-api:
+    mem_limit: 1.5g
+
+  rag-admin:
+    mem_limit: 768m
+
+  rag-worker:
+    mem_limit: 2g
+
+  rag-parser:
+    mem_limit: 6g
+    environment:
+      PARSER_WORKERS: "2"
+      PARSER_THREADS: "2"
+
+  rag-clamav:
+    mem_limit: 3g

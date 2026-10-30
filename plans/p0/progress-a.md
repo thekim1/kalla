@@ -45,26 +45,26 @@ Refs: [repo-and-deployment §8](../platform/repo-and-deployment.md)
 
 ## 5. Compose, backups, restore (#14)
 Refs: [repo-and-deployment §6, §7.4](../platform/repo-and-deployment.md), [performance-pass §3.1](../performance-pass.md), [platform/plan.md §8a](../platform/plan.md)
-- [ ] `deploy/compose.prod.yaml`, `compose.ingestion.yaml`: networks, zones, limits, one slot, `DOTNET_GCHeapHardLimitPercent=75`
-- [ ] `deploy/compose.openwebui.yaml` (optional pilot stack incl. `WEBUI_BANNERS`; to-verify #46, #134, #172)
+- [x] `deploy/compose.prod.yaml`, `compose.ingestion.yaml`: networks, zones, limits, one slot, `DOTNET_GCHeapHardLimitPercent=0x4B` (#31)
+- [x] `deploy/compose.openwebui.yaml` (optional pilot stack incl. `WEBUI_BANNERS`; to-verify #46, #134, #172) (#31)
 - [ ] `init-deployment.sh`, `deploy/host/` (`rag-ingestion.slice`, firewall script, `rag-backup.timer`)
 - [ ] `backup-postgres.sh`, `restore-pitr.sh`, `backup-uploads.sh`, `escrow-keys.sh` (blob keys only in P0/P1)
-- [ ] **Done:** `docker compose config` passes in CI
+- [x] **Done:** `docker compose config` passes in CI (#31)
 - [ ] Restore drill run locally
 - [ ] Restore drill on the test host (after H6), documented with achieved RPO/RTO; escrowed keys read back
 - [ ] to-verify #90, #124, #129 recorded
 
 ## 6. Worker dispatcher (#20, after H2)
 Refs: [design-engine.md](../ingestion-worker/design-engine.md) §9, §16, §20; [data-model §4](../platform/data-model.md)
-- [ ] `WorkerInstances` heartbeat, leases, `LISTEN rag_jobs` (heartbeat and leases done; wake-ups are the 2 s poll plus local signals until `rag_jobs` can share the config monitor's listening connection)
+- [x] `WorkerInstances` heartbeat, leases, `LISTEN rag_jobs` (`rag_jobs` rides the config monitor's listening connection, #21; the 2 s poll stays as the fallback)
 - [x] Reaper: reclaim ≠ attempt; poison suspect after 3 reclaims
 - [x] `command` job kind applied end to end (test enqueues through `IJobQueue`)
 - [x] **Done:** a killed worker's job is reclaimed within 45 s without using an attempt
-- [ ] **Hand-off H4:** issue to stream B
+- [x] **Hand-off H4:** issue to stream B (#28)
 
 ## 7. Scale seams, your part (#21)
 Refs: [performance-pass §8](../performance-pass.md), [data-model §9](../platform/data-model.md)
-- [ ] `IBlobStore` write-once contract (`IfAbsent`, tombstones) + file-system store; contract tests (an overwrite is refused)
+- [x] `IBlobStore` write-once contract (`IfAbsent`, tombstones) + file-system store; contract tests (an overwrite is refused)
 - [x] `IJobQueue` Postgres implementation
 - [x] `ConnectionStrings__ragdb-listen`, `Worker:Classes`, `Worker:Concurrency:<class>`
 

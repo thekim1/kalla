@@ -1,0 +1,125 @@
+# Production Compose, ingestion zone (plans/platform/repo-and-deployment.md §6.2, §6.4): rag-worker, rag-parser and
+# rag-clamav. On the pilot host it runs together with compose.prod.yaml (one project, see there); from P2 a separate
+# ingestion host adds compose.ingestion-remote.yaml instead. The three containers share the rag-ingestion.slice cgroup,
+# which caps the whole zone (installed from deploy/host/; cgroup v2 with the systemd driver). Where the slice is not
+# installed (a developer machine), set UME_RAG_INGESTION_SLICE to an empty value.
+#
+# The parser listens with TLS on 8000 with a certificate from the internal CA (init-deployment.sh); the worker trusts
+# that CA through SSL_CERT_FILE. clamd has no TLS or authentication, so it stays on the internal ingestion network.
+
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp]
+
+services:
+  rag-worker:
+    <<: *hardened
+    image: ${WORKER_IMAGE:-ume-rag/worker:latest}
+    user: "1654:1654"
+    restart: unless-stopped
+    # Running jobs get Worker:StopGraceSeconds (90 s) to finish, then are released; the host waits that plus 15 s.
+    stop_grace_period: 120s
+    cgroup_parent: ${UME_RAG_INGESTION_SLICE-rag-ingestion.slice}
+    cpus: 1.5
+    cpu_shares: 256
+    mem_reservation: 512m
+    mem_limit: 1.5g
+    pids_limit: 512
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Hexadecimal, as every GC setting in the environment: 0x4B = 75 % of mem_limit.
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/worker.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/worker.key
+      Parser__BaseUrl: https://rag-parser:8000
+      ClamAv__Host: rag-clamav
+      ClamAv__Port: "3310"
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
+      Crawl__AllowedPrivateRanges: ${UME_RAG_CRAWL_ALLOW:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: rag-worker
+      SSL_CERT_FILE: /run/certs/ca.pem
+    volumes:
+      - ${UME_RAG_SECRETS_DIR:?Run deploy/init-deployment.sh first}/worker:/run/app-secrets:ro
+      - ${UME_RAG_CERTS_DIR:?Run deploy/init-deployment.sh first}/worker:/run/certs:ro
+      - ${UME_RAG_SECRETS_DIR}/keys/rag-blob-internal:/run/keys/rag-blob-internal:ro
+      - rag-blobs:/data/blobs
+    depends_on:
+      postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+      # Started, not healthy: the parser warms up for minutes and freshclam's first download takes a while; the worker
+      # reports them in its own health and retries.
+      rag-parser: {condition: service_started}
+      rag-clamav: {condition: service_started}
+    # crawl: the only network with Internet egress, filtered by the host firewall (§6.1).
+    networks: [data, llm, ingestion, parser, crawl]
+    healthcheck:
+      test: [CMD, dotnet, Ume.Rag.Worker.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  rag-parser:
+    <<: *hardened
+    image: ${PARSER_IMAGE:-ume-rag/parser:latest}
+    user: "10001:10001"
+    restart: unless-stopped
+    cgroup_parent: ${UME_RAG_INGESTION_SLICE-rag-ingestion.slice}
+    # Job directories live on /tmp; tmpfs counts against mem_limit.
+    tmpfs: ["/tmp:size=1g"]
+    cpus: 4.0
+    cpu_shares: 128
+    mem_reservation: 2g
+    mem_limit: 3.5g
+    pids_limit: 256
+    environment:
+      # PARSER_WORKERS x PARSER_THREADS = cpus (16 GB host: 1 x 4; 24 GB: 2 x 2, compose.host-24g.yaml).
+      PARSER_WORKERS: "1"
+      PARSER_THREADS: "4"
+      PARSER_TLS_CERT_FILE: /run/certs/parser.crt
+      PARSER_TLS_KEY_FILE: /run/certs/parser.key
+    volumes:
+      - ${UME_RAG_CERTS_DIR}/parser:/run/certs:ro
+    # The parser network is internal and the parser is on no other: no egress at all (parser design §11).
+    networks: [parser]
+    # Health check: the image's own (python -m ume_parser.health, HTTPS once PARSER_TLS_* are set).
+
+  rag-clamav:
+    <<: *hardened
+    image: ${CLAMAV_IMAGE:-ume-rag/clamav:latest}
+    # The image's clamav user (images/clamav/Dockerfile).
+    user: "1000:1000"
+    restart: unless-stopped
+    cgroup_parent: ${UME_RAG_INGESTION_SLICE-rag-ingestion.slice}
+    cpus: 1.0
+    cpu_shares: 128
+    mem_reservation: 1.2g
+    mem_limit: 1.5g
+    pids_limit: 128
+    volumes:
+      - clamav-db:/var/lib/clamav
+    # An unhealthy clamd is not restarted by Docker (the entrypoint ends in `tail -f`, so the container keeps running):
+    # the host's restart-unhealthy timer (deploy/host/) restarts containers with this label. Meanwhile the worker fails
+    # closed (connectors design §11).
+    labels:
+      ume-rag.restart-unhealthy: "true"
+    # mirror: freshclam reaches database.clamav.net only (host firewall); ingestion: the worker's INSTREAM on 3310.
+    networks: [ingestion, mirror]
+    # Health check: the image's own (a real scan through clamd).
+
+networks:
+  data: {driver: bridge, internal: true, ipam: {config: [{subnet: 172.30.2.0/24}]}}
+  llm: {driver: bridge, ipam: {config: [{subnet: 172.30.3.0/24}]}}
+  ingestion: {driver: bridge, internal: true, ipam: {config: [{subnet: 172.30.4.0/24}]}}
+  parser: {driver: bridge, internal: true, ipam: {config: [{subnet: 172.30.5.0/24}]}}
+  crawl: {driver: bridge, ipam: {config: [{subnet: 172.30.6.0/24}]}}
+  mirror: {driver: bridge, ipam: {config: [{subnet: 172.30.7.0/24}]}}
+
+volumes:
+  rag-blobs:
+  clamav-db:

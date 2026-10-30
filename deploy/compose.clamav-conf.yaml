@@ -1,0 +1,13 @@
+# Overlay that replaces the ClamAV image's clamd.conf and freshclam.conf with the copies init-deployment.sh writes to
+# ${UME_RAG_SECRETS_DIR}/clamav/ (repo-and-deployment §5.5). The image's unprivileged entrypoint ignores the
+# CLAMD_CONF_* and FRESHCLAM_CONF_* variables, so a setting changes only through a mounted file. init-deployment.sh
+# writes the copies, and adds this file to COMPOSE_FILE, for either option:
+#   --host-memory 24          ConcurrentDatabaseReload yes and TestDatabases yes (with compose.host-24g.yaml's 3g)
+#   --freshclam-proxy H:P     HTTPProxyServer/HTTPProxyPort, when database.clamav.net is reached through a proxy
+# Without either the image's own confs are used (16 GB host, direct egress) and this file is not needed.
+
+services:
+  rag-clamav:
+    volumes:
+      - ${UME_RAG_SECRETS_DIR:?Run deploy/init-deployment.sh first}/clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+      - ${UME_RAG_SECRETS_DIR}/clamav/freshclam.conf:/etc/clamav/freshclam.conf:ro
