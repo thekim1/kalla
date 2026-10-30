@@ -492,10 +492,10 @@ verify* on the host image).
 | Container | Zone | `cpus` | `cpu_shares` | `mem_reservation` | `mem_limit` 16 GB | `mem_limit` 24 GB | `pids_limit` | Notes |
 |---|---|---|---|---|---|---|---|---|
 | postgres | data | 3.0 | 1024 | 2g | 3g | 5g | 512 | `shm_size: 1g`; settings below; limit sized from the P0 measurement, including `archive-push` and the scheduled `pgbackrest backup` running inside it (§7.4) |
-| rag-api (P2 + rag-api-b) | data | 2.0 each | 1024 | 384m | 1g each | 1.5g each | 512 | `DOTNET_GCHeapHardLimitPercent=75` |
-| rag-admin (P2 + rag-admin-b) | control | 1.0 each | 512 | 256m | 512m each | 768m each | 256 | `DOTNET_GCHeapHardLimitPercent=75` |
-| rag-migrate | – | 1.0 | 512 | – | 512m | 512m | 128 | one-shot; `DOTNET_GCHeapHardLimitPercent=75` |
-| rag-worker | ingestion | 1.5 | 256 | 512m | 1.5g | 2g | 512 | `DOTNET_GCHeapHardLimitPercent=75` |
+| rag-api (P2 + rag-api-b) | data | 2.0 each | 1024 | 384m | 1g each | 1.5g each | 512 | `DOTNET_GCHeapHardLimitPercent=0x4B` |
+| rag-admin (P2 + rag-admin-b) | control | 1.0 each | 512 | 256m | 512m each | 768m each | 256 | `DOTNET_GCHeapHardLimitPercent=0x4B` |
+| rag-migrate | – | 1.0 | 512 | – | 512m | 512m | 128 | one-shot; `DOTNET_GCHeapHardLimitPercent=0x4B` |
+| rag-worker | ingestion | 1.5 | 256 | 512m | 1.5g | 2g | 512 | `DOTNET_GCHeapHardLimitPercent=0x4B` |
 | rag-parser | ingestion | **4.0** (half the host) | 128 | 2g | 3.5g (1 worker × 4 threads) | 6g (2 workers × 2 threads) | 256 | `PARSER_WORKERS`, `PARSER_THREADS`, `PARSER_SLOT_MAX_RSS_MB`, `NER_*`; the NER process (`ner-0`, ≈ 0.5 GB model) shares this limit with a 2 800 MB slot watchdog, tight at 3.5g: measured in P0/R1 (*to verify*) |
 | rag-clamav | ingestion | 1.0 | 128 | 1.2g | 1.5g | 3g | 128 | `ConcurrentDatabaseReload` §5.5 |
 | `rag-ingestion.slice` | ingestion | `CPUQuota=500%` | `CPUWeight=25` | – | `MemoryMax=7G` | `MemoryMax=11G` | – | zone cap |
@@ -521,8 +521,9 @@ storage parameters of `content."Jobs"` only, data-model §4.1, settled at the H2
 `shared_preload_libraries='pg_stat_statements'` (capacity metrics, §9; was empty). `wal_compression=lz4` (the stock image
 is built `--with-lz4`, confirmed by `deploy/postgres/test.sh`, P0 #5). The file also sets `listen_addresses='*'`,
 `ssl_cert_file`/`ssl_key_file`/`ssl_ca_file` under `/run/certs/` and `hba_file='/run/config/pg_hba.conf'` (the gateway's
-mount paths); it holds the 16 GB profile with the 24 GB values as comments, and P0 #14 picks per deployment. `DOTNET_GCHeapHardLimitPercent=75` is set on
+mount paths); it holds the 16 GB profile with the 24 GB values as comments, and P0 #14 picks per deployment. `DOTNET_GCHeapHardLimitPercent=0x4B` (75 %) is set on
 **every** .NET container (api, worker, admin, migrations), not only the api ([`../performance-pass.md`](../performance-pass.md) §4).
+GC settings in the environment are **hexadecimal**: `75` would be read as 117 % and ignored (measured, PR #31, to-verify #124).
 
 **Multi-host database profile** (P2; 64 GB database host, D in [`../performance-pass.md`](../performance-pass.md) §5; estimate, confirmed by the scale test):
 `max_connections=200` (5-host budget, data-model §1.1), `shared_buffers=16GB`, `effective_cache_size=48GB`,
@@ -840,7 +841,7 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (simpli
 | 18 | Gateway **release 1** agreed with the gateway team (weakness review §5): feature B (residency ceiling, key flag `RequireMaxResidency`, the 503/403 split, `/v1/models` filtered by the ceiling) with ADR draft 018 (`../gateway-changes/adr-drafts.md`), and FakeLlm `dimensions` (§12.2); release 2 (features C and A, ADRs 019–020) planned for P2; the pilot team's per-level keys for pilot attribution agreed | design and ADR 018 accepted by the gateway team; release 1 scheduled before the pilot | README P0, gateway-changes plan §4, design §13 |
 | 19 | Docs: `local-development.md`, `production-setup.md` (sizing from §6.2), `runbook.md` (incl. restore and escrow; before go-live also a section on finding and exporting one Open WebUI conversation for the registrar on a public-records request, weakness review §4, plan §8), `upgrade-guide.md`, `security-events.md` | reviewed by the operations owner | plan §10 |
 | 20 | Worker dispatcher skeleton (after #6): `WorkerInstances` heartbeat, leases, reaper (reclaim ≠ attempt; poison suspect after 3 reclaims), `LISTEN rag_jobs`; one `command` kind end to end (admin enqueues, worker applies) | integration test: the command is applied; a killed worker's job is reclaimed within 45 s without using an attempt | engine design §20 (P0) |
-| 21 | Scale seams (after #6, #20): `IBlobStore` write-once contract (`IfAbsent`, tombstones) with the file-system implementation; `IJobQueue` seam (Postgres implementation); pooler-safe SQL rules + scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` and `Worker:Classes` per instance; `DOTNET_GCHeapHardLimitPercent=75` on every .NET service (the halfvec HNSW index follows in P1) | unit test finds no forbidden session-state SQL; contract tests pass on the file-system store (an overwrite attempt is refused) | [`../performance-pass.md`](../performance-pass.md) §8 (P0) |
+| 21 | Scale seams (after #6, #20): `IBlobStore` write-once contract (`IfAbsent`, tombstones) with the file-system implementation; `IJobQueue` seam (Postgres implementation); pooler-safe SQL rules + scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` and `Worker:Classes` per instance; `DOTNET_GCHeapHardLimitPercent=0x4B` on every .NET service (the halfvec HNSW index follows in P1) | unit test finds no forbidden session-state SQL; contract tests pass on the file-system store (an overwrite attempt is refused) | [`../performance-pass.md`](../performance-pass.md) §8 (P0) |
 | 22 | On-prem capacity on the real gateway hardware (weakness review §5): BGE-M3 embedding throughput (tokens/s by batch size, query-embedding p95 under an ingestion load) and the latency of the condense and answer models (p95, TTFT p99 for a full 16k-token prompt), by scripts in `scripts/capacity/` against the gateway with the user's access | numbers recorded against the performance-pass estimates (`to-verify.md` #98, #99, #104, #125, #149); a shortfall raised as register M2 | [`../performance-pass.md`](../performance-pass.md) §2, §3.9; `postponed-decisions.md` M2 |
 
 `perf.yml` and the nightly `evaluation.yml` follow in P1, before the pilot (§8.1).

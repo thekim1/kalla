@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Commands;
 using Ume.Rag.Worker.Jobs;
@@ -46,6 +47,29 @@ public sealed class DispatcherTests(RagDatabaseFixture database) : IAsyncLifetim
             cancelled.State.ShouldBe(JobStates.Cancelled);
             cancelled.LastError.ShouldBe(CancelRunCommand.CancelledReason);
         }
+    }
+
+    [Fact]
+    public async Task A_job_enqueued_by_another_process_wakes_the_worker_through_rag_jobs()
+    {
+        // The poll is 60 s and the admin's queue has its own data source and JobWakeUps, as in another process: only the
+        // rag_jobs notification on the config monitor's connection can start the job within a second.
+        var handler = new BlockingCommand(released: true);
+        await using var worker = await WorkerHost.StartAsync(database, s => s.AddSingleton<ICommandHandler>(handler),
+            new Dictionary<string, string?> { ["Worker:PollSeconds"] = "60", ["Worker:Classes"] = JobClasses.Command });
+        // The monitor confirms its first version after its LISTEN statements; then let the lane make its first, empty probe.
+        var config = worker.Services.GetRequiredService<ConfigVersionState>();
+        await WaitUntilAsync(() => Task.FromResult(config.LastConfirmedAt is not null));
+        await Task.Delay(500, Ct);
+
+        var enqueuedAt = handler.Now;
+        var job = await EnqueueAsync(database, Command(BlockingCommand.KindName));
+        var startedAt = await handler.StartedAsync(job, TimeSpan.FromSeconds(10));
+
+        var latency = startedAt - enqueuedAt;
+        TestContext.Current.TestOutputHelper?.WriteLine(string.Create(CultureInfo.InvariantCulture, $"started {latency.TotalMilliseconds:F0} ms after the enqueue"));
+        latency.ShouldBeLessThan(TimeSpan.FromSeconds(1));
+        await WaitForStateAsync(database, job, JobStates.Succeeded);
     }
 
     [Fact]
@@ -170,8 +194,10 @@ public sealed class DispatcherTests(RagDatabaseFixture database) : IAsyncLifetim
     [Fact]
     public async Task Under_load_the_worker_stays_within_its_pool_and_the_role_cap()
     {
-        // 20 command slots on a pool of 10: jobs wait for connections instead of opening more. The worker role's cap is 12
-        // (data-model §1.1): pool 10 + the config monitor's listening connection + 1 for a stop-then-start.
+        // 20 command slots on a pool of 10: jobs wait for connections instead of opening more. Each job holds a RagDbContext
+        // connection while the dispatcher's queue statements run beside it, both from the one ragdb data source (issue #22).
+        // The worker role's cap is 12 (data-model §1.1): pool 10 + the config monitor's listening connection + 1 for a
+        // stop-then-start.
         var hold = new HoldConnectionCommand();
         await using var worker = await WorkerHost.StartAsync(database, s => s.AddSingleton<ICommandHandler>(hold),
             new Dictionary<string, string?> { ["Worker:Concurrency:command"] = "20" });
