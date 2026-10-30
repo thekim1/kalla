@@ -24,7 +24,7 @@ Details still unchecked are marked *to verify* and collected in §19. Other cita
 | 7 | Stored outputs | Worker stores `result.json` **and** `docling.json.gz` as the parse output; re-chunking reads `result.json` only and never calls the parser (§7.6) |
 | 8 | Page ranges | PDF and multi-frame TIFF only; ≤ 20 pages, worker sizes ranges adaptively from returned timings; heading paths and cross-page tables are stitched **by the worker** from blocks with levels and bounding boxes (§8) |
 | 9 | OCR | Modes per request (`auto`/`force`/`off`); the worker groups pages with equal strategy into ranges. Tesseract (`swe`+`eng`) and EasyOCR (`sv`+`en`) both baked; P1 bake-off decides (§9) |
-| 10 | Runtime | One uvicorn process (API only) + an **own supervisor** with N pre-warmed conversion processes and one inspect process; SIGKILL on deadline or disconnect; recycle after 50 jobs or RSS growth; no `uvicorn --workers`, no `--limit-concurrency` (§10) |
+| 10 | Runtime | One uvicorn process (API only) + an **own supervisor** with N pre-warmed conversion processes, one inspect process and (step 6c) one NER process `ner-0`; SIGKILL on deadline or disconnect; recycle after 50 jobs or RSS growth; no `uvicorn --workers`, no `--limit-concurrency` (§10) |
 | 11 | Limits | 60 MB body, ≤ 20 pages per request, 120 s deadline **kept**; adds 2 000 pages per document, per-format bomb limits, tmpfs 1 GB (§11) |
 | 12 | Image | `python:3.12-slim-trixie` (was bookworm: newer LibreOffice and Tesseract), uv lock with hashes, CPU torch, apt from a dated `snapshot.debian.org`, models ≈ 0.5 GB, target ≤ 3.5 GB (§12) |
 
@@ -36,6 +36,8 @@ decisions. Additions made here:
 - The parser **does** split containers it understands (email) and returns the parts; it never recurses into them
   (the worker does, with a depth limit), so every part passes ClamAV and the worker's routing.
 - The parser **does** compute quality signals (§6) because they need the PDF internals and the OCR output it holds.
+- The parser **does** find person names for *Detect personal data* (`/v1/ner`, §7.8, added in step 6c): the Swedish
+  NER model needs Python; counting and flagging stay in the worker.
 - The parser **does not** compute heading paths, merge tables across pages, or infer heading levels from numbering
   ("Kapitel 3", "§ 4"): those depend on stitching and on parse profiles, which live in the worker (worker plan §6,
   RAGFlow lesson `platforms/ragflow.md` §7.4).
@@ -135,19 +137,19 @@ distributed image. `python-oxmsg` is already Docling's choice, so there is no se
 
 The worker ClamAV-scans each attachment part as its own blob, then creates a **child document** of the same
 classification and pushes it through the same pipeline (routing, parse, PII detection, chunking). The document store
-has no parent link today (`data-model.md` §2.2 `Documents`); proposed:
+had no parent link (`data-model.md` §2.2 `Documents`); added there in the step 5 review:
 
 | Change | Detail |
 |---|---|
 | `Documents.ParentDocumentId uuid NULL` | FK (`ParentDocumentId`, `Classification`) → `Documents` **Cascade**: purging the parent purges its children |
 | `Documents.AttachmentOrdinal smallint NULL`, `Documents.Depth smallint NOT NULL DEFAULT 0` | order within the parent; depth check |
 | `IdentityKind` value `attachment` | `CanonicalIdentity` = `<parent canonical identity>#att/<ordinal>/<sha256>`; identical attachments in two emails are two documents (same rule as data-model §12.13) |
-| `DocumentSources` | the worker writes the parent's `SourceId`s for each child in the same transaction, so collection mapping, shared chunk sets and the deletion guard work unchanged; a re-parse of the parent soft-deletes children whose hash disappeared |
-| Citations | Knowledge API shows "Bilaga *name* i *subject*" through `ParentDocumentId` (knowledge step 7) |
+| `DocumentSources` | the worker writes the parent's `SourceId`s for each child in the same transaction, with the attachment's sanitised `name` as `DisplayName` of every mirrored row (never `Documents.Title`), so collection mapping, shared chunk sets and the deletion guard work unchanged; a re-parse of the parent soft-deletes children whose hash disappeared (connectors design §10) |
+| Citations | Knowledge API shows "Bilaga *name* i *subject*" through `ParentDocumentId`: *name* = the child's `DisplayName`, *subject* = the parent's `Documents.Title`, which for an email is `email.subject` (knowledge design §10.3) |
 
 ## 6. Quality signals and `/v1/inspect`
 
-### 6.1 What the worker's heuristics need (worker §6.2)
+### 6.1 What the worker's heuristics need (processing design §3.1)
 
 | Decision | Signal | Source |
 |---|---|---|
@@ -156,7 +158,7 @@ has no parent link today (`data-model.md` §2.2 `Documents`); proposed:
 | Garbled layer → OCR `force` | `garbled_score` high, `bad_chars` | inspect |
 | Nothing found → re-render | after convert: `chars` ≈ 0 while `image_coverage` high | convert |
 | Table-dense → Docling tables `accurate` | `path_objects` (ruling lines), later `table_area_ratio` | inspect, convert |
-| Quality check (worker §6.3) | `chars`, `garbled_score`, `ocr_confidence`, `empty`, `table_area_ratio`, `picture_area_ratio` | convert |
+| Quality check (processing design §8) | `chars`, `garbled_score`, `ocr_confidence`, `empty`, `table_area_ratio`, `picture_area_ratio` | convert |
 
 Proposed starting thresholds, for the worker to tune on the fixture corpus in step 6: clean = `text_chars ≥ 200`
 (or `≥ 50` with `image_coverage < 0.3`) and `garbled_score < 0.2`; force OCR at `garbled_score ≥ 0.4`; re-render once
@@ -213,6 +215,7 @@ whether Docling keeps OCR cell confidence on the converted page), `table_count`,
 |---|---|---|---|
 | `POST` | `/v1/convert` | `multipart/form-data`: `file` (bytes), `options` (JSON) | Convert one document or page range |
 | `POST` | `/v1/inspect` | same, `options` optional | Cheap facts and per-page signals (§6.2) |
+| `POST` | `/v1/ner` | `application/json` (text units, no file) | Person names with code-point spans (§7.8) |
 | `GET` | `/v1/info` | – | Versions, build hash, capacity, limits, formats (§13) |
 | `GET` | `/health/live`, `/health/ready` | – | Probes (§13) |
 
@@ -452,7 +455,8 @@ tini (PID 1)
 └─ python -m ume_parser            supervisor + uvicorn (1 process, asyncio, TLS); no Docling import
    ├─ convert-slot-0 … N-1         spawned processes: Docling pipelines warm, PARSER_THREADS torch/OMP threads
    │   └─ soffice (per job)        own process group, rlimits (§4)
-   └─ inspect-0                    spawned process: pypdfium2 only, RLIMIT_AS 1 GB
+   ├─ inspect-0                    spawned process: pypdfium2 only, RLIMIT_AS 1 GB
+   └─ ner-0                        spawned process: KB BERT NER warm, NER_THREADS threads (§7.8, step 6c)
 ```
 
 - **Why not `uvicorn --workers N`** (repo-and-deployment §5.3): each uvicorn worker would run Docling in the
@@ -465,7 +469,9 @@ tini (PID 1)
   queue**: the worker's `parse` concurrency equals the capacity, which it reads from `/v1/info` `capacity.convert_slots`
   at start and every minute (so a change of `PARSER_WORKERS` needs no worker config).
 - Slots: `PARSER_WORKERS` × `PARSER_THREADS` = the container's `cpus` (16 GB host 1 × 4; 24 GB host 2 × 2,
-  repo-and-deployment §6.2). Inspect lane: one process, recycled after 200 jobs.
+  repo-and-deployment §6.2). Inspect lane: one process, recycled after 200 jobs. NER lane: one process, self-test on a
+  fixed Swedish sentence at start, at most `NER_QUEUE` (4) waiting requests else `503 busy`, recycled after 5 000
+  requests or RSS growth > 40 %; readiness does not depend on it (`ner_ready` in `/v1/info`).
 
 ### 10.2 Warm-up and readiness
 
@@ -543,7 +549,7 @@ Inputs arrive after ClamAV but are untrusted. The container is the outer sandbox
 | Python | uv lock with hashes, `no-build = true`, `exclude-newer` 7 days before lock (repo-and-deployment §2.4). `docling-slim` with only the extras needed (standard formats, `feat-ocr-easyocr`, email), not the `docling` meta package's full set. Adds: `easyocr`, `pypdfium2` (also a Docling dependency), `python-oxmsg` (Docling's `.msg` reader), `defusedxml`, `psutil`, `pillow`. CPU wheels for `torch` and `torchvision` from the PyTorch CPU index |
 | Docling extras | layout and TableFormer models only; picture classification, code/formula enrichment and picture description **off and not baked** |
 | Entry | `ENTRYPOINT ["tini","--"]`, `CMD ["python","-m","ume_parser"]` (supervisor starts uvicorn programmatically on 8443 with the TLS files) |
-| Env | `PARSER_WORKERS`, `PARSER_THREADS`, `OMP_NUM_THREADS`, `PARSER_OCR_DEFAULT`, `PARSER_SLOT_MAX_RSS_MB`, offline variables (§11) |
+| Env | `PARSER_WORKERS`, `PARSER_THREADS`, `OMP_NUM_THREADS`, `PARSER_OCR_DEFAULT`, `PARSER_SLOT_MAX_RSS_MB`, `NER_THREADS` (2), `NER_QUANTIZE` (1), `NER_QUEUE` (4), `NER_PERSON_LABELS` (`PER,PRS`), offline variables (§11) |
 | Size target | ≤ 4.0 GB with the NER model (≤ 3.5 GB before it; §5.1 says 2.5–3.5 GB): base ≈ 150 MB, torch CPU + torchvision ≈ 800 MB, other Python ≈ 500 MB, models ≈ 500 MB, LibreOffice + fonts ≈ 500 MB, Tesseract ≈ 50 MB. Measured in P0; above 3.5 GB, the first cut is the bake-off loser |
 
 Models baked (sizes approximate, *to verify* at P0):
@@ -572,7 +578,7 @@ Carlito/Caladea fonts OFL-1.1, DejaVu fonts Bitstream Vera licence; `python-oxms
 |---|---|
 | `/health/live` | 200 while the supervisor loop runs (no slot check) |
 | `/health/ready` | 200 when the self-tests of §10.2 passed and ≥ 1 slot is warm; 503 otherwise. Never blocked by conversions |
-| `/v1/info` | `parser` version and git revision; Python; `docling`, `docling-core`, `docling-parse`, `docling-ibm-models`, `torch`, `pypdfium2` (+ pdfium build), `easyocr`, Tesseract version and tessdata languages; LibreOffice version; each model with repository, revision and SHA-256; `ocr_default`; `capacity` (`convert_slots`, `slots_ready`, `inspect_slots`); `limits` (§11.1); supported formats; `build_hash` = SHA-256 of the canonical JSON of everything except capacity |
+| `/v1/info` | `parser` version and git revision; Python; `docling`, `docling-core`, `docling-parse`, `docling-ibm-models`, `torch`, `pypdfium2` (+ pdfium build), `easyocr`, Tesseract version and tessdata languages; LibreOffice version; each model with repository, revision and SHA-256; `ocr_default`; the NER model block (repository, revision, SHA-256, labels, quantised); `capacity` (`convert_slots`, `slots_ready`, `inspect_slots`, `ner_slots`, `ner_ready`); `limits` (§11.1); supported formats; `build_hash` = SHA-256 of the canonical JSON of everything except capacity |
 
 The worker records `build_hash` on every run item and stores the full info JSON once per hash (§17). The release smoke
 test already calls `/v1/info` from the worker container (repo-and-deployment §8.1).
@@ -623,6 +629,7 @@ Pilot host parser share: 4 CPUs (`cpus: 4.0`), 1 slot × 4 threads. Targets are 
 | Legacy/ODF/RTF | LibreOffice ≤ 10 s + DOCX path | 30 s | first conversion after a recycle slower |
 | Email (without attachments) | ≤ 2 s per message | 5 s | |
 | Slot re-warm after a kill | ≤ 30 s | 60 s | |
+| `/v1/ner`, per 512-token window (fp32 / int8) | *to measure* | – | ≈ 0.3–1.0 s of lane time per typical web page after the worker's prefilter (processing design §16) |
 
 **Throughput estimate**: the pilot's < 500 scanned documents at ≈ 6 pages each ≈ 3 000 pages × 4 s ≈ 3.3 h of parser
 time with Tesseract (≈ 7 h with EasyOCR): one night. Native PDFs are mostly PdfPig in the worker; the parser sees
@@ -644,7 +651,8 @@ confirm: 2 × 2 gives more pages per hour, 1 × 4 lower latency per document; th
 | Supervisor | with a fake converter: deadline kill, disconnect kill, crash (`os.abort`), RSS limit (allocating converter), recycle after N, `busy` when full, readiness during recycle, job directory always removed |
 | Integration (`slow`) | real Docling and LibreOffice on `tests/fixtures/parser/*`: expected block kinds, heading levels, table shapes, page numbers, å/ä/ö preserved |
 | Offline | `test_offline.py` (§11) |
-| Schema | `export_schema.py` writes `convert-request`, `convert-result`, `inspect-result`, `info`, `error` schemas from the pydantic models; CI fails on `git diff` in `contracts/` (repo-and-deployment §8.2) |
+| NER | label mapping, limits, `busy`, code-point offsets with emoji and combining characters, windows over 512 tokens, quantised vs fp32 agreement (processing design §17) |
+| Schema | `export_schema.py` writes `convert-request`, `convert-result`, `inspect-result`, `ner-request`, `ner-result`, `info`, `error` schemas from the pydantic models; CI fails on `git diff` in `contracts/` (repo-and-deployment §8.2) |
 
 ### 15.2 Contract tests (.NET, `tests/Ume.Rag.ContractTests`)
 
@@ -691,8 +699,8 @@ encrypted directory (`/srv/ume-rag-bench/`), are never committed, and are report
 
 | Phase | Deliverable |
 |---|---|
-| **P0** | Image with Docling, both OCR engines, LibreOffice and models baked; size measured; supervisor with one slot and warm-up self-test; `/health/*`, `/v1/info` with `build_hash`; all five schemas in `contracts/parser/v1/`; `/v1/convert` for a plain PDF (enough for the contract job); `test_offline.py` green with `--network none` (P0 checklist #12, #13) |
-| **P1** | `/v1/inspect`; all pilot formats (§3) incl. LibreOffice and email with attachments; OCR `auto`/`force`/`off`; tables `fast`/`accurate`; **page ranges** with `partial`; per-page signals and garble detector; picture crops on request (contract and implementation; no consumer yet); every error code; limits and bomb checks; RSS watchdog, recycling, disconnect kill; OTel and metrics; fixture corpus and goldens; contract tests; OCR bake-off decided (postponed P1); licence inventory (postponed P2); `bench.py` report on the test host |
+| **P0** | Image with Docling, both OCR engines, LibreOffice and models baked; size measured; supervisor with one slot and warm-up self-test; `/health/*`, `/v1/info` with `build_hash`; the five convert/inspect/info/error schemas in `contracts/parser/v1/`; `/v1/convert` for a plain PDF (enough for the contract job); `test_offline.py` green with `--network none` (P0 checklist #12, #13) |
+| **P1** | `/v1/inspect`; `/v1/ner` with `ner-0` and its two schemas (§7.8); all pilot formats (§3) incl. LibreOffice and email with attachments; OCR `auto`/`force`/`off`; tables `fast`/`accurate`; **page ranges** with `partial`; per-page signals and garble detector; picture crops on request (contract and implementation; no consumer yet); every error code; limits and bomb checks; RSS watchdog, recycling, disconnect kill; OTel and metrics; fixture corpus and goldens; contract tests; OCR bake-off decided (postponed P1); licence inventory (postponed P2); `bench.py` report on the test host |
 | **P2** | Remove the bake-off loser; describe-pictures node consumes crops (worker → gateway, residency rules); OCR for pictures in DOCX/PPTX (route via PDF); PDF embedded files as child documents; decide archives and macro-enabled formats; nightly fuzzing; GPU target if volumes need it |
 
 Moved from the plan's P2 to P1: page ranges (the 20-page request limit in §5.3 already requires them for any long

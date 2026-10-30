@@ -24,7 +24,7 @@ package source had to be checked for this step.
 
 | # | Topic | Decision |
 |---|---|---|
-| 1 | Placement | Chat role of `Ume.Rag.Api`; `IRetriever` in process; gateway calls through the shared `IGatewayClient` with a raw `HttpClient` + copied `SseReader` (headers must be read before the body); P2 agent loop behind `IAnswerStrategy` (§2) |
+| 1 | Placement | Chat role of `Ume.Rag.Api` (HTTP, SSE, writer, importer) over the answer core in `Ume.Rag.Answering` (shared with the admin test panel, admin design §2.1); `IRetriever` in process; gateway calls through the shared `IGatewayClient` with a raw `HttpClient` + copied `SseReader` (headers must be read before the body); P2 agent loop behind `IAnswerStrategy` (§2) |
 | 2 | Contract | OpenAI-compatible `/v1/models`, `/v1/chat/completions` (stream and not); unknown fields ignored, a fixed list refused; text content parts only (§3, answered 6) |
 | 3 | History | **The messages the client sends are authoritative for the prompt**; our store is a record for the user, review, feedback and retention. 0 SQL on the hot path (§11.3) |
 | 4 | Open WebUI tasks | One connection only (ours); title/tags/follow-ups go to our virtual task model `owui-tasks`, recognised by model id + the `{{TASK}}` connection header, answered by the client's on-prem `TaskModel`, never retrieved for, never stored (§4.2) |
@@ -38,7 +38,7 @@ package source had to be checked for this step.
 | 12 | Not found | Coverage `Low` → the assistant's fixed Swedish or English text + contact links, no model call; `Unknown` → model answer from keyword results with a caveat, or a "search unavailable" text when nothing was found, never the not-found text (§10, answered 3) |
 | 13 | Conversation ids | Open WebUI: (client, `sub`, chat id, assistant); others: issued **signed** ids `c1.…` verified without SQL; temporary Open WebUI chats stored as `none` (§11) |
 | 14 | Writer | Bounded channel (bytes and items), batches of ≤ 200 turns / 250 ms, encryption in the writer, one transaction per batch, no journal (no content outside the encrypted tables); loss bound stated (§12) |
-| 15 | Feedback | `POST /v1/feedback` + a 15-minute import of Open WebUI ratings via its admin API, mapped by chat id and the forwarded message id; comments encrypted with the conversation key; editors see ratings in P1 (§14, answered 4) |
+| 15 | Feedback | `POST /v1/feedback` + a 15-minute import of Open WebUI ratings via its admin API, mapped by chat id and the forwarded message id; comments encrypted with the conversation key; department roles see ratings in P1, comments only `rag-reviewer` and `rag-department-admin` (§14, answered 4, 7; admin design §3) |
 | 16 | Attachments C1 | P1: refused with `attachments_not_supported`, uploads off in Open WebUI. P2: chat-scoped storage in the `chat` schema under the conversation's data keys, parsed by the worker, written back through the API, searched only within that conversation (§15, answered 5–6) |
 | 17 | Latency | Chat overhead < 10 ms p95 excluding condense and retrieval; 0 Postgres statements and ≤ 1 Redis command of our own per message; measured by benchmarks, interaction audit, a `benchmarks/compare`-style run and the R1 test (§16) |
 
@@ -52,7 +52,7 @@ package source had to be checked for this step.
 | `Ume.Rag.Infrastructure` | `IGatewayClient.OpenChatStreamAsync` / `CompleteChatAsync` (shared with the worker, 6a §7.7), `SseReader` + `SseEvent` (copied, `ProviderModels.cs:200-238`, `:277-335`), `ChatCipher` (AES-GCM rows, data-model §7), `IKeyProvider`, `GatewayKeySource` (linked keys / platform key), `RateLimiter` (Lua, gateway pattern) | `Microsoft.Extensions.AI.OpenAI` is **not** used by chat: its streaming API hides the response headers the residency check needs (§20) |
 | `Ume.Rag.Answering` (admin design §2.1) | chat answer core: `RagAnswerStrategy`, `Condenser`, `PromptBuilder`, `TokenBudget`, `AnswerFilter` (markers, images, links), `CitationEmitter`, `LanguageGuess` (P2 `AgentAnswerStrategy`) | no HTTP; referenced by `Ume.Rag.Api` and `Ume.Rag.AdminApi`, so the admin test panel runs the exact chat path in process |
 | `Ume.Rag.Api` role `chat` | endpoint group, `ChatPipeline`, `ChatStreamWriter`, `OwuiTaskHandler`, `ConversationWriter` (BackgroundService), `FeedbackImporter` (BackgroundService), `ConversationIds` | OpenAPI document `chat` |
-| `Ume.Rag.Api` role `knowledge` | `KnowledgeService : IRetriever` | called in process (knowledge §2.2) |
+| `Ume.Rag.Api` role `knowledge` | hosts `KnowledgeService : IRetriever` (code in `Ume.Rag.Answering`) | called in process (knowledge §2.1–§2.2) |
 
 The chat role maps its routes only when `Rag:Roles` contains `chat` (repo-and-deployment §3). With the roles split,
 `IRetriever` is `HttpRetriever` (knowledge §2.2); nothing in the chat code changes.
@@ -230,7 +230,7 @@ As knowledge §3.7: `AddOpenApi("chat", …)` with typed results, `WithTags("Cha
 | 1 | Authenticate | identity §6.2–§6.3 (key cache, throttle), Open WebUI JWT (§5.2 there), token (§7 there) → `RagPrincipal` | 401/429 |
 | 2 | Parse body | §3.2; content-part refusal before anything else is done | 400/413 |
 | 3 | Task request? | §4.2; if yes → `OwuiTaskHandler`, end | – |
-| 4 | Rate limit | `ume-rag:rl:user:{subjectHash}:{minute}` via one Lua `INCR`+`EXPIRE` script (gateway pattern, `RateWindowSeconds` 120, data-model §11); `Chat:MessagesPerMinutePerUser` **20**; Redis down → not applied, logged once a minute (the gateway key limit stays the overall cap) | 429 |
+| 4 | Rate limit | `ume-rag:rl:user:{subjectHash}:{minute}` via one Lua `INCR`+`EXPIRE` script (gateway pattern, `RateWindowSeconds` 120, data-model §11); `Settings.Chat.MessagesPerMinutePerUser` **20**; Redis down → not applied, logged once a minute (the gateway key limit stays the overall cap) | 429 |
 | 5 | Policy | `IAccessPolicy.Decide(who, assistant, Chat)` at the confirmed version (identity §4.3 steps 0–11) | 404 `model_not_found` (+5002/5005), 503 |
 | 6 | Conversation key | §11.1: Open WebUI chat id or verified issued id or new id; **no SQL** | 404 |
 | 7 | Effective level | max(assistant level, client ceiling **if the request carries earlier assistant turns**) (§8.2); ceiling header from it | – |
@@ -446,7 +446,7 @@ it separately and the frame is prepended at run time). P2: each linked skill's b
 POST {Gateway:BaseUrl}/v1/chat/completions
 Authorization: Bearer <platform service key | linked key>
 x-ume-on-behalf-of: <assistant OwnerTeamId>              (release A)
-x-ume-max-residency: Eu                                  (internal; OnPrem for sensitive; none for public)
+x-ume-max-residency: Eu                                  (effective level, §8.2: internal Eu; sensitive OnPrem; public none)
 x-ume-run-id: <message id, N format>                     (release A; opaque, gateway §7.1)
 x-ume-step: answer | condense | owui-task
 x-ume-session: <conversation id>                         (session affinity for on-prem prefix caches)
@@ -497,7 +497,8 @@ effective level for residency is **max(assistant level, client ceiling)**. In th
 history use the assistant's level. A new conversation row is still started per assistant (§11.1).
 **Consequence (admin validation)**: an assistant whose audience includes a history-resending client must have a
 `GatewayModel` the gateway can serve within the residency of max(assistant level, client ceiling); otherwise every
-follow-up would fail with `max_residency_not_met`. The admin API refuses such a publish or audience link (§20); in the
+follow-up would fail with `max_residency_not_met`. The admin API refuses such a publish or audience link (§20; rule V8,
+admin design §4.6); in the
 pilot this means `public` assistants offered in Open WebUI use EU or on-prem models.
 
 ### 8.3 Timeouts, retries, cancellation
@@ -581,7 +582,7 @@ open at the limit is flushed as plain text with its opener escaped):
 | Construct | Action |
 |---|---|
 | Markdown image `![alt](url)`, reference images, HTML `<img`, `<picture`, `<svg`, `<iframe`, `<object`, `<embed`, `<script`, `<style`, `<link`, `<meta`, `<video`, `<audio`, `<source`, `<form`, `<a` | removed (alt text of an image kept in brackets) |
-| Markdown link `[text](url)` / autolink `<https://…>` | kept if the host is a cited source host or on `Chat:AllowedLinkHosts` (default `umea.se`, `*.umea.se`); else `text` (link removed); `javascript:`, `data:` and `vbscript:` always removed |
+| Markdown link `[text](url)` / autolink `<https://…>` | kept if the host is a cited source host or on `Settings.Chat.AllowedLinkHosts` (default `umea.se`, `*.umea.se`); else `text` (link removed); `javascript:`, `data:` and `vbscript:` always removed |
 | Bare URL `https://…` | kept for allowed hosts; others wrapped in inline code so renderers do not auto-link them |
 | `[n]` markers | §9.2 |
 
@@ -828,7 +829,7 @@ data, same retention), store `ReasonCategory` in plaintext (the reason if it is 
 | Open WebUI unreachable, 401/403 | run fails, `LastOutcome` set, warning; alert after 4 failed runs; the watermark does not move |
 | Feedback deleted in Open WebUI | not detectable through the list; our copy follows conversation retention |
 
-### 14.4 Editors in P1
+### 14.4 Feedback page in P1
 
 The admin UI gets a P1 **Feedback** page (department-scoped): ratings, reasons' categories, assistant, time, cited
 documents (ids resolved to titles) and outcome, without content. Reading a comment (or the conversation) is a
@@ -854,7 +855,7 @@ typed text: accepted for the pilot, since its content stays within the user's ow
 | Storage | new tier-local tables in `chat` (§20): `Attachments` (`Id`, `ConversationId`, `Classification`, `DataKeyId`, **`FileNameCiphertext`**, `MediaType`, `Bytes`, `Sha256`, `State` `received`/`scanning`/`clean`/`parsed`/`ready`/`malware`/`refused`/`failed`, `Reason`, `PiiTypes text[]`, `ChunkCount`, `CreatedAt`) and `AttachmentChunks` (`Id`, `AttachmentId`, `ConversationId`, `Classification`, `Ordinal`, `Page`, `PageEnd`, `DataKeyId`, **`TextCiphertext`**, **`EmbeddingCiphertext`** (1024 float32), `TokenCount`); composite FKs to the conversation and to `DataKeys` **Cascade**: shredding the conversation's keys removes them like messages. Never in `content`, never in a collection or the shared document store |
 | Endpoint | `POST /v1/conversations/{id}/attachments` (multipart, one file), `GET …/attachments` (state), `DELETE …/attachments/{aid}`; authenticated, non-anonymous subjects only; assistants with `QuerySteps.attachments.enabled` at level `internal` or `sensitive` (never the widget or `public`) |
 | Limits | ≤ 20 MB per file, ≤ 5 files and ≤ 2,000 chunks per conversation, ≤ 300 pages; types = the upload allow-list (connectors §9.2) minus email; archives and macro files refused (Z1) |
-| Flow | (1) API streams the file to a temp blob `chat-tmp/{attachmentId}` encrypted with a per-attachment key wrapped by `rag-blob-<level>` (the worker can read it, as uploads, connectors §9.1), inserts `Attachments` (`received`) and a job of the new class **`attachment`** (high priority, own concurrency 2); (2) worker: ClamAV fail-closed (connectors §11), sniff and type check, parse via the parser routing (parser design), chunk (processing §6), PII detection (processing §9: recorded as `PiiTypes`, not blocking — it is the user's own file in their own conversation), embed on-prem; (3) worker posts the chunks (text, pages, vectors) to the API's internal route `POST /internal/attachments/{id}/chunks` with the internal service key over the internal network; (4) the API encrypts with the conversation's data key and inserts; (5) temp blob and its key deleted (orphan sweep after 24 h). The worker never holds chat master keys or chat grants |
+| Flow | (1) API streams the file to a temp blob `chat-tmp/{attachmentId}` encrypted with a per-attachment key wrapped by `rag-blob-<level>` (the worker can read it, as uploads, connectors §9.1; `rag-api` gets a writable `chat-tmp/` sub-mount in P2 and wraps with the `rag-blob-<level>` key file it already reads, repo-and-deployment §6.3), inserts `Attachments` (`received`) and a job of the new class **`attachment`** (high priority, own concurrency 2); (2) worker: ClamAV fail-closed (connectors §11), sniff and type check, parse via the parser routing (parser design), chunk (processing §6), PII detection (processing §9: recorded as `PiiTypes`, not blocking — it is the user's own file in their own conversation), embed on-prem; (3) worker posts the chunks (text, pages, vectors) to the API's internal route `POST /internal/attachments/{id}/chunks` with the internal service key over the internal network; (4) the API encrypts with the conversation's data key and inserts; (5) temp blob and its key deleted (orphan sweep after 24 h). The worker never holds chat master keys or chat grants |
 | Residency | parse and embeddings on-prem (as ingestion); the answer call keeps the conversation's ceiling |
 | Retrieval | when a conversation has `ready` attachments: load and decrypt its `AttachmentChunks` (≤ 2,000 rows) into a per-conversation in-memory index (cached 5 min, same lifetime as unwrapped keys), exact cosine against the **same query embedding** the knowledge role computed (exposed on `RetrievalResult` as an internal field, also with the roles split via `include_query_embedding`, knowledge §2.2; §20), top 5; merged into the prompt as additional documents after the collection documents of equal rank (RRF over the two rank lists, k = 60); an attachment hit with distance ≤ the assistant's coverage threshold makes coverage `Ok` |
 | Citations | label "Bifogad fil *name*, s. n"; no link (the user has the file; the original is not kept after parsing) |
@@ -1075,7 +1076,8 @@ answers; follow-up with history on a `public` assistant from Open WebUI carries 
 7. **Feedback comments for editors** (§14.4): on the P1 Feedback page a comment is shown after a one-click,
    pre-filled reason ("Granskning av återkoppling"), audited as a conversation access, for `public` and `internal`;
    `sensitive` comments only through the full conversation-review flow with a second approver. Only the comment is
-   shown, never the conversation.
+   shown, never the conversation. *Who* was settled in step 10 (admin design §14.1 answer 3): `rag-reviewer` and
+   `rag-department-admin`, not platform admins implicitly (§14.4).
 
 ### 21.2 Open (user)
 

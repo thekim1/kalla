@@ -8,7 +8,9 @@ stays in .NET.
 
 ## 1. Scope
 
-**Does:** convert one document per request; OCR (Swedish); table structure; page numbers and heading paths.
+**Does:** convert one document per request; OCR (Swedish); table structure; page numbers and heading levels (paths
+are stitched by the worker); cheap per-page signals (`/v1/inspect`); names for personal-data detection (`/v1/ner`,
+added in step 6c).
 
 **Does not:** fetch anything, store anything, chunk, embed, or decide strategy (the worker's auto-parse decides and
 passes options).
@@ -19,24 +21,28 @@ passes options).
 | ------ | ------------------------------- | ------------------------------------------------------------------ |
 | `POST` | `/v1/convert`                   | Multipart file + options → `multipart/mixed` (result JSON, DoclingDocument, attachments, crops) |
 | `POST` | `/v1/inspect`                   | Cheap page count and per-page text-layer signals (no models)       |
+| `POST` | `/v1/ner`                       | Person names in text units (JSON in/out, own lane; design §7.8)    |
 | `GET`  | `/health/live`, `/health/ready` | Probes                                                             |
-| `GET`  | `/v1/info`                      | Versions of Docling, models and OCR engine (recorded in run items) |
+| `GET`  | `/v1/info`                      | Versions, build hash (recorded in run items), capacity (`convert_slots`, `ner_slots`), limits |
 
-Options: `ocr` (`auto` / `force` / `off`), `ocr_lang` (`swe`, `eng`), `tables` (`fast` / `accurate`), `pages`
-(range), `image_scale` (for re-render).
+Options (design §7.2): `request_id`, `file_ext`, `media_type`, `pages` (`{from, to}`), `deadline_ms`, `ocr` (`mode`
+`auto` / `force` / `off`, `languages`, `engine`), `tables` (`fast` / `accurate` / `off`), `image_scale` (for re-render),
+`pictures` (crops on request), `outputs` (`docling_json`, `markdown`).
 
-Response: Markdown with page markers, a structure list (headings with levels, page per block, tables), quality
-signals (characters per page, OCR confidence, pages with no text), timings and versions. Versioned contract
-(`/v1`), tested by contract tests from the .NET side.
+Response: `multipart/mixed` with `result.json` (blocks with their own Markdown, heading levels, pages, tables with
+cells, per-page quality signals, timings, build), `docling.json.gz` (lossless `DoclingDocument`), binary email
+attachments and picture crops. Versioned contract (`/v1`), tested by contract tests from the .NET side.
 
 ## 3. Design
 
-- FastAPI + Docling; OCR engine with Swedish models (Tesseract `swe` or Docling's default engine, choose by test).
+- FastAPI + Docling; OCR engine with Swedish models (Tesseract `swe` CLI or EasyOCR, both baked, always set
+  explicitly, never Docling's auto choice; the P1 bake-off decides, design §9).
 - All models baked into the image at build time: no downloads at runtime (on-prem hosts without internet).
 - CPU-only by default; a GPU image variant later if volumes need it.
-- Concurrency limited per container (one conversion per worker process, configurable), request timeout and max file
-  size; the worker's `parse` job class matches this limit so the sidecar is never overloaded (RAGFlow's top
-  complaint is stuck parsing).
+- Concurrency: an own supervisor with pre-warmed conversion slots, one inspect process and one NER process (not
+  uvicorn workers), no queue (`503 busy` when full); request deadline and max file size; the worker's `parse` and
+  `ner` job classes read the capacity from `/v1/info`, so the sidecar is never overloaded (RAGFlow's top complaint is
+  stuck parsing; design §10).
 - Long documents are converted in **page ranges** (e.g. 20 pages per request) chosen by the worker, so no request runs
   for minutes, a failure retries only its range, and per-page strategies fit naturally.
 - Runs in the **ingestion resource zone** with hard CPU limits (at most half the host's cores on a shared pilot host);
@@ -50,12 +56,13 @@ signals (characters per page, OCR confidence, pages with no text), timings and v
 | Phase | Deliverable                                                                                                                                                 |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P0    | Image builds with models baked in; health; contract skeleton                                                                                                |
-| P1    | `/v1/convert` and `/v1/inspect` for all pilot formats (answered 4) incl. legacy/ODF and email attachments; OCR auto/force/off with Swedish; table modes; page ranges; quality signals; contract tests; OCR bake-off; timings on a sample of Umeå documents (design §16) |
+| P1    | `/v1/convert` and `/v1/inspect` for all pilot formats (answered 4) incl. legacy/ODF and email attachments; `/v1/ner` (KB BERT NER, own lane); OCR auto/force/off with Swedish; table modes; page ranges; quality signals; contract tests; OCR bake-off; timings on a sample of Umeå documents (design §16) |
 | P2    | Describe-pictures node on crops; OCR of pictures inside DOCX/PPTX; archives and macro-enabled formats (Z1); GPU variant if needed |
 
 ## 5. Open questions
 
-1. OCR engine choice for Swedish (test Tesseract `swe` vs Docling's default on real scanned municipal documents).
+1. OCR engine choice for Swedish (Tesseract `swe` vs EasyOCR on real scanned municipal documents; design §9.3,
+   postponed item P1).
 2. Licences of the bundled layout/OCR models (Docling itself is MIT): verify before the pilot.
 3. ~~Volume of scanned documents~~ **Answered**: few (under 500) in the pilot, so CPU-only OCR within the parser's
    share of the pilot host is enough; revisit sizing when archives are onboarded.

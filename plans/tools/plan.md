@@ -60,7 +60,7 @@ holds skills in its config snapshot (design §2.1).
   limits per user and per tool.
 - **Credentials**: service identity (`rag-tools` client credentials or an API key held encrypted) in P2; OBO tokens in
   P3. Credentials never reach the model or the Chat API.
-- **Execution**: MCP client (official MCP C# SDK, to verify its version and maturity), timeouts, response size
+- **Execution**: MCP client (official MCP C# SDK 2.3.0, checked in step 9; version recheck at P2 start, design §15), timeouts, response size
   limits, output normalised and labelled as **untrusted** before it reaches the model.
 - **Audit**: every call recorded (assistant, tool, subject, client, duration, outcome, argument and result sizes,
   hashed arguments); full arguments/results only in the conversation record, under the same 90-day retention.
@@ -189,7 +189,7 @@ exfiltration channel, see §6).
 |---|---|
 | P1 | Client registry only (needed for ceilings); P1 assistants have a prompt and collections, no skills (decision) |
 | P2 (skills) | Skills and the Skills admin page, together with agent assistants |
-| P2 | Tool hub with read-only tools and service identity; agent assistants with progressive skill loading; platform MCP server (`search_knowledge`, `list_collections`, `ask_assistant`); MCP server template with a **mock** fee calculator (sample data) as the reference server; real tools (§7) after the data sources are inventoried |
+| P2 | Tool hub with read-only tools and service identity; agent assistants with progressive skill loading; platform MCP server (`search_knowledge`, `list_collections`, `get_document`, `ask_assistant`, `document://`) and per-skill endpoints (design §12); MCP server template with a **mock** fee calculator (sample data) as the reference server; real tools (§7) after the data sources are inventoried |
 | P3 | Entra OBO for user-delegated tools; write tools with confirmation; skill import/export; more hosted MCP servers; evaluation of a sandbox for skill scripts |
 
 ## 9. Open questions

@@ -30,7 +30,7 @@ materialised CTE); NuGet **`Pgvector` 0.3.2** (depends on `Npgsql` ≥ 8.0.5; co
 
 | # | Topic | Decision |
 |---|---|---|
-| 1 | Placement | Search core (candidates, fusion, dedup, diversity, coverage) in the shared library **`Ume.Rag.Retrieval`**, used unchanged by the API, the evaluator (worker) and the admin test panel; access, embedding, hydration, sections, citations and HTTP in the **knowledge role** of `Ume.Rag.Api`, behind the `IRetriever` port the Chat API calls in process (§2) |
+| 1 | Placement | Search core (candidates, fusion, dedup, diversity, coverage) in the shared library **`Ume.Rag.Retrieval`**, used unchanged by the API, the evaluator (worker) and the admin test panel; access, embedding, hydration, sections and citations in `KnowledgeService` (library `Ume.Rag.Answering`, admin design §2.1), hosted with HTTP by the **knowledge role** of `Ume.Rag.Api`, behind the `IRetriever` port the Chat API calls in process (§2) |
 | 2 | HTTP surface in P1 | `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` mapped but open only to `internal` clients (`rag-internal` when chat and knowledge split); `/v1/documents/{id}/content` open to signed **download grants** issued with citations; integrations and MCP in P2 (§2.3, §4.6) |
 | 3 | Errors | RFC 9457 problem details as the gateway's Data API (`ApiFaultException` + `code` extension); the OpenAI error shape stays for the chat role (§3.6) |
 | 4 | `top_k` | Default **10**, max **50** (answered 1); candidates 100 per list |
@@ -276,7 +276,7 @@ the page itself; serving crawled HTML from our origin would also be an XSS vecto
 | `Content-Disposition` | `inline` for `application/pdf`, `image/png`, `image/jpeg`; `attachment` for everything else (Office, email, HTML, text); `filename*=UTF-8''…` from the visible `DisplayName` (§10.2), else `dokument-{id:N}.{ext}` |
 | Other headers | `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` for non-PDF, `Cache-Control: private, no-store`, `ETag` = hex `ContentHash`, `Content-Length` = plaintext length computed from the blob length and segment count |
 | Ranges | **not supported in P1** (`Accept-Ranges: none`; uploads ≤ 50 MB, connectors §9.1). The segment format allows ranges later (seek to segment ⌊offset / 64 KiB⌋) |
-| Limits | one stream per request, `Knowledge:DownloadsPerMinutePerAddress` 120 (Redis `ume-rag:rl:ip:{ipHash}:{minute}`, data-model §11) |
+| Limits | one stream per request, `Knowledge:DownloadsPerMinutePerAddress` 120 (Redis `ume-rag:rl:dl:{ipHash}:{minute}`, data-model §11; not the P2 widget key `rl:ip`) |
 | Errors | as §3.6; after the first byte only a reset is possible |
 
 ### 3.6 Errors (problem details)
@@ -335,7 +335,7 @@ Steps 0–5 run in memory against one snapshot; nothing touches Postgres or the 
 | Chat (in process) and `rag-internal` (`assistant_id`) | the assistant's `AssistantCollections` from the snapshot; P2 RAG assistants: plus the collections of all linked skills (pinned or served version, tools design §3.9); P2 agent assistants: plus the collections of loaded skills (`SkillVersionLinks`, kind `collection`; `SkillVersionIds`, §2.2); `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
 | Integration key (P2) | requested slugs, each in `Keys.Scopes`; no slugs → all collections in the key's scope |
 | Token caller (P2) | requested slugs, each allowed by `CollectionAudiences` (new P2 table, §18) for the client, department or group; no slugs → `Filter` over all |
-| Admin test panel | the assistant's or the chosen collections, **including `building`**, checked with the admin's role scope (identity §4.8); runs in the admin process on `Ume.Rag.Retrieval` |
+| Admin test panel | the assistant's or the chosen collections, **including `building`**, checked with the admin's role scope (identity §4.8); runs in the admin process through `KnowledgeService` (`Ume.Rag.Answering`) on `Ume.Rag.Retrieval` |
 | Download grant | exactly the grant's collection (§4.6) |
 | Per-skill MCP endpoint (P2, `/mcp/skills/<slug>`, `AssistantId = null`) | the served skill version's linked collections (`SkillVersionIds = [served]`); audience = `SkillAudiences` (tools design §7.4) |
 
@@ -344,7 +344,9 @@ At most 20 collections per query (an assistant with more is refused on save by t
 ### 4.3 Levels, ceilings and tiers
 
 - **Effective level** of the query = the assistant's level (chat), else the highest level among the searched
-  collections. It decides the embedding cache tier (§5.4) and is logged (`Classification` scope).
+  collections. It decides the embedding cache tier (§5.4) and is logged (`Classification` scope). Chat's history rule
+  (max(assistant level, client ceiling), chat §8.2) and the fixed level of an agent run (tools §5.3) set the
+  **residency ceiling** of model calls only; they never widen what is searched here.
 - **Allowed levels** `$levels` = `{ l : l ≤ client ceiling ∧ l ≤ effective level }`. Chunk level = document level ≤
   collection level (data-model §6 rule 4), so this never removes a legitimate chunk; it stops a mislabelled or
   mis-mapped chunk (a bug in membership recomputation) from reaching a client above its ceiling.
@@ -480,7 +482,8 @@ of a short question is reversible by dictionary, the HMAC is not without the pep
 identity §6.1). `RedisKeys.QueryEmbedding(Guid profileId, string queryMac)` is added to the copied `RedisKeys` class
 (gateway `src/Ume.LlmGateway.Infrastructure/Stores/RedisKeys.cs`, one method per key with its lifetime in the doc
 comment). A Redis failure is a miss (logged once a minute), never an error. The evaluator keeps its own durable cache
-(`EmbeddingCache` by question hash, processing §13.5).
+(`EmbeddingCache` by question hash, processing §13.5). The admin test panel uses L1 only, with a per-process random HMAC
+key instead of the pepper (admin design §4.9), so only `rag-api` holds `Security__CacheKeyPepper`.
 
 ### 5.5 Failure behaviour (decision)
 
@@ -628,7 +631,7 @@ walking until 100 rows match or `hnsw.max_scan_tuples` (20,000) is reached (READ
 - `ScopeSizeCache` (in `Ume.Rag.Retrieval`) holds chunk counts per collection, from
   `SELECT unnest("CollectionIds"), sum("ChunkCount") FROM content."ChunkSets" WHERE "DeletedAt" IS NULL GROUP BY 1`
   every 10 minutes per tier (sets ≈ documents, so cheap).
-- Scope ≤ `Retrieval:ExactScanMaxChunks` (**10,000**, tuned by the §11 benchmark) → exact variant: a GIN bitmap scan
+- Scope ≤ `Settings.Retrieval.exactScanMaxChunks` (**10,000**, tuned by the §11 benchmark; §12.1) → exact variant: a GIN bitmap scan
   on `CollectionIds` and a top-100 sort over at most 10,000 distances. Larger → HNSW with `hnsw.ef_search = 100` and
   `hnsw.iterative_scan = relaxed_order`; the .NET fusion re-sorts by distance, which pgvector requires for relaxed
   results.
@@ -704,6 +707,10 @@ Applied in fused order until `top_k` results are taken:
 5. **Attachments and parents** are separate documents with separate caps; the citation links them (§10.3).
 6. **Order** of the output = fused order. The chat role may group by document in its prompt (§10.4) but `rank` stays.
 
+Identical chunks of **different** documents (duplicate URLs the normaliser cannot merge, connectors §3.1) are not
+collapsed in P1: collapsing could drop the document an evaluation question expects, and the per-document cap already
+bounds the repetition; revisit if evaluation or feedback shows duplicate citations.
+
 The evaluator runs the same steps (it calls the same engine), so recall@10 measures exactly the list chat gets
 (answered 1). Diversity runs on ids only, before hydration, so it needs no text.
 
@@ -734,7 +741,7 @@ indexing time anyway.
   text usually continues an answer), while `Σ TokenCount ≤ expandMaxTokens` (**1,500**, per collection). `TokenCount`
   includes each chunk's heading-path prefix (processing §6.5), so the sum over-estimates the assembled text and the
   bound is safe without a tokenizer in the API.
-- **Response budget**: `Retrieval:ExpandTotalMaxTokens` **8,000**; sections are assembled in rank order of their best
+- **Response budget**: `Settings.Retrieval.expandTotalMaxTokens` **8,000** (§12.1); sections are assembled in rank order of their best
   hit, and once the budget is spent, lower-ranked results get `section_ref: null` (their own chunk text is still in
   `text`).
 
@@ -821,7 +828,7 @@ through the gateway; retrieval should stay below ~15 % of it.
    round trips** (K, V, H+D) and **≤ 1 Redis command** (L2 GET on an L1 miss), 0 config queries.
 3. **Retrieval load test** (k6 from `benchmarks/compare/k6`): a synthetic 100k-chunk corpus (generated Swedish text
    embedded by FakeGateway) with one 3,000-chunk and one 60,000-chunk collection; reports p50/p95 per stage from
-   `rag.retrieval.stage.duration`; decides `ExactScanMaxChunks` and the frequent-term guard (§20).
+   `rag.retrieval.stage.duration`; decides `exactScanMaxChunks` and the frequent-term guard (§20).
 4. **R1 release test** (repo-and-deployment §8.3): adds retrieval p95 during the crawl + OCR phase ≤ 1.2 × idle, next to
    the chat TTFT rule.
 
@@ -849,7 +856,8 @@ change makes it unreachable without invalidation code (identity §4.6 pattern):
 The first five change rankings and are gated (processing §14.5); `coverageMaxDistance` and `expandMaxTokens` are not.
 `top_k` is not a collection setting: it belongs to the request (assistant `QuerySteps`, default 10). Platform-only
 values live in `Settings.Retrieval`: the defaults above plus `exactScanMaxChunks` 10,000, `expandTotalMaxTokens`
-8,000, `downloadGrantLifetimeHours` 168.
+8,000. The grant lifetime is a deployment setting (`Knowledge:DownloadGrantLifetime`, §4.6), not a `Settings` value:
+it is bound to the signing keys of the deployment, so one value exists.
 
 Security-relevant decisions use the snapshot only when confirmed (data-model §5 fail closed); the statement texts are
 built from the snapshot's literals and cached per variant in a static dictionary.
@@ -889,7 +897,7 @@ public sealed record Candidate(Guid ChunkId, Guid DocumentId, Guid ChunkSetId, i
 | Defence | hydration re-checks `CollectionIds && scope`, levels and `DeletedAt` (§6.3), so a stale or wrong external index can never return a chunk the caller may not see; it can only return fewer |
 | Index content | per chunk: id, document id, chunk set id, ordinal, text hash, collection ids, level, tags, document type, modified date, text + heading path (analysed with Swedish decompounding), embedding (`knn_vector` 1024, cosine) |
 | Rebuild | worker command `search-reindex` streams `Chunks` per tier (keyset pagination on `Id`) into a new index, then swaps an alias; nothing is re-embedded (`../../platforms/opensearch.md` §8 rule 2) |
-| Incremental | the index writer (6a §14) appends `(ChunkSetId, op)` to a new tier-local `content."SearchIndexOutbox"` in its transaction; a `search-sync` job applies batches; lag metric `rag.search.index_lag` |
+| Incremental | the index writer (6a §14) appends `(ChunkSetId, op)` to a new tier-local `content."SearchIndexOutbox"` in its transaction (table and the `search-reindex`/`search-sync` kinds join data-model §2.2/§4.2 only when the switch is built); a `search-sync` job applies batches; lag metric `rag.search.index_lag` |
 | Switch | `Retrieval:Index` = `postgres` \| `opensearch` \| `shadow` (`shadow` queries both, serves Postgres, logs rank overlap: the evaluation for the switch) |
 | Triggers | `01-general-idea.md` §6 / `../../platforms/opensearch.md` §8: hybrid recall@10 ≥ 5 points better on the Swedish benchmark, > 2–3M chunks or HNSW no longer in RAM, retrieval p95 > 300 ms after tuning, a facets/highlighting product need; measured by the evaluation sets and §11 |
 
@@ -1049,7 +1057,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 |---|---|
 | P0 | `Ume.Rag.Retrieval` skeleton; Postgres image with pgvector 0.8.7 and Hunspell; role defaults for `hnsw.*`; `SwedishTextSearchTests` |
 | P1 | In-process `IRetriever` for the chat role; K/V/H+D statements with exact/HNSW rule; RRF, dedup, variant collapse, cap 3; coverage with per-collection thresholds; section expansion with `OverlapChars`; citations incl. upload names and attachment parents; download grants and `/content` streaming with envelope decryption; query embedding with L1/L2 cache, circuit and degrade; `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; problem details, OpenAPI/Scalar; counters; metrics, traces; contract test; evaluation smoke; interaction audit; retrieval load test |
-| P2 | HTTP access for integrations and tokens (`CollectionAudiences`, key scopes, rate limits); MCP `search_knowledge`, `list_collections`, `document://`; agent assistants' skill collections; coverage calibration with control questions; tuning per collection behind the gate; `halfvec` evaluation (data-model §12.16); range requests if a PDF viewer needs them; optional Entra sign-in for downloads (§4.6) |
+| P2 | HTTP access for integrations and tokens (`CollectionAudiences`, key scopes, rate limits); MCP `search_knowledge`, `list_collections`, `get_document`, `document://`, per-skill endpoints (`SkillVersionIds`, tools §7.4); agent assistants' skill collections; coverage calibration with control questions; tuning per collection behind the gate; `halfvec` evaluation (data-model §12.16); range requests if a PDF viewer needs them; optional Entra sign-in for downloads (§4.6) |
 | P3 | Rerank (gateway-served, behind evaluation) between diversity and hydration; multi-query/HyDE behind evaluation (answered 3); cross-profile fusion during an embedding-profile migration; OpenSearch behind `ISearchIndex` if a trigger fires |
 
 ## 18. Changes to other documents
@@ -1073,13 +1081,13 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | `identity/design.md` §5.3 | the proxy exposes `GET /v1/documents/*` and `/content` to the staff network; the rest of `rag-api` stays restricted to the Open WebUI host |
 | `identity/design.md` §7.2, §10 | `/v1/search` → `/v1/retrieve`; 5001 reasons `grant_invalid`, `grant_expired` and `Credential` value `grant` |
 | `platform/repo-and-deployment.md` §1, §2.2 | test project `tests/Ume.Rag.Retrieval.Tests`; `benchmarks/Ume.Rag.Benchmarks` (`RetrievalBenchmarks`, `InteractionAudit` copy); `ModelContextProtocol`/`.AspNetCore` **2.3.0** (checked); `PGVECTOR_VERSION` **0.8.7** (latest 0.8.x, checked) |
-| `platform/repo-and-deployment.md` §3, §6.3, §7.1 | `rag-api` mounts the tier blob containers **read-only** and gets read access to the `rag-blob-<level>` master key files (file key provider); new secrets `Security__DownloadGrantKeys__<kid>`, `Security__CacheKeyPepper` made by `init-deployment.sh`; settings `Knowledge:*` (`OpenToClientKinds`, `PublicBaseUrl`, `DownloadGrantLifetime`, `DownloadsPerMinutePerAddress`, `PublishApiReference`) and `Retrieval:*` (`EmbeddingTimeout`, `MaxConcurrentSearches`, `ExactScanMaxChunks`, `ExpandNeighbourChunks`, `ExpandTotalMaxTokens`, `Index`) |
+| `platform/repo-and-deployment.md` §3, §6.3, §7.1 | `rag-api` mounts the tier blob containers **read-only** and gets read access to the `rag-blob-<level>` master key files (file key provider); new secrets `Security__DownloadGrantKeys__<kid>`, `Security__CacheKeyPepper` made by `init-deployment.sh`; settings `Knowledge:*` (`OpenToClientKinds`, `PublicBaseUrl`, `DownloadGrantLifetime`, `DownloadsPerMinutePerAddress`, `PublishApiReference`) and `Retrieval:*` (`EmbeddingTimeout`, `MaxConcurrentSearches`, `ExpandNeighbourChunks`, `Index`); `exactScanMaxChunks` and `expandTotalMaxTokens` are `Settings.Retrieval` values (§12.1) |
 | `platform/repo-and-deployment.md` §9 | metrics of §15; dashboard panels |
 | `platform/repo-and-deployment.md` §4.4 / gateway setup notes | the platform service key (and interim linked keys) used for query embeddings must have gateway `PiiPolicy` `Off` or `Allow`, never `Redact`/`Block` (§5.2) |
 | `knowledge-api/plan.md` §2–§5 | `expand: none \| section`; `top_k` default 10 max 50; problem details; three statements instead of "one round trip"; HTTP P1 for `internal` and grants only; answered 4–8 (§19.1 answers 1–5) |
 | `chat-api/plan.md` §4 | step 3.2 passes `AssistantId`, `Expand = Section`; step 3.4 handles `Coverage.Unknown` (degraded: answer with a caveat, never the not-found text); citations per §10.4 with download links; `MarkCited` after the answer; no query rewriting inside retrieval (condense stays a chat step) |
 | `tools/plan.md` §4 | `search_knowledge` schema and output shaping of §14; MCP download grants 1 hour |
-| `admin/plan.md` | test panel runs `Ume.Rag.Retrieval` in the admin process (incl. `building`), so the admin host needs `Gateway:*` for query embeddings; collection page: `RetrievalSettings` form (§12.1), coverage-threshold proposal from the evaluation set (§7) |
+| `admin/plan.md` | test panel runs the knowledge core in the admin process (since step 10 `KnowledgeService` in `Ume.Rag.Answering` over `Ume.Rag.Retrieval`, admin design §2.1; incl. `building`), so the admin host needs `Gateway:*` for query embeddings; collection page: `RetrievalSettings` form (§12.1), coverage-threshold proposal from the evaluation set (§7) |
 | `01-general-idea.md` §10 | after review, a "Knowledge API (step 7)" row: shared retrieval library, keyword in parallel with embedding, exact scan for small scopes, RRF in .NET, cap 3 per document, section expansion from neighbouring chunks, download grants, degrade to keyword-only, no result cache |
 
 ## 19. Questions
@@ -1120,7 +1128,7 @@ None.
 - `plainto_tsquery('content.rag_swedish', …)::text` shape when Hunspell returns several lexemes for one compound
   (grouping and operators), so the `' & '` → `' | '` replacement yields the intended OR query.
 - Exact-scan cost at 10,000 chunks of `vector(1024)` (TOASTed 4 KB values): detoast + distance within 25 ms p95; else
-  lower `ExactScanMaxChunks` or move to `halfvec`.
+  lower `Settings.Retrieval.exactScanMaxChunks` or move to `halfvec`.
 - Npgsql/Aspire tracing does not record parameter values (only statement text) by default.
 - `Pgvector` 0.3.2 `UseVector()` with Npgsql 10.0.x (package declares Npgsql ≥ 8.0.5; repo-and-deployment lists EF 10
   compatibility as unverified too).

@@ -112,7 +112,7 @@ FK** (config is main-only).
 |---|---|---|---|---|
 | `Departments` | Mirror of gateway departments, incl. feature C member groups | `Id uuid` (= gateway id), `Name varchar(200)`, `CostCenterCode varchar(50)`, `MemberGroups varchar(256)[]` (group claim values: Entra object ids, Keycloak/AD FS names; identity design §2.2), `IsActive bool`, `SyncedAt` | PK `Id`; U `CostCenterCode`; GIN `MemberGroups` | – |
 | `Teams` | Mirror of gateway teams (attribution `x-ume-on-behalf-of` sends `Id`) | `Id uuid` (= gateway), `DepartmentId`, `Name`, `Code varchar(100)` (from `/v1/catalog/teams`, gateway release C; display only), `IsActive`, `SyncedAt` | FK `DepartmentId` → `Departments` (Restrict, as gateway); U `Code` | – |
-| `Settings` | Singleton: platform defaults (deletion guard 20 %, crawl politeness, gate threshold 3 points, auto-apply ≥ 0.9 / ≥ 20 docs / 10 % trial, **parse auto-apply kill switch**, retention values from §8, `AuditRetentionDays` 730, `RetentionLastRun*`; worker: `WorkerConcurrency jsonb`, `DegradedFailureRatio` 0.05, `ScheduleJitterMinutes` 90, `PreviewMaxUsd` 0.50, default schedules per source type (engine design §9–§11); connectors: `DeletionGuardMinCount` 5, `DeletionGuardMaxCount` 500, `Crawl jsonb` (municipal host patterns, rates, host overrides, blocked hosts, ports, freshness 12 h, window 22–06, limits 10 000/10, caps, redirects 5), `QuarantineRetentionDays` 30; processing: `PiiFlagRules jsonb`, `PiiOwnDomains text[]`, `NerMinScore` 0.80, `EvaluationModel`, `EvaluationJudgeModel` (default: the gateway's on-prem general chat model), `GateFloor` 0.70, `GateSampleSize` 50, `EvaluationMaxQuestions` 100; retrieval: `Retrieval jsonb` = `RetrievalSettings` defaults (1.0 / 1.0, 100, 100, 3, 0.50, 1,500) plus platform-only `exactScanMaxChunks` 10,000, `expandTotalMaxTokens` 8,000, `downloadGrantLifetimeHours` 168, knowledge design §12.1; chat: `Chat jsonb` = `CondenseModel` (the gateway's on-prem small instruct alias), `MaxContextTokens`, default not-found texts sv/en, `AllowedLinkHosts` (`umea.se`, `*.umea.se`), `MessagesPerMinutePerUser` 20, chat design §5, §9.4, §10.1); tools: `Tools jsonb` = `AgentDefaults` (8 / 60 s / $0.05), `AgentHardCaps` (20 / 120 s / $0.25), `WriteToolsEnabled` false, `SkillGateModel`, `SkillRoutingFloor` 0.80, `CallsPerMinutePerUser` 60 (tools design §3.7, §4.9, §6.5) | `Id smallint` | `CK_Settings_Singleton` (`"Id" = 1`), range checks like `CK_GatewaySettings_*` | – |
+| `Settings` | Singleton: platform defaults (deletion guard 20 %, crawl politeness, gate threshold 3 points, auto-apply ≥ 0.9 / ≥ 20 docs / 10 % trial, **parse auto-apply kill switch**, retention values from §8, `AuditRetentionDays` 730, `RetentionLastRun*`; worker: `WorkerConcurrency jsonb`, `DegradedFailureRatio` 0.05, `ScheduleJitterMinutes` 90, `PreviewMaxUsd` 0.50, default schedules per source type (engine design §9–§11); connectors: `DeletionGuardMinCount` 5, `DeletionGuardMaxCount` 500, `Crawl jsonb` (`MunicipalHosts`, rates, `HostOverrides`, blocked hosts, `AllowedPorts`, `FreshnessHours` 12, window 22–06, limits 10 000/10, body caps HTML 10 MB / files 50 MB, redirects 5, `IdentityRulesVersion`; connectors design §3.1, §4–§7), `QuarantineRetentionDays` 30; processing: `PiiFlagRules jsonb`, `PiiOwnDomains text[]`, `NerMinScore` 0.80, `EvaluationModel`, `EvaluationJudgeModel` (default: the gateway's on-prem general chat model), `GateFloor` 0.70, `GateSampleSize` 50, `EvaluationMaxQuestions` 100; retrieval: `Retrieval jsonb` = `RetrievalSettings` defaults (1.0 / 1.0, 100, 100, 3, 0.50, 1,500) plus platform-only `exactScanMaxChunks` 10,000, `expandTotalMaxTokens` 8,000, knowledge design §12.1 (the download-grant lifetime is the deployment setting `Knowledge:DownloadGrantLifetime`, not a `Settings` value); chat: `Chat jsonb` = `CondenseModel` (the gateway's on-prem small instruct alias), `MaxContextTokens`, default not-found texts sv/en, `AllowedLinkHosts` (`umea.se`, `*.umea.se`), `MessagesPerMinutePerUser` 20, chat design §5, §9.4, §10.1); tools: `Tools jsonb` = `AgentDefaults` (8 / 60 s / $0.05), `AgentHardCaps` (20 / 120 s / $0.25), `WriteToolsEnabled` false, `SkillGateModel`, `SkillRoutingFloor` 0.80, `CallsPerMinutePerUser` 60 (tools design §3.7, §4.9, §6.5) | `Id smallint` | `CK_Settings_Singleton` (`"Id" = 1`), range checks like `CK_GatewaySettings_*` | – |
 | `DataTiers` | Data tiers known to the tier resolver | `Name varchar(30)` (`main`, `sensitive`), `ConnectionName varchar(50)` (`ragdb`, `ragdb-sensitive`: names of connection strings in env, never secrets), `BlobContainer varchar(63)`, `State` (`active`/`migrating`) | PK `Name` | – |
 | `DataProtectionPolicies` | §8a matrix, one row per level | `Classification` PK, `AllowedHistoryModes varchar(20)[]`, `DefaultHistoryMode`, `RetentionDefaultDays int`, `RetentionMaxDays int`, `EncryptionRequired bool`, `ReviewSecondApprover bool`, `ClientsWithoutHistoryOnly bool`, `TierName` FK → `DataTiers`, `ChatMasterKeyName`, `BlobMasterKeyName` | `CK_…_Encryption` (`internal`/`sensitive` ⇒ `EncryptionRequired`); `CK_…_Retention` (default ≤ max ≤ 90) | Defines them |
 | `EmbeddingProfiles` | R3 registry | `Id`, `Name`, `GatewayModel varchar(200)` (`bge-m3`), `Dimensions int` (1024), `Distance` (`cosine`), `MaxInputTokens` (8192), `CanaryText text`, `CanaryEmbedding vector` (detects a silently changed gateway model), `IsDefault`, `State` (`active`/`building`/`retired`) | U `Name`; partial U `IsDefault WHERE "IsDefault"` | Always on-prem (R3) |
@@ -171,7 +171,7 @@ written, so a sync without changes does not bump the config version. Member grou
 | `DocumentSources` | L | Which sources reference a document and which chunk set their pipeline produced | `DocumentId`, `SourceId` (no FK), `Classification`, `ChunkSetId`, `PipelineVersionId`, `LastRunId uuid`, `DisplayName varchar(300) NULL` (upload file name per source; never in `Documents.Title`), `HeldAt`, `HeldBy` (rejected deletions), `ConsecutiveFailures smallint NOT NULL DEFAULT 0`, `FirstSeenAt`, `LastSeenAt`, `DeletedAt`, `PurgeAfter` | PK (`DocumentId`, `SourceId`); FK (`DocumentId`, `Classification`) → `Documents`; FK (`ChunkSetId`, `Classification`) → `ChunkSets`; IX (`SourceId`) `WHERE "DeletedAt" IS NULL` |
 | `NodeOutputs` | L | Output cache index (blobs hold the data, §9) | `CacheKey bytea` PK, `Classification`, `DocumentId`, `NodeType`, `NodeVersion`, `ParamsHash bytea`, `InputHash bytea`, `OutputHash bytea` (next key without loading the blob, engine design §8), `BlobPath` (a prefix for multi-blob outputs such as the parse output: `result.json`, `docling/*.json.gz`), `IsParseOutput bool`, `CreatedAt`, `ExpiresAt` (null for the current parse output) | FK (`DocumentId`, `Classification`) → `Documents` Cascade; IX `ExpiresAt` |
 | `ChunkSets` | L | One collection-stage output per (document, collection-stage hash, profile); shared by every collection whose pipeline matches (R2) | `Id`, `DocumentId`, `Classification`, `CollectionStageHash bytea` (holds the whole-pipeline Merkle hash, engine design §3.3), `EmbeddingProfileId`, `ContentHash`, `InputHash bytea NOT NULL` (boundary `OutputHash`; noise-only changes re-key the set, processing design §12), `CollectionIds uuid[]` (authoritative), `ChunkCount`, `CreatedAt`, `DeletedAt` (deleted sets are revived by the index writer within 14 days; gate shadow sets are created deleted) | U (`Id`, `Classification`); U (`DocumentId`, `CollectionStageHash`, `EmbeddingProfileId`, `ContentHash`); FK (`DocumentId`, `Classification`) → `Documents` Cascade |
-| `Chunks` | L | **Collection index**: parents and children | `Id`, `ChunkSetId`, `DocumentId`, `Classification`, `Kind` (`parent`/`child`), `ParentId`, `Ordinal int`, `HeadingPath text`, `PageEnd int NULL` (P1 writes flat chunks as `Kind = 'child'`), `Text text`, `OverlapChars smallint NOT NULL DEFAULT 0` (leading characters of `Text` repeated from the previous chunk; section expansion strips them, knowledge design §9.3), `TextHash bytea`, `TokenCount int`, `Page int`, `Tags text[]`, `DocumentType varchar(30)`, `SourceModifiedAt`, `CollectionIds uuid[]` (copy of the set's), `EmbeddingProfileId uuid` (children only), `Embedding vector` (children only, untyped so profiles may differ in size), `SearchVector tsvector` (generated, §3), `DeletedAt` | PK `Id`; FK (`ChunkSetId`, `Classification`) → `ChunkSets` Cascade; FK (`DocumentId`, `Classification`) → `Documents`; **U (`ChunkSetId`, `Ordinal`)** `IX_Chunks_ChunkSetId_Ordinal` (section expansion and chunk-set scopes, knowledge design §6.3; also the index on `ChunkSetId`); IX `ParentId`; HNSW and GIN per §3. `Kind`/`ParentId` stay although every P1 row is `child`; dropped by a contract migration if P2 does not adopt parent windows (processing design §5.3) |
+| `Chunks` | L | **Collection index**: flat chunks (`Kind = child`) in P1; parents only if parent-child is adopted (processing design §5.3) | `Id`, `ChunkSetId`, `DocumentId`, `Classification`, `Kind` (`parent`/`child`), `ParentId`, `Ordinal int`, `HeadingPath text`, `PageEnd int NULL` (P1 writes flat chunks as `Kind = 'child'`), `Text text`, `OverlapChars smallint NOT NULL DEFAULT 0` (leading characters of `Text` repeated from the previous chunk; section expansion strips them, knowledge design §9.3), `TextHash bytea`, `TokenCount int`, `Page int`, `Tags text[]`, `DocumentType varchar(30)`, `SourceModifiedAt`, `CollectionIds uuid[]` (copy of the set's), `EmbeddingProfileId uuid` (children only), `Embedding vector` (children only, untyped so profiles may differ in size), `SearchVector tsvector` (generated, §3), `DeletedAt` | PK `Id`; FK (`ChunkSetId`, `Classification`) → `ChunkSets` Cascade; FK (`DocumentId`, `Classification`) → `Documents`; **U (`ChunkSetId`, `Ordinal`)** `IX_Chunks_ChunkSetId_Ordinal` (section expansion and chunk-set scopes, knowledge design §6.3; also the index on `ChunkSetId`); IX `ParentId`; HNSW and GIN per §3. `Kind`/`ParentId` stay although every P1 row is `child`; dropped by a contract migration if P2 does not adopt parent windows (processing design §5.3) |
 | `EmbeddingCache` | L | (profile, text hash) → embedding, so re-chunking embeds only new text | `Classification`, `EmbeddingProfileId`, `TextHash bytea`, `Embedding vector`, `LastUsedAt` | PK (`Classification`, `EmbeddingProfileId`, `TextHash`) |
 | `Runs` | L | One per sync/reprocess | `Id`, `SourceId`, `Classification`, `Kind` (`sync`/`retry-failed`/`reprocess`), `Trigger` (`schedule`/`manual`/`upload`/`publish`/`rollback`/`shared-document`/`retry`/`config-change`/`notification`), `PipelineVersionId`, `ScheduledFor timestamptz NULL`, `Phase varchar(20)` (`list`/`fetch`/`reconcile`/`done`), `Report jsonb`, `SettingsHashes jsonb`, `State` (`running`/`succeeded`/`degraded`/`failed`/`awaiting-deletion-confirmation`/`cancelled`), `Added/Updated/Unchanged/Deleted/Failed int`, `ProposedDeletions int`, `CostUsd numeric(18,8)`, `StartedAt`, `FinishedAt` | IX (`SourceId`, `StartedAt` DESC) |
 | `RunItems` | L | One per document per run, partitioned by day (§4) | `Id bigint identity`, `CreatedAt` (partition key), `RunId`, `Classification`, `DocumentId`, `Identity text`, `Outcome` (engine design §10.2), `Reason varchar(500)`, `Strategy`, `PipelineVersionId uuid`, `ParseProfileId`, `ExecutionId uuid`, `DurationMs`, `CostUsd`, `ParserBuildHash bytea` (parser `/v1/info` build; full info in `content."ParserBuilds"` (`BuildHash` PK, `Info jsonb`, `FirstSeenAt`), main tier) | PK (`CreatedAt`, `Id`); IX (`RunId`) |
@@ -314,7 +314,7 @@ assistant spanning tiers or profiles runs K and V once per (tier, profile) and f
 CREATE TABLE content."Jobs" (
     "Id"            uuid        NOT NULL,                 -- v7
     "EnqueuedAt"    timestamptz NOT NULL DEFAULT now(),   -- partition key
-    "Class"         varchar(20) NOT NULL CHECK ("Class" IN ('preview','command','sync','fetch','parse','ner','embed','eval')),
+    "Class"         varchar(20) NOT NULL CHECK ("Class" IN ('preview','command','sync','fetch','parse','ner','embed','eval','attachment')),  -- attachment: P2
     "Priority"      smallint    NOT NULL DEFAULT 0,       -- within a class; higher first
     "DepartmentId"  uuid        NOT NULL,                 -- fairness and attribution
     "TeamId"        uuid,
@@ -350,10 +350,11 @@ EF Core maps `Jobs` with `ExcludeFromMigrations()`; the table is created by raw 
 | Class | Order | Concurrency (per worker) | Lease | Max attempts | Notes |
 |---|---|---|---|---|---|
 | `preview` | 1 | 2 | 2 min | 1 | Never writes `content` except `Result` and `CrawlHosts.NextAllowedAt`; node outputs to `previews/` blobs |
-| `command` | 2 | 2 | 1 min | 3 | Admin decisions applied by the worker: clear PII flag, confirm/reject deletion, approve/rollback profile, edit human evaluation questions (§12.2) |
+| `command` | 2 | 2 | 1 min | 3 | Admin decisions applied by the worker: clear PII flag, confirm/reject deletion, release a held reference, approve/rollback profile, edit human evaluation questions, cancel a run, reprocess a document, recompute membership (§12.2; kinds in engine design §9.1) |
 | `sync` | 3 | 2 | 5 min | 3 | Listing, change detection, deletion guard |
 | `fetch` | 4 | 8 (frontier limits per host) | 2 min | 5 | |
 | `parse` | 5 | `min(setting, parser /v1/info convert_slots)` | 15 min | 3 | Heartbeat extends the lease; yields after a 10-min slice |
+| `ner` | after `parse` | parser `/v1/info` `capacity.ner_slots` × 2 | 2 min *proposed* | 3 *proposed* | *Detect personal data* (with PII, split, chunk) on the parser's NER lane (processing design §9.6); `busy`/`not_ready` requeue without an attempt |
 | `embed` | 6 | 4 | 2 min | 6 | Batches sized for the gateway |
 | `eval` | 7 | 1 | 15 min | 2 | Lowest |
 | `attachment` (P2) | after `preview` | 2 | 2 min | 3 | Chat attachments (chat design §15.2, engine design §9.1): scan → parse → chunk → PII → embed → post chunks to the API's internal route; never writes `chat` |
@@ -366,7 +367,9 @@ EF Core maps `Jobs` with `ExcludeFromMigrations()`; the table is created by raw 
 - **Leases**: dequeue sets `LeaseOwner`, `LeaseUntil`, `Attempts + 1`; a reaper (every 30 s) returns expired leases to
   `queued`, and also jobs of instances without a heartbeat for 45 s. A worker restart loses no work (worker §9).
 - **Dedup**: enqueue takes `pg_advisory_xact_lock(hashtextextended("DedupKey", 0))` and inserts only if no
-  `queued`/`running` job has the key (a unique index cannot span partitions without the partition key).
+  `queued`/`running` job has the key (a unique index cannot span partitions without the partition key). Keys in use:
+  `fetch:{level}:{identityHash}[:r]` (shared frontier; `:r` for the rendered variant), `sync-upload:{batchId}`
+  (connectors design §6, §9.1).
 - **Fairness per department**: the worker keeps running counts per (class, department) in memory and tries
   departments in ascending order with the indexed query below; the first hit wins. Preview and command are tried first.
 
@@ -476,7 +479,7 @@ per level, even in one tier (`rag-chat-public`, `rag-chat-internal`, `rag-chat-s
 
 | Main only | Tier-local (rows carry `Classification`) |
 |---|---|
-| all of `config` and `audit`; `content."Jobs"`, `"WorkerInstances"`, `"NodeManifest"`, `"WorkerNodeSupport"`, `"CrawlHosts"`; `chat."FeedbackImportState"` | rest of `content`; rest of `chat` |
+| all of `config` and `audit`; `content."Jobs"`, `"WorkerInstances"`, `"NodeManifest"`, `"WorkerNodeSupport"`, `"CrawlHosts"`, `"ParserBuilds"`; `chat."FeedbackImportState"` | rest of `content`; rest of `chat` |
 
 How the "no cross-level foreign keys or joins" rule is upheld:
 
@@ -501,7 +504,8 @@ tag; AAD = `"<table>:<row id>:<column>:<conversation id>"`, so ciphertext cannot
 | `Conversations.TitleCiphertext`, `Messages.ContentCiphertext`, `MessageSources.SnippetCiphertext`, `Feedback.CommentCiphertext` (reason + comment), `ToolCalls.ArgumentsCiphertext`, `ToolCalls.ResultCiphertext`; P2 `Attachments.FileNameCiphertext`, `AttachmentChunks.TextCiphertext`, `AttachmentChunks.EmbeddingCiphertext` | ids, times, assistant, client, subject id (oid), classification, history mode, token counts, cost, latency, outcome, residency, rating, tool name, sizes, HMAC of arguments, cited document/chunk ids |
 
 - **Data keys**: AES-256 key per conversation per **7-day epoch** in `chat."DataKeys"`, wrapped by `IKeyProvider`
-  (Key Vault / Managed HSM `wrapKey`, OpenBao transit, local key file in development). `DataKeys.Epoch` =
+  (Key Vault / Managed HSM `wrapKey`, OpenBao transit, key files: the **file key provider in the pilot**, plan §8a,
+  postponed decision K1; also in development). `DataKeys.Epoch` =
   ⌊(now − `Conversations.CreatedAt`) / 7 d⌋, unique per conversation, so concurrent writers converge on one key (chat
   design §12.3). New messages, feedback comments and P2 attachments use the current epoch key; the title is
   re-encrypted with it. `KeyProvider`, `MasterKeyName`, `MasterKeyVersion` identify the
@@ -520,7 +524,8 @@ tag; AAD = `"<table>:<row id>:<column>:<conversation id>"`, so ciphertext cannot
   rows are only deleted, not shredded (§12.10).
 
 **Blobs**: per-document data key in `content."DocumentKeys"` (wrapped by `rag-blob-<level>`); uploads before their
-document exists use a per-upload key stored with the upload job and moved to `DocumentKeys` on first fetch. Format:
+document exists use a per-upload key, wrapped and stored in the batch manifest (connectors design §9.1), and moved to
+`DocumentKeys` on first fetch; preview outputs use a per-job key wrapped in `Jobs.Result` (engine design §11). Format:
 header `URB1` ‖ key id ‖ base nonce, then 64 KiB segments with AES-256-GCM (STREAM construction). Purging a document
 deletes its `DocumentKeys` row, then its blob prefix. Unwrapped by the worker and, for citation downloads
 (`GET /v1/documents/{id}/content`, raw blob only, read-only mount), by the knowledge role (knowledge design §3.5).
@@ -541,7 +546,9 @@ connections to every tier); the worker runs the `content` steps and partition ma
 | `content."DocumentSources"` | removed from source → `DeletedAt`, purge after 14 days | worker, `DELETE` |
 | `content."Documents"`, `"ChunkSets"`, `"Chunks"`, `"DocumentKeys"`, `"NodeOutputs"` (+ blobs) | no live `DocumentSources` → soft delete, purge after 14 days | worker; cascade from `Documents` |
 | `content."NodeOutputs"` (+ blobs) | intermediate outputs 30 days (`Settings`); current parse output kept while the document lives | worker, `ExpiresAt` |
-| uploads (blobs) | while the source exists | worker on source deletion |
+| uploads (blobs) | while the source exists; a deleted upload's blobs purged 14 days after deletion (connectors design §9.3); uncommitted batches after 24 h | worker on source/upload deletion; admin sweep for uncommitted batches |
+| `content."QuarantinedFiles"` (+ blobs) | `Settings.QuarantineRetentionDays` (30) | worker |
+| `tmp/` and `previews/` blobs | 24 hours | worker sweep |
 | `content."EvaluationSets"` and children | until the collection is removed | worker on collection deletion |
 | `content."EmbeddingCache"` | unused 30 days *proposed* | worker |
 | `content."Jobs"` | terminal jobs 7 days *proposed* | partition drop |
@@ -560,11 +567,13 @@ container; ids in `N` format; every object envelope-encrypted with its document'
 
 | Kind | Path | Retention |
 |---|---|---|
-| Upload | `uploads/{sourceId}/{uploadId}/{sha256}` | while the source exists |
-| Quarantined file (ClamAV) | `quarantine/{sourceId}/{sha256}` | 30 days *proposed* |
-| Raw fetch | `documents/{documentId}/raw/{contentHash}` | current version while the document lives |
+| Upload | `uploads/{sourceId}/{uploadId}/{sha256}`; batch manifest `uploads/{sourceId}/batches/{batchId}.json` (names, hashes, wrapped keys; connectors design §9.1) | while the source exists |
+| Quarantined file (ClamAV) | `quarantine/{sourceId}/{sha256}` | `Settings.QuarantineRetentionDays` (30) |
+| Raw fetch | `documents/{documentId}/raw/{contentHash}` (attachment children under their own `documents/{childId}/raw/`); extracted links `…/raw/{contentHash}.links.json.gz` (connectors design §5) | current version while the document lives |
+| Job scratch | `tmp/{jobId}/…` (e.g. a file being scanned before it is renamed into place, connectors design §11) | 24 hours (sweep) |
+| Chat attachment upload (P2) | `chat-tmp/{attachmentId}` (per-attachment key wrapped by `rag-blob-<level>`, written by the API; chat design §15.2) | deleted after parsing; orphans swept after 24 hours |
 | Node output | `documents/{documentId}/nodes/{nodeType}/{cacheKey}.{ext}`; the parse output is a prefix `…/nodes/docling-parse/{cacheKey}/` with `result.json`, `docling/{from}-{to}.json.gz`, `pictures/{n}.png` (on request) and `ranges/{from}-{to}.result.json` (intermediate, 30 days) (parser design §7.6) | 30 days; parse output while the document lives |
-| Preview output | `previews/{jobId}/{nodeId}.json` | 24 hours |
+| Preview output | `previews/{jobId}/{nodeId}.json` (per-job key wrapped in `Jobs.Result`, engine design §11) | 24 hours |
 | robots.txt | `crawl/{host}/robots.txt` (main) | refreshed daily |
 
 **Cache key** = SHA-256 of `inputHash ‖ nodeType ‖ nodeVersion ‖ paramsHash`, where `inputHash` is the hash of the
@@ -606,7 +615,7 @@ Prefix `ume-rag:`, ACL user limited to `~ume-rag:*`; no publish channels (change
 | Key | Lifetime |
 |---|---|
 | `ume-rag:admin-session:{sessionId}` | session |
-| `ume-rag:rl:req:{keyId}:{minute}`, `ume-rag:rl:user:{subjectHash}:{minute}`, `ume-rag:rl:tool:{toolId}:{minute}`, `ume-rag:rl:tooluser:{toolId}:{subjectHash}:{minute}`, `ume-rag:rl:tools:{subjectHash}:{minute}`, `ume-rag:rl:mcp:{subjectHash}:{minute}` (tools design §4.9, §7.6), `ume-rag:rl:ip:{ipHash}:{minute}` | 120 s (`RateWindowSeconds`, as gateway) |
+| `ume-rag:rl:req:{keyId}:{minute}`, `ume-rag:rl:user:{subjectHash}:{minute}`, `ume-rag:rl:tool:{toolId}:{minute}`, `ume-rag:rl:tooluser:{toolId}:{subjectHash}:{minute}`, `ume-rag:rl:tools:{subjectHash}:{minute}`, `ume-rag:rl:mcp:{subjectHash}:{minute}` (tools design §4.9, §7.6), `ume-rag:rl:ip:{ipHash}:{minute}` (P2 widget, identity design §6.5), `ume-rag:rl:dl:{ipHash}:{minute}` (citation downloads, `Knowledge:DownloadsPerMinutePerAddress`; its own key so the two per-address limits never share a counter) | 120 s (`RateWindowSeconds`, as gateway) |
 | `ume-rag:qemb:{profileId:N}:{queryMac}` (query embedding only, value 1 version byte ‖ 1024 little-endian float32; `queryMac` = hex of the first 16 bytes of HMAC-SHA256(`Security:CacheKeyPepper`, normalised query), never a plain hash; `public`/`internal` effective level only, §12.14; an in-process L1 serves all levels; knowledge design §5.4) | 5 min |
 | `ume-rag:groups:{oid}` (feature C `checkMemberGroups` result `{checked, member}`, ids only) | 10 min |
 | `ume-rag:owui-oid:{hmac(email)}` (P2, Open WebUI email → Entra `oid`, identity design §5.4) | 1 h |

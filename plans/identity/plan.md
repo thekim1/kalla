@@ -83,9 +83,11 @@ rights (or the reverse):
 |---|---|
 | `rag-platform-admin` | Everything (like `gateway-admin`) |
 | `rag-department-admin` | Everything in own departments (like `department-admin`) |
-| `rag-pipeline-editor` | Canvas editing in own departments |
+| `rag-pipeline-editor` | Pipeline editing in own departments (template forms in P1, canvas in P2) |
+| `rag-reviewer` (P1) | Reads feedback comments and, with a reason (audited; `sensitive` with a second approver), conversations in own departments; not implied by any admin role (design §1.3, admin design §3.1) |
 | `rag-viewer` | Read status, runs, evaluation, usage in own departments (like `viewer`) |
-| `rag-editor` (from P2) | Sources, collections, assistants, skills via forms in own departments |
+| `rag-skill-editor` (P2) | Drafts, publishes and serves skills in own departments (tools design §3.6) |
+| `rag-editor` (from P2) | Sources, collections and assistants via forms in own departments; links published skills, cannot edit them |
 
 **Configuration keys**: the gateway's OIDC settings with a `UME_RAG_` prefix and the same defaults and semantics:
 `UME_RAG_OIDC_AUTHORITY`, `_CLIENT_ID`, `_CLIENT_SECRET` (file, as `init-deployment.sh` does), `_ROLE_CLAIM`
@@ -144,7 +146,7 @@ secret, short expiry, only from the Open WebUI instance's network.
 
 - **P1**: `clients` only: e.g. "everyone who can sign in to the pilot's Open WebUI". Open WebUI's own Entra login
   (with *assignment required* on its enterprise app) decides who that is. No Graph lookup needed.
-- **P2**: also `departments` (department scope as in §3) and `groups` (object ids), for callers with real tokens, and
+- **P2**: also `departments` (department scope as in §3) and `groups` (group claim values), for callers with real tokens, and
   for Open WebUI users resolved via Graph by email.
 
 **Decision** = subject may use the resource (audience) **and** the resource's classification ≤ the client's ceiling
@@ -178,7 +180,7 @@ systems to the SIEM. Every denial is a security event.
   - **Decided**: the exchange uses the `rag-api` registration's credential (Entra requires the token to be issued to
     the app doing the exchange); `rag-tools` stays for service-identity calls.
   - The user token is an internal, short-lived hand-off from the Chat API, never stored or logged; OBO caches are
-    encrypted, per user and short-lived; claims challenges are passed back to the client.
+    process-local in the tool hub (no Redis), per user and short-lived (design §9.2); claims challenges are passed back to the client.
 - Non-Entra per-user OAuth for third-party tools: out of scope until a concrete need appears.
 
 ## 8. Milestones
@@ -186,7 +188,7 @@ systems to the SIEM. Every denial is a security event.
 | Phase | Deliverable |
 |---|---|
 | P0 | Keycloak realm with the gateway's claims for dev and CI; OIDC and claim mapping copied from the gateway (`UME_RAG_OIDC_*`); keys in gateway style; package 1 submitted |
-| P1 | Admin sign-in on the municipal IdP (shared or twin registration); department scope from groups (feature C, both systems); Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; security events; package 2 submitted |
+| P1 | Admin sign-in on the municipal IdP (shared or twin registration); `rag-reviewer` role; department scope from groups (feature C, both systems); Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; security events; package 2 submitted |
 | P2 | `rag-api` tokens and OAuth machine clients, department/group audiences, MCP server authorisation, `rag-ingestion`, `rag-tools`, `ume-rag-pk-` widget keys |
 | P3 | OBO for user-delegated tools, Teams client, claims-challenge handling |
 

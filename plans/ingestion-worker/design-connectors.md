@@ -112,7 +112,7 @@ run items are written by the runner.
 | Discovery | `fetch` | `Content.Links` / stored outlinks become new claims for every source claiming the URL (§6.2) |
 | Reconcile | `sync`, phase `reconcile` | deletion candidates, guard, soft deletes (§13); enqueued by the finalizer when a run has no open jobs |
 | Retry | `sync` (`kind = retry-failed`) | `FromIdentity` for each failed item of the last run; no reconcile deletions |
-| Preflight, hierarchy | `preview` (new kinds `preflight`, `hierarchy`) | interactive, highest priority; results in `Jobs.Result` |
+| Preflight, hierarchy | `preview` (new kinds `preflight`, `hierarchy`) | interactive, highest priority; results in `Jobs.Result`; a URL-list preflight samples ≤ 20 URLs (admin design §4.7) |
 
 Email attachments are not listed by any connector: the parent's parse commit creates them (§10) and their `fetch`
 job runs the **attachment intake** instead of a root (roots hash alike, 6a §3.3, so the child's document stage
@@ -693,8 +693,8 @@ finishes all other work and the finalizer sets **`awaiting-deletion-confirmation
 
 | Event | Effect |
 |---|---|
-| `command` `confirm-deletion {runId}` (`rag-department-admin` of the source's department) | re-validates each proposal (a reference seen again by a later run is dropped), soft-deletes the rest, run items `deleted`; the finalizer recomputes the run state; audit 6001 |
-| `command` `reject-deletion {runId}` | nothing deleted; the references get `DocumentSources.HeldAt/HeldBy`, excluded from later guards and listed as "kept by decision" on the source page until they are seen again (hold cleared) or an admin releases the hold; run → `degraded` `deletion.rejected` |
+| `command` `confirm-deletion {runId}` (`Manage` policy of the source's department: `rag-department-admin` or `rag-platform-admin`, admin design V28) | re-validates each proposal (a reference seen again by a later run is dropped), soft-deletes the rest, run items `deleted`; the finalizer recomputes the run state; audit 6001 |
+| `command` `reject-deletion {runId}` | nothing deleted; the references get `DocumentSources.HeldAt/HeldBy`, excluded from later guards and listed as "kept by decision" on the source page until they are seen again (hold cleared) or an admin releases the hold (`command` `release-hold {sourceId}`, admin design §4.7: holds cleared, references become candidates at the next reconcile); run → `degraded` `deletion.rejected` |
 | a newer run of the source reaches reconcile while a proposal waits | the newer run computes afresh; the older run → `degraded` `deletion.superseded`; one waiting proposal per source at a time |
 | no decision | waits indefinitely, never auto-confirmed; shown on the Overview page (admin plan §4) and as a daily reminder metric `rag.deletion.awaiting` |
 
@@ -836,7 +836,8 @@ politeness (answered 4), so the R1 test uses a municipal test host.
 ## 20. Changes to other documents
 
 Applied in the step 6b review commit (2026-10-29), except: the admin plan items (step 10) and the knowledge-api
-items (step 7), which those steps take up; design-engine.md gets a pointer note rather than inline edits.
+items (step 7), which those steps take up; design-engine.md got a pointer note, and the consistency pass (step 11)
+applied its rows inline (6a §9.1, §10.1, §10.4, §14, §17).
 
 | Document | Change |
 |---|---|

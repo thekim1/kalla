@@ -2,7 +2,7 @@
 
 Detail step 6c of the Ume.Rag design. Details [`plan.md`](plan.md) §4–§7 (binding, incl. answered items 1–21) and
 specifies the internals of the nodes [`design-engine.md`](design-engine.md) (6a) marks "6c" in its catalogue
-(`design-engine.md:249-270`). It consumes, without redesigning: the port types (6a §2.2), the node interface and
+(`design-engine.md` §6). It consumes, without redesigning: the port types (6a §2.2), the node interface and
 results (6a §5, §7.3), segments and job classes (6a §7.4, §9.1), cache classes (6a §8), preview (6a §11), the publish
 flow with `IPublishGate` and shadow sets (6a §12.1), the index writer (6a §14) and the AIMD limiter (6a §18); variants,
 `ContentHashVersion`, noise rules and attachments from [`design-connectors.md`](design-connectors.md) (6b §8.4, §10,
@@ -304,7 +304,7 @@ tokens with no structure (`../../platforms/eneo.md:105`); Open WebUI loses headi
 
 | Column | Value |
 |---|---|
-| `Kind` | `child` for flat chunks (`ParentId` null), so the `SearchVector` and HNSW conditions apply (data-model `:154`, §3.2) |
+| `Kind` | `child` for flat chunks (`ParentId` null), so the `SearchVector` and HNSW conditions apply (data-model §2.2, §3.2) |
 | `Ordinal` | 0-based order within the chunk set |
 | `HeadingPath` | full path joined with ` › ` (untruncated; the prefix may be truncated) |
 | `Text` | body without the prefix (shown as context and citation snippet) |
@@ -340,7 +340,7 @@ retrieval already deduplicates on (knowledge design §8).
 
 | Metric | On | Definition | Default fail threshold |
 |---|---|---|---|
-| `chars` | Parsed | body characters after *Clean* | `< minChars` (200 in the web template, 6a `:677`; node default 50) |
+| `chars` | Parsed | body characters after *Clean* | `< minChars` (200 in the web template, 6a §13.1; node default 50) |
 | `charsPerPage` | Parsed (paged) | `chars / non-blank pages` | `< 100` |
 | `garble` | Parsed | page-weighted mean of `garbled_score` (parser pages; HTML/text: letter ratio < 0.5 → 1) | `> maxGarble` (0.3) |
 | `emptyPageRatio` | Parsed | pages with `chars == 0` and not `blank` ÷ pages | `> 0.3` |
@@ -356,7 +356,7 @@ Every metric is written as a fact (`quality.*`) whether it passes or not, and sh
 ## 9. *Detect personal data* (`detect-personal-data`, locked, `ner` class, intermediate)
 
 Runs on the cleaned `ParsedDocument` (blocks, table cells, email subject), outputs its input unchanged plus the
-fact `pii.counts`; the engine writes the counts and flag in the document-stage commit (6a `:272`). Text is NFC with
+fact `pii.counts`; the engine writes the counts and flag in the document-stage commit (6a §6, §7.6). Text is NFC with
 NBSP and soft hyphens already normalised (§4.2), which matters for phone numbers and names.
 
 ### 9.1 Patterns (.NET, `Ume.Rag.Worker/Pii`)
@@ -414,7 +414,7 @@ per-type maximum over its current document-stage outputs; the locked template pa
 
 ### 9.5 Flags, `public` collections, clearing, re-flagging
 
-- **Blocking** is the index writer's membership rule (6a `:771-773`): `CollectionIds` never contains a `public`
+- **Blocking** is the index writer's membership rule (6a §14 rule 4): `CollectionIds` never contains a `public`
   collection while `PiiFlaggedAt` is set and `PiiClearedAt` is null. Chunk sets are still built, so clearing is a
   membership change, never re-processing.
 - **New flag in a document-stage commit**: `PiiFlaggedAt = now()`, `PiiClearedAt = null`; existing sets of the
@@ -524,14 +524,14 @@ Response:
 
 | Topic | Rule |
 |---|---|
-| Profile | `platform-default` → the `EmbeddingProfiles` row with `IsDefault` (`bge-m3`, 1024, cosine, `MaxInputTokens` 8192; data-model `:108`); other profiles only by platform admins (R3, `../../02-architecture-review.md:45-59`) |
+| Profile | `platform-default` → the `EmbeddingProfiles` row with `IsDefault` (`bge-m3`, 1024, cosine, `MaxInputTokens` 8192; data-model §2.1); other profiles only by platform admins (R3, `../../02-architecture-review.md:45-59`) |
 | Input | the embedded string of §6.5 (prefix + body); no instruction prefix (BGE-M3 dense retrieval uses none, *to verify*); queries are embedded raw by the Knowledge API with the same NFC normalisation |
 | Cache | per document: one `SELECT … WHERE "Classification" = @l AND "EmbeddingProfileId" = @p AND "TextHash" = ANY(@h)`; misses deduplicated, embedded, inserted `ON CONFLICT DO NOTHING` in their own short transaction (6a §7.6); `LastUsedAt` touched at most once a day per row; unused 30 days → deleted (platform plan §8). Dify's cached embedding is the precedent (`../../platforms/dify.md:218`) |
 | Batching | ≤ `batchSize` (64) inputs and ≤ 16,384 tokens per request (`TokenCount` sum; gateway limit *to verify*), all misses of one document, then the next document's in the same `embed` job only when it serves several documents |
 | Request | `POST /v1/embeddings` `{model: "bge-m3", input: [...], encoding_format: "float"}`; headers by the engine (6a §7.7): `x-ume-on-behalf-of` = owner team of the triggering source's collection, `x-ume-max-residency: OnPrem` always, `x-ume-run-id`, `x-ume-step: embed` |
 | Response checks | count equals inputs; each vector 1024 finite floats (else fatal `embed.bad_vector`); `x-ume-residency` ≤ `OnPrem` (else fatal, 5003); stored as returned (cosine is scale-invariant) |
 | Canary | at startup and hourly the worker embeds a fixed Swedish canary text and compares it with `EmbeddingProfiles.CanaryEmbedding` (new, §19): cosine < 0.999 → the `embed` class stops on this instance, health `unhealthy`, alert: the gateway alias now serves another model, which would silently mix vector spaces |
-| Concurrency | AIMD of 6a §18 (`:862-865`): baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `WorkerConcurrency.embed` |
+| Concurrency | AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `WorkerConcurrency.embed` |
 | Failures | 6a §7.3 table; a 400 for one input fails the document (`embed.input_rejected`, a bug: 400 tokens ≪ 8192); partial results of a failed batch are discarded and the batch retried whole |
 
 **Profile migration (P3 outline).** New profile row `building`; `rag_ensure_profile_index` (data-model §3.2); a
@@ -572,7 +572,7 @@ soft-deleted, for nothing; a noisy site would churn its whole index weekly.
 | Eligible chunks | current sets of the collection; body ≥ 50 tokens; not from PII-flagged documents (keeps personal data out of stored questions); not `quality.largeTable` rows beyond the first group |
 | Stratification | by document: round-robin over documents in seeded random order, ≤ `⌈N/D⌉ + 1` per document; by document type: proportional to chunk share, each type with ≥ 5 % of chunks gets ≥ 2; by position: long documents (> 10 chunks) draw from first, middle and last third; by kind: table row groups and lists at least their share, min(5, available) |
 | Seed | `SHA-256(setId ‖ round)`; the sample is reproducible |
-| Model | `Settings.EvaluationModel` (on-prem chat model in the gateway catalogue, §20.3) with the collection level's ceiling (`public` none, `internal` `Eu`, `sensitive` `OnPrem`; platform plan §6); `x-ume-step: eval-generate`; temperature 0.3; JSON output |
+| Model | `Settings.EvaluationModel` (on-prem chat model in the gateway catalogue, §20.3; must be a `GatewayModels` row servable `OnPrem`, admin design §4.10) with the collection level's ceiling (`public` none, `internal` `Eu`, `sensitive` `OnPrem`; platform plan §6); `x-ume-step: eval-generate`; temperature 0.3; JSON output |
 
 Prompt outline (Swedish, versioned as `PromptVersion`):
 
@@ -840,13 +840,14 @@ Parser-bound documents add inspect (≈ 20 ms per PDF) and conversion (parser §
 | Phase | Deliverable |
 |---|---|
 | P1 | *Detect* with inspect; *Auto-parse* rules, ranges, stitching, re-render, built-in profiles, observations; worker parse nodes; *Clean*; *Split by headings* with re-levelling; *Chunk* with the BGE-M3 tokenizer, row groups; *Metadata from path*; *Quality check*; *Detect personal data* with patterns, `/v1/ner`, `ner` class, flag rules, clear command, re-flag, 5103; *Embed* with cache and canary; noise re-key; generated sets with filtering; human questions; `Ume.Rag.Retrieval`; gates for pipeline publish, collection publish and retrieval settings; overrides; scheduled runs; tests of §17 |
-| P2 | try-and-score; learned profiles and cleanup rules with auto-apply and rollback; `pii-mask`; feedback-derived questions; skill test layer; parent-child chunks; `halfvec` evaluation (data-model §12.16); ONNX NER if the R1 data asks |
+| P2 | try-and-score; learned profiles and cleanup rules with auto-apply and rollback; `pii-mask`; feedback-derived questions; skill test layer; parent-child chunks only if §5.3's condition is met; `halfvec` evaluation (data-model §12.16); ONNX NER if the R1 data asks |
 | P3 | embedding-profile migration tooling and gate; answer-faithfulness judge; keyed PII fingerprints if count-based re-flagging proves too weak |
 
 ## 19. Changes to other documents
 
 Applied in the step 6c review commit (2026-10-29), except the admin plan items (step 10); engine, connectors and
-knowledge documents got pointer notes or answered-item updates.
+knowledge documents got pointer notes or answered-item updates; the consistency pass (step 11) applied the engine
+rows inline.
 
 | Document | Change |
 |---|---|

@@ -5,10 +5,11 @@ Detail step 6a of the Ume.Rag design. Details [`plan.md`](plan.md) §2, §4 and 
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §3, §6, §9, [`../parser/design.md`](../parser/design.md)
 §7, §8, §10 and [`../gateway-changes/design.md`](../gateway-changes/design.md) §3, §5, §7.1. Nothing is implemented.
 
-Sibling documents, **to be written**: [`design-connectors.md`](design-connectors.md) (6b: connector internals, crawl
-frontier, change detection, deletion guard, child documents) and [`design-processing.md`](design-processing.md) (6c:
-auto-parse heuristics, chunking, embedding profile, personal-data detection, evaluation and the publish gate). This
-document defines the contracts they plug into. Changes it needs elsewhere are listed in §21; questions in §22.
+Sibling documents (written after this one; where they refine it, they win): [`design-connectors.md`](design-connectors.md)
+(6b: connector internals, crawl frontier, change detection, deletion guard, child documents) and
+[`design-processing.md`](design-processing.md) (6c: auto-parse heuristics, chunking, embedding profile, personal-data
+detection, evaluation and the publish gate). This document defines the contracts they plug into. Changes it needs
+elsewhere are listed in §21; questions in §22.
 
 **Gateway conventions copied** (`~/git/llmgateway`, read-only):
 
@@ -27,7 +28,7 @@ document defines the contracts they plug into. Changes it needs elsewhere are li
 |---|---|---|
 | 1 | Engine | Small custom DAG executor in the worker on the Postgres queue (comparison §4); executes **one document** at a time, in process, topological order (§7) |
 | 2 | Work model | **Reconciliation**: desired state = every live `DocumentSources` row points to the chunk set its source's published pipeline produces from the document's current content. `EnsureCurrent(document)` enqueues only what is missing; a nightly sweep catches drift (§2.3) |
-| 3 | Jobs per document | Nodes declare a job class (`fetch`, `parse`, `embed` or `inline`); the engine runs a document until it reaches a node of another class, then enqueues **one continuation job** in the same transaction as its state. Typically 2 jobs per web page, 3 per PDF (§7.4). Not a queue per step (KM lesson) |
+| 3 | Jobs per document | Nodes declare a job class (`fetch`, `parse`, `ner`, `embed` or `inline`); the engine runs a document until it reaches a node of another class, then enqueues **one continuation job** in the same transaction as its state. Typically 3 jobs per web page, 4 per PDF (§7.4). Not a queue per step (KM lesson) |
 | 4 | Stage sharing | Merkle hash per node over (type, version, canonical params, upstream hashes); `DocumentStageHash` = hash at the stage boundary, `PipelineHash` = hash at *Write*. Node ids, labels, forms and layout never enter a hash (§3.3) |
 | 5 | Validation | One shared library `Ume.Rag.Pipelines` (definition, validator, hashing) used by admin **and** worker, driven only by manifest data; every node rule must be expressible in JSON Schema (§4) |
 | 6 | Results | `Success | TransientError | FatalError`; capacity refusals (`busy`, `not_ready`, `duplicate_in_flight`, 429, unconfirmed config) requeue **without** an attempt (§7.3) |
@@ -62,7 +63,7 @@ everything else runs at document level (the separation KM lacked, `../../platfor
 | `RawContent` | blob reference (`documents/{id}/raw/{hash}`), media type declared and sniffed, size, URL or upload facts; carries a `Facts` bag (Detect results, inspect signals) | root nodes, *Headless render*, *Detect* (adds facts) |
 | `ParsedDocument` | parser `result.json` shape (blocks with `md`, level, page, layer; tables; pages with signals; parser design §7.3), plus `Facts` | parse nodes, *Clean*, *Detect personal data* |
 | `Sections` | ordered sections with heading path, page span, block refs | *Split by headings* |
-| `Chunks` | `flat` or `parent-child` (subtype, data-model `Chunks.Kind`), text, heading path, page, tags, document type, token count | *Chunk*, *Metadata from URL/path* |
+| `Chunks` | `flat` (P1, written as `Chunks.Kind = child`; `parent-child` only if evaluation shows query-time section expansion insufficient, 6c §5.3), text, heading path, page span, overlap characters, tags, document type, token count | *Chunk*, *Metadata from URL/path* |
 | `EmbeddedChunks` | `Chunks` + vector + profile id | *Embed* |
 | `T` | generic, bound by the incoming edge, with a constraint list | *Switch*, *Quality check* |
 
@@ -253,7 +254,7 @@ All version 1. Class: job class (§7.4); cache: §8. Details column: which docum
 | `crawl` (crawl root) | – → `out: RawContent` | `render` (`never`/`if-enabled`/`always`) | fetch | none | 6b |
 | `upload` (upload root) | – → `out: RawContent` | – (limits from source) | fetch | none | 6b |
 | `headless-render` | `in: RawContent` → `out: RawContent` | `timeoutSeconds` (30), `waitFor` (`networkidle`); passes input through with fact `render.not_enabled` when the source does not allow rendering | fetch | intermediate | 6b |
-| `detect` | `in: RawContent` → `out: RawContent` (+facts) | `inspect` (true: call parser `/v1/inspect` for PDF/TIFF) | inline | intermediate | 6c (signals: parser §6) |
+| `detect` | `in: RawContent` → `out: RawContent` (+facts) | `inspect` (true: call parser `/v1/inspect` for PDF, TIFF, Office, email; 6c §2) | inline | intermediate | 6c (signals: parser §6) |
 | `switch` | `in: T` → one port per case + `default` | `on` (`mediaType`/`language`/`scanned`/`fact:<name>`), `cases` | inline | none | 6a |
 | `auto-parse` | `in: RawContent` → `parsed: ParsedDocument`, `fallback: RawContent` (optional) | `ocr` (`auto`/`force`/`off`), `tables` (`fast`/`accurate`), `profiles` (true), `maxPages` (2,000) | parse | **durable** | 6c (ranges, stitching: parser §8) |
 | `html-main-content` | `in: RawContent` → `out: ParsedDocument` | `cleanupRules` (`none`/`learned`), `keepTables` | inline | durable | 6c |
@@ -263,9 +264,9 @@ All version 1. Class: job class (§7.4); cache: §8. Details column: which docum
 | `csv-table` | `in: RawContent` → `out: ParsedDocument` | `delimiter` (auto), `headerRows` (1) | inline | durable | 6c |
 | `clean` | `in: ParsedDocument` → `out: ParsedDocument` | `dropFurniture` (true), `minBlockChars`, `dehyphenate` | inline | intermediate | 6c |
 | `quality-check` | `in: T ∈ {ParsedDocument, Chunks}` → `pass: T`, `fail: T` | `minChars`, `maxGarble`, `minOcrConfidence`, `maxEmptyChunkRatio` | inline | none | 6c |
-| `detect-personal-data` (locked) | `in: ParsedDocument` → `out: ParsedDocument` | `types` (personnummer, phone, email, name), `ner` (true) | inline | intermediate | 6c (answered 6) |
+| `detect-personal-data` (locked) | `in: ParsedDocument` → `out: ParsedDocument` | `types` (personnummer, phone, email, name), `ner` (true) | ner (inline when `ner: false`) | intermediate | 6c §9 (answered 6) |
 | `split-headings` | `in: ParsedDocument` → `out: Sections` | `maxLevel` (4), `relevelLayoutHeadings` (true) | inline | intermediate | 6c |
-| `chunk` | `in: Sections` → `out: Chunks` | `mode` (`flat`; `parent-child` P2), `maxTokens` (400), `overlapPercent` (15), `prependHeadingPath` (true), `tableRowGroups` (true) | inline | intermediate | 6c (answered 8) |
+| `chunk` | `in: Sections` → `out: Chunks` | `mode` (`flat`; `parent-child` only if 6c §5.3's condition is met), `maxTokens` (400), `overlapPercent` (15), `prependHeadingPath` (true), `tableRowGroups` (true) | inline | intermediate | 6c (answered 8) |
 | `metadata-from-path` | `in: Chunks` → `out: Chunks` | `rules` (pattern → tags, document type, date) | inline | none | 6c |
 | `embed` (locked profile) | `in: Chunks` → `out: EmbeddedChunks` | `profile` (`platform-default`), `batchSize` (64) | embed | none (embedding cache) | 6c |
 | `write` (locked) | `in: EmbeddedChunks` → – | – | embed | none | 6a (§14) |
@@ -311,7 +312,7 @@ Queue mechanics are data-model §4.2: `TransientError` → `AvailableAt = now + 
 | Cause | Result | Attempt counted | Next |
 |---|---|---|---|
 | Parser `busy` / `not_ready` / `duplicate_in_flight` (parser §7.5) | transient | no | `Retry-After` (default 5 s) |
-| Parser `timeout`, `worker_crashed`, `resource_limit` / `ocr_failed`, `conversion_failed` | half the range inside the job (6c), single page → fatal / transient once, then fatal | – / yes | – / back-off |
+| Parser `timeout`, `worker_crashed`, `resource_limit` / `ocr_failed`, `conversion_failed` | half the range inside the job; a single page that still fails is a **missing page** (`degraded` while ≤ 10 % and ≤ 20 pages, else fatal; 6c §3.3) / transient once, then as before | – / yes | – / back-off |
 | Parser 400 / 413 / 415 / 422 others | fatal: `failed`, `too-large`, `unsupported`, `encrypted`, `corrupt`; `limit_exceeded` also event 5104 | – | – |
 | Gateway 429 or 503 with `Retry-After` / other 5xx, timeouts | transient | no / yes | `Retry-After` / back-off |
 | Gateway 402 (budget used up) | transient | yes | `AvailableAt` = next full hour; after `MaxAttempts` `failed`, reason `gateway.budget_exhausted` |
@@ -327,7 +328,7 @@ A job that crashes the whole process (e.g. OOM) is reclaimed by the reaper with 
 
 ### 7.4 Job segments and continuations
 
-Each node's `jobClass` is `fetch`, `parse`, `embed` or `inline`. The engine runs nodes inside the current job while
+Each node's `jobClass` is `fetch`, `parse`, `ner`, `embed` or `inline`. The engine runs nodes inside the current job while
 they are `inline` or of the job's class. At the first node of another class it stops, and in **one transaction**
 writes the document-stage results reached so far (if any), enqueues the continuation job (class of that node,
 payload: execution id, pipeline version, node id, cache key of its input) with a dedup key, and completes the current
@@ -337,12 +338,13 @@ document instead of a queue per step.
 
 | Document | Jobs |
 |---|---|
-| Web page | `fetch` (fetch, detect, html, clean, PII, split, chunk) → `embed` (embed, write) |
+| Web page | `fetch` (fetch, detect, html, clean) → `ner` (PII, split, chunk) → `embed` (embed, write) |
 | Unchanged web page (304 or same hash) | `fetch` only |
-| PDF / Office | `fetch` (fetch, detect) → `parse` (auto-parse … chunk) → `embed` |
+| PDF / Office | `fetch` (fetch, detect) → `parse` (auto-parse, clean) → `ner` (PII … chunk) → `embed` |
 | Shared document, second pipeline | `embed` only, reading the cached boundary output |
 
-Per-class concurrency then holds by construction: parser slots are only used by `parse` jobs, gateway embedding
+Per-class concurrency then holds by construction: parser slots are only used by `parse` jobs, the parser's NER lane
+only by `ner` jobs, gateway embedding
 load only by `embed` jobs, politeness by `fetch` (Eneo and Dify run everything through one worker, F4,
 `../../platforms/eneo.md:228`, `../../platforms/dify.md:234`).
 
@@ -408,7 +410,10 @@ fatal `gateway.delegation_not_applied`. `x-ume-cost-usd` is added to the node's 
 - **Key** (data-model §9): `SHA-256(inputHash ‖ nodeType ‖ nodeVersion ‖ paramsHash)`; `inputHash` = SHA-256 over
   the sorted `(port, outputHash)` of the active inputs; for the first node after the root, the raw content hash.
   `NodeOutputs` gains `OutputHash` (SHA-256 of the serialised output) so the next key can be computed **without
-  loading the blob**: resuming or re-planning walks the path from the root with one primary-key lookup per node.
+  loading the blob**: resuming or re-planning walks the path from the root with one primary-key lookup per node. The
+  `OutputHash` of a `ParsedDocument` covers content only (blocks, tables, pages with signals, title, language) and
+  **excludes** volatile facts (ETag, fetch time, timings, parser build), so a noise-only change can re-key a chunk set
+  (6c §12).
 - **Classes** (manifest `metadata.cacheClass`):
 
 | Class | Nodes | Kept |
@@ -440,20 +445,19 @@ Data-model §4.2 holds order, leases and attempts. Concurrency defaults below ar
 |---|---|---|---|
 | `preview` | 2 | `kind` (`node-preview`/`publish-plan`; 6b: `preflight`/`hierarchy`), `pipelineVersionId`, `documentIds` or `urls` (a `preflight` of a URL list samples ≤ 20 URLs, admin design §4.7), `untilNodeId`, `basePreviewJobId` | §11, §12 |
 | `command` | 2 | `kind` + ids: `clear-pii-flag`, `confirm-deletion`, `reject-deletion`, `approve-profile`, `rollback-profile`, `edit-eval-question`, `recompute-membership`, `reprocess-document`, `cancel-run`, `release-hold` (admin design §4.7) | 6a/6b/6c each own their kinds |
-| `sync` | 2 | `sourceId`, `runId`, `kind` (`sync`/`retry-failed`/`reprocess`), `scheduledFor`, `force`, `fromNode`, connector checkpoint | 6b (listing), §9.2 |
+| `sync` | 2 | `sourceId`, `runId`, `kind` (`sync`/`retry-failed`/`reprocess`), `phase` (`list`/`fetch`/`reconcile`), `scheduledFor`, `force`, `fromNode`, checkpoint reference (`ConnectorCheckpoints`, 6b §2.3); uploads `batchId` | 6b (listing, reconcile), §9.2 |
 | `fetch` | 8 (frontier limits per host) | `sourceId`, `runId`, identity or frontier entry; `executionId` once known | 6b, then §7 |
 | `parse` | `min(Settings, /v1/info capacity.convert_slots)` | `documentId`, `level`, `executionId`, `pipelineVersionId`, `nodeId`, `inputKey`, `slice` | §7, §9.5 |
+| `ner` | `/v1/info capacity.ner_slots` × 2 (6c §9.6) | as `parse` | §7, 6c §9 |
 | `embed` | 4, adaptive (§18) | `documentId`, `level`, `executionId`, `pipelineHash`, served `(sourceId, runId)` pairs, `inputKey` | §7, §14 |
-| `eval` | 1 | 6c | 6c |
+| `eval` | 1 | `kind`: `generate-set`, `top-up-set`, `pipeline-publish`, `collection-publish`, `retrieval-change`, `scheduled`, P2 `skill-gate`, `profile-auto-apply` (admin design §4.7); subject ids, candidate settings | 6c §13–§14 |
 | `attachment` (P2) | 2 | `attachmentId`, `conversationId`, `level` (chat design §15.2) | scan (ClamAV, fail-closed) → sniff/type check → parse → chunk → PII (recorded, not blocking) → embed on-prem → post chunks to the API's internal route; high priority (dispatched right after `preview`); never writes `chat` and holds no chat keys |
 
 `Worker:Classes` lists the classes an instance runs (`crawl` is not a class: discovery is part of `sync`/`fetch`, §21).
 
-> **Refined by 6c** (`design-processing.md` §19): new job class **`ner`** (*Detect personal data*; concurrency from
-> the parser's `capacity.ner_slots`), so a web page is `fetch` → `ner` → `embed`; a single page failing after
-> halving is a *missing page* (`degraded` up to 10 %, else `failed`); `OutputHash` of `ParsedDocument` excludes
-> volatile facts; the gate builds a sub-corpus and shadow executions never write `Documents` facts, PII or children;
-> the index writer gets a re-key path for noise-only changes; the NER estimate in §18 is 0.3–1.0 s per page.
+> **Refined by 6c** (`design-processing.md` §19), applied inline in the consistency pass: job class **`ner`** (§6,
+> §7.4, above); missing pages (§7.3); `OutputHash` without volatile facts (§8); sub-corpus gate and shadow executions
+> (§12.1); re-key path for noise-only changes (§14); NER cost (§18).
 
 ### 9.2 How a sync fans out
 
@@ -479,7 +483,7 @@ Data-model §4.2 holds order, leases and attempts. Concurrency defaults below ar
 ### 9.3 Dispatcher and fairness
 
 One dispatcher loop per instance (woken by `LISTEN rag_jobs`, polling every 2 s; data-model §4.3) fills free slots in
-class order (`preview`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`). Within a class:
+class order (`preview`, P2 `attachment`, `command`, `sync`, `fetch`, `parse`, `ner`, `embed`, `eval`). Within a class:
 
 - the list of departments with ready jobs is read every 5 s with a recursive-CTE loose index scan over
   `IX_Jobs_Ready` (Postgres 17 has no skip scan), cached in memory;
@@ -515,7 +519,8 @@ this is the "worker restart loses no work" target.
 - **Slicing**: a `parse` job yields after 10 minutes at a range boundary: it writes the completed ranges, re-enqueues
   itself with `slice + 1` at the back of its department's queue (no attempt), and completes. One 2,000-page OCR PDF
   (≈ 2 hours, parser §14) then shares the parser with other departments instead of holding it.
-- `/v1/inspect` (inside *Detect*) uses the parser's separate inspect lane and is not counted against slots.
+- `/v1/inspect` (inside *Detect*) uses the parser's separate inspect lane and is not counted against slots; `/v1/ner`
+  uses its own NER lane, bounded by the `ner` class (6c §9.6).
 
 ### 9.6 Scheduler
 
@@ -542,9 +547,11 @@ A `BackgroundService` on every instance; the instance holding `pg_try_advisory_x
 
 ### 10.1 Run states
 
-`running` → `succeeded` | `degraded` | `failed` | `awaiting-deletion-confirmation` (6b) | **`cancelled`** (new: source
-paused or deleted, or `cancel-run` command). Kinds `sync`, `retry-failed`, `reprocess` (publish, rollback, follow
-runs); `Trigger`: `schedule`, `manual`, `upload`, `publish`, `rollback`, `shared-document`, `retry`.
+`running` → `succeeded` | `degraded` | `failed` | `awaiting-deletion-confirmation` (6b §13.2, set by the finalizer
+when the guard left `DeletionProposals` waiting) | **`cancelled`** (new: source paused or deleted, or `cancel-run`
+command). Kinds `sync`, `retry-failed`, `reprocess` (publish, rollback, follow runs); `Trigger`: `schedule`,
+`manual`, `upload`, `publish`, `rollback`, `shared-document`, `retry`, `config-change` (scope or identity edits, 6b
+§12.4), P2 `notification` (SharePoint). `Runs.Phase` (`list` → `fetch` → `reconcile` → `done`) tracks a sync run.
 
 ### 10.2 Outcomes
 
@@ -581,8 +588,11 @@ F6).
 
 Every 30 s (advisory-lock leader): for `running` runs whose `sync` job is terminal and that no `queued`/`running` job
 serves (new `Jobs.RunIds uuid[]`: every run a job serves, since one shared `embed` job can serve the triggering run
-and follow runs; partial GIN index on open jobs, §21), aggregate `RunItems` into the counters and
-`CostUsd`, set `State` and `FinishedAt`. Counters are derived, never incremented by jobs, so retries cannot double-count
+and follow runs; partial GIN index on open jobs, §21): if a `sync`-kind run's fetches are done and it has not
+reconciled yet, enqueue its `sync` job with `phase = reconcile` (deletions and the guard, 6b §13.2) and wait for it;
+then aggregate `RunItems` into the counters and `CostUsd`, set `State` and `FinishedAt`. For a publish gate (6c §14.1)
+the finalizer likewise enqueues the measuring `eval` job when no job carrying the gate's `EvaluationRuns.Id` in
+`RunIds` is open. Counters are derived, never incremented by jobs, so retries cannot double-count
 and no hot row is updated per document.
 
 ### 10.5 What the admin shows (consumed by the admin plan §4)
@@ -624,7 +634,7 @@ and no hot row is updated per document.
 |---|---|---|
 | 1 | admin | validate the draft (§4 incl. live support); version → **`gating`** (read-only while plan and gate run; admin design §6.6), plan and gate job ids stored (`PlanJobId`, `GateRunId`) |
 | 2 | worker (`preview`, `kind = publish-plan`) | the **re-processing plan** (§12.2) and cost/time forecast into `Jobs.Result` |
-| 3 | worker (`eval`) | the **gate hook**: `IPublishGate.RunAsync(candidateVersion, sample)`; the sample's chunk sets are built for real as **shadow sets** (`CollectionIds = '{}'`, `DeletedAt = now()`, invisible to retrieval), so the work is reused on publish. Gate logic, sample size and thresholds: 6c (plan §7) |
+| 3 | worker (`eval`) | the **gate hook**: `IPublishGate.RunAsync(candidateVersion, sample)`; the chunk sets of a **sub-corpus** (the sample's expected documents plus distractors, 6c §14.1) are built for real as **shadow sets** (`CollectionIds = '{}'`, `DeletedAt = now()`, invisible to retrieval) by normal `parse`/`ner`/`embed` jobs at `Priority` 5 carrying the `EvaluationRuns.Id` in `RunIds`; shadow executions write node outputs and shadow sets only, never `Documents` facts, PII counts or child documents; the work is reused on publish. Gate logic, sample size and thresholds: 6c §14 |
 | 4 | user | sees plan, forecast and gate result; confirms (a failed gate blocks; override rules are 6c's); cancel or a failed gate without override returns the version to `draft` |
 | 5 | admin | one config transaction: checks that the version's stored hashes equal the hashes the gate measured (`EvaluationRuns.SubjectVersion`), version → `published` (`PublishedAt`, `GateRunId`), previous → `superseded`, `Pipelines.PublishedVersionId`; audit 6001; enqueues a `reprocess` `sync` per source using the pipeline |
 | 6 | worker | `EnsureCurrent` per live reference; the run items say `updated`, or `unchanged` when the set was already current |
@@ -753,7 +763,9 @@ public interface IIndexWriter
 {
     // One transaction: fence, chunk set (new, reused or revived), pointers, membership, run items, job completion.
     Task<IndexWriteResult> WriteAsync(ChunkSetWrite write, ExecutionFence fence, CancellationToken ct);
-    // Soft-deletes references (6b decides which); recomputes membership; documents without live references get DeletedAt/PurgeAfter.
+    // Soft-deletes references (6b decides which) and the same source's references of their child (attachment) documents;
+    // recomputes membership; documents without live references get DeletedAt/PurgeAfter. A reference seen again within
+    // the 14-day grace is revived (6b §13.4).
     Task<int> SoftDeleteReferencesAsync(IReadOnlyList<DocumentSourceKey> refs, Guid runId, CancellationToken ct);
     // Recomputes CollectionIds of every set of a document (PII cleared, collection level changed); batches of 1,000 chunks.
     Task RecomputeMembershipAsync(Guid documentId, Classification level, CancellationToken ct);
@@ -780,6 +792,10 @@ Transactional rules (schema: data-model §2.2):
    (data-model shared-chunk rule); copy to `Chunks.CollectionIds` where it changed; a set left with `{}` gets
    `DeletedAt = now()` (14-day grace). Shadow writes (§12.1) skip steps 3–4 and create the set already deleted.
 5. **Run items** for each served `(source, run)`, then the job completion; commit.
+
+**Re-key** (noise-only change, 6c §12): in the fenced document-stage commit, a live reference's current set whose
+`InputHash` equals the new boundary `OutputHash` (same `PipelineHash` and profile) gets `ContentHash = @new` in one row
+update; no collection-stage job, run item `unchanged`, reason `change.noise`.
 
 A retrieval statement sees either the old or the new set (one snapshot), never both or neither. Limits: 20,000
 chunks per set (above: outcome `too-large`, §16). Large membership changes (shared sets above 10,000 chunks) are
@@ -837,6 +853,10 @@ never source names, URLs or titles):
 | `rag.embed.tokens`, `rag.embed.concurrency_limit`, `rag.ingestion.cost` (USD) | counter, gauge, counter | –, –, class |
 | `rag.scheduler.lag` (s), `rag.reconcile.drift`, `rag.preview.duration` (s) | histogram, counter, histogram | –, –, kind |
 
+Connector metrics (`rag.connector.*`, `rag.crawl.*`, `rag.render.*`, `rag.egress.blocked`, `rag.clamav.*`,
+`rag.deletion.*`) are 6b §16; processing metrics (`rag.parse.*`, `rag.pii.*`, `rag.embed.cache`, `rag.chunkset.rekeyed`,
+`rag.evaluation.*`) are 6c §15.
+
 - **Traces**: one span per job (`rag.job {class}`) with child spans per node (`rag.node {type}`) and the HTTP client
   spans to parser and gateway, which continue the trace there. A continuation job stores the `traceparent` of its
   predecessor in its payload and starts with a **link** to it, so fetch → parse → embed of one document is one
@@ -858,7 +878,7 @@ never source names, URLs or titles):
 |---|---|---|---|---|
 | Worker CPU (fetch, AngleSharp + SmartReader, clean, regex PII, tokenizer, JSON) | ≈ 80 ms | ≈ 0.25 cores | 1.5 cores | `fetch` concurrency 8 covers ~200 ms fetch latency |
 | Politeness | – | 2.8 req/s on umea.se | 10 req/s municipal (answered 4) | external hosts at 1 req/s cap a single external site at 3,600 pages/h |
-| Parser NER lane (names) | ≈ 100 ms | ≈ 0.3 cores | parser 4 cores | must not queue behind conversions (§21, 6c) |
+| Parser NER lane (names) | ≈ 0.3–1.0 s of a 2-thread lane (6c §16) | ≈ 1–3 lanes' worth of CPU | parser 4 cores | own lane, never behind conversions; **the likely bottleneck**: prefilter, cache and quantisation are the levers |
 | Embedding (≈ 8 chunks × 450 tokens) | ≈ 3,600 tokens | ≈ 10,000 tokens/s | gateway's on-prem BGE-M3 | **the bottleneck to verify** (§23) |
 | Postgres: chunk inserts with HNSW, run items, jobs | ≈ 8 rows + 2 jobs | ≈ 22 vector inserts/s, ≈ 20 statements/s | 3 cores, pool 10 | HNSW insert ~1–3 ms each |
 | WAL | ≈ 50 KB | ≈ 140 KB/s | – | – |
@@ -900,7 +920,7 @@ CPU and pool waits, and the embed limit's behaviour.
 |---|---|
 | P0 | `Jobs` table and partitions (P0 checklist #6); dispatcher skeleton with leases, heartbeat, reaper; `WorkerInstances`; one `command` kind end to end |
 | P1 | `Ume.Rag.Pipelines` (format, validator, hashes); manifest registration and support check; engine with segments, fence, cache; all P1 nodes (internals 6b/6c); fairness, slicing, parser capacity; scheduler with defaults and jitter; runs, outcomes, finalizer, follow runs; preview; publish plan, gate hook, rollback; templates `website`, `url-list`, `files`; index writer; drift sweep; metrics, 5105; the tests of §19; R1 test passed |
-| P2 | canvas editing (admin); try-and-score (Auto-parse fan-out, 6c); error ports on nodes; parent-child chunks; P2 nodes; office-hours concurrency profiles if the R1 data asks for them; per-department caps in `Settings` |
+| P2 | canvas editing (admin); try-and-score (Auto-parse fan-out, 6c); error ports on nodes; parent-child chunks only if evaluation shows section expansion insufficient (6c §5.3); `attachment` class (chat design §15.2); P2 nodes; office-hours concurrency profiles if the R1 data asks for them; per-department caps in `Settings` |
 | P3 | more connectors; per-class worker deployments next to a separate parser host (`Worker:Classes`) |
 
 ## 21. Changes to other documents

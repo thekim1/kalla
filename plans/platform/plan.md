@@ -13,6 +13,9 @@ One repository, one solution, like the gateway:
 src/
   Ume.Rag.Domain/            entities, enums, port types, classification, access policy, shared contracts
   Ume.Rag.Infrastructure/    EF Core DbContexts, Postgres queue + outbox, Redis keys, gateway client, blob storage
+  Ume.Rag.Retrieval/         search core shared by the knowledge API, the evaluator and the admin test panel
+  Ume.Rag.Answering/         knowledge and chat answer core without HTTP (API and the admin test panel)
+  Ume.Rag.Pipelines/         pipeline definition format, validator, Merkle hashes (admin and worker)
   Ume.Rag.ServiceDefaults/   OpenTelemetry, health, problem responses, security headers (copy of gateway's)
   Ume.Rag.Api/               data plane: Knowledge API + Chat API + MCP server endpoint groups (role setting)
   Ume.Rag.Tools/             tool hub: MCP client, tool policy re-check, credentials, audit (skills runtime is in the chat role; see ../tools)
@@ -50,7 +53,7 @@ zones** from day one, even when they share a host (P2 adds a third, `tools-hoste
 | control | `rag-admin` | Ume.Rag.AdminApi | Admin API + static admin UI |
 | ingestion | `rag-worker` | Ume.Rag.Worker | Hard CPU/memory limits, lower CPU priority |
 | ingestion | `rag-parser` | parser | Hard limits; no egress; internal network only; first to move to its own host |
-| ingestion | `rag-renderer` | Playwright + Chromium | Headless rendering for JavaScript-only pages (P1); crawler egress rules apply |
+| ingestion | `rag-renderer` | Playwright + Chromium | Headless rendering for JavaScript-only pages (P1); no egress: the worker fetches every browser request through its egress guard (connectors design §8.3) |
 | ingestion | `rag-clamav` | ClamAV | Scans uploads and fetched files before parsing; signatures updated directly from database.clamav.net (decided: no mirror) |
 | – | `rag-migrate` | Ume.Rag.MigrationService | One-shot on deploy |
 
@@ -223,14 +226,15 @@ encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, t
 
 - Each conversation has its own data key (AES-256-GCM). Message text, titles, feedback comments, tool arguments and
   results, and the snapshot of cited source text are encrypted before they reach the database. Metadata (times,
-  assistant, user `oid`, token counts, cost, outcome) stays readable for statistics and retention.
+  assistant, subject id, token counts, cost, outcome) stays readable for statistics and retention.
 - Data keys are stored wrapped by a **master key per level** held in a key service behind `IKeyProvider`: Azure Key
   Vault / Managed HSM in Azure, OpenBao/HashiCorp Vault or an HSM on-prem, a local key file in development.
   **Postponed (2026-10-29): the pilot uses the file key provider**; Azure Key Vault is the intended target (see
   `../postponed-decisions.md`, item K1). Pilot rules for file keys:
   - master keys (one per level and shred month) are 256-bit random files in the deployment secrets directory
-    (`secrets/keys/<key name>`, mode 0400), mounted only into `rag-api` and `rag-admin`, never into Postgres or the
-    worker's blob paths; created by `init-deployment.sh --key-provider file --allow-file-keys`;
+    (`secrets/keys/<key name>`, mode 0400), never mounted into Postgres; the chat keys (`rag-chat-*`) only into
+    `rag-api` and `rag-admin`, the blob keys (`rag-blob-<level>`) into `rag-worker`, `rag-admin` (uploads) and read-only
+    into `rag-api` (citation downloads; repo-and-deployment §6.3); created by `init-deployment.sh --key-provider file --allow-file-keys`;
   - backed up **separately** from database backups, and those key backups kept **no longer than the shred schedule**
     (≤ 30 days), otherwise destroyed bucket keys come back from backup;
   - destroying a shred bucket = deleting its key file, logged in `audit."AuditLog"`;
@@ -264,7 +268,7 @@ envelope-encrypted per document with the same key service.
 - Storage access goes through a **tier resolver**: (classification) → (Postgres connection, blob container, master
   key). Default configuration: one tier for everything.
 - Rules that keep a later split cheap: no foreign keys or joins across classification levels; content and chat rows
-  carry their level; retrieval already fuses result lists with RRF (knowledge API §3), so an assistant spanning tiers
+  carry their level; retrieval already fuses result lists with RRF in .NET (knowledge design §6.5), so an assistant spanning tiers
   queries each tier and fuses.
 - Turning on a `sensitive` tier (its own on-prem Postgres instance, encrypted volume, master key and database
   credentials) is a configuration change plus a migration job that moves existing `sensitive` rows.
@@ -288,7 +292,7 @@ worker plan (§7) and admin plan. The postponed Swedish benchmark becomes the cu
 - **Observability**: OpenTelemetry traces, metrics and logs from every service; one trace follows a chat message
   through retrieval, tool calls and the gateway; ingestion runs carry the run id; config version in every log scope.
 - **Security**: crawler egress blocks private ranges unless allow-listed (SSRF); parser and MCP servers have no egress
-  beyond what they need; uploads limited by size and type; secrets from env/secret store (Key Vault on Azure); prompt
+  beyond what they need; uploads limited by size and type; secrets as files, key-per-file, never environment variables (repo-and-deployment §6.3); prompt
   injection rules in `../tools/plan.md` §6.
 - **Testing**: unit; integration against real Postgres/Redis (Aspire/Testcontainers); fake gateway; end-to-end
   browser tests; evaluation sets in CI on a fixture collection; the R1 release test.

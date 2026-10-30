@@ -1,7 +1,9 @@
 # Ingestion worker: plan
 
-**Detailed design**: [`design-engine.md`](design-engine.md) (6a: engine, nodes, jobs, runs, preview, publish);
-`design-connectors.md` (6b) and `design-processing.md` (6c) to follow. Where they differ, the designs win.
+**Detailed design**: [`design-engine.md`](design-engine.md) (6a: engine, nodes, jobs, runs, preview, publish),
+[`design-connectors.md`](design-connectors.md) (6b: connectors, frontier, change detection, deletion guard) and
+[`design-processing.md`](design-processing.md) (6c: parsing, chunking, personal data, embedding, evaluation, gates).
+Where they differ, the designs win.
 
 Background service that keeps the document store and collection indexes in step with their sources: it runs
 connectors, executes each source's pipeline (a typed DAG), decides how to parse each document, embeds through the
@@ -32,14 +34,17 @@ plane, a small capped Postgres connection pool and its own `statement_timeout`.
 | Pipeline engine | Executes a published pipeline version per document; caches node outputs |
 | Node catalogue | `IPipelineNode` implementations with typed ports and JSON-schema parameters; registered as a manifest (R7) |
 | Auto-parse | Chooses a parse strategy per document/page; records observations; learns profiles |
-| Index writer | Upserts a collection's chunks and embeddings per document in batches; soft deletes |
+| Index writer | Writes shared chunk sets (one per document, whole-pipeline hash and profile) and their collection membership in one fenced transaction per document; soft deletes and revivals (design-engine §14) |
 | Evaluator | Generates and runs evaluation sets; computes gates (R6) |
 | Run recorder | One run per sync, one run item per document with outcome, reason, strategy chosen, cost |
 
-**Job classes**, in priority order: `preview` (interactive, always first), `command` (admin decisions applied by the
-worker: clear a PII flag, confirm a deletion, approve or roll back a profile, edit human evaluation questions), `sync`,
-`fetch`, `parse`, `embed`, `eval`. Table design: `../platform/data-model.md` §4.
-`parse` concurrency equals the parser sidecar's capacity, so the sidecar is never overloaded.
+**Job classes**, in priority order: `preview` (interactive, always first; kinds `node-preview`, `publish-plan`,
+`preflight`, `hierarchy`), P2 `attachment` (chat attachments, right after `preview`; chat design §15.2), `command`
+(admin decisions applied by the worker: clear a PII flag, confirm or reject a deletion, release a hold, approve or roll
+back a profile, edit human evaluation questions, reprocess a document, cancel a run, recompute membership), `sync`,
+`fetch`, `parse`, `ner` (names for *Detect personal data*), `embed`, `eval`. Table design: `../platform/data-model.md`
+§4; kinds and payloads: design-engine §9.1. `parse` concurrency equals the parser's `capacity.convert_slots` and `ner`
+follows its `capacity.ner_slots`, so the sidecar is never overloaded.
 
 ## 3. Connector contract
 
@@ -51,8 +56,9 @@ Small capability interfaces (after Onyx), each optional:
 - `IHierarchyConnector`: folders/sites for the admin UI.
 - `IPreflightCheck`: validates an unsaved source configuration and explains fixes.
 
-Every fetched item gets a **canonical identity** (normalised URL without tracking parameters, SharePoint drive item
-id, or file hash). If the document store already has it with the same content hash **at the same classification
+Every fetched item gets a **canonical identity** (normalised **final URL after redirects** without tracking
+parameters, plus the variant `origin`/`rendered`; `rel=canonical` is never trusted; SharePoint drive item id, or file
+hash; design-connectors §3, §8.4). If the document store already has it with the same content hash **at the same classification
 level**, the fetch result is shared and nothing is re-parsed (R2); across levels documents are never shared (platform
 plan §3). Every LLM call in a pipeline (enrichment, judge, evaluation generation) sends the residency ceiling of the
 source's level (platform plan §6). Source settings are tagged by effect (identity, scope, behaviour, cosmetic) so an edit
@@ -63,8 +69,12 @@ produces the smallest re-sync.
 - *URL list*: exactly the listed URLs; conditional GET (ETag / Last-Modified).
 - *Website crawl*: start URL or sitemap, include/exclude patterns, max depth/pages, robots.txt, identifying user
   agent, SSRF protection, crawl report with failure reasons. Sources crawling the same host share the frontier and
-  its rate limit. Optional headless rendering via the `rag-renderer` container (P1, decided).
-- *File upload*: files from the admin API through blob storage; size/type limits. Pilot types (parser design §3):
+  its rate limit. Optional headless rendering via the `rag-renderer` container (P1, decided), chosen per page with
+  the source setting `render: auto` (JavaScript-only pages), the worker fetching every browser request
+  (design-connectors §8).
+- *File upload*: files from the admin API through blob storage in upload batches (create → one request per file →
+  commit, which enqueues the `sync`; design-connectors §9.1); size/type limits; identity by content hash, file names
+  only per source (`DocumentSources.DisplayName`). Pilot types (parser design §3):
   PDF, DOCX/PPTX/XLSX, legacy `.doc`/`.xls`/`.ppt`, `.odt`/`.ods`/`.odp`, `.rtf`, `.jpg`/`.png`/`.tif(f)`,
   `.eml`/`.msg`, `.txt`/`.md`/`.csv`, HTML. Archives and macro-enabled Office files are refused in P1 (postponed Z1).
   Email attachments become **child documents** (depth ≤ 2), each scanned by ClamAV and routed like any file.
@@ -77,34 +87,47 @@ and Eneo's SharePoint issues (#13583, #16590; #427, #521, #522, #429, #1081) bec
 
 - **Definition**: versioned JSON in `config`: nodes (`id`, `type`, `typeVersion`, `params`) and edges
   (`from: node.port`, `to: node.port`). Canvas layout is stored separately and never read by the worker.
-- **Two stages**: the *document stage* (fetch → detect → parse → clean) writes to the shared document store; the
-  *collection stage* (split → chunk → enrich → embed → write) writes to one collection's index. Two collections whose
-  pipelines are identical in the document stage share its output (R2).
-- **Port types**: `RawContent` → `ParsedDocument` (Markdown + structure + pages) → `Sections` → `Chunks` (flat or
-  parent-child) → `EmbeddedChunks`. Validated server-side on save and publish.
+- **Two stages**: the *document stage* (fetch → detect → parse → clean → detect personal data) writes to the shared
+  document store; the *collection stage* (split → chunk → enrich → embed → write) writes chunk sets. Stages are
+  compared by **Merkle hashes** (design-engine §3.3): two pipelines with the same document-stage hash share its output;
+  a chunk set is shared only when the **whole-pipeline** hash and the embedding profile match (R2). *Write* has no
+  collection parameter; target collections come from the sources' references.
+- **Port types**: `RawContent` → `ParsedDocument` (Markdown + structure + pages) → `Sections` → `Chunks` (flat in
+  P1; parent-child only if evaluation shows query-time section expansion is insufficient, design-processing §5.3) →
+  `EmbeddedChunks`. Validated server-side on save and publish.
 - **Node catalogue manifest (R7)**: at startup the worker registers its node types, versions and parameter schemas in
   `content."NodeManifest"` (with live support per instance in `content."WorkerNodeSupport"`). The admin validates pipelines and generates forms from the registered manifest; pipelines
   pin `typeVersion`; publishing is refused if no running worker supports a node version (safe rolling updates).
 - **Node interface**: `IPipelineNode { Type; Version; Inputs; Outputs; ParamsSchema; EstimateCost(); ExecuteAsync(ctx, inputs) }`
   returning `Success | TransientError | FatalError`.
 - **Execution**: per document, topological order; branches from *Switch*/*Auto-parse*; a *Quality check* can route
-  to a fallback branch. A newer run for the same document cancels an older one (execution id).
-- **Output cache**: node outputs stored by (content hash, node id, node version, params hash). The parse output is
-  kept as long as the document exists; other outputs 30 days.
-- **Preview**: same engine, `preview` job class (highest priority), never writes to `content`; returns each node's
-  output and estimated LLM cost.
-- **Publish**: computes a re-processing plan (documents × first changed node), runs the evaluation gate (§7) on a
-  sample, and shows both before it runs; each document records the pipeline version that processed it.
+  to a fallback branch. Work is **reconciled**: `EnsureCurrent` enqueues only what a reference is missing, and a
+  nightly drift sweep catches lost work; new content in a document shared with another department re-processes that
+  collection at once in its own follow run (design-engine §2.3). A newer execution for the same document cancels an
+  older one; the execution id changes only with new content or a forced reprocess (design-engine §7.5).
+- **Output cache**: node outputs keyed by (input hash, node type, node version, params hash; data-model §9) in three
+  classes: `durable` (parse outputs, kept as long as the document exists), `intermediate` (30 days) and `none`
+  (design-engine §8).
+- **Preview**: same engine, `preview` job class (highest priority), never writes to `content` except `Jobs.Result`
+  and `CrawlHosts.NextAllowedAt`; returns each node's output and estimated LLM cost.
+- **Publish**: the version is frozen in state `gating` while the worker computes a re-processing plan (documents ×
+  first changed node) and runs the evaluation gate (§7) on a sub-corpus; the user confirms after seeing both, and
+  confirm checks that the gate measured exactly this version (admin design §6.6); each document records the pipeline
+  version that processed it.
 
-**P1 node catalogue**: HTTP fetch, Sitemap/crawl, Upload, Detect, Switch, Auto-parse, HTML main content
-(AngleSharp + SmartReader), PDF fast path (PdfPig), Docling parse (sidecar), Clean, Split by headings, Chunk
-(flat / parent-child), Metadata from URL/path, Quality check, **Detect personal data**, Embed, Write to collection,
-Headless render.
+**P1 node catalogue** (design-engine §6): roots HTTP fetch (URL list), Crawl, Upload; Headless render, Detect (calls
+the parser's `/v1/inspect` for PDF/TIFF/Office/email), Switch, Auto-parse, HTML main content (AngleSharp +
+SmartReader), PDF fast path (PdfPig), Docling parse (sidecar), Plain text/Markdown and CSV table (worker-side), Clean,
+Quality check, **Detect personal data**, Split by headings, Chunk (flat), Metadata from URL/path, Embed, Write.
+Email attachments become child documents (depth ≤ 2) that run the pipeline themselves.
 
-**Personal data in sources (decision: detect and flag)**: the *Detect personal data* node is in every template. It
-finds personnummer, phone numbers, email addresses and names (Swedish NER) and flags the document with counts per
-type. Flagged documents are listed in the admin, and they are **blocked from `public` collections** until an editor
-clears them. Masking stays an optional P2 node a source can enable.
+**Personal data in sources (decision: detect and flag)**: the *Detect personal data* node is in every template
+(locked). It finds personnummer, samordningsnummer, phone numbers and email addresses (patterns in .NET) and names
+(Swedish NER through the parser's `/v1/ner`, in the `ner` job class) and records counts per type. A per-type flag rule
+(answered 23, `Settings.PiiFlagRules`) decides whether the document is flagged; flagged documents are listed in the
+admin and **blocked from `public` collections** until a department admin clears them (re-flagged when a count rises).
+If NER is unavailable, names stay `pending` and the document is kept out of `public` collections only (answered 25).
+Masking stays an optional P2 node a source can enable (design-processing §9).
 **P2**: SharePoint, OCR-forced, Table extract, PII mask, LLM summary/keywords, Date/type extraction.
 
 ## 5. Embedding (R3)
@@ -119,7 +142,9 @@ clears them. Masking stays an optional P2 node a source can enable.
 
 ## 6. Auto-parse and learning
 
-1. **Profiles** (learned or made by admins), matched on domain/path/document type → strategy.
+1. **Profiles** (learned or made by admins), matched on domain/path/document type → strategy. P1 ships built-in
+   profiles only (`default`, `regulations`, `protokoll`, versioned with the node) and records `ParseObservations`
+   from day one, so P2 learning starts with data (design-processing §3.5).
 2. **Per-page heuristics**: clean PDF text layer → PdfPig; empty/garbled → Docling OCR; nothing found → re-render;
    table-dense → Docling tables. Signals come from the parser's cheap `/v1/inspect` (page count, per-page text-layer
    facts, garble score; parser design §6) with starting thresholds in parser design §6.1. Pages with the same
@@ -148,18 +173,27 @@ clears them. Masking stays an optional P2 node a source can enable.
      directly: an editor turns a flagged chat into a **rewritten test question without personal data**, and only the
      rewritten question is kept, with the collection's classification (decision 2026-10-29). The original chat
      still expires under its own retention. The postponed Swedish benchmark becomes this curated layer.
-- **Metrics**: recall@k and MRR for retrieval (expected document found?), plus an optional answer-faithfulness check
-  by an on-prem judge model for assistants.
-- **Gates**: pipeline publish, parse-profile auto-apply, retrieval-setting changes and embedding-profile changes run the
-  affected sets (sampled) and **block or roll back** when recall@k drops more than a threshold (proposal: 3 points).
-  Results are stored per version and shown in the admin.
+- **Metrics**: recall@10 and MRR@10 for retrieval (expected **document** found?), measured through the shared
+  `Ume.Rag.Retrieval` engine with the Knowledge API's fusion, dedup, variant collapse and per-document cap
+  (design-processing §13.5); answer faithfulness by an on-prem judge for assistants in P3.
+- **Gates**: pipeline publish (on a sub-corpus of shadow sets, both arms searched exactly), parse-profile auto-apply
+  (P2), gated retrieval-setting changes, embedding-profile changes (P3) and skill publish (P2: retrieval and routing
+  layers, no tool execution) **block or roll back** when recall@10 drops more than 3 points **and** ≥ 3 questions net
+  are lost; a drop on the 50-question sample escalates to the full set first (design-processing §14.2). Rollbacks are
+  never gated. A new collection stays **`building`** (invisible to assistants) until its set reaches the 0.70 floor or
+  a platform admin overrides (answered 21, 24). Results are stored per version and shown in the admin.
 - `eval` job class, lowest priority; LLM costs charged to the owning team through the gateway.
 
 ## 8. Safety and efficiency
 
-- Two-stage change detection: timestamp/ETag, then content hash; unchanged documents are not re-parsed or re-embedded.
-- **Deletion guard**: a sync that would delete more than 20% of a source, or a source that returns nothing, pauses
-  for confirmation. Soft delete with a 14-day grace period. A document leaves the store only when no source references it.
+- Two-stage change detection: timestamp/ETag, then content hash (HTML noise-normalised); unchanged documents are not
+  re-parsed or re-embedded, and a noise-only change re-keys the chunk set instead of rebuilding it
+  (design-processing §12).
+- **Deletion guard**: deletions are applied in a reconcile phase after all fetches of a run, only after a complete
+  traversal or listing. A run whose non-exempt candidates are more than 20 % of a source (and at least
+  `DeletionGuardMinCount` 5), more than `DeletionGuardMaxCount` (500), or a source that returns nothing, pauses for
+  confirmation; configuration changes and explicit admin actions are exempt (design-connectors §13). Soft delete with a
+  14-day grace period. A document leaves the store only when no source references it.
 - Failures are data: per-document outcome and reason; a sync with failures above a threshold is marked degraded.
 - Every LLM or embedding call carries the owning team's attribution, so gateway budgets stop runaway costs.
 - Config is read at the current config version (platform plan §4); a source or pipeline change takes effect within
@@ -176,7 +210,7 @@ clears them. Masking stays an optional P2 node a source can enable.
 
 | Phase | Deliverable |
 |---|---|
-| P1 | Queue + LISTEN/NOTIFY, scheduler, document store with canonical identities, shared crawl frontier, URL list + crawl + upload connectors, two-stage engine with P1 nodes, node manifest, templates per source type, preview, publish plan, heuristic auto-parse, platform embedding profile, change detection, deletion guard, run records, generated evaluation sets + publish gate |
+| P1 | Queue + LISTEN/NOTIFY, scheduler, document store with canonical identities, shared crawl frontier, URL list + crawl + upload connectors, two-stage engine with P1 nodes, node manifest, templates per source type, preview, publish plan, heuristic auto-parse with built-in profiles, personal-data detection (patterns + NER, flag rules), platform embedding profile, change detection, deletion guard, run records, generated evaluation sets + publish gate, collection go-live floor |
 | P2 | SharePoint, try-and-score, learned profiles with auto-apply and evaluation-driven rollback, P2 nodes, retrieval-signal feedback loop, skill test questions in evaluation |
 | P3 | More connectors, embedding-profile migration tooling, OpenSearch indexing if adopted, answer-faithfulness judge |
 

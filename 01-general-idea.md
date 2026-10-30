@@ -26,8 +26,9 @@ one deployable) and is slow. We aim for the opposite:
    budgets in these services. PII routing, residency and cost reporting come for free.
 4. **API first, OpenAI-compatible where it exists.** An assistant is exposed as a "model" on `/v1/chat/completions`, so
    any OpenAI client works unchanged.
-5. **Fast request path.** Retrieval is one Postgres query (hybrid search) with warm caches; ingestion is entirely
-   off the request path in a worker.
+5. **Fast request path.** Retrieval is one Postgres query (hybrid search) with warm caches (as designed: three short
+   statements, keyword in parallel with the query embedding, fused in .NET; `plans/knowledge-api/design.md` §6);
+   ingestion is entirely off the request path in a worker.
 6. **Same stack and ops model as the gateway**: .NET 10, Aspire for local dev, PostgreSQL, Redis, Vue 3 admin UI with
    the gateway design system, OIDC/BFF login, Docker Compose release bundle, Kubernetes optional.
 7. **Content is stored here, unlike the gateway.** Documents, chunks and chat history are personal-data-bearing, so
@@ -132,7 +133,8 @@ and opts in to what it supports:
 - *Two-stage change detection*: timestamp/ETag first, then content hash; nothing unchanged is re-parsed or re-embedded.
   Embeddings are cached by text hash, so re-chunking only embeds new text.
 - *Run record per document* with an execution id: a newer sync cancels an older one still in progress (Kernel Memory).
-- *Job classes* (crawl, parse, embed, sync) with their own concurrency limits, fair per department, so one large
+- *Job classes* (crawl, parse, embed, sync; as designed: `preview`, `command`, `sync`, `fetch`, `parse`, `ner`, `embed`,
+  `eval`, crawling inside `sync`/`fetch`, `plans/platform/data-model.md` §4.2) with their own concurrency limits, fair per department, so one large
   crawl cannot starve everyone else (Eneo and Dify run everything through one worker queue).
 - *Crawl reports*: every run lists failed pages with reasons; per-department limits on concurrent crawls.
 - *Source settings tagged by effect* (identity, scope, behaviour, cosmetic) so an edit triggers the smallest
@@ -175,7 +177,9 @@ node can be re-run with the cached output of the nodes before it, and preview ne
 it. Publishing computes a re-processing plan (which documents, which nodes onwards) and shows it before it runs.
 
 **Chunk structures.** Flat chunks and parent-child chunks (search on the small child, return the parent section as
-context), declared as the output type of the chunk node so the index knows what it receives.
+context), declared as the output type of the chunk node so the index knows what it receives. (As decided: flat chunks
+in P1, sections rebuilt at query time from neighbouring chunks; parent-child only if evaluation shows the need,
+`plans/ingestion-worker/design-processing.md` §5.3, `plans/knowledge-api/design.md` §9.)
 
 **Auto-parse and learning.** The *Auto-parse* node chooses a parse strategy per document:
 
@@ -208,7 +212,8 @@ code (a small `IPipelineNode` interface), so the catalogue stays tested and supp
 - **Hybrid search in one SQL query we write ourselves**: pgvector HNSW similarity + Postgres full-text search with a
   Swedish configuration using a Hunspell `sv_SE` dictionary for compound-word splitting, merged with reciprocal rank
   fusion. Good for compound words, names, diarienummer and form numbers where pure vectors miss. (The PgVector
-  connector's built-in hybrid search requires every keyword to match, so we do not rely on it.)
+  connector's built-in hybrid search requires every keyword to match, so we do not rely on it.) As designed: three
+  short statements and RRF in .NET (`plans/knowledge-api/design.md` §6).
 - **Filters inside the same query** (collection, GIN-indexed tags, document type, date), applied before ranking, not
   as a list of ids afterwards (Dify's flaw).
 - Optional **reranker** (via the gateway if it can serve one, otherwise a later decision).
@@ -222,15 +227,16 @@ code (a small `IPipelineNode` interface), so the catalogue stays tested and supp
   questions, six setups from vector-only to OpenSearch with decompounding; recall, MRR, nDCG and latency.
 
 **Chat request path budget.** Eneo spends 78 SQL statements and 54–68 ms per message before the model is called.
-Ours: assistant and key configuration from an in-memory cache invalidated over Redis (as in the gateway), one
-retrieval query, conversation writes off the request path. Overhead is measured with the gateway's benchmark harness
+Ours: assistant and key configuration from an in-memory cache invalidated over Redis (as in the gateway; as designed:
+by the Postgres config outbox and `LISTEN/NOTIFY`, `plans/platform/data-model.md` §5), one retrieval query (three short
+statements), conversation writes off the request path (0 SQL on the hot path, `plans/chat-api/design.md`). Overhead is measured with the gateway's benchmark harness
 and must stay a small fraction of Eneo's.
 
 ## 7. Identity, keys and the gateway
 
 | Caller | Authenticates with | Gets |
 |---|---|---|
-| Staff in the admin UI | Municipal OIDC (Entra ID / Keycloak / AD FS), BFF cookie | Roles as in the gateway: platform admin, department admin, team admin, viewer |
+| Staff in the admin UI | Municipal OIDC (Entra ID / Keycloak / AD FS), BFF cookie | Roles as in the gateway: platform admin, department admin, team admin, viewer (as designed: the `rag-*` roles of `plans/identity/design.md` §1.3) |
 | Staff-facing apps (Open WebUI, intranet) | OIDC user token, or a RAG API key | Internal assistants their team/department allows |
 | Integrations | RAG API key (team-scoped) | Named assistants and collections |
 | Public web widget | No login; origin allow-list + rate limit | Only assistants marked `public` |
@@ -241,7 +247,8 @@ stay independently deployable and their key stores do not couple. Cost attributi
 attribution (`plans/gateway-changes/`); per-team keys are only the interim until that ships.
 
 Two key kinds, as in Eneo: **public keys** (`pk_`, read-only, bound to allowed origins, for the web widget) and
-**secret keys** (`sk_`, for integrations).
+**secret keys** (`sk_`, for integrations). (As designed: prefixes `ume-rag-pk-` / `ume-rag-sk-`,
+`plans/platform/data-model.md` §12.22.)
 
 **Security classification.** Collections and assistants carry a classification (e.g. public, internal, sensitive);
 an assistant may only link collections at or below its level, and the level decides which gateway residencies are
@@ -273,14 +280,15 @@ stated reason, which is itself audited.
 
 - .NET 10, ASP.NET Core minimal APIs, EF Core, Aspire 13 for local orchestration (same as the gateway).
 - Microsoft.Extensions.AI for the gateway clients (OpenAI-compatible); `CommunityToolkit.VectorData.PgVector` and
-  `Pgvector.EntityFrameworkCore`, with our own hybrid search SQL.
+  `Pgvector.EntityFrameworkCore`, with our own hybrid search SQL. (As designed: the chat role calls the gateway with a
+  raw `HttpClient`, and `CommunityToolkit.VectorData.PgVector` is not used; `plans/platform/repo-and-deployment.md` §2.2.)
 - AngleSharp + SmartReader (HTML main content), PdfPig (fast PDF text path and detection), Microsoft.Graph
   (SharePoint delta).
 - Pipeline engine: a small custom DAG executor (typed ports, ~1–2k lines) on a Postgres queue (`SKIP LOCKED`).
   Not Elsa, Agent Framework Workflows or Microsoft.Extensions.DataIngestion (preview, linear pipelines).
 - Not used: Kernel Memory (archived), Semantic Kernel, TickerQ (commercial licence since 2026-10-13).
 - PostgreSQL (pgvector, Swedish FTS with Hunspell): run as our own container so custom dictionaries can be loaded
-  (check whether the Azure managed offering allows this), Redis for caches/rate limits/invalidation.
+  (check whether the Azure managed offering allows this), Redis for caches/rate limits (invalidation: the Postgres config outbox).
 - Python sidecar: Docling, behind a small HTTP API; replaceable.
 - Vue 3 + the gateway design system for the admin UI.
 - Release bundle with Docker Compose (Azure VM, on-prem Docker host) and Kubernetes manifests; storage for uploaded
@@ -290,7 +298,7 @@ stated reason, which is itself audited.
 
 | Topic | Decision |
 |---|---|
-| Builder scope | Full canvas for **ingestion** pipelines. The **query side** is a fixed, linear sequence of steps per assistant (query rewrite, hybrid weights, rerank, top-k, filters, prompt template), set in a form with a test panel. It opens up to the canvas later, once test-question sets per assistant show that a change helps. Keeps the latency-critical path predictable. |
+| Builder scope | Full canvas for **ingestion** pipelines. The **query side** is a fixed, linear sequence of steps per assistant (query rewrite, hybrid weights, rerank, top-k, filters, prompt template), set in a form with a test panel (refined by steps 7–8: no query rewriting in P1, condense on follow-ups is a chat step; rerank P3). It opens up to the canvas later, once test-question sets per assistant show that a change helps. Keeps the latency-critical path predictable. |
 | Who edits pipelines | Department editors with a *pipeline editor* right: copy templates, change parameters, add nodes from the approved catalogue. The platform team owns templates and the node catalogue, and can lock required nodes (e.g. PII mask, Index). |
 | Learning | Parse profiles are **applied automatically above a confidence threshold**, with guardrails: minimum sample count, scoped to the department's own sources, trial run alongside the current strategy before taking over, automatic rollback on quality drop, notification + audit entry, kill switch. Below the threshold: proposed for approval. |
 | Chat history | Kept **90 days** by default (configurable per assistant). **Blocker for the pilot:** confirm with the registrar/archivist whether chat logs are allmänna handlingar and whether deletion needs a gallringsbeslut. |
@@ -319,8 +327,11 @@ stated reason, which is itself audited.
 | Feedback in evaluation | Only as editor-rewritten questions without personal data. |
 | Skills timing | P2, with agent assistants; P1 assistants are prompt + collections. |
 | Identity compatibility | Same identity model as the gateway: same OIDC/BFF, claims, config keys (`UME_RAG_OIDC_*`), key and Data API patterns, security events; preferably one shared admin registration with `rag-*` roles. Department scope from groups is added to both systems. No registration needed before the pilot. |
+| Data model (step 1) | `plans/platform/data-model.md`: one `ragdb` with schemas `config`/`content`/`chat`/`audit`, one DB role per service with connection caps and timeouts, grants table by table; Swedish Hunspell FTS configuration `content.rag_swedish`; day-partitioned `Jobs`/`RunItems` queue (`SKIP LOCKED`, dedup, per-department fairness, `command` jobs for admin decisions); config outbox with a monotonic version and fail-closed reads; tier resolver with composite `Classification` FKs; per-conversation data keys in 7-day epochs under monthly shred-bucket master keys; retention by `SECURITY DEFINER` step functions; key prefixes `ume-rag-sk-`/`ume-rag-pk-`. |
+| Repo and deployment (step 2) | `plans/platform/repo-and-deployment.md`: repo `ume-rag` copying the gateway's conventions; one `Ume.Rag.Api` binary with roles; own `Ume.Rag.FakeGateway` (1024-dim embeddings, residency headers); own Postgres image (pgvector + Hunspell, compound test in CI); resource zones with an ingestion cgroup slice and fixed networks with firewall egress rules; digest-pinned release bundle; GitHub Actions incl. the R1 release test and `entra.yml`; ordered P0 checklist (§11). |
 | Identity detail (step 3) | `plans/identity/design.md`. Member groups are group claim values (Entra object ids; names on Keycloak/AD FS); Graph lookup failure narrows to claims-only, never fails open. `ume-rag/infra/entra/` (Bicep) owns the shared admin registration incl. the gateway's roles; consent, role assignments and secrets stay manual. The RAG BFF uses its own client secret, as the gateway (certificates later, for both). Policy denials above ceiling or outside audience answer 404. |
 | Gateway changes (step 4 questions) | Delegated requests charge the effective team + department budgets, with the platform key's own budget and rate limit as an overall cap; any key may send the residency ceiling; three releases B → C → A; drafts stay in this repo until implementation. |
+| Gateway changes (step 4) | `plans/gateway-changes/design.md`, `adr-drafts.md` (ADR 018–020): B = `x-ume-max-residency` as one more hard constraint in candidate selection, `403 max_residency_not_met`, FakeLlm `fake-embed-<n>`, tool passthrough tests; C = `Departments.MemberGroups`, Graph `checkMemberGroups` without MSAL, tenant/guest refusal, events 2007/2008/3003, team `code` on the catalogue; A = `VirtualKeys.DelegatedTeamIds`, effective-team policy and budgets with the key as overall cap, echo header, event 1006, run grouping headers. No change in the gateway repo until implementation. |
 | Parser formats and pictures (step 5 questions) | Pilot parses PDF, Office (incl. legacy .doc/.xls/.ppt via LibreOffice headless), OpenDocument, RTF, images (OCR), email (.eml/.msg with attachments as separate documents), plain text/Markdown/CSV. Pictures: captions and OCR text only in P1; picture crops available on request for a P2 describe-pictures node. |
 | Parser detail (step 5) | `plans/parser/design.md`: worker keeps HTML, text, Markdown, CSV and clean PDF pages; parser handles the rest through Docling's native backends (legacy Office via its LibreOffice path behind our sandboxed wrapper, ODF native, email via `python-oxmsg`), plus a cheap `/v1/inspect`; multipart contract; the worker stores `result.json` and the `DoclingDocument`, so re-chunking never re-parses; own supervisor with pre-warmed processes; OCR engine always explicit. Zip and macro-enabled Office refused in P1 (Z1); email senders/recipients metadata only. |
 | Ingestion worker (step 6 questions) | Detail in three documents (engine; connectors; processing). Names for personal-data detection by a Swedish NER model in the parser image; patterns in the worker. Default sync: URL lists nightly, crawls weekly at night. Default chunks: heading-split, ≈ 400 tokens, ≈ 15 % overlap, heading path prepended, flat in P1. |
@@ -332,12 +343,13 @@ stated reason, which is itself audited.
 | Processing (step 6c) | `plans/ingestion-worker/design-processing.md`: per-page parse rules on inspect signals; built-in parse profiles with observations recorded from P1; BGE-M3 tokenizer in .NET; 400-token budget incl. heading path, sentence overlap, row-group tables; PII patterns in .NET plus `/v1/ner` on its own lane and a `ner` job class; public collections blocked for personnummer/samordningsnummer/external email always, names and contacts only in list-like documents; noise-only changes re-key chunk sets; evaluation on documents with intervals; sub-corpus gate with escalation; collections `building` until 0.70; flat chunks with section expansion in the knowledge API. |
 | Knowledge API (step 7 questions) | Top-k default 10, max 50. Citations without a public URL link to an access-checked download via 7-day signed grant links (staff network only, access re-checked at each download). No query rewriting in P1. No recency boost. |
 | Knowledge API (step 7) | `plans/knowledge-api/design.md`: shared `Ume.Rag.Retrieval` engine (API, evaluator, test panel); keyword search in parallel with the query embedding, then vector, then one hydrate batch, RRF in .NET; exact scan for scopes ≤ 10,000 chunks; degrade to keyword-only if embedding fails; coverage per collection by cosine distance; dedup + one variant per URL + max 3 chunks per document; section expansion from neighbouring chunks (`OverlapChars`); no result cache; query text never stored. |
-| Chat API (step 8 questions) | Condense on, follow-ups only, on an on-prem task model. History: last 10 messages, ≤ 4k tokens. Not found: fixed sv/en text + contacts, no model call. Feedback in P1, incl. import of Open WebUI ratings. C1 chat attachments (P2): chat-scoped with conversation retention. P1 uploads disabled in Open WebUI. Editors read feedback comments after a one-click audited reason (`sensitive`: full review flow). |
+| Chat API (step 8 questions) | Condense on, follow-ups only, on an on-prem task model. History: last 10 messages, ≤ 4k tokens. Not found: fixed sv/en text + contacts, no model call. Feedback in P1, incl. import of Open WebUI ratings. C1 chat attachments (P2): chat-scoped with conversation retention. P1 uploads disabled in Open WebUI. Editors read feedback comments after a one-click audited reason (`sensitive`: full review flow); **superseded in part** by Admin (step 10 questions): department admins and `rag-reviewer`s, not editors or platform admins. |
 | Chat API (step 8) | `plans/chat-api/design.md`: client-sent history authoritative, 0 SQL on the hot path; Open WebUI with one connection and our `owui-tasks` task model; residency checked before the first byte, follow-ups with history at max(level, client ceiling); `[n]` renumbered by first citation, Open WebUI `source` events vs `url_citation` for others; output filter against exfiltration; signed issued conversation ids; background writer with per-conversation 7-day key epochs, no journal; Open WebUI pruning job. |
 | Tools (step 9 questions) | Agent limits per user message: 8 tool calls, 60 s, $0.05 (hard cap 20 / 120 s / $0.25). Department skill editors publish behind the evaluation gate; tool links need a department grant; the platform team owns platform skills. MCP server template .NET only; other stacks via the OpenAPI → MCP generator. |
 | Tools (step 9) | `plans/tools/design.md`: tool hub `rag-tools` as the only credential holder (mTLS + service key hop); skills in `config` per the Agent Skills format (no scripts), SemVer with served pointer, MAJOR serve auto-pins other departments' assistants; skill gate = retrieval + routing layers, no tool execution; tool servers have clearance and result level, so an agent run's level is fixed at start; deny-by-default policy with one function for listing and calling; pinned definitions with 15-min drift checks and two-person re-approval; stateless `/mcp`, hub tools only on per-skill endpoints with `SkillAudiences`; .NET template + OpenAPI code generator; mock fee calculator `ume-mcp-avgifter` first; events 5012–5015. |
 | Admin (step 10 questions) | Swedish admin UI (the gateway's mechanism: texts in components and a labels file, no i18n; the gateway's own UI is English). Pilot department admins set up their own collections and assistants, with the platform team pairing. New `rag-reviewer` role reads conversations (reason, audited; `sensitive` needs a second approver); department admins and reviewers read single feedback comments after a one-click reason; platform admins neither implicitly. One NVDA screen-reader pass of the pilot journey before the pilot. Limited conversation review (behind a feedback item, `public`/`internal`) in P1. |
 | Admin (step 10) | `plans/admin/design.md`: the gateway's BFF, CSP and problem details copied; new `Ume.Rag.Answering` library so the test panel runs the real chat path in process (incl. `building` collections); stable error codes mapped to Swedish texts in the UI; `version` (`xmin`) concurrency; one-transaction write path (change + outbox + audit + jobs); cross-rules V1–V31 in one `ConfigRules` service; pipeline publish via a `gating` state; `GatewayModels` sync in P1; setup checklist for the pilot journey; Vue Flow 1.48.2 canvas in P2 with a keyboard list editor; WCAG 2.2 AA. |
+| Consistency pass (step 11) | `plans/consistency-pass.md`: all documents aligned with each other and with this table; settings rule (deployment knobs `Section:Key`, run-time values `Settings.<Section>.<Key>`); to-verify register `plans/to-verify.md`; P2: Open WebUI on its own VM, 24 GB RAG host keeps both slots. |
 
 Sections 3–9 above describe the original idea; where they differ from the plans, the plans and this table win.
 

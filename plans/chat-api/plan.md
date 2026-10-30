@@ -108,7 +108,8 @@ against a fake gateway, idle and during the R1 ingestion load test.
   without code changes.
 - Public widget conversations are stored for quality review without user identity; the widget tells visitors not to
   enter personal data.
-- Reading other people's conversations happens only in the admin UI, with a stated reason, audited.
+- Reading other people's conversations happens only in the admin UI, by `rag-reviewer`, with a stated reason, audited
+  (admin design §8).
 
 ## 6. Open WebUI pilot setup (R5)
 
@@ -136,7 +137,7 @@ Full settings: design §4.3 (Open WebUI v0.12.5).
 
 | Phase | Deliverable |
 |---|---|
-| P1 | `/v1/models` filtered by caller and client, streaming RAG completions, citations (both formats), not-found answers, residency check, issued conversation ids, history + retention, Open WebUI pilot with its data-handling profile; `/v1/feedback`, **Open WebUI feedback import** and the editors' **Feedback page** in the admin UI (design §14) |
+| P1 | `/v1/models` filtered by caller and client, streaming RAG completions, citations (both formats), not-found answers, residency check, issued conversation ids, history + retention, Open WebUI pilot with its data-handling profile; `/v1/feedback`, **Open WebUI feedback import** and the **Feedback page** in the admin UI (design §14; admin design §8) |
 | P2 | Agent assistants with skills and read-only tools via the tool hub, public widget (`ume-rag-pk-` keys, origins, rate limits), chat attachments (design §15.2), feedback review beyond P1, condense tuning behind the evaluation gate |
 | P3 | Rerank, query-side canvas (if evaluation shows it helps), Teams client, user-delegated tools (OBO), write tools with confirmation |
 
@@ -168,3 +169,4 @@ Answered (user, 2026-10-30; details in [`design.md`](design.md) §21.1):
    refused with `attachments_not_supported`.
 10. ~~Feedback comments for editors?~~ **Answered**: `public`/`internal`: shown after a one-click, pre-filled reason,
     audited as a conversation access, only the comment; `sensitive`: the full review flow with a second approver.
+    Readers settled in step 10: `rag-reviewer` and `rag-department-admin`, not platform admins (admin answered 6).

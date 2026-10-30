@@ -33,7 +33,7 @@ copied and changed as stated; "new" means there is no gateway counterpart.
 - Calls to `/api/*` without a session answer 401 instead of redirecting (`:111`, `:130-138`); 403 for missing rights
   (`:112`). Sign-out returns the IdP's end-session URL as JSON (`:139-149`).
 - Server-side sessions: the cookie holds only a random id; the ticket is Data-Protection-encrypted in Redis
-  (`AdminSessions.cs:16-54`), key `ume-rag:admin-session:{id}` (data-model §11).
+  (`AdminSessions.cs:16-54`), key `ume-rag:admin-session:{sessionId}` (data-model §11).
 - Lifetime 8 h, no sliding (`AdminAuthentication.cs:93-94`, `AdminSessions.cs:64`); `/bff/session/extend` moves
   expiry by up to 8 h but never past `Admin:MaxSessionHours` (12) from sign-in (`AdminSessions.cs:87-112`,
   `AdminAuthentication.cs:217-232`, `AdminOptions.cs:19-20`). Roles and departments are read at sign-in, so IdP
@@ -335,7 +335,7 @@ public sealed record RagPrincipal(
 Rules:
 
 - `SubjectId` is what conversations (`chat."Conversations"."SubjectId"`, data-model §2.3), per-user rate limits
-  (`ume-rag:rl:user:{subjectHash}`) and `ToolCallEvents` use. It is pseudonymous but personal data, so security
+  (`ume-rag:rl:user:{subjectHash}:{minute}`) and `ToolCallEvents` use. It is pseudonymous but personal data, so security
   events carry it only where the gateway carries an actor (§10).
 - Conversations are unique per (`ClientId`, `SubjectId`, `ExternalChatId`, `AssistantId`) (data-model §2.3, chat
   design §11.1), so an Open WebUI user id never meets an Entra `oid` in one namespace, and two Open WebUI instances
@@ -417,7 +417,7 @@ Infrastructure into `MembershipFacts { Departments, Groups, Known: bool }`, so t
 | 7 | **Classification ceiling**: resource level ≤ client ceiling | `ceiling_exceeded` (event 5005) | 404 |
 | 8 | **Anonymous**: resource level = `public` | `anonymous_not_allowed` | 404 |
 | 9 | **Data handling**: level policy `ClientsWithoutHistoryOnly` ⇒ `!client.StoresHistory`; `AllowedHistoryModes` contains the assistant's mode | `client_stores_history` | 404 |
-| 10 | **Audience** (assistants; collections via the assistant, or via `Knowledge.Read` audiences in P2): any `AssistantAudiences` row matches: `client` = this client; `department` ∈ `Membership.Departments`; `group` ∈ `Membership.Groups`. Application subjects match only `client` rows | `audience_mismatch` | 404 |
+| 10 | **Audience** (assistants; collections via the assistant, or via `CollectionAudiences` for token callers in P2, knowledge design §4.2): any `AssistantAudiences` row matches: `client` = this client; `department` ∈ `Membership.Departments`; `group` ∈ `Membership.Groups`. Application subjects match only `client` rows | `audience_mismatch` | 404 |
 | 11 | Step 10 needs a department/group row and `Membership.Known = false` | `membership_unavailable` | 503 |
 | 12 | Tools (P2): tool policy = tools design §5.1 (server → skill → assistant → client, `ToolPolicy.Visible`/`Authorize`); inside an agent loop a denial is a `denied` tool message + 5002, not an HTTP 403; on `/mcp` the SDK's unknown-tool error (tools design §5.2) | `tool_not_allowed` | 403 / tool message |
 | ✓ | Allowed: `EffectiveLevel` = resource level; `MaxResidency` per §4.7 | – | – |
@@ -467,8 +467,10 @@ reason in the `code` extension; knowledge design §3.6); the in-process path car
 | `internal` | `Eu` | `x-ume-residency` response check |
 | `sensitive` | `OnPrem` | linked `onprem` key + response check |
 
-Effective level for chat = the assistant's level (≥ all its collections, skills and tool servers, validated on
-save); for condense and title calls inside a conversation the same; for P2 agent runs it is fixed at the run's start
+Effective level for chat = the assistant's level (≥ all its collections, skills and tool servers' result levels,
+validated on save); for condense and title calls inside a conversation the same; a follow-up from a client that resends
+history (Open WebUI) runs at **max(assistant level, client ceiling)**, because earlier turns may come from another
+assistant (chat design §8.2, platform plan §6); for P2 agent runs it is fixed at the run's start
 and never rises: tool servers are bounded by clearance (assistant level ≤ clearance) and result level (result level ≤
 assistant level) (tools design §5.3). The Chat API sends the header from `AccessDecision.MaxResidency` and
 `x-ume-on-behalf-of` = the assistant's team **id** (gateway design §5.2; codes can change), and the echo of that header
@@ -655,7 +657,7 @@ A `pk` key is public (it is in the page source), so it identifies the widget, no
 - Anonymous session: on the first chat response the API issues `x-rag-session` (32 random bytes, base64url); the
   widget keeps it in `sessionStorage` and sends it back. `SubjectId = anon:` + hex HMAC-SHA256 of it with a key derived
   from the pepper (`HKDF(pepper, "widget-session")`), so the stored id cannot be turned back into the token.
-- Rate limits per key (`ume-rag:rl:req:{keyId}`) and per client address (`ume-rag:rl:ip:{ipHash}`, data-model §11).
+- Rate limits per key (`ume-rag:rl:req:{keyId}:{minute}`) and per client address (`ume-rag:rl:ip:{ipHash}:{minute}`, data-model §11).
   `Origin` can be forged by non-browser clients, so the per-address limit and the `public`-only rule are the real
   protection.
 
@@ -809,9 +811,9 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 | 5013 | `rag.tool.upstream_refused` | tools (Warning, P2) | a tool server refused our credential or it could not be used, once a minute per (server, reason) with `Count` | `ToolServerId`, `Reason` (`unauthorized`, `forbidden`, `token_failed`, `credential_unavailable`, `tls`), `Status`, `Count` |
 | 5014 | `rag.content.tag_neutralised` | api, tools (Information, P2) | reserved tags (tools design §3.8) neutralised in untrusted text, once a minute per (kind, resource) with `Count` | `SourceKind` (`source`, `tool_result`, `tool_description`, `skill_description`), `ResourceId`, `Count` |
 | 5015 | `rag.tool.result_refused` | tools (Warning, P2) | a tool result refused: `too_large`, `level_refused`, `protocol_error` | `ToolServerId`, `ToolId`, `Reason`, `ResultBytes`, `ResultLevel`, `EffectiveLevel` |
+| 5101–5103 | `rag.egress.blocked`, `rag.malware.detected`, `rag.pii.flagged` | worker | 5101/5102: connectors design §7, §11; 5103 on every transition to flagged (processing design §9.5) | 5103: `DocumentId`, `Classification`, `Types`, `Counts` (numbers only), `SourceId`, `RunId`, `Reflag`; SIEM rule for public references with a personnummer. Admin audit actions `pii.clear`, `gate.override` |
 | 5104 | `rag.parser.limit_exceeded` | worker | parser refused a file for a bomb or size limit (parser design §7.5) | `DocumentId`, `Limit` |
 | 5105 | `rag.pipeline.refused` | worker | refused to run a published pipeline version that fails validation (engine design §17); SIEM alerts on any | `PipelineId`, `PipelineVersionId`, `Reason` |
-| 5101–5103 | `rag.egress.blocked`, `rag.malware.detected`, `rag.pii.flagged` | worker | 5101/5102: connectors design §7, §11; 5103 on every transition to flagged (processing design §9.5) | 5103: `DocumentId`, `Classification`, `Types`, `Counts` (numbers only), `SourceId`, `RunId`, `Reflag`; SIEM rule for public references with a personnummer. Admin audit actions `pii.clear`, `gate.override` |
 | 6001 | `rag.admin.change` | admin | every audit entry (gateway 2001) | `Actor`, `Action`, `EntityType`, `EntityId` |
 | 6002 | `rag.admin.signin` | admin | sign-in, not extension (gateway 2002, `AdminAuthentication.cs:100-107`) | `Actor`, `SourceAddress`, `Roles`, `Departments`, `SessionId`, **`DepartmentLookup`** |
 | 6003 | `rag.admin.signout` | admin | (gateway 2003) | `Actor`, `SourceAddress`, `SessionId` |
@@ -836,7 +838,9 @@ Gateway counterparts (gateway design §10): our 5001 with `wrong_tenant`/`guest_
 3003 (Data API); our 5007 = gateway 2007.
 
 SIEM alerts to add to the gateway's list (`docs/security-events.md:29-34`): any 5008; 5005 from one client repeatedly
-(a client probing above its ceiling); any 5003 or 5011 from the chat role; 5004 for more than a minute (config monitor broken); 5007 bursts (Graph outage
+(a client probing above its ceiling); any 5003 or 5011 from the chat role; 5004 for more than a minute (config monitor broken); any 5102 (malware); 5101
+from `Render` to private address classes (connectors design §7); any 5105 (engine design §17); 5103 on a `public`
+reference with a personnummer (processing design §9.5); 5007 bursts (Graph outage
 or permission removed); 5001 `user_jwt_invalid` at all (Open WebUI secret mismatch or forgery); P2 (tools design §9.3): any 5012 (definition
 changed without a planned release), 5013 bursts, any 5015 `level_refused`, 5014 from one tool or document repeatedly
 (planted markup).

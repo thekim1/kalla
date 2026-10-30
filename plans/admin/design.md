@@ -65,7 +65,7 @@ gateway counterpart.
 | 4 | Roles | New **`rag-reviewer`** (answered 3): policies `Review`, `FeedbackComments`, `Read`. Feedback **comments** (`public`/`internal`, one-click reason): `rag-reviewer` and `rag-department-admin`. **Full conversations: `rag-reviewer` only.** No administrative role implies conversation content, `rag-platform-admin` included (§3) |
 | 5 | Concurrency | Every editable aggregate carries `version` (Postgres `xmin`); requests send it back; a mismatch is 409 `concurrent_change` (§4.3). Body field, not `If-Match`, so the copied client stays unchanged |
 | 6 | Write path | One transaction: entity change → outbox trigger (version bump) → audit row with that `ConfigVersion` → optional job rows (`Jobs` is main tier, same database); `pg_notify` at commit (§4.4) |
-| 7 | Validation | Field rules on request records (gateway style); **cross-rules** in one `ConfigRules` service (V1–V31, §4.6), run on save, on dependent changes and again before publish; CHECK violations (23514) answer 400, never 500 |
+| 7 | Validation | Field rules on request records (gateway style); **cross-rules** in one `ConfigRules` service (V1–V32, §4.6), run on save, on dependent changes and again before publish; CHECK violations (23514) answer 400, never 500 |
 | 8 | Jobs | The admin inserts `content."Jobs"` rows only (preview, sync, command, eval); decisions on content are `command` jobs; every result is read from `Jobs.Result`, `Runs`, `EvaluationRuns` (§4.7) |
 | 9 | Pilot UI | P1 pages are built for non-specialists (answered 2): one **setup checklist** per collection and assistant derived from state, template forms with defaults, preflight and preview before saving, impact shown before scope changes, publish as plan → quality check → confirm, consequences with counts, undo where the platform has one (§5.4) |
 | 10 | Pipelines | P1: template forms generated from the template's `form` list and the manifest's `paramsSchema`; pipeline editors also get a node list with generated forms and a JSON view. P2: canvas on **Vue Flow 1.48.2** (lazy route), always with an equivalent keyboard editor (§6) |
@@ -94,7 +94,7 @@ gateway counterpart.
 ### 2.2 Hosting, slots and background work
 
 - Two slots `rag-admin`, `rag-admin-b` (compose rolling overlay; proxy `127.0.0.1:9543`/`:9544`, repo-and-deployment
-  §6.1), control zone; sessions in Redis (`ume-rag:admin-session:{id}`), so either slot serves any user.
+  §6.1), control zone; sessions in Redis (`ume-rag:admin-session:{sessionId}`), so either slot serves any user.
 - Networks: `edge` (proxy; OIDC authority, Graph for feature C), `data` (Postgres all tiers, Redis), `llm` (gateway:
   test panel, Data API sync), P2 `tools` (hub: discovery, connection test, test-panel tool calls).
 - Background services and who runs them:
@@ -461,6 +461,7 @@ ladder `public → External`, `internal → Eu`, `sensitive → OnPrem`, ordered
 | V29 | data protection: `internal`/`sensitive` ⇒ encryption required; default ≤ max ≤ 90; changes apply to new key epochs only | `policy_rule` | policy save | data-model `CK_DataProtectionPolicies_*`, §7 |
 | V30 | `Settings` ranges as the `CK_Settings_*` checks (guard 1–100 %, min/max counts, floors 0.5–0.95, sample 20–100, …) | `setting_out_of_range` | settings save | data-model §2.1 |
 | V31 | embedding profile fixed per collection (`platform-default`); other profiles only `Admin` (P3) | `profile_admin_only` | collection save | R3 |
+| V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` are `GatewayModels` rows servable `OnPrem` (`SkillGateModel` also `SupportsTools`, tools §3.7 routing) | `settings_model_residency` | settings save; model sync changed residency (warning on Overview) | processing §13.1, chat §5, tools §3.7 |
 
 ### 4.7 Jobs for the worker
 
@@ -491,6 +492,7 @@ level (tier).
 | Human question edit | `command` `edit-eval-question` | – | – | `EvaluationQuestions` |
 | Reprocess one document | `command` `reprocess-document` | `reprocess:{documentId}` | – | run items |
 | Cancel a run | `command` `cancel-run` | `cancel:{runId}` | – | `Runs.State` |
+| Raise a collection's level (V2) | `command` `recompute-membership` | `membership:{collectionId}` | – | `Chunks.CollectionIds` (engine §15) |
 | Approve / roll back a parse profile (P2) | `command` `approve-profile` / `rollback-profile` | `profile:{id}` | – | `ParseProfiles` |
 
 The UI polls `GET /api/jobs/{id}` (or the run/evaluation it created) every 2 s, every 5 s after 30 s, every 15 s after 5
@@ -518,6 +520,8 @@ access by the admin's role scope (assistant's department ∈ caller's department
 `building` collections included, attribution to the assistant's owner team (knowledge §4.2, §4.5), residency ceiling at
 the assistant's level (no history: first-message rule; with test history: chat §8.2's rule for Open WebUI if the
 assistant has such a client in its audience). Nothing is stored (no conversation, message, feedback or statistics row).
+Query embeddings use the in-process L1 cache only (knowledge §5.4), keyed with a per-process random HMAC key: the
+admin host reads no Redis `qemb` keys and holds no `Security:CacheKeyPepper`.
 
 | Input | Output (JSON, non-streamed; the answer arrives within the chat budget, ≤ 60 s) |
 |---|---|
