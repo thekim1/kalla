@@ -73,11 +73,24 @@ Reasoning:
   inputs (legacy Office, `.msg`) are recognised only to refuse them as `format_deferred`.
 
 **Text-layer fast path** (`pipeline: text_layer`): per page, pypdfium2's text page gives the characters in content
-order; lines are grouped into paragraphs by vertical gap; a line whose font size is ≥ 1.25 × the page's median body
-size, ≤ 2 lines and ≤ 150 characters becomes a `heading` (`level_source: font_size`, level by size rank, at most 3);
-no table structure (table-dense pages take Docling per §6.1); no OCR, no rendering. Per-character font size through
-pypdfium2's raw pdfium API and the reading order of two-column pages are *to verify* on the fixture corpus (§15.3); if
-column order fails, inspect adds a column signal and such pages go to Docling.
+order, with pdfium's generated line breaks; lines whose gap is ≤ 0.5 × the page's median body size join into
+paragraphs; a line whose size is ≥ 1.25 × that median, ≤ 2 lines and ≤ 150 characters becomes a `heading`
+(`level_source: font_size`, level by size rank, at most 3); lines in the top or bottom 8 % of the page that look like
+a page number or repeat across the request are furniture (`page_header`/`page_footer`, as Docling labels them); no
+table structure (table-dense pages take Docling per §6.1); no OCR, no rendering. A character's size is the height of
+its loose box, not `FPDFText_GetFontSize`, which returns the `Tf` operand without the text matrix (as built in P0 #13,
+PR #16; settled at the integration sync point). The reading order of two-column pages is *to verify* on the fixture
+corpus (§15.3); if column order fails, inspect adds a column signal and such pages go to Docling.
+
+The parser checks the clean-page rule (§6.1) again before it takes the fast path. If any page of a `text_layer`
+request fails it, the **whole request** goes to Docling with the request's OCR and table options, with warning
+`text_layer_rejected` per failing page; the worker still decides per page when it plans ranges (§8.1) (as built in
+P0 #13, PR #16; settled at the integration sync point).
+
+In P0 the parser converts **PDF only** (`/v1/info` `formats.supported` = `pdf`): OLE inputs and RTF get
+`format_deferred`; every other input gets `unsupported_format`, with reason `archive`, `macro_enabled` or
+`executable` where the sniffer recognises it and `unknown` otherwise (OOXML and ODF included until P1). The other
+formats of the table above arrive in P1.
 
 Known P1 gap: scanned pages pasted as pictures into DOCX/PPTX are not OCR'd (Docling's declarative backends do not
 OCR pictures, *to verify*). The parser reports `picture_area_ratio` per page so the quality facts can flag such
@@ -139,11 +152,15 @@ Ported in spirit from RAGFlow (`ragflow/internal/deepdoc/parser/pdf/util/garbled
 `IsGarbledText`, `IsGarbledByFontEncoding`, `IsScanNoise`), adapted to Swedish. Score in [0, 1], max of:
 
 1. bad-character ratio (above);
-2. letter ratio among non-space characters below 0.5;
+2. share of letters **and digits** among non-space characters below 0.5 (digits count, so fee tables do not score as
+   garbled);
 3. **Swedish/English plausibility**: share of tokens of length ≥ 3 that are implausible under a character-bigram model
    trained on Swedish and English public text (a ≈ 50 KB table in the image), so "kommunfullmäktige" scores clean and
-   "ÃÂ¤kfm" does not; mojibake pairs (`Ã¤`, `Ã¶`, `Ã¥`) count double;
+   "ÃÂ¤kfm" does not; mojibake pairs (`Ã¤`, `Ã¶`, `Ã¥`) count double. **P0 has only the mojibake part** (the share of
+   tokens with such a pair, counted double); the bigram model is P1;
 4. scan noise: average token length < 2 or > 25, or > 30 % single-character tokens.
+
+(Criteria 2 and 3 as built in P0 #13, PR #16; settled at the integration sync point.)
 
 The same function scores text-layer text (inspect, fast path) and converted page text (convert), so the worker
 compares like with like. Test vectors in `tests/fixtures/parser/garbled/*.json` (text, expected range).
@@ -152,9 +169,10 @@ compares like with like. Test vectors in `tests/fixtures/parser/garbled/*.json` 
 
 `page`, `label` (slide number, sheet name, or null), `width`, `height`, `chars` (body text), `furniture_chars`
 (headers/footers), `garbled_score`, `text_layer_chars` (PDF), `image_coverage`, `ocr_applied` (none / bitmap /
-full-page), `ocr_confidence` (mean and p10 of word confidences, null if not exposed: *to verify* whether Docling keeps
-OCR cell confidence on the converted page), `table_count`, `table_area_ratio`, `picture_area_ratio`, `empty`
-(`chars == 0`), `ms` (time spent on the page, where reported).
+full-page), `ocr_confidence` (mean and p10 of word confidences; Docling keeps them in the layout clusters' cells
+of the conversion result, `from_ocr` with Tesseract's value ÷ 100, so the parser reads them there; P0 #13, to-verify
+#61), `table_count`, `table_area_ratio`, `picture_area_ratio` (on the fast path: the page's image coverage),
+`empty` (`chars == 0`), `ms` (time spent on the page, where reported).
 
 ## 7. Contract (`contracts/parser/v1/`)
 
@@ -189,7 +207,8 @@ Multipart, not a raw stream with options in headers: options are a nested JSON o
 }
 ```
 
-`pipeline: text_layer` ignores `ocr`, `tables` and `image_scale` and returns no `docling.json.gz`. Unknown properties
+`pipeline: text_layer` ignores `ocr`, `tables` and `image_scale` and returns no `docling.json.gz`, unless a page fails
+the clean-page check and the request falls back to Docling (§3). Unknown properties
 are rejected (400), so drift shows at once; new options are added as optional fields (§7.7).
 
 ### 7.3 Response
@@ -233,14 +252,17 @@ client reads it with `MultipartReader` (`Microsoft.AspNetCore.WebUtilities`).
 
 - **Block kinds**: `title`, `heading`, `paragraph`, `list_item`, `table`, `picture`, `caption`, `code`, `formula`,
   `footnote`, `page_header`, `page_footer`. `layer` is `body` or `furniture` (headers, footers, page numbers:
-  Docling's content layer, *to verify*); the worker drops furniture from chunks by default.
-- **`level_source`**: `style` (DOCX/ODF via styles), `layout` (PDF: the layout model detects section headers but its
-  levels are unreliable, *to verify*), `font_size` (text-layer fast path), `html`, `markdown`. The worker may re-level
-  `layout` and `font_size` headings by numbering or a parse rule.
+  Docling's content layer, whose other values `background`, `invisible` and `notes` the parser does not emit; P0 #13,
+  to-verify #62); the worker drops furniture from chunks by default.
+- **`level_source`**: `style` (DOCX/ODF via styles), `layout` (PDF: the layout model detects section headers but not
+  their levels: Heron gives level 1 to every heading, the document title included; P0 #13, to-verify #62),
+  `font_size` (text-layer fast path), `html`, `markdown`. The worker **re-levels** `layout` headings by numbering or a
+  parse rule, and may re-level `font_size` headings the same way.
 - **No character offsets**: each block carries its own Markdown (`md`), so there is no UTF-16 versus code-point
   question. The document Markdown is defined as the blocks' `md` joined by blank lines, with a line
-  `<!-- page: N -->` before the first block of each page; the parser includes it only when `outputs.markdown` is set
-  (preview, debugging). Pages without blocks still get a marker, unlike Docling's own page-break placeholder (Open
+  `<!-- page: N -->` before the first block of each page; the parser builds it from its blocks (not with Docling's
+  `export_to_markdown`) and includes it as `markdown` in `result.json` only when `outputs.markdown` is set (preview,
+  debugging). Pages without blocks still get a marker, unlike Docling's own page-break placeholder (Open
   WebUI notes that blank pages leave no break: `open-webui/backend/open_webui/retrieval/loaders/main.py:312-325`).
 - **`ref`** is the JSON pointer into the `DoclingDocument` (`#/texts/12`; null on the fast path), so a later consumer
   of the lossless JSON can join it to our blocks. Docling's JSON keys `texts`, `tables`, `pictures`,
@@ -248,10 +270,15 @@ client reads it with `MultipartReader` (`Microsoft.AspNetCore.WebUtilities`).
   (`main.py:312-325`) and RAGFlow (`ragflow/internal/parser/parser/pdf_parser_docling.go:273-300`), so they are stable
   across recent versions.
 - **Pages**: absolute page numbers of the original file in every case (Docling keeps original numbering under a page
-  range, *to verify*; otherwise the parser offsets). DOCX has `page` null; PPTX uses the slide number; XLSX uses the
-  sheet index with `label` = sheet name.
+  range, so the parser does not offset; P0 #13, to-verify #58). DOCX has `page` null; PPTX uses the slide number; XLSX
+  uses the sheet index with `label` = sheet name. `input.pages_requested` is the effective range (the whole document
+  when `pages` is null).
 - `tables[].cells` is the source of truth; `md` of a table block is a convenience rendering (pipe tables lose spans).
+  A cell's `header` is true for a column **or** a row header (TableFormer marks the first column as row headers).
 - `pictures[]` carries captions and OCR'd character counts only; picture crops are not part of P1 (§20).
+- Every field of the result is always present, `null` where it does not apply.
+
+(Result shape as built in P0 #13, PR #16; settled at the integration sync point.)
 
 ### 7.4 Spreadsheets
 
@@ -262,9 +289,10 @@ it the parser returns the first 200 000 with warning `truncated_cells` (a 300 00
 
 ### 7.5 Errors
 
-Error responses are `application/json` (`error.schema.json`): `{ "error": { "code", "detail", "retry", "limit"?,
-"pages_completed"? }, "request_id", "build" }`. `detail` is a fixed sentence per code, never a library message (those
-can quote document content).
+Error responses are `application/json` (`error.schema.json`): `{ "error": { "code", "detail", "retry", "limit",
+"reason", "pages_completed" }, "request_id", "build" }`, every field present and `null` where it does not apply;
+`reason` carries the `unsupported_format` reason (as built in P0 #13, PR #16; settled at the integration sync point).
+`detail` is a fixed sentence per code, never a library message (those can quote document content).
 
 | HTTP | `code` | Meaning | `retry` | Worker maps to |
 |---|---|---|---|---|
@@ -277,13 +305,14 @@ can quote document content).
 | 422 | `corrupt` | cannot be opened by the format's library | `none` | Fatal |
 | 422 | `too_many_pages` | document > 2 000 pages, or range > 20 | `none` / `smaller_range` | Fatal / re-plan |
 | 422 | `limit_exceeded` | bomb limits (§11), `limit` names which | `none` | Fatal, security event `5104` |
-| 422 | `ocr_failed` | OCR engine error | `same` (once) | Transient once, then Fatal |
+| 422 | `ocr_failed` | OCR engine error (a Docling error from an OCR module) | `same` (once) | Transient once, then Fatal |
 | 422 | `conversion_failed` | Docling or the fast path raised | `same` (once) | Transient once, then Fatal |
 | 422 | `timeout` | deadline hit with nothing usable | `smaller_range` | re-plan with half the range; single page → Fatal |
 | 200 | `status: partial` | deadline hit after some pages | – | keep completed pages, request the rest |
 | 500 | `worker_crashed` | conversion process died (signal) | `smaller_range` | as `timeout` |
-| 507 | `resource_limit` | RSS watchdog killed the conversion | `smaller_range` | as `timeout` |
+| 507 | `resource_limit` | RSS watchdog killed the conversion (P1; P0 has no watchdog) | `smaller_range` | as `timeout` |
 | 503 | `busy` / `not_ready` | no warm slot (`Retry-After`) | `later` | requeue after `Retry-After`, no attempt counted |
+| 501 | `not_implemented` | endpoint not in this build (`/v1/inspect` in P0) | `none` | Fatal (P0 only; added in P0 #13, PR #16) |
 
 `5104 rag.parser.limit_exceeded` is a security event in the worker's range (identity design §10 numbering), logged
 by the worker with document id and limit name only.
@@ -432,26 +461,35 @@ tini (PID 1)
 3. Ready when **all** slots passed at start; afterwards ready while **at least one** slot is warm (a recycling slot
    reduces `slots_ready` in `/v1/info`; requests meanwhile may see `busy`).
 
-Other option sets (OCR `force`, tables `fast`) are built lazily and kept in an LRU of three pipelines per slot
-(Docling caches pipelines per options, *to verify*; each holds its models, hence the bound).
+Other option sets (OCR `force`, tables `fast`) are built lazily and kept in an LRU of three pipelines per slot.
+Docling's `DocumentConverter` caches one pipeline per options hash and never evicts, so each option set gets its own
+converter and the per-request document timeout is set on the pipeline's own copy of its options. Each cached set
+costs about 0.5 GiB (an LRU of three peaked at 2.30 GiB per slot), so three sets do not fit under
+`PARSER_SLOT_MAX_RSS_MB` 2 800 next to `ner-0`: the cache size is set with the P1 RSS watchdog; three until then
+(P0 #13, PR #16; decided by the user 2026-10-30, to-verify #65).
 
 ### 10.3 Limits per conversion, recycling, cleanup
 
 | Mechanism | Value (16 GB host, 1 × 4) | Effect |
 |---|---|---|
-| Deadline | `min(deadline_ms, 120 s)`; Docling's own document timeout set to deadline − 10 s (*to verify* option name) for a graceful `partial` | then `SIGKILL` at deadline + 10 s → `timeout` |
+| Deadline | `min(deadline_ms, 120 s)`; Docling's own `document_timeout` set to max(deadline − 10 s, deadline ÷ 2) for a graceful `partial` (P0 #13, PR #16) | then `SIGKILL` at deadline + 10 s → `timeout` |
 | RSS watchdog | supervisor samples each slot every 500 ms (`psutil`); kill above `PARSER_SLOT_MAX_RSS_MB` (2 800; 2 × 2: 2 600) | `resource_limit`, respawn |
 | `RLIMIT_AS` | not used for slots (torch and ONNX reserve large virtual ranges); used for inspect | – |
 | OOM | slots `oom_score_adj=1000`, so the kernel picks them before the supervisor | supervisor survives, respawns |
 | Recycle | after 50 conversions, or when idle RSS exceeds warm RSS + 40 % | respawn between jobs; reason in metrics |
-| Job directory | `/tmp/jobs/<request_id>/` (input and output) | removed by the supervisor after the response is sent or the slot is killed; wiped at start |
+| Job directory | `/tmp/jobs/<request_id>-<8 hex>/` (input and output; P0 #13, PR #16) | removed after the response is sent or the slot is killed; wiped at start |
 | tmpfs | `/tmp` 1 GB (was 2 GB): tmpfs pages count against the container's memory limit | – |
+
+P0 builds the deadline, the disconnect kill, the job directory and the respawn of a dead or stuck slot. The RSS
+watchdog, recycling and `oom_score_adj` stay P1 (§16).
 
 ### 10.4 Cancellation
 
 The worker gives up by closing the connection (its HTTP timeout = deadline + 15 s, or a newer execution cancels the
 job, worker §4). The API awaits the slot result while checking `request.is_disconnected()` every second; on
-disconnect the supervisor kills the slot and respawns it. Killing costs a re-warm (≈ 10–30 s, *to measure*) but is
+disconnect the supervisor kills the slot and respawns it, and the API logs it and answers 499 (no client is left to
+read it; P0 #13, PR #16, to-verify #73: the slot was killed 0.1 s after the client left and warm again 7 s later).
+Killing costs a re-warm (≈ 10–30 s, *to measure*) but is
 the only reliable stop for native code. No cancel endpoint is needed: worker and parser talk directly, without a
 proxy that could hide a disconnect.
 
@@ -470,7 +508,7 @@ Inputs arrive after ClamAV but are untrusted. The container is the outer sandbox
 | Pathological PDF (deep object trees, huge content streams, endless xref loops) | deadline + kill, RSS watchdog, page cap 2 000; inspect lane has `RLIMIT_AS` and its own 10 s deadline; the fast path runs in a killable slot like Docling |
 | XXE in OOXML/ODF | lxml ≥ 5 resolves internal entities only by default (*to verify*); `defusedxml` installed so openpyxl uses it (*to verify*); no network for external DTDs; XXE fixtures (§15.3) |
 | Path traversal | zip entry names never used as paths; job directory per request |
-| Resource exhaustion | slot count = capacity, no queue, per-request deadline, body limit 60 MB enforced while streaming (uvicorn `h11_max_incomplete_event_size` and a counting reader), multipart part count ≤ 2 |
+| Resource exhaustion | slot count = capacity, no queue, per-request deadline, body limit 60 MB enforced while streaming by a counting reader (a declared `Content-Length` above the limit is refused before reading; `h11_max_incomplete_event_size` bounds only the request head; P0 #13, to-verify #73), multipart part count ≤ 2 |
 | Runtime downloads | `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `HF_DATASETS_OFFLINE=1`, Docling `artifacts_path=/opt/models`, `TESSDATA_PREFIX` fixed, `TORCH_HOME`/`XDG_CACHE_HOME` under `/tmp/cache`; `test_offline.py` runs a conversion of every format in a container with `--network none` **and** with `socket.socket.connect` patched to raise, so a silent fallback download fails the test instead of passing on a cached file |
 | Content in errors and logs | §7.5 fixed `detail`; §13 log rules |
 | Parser compromise | blast radius: its own TLS key and the documents in flight. No database, blob or key access; the worker treats every response as untrusted data (schema validation, size caps per part: `result.json` ≤ 50 MB, the binary part ≤ 60 MB, total ≤ 150 MB) |
@@ -482,7 +520,7 @@ Inputs arrive after ClamAV but are untrusted. The container is the outer sandbox
 | Request body | 60 MB | 60 MB (uploads ≤ 50 MB; crawler max fetch also 50 MB) | none |
 | Pages per request | 20 | 20 (hard); worker sizes adaptively, 8 with OCR | none |
 | Request deadline | 120 s | 120 s max, from `deadline_ms`; hard kill +10 s | none |
-| Pages per document | – | 2 000 | new |
+| Pages per document | – | 2 000, counted with pypdfium2 in the slot (Docling's `max_num_pages` and `max_file_size` refuse the whole document instead of truncating, so they are not used; P0 #13, to-verify #58) | new |
 | Inspect deadline | – | 10 s | new |
 | `/tmp` tmpfs | 2 GB | 1 GB | changed |
 | Per format | – | §7.4 cells, §11 zip/pixels | new |
@@ -600,7 +638,9 @@ confirm: 2 × 2 gives more pages per hour, 1 × 4 lower latency per document; th
 ### 15.2 Contract tests (.NET, `tests/Ume.Rag.ContractTests`)
 
 - Start the parser image (Testcontainers), convert every fixture with the worker's real client, read the multipart
-  response, validate `result.json` against `contracts/parser/v1/convert-result.schema.json` (JsonSchema.Net) and
+  response, validate `result.json` against `contracts/parser/v1/convert-result.schema.json` (in P0 a small test-only
+  validator, because `JsonSchema.Net` 9.x binaries ship under an *Open Source Maintenance Fee Agreement* and are not
+  used; P1 picks a permissively licensed 2020-12 validator; decided by the user 2026-10-30, to-verify #17) and
   deserialise into the client's records with `JsonUnmappedMemberHandling.Disallow` in tests (production tolerates
   unknown fields), so drift in either direction fails.
 - Compare with golden files `tests/fixtures/parser/golden/*.json`, normalised: timings, versions and `build` removed;
@@ -613,8 +653,9 @@ confirm: 2 × 2 gives more pages per hour, 1 × 4 lower latency per document; th
 ### 15.3 Fixture corpus (`tests/fixtures/parser/`)
 
 Every file is **public or synthetic**, listed in `MANIFEST.csv` (path, origin URL or generator, licence, contains
-personal data: must be `no`). The pre-commit hook and CI reject a fixture missing from the manifest and scan fixture
-text for personnummer patterns other than Skatteverket's published test numbers.
+personal data: must be `no`). Synthetic fixtures are generated by `src/parser/scripts/make_fixtures.py` (same bytes
+on every run) and licensed CC0-1.0 (P0 #13, PR #16). The pre-commit hook and CI reject a fixture missing from the
+manifest and scan fixture text for personnummer patterns other than Skatteverket's published test numbers.
 
 | Group | Content |
 |---|---|
@@ -639,7 +680,7 @@ In P1 the malicious fixtures (§15.3) cover the known attack shapes; crash findi
 
 | Phase | Deliverable |
 |---|---|
-| **P0** | Image with Docling, Tesseract `swe` and models baked; size measured; supervisor with one slot and warm-up self-test; `/health/*`, `/v1/info` with `build_hash`; the five convert/inspect/info/error schemas in `contracts/parser/v1/`; `/v1/convert` for a plain PDF (enough for the contract job); `test_offline.py` green with `--network none` (P0 checklist #12, #13) |
+| **P0** | Image with Docling, Tesseract `swe` and models baked; size measured; supervisor with one slot and warm-up self-test; `/health/*`, `/v1/info` with `build_hash`; the five convert/inspect/info/error schemas in `contracts/parser/v1/`; `/v1/convert` for PDF (as built, PR #16: the text-layer fast path and Docling with OCR `auto`/`force`/`off`, table modes, page ranges with `partial`, per-page signals with the P0 garble detector, the error codes, the disconnect kill; other formats refused, §3); `/v1/inspect` answers `501 not_implemented`; `test_offline.py` green with `--network none` (P0 checklist #12, #13) |
 | **P1** | `/v1/inspect`; text-layer fast path; `/v1/ner` with `ner-0` and its two schemas (§7.8); all P1 formats (§3), legacy Office, RTF and email refused as `format_deferred`; OCR `auto`/`force`/`off`; tables `fast`/`accurate`; **page ranges** with `partial`; per-page signals and garble detector; every error code; limits and bomb checks; RSS watchdog, recycling, disconnect kill; OTel and metrics; fixture corpus and goldens; contract tests; OCR acceptance check (§9.3); licence inventory (postponed P2); `bench.py` report on the test host |
 | **P2** | Legacy Office and RTF via LibreOffice, email with child documents (Z1, §4, §5); picture crops with a describe-pictures node (worker → gateway, residency rules); OCR for pictures in DOCX/PPTX (route via PDF); PDF embedded files as child documents; decide archives and macro-enabled formats; fuzzing (§15.4); cross-page table merge and page-end hyphenation if the evaluation shows a need; GPU target if volumes need it |
 

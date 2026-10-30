@@ -275,28 +275,36 @@ measures recall and latency per band; a failing band is trigger (c) for O1.
 
 | Issue | At 10× | Decision |
 |---|---|---|
-| Seam for a later broker (answered 4) | – | **`IJobQueue`** in `Ume.Rag.Infrastructure` (P0, sketch below); the Postgres implementation is plain SQL over the unpartitioned `Jobs`; enqueue takes the caller's transaction, so job creation stays atomic with domain writes (a broker would sit behind an outbox relay) |
+| Seam for a later broker (answered 4) | – | **`IJobQueue`** port in `Ume.Rag.Domain/Ports`, Postgres implementation in `Ume.Rag.Infrastructure` (P0, sketch below); the Postgres implementation is plain SQL over the unpartitioned `Jobs`; enqueue takes the caller's transaction, so job creation stays atomic with domain writes (a broker would sit behind an outbox relay) |
 | Dedup | batch enqueues of 500 rows | partial unique index on `DedupKey WHERE "State" IN ('queued','running')` (P0); replaces the advisory-lock dedup |
 | Dequeue round trips | one statement per job and department probe | P2: **batched dequeue**: `LIMIT @n` = free slots the department may take (fairness share, engine §9.3), one statement for several jobs |
 | Completion round trips | one `UPDATE` per job | P2: completions that are not part of a fenced effect transaction (e.g. fetch `unchanged`) are buffered ≤ 100 ms and written with one `UPDATE … FROM unnest(…)`; fenced completions stay in their transaction (engine §7.6) |
 | `NOTIFY` serialises committing transactions on a database-wide lock (`async.c:905-922`, REL_17) | ≈ 85 notifying commits/s, each holding the lock through commit | P2: **debounce**: a process sends `rag_jobs` for a class at most once per 200 ms, and not at all when it runs that class itself and has a free slot (it wakes locally); polling (2 s) remains the safety net |
 | LISTEN fan-out to many instances | 85 notifications/s × 6 instances = 500 wake-ups/s | P2: wake-ups are **coalesced** per class (≤ 1 probe round per 50 ms) and ignored when the instance has no free slot for the class (local check, no SQL) |
-| Fairness across instances | per instance, approximate (engine §9.3) | stays; at 20+ departments the loose-index-scan department list (every 5 s) is shared per instance; per-department cap `max(1, ⌈slots ÷ departments⌉)` per instance |
+| Fairness across instances | per instance, approximate, from P0 with a `GROUP BY` department list per probe (engine §9.3) | stays; at 20+ departments the loose-index-scan department list (every 5 s) is shared per instance; per-department cap `max(1, ⌈slots ÷ departments⌉)` per instance |
 | Per-process concurrency is a deployment knob (repo §3) | heterogeneous hosts need different values per instance | **`Worker:Concurrency:<class>`** (deployment, P0); `Settings.WorkerConcurrency` keeps run-time fleet values only (e.g. `departmentShare`); the fleet-wide embedding cap is infrastructure, so a deployment value (`Embedding:GlobalMaxInFlight`, §3.9) |
 | Mixed versions during a rolling update (P2, several instances) | an old worker may dequeue a job enqueued by new code | payloads are additive (tolerant reader); a job that needs a newer build carries `MinBuild` in its payload and older instances requeue it without an attempt (`rag.jobs.requeued{reason=build}`) |
 | Reclaims | an instance dies mid-job | a reclaim does not count as an attempt; a job reclaimed 3 times is dead-lettered as a poison suspect |
 | Broker | – | not before the §6 trigger; `fetch` is the first candidate, but its rate is capped by politeness (≤ Σ host rates), so the queue is unlikely to bind first |
 
+As built in P0 #20 (PR #20; settled at the integration sync point): the port lives in `Ume.Rag.Domain/Ports` and takes
+`DbTransaction`, so the domain does not reference Npgsql; dequeue returns one job (the batched form is P2); fail,
+release and cancel are separate members; the heartbeat renews each job's own lease. Wake-ups are not a queue member:
+they live in Infrastructure (`JobWakeUps`, fed by local enqueues and by `rag_jobs` on the config monitor's listening
+connection, data-model §4.3), so a broker brings its own.
+
 ```csharp
-// Ume.Rag.Infrastructure/Jobs
+// Ume.Rag.Domain/Ports (Postgres implementation: Ume.Rag.Infrastructure/Jobs)
 public interface IJobQueue
 {
-    Task EnqueueAsync(IReadOnlyList<JobRequest> jobs, NpgsqlTransaction tx, CancellationToken ct);   // dedup, wake-up
-    Task<IReadOnlyList<LeasedJob>> DequeueAsync(DequeueRequest request, CancellationToken ct);        // class, dept, n
-    Task<IReadOnlySet<JobId>> HeartbeatAsync(IReadOnlyList<JobId> running, CancellationToken ct);     // lost = missing
-    Task CompleteAsync(IReadOnlyList<JobCompletion> done, NpgsqlTransaction? tx, CancellationToken ct);
-    Task ReleaseAsync(IReadOnlyList<JobId> jobs, RequeueReason reason, CancellationToken ct);         // no attempt
-    IAsyncEnumerable<string> WakeUpsAsync(CancellationToken ct);                                       // LISTEN or broker
+    Task<IReadOnlySet<Guid>> EnqueueAsync(IReadOnlyList<JobRequest> jobs, DbTransaction? tx, CancellationToken ct); // dedup, pg_notify
+    Task<IReadOnlyList<ReadyDepartment>> ReadyDepartmentsAsync(string jobClass, CancellationToken ct);  // fairness (GROUP BY)
+    Task<LeasedJob?> DequeueAsync(DequeueRequest request, CancellationToken ct);                         // class, dept: one job
+    Task<IReadOnlySet<Guid>> HeartbeatAsync(Guid owner, IReadOnlyList<JobLease> running, CancellationToken ct); // lost = missing
+    Task<bool> CompleteAsync(Guid jobId, Guid owner, string? resultJson, DbTransaction? tx, CancellationToken ct);
+    Task<string?> FailAsync(Guid jobId, Guid owner, string error, bool fatal, TimeSpan? retryAfter, CancellationToken ct);
+    Task<bool> ReleaseAsync(Guid jobId, Guid owner, string reason, TimeSpan delay, CancellationToken ct); // no attempt
+    Task<int> CancelRunAsync(Guid runId, string reason, Guid? exceptJobId, CancellationToken ct);
 }
 ```
 
@@ -459,19 +467,23 @@ or > 50 % of one thread).
 ### 3.13 Object store and `IBlobStore`
 
 **Contract (P0, file system implementation):** blobs are **write-once**: a key is never overwritten (new content = new
-key) and deletion is a tombstone in the database plus a delayed purge. S3 has no rename, so the contract is S3-safe on
-both implementations:
+key) and deletion is a tombstone row in the database (`content."BlobTombstones"`, P1) plus a delayed purge. S3 has no
+rename, so the contract is S3-safe on both implementations. The interface is data-model §9's, as built in P0 #21
+(PR #33; settled at the integration sync point):
 
 ```csharp
+// Ume.Rag.Domain/Ports (file system implementation: Ume.Rag.Infrastructure/Blobs)
 public interface IBlobStore
 {
-    // Write-once and atomic: visible only when complete (FS: temp + rename without overwrite; S3: PUT with
-    // If-None-Match "*" or a completed multipart upload). An existing key is success (same content by construction).
+    // Write-once and atomic: visible only when complete (FS: staging file, fsync, POSIX link(2), which fails on an
+    // existing key; S3: PUT with If-None-Match "*" or a completed multipart upload). An existing key is AlreadyExisted.
     Task<BlobWriteResult> PutAsync(BlobKey key, Stream content, long? length, CancellationToken ct);
-    Task<Stream?> OpenReadAsync(BlobKey key, BlobRange? range, CancellationToken ct);            // null = absent
+    Task<Stream?> OpenReadAsync(BlobKey key, BlobRange? range, CancellationToken ct);  // null = absent; no suffix ranges
     Task<bool> ExistsAsync(BlobKey key, CancellationToken ct);
-    Task DeletePrefixAsync(BlobKey prefix, CancellationToken ct);         // delayed purge after tombstones; tmp sweeps
-    IAsyncEnumerable<BlobInfo> ListAsync(BlobKey prefix, CancellationToken ct); // tmp/ sweeps, weekly orphan audit only
+    Task<BlobWriteResult> PromoteAsync(BlobKey from, BlobKey to, CancellationToken ct); // tmp/ only, no overwrite
+    Task DeleteAsync(BlobKey key, CancellationToken ct);           // the purge, idempotent; called by the purge sweep
+    Task DeletePrefixAsync(BlobKey prefix, CancellationToken ct);  // tmp/ and previews/ sweeps only
+    IAsyncEnumerable<BlobInfo> ListAsync(BlobKey prefix, CancellationToken ct); // those sweeps, weekly orphan audit only
 }
 ```
 

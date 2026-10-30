@@ -430,18 +430,26 @@ CREATE INDEX "IX_Jobs_RunId" ON content."Jobs" ("RunId") WHERE "State" IN ('queu
   with `Attempts − 1`, so they never use up attempts (engine design §7.3).
 - **Leases**: dequeue sets `LeaseOwner`, `LeaseUntil`, `Attempts + 1`; a reaper (every 10 s) returns expired leases to
   `queued`, and also jobs of instances without a heartbeat for 30 s (the 10 s heartbeat may miss two beats; a killed worker's jobs are
-  back within 40 s, P0 #20, settled 2026-10-30). A reclaim after an instance died sets
-  `Attempts − 1` and `Reclaims + 1`; a job reclaimed 3 times is dead-lettered as a poison suspect
+  back within 40 s, P0 #20, settled 2026-10-30). A reclaim (an expired lease or a dead
+  instance, engine design §9.4; P0 #20) sets `Attempts − 1` and `Reclaims + 1`; a job reclaimed 3 times is dead-lettered as a poison suspect
   (`LastError = 'poison-suspect'`). A worker restart loses no work (worker §9).
 - **Dedup**: enqueue is `INSERT … ON CONFLICT ("DedupKey") WHERE "State" IN ('queued','running') DO NOTHING` against
   the partial unique index. Keys in use: `fetch:{level}:{urlHash}` (shared frontier), `sync-upload:{batchId}`
   (connectors design §6, §9.1).
-- **Fairness per department**: the worker keeps running counts per (class, department) in memory and tries
-  departments in ascending order with the indexed query below; the first hit wins. Preview and command are tried first.
-  One job per statement in P1; the **batched** dequeue (`LIMIT` = the free slots the department may take) comes in P2
+- **Fairness per department** (from P0): the worker keeps running counts per (class, department) in memory, reads the
+  departments with ready jobs of the class with the `GROUP BY` below, and tries them in ascending order of its running
+  count, then by best priority, then by oldest ready job, with the indexed query below; the first hit wins (as built in
+  P0 #20, PR #20; settled at the integration sync point). Each class has its own dispatcher loop and slots, so preview
+  and command never wait behind a busy class. One job per statement; the **batched** dequeue (`LIMIT` = the free slots
+  the department may take) and the recursive-CTE loose index scan in place of the `GROUP BY` (to-verify #9) come in P2
   behind the same `IJobQueue` seam (performance pass §3.4).
 
 ```sql
+SELECT "DepartmentId", max("Priority"), min("AvailableAt")
+FROM content."Jobs"
+WHERE "State" = 'queued' AND "Class" = $1 AND "AvailableAt" <= now()
+GROUP BY "DepartmentId";
+
 WITH next AS (
     SELECT "Id" FROM content."Jobs"
     WHERE "State" = 'queued' AND "Class" = $1 AND "DepartmentId" = $2 AND "AvailableAt" <= now()
@@ -459,11 +467,12 @@ RETURNING j.*;
 
 | Channel | Payload | Sent by | Listened by |
 |---|---|---|---|
-| `rag_jobs` | class name (`preview`, …) | enqueue transaction (`pg_notify` delivers at commit) | worker |
+| `rag_jobs` | class name (`preview`, …); other payloads are ignored | enqueue transaction (`pg_notify` delivers at commit) | worker (registered by `AddRagWorker` only) |
 | `rag_config` | config version (§5) | config trigger | api, worker, admin |
 
 Each instance holds one dedicated listening connection (counted in its role's limit, opened from its own connection
-string `ConnectionStrings__ragdb-listen`, so a later pooler never sees it) and still polls every 2 s (jobs) and 2 s
+string `ConnectionStrings__ragdb-listen`, so a later pooler never sees it): the config monitor's, which carries
+`rag_config` and, in the worker, `rag_jobs` too (P0 #20, PR #30, issue #21). It still polls every 2 s (jobs) and 2 s
 (config version), so a missed notification costs seconds. From P2 (first multi-host deployment) a process sends
 `rag_jobs` for a class at most once per 200 ms and receivers coalesce wake-ups per class
 ([`../performance-pass.md`](../performance-pass.md) §3.4).
@@ -614,7 +623,7 @@ Nightly, batched step functions in the gateway style (ADR 016): `SECURITY DEFINE
 | `content."ChunkSets"` (`writing`) | orphans older than 24 hours (engine design §14) | worker sweep |
 | `content."NodeOutputs"` (+ blobs) | unused 30 days (`Settings`); a parse output referenced by a live document is kept | worker, `LastUsedAt` |
 | uploads (blobs) | while the source exists; a replaced or deleted upload is tombstoned; uncommitted batches after 24 h | worker on source/upload deletion; admin sweep for uncommitted batches |
-| blob tombstones | purged `Settings.BlobPurgeDelayDays` (35, = Postgres backup retention) after deletion, so every restore point finds its blobs | worker sweep |
+| blob tombstones (`content."BlobTombstones"`, P1, §9) | purged `Settings.BlobPurgeDelayDays` (35, = Postgres backup retention) after deletion, so every restore point finds its blobs | worker sweep: `IBlobStore.DeleteAsync` per row older than the delay, then the row is deleted, in batches |
 | `content."QuarantinedFiles"` (+ blobs) | `Settings.QuarantineRetentionDays` (30) | worker |
 | `tmp/` and `previews/` blobs | 24 hours | worker sweep |
 | `content."EvaluationSets"` and children | until the collection is removed | worker on collection deletion |
@@ -634,21 +643,49 @@ Nightly, batched step functions in the gateway style (ADR 016): `SECURITY DEFINE
 
 ## 9. Blob layout (`IBlobStore`)
 
-One container (file system: `/data/blobs/rag/`; S3: one bucket, `BlobStore:S3:Bucket`, default `rag`). Paths below the
+One container (file system: `BlobStore:Root`, default `/data/blobs/rag/`; S3: one bucket, `BlobStore:S3:Bucket`, default `rag`). Paths below the
 container; ids in `N` format; `internal` objects envelope-encrypted per §7, `public` objects not (no SSE).
 
-**Contract** (S3-safe on both implementations, P0; [`../performance-pass.md`](../performance-pass.md) §3.13):
-**write-once**: a key is never overwritten (new content = new key); `PutAsync` is atomic (visible only when complete;
-FS temp + rename, S3 PUT or completed multipart) with `IfAbsent` semantics (S3 `If-None-Match: *`, 412 = already there
-= success, which is correct for content-addressed keys); `OpenReadAsync` (range, null = absent); `ExistsAsync`;
-`PromoteAsync` (FS rename, S3 server-side copy + delete; only from `tmp/`); `DeleteAsync` writes a **tombstone**
-(the purge sweep deletes the object after `Settings.BlobPurgeDelayDays`); `DeletePrefixAsync` only for `tmp/` and
+**Contract** (S3-safe on both implementations, P0; [`../performance-pass.md`](../performance-pass.md) §3.13; as built in
+P0 #21, PR #33; settled at the integration sync point): **write-once**: a key is never overwritten (new content = new
+key); `PutAsync` is atomic (visible only when complete; FS: a staging file under `{root}/.staging/`, fsync, then a
+no-overwrite POSIX `link(2)` to the key's path, because .NET's `File.Move(overwrite: false)` on Unix checks with
+`lstat` and then `rename`s over a file that appeared in between; S3: PUT or completed multipart) with `IfAbsent`
+semantics (S3 `If-None-Match: *`, 412 = already there = success, which is correct for content-addressed keys) and
+returns `BlobWriteResult` (`Created` or `AlreadyExisted`); `OpenReadAsync` (null = absent; a range is `offset` plus an
+optional length, clamped to the end, one that starts at or past the end reads as empty, an S3 store maps HTTP 416 to
+empty; no suffix ranges); `ExistsAsync`; `PromoteAsync` (FS link then unlink, S3 conditional server-side copy +
+delete; only from `tmp/`; returns `BlobWriteResult`, `AlreadyExisted` when the target exists, also on a retry);
+`DeleteAsync` is the idempotent **purge** (an absent key is success); `DeletePrefixAsync` only for `tmp/` and
 `previews/` sweeps; `ListAsync` only for those sweeps and the weekly orphan audit, never on hot paths. The file system
 implementation serves dev and the single-host pilot; beyond one host an S3-compatible object store (`AWSSDK.S3`,
 `ForcePathStyle`, checksums `WHEN_REQUIRED`): the municipality's S3 service if IT offers one, else SeaweedFS, decided
 with IT before the first multi-host deployment (postponed decision S2). Access keys **per service**
 (`BlobStore__S3__AccessKey`/`SecretKey`) with bucket policies mirroring today's mounts: worker read/write, admin write
 on `uploads/` and read, api read-only (P2: write on `chat-tmp/`).
+
+**Tombstones are database rows, not store markers.** A user's or a retention rule's deletion inserts a row into
+`content."BlobTombstones"` (key, deleted at, reason; P1, issue #34) in the transaction of its own change; the worker's
+purge sweep calls `DeleteAsync` after `Settings.BlobPurgeDelayDays` (§8). A marker in the store would survive a
+point-in-time restore to T and purge, 35 days later, a blob the restored database still references; a row rolls back
+with the reference. Scratch (`tmp/`) and preview blobs are deleted directly.
+
+**Keys** (`BlobKey`): the first segment is one of the areas in the table below; a key that names a blob has at least
+two segments (a one-segment key is a prefix only); segments are 1–255 characters of **lower-case** `a–z`, digits,
+`-`, `_` and `.`, neither starting nor ending with `.`; no leading, trailing or doubled `/`; at most 1,024 characters
+(the S3 limit). Lower case only, so two keys never collide on a case-insensitive file system. So the path parts
+below are written in that alphabet (settled at the integration sync point; the P1 callers format them):
+- ids are lower-case GUIDs (`D` format);
+- hashes and cache keys are lower-case hex;
+- `{level}` is the classification value (`public`, `internal`, `sensitive`);
+- `{nodeType}` is the node type's lower-case name;
+- `{host}` is the lower-case ASCII (punycode) host, and a port becomes `_{port}` (`example.se_8443`);
+- `{fetchedAt}` is UTC Unix seconds (`robots-1793395200.txt`).
+
+**File system limits (P0):** the parent directory is not fsynced after the link; only Linux is run (Windows and
+macOS paths are untested); the store needs a file system with hard links (the pilot uses a local Docker volume); the
+staging directory sits at the root, so P2's read-only api mount with a writable `chat-tmp/` needs a staging directory
+per writable mount.
 
 | Kind | Path | Retention | Backup |
 |---|---|---|---|

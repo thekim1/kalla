@@ -1,8 +1,9 @@
 name: Verify
 # A pull request is verified on the merge with main (pull_request); a push only verifies main, so a branch with a pull
 # request is not built twice. A branch without one can be verified from the Actions tab (workflow_dispatch).
-# Jobs: ownership and backend (Stage 0), images (P0 checklist #5), parser and contract (P0 checklist #13), deploy-checks
-# (P0 checklist #14), admin-ui (P0 checklist #3, plans/platform/repo-and-deployment.md §2.3, §8.2).
+# Jobs: ownership and backend (Stage 0), images (P0 checklist #5), deploy-checks (P0 checklist #14), admin-ui (P0
+# checklist #3, plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract jobs (P0 checklist #13) are in
+# parser.yml, which runs them only when the parser changed.
 on:
   push:
     branches: [main]
@@ -35,7 +36,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
-      parser: ${{ steps.filter.outputs.parser }}
       deploy: ${{ steps.filter.outputs.deploy }}
       adminui: ${{ steps.filter.outputs.adminui }}
     steps:
@@ -53,18 +53,16 @@ jobs:
           ui=false; [ -f src/admin-ui/package-lock.json ] && ui=true
           if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            printf 'code=true\nparser=true\ndeploy=true\nadminui=%s\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
+            printf 'code=true\ndeploy=true\nadminui=%s\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
           fi
           flag() { [ -n "$1" ] && echo true || echo false; }
           code="$(git diff --name-only "$range" | grep -vE '^(plans/|platforms/)|^[^/]+\.md$' || true)"
-          # The parser, its contract, the contract tests and fixtures, the worker's parser client, or this workflow.
-          parser="$(git diff --name-only "$range" | grep -E '^(src/parser/|contracts/parser/|tests/Ume\.Rag\.ContractTests/|tests/fixtures/parser/|src/Ume\.Rag\.Worker/Parsing/|\.github/workflows/verify\.yml$)' || true)"
           # The production Compose files and init-deployment.sh, or this workflow.
           deploy="$(git diff --name-only "$range" | grep -E '^(deploy/|\.github/workflows/verify\.yml$)' || true)"
           # The admin UI, the error codes its Swedish texts are checked against, its size budget script, or this workflow.
           adminui="$(git diff --name-only "$range" | grep -E '^(src/admin-ui/|contracts/admin/|scripts/admin-ui-size-budget\.mjs$|\.github/workflows/verify\.yml$)' || true)"
           [ "$ui" = true ] || adminui=""
-          { echo "code=$(flag "$code")"; echo "parser=$(flag "$parser")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"; } >> "$GITHUB_OUTPUT"
+          { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"; } >> "$GITHUB_OUTPUT"
 
   backend:
     needs: changes
@@ -204,103 +202,3 @@ jobs:
       - name: Design-system drift (warning only)
         # Without a gateway checkout it compares the copies with design-system.lock only; it always exits 0.
         run: node scripts/design-system-drift.mjs
-
-  parser:
-    # The parser sidecar (plans/parser/design.md §15.1, repo-and-deployment §8.2): lock, lint, unit and supervisor tests
-    # and the schema export on the runner; then the image's test target (real Docling, models and Tesseract, including
-    # test_offline.py) with no network at all. Runs only when the parser or its contract changed (changes.parser); a
-    # skipped job counts as passed for required checks. The image layers come from the GitHub Actions cache, shared with
-    # the contract job (the blobs are content-addressed, so the two scopes store them once).
-    needs: changes
-    if: needs.changes.outputs.parser == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: src/parser
-    steps:
-      - uses: actions/checkout@v4
-      - name: Free runner disk
-        # The parser image is about 3 GB and buildx keeps a second copy while loading it; the hosted runner's free space
-        # is not enough without removing preinstalled toolchains this job does not use.
-        run: |
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
-          docker system prune -af >/dev/null
-          df -h / | tail -1
-      - name: Install uv from the image the Dockerfile pins
-        run: |
-          mkdir -p "$RUNNER_TEMP/bin"
-          cid="$(docker create ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff x)"
-          docker cp "$cid:/uv" "$RUNNER_TEMP/bin/uv"
-          docker rm "$cid"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Lock, lint and tests
-        run: |
-          uv lock --check
-          uv sync --frozen
-          uv run ruff check .
-          uv run ruff format --check .
-          uv run pytest
-      - name: Committed schemas match the models
-        run: |
-          uv run python -m scripts.export_schema
-          git diff --exit-code -- ../../contracts/
-          test -z "$(git status --porcelain --untracked-files=all -- ../../contracts/)"
-      - name: pip-audit against the locked export
-        # torch and torchvision come from the PyTorch CPU index, which pip-audit cannot look up; it lists them as skipped.
-        run: |
-          uv export --frozen --no-emit-project --format requirements.txt -o "$RUNNER_TEMP/requirements.txt"
-          uv run pip-audit -r "$RUNNER_TEMP/requirements.txt" --require-hashes --disable-pip --progress-spinner off
-      - uses: docker/setup-buildx-action@v4
-      - name: Build the image's test target
-        uses: docker/build-push-action@v7
-        with:
-          context: src/parser
-          target: test
-          build-args: REVISION=${{ github.sha }}
-          tags: ume-rag/parser:test
-          load: true
-          cache-from: |
-            type=gha,scope=parser-test
-            type=gha,scope=parser-runtime
-          cache-to: type=gha,scope=parser-test,mode=max
-      - name: Tests in the image without network
-        run: docker run --rm --network none ume-rag/parser:test
-
-  contract:
-    # Ume.Rag.ContractTests (parser design §15.2): the worker's parser client against the parser image built from this
-    # commit; responses and error cases validated against contracts/parser/v1/ and compared with the goldens. Same
-    # trigger and cache as the parser job. The backend job runs the same project without the image, so there the
-    # image tests skip.
-    needs: changes
-    if: needs.changes.outputs.parser == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Free runner disk
-        # The parser image is about 3 GB and buildx keeps a second copy while loading it; the hosted runner's free space
-        # is not enough without removing preinstalled toolchains this job does not use.
-        run: |
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
-          docker system prune -af >/dev/null
-          df -h / | tail -1
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.401
-      - uses: docker/setup-buildx-action@v4
-      - name: Build the parser image
-        # The name has a registry part with a dot, so Testcontainers does not prefix it with the Docker Hub mirror below.
-        uses: docker/build-push-action@v7
-        with:
-          context: src/parser
-          build-args: REVISION=${{ github.sha }}
-          tags: ume-rag.local/parser:ci
-          load: true
-          cache-from: |
-            type=gha,scope=parser-runtime
-            type=gha,scope=parser-test
-          cache-to: type=gha,scope=parser-runtime,mode=max
-      - name: Contract tests
-        env:
-          TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
-          UME_RAG_TEST_PARSER_IMAGE: ume-rag.local/parser:ci
-        run: dotnet test --project tests/Ume.Rag.ContractTests/Ume.Rag.ContractTests.csproj -c Release

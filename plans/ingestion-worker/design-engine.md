@@ -37,7 +37,7 @@ are listed in §21; questions in §22; removed mechanisms in §24.
 | 6 | Results | `Success | TransientError | FatalError`; capacity refusals (`busy`, `not_ready`, `duplicate_in_flight`, 429, unconfirmed config) requeue **without** an attempt (§7.3) |
 | 7 | Execution id | A generation per (document, content); changes only on new content or a forced reprocess. It is a **fence**: commits check it and the job lease in the same transaction (§7.5) |
 | 8 | Semantics | At-least-once execution, effectively-once effects: content-addressed blobs and cache rows, dedup keys, fenced swaps (§7.6) |
-| 9 | Queue | `Jobs` unpartitioned; dedup by a partial unique index on `DedupKey`; a reclaim after an instance died is not an attempt, 3 reclaims → dead-letter (§9.4). P1 dispatch by class, priority and age; per-department fairness, batched dequeue and coalesced `NOTIFY` are P2 (§9.3) |
+| 9 | Queue | `Jobs` unpartitioned; dedup by a partial unique index on `DedupKey`; a reclaim after an instance died is not an attempt, 3 reclaims → dead-letter (§9.4). Dispatch by class, priority and age, with per-department fairness from P0 (a `GROUP BY` department list, §9.3); the loose index scan, batched dequeue and coalesced `NOTIFY` are P2 |
 | 10 | Scheduler | Cron in Europe/Stockholm, deterministic per-source jitter, catch-up collapses to one run (§9.6) |
 | 11 | Runs | Run items written only at a terminal outcome; the finalizer derives counters from items; degraded when > 5 % of processed items fail (§10) |
 | 12 | Preview | Same engine with a preview context: no DB access for stages, blobs only under `previews/{jobId}/`, *Index* never runs, *Embed* estimates by default; produces personal-data state like any execution (§11) |
@@ -286,6 +286,7 @@ Queue mechanics are data-model §4.2: `TransientError` → `AvailableAt = now + 
 | Config not confirmed within the grace window (§15) | transient | no | 2 s, then 5 s |
 | Stage version not supported here (§5.2) | transient | no | 30 s |
 | Unhandled exception in a stage | transient (`node.exception`; type name only, never the message) | yes | back-off |
+| Unhandled exception in a job handler outside a stage | transient (`job.exception`; the log carries the type name only, never the message; as built in P0 #20, PR #20) | yes | back-off |
 
 Bounded redelivery with back-off and an explicit lease follows RAGFlow's queue (`../../platforms/ragflow.md:57-58`).
 A job whose instance died is reclaimed **without** an attempt; a job reclaimed 3 times is dead-lettered as a poison
@@ -340,7 +341,7 @@ UPDATE content."Jobs" SET "State" = 'succeeded', "CompletedAt" = now(), "Result"
 
 | Effect | Where | Why it is safe to repeat |
 |---|---|---|
-| Stage output blobs | written **before** the DB commit, at content-addressed paths (`…/{cacheKey}…`), one atomic `IBlobStore.PutAsync` (file system: temp + rename; S3: one PUT or completed multipart upload; [`../performance-pass.md`](../performance-pass.md) §3.13); blobs are write-once, a new key for new content | same key → same plaintext; orphans (no `NodeOutputs` row after 24 h) removed by the sweeper |
+| Stage output blobs | written **before** the DB commit, at content-addressed paths (`…/{cacheKey}…`), one atomic `IBlobStore.PutAsync` (file system: staging file, fsync, no-overwrite `link(2)`, data-model §9; S3: one PUT or completed multipart upload; [`../performance-pass.md`](../performance-pass.md) §3.13); blobs are write-once, a new key for new content | same key → same plaintext; orphans (no `NodeOutputs` row after 24 h) removed by the sweeper |
 | `NodeOutputs` rows | segment commit, `INSERT … ON CONFLICT ("CacheKey") DO NOTHING` | content-addressed |
 | `Documents` facts (media type, language, page count, strategy, parse cache key, site-profile version) | segment commit, fenced | last fenced writer wins; the fence rejects stale executions |
 | Continuation jobs | same transaction, `DedupKey` (`parse:{doc}:{exec}`, `embed:{doc}:{exec}:{pipelineVersion}`) | `INSERT … ON CONFLICT DO NOTHING` on the partial unique `DedupKey` index (data-model §4.2) |
@@ -417,7 +418,11 @@ the deployment value `Worker:Concurrency:<class>` (repo-and-deployment §3 setti
 | `eval` | 1 | `kind`: `generate-set`, `top-up-set`, `publish-report`, `nightly`, `on-demand` (retrieval evaluation only; the answer-level `answers` run and the P2 skill gate run in `rag-admin`, 6c §14.8) | 6c §13–§14 |
 | `attachment` (P2) | 2 | `attachmentId`, `conversationId`, `level` (chat design §15.2) | scan (ClamAV, fail-closed) → sniff/type check → parse → chunk → PII (recorded, not blocking) → embed on-prem → post chunks to the API's internal route; dispatched right after `preview`; never writes `chat` and holds no chat keys |
 
-`Worker:Classes` lists the classes an instance runs (`crawl` is not a class: discovery is part of `sync`/`fetch`).
+`Worker:Classes` lists the classes an instance runs as a comma list (`parse,embed`; empty = every class; an unknown
+class fails at start; `crawl` is not a class: discovery is part of `sync`/`fetch`). The other timing knobs are
+deployment values too: `Worker:HeartbeatSeconds` (10), `Worker:InstanceTimeoutSeconds` (30), `Worker:ReaperSeconds`
+(10), `Worker:PollSeconds` (2) and `Worker:StopGraceSeconds` (90) (§9.3, §9.4; as built in P0 #20, PR #20; settled at
+the integration sync point).
 
 **Mixed versions during a rolling update**: payloads are additive (tolerant reader); a job that needs a newer build
 carries `MinBuild` in its payload, and an older instance requeues it without an attempt
@@ -442,24 +447,34 @@ site-profile change, §12) iterates the source's live documents and calls `Ensur
 
 ### 9.3 Dispatcher
 
-One dispatcher loop per instance (woken by `LISTEN rag_jobs`, polling every 2 s; data-model §4.3) fills free slots in
-class order (`preview`, P2 `attachment`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`), within a class by
-`Priority` and age, one job per dequeue statement (data-model §4.2 query).
+One dispatcher loop per class an instance runs (classes in the order `preview`, P2 `attachment`, `command`, `sync`,
+`fetch`, `parse`, `embed`, `eval`), each filling that class's own `Worker:Concurrency:<class>` slots; since slots are
+per class, this behaves as one loop per instance. A free slot dequeues one job per statement (data-model §4.2 query),
+within a class by `Priority` and age. A loop wakes on a `rag_jobs` notification for its class, on a local enqueue, or
+every `Worker:PollSeconds` (2 s). `rag_jobs` arrives on the config monitor's listening connection, not a second one,
+which the worker's 12-connection cap has no room for (data-model §1.1, §4.3); `AddRagWorker` registers the listener,
+because only the worker dispatches, and payloads outside the job-class list (`CK_Jobs_Class`) are ignored (as built in
+P0 #20 and PR #30; settled at the integration sync point).
 
-Queue access goes through the **`IJobQueue`** seam in `Ume.Rag.Infrastructure` (Postgres implementation = the
-data-model §4.2 SQL; enqueue takes the caller's transaction; a broker only behind the performance pass's §6 trigger).
-Batched completion of non-fenced outcomes (fetch `unchanged`) is buffered ≤ 100 ms and written with one
-`UPDATE … FROM unnest(…)`. The P1 pilot is one department, so per-department fairness waits for P2 together with
-batched dequeue and coalesced `NOTIFY` (§24).
+**Per-department fairness** is in from P0: a free slot reads the departments with ready jobs of its class
+(`IJobQueue.ReadyDepartmentsAsync`, a `GROUP BY "DepartmentId"` over the ready jobs) and probes them in ascending
+order of the jobs this instance already runs for them, then by best priority, then by oldest ready job; the first hit
+wins (data-model §4.2). The recursive-CTE loose index scan for many departments stays P2 (to-verify #9).
+
+Queue access goes through the **`IJobQueue`** seam (`Ume.Rag.Domain/Ports`, Postgres implementation in
+`Ume.Rag.Infrastructure/Jobs` = the data-model §4.2 SQL; enqueue and complete take the caller's `DbTransaction`; a
+broker only behind the performance pass's §6 trigger; members in performance pass §3.4). From P2, batched completion
+of non-fenced outcomes (fetch `unchanged`) is buffered ≤ 100 ms and written with one `UPDATE … FROM unnest(…)`;
+batched dequeue and coalesced `NOTIFY` come then too (§24).
 
 ### 9.4 Leases, heartbeats, reaper, shutdown
 
 | Mechanism | Rule |
 |---|---|
 | Lease | set at dequeue (data-model §4.2 durations) |
-| Heartbeat | every `lease / 3`, one statement for all of the instance's running jobs: `UPDATE … SET "LeaseUntil" = now() + lease WHERE "LeaseOwner" = @me AND "State" = 'running' AND "Id" = ANY(@ids) RETURNING "Id"`; a job missing from the result has lost its lease → its token is cancelled and its commit will fail the fence |
-| Reaper (every 10 s, any instance, `pg_try_advisory_xact_lock`) | `running` jobs with `LeaseUntil < now()`, **or** whose `LeaseOwner` instance has no heartbeat for 30 s (two missed heartbeats; worst case 40 s after a kill, P0 #20), go back to `queued` **without** counting an attempt and with `Reclaims + 1`; at 3 reclaims → `dead`, run item `failed`, reason `worker.poison_suspect` |
-| Graceful stop (`stop_grace_period` 120 s) | stop dequeuing; give running jobs 90 s; then cancel the rest and release their leases (`queued`, attempt not counted, `AvailableAt = now()`); delete the instance row |
+| Heartbeat | every `Worker:HeartbeatSeconds` (10 s; checked at start to renew the shortest lease at least three times), with the instance's own heartbeat, one statement for all of the instance's running jobs that sets each job's own lease: `UPDATE … SET "LeaseUntil" = now() + l.lease FROM unnest(@ids, @leases) l WHERE "Id" = l.id AND "LeaseOwner" = @me AND "State" = 'running' RETURNING "Id"`; a job missing from the result has lost its lease → its token is cancelled and its commit will fail the fence (as built in P0 #20, PR #20) |
+| Reaper (every `Worker:ReaperSeconds` = 10 s, any instance, `pg_try_advisory_xact_lock`) | `running` jobs with `LeaseUntil < now()`, **or** whose `LeaseOwner` instance has no heartbeat for `Worker:InstanceTimeoutSeconds` = 30 s (two missed heartbeats; worst case 40 s after a kill, P0 #20), go back to `queued` **without** counting an attempt (`Attempts − 1`, undoing the dequeue's count) and with `Reclaims + 1`; an expired lease counts as a reclaim too. At 3 reclaims → `dead` with `LastError = 'poison-suspect'`; from P1, with the `Runs` table, also run item `failed`, reason `worker.poison_suspect` (P0 has no run items; as built in P0 #20, PR #20). Instance rows silent for 5 minutes are removed |
+| Graceful stop (`stop_grace_period` 120 s, at least `Worker:StopGraceSeconds` + 15 s) | stop dequeuing; give running jobs `Worker:StopGraceSeconds` (90 s); then cancel the rest and release their leases (`queued`, attempt not counted, `AvailableAt = now()`); delete the instance row. The worker raises the host's shutdown timeout to the stop grace + 15 s, so .NET's 30 s default does not cut the drain short (as built in P0 #20, PR #20) |
 | Crash | reaper returns the jobs within 40 s; resumed work replays from the cache (§8), parse jobs from the last completed range |
 
 A document that kills its process (OOM in a stage) is reclaimed at most 3 times, so it dies instead of looping, while
@@ -513,7 +528,11 @@ A `BackgroundService` on every instance; the instance holding `pg_try_advisory_x
 when the guard left `DeletionProposals` waiting) | `cancelled` (source paused or deleted, or `cancel-run` command).
 Kinds `sync`, `retry-failed`, `reprocess` (publish, rollback, site-profile change); `Trigger`: `schedule`, `manual`,
 `upload`, `publish`, `rollback`, `site-profile`, `retry`, `config-change` (scope or identity edits, 6b §12.4), P2
-`notification` (SharePoint). `Runs.Phase` (`list` → `fetch` → `reconcile` → `done`) tracks a sync run.
+`notification` (SharePoint). The `cancel-run` command (`{"kind":"cancel-run","runId":…}`, dedup `cancel:{runId}`)
+cancels the run's queued and running jobs in one statement (`IJobQueue.CancelRunAsync`; a running job loses its lease
+and stops at its owner's next heartbeat without committing) and returns `{"cancelledJobs":n}`. In P0 it changes only
+`Jobs`; setting `Runs.State = 'cancelled'` joins the same command when the `Runs` table arrives in P1 (as built in
+P0 #20, PR #20). `Runs.Phase` (`list` → `fetch` → `reconcile` → `done`) tracks a sync run.
 
 ### 10.2 Outcomes
 
@@ -897,7 +916,7 @@ the normal egress guard (§11).
 
 - **Embedding throughput** of the gateway's on-prem BGE-M3 provider (tokens/s, batch size, effect on chat query
   embeddings): decides whether 10,000 pages/hour is reachable (§18).
-- A JSON Schema 2020-12 validator for .NET used by admin and worker (candidate `JsonSchema.Net`; licence, maintenance,
+- A JSON Schema 2020-12 validator for .NET used by admin and worker (not the `JsonSchema.Net` binaries, which ship under an Open Source Maintenance Fee Agreement, to-verify #17; maintenance,
   `if`/`then` support, performance); and RFC 8785 canonicalisation (same package family or ~100 lines of our own).
 - `Cronos`: version, 5-field syntax, `TimeZoneInfo` DST behaviour (repo-and-deployment §2.2 marks it *to verify*).
 - Npgsql binary `COPY` of `vector` columns via `Pgvector` in ≤ 1,000-row batches; HNSW insert cost per row on the pilot

@@ -13,6 +13,7 @@ listed done-when holds.
 - [x] Sync point after H2 (2026-10-30, PRs #5, #7, #8, #9; repeated at integration for later results): schema checked against [`platform/data-model.md`](platform/data-model.md); `results-a.md`
       and `results-b.md` folded into [`to-verify.md`](to-verify.md)
 - [ ] Integration review: "Design deviations" from every P0 PR settled in the design documents
+      (stream A's merged PRs settled 2026-10-30, session 8; stream B's #32, #35, #38, #39, #45, #46 and its last PRs remain)
 - [ ] `v0.1.0` released and deployed to the test host (stream A items 11–12)
 
 Owned by the user, outside the streams ([`p0/README.md`](p0/README.md) §5,

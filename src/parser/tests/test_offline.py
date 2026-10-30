@@ -1,8 +1,8 @@
 """The parser needs no network (parser design §11, repo-and-deployment §2.4).
 
-Needs the baked models and Tesseract, so it runs in the image (`docker build --target test`, then
-`docker run --network none`) and is skipped elsewhere. Every Python process of the test refuses IP connections and
-name lookups (`offline_guard/sitecustomize.py`), on top of the container having no network. The app test converts
+Needs the baked models and Tesseract, so it runs in the image (`docker build --target test` runs it in a
+`RUN --network=none` step) and is skipped elsewhere. Every Python process of the test refuses IP connections and
+name lookups (`offline_guard/sitecustomize.py`), on top of the build step having no network. The app test converts
 the text-layer fixture through both pipelines and the scanned fixture through Docling with OCR.
 """
 
