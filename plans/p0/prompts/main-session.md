@@ -9,6 +9,11 @@ coordination between stream A and stream B.
 
 **Read first:** `HANDOVER.md`, `AGENTS.md`, `plans/progress.md`, `plans/p0/README.md`.
 
+**Then:** follow the "Next step" section at the end of `HANDOVER.md`. Before any new piece of work, check GitHub once
+(open PRs, issues, comments): stream B is a remote agent and talks only through GitHub. Stream A runs through
+`implementor` subagents in their own worktrees; the main session verifies, commits and opens the PRs, and the user
+approves each merge.
+
 **Do the first item that applies:**
 1. **Stage 0 not done** (`plans/p0/progress-stage-0.md` has unticked boxes): build it on branch `stage-0`, ticking
    boxes as you go. Before creating the GitHub labels, ask the user. When Stage 0 is merged, open the H1 issues for

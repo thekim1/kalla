@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Updated 2026-10-30, session 6.
+State of the Ume.Rag work for the next session. Updated 2026-10-30, end of session 6.
 Repo `~/research/rag`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
 
@@ -13,7 +13,9 @@ gateway and wants to do better than **Eneo** (`~/git/eneo`), which they find slo
 This repo holds the design and, from P0, the code (decided session 5: no separate `ume-rag` repo). The design is **complete**: ten detail steps, a consistency pass, a performance pass
 and (session 4) a **simplification pass**, all reviewed and pushed. Session 5 split P0 into **Stage 0 + two parallel streams** (`plans/p0/`) and added the
 agent harness (`AGENTS.md`, `CLAUDE.md`, `.github/stream-ownership.txt`, PR template). Session 6 built **Stage 0**
-(PR #1, `84dedbe`). **Next: streams A and B in parallel** (H1 issues #3, #4).
+(PR #1, `84dedbe`), ran **stream A** through local subagents and reviewed **stream B** (a remote agent on another
+machine) over GitHub; the sync point after H2 is done. **Next: see "Next step" at the end** (merge the open PRs, then
+stream A items 5, 7, 8, 9, 10).
 
 Plain-language overview for stakeholders: `docs/stakeholder-report.html` (open in a browser; keep it in step with the
 design), also published as a private artifact (share from its menu): https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM
@@ -100,6 +102,20 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 - A formatter in the user's editor sometimes realigns markdown tables: **re-read a file before editing it**.
 - Commit at the end of each reviewed step, then push to `origin main`.
 - The global agent-memory instructions (`.agent/`) do not apply: this repo has no `.agent/` directory.
+- **Running P0 (session 6):**
+  - The main session runs **stream A** by delegating one item (or half an item) at a time to an `implementor`
+    subagent in its own worktree (`../rag-aN`, branch `a/<item>-<slug>` from `origin/main`). The `implementor` agent
+    type **cannot commit**: it leaves work uncommitted and reports; the main session re-runs its proofs (build, tests,
+    image tests), reviews the diff, then commits, pushes and opens the PR (template filled in).
+  - **Stream B is a remote agent on another machine** (GitHub user `thekim1`). Talk to it **only through GitHub**:
+    issues labelled `stream-b` (requests to it), `stream-a`, `main`, and PR reviews. **Check GitHub once before
+    starting each new piece of work** (open PRs, issues, recent comments); no continuous polling (too frequent).
+  - The user authorised the main session to **review stream B's PRs and answer its issues autonomously** (post the
+    review as a PR comment; open an issue for a bug, with evidence). Stream B merges its own PRs.
+  - **Merging stream A's PRs needs the user's explicit go-ahead** ("merge #N"): the permission classifier blocks
+    unapproved merges. **Force-push is blocked too**: to update a branch with `main`, merge `origin/main` into it and
+    push normally (a PR with a merge conflict gets no CI run at all).
+  - Repo rule: shared files (`Directory.Packages.props`, `UmeRag.slnx`, …) go in a small PR of their own, merged first.
 
 ## Progress
 
@@ -116,7 +132,10 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 | Weakness review: five fixes (P1a/P1b, gold set + go-live gate, freshness, history mode `none` + DPIA, gateway release split + P0 capacity) | `plans/weakness-review.md`, every plan document | `f9a12b2` … `abbc3d7` |
 | Progress files (checkboxes) and stream prompts | `plans/progress.md`, `plans/p0/progress-*.md`, `plans/p0/prompts/` | (this session) |
 | P0 Stage 0: solution, health, AppHost, TestKit, `verify.yml` + ownership check, labels | `plans/p0/progress-stage-0.md` | `84dedbe` (PR #1) |
-| **P0 streams A and B**, then the sync point after H2 | `plans/p0/stream-a.md`, `stream-b.md` | **next** |
+| P0 stream A: Postgres image (#5), parser image + contract (#12/#13), CI | `plans/p0/progress-a.md`, `results-a.md` | `f3b82ce` (#5), `95c2ad0` (#9), `6c3035a` (#16) |
+| P0 stream B (remote): schema + roles (H2), decompounder, config-version library, keys, FakeGateway + ceiling handler | `plans/p0/progress-b.md`, `results-b.md` | `8583b1b` (#7), `f6a3cf0` (#8), `dfd9743` (#13), `4520f53` (#17), `1a79a69` (#18) |
+| Sync point after H2: results folded into `to-verify.md`, deviations settled in the design; decisions recorded | `to-verify.md`, `data-model.md`, `repo-and-deployment.md`, `parser/design.md`, Decisions table | `2bcf459`, `f558e9c`, `0e03ac7`, `c85a023`, `487154b` |
+| **P0 continues**: open PRs, stream A items 5–10 | below | **next** |
 
 ## Open items
 
@@ -147,24 +166,66 @@ against Postgres `ispell`, the stock pgvector image tag, pgBackRest with that im
 acceptance page, the cost of the per-document swap, pool 12 / 4 searches, the Postgres admin session store, and the
 assistant test-run cost.
 
-## Next step: P0 streams A and B
+## Next step: P0, continue (start of session 7)
 
-Stage 0 is merged (`plans/p0/progress-stage-0.md`, with evidence and seven choices the design left open, numbered
-1–7). The H1 issues are open: #3 (stream A) and #4 (stream B).
+Start with `plans/p0/prompts/main-session.md` and this section. First check GitHub (open PRs, issues, comments since
+2026-10-30 18:00).
 
-1. Start each stream in its own worktree with `plans/p0/prompts/stream-a.md` and `stream-b.md`.
-2. Main session, at each sync point (`plans/p0/README.md` §4): fold `plans/p0/results-*.md` into `to-verify.md`,
-   settle "Design deviations" from the PRs in the design documents, answer issues labelled `main`. At the first sync
-   point, also fold Stage 0's choices 1–7 into `repo-and-deployment.md` (parser port 8000 is provisional).
-3. Main session prompt: `plans/p0/prompts/main-session.md` (item 2 from now on).
+**Open PRs at the end of session 6:**
 
-Local notes from Stage 0:
-- On WSL the Aspire CLI (fetched by `AspireUseCliBundle`) trusts the dev certificate in the Windows store on first run
-  through `powershell.exe` and waits for the Windows dialog; the user ran `dotnet dev-certs https --trust`. The CLI
-  binary is under `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/`; `aspire describe` and `aspire otel traces <resource>`
-  check health and traces without the browser.
-- Not pinned yet (7-day rule): AngleSharp 1.8.6 (released 2026-10-25), SmartReader and the P1/P2 packages without a
-  checked version; stream A pins the worker's.
+| PR | Stream | What | State | Action |
+|---|---|---|---|---|
+| #20 | A | Worker dispatcher, Postgres `IJobQueue`, reaper (10 s, 30 s silence, heartbeat 10 s), maintenance, `cancel-run`; fixes issue #12 | CI green, reviewed | **ask the user to merge**; then open the **H4** issue for stream B (admin enqueue: `AddRagJobQueue()` + `IJobQueue.EnqueueAsync(…, db.Database.CurrentTransaction?.GetDbTransaction(), ct)`), close #11, #12, #14 |
+| #26 | A | ClamAV image (1.4.5_base, unprivileged, scan-based health check), `images/clamav/test.sh`, `Start-Dev.ps1`, `Start-E2E.ps1`, CI step | CI was running, reviewed | ask the user to merge once green |
+| #23, #24, #25 | B | admin session store; `INotificationListener` (fixes #21); shared `NpgsqlDataSource` (fixes #22) | reviewed OK (#24 after its fix `180b7e2`) | stream B merges |
+
+**After #20, #24, #25 merge: a small stream A follow-up PR** in the worker: `JobWakeUps : INotificationListener`
+(channel `rag_jobs`, registered as a singleton beside `AddRagConfigMonitor()`; tick the LISTEN box in `progress-a.md`
+§6) and `JobDatabase` takes the DI `NpgsqlDataSource` instead of the connection string (PR #25's hand-off).
+
+**Stream A, remaining items** (`plans/p0/progress-a.md`; order and done-when in `plans/p0/stream-a.md`):
+- **Item 5, Compose, backups, restore (#14)**, the next big one. Inputs the brief must carry:
+  - secret files `/run/postgres-secrets/{migrator,api,admin,worker}_password` (issue #11);
+  - `Migration__RolesSqlPath` to the mounted `app-roles.sql`;
+  - `pg_hba.conf` keeps `local all postgres peer`;
+  - `pgbackrest stanza-create` at deployment (archiving fails with 103 until then);
+  - worker `stop_grace_period` ≥ 105 s (PR #20);
+  - parser TLS on in production (`PARSER_TLS_*`, port 8000);
+  - `DOTNET_GCHeapHardLimitPercent=75` on every .NET service;
+  - pick the 16/24 GB `postgresql.conf` profile; a 24 GB host mounts ClamAV confs with `ConcurrentDatabaseReload yes`
+    and `TestDatabases yes`;
+  - an alert or restart for an unhealthy ClamAV container (its entrypoint never exits);
+  - a possible freshclam egress proxy (`HTTPProxyServer`);
+  - `compose.openwebui.yaml` (W2 still open).
+  - Restore drill locally now; the test-host drill waits on **H6** (user).
+- **Item 7 rest:** `IBlobStore` write-once contract (`IfAbsent`, tombstones) + file-system store + contract tests.
+- **Item 8, Entra Bicep (#17)** → H7 to the user. **Item 9, capacity scripts (#22)**: scripts now, numbers wait on **H8**.
+- **Item 10, docs.** **Item 11, release `v0.1.0`**: only at the integration sync point, and only after **issue #27**
+  (bump ClamAV to `1.4.6_base` on or after 2026-11-02).
+
+**Stream B** (remote) continues its own list: #9 parts 2–3 (BFF sign-in, claim mapping, realm), #11 (admin UI and write
+path, which consumes H4), #19 docs. Review its PRs as they come.
+
+**Integration sync point** (`plans/p0/README.md` §4): when every P0 item except #15 and #16 is merged, fold
+`results-a.md`/`results-b.md` into `to-verify.md` again, settle each PR's "Design deviations" in the design, then
+release.
+
+**Waiting on the user** (unchanged): H6 (test host, backup target, escrow, `to-verify.md` #145), H7/#17 Entra
+submission, #18 gateway release 1 agreement, H8 gateway hardware access (#22), DPIA G1, owners and dates for A1, G1,
+W1, W2, N1, U1, P2. Decided in session 6 and recorded: NER model baked in the parser image; parser port 8000 with TLS in
+production; Postgres image built in CI (not published before release); no `JsonSchema.Net` binaries (validator picked in
+P1, `to-verify.md` #17); parser option-set cache sized with the P1 watchdog (#65); reaper and heartbeat timings; ClamAV
+1.4.5 until #27.
+
+**CI facts learned:** the two parser jobs take about 14 min (3 GB image; restoring the build cache is about as slow as
+a fresh build), and they run only when parser paths change. A single combined job was measured at 17 min and rejected
+(PR #19, closed). The hosted runner needs the "Free runner disk" step for that image. Testcontainers needs locally
+built images to carry a registry part with a dot (`ume-rag.local/...`), or the Docker Hub mirror prefix rewrites them.
+
+**Worktrees:** `../rag-a2` (PR #20) and `../rag-a3` (PR #26); remove each with `git worktree remove` once its PR has
+merged. The Aspire CLI is at `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on
+PATH; `start`, `describe`, `otel traces <resource>`, `stop`). On WSL its first run asks to trust the dev certificate in
+the Windows store (done once by the user with `dotnet dev-certs https --trust`).
 
 Not yet done: `.claude/settings.json` with a build/test command allowlist was refused by the permission classifier
 (self-modification); the user decides whether to add it.
