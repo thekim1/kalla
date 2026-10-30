@@ -33,8 +33,11 @@ public static class InfrastructureExtensions
     }
 
     /// <summary>
-    /// EF Core (Npgsql) via the Aspire integration: pooling, retries, health check and tracing. Production refuses the
-    /// superuser and anything but <c>VerifyFull</c> TLS, as the gateway's <c>AddGatewayDatabase</c>.
+    /// One <see cref="NpgsqlDataSource"/> for <c>ragdb</c>, registered as a singleton and shared by EF Core and raw Npgsql
+    /// (issue #22), so a process has one connection pool of <c>Maximum Pool Size</c> whatever mix of EF and SQL it runs
+    /// (data-model §1.1 budget); the Pgvector plugin is added to this builder when it lands. EF Core on top of it with
+    /// Aspire's enrichment (context pooling, retries, health check, tracing). Production refuses the superuser and
+    /// anything but <c>VerifyFull</c> TLS, as the gateway's <c>AddGatewayDatabase</c>.
     /// </summary>
     public static IHostApplicationBuilder AddRagDatabase(this IHostApplicationBuilder builder)
     {
@@ -49,8 +52,12 @@ public static class InfrastructureExtensions
             }
         }
 
-        builder.AddNpgsqlDbContext<RagDbContext>(DatabaseResourceName,
-            configureDbContextOptions: options => options.UseNpgsql(RagDbContext.ConfigureNpgsql));
+        var connectionString = builder.Configuration.GetConnectionString(DatabaseResourceName)
+            ?? throw new InvalidOperationException($"ConnectionStrings:{DatabaseResourceName} is not configured.");
+        builder.Services.TryAddSingleton(_ => new NpgsqlDataSourceBuilder(connectionString).Build());
+        builder.Services.AddDbContextPool<RagDbContext>((sp, options) =>
+            options.UseNpgsql(sp.GetRequiredService<NpgsqlDataSource>(), RagDbContext.ConfigureNpgsql));
+        builder.EnrichNpgsqlDbContext<RagDbContext>();
         return builder;
     }
 

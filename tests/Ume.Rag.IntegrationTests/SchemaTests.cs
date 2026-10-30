@@ -43,6 +43,35 @@ public sealed class SchemaTests(RagDatabaseFixture database)
     }
 
     [Fact]
+    public async Task EF_and_raw_Npgsql_share_one_connection_pool()
+    {
+        // Issue #22: one NpgsqlDataSource per process, so EF and raw SQL together stay within Maximum Pool Size.
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:ragdb"] = new NpgsqlConnectionStringBuilder(database.Connection(Worker)) { MaxPoolSize = 2, Timeout = 2 }.ConnectionString,
+        });
+        builder.AddRagDatabase();
+        using var host = builder.Build();
+        var dataSource = host.Services.GetRequiredService<NpgsqlDataSource>();
+        await using var scope = host.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<RagDbContext>();
+
+        await db.Database.OpenConnectionAsync(Ct);
+        await using var raw = await dataSource.OpenConnectionAsync(Ct);
+
+        // Both pool slots are taken by EF and raw SQL together: a third connection waits for the 2 s timeout.
+        var exhausted = await Should.ThrowAsync<NpgsqlException>(async () => await dataSource.OpenConnectionAsync(Ct));
+        exhausted.Message.ShouldContain("pool", Case.Insensitive);
+        await db.Database.CloseConnectionAsync();
+        await using var third = await dataSource.OpenConnectionAsync(Ct);
+
+        // Aspire's enrichment still adds the context's health check.
+        host.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckServiceOptions>>()
+            .Value.Registrations.ShouldContain(r => r.Name.Contains(nameof(RagDbContext), StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Concurrent_enqueues_with_one_dedup_key_insert_one_job_until_it_finishes()
     {
         // data-model §4.2 and §14: ON CONFLICT infers the partial unique index under concurrent enqueues.
