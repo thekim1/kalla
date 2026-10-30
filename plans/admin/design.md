@@ -305,7 +305,7 @@ BEGIN; SET LOCAL lock_timeout = '5s'
   4. SaveChanges → row triggers write ConfigOutbox and bump ConfigVersion (data-model §5)
   5. SELECT "Version" FROM config."ConfigVersion" → v
   6. INSERT audit."AuditLog" (ActorOid…, Action, EntityType, EntityId, Details {before, after}, DepartmentId,
-     ConfigVersion = v, Reason, Classification, Service = 'admin')
+     ConfigVersion = v, Reason, Classification, Service = 'rag-admin', the container and OTEL service name)
   7. INSERT content."Jobs" (§4.7) when the action enqueues work + pg_notify('rag_jobs')
 COMMIT  → rag_config and rag_jobs notifications delivered
 ```

@@ -62,7 +62,7 @@ section it implements. Migration ordering is the classic collision, so it has ex
 | H4 | A → B | Worker applies the `command` job kind (#20); test enqueues through `IJobQueue` | B's admin write path (#11) enqueues once both exist; small follow-up PR by B |
 | H5 | B → A | Service images build (Stage 0's `UmeServiceContainer`) and every health probe answers | Compose (#14) uses the Stage 0 images |
 | H6 | user → A | Test-host access, backup target and key escrow location (`to-verify.md` #145) | A prepares #14 scripts and runs the restore drill locally; the documented drill waits |
-| H7 | A, B → user | Bicep for Entra package 1 (#17, A), realm and claim mapping (#9, B) | the user submits package 1 |
+| H7 | A, B → user | Bicep for Entra package 1 (#17, A), realm and claim mapping (#9, B) | **moved to P2** (pilot uses Keycloak, Decisions table 2026-10-30); the Bicep stays in `infra/entra/` |
 | H8 | user → A | Access to the real gateway hardware for the capacity measurement (#22, weakness review §5) | A writes the `scripts/capacity/` scripts and runs them against a local gateway; the recorded numbers wait |
 
 ## 4. Sync points
