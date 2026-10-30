@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
@@ -23,6 +25,9 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<ConfigVersion> ConfigVersion => Set<ConfigVersion>();
     public DbSet<ConfigOutboxEntry> ConfigOutbox => Set<ConfigOutboxEntry>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+    public DbSet<Client> Clients => Set<Client>();
+    public DbSet<ApiKey> Keys => Set<ApiKey>();
+    public DbSet<KeyLastUse> KeyLastUse => Set<KeyLastUse>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<WorkerInstance> WorkerInstances => Set<WorkerInstance>();
     public DbSet<RunItem> RunItems => Set<RunItem>();
@@ -65,6 +70,57 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
         });
 
         modelBuilder.Entity<DataProtectionKey>(e => e.ToTable("DataProtectionKeys", ConfigSchema));
+
+        modelBuilder.Entity<Client>(e =>
+        {
+            e.ToTable("Clients", ConfigSchema, t =>
+            {
+                t.HasCheckConstraint("CK_Clients_Kind", $"\"Kind\" IN ({SqlList(ClientKinds.All)})");
+                t.HasCheckConstraint("CK_Clients_ClassificationCeiling", $"\"ClassificationCeiling\" IN ({SqlList(Classification.All)})");
+                t.HasCheckConstraint("CK_Clients_ToolPolicy", "\"ToolPolicy\" IN ('none', 'read')");
+                // A client that keeps chat history never reaches sensitive assistants; nor does an MCP client.
+                t.HasCheckConstraint("CK_Clients_History", "NOT \"StoresHistory\" OR \"ClassificationCeiling\" <> 'sensitive'");
+                t.HasCheckConstraint("CK_Clients_Mcp", "\"Kind\" <> 'mcp-client' OR \"ClassificationCeiling\" <> 'sensitive'");
+            });
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Kind).HasMaxLength(20);
+            e.Property(x => x.OAuthClientId).HasMaxLength(200);
+            e.Property(x => x.ClassificationCeiling).HasMaxLength(20);
+            e.Property(x => x.ToolPolicy).HasMaxLength(10).HasDefaultValue("none");
+            e.Property(x => x.PortalUrl).HasMaxLength(500);
+            e.Property(x => x.UpdatedBy).HasMaxLength(200);
+            e.Property(x => x.Version).IsRowVersion();
+            e.HasIndex(x => x.OAuthClientId).IsUnique();
+            e.HasMany(x => x.Keys).WithOne(x => x.Client).HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ApiKey>(e =>
+        {
+            e.ToTable("Keys", ConfigSchema, t => t.HasCheckConstraint("CK_Keys_Kind", "\"Kind\" IN ('sk', 'pk')"));
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Kind).HasMaxLength(2);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Description).HasMaxLength(1000);
+            e.Property(x => x.Prefix).HasMaxLength(20);
+            e.Property(x => x.KeyHash).HasMaxLength(64);
+            e.Property(x => x.EncryptedSecret).HasMaxLength(1000);
+            e.Property(x => x.CreatedBy).HasMaxLength(200);
+            e.HasIndex(x => x.KeyHash).IsUnique();
+            // As the gateway: a concurrent rotate or revoke of the same key fails instead of overwriting.
+            e.Property(x => x.RotatedToKeyId).IsConcurrencyToken();
+            e.Property(x => x.RevokedAt).IsConcurrencyToken();
+            e.Property(x => x.Scopes).HasColumnType("jsonb").HasConversion(
+                new ValueConverter<KeyScopes, string>(v => JsonSerializer.Serialize(v, ScopesJson), v => JsonSerializer.Deserialize<KeyScopes>(v, ScopesJson) ?? KeyScopes.None),
+                new ValueComparer<KeyScopes>((a, b) => Equals(a, b), v => v.GetHashCode(), v => new KeyScopes(v.AssistantIds.ToArray(), v.CollectionIds.ToArray())));
+        });
+
+        modelBuilder.Entity<KeyLastUse>(e =>
+        {
+            e.ToTable("KeyLastUse", ConfigSchema);
+            e.HasKey(x => x.KeyId);
+            e.HasOne<ApiKey>().WithOne().HasForeignKey<KeyLastUse>(x => x.KeyId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         // --- content --------------------------------------------------------------------------
         modelBuilder.Entity<Job>(e =>
@@ -155,6 +211,8 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     /// <summary><c>CK_&lt;table&gt;_Classification</c> on a row that carries its level (data-model §2).</summary>
     private static void ClassificationCheck<T>(TableBuilder<T> table, string tableName) where T : class =>
         table.HasCheckConstraint($"CK_{tableName}_Classification", $"\"Classification\" IN ({SqlList(Classification.All)})");
+
+    private static readonly JsonSerializerOptions ScopesJson = new(JsonSerializerDefaults.Web);
 
     private static string SqlList(IEnumerable<string> values) => string.Join(", ", values.Select(v => $"'{v}'"));
 }

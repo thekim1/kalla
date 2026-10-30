@@ -1,0 +1,516 @@
+{
+  "contract": "parser/v1",
+  "request_id": "case-text-layer-docling",
+  "status": "success",
+  "input": {
+    "format": "pdf",
+    "media_type_sniffed": "application/pdf",
+    "sha256": "2fbf42510795021baf7567766351271fdcb2c61e2b958c8070ec7788eedecb7d",
+    "bytes": 3575,
+    "page_count": 3,
+    "pages_requested": {
+      "from": 1,
+      "to": 3
+    },
+    "pages_completed": {
+      "from": 1,
+      "to": 3
+    },
+    "pipeline": "docling"
+  },
+  "pages": [
+    {
+      "page": 1,
+      "label": null,
+      "width": 595.0,
+      "height": 842.0,
+      "signals": {
+        "chars": 699,
+        "furniture_chars": 8,
+        "garbled_score": 0.0,
+        "text_layer_chars": 707,
+        "image_coverage": 0.0,
+        "ocr_applied": "none",
+        "ocr_confidence": null,
+        "table_count": 0,
+        "table_area_ratio": 0.0,
+        "picture_area_ratio": 0.0,
+        "empty": false
+      }
+    },
+    {
+      "page": 2,
+      "label": null,
+      "width": 595.0,
+      "height": 842.0,
+      "signals": {
+        "chars": 485,
+        "furniture_chars": 8,
+        "garbled_score": 0.0,
+        "text_layer_chars": 493,
+        "image_coverage": 0.0,
+        "ocr_applied": "none",
+        "ocr_confidence": null,
+        "table_count": 0,
+        "table_area_ratio": 0.0,
+        "picture_area_ratio": 0.0,
+        "empty": false
+      }
+    },
+    {
+      "page": 3,
+      "label": null,
+      "width": 595.0,
+      "height": 842.0,
+      "signals": {
+        "chars": 216,
+        "furniture_chars": 8,
+        "garbled_score": 0.0,
+        "text_layer_chars": 224,
+        "image_coverage": 0.0,
+        "ocr_applied": "none",
+        "ocr_confidence": null,
+        "table_count": 1,
+        "table_area_ratio": 0.088,
+        "picture_area_ratio": 0.0,
+        "empty": false
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": "b0",
+      "kind": "heading",
+      "level": 1,
+      "level_source": "layout",
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        64.0,
+        83.6,
+        392.9,
+        102.1
+      ],
+      "layer": "body",
+      "md": "# Riktlinjer för bygglov i Umeå kommun",
+      "ref": "#/texts/0",
+      "table": null
+    },
+    {
+      "id": "b1",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        64.0,
+        127.1,
+        475.4,
+        167.3
+      ],
+      "layer": "body",
+      "md": "De här riktlinjerna beskriver hur Umeå kommun handlägger ansökningar om bygglov, marklov och rivningslov. De gäller för alla som vill bygga nytt, bygga till eller ändra användningen av en byggnad inom kommunens gränser.",
+      "ref": "#/texts/1",
+      "table": null
+    },
+    {
+      "id": "b2",
+      "kind": "heading",
+      "level": 1,
+      "level_source": "layout",
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        64.0,
+        187.9,
+        129.4,
+        200.9
+      ],
+      "layer": "body",
+      "md": "# 1 Ansökan",
+      "ref": "#/texts/2",
+      "table": null
+    },
+    {
+      "id": "b3",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        64.0,
+        219.0,
+        456.5,
+        259.2
+      ],
+      "layer": "body",
+      "md": "En ansökan om bygglov lämnas digitalt via kommunens e-tjänst. Till ansökan ska situationsplan, fasadritningar och planritningar bifogas. Handläggningen börjar först när ansökan är komplett, och beslut fattas normalt inom tio veckor.",
+      "ref": "#/texts/3",
+      "table": null
+    },
+    {
+      "id": "b4",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        64.0,
+        274.0,
+        474.8,
+        299.2
+      ],
+      "layer": "body",
+      "md": "Byggnadsnämnden kan begära kompletteringar. Om kompletteringen inte kommer in inom den tid som anges i föreläggandet kan ansökan avvisas eller avslås.",
+      "ref": "#/texts/4",
+      "table": null
+    },
+    {
+      "id": "b5",
+      "kind": "heading",
+      "level": 1,
+      "level_source": "layout",
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        64.0,
+        319.8,
+        123.1,
+        332.8
+      ],
+      "layer": "body",
+      "md": "# 2 Avgifter",
+      "ref": "#/texts/5",
+      "table": null
+    },
+    {
+      "id": "b6",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        64.0,
+        350.9,
+        463.2,
+        376.1
+      ],
+      "layer": "body",
+      "md": "Avgiften för bygglov beräknas enligt kommunens taxa och tas ut även om ansökan avslås. Kostnaden för ett enbostadshus är för närvarande cirka 25 000 kronor.",
+      "ref": "#/texts/6",
+      "table": null
+    },
+    {
+      "id": "b7",
+      "kind": "page_footer",
+      "level": null,
+      "level_source": null,
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        272.5,
+        795.5,
+        317.5,
+        803.9
+      ],
+      "layer": "furniture",
+      "md": "Sida 1 av 3",
+      "ref": "#/texts/7",
+      "table": null
+    },
+    {
+      "id": "b8",
+      "kind": "heading",
+      "level": 1,
+      "level_source": "layout",
+      "page": 2,
+      "page_end": 2,
+      "bbox": [
+        64.0,
+        87.9,
+        247.7,
+        100.9
+      ],
+      "layer": "body",
+      "md": "# 3 Startbesked och slutbesked",
+      "ref": "#/texts/8",
+      "table": null
+    },
+    {
+      "id": "b9",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 2,
+      "page_end": 2,
+      "bbox": [
+        64.0,
+        119.0,
+        450.4,
+        144.2
+      ],
+      "layer": "body",
+      "md": "Innan arbetet får påbörjas krävs ett startbesked. Det tekniska samrådet hålls när byggnadsnämnden bedömer att det behövs, och kontrollplanen fastställs där.",
+      "ref": "#/texts/9",
+      "table": null
+    },
+    {
+      "id": "b10",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 2,
+      "page_end": 2,
+      "bbox": [
+        64.0,
+        159.0,
+        462.6,
+        184.2
+      ],
+      "layer": "body",
+      "md": "När åtgärden är genomförd ska byggherren begära slutbesked. Byggnaden får inte tas i bruk förrän slutbesked har lämnats, om inte nämnden beslutar något annat.",
+      "ref": "#/texts/10",
+      "table": null
+    },
+    {
+      "id": "b11",
+      "kind": "heading",
+      "level": 1,
+      "level_source": "layout",
+      "page": 2,
+      "page_end": 2,
+      "bbox": [
+        64.0,
+        204.8,
+        158.9,
+        217.8
+      ],
+      "layer": "body",
+      "md": "# 4 Överklagande",
+      "ref": "#/texts/11",
+      "table": null
+    },
+    {
+      "id": "b12",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 2,
+      "page_end": 2,
+      "bbox": [
+        64.0,
+        235.9,
+        450.4,
+        276.1
+      ],
+      "layer": "body",
+      "md": "Den som berörs av ett beslut kan överklaga det till Länsstyrelsen i Västerbotten. Överklagandet ska ha kommit in till kommunen inom tre veckor från den dag då beslutet kungjordes i Post- och Inrikes Tidningar.",
+      "ref": "#/texts/12",
+      "table": null
+    },
+    {
+      "id": "b13",
+      "kind": "page_footer",
+      "level": null,
+      "level_source": null,
+      "page": 2,
+      "page_end": 2,
+      "bbox": [
+        272.5,
+        795.5,
+        317.5,
+        803.9
+      ],
+      "layer": "furniture",
+      "md": "Sida 2 av 3",
+      "ref": "#/texts/13",
+      "table": null
+    },
+    {
+      "id": "b14",
+      "kind": "heading",
+      "level": 1,
+      "level_source": "layout",
+      "page": 3,
+      "page_end": 3,
+      "bbox": [
+        64.0,
+        87.9,
+        306.0,
+        100.9
+      ],
+      "layer": "body",
+      "md": "# Bilaga: Avgifter och handläggningstider",
+      "ref": "#/texts/14",
+      "table": null
+    },
+    {
+      "id": "b15",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 3,
+      "page_end": 3,
+      "bbox": [
+        64.0,
+        119.0,
+        447.9,
+        129.2
+      ],
+      "layer": "body",
+      "md": "Tabellen visar avgifter enligt taxan för år 2027 och normala handläggningstider.",
+      "ref": "#/texts/15",
+      "table": null
+    },
+    {
+      "id": "b16",
+      "kind": "table",
+      "level": null,
+      "level_source": null,
+      "page": 3,
+      "page_end": 3,
+      "bbox": [
+        62.6,
+        150.5,
+        514.8,
+        248.4
+      ],
+      "layer": "body",
+      "md": "| Åtgärd                   | Avgift    | Handläggningstid   |\n|--------------------------|-----------|--------------------|\n| Bygglov för enbostadshus | 25 000 kr | 10 veckor          |\n| Marklov                  | 8 000 kr  | 10 veckor          |\n| Rivningslov              | 4 500 kr  | 4 veckor           |",
+      "ref": "#/tables/0",
+      "table": "t0"
+    },
+    {
+      "id": "b17",
+      "kind": "page_footer",
+      "level": null,
+      "level_source": null,
+      "page": 3,
+      "page_end": 3,
+      "bbox": [
+        272.5,
+        795.5,
+        317.5,
+        803.9
+      ],
+      "layer": "furniture",
+      "md": "Sida 3 av 3",
+      "ref": "#/texts/16",
+      "table": null
+    }
+  ],
+  "tables": [
+    {
+      "id": "t0",
+      "rows": 4,
+      "cols": 3,
+      "header_rows": 1,
+      "caption": null,
+      "cells": [
+        {
+          "r": 0,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "Åtgärd"
+        },
+        {
+          "r": 0,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": true,
+          "text": "Avgift"
+        },
+        {
+          "r": 0,
+          "c": 2,
+          "rs": 1,
+          "cs": 1,
+          "header": true,
+          "text": "Handläggningstid"
+        },
+        {
+          "r": 1,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": true,
+          "text": "Bygglov för enbostadshus"
+        },
+        {
+          "r": 1,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "25 000 kr"
+        },
+        {
+          "r": 1,
+          "c": 2,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "10 veckor"
+        },
+        {
+          "r": 2,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": true,
+          "text": "Marklov"
+        },
+        {
+          "r": 2,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "8 000 kr"
+        },
+        {
+          "r": 2,
+          "c": 2,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "10 veckor"
+        },
+        {
+          "r": 3,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": true,
+          "text": "Rivningslov"
+        },
+        {
+          "r": 3,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "4 500 kr"
+        },
+        {
+          "r": 3,
+          "c": 2,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "4 veckor"
+        }
+      ]
+    }
+  ],
+  "pictures": [],
+  "warnings": [],
+  "markdown": null
+}

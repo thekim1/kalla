@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from ume_parser import health, info
+from ume_parser import api, health, info
 from ume_parser.settings import Settings
 from ume_parser.supervisor import Supervisor
 
@@ -21,6 +21,7 @@ def create_app(settings: Settings | None = None, supervisor: Supervisor | None =
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.static_info = info.collect(settings)
         app.state.build_hash = info.build_hash(app.state.static_info)
+        app.state.build = info.build(app.state.static_info, app.state.build_hash)
         await supervisor.start()
         try:
             yield
@@ -28,9 +29,11 @@ def create_app(settings: Settings | None = None, supervisor: Supervisor | None =
             await supervisor.stop()
 
     app = FastAPI(title="ume-parser", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.settings = settings
     app.state.supervisor = supervisor
     app.include_router(health.router)
     app.include_router(info.router)
+    app.include_router(api.router)
     return app
 
 

@@ -12,11 +12,40 @@ public static partial class SecurityEvents
 {
     public const string Category = "Ume.Rag.Security";
 
+    private static readonly System.Buffers.SearchValues<char> ControlCharacters = System.Buffers.SearchValues.Create(
+        [.. Enumerable.Range(0, 0x20).Select(c => (char)c), .. Enumerable.Range(0x7F, 0x21).Select(c => (char)c)]);
+
+    /// <summary>
+    /// <paramref name="value"/> with control characters replaced by '?', for values from outside that are logged (copied
+    /// from the gateway): a newline could otherwise start a forged log line in a plain-text log.
+    /// </summary>
+    public static string Printable(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return value.AsSpan().IndexOfAny(ControlCharacters) < 0
+            ? value
+            : string.Create(value.Length, value, static (span, v) =>
+            {
+                v.AsSpan().CopyTo(span);
+                int i;
+                while ((i = span.IndexOfAny(ControlCharacters)) >= 0)
+                {
+                    span[i] = '?';
+                    span = span[(i + 1)..];
+                }
+            });
+    }
+
     public static ILogger CreateLogger(ILoggerFactory factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
         return factory.CreateLogger(Category);
     }
+
+    [LoggerMessage(5003, LogLevel.Warning,
+        "Gateway answer discarded: residency {Observed} above the ceiling {Ceiling} on {Endpoint} (gateway request {GatewayRequestId})",
+        EventName = "rag.residency.refused")]
+    public static partial void ResidencyRefused(ILogger logger, string ceiling, string observed, string endpoint, string? gatewayRequestId);
 
     [LoggerMessage(5004, LogLevel.Warning,
         "Security-relevant decisions refused: config not confirmed since {LastConfirmedAt} (cached version {CachedVersion}) on {Service}, x{Count}",

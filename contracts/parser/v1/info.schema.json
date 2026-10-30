@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/parser/v1/info.schema.json",
+  "$defs": {
+    "Capacity": {
+      "properties": {
+        "convert_slots": {
+          "title": "Convert Slots",
+          "type": "integer"
+        },
+        "slots_ready": {
+          "title": "Slots Ready",
+          "type": "integer"
+        },
+        "inspect_slots": {
+          "title": "Inspect Slots",
+          "type": "integer"
+        },
+        "ner_ready": {
+          "title": "Ner Ready",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "convert_slots",
+        "slots_ready",
+        "inspect_slots",
+        "ner_ready"
+      ],
+      "title": "Capacity",
+      "type": "object"
+    },
+    "Formats": {
+      "properties": {
+        "supported": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Supported",
+          "type": "array"
+        },
+        "deferred": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Deferred",
+          "type": "array"
+        }
+      },
+      "required": [
+        "supported",
+        "deferred"
+      ],
+      "title": "Formats",
+      "type": "object"
+    },
+    "Limits": {
+      "properties": {
+        "max_body_bytes": {
+          "title": "Max Body Bytes",
+          "type": "integer"
+        },
+        "max_pages_per_request": {
+          "title": "Max Pages Per Request",
+          "type": "integer"
+        },
+        "max_pages_per_document": {
+          "title": "Max Pages Per Document",
+          "type": "integer"
+        },
+        "max_deadline_ms": {
+          "title": "Max Deadline Ms",
+          "type": "integer"
+        },
+        "inspect_deadline_ms": {
+          "title": "Inspect Deadline Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_body_bytes",
+        "max_pages_per_request",
+        "max_pages_per_document",
+        "max_deadline_ms",
+        "inspect_deadline_ms"
+      ],
+      "title": "Limits",
+      "type": "object"
+    },
+    "Model": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "repository": {
+          "title": "Repository",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "licence": {
+          "title": "Licence",
+          "type": "string"
+        },
+        "files": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "path → SHA-256",
+          "title": "Files",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "repository",
+        "revision",
+        "licence",
+        "files"
+      ],
+      "title": "Model",
+      "type": "object"
+    },
+    "ParserVersion": {
+      "properties": {
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "revision"
+      ],
+      "title": "ParserVersion",
+      "type": "object"
+    },
+    "Pdfium": {
+      "properties": {
+        "build": {
+          "title": "Build",
+          "type": "integer"
+        },
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        },
+        "flags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Flags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "build",
+        "origin",
+        "flags"
+      ],
+      "title": "Pdfium",
+      "type": "object"
+    },
+    "Tesseract": {
+      "properties": {
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "languages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Languages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "version",
+        "languages"
+      ],
+      "title": "Tesseract",
+      "type": "object"
+    }
+  },
+  "description": "`GET /v1/info`.",
+  "properties": {
+    "parser": {
+      "$ref": "#/$defs/ParserVersion"
+    },
+    "python": {
+      "title": "Python",
+      "type": "string"
+    },
+    "packages": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Packages",
+      "type": "object"
+    },
+    "pdfium": {
+      "$ref": "#/$defs/Pdfium"
+    },
+    "tesseract": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Tesseract"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "models": {
+      "items": {
+        "$ref": "#/$defs/Model"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "limits": {
+      "$ref": "#/$defs/Limits"
+    },
+    "formats": {
+      "$ref": "#/$defs/Formats"
+    },
+    "build_hash": {
+      "description": "SHA-256 of everything except capacity",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Build Hash",
+      "type": "string"
+    },
+    "capacity": {
+      "$ref": "#/$defs/Capacity"
+    }
+  },
+  "required": [
+    "parser",
+    "python",
+    "packages",
+    "pdfium",
+    "tesseract",
+    "models",
+    "limits",
+    "formats",
+    "build_hash",
+    "capacity"
+  ],
+  "title": "Info",
+  "type": "object"
+}

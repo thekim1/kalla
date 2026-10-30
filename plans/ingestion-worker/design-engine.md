@@ -224,7 +224,7 @@ At startup, before the dispatcher dequeues anything:
 3. Log a warning for every **published** pipeline version whose template version uses a stage version this instance
    lacks.
 
-Heartbeat every 15 s (`WorkerInstances.LastHeartbeatAt`); clean stop deletes the instance (support cascades); any
+Heartbeat every 10 s (`WorkerInstances.LastHeartbeatAt`); clean stop deletes the instance (support cascades); any
 instance deletes instances silent for 5 minutes. A job that needs a stage version this instance does not support is
 released (`AvailableAt + 30 s`, no attempt); after 10 minutes without any supporting instance it fails with outcome
 `failed`, reason `node.version_unsupported`.
@@ -458,9 +458,9 @@ batched dequeue and coalesced `NOTIFY` (§24).
 |---|---|
 | Lease | set at dequeue (data-model §4.2 durations) |
 | Heartbeat | every `lease / 3`, one statement for all of the instance's running jobs: `UPDATE … SET "LeaseUntil" = now() + lease WHERE "LeaseOwner" = @me AND "State" = 'running' AND "Id" = ANY(@ids) RETURNING "Id"`; a job missing from the result has lost its lease → its token is cancelled and its commit will fail the fence |
-| Reaper (every 30 s, any instance, `pg_try_advisory_xact_lock`) | `running` jobs with `LeaseUntil < now()`, **or** whose `LeaseOwner` instance has no heartbeat for 45 s, go back to `queued` **without** counting an attempt and with `Reclaims + 1`; at 3 reclaims → `dead`, run item `failed`, reason `worker.poison_suspect` |
+| Reaper (every 10 s, any instance, `pg_try_advisory_xact_lock`) | `running` jobs with `LeaseUntil < now()`, **or** whose `LeaseOwner` instance has no heartbeat for 30 s (two missed heartbeats; worst case 40 s after a kill, P0 #20), go back to `queued` **without** counting an attempt and with `Reclaims + 1`; at 3 reclaims → `dead`, run item `failed`, reason `worker.poison_suspect` |
 | Graceful stop (`stop_grace_period` 120 s) | stop dequeuing; give running jobs 90 s; then cancel the rest and release their leases (`queued`, attempt not counted, `AvailableAt = now()`); delete the instance row |
-| Crash | reaper returns the jobs within ~45 s; resumed work replays from the cache (§8), parse jobs from the last completed range |
+| Crash | reaper returns the jobs within 40 s; resumed work replays from the cache (§8), parse jobs from the last completed range |
 
 A document that kills its process (OOM in a stage) is reclaimed at most 3 times, so it dies instead of looping, while
 an ordinary deploy or host restart costs no attempts. Early reclaim keeps a killed worker from idling the parser for a
@@ -765,7 +765,7 @@ level or clearing a document (6c §9.5) runs the same per-document swap of state
 
 | Failure | Detection | Recovery |
 |---|---|---|
-| Worker process crash or OOM | missing heartbeat 45 s | reaper requeues without an attempt; cache and range blobs make the retry cheap; 3 reclaims stop a poison document (`dead`, `worker.poison_suspect`) |
+| Worker process crash or OOM | missing heartbeat 30 s | reaper requeues without an attempt; cache and range blobs make the retry cheap; 3 reclaims stop a poison document (`dead`, `worker.poison_suspect`) |
 | Lease lost (GC pause, DB stall) | heartbeat returns no row | token cancelled; the fence rejects the swap; the new owner redoes the work |
 | Postgres unavailable | Npgsql errors | dispatcher backs off (1 s → 30 s); jobs in flight fail their commit and are re-leased later; nothing partial is visible (sets become visible only at the swap) |
 | Crash between chunk batches and swap | set left `writing` | invisible; the retried execution writes a new set; the orphan sweep removes the old one |

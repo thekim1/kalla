@@ -37,15 +37,15 @@ Refs: [repo-and-deployment §4](../platform/repo-and-deployment.md), [data-model
 
 ## 4. Keys (#10)
 Refs: [identity/design.md §6](../identity/design.md)
-- [ ] `ume-rag-sk-` keys, HMAC + pepper, prefix, rotation grace in `config."Keys"`
-- [ ] **Done:** the gateway's `KeyTests` copied and passing
+- [x] `ume-rag-sk-` keys, HMAC + pepper, prefix, rotation grace in `config."Keys"`
+- [x] **Done:** the gateway's `KeyTests` copied and passing
 
 ## 5. FakeGateway and gateway client (#8)
 Refs: [repo-and-deployment §4.3](../platform/repo-and-deployment.md), [gateway-changes/design.md](../gateway-changes/design.md) §3, §6 (release 1 only, [weakness-review §5](../weakness-review.md))
-- [ ] `Ume.Rag.FakeGateway`: 1024-dim embeddings, residency headers, per-level dev keys, catalogue
-- [ ] Modes: 400 without a ceiling for `RequireMaxResidency` keys, `403 max_residency_not_met`, 503 with `Retry-After`; `/v1/models` filtered by the ceiling; rerank fake
-- [ ] Gateway client `DelegatingHandler` refusing a call without an explicit ceiling or with another level's key
-- [ ] **Done:** API tests use it; a wrong-residency answer is aborted; the handler test covers every call site
+- [x] `Ume.Rag.FakeGateway`: 1024-dim embeddings, residency headers, per-level dev keys, catalogue
+- [x] Modes: 400 without a ceiling for `RequireMaxResidency` keys, `403 max_residency_not_met`, 503 with `Retry-After`; `/v1/models` filtered by the ceiling; rerank fake
+- [x] Gateway client `DelegatingHandler` refusing a call without an explicit ceiling or with another level's key
+- [x] **Done:** API tests use it; a wrong-residency answer is aborted; the handler test covers every call site (no service calls the gateway yet; every gateway client is registered through `AddGatewayClient`, which the handler tests exercise)
 
 ## 6. Identity (#9)
 Refs: [identity/design.md](../identity/design.md) §1–§3, §10, §11; [identity/plan.md §3](../identity/plan.md) (P1 department scope from hand-entered member groups)

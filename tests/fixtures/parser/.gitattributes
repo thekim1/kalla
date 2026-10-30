@@ -1,0 +1,6 @@
+# Fixtures are compared byte for byte (sha256 in the goldens, scripts/make_fixtures.py in the tests): never convert
+# line endings in them.
+*.pdf binary
+*.doc binary
+*.json text eol=lf
+*.csv text eol=lf

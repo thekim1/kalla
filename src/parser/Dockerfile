@@ -85,13 +85,15 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=10m --retries=3 CMD ["pyt
 ENTRYPOINT ["tini", "--"]
 CMD ["python", "-m", "ume_parser"]
 
-# Runtime plus the dev dependencies and the tests, for test_offline.py with --network none.
+# Runtime plus the dev dependencies and the tests, for test_offline.py with --network none. The tests generate the
+# fixtures with scripts/make_fixtures.py, the same bytes as tests/fixtures/parser/ in the repository.
 FROM runtime AS test
 USER root
 COPY --from=uv /uv /usr/local/bin/uv
 COPY uv.lock .python-version ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     UV_PROJECT_ENVIRONMENT=/opt/venv UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy uv sync --frozen --no-install-project
+COPY scripts ./scripts
 COPY tests ./tests
 USER 10001
 CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]

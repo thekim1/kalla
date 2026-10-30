@@ -25,6 +25,12 @@ GRANT UPDATE ON config."ConfigVersion" TO ume_rag_admin;
 GRANT SELECT ON config."DataProtectionKeys" TO ume_rag_api, ume_rag_admin, ume_rag_worker;
 GRANT INSERT ON config."DataProtectionKeys" TO ume_rag_admin;
 GRANT SELECT ON config."__EFMigrationsHistory" TO ume_rag_admin;
+-- Clients and keys: the admin manages them, the api authenticates with them; key use goes to KeyLastUse (api), so it
+-- never bumps the config version. The worker holds no keys.
+GRANT SELECT, INSERT, UPDATE, DELETE ON config."Clients", config."Keys" TO ume_rag_admin;
+GRANT SELECT ON config."Clients", config."Keys" TO ume_rag_api;
+GRANT SELECT ON config."KeyLastUse" TO ume_rag_admin;
+GRANT SELECT, INSERT, UPDATE ON config."KeyLastUse" TO ume_rag_api;
 
 -- content: the worker owns it; the admin reads it and enqueues jobs (decisions are command jobs, data-model §12.2).
 GRANT SELECT, INSERT, UPDATE, DELETE ON content."Jobs", content."WorkerInstances", content."RunItems" TO ume_rag_worker;
