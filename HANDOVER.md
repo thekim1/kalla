@@ -189,17 +189,13 @@ assistant test-run cost.
 Start with `plans/p0/prompts/main-session.md` and this section. First check GitHub (open PRs, issues, comments since
 2026-10-30 20:30 local time, CET).
 
-**Open stream A PRs at the end of session 7.** All are reviewed, and the main session re-ran each one's proofs. Ask the
-user to merge them in this order, merging `origin/main` into each before its turn (they all conflict in
-`results-a.md`/`progress-a.md`):
+**Stream A at the end of session 7:** #43, #36, #37, #40 and #42 are merged (`05973c1`, `a9590dd`, `46a1c54`,
+`e9ebdb3`, `b8ad795`); H8 is open as #48. Open:
 
-| PR | Item | What | CI | After merge |
-|---|---|---|---|---|
-| #43 | shared | `.gitignore`: `deploy/upload-backup/`, `deploy/openwebui-data/` | running | – |
-| #36 | 8 (#17) | Entra package 1 Bicep, `entra.yml` | **merged** `a9590dd` | **H7 deferred to P2**: the pilot signs in with Keycloak (user, 2026-10-30) |
-| #37 | 9 (#22) | `scripts/capacity/capacity.py` (stdlib), tried on FakeGateway | green `05d4a86` | open **H8** |
-| #40 | 5 (#14, 2/2) | `deploy/host/`, backup/restore/escrow scripts, local PITR drill (RPO ≤ 43 s, RTO 23 s) | green `9e9998c`, then `d6ea118` (init step order) pushed: re-check | – |
-| #42 | 10 (#19) | docs: local development, production setup, runbook, upgrade guide | running | runbook box stays open (G1 public-records export) |
+| PR / branch | What | State |
+|---|---|---|
+| #49 (`../rag-a12`) | `verify.yml` admin-ui job + `scripts/admin-ui-size-budget.mjs` (fixes #44) | reviewed; ask the user to merge when green |
+| `a/3-parser-ci-speed` (`../rag-a13`, stacked on #49) | Parser CI speed-up, user's choice A + B: own `parser.yml` with a narrow trigger (not `verify.yml`, not the blob tests), pytest inside the image build (`RUN --network=none`) so the parser job needs no load and no disk cleanup | agent at work or done; measure on GitHub against today's ≈ 7 min (parser 6.3–7.4 min, contract 4.3–6.0 min) |
 
 **Pilot sign-in = Keycloak, not Entra** (user, 2026-10-30; Decisions table "P1 pilot sign-in"; identity plan §1).
 The Keycloak is **shared with the gateway**: its own Compose project on the gateway's production host, defined in the
