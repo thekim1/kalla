@@ -1,0 +1,10 @@
+[Unit]
+Description=Ume Rag: check for unhealthy labelled containers every minute
+Documentation=file:@DEPLOY_DIR@/host/README.md
+
+[Timer]
+OnCalendar=*:*:00
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
