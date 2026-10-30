@@ -4,7 +4,10 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
+using Microsoft.Extensions.Options;
 using Ume.Rag.Infrastructure.Config;
+using Ume.Rag.Infrastructure.Keys;
+using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Infrastructure.Persistence;
 
 namespace Ume.Rag.Infrastructure;
@@ -64,6 +67,23 @@ public static class InfrastructureExtensions
         builder.Services.TryAddSingleton<ConfigVersionState>();
         builder.Services.AddHostedService<ConfigVersionMonitor>();
         builder.Services.AddHealthChecks().AddCheck<ConfigConfirmedHealthCheck>("config");
+        return builder;
+    }
+
+    /// <summary>
+    /// Key hashing with Ume.Rag's pepper (<c>Security:KeyPepper</c>) and the <see cref="KeyStore"/> (identity design §6),
+    /// registered as an <see cref="IConfigChangeHandler"/> so key and client changes clear its caches. Pair with
+    /// <see cref="AddRagConfigMonitor"/> in a service that authenticates keys.
+    /// </summary>
+    public static IHostApplicationBuilder AddRagKeys(this IHostApplicationBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.Services.AddOptions<SecurityOptions>().BindConfiguration(SecurityOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+        builder.Services.AddOptions<KeyStoreOptions>().BindConfiguration(KeyStoreOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+        builder.Services.TryAddSingleton(TimeProvider.System);
+        builder.Services.TryAddSingleton(sp => KeyHasherFactory.Create(sp.GetRequiredService<IOptions<SecurityOptions>>().Value));
+        builder.Services.TryAddSingleton<KeyStore>();
+        builder.Services.AddSingleton<IConfigChangeHandler>(sp => sp.GetRequiredService<KeyStore>());
         return builder;
     }
 }
