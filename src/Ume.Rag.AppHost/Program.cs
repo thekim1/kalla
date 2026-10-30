@@ -15,6 +15,11 @@ const string PostgresImage = "pgvector/pgvector";
 const string PostgresTag = "0.8.7-pg17-trixie";
 const string PostgresDigest = "7a7e9f22015b67edb4bef5c59daeebcd7e74bfa570df6ce60ae01237c8648a84";
 
+// The Keycloak version Aspire.Hosting.Keycloak runs (tag 26.6), pinned by digest. Same pin as
+// Ume.Rag.AdminApi.Tests.KeycloakFixture.Image; update both together.
+const string KeycloakTag = "26.6.4";
+const string KeycloakDigest = "0aae0de7fca85525f727d3354df17896092de8bb26ae4c12d89c77e5df8cbce4";
+
 var builder = DistributedApplication.CreateBuilder(args);
 builder.AddDockerComposeEnvironment("compose").WithDashboard(false);
 
@@ -23,6 +28,7 @@ var devKey = Secret("dev-key", 43);
 var oidcSecret = Secret("oidc-client-secret", 48);
 var devUserPassword = Secret("dev-user-password", 32);
 var apiClientSecret = Secret("api-client-secret", 48);
+var openWebUiClientSecret = Secret("openwebui-client-secret", 48);
 
 var postgres = builder.AddPostgres("postgres")
     .WithImage(PostgresImage, PostgresTag).WithImageSHA256(PostgresDigest)
@@ -36,18 +42,16 @@ var redis = builder.Configuration.GetValue<bool>("Redis:Enabled")
     : null;
 
 // Oidc:Authority (AppHost user secrets) points local runs at an existing identity provider instead of the bundled test
-// Keycloak, which is then not started. The realm (dev/keycloak/ume-rag-realm.json) is imported once it exists (#9).
+// Keycloak, which is then not started. Its realm is dev/keycloak/ume-realm.json (identity design §11).
 var externalOidc = !string.IsNullOrWhiteSpace(builder.Configuration["Oidc:Authority"]);
-var realmDirectory = Path.Combine("..", "..", "dev", "keycloak");
 var keycloak = builder.ExecutionContext.IsRunMode && !externalOidc ? builder.AddKeycloak("keycloak")
+    .WithImageTag(KeycloakTag).WithImageSHA256(KeycloakDigest)
+    .WithRealmImport(Path.Combine("..", "..", "dev", "keycloak"))
     .WithEnvironment("UME_RAG_OIDC_CLIENT_SECRET", oidcSecret)
     .WithEnvironment("UME_RAG_DEV_USER_PASSWORD", devUserPassword)
     .WithEnvironment("UME_RAG_API_CLIENT_SECRET", apiClientSecret)
+    .WithEnvironment("UME_RAG_OWUI_CLIENT_SECRET", openWebUiClientSecret)
     .WithHttpsDeveloperCertificate() : null;
-if (keycloak is not null && Directory.Exists(Path.Combine(builder.AppHostDirectory, realmDirectory)))
-{
-    keycloak.WithRealmImport(realmDirectory);
-}
 
 // FakeGateway:Enabled=false (AppHost user secrets) runs against a real local gateway instead (§4.4).
 var fakeGateway = builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("FakeGateway:Enabled", true)
