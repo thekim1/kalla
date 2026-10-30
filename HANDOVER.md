@@ -196,12 +196,19 @@ user to merge them in this order, merging `origin/main` into each before its tur
 | PR | Item | What | CI | After merge |
 |---|---|---|---|---|
 | #43 | shared | `.gitignore`: `deploy/upload-backup/`, `deploy/openwebui-data/` | running | – |
-| #36 | 8 (#17) | Entra package 1 Bicep (Graph ext. 1.0.0 by digest), `entra.yml` (build on PR, plan when configured, apply by dispatch behind reviewers) | green `a490f28` | open **H7** from the saved text (see below) |
+| #36 | 8 (#17) | Entra package 1 Bicep, `entra.yml` | **merged** `a9590dd` | **H7 deferred to P2**: the pilot signs in with Keycloak (user, 2026-10-30) |
 | #37 | 9 (#22) | `scripts/capacity/capacity.py` (stdlib), tried on FakeGateway | green `05d4a86` | open **H8** |
 | #40 | 5 (#14, 2/2) | `deploy/host/`, backup/restore/escrow scripts, local PITR drill (RPO ≤ 43 s, RTO 23 s) | green `9e9998c`, then `d6ea118` (init step order) pushed: re-check | – |
 | #42 | 10 (#19) | docs: local development, production setup, runbook, upgrade guide | running | runbook box stays open (G1 public-records export) |
 
-The H7 and H8 issue texts were drafted in session 7's scratchpad, which does not survive. Rewrite them from:
+**Pilot sign-in = Keycloak, not Entra** (user, 2026-10-30; Decisions table "P1 pilot sign-in"; identity plan §1).
+Follow-ups for the P1 briefs: a `keycloak` service in the pilot Compose with its database in the pilot Postgres
+(stream A, `deploy/`); a production realm without test users and with the `rag-*` roles, the `departmentCodes`
+attribute and the `ume-rag-admin`/`open-webui` clients (stream B, from `dev/keycloak/ume-realm.json`); Open WebUI's
+OIDC settings pointed at it; account administration in the runbook. Keep the stakeholder report in step.
+
+The H7 issue (Entra, now P2) and the H8 issue texts were drafted in session 7's scratchpad, which does not survive.
+Rewrite them when needed from:
 - PR #36's body and `infra/entra/README.md` (H7: parameter file; deployer app `ume-rag-entra-deploy` with
   `Application.ReadWrite.OwnedBy` + `Group.Create`, and ask IT about `Group.ReadWrite.All`; plan app with
   `Application.Read.All`; subscription and resource group; GitHub variables and environments `entra-plan`,

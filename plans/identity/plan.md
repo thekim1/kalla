@@ -13,8 +13,11 @@ invented on one side.
 
 ## 1. Principles
 
-1. **The municipal OIDC provider is the identity source** (Entra ID in production; Keycloak or AD FS work the same
-   way, as in the gateway). The platform stores no passwords and keeps no own user directory.
+1. **An OIDC provider is the identity source**; Keycloak, AD FS and Entra ID work the same way, as in the gateway.
+   **Pilot (P1): a Keycloak container in the pilot Compose** holds the admins' and pilot users' accounts, and both
+   the admin UI and Open WebUI sign in through it (user, 2026-10-30: as simple as possible, no Entra approval on the
+   pilot's critical path). **Entra ID from P2** (approval package 1, `infra/entra/`, is ready but not submitted), a
+   configuration change, not code. The RAG services store no passwords; Keycloak does, for the pilot only.
 2. **Every request has a subject and a client.** The subject is a user, an application or an anonymous visitor; the
    client is the front end or integration it arrived through. Both are part of every authorisation decision.
 3. **One policy engine** (`IAccessPolicy` in `Ume.Rag.Domain`) used by the Chat/Knowledge API, the MCP server, the
