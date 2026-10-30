@@ -29,6 +29,7 @@ var oidcSecret = Secret("oidc-client-secret", 48);
 var devUserPassword = Secret("dev-user-password", 32);
 var apiClientSecret = Secret("api-client-secret", 48);
 var openWebUiClientSecret = Secret("openwebui-client-secret", 48);
+var dataApiKey = Secret("data-api-key", 43);
 
 var postgres = builder.AddPostgres("postgres")
     .WithImage(PostgresImage, PostgresTag).WithImageSHA256(PostgresDigest)
@@ -187,6 +188,9 @@ if (redis is not null)
 // Every model call goes through the gateway: locally the fake one (AGENTS.md).
 if (fakeGateway is not null)
 {
+    // The admin's organisation sync reads the fake's Data API catalogue (admin design §4.10).
+    fakeGateway.WithEnvironment("FakeGateway__DataApiKey", dataApiKey);
+    adminApi.WithEnvironment("OrgSync__BaseUrl", fakeGateway.GetEndpoint("https")).WithEnvironment("OrgSync__DataApiKey", dataApiKey);
     foreach (var service in new[] { api, worker, adminApi })
     {
         service.WithEnvironment("Gateway__BaseUrl", fakeGateway.GetEndpoint("https")).WaitFor(fakeGateway);

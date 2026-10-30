@@ -32,6 +32,12 @@ public static class AdminErrorCodes
     /// <summary>The config version lock was not granted within 5 s (admin design §4.4); retry.</summary>
     public static AdminErrorCode ConfigBusy { get; } = new("config_busy", 503, "Another change is being saved. Try again in a moment.");
 
+    /// <summary>The organisation sync has no gateway Data API configured (<c>OrgSync:BaseUrl</c>).</summary>
+    public static AdminErrorCode SyncOff { get; } = new("sync_off", 409, "The sync with the AI gateway is not configured.");
+
+    /// <summary>The gateway did not answer or the mirror could not be written; the last mirror is kept. <c>{error}</c> is the error type.</summary>
+    public static AdminErrorCode SyncFailed { get; } = new("sync_failed", 502, "The sync with the AI gateway failed ({error}). The last synced data is kept.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
-        [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy];
+        [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed];
 }

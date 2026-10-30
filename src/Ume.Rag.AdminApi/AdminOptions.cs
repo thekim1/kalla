@@ -17,6 +17,12 @@ public sealed class AdminOptions
     /// </summary>
     [Range(1, 24)]
     public int MaxSessionHours { get; set; } = 12;
+
+    /// <summary>
+    /// Runs the nightly retention steps (repo-and-deployment §3). Each batch is idempotent under an advisory lock, so
+    /// several instances share or skip the work; <c>false</c> is an off switch.
+    /// </summary>
+    public bool Retention { get; set; } = true;
 }
 
 /// <summary>

@@ -31,6 +31,11 @@ builder.Services.AddSingleton<IAdminSessionStore, PostgresAdminSessionStore>();
 builder.Services.AddSingleton<AccessDeniedThrottle>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<AdminContext>();
+builder.Services.AddOptions<OrgSyncOptions>().BindConfiguration(OrgSyncOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+builder.Services.AddHttpClient(OrganisationSync.HttpClientName);
+builder.Services.AddSingleton<OrganisationSync>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<OrganisationSync>());
+builder.Services.AddHostedService<RetentionService>();
 builder.Services.AddRateLimiter(o =>
 {
     o.AddPolicy(AdminRateLimits.PerUser, http => RateLimitPartition.GetFixedWindowLimiter(

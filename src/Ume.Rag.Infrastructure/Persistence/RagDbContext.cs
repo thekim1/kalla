@@ -113,6 +113,8 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
             // As the gateway: a concurrent rotate or revoke of the same key fails instead of overwriting.
             e.Property(x => x.RotatedToKeyId).IsConcurrencyToken();
             e.Property(x => x.RevokedAt).IsConcurrencyToken();
+            // Keys belong to mirrored teams (identity design §6.4); teams are deactivated, never deleted, by the org sync.
+            e.HasOne<Team>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Restrict);
             e.Property(x => x.Scopes).HasColumnType("jsonb").HasConversion(
                 new ValueConverter<KeyScopes, string>(v => JsonSerializer.Serialize(v, ScopesJson), v => JsonSerializer.Deserialize<KeyScopes>(v, ScopesJson) ?? KeyScopes.None),
                 new ValueComparer<KeyScopes>((a, b) => Equals(a, b), v => v.GetHashCode(), v => new KeyScopes(v.AssistantIds.ToArray(), v.CollectionIds.ToArray())));
