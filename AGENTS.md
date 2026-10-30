@@ -9,11 +9,18 @@ This repo holds the design (`01-general-idea.md`, `plans/`, `platforms/`) and, f
 Read in this order. A later source overrides an earlier one only where the earlier one says so:
 
 1. `01-general-idea.md` §10 **Decisions table**. Later rows win over earlier rows.
-2. `plans/simplification-pass.md`. It overrides the detail documents wherever they disagree.
-3. The detail document for your area. `HANDOVER.md` maps areas to documents.
+2. `plans/weakness-review.md`. It overrides the simplification pass and the detail documents.
+3. `plans/simplification-pass.md`. It overrides the detail documents wherever they disagree.
+4. The detail document for your area. `HANDOVER.md` maps areas to documents.
 
-Your assignment is in `plans/p0/`: the brief for your stream gives your items in order, each item's done-when
-criterion, and what you hand to the other stream. Design sessions (not stream work) start from `HANDOVER.md`.
+Your assignment is in `plans/p0/`:
+- the brief for your stream gives your items in order, each item's done-when criterion, and what you hand to the
+  other stream;
+- your progress file (`progress-a.md` or `progress-b.md`) says where you are. Tick its boxes in the PR that does the
+  work.
+
+Phase progress is in `plans/progress.md`. Prompts to start each stream are in `plans/p0/prompts/`. Design sessions
+(not stream work) start from `HANDOVER.md`.
 
 The gateway (`~/git/llmgateway`, github.com/thekim1/llmgateway) is the reference implementation. When a design says
 **copy**, take the gateway file unchanged. When it says **adapt**, change only what the design lists. Keep the

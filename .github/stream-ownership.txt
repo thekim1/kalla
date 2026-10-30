@@ -6,9 +6,11 @@
 # and shared paths (check: Stage 0, verify.yml).
 # Rationale and hand-offs: plans/p0/README.md.
 
-# Stream results files
+# Stream results and progress files
 plans/p0/results-a.md                         a
 plans/p0/results-b.md                         b
+plans/p0/progress-a.md                        a
+plans/p0/progress-b.md                        b
 
 # Design, coordination and the root build files (Stage 0; later changes through an issue to the main session)
 plans/**                                      main

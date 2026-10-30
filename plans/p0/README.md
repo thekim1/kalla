@@ -12,6 +12,11 @@ Three steps: **Stage 0** (main session, alone) → **stream A and stream B in pa
 | [`stream-a.md`](stream-a.md) | Stream A: platform and the ingestion side (images, parser, Compose, backups, CI, release, worker dispatcher) |
 | [`stream-b.md`](stream-b.md) | Stream B: application and the serving side (schema, config library, keys, identity, FakeGateway, admin) |
 
+Progress: [`progress-stage-0.md`](progress-stage-0.md), [`progress-a.md`](progress-a.md),
+[`progress-b.md`](progress-b.md) (checkboxes per step, with plan references); phases: [`../progress.md`](../progress.md).
+Prompts to start an agent: [`prompts/stream-a.md`](prompts/stream-a.md), [`prompts/stream-b.md`](prompts/stream-b.md),
+[`prompts/main-session.md`](prompts/main-session.md).
+
 ## 1. Stage 0 (main session)
 
 Fixes every file both streams would otherwise create or reorder, so the streams afterwards fill in files rather than

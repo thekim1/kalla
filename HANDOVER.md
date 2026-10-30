@@ -19,7 +19,8 @@ design), also published as a private artifact (share from its menu): https://cla
 
 ## Reading order
 
-1. `01-general-idea.md` §10 **Decisions table**: authoritative; later rows win over earlier ones. The rows from "Simplification
+1. `01-general-idea.md` §10 **Decisions table**: authoritative; later rows win over earlier ones. Then
+   `plans/weakness-review.md` (session 5: five fixes, binding over the simplification pass and the detail documents). The rows from "Simplification
    pass" on (site profiles, visual builder, fewer containers, workspaces, many assistants) override much of what
    comes before. Sections 3–9 are the original idea.
 2. `plans/simplification-pass.md`: the ten review changes in decided form, §11a conflicts settled during the
@@ -111,13 +112,21 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 | Overall review → simplification pass (10 changes) + umea.se site profiles | `plans/simplification-pass.md`, every plan document | `6f0602f` |
 | Six pilot containers; many assistants per department (§15); ask-a-file workspaces plan | `simplification-pass.md` §14–§15, `plans/workspaces/plan.md` | `0e91d81`, `00e531c` |
 | P0 split into Stage 0 + streams A/B; agent harness | `plans/p0/`, `AGENTS.md`, `CLAUDE.md`, `.github/` | (this session) |
+| Weakness review: five fixes (P1a/P1b, gold set + go-live gate, freshness, history mode `none` + DPIA, gateway release split + P0 capacity) | `plans/weakness-review.md`, every plan document | `f9a12b2` … `abbc3d7` |
+| Progress files (checkboxes) and stream prompts | `plans/progress.md`, `plans/p0/progress-*.md`, `plans/p0/prompts/` | (this session) |
 | **P0 Stage 0** (main session), then streams A and B | `plans/p0/README.md` §1 | **next** |
 
 ## Open items
 
 **Waiting on people** (`plans/postponed-decisions.md`):
-- **A1** archive law: are chat logs allmänna handlingar, is a gallringsbeslut needed? **Pilot blocker**; owner still
+- **A1** archive law: are chat logs allmänna handlingar, is a gallringsbeslut needed? No longer a pilot blocker (pilot
+  runs history mode `none`, weakness review §4); gates stored chat content; owner
   to be named. Also gates destroying chat bucket keys.
+- **G1** DPIA with the data protection officer: starts in P0, finished before go-live; covers Open WebUI's store as the
+  primary copy and decides W2 (weakness review §4).
+- **M2** on-prem model capacity: decided before P1 if the P0 measurement (#22) falls short (weakness review §5).
+- Every phase-blocking item needs a named person and a date before the phase starts; P0 ends only when A1, G1, W1,
+  W2, N1, U1 and P2 have both.
 - **W2** Open WebUI chat copies: v0.12.5 cannot prune other users' chats without `ENABLE_ADMIN_CHAT_ACCESS`; decide
   with A1 before the pilot.
 - **W1** existing AI chat on umea.se (`chat.umea.se`, `ume-app-aichat-prod`): what it is and how it overlaps.
@@ -141,6 +150,9 @@ assistant test-run cost.
 Decided in session 5 (Decisions table, "P0 set-up"): code in this repo; the combined gateway release is agreed in P0
 and built in P1; the user owns the people items (Entra submission #17, gateway-team agreement #18, backup target and
 escrow `to-verify.md` #145, test-host access #16); the main session runs Stage 0.
+
+Start a session with `plans/p0/prompts/main-session.md`; streams start with `plans/p0/prompts/stream-a.md` and
+`stream-b.md`. Progress lives in `plans/progress.md` and `plans/p0/progress-*.md`.
 
 1. Stage 0 as listed in `plans/p0/README.md` §1, on branch `stage-0`, with the 7-day package rule (V1). It
    includes the CI ownership check against `.github/stream-ownership.txt` and the GitHub labels.
