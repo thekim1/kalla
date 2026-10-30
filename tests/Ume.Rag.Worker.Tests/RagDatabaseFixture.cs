@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+using System.Collections.Concurrent;
 using Npgsql;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.TestKit;
@@ -11,6 +11,8 @@ namespace Ume.Rag.Worker.Tests;
 /// </summary>
 public sealed class RagDatabaseFixture : RagDatabase, IAsyncLifetime
 {
+    private readonly ConcurrentDictionary<string, NpgsqlDataSource> _dataSources = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Removes every job and instance, so a test sees only its own, and closes the idle pooled connections earlier tests
     /// left, so each test starts with the worker role's whole connection cap.
@@ -18,6 +20,7 @@ public sealed class RagDatabaseFixture : RagDatabase, IAsyncLifetime
     public async Task ResetAsync()
     {
         await Sql.ExecuteAsync(Connection(null), """DELETE FROM content."Jobs"; DELETE FROM content."WorkerInstances";""");
+        await DisposeDataSourcesAsync();
         NpgsqlConnection.ClearAllPools();
         var waited = System.Diagnostics.Stopwatch.StartNew();
         while (await Sql.ScalarAsync<long>(Connection(null), "SELECT count(*) FROM pg_stat_activity WHERE usename = 'ume_rag_worker'") > 0)
@@ -30,8 +33,25 @@ public sealed class RagDatabaseFixture : RagDatabase, IAsyncLifetime
     /// <summary>The queue as <paramref name="role"/> sees it, outside any host.</summary>
     public PostgresJobQueue Queue(string role) => new(Database(role), new JobWakeUps(TimeProvider.System));
 
-    public JobDatabase Database(string role) =>
-        new(new ConfigurationBuilder().AddInMemoryCollection([new KeyValuePair<string, string?>("ConnectionStrings:ragdb", Connection(role))]).Build());
+    /// <summary>The queue's connections as <paramref name="role"/>, from one data source per role, as a process has.</summary>
+    public JobDatabase Database(string role) => new(_dataSources.GetOrAdd(role, r => NpgsqlDataSource.Create(Connection(r))));
+
+    async ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        await DisposeDataSourcesAsync();
+        await DisposeAsync();
+    }
+
+    private async Task DisposeDataSourcesAsync()
+    {
+        foreach (var role in _dataSources.Keys)
+        {
+            if (_dataSources.TryRemove(role, out var dataSource))
+            {
+                await dataSource.DisposeAsync();
+            }
+        }
+    }
 }
 
 [CollectionDefinition(Name)]
