@@ -318,7 +318,7 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 
 | Mechanism | Where it went |
 |---|---|
-| Typed DAG, node catalogue with ports, user-added and locked nodes, canvas | dropped; fixed linear pipelines = template + parameters (§4) |
+| Typed DAG, node catalogue with ports, user-added and locked nodes, canvas | fixed linear pipelines = template + parameters (§4); the visual builder is a P3 item behind a trigger (register C2) |
 | Two-stage Merkle hashes, shared chunk sets, collection membership arrays, follow runs | dropped; documents and sets per source, per-stage cache keys (§3, §4) |
 | `ner` job class and NER lane sizing; NER for every document | dropped; gated NER inside the processing job (§4) |
 | PdfPig fast path in the worker | dropped; all PDFs to the parser, pypdfium2 text-layer path there (§6.2) |

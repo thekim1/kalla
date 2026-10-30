@@ -74,8 +74,8 @@ dropped).
   rules) → clean → chunk → personal data → embed → index. A pipeline version is (template id, parameter set) as
   versioned JSON; publish computes the re-processing plan from which parameters changed (effect tags kept).
   `IPipelineNode` stays as the internal way to add stages in code. Removed: the DAG executor, typed ports, user-added
-  nodes, locked nodes, the Vue Flow canvas (dropped from the roadmap; reconsidered only if editors demonstrably need
-  custom flows). The *pipeline editor* right becomes "edit template parameters".
+  nodes, locked nodes, the Vue Flow canvas (a **P3 item behind a trigger**, register C2, decided by the user 2026-10-30: built only when
+  editors ask for a flow that template parameters cannot express, seen in at least two departments or one recurring platform-team request). The *pipeline editor* right becomes "edit template parameters".
 - **Parse rules, no auto-apply learning of parse strategies.** Built-in rules plus admin-made parse rules; parse
   observations are still recorded; from P2, parse-profile **proposals** are shown to platform admins and need
   approval. Removed: confidence threshold, trial runs, automatic rollback, the kill switch for auto-apply.

@@ -130,7 +130,7 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 
 | Item | Where it went |
 |---|---|
-| Pipeline canvas (Vue Flow), node palette, typed ports, locked nodes | Dropped from the roadmap (§2) |
+| Pipeline canvas (Vue Flow), node palette, typed ports, locked nodes | P3 behind a trigger (register C2, `../simplification-pass.md` §2) |
 | P1 node editor and JSON view | Removed: pipelines are template + parameters (§2) |
 | Version diff, rebase | P2 if needed (parameter diff) (§10) |
 | Blocking evaluation gates, gate cards with intervals/escalation, collection floor, `gating` and `building` states, platform-admin gate overrides | Removed; advisory evaluation report on the publish screen (§8) |

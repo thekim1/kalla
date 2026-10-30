@@ -13,8 +13,8 @@ gateway and wants to do better than **Eneo** (`~/git/eneo`), which they find slo
 This repo holds **design only**. The design is **complete**: ten detail steps, a consistency pass, a performance pass
 and (session 4) a **simplification pass**, all reviewed and pushed. **Next is P0 implementation.**
 
-Plain-language overview for stakeholders (private artifact, share from its menu):
-https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM
+Plain-language overview for stakeholders: `docs/stakeholder-report.html` (open in a browser; keep it in step with the
+design), also published as a private artifact (share from its menu): https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM
 
 ## Reading order
 
@@ -113,6 +113,8 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 - **P2** licences of models, OCR data, dictionaries and the `sv_SE` word list, before the pilot.
 - **D1** Postgres streaming standby, before production beyond the pilot.
 - **R1** self-hosted GitHub runner; **S2** object store server (P2).
+- **C2** visual pipeline builder: P3, built only when its trigger fires (editors need flows that template
+  parameters cannot express).
 
 **Measured or checked during implementation**: `plans/to-verify.md` (rows up to #160), including the decompounder
 against Postgres `ispell`, the stock pgvector image tag, pgBackRest with that image, the umea.se site profile and

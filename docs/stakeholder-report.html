@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Stakeholder report. Published copy: https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM (private). Open this file in a browser. -->
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Ume.Rag Knowledge Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one readable report column (~68ch) with wide figures that break out to 1080px; river-and-birch palette. */
+:root {
+  --bg: #f4f6f6;          /* birch white, faint green-grey */
+  --surface: #ffffff;
+  --ink: #14232b;         /* deep river ink */
+  --muted: #536570;
+  --line: #d5dee1;
+  --accent: #1d6a85;      /* Ume river blue */
+  --accent-soft: #e1eef2;
+  --spruce: #2f5d4a;      /* good / strength */
+  --spruce-soft: #e2eee8;
+  --amber: #9a5b00;       /* attention */
+  --amber-soft: #f7ecd9;
+  --weak: #8a3b2e;
+  --weak-soft: #f6e3df;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --step--1: 0.875rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.3rem;
+  --step-2: 1.75rem;
+  --step-3: clamp(2.1rem, 4.5vw, 3.1rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f181c; --surface: #16232a; --ink: #e2eaec; --muted: #9db0b8; --line: #2a3b43;
+    --accent: #6cb8d3; --accent-soft: #17323d; --spruce: #7cc3a3; --spruce-soft: #173229;
+    --amber: #e3ad5c; --amber-soft: #352914; --weak: #e59484; --weak-soft: #3a1f1a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f181c; --surface: #16232a; --ink: #e2eaec; --muted: #9db0b8; --line: #2a3b43;
+  --accent: #6cb8d3; --accent-soft: #17323d; --spruce: #7cc3a3; --spruce-soft: #173229;
+  --amber: #e3ad5c; --amber-soft: #352914; --weak: #e59484; --weak-soft: #3a1f1a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: var(--step-0); line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 4rem;
+}
+.wrap { max-width: 1080px; margin: 0 auto; }
+.col { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: var(--step-3); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: var(--step-2); font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: var(--step-1); font-weight: 500; }
+p { margin: 0; }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.eyebrow { font-family: var(--font-mono); font-size: var(--step--1); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.lead { font-size: var(--step-1); line-height: 1.45; color: var(--ink); }
+.muted { color: var(--muted); }
+.mono { font-family: var(--font-mono); font-size: 0.92em; }
+section { padding-block: 3.25rem 0; display: grid; gap: 1.25rem; }
+.stack { display: grid; gap: 1rem; }
+
+/* Top bar */
+.topbar { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; align-items: baseline; padding-block: 1.25rem; border-bottom: 1px solid var(--line); }
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; }
+.topbar nav { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: var(--step--1); }
+.topbar nav a { color: var(--muted); text-decoration: none; }
+.topbar nav a:hover { color: var(--accent); }
+
+/* Hero */
+.hero { padding-block: 3rem 0; display: grid; gap: 1.5rem; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.fact { background: var(--surface); padding: 1rem 1.1rem; display: grid; gap: 0.25rem; align-content: start; }
+.fact b { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; line-height: 1.2; }
+.fact span { color: var(--muted); font-size: var(--step--1); line-height: 1.45; }
+
+/* Example conversation */
+.chat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; display: grid; gap: 1rem; max-width: 720px; }
+.msg { display: grid; gap: 0.35rem; }
+.who { font-family: var(--font-mono); font-size: var(--step--1); color: var(--muted); }
+.bubble { padding: 0.8rem 1rem; border-radius: 10px; }
+.q .bubble { background: var(--accent-soft); justify-self: start; }
+.a .bubble { background: var(--bg); border: 1px solid var(--line); }
+.cite { font-family: var(--font-mono); font-size: 0.8em; color: var(--accent); vertical-align: super; }
+.source { display: flex; gap: 0.6rem; align-items: baseline; font-size: var(--step--1); border-top: 1px dashed var(--line); padding-top: 0.6rem; }
+.source .n { font-family: var(--font-mono); color: var(--accent); }
+.note { font-size: var(--step--1); color: var(--muted); }
+
+/* System map */
+.map { display: grid; grid-template-columns: 1fr auto 1.6fr auto 1fr; gap: 0.75rem; align-items: stretch; }
+.lane { display: grid; gap: 0.6rem; align-content: start; }
+.lane h3 { font-family: var(--font-mono); font-size: var(--step--1); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.85rem; display: grid; gap: 0.15rem; }
+.box b { font-size: 0.98rem; }
+.box span { font-size: var(--step--1); color: var(--muted); line-height: 1.4; }
+.box.core { border-color: var(--accent); }
+.arrow { align-self: center; color: var(--accent); font-family: var(--font-mono); font-size: 1.4rem; }
+.gateway { grid-column: 1 / -1; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 8px; padding: 0.8rem 1rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: baseline; }
+.gateway b { font-family: var(--font-display); }
+@media (max-width: 760px) {
+  .map { grid-template-columns: 1fr; }
+  .arrow { justify-self: center; transform: rotate(90deg); }
+}
+
+/* Process steps (a real sequence, so numbered) */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0.75rem; counter-reset: s; }
+.steps li { counter-increment: s; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem 1rem; display: grid; gap: 0.3rem; align-content: start; }
+.steps li::before { content: counter(s); font-family: var(--font-mono); font-size: var(--step--1); color: var(--accent); }
+.steps b { font-family: var(--font-display); font-size: 1.05rem; }
+.steps span { font-size: var(--step--1); color: var(--muted); line-height: 1.45; }
+
+/* umea.se page figure */
+.page-fig { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+@media (max-width: 760px) { .page-fig { grid-template-columns: minmax(0, 1fr); } }
+.bar { display: grid; gap: 0.4rem; }
+.bar-track { height: 18px; background: var(--weak-soft); border-radius: 4px; position: relative; overflow: hidden; border: 1px solid var(--line); }
+.bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--spruce); }
+.bar-legend { display: flex; justify-content: space-between; gap: 0.5rem; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.learned { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.learned div { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 0.75rem; padding: 0.6rem 0.9rem; border-top: 1px solid var(--line); font-size: var(--step--1); }
+.learned div:first-child { border-top: 0; }
+.learned dt, .learned .k { color: var(--muted); }
+.learned code, code { font-family: var(--font-mono); font-size: 0.88em; overflow-wrap: anywhere; }
+.kept { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1rem; font-size: var(--step--1); display: grid; gap: 0.5rem; }
+.strike { text-decoration: line-through; color: var(--weak); }
+.crumb { font-family: var(--font-mono); font-size: 0.85em; color: var(--accent); }
+
+/* Classification */
+.levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; }
+.level { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1rem; display: grid; gap: 0.5rem; align-content: start; }
+.level .tag { font-family: var(--font-mono); font-size: var(--step--1); padding: 0.1rem 0.5rem; border-radius: 999px; justify-self: start; }
+.t-public { background: var(--spruce-soft); color: var(--spruce); }
+.t-internal { background: var(--accent-soft); color: var(--accent); }
+.t-sensitive { background: var(--amber-soft); color: var(--amber); }
+.level dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.3rem 0.75rem; font-size: var(--step--1); }
+.level dt { color: var(--muted); }
+.level dd { margin: 0; }
+
+/* Strengths */
+.strengths { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+.strength { display: grid; gap: 0.45rem; align-content: start; padding-top: 0.9rem; border-top: 2px solid var(--accent); }
+.strength h3 { font-size: 1.15rem; font-weight: 700; }
+.strength p { font-size: 0.98rem; }
+.strength .vs { font-size: var(--step--1); color: var(--muted); }
+
+/* Comparison table */
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 860px; font-size: var(--step--1); line-height: 1.4; }
+th, td { text-align: left; vertical-align: top; padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--line); }
+thead th { font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; background: var(--bg); position: sticky; top: 0; }
+tbody th { font-weight: 700; width: 12rem; }
+td.us { background: var(--accent-soft); }
+thead th.us { background: var(--accent); color: var(--surface); }
+tr:last-child th, tr:last-child td { border-bottom: 0; }
+.pill { display: inline-block; font-family: var(--font-mono); font-size: 0.78rem; padding: 0.05rem 0.45rem; border-radius: 999px; margin-right: 0.3rem; white-space: nowrap; }
+.p-good { background: var(--spruce-soft); color: var(--spruce); }
+.p-mid { background: var(--amber-soft); color: var(--amber); }
+.p-bad { background: var(--weak-soft); color: var(--weak); }
+
+/* Honest column */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.2rem; display: grid; gap: 0.6rem; align-content: start; }
+.panel ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.45rem; font-size: 0.98rem; }
+
+/* Roadmap */
+.phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--line); gap: 1px; }
+.phase { background: var(--surface); padding: 1rem; display: grid; gap: 0.45rem; align-content: start; }
+.phase .code { font-family: var(--font-mono); color: var(--accent); font-size: var(--step--1); }
+.phase h3 { font-size: 1.1rem; font-weight: 700; }
+.phase p { font-size: var(--step--1); color: var(--muted); }
+.phase.now { box-shadow: inset 0 3px 0 var(--accent); }
+
+/* Open questions */
+.questions { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.question { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) minmax(0, 12rem); gap: 1rem; padding: 0.85rem 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.question .id { font-family: var(--font-mono); color: var(--amber); }
+.question .when { font-size: var(--step--1); color: var(--muted); }
+@media (max-width: 640px) { .question { grid-template-columns: 3.5rem minmax(0, 1fr); } .question .when { grid-column: 2; } }
+
+footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: grid; gap: 0.4rem; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <span class="brand">Ume.Rag</span>
+    <nav aria-label="Sections">
+      <a href="#what">What it does</a>
+      <a href="#how">How it works</a>
+      <a href="#umea">umea.se example</a>
+      <a href="#safety">Safety</a>
+      <a href="#compare">Compared</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#open">Open questions</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <p class="eyebrow">Design report · Umeå kommun · October 2026</p>
+    <h1>One place where the municipality's own knowledge answers questions, in Swedish, with sources</h1>
+    <p class="lead col">Ume.Rag is a knowledge platform for Umeå kommun. Departments point it at web pages, websites and
+      documents. It reads and indexes them, and builds assistants that answer staff questions with links to the exact
+      sources. It runs on the municipality's own servers, and every AI call goes through the LLM gateway the
+      municipality already operates.</p>
+    <div class="facts" role="list">
+      <div class="fact" role="listitem"><b>One server</b><span>The pilot runs on a single 8-core machine with 16–24 GB of memory.</span></div>
+      <div class="fact" role="listitem"><b>Built for Swedish</b><span>Search splits compound words, so <i>bygglovsansökan</i> also finds <i>bygglov</i>.</span></div>
+      <div class="fact" role="listitem"><b>Always cites</b><span>Every answer links to the pages it used. With no good source, it says so and gives a contact.</span></div>
+      <div class="fact" role="listitem"><b>Inside the rules</b><span>Each source is classified as public, internal or sensitive, and that decides where AI may process it.</span></div>
+    </div>
+  </div>
+
+  <section id="what" aria-labelledby="what-h">
+    <p class="eyebrow">What it does</p>
+    <h2 id="what-h">Staff ask in plain Swedish and get an answer they can check</h2>
+    <div class="col stack">
+      <p>Today the answer to a question like "who do I call about IT support?" is spread over thousands of pages
+        on umea.se, the intranet and in PDF files. Ume.Rag gathers those sources per department, keeps them up to date,
+        and lets an assistant answer from them. The assistant shows up as a model in the chat tool staff already use
+        (Open WebUI in the pilot). Other systems, such as the intranet or a case system, can call the same assistant
+        through a standard API.</p>
+    </div>
+    <div class="chat" aria-label="Example conversation">
+      <div class="msg q">
+        <span class="who">Staff member</span>
+        <div class="bubble">Vem kontaktar jag om jag behöver IT-support, och när har de öppet?</div>
+      </div>
+      <div class="msg a">
+        <span class="who">Assistant · Digital omställning och IT</span>
+        <div class="bubble">Ring IT-supporten på 090-16 11 34. Telefonsupporten är öppen vardagar klockan 8–17,
+          med lunchstängt 12–13. Bokade besök tas emot 8.00–16.30 i Stadshuset, norra flygeln, Skolgatan 31.<span class="cite">[1]</span></div>
+        <div class="source"><span class="n">[1]</span><span>Digital omställning och IT · umea.se · <span class="crumb">Kommun och politik › Kommunens organisation › …</span> · uppdaterad 2026-01-15</span></div>
+      </div>
+      <p class="note">An illustration built from the real umea.se page used as the example below. The facts in the answer are on that page.</p>
+    </div>
+  </section>
+
+  <section id="how" aria-labelledby="how-h">
+    <p class="eyebrow">How it works</p>
+    <h2 id="how-h">Five small parts, each with one job</h2>
+    <p class="col">Platforms such as Eneo put everything in one large application, so a big website import can slow down
+      everyone's chat. Ume.Rag keeps reading and indexing apart from answering, so the two never compete.</p>
+
+    <div class="map" role="img" aria-label="System map: sources flow into the ingestion side, which fills the knowledge store; assistants answer people from the store; all AI calls go through the LLM gateway.">
+      <div class="lane">
+        <h3>Sources</h3>
+        <div class="box"><b>Web pages</b><span>Lists of exact pages</span></div>
+        <div class="box"><b>Websites</b><span>Whole sites, crawled politely at night</span></div>
+        <div class="box"><b>Files</b><span>PDF, Word, Excel, PowerPoint, scans</span></div>
+        <div class="box"><b>SharePoint</b><span>From phase 2</span></div>
+      </div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="lane">
+        <h3>The platform</h3>
+        <div class="box core"><b>Ingestion worker</b><span>Fetches, checks for changes and viruses, cleans, splits and indexes, in the background</span></div>
+        <div class="box core"><b>Document reader</b><span>Turns PDFs, Office files and scans into text, with tables and headings kept</span></div>
+        <div class="box core"><b>Knowledge store</b><span>One PostgreSQL database: documents, search index, settings, encrypted chat history</span></div>
+        <div class="box core"><b>Assistants API</b><span>Searches, builds the answer, streams it with sources</span></div>
+        <div class="box"><b>Admin</b><span>Swedish web pages where departments set up sources and assistants and test them</span></div>
+      </div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="lane">
+        <h3>People and apps</h3>
+        <div class="box"><b>Open WebUI</b><span>The staff chat tool in the pilot</span></div>
+        <div class="box"><b>Intranet, case systems</b><span>Through the standard chat API</span></div>
+        <div class="box"><b>Website widget</b><span>Public assistants, phase 2</span></div>
+        <div class="box"><b>AI tools (MCP)</b><span>Phase 2</span></div>
+      </div>
+      <div class="gateway"><b>LLM gateway</b><span>Every AI call, for answers and for indexing, goes through the municipality's existing gateway. It handles budgets, cost per team and which providers each call may use. Embeddings (the "meaning" index) are always computed on the municipality's own servers.</span></div>
+    </div>
+
+    <h3>What happens when a document is added</h3>
+    <ol class="steps">
+      <li><b>Fetch</b><span>Downloads the page or file, follows robots.txt and keeps a polite pace (at most 10 requests per second to municipal sites, at night).</span></li>
+      <li><b>Check</b><span>Skips anything unchanged since last time. Files are scanned for viruses before anything opens them.</span></li>
+      <li><b>Read</b><span>Pulls out the real text. Web pages use the site's learned profile; PDFs and Office files go to the document reader, with OCR for scans.</span></li>
+      <li><b>Split</b><span>Cuts the text into passages of about 400 words' worth of tokens, each labelled with its page title and heading path.</span></li>
+      <li><b>Protect</b><span>Looks for personal identity numbers and other personal data. Documents with personal data are kept out of public assistants.</span></li>
+      <li><b>Index</b><span>Stores each passage twice: as Swedish keywords and as a "meaning" vector, so both exact terms and paraphrases are found.</span></li>
+      <li><b>Report</b><span>Runs the collection's test questions and shows how well the right documents are found, before and after the change. One click rolls it back.</span></li>
+    </ol>
+
+    <h3>What happens when someone asks</h3>
+    <ol class="steps">
+      <li><b>Who is asking</b><span>Checks the person's department and which assistants they may use, from memory, without a database round trip.</span></li>
+      <li><b>Understand</b><span>For a follow-up like "vad kostar det?", rewrites it into a full question using the conversation so far.</span></li>
+      <li><b>Search</b><span>Searches by Swedish keywords and by meaning at the same time, then merges the two result lists.</span></li>
+      <li><b>Enough sources?</b><span>If nothing relevant is found, it gives a fixed "I can't find an answer" with contact details instead of guessing.</span></li>
+      <li><b>Answer</b><span>The language model writes the answer from the found passages only, citing them. The answer is streamed as it is written.</span></li>
+      <li><b>Remember safely</b><span>The conversation is stored encrypted and deleted after 90 days (pending the archive question below).</span></li>
+    </ol>
+  </section>
+
+  <section id="umea" aria-labelledby="umea-h">
+    <p class="eyebrow">Worked example · umea.se</p>
+    <h2 id="umea-h">How the platform learns a real website</h2>
+    <div class="col stack">
+      <p>We checked the design against a real page: <a href="https://www.umea.se/kommunochpolitik/kommunensorganisation/forvaltningarverksamheter/teknikochfastighet/digitalomstallningochit.4.88db09b1724ee319ca45d.html">Digital omställning och IT</a>.
+        Like most of umea.se it is built in Sitevision, a CMS that many Swedish municipalities use. Most of a web page is
+        menus, footers, cookie banners and share buttons. Indexing all of that is a common reason other platforms give
+        poor answers.</p>
+    </div>
+    <div class="page-fig">
+      <div class="stack">
+        <div class="bar" aria-label="Share of the page that is real content">
+          <strong>Real content on the example page</strong>
+          <div class="bar-track"><div class="bar-fill" style="width: 1.3%;"></div></div>
+          <div class="bar-legend"><span>1,352 characters of text</span><span>107 KB of HTML in total</span></div>
+        </div>
+        <div class="kept">
+          <strong>What the learned profile keeps and drops inside the main content</strong>
+          <span>Kept: the description of the department, the contact block (phone, address, opening hours), the page date.</span>
+          <span>Dropped: <span class="strike">Dela Facebook Twitter LinkedIn Mail Stäng dela</span> · <span class="strike">www.umea.se/doit</span> · <span class="strike">Undersidor</span> list (still used to find new pages, not indexed as text).</span>
+        </div>
+        <p class="note">The whole umea.se sitemap lists 24,184 files: 6,159 web pages, 7,959 PDFs, and images and videos.
+          PDFs are more than half of the text content, so the document reader matters as much as the web crawler.</p>
+      </div>
+      <dl class="learned" aria-label="What the site profile learns for umea.se">
+        <div><dt class="k">CMS</dt><dd>Sitevision, from its page markup. A built-in Sitevision preset gives a head start on other municipal sites too.</dd></div>
+        <div><dt class="k">Main content</dt><dd>The page's <code>&lt;main&gt;</code> area</dd></div>
+        <div><dt class="k">Breadcrumb</dt><dd><span class="crumb">Kommun och politik › Kommunens organisation › …</span> added to every passage so the assistant knows where it belongs</dd></div>
+        <div><dt class="k">Page date</dt><dd>"Sidan uppdaterades 2026-01-15", matching the sitemap's date</dd></div>
+        <div><dt class="k">Change signal</dt><dd>The server sends no change headers, so the sitemap dates decide what to fetch again. A daily run fetches only changed pages.</dd></div>
+        <div><dt class="k">Page identity</dt><dd>The Sitevision page id (<code>4.88db09b1724ee319ca45d</code>) survives when a page is moved in the menu tree. It is used once confirmed by comparing content.</dd></div>
+        <div><dt class="k">JavaScript</dt><dd>Not needed: the text is in the page as delivered, so no browser engine is required</dd></div>
+      </dl>
+    </div>
+    <div class="col stack">
+      <p>The platform learns this profile on its own from a sample of 30–50 pages. It applies the profile to a new source
+        automatically and shows a before-and-after preview. If the site is redesigned and extraction gets worse, it
+        learns again. A new profile replaces the old one only if no sample page loses real text; otherwise an
+        administrator is asked first. Every profile version can be rolled back with one click.</p>
+    </div>
+  </section>
+
+  <section id="safety" aria-labelledby="safety-h">
+    <p class="eyebrow">Safety by design</p>
+    <h2 id="safety-h">The classification decides where AI may process the data</h2>
+    <p class="col">Each source, collection and assistant has one of three levels. The platform enforces the level on every
+      AI call, during indexing as well as chat, through the gateway. A call that would go further than its level allows
+      is stopped before any data leaves.</p>
+    <div class="levels">
+      <div class="level"><span class="tag t-public">public</span>
+        <dl><dt>AI may run</dt><dd>Any provider the gateway allows</dd><dt>Example</dt><dd>umea.se pages, public assistants for citizens</dd></dl></div>
+      <div class="level"><span class="tag t-internal">internal</span>
+        <dl><dt>AI may run</dt><dd>On the municipality's own servers or with EU providers</dd><dt>Example</dt><dd>Staff guidelines, the pilot assistant in Open WebUI</dd></dl></div>
+      <div class="level"><span class="tag t-sensitive">sensitive</span>
+        <dl><dt>AI may run</dt><dd>Only on the municipality's own servers</dd><dt>Example</dt><dd>Not in the pilot. Gets its own separate installation when needed.</dd></dl></div>
+    </div>
+    <div class="two">
+      <div class="panel"><h3>Protecting what people write</h3>
+        <ul>
+          <li>Chat history is encrypted inside the database. A copied database or backup alone reveals nothing.</li>
+          <li>Kept 90 days by default, then deleted. Destroying the keys so that even backups become unreadable waits for the archive decision (A1 below).</li>
+          <li>No chat or document text ever goes into logs, metrics or caches.</li>
+          <li>Reading another person's conversation needs a reviewer role, a stated reason and an audit entry. For sensitive data a second person must approve.</li>
+        </ul></div>
+      <div class="panel"><h3>Failures are visible, never silent</h3>
+        <ul>
+          <li>Every document gets a record of what happened to it and why.</li>
+          <li>If a sync would delete more than 20 % of a source, or the source suddenly returns nothing, the platform pauses and asks a person.</li>
+          <li>Continuous database backup with point-in-time restore: at most about 5 minutes of data can be lost.</li>
+          <li>A short database outage does not stop chat: the platform keeps using its last confirmed settings for 90 seconds.</li>
+        </ul></div>
+    </div>
+  </section>
+
+  <section id="compare" aria-labelledby="compare-h">
+    <p class="eyebrow">Compared with other platforms</p>
+    <h2 id="compare-h">Where Ume.Rag is stronger</h2>
+    <p class="col">Before designing anything we studied the source code and issue trackers of five comparable platforms:
+      Eneo (used by several Swedish municipalities), Dify, RAGFlow, Onyx and Open WebUI. The strengths below answer
+      problems we found there.</p>
+
+    <div class="strengths">
+      <div class="strength"><h3>It understands Swedish</h3>
+        <p>Swedish builds long compound words. Ume.Rag splits them when indexing and when searching, and combines keyword
+          and meaning search. Diarienummer, form names and exact terms are found as well as paraphrases.</p>
+        <p class="vs">None of the five platforms analyses Swedish text. Eneo searches by meaning only, and Open WebUI uses a
+          language-neutral keyword search.</p></div>
+      <div class="strength"><h3>Chat stays fast while it indexes</h3>
+        <p>Answering and indexing run in separate parts with separate resource limits. Before each release, chat speed is
+          measured during a full website crawl plus a scanning batch, and may not get more than 10 % slower.</p>
+        <p class="vs">Eneo runs 78 database queries per message and reached an 11-second wait for the first word at 64
+          users. Open WebUI freezes during document ingestion.</p></div>
+      <div class="strength"><h3>Small enough to run ourselves</h3>
+        <p>The pilot is eight small containers on one server, on the same technology and operations model as the LLM
+          gateway, which the same team already runs. It grows to 3–5 servers for about ten times the pilot's load.</p>
+        <p class="vs">Dify ships 16 containers and about 1,400 settings. Onyx needs 13 containers and at least 10 GB of
+          memory.</p></div>
+      <div class="strength"><h3>Learns each website instead of indexing menus</h3>
+        <p>Learned site profiles find the real content, breadcrumb and date of each site. Pages are fetched again only
+          when the sitemap says they changed, and nothing is re-indexed unless its text changed.</p>
+        <p class="vs">Eneo indexes whole pages including menus and re-embeds every page on every crawl.</p></div>
+      <div class="strength"><h3>Safe with deletions and failures</h3>
+        <p>A deletion guard, a record for every document and degraded-not-green status make problems visible before they
+          cost anything.</p>
+        <p class="vs">Onyx deleted 189,833 documents in one sync and reported success.</p></div>
+      <div class="strength"><h3>Everything is included, and it is ours</h3>
+        <p>Single sign-on, roles, audit log, retention and the admin interface are part of the base platform. It is the
+          municipality's own code with no licence tiers.</p>
+        <p class="vs">Dify keeps SSO and roles closed source. Onyx puts retention deletion in its enterprise edition.
+          RAGFlow has no OIDC, roles or audit in the open version.</p></div>
+    </div>
+
+    <h3>Side by side</h3>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Comparison table, scrolls sideways">
+      <table>
+        <thead>
+          <tr><th scope="col">Topic</th><th scope="col" class="us">Ume.Rag</th><th scope="col">Eneo</th><th scope="col">Dify</th><th scope="col">RAGFlow</th><th scope="col">Onyx</th><th scope="col">Open WebUI</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Swedish text search</th>
+            <td class="us"><span class="pill p-good">yes</span>compound splitting + Swedish stemming</td>
+            <td><span class="pill p-bad">no</span></td><td><span class="pill p-bad">no</span>Chinese tokenizer</td><td><span class="pill p-bad">no</span></td><td><span class="pill p-bad">no</span>English default</td><td><span class="pill p-bad">no</span></td></tr>
+          <tr><th scope="row">Keyword + meaning search</th>
+            <td class="us"><span class="pill p-good">yes</span>in one database, filters applied before ranking</td>
+            <td><span class="pill p-bad">no</span>meaning only, no index</td><td><span class="pill p-mid">partly</span>filters applied after search</td><td><span class="pill p-good">yes</span>Elasticsearch</td><td><span class="pill p-good">yes</span>OpenSearch</td><td><span class="pill p-mid">partly</span>keyword index rebuilt per query</td></tr>
+          <tr><th scope="row">Indexing can slow chat</th>
+            <td class="us"><span class="pill p-good">no</span>separate zones, measured each release</td>
+            <td><span class="pill p-bad">yes</span>one worker queue for everything</td><td><span class="pill p-mid">risk</span>one worker for ~24 queues</td><td><span class="pill p-bad">yes</span>one container runs every process</td><td><span class="pill p-good">separate</span></td><td><span class="pill p-bad">yes</span>freezes during ingestion</td></tr>
+          <tr><th scope="row">Only re-processes changes</th>
+            <td class="us"><span class="pill p-good">yes</span>sitemap dates, content fingerprints, cached embeddings</td>
+            <td><span class="pill p-bad">no</span>re-embeds every page per crawl</td><td><span class="pill p-bad">no</span>no scheduled sync</td><td><span class="pill p-mid">partly</span></td><td><span class="pill p-good">yes</span></td><td><span class="pill p-bad">no</span></td></tr>
+          <tr><th scope="row">Choice of reader per document</th>
+            <td class="us"><span class="pill p-good">automatic</span>site profile for pages, per-page checks for PDFs</td>
+            <td><span class="pill p-mid">by file type</span></td><td><span class="pill p-mid">by extension</span>one global setting</td><td><span class="pill p-mid">per page</span>template chosen by hand</td><td><span class="pill p-mid">fixed</span></td><td><span class="pill p-mid">fixed</span></td></tr>
+          <tr><th scope="row">Guard against mass deletion</th>
+            <td class="us"><span class="pill p-good">yes</span>pauses above 20 %</td>
+            <td><span class="pill p-mid">–</span></td><td><span class="pill p-mid">–</span></td><td><span class="pill p-mid">–</span></td><td><span class="pill p-bad">no</span>189,833 docs deleted as "success"</td><td><span class="pill p-mid">–</span></td></tr>
+          <tr><th scope="row">Where AI may process data</th>
+            <td class="us"><span class="pill p-good">per level</span>enforced on every call via the gateway</td>
+            <td><span class="pill p-good">per space</span>classification limits models</td><td><span class="pill p-mid">–</span></td><td><span class="pill p-mid">–</span></td><td><span class="pill p-mid">–</span></td><td><span class="pill p-mid">–</span></td></tr>
+          <tr><th scope="row">Basic installation</th>
+            <td class="us">8 containers on one 8-core, 16–24 GB server</td>
+            <td>API and worker in one image + Postgres, Redis</td><td>16 containers (47 defined)</td><td>6 containers; 16 GB recommended</td><td>13 containers; ≥ 10 GB memory</td><td>1 container</td></tr>
+          <tr><th scope="row">SSO, roles, audit included</th>
+            <td class="us"><span class="pill p-good">yes</span></td>
+            <td><span class="pill p-good">yes</span></td><td><span class="pill p-bad">no</span>closed source</td><td><span class="pill p-bad">no</span>open-core</td><td><span class="pill p-mid">partly</span>some features Enterprise</td><td><span class="pill p-good">yes</span></td></tr>
+          <tr><th scope="row">Licence catch</th>
+            <td class="us">none: the municipality's own code</td>
+            <td>–</td><td>no multi-tenant use; logo must stay</td><td>open-core</td><td>community / enterprise split</td><td>branding must stay above 50 users</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Source: the platform analyses in <code>platforms/</code> (Eneo v2.1.1/v2.2.3, Dify 1.18.0, RAGFlow v1.0.0-rc2, Onyx a4e97fc, Open WebUI v0.12.5), each with code references and issue links. "–" means not found in the analysis.</p>
+
+    <div class="two">
+      <div class="panel"><h3>Where others are ahead today</h3>
+        <ul>
+          <li><b>They exist.</b> Ume.Rag is a finished design with no code yet. The others can be installed today.</li>
+          <li><b>Breadth.</b> Onyx and Dify have many more connectors and a large plugin ecosystem.</li>
+          <li><b>Visual building.</b> Dify has a drag-and-drop workflow canvas. Ume.Rag deliberately uses fixed pipelines with settings forms.</li>
+          <li><b>A polished chat interface.</b> Open WebUI's is much better than anything we would build, which is why the pilot uses it as the front end.</li>
+        </ul></div>
+      <div class="panel"><h3>Kept simple on purpose</h3>
+        <ul>
+          <li>One fixed, well-tested pipeline per source type, set up through forms. A visual workflow builder stays on the list for phase 3 and is built only if editors need it.</li>
+          <li>Search in PostgreSQL, the database the team already runs. A dedicated search engine is added only if measurements show the need.</li>
+          <li>Tools and agents wait until the basic assistant works well (phase 2), and start read-only.</li>
+          <li>Each feature has a clear owner and a measurable reason to exist, which is the opposite of the "kitchen sink" approach.</li>
+        </ul></div>
+    </div>
+  </section>
+
+  <section id="roadmap" aria-labelledby="roadmap-h">
+    <p class="eyebrow">Roadmap</p>
+    <h2 id="roadmap-h">Four phases, each driven by what the previous one measured</h2>
+    <div class="phases">
+      <div class="phase now"><span class="code">P0 · next</span><h3>Foundation</h3>
+        <p>A skeleton that builds, deploys, can be monitored and can be restored from backup. Test sign-in, the database with Swedish search, and agreement on one gateway release.</p></div>
+      <div class="phase"><span class="code">P1</span><h3>Pilot</h3>
+        <p>One department uses an assistant in Open WebUI. Web pages, websites (umea.se) and file uploads, learned site profiles, quality reports, feedback and limited conversation review.</p></div>
+      <div class="phase"><span class="code">P2</span><h3>Broaden</h3>
+        <p>More departments, SharePoint, a website widget for citizens, read-only AI tools and MCP, re-ranking for better answers, older file formats, 3 servers with a database standby.</p></div>
+      <div class="phase"><span class="code">P3</span><h3>Scale and refine</h3>
+        <p>Driven by measurements: a Swedish benchmark, a dedicated search engine if needed, a Teams client, tools that act on the user's behalf, write actions with confirmation, and a visual pipeline builder if editors need flows the settings forms cannot express.</p></div>
+    </div>
+  </section>
+
+  <section id="open" aria-labelledby="open-h">
+    <p class="eyebrow">Waiting on people</p>
+    <h2 id="open-h">Decisions needed before the pilot</h2>
+    <div class="questions">
+      <div class="question"><span class="id">A1</span><span><b>Archive law.</b> Are chat logs public records (allmänna handlingar), and does deleting them after 90 days need a gallringsbeslut? This blocks the pilot. Owner not yet named.</span><span class="when">Registrar / archivist</span></div>
+      <div class="question"><span class="id">W1</span><span><b>The existing chat on umea.se.</b> The website already allows an AI chat service (chat.umea.se). What is it, and how does it overlap with this platform?</span><span class="when">Web team</span></div>
+      <div class="question"><span class="id">W2</span><span><b>Copies in Open WebUI.</b> Open WebUI keeps its own copy of chats and cannot easily delete other users' chats. Decide how that copy is handled, together with A1.</span><span class="when">Platform team + archivist</span></div>
+      <div class="question"><span class="id">N1</span><span><b>Product name.</b> "Ume.Rag" is a working name.</span><span class="when">Product owner</span></div>
+      <div class="question"><span class="id">U1</span><span><b>Crawler contact page.</b> The page the crawler links to, and a check with the web editors before the first crawl of umea.se.</span><span class="when">Web editors</span></div>
+      <div class="question"><span class="id">P2</span><span><b>Licences</b> of the AI models, OCR data and Swedish dictionaries the platform ships with.</span><span class="when">Platform team</span></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Ume.Rag design, state after the simplification pass of 2026-10-30. The design is complete; implementation (phase P0) is next.</span>
+    <span>Detailed documents: the <code>plans/</code> folder of the design repository, starting with <code>plans/README.md</code> and <code>plans/simplification-pass.md</code>.</span>
+  </footer>
+</div>
+</body>
+</html>
