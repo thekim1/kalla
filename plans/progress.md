@@ -10,7 +10,7 @@ listed done-when holds.
 - [x] Stage 0, main session: [`p0/progress-stage-0.md`](p0/progress-stage-0.md)
 - [ ] Stream A, platform and the ingestion side: [`p0/progress-a.md`](p0/progress-a.md)
 - [ ] Stream B, application and the serving side: [`p0/progress-b.md`](p0/progress-b.md)
-- [ ] Sync point after H2: schema checked against [`platform/data-model.md`](platform/data-model.md); `results-a.md`
+- [x] Sync point after H2 (2026-10-30, PRs #5, #7, #8, #9; repeated at integration for later results): schema checked against [`platform/data-model.md`](platform/data-model.md); `results-a.md`
       and `results-b.md` folded into [`to-verify.md`](to-verify.md)
 - [ ] Integration review: "Design deviations" from every P0 PR settled in the design documents
 - [ ] `v0.1.0` released and deployed to the test host (stream A items 11–12)

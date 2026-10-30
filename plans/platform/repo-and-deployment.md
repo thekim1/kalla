@@ -419,6 +419,10 @@ adopted (P2, §5.4).
 
 ### 5.3 Parser image (`src/parser/Dockerfile`)
 
+(As built in P0 #12, PR #9: `python:3.12.15-slim-trixie` by digest, `docling-slim` 2.142.0 because 2.145 was under 7
+days old, Debian packages only `tini tesseract-ocr tesseract-ocr-swe` with `opencv-python-headless` and `pandas` as
+direct Python dependencies instead of `libgl1` and fonts, the KB NER model baked from P0, a `test` target for the
+offline tests, port **8000**: plain HTTP in dev, TLS through `PARSER_TLS_*` in production Compose; 2.88 GB.)
 Stage 1 `python:3.12-slim-trixie` + uv (copied from the pinned `ghcr.io/astral-sh/uv` image): `uv sync --frozen
 --no-dev --no-install-project` (`docling-slim` with selected extras, `pypdfium2`, `defusedxml`, `psutil`, `pillow`),
 then `python scripts/download_models.py --out /opt/models` (pinned revisions; the **only** step with network). Stage 2
@@ -512,9 +516,12 @@ busy. The R1 release test (§8.3) confirms or corrects these numbers.
 `work_mem=8MB`, `maintenance_work_mem=512MB / 1GB` (HNSW builds), `max_parallel_maintenance_workers=2`,
 `max_worker_processes=8`, `wal_level=replica`, `archive_mode=on`,
 `archive_command = 'pgbackrest --stanza=ragdb archive-push %p'` (synchronous, inside the container, §7.4), `archive_timeout=60`, `wal_compression=on`, `ssl=on` with the internal CA, `log_statement=none` (gateway),
-`autovacuum_vacuum_scale_factor=0.02` and `autovacuum_vacuum_cost_limit=2000` (data-model §4.4),
-`shared_preload_libraries='pg_stat_statements'` (capacity metrics, §9; was empty). `wal_compression=lz4` instead of `on`
-if the stock image's build supports it (*to verify*, `deploy/postgres/test.sh`). `DOTNET_GCHeapHardLimitPercent=75` is set on
+(autovacuum stays at the server defaults; `autovacuum_vacuum_scale_factor=0.02` and `autovacuum_vacuum_cost_limit=2000` are
+storage parameters of `content."Jobs"` only, data-model §4.1, settled at the H2 sync point),
+`shared_preload_libraries='pg_stat_statements'` (capacity metrics, §9; was empty). `wal_compression=lz4` (the stock image
+is built `--with-lz4`, confirmed by `deploy/postgres/test.sh`, P0 #5). The file also sets `listen_addresses='*'`,
+`ssl_cert_file`/`ssl_key_file`/`ssl_ca_file` under `/run/certs/` and `hba_file='/run/config/pg_hba.conf'` (the gateway's
+mount paths); it holds the 16 GB profile with the 24 GB values as comments, and P0 #14 picks per deployment. `DOTNET_GCHeapHardLimitPercent=75` is set on
 **every** .NET container (api, worker, admin, migrations), not only the api ([`../performance-pass.md`](../performance-pass.md) §4).
 
 **Multi-host database profile** (P2; 64 GB database host, D in [`../performance-pass.md`](../performance-pass.md) §5; estimate, confirmed by the scale test):

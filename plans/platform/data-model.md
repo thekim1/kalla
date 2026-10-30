@@ -44,7 +44,7 @@ service roles, as in the gateway.
 
 ### 1.1 Roles, caps and timeouts
 
-Created by `deploy/postgres/init.sql` from `/run/postgres-secrets/<role>_password` (gateway pattern); `pg_hba.conf`
+Created by `deploy/postgres/init.sql` from `/run/postgres-secrets/{migrator,api,admin,worker}_password` (the gateway's short names; P0 #6, PR #7); `pg_hba.conf`
 allows only `hostssl ragdb ume_rag_migrator,ume_rag_admin,ume_rag_api,ume_rag_worker all scram-sha-256` (plus
 `ume_rag_monitor` from P2, below). pgBackRest runs inside the `postgres` container (`ume-rag/postgres`) and connects
 over the local Unix socket, so it needs no network entry (repo-and-deployment §7.4).
@@ -66,7 +66,8 @@ stays well under `max_connections`. **Budget rule** (P2, first multi-host deploy
 (`superuser_reserved_connections`) + 2 (`ume_rag_monitor`) ≤ `max_connections`; checked at deploy time by
 `deploy/postgres/connection-budget.sh`. Code is pooler-safe from P0 (no session `SET`, session advisory locks,
 `WITH HOLD` cursors or SQL `PREPARE`; LISTEN on its own `ConnectionStrings__ragdb-listen`). Applied in `init.sql` and
-re-applied by `app-roles.sql`:
+**only** there (P0 #6, PR #7): `app-roles.sql` runs as the `NOCREATEROLE` DDL role, which Postgres refuses `ALTER ROLE` on
+the service roles, so a later change of a cap, timeout or `hnsw.*` default is a superuser step in `docs/upgrade-guide.md`:
 
 ```sql
 ALTER ROLE ume_rag_worker CONNECTION LIMIT 12;
@@ -113,6 +114,7 @@ worker runs only retrieval evaluation and reads no assistant, skill or tool tabl
 | `audit."ToolCallEvents"`, `"ToolDefinitionObservations"` (P2) | S I | I | – |
 | `audit."AuthFailures"` | S I | I | – |
 | Functions (§3.3, §4, §5, §8) | X `chat.rag_retention_chat_step`, `audit.rag_retention_audit_step`, `config.rag_retention_config_step`, `content.rag_or_query` | X `content.rag_count_retrievals`, `content.rag_or_query` | X `content.rag_partition_maintain`, `content.rag_ensure_profile_index`, `content.rag_or_query` |
+| (every role with `rag_or_query`) | X the aggregate `content.rag_tsquery_or_agg`, which `rag_or_query` calls with the caller's rights (P0 #6) | | |
 | Sequences | `USAGE, SELECT ON ALL SEQUENCES` in the schemas each role writes | | |
 
 Partitioned tables are only accessed through their parent, so grants on the parent suffice.
@@ -285,8 +287,9 @@ Security events are not stored: like the gateway (ADR 015) they go to OpenTeleme
 ### 3.1 Swedish text search: .NET decompounder + built-in `swedish`
 
 Compounds are split in .NET by `SwedishDecompounder` (`Ume.Rag.Retrieval`, used by the worker and the query side):
-driven by the `sv_SE` Hunspell word list (embedded resource; licence in postponed P2) with linking-morpheme rules
-(`s`, vowel elision), longest match and a minimum part length. The worker stores `Chunks."SearchText"` = text plus the
+driven by the `sv_SE` Hunspell word list (LibreOffice dictionaries, pinned commit, LGPL-3.0; embedded resource; licence in
+postponed P2). Linking morphemes (`s`, vowel elision) come from the list's own suffix rules and compound-only stems, not
+from separate hand rules (P0 #5, PR #8); longest match and a minimum part length. The worker stores `Chunks."SearchText"` = text plus the
 parts of the text's and heading path's compounds; Postgres uses only the **built-in `swedish`** configuration
 (Snowball), so no dictionary loads into Postgres backends. The query side runs the same decompounder before building
 the query (§3.3).
@@ -469,7 +472,10 @@ string `ConnectionStrings__ragdb-listen`, so a later pooler never sees it) and s
 `RunItems` is range-partitioned by day (`content."RunItems_20261029"`) with a `DEFAULT` partition as a safety net.
 `content.rag_partition_maintain()` (`SECURITY DEFINER`, owner migrator, run by the migration service on deploy and by
 the worker daily at 02:00) creates partitions for today + 7 days and drops partitions older than the run-item
-retention, so run items never cause vacuum storms (R1).
+retention (90 days, a constant in the function until it becomes a `Settings` value), so run items never cause vacuum
+storms (R1). It returns `(created, dropped, default_rows)`: when maintenance lagged, rows of a day being created are
+moved out of `DEFAULT` into it, and `default_rows > 0` (rows of other days still in `DEFAULT`) is the lag signal for a
+worker metric. One run at a time under a transaction advisory lock (P0 #6, PR #7, issue #10).
 
 Terminal jobs older than 7 days are deleted nightly in batches of 1,000 through `IX_Jobs_Terminal` (worker retention,
 §8).
