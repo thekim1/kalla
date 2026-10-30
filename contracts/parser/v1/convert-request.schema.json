@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/parser/v1/convert-request.schema.json",
+  "$defs": {
+    "OcrOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "default": "auto",
+          "enum": [
+            "off",
+            "auto",
+            "force"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "languages": {
+          "default": [
+            "swe"
+          ],
+          "description": "Tesseract `swe` only (§9)",
+          "items": {
+            "const": "swe",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Languages",
+          "type": "array"
+        }
+      },
+      "title": "OcrOptions",
+      "type": "object"
+    },
+    "OutputOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "docling_json": {
+          "default": true,
+          "title": "Docling Json",
+          "type": "boolean"
+        },
+        "markdown": {
+          "default": false,
+          "title": "Markdown",
+          "type": "boolean"
+        }
+      },
+      "title": "OutputOptions",
+      "type": "object"
+    },
+    "PageRange": {
+      "additionalProperties": false,
+      "description": "1-based, inclusive page numbers of the original file.",
+      "properties": {
+        "from": {
+          "minimum": 1,
+          "title": "From",
+          "type": "integer"
+        },
+        "to": {
+          "minimum": 1,
+          "title": "To",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "PageRange",
+      "type": "object"
+    },
+    "TableOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "default": "accurate",
+          "enum": [
+            "fast",
+            "accurate",
+            "off"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "title": "TableOptions",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The `options` part of `POST /v1/convert` (§7.2). `pipeline: text_layer` ignores `ocr`, `tables` and\n`image_scale` and returns no `docling` part.",
+  "properties": {
+    "request_id": {
+      "description": "job id + range ordinal: log correlation",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "file_ext": {
+      "description": "extension only, never the file name",
+      "pattern": "^\\.[a-z0-9]{1,10}$",
+      "title": "File Ext",
+      "type": "string"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "maxLength": 255,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "declared; compared with the sniffed type",
+      "title": "Media Type"
+    },
+    "pages": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PageRange"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "null = the whole document"
+    },
+    "deadline_ms": {
+      "default": 110000,
+      "maximum": 120000,
+      "minimum": 1000,
+      "title": "Deadline Ms",
+      "type": "integer"
+    },
+    "pipeline": {
+      "default": "docling",
+      "enum": [
+        "text_layer",
+        "docling"
+      ],
+      "title": "Pipeline",
+      "type": "string"
+    },
+    "ocr": {
+      "$ref": "#/$defs/OcrOptions",
+      "default": {
+        "mode": "auto",
+        "languages": [
+          "swe"
+        ]
+      }
+    },
+    "tables": {
+      "$ref": "#/$defs/TableOptions",
+      "default": {
+        "mode": "accurate"
+      }
+    },
+    "image_scale": {
+      "default": 2.0,
+      "maximum": 4.0,
+      "minimum": 1.0,
+      "title": "Image Scale",
+      "type": "number"
+    },
+    "outputs": {
+      "$ref": "#/$defs/OutputOptions",
+      "default": {
+        "docling_json": true,
+        "markdown": false
+      }
+    }
+  },
+  "required": [
+    "request_id",
+    "file_ext"
+  ],
+  "title": "ConvertRequest",
+  "type": "object"
+}

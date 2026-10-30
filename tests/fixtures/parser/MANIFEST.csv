@@ -1,0 +1,7 @@
+path,origin,licence,personal_data
+text-layer.pdf,"synthetic: src/parser/scripts/make_fixtures.py (invented Swedish text, Helvetica, two pages)",CC0-1.0,no
+scanned.pdf,"synthetic: src/parser/scripts/make_fixtures.py (invented Swedish text rendered to a 200 dpi JPEG, no text layer)",CC0-1.0,no
+corrupt.pdf,"synthetic: src/parser/scripts/make_fixtures.py (PDF header + seeded random bytes)",CC0-1.0,no
+legacy.doc,"synthetic: src/parser/scripts/make_fixtures.py (OLE signature + zero header)",CC0-1.0,no
+cases.json,"hand-written: the requests of Ume.Rag.ContractTests and scripts/update_goldens.py",CC0-1.0,no
+golden/*.json,"generated: src/parser/scripts/update_goldens.py against the parser image",CC0-1.0,no

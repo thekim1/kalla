@@ -1,0 +1,760 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/parser/v1/convert-result.schema.json",
+  "$defs": {
+    "Block": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "title",
+            "heading",
+            "paragraph",
+            "list_item",
+            "table",
+            "picture",
+            "caption",
+            "code",
+            "formula",
+            "footnote",
+            "page_header",
+            "page_footer"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Level"
+        },
+        "level_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "style",
+                "layout",
+                "font_size",
+                "html",
+                "markdown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Level Source"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Page"
+        },
+        "page_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Page End"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "description": "left, top, right, bottom in points",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Bbox"
+        },
+        "layer": {
+          "enum": [
+            "body",
+            "furniture"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "md": {
+          "title": "Md",
+          "type": "string"
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "JSON pointer into the DoclingDocument; null on the text-layer path",
+          "title": "Ref"
+        },
+        "table": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "id in `tables` for a table block",
+          "title": "Table"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "level",
+        "level_source",
+        "page",
+        "page_end",
+        "bbox",
+        "layer",
+        "md",
+        "ref",
+        "table"
+      ],
+      "title": "Block",
+      "type": "object"
+    },
+    "Build": {
+      "properties": {
+        "parser": {
+          "title": "Parser",
+          "type": "string"
+        },
+        "docling": {
+          "title": "Docling",
+          "type": "string"
+        },
+        "build_hash": {
+          "title": "Build Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "parser",
+        "docling",
+        "build_hash"
+      ],
+      "title": "Build",
+      "type": "object"
+    },
+    "ConvertInput": {
+      "properties": {
+        "format": {
+          "enum": [
+            "pdf",
+            "docx",
+            "pptx",
+            "xlsx",
+            "odt",
+            "ods",
+            "odp",
+            "jpeg",
+            "png",
+            "tiff"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "media_type_sniffed": {
+          "title": "Media Type Sniffed",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "bytes": {
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "page_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Page Count"
+        },
+        "pages_requested": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pages_completed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pipeline": {
+          "description": "the pipeline that ran (text_layer falls back to docling, §8)",
+          "enum": [
+            "text_layer",
+            "docling"
+          ],
+          "title": "Pipeline",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "media_type_sniffed",
+        "sha256",
+        "bytes",
+        "page_count",
+        "pages_requested",
+        "pages_completed",
+        "pipeline"
+      ],
+      "title": "ConvertInput",
+      "type": "object"
+    },
+    "ConvertWarning": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Page"
+        }
+      },
+      "required": [
+        "code",
+        "page"
+      ],
+      "title": "ConvertWarning",
+      "type": "object"
+    },
+    "OcrConfidence": {
+      "properties": {
+        "mean": {
+          "title": "Mean",
+          "type": "number"
+        },
+        "p10": {
+          "title": "P10",
+          "type": "number"
+        }
+      },
+      "required": [
+        "mean",
+        "p10"
+      ],
+      "title": "OcrConfidence",
+      "type": "object"
+    },
+    "Page": {
+      "properties": {
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Page"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Label"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Width"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Height"
+        },
+        "signals": {
+          "$ref": "#/$defs/PageSignals"
+        }
+      },
+      "required": [
+        "page",
+        "label",
+        "width",
+        "height",
+        "signals"
+      ],
+      "title": "Page",
+      "type": "object"
+    },
+    "PageSignals": {
+      "description": "Per-page quality signals (§6.4). Character counts are non-whitespace characters.",
+      "properties": {
+        "chars": {
+          "title": "Chars",
+          "type": "integer"
+        },
+        "furniture_chars": {
+          "title": "Furniture Chars",
+          "type": "integer"
+        },
+        "garbled_score": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Garbled Score",
+          "type": "number"
+        },
+        "text_layer_chars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Text Layer Chars"
+        },
+        "image_coverage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Image Coverage"
+        },
+        "ocr_applied": {
+          "enum": [
+            "none",
+            "bitmap",
+            "full-page"
+          ],
+          "title": "Ocr Applied",
+          "type": "string"
+        },
+        "ocr_confidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OcrConfidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "table_count": {
+          "title": "Table Count",
+          "type": "integer"
+        },
+        "table_area_ratio": {
+          "title": "Table Area Ratio",
+          "type": "number"
+        },
+        "picture_area_ratio": {
+          "title": "Picture Area Ratio",
+          "type": "number"
+        },
+        "empty": {
+          "title": "Empty",
+          "type": "boolean"
+        },
+        "ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ms"
+        }
+      },
+      "required": [
+        "chars",
+        "furniture_chars",
+        "garbled_score",
+        "text_layer_chars",
+        "image_coverage",
+        "ocr_applied",
+        "ocr_confidence",
+        "table_count",
+        "table_area_ratio",
+        "picture_area_ratio",
+        "empty",
+        "ms"
+      ],
+      "title": "PageSignals",
+      "type": "object"
+    },
+    "PageSpan": {
+      "properties": {
+        "from": {
+          "title": "From",
+          "type": "integer"
+        },
+        "to": {
+          "title": "To",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "PageSpan",
+      "type": "object"
+    },
+    "Picture": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "block": {
+          "title": "Block",
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Page"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "description": "left, top, right, bottom in points",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Bbox"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Caption"
+        },
+        "ocr_chars": {
+          "title": "Ocr Chars",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "block",
+        "page",
+        "bbox",
+        "caption",
+        "ocr_chars"
+      ],
+      "title": "Picture",
+      "type": "object"
+    },
+    "Table": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "rows": {
+          "title": "Rows",
+          "type": "integer"
+        },
+        "cols": {
+          "title": "Cols",
+          "type": "integer"
+        },
+        "header_rows": {
+          "title": "Header Rows",
+          "type": "integer"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Caption"
+        },
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/TableCell"
+          },
+          "title": "Cells",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "rows",
+        "cols",
+        "header_rows",
+        "caption",
+        "cells"
+      ],
+      "title": "Table",
+      "type": "object"
+    },
+    "TableCell": {
+      "properties": {
+        "r": {
+          "title": "R",
+          "type": "integer"
+        },
+        "c": {
+          "title": "C",
+          "type": "integer"
+        },
+        "rs": {
+          "title": "Rs",
+          "type": "integer"
+        },
+        "cs": {
+          "title": "Cs",
+          "type": "integer"
+        },
+        "header": {
+          "description": "a column or row header cell",
+          "title": "Header",
+          "type": "boolean"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "r",
+        "c",
+        "rs",
+        "cs",
+        "header",
+        "text"
+      ],
+      "title": "TableCell",
+      "type": "object"
+    },
+    "Timings": {
+      "properties": {
+        "total_ms": {
+          "title": "Total Ms",
+          "type": "integer"
+        },
+        "wait_ms": {
+          "title": "Wait Ms",
+          "type": "integer"
+        },
+        "docling_ms": {
+          "title": "Docling Ms",
+          "type": "integer"
+        },
+        "text_layer_ms": {
+          "title": "Text Layer Ms",
+          "type": "integer"
+        },
+        "signals_ms": {
+          "title": "Signals Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_ms",
+        "wait_ms",
+        "docling_ms",
+        "text_layer_ms",
+        "signals_ms"
+      ],
+      "title": "Timings",
+      "type": "object"
+    }
+  },
+  "description": "`result.json`, the first part of a `/v1/convert` response (§7.3).",
+  "properties": {
+    "contract": {
+      "const": "parser/v1",
+      "title": "Contract",
+      "type": "string"
+    },
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "success",
+        "partial"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "input": {
+      "$ref": "#/$defs/ConvertInput"
+    },
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/Page"
+      },
+      "title": "Pages",
+      "type": "array"
+    },
+    "blocks": {
+      "items": {
+        "$ref": "#/$defs/Block"
+      },
+      "title": "Blocks",
+      "type": "array"
+    },
+    "tables": {
+      "items": {
+        "$ref": "#/$defs/Table"
+      },
+      "title": "Tables",
+      "type": "array"
+    },
+    "pictures": {
+      "items": {
+        "$ref": "#/$defs/Picture"
+      },
+      "title": "Pictures",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/ConvertWarning"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "timings": {
+      "$ref": "#/$defs/Timings"
+    },
+    "build": {
+      "$ref": "#/$defs/Build"
+    },
+    "markdown": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "the document Markdown with page markers, when outputs.markdown is set",
+      "title": "Markdown"
+    }
+  },
+  "required": [
+    "contract",
+    "request_id",
+    "status",
+    "input",
+    "pages",
+    "blocks",
+    "tables",
+    "pictures",
+    "warnings",
+    "timings",
+    "build",
+    "markdown"
+  ],
+  "title": "ConvertResult",
+  "type": "object"
+}

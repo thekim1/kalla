@@ -1,0 +1,46 @@
+{
+  "conversions": [
+    {
+      "name": "text-layer",
+      "file": "text-layer.pdf",
+      "options": { "file_ext": ".pdf", "media_type": "application/pdf", "pipeline": "text_layer", "outputs": { "markdown": true } },
+      "pipeline": "text_layer",
+      "docling_part": false
+    },
+    {
+      "name": "text-layer-docling",
+      "file": "text-layer.pdf",
+      "options": { "file_ext": ".pdf", "media_type": "application/pdf", "ocr": { "mode": "off" } },
+      "pipeline": "docling",
+      "docling_part": true
+    },
+    {
+      "name": "text-layer-page-2",
+      "file": "text-layer.pdf",
+      "options": { "file_ext": ".pdf", "pipeline": "text_layer", "pages": { "from": 2, "to": 2 } },
+      "pipeline": "text_layer",
+      "docling_part": false
+    },
+    {
+      "name": "scanned",
+      "file": "scanned.pdf",
+      "options": { "file_ext": ".pdf", "media_type": "application/pdf", "outputs": { "markdown": true } },
+      "pipeline": "docling",
+      "docling_part": true
+    },
+    {
+      "name": "scanned-as-text-layer",
+      "file": "scanned.pdf",
+      "options": { "file_ext": ".pdf", "pipeline": "text_layer", "outputs": { "docling_json": false } },
+      "pipeline": "docling",
+      "docling_part": false
+    }
+  ],
+  "errors": [
+    { "name": "corrupt", "file": "corrupt.pdf", "options": { "file_ext": ".pdf" }, "status": 422, "code": "corrupt", "retry": "none" },
+    { "name": "format-deferred", "file": "legacy.doc", "options": { "file_ext": ".doc" }, "status": 415, "code": "format_deferred", "retry": "none" },
+    { "name": "unknown-option", "file": "text-layer.pdf", "options": { "file_ext": ".pdf", "colour": "blue" }, "status": 400, "code": "invalid_request", "retry": "none", "echoes_request_id": false },
+    { "name": "range-over-20-pages", "file": "text-layer.pdf", "options": { "file_ext": ".pdf", "pages": { "from": 1, "to": 21 } }, "status": 422, "code": "too_many_pages", "retry": "smaller_range" },
+    { "name": "range-past-the-end", "file": "text-layer.pdf", "options": { "file_ext": ".pdf", "pages": { "from": 3, "to": 4 } }, "status": 400, "code": "invalid_request", "retry": "none" }
+  ]
+}

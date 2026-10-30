@@ -1,9 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <!-- Stage 0: no tests yet, and Microsoft.Testing.Platform exits with 8 when zero tests ran. Remove with the first test. -->
-    <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --ignore-exit-code 8</TestingPlatformCommandLineArguments>
-  </PropertyGroup>
+  <!--
+    The parser contract (parser/v1): the worker's parser client against the parser image, the committed schemas in
+    contracts/parser/v1/ and the goldens in tests/fixtures/parser/golden/. Tests that need the image skip unless
+    UME_RAG_TEST_PARSER_IMAGE names it; CI's contract job sets it.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Testcontainers" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.TestKit\Ume.Rag.TestKit.csproj" />
+    <ProjectReference Include="..\..\src\Ume.Rag.Worker\Ume.Rag.Worker.csproj" />
   </ItemGroup>
 </Project>

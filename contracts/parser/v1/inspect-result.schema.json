@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/parser/v1/inspect-result.schema.json",
+  "$defs": {
+    "Build": {
+      "properties": {
+        "parser": {
+          "title": "Parser",
+          "type": "string"
+        },
+        "docling": {
+          "title": "Docling",
+          "type": "string"
+        },
+        "build_hash": {
+          "title": "Build Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "parser",
+        "docling",
+        "build_hash"
+      ],
+      "title": "Build",
+      "type": "object"
+    },
+    "InspectPage": {
+      "properties": {
+        "page": {
+          "title": "Page",
+          "type": "integer"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "title": "Height",
+          "type": "number"
+        },
+        "rotation": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rotation"
+        },
+        "text_chars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Text Chars"
+        },
+        "bad_chars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Bad Chars"
+        },
+        "garbled_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Garbled Score"
+        },
+        "image_coverage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Image Coverage"
+        },
+        "path_objects": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Path Objects"
+        }
+      },
+      "required": [
+        "page",
+        "width",
+        "height",
+        "rotation",
+        "text_chars",
+        "bad_chars",
+        "garbled_score",
+        "image_coverage",
+        "path_objects"
+      ],
+      "title": "InspectPage",
+      "type": "object"
+    }
+  },
+  "description": "`POST /v1/inspect` (§6.2): cheap facts and per-page signals, no models.",
+  "properties": {
+    "contract": {
+      "const": "parser/v1",
+      "title": "Contract",
+      "type": "string"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Request Id"
+    },
+    "format": {
+      "enum": [
+        "pdf",
+        "docx",
+        "pptx",
+        "xlsx",
+        "odt",
+        "ods",
+        "odp",
+        "jpeg",
+        "png",
+        "tiff"
+      ],
+      "title": "Format",
+      "type": "string"
+    },
+    "media_type_sniffed": {
+      "title": "Media Type Sniffed",
+      "type": "string"
+    },
+    "page_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Page Count"
+    },
+    "rangeable": {
+      "title": "Rangeable",
+      "type": "boolean"
+    },
+    "encrypted": {
+      "anyOf": [
+        {
+          "enum": [
+            "none",
+            "owner_only",
+            "user_password"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Encrypted"
+    },
+    "has_javascript": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Has Javascript"
+    },
+    "has_embedded_files": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Has Embedded Files"
+    },
+    "has_xfa": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Has Xfa"
+    },
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/InspectPage"
+      },
+      "title": "Pages",
+      "type": "array"
+    },
+    "refusal": {
+      "anyOf": [
+        {
+          "enum": [
+            "invalid_request",
+            "duplicate_in_flight",
+            "too_large",
+            "format_deferred",
+            "unsupported_format",
+            "encrypted",
+            "corrupt",
+            "too_many_pages",
+            "limit_exceeded",
+            "ocr_failed",
+            "conversion_failed",
+            "timeout",
+            "worker_crashed",
+            "resource_limit",
+            "busy",
+            "not_ready",
+            "not_implemented"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "the error code convert would give, if any",
+      "title": "Refusal"
+    },
+    "build": {
+      "$ref": "#/$defs/Build"
+    }
+  },
+  "required": [
+    "contract",
+    "request_id",
+    "format",
+    "media_type_sniffed",
+    "page_count",
+    "rangeable",
+    "encrypted",
+    "has_javascript",
+    "has_embedded_files",
+    "has_xfa",
+    "pages",
+    "refusal",
+    "build"
+  ],
+  "title": "InspectResult",
+  "type": "object"
+}
