@@ -1,0 +1,194 @@
+# Production Compose, data plane and control zone (plans/platform/repo-and-deployment.md §6): postgres (pgBackRest
+# inside), the one-shot rag-migrate, rag-api and rag-admin. The ingestion zone (rag-worker, rag-parser, rag-clamav) is
+# compose.ingestion.yaml; the pilot host runs both:
+#
+#   1. ./deploy/init-deployment.sh     certificates, secrets, deploy/.env (its COMPOSE_FILE lists the files below)
+#   2. docker compose --env-file deploy/.env up -d --wait
+#      (same as: docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml --env-file deploy/.env ...)
+#   3. docker compose --env-file deploy/.env exec -T postgres pgbackrest --stanza=ragdb stanza-create
+#      once per new database or backup repository (idempotent): WAL archiving fails until the stanza exists.
+#
+# Optional overlays: compose.host-24g.yaml (24 GB host profile), compose.clamav-conf.yaml (ClamAV confs written by
+# init-deployment.sh). compose.openwebui.yaml is a separate project. One slot in the pilot (rolling slots from P2).
+# Secrets and certificates are files, never environment variables. Every container runs hardened (x-hardened), under a
+# numeric user, with the limits of §6.2 for a 16 GB host.
+name: ume-rag
+
+# Inside its container every .NET service listens on 8443 and its health check (--health-check) probes
+# https://localhost:8443/health/ready; only the host side of a published port is configurable.
+
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp]
+
+services:
+  postgres:
+    <<: *hardened
+    image: ${POSTGRES_IMAGE:-ume-rag/postgres:latest}
+    user: "999:999"
+    restart: unless-stopped
+    # A fast shutdown ends with a checkpoint; Docker's default 10 s can cut it short.
+    stop_grace_period: 60s
+    # /tmp also holds the pgBackRest lock files.
+    tmpfs: [/tmp, "/var/run/postgresql:uid=999,gid=999,mode=0700"]
+    shm_size: 1g
+    cpus: 3.0
+    cpu_shares: 1024
+    mem_reservation: 2g
+    mem_limit: 3g
+    pids_limit: 512
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/postgres-secrets/bootstrap_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=peer
+    # postgresql.conf holds the 16 GB profile (compose.host-24g.yaml overrides the memory settings), hba_file and the
+    # certificate paths below, and archive_command (pgbackrest archive-push).
+    command: [postgres, -c, config_file=/etc/postgresql/postgresql.conf]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ${UME_RAG_CERTS_DIR:?Run deploy/init-deployment.sh first}/postgres:/run/certs:ro
+      - ${UME_RAG_SECRETS_DIR:?Run deploy/init-deployment.sh first}/postgres:/run/postgres-secrets:ro
+      # pgBackRest repository settings and passphrase (§7.4), appended to the image's /etc/pgbackrest/pgbackrest.conf.
+      - ${UME_RAG_SECRETS_DIR}/pgbackrest/repo.conf:/etc/pgbackrest/conf.d/repo.conf:ro
+      # A posix repository: the backup share mounted on the host (UME_RAG_BACKUP_DIR), else a local volume (test hosts
+      # only: it is not off the host). Unused with an S3 repository.
+      - ${UME_RAG_BACKUP_DIR:-pgbackrest-repo}:/var/lib/pgbackrest
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
+      - ./postgres/pg_hba.conf:/run/config/pg_hba.conf:ro
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    # backup: pgBackRest archive-push and the host timer's backups reach only the backup target (host firewall).
+    networks: [data, backup]
+    healthcheck:
+      # Over TCP: the entrypoint's temporary server during initdb listens on the socket only, so it never looks ready.
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres, -d, ragdb]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  rag-migrate:
+    <<: *hardened
+    image: ${MIGRATIONS_IMAGE:-ume-rag/migrations:latest}
+    user: "1654:1654"
+    restart: "no"
+    cpus: 1.0
+    cpu_shares: 512
+    mem_limit: 512m
+    pids_limit: 128
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      # GC settings in the environment are hexadecimal: 0x4B = 75 % of mem_limit ("75" would be read as 117 % and
+      # ignored).
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Migration__RolesSqlPath: /run/config/app-roles.sql
+      Seed__Enabled: "false"
+      SSL_CERT_FILE: /run/certs/ca.pem
+    volumes:
+      - ${UME_RAG_SECRETS_DIR}/migrations:/run/app-secrets:ro
+      - ${UME_RAG_CERTS_DIR}/migrations:/run/certs:ro
+      - ./postgres/app-roles.sql:/run/config/app-roles.sql:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [data]
+
+  rag-api:
+    <<: *hardened
+    image: ${API_IMAGE:-ume-rag/api:latest}
+    user: "1654:1654"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    cpus: 2.0
+    cpu_shares: 1024
+    mem_reservation: 384m
+    mem_limit: 1g
+    pids_limit: 512
+    ports: ["${UME_RAG_API_BIND:-127.0.0.1}:${UME_RAG_API_PORT:-8543}:8443"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/api.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/api.key
+      Rag__Roles: knowledge,chat,mcp
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: rag-api
+      SSL_CERT_FILE: /run/certs/ca.pem
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
+    volumes:
+      - ${UME_RAG_SECRETS_DIR}/api:/run/app-secrets:ro
+      - ${UME_RAG_CERTS_DIR}/api:/run/certs:ro
+      - ${UME_RAG_SECRETS_DIR}/keys/rag-blob-internal:/run/keys/rag-blob-internal:ro
+      # Citation downloads only (knowledge design §3.5).
+      - rag-blobs:/data/blobs:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+    networks: [edge, data, llm]
+    healthcheck:
+      test: [CMD, dotnet, Ume.Rag.Api.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+  rag-admin:
+    <<: *hardened
+    image: ${ADMIN_IMAGE:-ume-rag/admin:latest}
+    user: "1654:1654"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    cpus: 1.0
+    cpu_shares: 512
+    mem_reservation: 256m
+    mem_limit: 512m
+    pids_limit: 256
+    ports: ["${UME_RAG_ADMIN_BIND:-127.0.0.1}:${UME_RAG_ADMIN_PORT:-9543}:8443"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DOTNET_GCHeapHardLimitPercent: "0x4B"
+      Security__SecretsDirectory: /run/app-secrets
+      DataProtection__CertificatePath: /run/certs/data-protection.pfx
+      Kestrel__Endpoints__Https__Url: https://+:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/certs/admin.crt
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/admin.key
+      Oidc__Authority: ${UME_RAG_OIDC_AUTHORITY:?Set the HTTPS OIDC authority in deploy/.env}
+      Oidc__ClientId: ${UME_RAG_OIDC_CLIENT_ID:-ume-rag-admin}
+      Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
+      OTEL_SERVICE_NAME: rag-admin
+      SSL_CERT_FILE: /run/certs/ca.pem
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
+    volumes:
+      - ${UME_RAG_SECRETS_DIR}/admin:/run/app-secrets:ro
+      - ${UME_RAG_CERTS_DIR}/admin:/run/certs:ro
+      - ${UME_RAG_SECRETS_DIR}/keys/rag-blob-internal:/run/keys/rag-blob-internal:ro
+      # Uploads (admin design §2.2).
+      - rag-blobs:/data/blobs
+    depends_on:
+      postgres: {condition: service_healthy}
+      rag-migrate: {condition: service_completed_successfully}
+    networks: [edge, data, llm]
+    healthcheck:
+      test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+
+# Fixed subnets, so deploy/host/docker-user-firewall.sh can give each network its egress rule (§6.1). The networks of
+# the ingestion zone are in compose.ingestion.yaml.
+networks:
+  edge: {driver: bridge, ipam: {config: [{subnet: 172.30.1.0/24}]}}
+  data: {driver: bridge, internal: true, ipam: {config: [{subnet: 172.30.2.0/24}]}}
+  llm: {driver: bridge, ipam: {config: [{subnet: 172.30.3.0/24}]}}
+  backup: {driver: bridge, ipam: {config: [{subnet: 172.30.16.0/24}]}}
+
+volumes:
+  postgres-data:
+  pgbackrest-repo:
+  rag-blobs:

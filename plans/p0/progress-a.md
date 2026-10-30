@@ -45,11 +45,11 @@ Refs: [repo-and-deployment §8](../platform/repo-and-deployment.md)
 
 ## 5. Compose, backups, restore (#14)
 Refs: [repo-and-deployment §6, §7.4](../platform/repo-and-deployment.md), [performance-pass §3.1](../performance-pass.md), [platform/plan.md §8a](../platform/plan.md)
-- [ ] `deploy/compose.prod.yaml`, `compose.ingestion.yaml`: networks, zones, limits, one slot, `DOTNET_GCHeapHardLimitPercent=75`
-- [ ] `deploy/compose.openwebui.yaml` (optional pilot stack incl. `WEBUI_BANNERS`; to-verify #46, #134, #172)
+- [x] `deploy/compose.prod.yaml`, `compose.ingestion.yaml`: networks, zones, limits, one slot, `DOTNET_GCHeapHardLimitPercent=0x4B` (#31)
+- [x] `deploy/compose.openwebui.yaml` (optional pilot stack incl. `WEBUI_BANNERS`; to-verify #46, #134, #172) (#31)
 - [ ] `init-deployment.sh`, `deploy/host/` (`rag-ingestion.slice`, firewall script, `rag-backup.timer`)
 - [ ] `backup-postgres.sh`, `restore-pitr.sh`, `backup-uploads.sh`, `escrow-keys.sh` (blob keys only in P0/P1)
-- [ ] **Done:** `docker compose config` passes in CI
+- [x] **Done:** `docker compose config` passes in CI (#31)
 - [ ] Restore drill run locally
 - [ ] Restore drill on the test host (after H6), documented with achieved RPO/RTO; escrowed keys read back
 - [ ] to-verify #90, #124, #129 recorded

@@ -1,8 +1,8 @@
 name: Verify
 # A pull request is verified on the merge with main (pull_request); a push only verifies main, so a branch with a pull
 # request is not built twice. A branch without one can be verified from the Actions tab (workflow_dispatch).
-# Jobs: ownership and backend (Stage 0), images (P0 checklist #5), parser and contract (P0 checklist #13). Stream A adds
-# the ui and deploy-checks jobs (P0 checklist #3, plans/platform/repo-and-deployment.md §8.2).
+# Jobs: ownership and backend (Stage 0), images (P0 checklist #5), parser and contract (P0 checklist #13), deploy-checks
+# (P0 checklist #14). Stream A adds the ui job (P0 checklist #3, plans/platform/repo-and-deployment.md §8.2).
 on:
   push:
     branches: [main]
@@ -36,6 +36,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       parser: ${{ steps.filter.outputs.parser }}
+      deploy: ${{ steps.filter.outputs.deploy }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,13 +49,15 @@ jobs:
           if [ "${{ github.event_name }}" = pull_request ]; then range="$BEFORE...HEAD"; else range="$BEFORE..HEAD"; fi
           if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            echo "code=true" >> "$GITHUB_OUTPUT"; echo "parser=true" >> "$GITHUB_OUTPUT"; exit 0
+            printf 'code=true\nparser=true\ndeploy=true\n' >> "$GITHUB_OUTPUT"; exit 0
           fi
+          flag() { [ -n "$1" ] && echo true || echo false; }
           code="$(git diff --name-only "$range" | grep -vE '^(plans/|platforms/)|^[^/]+\.md$' || true)"
-          echo "code=$([ -n "$code" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           # The parser, its contract, the contract tests and fixtures, the worker's parser client, or this workflow.
           parser="$(git diff --name-only "$range" | grep -E '^(src/parser/|contracts/parser/|tests/Ume\.Rag\.ContractTests/|tests/fixtures/parser/|src/Ume\.Rag\.Worker/Parsing/|\.github/workflows/verify\.yml$)' || true)"
-          echo "parser=$([ -n "$parser" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          # The production Compose files and init-deployment.sh, or this workflow.
+          deploy="$(git diff --name-only "$range" | grep -E '^(deploy/|\.github/workflows/verify\.yml$)' || true)"
+          { echo "code=$(flag "$code")"; echo "parser=$(flag "$parser")"; echo "deploy=$(flag "$deploy")"; } >> "$GITHUB_OUTPUT"
 
   backend:
     needs: changes
@@ -106,6 +109,45 @@ jobs:
         # Offline: a one-line EICAR test signature in a fresh volume, no download from database.clamav.net
         # (images/clamav/test.sh --online exercises freshclam locally).
         run: bash images/clamav/test.sh ume-rag/clamav:ci
+
+  deploy-checks:
+    # Production Compose (P0 checklist #14, repo-and-deployment §8.2): every supported combination of the files renders
+    # with `docker compose config` against placeholder settings, the image defaults stay the local :latest dev images
+    # (a release bundle pins the pushed ones by digest, §7.2), and the deployment scripts pass shellcheck.
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Local image defaults are untagged dev images
+        run: |
+          stale="$(grep -Hn 'ume-rag/[a-z]*:' deploy/compose*.yaml | grep -v ':latest}' || true)"
+          [ -z "$stale" ] || { echo "Local image defaults must stay ume-rag/<service>:latest:"; echo "$stale"; exit 1; }
+      - name: Production Compose files are valid
+        env:
+          UME_RAG_CERTS_DIR: /certs
+          UME_RAG_SECRETS_DIR: ${{ runner.temp }}/secrets
+          UME_RAG_OIDC_AUTHORITY: https://idp.example.se
+          UME_RAG_GATEWAY_URL: https://llm.example.se
+          UME_RAG_API_PUBLIC_URL: https://rag-api.example.se
+          UME_RAG_OPENWEBUI_HOST: chat.example.se
+          UME_RAG_OPENWEBUI_OIDC_CLIENT_ID: open-webui
+          UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL: https://idp.example.se/.well-known/openid-configuration
+          UME_RAG_OPENWEBUI_DATA_DIR: /openwebui-data
+        run: |
+          # compose.openwebui.yaml reads its env_file while rendering.
+          mkdir -p "$UME_RAG_SECRETS_DIR" && touch "$UME_RAG_SECRETS_DIR/openwebui.env"
+          for files in "compose.prod.yaml" \
+                       "compose.prod.yaml compose.ingestion.yaml" \
+                       "compose.prod.yaml compose.ingestion.yaml compose.clamav-conf.yaml" \
+                       "compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml" \
+                       "compose.openwebui.yaml"; do
+            args=(); for f in $files; do args+=(-f "deploy/$f"); done
+            echo "docker compose ${args[*]} config --quiet"
+            docker compose "${args[@]}" config --quiet
+          done
+      - name: Deployment scripts pass shellcheck
+        run: shellcheck deploy/*.sh deploy/postgres/*.sh
 
   parser:
     # The parser sidecar (plans/parser/design.md §15.1, repo-and-deployment §8.2): lock, lint, unit and supervisor tests
