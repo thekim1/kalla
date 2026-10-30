@@ -10,7 +10,9 @@ Where a diagram and a document differ, the document wins.
 
 ## 1. System overview
 
-Dashed edges and boxes marked P2 are not in the pilot.
+Dashed edges and boxes marked P2 are not in the pilot. The pilot runs six long-running containers (rag-api, rag-admin,
+rag-worker, rag-parser, rag-clamav, postgres) plus the one-shot rag-migrate; Redis arrives with the first multi-host
+deployment (P2).
 
 ```mermaid
 flowchart LR
@@ -39,8 +41,8 @@ flowchart LR
     end
 
     subgraph data_zone["Data zone"]
-        pg[("Postgres, stock pgvector image<br/>config | content | chat | audit")]
-        redis[("Redis")]
+        pg[("Postgres: pgvector image + pgBackRest<br/>config | content | chat | audit<br/>admin sessions, Data Protection keys")]
+        redis[("Redis (P2, multi-host only)")]
         blobs[("Blob store, write-once<br/>internal: envelope-encrypted; public: encrypted disk<br/>file system (pilot); S3 object store beyond one host")]
     end
 
@@ -67,17 +69,16 @@ flowchart LR
     worker -- "embeddings, LLM stages<br/>OnPrem and Eu keys only, explicit ceiling" --> gateway
 
     api --> pg
-    api -- "rate limits, query-embedding cache" --> redis
+    api -. "shared rate limits, L2 query-embedding cache (P2)" .-> redis
     api -- "download grants (read-only)" --> blobs
     admin -- "config + outbox (serialised writes), jobs" --> pg
-    admin --> redis
     worker -- "jobs, documents, chunk sets" --> pg
     worker --> blobs
     worker -. "crawl and embedding in-flight leases (P2, multi-host)" .-> redis
 
     pg -. "LISTEN/NOTIFY: config version, jobs" .-> api
     pg -. "LISTEN/NOTIFY" .-> worker
-    pg -- "WAL archiving (archive_timeout 60 s)" --> backup
+    pg -- "pgBackRest archive-push (archive_timeout 60 s),<br/>backups from a host timer" --> backup
     blobs -- "uploads within 15 min" --> backup
 
     worker -- "multipart parse, /v1/inspect,<br/>gated /v1/ner" --> parser
@@ -92,6 +93,8 @@ flowchart LR
     api -- "feedback import (HTTP API)" --> owui
     admin -- "OIDC sign-in" --> idp
     api -. "JWKS (P2)" .-> idp
+
+    style redis stroke-dasharray: 5 5
 ```
 
 The zones are one host in the pilot, with one slot per service and an announced maintenance window for updates. From
@@ -101,7 +104,8 @@ role, Compose per host: three hosts in P2 (**D** data: Postgres, Redis, object s
 `preview,command,sync,fetch,eval`, clamd, small parser, renderer if needed; **P** processing: worker `parse,embed` with
 its own parser). A Postgres streaming standby is required before production beyond the pilot (register D1). Parser,
 renderer and clamd stay host-local to their worker; all hosts share the one Postgres, Redis and object store over a
-routed LAN with TLS. A separate `rag-tools` service (mTLS hop, own database role) comes only with the first external,
+routed LAN with TLS. In the pilot, rate limits and the query-embedding cache are in process and admin sessions are in
+Postgres. A separate `rag-tools` service (mTLS hop, own database role) comes only with the first external,
 OBO or write tool (P3).
 
 ## 2. Chat request (RAG assistant, P1)
@@ -112,7 +116,6 @@ sequenceDiagram
     participant U as Open WebUI
     participant C as rag-api chat role
     participant K as Knowledge core (Ume.Rag.Answering)
-    participant R as Redis
     participant P as Postgres
     participant G as LLM gateway
     participant W as Background writer
@@ -120,7 +123,7 @@ sequenceDiagram
     U->>C: POST /v1/chat/completions (model = assistant, history, user JWT, chat id)
     C->>C: authenticate, IAccessPolicy at the confirmed config version (grace window 90 s)
     C->>C: effective level = max(assistant level, client ceiling), fixed from the first message
-    C->>R: per-user rate limit (1 command, in-memory fallback)
+    C->>C: per-user rate limit (in process in the pilot, Redis from P2)
     opt follow-up question that is not self-contained (length, anaphora)
         C->>G: condense on Settings.Chat.CondenseModel (x-ume-step: condense, explicit ceiling)
         G-->>C: standalone query (timeout 600 ms or failure: raw question)
@@ -129,7 +132,7 @@ sequenceDiagram
     par keyword in parallel with the embedding
         K->>P: K: keyword candidates (decompounded lexemes, built-in swedish, top 100)
     and
-        K->>R: query embedding cache (public/internal)
+        K->>K: query embedding cache (in process, HMAC key)
         K->>G: embed query on-prem on a miss
     end
     K->>P: V: vector candidates (exact scan or halfvec HNSW, CollectionId filter)

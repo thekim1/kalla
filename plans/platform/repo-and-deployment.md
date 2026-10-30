@@ -26,7 +26,7 @@ src/
   Ume.Rag.Retrieval/                 search core (keyword/vector candidates, RRF, dedup, diversity, coverage; knowledge design §2.1) and `SwedishDecompounder` (`sv_SE` word list as an embedded resource, used by the worker too), shared by the knowledge API, the evaluator (processing design §13.5) and the admin test panel
   Ume.Rag.Answering/                 knowledge core (KnowledgeService without HTTP) and chat answer core (RagAnswerStrategy, PromptBuilder, TokenBudget, Condenser, AnswerFilter, CitationEmitter, LanguageGuess); referenced by Api and AdminApi only (never the worker), so the test panel runs the real chat path (admin design §2.1) and the admin runs the answer-level judge (`answers` runs, late P1) and the P2 skill gate; P2: AgentAnswerStrategy, AgentPromptBuilder, BuiltInTools, ToolCallStreamParser, SkillFileCache (tools design §2.1)
   Ume.Rag.Pipelines/                 fixed pipeline templates per source type, versioned parameter sets, validator, per-stage cache keys, re-processing plan from effect tags (admin + worker; engine design §4)
-  Ume.Rag.Infrastructure/            RagDbContext, queue + LISTEN/NOTIFY, config-version monitor, RedisKeys, gateway client, blob stores, key providers, SecurityEvents
+  Ume.Rag.Infrastructure/            RagDbContext, queue + LISTEN/NOTIFY, config-version monitor, `IRateLimitStore`/`ISharedCache` (in-memory; Redis from P2) and RedisKeys, Postgres admin session store, gateway client, blob stores, key providers, SecurityEvents
   Ume.Rag.ServiceDefaults/           copy of the gateway's (OpenTelemetry, health, ShutdownDrain, WebDefaults, problem responses)
   Ume.Rag.Api/                       data plane: Knowledge, Chat, MCP endpoint groups (Rag:Roles)
   Ume.Rag.Worker/                    ingestion: connectors, fixed pipelines, site profiles, scheduler, retrieval evaluator (recall/MRR through Ume.Rag.Retrieval), retention + partition jobs
@@ -42,6 +42,7 @@ contracts/parser/v1/                 convert-request, convert-result, inspect-re
 contracts/skill/v1/                  manifest.schema.json (`ume-rag.json` skill manifest, tools design §3.2)
 contracts/admin/v1/                  error-codes.json (admin API error codes; CI checks the UI's Swedish texts cover every code, admin design §4.1)
 images/
+  postgres/Dockerfile                stock pgvector image (digest-pinned) + PGDG `pgbackrest` package and `pgbackrest.conf` (§5.2)
   renderer/Dockerfile                P2, only if needed: Playwright server + Chromium headless shell
   clamav/Dockerfile                  ClamAV + freshclam updating directly from database.clamav.net (decided: no mirror, §5.5)
 templates/mcp-server/                P2: `dotnet new ume-mcp-server` template, packaged as `Ume.Rag.Templates` (contents: tools design §8.1)
@@ -65,7 +66,7 @@ benchmarks/
   release-test/                      R1 test: k6 chat streams during crawl + OCR (from the gateway's benchmarks/compare/k6); chat overhead run (k6/chat.js, FakeGateway, chat design §16.2)
   Ume.Rag.Benchmarks/                BenchmarkDotNet: RetrievalBenchmarks, ChatBenchmarks (chat design §16.2), InteractionAudit (copy of the gateway's; knowledge design §11)
 deploy/
-  compose.prod.yaml                  data plane + control zone (host A), incl. postgres and rag-pgbackrest
+  compose.prod.yaml                  data plane + control zone (host A), incl. postgres (pgBackRest inside, §7.4)
   compose.ingestion.yaml             ingestion zone (same host in the pilot, host B later)
   compose.ingestion-remote.yaml      overlay for a separate ingestion host
   compose.rolling.yaml               P2: b slots for rag-api and rag-admin
@@ -73,13 +74,13 @@ deploy/
   compose.openwebui.yaml             optional Open WebUI pilot stack: env of chat design §4.3 (title, tag and follow-up generation off), feedback pruning through its HTTP API; chat-copy retention is open item W2 (chat design §13.3)
   compose.mcp.yaml                   P2: hosted MCP servers (one container each, zone `tools-hosted`; tools design §8.3)
   init-deployment.sh  rolling-update.sh  build-release-bundle.sh  Test-Deployment.ps1
-  restore-pitr.sh  backup-uploads.sh  restore-blobs.sh  escrow-keys.sh
+  backup-postgres.sh  restore-pitr.sh  backup-uploads.sh  restore-blobs.sh  escrow-keys.sh
   postgres/                          init.sql, app-roles.sql, pg_hba.conf, postgresql.conf, upgrade-extensions.sql, test.sh (image test)
-  pgbackrest/                        pgbackrest.conf, Dockerfile of the sidecar (§7.4)
-  redis/                             redis.conf, users.acl.example
+  pgbackrest/                        pgbackrest.conf (copied into `ume-rag/postgres`), repo.conf.example (repository settings, written by init-deployment; §7.4)
+  redis/                             redis.conf, users.acl.example (P2, first multi-host deployment)
   proxy/nginx.conf.example           reverse proxy (one slot; two slots each from P2)
   otel/                              collector-siem.example.yaml (security category), dashboards/*.json
-  host/                              rag-ingestion.slice, docker-user-firewall.sh (egress rules per network)
+  host/                              rag-ingestion.slice, docker-user-firewall.sh (egress rules per network), rag-backup.service + rag-backup.timer (pgBackRest backups, §7.4)
   kubernetes/                        later (§10)
   tests/                             compose-rolling-e2e.sh, verify-data.sh, spa-smoke.mjs (copy + adapt)
 dev/keycloak/ume-rag-realm.json      realm with the gateway's claims + rag-* roles
@@ -300,8 +301,8 @@ persistent secrets through the same `Secret(name, length)` helper, `WaitFor`/`Wa
 
 | Resource | Aspire call | Toggle | Notes |
 |---|---|---|---|
-| `postgres` + database `ragdb` | `AddPostgres("postgres").WithImage("pgvector/pgvector", <pinned tag>)` `.WithDataVolume(DevelopmentVolumes:Postgres)` | – | stock pgvector image (§5.2), superuser in dev as in the gateway |
-| `redis` | `AddRedis("redis", password: Secret("redis-password", 48))` | – | prefix `ume-rag:` |
+| `postgres` + database `ragdb` | `AddPostgres("postgres").WithImage("pgvector/pgvector", <pinned tag>)` `.WithDataVolume(DevelopmentVolumes:Postgres)` | – | the stock pgvector image `ume-rag/postgres` is built from (§5.2; pgBackRest is not needed in dev), superuser in dev as in the gateway |
+| `redis` | `AddRedis("redis", password: Secret("redis-password", 48))` | `Redis:Enabled` (default false: the pilot shape, in-memory `IRateLimitStore`/`ISharedCache`) | P2 path: sets `ConnectionStrings:redis`; prefix `ume-rag:` |
 | `keycloak` | `AddKeycloak("keycloak").WithRealmImport("../../dev/keycloak")` | off when `Oidc:Authority` is set | env `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_DEV_USER_PASSWORD`, `UME_RAG_API_CLIENT_SECRET` |
 | `fake-gateway` | `AddProject<Projects.Ume_Rag_FakeGateway>` | `FakeGateway:Enabled` (default true) | §4.3; `FakeGateway:Latency:*` passed through as in the gateway |
 | `ollama` | `AddOllama("ollama").AddModel("bge-m3")` | `Ollama:Enabled` (default false, dev only, throws in publish mode as the gateway does) | real BGE-M3 embeddings behind the fake gateway |
@@ -385,8 +386,7 @@ vectors when we run against a real local gateway.
 |---|---|---|---|---|---|---|
 | `ume-rag/api`, `worker`, `admin`, `migrations` | `dotnet publish -t:PublishContainer` | `aspnet:10.0.13-noble-chiseled-extra@sha256:3ed6…` (gateway's) | 1654 | read-only, tmpfs `/tmp` | `dotnet Ume.Rag.<X>.dll --health-check` (`ExitIfHealthProbeAsync`, `UME_HEALTHCHECK_URL` default `https://localhost:8443/health/ready`) | 160–220 MB (admin + UI ~230 MB) |
 | `ume-rag/fake-gateway` | SDK container | `noble-chiseled` | 1654 | read-only | same | ~130 MB |
-| `pgvector/pgvector` (postgres) | not built: stock image, digest-pinned in the bundle | pgvector 0.8.7 on Postgres 17 (tag *to verify*) | 999 (`postgres`) | read-only, tmpfs `/tmp`, `/var/run/postgresql` | `pg_isready -d ragdb` | *to verify* |
-| `ume-rag/pgbackrest` | `deploy/pgbackrest/Dockerfile` | `debian:trixie-slim` (digest-pinned) + PGDG `pgbackrest` package | 999 (same uid as postgres, shares its volume) | read-only, tmpfs `/tmp` | `pgbackrest check` (exit code) | *to verify* |
+| `ume-rag/postgres` | `images/postgres/Dockerfile` (a few lines, §5.2) | stock `pgvector/pgvector`, digest-pinned (pgvector 0.8.7 on Postgres 17, tag *to verify*) + PGDG `pgbackrest` package | 999 (`postgres`) | read-only, tmpfs `/tmp` (pgBackRest lock path), `/var/run/postgresql` | `pg_isready -d ragdb` | stock image + the `pgbackrest` package, *to verify* |
 | `ume-rag/parser` | `src/parser/Dockerfile` | `python:3.12-slim-trixie` (digest-pinned; parser design §12) | 10001 | read-only, tmpfs `/tmp` (1 GB: tmpfs counts against the memory limit) | `python -m ume_parser.health` (HTTPS GET `/health/ready`, exit code; no curl) | target ≤ 3.5 GB, *to verify* (parser design §12; torch CPU + models; Tesseract `swe` only; no LibreOffice, EasyOCR or `python-oxmsg`) |
 | `ume-rag/clamav` | `images/clamav/Dockerfile` | `clamav/clamav-debian:1.4` (LTS, digest-pinned; *to verify* tag) | 100 (`clamav`) | read-only, volume `/var/lib/clamav`, tmpfs `/run/clamav`, `/tmp` | `clamdscan --ping 3` | ~350 MB + ~350 MB signatures in the volume |
 
@@ -396,18 +396,20 @@ images (chiseled). Compose adds `read_only`, `cap_drop: [ALL]`, `no-new-privileg
 anchor). The renderer image (`images/renderer/`, Playwright server + Chromium) is built only if the renderer is
 adopted (P2, §5.4).
 
-### 5.2 Postgres (stock image)
+### 5.2 Postgres (stock image + pgBackRest)
 
-- **Image**: the stock `pgvector/pgvector` image for pgvector 0.8.7 on Postgres 17, pinned by digest in the release
-  bundle (`POSTGRES_IMAGE`); no Dockerfile of ours, no compile, no dictionary. Supersedes the "own container
-  everywhere" decision (simplification pass §3). Managed Postgres is allowed where pgvector ≥ 0.8 and the settings of
+- **Image**: `ume-rag/postgres`, derived from the stock `pgvector/pgvector` image for pgvector 0.8.7 on Postgres 17
+  (`FROM` by digest) with only the PGDG `pgbackrest` package and `pgbackrest.conf` added (simplification pass §14);
+  pinned by digest in the release bundle (`POSTGRES_IMAGE`). No compile, no dictionary, no extension build. Supersedes
+  the "own container everywhere" decision (simplification pass §3). Managed Postgres is allowed where pgvector ≥ 0.8 and the settings of
   §6.2 are available.
 - **Init scripts are mounted, not baked**, as in the gateway: `deploy/postgres/init.sql` →
   `/docker-entrypoint-initdb.d/10-roles.sql` (roles from `/run/postgres-secrets/*_password`, database `ragdb`,
   `CREATE EXTENSION vector` as bootstrap superuser, data-model §1); `postgresql.conf` and `pg_hba.conf` mounted.
 - **Image test** (CI job `images`, `deploy/postgres/test.sh`): start the pinned image, run `init.sql`; `SELECT
   extversion FROM pg_extension WHERE extname='vector'` equals the expected version; an HNSW index builds on 1024-dim
-  vectors; `pg_stat_statements` loads; `wal_compression=lz4` is accepted; archiving to the pgBackRest sidecar works
+  vectors; `pg_stat_statements` loads; `wal_compression=lz4` is accepted; `pgbackrest` runs as uid 999 on the
+  read-only root file system and `archive_command` pushes WAL from inside the container to a local test repository
   (`pgbackrest check`). The Swedish search tests are .NET tests (`SwedishTextSearchTests`, data-model §3.1).
 - **P0 comparison** (one-off, recorded in `docs/`): the .NET decompounder against Postgres `ispell` with the same
   `sv_SE` word list, in a throwaway container that has the dictionary files, on a word sample (to verify, §14).
@@ -454,8 +456,8 @@ Fixed subnets so the host firewall (`deploy/host/docker-user-firewall.sh`, `DOCK
 | Network | Subnet | `internal` | Members | Egress |
 |---|---|---|---|---|
 | `edge` | 172.30.1.0/24 | no | rag-api(+b), rag-admin(+b) | admin: OIDC authority only in P1 (`login.microsoftonline.com`, no Graph), from P2 Graph for the member-group lookup; api: the Open WebUI host (feedback import, chat design §14.2); api from P2: OIDC authority (JWKS), Graph (P2 audiences), OBO (P3) (identity design §7–§9) |
-| `data` | 172.30.2.0/24 | **yes** | postgres, rag-pgbackrest, redis, rag-api(+b), rag-admin(+b), rag-worker, rag-migrate | none |
-| `backup` | *to allocate* | no | rag-pgbackrest; the upload copy job | firewall: only the backup target (§7.4) |
+| `data` | 172.30.2.0/24 | **yes** | postgres, rag-api(+b), rag-admin(+b), rag-worker, rag-migrate | none |
+| `backup` | *to allocate* | no | postgres (pgBackRest `archive-push` and backups, §7.4); the upload copy job | firewall: only the backup target (§7.4) |
 | `llm` | 172.30.3.0/24 | no | rag-api(+b), rag-worker, rag-admin(+b) | firewall: only the gateway's address and port (gateway's `llm` name) |
 | `ingestion` | 172.30.4.0/24 | **yes** | rag-worker, rag-clamav (P2: rag-renderer, if adopted) | none |
 | `parser` | 172.30.5.0/24 | **yes** | rag-worker, rag-parser | none (parser has no other network) |
@@ -482,9 +484,7 @@ verify* on the host image).
 
 | Container | Zone | `cpus` | `cpu_shares` | `mem_reservation` | `mem_limit` 16 GB | `mem_limit` 24 GB | `pids_limit` | Notes |
 |---|---|---|---|---|---|---|---|---|
-| postgres | data | 3.0 | 1024 | 2g | 3g | 5g | 512 | `shm_size: 1g`; settings below; limit sized from the P0 measurement |
-| rag-pgbackrest | data | 0.5 | 256 | – | 512m | 512m | 128 | WAL archiving and backups (§7.4); sizes proposed |
-| redis | data | 0.5 | 1024 | 64m | 256m | 256m | 64 | no persistence (gateway) |
+| postgres | data | 3.0 | 1024 | 2g | 3g | 5g | 512 | `shm_size: 1g`; settings below; limit sized from the P0 measurement, including `archive-push` and the scheduled `pgbackrest backup` running inside it (§7.4) |
 | rag-api (P2 + rag-api-b) | data | 2.0 each | 1024 | 384m | 1g each | 1.5g each | 512 | `DOTNET_GCHeapHardLimitPercent=75` |
 | rag-admin (P2 + rag-admin-b) | control | 1.0 each | 512 | 256m | 512m each | 768m each | 256 | `DOTNET_GCHeapHardLimitPercent=75` |
 | rag-migrate | – | 1.0 | 512 | – | 512m | 512m | 128 | one-shot; `DOTNET_GCHeapHardLimitPercent=75` |
@@ -496,9 +496,10 @@ verify* on the host image).
 | `ume-mcp-<name>` (P2) | tools-hosted | 0.5 each | 256 | – | 384m each | 384m each | – | hosted MCP servers, `compose.mcp.yaml` (tools design §8.3) |
 
 Sum of memory limits (ingestion containers counted at the slice cap, the one-shot migrator included), pilot with one
-slot: 16 GB host ≈ 12.75 GB (OS and Docker keep ~2 GB; limits are not all reached at once); 24 GB host ≈ 19.5 GB,
-≈ 21 GB with Open WebUI. P2 adds the b slots and 384m per hosted MCP server (`ume-mcp-kommun`): ≈ 14.6 GB on a 16 GB
-host and ≈ 22.1 GB on a 24 GB host, so P2 uses the 24 GB host **with Open WebUI on its own VM** (decided by the user
+slot (six long-running containers, no Redis): 16 GB host ≈ 12 GB (OS and Docker keep ~2 GB; limits are not all
+reached at once); 24 GB host ≈ 18.75 GB, ≈ 20.25 GB with Open WebUI. P2 adds the b slots, Redis (256m,
+[`../performance-pass.md`](../performance-pass.md) §3.12) and 384m per hosted MCP server (`ume-mcp-kommun`): ≈ 14.1 GB on a
+16 GB host and ≈ 21.6 GB on a 24 GB host, so P2 uses the 24 GB host **with Open WebUI on its own VM** (decided by the user
 2026-10-30 in the consistency pass); the in-process tool hub may need a larger `rag-api` limit, measured in P2. Under
 CPU contention the data plane (weight 1024) gets about 4× the CPU of each ingestion container; the slice keeps the ingestion zone at 5 cores even when every ingestion container is
 busy. The R1 release test (§8.3) confirms or corrects these numbers.
@@ -507,7 +508,7 @@ busy. The R1 release test (§8.3) confirms or corrects these numbers.
 `max_connections=100` (data-model §1.1), `shared_buffers=768MB / 1536MB`, `effective_cache_size=2GB / 3500MB`,
 `work_mem=8MB`, `maintenance_work_mem=512MB / 1GB` (HNSW builds), `max_parallel_maintenance_workers=2`,
 `max_worker_processes=8`, `wal_level=replica`, `archive_mode=on`,
-`archive_command` = pgBackRest `archive-push` (§7.4), `archive_timeout=60`, `wal_compression=on`, `ssl=on` with the internal CA, `log_statement=none` (gateway),
+`archive_command = 'pgbackrest --stanza=ragdb archive-push %p'` (synchronous, inside the container, §7.4), `archive_timeout=60`, `wal_compression=on`, `ssl=on` with the internal CA, `log_statement=none` (gateway),
 `autovacuum_vacuum_scale_factor=0.02` and `autovacuum_vacuum_cost_limit=2000` (data-model §4.4),
 `shared_preload_libraries='pg_stat_statements'` (capacity metrics, §9; was empty). `wal_compression=lz4` instead of `on`
 if the stock image's build supports it (*to verify*, `deploy/postgres/test.sh`). `DOTNET_GCHeapHardLimitPercent=75` is set on
@@ -523,20 +524,19 @@ if the stock image's build supports it (*to verify*, `deploy/postgres/test.sh`).
 
 | Volume | Mounted in | Notes |
 |---|---|---|
-| `postgres-data` | postgres (rw), rag-pgbackrest (rw, backups and restore) | LUKS-encrypted host disk (plan §8a baseline) |
-| `pgbackrest-spool` | postgres, rag-pgbackrest | WAL handed from `archive_command` to the sidecar (§7.4) |
+| `postgres-data` | postgres (rw; backups run inside it, a restore runs in a one-off container of the same image, §7.4) | LUKS-encrypted host disk (plan §8a baseline) |
 | `rag-blobs` → `/data/blobs` | rag-worker (rw), rag-admin (rw, uploads), rag-api (**read-only**, citation downloads, knowledge design §3.5) | one container `rag/`, write-once keys (data-model §9); single host only: beyond one host the S3-compatible object store (bucket `rag`) replaces this volume (§6.4). Master key files (file key provider, plan §8a): `rag-chat-<level>` only in rag-api and rag-admin; `rag-blob-internal` in rag-worker and rag-admin (uploads) and read-only in rag-api (downloads); `public` blobs are not encrypted. P2: rag-api also writes `chat-tmp/` (chat attachments, chat design §15.2), so its mount becomes read-only plus a writable `chat-tmp/` sub-mount |
 | `clamav-db` → `/var/lib/clamav` | rag-clamav | signatures |
 | `openwebui-data` | open-webui | its own SQLite DB on an encrypted volume (§12.8) |
 
 Secrets and certificates are files, never environment variables (gateway `compose.prod.yaml`): `${UME_RAG_SECRETS_DIR}/<service>`
-→ `/run/app-secrets` (key-per-file: `ConnectionStrings__ragdb`, `ConnectionStrings__redis`, `Security__KeyPepper`,
+→ `/run/app-secrets` (key-per-file: `ConnectionStrings__ragdb`, `ConnectionStrings__redis` (P2, multi-host only; without it the in-memory `IRateLimitStore`/`ISharedCache` are used), `Security__KeyPepper`,
 `Gateway__Keys__OnPrem` / `__Eu` / `__External` (delegating gateway keys per level, plan §6: api and admin hold all three, the worker only `OnPrem` and `Eu`, never the open key; its non-on-prem LLM calls send `Eu`), `BlobStore__S3__AccessKey`/`BlobStore__S3__SecretKey` (**per service**, only with `BlobStore:Kind=S3`; bucket policies mirror the mounts above: worker read/write, admin write on `uploads/` and read, api read-only, P2 write on `chat-tmp/`; [`../performance-pass.md`](../performance-pass.md) §3.13), `Security__CrawlKeyPepper` (worker, P2: HMAC of host names in the Redis crawl leases, [`../performance-pass.md`](../performance-pass.md) §3.6), `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`,
 `Security__DownloadGrantKeys__<kid>` and `Security__CacheKeyPepper` (api; knowledge design §4.6, §5.4), `Security__ConversationIdKeys__<kid>` and `OpenWebUi__AdminApiKey` (api; chat design §11.1, §14.2), `Security__ToolAuditKey` (api and admin; P2), `Api__ServiceKey` (worker, P2: client `rag-internal`, posts chat-attachment chunks
 to the api's internal route, chat design §15.2; issued in the admin UI)), `${UME_RAG_CERTS_DIR}/<service>` →
 `/run/certs` (service cert/key, `ca.pem`, `data-protection.pfx`; P2: the tool identity's Entra client-credentials certificate for
-hosted MCP servers, in api and admin only, never the worker, tools design §2.2, §4.6), Postgres secrets → `/run/postgres-secrets`, pgBackRest repository passphrase →
-`/run/pgbackrest-secrets` (rag-pgbackrest only). Hosted MCP servers get `${UME_RAG_SECRETS_DIR}/mcp-<name>` (tools
+hosted MCP servers, in api and admin only, never the worker, tools design §2.2, §4.6), Postgres secrets → `/run/postgres-secrets`, pgBackRest repository settings and passphrase
+(`${UME_RAG_SECRETS_DIR}/pgbackrest/repo.conf`) → `/etc/pgbackrest/conf.d/repo.conf` (postgres only, read-only). Hosted MCP servers get `${UME_RAG_SECRETS_DIR}/mcp-<name>` (tools
 design §8.3).
 
 Hardening: every service uses the `x-hardened` anchor (`read_only`, `cap_drop: [ALL]`, `no-new-privileges`, tmpfs
@@ -588,27 +588,27 @@ Redis and one object store (single node on its own encrypted disk) on the data h
 | `--org-sync-key-file FILE` | – | `secrets/admin/OrgSync__DataApiKey` (gateway Data API key `ume-dk-…`, `catalog.read` only; identity design §2.1) |
 | `--gateway-key-file LEVEL=FILE` (repeated for `OnPrem`, `Eu`, `External`) | – (keys issued by the gateway team per deployable) | `secrets/{api,admin}/Gateway__Keys__<level>`; `secrets/worker/` only `OnPrem` and `Eu` (refuses `External` for the worker) |
 | `--key-provider file\|openbao\|azure` + `--openbao-addr`, `--openbao-role-file` / `--keyvault-uri` | `file` refuses Production unless `--allow-file-keys` (test hosts and the pilot: postponed decision K1, plan §8a) | `KeyProvider__*`; with `file`: the master key files `secrets/keys/rag-chat-<level>`, `rag-blob-internal` (mode 0400), then a reminder to run `escrow-keys.sh` (§7.4) |
-| `--backup-target URL` | prompted | pgBackRest `repo1` (IT's backup storage: S3-compatible or a mounted share; decided with IT) and the upload copy target |
+| `--backup-target URL` | prompted | pgBackRest `repo1` in `secrets/pgbackrest/repo.conf` (IT's backup storage: S3-compatible or a mounted share; decided with IT) and the upload copy target |
 | `--crawl-allow CIDR[,…]` | none | `.env`, `deploy/host/` firewall input and `Crawl__AllowedPrivateRanges` for the worker's `IEgressGuard` (connectors design §7). (`--clamav-mirror` dropped: no mirror, §5.5) |
 | `--role data\|api\|ingestion\|processing\|all` | `all` | §6.4 (multi-host roles: that host's `.env`, certificates and only its secrets) |
 | `--proxy`, `--upstream-host`, `--rolling`, `--no-chown`, PKI file options, `--renew-certs`, `--renew-ca`, `--yes` | as gateway | as gateway |
 
-It generates: the internal CA and service certificates (api, admin, worker, parser, postgres, redis), the Data
-Protection certificate, passwords for `bootstrap`, `ume_rag_migrator`, `ume_rag_api`, `ume_rag_admin`, `ume_rag_worker`, the pgBackRest repository passphrase (escrowed, §7.4), the Redis password and ACL from `users.acl.example` (user `ume-rag`, `~ume-rag:*`), the key
+It generates: the internal CA and service certificates (api, admin, worker, parser, postgres), the Data
+Protection certificate, passwords for `bootstrap`, `ume_rag_migrator`, `ume_rag_api`, `ume_rag_admin`, `ume_rag_worker`, the pgBackRest repository passphrase (escrowed, §7.4), the key
 pepper, the download-grant key (`Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes; a new `kid` on rotation) and the query
-cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, chat design §11.1), the tool audit HMAC key (`Security__ToolAuditKey`, P2, tools design §9.1), the Open WebUI JWT secret, P2: the crawl key pepper (`Security__CrawlKeyPepper`) and the renderer WebSocket path secret (if adopted), and `deploy/.env` (non-secret settings only).
+cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, chat design §11.1), the tool audit HMAC key (`Security__ToolAuditKey`, P2, tools design §9.1), the Open WebUI JWT secret, P2: the crawl key pepper (`Security__CrawlKeyPepper`), the renderer WebSocket path secret (if adopted) and, with `--role data` on the first multi-host deployment, the Redis certificate, password and ACL from `users.acl.example` (user `ume-rag`, `~ume-rag:*`) with `ConnectionStrings__redis` for api and worker, and `deploy/.env` (non-secret settings only).
 The Open WebUI admin API key (`OpenWebUi__AdminApiKey`) is not generated: an operator creates the service account and
 its key in Open WebUI and places the file (chat design §14.2).
 **Gateway keys per deployable** (plan §6; [`../performance-pass.md`](../performance-pass.md) §3.9): the worker's keys
 are its own and carry the gateway's existing per-key `MaxConcurrentRequests` cap, so a misconfigured worker fleet
 cannot starve chat's query embeddings. A separate BGE-M3 query route/replica follows only when its trigger fires (query
 embedding p95 during ingestion > 2 × idle).
-Ownership: 999 (postgres, pgbackrest, redis), 1654 (.NET services), 10001 (parser), 10002 (P2 renderer), 100 (clamav).
+Ownership: 999 (postgres; P2 redis), 1654 (.NET services), 10001 (parser), 10002 (P2 renderer), 100 (clamav).
 
 ### 7.2 `build-release-bundle.sh`
 
-Same as the gateway's: `API_IMAGE ADMIN_IMAGE WORKER_IMAGE MIGRATIONS_IMAGE PARSER_IMAGE CLAMAV_IMAGE PGBACKREST_IMAGE
-POSTGRES_IMAGE` (the stock pgvector image; + `RENDERER_IMAGE` if adopted), each pinned by digest, are written into every `${X_IMAGE:-…}` default; the
+Same as the gateway's: `API_IMAGE ADMIN_IMAGE WORKER_IMAGE MIGRATIONS_IMAGE PARSER_IMAGE CLAMAV_IMAGE
+POSTGRES_IMAGE` (`ume-rag/postgres`; + `RENDERER_IMAGE` if adopted), each pinned by digest, are written into every `${X_IMAGE:-…}` default; the
 script fails on an unpinned image. Output `ume-rag-X.Y.Z.tar.gz` with `deploy/` (compose files, scripts,
 `postgres/`, `pgbackrest/`, `redis/`, `proxy/`, `otel/`, `host/`). No Portainer stack in P0/P1 (§12.9).
 
@@ -637,7 +637,7 @@ Targets for the pilot: **RPO ≤ 5 min, RTO ≤ 4 h** (simplification pass §4).
 
 | What | Tool | Notes |
 |---|---|---|
-| Postgres | **pgBackRest** in the `rag-pgbackrest` sidecar: continuous WAL archiving (`archive_timeout` 60 s), weekly full, daily differential, 35-day retention (proposed); repository `repo1` on the backup target, encrypted (`repo1-cipher-type=aes-256-cbc`, passphrase escrowed) | **point-in-time restore** with `restore-pitr.sh --target-time` (stops api, admin, worker; `pgbackrest restore --type=time`; starts Postgres in recovery, then the services). `archive_command` hands each WAL file to the sidecar through the `pgbackrest-spool` volume, since the stock image has no pgBackRest (*to verify*; fallback: a one-line derived image adding the PGDG `pgbackrest` package) |
+| Postgres | **pgBackRest** inside the `postgres` container (`ume-rag/postgres`, §5.2): continuous WAL archiving by `archive_command` (`archive-push`, synchronous, so no spool volume; `archive_timeout` 60 s), weekly full, daily differential, 35-day retention (proposed); repository `repo1` on the backup target, encrypted (`repo1-cipher-type=aes-256-cbc`, passphrase escrowed). Scheduled backups: the host timer `rag-backup.timer` runs `backup-postgres.sh`, i.e. `docker compose exec -T postgres pgbackrest --stanza=ragdb --type=full\|diff backup` (expiry follows each backup); no long-running sidecar. `postgres` is on the `backup` network (§6.1) | **point-in-time restore** with `restore-pitr.sh --target-time` (stops api, admin, worker and postgres; `pgbackrest restore --type=time` in a one-off container of the `postgres` image on `postgres-data` (`docker compose run --rm`); starts Postgres in recovery, then the services) |
 | Uploads | `backup-uploads.sh`: copies new `uploads/` objects to the backup target **within 15 minutes** (the only content that cannot be fetched again); write-once keys make the copy incremental | `rclone`/bucket replication beyond one host (§6.4) |
 | Derived blobs | raw fetches, parse and stage outputs | re-creatable: backed up nightly or not at all (a restore re-fetches and re-parses) |
 | Secrets | pepper, `data-protection.pfx`, `secrets/` | separately, through the secret manager (gateway runbook) |
@@ -655,8 +655,10 @@ Rules:
    escrowed keys, then a chat history read, a document preview and a search query; record the achieved RPO and RTO.
 4. **Standby**: a streaming replica (pgBackRest-seeded, on another host) is an **availability** requirement before
    production beyond the pilot (P2); it also serves `ConnectionStrings__ragdb-read` when that trigger fires.
-5. Health: the last successful backup age and the WAL archive age are exported as metrics (§9); alerts when the last
-   backup is older than 26 h or the newest archived WAL older than the RPO (5 min) (proposed).
+5. Health: the last successful backup age (`pgbackrest info`, read by `backup-postgres.sh`) and the WAL archive age
+   (`pg_stat_archiver`) are exported as metrics (§9; how the timer's result reaches the collector is *to verify*, §14);
+   alerts when the last backup is older than 26 h, the timer unit failed, or the newest archived WAL is older than the
+   RPO (5 min) (proposed).
 
 ### 7.5 Upgrade guide (`docs/upgrade-guide.md`)
 
@@ -681,7 +683,7 @@ then the gateway's six-step *Upgrade procedure* and *Certificate and secret rota
 | Workflow | Phase | Trigger | Mirrors | Content |
 |---|---|---|---|---|
 | `verify.yml` | P0 | push to main, PR, dispatch, `workflow_call` | gateway `verify.yml` | §8.2 |
-| `release.yml` | P0 | tag `v*.*.*` | gateway `release.yml` | verify → build and push all images to `ghcr.io/<owner>/ume-rag/<service>:X.Y.Z` (+ `latest` for non-pre-releases) → bundle pinned by digest → smoke test (init-deployment, `up --wait`, `/v1/models` = 401 without a key, admin `/` = 200, a Swedish compound query through the API, `pgbackrest check`, parser `/v1/info` from the worker container) → GitHub release with bundle, SBOM, `SHA256SUMS` |
+| `release.yml` | P0 | tag `v*.*.*` | gateway `release.yml` | verify → build and push all images to `ghcr.io/<owner>/ume-rag/<service>:X.Y.Z` (+ `latest` for non-pre-releases) → bundle pinned by digest → smoke test (init-deployment, `up --wait`, `/v1/models` = 401 without a key, admin `/` = 200, a Swedish compound query through the API, `pgbackrest check` in the postgres container, parser `/v1/info` from the worker container) → GitHub release with bundle, SBOM, `SHA256SUMS` |
 | `deploy-e2e.yml` | P2 (with a/b slots) | PR touching `deploy/**`, `images/**`, ServiceDefaults | gateway `deploy-e2e.yml` | rolling update under load behind nginx (`compose-rolling-e2e.sh`), fails on one lost request; kind cluster only once §10 exists |
 | `flake-hunt.yml` | P2 | weekly Mon 03:17, dispatch | copy | 5 runs incl. `Category=Flaky` |
 | `parser-robustness.yml` | P2 | weekly, nightly once stable; dispatch | new | Atheris fuzzing of our own parser code (zip pre-check, sniffing, name sanitiser; the attachment splitter with email), 10 minutes each, and the mutation run against the container (parser design §15.4) |
@@ -695,9 +697,9 @@ then the gateway's six-step *Upgrade procedure* and *Certificate and secret rota
 | Job | Steps | Source of the pattern |
 |---|---|---|
 | deploy-checks | image defaults stay `:latest` dev images; `docker compose … config --quiet` for prod, prod+ingestion, ingestion-remote (P2: prod+rolling) | gateway |
-| images | pull the pinned stock pgvector image and run `deploy/postgres/test.sh` (pgvector version, HNSW build, `pg_stat_statements`, `wal_compression=lz4`, archiving to the pgBackRest sidecar); build the pgBackRest image; build the parser image only when `src/parser/**` changed (else pull the main-branch image) | new |
-| backend | `dotnet build UmeRag.slnx -c Release`; `dotnet test --filter-not-trait "Category=Flaky"` — unit, API (WebApplicationFactory + FakeGateway), **integration against the pinned pgvector image** (`TestPostgres.Image` = `UME_RAG_TEST_POSTGRES_IMAGE`) and Redis (`TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX=mirror.gcr.io/`), `DatabaseRoleTests`, `SwedishTextSearchTests`, the gateway-client ceiling handler test per call site (plan §6); vulnerable-package audit (gateway's `dotnet list … --vulnerable` + python assert) | gateway + new |
-| base-image scan | Trivy 0.67.2 on the chiseled base, the pgvector, pgBackRest, parser and ClamAV images (`HIGH,CRITICAL`, `--ignore-unfixed`) | gateway (extended) |
+| images | build `ume-rag/postgres` from `images/postgres/Dockerfile` and run `deploy/postgres/test.sh` (pgvector version, HNSW build, `pg_stat_statements`, `wal_compression=lz4`, `archive-push` from inside the image, §5.2); build the parser image only when `src/parser/**` changed (else pull the main-branch image) | new |
+| backend | `dotnet build UmeRag.slnx -c Release`; `dotnet test --filter-not-trait "Category=Flaky"` — unit, API (WebApplicationFactory + FakeGateway), **integration against the pinned pgvector image** (`TestPostgres.Image` = `UME_RAG_TEST_POSTGRES_IMAGE`) and, for the P2 Redis implementations of `IRateLimitStore`/`ISharedCache`, Redis (`TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX=mirror.gcr.io/`), `DatabaseRoleTests`, `SwedishTextSearchTests`, the gateway-client ceiling handler test per call site (plan §6); vulnerable-package audit (gateway's `dotnet list … --vulnerable` + python assert) | gateway + new |
+| base-image scan | Trivy 0.67.2 on the chiseled base, the `ume-rag/postgres`, parser and ClamAV images (`HIGH,CRITICAL`, `--ignore-unfixed`) | gateway (extended) |
 | ui | `npm ci`, `lint`, `typecheck`, `test`, `build`, `npm audit --audit-level=low` in `src/admin-ui` and `tests/e2e`; design-system drift report (warning) | gateway |
 | parser | `uv lock --check`, `ruff check`, `pytest` (incl. supervisor tests with a fake converter and `test_offline.py` with network disabled), `export_schema.py` + `git diff --exit-code contracts/` , `pip-audit` | new |
 | contract | `Ume.Rag.ContractTests` start the parser image (Testcontainers) and convert `tests/fixtures/parser/*` with the worker's client; compare structure to golden JSON (tolerant to timings and versions); responses and error fixtures validated against `contracts/parser/v1/` | new |
@@ -732,7 +734,7 @@ p50/p95/p99).
 - **ServiceDefaults copied**: OTel logs (formatted message + scopes), metrics (`AddMeter("Ume.Rag")`, ASP.NET Core,
   HttpClient, runtime) and traces (`AddSource(appName)`, `AddSource("Ume.Rag")`, health filtered, `url.query` removed);
   JSON console outside Development; OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` (`UME_RAG_OTEL_ENDPOINT`) is set.
-  Npgsql and Redis tracing come from the Aspire client integrations. The parser uses
+  Npgsql (and, from P2, Redis) tracing comes from the Aspire client integrations. The parser uses
   `opentelemetry-instrumentation-fastapi` with the same endpoint; the worker propagates `traceparent`, so one trace
   covers fetch → scan → parse → embed. Chat traces continue into the gateway (it already traces incoming requests).
 - **No content in telemetry** (plan §8a): no prompts, chunk text, document titles or URLs of `sensitive` sources;
@@ -753,7 +755,7 @@ p50/p95/p99).
 - **Metrics** (meter `Ume.Rag`): `rag.chat.ttft` (histogram, by `level`, `client_kind`, `outcome`), `rag.retrieval.duration`, `rag.retrieval.coverage` with near-threshold distances (never query text),
   `rag.gateway.request.duration` and `rag.gateway.residency_refusals`, `rag.jobs.queued` / `rag.jobs.age` by class,
   `rag.parse.duration_per_page`, `rag.clamav.detections`, `rag.config.version` per instance, `rag.config.lag` and `rag.config.unconfirmed_seconds` (grace window),
-  `rag.db.pool.in_use` per role, `rag.retention.deleted` by table, `rag.backup.age` and `rag.backup.wal_archive_age` (from `pgbackrest info`, §7.4), `rag.ingest.incomplete_runs` per source, `rag.evaluation.recall_at_10` by collection;
+  `rag.db.pool.in_use` per role, `rag.retention.deleted` by table, `rag.backup.age` (from `pgbackrest info`) and `rag.backup.wal_archive_age` (from `pg_stat_archiver`; §7.4), `rag.ingest.incomplete_runs` per source, `rag.evaluation.recall_at_10` by collection;
   ingestion adds `rag.jobs.*`, `rag.engine.*`, `rag.runs.*`, `rag.index.*`, `rag.scheduler.lag`, `rag.preview.duration`,
   `rag.reconcile.drift` (engine design §17), `rag.connector.*`, `rag.crawl.*`, `rag.render.*`, `rag.clamav.*`,
   `rag.deletion.*` (connectors design §16), `rag.parse.*`, `rag.chunk.*`, `rag.pii.*`, `rag.embed.*`, `rag.evaluation.*`
@@ -788,8 +790,8 @@ p50/p95/p99).
 ## 10. Kubernetes (later; mirrors `docs/kubernetes.md`)
 
 Same shape as the gateway's `deploy/kubernetes`: `base/` (api ×2, admin ×2, worker ×1, migrations Job, probes on
-`/health/*`, PodDisruptionBudgets, restricted Pod Security Standard), `components/datastores` (the pgvector image as a
-StatefulSet with the pgBackRest sidecar; Redis), `components/ingestion` (worker, parser, clamav), `example/`, `create-secrets.sh`,
+`/health/*`, PodDisruptionBudgets, restricted Pod Security Standard), `components/datastores` (`ume-rag/postgres` as a
+StatefulSet, pgBackRest inside; Redis), `components/ingestion` (worker, parser, clamav), `example/`, `create-secrets.sh`,
 `deploy.sh`. What changes against Compose:
 
 | Compose | Kubernetes |
@@ -812,16 +814,16 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (simpli
 | 2 | Projects from §3 (empty endpoints; P2 `Ume.Rag.Tools` and the MCP template not yet), incl. the `Ume.Rag.Retrieval`, `Ume.Rag.Pipelines` and `Ume.Rag.Answering` skeletons, `UmeRag.slnx`, `tests/` projects and `TestKit` | `dotnet test` runs (0 tests is fine) | plan §11.1, knowledge design §17, engine design §20 |
 | 3 | `verify.yml` (backend, ui, deploy-checks, images) | green PR in GitHub | plan §11.1 |
 | 4 | `Ume.Rag.ServiceDefaults` copied; health `/health/live`, `/health/ready`, `/version`, `--health-check` in every service | probe exits 0/1 in a container; OTLP traces visible in the Aspire dashboard | plan §11.2 |
-| 5 | Postgres: pinned stock pgvector image + `deploy/postgres/test.sh`; `SwedishDecompounder` with the `sv_SE` word list and its unit tests; P0 comparison against Postgres `ispell` recorded | `bygglovsansökan` → `bygglov`, `ansökan` passes; image test green; comparison recorded (data-model §14) | plan §11.3, knowledge P0 |
+| 5 | Postgres: `ume-rag/postgres` (pinned stock pgvector image + PGDG `pgbackrest`) + `deploy/postgres/test.sh`; `SwedishDecompounder` with the `sv_SE` word list and its unit tests; P0 comparison against Postgres `ispell` recorded | `bygglovsansökan` → `bygglov`, `ansökan` passes; image test green; comparison recorded (data-model §14) | plan §11.3, knowledge P0 |
 | 6 | `deploy/postgres/init.sql`, `pg_hba.conf`, `app-roles.sql` from data-model §1; `Ume.Rag.MigrationService` with schemas, config outbox, unpartitioned `Jobs` with the partial unique `DedupKey` index, day-partitioned `RunItems`, `rag_partition_maintain()`; role defaults `hnsw.ef_search`/`hnsw.iterative_scan`/`hnsw.max_scan_tuples`; `content.rag_or_query`; `DatabaseRoleTests`, connection caps and `statement_timeout` asserted; `SwedishTextSearchTests` (a part matches through Postgres); pool sizes measured | integration tests green against the pinned image; pool measurement recorded | plan §11.3, knowledge design §17 |
 | 7 | Config-version library (`ConfigVersionMonitor`: LISTEN `rag_config` + 2 s poll, grace window `Config:MaxUnconfirmedSeconds`) and log scope; serialised config writes (`FOR UPDATE` on the version row) | tests: a revoked key is refused as soon as the notification arrives; keyed requests get 503 after the window without confirmation; readiness stays green within it; two concurrent saves cannot both pass a cross-rule | plan §4, §11.2 |
 | 8 | `Ume.Rag.FakeGateway` (1024-dim embeddings, residency headers, per-level dev keys, `400` without a ceiling for `RequireMaxResidency` keys, `403 max_residency_not_met` and 503 `Retry-After` modes, `/v1/models` filtered by the ceiling, rerank fake, catalog); gateway client `DelegatingHandler` that refuses a call without an explicit ceiling or with a key of another level | API tests use it; a wrong-residency answer is aborted; the handler test covers every call site that exists | README P0 (fake gateway), plan §6 |
 | 9 | `dev/keycloak/ume-rag-realm.json` (incl. `rag-reviewer`, admin design §12); OIDC/BFF and claim mapping copied from the gateway admin API (`UME_RAG_OIDC_*`); `OidcClaimMappingTests` copied; audit actor `oid` | sign-in to the empty admin UI as each test user shows the right roles and departments (incl. a department from a group claim) | identity §8 P0 |
 | 10 | Keys in gateway style (`ume-rag-sk-`, HMAC + pepper, prefix, rotation grace) in `config."Keys"` | key auth tests copied from the gateway's `KeyTests` pass | README P0 (keys) |
 | 11 | Admin UI skeleton with the copied design system in Swedish (`labels.ts`/`messages.ts` skeleton), Vite on 5174, `design-system.lock`; admin API write path (`AdminContext`: change + outbox + audit in one transaction), `PermissionMatrix` role tests, org sync against the FakeGateway catalogue, `contracts/admin/v1/error-codes.json` export | lint/typecheck/test/build green; shell looks like the gateway's; a saved change bumps the config version with one audit entry; synced departments visible | admin P0 (admin design §12) |
-| 12 | AppHost (§4.1) with postgres (pinned pgvector image), redis, keycloak, fake-gateway, parser (P0 image with Docling, Tesseract `swe` and models baked, size measured; supervisor with one slot; health + `/v1/info` with `build_hash`; parser design §16), clamav, migrations, api, worker, adminapi, admin-ui; `Start-Dev.ps1`, `Start-E2E.ps1`; seeder | `.\scripts\Start-Dev.ps1` brings every resource to healthy on a clean machine | plan §11.4, parser P0 |
+| 12 | AppHost (§4.1) with postgres (pinned pgvector image), keycloak, fake-gateway, parser (P0 image with Docling, Tesseract `swe` and models baked, size measured; supervisor with one slot; health + `/v1/info` with `build_hash`; parser design §16), clamav, migrations, api, worker, adminapi, admin-ui; `Start-Dev.ps1`, `Start-E2E.ps1`; seeder | `.\scripts\Start-Dev.ps1` brings every resource to healthy on a clean machine | plan §11.4, parser P0 |
 | 13 | Parser contract skeleton: `contracts/parser/v1/*.json`, `ContractTests`, parser CI job | contract job green; `test_offline.py` passes with networking disabled | parser P0 |
-| 14 | Single-host `compose.prod.yaml` + `compose.ingestion.yaml` with networks, zones and limits (§6; one slot), `init-deployment.sh`, `rag-ingestion.slice`, firewall script; **pgBackRest** sidecar with WAL archiving, `restore-pitr.sh`, `backup-uploads.sh`, `escrow-keys.sh` (§7.4) | `docker compose config` passes in CI; **point-in-time restore drill** on the test host documented with achieved RPO/RTO; escrowed keys read back | plan §11.5 |
+| 14 | Single-host `compose.prod.yaml` + `compose.ingestion.yaml` with networks, zones and limits (§6; one slot), `init-deployment.sh`, `rag-ingestion.slice`, firewall script; **pgBackRest** inside the postgres image with WAL archiving, `rag-backup.timer` + `backup-postgres.sh`, `restore-pitr.sh`, `backup-uploads.sh`, `escrow-keys.sh` (§7.4) | `docker compose config` passes in CI; **point-in-time restore drill** on the test host documented with achieved RPO/RTO; escrowed keys read back | plan §11.5 |
 | 15 | `release.yml` + `build-release-bundle.sh`; tag `v0.1.0` | release with digest-pinned bundle and SBOM; smoke test green | plan §10 Releases |
 | 16 | Deploy `v0.1.0` to the test host (8 vCPU / 16 GB) behind the municipal proxy | health green through the proxy | plan §11.5 |
 | 17 | `infra/entra/` + `entra.yml` (plan only on PR); approval package 1 (RAG's own registrations: `ume-rag-admin` with redirect URIs and `rag-*` roles incl. `rag-reviewer`, its own credential, the `open-webui` registration, pilot groups) **submitted** | workflow run awaiting the environment approval; ticket id recorded | plan §11.7, identity §2/§8 |
@@ -874,13 +876,15 @@ See [`../simplification-pass.md`](../simplification-pass.md) (section numbers th
 | `Gateway__ServiceKey`, `Gateway:AttributionMode`, `Gateway:SendResidencyCeiling`, interim keys; shared Entra registration (§6, §7) | Replaced: keys per level and deployable; RAG's own registrations |
 | a/b slots, `deploy-e2e.yml`, `LeaderLeases`, `connection-budget.sh`, `ume_rag_monitor`, Redis leases, `Security__CrawlKeyPepper`; `flake-hunt.yml`, `scale.yml`, Atheris; `OrgSync:MaxAgeHours` (§1, §7) | P2 |
 | `perf.yml`, nightly `evaluation.yml` (§1) | P1, before the pilot |
+| `redis` in the pilot: container, its `data` network membership and limits row, `ConnectionStrings__redis`, Redis password, ACL and certificate; Redis in the default AppHost (§14) | P2 (first multi-host deployment, enabled by `ConnectionStrings:redis`); P1 uses the in-memory `IRateLimitStore`/`ISharedCache` and the Postgres admin session store |
+| `rag-pgbackrest` sidecar, `ume-rag/pgbackrest` image, `PGBACKREST_IMAGE`, `pgbackrest-spool` volume (§14) | Replaced: pgBackRest inside `ume-rag/postgres`, backups from a host timer |
 
 ## 14. To verify (simplification pass)
 
 | Item | Where | Phase | How |
 |---|---|---|---|
 | `pgvector/pgvector` tag and digest for pgvector 0.8.7 on Postgres 17; its user id; `pg_stat_statements` and `wal_compression=lz4` available | §5.1, §5.2, §6.2 | P0 | source + test (`deploy/postgres/test.sh`) |
-| pgBackRest `archive-push` from a sidecar fed by an `archive_command` spool on a shared volume (stock image has no pgBackRest); fallback: one-line derived image with the PGDG `pgbackrest` package | §5.1, §7.4 | P0 | test |
+| `ume-rag/postgres`: the PGDG `pgbackrest` package installs on the stock image's base (PGDG repository already configured there); synchronous `archive-push` from inside the container on a read-only root file system; `docker compose exec postgres pgbackrest backup` from `rag-backup.timer`; restore in a one-off container of the image; how the timer's result reaches `rag.backup.age` | §5.1, §5.2, §7.4, §9 | P0 | test |
 | RPO ≤ 5 min and RTO ≤ 4 h achieved in the point-in-time restore drill on the test host | §7.4 | P0 | measure |
 | Backup target with IT (S3-compatible or share), encryption at rest, and where the escrow lives | §7.1, §7.4 | P0 | ask (IT operations) |
 | FakeGateway rerank endpoint path matching the gateway's planned P2 endpoint | §4.3 | P1 | ask (gateway team) |

@@ -80,7 +80,7 @@ sampling, elicitation or roots requests.
 | Project | Owns (tools) | Notes |
 |---|---|---|
 | `Ume.Rag.Domain` | `ToolPolicy` (pure, §5.2), `ToolBinding`, `ToolCallRequest`/`ToolCallOutcome`, port `IToolHub`, `SkillCatalog` (served version and inclusion mode per assistant), `AgentLimits`, `CostEstimate` (text subset of the gateway's `CostCalculator.Calculate`, `src/Ume.LlmGateway.Domain/Services/CostCalculator.cs:37-61`), `LethalTrifecta` (pure validator), `SwedishCalendar`, `CanonicalJson` (definition hashes) | table-driven unit tests, no I/O |
-| **`Ume.Rag.Tools`** (library) | `InProcessToolHub : IToolHub`, `ToolRegistrySnapshot` (per config version), `McpClientPool`, `ServerBulkhead`, `ClientCredentialsResolver`, `ToolCallExecutor`, `ResultNormaliser`, `DefinitionVerifier` (on connect), `DefinitionDriftMonitor` (leader only), `ToolCallAuditWriter` (BackgroundService, copy of the `UsageWriter` channel pattern, `Pipeline/UsageWriter.cs:16-40`, `:86-178`), `ToolRateLimiter` (Lua, `RedisStores.cs:13-44` pattern), `ToolAuditHmac` | referenced by `Ume.Rag.Api` and `Ume.Rag.AdminApi` (never the worker); becomes the `rag-tools` service in P3 |
+| **`Ume.Rag.Tools`** (library) | `InProcessToolHub : IToolHub`, `ToolRegistrySnapshot` (per config version), `McpClientPool`, `ServerBulkhead`, `ClientCredentialsResolver`, `ToolCallExecutor`, `ResultNormaliser`, `DefinitionVerifier` (on connect), `DefinitionDriftMonitor` (leader only), `ToolCallAuditWriter` (BackgroundService, copy of the `UsageWriter` channel pattern, `Pipeline/UsageWriter.cs:16-40`, `:86-178`), `ToolRateLimiter` (over `IRateLimitStore`; Redis Lua as `RedisStores.cs:13-44` when Redis is configured), `ToolAuditHmac` | referenced by `Ume.Rag.Api` and `Ume.Rag.AdminApi` (never the worker); becomes the `rag-tools` service in P3 |
 | `Ume.Rag.Answering` (admin design §2.1) | `AgentAnswerStrategy`, `AgentPromptBuilder`, `BuiltInTools` (`search_knowledge`, `load_skill`, `read_skill_file`, `current_date`), `ToolCallStreamParser`, `SkillFileCache` | shared by the chat role, the admin test panel and the skill gate |
 | `Ume.Rag.Api` role `chat` | `AgentStatusEmitter` (Open WebUI `status` events, §6.7); hosts the agent strategy and the in-process hub | P2 |
 | `Ume.Rag.Api` role `mcp` | `McpEndpoints` (SDK server, filters), `McpPlatformTools` | early P2; no hub |
@@ -555,8 +555,10 @@ The chat role adds a per-message cap of **48,000** characters over all tool resu
 
 ### 4.9 Rate limits
 
-One Lua script (`INCR` + `EXPIRE`, the gateway's pattern, `RedisStores.cs:13-44`; window 120 s, data-model §11) checks
-three keys per call:
+Three counters per call through `IRateLimitStore` (simplification pass §14; window 120 s, data-model §11). On one host
+the in-memory implementation counts per instance; when `ConnectionStrings:redis` is configured (tools on several hosts,
+the first multi-host deployment) the Redis implementation checks the three keys in one Lua script (`INCR` + `EXPIRE`,
+the gateway's pattern, `RedisStores.cs:13-44`):
 
 | Key | Default | Set by |
 |---|---|---|
@@ -564,9 +566,9 @@ three keys per call:
 | `ume-rag:rl:tooluser:{toolId}:{subjectHash}:{minute}` | `Tools.CallsPerMinutePerUser` 30 | platform admin |
 | `ume-rag:rl:tools:{subjectHash}:{minute}` | `Settings.Tools.CallsPerMinutePerUser` 60 over all tools | platform setting |
 
-`subjectHash` = the same HMAC as chat's per-user key. Over a limit → `outcome = rate_limited`. Redis down → per-instance
-in-memory limits (simplification pass §9), logged once a minute; the per-message call limit (§6.5) still bounds every
-run.
+`subjectHash` = the same HMAC as chat's per-user key. Over a limit → `outcome = rate_limited`. With Redis: Redis down →
+per-instance in-memory limits (simplification pass §9), logged once a minute; the per-message call limit (§6.5) still
+bounds every run.
 
 ### 4.10 Caching (decision: no result cache)
 
@@ -894,9 +896,9 @@ Removed (simplification pass): `ask_assistant` and its MCP conversations move to
 
 ### 7.6 Rate limits
 
-`/mcp` tools count on `ume-rag:rl:mcp:{subjectHash}:{minute}` at `Mcp:CallsPerMinutePerUser` 60. Over limit → `isError`
-"För många anrop, försök igen om en stund." plus HTTP 429 with `Retry-After` when the limit is hit before the JSON-RPC
-body is parsed (identity §6.3).
+`/mcp` tools count on `ume-rag:rl:mcp:{subjectHash}:{minute}` (`IRateLimitStore`, as §4.9) at
+`Mcp:CallsPerMinutePerUser` 60. Over limit → `isError` "För många anrop, försök igen om en stund." plus HTTP 429 with
+`Retry-After` when the limit is hit before the JSON-RPC body is parsed (identity §6.3).
 
 ## 8. Hosted municipal MCP servers
 
@@ -1053,7 +1055,7 @@ histograms; tool ids appear in logs and the audit).
 - **Logs**: `[LoggerMessage]`; drift, credential failure, transport failure, circuit open, limit hit, repeated call,
   normalisation dropped content, audit batch failure.
 - **Telemetry scan test** (chat §17): marker arguments, results and skill bodies never appear in logs, traces, metrics,
-  problem bodies, Redis or `audit`.
+  problem bodies, Redis (when configured) or `audit`.
 - **Dashboard** *Tools*: calls and outcomes per server, p95 duration, circuit state, drift observations, approvals
   pending, agent limit hits, cost per run p95, MCP requests.
 
@@ -1075,7 +1077,7 @@ histograms; tool ids appear in logs and the audit).
   validation, share list (removal refused while linked), `evals.json` round trip.
 - `SwedishCalendar` 2020–2040; `current_date` output.
 
-### 11.2 Integration (Testcontainers: Postgres, Redis, Keycloak; FakeGateway; `FakeMcpServer`)
+### 11.2 Integration (Testcontainers: Postgres, Keycloak, Redis for the multi-host rate limits; FakeGateway; `FakeMcpServer`)
 
 `FakeMcpServer` (in `Ume.Rag.TestKit`, built on the SDK 2.3.0 server) has modes: normal, slow (> timeout), huge
 (> 256 KiB), `isError`, image/audio/resource-link content, changed definition after N lists, added/removed tool,
@@ -1224,7 +1226,7 @@ labelling municipal tool results `trust="municipal"` (§4.8).
 
 ## 16. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §10:
+Per [`../simplification-pass.md`](../simplification-pass.md) §10, §14:
 
 | Removed or deferred | Where it went |
 |---|---|
@@ -1246,3 +1248,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §10:
 | Unknown price "not limited" | Fails closed (§6.5) |
 | Hub-unreachable rule (2 failures drop tools) | Replaced by per-server bulkheads and circuits |
 | Skill gate as a worker `eval` job, the worker on network `mcp` with the tool certificate | The gate runs in `rag-admin`; the worker has no tool access (§3.7) |
+| Tool rate limits always in Redis | `IRateLimitStore`: in process on one host, Redis only when tools run on several hosts (§4.9, §7.6) |

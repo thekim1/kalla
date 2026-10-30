@@ -398,7 +398,7 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
         <p class="vs">Eneo runs 78 database queries per message and reached an 11-second wait for the first word at 64
           users. Open WebUI freezes during document ingestion.</p></div>
       <div class="strength"><h3>Small enough to run ourselves</h3>
-        <p>The pilot is eight small containers on one server, on the same technology and operations model as the LLM
+        <p>The pilot is six small containers on one server, on the same technology and operations model as the LLM
           gateway, which the same team already runs. It grows to 3–5 servers for about ten times the pilot's load.</p>
         <p class="vs">Dify ships 16 containers and about 1,400 settings. Onyx needs 13 containers and at least 10 GB of
           memory.</p></div>
@@ -446,7 +446,7 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
             <td class="us"><span class="pill p-good">per level</span>enforced on every call via the gateway</td>
             <td><span class="pill p-good">per space</span>classification limits models</td><td><span class="pill p-mid">–</span></td><td><span class="pill p-mid">–</span></td><td><span class="pill p-mid">–</span></td><td><span class="pill p-mid">–</span></td></tr>
           <tr><th scope="row">Basic installation</th>
-            <td class="us">8 containers on one 8-core, 16–24 GB server</td>
+            <td class="us">6 containers on one 8-core, 16–24 GB server</td>
             <td>API and worker in one image + Postgres, Redis</td><td>16 containers (47 defined)</td><td>6 containers; 16 GB recommended</td><td>13 containers; ≥ 10 GB memory</td><td>1 container</td></tr>
           <tr><th scope="row">SSO, roles, audit included</th>
             <td class="us"><span class="pill p-good">yes</span></td>

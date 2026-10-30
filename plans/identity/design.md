@@ -14,7 +14,7 @@ copied and changed as stated; "new" means there is no gateway counterpart.
 
 | Area | Gateway source | Here |
 |---|---|---|
-| OIDC code + PKCE BFF, cookie session in Redis, CSRF, 8 h / 12 h sessions | `src/Ume.LlmGateway.AdminApi/AdminAuthentication.cs:71-233`, `AdminSessions.cs`, ADR 002 | §1 (adapt) |
+| OIDC code + PKCE BFF, server-side cookie session, CSRF, 8 h / 12 h sessions | `src/Ume.LlmGateway.AdminApi/AdminAuthentication.cs:71-233`, `AdminSessions.cs`, ADR 002 | §1 (adapt) |
 | Claim mapping (`roles`, `departmentCodes`, `teamCodes`, group → role) | `AdminAuthentication.cs:18-65`, `AdminOptions.cs:107-131` | §1.3 (copy) |
 | Department scope from `departmentCodes` matched on cost-centre code | `AdminContext.cs:81-90`, `docs/identity-and-roles.md:26-31` | §1.3, §2 (copy + feature C) |
 | Virtual keys: HMAC + pepper, cache incl. negative cache, failure buckets, per-address throttle, 24 h grace, audited reveal | `Domain/Services/VirtualKeyHasher.cs`, `Gateway/Pipeline/KeyAuthenticator.cs`, `AuthFailureRecorder.cs`, `AuthFailureThrottle.cs`, `Domain/Services/KeyRotation.cs`, `AdminApi/KeyEndpoints.cs:79-133` | §6 (adapt) |
@@ -33,8 +33,14 @@ copied and changed as stated; "new" means there is no gateway counterpart.
   too, right after it.
 - Calls to `/api/*` without a session answer 401 instead of redirecting (`:111`, `:130-138`); 403 for missing rights
   (`:112`). Sign-out returns the IdP's end-session URL as JSON (`:139-149`).
-- Server-side sessions: the cookie holds only a random id; the ticket is Data-Protection-encrypted in Redis
-  (`AdminSessions.cs:16-54`), key `ume-rag:admin-session:{sessionId}` (data-model §11).
+- Server-side sessions: the cookie holds only a random id; the ticket is Data-Protection-encrypted
+  (`AdminSessions.cs:16-54`) and stored in Postgres, `config."AdminSessions"` (session id, ciphertext, expiry; owned by
+  `rag-admin`), through a Postgres implementation of `IAdminSessionStore` (`Infrastructure/Stores/Stores.cs:147-154`;
+  the gateway has Redis and in-memory ones, `InfrastructureExtensions.cs:110`, `:120`). A read ignores expired rows;
+  the admin's retention step deletes them. The Data Protection key ring is already in Postgres
+  (`config."DataProtectionKeys"`, as the gateway's `PersistKeysToDbContext`, `InfrastructureExtensions.cs:60-63`), so
+  sign-in needs no Redis (simplification pass §14). The gateway's production check that demands Redis with TLS and a
+  restricted ACL user (`:92-100`) applies in our copy only when `ConnectionStrings:redis` is set (P2).
 - Lifetime 8 h, no sliding (`AdminAuthentication.cs:93-94`, `AdminSessions.cs:64`); `/bff/session/extend` moves
   expiry by up to 8 h but never past `Admin:MaxSessionHours` (12) from sign-in (`AdminSessions.cs:87-112`,
   `AdminAuthentication.cs:217-232`, `AdminOptions.cs:19-20`). Roles and departments are read at sign-in, so IdP
@@ -62,6 +68,7 @@ copied and changed as stated; "new" means there is no gateway counterpart.
 | `OidcOptions` (`AdminOptions.cs:107-131`) | same | adapt: default `ClientId` `ume-rag-admin`; new `TenantId`, `RefuseGuests` (§1.4) |
 | `AdminOptions` (`AdminOptions.cs:7-51`) | same | adapt: keep `RequestsPerMinute`, `MaxSessionHours`, `AuditSourceAddress`; drop price/release settings |
 | `AdminTicketStore`, `AdminSessionLimit` (`AdminSessions.cs`) | same | copy; protector purpose `Ume.Rag.AdminApi.Session.v1` |
+| `IAdminSessionStore` (`Infrastructure/Stores/Stores.cs:147-154`), `RedisAdminSessionStore`, `InMemoryAdminSessionStore` | `IAdminSessionStore`, `PostgresAdminSessionStore` | adapt: Postgres implementation over `config."AdminSessions"` (§1.1); the Redis one is not copied |
 | `AdminActor`, `AdminActivityMiddleware`, `AccessDeniedThrottle`, `AdminClientAddresses` (`AdminActivity.cs`) | same | copy |
 | `AdminContext` scope methods (`AdminContext.cs:69-130`) | `AdminContext` | adapt: `IsAdmin` = `rag-platform-admin`; `Departments()` unchanged; teams/keys per RAG roles; actor `oid` (§1.1) |
 | – | `DepartmentMembershipResolver` | new (§2) |
@@ -639,7 +646,9 @@ A `pk` key is public (it is in the page source), so it identifies the widget, no
 - Anonymous session: on the first chat response the API issues `x-rag-session` (32 random bytes, base64url); the
   widget keeps it in `sessionStorage` and sends it back. `SubjectId = anon:` + hex HMAC-SHA256 of it with a key derived
   from the pepper (`HKDF(pepper, "widget-session")`), so the stored id cannot be turned back into the token.
-- Rate limits per key (`ume-rag:rl:req:{keyId}:{minute}`) and per client address (`ume-rag:rl:ip:{ipHash}:{minute}`, data-model §11).
+- Rate limits per key and per client address through `IRateLimitStore`: in process on one host; with
+  `ConnectionStrings:redis` (several hosts) `ume-rag:rl:req:{keyId}:{minute}` and `ume-rag:rl:ip:{ipHash}:{minute}`
+  (data-model §11).
   `Origin` can be forged by non-browser clients, so the per-address limit and the `public`-only rule are the real
   protection.
 
@@ -948,7 +957,7 @@ membership of the pilot groups is maintained by IT, not by IaC.
 | Gateway test | Ours | Notes |
 |---|---|---|
 | `OidcClaimMappingTests` (`tests/Ume.LlmGateway.AdminApi.Tests/OidcClaimMappingTests.cs:13`, `:22`, `:31`, `:43`, `:56`) | `Ume.Rag.AdminApi.Tests/OidcClaimMappingTests` | role values `rag-*` |
-| `AdminSessionTests` (`AdminSessionTests.cs:38`, `:57`, `:73`, `:97`) | same | ticket store, 12 h limit |
+| `AdminSessionTests` (`AdminSessionTests.cs:38`, `:57`, `:73`, `:97`) | same | ticket store, 12 h limit; plus a `PostgresAdminSessionStore` test (expired row not returned, sign-out deletes the row) |
 | `AuthFailureThrottleTests` (`tests/Ume.LlmGateway.Gateway.Tests/AuthFailureThrottleTests.cs:20`, `:39`, `:54`) | `Ume.Rag.Api.Tests` | unchanged |
 | Gateway `SecurityEventTests` (`SecurityEventTests.cs:18`, `:40`, `:66`, `:83`, `:109`) | `Ume.Rag.Api.Tests/AuthFailureTests` | buckets, no presented value, overflow, address truncation |
 | `DataApiKeyTests` (`tests/Ume.LlmGateway.DataApi.Tests/DataApiKeyTests.cs:13`, `:38`, `:59`) | `Ume.Rag.Api.Tests/KeyAndTokenTests` | a token can never claim key permissions and the reverse |
@@ -1053,7 +1062,7 @@ The step 3 changes were applied in the step 3 review commit (2026-10-29). Needed
 
 ## 17. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §1, §6, §7 and §9:
+Per [`../simplification-pass.md`](../simplification-pass.md) §1, §6, §7, §9 and §14:
 
 | Removed or deferred | Where it went |
 |---|---|
@@ -1068,3 +1077,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §1, §6, §7 and �
 | SIEM alert on any 5105; admin audit action `gate.override` | removed (§10) |
 | `owui-tasks`, `X-Rag-Owui-Task`, `Clients.TaskModel`/`TaskModelResidency` | removed with Open WebUI task generation (§4.1, §5.1) |
 | Guest rule "`idp` ≠ issuer" | one rule in both systems (§1.7) |
+| Admin sessions in Redis (`ume-rag:admin-session:{sessionId}`) | Postgres `config."AdminSessions"` (§1.1); no Redis in P1 |

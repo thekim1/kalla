@@ -345,3 +345,28 @@ is routed dynamically (HTML extraction in the worker; PDF fast path, Docling or 
   line and child-link list, with breadcrumb "Kommun och politik › Kommunens organisation › Förvaltningar och
   verksamheter › Teknik och fastighet" (path to verify on the live page) and date 2026-01-15; a fixture set of ≈ 20
   saved umea.se pages (HTML and PDF) is checked in as a regression corpus.
+
+## 14. Fewer containers in the pilot (user, 2026-10-30)
+
+The user asked whether the pilot's eight long-running containers could be fewer. Decided: **six** (`rag-api`,
+`rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`, `postgres`), plus the one-shot `rag-migrate`.
+
+- **No Redis in P1.** In the single-slot pilot Redis held only admin sessions, rate limits and the query-embedding
+  cache. Replacements:
+  - **Admin sessions**: the BFF's ticket store (and Data Protection key ring, if the gateway keeps it in Redis) in
+    Postgres, owned by `rag-admin`, expired rows deleted by the admin's retention step.
+  - **Rate limits**: in-process per instance (exact with one slot).
+  - **Query-embedding cache**: in-process memory cache with the same HMAC key, value format and size cap.
+  - Each sits behind a small seam (`IRateLimitStore`, `ISharedCache`) with an in-memory implementation and a Redis
+    implementation; **Redis returns with the first multi-host deployment (P2)**, where rate limits, crawl and
+    embedding in-flight leases and the cache must be shared. A deployment enables it by configuring
+    `ConnectionStrings:redis`; without it, the in-memory implementations are used.
+- **pgBackRest inside the Postgres image.** `ume-rag/postgres` = the pinned stock `pgvector/pgvector` image plus the
+  PGDG `pgbackrest` package and its configuration (a derived image of a few lines, tested in CI);
+  `archive_command = pgbackrest archive-push %p`; scheduled backups run `pgbackrest backup` inside the `postgres`
+  container from a host timer (`docker compose exec`), so there is no long-running sidecar and no WAL spool volume.
+  The `postgres` container joins the `backup` network, whose firewall allows only the backup target.
+- Considered and rejected: merging `rag-api` and `rag-admin` (an admin deploy would restart chat, and the nightly
+  answer judge and test panel would share CPU with live chat); merging ClamAV into the parser (ClamAV needs egress for
+  signature updates, the parser must have none); merging the worker into `rag-api` (ingestion must never compete with
+  chat).

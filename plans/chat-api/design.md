@@ -41,7 +41,7 @@ package source had to be checked for this step.
 | 14 | Writer | Bounded channel (bytes and items), batches of ≤ 200 turns / 250 ms, encryption in the writer, one transaction per batch, no journal (no content outside the encrypted tables); loss bound stated (§12) |
 | 15 | Feedback | `POST /v1/feedback` + a 15-minute import of Open WebUI ratings via its admin API, mapped by chat id and the forwarded message id; comments encrypted under the message's bucket key; department roles see ratings in P1, comments only `rag-reviewer` and `rag-department-admin` (§14, answered 4, 7; admin design §3) |
 | 16 | Attachments C1 | P1: refused with `attachments_not_supported`, uploads off in Open WebUI. P2: chat-scoped storage in the `chat` schema under the chat bucket keys, parsed by the worker, written back through the API, searched only within that conversation (§15, answered 5–6) |
-| 17 | Latency | Chat overhead < 10 ms p95 excluding condense and retrieval; 0 Postgres statements and ≤ 1 Redis command of our own per message; measured by benchmarks, interaction audit, a `benchmarks/compare`-style run and the R1 test (§16) |
+| 17 | Latency | Chat overhead < 10 ms p95 excluding condense and retrieval; 0 Postgres statements and 0 Redis commands of our own per message (P1 has no Redis); measured by benchmarks, interaction audit, a `benchmarks/compare`-style run and the R1 test (§16) |
 
 ## 2. Placement and interfaces
 
@@ -228,7 +228,7 @@ As knowledge §3.7: `AddOpenApi("chat", …)` with typed results, `WithTags("Cha
 | 1 | Authenticate | identity §6.2–§6.3 (key cache, throttle), Open WebUI JWT (§5.2 there), token (§7 there) → `RagPrincipal` | 401/429 |
 | 2 | Parse body | §3.2; content-part refusal before anything else is done | 400/413 |
 | 3 | Message kind | `MessageKind`: conversational (no content words, §6.2) → steps 9–11 skipped | – |
-| 4 | Rate limit | `ume-rag:rl:user:{subjectHash}:{minute}` via one Lua `INCR`+`EXPIRE` script (gateway pattern, `RateWindowSeconds` 120, data-model §11); `Settings.Chat.MessagesPerMinutePerUser` **20**; Redis down → not applied, logged once a minute (the gateway key limit stays the overall cap) | 429 |
+| 4 | Rate limit | `IRateLimitStore`, per user (`subjectHash`) and minute, `RateWindowSeconds` 120 (gateway pattern); `Settings.Chat.MessagesPerMinutePerUser` **20**. P1: in process per instance (exact with one slot). From the first multi-host deployment (P2, `ConnectionStrings:redis` set): `ume-rag:rl:user:{subjectHash}:{minute}` via one Lua `INCR`+`EXPIRE` script (data-model §11); Redis down → the per-instance limit, logged once a minute (simplification pass §9) | 429 |
 | 5 | Policy | `IAccessPolicy.Decide(who, assistant, Chat)` at the current snapshot, within the config grace window (identity §4.3 steps 0–11) | 404 `model_not_found` (+5002/5005), 503 |
 | 6 | Conversation key | §11.1: Open WebUI chat id or verified issued id or new id; **no SQL** | 404 |
 | 7 | Effective level | history-keeping client (`Clients.StoresHistory`): max(assistant level, client ceiling) on **every** turn; else the assistant's level (§8.2); ceiling header and key from it | – |
@@ -241,8 +241,8 @@ As knowledge §3.7: `AddOpenApi("chat", …)` with typed results, `WithTags("Cha
 | 14 | Stream | §9: filter, renumber, emit citations, write, flush per event | §9.6 |
 | 15 | Finish | `MarkCited(result, citedRanks)` with only the cited ranks (§9.5); `ChatTurn` → `ConversationWriter.TryEnqueue` (§12); metrics | – |
 
-Steps 1–8 and 12 run in memory against one config snapshot; step 4 is the only Redis command of the chat role (the
-embedding cache in step 10 is the knowledge role's). The order puts every refusal before any model call and every
+Steps 1–8 and 12 run in memory against one config snapshot, step 4 included in P1 (from P2 it is the only Redis
+command of the chat role; the embedding cache in step 10 is the knowledge role's). The order puts every refusal before any model call and every
 model call before any byte to the client.
 
 ### 4.2 Open WebUI task requests (title, tags, follow-ups)
@@ -863,7 +863,7 @@ typed text: accepted for the pilot, since its content stays within the user's ow
 | Stage | Target p95 | Notes |
 |---|---|---|
 | Authentication, parse, message kind, policy, conversation key, level, language | ≤ 2 ms | memory only; body parse of a 50 KB Open WebUI request ≈ 0.3 ms |
-| Rate limit | ≤ 1 ms | 1 Redis round trip |
+| Rate limit | ≤ 1 ms | in process (P2: 1 Redis round trip) |
 | Prompt building, budget, serialisation | ≤ 2 ms | ≤ 8,000 source tokens + history |
 | Gateway request write → our first byte after the gateway's first event | ≤ 2 ms | header checks, first chunk rewrite, flush |
 | **Chat overhead** | **< 10 ms** | everything except condense, retrieval and the gateway's own TTFT |
@@ -883,8 +883,8 @@ retrieval) + (time our first content byte is flushed − time the gateway's firs
    (`docs/performance-improvement-plan.md:94-101`).
 2. **Interaction audit** (copy of `benchmarks/Ume.LlmGateway.Benchmarks/InteractionAudit.cs:11-40`, Npgsql and Redis
    activities under the request activity): a warm chat message issues **0 Postgres statements from the chat role**
-   (the knowledge role's 3: K, V, H+D), **1 Redis command** of the chat role (rate limit) plus ≤ 1 for the embedding
-   cache, **0 config queries**; the writer's statements counted separately as background (the gateway reports 0.7 per
+   (the knowledge role's 3: K, V, H+D), **0 Redis commands** (P2 with Redis: 1 for the rate limit plus ≤ 1 for the
+   embedding cache), **0 config queries**; the writer's statements counted separately as background (the gateway reports 0.7 per
    message, `docs/performance.md:308`). Asserted in CI.
 3. **Overhead run** in the style of `benchmarks/compare` (`benchmarks/compare/README.md:1-15`, k6 `k6/chat.js`):
    Open WebUI-shaped requests against `rag-api` with FakeGateway (`FirstTokenMs=400`) and a fixture collection;
@@ -927,7 +927,7 @@ totals).
   failure (reason), stream interrupted, writer batch failure, dropped turn (message id), import run summary. Scopes: `ConfigVersion`, `AssistantId`, `ClientId`, `Classification`, `ConversationId` hash
   (repo-and-deployment §9), `MessageId`.
 - **Telemetry scan test**: a marker question, marker answer (FakeGateway) and marker comment never appear in logs,
-  traces, metrics, problem bodies or Redis.
+  traces, metrics, problem bodies or cache keys.
 - **Security events**: 5001 (credentials, JWT), 5002 (denials incl. `conversation_not_owned`), 5003 (residency on
   answer or condense call), 5004, 5005, new **5011** `rag.gateway.delegation_missing` (Warning; `Step`,
   `AssistantId`, `TeamId`, `GatewayRequestId`); SIEM alerts on any 5003 or 5011 from the chat role.
@@ -961,7 +961,7 @@ totals).
 - Writer: batching by time and size, byte cap, enqueue timeout, poison split; messages of one turn in different
   expiry months use their own bucket keys.
 
-### 18.2 Integration (Testcontainers: our Postgres, Redis, Keycloak; FakeGateway)
+### 18.2 Integration (Testcontainers: our Postgres, Keycloak; FakeGateway; Redis from P2)
 
 - Full turn persisted: conversation upsert, `Seq`, ciphertext decrypts with the bucket key and fails with another
   conversation's AAD, `MessageSources` numbers, daily totals; mode `none` writes no ciphertext; `session` expiry.
@@ -1132,7 +1132,7 @@ worker runs only retrieval evaluation and references neither `Ume.Rag.Answering`
 
 ## 23. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8, §9:
+Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8, §9, §14:
 
 | Item | Where it went |
 |---|---|
@@ -1149,3 +1149,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8,
 | `MarkCited` with every chunk of every cited document | only the cited ranks (§9.5) |
 | Gateway headers timeout 60 s | 15 s, proposed (§8.3) |
 | Strict fail-closed on an unconfirmed config version | grace window (§4.1) |
+| Redis rate limit per user in P1 ("not applied" when Redis is down) | P2, first multi-host deployment; P1 limits in process behind `IRateLimitStore`, P2 falls back to per-instance limits (§4.1 step 4, simplification pass §9, §14) |

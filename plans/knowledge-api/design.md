@@ -40,7 +40,7 @@ materialised CTE); NuGet **`Pgvector` 0.3.2** (depends on `Npgsql` ≥ 8.0.5; co
 | 7 | Exact vs HNSW | Scopes of ≤ 10,000 chunks are searched **exactly** (B-tree on the scalar `CollectionId` + sort), larger ones through HNSW with `relaxed_order` iterative scan unless the scope is too selective; HNSW settings are role defaults, no per-query `SET`; same rule in the evaluator (§6.4) |
 | 8 | Fusion | RRF k = 60, weights from `RetrievalSettings` (default 1.0 / 1.0); multi-collection queries use the platform defaults unless all collections agree; deterministic tie-breaks (§6.5) |
 | 9 | Embedding failure | `hybrid` degrades to keyword-only with `degraded: "embedding_unavailable"` and coverage `unknown`; `vector` answers 503; the evaluator never degrades (§5.5) |
-| 10 | Embedding cache | In-process L1 for every level, Redis L2 only for `public`/`internal`; key is an **HMAC** of the normalised query, 5 min (§5.4) |
+| 10 | Embedding cache | In-process cache for every level (P1 has no Redis); from the first multi-host deployment (P2) a shared Redis L2 only for `public`/`internal` behind `ISharedCache`; key is an **HMAC** of the normalised query, 5 min (§5.4) |
 | 11 | Coverage | `low` only when the vector side is weak (best cosine distance above every searched collection's `coverageMaxDistance`, default 0.50) **and** the keyword side is weak (no candidate at or above `coverageMinKeywordScore`); keyword-only → `unknown`; outcomes and near-threshold margins are metrics for calibration, never query text (§7) |
 | 12 | Diversity | Dedup `(DocumentId, TextHash)`; documents of different sources with the same identity (URL) collapse to one; **max 3 chunks per document** (configurable 1–10) (§8) |
 | 13 | Section expansion | From **neighbouring chunks in Postgres** (`ChunkSetId`, `Ordinal`, heading path), not from blobs; overlap stripped by a new `Chunks.OverlapChars`; ≤ 1,500 tokens per section, ≤ 8,000 per response; hits in one section merged (§9) |
@@ -59,7 +59,7 @@ materialised CTE); NuGet **`Pgvector` 0.3.2** (depends on `Npgsql` ≥ 8.0.5; co
 |---|---|---|
 | `Ume.Rag.Domain` | port `IRetriever`, request/result records, `RetrievalMode`, `ExpandMode`, `Classification`, `IAccessPolicy` (identity §4.2) | Chat role, knowledge role, MCP role (P2) |
 | `Ume.Rag.Retrieval` (new in repo-and-deployment §1) | `RetrievalEngine` (candidates → fusion → dedup → diversity → coverage), `ISearchIndex` + `PostgresSearchIndex` (statements of §6), `IReranker` (§6.7), `RetrievalSettingsResolver`, `QueryNormalizer`, `SwedishDecompounder` (query side, or in `Ume.Rag.Text`, platform §3), `RrfFusion`, `ResultDiversifier`, `CoverageEvaluator`, `ScopeSizeCache` | `Ume.Rag.Api` (knowledge role), `Ume.Rag.Worker` (evaluator, processing §13.5), `Ume.Rag.AdminApi` (test panel) |
-| `Ume.Rag.Infrastructure` | `IGatewayClient` (shared with the worker, 6a §7.7) incl. `EmbedQueryAsync` and the residency-ceiling `DelegatingHandler`, `QueryEmbeddingCache`, `IBlobStore`, `IKeyProvider`, config snapshot, `SecurityEvents`, `RedisKeys` | all |
+| `Ume.Rag.Infrastructure` | `IGatewayClient` (shared with the worker, 6a §7.7) incl. `EmbedQueryAsync` and the residency-ceiling `DelegatingHandler`, `QueryEmbeddingCache`, `IBlobStore`, `IKeyProvider`, config snapshot, `SecurityEvents`, `ISharedCache` and `IRateLimitStore` (in-memory implementations; Redis implementations and `RedisKeys` used when `ConnectionStrings:redis` is set, P2) | all |
 | `Ume.Rag.Answering` (admin design §2.1) | `KnowledgeService : IRetriever` core without HTTP (policy within a given scope, collection resolution, embedding, hydration, sections, citations, statistics) | `Ume.Rag.Api` (knowledge role), `Ume.Rag.AdminApi` (test panel) |
 | `Ume.Rag.Api` (role `knowledge`) | hosts `KnowledgeService`; `DownloadGrants`, endpoint group `/v1` knowledge routes, OpenAPI document `knowledge` | Chat role in process; HTTP callers |
 
@@ -282,7 +282,7 @@ the page itself; serving crawled HTML from our origin would also be an XSS vecto
 | `Content-Disposition` | `inline` for `application/pdf`, `image/png`, `image/jpeg`; `attachment` for everything else (Office, email, HTML, text); `filename*=UTF-8''…` from the visible `DisplayName` (§10.2), else `dokument-{id:N}.{ext}` |
 | Other headers | `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` for non-PDF, `Cache-Control: private, no-store`, `ETag` = hex `ContentHash`, `Content-Length` = plaintext length computed from the blob length and segment count |
 | Ranges | **not supported in P1** (`Accept-Ranges: none`; uploads ≤ 50 MB, connectors §9.1). The segment format allows ranges later (seek to segment ⌊offset / 64 KiB⌋) |
-| Limits | one stream per request, `Knowledge:DownloadsPerMinutePerAddress` 120 (Redis `ume-rag:rl:dl:{ipHash}:{minute}`, data-model §11; not the P2 widget key `rl:ip`) |
+| Limits | one stream per request, `Knowledge:DownloadsPerMinutePerAddress` 120 through `IRateLimitStore` (in process per instance in P1; from P2 Redis `ume-rag:rl:dl:{ipHash}:{minute}`, data-model §11; not the P2 widget key `rl:ip`) |
 | Errors | as §3.6; after the first byte only a reset is possible |
 
 ### 3.6 Errors (problem details)
@@ -425,7 +425,7 @@ path, binding the download to the user.
   through `content.rag_count_retrievals(...)` (`SECURITY DEFINER`, data-model §12.3), off the request path; a crash
   loses at most 30 s of counts. Keyed by `(DocumentId, TextHash)`, not chunk id, so counts survive
   re-chunking (processing §6.5; data-model change §18).
-- **Query text is never stored or logged**: not in Postgres, logs, traces, metrics, problem details or Redis keys
+- **Query text is never stored or logged**: not in Postgres, logs, traces, metrics, problem details or cache keys
   (the cache key is an HMAC, §5.4). A telemetry-scan test (repo-and-deployment §9) runs a retrieval with a marker
   query and asserts the marker appears nowhere.
 
@@ -485,15 +485,19 @@ traceparent: …
 | Layer | Levels | Key | Value | TTL, size |
 |---|---|---|---|---|
 | L1 in process (`MemoryCache` with `SizeLimit`, as `KeyAuthenticator.cs:23`) | all | `(profileId, queryMac)` | `float[1024]` | 5 min; 2,000 entries (≈ 8 MB) |
-| L2 Redis | `public`, `internal` effective level only (data-model §12.14) | `ume-rag:qemb:{profileId:N}:{queryMac}` | 1 version byte ‖ 1024 little-endian float32 (4,097 B) | 5 min (`SET … EX 300`) |
+| L2 `ISharedCache` | `public`, `internal` effective level only (data-model §12.14) | `ume-rag:qemb:{profileId:N}:{queryMac}` | 1 version byte ‖ 1024 little-endian float32 (4,097 B) | 5 min (Redis: `SET … EX 300`); P2 multi-host only |
 
 `queryMac` = hex of the first 16 bytes of `HMAC-SHA256(Security:CacheKeyPepper, normalised query)`: a plain SHA-256
 of a short question is reversible by dictionary, the HMAC is not without the pepper (a secret file like the key pepper,
 identity §6.1). `RedisKeys.QueryEmbedding(Guid profileId, string queryMac)` is added to the copied `RedisKeys` class
 (gateway `src/Ume.LlmGateway.Infrastructure/Stores/RedisKeys.cs`, one method per key with its lifetime in the doc
-comment). A Redis failure is a miss (logged once a minute), never an error. The evaluator keeps its own durable cache
-(`EmbeddingCache` by question hash, processing §13.5). The admin test panel uses L1 only, with a per-process random HMAC
-key instead of the pepper (admin design §4.9), so only `rag-api` holds `Security__CacheKeyPepper`.
+comment). L2 goes through `ISharedCache`: P1 has no Redis (single slot, simplification pass §14), so P1 registers the
+no-op implementation (every L2 read is a miss, every write is dropped) and L1 alone is the cache; a second in-memory
+copy would only duplicate L1. From the first multi-host deployment (P2) `ConnectionStrings:redis` selects
+the Redis implementation, which shares hits across instances; a Redis failure is then a miss (logged once a minute),
+never an error. The evaluator keeps its own durable cache (`EmbeddingCache` by question hash, processing §13.5). The
+admin test panel uses L1 only, with a per-process random HMAC key instead of the pepper (admin design §4.9), so only
+`rag-api` holds `Security__CacheKeyPepper`.
 
 ### 5.5 Failure behaviour (decision)
 
@@ -835,7 +839,7 @@ at the cited page; label: title, heading path tail, "s. 12–13", modified date.
 | Stage | Target p95 (100k chunks, pilot host) | Notes |
 |---|---|---|
 | Authentication, policy, scope, settings | ≤ 1 ms | memory only, at the config version |
-| Query embedding, cache hit | ≤ 2 ms | L1 ≈ 0, Redis ≈ 0.5–1 ms |
+| Query embedding, cache hit | ≤ 2 ms | in process ≈ 0 (P2 Redis L2 ≈ 0.5–1 ms) |
 | Query embedding, miss | ≤ 60 ms | gateway time for an embeddings request ≈ 1–2.3 ms (`docs/performance.md:239`, 16 inputs) + BGE-M3 on-prem (*to measure*, §20) |
 | K keyword statement | ≤ 30 ms | parallel to the embedding, normally off the critical path |
 | V vector statement | ≤ 15 ms HNSW, ≤ 25 ms exact at 10,000 chunks | – |
@@ -850,11 +854,11 @@ through the gateway; retrieval should stay below ~15 % of it.
 gateway's `PipelineBenchmarks`: fusion + diversity over 200 candidates, section assembly, citations and grants;
 allocations are the regression gate, `docs/performance-improvement-plan.md:94-101`); an **interaction audit** (copy of
 `benchmarks/Ume.LlmGateway.Benchmarks/InteractionAudit.cs:11-16`): a warm retrieval issues exactly **3 Postgres round
-trips** (K, V, H+D), **≤ 1 Redis command** (L2 GET on an L1 miss) and 0 config queries; a **retrieval load test** (k6
-from `benchmarks/compare/k6`, synthetic 100k-chunk corpus embedded by FakeGateway with one 3,000-chunk and one
-60,000-chunk collection, p50/p95 per stage from `rag.retrieval.stage.duration`), which decides `exactScanMaxChunks`
-and the frequent-term guard (§20); and the **R1 release test** (repo-and-deployment §8.3): retrieval p95 during the
-crawl + OCR phase ≤ 1.2 × idle.
+trips** (K, V, H+D), **0 Redis commands** (P2 with Redis: ≤ 1, the L2 GET on an L1 miss) and 0 config queries; a
+**retrieval load test** (k6 from `benchmarks/compare/k6`, synthetic 100k-chunk corpus embedded by FakeGateway with one
+3,000-chunk and one 60,000-chunk collection, p50/p95 per stage from `rag.retrieval.stage.duration`), which decides
+`exactScanMaxChunks` and the frequent-term guard (§20); and the **R1 release test** (repo-and-deployment §8.3):
+retrieval p95 during the crawl + OCR phase ≤ 1.2 × idle.
 
 ## 12. Caching by config version
 
@@ -1004,7 +1008,7 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 - `DownloadGrants`: round trip, tamper of every field, expiry, unknown `kid`, rotation overlap, constant-time compare.
 - Cache keys: HMAC derivation, `sensitive` never yields an L2 key.
 
-### 16.2 Integration (`Ume.Rag.IntegrationTests`, Testcontainers: the stock pgvector image, Redis, Keycloak)
+### 16.2 Integration (`Ume.Rag.IntegrationTests`, Testcontainers: the stock pgvector image, Keycloak; Redis from P2)
 
 - Statements: every variant prepared; `EXPLAIN` under `SET plan_cache_mode = force_generic_plan` shows the HNSW partial
   index for approximate V, the B-tree `IX_Chunks_CollectionId` and no HNSW for exact V, the partial GIN index for K;
@@ -1031,9 +1035,10 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
   `Content-Disposition`/`nosniff`/CSP headers; uploaded HTML served as attachment; `url` document → 404
   `content_not_served`; grant re-check after unlinking the collection, revoking the key or disabling the client → 404.
 - Failure paths: `fake-fail-500`, `fake-slow` (timeout), `fake-wrong-residency` → degraded hybrid / 503 vector, events
-  5003; circuit opens after 5 failures; Redis down → still answers; config unconfirmed → 503 + 5004.
-- Redis: after `sensitive` retrievals no `ume-rag:qemb:*` key exists; after `internal` ones it does.
-- Telemetry scan: marker query never appears in captured logs, traces, metrics, problem bodies or Redis keys.
+  5003; circuit opens after 5 failures; config unconfirmed → 503 + 5004.
+- P2 (with `ConnectionStrings:redis`): Redis down → still answers; after `sensitive` retrievals no `ume-rag:qemb:*`
+  key exists, after `internal` ones it does.
+- Telemetry scan: marker query never appears in captured logs, traces, metrics, problem bodies or cache keys.
 
 ### 16.4 Evaluation in CI
 
@@ -1046,7 +1051,7 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 
 ### 16.5 Performance
 
-§11 "Measured by"; the interaction-audit counts (3 Postgres round trips, ≤ 1 Redis command, 0 config queries) are an
+§11 "Measured by"; the interaction-audit counts (3 Postgres round trips, 0 Redis commands, 0 config queries) are an
 assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 
 ### 16.6 Security and negative tests
@@ -1082,7 +1087,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | `platform/data-model.md` §1.2 grants | api: S on `content."Documents"` (incl. `SourceId`, `DisplayName`), `ChunkSets`, `Chunks`, S on `config."Sources"` (columns `Id`, `CollectionId`, `Type`, `Classification`, `State`, `DeletedAt`) |
 | `platform/data-model.md` §2.2 `RetrievalStats` | key (`Day`, `DocumentId`, `TextHash`, `CollectionId`) + `Classification`, not `ChunkId`; `content.rag_count_retrievals` takes those arrays |
 | `platform/data-model.md` §2.1 | `Collections.RetrievalSettings` schema of §12.1 (no `efSearch`; adds `coverageMinKeywordScore`); `Settings.Retrieval` defaults and platform-only values of §12.1 (P2: `rerankCandidates`, `coverageMinRerankScore`); `Assistants.QuerySteps.retrieval.rerank` (P2); P2 table `CollectionAudiences` (`CollectionId`, `Kind` `client`/`department`/`group`, `SubjectId`, `GroupValue`, same checks as `AssistantAudiences`) |
-| `platform/data-model.md` §11, §12.14, §12.15 | Redis key `ume-rag:qemb:{profileId:N}:{queryMac}` with HMAC (`Security:CacheKeyPepper`) and the value format; L1 in process for all levels; §12.15 resolved by §7 here |
+| `platform/data-model.md` §11, §12.14, §12.15 | P2 Redis key `ume-rag:qemb:{profileId:N}:{queryMac}` with HMAC (`Security:CacheKeyPepper`) and the value format; in process for all levels (P1: the only cache); §12.15 resolved by §7 here |
 | `ingestion-worker/design-processing.md` §6.5 | the chunker writes `OverlapChars` (0 for the first chunk of a section, tables, code) |
 | `ingestion-worker/design-processing.md` §13.5 | the evaluator calls the library with a `Collections` scope over the full collection (no `ChunkSets` scope); same dedup, identity-group collapse and per-document cap (k = 10); P2: compares with and without `IReranker` |
 | `identity/design.md` §3 | `CredentialKind.DownloadGrant`; caller row "Browser following a citation link — grant — subject none — client from the grant — P1" |
@@ -1157,7 +1162,7 @@ None.
 
 ## 21. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §5, §6, §8–§10:
+Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §5, §6, §8–§10, §14:
 
 | Item | Where it went |
 |---|---|
@@ -1177,3 +1182,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §5, §6,
 | Interim team linked key for query embeddings | `OnPrem`-only delegating key with explicit ceiling (§5.2) |
 | Attachments as child documents (`ParentDocumentId`, `attachment` identity kind, `parent` citation field, "Bilaga *name* i *subject*", separate caps) | P2 with email (Z1, §10.3) |
 | `DocumentKeys` per-document blob keys | data key in the blob header (data-model §7, §3.5) |
+| Redis L2 query-embedding cache and Redis download rate limit in P1 | P2, first multi-host deployment; P1 uses the in-memory `ISharedCache` and `IRateLimitStore` (simplification pass §14; §5.4, §3.5) |

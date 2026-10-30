@@ -5,7 +5,9 @@
 > (`LeaderLeases`, batched dequeue, debounced `NOTIFY`, Redis crawl and embedding leases, connection-budget script,
 > `ume_rag_monitor`, a/b slots) arrive with the first multi-host deployment (P2); `Jobs` is unpartitioned; the NER lane
 > and Hunspell in Postgres are gone; chunks carry a scalar `CollectionId`; every PDF goes to the parser; umea.se
-> numbers (§13.1 there) replace estimates where they apply.
+> numbers (§13.1 there) replace estimates where they apply. The pilot runs six long-running containers (§14 there):
+> no Redis in P1 (rate limits and the query-embedding cache in process, admin sessions in Postgres) and pgBackRest
+> inside the Postgres image; Redis returns on host D with the first multi-host deployment.
 
 Cross-cutting pass over the Ume.Rag design (after the consistency pass, [`consistency-pass.md`](consistency-pass.md)):
 good parallelism now, and the ability to scale the crawler, parser, embedding and data plane out over several hosts
@@ -51,7 +53,7 @@ The simplification pass then moved the multi-host mechanisms to P2. The other do
 |---|---|---|
 | 1 | Scale target | ≈ 10× the pilot on 3–5 hosts (answered 1): ~100,000 pages/hour **checked**, downstream sized for 10–20k pages/hour **changed** sustained and bulk loads throttled to the embedding budget; 5–10M chunks; 20+ departments; several hundred concurrent chat users (≈ 20 messages/s peak). Beyond that only behind §6 triggers |
 | 2 | Binding resources | Per-host politeness binds crawling; the gateway's on-prem **BGE-M3** binds embedding (bulk); the **parser** binds documents (every PDF goes through it, and PDFs are the larger half of umea.se: 7,959 PDF vs 6,159 HTML URLs) and OCR; names (NER) run only for gated documents; Postgres binds only through HNSW memory and vacuum; chat is bound by the gateway's answer models, not by us (§2) |
-| 3 | Scale-out shape | Pilot: one host, one slot. From P2: Compose per host, roles per host (answered 2): same images, `Worker:Classes` + deployment settings per instance, one Postgres (+ streaming standby), one Redis, one object store; routed LAN with TLS and host firewalls, no overlay network (§5) |
+| 3 | Scale-out shape | Pilot: one host, one slot, six long-running containers, no Redis. From P2: Compose per host, roles per host (answered 2): same images, `Worker:Classes` + deployment settings per instance, one Postgres (+ streaming standby), one Redis, one object store; routed LAN with TLS and host firewalls, no overlay network (§5) |
 | 4 | Per-process vs fleet settings | Per-instance concurrency is **`Worker:Concurrency:<class>`** (deployment, per the settings rule); `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps (§3.4) |
 | 5 | Connections | Small pools (`rag-api` 12, `rag-admin` 5, `rag-worker` 10, `max_connections` 100; starting values measured in P0) and an explicit budget per role × instances (§3.1); **no PgBouncer** up to 5 hosts, but code is **pooler-safe from P0** (no session state; LISTEN on its own connection string); budget script from P2; PgBouncer ≥ 1.21 in transaction mode behind a trigger |
 | 6 | Vectors | **HNSW on `("Embedding"::halfvec(1024))`** (column stays `vector`) keeps Postgres viable to ≈ 10M chunks on a 64 GB database host; the O1 trigger is measured HNSW memory, latency and filtered recall instead of "> 2–3M chunks" (§3.3) |
@@ -108,7 +110,7 @@ of sizing GPUs for the peak (§3.9). A second department indexing the same site 
 
 | Stage | Per message (source) | 10× (20 msg/s peak) | Binds |
 |---|---|---|---|
-| Authentication, policy, rate limit | memory + 1 Redis command (chat §16.1); per-instance in-memory limits if Redis is down | 20 Redis cmd/s | – |
+| Authentication, policy, rate limit | memory; pilot: in-process rate limit; from P2 + 1 Redis command (chat §16.1), per-instance in-memory limits if Redis is down | 20 Redis cmd/s | – |
 | Chat overhead, re-streaming ≈ 200 events | < 10 ms budget (chat §16.1); the gateway spends ≈ 6.5–7 ms CPU per realistic stream (`docs/performance.md:211-213`) | ≈ 0.3 cores across instances; ≈ 160 open streams | – |
 | Condense | skipped for self-contained questions (length, no anaphora); otherwise one on-prem call with a 600 ms timeout | share of follow-ups (*to measure*) | gateway providers |
 | Query embedding | ≈ 30 tokens; ≤ 60 ms miss (knowledge §11) | 600 tokens/s, but **latency** behind ingestion batches | BGE-M3 queueing (§3.9) |
@@ -431,7 +433,7 @@ Estimated BGE-M3 throughput (≈ 568M parameters ≈ 1.1 GFLOP per token; *estim
 | Topic | Decision |
 |---|---|
 | Instances | pilot: one slot, updates in an announced maintenance window. From P2: 2 per data-plane host (a/b slots, rolling overlay), 2 hosts at 5-host scale; the municipal proxy load-balances all four with `proxy_buffering off`; CPU need is < 1 core at 20 msg/s (§2.2), so instances are for availability |
-| Sticky sessions | **none needed**: config snapshot per instance (grace window `Config:MaxUnconfirmedSeconds` 90 s, then 503 for keyed requests), rate limits and admin sessions in Redis, Data Protection keys in `config."DataProtectionKeys"`, signed conversation ids and download grants (chat §11.1, knowledge §4.6), MCP stateless (tools §7.1). Per-instance only: L1 query-embedding cache (L2 Redis shares hits), the writer queue (bounded loss, chat §12.4) |
+| Sticky sessions | **none needed**: config snapshot per instance (grace window `Config:MaxUnconfirmedSeconds` 90 s, then 503 for keyed requests), admin sessions in `config."AdminSessions"`, rate limits in Redis (P2; in process in the one-slot pilot), Data Protection keys in `config."DataProtectionKeys"`, signed conversation ids and download grants (chat §11.1, knowledge §4.6), MCP stateless (tools §7.1). Per-instance only: L1 query-embedding cache (from P2 the L2 in Redis shares hits), the writer queue (bounded loss, chat §12.4) |
 | Connection pools | §3.1 (pool 12, `MaxConcurrentSearches` 4, measured in P0) |
 | Writer across instances | `Seq` under the conversation row lock (chat §12.2) is correct across instances; totals upsert sorted and last (§3.2) |
 | Read routing | §3.1, to the standby only by trigger |
@@ -441,12 +443,13 @@ Estimated BGE-M3 throughput (≈ 568M parameters ≈ 1.1 GFLOP per token; *estim
 
 ### 3.12 Redis
 
-One instance stays enough at 10×: ≈ 2–3 commands per chat message (≈ 60/s), crawl and embed leases from P2 (≈ 60–100/s),
-sessions; the gateway's own Redis used about half a command thread at 17,888 msg/s (`docs/performance.md:129-131`).
+None in the single-host pilot (simplification pass §14); Redis arrives on host D with the first multi-host deployment
+(P2), enabled by `ConnectionStrings:redis`. One instance stays enough at 10×: ≈ 2–3 commands per chat message (≈ 60/s),
+crawl and embed leases (≈ 60–100/s); the gateway's own Redis used about half a command thread at 17,888 msg/s (`docs/performance.md:129-131`).
 Memory: query embeddings 4 KB × entries of 5 min (≈ 6,000 at 20 msg/s ≈ 24 MB) + small keys → `mem_limit` 256 MB
 stays. P2 keys (data-model §11): `ume-rag:crawl:inflight:{hostMac}` and `ume-rag:embed:inflight` (sorted sets, TTL =
-lease). No persistence: a restart loses rate-limit windows (per-instance in-memory limits meanwhile), L2 cache, leases
-(fallbacks above) and admin sessions (users sign in again). Sentinel/replica only by trigger (availability requirement
+lease). No persistence: a restart loses rate-limit windows (per-instance in-memory limits meanwhile), L2 cache and leases
+(fallbacks above); admin sessions live in Postgres. Sentinel/replica only by trigger (availability requirement
 or > 50 % of one thread).
 
 ### 3.13 Object store and `IBlobStore`
@@ -579,15 +582,17 @@ await copy.CompleteAsync(ct);
 ### 5.1 One host (pilot)
 
 repo §6.2: 8 vCPU / 24 GB, zones by `cpu_shares` and the ingestion slice, file-system blobs, no pooler, one worker
-with all classes, **one slot** per service (updates in an announced maintenance window), stock pgvector Postgres with
-pgBackRest WAL archiving to the backup target (RPO ≤ 5 min, RTO ≤ 4 h by point-in-time restore). P0/P1 add only seams
+with all classes, **one slot** per service (updates in an announced maintenance window), six long-running containers
+(no Redis: rate limits and the query-embedding cache in process, admin sessions in Postgres), the pgvector Postgres
+image with pgBackRest inside, WAL archiving to the backup target and backups from a host timer (RPO ≤ 5 min, RTO ≤ 4 h
+by point-in-time restore). P0/P1 add only seams
 (§8).
 
 ### 5.2 Three hosts (P2, first multi-host deployment)
 
 | Host | Size (estimate) | Runs | Networks |
 |---|---|---|---|
-| **D** data | 8–16 vCPU, 64 GB, NVMe | postgres, redis, object store, OTel collector | LAN: 5432, 6379 (TLS), 443 S3 (TLS) to listed peer IPs only |
+| **D** data | 8–16 vCPU, 64 GB, NVMe | postgres, redis (enabled by `ConnectionStrings:redis`), object store, OTel collector | LAN: 5432, 6379 (TLS), 443 S3 (TLS) to listed peer IPs only |
 | **A** data plane + control | 8 vCPU, 16 GB | rag-api a/b (in-process tool hub), rag-admin a/b; Open WebUI on its own VM (decided) | `edge`, `llm`; LAN to D |
 | **I** ingestion | 16 vCPU, 32 GB | rag-worker (all classes), rag-parser (2 × 2 or 4 × 2 slots), rag-clamav; rag-renderer only if a source needs JavaScript | `ingestion`, `parser`, `crawl`, `mirror`, `llm`; LAN to D |
 
@@ -667,9 +672,9 @@ manual dispatch on 3 test hosts, before the multi-host rollout and after changes
 
 | Phase | Item | Why now |
 |---|---|---|
-| **P0** | write-once `IBlobStore` contract (FS impl); `IJobQueue` seam (Postgres impl) with the partial unique dedup index on unpartitioned `Jobs`; pooler-safe rules + SQL scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` (deployment) and `Worker:Classes` per instance; pool starting values (api 12 with `MaxConcurrentSearches` 4, admin 5, worker 10, `max_connections` 100) and the Postgres memory limit measured; stock pgvector image with pgBackRest and a point-in-time restore drill; `DOTNET_GCHeapHardLimitPercent` on every .NET service; halfvec index expression in the first migration | seams cost a day now and a migration later; restore works before data exists |
+| **P0** | write-once `IBlobStore` contract (FS impl); `IJobQueue` seam (Postgres impl) with the partial unique dedup index on unpartitioned `Jobs`; pooler-safe rules + SQL scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` (deployment) and `Worker:Classes` per instance; pool starting values (api 12 with `MaxConcurrentSearches` 4, admin 5, worker 10, `max_connections` 100) and the Postgres memory limit measured; pgvector image with pgBackRest inside (`ume-rag/postgres`) and a point-in-time restore drill; `DOTNET_GCHeapHardLimitPercent` on every .NET service; halfvec index expression in the first migration | seams cost a day now and a migration later; restore works before data exists |
 | **P1** | `S3BlobStore` (AWSSDK.S3) + contract tests in CI against the chosen server; chunk writes in short batches + swap + orphan sweep; sorted upserts and totals-last; nav-link claim cache; selectivity rule for V; incremental `lastmod` runs as the template default; capacity metrics and dashboard; FakeGateway throughput model; `perf.yml` (R1) | cheap and single-host-safe |
-| **P2** | first multi-host deployment: 3-host topology (D, A, I) with routed LAN, compose split, `init-deployment --role`; a/b slots; `content."LeaderLeases"`; connection-budget script; `ume_rag_monitor`; batched dequeue/completion; wake-up coalescing and NOTIFY debounce; Redis in-flight leases (crawl hosts, embedding); `MinBuild` on job payloads; object store server; Postgres streaming standby before production beyond the pilot (D1); `EmbeddingCache` via `Chunks`; scale test (`FakeSites`, `ScaleSeed`) before the rollout; renderer if a source needs it; K1 decided before going multi-host | departments 2–20 arrive (README P2); each removes a known multi-instance defect |
+| **P2** | first multi-host deployment: 3-host topology (D, A, I) with routed LAN, compose split, `init-deployment --role`; a/b slots; `content."LeaderLeases"`; connection-budget script; `ume_rag_monitor`; batched dequeue/completion; wake-up coalescing and NOTIFY debounce; Redis (enabled by `ConnectionStrings:redis`: shared rate limits, L2 query-embedding cache, in-flight leases for crawl hosts and embedding); `MinBuild` on job payloads; object store server; Postgres streaming standby before production beyond the pilot (D1); `EmbeddingCache` via `Chunks`; scale test (`FakeSites`, `ScaleSeed`) before the rollout; renderer if a source needs it; K1 decided before going multi-host | departments 2–20 arrive (README P2); each removes a known multi-instance defect |
 | **P3** | 5-host topology; PgBouncer, read routing to the standby, broker, binary-quantized index, OpenSearch (O1), CUDA parser, Kubernetes, Redis HA, distributed object store, query lane — **each only when its §6 trigger fires** | measured, not planned |
 
 ## 9. Changes to other documents

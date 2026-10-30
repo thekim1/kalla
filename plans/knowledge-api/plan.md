@@ -70,8 +70,9 @@ config version, before any query runs (R7).
 - **Section expansion**: with `expand=section` the hit's section is rebuilt from neighbouring chunks (≤ 1,500 tokens,
   returned once per section; design §9).
 - **Query embedding** through the gateway on the on-prem profile (attribution: the assistant's or caller's team);
-  cached by (profile, normalised query hash) for a few minutes: in Redis for `public`/`internal` queries, in process
-  memory only for `sensitive` (embeddings partly reveal text).
+  cached by (profile, HMAC of the normalised query) for a few minutes in process memory (P1 has no Redis); from the
+  first multi-host deployment (P2) also in Redis for `public`/`internal` queries, never for `sensitive` (embeddings
+  partly reveal text; design §5.4).
 - **No-answer signal**: `coverage: low` only when the best hit's **cosine distance** is above a per-collection
   threshold **and** the keyword list is empty or below its floor (RRF scores are rank-only, so they cannot signal
   coverage), so callers can say "I don't know" without guessing; outcomes and near-threshold distances are metrics
@@ -129,7 +130,7 @@ Answered (2026-10-30; detail in [`design.md`](design.md) §19.1):
 
 ## 7. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §8:
+Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §8, §14:
 
 | Item | Where it went |
 |---|---|
@@ -138,3 +139,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §8:
 | Coverage from vector distance alone | vector **and** keyword weak (§3) |
 | Rerank in P3 | `IReranker` seam P1, gateway rerank P2 (§3, §5) |
 | `building` collections, tuning "behind the evaluation gate" | removed; unpublished collections are not searched, evaluation is advisory |
+| Redis query-embedding cache in P1 | P2, first multi-host deployment; P1 caches in process (§3, simplification pass §14) |

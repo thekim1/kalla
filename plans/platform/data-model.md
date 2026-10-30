@@ -21,7 +21,8 @@ went is listed in §13.
 | Keys: random secret shown once, `KeyHash` = hex HMAC-SHA256 with a pepper outside the DB, display `Prefix`, rotation with `GraceUntil`/`RotatedToKeyId`, Data-Protection-encrypted `EncryptedSecret` for audited reveal | `Domain/Services/VirtualKeyHasher.cs`, `VirtualKey` entity, `Infrastructure/Security/Security.cs`, ADR 004 / 007 | `config."Keys"`, prefixes `ume-rag-sk-` / `ume-rag-pk-` |
 | Audit entry columns (`Actor`, `ActorName`, `ActorRoles`, `ActorDepartments`, `SourceAddress`, `SessionId`, `RequestId`, `UserAgent`, masked `Details`) | `AuditLogEntry`, `GatewayDbContext.cs` | `audit."AuditLog"` plus `Reason`, `Service`, `ConfigVersion`; actor = `oid` (fallback `sub`) |
 | Data Protection key ring in the database (`DataProtectionKeys`) | `GatewayDbContext` implements `IDataProtectionKeyContext` | `config."DataProtectionKeys"` |
-| Redis: one `RedisKeys` class, all keys under one prefix, ACL user limited to it | `Infrastructure/Stores/RedisKeys.cs`, `deploy/redis/users.acl.example` | `ume-rag:` prefix (§11) |
+| Admin sessions on the server (`IAdminSessionStore` behind the BFF's `AdminTicketStore`; Redis in the gateway) | `Infrastructure/Stores/Stores.cs` (`IAdminSessionStore`), `AdminApi/AdminSessions.cs` | `PostgresAdminSessionStore` over `config."AdminSessions"` (§2.1); no Redis in P1 |
+| Redis (P2, first multi-host deployment): one `RedisKeys` class, all keys under one prefix, ACL user limited to it | `Infrastructure/Stores/RedisKeys.cs`, `deploy/redis/users.acl.example` | `ume-rag:` prefix (§11) |
 
 The gateway has no connection caps, `statement_timeout`, partitioning, schemas or `LISTEN/NOTIFY`; those are new here
 (R1, R7) and follow Postgres defaults where nothing better is needed.
@@ -45,8 +46,8 @@ service roles, as in the gateway.
 
 Created by `deploy/postgres/init.sql` from `/run/postgres-secrets/<role>_password` (gateway pattern); `pg_hba.conf`
 allows only `hostssl ragdb ume_rag_migrator,ume_rag_admin,ume_rag_api,ume_rag_worker all scram-sha-256` (plus
-`ume_rag_monitor` from P2, below) and the pgBackRest replication/backup user from the local pgBackRest container
-(repo-and-deployment §7.4).
+`ume_rag_monitor` from P2, below). pgBackRest runs inside the `postgres` container (`ume-rag/postgres`) and connects
+over the local Unix socket, so it needs no network entry (repo-and-deployment §7.4).
 
 | Role | Used by | `CONNECTION LIMIT` | Npgsql `Maximum Pool Size` per instance | `statement_timeout` | `lock_timeout` | `idle_in_transaction_session_timeout` |
 |---|---|---|---|---|---|---|
@@ -101,6 +102,7 @@ worker runs only retrieval evaluation and reads no assistant, skill or tool tabl
 | `config."ToolServers"` (P2) | S I U D | S | – |
 | `config."KeyLastUse"` | S | S I U | – |
 | `config."DataProtectionKeys"` | S I | S | S |
+| `config."AdminSessions"` | S I U D | – | – |
 | `config."ConfigVersion"`, `"ConfigOutbox"` | S, `U` on `ConfigVersion` only for the `FOR UPDATE` lock (§5; writes otherwise only via trigger) | S | S |
 | `config."__EFMigrationsHistory"` | S | – | – |
 | `content` tables | S (incl. test-panel retrieval, knowledge design §4.2), plus **I U on `EvaluationRuns`, `EvaluationResults`** (answer-level runs of kind `answers` and P2 skill-gate runs, which run in `rag-admin`) | S on `Documents` (columns `Id`, `SourceId`, `Classification`, `IdentityKind`, `IdentityHash`, `Title`, `Url`, `MediaType`, `DisplayName`, `SourceModifiedAt`, `PageCount`, `LiveChunkSetId`, `DeletedAt`; citations and downloads, knowledge design §3.5), `ChunkSets`, `Chunks` | S I U D (all) |
@@ -156,6 +158,7 @@ referenced **by id without a FK**.
 | `Keys` | Gateway-style keys | as gateway `VirtualKey`: `Id`, `ClientId` FK, `TeamId`, `Kind` (`sk`/`pk`), `Name`, `Prefix varchar(20)` (`ume-rag-sk-AbC1`), `KeyHash varchar(64)` (hex HMAC-SHA256, pepper `Security__KeyPepper`), `EncryptedSecret`, `Scopes jsonb` (assistants/collections), `AllowedOrigins`, `AllowedIpRanges`, `RequestsPerMinute`, `IsEnabled`, `CreatedAt`, `CreatedBy`, `ExpiresAt`, `RevokedAt`, `GraceUntil`, `RotatedToKeyId` | U `KeyHash`; concurrency tokens `RotatedToKeyId`, `RevokedAt` (as gateway) | key's client ceiling applies |
 | `KeyLastUse` | `LastUsedAt` split out so key use never bumps the config version | `KeyId` PK, `LastUsedAt` | – | – |
 | `DataProtectionKeys` | ASP.NET Data Protection key ring | EF standard | – | – |
+| `AdminSessions` | Admin BFF sessions (`PostgresAdminSessionStore`; replaces the gateway's Redis store, simplification pass §14) | `SessionId varchar(64)` (the cookie's random id), `Value bytea` (ticket, Data-Protection-encrypted with purpose `Ume.Rag.AdminApi.Session.v1`, so a writer cannot forge a session), `ExpiresAt timestamptz` (≤ 8 h per sign-in or extension, never past `Admin:MaxSessionHours` 12 h) | PK `SessionId`; IX `ExpiresAt` | – (no content; a read ignores expired rows; sign-out deletes the row) |
 | `ConfigVersion`, `ConfigOutbox` | R7 (§5) | | | |
 
 The gateway keys RAG uses (delegating keys per level, plan §6: `Gateway__Keys__OnPrem`, `Gateway__Keys__Eu`,
@@ -482,7 +485,7 @@ CREATE TRIGGER "TR_Keys_ConfigChanged" AFTER INSERT OR UPDATE OR DELETE ON confi
     FOR EACH ROW EXECUTE FUNCTION config.rag_config_changed('true');
 ```
 
-- **Every** config table except `KeyLastUse`, `DataProtectionKeys`, `ConfigVersion` and `ConfigOutbox` gets the
+- **Every** config table except `KeyLastUse`, `DataProtectionKeys`, `AdminSessions`, `ConfigVersion` and `ConfigOutbox` gets the
   trigger, so no code path can forget the outbox. `SecurityRelevant = true` for `Keys`, `Clients`, `Collections`,
   `CollectionShares`, `Sources`, `Assistants`, `Assistant*`, `Skills`, `SkillShares`, `SkillVersions` (state changes),
   `SkillVersionLinks`, `ToolServers`, `Tools`, `ToolApprovals`, `ToolDefinitions`, `ToolDepartmentGrants`,
@@ -580,6 +583,7 @@ Nightly, batched step functions in the gateway style (ADR 016): `SECURITY DEFINE
 | `content."RetrievalStats"` | 13 months *proposed* | worker |
 | `content."SiteProfileVersions"` | `superseded`/`rejected` versions older than 1 year, keeping the last 10 per host *proposed* | worker |
 | `config."ConfigOutbox"` | 30 days *proposed* | `config.rag_retention_config_step` |
+| `config."AdminSessions"` | rows past `ExpiresAt` (sign-out deletes at once) | `config.rag_retention_config_step`, run by the admin's `RetentionService` |
 | `audit.*` | 2 years (`Settings.AuditRetentionDays`, minimum 90, may be "forever") | `audit.rag_retention_audit_step` |
 | Open WebUI's own database | client data-handling profile (90 days): feedback pruned through its HTTP API; chat copies of other users cannot be pruned at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`, so they stay unpruned in the pilot (stated in its data-handling profile) until register item W2 is decided with A1 | Open WebUI's HTTP API, never SQL against its database |
 
@@ -633,14 +637,25 @@ bytes share the raw blob and every stage output up to the first stage whose sett
   `content.rag_partition_maintain()`, then the dev seeder (development only; seeds the BGE-M3 profile with its fixed
   id). Services wait for it as in the gateway compose files.
 
-## 11. Redis (mirrors `RedisKeys.cs`)
+## 11. Redis (P2, first multi-host deployment; mirrors `RedisKeys.cs`)
 
-Prefix `ume-rag:`, ACL user limited to `~ume-rag:*`; no publish channels (change events come from Postgres). Every use
-states its behaviour when Redis is down (simplification pass §9).
+**No Redis in the pilot** (simplification pass §14). Each P1 use lives here instead; a deployment enables Redis by
+configuring `ConnectionStrings:redis` (P2, where rate limits, in-flight leases and the cache must be shared across
+instances); without it the in-memory implementations of the seams are used.
 
-| Key | Lifetime | Redis down |
+| Use | P1 (single host, one slot, no Redis) | From P2 (`ConnectionStrings:redis` set) |
 |---|---|---|
-| `ume-rag:admin-session:{sessionId}` | session | admin sign-in and sessions unavailable (admin API 503); data plane unaffected |
+| Admin sessions (BFF ticket store, `IAdminSessionStore`) | `config."AdminSessions"` (§2.1) through `PostgresAdminSessionStore`, owned by `rag-admin`; expired rows deleted by the admin's `RetentionService` (§8) | unchanged: Postgres serves every admin instance |
+| Data Protection key ring | `config."DataProtectionKeys"` (as the gateway's `PersistKeysToDbContext`, `InfrastructureExtensions.cs:60-63`) | unchanged |
+| Rate limits | `IRateLimitStore`, in-memory per instance (exact with one slot), same keys and windows as below | Redis keys below |
+| Query-embedding cache | `ISharedCache`, in-memory in process, same HMAC key, value format and size cap, every level (knowledge design §5.4) | Redis L2 for `public`/`internal` below; the in-process L1 stays |
+| Crawl and embedding in-flight leases | not needed: one `fetch` instance keeps the per-host cap exact; per-instance AIMD for embedding | Redis keys below |
+
+Redis keys (P2): prefix `ume-rag:`, ACL user limited to `~ume-rag:*`; no publish channels (change events come from
+Postgres). Every use states its behaviour when Redis is down (simplification pass §9).
+
+| Key (P2) | Lifetime | Redis down |
+|---|---|---|
 | `ume-rag:rl:req:{keyId}:{minute}`, `ume-rag:rl:user:{subjectHash}:{minute}`, `ume-rag:rl:tool:{toolId}:{minute}`, `ume-rag:rl:tooluser:{toolId}:{subjectHash}:{minute}`, `ume-rag:rl:tools:{subjectHash}:{minute}`, `ume-rag:rl:mcp:{subjectHash}:{minute}` (tools design §4.9, §7.6), `ume-rag:rl:ip:{ipHash}:{minute}` (P2 widget, identity design §6.5), `ume-rag:rl:dl:{ipHash}:{minute}` (citation downloads, `Knowledge:DownloadsPerMinutePerAddress`; its own key so the two per-address limits never share a counter) | 120 s (`RateWindowSeconds`, as gateway) | per-instance in-memory limits with the same values |
 | `ume-rag:qemb:{profileId:N}:{queryMac}` (query embedding only, value 1 version byte ‖ 1024 little-endian float32; `queryMac` = hex of the first 16 bytes of HMAC-SHA256(`Security:CacheKeyPepper`, normalised query), never a plain hash; `public`/`internal` effective level only, §12.14; an in-process L1 serves all levels; knowledge design §5.4) | 5 min | L1 only; misses embed through the gateway |
 | `ume-rag:crawl:inflight:{hostMac}` (P2, sorted set of in-flight fetch leases per crawl host, cap `MaxConnections`; `hostMac` = HMAC of the host name with `Security__CrawlKeyPepper`), `ume-rag:embed:inflight` (P2, sorted set, fleet-wide cap `Embedding:GlobalMaxInFlight`) ([`../performance-pass.md`](../performance-pass.md) §3.6, §3.9) | TTL = lease (60 s for fetch) | per-instance caps (`Worker:Concurrency:<class>`); `CrawlHosts.NextAllowedAt` keeps host politeness in Postgres |
@@ -666,7 +681,7 @@ states its behaviour when Redis is down (simplification pass §9).
 | 11 | Retention values missing in §8 | Jobs, run items, runs, observations, caches, outbox, stats, quarantine | Values marked *proposed* in §8–9; add to `Settings` and platform §8 |
 | 12 | Job classes | Worker §2 lists six classes | Add `command` (§12.2) |
 | 13 | Cache key "node id" | Pipeline-local node ids would prevent sharing | Stage type id + input hash (§9); stage outputs are content-addressed and shared across documents and sources |
-| 14 | Query-embedding cache | Plan §8a allows embeddings in Redis; embeddings partly reveal text | No Redis cache for `sensitive` queries (in-process only); resolved by knowledge design §5.4 (L1 in process for all levels, L2 Redis for `public`/`internal` with an HMAC key, §11) |
+| 14 | Query-embedding cache | Plan §8a allows embeddings in Redis; embeddings partly reveal text | No Redis cache for `sensitive` queries (in-process only); resolved by knowledge design §5.4 (L1 in process for all levels with an HMAC key; from P2 an L2 in Redis for `public`/`internal` only, §11; no Redis in P1) |
 | 15 | Coverage signal | Knowledge §3 uses "best fused score"; RRF scores are rank-only | Coverage on best cosine distance per collection together with the keyword list (`low` only when the distance is above the threshold and the keyword list is empty or below its floor; knowledge design §7) |
 | 16 | Vector storage | `vector` (4 KB per 1024-dim chunk) vs `halfvec` (2 KB) | **Decided (performance pass, [`../performance-pass.md`](../performance-pass.md) §3.3)**: HNSW index on `("Embedding"::halfvec(1024))` from P1, column stays `vector`; recall measured with the evaluation sets (HNSW vs exact) before the first large collection |
 | 17 | Run items, frontier, profiles placement | Hold URLs and patterns of possibly `sensitive` sources | Carry `Classification`; parse rules and site profiles apply only within their level |
@@ -699,6 +714,7 @@ See [`../simplification-pass.md`](../simplification-pass.md) (section numbers th
 | Gate columns on `Collections`, `EvaluationRuns` and `Settings`; parse auto-apply columns and states (§8, §2) | Removed: advisory harness; P2 proposals with approval |
 | `GatewayKeyLinks`; `Clients.TaskModel`/`TaskModelResidency`; `ResolveUsersByEmail` and the `owui-oid` key; GIN on `MemberGroups` (§1, §6, §7) | Removed or dropped |
 | Redis `ume-rag:groups:{oid}` (§7) | P2 with the Graph member-group lookup (identity design) |
+| Redis in the pilot: `ume-rag:admin-session:{sessionId}`, rate-limit and query-embedding keys (§14) | Admin sessions in `config."AdminSessions"` (also in P2); rate limits and the query-embedding cache in process in P1; Redis from the first multi-host deployment (P2) |
 | Skill pin/follow columns (`AssistantSkills.PinnedVersionId`, `PinnedReason`), `SkillVersions` states `gating`/`gate-failed`, `Settings.Tools.SkillRoutingFloor`; `SkillAudiences`; `Assistants.RiskAcceptance` (§10) | Removed (P2 sharing through `CollectionShares`/`SkillShares`) |
 | Tool hosting `municipal`/`external`, auth `none`/`api-key`/`obo`, `ToolServers.EncryptedCredential`, `PerCallConnection`; role `ume_rag_tools` (§10) | P3 (with `rag-tools`, the first external, OBO or write tool) |
 | `ume_rag_monitor`, `LeaderLeases`, connection-budget script, batched dequeue, debounced `NOTIFY`, Redis crawl and embedding leases (§1) | P2 (first multi-host deployment) |
@@ -716,3 +732,4 @@ See [`../simplification-pass.md`](../simplification-pass.md) (section numbers th
 | `content.rag_tsquery_or_agg` over the built-in `tsquery_or` on the stock image; `rag_or_query` returns an OR query and `NULL` for stop words only | P0 | test |
 | `ALTER ROLE … SET hnsw.*` accepted before the `vector` library is loaded in the session, and visible via `SHOW` on each role's connections | P0 | test |
 | Bucket-key creation race: one `DataKeys` row per (level, month) under concurrent first writes | P1 | test |
+| `PostgresAdminSessionStore` with the copied `AdminTicketStore`: sign-out ends every copy of the cookie, an expired row is not returned, extension stops at 12 h, the retention step deletes expired rows | P0 | test |

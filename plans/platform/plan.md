@@ -13,7 +13,7 @@ One repository, one solution, like the gateway:
 ```
 src/
   Ume.Rag.Domain/            entities, enums, port types, classification, access policy, shared contracts
-  Ume.Rag.Infrastructure/    EF Core DbContext, Postgres queue + outbox, Redis keys, gateway client, blob storage
+  Ume.Rag.Infrastructure/    EF Core DbContext, Postgres queue + outbox, rate-limit and cache seams (in-memory; Redis from P2), gateway client, blob storage
   Ume.Rag.Retrieval/         search core and SwedishDecompounder, shared by the knowledge API, the worker and the admin test panel
   Ume.Rag.Answering/         knowledge and chat answer core without HTTP (API; admin test panel, answer-level judge, P2 skill gate)
   Ume.Rag.Pipelines/         pipeline templates and versioned parameter sets, validator, per-stage cache keys (admin and worker)
@@ -48,9 +48,7 @@ zones** from day one, even when they share a host (P2 adds a third, `tools-hoste
 |---|---|---|---|
 | data plane | `rag-api` | Ume.Rag.Api | Knowledge + Chat + MCP server roles; from P2 also the in-process tool hub (tools design §2) |
 | tools-hosted | `ume-mcp-<name>` | one per hosted MCP server | P2; own zone (`cpu_shares` 256, `cpus` 0.5, `mem_limit` 384m each), networks `mcp` and its own `mcp-<name>-egress` (tools design §2.2, §8.3); first and only in P2: `ume-mcp-kommun`, starting with the mock fee calculator |
-| data plane | `postgres` | stock `pgvector/pgvector` (pgvector 0.8.7 on Postgres 17; tag *to verify*) | Managed Postgres is allowed where pgvector ≥ 0.8 and the needed settings are available (decided 2026-10-30, simplification pass §3) |
-| data plane | `rag-pgbackrest` | pgBackRest | WAL archiving and backups (repo-and-deployment §7.4) |
-| data plane | `redis` | Redis | Rate limits, caches |
+| data plane | `postgres` | `ume-rag/postgres`: stock `pgvector/pgvector` (pgvector 0.8.7 on Postgres 17; tag *to verify*) + PGDG `pgbackrest` | WAL archiving and backups run inside it (repo-and-deployment §7.4). Managed Postgres is allowed where pgvector ≥ 0.8 and the needed settings are available (decided 2026-10-30, simplification pass §3) |
 | control | `rag-admin` | Ume.Rag.AdminApi | Admin API + static admin UI; test panel, answer-level evaluation and (P2) the skill gate and tool discovery through the in-process hub |
 | ingestion | `rag-worker` | Ume.Rag.Worker | Hard CPU/memory limits, lower CPU priority |
 | ingestion | `rag-parser` | parser | Hard limits; no egress; internal network only; first to move to its own host |
@@ -60,10 +58,15 @@ zones** from day one, even when they share a host (P2 adds a third, `tools-hoste
 - **Pilot**: one host is allowed: **8 vCPU / 16 GB minimum, 24 GB recommended** (Docling models and ClamAV
   signatures need several GB together), with Docker CPU shares and limits giving the data plane priority. The parser
   gets at most half the cores. BGE-M3 runs at the gateway's on-prem provider, not on this host. The pilot runs **one
-  slot** per service; updates use a short announced maintenance window (a/b slots come with P2).
+  slot** per service; updates use a short announced maintenance window (a/b slots come with P2). Six long-running
+  containers (`rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`, `postgres`) plus the one-shot
+  `rag-migrate` (simplification pass §14): **no Redis** (rate limits and the query-embedding cache in process behind
+  `IRateLimitStore`/`ISharedCache`, admin sessions in Postgres) and no backup sidecar (scheduled backups run
+  `pgbackrest backup` inside `postgres` from a host timer).
 - **Production**: ingestion zone on its own host or node pool; the data plane host never runs OCR. Scale-out is
   **Compose per host, roles per host** (decided 2026-10-30; [`../performance-pass.md`](../performance-pass.md) §5): same images, `Worker:Classes` and
-  deployment settings per instance, one Postgres (with a streaming standby, §10), one Redis and one S3-compatible
+  deployment settings per instance, one Postgres (with a streaming standby, §10), one Redis (enabled by
+  `ConnectionStrings:redis`) and one S3-compatible
   object store (the municipality's S3 service if IT offers one, else SeaweedFS; decided with IT before the first
   multi-host deployment, postponed decision S2), routed LAN with TLS and host firewalls, no overlay network:
 
@@ -80,7 +83,7 @@ zones** from day one, even when they share a host (P2 adds a third, `tools-hoste
   applies at scale in the manual **scale test** (`scale.yml`, P2, before the multi-host rollout: chat p95 TTFT during
   a 100k-page crawl + OCR batch ≤ 1.10 × idle; [`../performance-pass.md`](../performance-pass.md) §7).
 
-**Decided (2026-10-29): our Postgres and Redis are separate instances from the gateway's**, each system with its own
+**Decided (2026-10-29): our Postgres and (from P2) Redis are separate instances from the gateway's**, each system with its own
 database. Reasons: the gateway's ADR 015 (other teams' data goes through interfaces, never the database; we read
 organisation data through the gateway's API); the gateway stores no content while ours holds documents and chat
 logs, so backups, admin access and retention must not be shared; ingestion load must never reach the gateway's
@@ -122,8 +125,9 @@ new key), deletion = tombstone + delayed purge. Implementations: file system vol
   beyond that, keyed requests are refused with 503. Notifications still apply changes (revocations included) at once.
   Readiness does not fail on staleness within the window, so one stalled database does not drain every instance at
   once. Other settings may serve slightly stale.
-- Redis is used for rate limits and short-lived caches only, not as the source of change events; every Redis use has
-  a stated Redis-down behaviour (data-model §11).
+- Redis (from the first multi-host deployment, P2; none in the pilot) is used for shared rate limits, the shared
+  query-embedding cache and in-flight leases only, not as the source of change events; every Redis use has a stated
+  Redis-down behaviour, and the P1 home of each use is listed in data-model §11.
 
 ## 5. Identity and access
 
@@ -214,6 +218,7 @@ blobs are tombstoned and purged with the blob purge delay.
 | Assistant daily totals (statistics without content) | 3 years (proposed) | Platform setting |
 | Audit | separate, longer (e.g. 2 years) | Platform setting |
 | Postgres backups (pgBackRest) | 35 days (proposed) | Deployment |
+| Admin sessions (`config."AdminSessions"`) | until expiry (≤ 12 h); expired rows deleted nightly | – |
 
 Copies held by clients are covered by the client's data-handling profile (R5), never by SQL against their databases.
 Open WebUI's feedback is pruned to the same 90 days through its HTTP API; its chat copies cannot be pruned for other
@@ -313,7 +318,7 @@ these sets.
   beyond what they need; the worker parses only HTML, text, Markdown and CSV, every PDF and binary format goes to the
   parser; uploads limited by size and type; secrets as files, key-per-file, never environment variables
   (repo-and-deployment §6.3); prompt injection rules in `../tools/plan.md` §6.
-- **Testing**: unit; integration against real Postgres/Redis (Aspire/Testcontainers); fake gateway; end-to-end
+- **Testing**: unit; integration against real Postgres (and Redis for the P2 implementations of the seams; Aspire/Testcontainers); fake gateway; end-to-end
   browser tests; evaluation sets in CI on a fixture collection; the R1 release test (P1).
 - **Backup and recovery**: pgBackRest with continuous WAL archiving (`archive_timeout` 60 s) and point-in-time
   restore; RPO ≤ 5 min, RTO ≤ 4 h for the pilot; uploads copied to the backup target within 15 minutes; a
@@ -365,3 +370,4 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 | Graph member-group lookup; `rag-renderer` (only if needed); a/b slots and the multi-host seams | P2 |
 | Separate `rag-tools` service (with the first external, OBO or write tool) | P3 |
 | 10-second fail-closed config rule | Replaced by the grace window (§9 there) |
+| `redis` and `rag-pgbackrest` containers in the pilot (eight long-running containers → six, §14 there) | Redis: P2 (first multi-host deployment, `ConnectionStrings:redis`), in-memory seams and Postgres admin sessions in P1; pgBackRest inside the Postgres image |

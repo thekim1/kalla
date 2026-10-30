@@ -13,7 +13,8 @@ or team named in the row).
 
 Document names are relative to `plans/`; "gateway design" is `gateway-changes/design.md`. Rows whose subject the
 simplification pass ([`simplification-pass.md`](simplification-pass.md)) removed are struck with "dropped
-(simplification pass)"; its new checks are rows 127–140, and the follow-up round of that pass added rows 141–160.
+(simplification pass)"; its new checks are rows 127–140, the follow-up round of that pass added rows 141–160, and the container cut (§14
+there: six containers, no Redis in P1, pgBackRest inside the Postgres image) added rows 161–163.
 
 ## Postgres and pgvector
 
@@ -32,7 +33,8 @@ simplification pass ([`simplification-pass.md`](simplification-pass.md)) removed
 | 11 | CloudNativePG image requirements with pgvector (its own images or the stock pgvector image) | `platform/repo-and-deployment.md` §10 | P3 | source |
 | 127 | Stock `pgvector/pgvector` image tag and digest for pgvector 0.8.7 on PostgreSQL 17 (7-day rule); its user id; ships `pg_stat_statements` | `simplification-pass.md` §3; `platform/data-model.md` §14; `platform/repo-and-deployment.md` §5.1, §14; postponed V1 | P0 | source + test (`deploy/postgres/test.sh`) |
 | 128 | .NET `SwedishDecompounder` vs Postgres `ispell` on a word sample: recall difference of compound parts; same parts for `SearchText` and the query side; one integration test that a part matches through the built-in `swedish` configuration | `simplification-pass.md` §3; `platform/data-model.md` §14; `ingestion-worker/design-processing.md` §21 | P0 | measure + test |
-| 129 | pgBackRest with the stock pgvector image: `archive-push` from a sidecar fed by an `archive_command` spool on a shared volume (fallback: one-line derived image with the PGDG `pgbackrest` package), WAL archiving (`archive_timeout` 60 s), weekly full / daily differential; point-in-time restore drill meets RPO ≤ 5 min and RTO ≤ 4 h on the test host | `simplification-pass.md` §4; `platform/repo-and-deployment.md` §7.4, §14 | P0 | test + measure |
+| 129 | pgBackRest WAL archiving (`archive_timeout` 60 s) and weekly full / daily differential backups from the host timer (`docker compose exec postgres pgbackrest backup`); point-in-time restore drill meets RPO ≤ 5 min and RTO ≤ 4 h on the test host | `simplification-pass.md` §4, §14; `platform/repo-and-deployment.md` §7.4, §14 | P0 | test + measure |
+| 161 | `ume-rag/postgres` (stock pgvector image + PGDG `pgbackrest`): the package installs on the stock base; synchronous `archive-push` from inside the container on a read-only root file system (no spool volume); restore in a one-off container of the image; how the backup timer's result reaches `rag.backup.age` | `simplification-pass.md` §14; `platform/repo-and-deployment.md` §5.2, §7.4, §14 | P0 | test (`deploy/postgres/test.sh`, test host) |
 | 130 | Managed Postgres (Azure Database for PostgreSQL) with pgvector ≥ 0.8 and the needed settings (`shared_preload_libraries`, HNSW settings, `performance-pass.md` §3.2) | `simplification-pass.md` §3; `performance-pass.md` §3.2 | P2 | source |
 | 141 | Swap transaction: flipping `DeletedAt` on a set's chunks is a non-HOT update that inserts every newly visible chunk into the partial HNSW and GIN indexes inside the swap; duration and WAL p95 per document for sets of 50–500 chunks during a large publish beside chat traffic, and for the largest sets (20,000 chunks) | `platform/data-model.md` §14; `ingestion-worker/design-engine.md` §23 | P1 | measure |
 | 142 | `content.rag_or_query` and the `rag_tsquery_or_agg` aggregate over the built-in `tsquery_or` on the stock image: an OR query, `NULL` for stop words only; `plainto_tsquery('simple', lexeme)` accepts every lexeme the `swedish` parser emits (hosts, URLs, paths, hyphens, `'`, `\`), fuzzed over the test corpus | `platform/data-model.md` §14; `knowledge-api/design.md` §6.2, §20 | P0 | test |
@@ -57,6 +59,7 @@ simplification pass ([`simplification-pass.md`](simplification-pass.md)) removed
 | 23 | Version lock: `SELECT … FOR UPDATE` on `config."ConfigVersion"` before `SaveChanges`, then the bumped value read after the outbox trigger in the same transaction; no deadlock with the trigger's own update of that row; lock waits at the admin's real write rate | `admin/design.md` §4.4, §15 | P1 | test + measure (`rag.admin.config_lock.wait`) |
 | 24 | EF Core needs `e.Ignore(...)` for non-mapped `VirtualKey` members | gateway design §16 | P1 (combined release) | test |
 | 25 | `OnTokenValidated` properties reach the cookie ticket; `ctx.Fail` + `OnRemoteFailure` redirect on .NET 10 | gateway design §16 | P1 (combined release) | test |
+| 163 | Postgres admin ticket store (`config."AdminSessions"`, `PostgresAdminSessionStore`) with the copied BFF code (`AdminTicketStore`, `AdminSessionLimit`): sign-out ends every copy of the cookie, expired rows are not returned and are deleted by the retention step, extension stops at 12 h; the copied `AdminSessionTests` pass | `simplification-pass.md` §14; `platform/data-model.md` §2.1, §14; `identity/design.md` §1 | P0 | test |
 | 26 | `Microsoft.ML.Tokenizers` 2.0.1: parity with Hugging Face for BGE-M3, options, thread safety, speed | `ingestion-worker/design-processing.md` §6.1, §21 | P1 | test + measure |
 | 27 | `System.Uri` escaping and IDN vs the canonicaliser rules; `IdnMapping` UTS 46 flags in .NET 10 | `ingestion-worker/design-connectors.md` §3.1, §22 | P1 | test |
 | 28 | `SocketsHttpHandler.ConnectCallback` with HTTP/2 + SNI; decompression byte counting; Brotli | `ingestion-worker/design-connectors.md` §22 | P1 | test |
@@ -170,6 +173,7 @@ simplification pass ([`simplification-pass.md`](simplification-pass.md)) removed
 | 94 | About-page URL for the crawler's user agent; umea.se `robots.txt` allows it | `ingestion-worker/design-connectors.md` §22; postponed U1 | P1 (before the first production crawl) | ask (web editors) |
 | 145 | Backup target with IT (S3-compatible or share), encryption at rest, and where the offline key escrow lives | `platform/repo-and-deployment.md` §7.1, §7.4, §14; `simplification-pass.md` §4 | P0 | ask (IT operations) |
 | 153 | `rag-api` memory limit with the in-process tool hub and one hosted MCP server | `platform/repo-and-deployment.md` §6.2, §14 | P2 | measure |
+| 162 | In-process `IRateLimitStore` and query-embedding cache (`ISharedCache` in-memory) in the one-slot pilot: a `rag-api` restart or maintenance-window update resets rate-limit windows and empties the cache without errors; cache hit rate and query-embedding p95 just after a restart; memory within the cache's size cap | `simplification-pass.md` §14; `platform/data-model.md` §11; `knowledge-api/design.md` §5.4 | P1 | test + measure |
 
 ## UI and accessibility
 

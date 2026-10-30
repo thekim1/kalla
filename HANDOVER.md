@@ -49,10 +49,13 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 
 ## Key decisions (full list: Decisions table)
 
+- **Pilot containers (6)**: `rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`, `postgres` (pgBackRest
+  inside the image); no Redis until the first multi-host deployment (P2) (`simplification-pass.md` §14).
 - **Services**: `Ume.Rag.Api` (roles chat, knowledge, mcp), `Ume.Rag.AdminApi` + Swedish admin UI (also hosts the
   nightly answer judge and, in P2, the skill gate), ingestion worker (`Worker:Classes` per instance; retrieval
   evaluation only, no tools), Python Docling parser (all PDFs, OCR, gated NER), ClamAV; renderer only in P2 if a
-  source needs JavaScript; tool hub in-process in P2. Stock pgvector Postgres and Redis, separate from the gateway.
+  source needs JavaScript; tool hub in-process in P2. Postgres (stock pgvector + pgBackRest), and Redis from P2, separate
+  from the gateway.
 - **Ingestion**: documents and chunk sets per source, reuse by content-addressed caches; fixed linear pipelines
   (template + parameters), no canvas; **learned site profiles** per host (Sitevision preset) set the HTML stages,
   auto-applied with guardrails; sitemap `lastmod` incremental runs; advisory evaluation, no gates.

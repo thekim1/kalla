@@ -93,9 +93,10 @@ gateway counterpart.
 ### 2.2 Hosting, slots and background work
 
 - One slot `rag-admin` in the single-host pilot (one-slot deployment with a short announced maintenance window,
-  simplification pass §1); `rag-admin-b` with the a/b slots of P2. Control zone; sessions in Redis
-  (`ume-rag:admin-session:{sessionId}`), so either slot serves any user.
-- Networks: `edge` (proxy; OIDC authority; Graph for feature C from P2), `data` (Postgres, Redis), `llm` (gateway: test
+  simplification pass §1); `rag-admin-b` with the a/b slots of P2. Control zone; sessions in Postgres
+  (`config."AdminSessions"`, owned by `rag-admin`; identity §1.1), so either slot serves any user; no Redis in P1
+  (simplification pass §14).
+- Networks: `edge` (proxy; OIDC authority; Graph for feature C from P2), `data` (Postgres), `llm` (gateway: test
   panel, model validation, answer-level evaluation, P2 skill gate, Data API sync), P2 `mcp` (hosted MCP servers:
   discovery, connection test, drift polling, test-panel and skill-gate tool calls; the worker is not on it).
 - Background services:
@@ -104,7 +105,7 @@ gateway counterpart.
 |---|---|---|---|
 | `OrganisationSync` | 5 min + on demand | `pg_try_advisory_xact_lock` per run, as `AdminApi/ModelListSync.cs:148-153` | `Departments`, `Teams` (changed rows only) |
 | `GatewayModelSync` | 5 min + on demand | same pattern | `GatewayModels` (changed rows only) |
-| `RetentionService` | nightly | each step batch idempotent under `pg_try_advisory_xact_lock(<step>)` ([`../performance-pass.md`](../performance-pass.md) §3.5); `Admin:Retention` (default `true`) as an off switch | chat/audit/config deletions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
+| `RetentionService` | nightly | each step batch idempotent under `pg_try_advisory_xact_lock(<step>)` ([`../performance-pass.md`](../performance-pass.md) §3.5); `Admin:Retention` (default `true`) as an off switch | chat/audit/config deletions, expired admin sessions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
 | `DefinitionDriftMonitor` (P2) | 15 min | advisory lock (the one drift leader) | `Tools.State`, repins from pre-registrations (tools §4.4) |
 | `ConfigVersionMonitor` | `rag_config` + 2 s poll | every instance | none (keeps the admin's own snapshot for validators and the test panel) |
 | `AnswerEvaluationService` (late P1) | nightly | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Ume.Rag.Answering` and the on-prem judge (processing §14.8) |
@@ -1039,7 +1040,7 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
   `KeyHash`, `EncryptedKey`).
 - Error-code coverage: every `ValidationCode` has an English message and is in `contracts/admin/v1/error-codes.json`.
 
-### 11.2 API integration (WebApplicationFactory; Testcontainers: the stock pgvector image, Redis, Keycloak; FakeGateway)
+### 11.2 API integration (WebApplicationFactory; Testcontainers: the stock pgvector image, Keycloak; FakeGateway)
 
 - **Role matrix**: generated from `PermissionMatrix`: every endpoint × every Keycloak test user → expected
   200/403/404; ids of another department → 404; shared collections usable for links but not editable.
@@ -1106,6 +1107,7 @@ component axe checks.
 | `platform/data-model.md` §2.1 | `GatewayModels` P1 with `Kind`, `Residencies varchar(10)[]`, `Source`; **no** `PipelineVersions.State = gating`, **no** `PlanJobId`; `UpdatedAt`, `UpdatedBy` on every editable aggregate root, `xmin` as concurrency token; `Clients.PortalUrl varchar(500) NULL`; `CollectionShares` (`CollectionId`, `DepartmentId`, `SharedBy`, `SharedAt`; PK both ids) replacing the own-department-only link note; no `Clients.TaskModel`/`TaskModelResidency`; no `GatewayKeyLinks`; `Collections.PublishGateRunId` dropped |
 | `platform/data-model.md` §2.3, §2.4 | `Feedback.ReasonCategory varchar(40) NULL`; `AuditLog.DepartmentId uuid NULL` (+ IX), actor column holds `oid`; `ConversationAccess` adds `Scope`, `FeedbackId`, `AssistantId`, `DepartmentId`, `ExpiresAt` |
 | `platform/data-model.md` §5 | every admin config transaction starts with `SELECT … FOR UPDATE` on `config."ConfigVersion"` (state it next to the outbox trigger) |
+| `platform/data-model.md` §1.2, §2.1, §5, §8, §11 | simplification pass §14: new `config."AdminSessions"` (`SessionId` PK, `Value bytea` (Data-Protection-encrypted ticket), `ExpiresAt` + IX; identity §1.1), admin S I U D, no api or worker grant, no outbox trigger (as `DataProtectionKeys`); retention deletes expired rows; §11 without `ume-rag:admin-session:*` |
 | `ingestion-worker/design-engine.md` | `command` kinds `approve-site-profile`, `reject-site-profile`, `edit-site-profile` (admin actions on `proposed`/`manual` site-profile versions; only `rollback-site-profile` exists there) and P2 `approve-profile`/`reject-profile` for parse-profile proposals; `eval` `on-demand` also enqueued by the admin after a retrieval-settings save; preview returns site-profile before/after for crawl sources; preflight samples ≤ 20 URLs and reports the CMS preset; template `paramsSchema` annotations `x-labels`, `x-help`, `x-unit` |
 | `ingestion-worker/design-connectors.md` §9.1 | uploads as batch create → one request per file → commit (manifest and `sync` job at commit; uncommitted batches swept after 24 h) |
 | `ingestion-worker/design-processing.md` §13–§14 | evaluation reports as consumed in §7.2 (recall@10, MRR with counts, previous run, per-question changes); no gate states, floor or overrides |
@@ -1199,3 +1201,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 | `rag-admin` → `rag-tools` hop | In-process hub in P2; `rag-tools` P3 (§10) |
 | Second admin slot in the pilot | P2 with the a/b slots (§1) |
 | Shred-bucket destruction in `RetentionService` | Off until A1 (§5) |
+| Admin sessions in Redis (`ume-rag:admin-session:{sessionId}`), `data` network reaching Redis | Postgres `config."AdminSessions"`, expired rows deleted by `RetentionService`; Redis returns in P2 only for shared limits, leases and the embedding cache (§14) |
