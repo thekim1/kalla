@@ -25,9 +25,9 @@ Refs: [data-model](../platform/data-model.md) §1, §2, §4, §5, §10, §14; [k
 
 ## 2. Swedish decompounder (#5, .NET part)
 Refs: [simplification-pass §3](../simplification-pass.md), [data-model §3, §14](../platform/data-model.md)
-- [ ] `SwedishDecompounder` in `Ume.Rag.Retrieval` with the `sv_SE` word list; unit tests (`bygglovsansökan` → `bygglov`, `ansökan`)
-- [ ] `SwedishTextSearchTests` (a part matches through the built-in `swedish` configuration)
-- [ ] Comparison against Postgres `ispell` recorded (to-verify #128)
+- [x] `SwedishDecompounder` in `Ume.Rag.Retrieval` with the `sv_SE` word list; unit tests (`bygglovsansökan` → `bygglov`, `ansökan`)
+- [x] `SwedishTextSearchTests` (a part matches through the built-in `swedish` configuration)
+- [x] Comparison against Postgres `ispell` recorded (to-verify #128)
 
 ## 3. Config-version library (#7)
 Refs: [repo-and-deployment §4](../platform/repo-and-deployment.md), [data-model §5](../platform/data-model.md)

@@ -1,0 +1,105 @@
+# Word sample from umea.se topics for SwedishDecompounder (to-verify #128). One word per line; '=' marks a simple
+# word that must not be split. Compared against Postgres ispell with the same sv_SE list on 2026-10-30 (results-b.md).
+bygglovsansökan
+förskoleplats
+avfallstaxa
+parkeringstillstånd
+äldreomsorgen
+kommunfullmäktige
+socialtjänsten
+detaljplan
+bostadsanpassningsbidrag
+hemtjänst
+grundskola
+gymnasieskolan
+översiktsplan
+miljöförvaltningen
+avloppsrening
+barnomsorgsavgift
+sommarlovet
+fritidsgård
+kulturhuset
+stadsbyggnadskontoret
+byggnadsnämnden
+matsedel
+ansökningsblankett
+felanmälan
+snöröjning
+busskort
+personuppgifter
+arbetsmarknadsenheten
+skolskjuts
+vattenledning
+återvinningscentral
+sophämtning
+bygglovshandläggare
+strandskyddsdispens
+nybyggnadskarta
+fastighetsförteckning
+tomtkö
+lägenhetsregister
+dricksvatten
+livsmedelskontroll
+serveringstillstånd
+alkoholservering
+försörjningsstöd
+= ekonomiskt
+familjerätt
+vårdnadshavare
+elevhälsa
+modersmålsundervisning
+fritidshem
+skollunch
+lekplats
+idrottshall
+simhallen
+badplatser
+cykelvägar
+gatubelysning
+parkeringsavgift
+trafiksäkerhet
+hastighetsgräns
+kollektivtrafik
+nämndsammanträde
+protokollsutdrag
+diarienummer
+= allmänna
+= handlingar
+offentlighetsprincipen
+dataskyddsförordningen
+klagomålshantering
+synpunktshantering
+medborgarförslag
+valnämnden
+röstkort
+förtidsröstning
+kommunstyrelsen
+budgetproposition
+skattesats
+föreningsbidrag
+evenemangskalender
+turistbyrån
+näringslivsutveckling
+företagslots
+upphandlingsenheten
+lönespecifikation
+semesteransökan
+tjänstebil
+krisberedskap
+räddningstjänsten
+brandskyddskontroll
+sotningsavgift
+energirådgivning
+solceller
+laddstolpar
+klimatanpassning
+naturreservat
+vandringsled
+= kommun
+= information
+= kalender
+= kontakt
+= biblioteket
+= vatten
+= tillgänglighet
+= medborgare
