@@ -10,7 +10,7 @@ the PR number after it (`[x] … (#12)`). Record every `to-verify` row in [`resu
 ## Waiting on (tick when it lands)
 - [x] **H1** Stage 0 merged ([`progress-stage-0.md`](progress-stage-0.md))
 - [x] **H3** A's `ume-rag/postgres` image in CI (then switch `TestPostgres` to it) (A's #5: CI sets `UME_RAG_TEST_POSTGRES_IMAGE`, issue #6)
-- [ ] **H4** worker applies the `command` kind (then wire the admin enqueue)
+- [x] **H4** worker applies the `command` kind (then wire the admin enqueue) (#28)
 
 ## 1. Schema and roles (#6, first)
 Refs: [data-model](../platform/data-model.md) §1, §2, §4, §5, §10, §14; [knowledge-api/design.md](../knowledge-api/design.md) §6, §15, §17

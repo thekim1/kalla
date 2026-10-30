@@ -4,8 +4,10 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Persistence;
 using Ume.Rag.Infrastructure.Security;
@@ -22,6 +24,9 @@ public sealed record AdminChange<T>(T Result, string Action, string EntityType, 
     public Guid? DepartmentId { get; init; }
     public string? Classification { get; init; }
     public string? Reason { get; init; }
+
+    /// <summary>Worker jobs the change starts (admin design §4.7), enqueued in the same transaction.</summary>
+    public IReadOnlyList<JobRequest> Jobs { get; init; } = [];
 }
 
 /// <summary>
@@ -29,7 +34,7 @@ public sealed record AdminChange<T>(T Result, string Action, string EntityType, 
 /// gateway's <c>AdminContext</c>: no invalidation bus (the outbox is in the transaction, data-model §5), and every config
 /// change runs under the config version lock with its audit entry.
 /// </summary>
-public sealed class AdminContext(RagDbContext db, TimeProvider time, ILoggerFactory loggers, IHttpContextAccessor http)
+public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider time, ILoggerFactory loggers, IHttpContextAccessor http)
 {
     public const string ServiceName = "rag-admin";
 
@@ -67,7 +72,8 @@ public sealed class AdminContext(RagDbContext db, TimeProvider time, ILoggerFact
     /// <summary>
     /// Runs one config change through the write path (admin design §4.4): the version lock first, then
     /// <paramref name="apply"/> (load, version check, rules, change), save (the triggers write the outbox and bump the
-    /// version), then the audit entry with the new version, all in one transaction; the 6001 event after commit.
+    /// version), then the audit entry with the new version and the change's jobs (<c>pg_notify('rag_jobs')</c> is delivered
+    /// at commit), all in one transaction; the 6001 event after commit.
     /// <paramref name="apply"/> may run more than once (transient failures retry), so it loads everything it changes.
     /// </summary>
     public async Task<T> WriteAsync<T>(Func<CancellationToken, Task<AdminChange<T>>> apply, CancellationToken ct)
@@ -86,6 +92,11 @@ public sealed class AdminContext(RagDbContext db, TimeProvider time, ILoggerFact
                 audit = Audit(actor, change, version);
                 Db.AuditLog.Add(audit);
                 await Db.SaveChangesAsync(attempt);
+                if (change.Jobs.Count > 0)
+                {
+                    await jobs.EnqueueAsync(change.Jobs, Db.Database.CurrentTransaction!.GetDbTransaction(), attempt);
+                }
+
                 return change.Result;
             }, ct);
         }

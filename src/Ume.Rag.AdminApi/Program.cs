@@ -6,6 +6,7 @@ using Ume.Rag.AdminApi;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Infrastructure;
 using Ume.Rag.Infrastructure.Config;
+using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Infrastructure.Stores;
 
 if (await WebDefaults.ExitIfHealthProbeAsync(args))
@@ -23,6 +24,8 @@ builder.AddUmeWebDefaults(maxRequestBodySize: 1024 * 1024, errors =>
     errors.Translators.Add(AdminDatabaseFaults.Translate);
 });
 builder.AddRagDatabase();
+// Admin actions enqueue worker jobs in their own transaction (H4, #28); the admin registers no rag_jobs listener.
+builder.AddRagJobQueue();
 builder.AddRagDataProtection();
 builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
