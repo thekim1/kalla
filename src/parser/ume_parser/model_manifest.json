@@ -1,0 +1,44 @@
+{
+  "models": [
+    {
+      "name": "layout",
+      "repository": "docling-project/docling-layout-heron",
+      "revision": "8f39ad3c0b4c58e9c2d2c84a38465abf757272d8",
+      "licence": "apache-2.0",
+      "dir": "docling-project--docling-layout-heron",
+      "files": {
+        "config.json": "fdea30805ce2f5666b147fca941dcdd27ad468e27d6ed21902207d3da056a97d",
+        "model.safetensors": "00333a43451945aaf89db8ca9c0a17e75d1537c17db60fdb91aa95f4c7929e0c",
+        "preprocessor_config.json": "cd38cd59999e7a95d68e487fbe5132df3d4e5c32a0836add57e6126ba0c4eaf1"
+      }
+    },
+    {
+      "name": "tableformer",
+      "repository": "docling-project/docling-models",
+      "revision": "fc0f2d45e2218ea24bce5045f58a389aed16dc23",
+      "licence": "cdla-permissive-2.0",
+      "dir": "docling-project--docling-models",
+      "files": {
+        "model_artifacts/tableformer/accurate/tableformer_accurate.safetensors": "2a7d6c924b3cd12fb99a09280ca9c33a89c5d60b93253617d2e088c1a40374d9",
+        "model_artifacts/tableformer/accurate/tm_config.json": "984e122ceb8ccf84d84c9d2882f6f2302a44b4f1e577babd6289892c36f3cffd",
+        "model_artifacts/tableformer/fast/tableformer_fast.safetensors": "3119563aab5a7c96fda4d621119b63fd8806272b86c30936d15507616422f718",
+        "model_artifacts/tableformer/fast/tm_config.json": "dca6762508dddfae6d57d6cb4ef822c6000119dff0f3b6489db7413118c2622a"
+      }
+    },
+    {
+      "name": "ner",
+      "repository": "KBLab/bert-base-swedish-cased-ner",
+      "revision": "f3c83af8196b812028fc08e1971a2d289d0a3f1d",
+      "licence": "mit",
+      "dir": "kb-ner",
+      "files": {
+        "added_tokens.json": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "config.json": "1284483dab27959cf57bbabbd7edd9b2791506c1f673cefc1a6b28f47a184a15",
+        "model.safetensors": "fde0c4f917d5ae080cea0c39d803c531620c51ae1220e272c0637d09d70e16be",
+        "special_tokens_map.json": "303df45a03609e4ead04bc3dc1536d0ab19b5358db685b6f3da123d05ec200e3",
+        "tokenizer_config.json": "d1e9abb2058dcbef4391b9ae569a1b116330fee3ec18866c0e09f2db3c4377c7",
+        "vocab.txt": "cf103a3207ce9ce64c4d9e306c2cb433e5987b6050a9d869914e1a8e2c781ad6"
+      }
+    }
+  ]
+}
