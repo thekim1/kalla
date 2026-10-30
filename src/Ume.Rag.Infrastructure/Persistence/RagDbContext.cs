@@ -28,6 +28,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<ApiKey> Keys => Set<ApiKey>();
     public DbSet<KeyLastUse> KeyLastUse => Set<KeyLastUse>();
+    public DbSet<AdminSession> AdminSessions => Set<AdminSession>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<WorkerInstance> WorkerInstances => Set<WorkerInstance>();
     public DbSet<RunItem> RunItems => Set<RunItem>();
@@ -113,6 +114,14 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
             e.Property(x => x.Scopes).HasColumnType("jsonb").HasConversion(
                 new ValueConverter<KeyScopes, string>(v => JsonSerializer.Serialize(v, ScopesJson), v => JsonSerializer.Deserialize<KeyScopes>(v, ScopesJson) ?? KeyScopes.None),
                 new ValueComparer<KeyScopes>((a, b) => Equals(a, b), v => v.GetHashCode(), v => new KeyScopes(v.AssistantIds.ToArray(), v.CollectionIds.ToArray())));
+        });
+
+        modelBuilder.Entity<AdminSession>(e =>
+        {
+            e.ToTable("AdminSessions", ConfigSchema);
+            e.HasKey(x => x.SessionId);
+            e.Property(x => x.SessionId).HasMaxLength(64);
+            e.HasIndex(x => x.ExpiresAt);
         });
 
         modelBuilder.Entity<KeyLastUse>(e =>
