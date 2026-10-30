@@ -214,7 +214,8 @@ encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, t
 | Retention (default / max) | 90 / 90 days | 90 / 90 days | 30 / 90 days |
 | Application-level encryption of content | optional (default on) | **required** | **required** |
 | Key scope | per conversation | per conversation | per conversation, separate master key |
-| Admin review of conversations | reason | reason | reason **+ second approver** |
+| Admin review of conversations (`rag-reviewer` only; admin design §3.1, §8) | reason | reason | reason **+ second approver** |
+| Admin reading a single feedback comment (`rag-reviewer` or `rag-department-admin`) | one-click reason, audited | one-click reason, audited | only through the review flow above |
 | Allowed clients | per ceiling | per ceiling | only clients without their own history store |
 | Feedback comments, tool results, cited source text | same policy as messages | same | same |
 

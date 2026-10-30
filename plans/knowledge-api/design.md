@@ -58,12 +58,14 @@ materialised CTE); NuGet **`Pgvector` 0.3.2** (depends on `Npgsql` ≥ 8.0.5; co
 | `Ume.Rag.Domain` | port `IRetriever`, request/result records, `RetrievalMode`, `ExpandMode`, `Classification`, `IAccessPolicy` (identity §4.2) | Chat role, knowledge role, MCP role (P2) |
 | `Ume.Rag.Retrieval` (new in repo-and-deployment §1) | `RetrievalEngine` (candidates → fusion → dedup → diversity → coverage), `ISearchIndex` + `PostgresSearchIndex` (statements of §6), `RetrievalSettingsResolver`, `QueryNormalizer`, `RrfFusion`, `ResultDiversifier`, `CoverageEvaluator`, `ScopeSizeCache` | `Ume.Rag.Api` (knowledge role), `Ume.Rag.Worker` (evaluator, processing §13.5), `Ume.Rag.AdminApi` (test panel) |
 | `Ume.Rag.Infrastructure` | `IGatewayClient` (shared with the worker, 6a §7.7) incl. `EmbedQueryAsync`, `QueryEmbeddingCache`, `IBlobStore`, `IKeyProvider`, `ITierResolver`, config snapshot, `SecurityEvents`, `RedisKeys` | all |
-| `Ume.Rag.Api` (role `knowledge`) | `KnowledgeService : IRetriever` (policy, collection resolution, embedding, hydration, sections, citations, statistics), `DownloadGrants`, endpoint group `/v1` knowledge routes, OpenAPI document `knowledge` | Chat role in process; HTTP callers |
+| `Ume.Rag.Answering` (admin design §2.1) | `KnowledgeService : IRetriever` core without HTTP (policy within a given scope, collection resolution, embedding, hydration, sections, citations, statistics) | `Ume.Rag.Api` (knowledge role), `Ume.Rag.AdminApi` (test panel) |
+| `Ume.Rag.Api` (role `knowledge`) | hosts `KnowledgeService`; `DownloadGrants`, endpoint group `/v1` knowledge routes, OpenAPI document `knowledge` | Chat role in process; HTTP callers |
 
 The evaluator calls `RetrievalEngine` directly with a `Collections` or `ChunkSets` scope (processing §13.5) and no
 policy; the API wraps the same engine with policy and hydration. Nothing in `Ume.Rag.Retrieval` reads `config` or
 knows about principals: it receives a resolved `SearchScope`, so the evaluator and the API cannot drift apart except in
-what they pass in (contract test, §16.3).
+what they pass in (contract test, §16.3). The `building` rule is unchanged: no API route includes `building`
+collections; only the admin host passes them to the shared core (test panel, §4.5).
 
 ### 2.2 In-process interface (Chat API → knowledge role)
 

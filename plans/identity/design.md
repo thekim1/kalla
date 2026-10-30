@@ -78,9 +78,10 @@ groups intersect the group claim (`:40-48`).
 
 | Role value | Policy membership | Scope |
 |---|---|---|
-| `rag-platform-admin` | `Admin`, `Manage`, `EditPipelines`, `EditSkills`, `Edit`, `Read` | every department (like `gateway-admin`, `AdminContext.cs:81-86`) |
-| `rag-department-admin` | `Manage`, `EditPipelines`, `EditSkills`, `Edit`, `Read` | `departmentCodes` (+ feature C) |
+| `rag-platform-admin` | `Admin`, `Manage`, `EditPipelines`, `EditSkills`, `Edit`, `Read` (neither `Review` nor `FeedbackComments`) | every department (like `gateway-admin`, `AdminContext.cs:81-86`) |
+| `rag-department-admin` | `Manage`, `EditPipelines`, `EditSkills`, `Edit`, `Read`, `FeedbackComments` | `departmentCodes` (+ feature C) |
 | `rag-pipeline-editor` | `EditPipelines`, `Read` | same |
+| `rag-reviewer` (P1) | `Review`, `FeedbackComments`, `Read` | same (feedback comments and conversations with a reason, audited; admin design §3.1, §8) |
 | `rag-skill-editor` (P2) | `EditSkills`, `Read` | same (draft, publish, serve, roll back skills; tools design §3.6) |
 | `rag-editor` (P2) | `Edit`, `Read` | same; links published skills to assistants, cannot edit skills (tools design §3.6) |
 | `rag-viewer` | `Read` | same |
@@ -89,7 +90,9 @@ groups intersect the group claim (`:40-48`).
 As in the gateway, policies are `RequireRole(any of …)` (`AdminAuthentication.cs:151-158`), so several roles add up
 and the highest one counts (`docs/identity-and-roles.md:22-24`). Role values that are not `rag-*` are ignored, so a
 token from the shared registration carrying `gateway-admin` grants nothing here, and the gateway ignores `rag-*`
-because its policies name only its own roles. `teamCodes` is read and shown but grants nothing in P1 (no team-scoped
+because its policies name only its own roles. `Review` (open a conversation) and `FeedbackComments` (reveal one
+feedback comment) are not implied by `Admin`: no administrative role grants conversation content, so a platform admin
+who must review is also given `rag-reviewer`. `teamCodes` is read and shown but grants nothing in P1 (no team-scoped
 role yet, plan §3).
 
 ### 1.4 Settings
@@ -109,6 +112,7 @@ with the `UME_RAG_` prefix; for local runs the same keys as `Oidc:<Setting>` in 
 | `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | `Oidc:RoleGroups:rag-platform-admin` | – | `;`-separated, case-insensitive |
 | `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN` | `Oidc:RoleGroups:rag-department-admin` | – | |
 | `UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR` | `Oidc:RoleGroups:rag-pipeline-editor` | – | |
+| `UME_RAG_OIDC_GROUPS_REVIEWER` | `Oidc:RoleGroups:rag-reviewer` | – | P1 (admin design §3.1) |
 | `UME_RAG_OIDC_GROUPS_SKILL_EDITOR` | `Oidc:RoleGroups:rag-skill-editor` | – | P2 (tools design §3.6) |
 | `UME_RAG_OIDC_GROUPS_EDITOR` | `Oidc:RoleGroups:rag-editor` | – | P2 |
 | `UME_RAG_OIDC_GROUPS_VIEWER` | `Oidc:RoleGroups:rag-viewer` | – | |
@@ -477,7 +481,9 @@ value (chat-api §4).
 
 - **Admin test panel**: runs in the admin process, builds a `RagPrincipal` for client `admin-console` with the
   admin's `sub`, and checks access with the admin's role scope (department of the assistant ∈ admin's departments),
-  not with assistant audiences. Answers are not stored as conversations.
+  not with assistant audiences. Answers are not stored as conversations. It runs the real chat path in process through
+  the `Ume.Rag.Answering` library (admin design §2.1, §4.9). P2 agent test calls go to the hub as `admin-console`
+  (needs `ToolPolicy = read` on that client, tools design §2.2).
 - **`rag-internal`**: the chat role sends `assistantId` and the already-made decision's level; the knowledge role
   recomputes the assistant's collections from its own snapshot (same version or newer) and refuses if the assistant's
   level is now above what was forwarded (the stricter answer wins).
@@ -809,10 +815,10 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 | 6001 | `rag.admin.change` | admin | every audit entry (gateway 2001) | `Actor`, `Action`, `EntityType`, `EntityId` |
 | 6002 | `rag.admin.signin` | admin | sign-in, not extension (gateway 2002, `AdminAuthentication.cs:100-107`) | `Actor`, `SourceAddress`, `Roles`, `Departments`, `SessionId`, **`DepartmentLookup`** |
 | 6003 | `rag.admin.signout` | admin | (gateway 2003) | `Actor`, `SourceAddress`, `SessionId` |
-| 6004 | `rag.conversation.access` | admin | conversation review events | unchanged |
+| 6004 | `rag.conversation.access` | admin | conversation review events: comment reveal and conversation access, before decrypting; per fetch within an access window (admin design §8.2–§8.3) | `Actor`, `RequestId`, `Event`, `Scope` (`comment`/`conversation`), `ConversationId`, `Classification`, `AssistantId` |
 | 6005 | `rag.admin.session.extended` | admin | *Stay signed in* (gateway 2004) | `Actor`, `SessionId`, `ExpiresAt`, `SourceAddress` |
 | 6006 | `rag.admin.access.denied` | admin | 403 for a signed-in user, once a minute per user (gateway 2005) | `Actor`, `Method`, `Path`, `Count`, `SourceAddress`, `Roles` |
-| 6007 | `rag.admin.data.read` | admin | reads of the audit log, keys, conversation lists (gateway 2006) | `Actor`, `Path`, `Query`, `SourceAddress` |
+| 6007 | `rag.admin.data.read` | admin | reads of the audit log, keys, conversation lists, feedback lists, the access log and conversation views (gateway 2006) | `Actor`, `Path`, `Query`, `SourceAddress` |
 
 `Reason` values of 5001: the gateway's set (`missing_key`, `invalid_key`, `key_revoked`, `key_expired`,
 `key_disabled`, `owner_inactive`, `address_not_allowed`; `SecurityEvents.cs:51-61`) plus `origin_not_allowed`,
@@ -844,14 +850,14 @@ from the gateway's file; passwords and secrets are import placeholders like `${U
 | Element | Content |
 |---|---|
 | User profile | declares `departmentCodes`, `teamCodes` (Keycloak ≥ 24 drops undeclared attributes, `docs/identity-and-roles.md:148-149`) |
-| Realm roles | `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-skill-editor` (P2), `rag-editor`, `rag-viewer`; app permissions `Knowledge.Read.All`, `Chat.Invoke.All` |
+| Realm roles | `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-reviewer`, `rag-skill-editor` (P2), `rag-editor`, `rag-viewer`; app permissions `Knowledge.Read.All`, `Chat.Invoke.All` |
 | Client scopes | `Chat.Use`, `Knowledge.Read`, `Mcp.Use` (optional client scopes, each with an audience mapper `ume-rag-api`, `include.in.token.scope` on, so they appear in `scope`) |
 | Client `ume-rag-admin` | confidential, standard flow only, PKCE S256, redirect and post-logout URIs for `https://localhost:5174` and the adminapi https port (as `ume-realm.json:28-37`); mappers copied: `roles` realm-role mapper (`:41-52`), `departmentCodes` and `teamCodes` attribute mappers (`:54-79`), all to the ID token; **`groups`** group-membership mapper (full path off, ID token on) |
 | Client `ume-rag-api-dev` | client credentials only (as `ume-data-dev`, `:84-107`); audience mapper `ume-rag-api`; realm-role mapper to `roles` (access token); service account roles `Knowledge.Read.All`, `Chat.Invoke.All` |
 | Client `ume-rag-chat-dev` | **new**: public client, code + PKCE, redirect `http://localhost:*` style loopback for test tools; default scope `Chat.Use`, optional `Knowledge.Read`, `Mcp.Use`; for delegated-token and MCP tests |
 | Client `open-webui-dev` | confidential, code flow, redirect `http://localhost:<owui port>/oauth/oidc/callback`; `email` in ID token; used when `OpenWebUi:Enabled` |
 | Groups | `Byggnadsnämnden` (member: `rag-group-member`), `rag-pilot-users` (members: all test users) |
-| Users | `rag-platform-admin` (1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), **`rag-skill-editor`** (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute; via `Byggnadsnämnden` → department 3000), **`rag-no-role`** (1000, no role: every `/api` call 403), **`rag-chat-user`** (no admin role; for delegated chat tokens) |
+| Users | `rag-platform-admin` (1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), **`rag-reviewer`** (1000), **`rag-skill-editor`** (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute; via `Byggnadsnämnden` → department 3000), **`rag-no-role`** (1000, no role: every `/api` call 403), **`rag-chat-user`** (no admin role; for delegated chat tokens) |
 | Seed | the FakeGateway catalogue (repo-and-deployment §4.3) returns department 3000 with `memberGroups: ["Byggnadsnämnden"]`, so the org sync fills the mirror in dev |
 
 Development uses `Oidc:GroupLookup = Claims`; the Graph path is covered by unit tests with a fake
@@ -869,7 +875,7 @@ Development uses `Oidc:GroupLookup = Claims`; the Graph path is covered by unit 
 | Its service principal | `appRoleAssignmentRequired = true` | no |
 | Pilot groups (new) | `Ume.Rag pilot users` (Open WebUI access), `Ume.Rag platform admins`, `Ume.Rag department admins – <pilot department>` (names agreed with IT; no convention exists, plan answered question 5) | `Group.Create` for the deployer |
 | `rag-tools` credential and MCP server registrations (P2) | a certificate credential (`keyCredentials`) for `rag-tools` client credentials (`/run/certs/rag-tools-entra.pfx`, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-avgifter`) with app role `Tools.Invoke` (Application) and its assignment to `rag-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
-| App role assignments | pilot users group → `open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin` (P2: skill editor groups → `rag-skill-editor`) on the shared registration | assigning on an app the deployer does not own needs `AppRoleAssignment.ReadWrite.All` or app ownership |
+| App role assignments | pilot users group → `open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin`, reviewer groups per department → `rag-reviewer` (P2: skill editor groups → `rag-skill-editor`) on the shared registration | assigning on an app the deployer does not own needs `AppRoleAssignment.ReadWrite.All` or app ownership |
 
 ### 12.2 Credentials
 
@@ -904,6 +910,7 @@ var ragRoles = [
   { id: guid('rag-platform-admin'),   value: 'rag-platform-admin',   displayName: 'RAG platform admin',   allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: everything' }
   { id: guid('rag-department-admin'), value: 'rag-department-admin', displayName: 'RAG department admin', allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: own departments' }
   { id: guid('rag-pipeline-editor'),  value: 'rag-pipeline-editor',  displayName: 'RAG pipeline editor',  allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: pipelines' }
+  { id: guid('rag-reviewer'),         value: 'rag-reviewer',         displayName: 'RAG reviewer',         allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: feedback comments and conversations with a reason' }
   { id: guid('rag-viewer'),           value: 'rag-viewer',           displayName: 'RAG viewer',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: read' }
   { id: guid('rag-editor'),           value: 'rag-editor',           displayName: 'RAG editor',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: forms in own departments (P2)' }
   { id: guid('rag-skill-editor'),     value: 'rag-skill-editor',     displayName: 'RAG skill editor',     allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: skills in own departments (P2)' }

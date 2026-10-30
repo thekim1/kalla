@@ -135,7 +135,8 @@ cannot read (data-model §1.2; Dify and RAGFlow mix the two, F13). Abridged exam
                 "displayName": { "sv": "Växel", "en": "Switch" }, "deprecated": false } }
 ```
 
-`metadata` is a new `jsonb` column (§21). Port and schema of an existing (type, version) are immutable: a worker that
+`metadata` is a new `jsonb` column (§21). `paramsSchema` properties carry the annotations `x-labels`, `x-help` and
+`x-unit` (Swedish) from which the admin generates forms (admin design §6.3); a missing label fails a manifest CI check. Port and schema of an existing (type, version) are immutable: a worker that
 starts with a different definition for a registered pair **fails startup** (a change needs a version bump).
 
 ### 3.3 Hashes ("identical" stages)
@@ -437,8 +438,8 @@ Data-model §4.2 holds order, leases and attempts. Concurrency defaults below ar
 
 | Class | Concurrency | Payload (ids and parameters only, ≤ 4 KB) | Runs |
 |---|---|---|---|
-| `preview` | 2 | `kind` (`node-preview`/`publish-plan`), `pipelineVersionId`, `documentIds` or `urls`, `untilNodeId`, `basePreviewJobId` | §11, §12 |
-| `command` | 2 | `kind` + ids: `clear-pii-flag`, `confirm-deletion`, `reject-deletion`, `approve-profile`, `rollback-profile`, `edit-eval-question`, `recompute-membership`, `reprocess-document`, `cancel-run` | 6a/6b/6c each own their kinds |
+| `preview` | 2 | `kind` (`node-preview`/`publish-plan`; 6b: `preflight`/`hierarchy`), `pipelineVersionId`, `documentIds` or `urls` (a `preflight` of a URL list samples ≤ 20 URLs, admin design §4.7), `untilNodeId`, `basePreviewJobId` | §11, §12 |
+| `command` | 2 | `kind` + ids: `clear-pii-flag`, `confirm-deletion`, `reject-deletion`, `approve-profile`, `rollback-profile`, `edit-eval-question`, `recompute-membership`, `reprocess-document`, `cancel-run`, `release-hold` (admin design §4.7) | 6a/6b/6c each own their kinds |
 | `sync` | 2 | `sourceId`, `runId`, `kind` (`sync`/`retry-failed`/`reprocess`), `scheduledFor`, `force`, `fromNode`, connector checkpoint | 6b (listing), §9.2 |
 | `fetch` | 8 (frontier limits per host) | `sourceId`, `runId`, identity or frontier entry; `executionId` once known | 6b, then §7 |
 | `parse` | `min(Settings, /v1/info capacity.convert_slots)` | `documentId`, `level`, `executionId`, `pipelineVersionId`, `nodeId`, `inputKey`, `slice` | §7, §9.5 |
@@ -621,11 +622,11 @@ and no hot row is updated per document.
 
 | Step | Who | What |
 |---|---|---|
-| 1 | admin | validate the draft (§4 incl. live support); version stays `draft` |
+| 1 | admin | validate the draft (§4 incl. live support); version → **`gating`** (read-only while plan and gate run; admin design §6.6), plan and gate job ids stored (`PlanJobId`, `GateRunId`) |
 | 2 | worker (`preview`, `kind = publish-plan`) | the **re-processing plan** (§12.2) and cost/time forecast into `Jobs.Result` |
 | 3 | worker (`eval`) | the **gate hook**: `IPublishGate.RunAsync(candidateVersion, sample)`; the sample's chunk sets are built for real as **shadow sets** (`CollectionIds = '{}'`, `DeletedAt = now()`, invisible to retrieval), so the work is reused on publish. Gate logic, sample size and thresholds: 6c (plan §7) |
-| 4 | user | sees plan, forecast and gate result; confirms (a failed gate blocks; override rules are 6c's) |
-| 5 | admin | one config transaction: version → `published` (`PublishedAt`, `GateRunId`), previous → `superseded`, `Pipelines.PublishedVersionId`; audit 6001; enqueues a `reprocess` `sync` per source using the pipeline |
+| 4 | user | sees plan, forecast and gate result; confirms (a failed gate blocks; override rules are 6c's); cancel or a failed gate without override returns the version to `draft` |
+| 5 | admin | one config transaction: checks that the version's stored hashes equal the hashes the gate measured (`EvaluationRuns.SubjectVersion`), version → `published` (`PublishedAt`, `GateRunId`), previous → `superseded`, `Pipelines.PublishedVersionId`; audit 6001; enqueues a `reprocess` `sync` per source using the pipeline |
 | 6 | worker | `EnsureCurrent` per live reference; the run items say `updated`, or `unchanged` when the set was already current |
 
 The admin owns `config` and the worker only reads it, so publish states stay in `PipelineVersions.State`; the plan and

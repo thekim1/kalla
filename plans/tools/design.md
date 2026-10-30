@@ -100,7 +100,7 @@ already holds in its snapshot (`api` has `SELECT` on `Skills`, `SkillVersions`, 
 | From → to | Path | Authentication | Carries |
 |---|---|---|---|
 | `rag-api` (chat, mcp) → `rag-tools` | new internal network `tools`, HTTPS with the internal CA | **mTLS** (client certificate from `/run/certs`, subject in `Tools:AllowedCallers` = `rag-api`, `rag-admin`) **and** the `ume-rag-sk-` service key of client `rag-internal` (identity §9.1 "mTLS-only hop that already carries the service key") | tool-call requests (§2.4); P3 `x-rag-user-assertion` |
-| `rag-admin` → `rag-tools` | `tools` network | same, service key of client `admin-console` | discovery, connection test |
+| `rag-admin` → `rag-tools` | `tools` network | same, service key of client `admin-console` | discovery, connection test; P2 agent test-panel tool calls (admin design §4.9; the `admin-console` client needs `ToolPolicy = read`) |
 | `rag-tools` → hosted MCP servers | new internal network `mcp` | per server (§4.6), normally `client-credentials` | MCP over Streamable HTTP |
 | `rag-tools` → municipal and external MCP servers | new network `tools-egress`, firewall allow-lists `UME_RAG_TOOLS_INTERNAL_ALLOW` (municipal CIDRs) and `UME_RAG_TOOLS_ALLOW` (registered internet hosts) plus the OIDC token endpoint | per server | MCP |
 | `rag-tools` → Postgres, Redis | `data` | `ume_rag_tools` role; Redis ACL user | snapshot, audit inserts, rate limits |
@@ -1284,7 +1284,7 @@ budget; the R1 release test gets an agent scenario (10 % of chat streams) withou
 
 | Phase | Deliverable |
 |---|---|
-| P2 start | M1 checks (SDK version, real MCP clients, Entra metadata questions); `GatewayModels` sync; gateway `features` on the catalogue if released |
+| P2 start | M1 checks (SDK version, real MCP clients, Entra metadata questions); gateway `features` on the catalogue if released (`GatewayModels` sync itself moved to P1, admin design §4.10) |
 | P2 a | `rag-tools` with registry snapshot, MCP client, resolvers (`none`, `api-key`, `client-credentials`), policy re-check, normalisation, rate limits, audit, drift monitor; admin: tool-server registration, discovery, two approvals, grants; template + `ume-mcp-avgifter` (mock) deployed on `mcp` |
 | P2 b | `AgentAnswerStrategy` with built-ins, limits, status events, hold-back, citations, `ToolCalls` storage; FakeGateway scripted tool modes; injection suites |
 | P2 c | Skills: editor role, draft/publish/serve/rollback, `SkillVersionFiles`, skill gate (retrieval + routing), `load_skill`/`read_skill_file`, RAG static inclusion; lethal-trifecta validator and risk acceptance |

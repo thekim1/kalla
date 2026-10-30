@@ -581,6 +581,10 @@ it. Small item for any later release: add `ModelDeployment.ContextWindow` (alrea
 `GatewayModels` sync sets `SupportsTools` for agent assistants without a manual flag (tools design §6.4). Additive
 fields, no migration.
 
+Optional item next to these (admin design §4.10): `GET /v1/catalog/routes` (route alias name, kind, target model ids),
+so the RAG admin syncs route aliases and their targets' residencies instead of platform admins keeping manual
+`GatewayModels` rows for them. Additive route, `catalog.read` scope.
+
 ## 8. Data model, migrations, Redis
 
 ### 8.1 Migrations
