@@ -1,0 +1,33 @@
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{json,yml,yaml,ts,vue,js,mjs,css,html,md}]
+indent_size = 2
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_for_built_in_types = true:suggestion
+dotnet_sort_system_directives_first = true
+# Async suffix not required for minimal API handlers
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.IDE0005.severity = warning
+
+# Raised above AnalysisLevel latest-recommended: CancellationToken forwarding, [LoggerMessage] logging, culture-explicit
+# string operations (ordinal is also the fast path), and Random only where justified (weighted routing is suppressed per method).
+dotnet_diagnostic.CA2016.severity = warning
+dotnet_diagnostic.CA1848.severity = warning
+dotnet_diagnostic.CA1873.severity = warning
+dotnet_diagnostic.CA1304.severity = warning
+dotnet_diagnostic.CA1305.severity = warning
+dotnet_diagnostic.CA1307.severity = warning
+dotnet_diagnostic.CA1309.severity = warning
+dotnet_diagnostic.CA1310.severity = warning
+dotnet_diagnostic.CA1311.severity = warning
+dotnet_diagnostic.CA5394.severity = warning

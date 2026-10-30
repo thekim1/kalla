@@ -1,0 +1,6 @@
+{
+  "appHost": {
+    "path": "src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj",
+    "language": "csharp"
+  }
+}

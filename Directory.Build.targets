@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Container settings shared by the service images (AdminApi, DataApi, Gateway, MigrationService). Opt in with
+    <UmeServiceContainer>true</UmeServiceContainer>. This lives in a .targets file because Directory.Build.props is read
+    before the project file, so it cannot see the opt-in; the SDK reads these properties in targets that run later.
+    Base image: digest-pinned chiseled-extra (non-root, no shell, ICU and time-zone data). Update tag and digest together.
+  -->
+  <PropertyGroup Condition="'$(UmeServiceContainer)' == 'true'">
+    <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0.13-noble-chiseled-extra@sha256:3ed6558056b54d5c9dfefb7ff473728e022ff2bf1d976cbf8ee07b05ec594374</ContainerBaseImage>
+    <ContainerUser>1654</ContainerUser>
+  </PropertyGroup>
+</Project>

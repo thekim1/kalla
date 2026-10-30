@@ -1,9 +1,10 @@
 # Who may change which path during P0. One rule per line: <glob> <owner>. The first matching rule wins.
 # Owners: a = stream A (platform and ingestion side), b = stream B (application and serving side),
 #         shared = either stream, append-only, in a PR of its own, main = main session (design and coordination).
-# Globs follow gitignore rules: * stays inside one directory, ** crosses directories; a path that matches no rule
-# fails the check, so add a rule here first (main session). A PR from branch a/* or b/* may touch only its own paths
-# and shared paths (check: Stage 0, verify.yml).
+# Globs are anchored at the repository root (*.md is a root file only): * stays inside one directory, ** crosses
+# directories. A path that matches no rule fails the check, so add a rule here first (main session). A PR from branch
+# a/* or b/* may touch only its own paths and shared paths (check: scripts/check-ownership.py, job ownership in
+# verify.yml).
 # Rationale and hand-offs: plans/p0/README.md.
 
 # Stream results and progress files

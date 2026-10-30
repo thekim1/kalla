@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>ume-rag-worker</UserSecretsId>
+    <ContainerRepository>ume-rag/worker</ContainerRepository>
+    <UmeServiceContainer>true</UmeServiceContainer>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Ume.Rag.Infrastructure\Ume.Rag.Infrastructure.csproj" />
+    <ProjectReference Include="..\Ume.Rag.ServiceDefaults\Ume.Rag.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\Ume.Rag.Pipelines\Ume.Rag.Pipelines.csproj" />
+    <ProjectReference Include="..\Ume.Rag.Retrieval\Ume.Rag.Retrieval.csproj" />
+  </ItemGroup>
+</Project>
