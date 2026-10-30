@@ -1,0 +1,10 @@
+[Unit]
+Description=Ume Rag: backup and WAL archive metrics every two minutes
+Documentation=file:@DEPLOY_DIR@/host/README.md
+
+[Timer]
+OnCalendar=*:0/2
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
