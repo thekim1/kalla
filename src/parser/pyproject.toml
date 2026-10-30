@@ -1,0 +1,56 @@
+[project]
+name = "ume-parser"
+version = "0.1.0"
+requires-python = "==3.12.*"
+dependencies = [
+    "docling-slim[convert-core,format-pdf,format-office,format-opendocument,models-local]==2.142.0",
+    "opencv-python-headless==4.14.0.94",
+    "pandas==3.1.0",
+    "pypdfium2==5.14.0",
+    "defusedxml==0.7.1",
+    "psutil==7.2.2",
+    "pillow==13.0.0",
+    "fastapi==0.161.1",
+    "uvicorn==0.54.0",
+    "pydantic==2.14.1",
+    "pydantic-settings==2.16.1",
+    "python-multipart==0.0.32",
+    "torch==2.14.1",
+    "torchvision==0.29.1",
+    "transformers==5.20.2",
+]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "ruff==0.17.2", "httpx2==2.16.0"]
+
+[tool.uv]
+package = false
+no-build = true
+exclude-newer = "2026-10-23T00:00:00Z"
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "S", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ume_parser", "offline_guard"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
