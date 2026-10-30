@@ -97,7 +97,7 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 | 11. Consistency pass + to-verify register | `plans/consistency-pass.md`, `plans/to-verify.md` | `55b6113` |
 | Architecture diagrams | `plans/architecture.md` | `74f8b61` |
 | Performance pass | `plans/performance-pass.md` | `3b79baa` |
-| Overall review → simplification pass (10 changes) + umea.se site profiles | `plans/simplification-pass.md`, every plan document | session 4 commit |
+| Overall review → simplification pass (10 changes) + umea.se site profiles | `plans/simplification-pass.md`, every plan document | `6f0602f` |
 | **P0 implementation** | `plans/platform/repo-and-deployment.md` §11 | **next** |
 
 ## Open items
