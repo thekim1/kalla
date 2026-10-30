@@ -33,9 +33,9 @@ Refs: [parser/design.md](../parser/design.md) §7, §9–§13, §16, §19; [repo
 
 ## 3. ClamAV and dev scripts (#12)
 Refs: [repo-and-deployment §4, §5.5](../platform/repo-and-deployment.md)
-- [ ] `images/clamav/Dockerfile` (freshclam direct, no mirror)
-- [ ] `scripts/Start-Dev.ps1`, `scripts/Start-E2E.ps1` adapted from the gateway
-- [ ] to-verify #89 recorded
+- [x] `images/clamav/Dockerfile` (freshclam direct, no mirror)
+- [x] `scripts/Start-Dev.ps1`, `scripts/Start-E2E.ps1` adapted from the gateway
+- [x] to-verify #89 recorded
 
 ## 4. CI beyond Stage 0 (#3)
 Refs: [repo-and-deployment §8](../platform/repo-and-deployment.md)
