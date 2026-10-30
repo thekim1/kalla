@@ -486,16 +486,16 @@ $own_step
   1. Register these redirect URIs for client '$oidc_client' in Entra (code + PKCE):
        https://$admin_host$public_admin/signin-oidc
        https://$admin_host$public_admin/signout-callback-oidc
-  2. docker compose --env-file deploy/.env up -d --wait
-  3. docker compose --env-file deploy/.env exec -T postgres pgbackrest --stanza=ragdb stanza-create
+  2. As root, before the first up: $here/host/install.sh (the ingestion slice the containers' cgroup_parent
+     names, the firewall, and the backup, upload copy and restart-unhealthy timers; deploy/host/README.md).
+  3. docker compose --env-file deploy/.env up -d --wait
+  4. docker compose --env-file deploy/.env exec -T postgres pgbackrest --stanza=ragdb stanza-create
      Once per new database or repository (safe to repeat): WAL archiving fails until the stanza exists.$backup_note
-  4. Escrow the long-lived keys: $here/escrow-keys.sh /media/<escrow>, then --verify it
+  5. Escrow the long-lived keys: $here/escrow-keys.sh /media/<escrow>, then --verify it
      ($secrets/keys/rag-blob-internal and $secrets/pgbackrest/cipher-pass). Back up $secrets/.pepper and
      $certs/data-protection.pfx separately from database backups: without them a restored database is unusable.
-  5. As root: $here/host/install.sh (the ingestion slice, the firewall, and the backup, upload copy and
-     restart-unhealthy timers; deploy/host/README.md).
   6. Internal certificates last 825 days; re-issue with: $0 --renew-certs
-  7. Move $certs/ca.key off this host (with the backups in step 4). Anyone who can read it can
+  7. Move $certs/ca.key off this host (with the backups in step 5). Anyone who can read it can
      issue certificates the services trust; it is only needed again for --renew-certs.
 $proxy_note$owui_note
 EOF
