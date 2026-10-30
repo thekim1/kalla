@@ -648,6 +648,9 @@ A source never moves between collections (a new source is created), so `collecti
 | scope | immediate `sync`, `Trigger = config-change` | only newly in-scope items (crawl: traversal with conditional GET) | narrowing removals exempt (admin confirmed the shown count) |
 | identity | immediate full `sync`, `force` | everything | identity removals exempt; unexpected losses still go through the guard |
 
+> **Decided in 6c** (`design-processing.md` §12): a noise-only change (new `ContentHash`, same parsed output)
+> creates no new chunk set; the set is re-keyed and the run item is `unchanged`, reason `change.noise`.
+
 ## 13. Deletion guard
 
 ### 13.1 Candidates

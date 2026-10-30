@@ -260,6 +260,10 @@ envelope-encrypted per document with the same key service.
 
 ## 9. Evaluation as a platform capability (R6)
 
+Detail: `../ingestion-worker/design-processing.md` §13–§14: questions point at documents; gates compare a
+sub-corpus under old and new versions; a new collection stays `building` until recall@10 ≥ 0.70 (decided
+2026-10-29); overrides only by platform admins with a reason.
+
 Every collection has an **evaluation set**: question/answer pairs generated automatically from sampled chunks by an
 on-prem model, plus human questions, rewritten feedback questions and skill test questions over time. Pipeline publish,
 parse-profile auto-apply, retrieval-setting changes and embedding-profile changes are **gated** on it. Details in the

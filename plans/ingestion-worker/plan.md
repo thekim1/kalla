@@ -234,5 +234,31 @@ Answered (2026-10-29, step 6b review):
 16. **SharePoint permissions (P2)**: not mirrored; preflight warns about unique permissions; mirroring is a P3 option.
 17. **Malware**: SIEM alert, metadata-only view, no download or release in P1, quarantine purged after 30 days.
 
+Answered (2026-10-29, step 6c questions):
+
+18. **NER model for names**: `KBLab/bert-base-swedish-cased-ner` (MIT, ~110M parameters, SUC 3.0, label `PRS`),
+    baked into the parser image; measured on our fixtures in P1 (KBLab marks it experimental).
+19. **Gate override**: only `rag-platform-admin`, with a mandatory reason (audited, shown on the pipeline page).
+20. **Evaluation set size**: up to 100 filtered generated questions per collection (fewer for small collections); a
+    publish gate runs a stratified sample of 50.
+21. **First publish of a new collection**: must reach an absolute recall@10 floor (proposal 0.7 on its generated
+    set) or be overridden by a platform admin; afterwards the 3-point relative rule applies.
+
+Answered (2026-10-29, step 6c review):
+
+22. **Chunking vs knowledge API**: flat chunks (answered 8) win over the knowledge plan's parent-child; the knowledge
+    API expands to the surrounding section at query time.
+23. **Personal data that blocks `public` collections**: personnummer, samordningsnummer and external email
+    addresses always; names, phones and own-domain emails only together in list-like documents (≥ 5 names and ≥ 5
+    contact details). Rules in `Settings.PiiFlagRules`.
+24. **Collection go-live**: a new collection is `building` (invisible to assistants) until its evaluation reaches
+    the 0.70 floor or a platform admin overrides.
+25. **If NER cannot keep up**: index first; documents stay out of `public` collections until names are checked.
+26. **Evaluation models**: default the gateway's on-prem general chat model for generation and judging (a setting).
+
+Answered 18 refined in review: the model's `config.json` uses **`PER`** for persons (the card's example shows
+`PRS`); mixed labels (`ORG/PRS`, `PRS/WRK`, `LOC/PRS`) are not counted in P1. Processing details:
+[`design-processing.md`](design-processing.md).
+
 The upload types of answered 3 are superseded by the pilot list in §3 (parser design §3). Connector details:
 [`design-connectors.md`](design-connectors.md).

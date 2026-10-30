@@ -1,6 +1,6 @@
 # Handover
 
-Status of the Ume.Rag design work, for the next session. Updated 2026-10-29 (end of session 2, steps 3–6b).
+Status of the Ume.Rag design work, for the next session. Updated 2026-10-30 (end of session 2, steps 3–6).
 
 ## What this is
 
@@ -25,6 +25,7 @@ and a "kitchen sink" monolith.
 | `plans/parser/design.md` | **Detail step 5** (done): routing worker vs parser, `/v1/inspect`, Docling native legacy/ODF/email backends behind a sandboxed `soffice` wrapper, attachment splitter → child documents, multipart contract, stored DoclingDocument, page ranges + stitching, OCR modes and bake-off, supervisor process model, security, image, tests. Docling claims checked against `docling-slim` 2.145.0 |
 | `plans/ingestion-worker/design-engine.md` | **Detail step 6a** (done): engine model, definition format + validator + Merkle hashes (`Ume.Rag.Pipelines`), node interface and P1 catalogue, execution with segments and fence, cache, jobs/fairness/scheduler, runs, preview, publish/rollback, templates, index writer, config mid-run, observability, capacity, tests |
 | `plans/ingestion-worker/design-connectors.md` | **Detail step 6b** (done): connector contracts and checkpoints, URL identity, URL list, crawl (robots, sitemaps, scope, traps, traversals), shared frontier with claims and releaser, egress guard, renderer fed by worker fetches, variants, uploads, attachments, ClamAV, change detection and effect tags, deletion guard with reconcile phase, SharePoint P2 outline |
+| `plans/ingestion-worker/design-processing.md` | **Detail step 6c** (done): auto-parse rules and ranges, stitching, clean, split, chunk (tokenizer), metadata, quality check, PII detection + parser `/v1/ner`, embed, noise re-key, evaluation sets, gate, go-live floor |
 | `plans/postponed-decisions.md` | **Register of postponed decisions** (K1 key service, T1 sensitive tier, A1 archive law, R1 runner, ...), with stopgap, deadline, owner. Review at each phase start; add new postponements here |
 
 Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{dify,ragflow,onyx,open-webui,kernel-memory,bifrost}`.
@@ -59,8 +60,8 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | 5. Parser | `plans/parser/design.md` | done, reviewed | `5c9e414` |
 | 6a. Ingestion engine | `plans/ingestion-worker/design-engine.md` | done, reviewed | `080d4bd` |
 | 6b. Connectors | `plans/ingestion-worker/design-connectors.md` | done, reviewed | `e2a99d9` |
-| **6c. Processing** (auto-parse, chunking, embedding, PII, evaluation) | `plans/ingestion-worker/design-processing.md` | **next** | – |
-| 7. Knowledge API | `plans/knowledge-api/` | todo | – |
+| 6c. Processing | `plans/ingestion-worker/design-processing.md` | done, reviewed | see `git log` |
+| **7. Knowledge API** | `plans/knowledge-api/` | **next** | – |
 | 8. Chat API (decide C1 chat attachments here) | `plans/chat-api/` | todo | – |
 | 9. Tools (skills, tool hub, MCP server, template) | `plans/tools/` | todo | – |
 | 10. Admin API + UI | `plans/admin/` | todo | – |
@@ -90,20 +91,17 @@ After step 10: a consistency pass across all detail documents, then P0 implement
 - R1 self-hosted runner (IT security), A1 archive law (owner to be named), N1 product name: see the register.
 - Nothing else is waiting on the user right now.
 
-## Next step in detail: step 6c, processing
+## Next step in detail: step 7, knowledge API
 
-Brief a subagent to write `plans/ingestion-worker/design-processing.md`, consuming `design-engine.md` (node
-contracts, cache classes, segments, `IPublishGate` and **shadow chunk sets** §12.1, index writer §14) and
-`design-connectors.md` (variants, `ContentHashVersion`, attachments). Cover: *Detect* and *Auto-parse* (inspect
-signals and thresholds, parser design §6; range planning and adaptive sizing §8.1; profiles P1 heuristics only),
-stitching (§8.2), *Clean* (furniture, dehyphenation, learned cleanup rules P2), *Split by headings* (re-levelling
-layout headings by numbering), *Chunk* (answered 8: ≈ 400 BGE-M3 tokens, 15 % overlap, heading path, row-group
-tables; tokenizer in .NET), *Metadata from path*, *Quality check* metrics; *Detect personal data* (patterns incl.
-personnummer checksum and samordningsnummer in the worker; names via a new parser NER endpoint **with its own lane**
-— answered 6; a change to parser design to list; model choice and licence; how flags block `public` collections and
-the clear command); *Embed* (platform profile BGE-M3 1024, batching, `EmbeddingCache`, AIMD from engine §18,
-residency `OnPrem`); evaluation (generated sets, filtering, metrics recall@k/MRR, sampling, the publish gate with the
-3-point threshold, behaviour for new collections without a baseline, overrides, auto-apply gate for P2 profiles,
-cost); noise-only content changes (6b §12.2 left open whether they create new chunk sets); observability, tests.
-Before briefing, ask the user anything only they can decide (e.g. which NER model and licence, gate override rights,
-evaluation sample size and cost budget).
+Brief a subagent to write `plans/knowledge-api/design.md`. Fixed inputs: data-model §3 (Swedish FTS, hybrid SQL,
+indexes), processing design §13.5 (shared `Ume.Rag.Retrieval` library, used by the evaluator too) and §14.3
+(`building` collections excluded), knowledge plan answered 3 as superseded (flat chunks; **section expansion at query
+time** from heading path + stored parse output), identity design §3–§4 (`RagPrincipal`, `IAccessPolicy`, ceilings,
+audiences, 404 for invisible resources), engine/connectors (variants: two documents may share a URL; dedup in
+results; `DocumentSources.DisplayName` for upload citations), gateway design (query embeddings: `OnPrem`, team id).
+Cover: `/v1/retrieve` contract, filters, query embedding + cache, hybrid fusion and weights, coverage signal,
+document dedup and diversity, section expansion, citations (title, URL, page, heading path, attachment parent),
+access checks and audit, latency budget (chat TTFT), caching by config version, OpenSearch seam (O1), MCP tool
+exposure outline (P2), observability, tests incl. evaluation in CI. Before briefing, ask the user anything only they
+can decide (e.g. default top-k, whether to show page numbers/links in citations for internal documents, query
+rewriting in P1).

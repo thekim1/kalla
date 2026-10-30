@@ -447,6 +447,12 @@ Data-model §4.2 holds order, leases and attempts. Concurrency defaults below ar
 
 `Worker:Classes` lists the classes an instance runs (`crawl` is not a class: discovery is part of `sync`/`fetch`, §21).
 
+> **Refined by 6c** (`design-processing.md` §19): new job class **`ner`** (*Detect personal data*; concurrency from
+> the parser's `capacity.ner_slots`), so a web page is `fetch` → `ner` → `embed`; a single page failing after
+> halving is a *missing page* (`degraded` up to 10 %, else `failed`); `OutputHash` of `ParsedDocument` excludes
+> volatile facts; the gate builds a sub-corpus and shadow executions never write `Documents` facts, PII or children;
+> the index writer gets a re-key path for noise-only changes; the NER estimate in §18 is 0.3–1.0 s per page.
+
 ### 9.2 How a sync fans out
 
 > **Refined by 6b** (`design-connectors.md` §2, §6, §13): URL-list and crawl items become frontier **claims**

@@ -22,6 +22,7 @@ Directory.Packages.props  dotnet-tools.json  aspire.config.json  UmeRag.slnx  RE
 .github/workflows/                   verify.yml release.yml deploy-e2e.yml flake-hunt.yml perf.yml evaluation.yml entra.yml
 src/
   Ume.Rag.Domain/                    entities, classification, IAccessPolicy, ports (IRetriever, IBlobStore, IKeyProvider, ITierResolver)
+  Ume.Rag.Retrieval/                 the data-model §3.3 hybrid query, shared by the knowledge API and the evaluator (processing design §13.5)
   Ume.Rag.Pipelines/                 pipeline definition format, validator, Merkle hashes (admin + worker; engine design §4); templates seeded from Ume.Rag.MigrationService/Templates/
   Ume.Rag.Infrastructure/            RagDbContext, queue + LISTEN/NOTIFY, config-version monitor, RedisKeys, gateway client, blob stores, key providers, SecurityEvents
   Ume.Rag.ServiceDefaults/           copy of the gateway's (OpenTelemetry, health, ShutdownDrain, WebDefaults, problem responses)
@@ -186,6 +187,7 @@ src/parser/
 | PyTorch | CPU wheels from the PyTorch CPU index (`[[tool.uv.index]]` with `explicit = true`), saving ~2 GB against the CUDA build |
 | Models | downloaded at **image build** by `scripts/download_models.py` with pinned Hugging Face revisions into `/opt/models`; runtime sets `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, Docling `artifacts_path=/opt/models`; `test_offline.py` converts a PDF with networking disabled |
 | OCR | Tesseract `swe` + `eng` from Debian packages, or Docling's default engine: chosen in P1 (parser §5.1); both baked |
+| Worker tokenizer | `Microsoft.ML.Tokenizers` 2.0.1 (MIT) with BGE-M3's `sentencepiece.bpe.model` (a Unigram model, pinned revision and SHA-256) as a worker resource; parity test against Hugging Face (processing design §6.1) |
 | Licences | `src/parser/LICENSES.md`, generated at build from package metadata, Debian copyright files and the model table (parser design §12; before the pilot) |
 
 ## 3. Projects and roles

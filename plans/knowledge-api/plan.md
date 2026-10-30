@@ -90,5 +90,9 @@ Answered (2026-10-29):
 1. **External access**: Chat API only during the pilot; `/v1/retrieve` opens to registered integrations in P2,
    together with the MCP server.
 2. **Query logs**: counters only. Retrieved and cited chunk/document counts are stored; query text is never stored.
-3. **Default chunking**: parent-child. Split by headings; ~400-token child chunks for search; the surrounding section
-   (up to ~1,500 tokens) returned as context. Tuned later with the evaluation sets.
+3. ~~**Default chunking**: parent-child~~ **Superseded 2026-10-29** (ingestion answered 8, 22): P1 stores **flat**
+   ~400-token chunks (split by headings, heading path prepended); `expand=parent` returns the surrounding **section**
+   (up to ~1,500 tokens) at query time from the chunk's heading path and the stored parse output, giving the same
+   context without a second chunk kind. Retrieval runs through the shared `Ume.Rag.Retrieval` library (also used by
+   the evaluator), excludes `building` collections (except the admin test panel), and embeds queries without an
+   instruction prefix (processing design §13.5, §14.3).

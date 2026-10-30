@@ -367,6 +367,18 @@ and rejects a concurrent duplicate (a worker whose lease expired while the first
 are additive only (new optional fields, new enum values the worker treats as unknown-safe); a breaking change is
 `/v2`, served alongside `/v1` for one release.
 
+### 7.8 `POST /v1/ner` (added in step 6c)
+
+Names for *Detect personal data* (worker plan answered 6, 18), specified in
+[`../ingestion-worker/design-processing.md`](../ingestion-worker/design-processing.md) §10: JSON request with text
+blocks, JSON response with code-point spans and labels; schemas `ner-request.schema.json`, `ner-result.schema.json`.
+Model `KBLab/bert-base-swedish-cased-ner` (MIT), pinned revision `f3c83af8196b812028fc08e1971a2d289d0a3f1d`. Its
+`config.json` labels (checked in review): `PER` for persons, plus mixed labels `ORG/PRS`, `PRS/WRK`, `LOC/PRS` and
+others; `NER_PERSON_LABELS` defaults to `PER,PRS`; mixed labels are returned only on request and not counted in P1.
+Served by its own warm process **`ner-0`** (own lane, never behind conversions; `NER_THREADS` 2, `NER_QUANTIZE`,
+`NER_QUEUE` 4, recycle after 5 000 requests); `/v1/info` adds `capacity.ner_slots`, `ner_ready` and the model block
+inside `build_hash`; readiness does not depend on NER.
+
 ## 8. Page ranges and stitching
 
 ### 8.1 Planning
@@ -532,7 +544,7 @@ Inputs arrive after ClamAV but are untrusted. The container is the outer sandbox
 | Docling extras | layout and TableFormer models only; picture classification, code/formula enrichment and picture description **off and not baked** |
 | Entry | `ENTRYPOINT ["tini","--"]`, `CMD ["python","-m","ume_parser"]` (supervisor starts uvicorn programmatically on 8443 with the TLS files) |
 | Env | `PARSER_WORKERS`, `PARSER_THREADS`, `OMP_NUM_THREADS`, `PARSER_OCR_DEFAULT`, `PARSER_SLOT_MAX_RSS_MB`, offline variables (§11) |
-| Size target | ≤ 3.5 GB (§5.1 says 2.5–3.5 GB): base ≈ 150 MB, torch CPU + torchvision ≈ 800 MB, other Python ≈ 500 MB, models ≈ 500 MB, LibreOffice + fonts ≈ 500 MB, Tesseract ≈ 50 MB. Measured in P0; above 3.5 GB, the first cut is the bake-off loser |
+| Size target | ≤ 4.0 GB with the NER model (≤ 3.5 GB before it; §5.1 says 2.5–3.5 GB): base ≈ 150 MB, torch CPU + torchvision ≈ 800 MB, other Python ≈ 500 MB, models ≈ 500 MB, LibreOffice + fonts ≈ 500 MB, Tesseract ≈ 50 MB. Measured in P0; above 3.5 GB, the first cut is the bake-off loser |
 
 Models baked (sizes approximate, *to verify* at P0):
 
@@ -541,6 +553,7 @@ Models baked (sizes approximate, *to verify* at P0):
 | Docling layout model (current default, e.g. "heron") | Hugging Face `docling-project/…`, pinned revision | ≈ 150–200 MB | *to verify* (model card) |
 | TableFormer fast + accurate | same repository family | ≈ 200 MB | *to verify* |
 | EasyOCR CRAFT detector + Latin recogniser | EasyOCR model release URLs, pinned SHA-256 | ≈ 100 MB | Apache-2.0 (*to verify* for weights) |
+| KB BERT NER (`KBLab/bert-base-swedish-cased-ner`, rev `f3c83af`) | Hugging Face, pinned revision + SHA-256 | ≈ 499 MB fp32 | MIT (SUC 3.0 training data: terms *to verify*); uses `transformers`, `tokenizers`, `safetensors` (Apache-2.0, already present) |
 | Tesseract `swe`, `eng` | Debian packages | ≈ 10–30 MB | Apache-2.0 |
 | Garble bigram table | built in-repo from public Swedish/English text | ≈ 50 KB | own |
 
