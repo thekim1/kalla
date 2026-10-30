@@ -37,8 +37,8 @@ Refs: [repo-and-deployment §4](../platform/repo-and-deployment.md), [data-model
 
 ## 4. Keys (#10)
 Refs: [identity/design.md §6](../identity/design.md)
-- [ ] `ume-rag-sk-` keys, HMAC + pepper, prefix, rotation grace in `config."Keys"`
-- [ ] **Done:** the gateway's `KeyTests` copied and passing
+- [x] `ume-rag-sk-` keys, HMAC + pepper, prefix, rotation grace in `config."Keys"`
+- [x] **Done:** the gateway's `KeyTests` copied and passing
 
 ## 5. FakeGateway and gateway client (#8)
 Refs: [repo-and-deployment §4.3](../platform/repo-and-deployment.md), [gateway-changes/design.md](../gateway-changes/design.md) §3, §6 (release 1 only, [weakness-review §5](../weakness-review.md))
