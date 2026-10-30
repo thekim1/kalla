@@ -22,7 +22,7 @@ Directory.Packages.props  dotnet-tools.json  aspire.config.json  UmeRag.slnx  RE
 .github/workflows/                   verify.yml release.yml deploy-e2e.yml flake-hunt.yml perf.yml evaluation.yml entra.yml
 src/
   Ume.Rag.Domain/                    entities, classification, IAccessPolicy, ports (IRetriever, IBlobStore, IKeyProvider, ITierResolver)
-  Ume.Rag.Retrieval/                 the data-model §3.3 hybrid query, shared by the knowledge API and the evaluator (processing design §13.5)
+  Ume.Rag.Retrieval/                 search core (keyword/vector candidates, RRF, dedup, diversity, coverage; knowledge design §2.1), shared by the knowledge API, the evaluator (processing design §13.5) and the admin test panel
   Ume.Rag.Pipelines/                 pipeline definition format, validator, Merkle hashes (admin + worker; engine design §4); templates seeded from Ume.Rag.MigrationService/Templates/
   Ume.Rag.Infrastructure/            RagDbContext, queue + LISTEN/NOTIFY, config-version monitor, RedisKeys, gateway client, blob stores, key providers, SecurityEvents
   Ume.Rag.ServiceDefaults/           copy of the gateway's (OpenTelemetry, health, ShutdownDrain, WebDefaults, problem responses)
@@ -50,13 +50,15 @@ tests/
   Ume.Rag.Api.Tests/                 WebApplicationFactory + FakeGateway: chat, knowledge, keys, fail-closed config
   Ume.Rag.Worker.Tests/              pipeline engine, nodes (golden fixtures), queue, SSRF guard, ClamAV client
   Ume.Rag.AdminApi.Tests/            BFF, OIDC claim mapping (copy of OidcClaimMappingTests), audit, outbox
-  Ume.Rag.IntegrationTests/          migrations, DatabaseRoleTests, SwedishTextSearchTests, partitions, tier matrix
+  Ume.Rag.Retrieval.Tests/           fusion, diversity, coverage, section assembly, query normalisation (knowledge design §16.1)
+  Ume.Rag.IntegrationTests/          migrations, DatabaseRoleTests, SwedishTextSearchTests, partitions, tier matrix, retrieval statements
   Ume.Rag.ContractTests/             worker parser client vs parser image (golden responses)
   e2e/                               Playwright TypeScript browser tests (copy of the gateway's setup)
   evaluation/smoke/                  fixture collection (documents) + 30 questions, used by CI
   fixtures/                          documents for parser and node tests (Swedish PDFs, DOCX, scanned pages)
 benchmarks/
   release-test/                      R1 test: k6 chat streams during crawl + OCR (from the gateway's benchmarks/compare/k6)
+  Ume.Rag.Benchmarks/                BenchmarkDotNet: RetrievalBenchmarks, InteractionAudit (copy of the gateway's; knowledge design §11)
 deploy/
   compose.prod.yaml                  data plane + control zone (host A)
   compose.ingestion.yaml             ingestion zone (same host in the pilot, host B later)
@@ -137,14 +139,14 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | | `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.StackExchange.Redis` | 13.6.1 | gateway |
 | | `Scalar.AspNetCore` | 2.18.0 | gateway |
 | Vectors | `Pgvector` / `Pgvector.EntityFrameworkCore` | 0.3.2 / 0.3.0 | NuGet-checked; EF 10 compatibility *to verify* in P0 |
-| | `CommunityToolkit.VectorData.PgVector`, `Microsoft.Extensions.VectorData.Abstractions` | 1.0.2 / 10.11.0 | **not added**: retrieval is hand-written SQL (data-model §3.3) |
+| | `CommunityToolkit.VectorData.PgVector`, `Microsoft.Extensions.VectorData.Abstractions` | 1.0.2 / 10.11.0 | **not added**: retrieval is hand-written SQL (knowledge design §6) |
 | AI | `Microsoft.Extensions.AI`, `Microsoft.Extensions.AI.OpenAI` | 10.11.0 | NuGet-checked (`.OpenAI` *to verify*: listed together) |
 | | `Microsoft.ML.Tokenizers` | 2.0.1 | NuGet-checked (chunk sizing) |
 | Ingestion | `AngleSharp` 1.8.6, `SmartReader` 0.11.1, `PdfPig` 0.1.16 | as listed | NuGet-checked |
 | | `Microsoft.Graph` | 6.9.0 | NuGet-checked; P2 (SharePoint, feature C) |
 | | `Microsoft.Playwright` | same as renderer image (§5.4) | *to verify*; exact match required |
 | | `Cronos` | *to verify* | schedules (worker) |
-| MCP | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` | *to verify* | P2 (MCP endpoint group, template) |
+| MCP | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` | 2.3.0 | NuGet-checked (knowledge design step 7: attribute and transport names); P2 (MCP endpoint group, template); recheck at P2 start |
 | Keys | `Azure.Security.KeyVault.Keys`, `Azure.Identity` | *to verify* | `IKeyProvider` for Azure; OpenBao via plain `HttpClient` (transit API), no package |
 | Testing | `xunit.v3` 4.0.2, `xunit.runner.visualstudio` 4.0.1, `Microsoft.NET.Test.Sdk` 18.11.0, `Shouldly` 4.3.0, `NSubstitute` 6.2.0, `WireMock.Net` 2.19.0, `Microsoft.AspNetCore.Mvc.Testing` 10.0.13, `Microsoft.Extensions.TimeProvider.Testing` 10.11.0, `Testcontainers.PostgreSql` / `.Redis` 4.16.0 | as listed | gateway (no `EntityFrameworkCore.Sqlite`: every DB test needs pgvector) |
 | Benchmarks | `BenchmarkDotNet` | 0.15.8 | gateway |
@@ -220,6 +222,14 @@ Every service project starts with `if (await WebDefaults.ExitIfHealthProbeAsync(
 
 Splitting Chat from Knowledge later is a Compose change: a second `rag-api` service with `Rag__Roles=chat`,
 `Retrieval__Mode=Http`; no code change (plan §1).
+
+Knowledge-role settings (knowledge design §2.3, §3.5, §4.6, §5.3, §6, §9, §13): `Knowledge:OpenToClientKinds`
+(default `["internal"]` in P1), `Knowledge:PublicBaseUrl` (= `UME_RAG_API_PUBLIC_URL`, for download links),
+`Knowledge:DownloadGrantLifetime` (7 days; `sensitive` 1 hour), `Knowledge:DownloadsPerMinutePerAddress` (120),
+`Knowledge:PublishApiReference` (default `true`, off in production until P2); `Retrieval:EmbeddingTimeout` (1,500 ms),
+`Retrieval:MaxConcurrentSearches` (16), `Retrieval:ExactScanMaxChunks` (10,000), `Retrieval:ExpandNeighbourChunks`
+(8), `Retrieval:ExpandTotalMaxTokens` (8,000), `Retrieval:Index` (`postgres` \| `opensearch` \| `shadow`). The admin
+host also needs `Gateway:*` for test-panel query embeddings (knowledge design §4.2).
 
 ## 4. Local development
 
@@ -301,6 +311,10 @@ vectors when we run against a real local gateway.
   add the Ollama provider with model `bge-m3` (the gateway's `Ollama:Enabled` brings `qwen2.5:0.5b` for chat) and an
   alias matching our profile's model name, or (from gateway release B) point that alias at FakeLlm model
   `fake-embed-1024`. Older gateways' FakeLlm embeddings (8 dims) are refused by our dimension check with a clear error.
+- **Gateway key PII policy**: the platform service key (and interim linked team keys) used for query embeddings must
+  have gateway `PiiPolicy` `Off` or `Allow` for `/v1/embeddings`, never `Redact`/`Block` (a redacting key would
+  silently change queries containing personnummer); the knowledge role checks it at startup with a canary embedding
+  (knowledge design §5.2, §5.6).
 
 ## 5. Container images
 
@@ -326,7 +340,7 @@ caches, `LABEL org.opencontainers.image.source/version/revision`, `USER` numeric
 # Postgres 17 + pgvector + Hunspell sv_SE (data-model §1, §3.1). Update tag, digest, pgvector and dictionary together.
 ARG PG_IMAGE=docker.io/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
 FROM ${PG_IMAGE} AS build
-ARG PGVECTOR_VERSION=0.8.1          # latest 0.8.x: to verify
+ARG PGVECTOR_VERSION=0.8.7          # latest 0.8.x (tag 2026-10-01), checked in knowledge design step 7
 ARG PGVECTOR_SHA256=<sha256 of the tag tarball>
 ARG DICT_COMMIT=<LibreOffice/dictionaries commit>
 ARG DICT_AFF_SHA256=<…> DICT_DIC_SHA256=<…>
@@ -458,13 +472,14 @@ busy. The R1 release test (§8.3) confirms or corrects these numbers.
 | Volume | Mounted in | Notes |
 |---|---|---|
 | `postgres-data` | postgres | LUKS-encrypted host disk (plan §8a baseline) |
-| `rag-blobs` → `/data/blobs` | rag-worker (rw), rag-admin (rw, uploads) | containers `rag-main/`, later `rag-sensitive/` (data-model §9); single host only (§6.4) |
+| `rag-blobs` → `/data/blobs` | rag-worker (rw), rag-admin (rw, uploads), rag-api (**read-only**, citation downloads, knowledge design §3.5) | containers `rag-main/`, later `rag-sensitive/` (data-model §9); single host only (§6.4); rag-api also gets unwrap access to the `rag-blob-<level>` master keys (read access to their key files with the file key provider) |
 | `clamav-db` → `/var/lib/clamav` | rag-clamav | signatures |
 | `openwebui-data` | open-webui | its own SQLite DB on an encrypted volume (§12.8) |
 
 Secrets and certificates are files, never environment variables (gateway `compose.prod.yaml`): `${UME_RAG_SECRETS_DIR}/<service>`
 → `/run/app-secrets` (key-per-file: `ConnectionStrings__ragdb`, `ConnectionStrings__redis`, `Security__KeyPepper`,
-`Gateway__ServiceKey`, `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`), `${UME_RAG_CERTS_DIR}/<service>`
+`Gateway__ServiceKey`, `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`,
+`Security__DownloadGrantKeys__<kid>` and `Security__CacheKeyPepper` (api; knowledge design §4.6, §5.4)), `${UME_RAG_CERTS_DIR}/<service>`
 → `/run/certs` (service cert/key, `ca.pem`, `data-protection.pfx`), Postgres secrets → `/run/postgres-secrets`.
 
 Hardening: every service uses the `x-hardened` anchor (`read_only`, `cap_drop: [ALL]`, `no-new-privileges`, tmpfs
@@ -509,7 +524,8 @@ the worker's secrets only).
 It generates: the internal CA and service certificates (api, admin, worker, parser, postgres, redis), the Data
 Protection certificate, passwords for `bootstrap`, `ume_rag_migrator`, `ume_rag_api`, `ume_rag_admin`, `ume_rag_worker`
 (`ume_rag_tools` in P2), the Redis password and ACL from `users.acl.example` (user `ume-rag`, `~ume-rag:*`), the key
-pepper, the Open WebUI JWT secret, the renderer WebSocket path secret, and `deploy/.env` (non-secret settings only).
+pepper, the download-grant key (`Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes; a new `kid` on rotation) and the query
+cache-key pepper (`Security__CacheKeyPepper`), the Open WebUI JWT secret, the renderer WebSocket path secret, and `deploy/.env` (non-secret settings only).
 Ownership: 70 (postgres), 999 (redis), 1654 (.NET services), 10001 (parser), 10002 (renderer), 100 (clamav).
 
 ### 7.2 `build-release-bundle.sh`
@@ -645,9 +661,13 @@ connection refusals. Output: a Markdown report as the gateway's `latency_report.
 - **Metrics** (meter `Ume.Rag`): `rag.chat.ttft` (histogram, by assistant level and client), `rag.retrieval.duration`,
   `rag.gateway.request.duration` and `rag.gateway.residency_refusals`, `rag.jobs.queued` / `rag.jobs.age` by class,
   `rag.parse.duration_per_page`, `rag.clamav.detections`, `rag.config.version` per instance and `rag.config.lag`,
-  `rag.db.pool.in_use` per role, `rag.retention.deleted` by table, `rag.evaluation.recall_at_10` by collection.
+  `rag.db.pool.in_use` per role, `rag.retention.deleted` by table, `rag.evaluation.recall_at_10` by collection;
+  retrieval adds `rag.retrieval.stage.duration`, `.embedding.cache`, `.embedding.failures`, `.degraded`, `.coverage`,
+  `.candidates`, `.results`, `.collections_skipped`, `.concurrency_rejections`, `.stats.flush` and
+  `rag.documents.downloads` / `.download.bytes` (knowledge design §15).
 - **Dashboards** (`deploy/otel/dashboards/`, Grafana JSON, *new*: the gateway ships none): *Data plane* (TTFT p50/p95,
-  retrieval, gateway latency, refusals), *Ingestion* (queue depth and age, parse throughput, failures, ClamAV),
+  retrieval p50/p95 per stage, degraded rate, coverage `low` share per level, embedding cache hit rate, downloads,
+  gateway latency, refusals), *Ingestion* (queue depth and age, parse throughput, failures, ClamAV),
   *Database* (connections per role vs. limits, pool waits, slow statements, partition sizes), *Config & security*
   (version lag per instance, fail-closed refusals, security events). The Aspire dashboard is used in development only.
 
@@ -713,7 +733,7 @@ Review fix: Chromium keeps its sandbox via a seccomp profile (§5.4).
 | 9 | Portainer | The gateway ships `compose.portainer.yaml`; operations may expect it | Skip in P0/P1 (init-deployment covers the pilot host); add if operations ask |
 | 10 | Supply chain in both repos | Gateway pins actions by tag and signs nothing | Propose for both repos together (compatibility): actions pinned by SHA, `attest-build-provenance` on images |
 | 11 | Pilot key service | Envelope encryption needs a production `IKeyProvider` from P1 | **Postponed: file key provider in the pilot** with the rules in plan §8a (`--key-provider file --allow-file-keys`, key files only in api/admin, key backups ≤ 30 days, no `sensitive` data); Azure Key Vault later via the `rewrap` command (`../postponed-decisions.md` K1) |
-| 12 | Package versions | Docling, FastAPI, Vue Flow, MCP SDK, Playwright, Cronos, Azure Key Vault SDK, `Aspire.Hosting.Python`, pgvector 0.8.x latest, ClamAV tag, Open WebUI tag | Fix at P0 step 2/12 with the npm/uv 7-day rule; record here |
+| 12 | Package versions | Docling, FastAPI, Vue Flow, MCP SDK (2.3.0 checked, knowledge design), Playwright, Cronos, Azure Key Vault SDK, `Aspire.Hosting.Python`, pgvector 0.8.x latest (0.8.7 checked, knowledge design), ClamAV tag, Open WebUI tag | Fix at P0 step 2/12 with the npm/uv 7-day rule; record here |
 | 13 | Aspire minor | `kernel-memory-and-dotnet.md` lists `Aspire.Hosting.PostgreSQL` 13.6.4; the gateway pins 13.6.1 | Stay on 13.6.1 with the gateway; upgrade both together |
 | 14 | Blob volume shared by admin and worker | File volume works only on one host; uploads arrive at the admin | Accepted for the pilot (plan §12.1); S3/Azure Blob is a precondition of §6.4 |
 | 15 | ClamAV updates | Plan §2 assumed a controlled mirror | **Decided: direct, no mirror**: freshclam updates from `database.clamav.net`, allowed through the host firewall for the `mirror` network only |

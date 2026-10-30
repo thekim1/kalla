@@ -294,7 +294,7 @@ handlers; the admin API keeps the gateway's `ClaimsPrincipal` + `AdminContext` m
 
 ```csharp
 public enum SubjectKind { EntraUser, OwuiUser, Application, Anonymous }   // stored as entra-user, owui-user, application, anonymous
-public enum CredentialKind { SecretKey, PublicKey, AccessToken, ServiceKey }
+public enum CredentialKind { SecretKey, PublicKey, AccessToken, ServiceKey, DownloadGrant }
 
 public sealed record RagPrincipal(
     SubjectKind Kind,
@@ -321,6 +321,7 @@ public sealed record RagPrincipal(
 | MCP client | delegated token, `scp` `Mcp.Use` (§8) | `EntraUser` | `oid` | `azp` (kind `mcp-client`) | P2 |
 | Chat role → knowledge role over HTTP (`Retrieval:Mode=Http`) | internal `ume-rag-sk-` service key | `Application` + forwarded decision | `svc:{keyId}` | client `rag-internal` (kind `internal`) | when split |
 | Admin test panel | admin session (in-process, no HTTP) | `EntraUser` | admin `sub` | client `admin-console` (kind `internal`) | P1 |
+| Browser following a citation link (`GET /v1/documents/{id}` and `/content` only) | signed download grant `?grant=g1.…` (knowledge design §4.6) | none (no subject; the grant carries ids only) | – | the grant's `cl` (client that received the citation) | P1 |
 
 Rules:
 
@@ -395,6 +396,7 @@ Infrastructure into `MembershipFacts { Departments, Groups, Known: bool }`, so t
 |---|---|---|---|
 | 0 | Snapshot confirmed (`Version == lastConfirmed`, ≤ 10 s; data-model §5) | `config_unconfirmed` | 503 |
 | 1 | Client exists and `IsEnabled`; the key's client is the client | `client_disabled` / `client_unknown` | 403 |
+| 1a | Knowledge routes only: client kind in `Knowledge:OpenToClientKinds` (P1 `internal`; knowledge design §2.3); download grants are checked by their own re-check instead (knowledge design §4.6) | `client_not_allowed` | 403 |
 | 2 | Credential kind allowed for the client kind (`open-webui`: sk key + JWT; `widget`: pk key; `integration`: sk key or app token; `own-client`/`teams`/`mcp-client`: delegated token; `internal`: service key or in-process) | `credential_not_allowed` | 403 |
 | 3 | Subject kind allowed for the client kind (`widget` ⇒ `Anonymous` only; `Anonymous` only via `widget`) | `subject_not_allowed` | 403 |
 | 4 | Permission for the action: delegated `scp` (`Chat.Use` for `ListModels`/`Chat`/`Feedback`, `Knowledge.Read` for `Search`/`ReadDocument`, `Mcp.Use` for `McpCall`), app `roles` (`Chat.Invoke.All`, `Knowledge.Read.All`), keys: key kind (`pk` ⇒ `ListModels`/`Chat`/`Feedback` only) | `permission_missing` | 403 |
@@ -414,8 +416,11 @@ assistants exist above its ceiling or outside its audience; the security event s
 
 ### 4.4 Errors
 
-Data-plane errors use the OpenAI error shape like the gateway's `GatewayErrors` (`{"error":{"message","type",
-"code"}}`); `code` = the reason above, or for authentication the reasons in §6.3/§5.3. `WWW-Authenticate: Bearer` on
+Chat-role errors use the OpenAI error shape like the gateway's `GatewayErrors` (`{"error":{"message","type",
+"code"}}`); `code` = the reason above, or for authentication the reasons in §6.3/§5.3. Knowledge routes (`/v1/retrieve`,
+`/v1/collections`, `/v1/documents/*`) answer RFC 9457 problem details like the gateway's Data API (`ApiFaultException`,
+reason in the `code` extension; knowledge design §3.6); the in-process path carries status and code in
+`RetrievalDeniedException` and the chat role translates. `WWW-Authenticate: Bearer` on
 401 (as `GatewayRequestHandler.Stages.cs:48`), with `resource_metadata` on `/mcp` (§8).
 
 ### 4.5 Fail-closed rules
@@ -507,6 +512,9 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
 
 - The connection key has `AllowedIpRanges` = the Open WebUI host (gateway pattern, `address_not_allowed`,
   `GatewayRequestHandler.Stages.cs:63-67`); the firewall admits only that host to `rag-api` for this path.
+- Exception: the reverse proxy exposes `GET /v1/documents/*` and `GET /v1/documents/*/content` to the **staff network**,
+  so users' browsers can follow citation download links (signed grants, knowledge design §4.6); every other `rag-api`
+  path stays restricted to the Open WebUI host.
 - `FORWARD_USER_INFO_HEADER_JWT_SECRET` is used for nothing else. Open WebUI sends the same JWT to every connection
   (forwarding is global), including the gateway connection for the on-prem task model (chat-api §6). Without `aud` a
   receiver could replay it within its lifetime, but it is useless without our connection key (§5.2 step 1), so other
@@ -659,7 +667,7 @@ Added checks after signature/issuer/audience/lifetime (JWKS cached by the handle
 | Value | Type | Claim | Grants | Subject |
 |---|---|---|---|---|
 | `Chat.Use` | delegated scope | `scp` | `/v1/models`, `/v1/chat/completions`, feedback, as the user | `EntraUser` |
-| `Knowledge.Read` | delegated scope | `scp` | `/v1/search`, documents, as the user | `EntraUser` |
+| `Knowledge.Read` | delegated scope | `scp` | `/v1/retrieve`, `/v1/collections`, documents, as the user | `EntraUser` |
 | `Mcp.Use` | delegated scope | `scp` | `/mcp` (§8) | `EntraUser` |
 | `Chat.Invoke.All` | app role (members: Applications only) | `roles` | chat as an application, client audiences only | `Application` |
 | `Knowledge.Read.All` | app role (Applications only) | `roles` | search as an application, client audiences only | `Application` |
@@ -756,7 +764,7 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 
 | Id | Name | Emitted by | When | Attributes |
 |---|---|---|---|---|
-| 5001 | `rag.auth.failed` | api, admin (sign-in refusals) | Once per bucket per flush (§6.3); admin: per refused sign-in | `Reason`, `Credential` (`sk`, `pk`, `token`, `owui-jwt`, `oidc-signin`), `Endpoint`, `KeyId`, `KeyPrefix`, `ClientId`, `TeamId`, `DepartmentId`, `SourceAddress`, `Count`, `FirstSeen`, `LastSeen` |
+| 5001 | `rag.auth.failed` | api, admin (sign-in refusals) | Once per bucket per flush (§6.3); admin: per refused sign-in | `Reason`, `Credential` (`sk`, `pk`, `token`, `owui-jwt`, `oidc-signin`, `grant`), `Endpoint`, `KeyId`, `KeyPrefix`, `ClientId`, `TeamId`, `DepartmentId`, `SourceAddress`, `Count`, `FirstSeen`, `LastSeen` |
 | 5002 | `rag.access.denied` | api, tools | `IAccessPolicy` denial on an explicit request (not `Filter`), at most once a minute per (subject, reason, resource) with `Count` (like `AccessDeniedThrottle`, `AdminActivity.cs:172`) | `Reason`, `Action`, `ResourceType`, `ResourceId`, `SubjectKind`, `SubjectId`, `ClientId`, `KeyId`, `ConfigVersion`, `SourceAddress`, `Count` |
 | 5003 | `rag.residency.refused` | api, worker | gateway answered with a residency above the ceiling | (as step 2) |
 | 5004 | `rag.config.stale_refused` | api, tools, worker | `config_unconfirmed` refusal, once a minute per instance with `Count` | `Service`, `CachedVersion`, `LastConfirmedAt`, `Count` |
@@ -780,7 +788,8 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 `Reason` values of 5001: the gateway's set (`missing_key`, `invalid_key`, `key_revoked`, `key_expired`,
 `key_disabled`, `owner_inactive`, `address_not_allowed`; `SecurityEvents.cs:51-61`) plus `origin_not_allowed`,
 `user_jwt_missing`, `user_jwt_invalid`, `user_jwt_expired`, `user_jwt_role`, `user_jwt_mismatch`, `token_invalid`,
-`token_expired`, `wrong_tenant`, `guest_refused`, `client_unknown`, `permission_missing`. 5002 `Reason` = §4.3 reasons.
+`token_expired`, `wrong_tenant`, `guest_refused`, `client_unknown`, `permission_missing`, `grant_invalid`,
+`grant_expired` (download grants, knowledge design §4.6). 5002 `Reason` = §4.3 reasons.
 
 Gateway counterparts (gateway design §10): our 5001 with `wrong_tenant`/`guest_refused` = gateway 2008 (admin) or
 3003 (Data API); our 5007 = gateway 2007.

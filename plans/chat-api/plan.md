@@ -43,11 +43,16 @@ Every request resolves to a **client** from the client registry, which sets a cl
    exceed the client's ceiling (R5).
 3. **Query steps** (fixed order, configurable per assistant):
    1. *Condense*: rewrite the latest question into a standalone query (optional; on-prem model for `sensitive`).
-   2. *Retrieve*: Knowledge API (in-process) over the assistant's collections, filters, top-k.
+      This is the only query rewriting: the Knowledge API uses the query as given (knowledge design §5.1).
+   2. *Retrieve*: Knowledge API (in-process `IRetriever`) with `AssistantId` (it resolves the assistant's
+      collections), `Expand = Section`, the assistant's filters and top-k (default 10, max 50; knowledge design §2.2).
    3. *Rerank*: P3.
-   4. *Coverage check*: if coverage is low, answer with the configured "not found" text and contact links, without
-      calling the model.
-   5. *Prompt*: system prompt + numbered sources (marked as untrusted content) + history window + question.
+   4. *Coverage check*: if coverage is `Low`, answer with the configured "not found" text and contact links, without
+      calling the model. If coverage is `Unknown` (degraded to keyword-only because the query embedding failed,
+      knowledge design §5.5), answer from the keyword results with a caveat and **never** with the not-found text.
+   5. *Prompt*: system prompt + numbered sources (marked as untrusted content) + history window + question; one
+      number `[n]` per document in order of its best rank, with its sections and page ranges (knowledge design
+      §10.4).
 4. Call the gateway (`/v1/chat/completions`, stream) with the platform service key on behalf of the assistant's team
    (`x-ume-on-behalf-of: <team id>`) and the residency ceiling of the assistant's level: `Eu` for `internal`, `OnPrem`
    for `sensitive` (platform plan §6; R4; gateway design §3, §5). Interim: the team's linked key; after gateway
@@ -58,7 +63,10 @@ Every request resolves to a **client** from the client registry, which sets a cl
    the request with an error and a security event. No content
    is streamed first.
 6. Stream to the client. Parse `[n]` markers and emit citations only for sources actually used: OpenAI
-   `url_citation` annotations and Open WebUI `source` events (`../../platforms/open-webui.md` §9). External image
+   `url_citation` annotations and Open WebUI `source` events (`../../platforms/open-webui.md` §9). Links are the
+   document's `url`, or its `download_url` (signed grant link, knowledge design §4.6) for uploads and attachments,
+   plus `#page=n` for PDFs; labels show title, heading path, pages and modified date (knowledge design §10.4). After
+   the answer, call `IRetriever.MarkCited` with the cited ranks (counters only). External image
    URLs in answers are stripped (exfiltration channel).
 7. After the response: conversation, messages, used sources, tool-call records and gateway usage headers are written
    by a background writer, off the request path.

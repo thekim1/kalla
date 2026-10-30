@@ -78,7 +78,7 @@ Endpoint group `/mcp` in `Ume.Rag.Api` (Streamable HTTP), authorised with Entra 
 
 | Tool / resource | Purpose |
 |---|---|
-| `search_knowledge(query, collections?, filters?)` | Knowledge API retrieval with citations |
+| `search_knowledge(query, collections?, top_k?, document_types?, modified_after?)` | Knowledge API retrieval with citations; schema and output shaping in knowledge design §14 (`top_k` ≤ 20, no section expansion, each text ≤ 2,000 and total ≤ 24,000 characters, results wrapped as untrusted `<source>` blocks plus `structuredContent` with `coverage`) |
 | `list_collections()` | Collections the user may search through this client |
 | `ask_assistant(assistant, question, conversation_id?)` | Run an assistant and return the answer with sources |
 | Resource `document://{id}` | Document metadata and the cited text |
@@ -91,6 +91,9 @@ agent frameworks use municipal knowledge without their own RAG.
 **Per-skill endpoints** (after Bifrost's "virtual MCPs"): each published skill can also be exposed at
 `/mcp/skills/<slug>`, offering only that skill's knowledge search and tools. A department can give an MCP client
 exactly "Bygglov" and nothing else, with the same authorisation.
+
+Citation download links returned over MCP are signed grants bound to the MCP client with a lifetime of **1 hour**
+(knowledge design §4.6, §14).
 
 ## 5. Hosting municipal MCP servers
 

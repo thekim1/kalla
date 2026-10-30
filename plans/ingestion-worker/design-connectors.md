@@ -550,7 +550,8 @@ document (metadata title or first heading), never from a file name.
 2. In the parent's **fenced document-stage commit**: upsert child `Documents` (`IdentityKind = attachment`,
    identity `<parent>#att/<ordinal>/<sha256>`, `ParentDocumentId`, `AttachmentOrdinal`, `Depth = parent + 1`,
    same `Classification` by the composite FK); mirror every live `DocumentSources` row of the parent (same
-   `SourceId`s); soft-delete child references whose identity is no longer among the parts; enqueue one `fetch` job
+   `SourceId`s), writing the attachment's sanitised file name (parser §5.2 `name`) into `DisplayName` of every mirrored
+   row (knowledge design §10.2; like uploads, never into `Documents.Title`); soft-delete child references whose identity is no longer among the parts; enqueue one `fetch` job
    per new or changed child (`DedupKey` as uploads). A superseded parent execution therefore never creates children.
 3. The child's `fetch` job runs the **attachment intake**: ClamAV scan of the part (§11), sniff, type check, depth
    check, then the pipeline of each referencing source from the first node after the root. A malware child is
@@ -558,7 +559,10 @@ document (metadata title or first heading), never from a file name.
 4. Later changes: a new reference to the parent (another source) mirrors to the children in the same transaction;
    `SoftDeleteReferencesAsync` on a parent reference also removes the children's references for that source; a
    parent purge cascades (FK). Children are excluded from deletion-guard counts (they follow their parent).
-5. Citations: "Bilaga *name* i *subject*" through `ParentDocumentId` (knowledge step 7; parser §5.4).
+5. Citations: "Bilaga *name* i *subject*" through `ParentDocumentId` (knowledge design §10.3; parser §5.4): *name* is
+   the child's `DisplayName`, *subject* the parent's `Documents.Title`, which for an email document is its subject
+   (parser §5.2 `email.subject`; empty subject → first heading or "Dokument utan titel"). The parent part is shown only
+   when the parent is visible to the caller.
 
 ## 11. ClamAV
 

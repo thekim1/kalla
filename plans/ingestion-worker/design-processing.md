@@ -38,7 +38,7 @@ F1 0.922 on SUC 3.0). `transformers` (Apache-2.0) is already in the parser image
 | 12 | Embed | Platform profile only; ≤ 64 inputs and ≤ 16k tokens per request; cache by (level, profile, `TextHash`); a canary embedding detects a silently changed gateway model (§11) |
 | 13 | Noise-only changes | **No new chunk set**: when the boundary output hash equals the current set's, the set is re-keyed to the new `ContentHash` in one row update (§12) |
 | 14 | Evaluation target | Questions point at **documents**, not chunks; metrics recall@10 and MRR@10 with Wilson and bootstrap intervals (§13) |
-| 15 | Retrieval in evaluation | A shared `Ume.Rag.Retrieval` library runs the data-model §3.3 SQL for both the Knowledge API and the evaluator; scope is collections or an explicit chunk-set list (§13.5) |
+| 15 | Retrieval in evaluation | A shared `Ume.Rag.Retrieval` library runs the knowledge design §6 statements and the .NET fusion and diversity for both the Knowledge API and the evaluator; scope is collections or an explicit chunk-set list (§13.5) |
 | 16 | Shadow sets | **Agree with 6a**, refined: the gate builds a **sub-corpus** (sampled questions' documents + distractors) under the candidate as shadow sets and compares it with the same documents' current sets (§14.1) |
 | 17 | Gate rule | Fail when recall@10 drops > 3 points **and** ≥ 3 questions net are lost; a drop on the 50-sample escalates to the full set before failing (§14.2) |
 | 18 | First publish | A new collection is `building` until its full generated set reaches recall@10 ≥ 0.70 on the real index, or a platform admin overrides (§14.3) |
@@ -233,7 +233,8 @@ a bold paragraph (`**…**`) in its parent. The RAGFlow title chunker with regex
 
 Section size is unbounded here; the chunker (§6) packs long sections into several chunks with the same path, so
 *Split* never cuts mid-paragraph. A document without headings is one level-0 section (path = title). Parent-child
-(P2) cuts sections above 1,500 tokens into parent windows at block boundaries.
+(P2, only if evaluation shows that query-time section expansion from neighbouring chunks, knowledge design §9, is
+insufficient) cuts sections above 1,500 tokens into parent windows at block boundaries.
 
 ## 6. *Chunk* (`chunk`, inline, intermediate; answered 8)
 
@@ -307,6 +308,7 @@ tokens with no structure (`../../platforms/eneo.md:105`); Open WebUI loses headi
 | `Ordinal` | 0-based order within the chunk set |
 | `HeadingPath` | full path joined with ` › ` (untruncated; the prefix may be truncated) |
 | `Text` | body without the prefix (shown as context and citation snippet) |
+| `OverlapChars` | number of leading characters of `Text` repeated from the previous chunk (§6.2 rule 3, list lead-in); 0 for the first chunk of a section, tables and code; section expansion strips them (knowledge design §9.3) |
 | `TextHash` | `SHA-256(UTF-8(NFC(prefix + "\n\n" + Text)))` = exactly the embedded string |
 | `TokenCount` | tokens of the embedded string |
 | `Page`, `PageEnd` | first and last page of the chunk's blocks (`PageEnd` new, §19); null for HTML/DOCX |
@@ -315,7 +317,7 @@ tokens with no structure (`../../platforms/eneo.md:105`); Open WebUI loses headi
 
 **Ids.** `Chunks.Id` stays a v7 id per row (the index writer's transaction makes retries safe). Anything that must
 survive re-chunking (evaluation provenance, retrieval statistics, feedback) uses `(DocumentId, TextHash)`, the key
-the hybrid query already deduplicates on (data-model §3.3).
+retrieval already deduplicates on (knowledge design §8).
 
 ## 7. *Metadata from path* (`metadata-from-path`, inline, no cache)
 
@@ -632,11 +634,14 @@ seed, judge scores), `Strata` (document type, kind) (§19).
 
 ### 13.5 Running retrieval as the Knowledge API does
 
-- New shared project **`Ume.Rag.Retrieval`** (used by `Ume.Rag.Api` and the worker): builds and runs the
-  data-model §3.3 statement with the collection's `RetrievalSettings` (weights, `ef_search`), profile literal,
-  dedup by `(DocumentId, TextHash)` and RRF; `k = 10`; mode hybrid; no filters; `expand=none`.
-- Scope: `Collections(ids)` (the API's `CollectionIds && $3`) or `ChunkSets(ids)` (`c."ChunkSetId" = ANY($3)`, same
-  CTEs otherwise) for gates (§14.1). Shadow chunks have `Chunks.DeletedAt` null and `CollectionIds = '{}'`, so they
+- New shared project **`Ume.Rag.Retrieval`** (used by `Ume.Rag.Api`, the worker and the admin test panel): runs the
+  keyword and vector candidate statements (knowledge design §6.2) with the collection's `RetrievalSettings` (weights,
+  `candidates`, `efSearch`) and profile literal, then fuses in .NET (RRF) and applies the same dedup by
+  `(DocumentId, TextHash)`, variant collapse and per-document cap (default 3) as the API (knowledge design §6.5, §8);
+  `k = 10` (knowledge answered 1); mode hybrid; no filters; `expand=none`; never degrades to keyword-only.
+- Scope: `Collections(ids)` (the API's `CollectionIds && $scope`) or `ChunkSets(ids)` (`c."ChunkSetId" = ANY($scope)`,
+  same statements otherwise) for gates (§14.1). `ChunkSets` scopes always use the **exact** vector variant; `Collections`
+  scopes follow the API's exact/HNSW rule (≤ 10,000 chunks exact, knowledge design §6.4). Shadow chunks have `Chunks.DeletedAt` null and `CollectionIds = '{}'`, so they
   are invisible to the API and visible to a chunk-set scope.
 - Query embedding through the same embedding client and normalisation as the API, cached in `EmbeddingCache` by
   the question's hash (stable across runs).
@@ -686,8 +691,8 @@ the same kind of corpus.
    `Documents` facts, PII counts or child documents (like preview, but with cache writes), and are cancelled by new
    content like any execution. The finalizer (6a §10.4) enqueues the measuring `eval` job when no job of the gate is
    open.
-5. **Measure**: both arms with `ChunkSets` scope (§13.5) on the same questions; the exact vs. approximate nearest
-   neighbour difference is the same for both arms. Absolute numbers from a sub-corpus are optimistic and are shown
+5. **Measure**: both arms with `ChunkSets` scope (§13.5) on the same questions; both arms are searched **exactly**
+   (no ANN noise, knowledge design §6.4), so they measure chunking only. Absolute numbers from a sub-corpus are optimistic and are shown
    only as context; the floor uses the full index (§14.3).
 
 On publish, `EnsureCurrent` finds and revives the shadow sets (6a §14 rule 2); the rest of the collection is
@@ -732,9 +737,9 @@ the failed result. Rollbacks are never blocked (6a §12.3), so they need no over
 
 | Change | Corpus | Questions | Arms |
 |---|---|---|---|
-| `Collections.RetrievalSettings` (weights, `ef_search`, top-k) | full collection, `Collections` scope | full set (cheap: no rebuild) | current vs candidate settings |
+| `Collections.RetrievalSettings` gated values: `vectorWeight`, `keywordWeight`, `candidates`, `efSearch`, `maxChunksPerDocument` (knowledge design §12.1; top-k is per request, not a collection setting) | full collection, `Collections` scope | full set (cheap: no rebuild) | current vs candidate settings |
 | Embedding profile (P3) | full collection under each profile after the background re-embed | full set | old vs new profile |
-| Coverage threshold only | none | – | not gated (does not change ranking) |
+| Coverage threshold (`coverageMaxDistance`) or `expandMaxTokens` only | none | – | not gated (does not change ranking) |
 
 Same decision rule as §14.2 on the full set; the admin saves the settings only after a pass or an override.
 
@@ -888,7 +893,8 @@ knowledge documents got pointer notes or answered-item updates.
   statistics (licence) for fixtures and the gazetteer.
 - Docling `timings` granularity for per-page milliseconds (range sizing falls back to `docling_ms / pages`).
 - Postgres: chunk-set scope with `ChunkSetId = ANY(…)` uses a bitmap scan and exact ordering (no HNSW) for a
-  2,000-chunk sub-corpus; an index on `Chunks.ChunkSetId` exists.
+  2,000-chunk sub-corpus; the index on `Chunks.ChunkSetId` is the unique (`ChunkSetId`, `Ordinal`) index (knowledge
+  design §18).
 - On-prem LLM through the gateway: JSON output mode, and that judge scores at temperature 0 are stable enough for
   reproducible filtering.
 - All planning numbers of §14.7 and §16, measured in the R1 test.

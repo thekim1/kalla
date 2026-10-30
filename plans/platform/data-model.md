@@ -26,7 +26,7 @@ The gateway has no connection caps, `statement_timeout`, partitioning, schemas o
 
 ## 1. Database layout
 
-One Postgres 17 instance (our image: pgvector 0.8.x + Hunspell `sv_SE`), database **`ragdb`** (gateway: `gatewaydb`),
+One Postgres 17 instance (our image: pgvector 0.8.7 + Hunspell `sv_SE`), database **`ragdb`** (gateway: `gatewaydb`),
 owned by the DDL role. Extension `vector` is created by `init.sql` as the bootstrap superuser (it is not a trusted
 extension). The `public` schema keeps only the extension; `REVOKE ALL ON SCHEMA public FROM PUBLIC` and `USAGE` for the
 service roles, as in the gateway.
@@ -60,7 +60,17 @@ ALTER ROLE ume_rag_worker IN DATABASE ragdb SET statement_timeout = '60s';
 ALTER ROLE ume_rag_worker IN DATABASE ragdb SET lock_timeout = '5s';
 ALTER ROLE ume_rag_worker IN DATABASE ragdb SET idle_in_transaction_session_timeout = '60s';
 ALTER ROLE ume_rag_migrator IN DATABASE ragdb SET maintenance_work_mem = '1GB';   -- HNSW builds
+-- Retrieval defaults (knowledge design §6.4), no per-query SET: api, worker (evaluator), admin (test panel)
+ALTER ROLE ume_rag_api IN DATABASE ragdb SET hnsw.ef_search = 100;
+ALTER ROLE ume_rag_api IN DATABASE ragdb SET hnsw.iterative_scan = relaxed_order;
+ALTER ROLE ume_rag_worker IN DATABASE ragdb SET hnsw.ef_search = 100;
+ALTER ROLE ume_rag_worker IN DATABASE ragdb SET hnsw.iterative_scan = relaxed_order;
+ALTER ROLE ume_rag_admin IN DATABASE ragdb SET hnsw.ef_search = 100;
+ALTER ROLE ume_rag_admin IN DATABASE ragdb SET hnsw.iterative_scan = relaxed_order;
 ```
+
+A collection whose gated `RetrievalSettings.efSearch` differs runs its vector statement with `SET LOCAL` in a
+read-only batch (knowledge design §6.4).
 
 ### 1.2 Grants (`deploy/postgres/app-roles.sql`)
 
@@ -69,14 +79,14 @@ listed here (copied from the gateway's file header). `S` select, `I` insert, `U`
 
 | Object | admin | api | tools | worker |
 |---|---|---|---|---|
-| `config` tables except below | S I U D | S on: `Departments`, `Teams`, `Settings`, `DataTiers`, `DataProtectionPolicies`, `EmbeddingProfiles`, `Collections`, `Assistants`, `Assistant*`, `Skills`, `SkillVersions`, `SkillVersionLinks`, `Tools`, `ToolDefinitions`, `ToolApprovals`, `Clients`, `Keys`, `GatewayKeyLinks` | S on: `Settings`, `DataProtectionPolicies`, `Assistants`, `AssistantSkills`, `Skills`, `SkillVersions`, `SkillVersionLinks`, `ToolServers`, `Tools`, `ToolDefinitions`, `ToolApprovals`, `Clients` | S on: `Departments`, `Teams`, `Settings`, `DataTiers`, `DataProtectionPolicies`, `EmbeddingProfiles`, `Collections`, `Sources`, `Pipelines`, `PipelineVersions`, `Assistants`, `AssistantCollections`, `SkillVersions`, `GatewayKeyLinks` |
+| `config` tables except below | S I U D | S on: `Departments`, `Teams`, `Settings`, `DataTiers`, `DataProtectionPolicies`, `EmbeddingProfiles`, `Collections`, `Sources` (columns `Id`, `CollectionId`, `Type`, `Classification`, `State`, `DeletedAt`; knowledge design §6.3), `Assistants`, `Assistant*`, `Skills`, `SkillVersions`, `SkillVersionLinks`, `Tools`, `ToolDefinitions`, `ToolApprovals`, `Clients`, `Keys`, `GatewayKeyLinks`, `CollectionAudiences` (P2) | S on: `Settings`, `DataProtectionPolicies`, `Assistants`, `AssistantSkills`, `Skills`, `SkillVersions`, `SkillVersionLinks`, `ToolServers`, `Tools`, `ToolDefinitions`, `ToolApprovals`, `Clients` | S on: `Departments`, `Teams`, `Settings`, `DataTiers`, `DataProtectionPolicies`, `EmbeddingProfiles`, `Collections`, `Sources`, `Pipelines`, `PipelineVersions`, `Assistants`, `AssistantCollections`, `SkillVersions`, `GatewayKeyLinks` |
 | `config."ToolServers"` | S I U D | S on every column **except** `EncryptedCredential` | S (all columns) | – |
 | `config."PipelineCanvasLayouts"` | S I U D | – | – | – (the worker never reads layouts, enforced) |
 | `config."KeyLastUse"` | S | S I U | – | – |
 | `config."DataProtectionKeys"` | S I | S | S | S |
 | `config."ConfigVersion"`, `"ConfigOutbox"` | S (writes only via trigger, §5) | S | S | S |
 | `config."__EFMigrationsHistory"` | S | – | – | – |
-| `content` tables | S | S on `Documents`, `ChunkSets`, `Chunks` | – | S I U D (all) |
+| `content` tables | S (incl. test-panel retrieval, knowledge design §4.2) | S on `Documents`, `ChunkSets`, `Chunks`; S on `DocumentSources` (columns `DocumentId`, `SourceId`, `Classification`, `DisplayName`, `DeletedAt`; citation names) and `DocumentKeys` (downloads, knowledge design §3.5) | – | S I U D (all) |
 | `content."Jobs"` | S I | – | – | S I U D |
 | `chat` tables | S | S I U D | – | – |
 | `audit."AuditLog"` | S I | I | I | I |
@@ -102,11 +112,11 @@ FK** (config is main-only).
 |---|---|---|---|---|
 | `Departments` | Mirror of gateway departments, incl. feature C member groups | `Id uuid` (= gateway id), `Name varchar(200)`, `CostCenterCode varchar(50)`, `MemberGroups varchar(256)[]` (group claim values: Entra object ids, Keycloak/AD FS names; identity design §2.2), `IsActive bool`, `SyncedAt` | PK `Id`; U `CostCenterCode`; GIN `MemberGroups` | – |
 | `Teams` | Mirror of gateway teams (attribution `x-ume-on-behalf-of` sends `Id`) | `Id uuid` (= gateway), `DepartmentId`, `Name`, `Code varchar(100)` (from `/v1/catalog/teams`, gateway release C; display only), `IsActive`, `SyncedAt` | FK `DepartmentId` → `Departments` (Restrict, as gateway); U `Code` | – |
-| `Settings` | Singleton: platform defaults (deletion guard 20 %, crawl politeness, gate threshold 3 points, auto-apply ≥ 0.9 / ≥ 20 docs / 10 % trial, **parse auto-apply kill switch**, retention values from §8, `AuditRetentionDays` 730, `RetentionLastRun*`; worker: `WorkerConcurrency jsonb`, `DegradedFailureRatio` 0.05, `ScheduleJitterMinutes` 90, `PreviewMaxUsd` 0.50, default schedules per source type (engine design §9–§11); connectors: `DeletionGuardMinCount` 5, `DeletionGuardMaxCount` 500, `Crawl jsonb` (municipal host patterns, rates, host overrides, blocked hosts, ports, freshness 12 h, window 22–06, limits 10 000/10, caps, redirects 5), `QuarantineRetentionDays` 30; processing: `PiiFlagRules jsonb`, `PiiOwnDomains text[]`, `NerMinScore` 0.80, `EvaluationModel`, `EvaluationJudgeModel` (default: the gateway's on-prem general chat model), `GateFloor` 0.70, `GateSampleSize` 50, `EvaluationMaxQuestions` 100) | `Id smallint` | `CK_Settings_Singleton` (`"Id" = 1`), range checks like `CK_GatewaySettings_*` | – |
+| `Settings` | Singleton: platform defaults (deletion guard 20 %, crawl politeness, gate threshold 3 points, auto-apply ≥ 0.9 / ≥ 20 docs / 10 % trial, **parse auto-apply kill switch**, retention values from §8, `AuditRetentionDays` 730, `RetentionLastRun*`; worker: `WorkerConcurrency jsonb`, `DegradedFailureRatio` 0.05, `ScheduleJitterMinutes` 90, `PreviewMaxUsd` 0.50, default schedules per source type (engine design §9–§11); connectors: `DeletionGuardMinCount` 5, `DeletionGuardMaxCount` 500, `Crawl jsonb` (municipal host patterns, rates, host overrides, blocked hosts, ports, freshness 12 h, window 22–06, limits 10 000/10, caps, redirects 5), `QuarantineRetentionDays` 30; processing: `PiiFlagRules jsonb`, `PiiOwnDomains text[]`, `NerMinScore` 0.80, `EvaluationModel`, `EvaluationJudgeModel` (default: the gateway's on-prem general chat model), `GateFloor` 0.70, `GateSampleSize` 50, `EvaluationMaxQuestions` 100; retrieval: `Retrieval jsonb` = `RetrievalSettings` defaults (1.0 / 1.0, 100, 100, 3, 0.50, 1,500) plus platform-only `exactScanMaxChunks` 10,000, `expandTotalMaxTokens` 8,000, `downloadGrantLifetimeHours` 168, knowledge design §12.1) | `Id smallint` | `CK_Settings_Singleton` (`"Id" = 1`), range checks like `CK_GatewaySettings_*` | – |
 | `DataTiers` | Data tiers known to the tier resolver | `Name varchar(30)` (`main`, `sensitive`), `ConnectionName varchar(50)` (`ragdb`, `ragdb-sensitive`: names of connection strings in env, never secrets), `BlobContainer varchar(63)`, `State` (`active`/`migrating`) | PK `Name` | – |
 | `DataProtectionPolicies` | §8a matrix, one row per level | `Classification` PK, `AllowedHistoryModes varchar(20)[]`, `DefaultHistoryMode`, `RetentionDefaultDays int`, `RetentionMaxDays int`, `EncryptionRequired bool`, `ReviewSecondApprover bool`, `ClientsWithoutHistoryOnly bool`, `TierName` FK → `DataTiers`, `ChatMasterKeyName`, `BlobMasterKeyName` | `CK_…_Encryption` (`internal`/`sensitive` ⇒ `EncryptionRequired`); `CK_…_Retention` (default ≤ max ≤ 90) | Defines them |
 | `EmbeddingProfiles` | R3 registry | `Id`, `Name`, `GatewayModel varchar(200)` (`bge-m3`), `Dimensions int` (1024), `Distance` (`cosine`), `MaxInputTokens` (8192), `CanaryText text`, `CanaryEmbedding vector` (detects a silently changed gateway model), `IsDefault`, `State` (`active`/`building`/`retired`) | U `Name`; partial U `IsDefault WHERE "IsDefault"` | Always on-prem (R3) |
-| `Collections` | Search scope, access and classification | `Id`, `Slug varchar(100)`, `Name`, `DepartmentId`, `OwnerTeamId`, `Classification`, `EmbeddingProfileId` FK, `RetrievalSettings jsonb`, `PublishedAt timestamptz NULL` (null = `building`, invisible to retrieval except the admin test panel), `PublishGateRunId uuid NULL` (processing design §14.3) (weights, top-k, coverage threshold), `GateSettings jsonb`, `DeletedAt` | U `Slug`; IX `DepartmentId` | ≥ every source's level (validated on save) |
+| `Collections` | Search scope, access and classification | `Id`, `Slug varchar(100)`, `Name`, `DepartmentId`, `OwnerTeamId`, `Classification`, `EmbeddingProfileId` FK, `RetrievalSettings jsonb` (`vectorWeight`, `keywordWeight`, `candidates`, `efSearch`, `maxChunksPerDocument` gated; `coverageMaxDistance`, `expandMaxTokens` not gated; unset values fall back to `Settings.Retrieval`; top-k is per request, not here; knowledge design §12.1), `PublishedAt timestamptz NULL` (null = `building`, invisible to retrieval except the admin test panel), `PublishGateRunId uuid NULL` (processing design §14.3), `GateSettings jsonb`, `DeletedAt` | U `Slug`; IX `DepartmentId` | ≥ every source's level (validated on save) |
 | `Sources` | One connector instance; belongs to one collection | `Id`, `CollectionId` FK, `Type` (`url-list`/`crawl`/`upload`/`sharepoint`), `Name`, `Classification`, `Settings jsonb` (fields tagged identity/scope/behaviour/cosmetic), `Schedule varchar(100)` (cron), `PipelineId` FK, `State` (`active`/`paused`), `DeletedAt` | IX `CollectionId`; IX `PipelineId` | ≤ collection level |
 | `Pipelines` | Pipeline or template | `Id`, `DepartmentId` (null = platform template), `Name`, `IsTemplate`, `CopiedFromId`, `PublishedVersionId` FK → `PipelineVersions` (nullable) | U (`DepartmentId`, `Name`) | – |
 | `PipelineVersions` | Immutable once published | `Id`, `PipelineId` FK, `Number int`, `State` (`draft`/`published`/`superseded`), `Definition jsonb` (nodes `id`/`type`/`typeVersion`/`params`/`locked`, edges), `DocumentStageHash bytea`, `CollectionStageHash bytea`, `CreatedBy`, `PublishedAt`, `GateRunId uuid` (→ content, no FK) | U (`PipelineId`, `Number`) | – |
@@ -115,6 +125,7 @@ FK** (config is main-only).
 | `AssistantCollections` | Direct collections | `AssistantId`, `CollectionId` | PK both; FKs Cascade/Restrict | as above |
 | `AssistantSkills` | Skills of an assistant | `AssistantId`, `SkillId`, `PinnedVersionId` (null = follow served) | PK (`AssistantId`, `SkillId`) | as above |
 | `AssistantAudiences` | Who may use it | `AssistantId`, `Kind` (`client`/`department`/`group`), `SubjectId uuid` (client or department id; null for `group`), `GroupValue varchar(256)` (`group` only; identity design §2.2) | U (`AssistantId`, `Kind`, `coalesce(SubjectId::text, GroupValue)`); `CK_` exactly one of `SubjectId`/`GroupValue` | P1 uses `client` only |
+| `CollectionAudiences` (P2) | Which token callers may search a collection over HTTP/MCP (knowledge design §4.2) | `CollectionId`, `Kind` (`client`/`department`/`group`), `SubjectId uuid` (null for `group`), `GroupValue varchar(256)` (`group` only) | U (`CollectionId`, `Kind`, `coalesce(SubjectId::text, GroupValue)`); `CK_` exactly one of `SubjectId`/`GroupValue` (as `AssistantAudiences`) | – |
 | `Skills` | Skill identity and **served pointer** | `Id`, `Slug`, `Name`, `DepartmentId` (null = platform), `Classification`, `ServedVersionId` FK → `SkillVersions` | U `Slug` | – |
 | `SkillVersions` | Immutable SemVer versions | `Id`, `SkillId` FK, `Version varchar(50)`, `VersionMajor/Minor/Patch int`, `Description`, `Instructions text`, `Manifest jsonb`, `ReferenceBlobPrefix`, `TestQuestions jsonb`, `State`, `PublishedAt`, `GateRunId` | U (`SkillId`, `Version`); `CK_` increasing via app | – |
 | `SkillVersionLinks` | Linked collections and tools | `SkillVersionId`, `Kind` (`collection`/`tool`), `TargetId` | PK all three | skill level ≥ links |
@@ -151,7 +162,7 @@ written, so a sync without changes does not bump the config version. Member grou
 | `DocumentSources` | L | Which sources reference a document and which chunk set their pipeline produced | `DocumentId`, `SourceId` (no FK), `Classification`, `ChunkSetId`, `PipelineVersionId`, `LastRunId uuid`, `DisplayName varchar(300) NULL` (upload file name per source; never in `Documents.Title`), `HeldAt`, `HeldBy` (rejected deletions), `ConsecutiveFailures smallint NOT NULL DEFAULT 0`, `FirstSeenAt`, `LastSeenAt`, `DeletedAt`, `PurgeAfter` | PK (`DocumentId`, `SourceId`); FK (`DocumentId`, `Classification`) → `Documents`; FK (`ChunkSetId`, `Classification`) → `ChunkSets`; IX (`SourceId`) `WHERE "DeletedAt" IS NULL` |
 | `NodeOutputs` | L | Output cache index (blobs hold the data, §9) | `CacheKey bytea` PK, `Classification`, `DocumentId`, `NodeType`, `NodeVersion`, `ParamsHash bytea`, `InputHash bytea`, `OutputHash bytea` (next key without loading the blob, engine design §8), `BlobPath` (a prefix for multi-blob outputs such as the parse output: `result.json`, `docling/*.json.gz`), `IsParseOutput bool`, `CreatedAt`, `ExpiresAt` (null for the current parse output) | FK (`DocumentId`, `Classification`) → `Documents` Cascade; IX `ExpiresAt` |
 | `ChunkSets` | L | One collection-stage output per (document, collection-stage hash, profile); shared by every collection whose pipeline matches (R2) | `Id`, `DocumentId`, `Classification`, `CollectionStageHash bytea` (holds the whole-pipeline Merkle hash, engine design §3.3), `EmbeddingProfileId`, `ContentHash`, `InputHash bytea NOT NULL` (boundary `OutputHash`; noise-only changes re-key the set, processing design §12), `CollectionIds uuid[]` (authoritative), `ChunkCount`, `CreatedAt`, `DeletedAt` (deleted sets are revived by the index writer within 14 days; gate shadow sets are created deleted) | U (`Id`, `Classification`); U (`DocumentId`, `CollectionStageHash`, `EmbeddingProfileId`, `ContentHash`); FK (`DocumentId`, `Classification`) → `Documents` Cascade |
-| `Chunks` | L | **Collection index**: parents and children | `Id`, `ChunkSetId`, `DocumentId`, `Classification`, `Kind` (`parent`/`child`), `ParentId`, `Ordinal int`, `HeadingPath text`, `PageEnd int NULL` (P1 writes flat chunks as `Kind = 'child'`), `Text text`, `TextHash bytea`, `TokenCount int`, `Page int`, `Tags text[]`, `DocumentType varchar(30)`, `SourceModifiedAt`, `CollectionIds uuid[]` (copy of the set's), `EmbeddingProfileId uuid` (children only), `Embedding vector` (children only, untyped so profiles may differ in size), `SearchVector tsvector` (generated, §3), `DeletedAt` | PK `Id`; FK (`ChunkSetId`, `Classification`) → `ChunkSets` Cascade; FK (`DocumentId`, `Classification`) → `Documents`; IX `ParentId`; HNSW and GIN per §3 |
+| `Chunks` | L | **Collection index**: parents and children | `Id`, `ChunkSetId`, `DocumentId`, `Classification`, `Kind` (`parent`/`child`), `ParentId`, `Ordinal int`, `HeadingPath text`, `PageEnd int NULL` (P1 writes flat chunks as `Kind = 'child'`), `Text text`, `OverlapChars smallint NOT NULL DEFAULT 0` (leading characters of `Text` repeated from the previous chunk; section expansion strips them, knowledge design §9.3), `TextHash bytea`, `TokenCount int`, `Page int`, `Tags text[]`, `DocumentType varchar(30)`, `SourceModifiedAt`, `CollectionIds uuid[]` (copy of the set's), `EmbeddingProfileId uuid` (children only), `Embedding vector` (children only, untyped so profiles may differ in size), `SearchVector tsvector` (generated, §3), `DeletedAt` | PK `Id`; FK (`ChunkSetId`, `Classification`) → `ChunkSets` Cascade; FK (`DocumentId`, `Classification`) → `Documents`; **U (`ChunkSetId`, `Ordinal`)** `IX_Chunks_ChunkSetId_Ordinal` (section expansion and chunk-set scopes, knowledge design §6.3; also the index on `ChunkSetId`); IX `ParentId`; HNSW and GIN per §3. `Kind`/`ParentId` stay although every P1 row is `child`; dropped by a contract migration if P2 does not adopt parent windows (processing design §5.3) |
 | `EmbeddingCache` | L | (profile, text hash) → embedding, so re-chunking embeds only new text | `Classification`, `EmbeddingProfileId`, `TextHash bytea`, `Embedding vector`, `LastUsedAt` | PK (`Classification`, `EmbeddingProfileId`, `TextHash`) |
 | `Runs` | L | One per sync/reprocess | `Id`, `SourceId`, `Classification`, `Kind` (`sync`/`retry-failed`/`reprocess`), `Trigger` (`schedule`/`manual`/`upload`/`publish`/`rollback`/`shared-document`/`retry`/`config-change`/`notification`), `PipelineVersionId`, `ScheduledFor timestamptz NULL`, `Phase varchar(20)` (`list`/`fetch`/`reconcile`/`done`), `Report jsonb`, `SettingsHashes jsonb`, `State` (`running`/`succeeded`/`degraded`/`failed`/`awaiting-deletion-confirmation`/`cancelled`), `Added/Updated/Unchanged/Deleted/Failed int`, `ProposedDeletions int`, `CostUsd numeric(18,8)`, `StartedAt`, `FinishedAt` | IX (`SourceId`, `StartedAt` DESC) |
 | `RunItems` | L | One per document per run, partitioned by day (§4) | `Id bigint identity`, `CreatedAt` (partition key), `RunId`, `Classification`, `DocumentId`, `Identity text`, `Outcome` (engine design §10.2), `Reason varchar(500)`, `Strategy`, `PipelineVersionId uuid`, `ParseProfileId`, `ExecutionId uuid`, `DurationMs`, `CostUsd`, `ParserBuildHash bytea` (parser `/v1/info` build; full info in `content."ParserBuilds"` (`BuildHash` PK, `Info jsonb`, `FirstSeenAt`), main tier) | PK (`CreatedAt`, `Id`); IX (`RunId`) |
@@ -161,7 +172,7 @@ written, so a sync without changes does not bump the config version. Member grou
 | `EvaluationQuestions` | L | Layers generated / skill / human | `Id`, `SetId`, `Classification`, `Layer`, `Question text`, `ExpectedAnswer text`, `ExpectedDocumentIds uuid[]`, `SourceContentHash bytea`, `Origin jsonb`, `Strata jsonb`, `State` (`active`/`stale`/`retired`), `SourceChunkId`, `SkillVersionId`, `CreatedBy`, `RetiredAt` | FK (`SetId`, `Classification`) → `EvaluationSets` Cascade; IX (`SetId`) `WHERE "RetiredAt" IS NULL` |
 | `EvaluationRuns` | L | One gate or scheduled run | `Id`, `SetId`, `Classification`, `Trigger` (`pipeline-publish`/`collection-publish`/`profile-auto-apply`/`retrieval-change`/`embedding-change`/`skill-publish`/`scheduled`), `SubjectId`, `Kind` (`baseline`/`candidate`/`single`), `Scope` (`collection`/`sub-corpus`), `CorpusDocuments`, `QuestionCount`, `RecallCiLow/High`, `MrrCiLow/High`, `Wins`, `Losses`, `McNemarP`, `Decision` (`pass`/`pass-noise`/`pass-not-significant`/`fail`/`not-measurable`), `OverriddenBy`, `OverrideReason`, `OverriddenAt`, `PromptVersion`, `Seed` (processing design §14), `SubjectVersion`, `BaselineRunId`, `K int`, `SampleSize`, `RecallAtK numeric(5,4)`, `Mrr numeric(5,4)`, `Faithfulness numeric(5,4)`, `ThresholdPoints numeric(4,2)`, `GatePassed bool`, `StartedAt`, `FinishedAt` | FK as above; IX (`SetId`, `StartedAt` DESC) |
 | `EvaluationResults` | L | Per question per run | `RunId`, `QuestionId`, `Classification`, `ExpectedRank int` (null = not found), `Hit bool`, `Faithfulness numeric(5,4)` | PK (`RunId`, `QuestionId`); FK (`RunId`, `Classification`) Cascade |
-| `RetrievalStats` | L | Counters only, never query text (knowledge §6.2) | `Day date`, `ChunkId`, `CollectionId`, `Classification`, `Retrieved int`, `Cited int` | PK (`Day`, `ChunkId`, `CollectionId`) |
+| `RetrievalStats` | L | Counters only, never query text (knowledge design §4.7) | `Day date`, `DocumentId`, `TextHash bytea`, `CollectionId`, `Classification`, `Retrieved int`, `Cited int` (keyed by text hash, not chunk id, so counts survive re-chunking, processing design §6.5) | PK (`Day`, `DocumentId`, `TextHash`, `CollectionId`) |
 
 Shared-chunk rule: the worker keeps `ChunkSets."CollectionIds"` = distinct collections of the live `DocumentSources`
 pointing at the set, **minus `public` collections while the document's PII flag is not cleared** (worker §4), and
@@ -201,7 +212,7 @@ depend on rows that retention later removes.
 
 Security events are not stored: like the gateway (ADR 015) they go to OpenTelemetry in `Ume.Rag.Security`.
 
-## 3. Search indexes and the hybrid query
+## 3. Search indexes and the retrieval statements
 
 ### 3.1 Swedish text search configuration `content.rag_swedish`
 
@@ -238,6 +249,8 @@ CREATE INDEX "IX_Chunks_SearchVector" ON content."Chunks" USING gin ("SearchVect
 CREATE INDEX "IX_Chunks_CollectionIds" ON content."Chunks" USING gin ("CollectionIds")
     WHERE "DeletedAt" IS NULL;
 CREATE INDEX "IX_Chunks_Tags" ON content."Chunks" USING gin ("Tags") WHERE "DeletedAt" IS NULL;
+-- Section expansion and chunk-set scopes (knowledge design §6.3, §9); the chunker also writes "OverlapChars".
+CREATE UNIQUE INDEX "IX_Chunks_ChunkSetId_Ordinal" ON content."Chunks" ("ChunkSetId", "Ordinal");
 
 -- One partial HNSW index per embedding profile; the platform profile BGE-M3 (1024 dims) is seeded with a fixed id.
 CREATE INDEX "IX_Chunks_Embedding_bge_m3" ON content."Chunks"
@@ -250,85 +263,35 @@ owner migrator, called by the worker) **before** any row of that profile exists,
 `CONCURRENTLY`. A dictionary change requires regenerating `SearchVector` (`UPDATE … SET "Text" = "Text"` in batches, a
 release-notes item).
 
-### 3.3 The hybrid retrieval query (one round trip)
+### 3.3 Retrieval statements (three short statements, knowledge design §6)
 
-Parameters: `$1 vector(1024)` query embedding, `$2 text` query, `$3 uuid[]` collection ids (already access- and
-ceiling-checked in memory), `$4 text[]` allowed levels (defence in depth), `$5 text[]` tags or null, `$6 text[]`
-document types or null, `$7 timestamptz` modified after or null, `$8 int` top-k, `$9`/`$10 float8` vector/keyword
-weights. The profile id is **inlined as a literal** (from config, never user input), so the planner can match the
-partial index under a generic plan.
+The statements are defined once, in knowledge design §6.2–§6.3 (owned by `Ume.Rag.Retrieval`'s `PostgresSearchIndex`
+and the knowledge role); this section only summarises the rules this schema must support, so two copies of the SQL
+cannot drift:
 
-```sql
-BEGIN READ ONLY;
-SET LOCAL hnsw.ef_search = 100;
-SET LOCAL hnsw.iterative_scan = relaxed_order;   -- pgvector 0.8: keep scanning until filters yield enough rows
-WITH vec AS (
-    SELECT v."Id", v."DocumentId", v."TextHash", v.distance,
-           row_number() OVER (ORDER BY v.distance) AS rnk
-    FROM (
-        SELECT c."Id", c."DocumentId", c."TextHash",
-               c."Embedding"::vector(1024) <=> $1 AS distance
-        FROM content."Chunks" c
-        WHERE c."EmbeddingProfileId" = '01929b6e-0000-7000-8000-00000000b6e3'
-          AND c."DeletedAt" IS NULL
-          AND c."CollectionIds" && $3
-          AND c."Classification" = ANY ($4)
-          AND ($5::text[] IS NULL OR c."Tags" && $5)
-          AND ($6::text[] IS NULL OR c."DocumentType" = ANY ($6))
-          AND ($7::timestamptz IS NULL OR c."SourceModifiedAt" >= $7)
-        ORDER BY c."Embedding"::vector(1024) <=> $1
-        LIMIT 100
-    ) v
-),
-kw_query AS (   -- OR semantics: plainto_tsquery ANDs lexemes, so the operators are swapped
-    SELECT replace(plainto_tsquery('content.rag_swedish', $2)::text, ' & ', ' | ')::tsquery AS tsq
-),
-kw AS (
-    SELECT k."Id", k."DocumentId", k."TextHash",
-           row_number() OVER (ORDER BY k.score DESC) AS rnk
-    FROM (
-        SELECT c."Id", c."DocumentId", c."TextHash", ts_rank_cd(c."SearchVector", q.tsq) AS score
-        FROM content."Chunks" c, kw_query q
-        WHERE c."SearchVector" @@ q.tsq
-          AND c."Kind" = 'child' AND c."DeletedAt" IS NULL
-          AND c."EmbeddingProfileId" = '01929b6e-0000-7000-8000-00000000b6e3'
-          AND c."CollectionIds" && $3
-          AND c."Classification" = ANY ($4)
-          AND ($5::text[] IS NULL OR c."Tags" && $5)
-          AND ($6::text[] IS NULL OR c."DocumentType" = ANY ($6))
-          AND ($7::timestamptz IS NULL OR c."SourceModifiedAt" >= $7)
-        ORDER BY score DESC
-        LIMIT 100
-    ) k
-),
-fused AS (
-    SELECT COALESCE(v."Id", k."Id") AS "Id",
-           COALESCE(v."DocumentId", k."DocumentId") AS "DocumentId",
-           COALESCE(v."TextHash", k."TextHash") AS "TextHash",
-           v.distance, v.rnk AS vec_rank, k.rnk AS kw_rank,
-           COALESCE($9 / (60 + v.rnk), 0) + COALESCE($10 / (60 + k.rnk), 0) AS rrf
-    FROM vec v FULL OUTER JOIN kw k ON k."Id" = v."Id"
-),
-dedup AS (      -- same page indexed by two pipelines appears once (knowledge §3)
-    SELECT DISTINCT ON ("DocumentId", "TextHash") *
-    FROM fused
-    ORDER BY "DocumentId", "TextHash", rrf DESC
-)
-SELECT d."Id", d.rrf, d.distance, d.vec_rank, d.kw_rank,
-       c."Text", c."HeadingPath", c."Page", c."ParentId", p."Text" AS "ParentText",
-       doc."Id" AS "DocumentId", doc."Title", doc."Url", doc."IdentityKind", doc."SourceModifiedAt"
-FROM dedup d
-JOIN content."Chunks" c ON c."Id" = d."Id"
-JOIN content."Documents" doc ON doc."Id" = c."DocumentId" AND doc."Classification" = c."Classification"
-LEFT JOIN content."Chunks" p ON p."Id" = c."ParentId" AND p."Classification" = c."Classification"
-ORDER BY d.rrf DESC
-LIMIT $8;
-COMMIT;
-```
+- **K** (keyword candidates): `plainto_tsquery('content.rag_swedish', $query)` with ` & ` swapped for ` | ` (OR
+  semantics), `ts_rank_cd`, top 100, on the partial GIN index of §3.2 (`"Kind" = 'child' AND "DeletedAt" IS NULL`).
+  Runs on its own connection **in parallel with the query embedding**.
+- **V** (vector candidates): `"Embedding"::vector(1024) <=> $vector`, top 100, approximate through the per-profile
+  partial HNSW index, or **exact** (`ORDER BY (… <=> $1) + 0`: GIN bitmap on `CollectionIds` + top-N sort) for scopes of
+  ≤ 10,000 chunks and for evaluator `ChunkSets` scopes (knowledge design §6.4).
+- Both filter `"CollectionIds" && $scope` (or `"ChunkSetId" = ANY ($scope)` for the evaluator) and `"Classification" =
+  ANY ($levels)` (defence in depth), return ids and numbers only (`ChunkSetId`, `Ordinal`, `TextHash`,
+  `CollectionIds`, the document's `IdentityKind`/`IdentityHash`/`ParentDocumentId`), never text. Optional filters
+  (tags, document types, modified after) are **appended only when present**, not `($x IS NULL OR …)`. The profile id is
+  **inlined as a literal** (from config, never user input), so the planner matches the partial indexes under a generic
+  plan.
+- **H+D** (hydrate, one `NpgsqlBatch`): the final hits with their section neighbours by (`ChunkSetId`, `Ordinal`)
+  range (the unique index of §3.2), re-checking scope, levels and `DeletedAt`; documents of the hits and their parents
+  with the `DisplayName` of sources the caller may see and a parent-visibility flag.
+- RRF fusion, `(DocumentId, TextHash)` dedup, variant collapse, the per-document cap, coverage and the final top-k run
+  in .NET (`Ume.Rag.Retrieval`, knowledge design §6.5–§8). There is no parent join (flat chunks; sections come from
+  neighbouring chunks, knowledge design §9). `hnsw.ef_search` and `hnsw.iterative_scan` are role defaults (§1.1), not
+  per-query `SET LOCAL`.
 
-`expand=none` drops the parent join; the API returns each parent text once. The coverage signal uses `distance` of the
-best hit, not the RRF score (§12.15). An assistant spanning tiers or profiles runs this once per (tier, profile) and
-fuses the lists with RRF in the API (plan §8a, knowledge §3).
+The coverage signal uses the best cosine **distance** per searched collection, not the RRF score (§12.15). An
+assistant spanning tiers or profiles runs K and V once per (tier, profile) and fuses in .NET (plan §8a, knowledge design
+§6.5). A warm retrieval is 3 Postgres round trips (K, V, H+D).
 
 ## 4. Job queue
 
@@ -543,7 +506,8 @@ tag; AAD = `"<table>:<row id>:<column>:<conversation id>"`, so ciphertext cannot
 **Blobs**: per-document data key in `content."DocumentKeys"` (wrapped by `rag-blob-<level>`); uploads before their
 document exists use a per-upload key stored with the upload job and moved to `DocumentKeys` on first fetch. Format:
 header `URB1` ‖ key id ‖ base nonce, then 64 KiB segments with AES-256-GCM (STREAM construction). Purging a document
-deletes its `DocumentKeys` row, then its blob prefix.
+deletes its `DocumentKeys` row, then its blob prefix. Unwrapped by the worker and, for citation downloads
+(`GET /v1/documents/{id}/content`, raw blob only, read-only mount), by the knowledge role (knowledge design §3.5).
 
 ## 8. Retention jobs
 
@@ -628,7 +592,7 @@ Prefix `ume-rag:`, ACL user limited to `~ume-rag:*`; no publish channels (change
 |---|---|
 | `ume-rag:admin-session:{sessionId}` | session |
 | `ume-rag:rl:req:{keyId}:{minute}`, `ume-rag:rl:user:{subjectHash}:{minute}`, `ume-rag:rl:tool:{toolId}:{minute}`, `ume-rag:rl:ip:{ipHash}:{minute}` | 120 s (`RateWindowSeconds`, as gateway) |
-| `ume-rag:qemb:{profileId}:{queryHash}` (embedding only; `public`/`internal` queries only, §12.14) | 5 min |
+| `ume-rag:qemb:{profileId:N}:{queryMac}` (query embedding only, value 1 version byte ‖ 1024 little-endian float32; `queryMac` = hex of the first 16 bytes of HMAC-SHA256(`Security:CacheKeyPepper`, normalised query), never a plain hash; `public`/`internal` effective level only, §12.14; an in-process L1 serves all levels; knowledge design §5.4) | 5 min |
 | `ume-rag:groups:{oid}` (feature C `checkMemberGroups` result `{checked, member}`, ids only) | 10 min |
 | `ume-rag:owui-oid:{hmac(email)}` (P2, Open WebUI email → Entra `oid`, identity design §5.4) | 1 h |
 
@@ -643,7 +607,7 @@ chunk sets is stated (§2.2); `GatewayKeyLinks` is security-relevant (§5).
 |---|---|---|---|
 | 1 | Identifier casing | Plans write `content.node_manifest` (snake case); the gateway uses EF's quoted PascalCase | PascalCase as here (`content."NodeManifest"`); update worker §4 wording |
 | 2 | Admin writes to `content` | Plan §3 says `content` is written by the worker, but the admin enqueues preview/sync/eval, clears PII flags, confirms deletions, approves/rolls back profiles, edits human questions | Admin gets `INSERT` on `Jobs` only; decisions are `command` jobs applied by the worker (adds class `command` to worker §2) |
-| 3 | Retrieval statistics | Knowledge API counts retrievals but has read-only `content` | `content.rag_count_retrievals(day, chunk ids, collection ids, cited ids)` `SECURITY DEFINER` upsert, called off the request path |
+| 3 | Retrieval statistics | Knowledge API counts retrievals but has read-only `content` | `content.rag_count_retrievals(day, document ids, text hashes, collection ids, levels, retrieved counts, cited counts)` `SECURITY DEFINER` upsert of aggregated counters, flushed every 30 s off the request path (knowledge design §4.7; keyed by text hash so counts survive re-chunking) |
 | 4 | Tool hub writes | Tool-call audit and definition drift need a writer that is not admin | `audit."ToolCallEvents"` and `audit."ToolDefinitionObservations"`, `INSERT` for tools |
 | 5 | Crypto-shredding vs backups | Plan §8a says deleting the wrapped key reaches backups; it does not, because backups contain the key rows and the master key still exists | Monthly shred-bucket master keys destroyed after expiry (§7); check Key Vault purge protection (it delays purge by 7–90 days) and OpenBao key deletion settings |
 | 6 | Retention granularity | 90 days per conversation from last activity would keep old messages of long conversations | 7-day key epochs per conversation; every message gone ≤ retention + 7 days |
@@ -654,8 +618,8 @@ chunk sets is stated (§2.2); `GatewayKeyLinks` is security-relevant (§5).
 | 11 | Retention values missing in §8 | Jobs, run items, runs, observations, caches, outbox, stats, quarantine | Values marked *proposed* in §8–9; add to `Settings` and platform §8 |
 | 12 | Job classes | Worker §2 lists six classes | Add `command` (§12.2) |
 | 13 | Cache key "node id" | Pipeline-local node ids would prevent sharing; per-document blob keys prevent cross-document sharing | Node type id + input hash (§9); namespace node outputs per document; accept no sharing between two URLs with identical bytes |
-| 14 | Query-embedding cache | Plan §8a allows embeddings in Redis; embeddings partly reveal text | No Redis cache for `sensitive` queries (in-process only) |
-| 15 | Coverage signal | Knowledge §3 uses "best fused score"; RRF scores are rank-only | Coverage threshold on best cosine distance per collection |
+| 14 | Query-embedding cache | Plan §8a allows embeddings in Redis; embeddings partly reveal text | No Redis cache for `sensitive` queries (in-process only); resolved by knowledge design §5.4 (L1 in process for all levels, L2 Redis for `public`/`internal` with an HMAC key, §11) |
+| 15 | Coverage signal | Knowledge §3 uses "best fused score"; RRF scores are rank-only | Coverage threshold on best cosine distance per collection; resolved by knowledge design §7 (`RetrievalSettings.coverageMaxDistance`, default 0.50, calibrated from the evaluation set; any covered collection → `ok`) |
 | 16 | Vector storage | `vector` (4 KB per 1024-dim chunk) vs `halfvec` (2 KB) | Start with `vector`; evaluate `halfvec` with the evaluation sets in P2 |
 | 17 | Run items, frontier, profiles placement | Hold URLs and patterns of possibly `sensitive` sources | Tier-local (as here); learned profiles apply only within their level |
 | 18 | Hunspell compounds | Postgres `ispell` supports `COMPOUNDFLAG`-style affixes but not every Hunspell compound rule | P0 test decides; fallback: decompound in the worker before indexing, same configuration name |

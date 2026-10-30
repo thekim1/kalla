@@ -51,12 +51,12 @@ and security events: `../identity/design.md` §1, §6.4, §10.
 |---|---|
 | Overview | Sync health per department, degraded sources, paused deletions waiting for confirmation, failed evaluation gates, recent failures |
 | Documents | The shared document store: which collections and sources use a document, parse strategy and profile, last fetch (R2) |
-| Collections | Classification, sources, document counts, retrieval settings, **evaluation set and latest results** |
+| Collections | Classification, sources, document counts, retrieval settings (`RetrievalSettings` form: weights, candidates, `efSearch`, chunks per document behind the evaluation gate; coverage threshold and section budget saved directly; knowledge design §12.1), coverage-threshold proposal from the evaluation set's best-distance distribution (knowledge design §7), **evaluation set and latest results** |
 | Sources | Type-specific form, pre-flight check, schedule, "sync now", run history, crawl reports, failed items, deletion confirmations; notice when another department already crawls the same site |
 | Pipelines | Templates; canvas (Vue Flow) for pipeline editors with typed ports and the node palette from the manifest; generated parameter forms; per-node preview; draft/published versions, diff, restore; publish with re-processing plan, cost estimate and **evaluation gate result** |
 | Parse profiles | Learned and manual profiles, confidence, sample count, trial results, gate results, auto-applied/proposed state, rollback, kill switch |
 | Evaluation | Per collection and assistant: generated, skill and human questions; add/edit questions; turn flagged feedback into rewritten questions without personal data; run history per version; gate thresholds (R6) |
-| Assistants | Mode (RAG / agent), prompt, model, collections, skills, query-step form, classification, audience (who may use it), retention, allowed origins; **test panel** with retrieved chunks, tool calls and the answer |
+| Assistants | Mode (RAG / agent), prompt, model, collections, skills, query-step form, classification, audience (who may use it), retention, allowed origins; **test panel** with retrieved chunks, tool calls and the answer; the panel runs `Ume.Rag.Retrieval` in the admin process (also over `building` collections, with the admin's role scope; knowledge design §4.2), so the admin host needs `Gateway:*` settings for query embeddings |
 | Skills | Versioned skill packages: instructions, references, linked collections and tools, test questions, classification; import/export in Agent Skills format (`../tools/plan.md`) |
 | Tool servers | Registered MCP servers: URL, auth mode, classification, allowed tools, pinned tool definitions with re-approval on change |
 | Clients | Client registry (R5): Entra app registrations, keys, Open WebUI and widget instances; classification ceiling; data-handling profile (stores history? retention? task model?) |
