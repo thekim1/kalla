@@ -6,7 +6,7 @@ redesigning: `IRetriever`, `RetrievalResult`, `Coverage`, `MarkCited`, download 
 the latency budget of [`../knowledge-api/design.md`](../knowledge-api/design.md) (§2.2, §3.6, §4.6, §5, §5.5, §9, §10,
 §11, §15, §16); `RagPrincipal`, the client registry, `IAccessPolicy`, the OpenAI error shape, the residency ceiling,
 Open WebUI trust, keys and security events of [`../identity/design.md`](../identity/design.md) (§3–§7, §10);
-delegation, residency ceiling, key flags, run headers and the combined release of
+delegation, residency ceiling, key flags, run headers and the two releases (weakness review §5) of
 [`../gateway-changes/design.md`](../gateway-changes/design.md) (§3, §5, §7.1, §13); the `chat` tables, config
 versioning, envelope encryption with bucket keys, retention and Redis rules of
 [`../platform/data-model.md`](../platform/data-model.md) (§2.1, §2.3, §5, §7, §8, §11, §12.23) and level policies of
@@ -447,7 +447,7 @@ it separately and the frame is prepended at run time). P2: each linked skill's b
 ```http
 POST {Gateway:BaseUrl}/v1/chat/completions
 Authorization: Bearer <rag-api delegating key of the ceiling>
-x-ume-on-behalf-of: <assistant OwnerTeamId>
+x-ume-on-behalf-of: <assistant OwnerTeamId>              (from gateway release 2, P2; not sent in P1)
 x-ume-max-residency: Eu                                  (effective level, §8.2: public External; internal Eu; sensitive OnPrem)
 x-ume-run-id: <message id, N format>                     (opaque, gateway §7.1)
 x-ume-step: answer | condense | assistant-test   (assistant-test: test runs in rag-admin, admin design §7.4)
@@ -466,7 +466,10 @@ traceparent: …
   `src/Ume.LlmGateway.Infrastructure/Providers/OpenAICompatibleAdapter.cs:225-260`).
 - `temperature` from `QuerySteps.answer.temperature` (default 0.2); no other sampling parameter.
 
-**Keys and ceiling** (combined gateway release, gateway design §13; simplification pass §6):
+**Keys and ceiling** (gateway design §13; simplification pass §6). **Until gateway release 2** (P1, [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)) the
+three keys are the pilot department's team's own keys per level (`AllowedIpRanges`, `RequireMaxResidency`, no
+delegation, so the gateway also applies that team's request policy, which stays empty), and every call is charged to
+the pilot team. From release 2 (P2) they are delegating keys:
 
 | Ceiling | Key (`rag-api`, with `AllowedIpRanges`, `RequireMaxResidency`, `ApplyTeamPolicy` false) | Used for |
 |---|---|---|
@@ -489,7 +492,7 @@ The call uses `HttpCompletionOption.ResponseHeadersRead`; nothing is written to 
    case-insensitively and compared by `OnPrem < Eu < External` with the call's ceiling. Missing or above → abort
    (dispose the response, which cancels the gateway stream), event **5003** `rag.residency.refused`, 502
    `upstream_error`. `public` calls carry `External`, so the check always applies.
-3. **Delegation echo** (when `Gateway:RequireDelegationEcho` is set): `x-ume-on-behalf-of` equals the team id sent;
+3. **Delegation echo** (from gateway release 2, P2; when `Gateway:RequireDelegationEcho` is set): `x-ume-on-behalf-of` equals the team id sent;
    else abort, new event **5011** `rag.gateway.delegation_missing`, 502.
 4. **PII header** (`GatewayHeaders.cs:36`): recorded and counted (`rag.chat.gateway.pii{action}`); `blocked` arrives as
    an error status. Delegated requests apply only the key's request policy (`ApplyTeamPolicy` false), so each key's
@@ -763,7 +766,7 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
   outage up to the capacity. The answer was delivered; what is lost is our record, its statistics and the possibility
   of attaching feedback (the importer counts such feedback as unmapped, §14.3).
 - `CostUsd` for streamed answers (P2): a job reads the gateway Data API usage feed (`/v1/usage/records`, cursor by id,
-  permission `usage.detail`, `src/Ume.LlmGateway.DataApi/DataEndpoints.cs:66-80`; `runId` added in the combined release, gateway
+  permission `usage.detail`, `src/Ume.LlmGateway.DataApi/DataEndpoints.cs:66-80`; `runId` added in gateway release 2 (weakness review §5), gateway
   design §5.9) and fills `Messages.CostUsd` and the daily totals by run id. Until then cost is visible in the gateway's
   own reports per team.
 
@@ -1221,3 +1224,9 @@ Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-sec
 | History modes `stored`/`session`, bucket keys (§12.3), content encryption in the writer, crypto-shredding | When A1 allows stored content; P1 pilot runs history mode `none` (§11.2) |
 | Feedback comments in our store (`/v1/feedback`, import), comment reveal, conversation review | Same; comments are refused (`comment_not_stored`) or dropped on import and stay in Open WebUI (§14) |
 | Chat attachments (§15.2), widget conversations stored for review, server-side history (P2) | Also wait for A1 to allow stored content |
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| `x-ume-on-behalf-of`, the delegation echo check (§8.2 step 3) and event 5011 in P1 | P2 with gateway release 2; P1 uses the pilot team's per-level keys (§8.1) |

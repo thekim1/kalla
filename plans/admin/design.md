@@ -146,7 +146,7 @@ gateway counterpart.
 | `audit` | S I on `AuditLog`, `ConversationAccess`, `AuthFailures`; S on tool tables (P2 S I on `ToolDefinitionObservations`) | audit list, access log |
 | Blobs | `rag-blobs` rw (uploads; preview outputs read); `internal` blobs unwrapped with the level's master key, `public` blobs are not envelope-encrypted (simplification pass §4) | uploads, preview outputs, PII highlight previews |
 | `IKeyProvider` | chat master keys (file provider in the pilot), once A1 allows stored content (weakness review §4) | comment and conversation decryption (§8) |
-| Gateway | `Gateway:*` delegating keys per level (`Gateway__Keys__OnPrem`, `__Eu`, `__External`; simplification pass §6); Data API key `OrgSync__DataApiKey` (`catalog.read`) | test panel embedding + answer, `/v1/models` validation (§4.6 V8), answer-level evaluation and assistant test questions with the on-prem judge, P2 skill gate, §4.10 |
+| Gateway | `Gateway:*` delegating keys per level (`Gateway__Keys__OnPrem`, `__Eu`, `__External`; simplification pass §6; until gateway release 2 the pilot team's own keys per level, weakness review §5); Data API key `OrgSync__DataApiKey` (`catalog.read`) | test panel embedding + answer, `/v1/models` validation (§4.6 V8), answer-level evaluation and assistant test questions with the on-prem judge, P2 skill gate, §4.10 |
 | Hosted MCP servers (P2) | in-process `Ume.Rag.Tools`, `client-credentials` with the `ume-rag-tools` certificate (tools §4.6) | discovery, connection test, drift polling, test-panel and skill-gate tool calls |
 
 ## 3. Roles and permissions
@@ -333,7 +333,7 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 | `GET /api/organisation/sync`, `POST /api/organisation/sync` | Read / Admin | last run, outcome, changed rows; run now |
 | `GET /api/gateway/models` | Read | `GatewayModels` with residencies, `SupportsTools`, context window, prices, `Source` |
 | `POST /api/gateway/models/sync`; `PUT /api/gateway/models/{name}` | Admin | run now; manual row (aliases, `SupportsTools` until the catalogue has `features`) |
-| `GET /api/gateway/status` | Admin | per level key: one `x-ume-max-residency` embedding call and the delegation echo |
+| `GET /api/gateway/status` | Admin | per level key: one `x-ume-max-residency` embedding call and (from gateway release 2, P2) the delegation echo |
 | `GET /api/departments/{id}/map` (P2, weakness review §1) | Read | department map (§5.5.6): sources → collections (own and shared in) → assistants (published links; draft-only links flagged) → audiences (clients), from the admin's snapshot; no content |
 | `GET/PUT /api/departments/{id}/settings` (P2) | Read / Manage | `DepartmentSettings` (`EditOwnerTeamOnly`, `version`); audited `departmentsettings.update` (§3.2) |
 | `POST /api/access/explain` `{ clientId, subject, assistantId }` | Admin; Manage (own department's assistants and clients) | runs the pure `IAccessPolicy` steps (identity §4.3) against the admin's snapshot for that client, subject (`oid`, key id or Open WebUI user) and assistant; returns `{ allowed, step, reason, status, effectiveLevel, maxResidency, configVersion }` (`step` = the stable step id, `reason` = the stable deny code, identity §4.9); no content; no security event |
@@ -578,8 +578,8 @@ panel ships in the same P1 release as the chat role, so it never runs a differen
 
 | Sync | Source (gateway Data API, `catalog.read` key `OrgSync__DataApiKey`) | Rule |
 |---|---|---|
-| Departments | `GET /v1/catalog/departments` (`DataEndpoints.cs:140-142`; `memberGroups` after the combined gateway release) | upsert by id; only changed rows written; a department missing from the gateway → `IsActive = false`; member groups replace the stored array |
-| Teams | `GET /v1/catalog/teams` (`:143-145`; `code` after the combined release) | as departments |
+| Departments | `GET /v1/catalog/departments` (`DataEndpoints.cs:140-142`; `memberGroups` from gateway release 2, P2, weakness review §5) | upsert by id; only changed rows written; a department missing from the gateway → `IsActive = false`; member groups replace the stored array |
+| Teams | `GET /v1/catalog/teams` (`:143-145`; `code` from gateway release 2) | as departments |
 | Models | `GET /v1/catalog/models`, `/providers`, `/prices` (`:149-157`) | `GatewayModels` row per chat/embedding deployment: `Kind = model`, `Residencies = [provider residency]`, latest price; `SupportsTools`/`ContextWindow` manual until the catalogue carries them (gateway-changes §7.3); disabled models removed from pickers, kept for existing assistants with a warning |
 | Route aliases | none today (`DataEndpoints.cs:139-160`) | manual rows `Kind = route`, `Residencies` = its targets' residencies, `Source = manual`; servable at a ceiling when any target is within it; replaced by a synced `/v1/catalog/routes` when the gateway adds it |
 
@@ -1342,8 +1342,8 @@ None.
 - **Version lock** (new): `SELECT … FOR UPDATE` on `config."ConfigVersion"` before `SaveChanges`, then reading the
   bumped value after the outbox trigger in the same transaction; no deadlock with the trigger's own update of that row;
   lock waits under the admin's real write rate (integration test + `rag.admin.config_lock.wait`).
-- **Gateway**: whether the combined release's `memberGroups`/`code` fields and the proposed `/v1/catalog/routes` land;
-  that the release's `/v1/models` test at a ceiling with a delegating key passes (gateway-changes design §3.6; V8 relies
+- **Gateway**: whether release 2's `memberGroups`/`code` fields and the proposed `/v1/catalog/routes` land; that
+  release 1's `/v1/models` test at a ceiling passes (with a delegating key from release 2; weakness review §5) (gateway-changes design §3.6; V8 relies
   on it); residency semantics of a route alias under the header.
 - **Generic forms** (new): the .NET 10 OpenAPI generator (or our own `FormSchemas`) emits DataAnnotations ranges,
   required members and enums as JSON Schema keywords that `FormModel` can render; `jsonb` members round-trip.
@@ -1414,3 +1414,9 @@ Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-sec
 | Comment reveal (§8.2), conversation review behind a feedback item (§8.3), Åtkomstlogg (§8.5), `ConversationAccess` writes and event 6004 | When A1 allows stored content; P1 pilot runs history mode `none`, the Feedback page shows ratings only |
 | Chat master keys in the admin (`IKeyProvider` for comment and conversation decryption) | Same; the admin still unwraps `internal` blobs |
 | History modes `stored`/`session` in the data-protection form and the assistant retention form (V10, V29) | Same; P1 allows `none` only |
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| Delegation echo in the gateway status check (§4); `memberGroups` and team `code` in the organisation sync | P2 with gateway release 2; P1 checks the ceiling with the pilot team's per-level keys and syncs departments and teams without them |

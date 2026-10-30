@@ -2,7 +2,9 @@
 
 Mermaid views of the Ume.Rag design as it stands after the simplification pass
 ([`simplification-pass.md`](simplification-pass.md)) and the P1 split of the
-[weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer). Sources: networks and containers
+[weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer), with the two gateway releases of
+[§5](weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control) (the diagrams show release 2; in P1 the keys are the pilot team's and no
+`x-ume-on-behalf-of` or echo is sent). Sources: networks and containers
 [`platform/repo-and-deployment.md`](platform/repo-and-deployment.md) §6, data ownership
 [`platform/data-model.md`](platform/data-model.md), request paths [`chat-api/design.md`](chat-api/design.md) §4,
 [`knowledge-api/design.md`](knowledge-api/design.md) §6, ingestion
@@ -18,7 +20,7 @@ deployment (P2).
 ```mermaid
 flowchart LR
     subgraph clients["Clients"]
-        owui["Open WebUI<br/>(pilot client; own VM from P2)"]
+        owui["Open WebUI<br/>(pilot client; own VM from P2;<br/>one instance per department until W3 and E1)"]
         browser["Admin browser"]
         mcpc["MCP clients (P2)"]
         integ["Integrations / widget (P2)"]
@@ -53,7 +55,7 @@ flowchart LR
         mcpsrv["ume-mcp-kommun<br/>(mock fee calculator first)"]
     end
 
-    gateway["LLM gateway (separate repo and database)<br/>one combined release: residency ceiling,<br/>delegation, member groups from claims<br/>chat, embeddings BGE-M3"]
+    gateway["LLM gateway (separate repo and database)<br/>release 1 (pilot): residency ceiling<br/>release 2 (P2): delegation, member groups from claims<br/>chat, embeddings BGE-M3"]
     idp["Entra ID / Keycloak"]
     web["Municipal and external websites"]
     clamdb["database.clamav.net"]
@@ -65,7 +67,7 @@ flowchart LR
     proxy --> api
     proxy --> admin
 
-    api -- "chat, condense, query embeddings<br/>key per level: OnPrem, Eu, open<br/>x-ume-on-behalf-of, explicit x-ume-max-residency" --> gateway
+    api -- "chat, condense, query embeddings<br/>key per level: OnPrem, Eu, open<br/>x-ume-on-behalf-of (P2), explicit x-ume-max-residency" --> gateway
     admin -- "test panel, Data API sync,<br/>/v1/models at the level's ceiling,<br/>answer judge, skill gate (P2)" --> gateway
     worker -- "embeddings, LLM stages<br/>OnPrem and Eu keys only, explicit ceiling" --> gateway
 
@@ -146,8 +148,8 @@ sequenceDiagram
     alt coverage low (best distance above threshold and keyword list below its floor)
         C-->>U: fixed not-found text + contact links (no model call)
     else coverage ok or degraded, or no content words (gate skipped, no-sources frame)
-        C->>G: stream answer (per-level key, x-ume-on-behalf-of, explicit x-ume-max-residency)
-        G-->>C: headers: x-ume-residency, delegation echo (503 + Retry-After when targets are drained)
+        C->>G: stream answer (per-level key, x-ume-on-behalf-of from P2, explicit x-ume-max-residency)
+        G-->>C: headers: x-ume-residency, delegation echo from P2 (503 + Retry-After when targets are drained)
         C->>C: check residency and echo before the first byte
         G-->>C: SSE deltas
         C-->>U: filtered text, [n] renumbered, Open WebUI source events

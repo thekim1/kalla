@@ -750,7 +750,7 @@ All four count as tool calls when the model calls them (answered 1), are stored 
 | Topic | Rule |
 |---|---|
 | Format | OpenAI Chat Completions function tools: `tools[] { type: "function", function: { name, description, parameters } }`, `tool_choice: "auto"` (final call `"none"`, §6.5); `parallel_tool_calls` not sent |
-| Gateway compatibility | function tools are client-run tools, accepted for every key without the provider-tool permission (`src/Ume.LlmGateway.Domain/Services/ProviderFeaturePolicy.cs:8-23`); `tools`/`tool_choice` are protected from request policies; passthrough and order covered by the combined gateway release's tests (gateway-changes §7.2). We never send provider tools |
+| Gateway compatibility | function tools are client-run tools, accepted for every key without the provider-tool permission (`src/Ume.LlmGateway.Domain/Services/ProviderFeaturePolicy.cs:8-23`); `tools`/`tool_choice` are protected from request policies; passthrough and order covered by gateway release 1's tests (gateway-changes §7.2, weakness review §5). We never send provider tools |
 | Model names | built-ins as named; server tools `{serverSlug}_{toolName}` (`^[a-zA-Z0-9_-]{1,64}$`; a longer name is cut to 55 characters + `_` + 8 hex of its SHA-256) |
 | Descriptions and schemas | the **pinned** definition's `description` (≤ 1,024 characters, tag-neutralised) and `inputSchema`; `title`, annotations, icons and `_meta` are never sent |
 | Which models | assistants that use tools need a `GatewayModel` with `SupportsTools` (from the gateway's `tools` feature tag, `ModelDeployment.Features`, `src/Ume.LlmGateway.Domain/Entities/Entities.cs:310-311`); the Data API's `/v1/catalog/models` does not expose `Features` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:152-154`): gateway change (§13); until then a platform admin sets `SupportsTools` by hand |
@@ -1220,8 +1220,8 @@ labelling municipal tool results `trust="municipal"` (§4.8).
   cancelling `CallToolAsync` sends `notifications/cancelled`; `ListToolsAsync` pagination; the package version at P2
   start (V1).
 - **MCP clients** (M1): Entra items of identity §8; which clients use resources and prompts (P3).
-- **Gateway and models**: streamed `tool_calls` deltas pass unchanged through the gateway's adapters (combined
-  release tests, gateway-changes §7.2); `prompt_tokens_details.cached_tokens` arrives in the usage chunk; tool-name rules
+- **Gateway and models**: streamed `tool_calls` deltas pass unchanged through the gateway's adapters (gateway
+  release 1 tests, gateway-changes §7.2); `prompt_tokens_details.cached_tokens` arrives in the usage chunk; tool-name rules
   of every provider in use; on-prem tool calling (vLLM tool parser or Ollama `tools`) on the municipality's on-prem
   models, Swedish tool-choice quality, and the `tools` feature tag on their deployments.
 - **Open WebUI v0.12.5**: status events from an external OpenAI connection are forwarded

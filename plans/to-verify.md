@@ -6,7 +6,7 @@ them. When an item is resolved, record the result in the document's section and 
 follow postponed decision V1 and the 7-day package rule (`platform/repo-and-deployment.md` §12.12); licences feed
 postponed decision P2 ([`postponed-decisions.md`](postponed-decisions.md)).
 
-Phases: P0 foundation, P1 MVP/pilot (P1a walking skeleton, P1b pilot hardening; the one combined gateway release happens in P1), P2 broaden, P3 scale (README). *How*:
+Phases: P0 foundation, P1 MVP/pilot (P1a walking skeleton, P1b pilot hardening; gateway release 1 happens in P1 before the pilot, release 2 in P2, weakness review §5), P2 broaden, P3 scale (README). *How*:
 **test** (a unit, integration or manual test that proves the behaviour), **source** (read the package's source, release
 notes or documentation at the pinned version), **measure** (benchmark, R1 release test or pilot data), **ask** (a person
 or team named in the row).
@@ -20,7 +20,10 @@ department (§15 there: assistant versions, test questions, derived mode) added 
 (site-profile learning, answer judge, assistant tests, adaptive range sizing) carry phase "P2 (weakness review §1)".
 The [weakness review §4](weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)
 (data protection) added rows 172–173; rows only verifiable for the chat-key work it defers carry phase "when A1 allows
-stored content (weakness review §4)".
+stored content (weakness review §4)". The [weakness review §5](weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control) split the
+gateway release: rows tagged "release 1" are checked in P1 before the pilot, rows tagged "release 2" in P2; the rows on
+embedding and model throughput and latency (98, 99, 104, 125, 149) moved to P0 (checklist #22, on the real gateway
+hardware); it added rows 174–175 (late-P1 spikes on W3 and E1).
 
 ## Postgres and pgvector
 
@@ -66,8 +69,8 @@ stored content (weakness review §4)".
 | 21 | Npgsql binary `COPY` of `vector` via `Pgvector` inside a transaction; HNSW insert cost; a chunk set written with `DeletedAt` set in batches of ≤ 1,000, then a short swap per document | `ingestion-worker/design-engine.md` §23 | P1 | test + measure |
 | 22 | Npgsql EF Core 10.0.3: `xmin` as `uint` row version on every root; `ExecuteUpdate` behaviour | `admin/design.md` §4.3 | P1 | test |
 | 23 | Version lock: `SELECT … FOR UPDATE` on `config."ConfigVersion"` before `SaveChanges`, then the bumped value read after the outbox trigger in the same transaction; no deadlock with the trigger's own update of that row; lock waits at the admin's real write rate | `admin/design.md` §4.4, §15 | P1 | test + measure (`rag.admin.config_lock.wait`) |
-| 24 | EF Core needs `e.Ignore(...)` for non-mapped `VirtualKey` members | gateway design §16 | P1 (combined release) | test |
-| 25 | `OnTokenValidated` properties reach the cookie ticket; `ctx.Fail` + `OnRemoteFailure` redirect on .NET 10 | gateway design §16 | P1 (combined release) | test |
+| 24 | EF Core needs `e.Ignore(...)` for non-mapped `VirtualKey` members | gateway design §16 | P2 (release 2: delegation views) | test |
+| 25 | `OnTokenValidated` properties reach the cookie ticket; `ctx.Fail` + `OnRemoteFailure` redirect on .NET 10 | gateway design §16 | P2 (release 2: feature C, tenant/guest) | test |
 | 163 | Postgres admin ticket store (`config."AdminSessions"`, `PostgresAdminSessionStore`) with the copied BFF code (`AdminTicketStore`, `AdminSessionLimit`): sign-out ends every copy of the cookie, expired rows are not returned and are deleted by the retention step, extension stops at 12 h; the copied `AdminSessionTests` pass | `simplification-pass.md` §14; `platform/data-model.md` §2.1, §14; `identity/design.md` §1 | P0 | test |
 | 26 | `Microsoft.ML.Tokenizers` 2.0.1: parity with Hugging Face for BGE-M3, options, thread safety, speed | `ingestion-worker/design-processing.md` §6.1, §21 | P1 | test + measure |
 | 27 | `System.Uri` escaping and IDN vs the canonicaliser rules; `IdnMapping` UTS 46 flags in .NET 10 | `ingestion-worker/design-connectors.md` §3.1, §22 | P1 | test |
@@ -85,20 +88,20 @@ stored content (weakness review §4)".
 
 | # | Item | Where | Phase | How |
 |---|---|---|---|---|
-| 36 | OpenAI .NET SDK default `encoding_format` | gateway design §6, §16 | P1 (combined release) | source + test |
-| 37 | Ollama `/v1/embeddings` with `dimensions` (low priority) | gateway design §16 | P1 (combined release) | test |
-| 38 | WebSocket clients can set custom headers on upgrade | gateway design §16 | P1 (combined release) | test |
-| 39 | Compose nested default `${A:-${B:-true}}` | gateway design §16 | P1 (combined release) | test |
-| 40 | No gateway code reads `key.TeamId` as owner after step 1b except the listed places | gateway design §16 | P1 (combined release) | grep at implementation |
-| 41 | Combined release `memberGroups`/`code` fields (claims-only); `/v1/models` at a ceiling with a delegating key lists only models with a target within it (admin V8 relies on it); proposed `GET /v1/catalog/routes`; route-alias residency under `x-ume-max-residency` | `admin/design.md` §4.6, §4.10, §15; gateway design §3.4, §3.6 | P1 (combined release) | test + ask (gateway team) |
+| 36 | OpenAI .NET SDK default `encoding_format` | gateway design §6, §16 | P1 (release 1: FakeLlm) | source + test |
+| 37 | Ollama `/v1/embeddings` with `dimensions` (low priority) | gateway design §16 | P1 (release 1: FakeLlm) | test |
+| 38 | WebSocket clients can set custom headers on upgrade | gateway design §16 | P1 (release 1) | test |
+| 39 | Compose nested default `${A:-${B:-true}}` | gateway design §16 | P2 (release 2: guest settings) | test |
+| 40 | No gateway code reads `key.TeamId` as owner after step 1b except the listed places | gateway design §16 | P2 (release 2: delegation) | grep at implementation |
+| 41 | Release 2 `memberGroups`/`code` fields (claims-only); `/v1/models` at a ceiling lists only models with a target within it, for the pilot team's keys (release 1) and delegating keys (release 2) (admin V8 relies on it); proposed `GET /v1/catalog/routes`; route-alias residency under `x-ume-max-residency` | `admin/design.md` §4.6, §4.10, §15; gateway design §3.4, §3.6 | P1 (release 1: ceiling); P2 (release 2) | test + ask (gateway team) |
 | 42 | The usage-only final chunk keeps `choices: []` for every adapter | `chat-api/design.md` §8.3 | P1 | test |
 | 43 | Gateway embeddings: maximum inputs and tokens per request | `ingestion-worker/design-processing.md` §11, §21 | P1 | source + ask (gateway team) |
 | 44 | On-prem LLM through the gateway: JSON output mode; judge stability at temperature 0; run-to-run variance of nightly retrieval runs on an unchanged collection (input to any future gate) | `ingestion-worker/design-processing.md` §21 | P1 | test + measure |
-| 45 | Streamed `tool_calls` deltas through every adapter; `cached_tokens` in usage; provider tool-name rules; on-prem tool calling, Swedish tool choice, the `tools` feature tag | `tools/design.md` §6.4 | P1 (combined release tests) / P2 | test |
+| 45 | Streamed `tool_calls` deltas through every adapter; `cached_tokens` in usage; provider tool-name rules; on-prem tool calling, Swedish tool choice, the `tools` feature tag | `tools/design.md` §6.4 | P1 (release 1 tests) / P2 | test |
 | 133 | Gateway rerank endpoint for `bge-reranker-v2-m3` on-prem (a separate P2 gateway release; the gateway has none today): latency over 30 passages on the on-prem hardware within the proposed 500 ms timeout | `simplification-pass.md` §8; `knowledge-api/design.md` §6.7, §20; gateway design §7.4 | P2 | measure |
-| 147 | The gateway's attempt loop can tell that every attempted candidate was circuit-open or cooling down at selection (`CircuitStatus` after `SelectCandidatesAsync`, `Stores.cs:175`), for the 503 with `Retry-After` | gateway design §3.3, §16 | P1 (combined release) | test |
+| 147 | The gateway's attempt loop can tell that every attempted candidate was circuit-open or cooling down at selection (`CircuitStatus` after `SelectCandidatesAsync`, `Stores.cs:175`), for the 503 with `Retry-After` | gateway design §3.3, §16 | P1 (release 1) | test |
 | 148 | Path and request shape of the P2 rerank endpoint agreed with the gateway team, and the on-prem runtime serving `bge-reranker-v2-m3`, before the FakeGateway rerank fake is fixed | gateway design §7.4, §16; `platform/repo-and-deployment.md` §4.3, §14 | P1 | ask (gateway team) |
-| 149 | Interactive gateway headers timeout 15 s: TTFT p99 of the slowest pilot answer model for a full 16k-token prompt stays below it | `chat-api/design.md` §8.3, §22 | P1 | measure |
+| 149 | Interactive gateway headers timeout 15 s: TTFT p99 of the slowest pilot answer model for a full 16k-token prompt stays below it | `chat-api/design.md` §8.3, §22 | P0 (checklist #22, weakness review §5) | measure |
 
 ## Open WebUI
 
@@ -116,6 +119,8 @@ stored content (weakness review §4)".
 | 165 | Open WebUI shows an assistant's description and contact: an `info.meta.description` in our `/v1/models` entry survives the model merge (default metadata, workspace overrides) and appears in the model selector (a top-level `description` does not, `src/lib/utils/localizedContent.ts:165-168`); sending `info.meta` leaves capabilities unchanged; else the platform team enters it in Open WebUI's model editor | `chat-api/design.md` §3.1, §22; `simplification-pass.md` §15 | P1 | source + test |
 | 172 | `WEBUI_BANNERS` at v0.12.5: the fixed input warning (`dismissible: false`) shows on every new chat for every user and cannot be closed, and survives a restart with `ENABLE_PERSISTENT_CONFIG=false`. Source read 2026-10-30: env JSON list of `BannerModel` (`id`, `type`, `title?`, `content`, `dismissible`, `timestamp`, `i18n?`, `ow/config.py:2218-2235`); shown only on the new-chat screen (`src/lib/components/chat/Navbar.svelte:349`) (weakness review §4) | `chat-api/design.md` §4.3, §22 | P1b | test |
 | 173 | Public-records request: how one user's conversation is found and exported for the registrar from Open WebUI v0.12.5 with `ENABLE_ADMIN_CHAT_ACCESS=false` and `ENABLE_ADMIN_EXPORT=false` (the user's own export, a temporary admin-access window, or a read-only query), for the runbook section (weakness review §4) | `chat-api/design.md` §13.3; `platform/repo-and-deployment.md` §11 #19 | P1b (before go-live, with the DPIA G1) | source + test |
+| 174 | W3 workaround (weakness review §5): our `/v1/models` lists every assistant offered to one Open WebUI client, and Open WebUI v0.12.5 group permissions (groups from the OIDC claim) hide models per user without breaking chat against the process-wide model registry | `postponed-decisions.md` W3; `workspaces/plan.md` §3 | P1b (spike) | test |
+| 175 | E1 (weakness review §5): Open WebUI `auth_type: system_oauth` forwards a real Entra token with `api://rag-api/Chat.Use` and refreshes it; our JWT and token checks accept it (identity design §9.4) | `postponed-decisions.md` E1; `identity/design.md` §9.4 | P1b (spike) | test (tenant) |
 
 ## MCP and skills
 
@@ -166,9 +171,9 @@ stored content (weakness review §4)".
 | 82 | Graph `checkMemberGroups` on `/users/{id}`: is `User.ReadBasic.All` needed | `identity/design.md` §2.4, §16; gateway design §16 | P2 (Graph member-group lookup) | test (tenant) |
 | 83 | Keycloak client-credentials tokens carry `client_id` and no `sid` | `identity/design.md` §7.1, §16 | P0 | test |
 | 84 | Graph Bicep extension: version; `passwordCredentials` not writable; `members` on groups; what-if; `groupMembershipClaims` settable on `Microsoft.Graph/applications` | `identity/design.md` §12.2–§12.4, §16; postponed V1 | P0 (checklist #17) | source + test |
-| 85 | Entra `acct` and `idp` values for B2B guests in ID and access tokens | `identity/design.md` §16; gateway design §16 | P1 (combined release) | test (guest account) |
+| 85 | Entra `acct` and `idp` values for B2B guests in ID and access tokens | `identity/design.md` §16; gateway design §16 | P1 (our refusal); P2 (gateway release 2) | test (guest account) |
 | 151 | ID tokens of `ume-rag-admin` carry `oid` with the scopes the BFF requests (`openid profile email`) | `identity/design.md` §1.1, §16 | P0 | test (tenant) |
-| 152 | `groupMembershipClaims = SecurityGroup` on `ume-rag-admin` (and the gateway's admin registration) puts cloud and synced member groups as object ids into the ID token's `groups` claim; how many pilot admins exceed the token's group limit (overage) | `identity/design.md` §2.5, §16; gateway design §16 | P1 (combined release) | test (tenant) + ask (IT) |
+| 152 | `groupMembershipClaims = SecurityGroup` on `ume-rag-admin` (and the gateway's admin registration) puts cloud and synced member groups as object ids into the ID token's `groups` claim; how many pilot admins exceed the token's group limit (overage) | `identity/design.md` §2.5, §16; gateway design §16 | P2 (release 2: feature C) | test (tenant) + ask (IT) |
 | 86 | `GET /groups?$search` with `GroupMember.Read.All` | gateway design §16 | P2 (Graph member-group lookup) | test |
 | 87 | `private_key_jwt` client credentials from on-prem for the tool identity `ume-rag-tools` (in-process hub in `rag-api` and `rag-admin`); app-only tokens with `idtyp = app` + `Tools.Invoke`; Keycloak audience mapper for dev | `tools/design.md` §4.6, §8.1, §15 | P2 | test |
 | 88 | Graph: `driveItem` subscription maximum lifetime; unique-permission listing under `Sites.Selected`; delta after folder moves | `ingestion-worker/design-connectors.md` §14, §22 | P2 | test |
@@ -199,13 +204,13 @@ stored content (weakness review §4)".
 
 | # | Item | Where | Phase | How |
 |---|---|---|---|---|
-| 98 | Embedding throughput of the gateway's on-prem BGE-M3 (tokens/s, batch size) and its effect on chat query embeddings | `ingestion-worker/design-engine.md` §18, §23; `ingestion-worker/design-processing.md` §21 | P1 (R1) | measure |
-| 99 | BGE-M3 without a query instruction prefix; on-prem query-embedding p95 on production hardware | `knowledge-api/design.md` §5.1, §11; `ingestion-worker/design-processing.md` §11, §21 | P1 | measure |
+| 98 | Embedding throughput of the gateway's on-prem BGE-M3 (tokens/s, batch size) and its effect on chat query embeddings | `ingestion-worker/design-engine.md` §18, §23; `ingestion-worker/design-processing.md` §21 | P0 (checklist #22, weakness review §5; shortfall → register M2) | measure |
+| 99 | BGE-M3 without a query instruction prefix; on-prem query-embedding p95 on production hardware | `knowledge-api/design.md` §5.1, §11; `ingestion-worker/design-processing.md` §11, §21 | P0 (p95, checklist #22, weakness review §5); P1 (prefix, on the gold set) | measure |
 | 100 | Planning numbers: CPU and statements per page | `ingestion-worker/design-engine.md` §18, §23; `ingestion-worker/design-connectors.md` §17, §22; `ingestion-worker/design-processing.md` §14.7, §16, §21 | P1 (R1) | measure |
 | 101 | Ingestion targets: 10k pages/h without moving chat p95 > 10 %; unchanged re-crawl runs no parse/embed; one parse per URL for two departments (caches; one fetch only with the shared frontier, P2, weakness review §1); restart loses no work | `ingestion-worker/plan.md` §9 | P1 (R1) | measure |
 | 102 | Knowledge database part p95 < 100 ms at 100k chunks | `knowledge-api/plan.md` §4; `knowledge-api/design.md` §11 | P1 | measure (load test) |
 | 103 | Character estimate ÷ 3 vs real tokenizers (Swedish, English), via `rag.chat.prompt.estimate_ratio` | `chat-api/design.md` §6.3 | P1 | measure |
-| 104 | On-prem condense model latency p95 within the 600 ms timeout | `chat-api/design.md` §5, §16 | P1 | measure |
+| 104 | On-prem condense model latency p95 within the 600 ms timeout | `chat-api/design.md` §5, §16 | P0 (checklist #22, weakness review §5) | measure |
 | 136 | Condense skip heuristic (length, no anaphora): share of follow-ups skipped and wrongly skipped, and retrieval recall of skipped vs condensed follow-ups, on real pilot questions | `simplification-pass.md` §8; `chat-api/design.md` §5, §22 | P1 | measure (pilot data) |
 | 105 | `LanguageGuess` ≥ 97 % on real pilot questions | `chat-api/design.md` §10.3 | P1 | measure (pilot data) |
 | 106 | Admin API p95 budgets and the overview query at 100k run items | `admin/design.md` §10.2 | P1 (R1) | measure |
@@ -243,7 +248,7 @@ stored content (weakness review §4)".
 | 122 | `wal_compression = lz4` available in the stock pgvector image | `performance-pass.md` §3.2; `platform/repo-and-deployment.md` §6.2 | P0 | test (image test job) |
 | 123 | OpenTelemetry Collector `postgresql` receiver metric set (connections per role, dead tuples, index sizes) | `performance-pass.md` §3.14; `platform/repo-and-deployment.md` §9 | P1 | source + test |
 | 124 | .NET 10 GC defaults in containers (DATAS with Server GC; `DOTNET_GCHeapHardLimitPercent`) | `performance-pass.md` §4; `platform/repo-and-deployment.md` §6.2 | P0 | source + test |
-| 125 | BGE-M3 tokens/s per GPU class and on CPU at the gateway's provider; head-of-line blocking of a query embedding behind 64- vs 32-input batches (extends #98) | `performance-pass.md` §3.9; `ingestion-worker/design-processing.md` §11 | P1 (R1) | measure |
+| 125 | BGE-M3 tokens/s per GPU class and on CPU at the gateway's provider; head-of-line blocking of a query embedding behind 64- vs 32-input batches (extends #98) | `performance-pass.md` §3.9; `ingestion-worker/design-processing.md` §11 | P0 (checklist #22, weakness review §5) | measure |
 | 126 | uvicorn client-certificate verification for the optional multi-endpoint parser mode (`PARSER_TLS_CLIENT_CA`) | `performance-pass.md` §3.8; `parser/design.md` §13.1 | P3 | test |
 | 140 | `rag-api` pool 12 with `Retrieval:MaxConcurrentSearches` 4 = ⌊(pool − 3) ÷ 2⌋ (each search may hold 2 connections while K and V overlap); admin 5, worker 10, `max_connections` 100: pool waits and 503s at 20 msg/s next to the chat writer and the stats flush | `simplification-pass.md` §9; `performance-pass.md` §3.1; `knowledge-api/design.md` §6.6, §20; `platform/data-model.md` §1.1, §14 | P0 (measure), P1 (R1) | measure |
 | 164 | Config snapshot with many assistants: build time and memory of the api snapshot with 300 published assistant versions (instructions up to 20 KB each), reloaded whole on any assistant change (reload by outbox `EntityId` if over 50 ms); draft saves never bump the config version | `platform/data-model.md` §5, §14; `simplification-pass.md` §15 | P1 | measure + test |

@@ -396,7 +396,11 @@ return 1
 ### 3.9 Embedding throughput through the gateway
 
 The embedding model is the binding constraint for bulk ingestion and the main R1 risk (chat query embeddings share it).
-Estimated BGE-M3 throughput (≈ 568M parameters ≈ 1.1 GFLOP per token; *estimates*, to-verify #98 measures them):
+Estimated BGE-M3 throughput (≈ 568M parameters ≈ 1.1 GFLOP per token; *estimates*, to-verify #98 measures them).
+**Measured in P0** on the real gateway hardware (repo-and-deployment §11 #22, [weakness review §5](weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)),
+together with the condense and answer models' latency, and recorded against these estimates and the §2 chat table. If
+capacity falls short, register M2 decides before P1 between more on-prem capacity and a longer initial-load window;
+the embedding profile stays on-prem BGE-M3:
 
 | Hardware at the gateway's provider | Tokens/s | Pages/h (3,600 tokens) |
 |---|---|---|
@@ -672,7 +676,7 @@ manual dispatch on 3 test hosts, before the multi-host rollout and after changes
 
 | Phase | Item | Why now |
 |---|---|---|
-| **P0** | write-once `IBlobStore` contract (FS impl); `IJobQueue` seam (Postgres impl) with the partial unique dedup index on unpartitioned `Jobs`; pooler-safe rules + SQL scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` (deployment) and `Worker:Classes` per instance; pool starting values (api 12 with `MaxConcurrentSearches` 4, admin 5, worker 10, `max_connections` 100) and the Postgres memory limit measured; pgvector image with pgBackRest inside (`ume-rag/postgres`) and a point-in-time restore drill; `DOTNET_GCHeapHardLimitPercent` on every .NET service; halfvec index expression in the first migration | seams cost a day now and a migration later; restore works before data exists |
+| **P0** | on-prem capacity on the real gateway hardware: BGE-M3 throughput, condense and answer model latency (checklist #22, weakness review §5; register M2 if short); write-once `IBlobStore` contract (FS impl); `IJobQueue` seam (Postgres impl) with the partial unique dedup index on unpartitioned `Jobs`; pooler-safe rules + SQL scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` (deployment) and `Worker:Classes` per instance; pool starting values (api 12 with `MaxConcurrentSearches` 4, admin 5, worker 10, `max_connections` 100) and the Postgres memory limit measured; pgvector image with pgBackRest inside (`ume-rag/postgres`) and a point-in-time restore drill; `DOTNET_GCHeapHardLimitPercent` on every .NET service; halfvec index expression in the first migration | seams cost a day now and a migration later; restore works before data exists |
 | **P1** | `S3BlobStore` (AWSSDK.S3) + contract tests in CI against the chosen server; chunk writes in short batches + swap + orphan sweep; sorted upserts and totals-last; selectivity rule for V; incremental `lastmod` runs as the template default; capacity metrics and dashboard; FakeGateway throughput model; `perf.yml` (R1) | cheap and single-host-safe |
 | **P2** | from weakness review §1: shared crawl frontier with claims, releaser and the nav-link claim cache, AIMD embedding concurrency; first multi-host deployment: 3-host topology (D, A, I) with routed LAN, compose split, `init-deployment --role`; a/b slots; `content."LeaderLeases"`; connection-budget script; `ume_rag_monitor`; batched dequeue/completion; wake-up coalescing and NOTIFY debounce; Redis (enabled by `ConnectionStrings:redis`: shared rate limits, L2 query-embedding cache, in-flight leases for crawl hosts and embedding); `MinBuild` on job payloads; object store server; Postgres streaming standby before production beyond the pilot (D1); `EmbeddingCache` via `Chunks`; scale test (`FakeSites`, `ScaleSeed`) before the rollout; renderer if a source needs it; K1 decided before going multi-host | departments 2–20 arrive (README P2); each removes a known multi-instance defect |
 | **P3** | 5-host topology; PgBouncer, read routing to the standby, broker, binary-quantized index, OpenSearch (O1), CUDA parser, Kubernetes, Redis HA, distributed object store, query lane — **each only when its §6 trigger fires** | measured, not planned |
@@ -767,7 +771,7 @@ None.
 | 122 | `wal_compression = lz4` available in the stock pgvector image | P0 | test |
 | 123 | OTel Collector `postgresql` receiver metric set (connections per role, dead tuples, index sizes) | P1 | source + test |
 | 124 | .NET 10 GC defaults in containers (DATAS on with Server GC; `GCHeapHardLimitPercent`) | P0 | source + test |
-| 125 | BGE-M3 tokens/s per GPU class and CPU at the gateway's provider; head-of-line blocking of a query behind 64- vs 32-input batches (extends #98) | P1 (R1) | measure |
+| 125 | BGE-M3 tokens/s per GPU class and CPU at the gateway's provider; head-of-line blocking of a query behind 64- vs 32-input batches (extends #98) | P0 (checklist #22, weakness review §5) | measure |
 | 126 | uvicorn client-certificate verification for the optional multi-endpoint parser mode | P3 | test |
 | 130 | Managed Postgres (Azure) with pgvector ≥ 0.8 and the §3.2 settings | P2 | source |
 | 132 | pypdfium2 fast-path throughput in the parser (pages/s per slot) and the PDF route mix on umea.se | P1 | measure |

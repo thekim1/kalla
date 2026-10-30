@@ -79,10 +79,12 @@ are drafts tested in the admin test panel until published (data-model §2.1). Th
    the level. For clients that keep history (Open WebUI) every turn, from the first message, runs at **max(assistant
    level, client ceiling)**, so model and residency never change between turns (design §8.2). Gateway `503` with
    `Retry-After` (in-ceiling targets drained) is passed on as retryable; `403 max_residency_not_met` is a
-   configuration fault (design §3.6).
+   configuration fault (design §3.6). **Until gateway release 2 (P1)** the keys are the pilot department's team's own
+   keys per level and no `x-ume-on-behalf-of` is sent; delegation and its echo check arrive with release 2 in P2
+   (weakness review §5, gateway design §13.4).
 5. **Residency check before the first byte (R4)**: read the gateway's `x-ume-residency` response header, compared
    case-insensitively by order `OnPrem < Eu < External` (the gateway writes `Eu`); anything above the call's ceiling,
-   or a missing `x-ume-on-behalf-of` echo when `Gateway:RequireDelegationEcho` is set, aborts the request with an
+   or (from release 2) a missing `x-ume-on-behalf-of` echo when `Gateway:RequireDelegationEcho` is set, aborts the request with an
    error and a security event. No content is streamed first.
 6. Stream to the client. Parse `[n]` markers, **renumber them in order of first citation**, and emit citations only
    for sources actually used, per client kind (never both): Open WebUI gets one `source` event per cited document
@@ -230,3 +232,9 @@ Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-sec
 | History modes `stored`/`session`, chat bucket keys, content encryption in the writer, crypto-shredding | When A1 allows stored content; the P1 pilot runs history mode `none` (metadata and ratings) (§5) |
 | Feedback comments in our store, comment reveal, conversation review by `rag-reviewer` | Same; comments stay in Open WebUI (§5, answered 7, 10) |
 | P2 features that store chat content (chat attachments, widget conversations for review, server-side history) | Need A1 to allow stored content as well |
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| `x-ume-on-behalf-of`, the delegation echo check and event 5011 in P1 | P2 with gateway release 2; P1 calls with the pilot team's per-level keys (§4) |

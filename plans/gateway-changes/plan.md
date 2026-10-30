@@ -3,11 +3,18 @@
 **Detailed design: [`design.md`](design.md)** (step 4) and ADR drafts 018–020 in [`adr-drafts.md`](adr-drafts.md);
 where they differ from this plan, they win (header values, error codes, the team id, events, the release).
 
-Small features in the LLM gateway (`~/git/llmgateway`, our own code), shipped as **one combined release before the
-pilot** ([`../simplification-pass.md`](../simplification-pass.md) §6–§7), so the RAG platform does not have to store
+Small features in the LLM gateway (`~/git/llmgateway`, our own code), so the RAG platform does not have to store
 one gateway key per team, and so the `sensitive` → on-prem rule is enforced by the gateway on every request rather
 than by key settings checked once (review R4, `../../02-architecture-review.md`). The letters A, B and C below name
-features, not releases.
+features, not releases. They ship in **two releases** ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control),
+replacing the one combined release of [`../simplification-pass.md`](../simplification-pass.md) §6–§7):
+
+- **Release 1, before the pilot**: feature B (§3) and the FakeLlm `dimensions` addition (§3c); ADR 018.
+- **Release 2, in P2**: feature C (§3b) and feature A (§2), before the first second-department or group audience;
+  ADRs 019–020.
+
+Until release 2 the pilot's calls are attributed with the **per-level gateway keys of the pilot department's team**
+(§4).
 
 ## 1. Why
 
@@ -18,7 +25,7 @@ features, not releases.
   verified once at link time can silently be widened. The RAG platform therefore holds one delegating key per level
   and sends an explicit ceiling on every call; the gateway enforces both (§3).
 
-## 2. Feature A: delegated attribution
+## 2. Feature A: delegated attribution (release 2, P2)
 
 - A key can be marked **delegating** by a gateway admin (only gateway admins), with an explicit **list of teams** it
   may act for (decision: listed teams, not whole departments); new teams are added explicitly.
@@ -36,7 +43,7 @@ features, not releases.
 - Without the header the key behaves as a normal key of its own team.
 - Admin UI: the key page shows the delegation scope; usage reports can be filtered by delegating key.
 
-## 3. Feature B: per-request residency ceiling
+## 3. Feature B: per-request residency ceiling (release 1, before the pilot)
 
 - Header `x-ume-max-residency: OnPrem | Eu | External` (the `DataResidency` names, case-insensitive; omit for no
   ceiling; malformed `400 invalid_request`). It removes every candidate provider above the ceiling before routing,
@@ -55,7 +62,7 @@ features, not releases.
   for every key, delegating keys included, and `ume.residencies` then shows only residencies within the ceiling.
   Ume.Rag's model check on assistant save relies on this (`../admin/design.md` §4.6 V8; design §3.4).
 
-## 3b. Feature C: department scope from groups (shared with the RAG platform)
+## 3b. Feature C: department scope from groups (shared with the RAG platform; release 2, P2)
 
 Both systems get a user's department scope only from the `departmentCodes` claim, and the municipality has no
 department attribute in Entra today. Added to the gateway and implemented identically in the RAG platform
@@ -79,7 +86,7 @@ department attribute in Entra today. Added to the gateway and implemented identi
 `UME_OIDC_REFUSE_GUESTS` (default on: refuse `acct = 1` or a foreign `idp`, one rule in both systems,
 `../identity/design.md` §1.7) for admin sign-in and the Data API.
 
-## 3c. FakeLlm: honour the `dimensions` parameter
+## 3c. FakeLlm: honour the `dimensions` parameter (release 1)
 
 The gateway's FakeLlm returns 8-dimensional embeddings (`Vector()` in `src/Ume.LlmGateway.FakeLlm/Program.cs`), so the
 RAG platform (1024-dim BGE-M3 profile) cannot run against a real local gateway with the fake provider. Small change:
@@ -89,9 +96,9 @@ similar texts get similar vectors. Until then, developers add Ollama `bge-m3` to
 
 ## 3a. Small additions (from the Bifrost analysis)
 
-- **Run grouping headers** (metadata only): `x-ume-run-id` and `x-ume-step` stored on usage records, so the many
+- **Run grouping headers** (metadata only; release 2, with feature A's usage migration): `x-ume-run-id` and `x-ume-step` stored on usage records, so the many
   model calls of one agent run, ingestion run or evaluation run can be grouped and costed together. No content.
-- **Tool passthrough guarantee**: tests asserting that `tools`, `tool_choice` and tool messages pass through the
+- **Tool passthrough guarantee** (release 1, tests only): tests asserting that `tools`, `tool_choice` and tool messages pass through the
   gateway unchanged and in the same order on every endpoint, including the translated ones (Anthropic ↔ OpenAI,
   Responses API).
 - **Optional, later release** (design §7.3): `contextWindow` and `features` (incl. `tools`) on `/v1/catalog/models`, so
@@ -107,7 +114,7 @@ to pass them through faithfully and account for the calls.
 
 ## 3d. P2: rerank endpoint (separate release)
 
-Not part of the combined pre-pilot release. The gateway has no rerank endpoint today; Ume.Rag's `IReranker` seam
+Not part of release 1 or release 2 (weakness review §5). The gateway has no rerank endpoint today; Ume.Rag's `IReranker` seam
 (`../knowledge-api/design.md` §6.7) runs against a FakeGateway rerank endpoint in P1. For P2, a separate gateway
 change adds a rerank endpoint serving `bge-reranker-v2-m3` on-prem: query plus passages in, one score per passage out,
 honouring `x-ume-max-residency` and `RequireMaxResidency` like every other endpoint, with usage recorded per key and
@@ -115,33 +122,42 @@ team. Path and request shape are to be defined with the gateway team (to verify)
 
 ## 4. Interim without the gateway changes
 
-Removed (simplification pass): no interim; development and test use the FakeGateway, and the pilot waits for the
-combined release.
+Development and test use the FakeGateway. The pilot waits for **release 1** only (weakness review §5). Until
+release 2, **pilot attribution** uses the pilot department's team's own gateway keys, one per level (`OnPrem`-only,
+`Eu`-max, open), issued per deployable with `AllowedIpRanges` and `RequireMaxResidency`. This reverses the "no interim
+per-team keys" rule of [`../simplification-pass.md`](../simplification-pass.md) §7 for that one team; the gateway is
+unchanged by it (they are ordinary team keys). Every P1 call is then charged to the pilot team, and Ume.Rag sends no
+`x-ume-on-behalf-of`. Because the keys are not delegating, the gateway also applies the pilot team's request policy,
+so that team keeps no request policy while its keys serve Ume.Rag. With release 2, Ume.Rag switches to delegating
+keys per level (design §13.4) and the pilot team's keys are revoked.
 
 ## 5. Work items (gateway repo)
 
-Detailed per file in `design.md` (§3.5, §4, §5, §6, §7); the release plan is design §13.
+Detailed per file in `design.md` (§3.5, §4, §5, §6, §7); the release plan is design §13. Release in brackets
+(weakness review §5).
 
-1. Domain: delegation scope and the key flags `RequireMaxResidency`, `ApplyTeamPolicy`; residency ceiling parsing.
-2. Request pipeline: header check after HMAC authentication; resolve the effective team from the header; budget
-   reservation against that team; request policy per `ApplyTeamPolicy`; ceiling filter in route resolution with the
-   403/503 rule.
-3. Usage records: delegating key id, effective team, run grouping.
-4. Admin API/UI: delegation scope and key flags (gateway admins only on delegating keys), audit entries; member groups
-   on *Organisation*.
-5. Tests: intersection rules, unknown team, ceiling removes all candidates, drained in-ceiling target → 503, fallback
-   never exceeds the ceiling, budgets charged to the right team, team policy not applied, benchmarks unchanged.
-6. Docs: routing rules, identity and roles, ADRs 018–020.
-7. Feature C (claims only) and tenant/guest refusal: the work items in `../identity/design.md` §2.7.
+1. Domain: residency ceiling parsing and the key flag `RequireMaxResidency` (release 1); delegation scope and the key
+   flag `ApplyTeamPolicy` (release 2).
+2. Request pipeline: header check after HMAC authentication; ceiling filter in route resolution with the 403/503
+   rule (release 1); resolve the effective team from the header, budget reservation against that team, request
+   policy per `ApplyTeamPolicy` (release 2).
+3. Usage records: delegating key id, effective team, run grouping (release 2).
+4. Admin API/UI: `RequireMaxResidency` on the key form (release 1); delegation scope and `ApplyTeamPolicy` (gateway
+   admins only on delegating keys), audit entries, member groups on *Organisation* (release 2).
+5. Tests: ceiling removes all candidates, drained in-ceiling target → 503, fallback never exceeds the ceiling,
+   `/v1/models` at a ceiling, benchmarks unchanged (release 1); intersection rules, unknown team, budgets charged to
+   the right team, team policy not applied (release 2).
+6. Docs: routing rules, identity and roles, ADR 018 (release 1), ADRs 019–020 (release 2).
+7. Feature C (claims only) and tenant/guest refusal: the work items in `../identity/design.md` §2.7 (release 2).
 8. P2, separate release: the rerank endpoint (§3d).
 
 ## 6. Milestones
 
 | Phase | Deliverable |
 |---|---|
-| P0 | ADRs and design agreed in the gateway repo |
-| P1 | One combined release (design §13) before the pilot; Ume.Rag switches to its per-level delegating keys, sends the ceiling on every call and syncs member groups. Development and test run on the FakeGateway until then |
-| P2 | Rerank endpoint for `bge-reranker-v2-m3` on-prem (§3d), its own release |
+| P0 | ADRs and design agreed in the gateway repo; release 1 scheduled before the pilot (weakness review §5) |
+| P1 | **Release 1** (design §13) before the pilot: Ume.Rag sends the ceiling on every call with the pilot team's per-level keys (§4) and validates models against `/v1/models` at a ceiling. Development and test run on the FakeGateway until then |
+| P2 | **Release 2** (design §13), before the first second-department or group audience: Ume.Rag switches to its per-level delegating keys, sends `x-ume-on-behalf-of` and syncs member groups. Rerank endpoint for `bge-reranker-v2-m3` on-prem (§3d), its own release |
 
 ## 7. Open questions
 
@@ -156,7 +172,8 @@ Answered (2026-10-29, release order revised 2026-10-30):
 4. **Who may send `x-ume-max-residency`**: any key (it can only narrow); documented as a general gateway feature.
    Keys with `RequireMaxResidency` must send it.
 5. **Release order**: one combined, rolling-update-safe release with features B, C (claims only) and A, ADRs 018–020
-   accepted together (`../simplification-pass.md` §7).
+   accepted together (`../simplification-pass.md` §7). **Revised (weakness review §5):** release 1 (B and FakeLlm
+   `dimensions`, ADR 018) before the pilot; release 2 (C and A, ADRs 019–020) in P2.
 6. **Step 4 output**: drafts in this repo (`plans/gateway-changes/`: ADR rows in the gateway's table format + a design
    document), copied into the gateway repo when implementation starts.
 7. **Guests refused by default** for every gateway adopter (`RefuseGuests = true`), with an upgrade-guide note.
@@ -168,8 +185,19 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §6–§7:
 
 | Item | Where it went |
 |---|---|
-| Three releases B → C → A | one combined release (§6, design §13) |
+| Three releases B → C → A | one combined release (§6, design §13); since weakness review §5 two releases (B; then C and A) |
 | Interim per-team linked keys (`GatewayKeyLinks`, `onprem` keys) | removed; FakeGateway for development and test, pilot waits for the release |
 | Graph `checkMemberGroups` lookup, `GroupMember.Read.All`, membership cache, circuit, event 2007, `departmentLookup` and its banner | P2, with data-plane audiences and approval package 2 (identity plan §2) |
 | Effective team's request policy on delegated requests | removed; key's policy only unless `ApplyTeamPolicy` |
 | `403 max_residency_not_met` for drained in-ceiling targets | replaced by `503` with `Retry-After` |
+
+## 9. Deferred or removed (weakness review)
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| One combined release before the pilot | release 1 (feature B, FakeLlm `dimensions`, ADR 018) before the pilot; release 2 (features C and A, ADRs 019–020) in P2 |
+| Delegated attribution for the pilot (delegating keys, `x-ume-on-behalf-of`, echo check) | P2 with release 2; the pilot uses the pilot team's per-level keys (§4) |
+| Member groups from claims and tenant/guest refusal in the gateway | P2 with release 2 |
+| Run grouping headers stored on usage records (§3a) | release 2 (migration `UsageDelegationAndRuns`); a release-1 gateway ignores them |

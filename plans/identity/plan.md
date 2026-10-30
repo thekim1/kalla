@@ -29,7 +29,7 @@ invented on one side.
 | Need | Works without an Entra registration? | Needed from |
 |---|---|---|
 | Development and CI | Yes: Keycloak with the same claims | never |
-| Platform → gateway | Yes: delegating gateway keys per level (`../gateway-changes/plan.md`) | never |
+| Platform → gateway | Yes: the pilot team's gateway keys per level until gateway release 2 (P2), then delegating keys per level (`../gateway-changes/plan.md` §4; weakness review §5) | never |
 | Open WebUI → Chat API | Yes: gateway-style key (`ume-rag-sk-…`) for the connection + Open WebUI's signed user JWT | never |
 | Integrations → our APIs | Yes: keys | only if an app prefers OAuth tokens |
 | URL lists, crawling, uploads | Yes | never |
@@ -105,7 +105,8 @@ alternative, exactly as in the gateway.
 **Departments without a department attribute.** Both systems get department scope only from `departmentCodes`, and
 the municipality has no such attribute today (answered: users are organised in groups). Rather than a RAG-only
 mapping, the same small feature is added to **both systems** (see `../gateway-changes/plan.md`, feature C), **claims
-only** in P1:
+only**. It reaches production with **gateway release 2 in P2** ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)): our mirror gets member groups only from the
+gateway's catalogue. The resolver itself is built and tested in P0 against the FakeGateway catalogue.
 
 - A department (in the gateway's *Organisation* page, and mirrored here because organisation data comes from the
   gateway) may list **member groups** (group claim values).
@@ -113,6 +114,11 @@ only** in P1:
   groups appear in the user's group claim. Their *role* still comes from `roles`.
 - A group the token does not show adds nothing (scope can only narrow). A Graph lookup for such groups is P2 (§2).
 - When IT later adds a department attribute, the claim takes over without any code change.
+- **Until release 2** (P1), department scope comes from the `departmentCodes` claim, plus **member groups entered by
+  hand on our own department record** (settled, weakness review §5): a platform admin enters the pilot department's
+  Entra group object ids in the department form, and our resolver matches them against the `groups` claim exactly as
+  it will later with synced data. With release 2 the org sync from the gateway catalogue fills the same field and the
+  hand-entered values are replaced. The gateway itself is unchanged; platform admins need no department scope.
 
 Groups are stored as group claim values: Entra object ids (works for cloud groups now and synced AD groups later,
 answered question 1), group names on Keycloak/AD FS (design §2.2). In P1 they are entered as values; picking groups
@@ -148,8 +154,11 @@ secret, short expiry, only from the Open WebUI instance's network.
 - **P1**: `clients` only: e.g. "everyone who can sign in to the pilot's Open WebUI". Open WebUI's own Entra login
   (with *assignment required* on its enterprise app) decides who that is. No Graph lookup needed.
 - **P2**: also `departments` (department scope as in §3) and `groups` (group claim values), for callers with real
-  tokens. For Open WebUI users they wait for E1 (a real Entra token through Open WebUI, §7); Open WebUI's e-mail is
-  never the basis of a grant.
+  tokens. For Open WebUI users they wait for E1 (a real Entra token through Open WebUI, §7) and W3 (Open WebUI's
+  process-wide model list); Open WebUI's e-mail is never the basis of a grant.
+- **Beyond one department in Open WebUI** ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)): until W3 and E1 are solved, each department gets **its own Open
+  WebUI instance**, registered as its own client with its own ceiling, and its assistants' audience is that client.
+  Spikes on E1 and on the W3 workaround (Open WebUI group permissions) run in late P1 (P1b).
 
 **Assistant versions** (`../simplification-pass.md` §15): audience and classification belong to the assistant, not to
 its versions, so publishing or restoring a version never changes who may use it; only the published version reaches
@@ -191,7 +200,8 @@ systems to the SIEM. Every denial is a security event.
 - **P3, on-behalf-of**: the tool hub exchanges the user's `rag-api` token for a downstream token with Entra OBO.
   - Needs a real Entra token: our own client, Teams and MCP clients send one; Open WebUI can too with
     `auth_type: system_oauth` if its login requests `api://rag-api/Chat.Use`
-    (`open-webui/backend/open_webui/utils/headers.py:209-212`; to test in P2).
+    (`open-webui/backend/open_webui/utils/headers.py:209-212`; spiked in late P1 (P1b), weakness review §5, register
+    E1).
   - **Decided**: the exchange uses the `rag-api` registration's credential (Entra requires the token to be issued to
     the app doing the exchange); `ume-rag-tools` stays for service-identity calls.
   - The user token is an internal, short-lived hand-off from the Chat API, never stored or logged; OBO caches are
@@ -203,8 +213,8 @@ systems to the SIEM. Every denial is a security event.
 | Phase | Deliverable |
 |---|---|
 | P0 | Keycloak realm with the gateway's claims for dev and CI; OIDC and claim mapping copied from the gateway (`UME_RAG_OIDC_*`); keys in gateway style; package 1 submitted |
-| P1 | Admin sign-in on the municipal IdP (`ume-rag-admin`); `rag-reviewer` role; department scope from groups in the claim (feature C, both systems); Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; explain access; security events; package 2 submitted |
-| P2 | `rag-api` tokens and OAuth machine clients, department/group audiences, Graph member-group lookup, owner-team scoping of admin writes, MCP server authorisation, `rag-ingestion`, tool identity `ume-rag-tools` (in-process hub), `ume-rag-pk-` widget keys |
+| P1 | Admin sign-in on the municipal IdP (`ume-rag-admin`); `rag-reviewer` role; department scope from the `departmentCodes` claim; Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; explain access; security events; package 2 submitted; P1b: spikes on E1 and the W3 workaround (weakness review §5) |
+| P2 | Department scope from groups in the claim with gateway release 2 (feature C, both systems; weakness review §5), `rag-api` tokens and OAuth machine clients, department/group audiences (one Open WebUI instance per department until W3 and E1 are solved), Graph member-group lookup, owner-team scoping of admin writes, MCP server authorisation, `rag-ingestion`, tool identity `ume-rag-tools` (in-process hub), `ume-rag-pk-` widget keys |
 | P3 | OBO for user-delegated tools (with the `rag-tools` service), Teams client, claims-challenge handling |
 
 ## 9. Answered questions (2026-10-29)
@@ -239,3 +249,13 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §1, §6, §7 and �
 | Audit actor `sub` | `oid`, fallback `sub` (§3) |
 | Strict "current config version" rule (10 s confirmation) | grace window `Config:MaxUnconfirmedSeconds` (§1) |
 | `rag-tools` as a P2 service holding the tool credential | P3 with the first external, OBO or write tool; in P2 `rag-api` and `rag-admin` hold the `ume-rag-tools` certificate (§7) |
+
+## 11. Deferred or removed (weakness review)
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| Department scope from groups in the claim in production (feature C, both systems) | P2, with gateway release 2; the resolver is still built and tested in P0 (§3) |
+| Delegating gateway keys for the pilot | the pilot team's per-level keys until release 2 (§2) |
+| E1 test (OBO through Open WebUI) and the W3 workaround | spikes moved from P2 to late P1 (P1b); fallback decided: one Open WebUI instance per department (§5) |

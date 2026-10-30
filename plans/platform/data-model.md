@@ -129,7 +129,7 @@ referenced **by id without a FK**.
 | Table | Purpose | Key columns | Keys and indexes | Classification rules |
 |---|---|---|---|---|
 | `Departments` | Mirror of gateway departments, incl. member groups | `Id uuid` (= gateway id), `Name varchar(200)`, `CostCenterCode varchar(50)`, `MemberGroups varchar(256)[]` (group claim values: Entra object ids, Keycloak/AD FS names; identity design §2.2), `IsActive bool`, `SyncedAt` | PK `Id`; U `CostCenterCode` (no GIN on `MemberGroups`: matched in memory from the config snapshot) | – |
-| `Teams` | Mirror of gateway teams (attribution `x-ume-on-behalf-of` sends `Id`) | `Id uuid` (= gateway), `DepartmentId`, `Name`, `Code varchar(100)` (from `/v1/catalog/teams`, combined gateway release; display only), `IsActive`, `SyncedAt` | FK `DepartmentId` → `Departments` (Restrict, as gateway); U `Code` | – |
+| `Teams` | Mirror of gateway teams (attribution `x-ume-on-behalf-of` sends `Id`) | `Id uuid` (= gateway), `DepartmentId`, `Name`, `Code varchar(100)` (from `/v1/catalog/teams`, gateway release 2 in P2, weakness review §5; display only), `IsActive`, `SyncedAt` | FK `DepartmentId` → `Departments` (Restrict, as gateway); U `Code` | – |
 | `DepartmentSettings` (P2) | RAG-side settings of a department (`Departments` is a gateway mirror, so it gets no local columns) | `DepartmentId` PK FK → `Departments`, `EditOwnerTeamOnly bool NOT NULL DEFAULT false` (`Edit`, `EditPipelines` and `EditSkills` on assistants, collections, sources and skills limited to members of their owner team, matched from the `teamCodes` claim to `Teams.Code`, which is therefore no longer display-only; department admins keep every right; simplification pass §15), `UpdatedAt`, `UpdatedBy` | PK `DepartmentId` | – |
 | `Settings` | Singleton: platform defaults (deletion guard 20 %, crawl politeness, retention values from §8, `AuditRetentionDays` 730, `BlobPurgeDelayDays` 35, `ChatShreddingEnabled` false (switched on only if A1 allows deletion, §7), `RetentionLastRun*`; worker: `WorkerConcurrency jsonb`, `DegradedFailureRatio` 0.05, `ScheduleJitterMinutes` 90, `PreviewMaxUsd` 0.50, default schedules per source type (engine design §9–§11); connectors: `DeletionGuardMinCount` 5, `DeletionGuardMaxCount` 500, `Crawl jsonb` (`MunicipalHosts`, rates, `HostOverrides`, blocked hosts, `AllowedPorts`, `FreshnessHours` 12, window 22–06, limits 10 000/10, body caps HTML 10 MB / files 50 MB, redirects 5, `IdentityRulesVersion`, `IncompleteRunsAlert` 3; connectors design §3.1, §4–§7), `QuarantineRetentionDays` 30; processing: `PiiFlagRules jsonb`, `PiiOwnDomains text[]`, `NerMinScore` 0.80, `EvaluationModel`, `EvaluationJudgeModel` (default: the gateway's on-prem general chat model), `EvaluationMaxQuestions` 100; retrieval: `Retrieval jsonb` = `RetrievalSettings` defaults (1.0 / 1.0, 100, 3, `recency` null, 0.50, `coverageMinKeywordScore` null, 1,500) plus platform-only `exactScanMaxChunks` 10,000, `minHnswSelectivity` 0.2 %, `expandTotalMaxTokens` 8,000, knowledge design §12.1 (the download-grant lifetime is the deployment setting `Knowledge:DownloadGrantLifetime`, not a `Settings` value); chat: `Chat jsonb` = `CondenseModel` (the gateway's on-prem small instruct alias; the only task model), `MaxContextTokens`, default not-found texts sv/en, `AllowedLinkHosts` (`umea.se`, `*.umea.se`), `MessagesPerMinutePerUser` 20, chat design §5, §9.4, §10.1; the condense and gateway-headers timeouts are deployment settings `Chat:CondenseTimeout` 600 ms and `Chat:GatewayHeadersTimeout` 15 s, repo-and-deployment §3); tools: `Tools jsonb` = `AgentDefaults` (8 / 60 s / $0.05), `AgentHardCaps` (20 / 120 s / $0.25), `WriteToolsEnabled` false, `SkillGateModel`, `StaticSkillTokens` 4,000, `CallsPerMinutePerUser` 60 (tools design §3.7, §4.9, §6.5) | `Id smallint` | `CK_Settings_Singleton` (`"Id" = 1`), range checks like `CK_GatewaySettings_*` | – |
 | `DataProtectionPolicies` | Plan §8a matrix, one row per level | `Classification` PK, `AllowedHistoryModes varchar(20)[]`, `DefaultHistoryMode`, `RetentionDefaultDays int`, `RetentionMaxDays int`, `EncryptionRequired bool`, `ReviewSecondApprover bool`, `ClientsWithoutHistoryOnly bool`, `ChatMasterKeyName`, `BlobMasterKeyName` (null for `public`: public blobs are not envelope-encrypted, §7) | `CK_…_Encryption` (`internal`/`sensitive` ⇒ `EncryptionRequired`); `CK_…_Retention` (default ≤ max ≤ 90) | Defines them |
@@ -163,7 +163,8 @@ referenced **by id without a FK**.
 | `AdminSessions` | Admin BFF sessions (`PostgresAdminSessionStore`; replaces the gateway's Redis store, simplification pass §14) | `SessionId varchar(64)` (the cookie's random id), `Value bytea` (ticket, Data-Protection-encrypted with purpose `Ume.Rag.AdminApi.Session.v1`, so a writer cannot forge a session), `ExpiresAt timestamptz` (≤ 8 h per sign-in or extension, never past `Admin:MaxSessionHours` 12 h) | PK `SessionId`; IX `ExpiresAt` | – (no content; a read ignores expired rows; sign-out deletes the row) |
 | `ConfigVersion`, `ConfigOutbox` | R7 (§5) | | | |
 
-The gateway keys RAG uses (delegating keys per level, plan §6: `Gateway__Keys__OnPrem`, `Gateway__Keys__Eu`,
+The gateway keys RAG uses (delegating keys per level, plan §6, and until gateway release 2 the pilot team's own keys
+per level, weakness review §5: `Gateway__Keys__OnPrem`, `Gateway__Keys__Eu`,
 `Gateway__Keys__External`; the worker holds only `OnPrem` and `Eu`) are deployment secrets, not rows
 (repo-and-deployment §6.3).
 
@@ -193,7 +194,8 @@ agent rules for every linking assistant (admin design V14, V18).
 
 **Organisation mirror.** The admin API syncs `Departments`/`Teams` from the gateway Data API (`catalog.read`,
 `GET /v1/catalog/departments`, `/teams`; `docs/data-access.md`) every 5 minutes and on demand; only changed rows are
-written, so a sync without changes does not bump the config version. Member groups need a catalogue field (§12.9).
+written, so a sync without changes does not bump the config version. Member groups need a catalogue field (§12.9),
+delivered with gateway release 2 in P2 (weakness review §5); until then `MemberGroups` stays empty.
 
 ### 2.2 `content` (owner: worker)
 
@@ -713,7 +715,7 @@ Postgres). Every use states its behaviour when Redis is down (simplification pas
 | 6 | Retention granularity | 90 days per conversation from last activity would keep old messages of long conversations | Per-message `ExpiresAt`; each message under the bucket of its own expiry month |
 | 7 | Shared chunks vs dedup | Plan §3 "one set of chunks" vs knowledge §3 "deduplicated by document and chunk text hash" | Chunk sets per source; reuse by caches (§9); retrieval still dedups by (`DocumentId`, `TextHash`) |
 | 8 | Chunk level | "Classification lives on collections" vs isolation | A chunk carries its source's level; access by collection; isolation of `sensitive` = separate deployment (§6) |
-| 9 | Organisation sync | Data API `catalog.read` has departments and teams but no member groups | The combined gateway release adds `memberGroups` (strings) to `/v1/catalog/departments`; admin syncs every 5 min with a gateway Data API key (`ume-dk-`, `catalog.read` only; identity design §2.1); in `gateway-changes` |
+| 9 | Organisation sync | Data API `catalog.read` has departments and teams but no member groups | Gateway release 2 (P2, weakness review §5) adds `memberGroups` (strings) to `/v1/catalog/departments`; admin syncs every 5 min with a gateway Data API key (`ume-dk-`, `catalog.read` only; identity design §2.1); in `gateway-changes` |
 | 10 | Encryption below `sensitive` | §8a requires encryption for `internal`/`sensitive`, optional for `public` | Chat encrypted at every level by default; blobs: `internal` encrypted, `public` not (encrypted disk only) |
 | 11 | Retention values missing in §8 | Jobs, run items, runs, observations, caches, outbox, stats, quarantine | Values marked *proposed* in §8–9; add to `Settings` and platform §8 |
 | 12 | Job classes | Worker §2 lists six classes | Add `command` (§12.2) |
@@ -795,3 +797,9 @@ Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-sec
 | `DataProtectionPolicies` history modes `stored`/`session`, `ChatMasterKeyName` keys `rag-chat-<level>` | Same; P1 allows only `none` |
 | `audit."ConversationAccess"` (conversation review, comment reveals) | Same |
 | `Settings.ChatShreddingEnabled` and shred keys | Same (still also behind A1's answer on deletion) |
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| `Departments.MemberGroups` and `Teams.Code` filled in P1 | P2, from gateway release 2; the columns stay and are empty (or null) until then |

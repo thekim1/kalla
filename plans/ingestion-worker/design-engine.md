@@ -356,11 +356,13 @@ data-model §1.1) serves ~20 concurrent jobs.
 
 Every call from a stage goes through `IGatewayClient` with headers set by the engine, never by the stage. The worker
 holds the per-level delegating keys `OnPrem` and `Eu` (never the open key, simplification pass §6); the client's
-`DelegatingHandler` refuses a call without an explicit ceiling or with a key that does not match it.
+`DelegatingHandler` refuses a call without an explicit ceiling or with a key that does not match it. **Until gateway
+release 2** (P1, weakness review §5) these are the pilot department's team's own `OnPrem` and `Eu` keys, every call
+is charged to that team, and no `x-ume-on-behalf-of` is sent (so no echo is checked).
 
 | Header | Value |
 |---|---|
-| `x-ume-on-behalf-of` | the owning team of the document's collection (`Collections.OwnerTeamId`; gateway design §5.2) |
+| `x-ume-on-behalf-of` | from gateway release 2 (P2): the owning team of the document's collection (`Collections.OwnerTeamId`; gateway design §5.2) |
 | `x-ume-max-residency` | `OnPrem` for embeddings and evaluation always (R3); other LLM calls (P2 stages) by the document level: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker has no `External` key) |
 | `x-ume-run-id`, `x-ume-step` | `RunId` (GUID) and stage **type** (`embed`, `eval-judge`), never names (gateway design §7.1) |
 | `traceparent` | current activity |
@@ -817,7 +819,7 @@ profiles) are 6b §16; processing metrics (`rag.parse.*`, `rag.pii.*`, `rag.embe
 | Worker CPU (fetch, AngleSharp + SmartReader, clean, regex PII, tokenizer, decompounder, JSON) | ≈ 80 ms | ≈ 0.25 cores | 1.5 cores | `fetch` concurrency 8 covers ~200 ms fetch latency |
 | Politeness | – | 2.8 req/s on umea.se | 10 req/s municipal (answered 4) | external hosts at 1 req/s cap a single external site at 3,600 pages/h; incremental runs by `lastmod` fetch only changed pages (6b) |
 | Parser NER (names) | only list-like pages of `public` collections (6c §9.6) | a small fraction of pages | parser NER process | no longer a bottleneck by construction; measured in R1 |
-| Embedding (≈ 8 chunks × 450 tokens) | ≈ 3,600 tokens | ≈ 10,000 tokens/s | gateway's on-prem BGE-M3 | **the bottleneck to verify** (§23) |
+| Embedding (≈ 8 chunks × 450 tokens) | ≈ 3,600 tokens | ≈ 10,000 tokens/s | gateway's on-prem BGE-M3 | **the bottleneck to verify** (§23); measured on the real gateway hardware in P0 (checklist #22, weakness review §5; a shortfall goes to register M2) |
 | Postgres: chunk inserts with HNSW, run items, jobs | ≈ 8 rows + 2 jobs | ≈ 22 vector inserts/s, ≈ 20 statements/s | 3 cores, pool 10 | HNSW insert ~1–3 ms each; batches ≤ 1,000 rows keep transactions short |
 | WAL | ≈ 50 KB | ≈ 140 KB/s | – | – |
 
@@ -936,3 +938,9 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | Re-processing plan by first affected stage from effect tags (§12.2) | P2; P1 publish re-processes every live document of the affected sources, unchanged stages free from the per-stage caches, still with report and keep or roll back |
 | Adaptive embed concurrency (AIMD, §18) | P2; P1 uses the fixed `Worker:Concurrency:embed` from configuration |
 | Shared crawl frontier and site-profile learning (6b) | P2 (6b §24) |
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| `x-ume-on-behalf-of` on worker calls and the `gateway.delegation_not_applied` echo check in P1 (§7.7) | P2 with gateway release 2; P1 uses the pilot team's `OnPrem` and `Eu` keys |

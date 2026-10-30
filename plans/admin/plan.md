@@ -55,8 +55,8 @@ retention.
 
 Same model as the gateway (`../identity/plan.md` §3): roles from the `roles` claim of RAG's own Entra registration
 (values `rag-*`) or from `UME_RAG_OIDC_GROUPS_<ROLE>`; departments from `departmentCodes` plus the departments' member
-groups (feature C; claims only in P1, Graph lookup in P2; member groups are edited in the gateway's *Organisation* page
-and read here).
+groups (feature C, claims only, from gateway release 2 in P2, weakness review §5: in P1 `departmentCodes` only; Graph
+lookup in P2; member groups are edited in the gateway's *Organisation* page and read here).
 
 | Role | Can |
 |---|---|
@@ -187,3 +187,9 @@ Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-sec
 |---|---|
 | Comment reveal on the Feedback page, conversation review behind a feedback item, access log (Åtkomstlogg) | When A1 allows stored content; the P1 pilot runs history mode `none` (ratings only), comments stay in Open WebUI |
 | History modes `stored`/`session` in the data-protection form | Same; P1 offers `none` only |
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| Department scope from member groups in P1 | P2 with gateway release 2; P1 scope from `departmentCodes` only (identity plan §3) |

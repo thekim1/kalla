@@ -264,7 +264,7 @@ admin host also needs `Gateway:*` for test-panel query embeddings (knowledge des
 Chat-role settings (chat design §3.7, §8, §12, §14.2): `Chat:PublishApiReference` (default `true`, off in production
 until P2), `Chat:CondenseTimeout` (600 ms, hard; falls back to the raw question), `Chat:GatewayHeadersTimeout` (15 s, proposed), `Chat:StreamIdleTimeout` (60 s),
 `Chat:MaxAnswerDuration` (240 s), `Chat:WriterEnqueueTimeout` (2 s), `Chat:CharsPerToken` (3); `Gateway:RequireDelegationEcho` (default `true`; decides when a missing delegation echo fails
-closed; the ceiling header is always sent, plan §6); `OpenWebUi:BaseUrl`, `OpenWebUi:AdminApiKey` (feedback import), `OpenWebUi:ClientId`, `OpenWebUi:JwtSecret`,
+closed; used from gateway release 2 in P2, when delegation starts, weakness review §5; the ceiling header is always sent, plan §6); `OpenWebUi:BaseUrl`, `OpenWebUi:AdminApiKey` (feedback import), `OpenWebUi:ClientId`, `OpenWebUi:JwtSecret`,
 `OpenWebUi:MaxLifetimeSeconds` (600) (user JWT, identity design §5.2); per instance `OpenWebUi:Instances:<name>:*`.
 Platform-wide chat values (condense model, link allow-list, per-user rate) live in `config."Settings".Chat`
 (data-model §2.1).
@@ -350,15 +350,15 @@ streaming code, and adds:
 | `POST /v1/embeddings`: **1024 dimensions**, L2-normalised feature hashing of word unigrams and character trigrams | texts that share words are close, so retrieval and evaluation tests mean something |
 | `POST /v1/chat/completions` (stream and not), answers built from the last user message and any `[n]` context, so citation tests can assert | chat, condense, evaluation generation and judging |
 | Stream modes (chat design §18.4): configurable usage-only final chunk (on/off), broken stream mid-way, stall (> idle timeout), missing `[DONE]`, empty deltas, `finish_reason: length`; echoes `x-ume-session` | streaming edge cases |
-| `GET /v1/models`; per-model residency in `appsettings.json` (`OnPrem`, `Eu`, `External`: the gateway's `DataResidency` names); lists only models with a target within the request's `x-ume-max-residency`, as the gateway does for delegating keys (gateway design §3.4) | model validation on assistant save (plan §6) |
-| Response header `x-ume-residency`; honours `x-ume-max-residency` (case-insensitive names; other values 400 `invalid_request`; `403 max_residency_not_met` if no configured target fits) and answers `400 invalid_request` without it for keys flagged `RequireMaxResidency` (every dev key, on every endpoint incl. `/v1/models`); three dev keys with per-level ceilings (`OnPrem`, `Eu`, open) and a key/level mismatch refusal; records `x-ume-on-behalf-of` and echoes it (gateway design §3, §5.2) | fail-closed and key-layer tests (plan §6, §7) |
-| `GET /v1/catalog/departments` (Data API shape incl. `memberGroups`; department 3000 lists `Byggnadsnämnden`) and `/v1/catalog/teams` (incl. `code`, combined gateway release) | organisation sync without the gateway |
+| `GET /v1/models`; per-model residency in `appsettings.json` (`OnPrem`, `Eu`, `External`: the gateway's `DataResidency` names); lists only models with a target within the request's `x-ume-max-residency`, as the gateway does from release 1 for every key (gateway design §3.4) | model validation on assistant save (plan §6) |
+| Response header `x-ume-residency`; honours `x-ume-max-residency` (case-insensitive names; other values 400 `invalid_request`; `403 max_residency_not_met` if no configured target fits) and answers `400 invalid_request` without it for keys flagged `RequireMaxResidency` (every dev key, on every endpoint incl. `/v1/models`); three dev keys with per-level ceilings (`OnPrem`, `Eu`, open) and a key/level mismatch refusal; records `x-ume-on-behalf-of` and echoes it (gateway design §3, §5.2; not needed before gateway release 2 in P2, when Ume.Rag starts sending it, weakness review §5) | fail-closed and key-layer tests (plan §6, §7) |
+| `GET /v1/catalog/departments` (Data API shape incl. `memberGroups`; department 3000 lists `Byggnadsnämnden`) and `/v1/catalog/teams` (incl. `code`; `memberGroups` and `code` come with gateway release 2, P2, weakness review §5) | organisation sync without the gateway |
 | Fault injection: model names `fake-fail-500`, `fake-slow`, `fake-wrong-residency`, `fake-drained` (503 with `Retry-After`: targets within the ceiling exist but are drained) | resilience and residency tests |
 | Rerank endpoint (P1, scores from word overlap; path as the gateway's P2 endpoint, *to verify*) | the `IReranker` seam and the evaluator's with/without comparison |
 | `FakeGateway:Upstream:Embeddings=http://ollama…` | real BGE-M3 vectors from Ollama when enabled |
 | Scripted tool modes (P2): a fixture lists the assistant messages per step (`tool_calls` with ids and arguments, streamed in deltas, or text) | deterministic agent-loop tests (tools design §11.2) |
 
-Feature request for the gateway (§12.2), delivered in the combined gateway release (gateway design §6): FakeLlm honours the
+Feature request for the gateway (§12.2), delivered in gateway release 1 (gateway design §6, weakness review §5): FakeLlm honours the
 OpenAI `dimensions` parameter and a `fake-embed-<n>` model-name suffix, so the gateway's own fake serves 1024-dim
 vectors when we run against a real local gateway.
 
@@ -375,7 +375,7 @@ vectors when we run against a real local gateway.
 - **Against a real local gateway** (gateway AppHost running): AppHost user secrets `FakeGateway:Enabled=false`,
   `Gateway:BaseUrl=https://localhost:<gateway port>`, `Gateway:Keys:<level>=<gateway dev keys>`. In the gateway's admin,
   add the Ollama provider with model `bge-m3` (the gateway's `Ollama:Enabled` brings `qwen2.5:0.5b` for chat) and an
-  alias matching our profile's model name, or (from the combined gateway release) point that alias at FakeLlm model
+  alias matching our profile's model name, or (from gateway release 1) point that alias at FakeLlm model
   `fake-embed-1024`. Older gateways' FakeLlm embeddings (8 dims) are refused by our dimension check with a clear error.
 - **Gateway key PII policy**: the `OnPrem` keys used for embeddings (api and worker) must have gateway `PiiPolicy` `Off` or `Allow` for `/v1/embeddings`, never `Redact`/`Block` (a redacting key would
   silently change queries containing personnummer); the knowledge role checks it at startup with a canary embedding
@@ -534,7 +534,7 @@ if the stock image's build supports it (*to verify*, `deploy/postgres/test.sh`).
 
 Secrets and certificates are files, never environment variables (gateway `compose.prod.yaml`): `${UME_RAG_SECRETS_DIR}/<service>`
 → `/run/app-secrets` (key-per-file: `ConnectionStrings__ragdb`, `ConnectionStrings__redis` (P2, multi-host only; without it the in-memory `IRateLimitStore`/`ISharedCache` are used), `Security__KeyPepper`,
-`Gateway__Keys__OnPrem` / `__Eu` / `__External` (delegating gateway keys per level, plan §6: api and admin hold all three, the worker only `OnPrem` and `Eu`, never the open key; its non-on-prem LLM calls send `Eu`), `BlobStore__S3__AccessKey`/`BlobStore__S3__SecretKey` (**per service**, only with `BlobStore:Kind=S3`; bucket policies mirror the mounts above: worker read/write, admin write on `uploads/` and read, api read-only, P2 write on `chat-tmp/`; [`../performance-pass.md`](../performance-pass.md) §3.13), `Security__CrawlKeyPepper` (worker, P2: HMAC of host names in the Redis crawl leases, [`../performance-pass.md`](../performance-pass.md) §3.6), `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`,
+`Gateway__Keys__OnPrem` / `__Eu` / `__External` (delegating gateway keys per level, plan §6; until gateway release 2 the pilot team's own keys per level, plan §7, weakness review §5: api and admin hold all three, the worker only `OnPrem` and `Eu`, never the open key; its non-on-prem LLM calls send `Eu`), `BlobStore__S3__AccessKey`/`BlobStore__S3__SecretKey` (**per service**, only with `BlobStore:Kind=S3`; bucket policies mirror the mounts above: worker read/write, admin write on `uploads/` and read, api read-only, P2 write on `chat-tmp/`; [`../performance-pass.md`](../performance-pass.md) §3.13), `Security__CrawlKeyPepper` (worker, P2: HMAC of host names in the Redis crawl leases, [`../performance-pass.md`](../performance-pass.md) §3.6), `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`,
 `Security__DownloadGrantKeys__<kid>` and `Security__CacheKeyPepper` (api; knowledge design §4.6, §5.4), `Security__ConversationIdKeys__<kid>` and `OpenWebUi__AdminApiKey` (api; chat design §11.1, §14.2), `Security__ToolAuditKey` (api and admin; P2), `Api__ServiceKey` (worker, P2: client `rag-internal`, posts chat-attachment chunks
 to the api's internal route, chat design §15.2; issued in the admin UI)), `${UME_RAG_CERTS_DIR}/<service>` →
 `/run/certs` (service cert/key, `ca.pem`, `data-protection.pfx`; P2: the tool identity's Entra client-credentials certificate for
@@ -745,7 +745,7 @@ p50/p95/p99).
   spans (connectors design §16). A unit test scans captured telemetry from a test chat for the test content.
 - **Security events**: category `Ume.Rag.Security` (`SecurityEvents` copied from the gateway, `Printable()` included),
   same collector rules (`deploy/otel/collector-siem.example.yaml`, filter extended to both categories). Gateway ids are
-  1001–3003 (2007, 2008, 3003 added by the combined gateway release); ours **5001–6999**: `5001 rag.auth.failed`, `5002 rag.access.denied`, `5003 rag.residency.refused`,
+  1001–3003 (2008, 3003 added by gateway release 2; 2007 with the P2 Graph lookup); ours **5001–6999**: `5001 rag.auth.failed`, `5002 rag.access.denied`, `5003 rag.residency.refused`,
   `5004 rag.config.stale_refused`, `5005 rag.ceiling.refused`, `5101 rag.egress.blocked` (SSRF), `5102
   rag.malware.detected`, `5103 rag.pii.flagged`, `6001 rag.admin.change`, `6002 rag.admin.signin`, `6003
   rag.admin.signout`, `6004 rag.conversation.access`; 5101/5102 attributes per connectors design §7, §11 (SIEM: any 5102; P2 with the renderer: 5101 from `Render`); the engine design adds `5105 rag.pipeline.refused` and log scopes `ExecutionId`, `Stage`; the parser design adds `5104 rag.parser.limit_exceeded` (worker); identity adds `5006 rag.auth.throttled`, `5007` (reserved for the P2 Graph member-group lookup), `5008 rag.key.unexpected_use`, `5009 rag.mcp.client_refused`, `5010 rag.obo.refused`,
@@ -830,18 +830,21 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (simpli
 | 15 | `release.yml` + `build-release-bundle.sh`; tag `v0.1.0` | release with digest-pinned bundle and SBOM; smoke test green | plan §10 Releases |
 | 16 | Deploy `v0.1.0` to the test host (8 vCPU / 16 GB) behind the municipal proxy | health green through the proxy | plan §11.5 |
 | 17 | `infra/entra/` + `entra.yml` (plan only on PR); approval package 1 (RAG's own registrations: `ume-rag-admin` with redirect URIs and `rag-*` roles incl. `rag-reviewer`, its own credential, the `open-webui` registration, pilot groups) **submitted** | workflow run awaiting the environment approval; ticket id recorded | plan §11.7, identity §2/§8 |
-| 18 | One combined gateway release agreed with the gateway team: design and ADR drafts 018–020 (`../gateway-changes/adr-drafts.md`), key flags `RequireMaxResidency`, `ApplyTeamPolicy`, the 503/403 split, FakeLlm `dimensions` (§12.2) | design and drafts accepted by the gateway team; the release scheduled before the pilot | README P0, gateway-changes plan |
+| 18 | Gateway **release 1** agreed with the gateway team (weakness review §5): feature B (residency ceiling, key flag `RequireMaxResidency`, the 503/403 split, `/v1/models` filtered by the ceiling) with ADR draft 018 (`../gateway-changes/adr-drafts.md`), and FakeLlm `dimensions` (§12.2); release 2 (features C and A, ADRs 019–020) planned for P2; the pilot team's per-level keys for pilot attribution agreed | design and ADR 018 accepted by the gateway team; release 1 scheduled before the pilot | README P0, gateway-changes plan §4, design §13 |
 | 19 | Docs: `local-development.md`, `production-setup.md` (sizing from §6.2), `runbook.md` (incl. restore and escrow; before go-live also a section on finding and exporting one Open WebUI conversation for the registrar on a public-records request, weakness review §4, plan §8), `upgrade-guide.md`, `security-events.md` | reviewed by the operations owner | plan §10 |
 | 20 | Worker dispatcher skeleton (after #6): `WorkerInstances` heartbeat, leases, reaper (reclaim ≠ attempt; poison suspect after 3 reclaims), `LISTEN rag_jobs`; one `command` kind end to end (admin enqueues, worker applies) | integration test: the command is applied; a killed worker's job is reclaimed within 45 s without using an attempt | engine design §20 (P0) |
 | 21 | Scale seams (after #6, #20): `IBlobStore` write-once contract (`IfAbsent`, tombstones) with the file-system implementation; `IJobQueue` seam (Postgres implementation); pooler-safe SQL rules + scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` and `Worker:Classes` per instance; `DOTNET_GCHeapHardLimitPercent=75` on every .NET service (the halfvec HNSW index follows in P1) | unit test finds no forbidden session-state SQL; contract tests pass on the file-system store (an overwrite attempt is refused) | [`../performance-pass.md`](../performance-pass.md) §8 (P0) |
+| 22 | On-prem capacity on the real gateway hardware (weakness review §5): BGE-M3 embedding throughput (tokens/s by batch size, query-embedding p95 under an ingestion load) and the latency of the condense and answer models (p95, TTFT p99 for a full 16k-token prompt), by scripts in `scripts/capacity/` against the gateway with the user's access | numbers recorded against the performance-pass estimates (`to-verify.md` #98, #99, #104, #125, #149); a shortfall raised as register M2 | [`../performance-pass.md`](../performance-pass.md) §2, §3.9; `postponed-decisions.md` M2 |
 
 `perf.yml` and the nightly `evaluation.yml` follow in P1, before the pilot (§8.1).
 
 **Who does what (decided 2026-10-30):** the main session runs Stage 0 (#1, #2 and the shared files), then two
 streams build the rest in parallel; the split, file ownership and hand-offs are in [`../p0/`](../p0/). The parts that
-need other people are owned by the user, outside both streams: submitting Entra package 1 (#17), agreeing the combined
-gateway release with the gateway team (#18; it is built in P1, before the pilot), the backup target and key escrow
-with IT (`to-verify.md` #145) and access to the test host (#16).
+need other people are owned by the user, outside both streams: submitting Entra package 1 (#17), agreeing gateway
+release 1 with the gateway team (#18; it is built in P1, before the pilot; release 2 follows in P2, weakness review
+§5), the backup target and key escrow with IT (`to-verify.md` #145), access to the test host (#16) and to the gateway
+hardware for #22, the DPIA started with the data protection officer (register G1) and a named person and date for
+A1, G1, W1, W2, N1, U1 and P2 (`postponed-decisions.md` phase-start rule; P0 ends only when all have both).
 
 ## 12. Open decisions and contradictions found
 
@@ -853,7 +856,7 @@ decided form of the simplification pass (2026-10-30).
 | # | Topic | Finding | Recommendation |
 |---|---|---|---|
 | 1 | FakeLlm reuse (plan §1 "or reuse gateway FakeLlm") | FakeLlm embeddings are 8-dim and it sends no residency header | Own `Ume.Rag.FakeGateway` (§4.3), copying `FakeLatency.cs`; update plan §1 wording |
-| 2 | Real local gateway | Its FakeLlm cannot feed our 1024-dim profile | Delivered in the combined gateway release (`../gateway-changes/design.md` §6: `dimensions`, `fake-embed-1024`); before it, Ollama `bge-m3` in the gateway |
+| 2 | Real local gateway | Its FakeLlm cannot feed our 1024-dim profile | Delivered in gateway release 1 (`../gateway-changes/design.md` §6: `dimensions`, `fake-embed-1024`; weakness review §5); before it, Ollama `bge-m3` in the gateway |
 | 3 | Connection caps vs rolling slots (data-model §1.1) | Two slots double a role's connections | Smaller pools (api 12 with `Retrieval:MaxConcurrentSearches` 4, admin 5, worker 10 per instance; `max_connections` 100), limits with room for the P2 b slots; worker stop-then-start (§7.3); measured in P0, confirmed in the R1 test |
 | 4 | Self-hosted runner | BGE-M3 and the test gateway are on-prem; GitHub-hosted runners cannot reach them | **Open: IT security must approve** one ephemeral, environment-protected runner on the test host for `perf.yml`/`evaluation.yml`. Fallback: run both manually on the test host with a script |
 | 5 | Entra IaC tool | Bicep vs Terraform | **Decided: Bicep** with the Microsoft Graph extension in `infra/entra/` |

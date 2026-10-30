@@ -189,6 +189,16 @@ owner.
   workaround (Open WebUI group permissions) move from P2 to late P1.
 - **Owners and dates.** Phase-start rule: every item in `postponed-decisions.md` that blocks the next phase has a
   named person and a date before that phase starts. P0 ends only when A1, G1, W1, W2, N1, U1 and P2 have both.
+- **Settled while applying:**
+  - **Pilot department scope.** In P1 the pilot department's scope comes from member groups entered by hand on our
+    own department record, matched against the `groups` claim. With release 2 the org sync fills the same field.
+  - **Release-1 migration.** `RequireMaxResidency` gets its own release-1 gateway migration (`KeyResidencyCeiling`),
+    separate from the release-2 delegation migration.
+  - **Pilot-team keys.** They are ordinary team keys. The pilot team keeps no request policy. Every P1 gateway call is
+    charged to that team. With release 2 we switch to delegating keys and revoke the pilot-team keys.
+  - **Resolver.** The member-group resolver is still built in P0 against the FakeGateway.
+  - **Capacity measurements (#22).** Embedding throughput, query-embedding p95 under ingestion load, and answer-model
+    TTFT p99 for a 16k-token prompt.
 
 ## Lower-ranked findings (recorded, not changed here)
 

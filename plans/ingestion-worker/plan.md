@@ -142,7 +142,11 @@ child documents.
 - One **platform embedding profile**: a multilingual model served on-prem through the gateway, used for every
   collection and classification. Content is never sent off-premises to be indexed.
 - Calls go through the gateway with the worker's `OnPrem` delegating key on behalf of the collection's owning team,
-  with the explicit `OnPrem` residency ceiling header.
+  with the explicit `OnPrem` residency ceiling header. Until gateway release 2 (P1) the key is the pilot department's
+  team's own `OnPrem` key and no `x-ume-on-behalf-of` is sent (weakness review §5).
+- BGE-M3 throughput on the real gateway hardware is measured in P0 (checklist #22); if it falls short, register M2
+  decides before P1 between more on-prem capacity and a longer initial-load window. The profile stays on-prem
+  BGE-M3 (weakness review §5).
 - Embedding cache by (profile, text hash): re-chunking only embeds new text; batches sized for the gateway. Embedding
   concurrency is a fixed value from configuration in P1; adaptive concurrency (AIMD) is P2 (weakness review §1).
 - Other profiles are an explicit exception set by platform admins. A profile change (P3) re-embeds every affected
@@ -355,7 +359,7 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 | Headless rendering (`rag-renderer`) and `origin`/`rendered` variants | P2 if needed (§3) |
 | Legacy Office, RTF, email with child documents | P2 (§3) |
 | Per-department fairness, batched dequeue, coalesced `NOTIFY`, lease leaders, fleet-wide embedding cap | P2, first multi-host deployment (§2) |
-| Interim per-team gateway keys | dropped; one combined gateway release before the pilot (§5) |
+| Interim per-team gateway keys | dropped; one combined gateway release before the pilot (§5). Reversed for the pilot team by weakness review §5 (§13) |
 
 ## 13. Deferred or removed (weakness review)
 
@@ -368,3 +372,10 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | Publish plans from effect tags | P2; P1 publish re-processes every document of the collection, still with report and keep or roll back (§4) |
 | Adaptive embedding concurrency (AIMD), parse ranges sized by moving average | P2; fixed values from configuration in P1 (§5, §6) |
 | Nightly answer-level judge (`answers` runs) | P2 (§7) |
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| Delegated attribution of worker calls (`x-ume-on-behalf-of` = collection owner team) in P1 | P2 with gateway release 2; P1 uses the pilot team's own per-level keys (§5) |
+| BGE-M3 throughput measured in P1 (R1) | P0, checklist #22 (`to-verify.md` #98, #125) |

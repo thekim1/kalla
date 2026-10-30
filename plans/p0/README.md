@@ -58,6 +58,7 @@ section it implements. Migration ordering is the classic collision, so it has ex
 | H5 | B → A | Service images build (Stage 0's `UmeServiceContainer`) and every health probe answers | Compose (#14) uses the Stage 0 images |
 | H6 | user → A | Test-host access, backup target and key escrow location (`to-verify.md` #145) | A prepares #14 scripts and runs the restore drill locally; the documented drill waits |
 | H7 | A, B → user | Bicep for Entra package 1 (#17, A), realm and claim mapping (#9, B) | the user submits package 1 |
+| H8 | user → A | Access to the real gateway hardware for the capacity measurement (#22, weakness review §5) | A writes the `scripts/capacity/` scripts and runs them against a local gateway; the recorded numbers wait |
 
 ## 4. Sync points
 
@@ -75,12 +76,16 @@ In addition:
 - Work in a branch of your own prefix and merge to `main` daily; long-lived branches are where collisions grow.
 - Two agents in one clone: one worktree each (`git worktree add ../rag-a`, `../rag-b`).
 - Requests between streams go through GitHub issues with the owner's label, never through shared files.
-- Items owned by the user (#16 access, #17 submission, #18 gateway-team agreement, `to-verify.md` #145) are not
-  stream work; a stream that needs one waits on its hand-off in §3 and continues with the next item.
+- Items owned by the user (#16 access, #17 submission, #18 agreement on gateway release 1 with the gateway team,
+  access to the gateway hardware for #22, `to-verify.md` #145) are not stream work; a stream that needs one waits on
+  its hand-off in §3 and continues with the next item. Also the user's, outside the streams ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)): the DPIA
+  started with the data protection officer (register G1), and a named person and a date for A1, G1, W1, W2, N1, U1 and
+  P2 (`../postponed-decisions.md` phase-start rule); P0 ends only when all have both.
 
 ## 6. P1 continuation (outline)
 
 The same seam carries on. A: connectors and crawl, site profiles, parser formats, fixed pipelines, index writer,
 evaluation runs in the worker. B: retrieval and knowledge API, chat API, assistants and versions, admin journey
-pages, feedback, the combined gateway release integration. The ingestion pages of the admin UI sit on the seam; their
+pages, feedback, the gateway release 1 integration (the pilot team's per-level keys; delegation and member groups
+follow with release 2 in P2, weakness review §5). The ingestion pages of the admin UI sit on the seam; their
 split is decided with the P1 briefs.

@@ -176,6 +176,15 @@ therefore has ratings only; comments stay in Open WebUI, whose store is the prim
 - Consistency fixes: one guest rule in both systems; no MSAL in the RAG Graph client; no GIN index on the RAG mirror
   of member groups; `Gateway:RequireDelegationEcho` setting decides when a missing echo fails closed.
 
+**Later change ([weakness review §5](weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)).**
+The combined release is split. Release 1, before the pilot: the residency ceiling with `RequireMaxResidency`, the
+503/403 split, `/v1/models` filtered by the ceiling (ADR 018) and FakeLlm `dimensions`. Release 2, in P2: member
+groups from claims (ADR 019) and delegation (ADR 020), before the first second-department or group audience. The
+"no interim per-team keys" rule is reversed for the one pilot team: until release 2 the pilot is attributed with that
+team's own per-level gateway keys (no `x-ume-on-behalf-of`; the gateway is unchanged). Department scope from groups
+in the claim therefore reaches production with release 2. A second department in Open WebUI gets its own Open WebUI
+instance until W3 and E1 are solved; the E1 and W3 spikes move to late P1.
+
 ## 8. Answer quality and evaluation
 
 - **Not-found gate**: coverage is `low` only when the best vector distance is above the threshold **and** the keyword

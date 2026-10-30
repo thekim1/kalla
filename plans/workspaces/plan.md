@@ -54,7 +54,8 @@ excluded from nightly retrieval evaluation and the answer-level judge.
   (MCP clients stay at ceiling `public` by default, so they see no workspace unless an admin raises the client).
 - **Clients**: Open WebUI (each workspace appears as a model to its members), the own chat client (P2, delegated
   token), later Teams (P3).
-- **Attribution**: gateway calls go `x-ume-on-behalf-of` a team. P2a proposal: one platform team
+- **Attribution**: gateway calls go `x-ume-on-behalf-of` a team (delegation arrives with gateway release 2, P2, before
+  P2a; weakness review §5). P2a proposal: one platform team
   `Settings.Workspaces.TeamId` with a central budget, the matching department as `Collections.DepartmentId` and
   `Jobs.DepartmentId` (one fairness bucket for all workspaces); per-department charge-back is question 2.
 - **Department assistants linking a workspace** (direct links, P2): only a **team** workspace, only after a manager
@@ -73,6 +74,10 @@ registry** (`app.state.MODELS`) overwritten by whichever user last listed models
 and chat resolves the model from it (`main.py:1153-1167`), so per-user model lists can fail with "Model not found"
 when two users with different lists are active. The per-user list cache itself is keyed by user
 (`routers/openai.py:709-715`). This affects every P2 department/group audience, not only workspaces (question 4).
+**Since [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):** the spikes on E1 and on the W3 workaround (Open WebUI group permissions, register W3) run in late P1
+(P1b), so this gate is known before P2 starts. Departments beyond the first get one Open WebUI instance each (its own
+client, ceiling and audience) until W3 and E1 are solved; that fallback does not serve personal or team workspaces,
+which still wait for both gates.
 
 ## 4. Self-service area "Mina kunskapsbaser"
 
@@ -291,8 +296,8 @@ logs; the pilot runs history mode `none` until it is answered, weakness review �
 
 | Item | When | How |
 |---|---|---|
-| Open WebUI process-wide `app.state.MODELS` with per-user lists (`utils/models.py:484-499`, `main.py:1153-1167`) at the P2 version | P2 start | two users with different lists, interleaved chats |
-| E1: `system_oauth` token forwarding and refresh with our audience | P2 (E1 test) | as identity design §9.4 |
+| Open WebUI process-wide `app.state.MODELS` with per-user lists (`utils/models.py:484-499`, `main.py:1153-1167`) at the P2 version | late P1 (P1b spike, weakness review §5; `../to-verify.md` #174) | two users with different lists, interleaved chats |
+| E1: `system_oauth` token forwarding and refresh with our audience | late P1 (P1b spike, weakness review §5; `../to-verify.md` #175) | as identity design §9.4 |
 | Interactive latency: 30-page text PDF searchable p50 ≤ 60 s during a crawl and an OCR batch | P2a | `perf.yml` scenario |
 | Swedish summary quality of the on-prem model (20 municipal PDFs, judged by two staff) and its tokens/s | P2a | sample run |
 | Config snapshot reload cost with ~5,000 assistants and frequent workspace writes | P2a | load test |

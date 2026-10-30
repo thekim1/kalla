@@ -1,8 +1,9 @@
 # Gateway ADR drafts 018–020
 
-Drafts of three rows for `docs/adr.md` in the gateway repo (`~/git/llmgateway`, table at `docs/adr.md:3-23`; append the rows right after 017). They are
-copied into the gateway repo together, with the one combined release ([`design.md`](design.md) §13): 018 is feature B,
-019 feature C, 020 feature A of [`plan.md`](plan.md). Same table and cell style as 013–017: one dense paragraph per
+Drafts of three rows for `docs/adr.md` in the gateway repo (`~/git/llmgateway`, table at `docs/adr.md:3-23`; append the rows right after 017). 018 is
+feature B, 019 feature C, 020 feature A of [`plan.md`](plan.md). Since the [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)
+they go in with two releases ([`design.md`](design.md) §13): **018 is accepted with release 1** (before the pilot),
+**019 and 020 with release 2** (P2). Same table and cell style as 013–017: one dense paragraph per
 cell.
 
 | ADR | Decision | Rationale / consequences |
@@ -11,12 +12,13 @@ cell.
 | 019 | Department scope can also come from group membership in the token, and admin sign-in refuses other tenants and guests | Municipalities often have no department attribute in their directory, but do have groups. A department gets optional **member groups** (group claim values: Entra object ids, AD FS or Keycloak names, matched case-insensitively like `Oidc:RoleGroups`), edited by gateway admins. At sign-in the scope is the `departmentCodes` claim plus every active department whose member groups appear in the token's group claim, written back as ordinary `departmentCodes` claims, so every scoped query is unchanged; membership never grants a role. Only the claim is read: a group the token does not show (not emitted, or overage) adds nothing, so scope can only narrow. Member groups are exposed on the Data API's `catalog.read` departments list so another system (Ume.Rag) can apply the same rule with the same data. Independently, `Oidc:TenantId` (token `tid` must match) and `Oidc:RefuseGuests` (default on: `acct = 1`, or an `idp` that differs from both the issuer and `https://sts.windows.net/{tid}/`) refuse sign-in and Data API tokens of other tenants and guests (`admin.signin.refused` 2008, `data.token.refused` 3003). Keycloak and AD FS emit neither claim, so the guest check is a no-op there; Entra adopters who deliberately admit guests turn it off. |
 | 020 | A key can act for listed teams (delegated attribution), and delegation can never widen access | A platform that serves many teams (Ume.Rag) would otherwise hold one key per team: many secrets, and attribution that depends on picking the right one. A gateway admin, and only a gateway admin, gives a key an explicit list of teams; requests from it may send `x-ume-on-behalf-of: <team id or team code>`. The request is then charged and routed as the team's: team and department budgets and token quotas, routing rules and usage attribution, while everything that limits access stays the key's own (models, providers, residencies, PII, attachment, provider tools and storage, content guard, address list). The request policy is **the key's only**: a team's policy (system prompt, parameter overrides) is written for the team's own clients and would silently change the calling platform's prompts; a gateway admin can opt a key in with `ApplyTeamPolicy` (default off). Teams have no allow-lists of their own, so the intersection is the key's lists, and routing rules never widen (ADR 013). The key's own budgets and rate limits still cap all its traffic, and key budgets follow the rotation lineage (ADR 007); the delegation list and flags are copied on rotation. Usage records keep the delegating key id, carry the effective team and department and are marked `delegated`, so reports, budgets seeded from usage and exports agree. An unlisted, unknown or inactive team, or the header from a non-delegating key, is `403 delegation_not_allowed` with `gateway.delegation.refused` (1006). The list is checked when the key is loaded into the authentication cache (one extra query on a cold load, none per request) and refreshed by the existing key invalidation, which team and department changes already publish. Because a delegating key acts across departments, its settings can only be changed by gateway admins; a team on a list cannot be deleted until it is removed from the list (a grant is not orphaned like a rule under ADR 014). End users stay invisible to the gateway: per-user limits remain the calling platform's job. |
 
-Line to replace the current acceptance line (`docs/adr.md:25-26`) with, filling in the date when the rows are
-accepted together:
+Line to replace the current acceptance line (`docs/adr.md:25-26`) with, filling in each date when its rows are
+accepted (018 with release 1, 019–020 with release 2; weakness review §5). With release 1 only the 018 row is
+appended and the line ends "018 on YYYY-MM-DD"; release 2 appends 019–020 and the second date:
 
 > Accepted for POC on 2026-10-07 (013-014 on 2026-10-09, 015 on 2026-10-10, 016 on 2026-10-12, 017 on 2026-10-16,
-> 018-020 on YYYY-MM-DD). Reassess durable accounting, HA, egress isolation and per-use-case legal controls before
-> production approval.
+> 018 on YYYY-MM-DD, 019-020 on YYYY-MM-DD). Reassess durable accounting, HA, egress isolation and per-use-case legal
+> controls before production approval.
 
 ## Deferred or removed (simplification pass)
 
@@ -24,3 +26,10 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §6–§7: one row 
 became one combined release; 019 no longer contains the Graph `checkMemberGroups` lookup (P2, with
 `GroupMember.Read.All`, its cache and event 2007); 020 no longer applies the effective team's request policy; 018 now
 answers 503 instead of 403 for drained in-ceiling targets and adds `RequireMaxResidency`.
+
+## Deferred or removed (weakness review)
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+the three rows are no longer accepted together. 018 (feature B) is accepted with release 1 before the pilot; 019
+(feature C) and 020 (feature A) with release 2 in P2. The row texts are unchanged: 018 already stands without
+delegation (its `/v1/models` sentence applies to every key).

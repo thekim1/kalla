@@ -443,7 +443,7 @@ explicit `x-ume-max-residency` and checks that the key matches it:
 ```http
 POST {Gateway:BaseUrl}/v1/embeddings
 Authorization: Bearer <rag-api OnPrem-only delegating key>
-x-ume-on-behalf-of: <team id>
+x-ume-on-behalf-of: <team id>               (from gateway release 2, P2; not sent in P1)
 x-ume-max-residency: OnPrem
 x-ume-run-id: <RunId or retrieval id>
 x-ume-step: query-embed
@@ -455,10 +455,10 @@ traceparent: …
 | Topic | Rule |
 |---|---|
 | Model | `EmbeddingProfiles.GatewayModel` of the profile being searched (`bge-m3`, 1024 dims, data-model §2.1); never `dimensions` (gateway design §6) |
-| Attribution | chat: the assistant's `OwnerTeamId` (identity §4.7); integration key: `Keys.TeamId`; token callers and MCP: the first searched collection's `OwnerTeamId`; test panel: the assistant's or collection's owner team |
+| Attribution | from gateway release 2 (P2); in P1 every call is charged to the pilot department's team, whose own `OnPrem` key is used (weakness review §5). Then: chat: the assistant's `OwnerTeamId` (identity §4.7); integration key: `Keys.TeamId`; token callers and MCP: the first searched collection's `OwnerTeamId`; test panel: the assistant's or collection's owner team |
 | Residency | `OnPrem` always (R3); the gateway applies it to `/v1/embeddings` (gateway design §3.4 table) |
-| Response checks | `x-ume-residency` (`src/Ume.LlmGateway.Gateway/Pipeline/GatewayHeaders.cs:15`) must be `OnPrem` (case-insensitive) else discard + 5003; `x-ume-pii` (`GatewayHeaders.cs:36`) must be absent or not `redacted`/`blocked`, else discard (a redacted query embeds different text, `GatewayRequestHandler.cs:145-157`); the `x-ume-on-behalf-of` echo must match when `Gateway:RequireDelegationEcho` is set (6a §7.7); exactly one vector of `Dimensions` finite floats, not all zero |
-| Key | the `OnPrem`-only delegating key (`RequireMaxResidency`, `AllowedIpRanges`); delegated requests apply only the key's request policy (`ApplyTeamPolicy` false), so its `PiiPolicy` must be `Off` or `Allow` for `/v1/embeddings` (a `Redact` or `Block` key would silently change or refuse queries containing personnummer); checked at startup by one canary embedding (§5.6) |
+| Response checks | `x-ume-residency` (`src/Ume.LlmGateway.Gateway/Pipeline/GatewayHeaders.cs:15`) must be `OnPrem` (case-insensitive) else discard + 5003; `x-ume-pii` (`GatewayHeaders.cs:36`) must be absent or not `redacted`/`blocked`, else discard (a redacted query embeds different text, `GatewayRequestHandler.cs:145-157`); from release 2, the `x-ume-on-behalf-of` echo must match when `Gateway:RequireDelegationEcho` is set (6a §7.7); exactly one vector of `Dimensions` finite floats, not all zero |
+| Key | the `OnPrem`-only delegating key (`RequireMaxResidency`, `AllowedIpRanges`; until release 2 the pilot team's own `OnPrem` key, whose team keeps no request policy); delegated requests apply only the key's request policy (`ApplyTeamPolicy` false), so its `PiiPolicy` must be `Off` or `Allow` for `/v1/embeddings` (a `Redact` or `Block` key would silently change or refuse queries containing personnummer); checked at startup by one canary embedding (§5.6) |
 
 ### 5.3 Timeouts, retries, circuit
 
@@ -1215,3 +1215,11 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §5, §6,
 | `DocumentKeys` per-document blob keys | data key in the blob header (data-model §7, §3.5) |
 | Redis L2 query-embedding cache and Redis download rate limit in P1 | P2, first multi-host deployment; P1 uses the in-memory `ISharedCache` and `IRateLimitStore` (simplification pass §14; §5.4, §3.5) |
 | Skill collections in the retrieval scope (P2 RAG assistants: every linked skill's; agent: loaded skills' via `SkillVersionIds`), the per-skill MCP endpoint's collection scope (P3) | removed (simplification pass §15): the scope is the published version's direct collections (§4.2); skills carry no collections, so `SkillVersionIds` is gone |
+
+## 22. Deferred or removed (weakness review)
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| `x-ume-on-behalf-of` on query embeddings and its echo check in P1 (§5.2) | P2 with gateway release 2; P1 uses the pilot team's `OnPrem` key |

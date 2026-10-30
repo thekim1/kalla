@@ -137,8 +137,9 @@ Detailed in [`../identity/plan.md`](../identity/plan.md). In short:
 - People sign in exactly as in the gateway: the same OIDC/BFF mechanism and code, the same claims (`roles`,
   `departmentCodes`, `teamCodes`) and configuration keys (`UME_RAG_OIDC_*`), on **RAG's own Entra registrations**
   (`ume-rag-admin`) with `rag-*` roles; RAG's Bicep owns only RAG's registrations. The audit actor is `oid` (fallback
-  `sub`). In P1 departments without a department attribute come from **groups in the claim** (claims-only member
-  groups in the combined gateway release); the Graph-based member-group lookup is P2.
+  `sub`). Departments without a department attribute come from **groups in the claim** (claims-only member groups,
+  gateway release 2 in P2, weakness review §5; in P1 department scope comes from the `departmentCodes` claim only,
+  identity plan §3); the Graph-based member-group lookup is P2.
 - No Entra registration is needed for P0 or development (Keycloak + keys); admin and Open WebUI sign-in must be
   approved before the pilot.
 - Every caller is a **client** from the client registry (R5): an Entra app registration, an `ume-rag-sk-`/`ume-rag-pk-` key, or a
@@ -171,7 +172,8 @@ Levels `public` < `internal` < `sensitive` on sources, collections, skills, tool
   Enforced structurally in three layers (R4): an **explicit ceiling on every call** (a `DelegatingHandler` in the
   gateway client refuses a request without one and checks that the key matches the level; unit-tested per call site;
   the gateway refuses a request without the header, key flag `RequireMaxResidency`); **delegating keys per level**,
-  issued per deployable that needs them, with `AllowedIpRanges` (the worker never holds the open key); and the
+  issued per deployable that needs them, with `AllowedIpRanges` (the worker never holds the open key; until gateway
+  release 2 the pilot team's own keys per level, §7); and the
   response's `x-ume-residency` checked before any byte is streamed or an ingestion result stored (fail closed). The
   level of a call is the highest level of the data in it. Values are the gateway's `DataResidency` names (gateway
   design §3.1). The gateway answers **503 with `Retry-After`** when targets within the ceiling are drained or
@@ -187,13 +189,19 @@ Levels `public` < `internal` < `sensitive` on sources, collections, skills, tool
 
 Detailed in [`../gateway-changes/plan.md`](../gateway-changes/plan.md):
 
-- **One combined gateway release before the pilot**: residency ceiling, delegation (`x-ume-on-behalf-of: <team id>`:
-  delegated requests charge the effective team's budgets and attribution, but **request policy comes from the key
-  only**) and member groups in claims-only mode, plus the key flags `RequireMaxResidency` and `ApplyTeamPolicy`
-  (false for delegating keys). `/v1/models` lists only models within the request's ceiling, which the admin's model
-  validation relies on. ADR drafts 018–020 are scheduled together.
-- **Delegating keys per level** (§6), not one platform key; each deployable holds only the levels it needs.
-- Development and test use the FakeGateway; the pilot waits for the release (no interim per-team keys).
+- **Two gateway releases** ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control); before it, one combined release):
+  - **Release 1, before the pilot**: residency ceiling with the key flag `RequireMaxResidency` and the 503/403 split;
+    `/v1/models` lists only models within the request's ceiling, which the admin's model validation relies on; FakeLlm
+    `dimensions`. ADR 018.
+  - **Release 2, in P2**, before the first second-department or group audience: delegation (`x-ume-on-behalf-of:
+    <team id>`: delegated requests charge the effective team's budgets and attribution, but **request policy comes
+    from the key only**, key flag `ApplyTeamPolicy`, false for delegating keys) and member groups in claims-only
+    mode. ADRs 019–020.
+- **Keys per level** (§6), not one platform key; each deployable holds only the levels it needs. **Pilot
+  attribution** until release 2: the pilot department's team's own gateway keys per level (no `x-ume-on-behalf-of`;
+  the team keeps no request policy). This reverses the "no interim per-team keys" rule of simplification pass §7 for
+  that one team; the gateway is unchanged by it. From release 2: delegating keys per level.
+- Development and test use the FakeGateway; the pilot waits for release 1.
 
 ## 8. Retention and personal data
 
@@ -378,11 +386,16 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (ordere
    `release.yml`; deploy to a test host.
 6. Scale seams: pooler-safe SQL rule and scan test; `IBlobStore` with the write-once contract; `IJobQueue` over the
    Postgres queue; `Worker:Classes` and `Worker:Concurrency:<class>`.
-7. Entra approval package 1 (RAG's own registrations) submitted; no Entra registration is needed for P0 itself; the
-   combined gateway release agreed with the gateway team.
+7. Entra approval package 1 (RAG's own registrations) submitted; no Entra registration is needed for P0 itself;
+   gateway release 1 agreed with the gateway team and scheduled before the pilot (release 2 in P2, weakness review §5).
 8. Data protection (weakness review §4, owned by the user, outside the build streams): the DPIA (register G1) started
    with the data protection officer; A1 has a named owner. Key escrow covers the blob master key and the pgBackRest
    passphrase only (no chat master keys before A1 allows stored content).
+9. On-prem capacity measured on the real gateway hardware (weakness review §5, checklist #22): BGE-M3 embedding
+   throughput and condense and answer model latency, recorded against the performance-pass estimates; a shortfall
+   goes to register M2, decided before P1.
+10. Owners and dates (weakness review §5, owned by the user): A1, G1, W1, W2, N1, U1 and P2 each have a named person
+    and a date (`postponed-decisions.md`, phase-start rule).
 
 ## 12. Answered questions (2026-10-29)
 
@@ -431,3 +444,12 @@ Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-sec
 | Chat bucket keys, chat content encryption, chat master keys `rag-chat-<level>` and their escrow | When A1 allows stored content; the data model keeps the columns and tables (§8a, data-model §7) |
 | Crypto-shredding | Still behind A1 (now also behind stored content) |
 | Conversation review and reading feedback comments by `rag-reviewer`/`rag-department-admin` | When A1 allows stored content; feedback comments stay in Open WebUI (§8a) |
+
+Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+
+| Item | Where it went |
+|---|---|
+| One combined gateway release before the pilot | release 1 (residency ceiling, FakeLlm `dimensions`) before the pilot; release 2 (delegation, member groups) in P2 (§7) |
+| Delegating keys for the pilot; "no interim per-team keys" | the pilot team's per-level keys until release 2 (§7) |
+| Department scope from groups in the claim in P1 | P2 with release 2 (§5) |
+| On-prem throughput measured in P1 (R1) | P0 (§11 item 9) |
