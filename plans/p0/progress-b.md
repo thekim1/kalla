@@ -49,21 +49,21 @@ Refs: [repo-and-deployment §4.3](../platform/repo-and-deployment.md), [gateway-
 
 ## 6. Identity (#9)
 Refs: [identity/design.md](../identity/design.md) §1–§3, §10, §11; [identity/plan.md §3](../identity/plan.md) (P1 department scope from hand-entered member groups)
-- [ ] `dev/keycloak/ume-rag-realm.json` incl. `rag-reviewer`
-- [ ] OIDC/BFF and claim mapping copied from the gateway admin API (`UME_RAG_OIDC_*`); audit actor `oid`
+- [x] `dev/keycloak/ume-rag-realm.json` incl. `rag-reviewer` (#35)
+- [x] OIDC/BFF and claim mapping copied from the gateway admin API (`UME_RAG_OIDC_*`); audit actor `oid` (#32)
 - [x] Postgres admin session store; `AdminSessionTests` copied (to-verify #163)
-- [ ] `OidcClaimMappingTests` copied; member-group resolver tested against FakeGateway data
+- [x] `OidcClaimMappingTests` copied; member-group resolver tested against FakeGateway data (#32)
 - [ ] to-verify #83, #151 recorded
 - [ ] **Done:** sign-in to the empty admin UI as each test user shows the right roles and departments (incl. one from a group claim)
-- [ ] **Hand-off H7:** realm and claim mapping ready for the user's package 1
+- [x] **Hand-off H7:** realm and claim mapping ready for the user's package 1 (#35)
 
 ## 7. Admin skeleton and write path (#11)
 Refs: [admin/design.md](../admin/design.md) §2–§4, §11, §12
 - [ ] Admin UI skeleton: copied design system, Swedish `labels.ts`/`messages.ts`, Vite on 5174, `design-system.lock`
-- [ ] `AdminContext` write path: change + outbox + audit in one transaction
-- [ ] `PermissionMatrix` role tests
-- [ ] Org sync against the FakeGateway catalogue
-- [ ] `contracts/admin/v1/error-codes.json` export
+- [x] `AdminContext` write path: change + outbox + audit in one transaction (#38)
+- [x] `PermissionMatrix` role tests (#38)
+- [x] Org sync against the FakeGateway catalogue (#39)
+- [x] `contracts/admin/v1/error-codes.json` export (#38)
 - [ ] **Done:** lint/typecheck/test/build green; a saved change bumps the config version with one audit entry; synced departments visible
 - [ ] `command` enqueue from the admin (after H4)
 

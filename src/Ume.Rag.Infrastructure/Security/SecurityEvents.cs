@@ -42,6 +42,11 @@ public static partial class SecurityEvents
         return factory.CreateLogger(Category);
     }
 
+    /// <summary>A refused credential; for the admin, one per refused sign-in (credential <c>oidc-signin</c>).</summary>
+    [LoggerMessage(5001, LogLevel.Warning,
+        "Authentication failed: {Reason} ({Credential}) on {Endpoint} from {SourceAddress}", EventName = "rag.auth.failed")]
+    public static partial void AuthFailed(ILogger logger, string reason, string credential, string endpoint, string? sourceAddress);
+
     [LoggerMessage(5003, LogLevel.Warning,
         "Gateway answer discarded: residency {Observed} above the ceiling {Ceiling} on {Endpoint} (gateway request {GatewayRequestId})",
         EventName = "rag.residency.refused")]
@@ -51,4 +56,31 @@ public static partial class SecurityEvents
         "Security-relevant decisions refused: config not confirmed since {LastConfirmedAt} (cached version {CachedVersion}) on {Service}, x{Count}",
         EventName = "rag.config.stale_refused")]
     public static partial void ConfigStaleRefused(ILogger logger, string service, long cachedVersion, DateTimeOffset? lastConfirmedAt, int count);
+
+    /// <summary>Every audit entry the admin writes (identity design §10).</summary>
+    [LoggerMessage(6001, LogLevel.Information,
+        "Admin {Actor}: {Action} {EntityType} {EntityId}", EventName = "rag.admin.change")]
+    public static partial void AdminChange(ILogger logger, string actor, string action, string entityType, string? entityId);
+
+    [LoggerMessage(6002, LogLevel.Information,
+        "Admin {Actor} signed in from {SourceAddress} with roles {Roles}, departments {Departments}; session {SessionId}", EventName = "rag.admin.signin")]
+    public static partial void AdminSignIn(ILogger logger, string actor, string? sourceAddress, string roles, string departments, string? sessionId);
+
+    [LoggerMessage(6003, LogLevel.Information,
+        "Admin {Actor} signed out from {SourceAddress}; session {SessionId}", EventName = "rag.admin.signout")]
+    public static partial void AdminSignOut(ILogger logger, string actor, string? sourceAddress, string? sessionId);
+
+    [LoggerMessage(6005, LogLevel.Information,
+        "Admin {Actor} extended session {SessionId} until {ExpiresAt} from {SourceAddress}", EventName = "rag.admin.session.extended")]
+    public static partial void AdminSessionExtended(ILogger logger, string actor, string? sessionId, DateTimeOffset expiresAt, string? sourceAddress);
+
+    /// <summary>A 403 for a signed-in user, at most once a minute per user with the count since the last.</summary>
+    [LoggerMessage(6006, LogLevel.Warning,
+        "Admin {Actor} was refused {Method} {Path} x{Count} from {SourceAddress} (roles {Roles})", EventName = "rag.admin.access.denied")]
+    public static partial void AdminAccessDenied(ILogger logger, string actor, string method, string path, int count, string? sourceAddress, string roles);
+
+    /// <summary>A read of a sensitive list (audit log, keys, feedback, access log, conversation views).</summary>
+    [LoggerMessage(6007, LogLevel.Information,
+        "Admin {Actor} read {Path}{Query} from {SourceAddress}", EventName = "rag.admin.data.read")]
+    public static partial void AdminDataRead(ILogger logger, string actor, string path, string query, string? sourceAddress);
 }

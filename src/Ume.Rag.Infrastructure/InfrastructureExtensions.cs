@@ -1,3 +1,5 @@
+using System.Security.Cryptography.X509Certificates;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -16,6 +18,7 @@ namespace Ume.Rag.Infrastructure;
 public static class InfrastructureExtensions
 {
     public const string DatabaseResourceName = "ragdb";
+    public const string DataProtectionApplicationName = "Ume.Rag";
 
     /// <summary>
     /// Secret files (<c>Security:SecretsDirectory</c>, one file per key) as configuration, as in the gateway.
@@ -115,5 +118,31 @@ public static class InfrastructureExtensions
             })
             .RemoveStandardResilienceHandler()
             .AddHttpMessageHandler<ResidencyCeilingHandler>();
+    }
+
+    /// <summary>
+    /// ASP.NET Data Protection with the key ring in <c>config."DataProtectionKeys"</c> (data-model §2.1, as the gateway's
+    /// <c>AddGatewaySecurity</c>): admin sessions and revealable key secrets. Production protects the key ring at rest with a
+    /// certificate (<c>DataProtection:CertificatePath</c>); without one it is stored unencrypted (local development only).
+    /// </summary>
+    public static IHostApplicationBuilder AddRagDataProtection(this IHostApplicationBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        var dataProtection = builder.Services.AddDataProtection()
+            .SetApplicationName(DataProtectionApplicationName)
+            .PersistKeysToDbContext<RagDbContext>();
+        var certPath = builder.Configuration["DataProtection:CertificatePath"];
+        if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(certPath))
+        {
+            throw new InvalidOperationException("Production requires DataProtection:CertificatePath to protect the shared key ring.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(certPath))
+        {
+            dataProtection.ProtectKeysWithCertificate(
+                X509CertificateLoader.LoadPkcs12FromFile(certPath, builder.Configuration["DataProtection:CertificatePassword"]));
+        }
+
+        return builder;
     }
 }

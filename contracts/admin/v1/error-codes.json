@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "codes": [
+    {
+      "code": "invalid_value",
+      "status": 400,
+      "message": "The value is invalid."
+    },
+    {
+      "code": "platform_rule",
+      "status": 400,
+      "message": "The change breaks a platform rule ({constraint})."
+    },
+    {
+      "code": "not_found",
+      "status": 404,
+      "message": "It does not exist, or you do not have access to it."
+    },
+    {
+      "code": "concurrent_change",
+      "status": 409,
+      "message": "Someone else changed this while you were working. Reload and compare."
+    },
+    {
+      "code": "already_exists",
+      "status": 409,
+      "message": "Something with the same name or key already exists."
+    },
+    {
+      "code": "in_use",
+      "status": 409,
+      "message": "The change conflicts with something that refers to it."
+    },
+    {
+      "code": "config_busy",
+      "status": 503,
+      "message": "Another change is being saved. Try again in a moment."
+    },
+    {
+      "code": "sync_off",
+      "status": 409,
+      "message": "The sync with the AI gateway is not configured."
+    },
+    {
+      "code": "sync_failed",
+      "status": 502,
+      "message": "The sync with the AI gateway failed ({error}). The last synced data is kept."
+    }
+  ]
+}

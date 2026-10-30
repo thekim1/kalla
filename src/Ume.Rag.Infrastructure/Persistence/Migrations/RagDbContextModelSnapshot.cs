@@ -147,6 +147,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.HasIndex("KeyHash")
                         .IsUnique();
 
+                    b.HasIndex("TeamId");
+
                     b.ToTable("Keys", "config", t =>
                         {
                             t.HasCheckConstraint("CK_Keys_Kind", "\"Kind\" IN ('sk', 'pk')");
@@ -393,6 +395,39 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Department", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CostCenterCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.PrimitiveCollection<string[]>("MemberGroups")
+                        .IsRequired()
+                        .HasColumnType("varchar(256)[]");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CostCenterCode")
+                        .IsUnique();
+
+                    b.ToTable("Departments", "config");
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Job", b =>
                 {
                     b.Property<Guid>("Id")
@@ -590,6 +625,39 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Team", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("DepartmentId");
+
+                    b.ToTable("Teams", "config");
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.WorkerInstance", b =>
                 {
                     b.Property<Guid>("InstanceId")
@@ -623,6 +691,11 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Ume.Rag.Domain.Entities.Team", null)
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Client");
                 });
 
@@ -635,9 +708,25 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Team", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.Department", "Department")
+                        .WithMany("Teams")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Department");
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Client", b =>
                 {
                     b.Navigation("Keys");
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Department", b =>
+                {
+                    b.Navigation("Teams");
                 });
 #pragma warning restore 612, 618
         }

@@ -47,10 +47,10 @@ Refs: [repo-and-deployment §8](../platform/repo-and-deployment.md)
 Refs: [repo-and-deployment §6, §7.4](../platform/repo-and-deployment.md), [performance-pass §3.1](../performance-pass.md), [platform/plan.md §8a](../platform/plan.md)
 - [x] `deploy/compose.prod.yaml`, `compose.ingestion.yaml`: networks, zones, limits, one slot, `DOTNET_GCHeapHardLimitPercent=0x4B` (#31)
 - [x] `deploy/compose.openwebui.yaml` (optional pilot stack incl. `WEBUI_BANNERS`; to-verify #46, #134, #172) (#31)
-- [ ] `init-deployment.sh`, `deploy/host/` (`rag-ingestion.slice`, firewall script, `rag-backup.timer`)
-- [ ] `backup-postgres.sh`, `restore-pitr.sh`, `backup-uploads.sh`, `escrow-keys.sh` (blob keys only in P0/P1)
+- [x] `init-deployment.sh`, `deploy/host/` (`rag-ingestion.slice`, firewall script, `rag-backup.timer`) (#40)
+- [x] `backup-postgres.sh`, `restore-pitr.sh`, `backup-uploads.sh`, `escrow-keys.sh` (blob keys only in P0/P1) (#40)
 - [x] **Done:** `docker compose config` passes in CI (#31)
-- [ ] Restore drill run locally
+- [x] Restore drill run locally (#40)
 - [ ] Restore drill on the test host (after H6), documented with achieved RPO/RTO; escrowed keys read back
 - [ ] to-verify #90, #124, #129 recorded
 
@@ -83,10 +83,10 @@ Refs: [weakness-review §5](../weakness-review.md), [performance-pass §3.9](../
 
 ## 10. Docs (#19)
 Refs: [platform/plan.md §10](../platform/plan.md), [repo-and-deployment §6.2, §7.4](../platform/repo-and-deployment.md)
-- [ ] `docs/local-development.md`
-- [ ] `docs/production-setup.md` (sizing from §6.2)
+- [x] `docs/local-development.md` (#42)
+- [x] `docs/production-setup.md` (sizing from §6.2) (#42)
 - [ ] `docs/runbook.md` (restore, escrow, public-records export section per register G1)
-- [ ] `docs/upgrade-guide.md`
+- [x] `docs/upgrade-guide.md` (#42)
 
 ## 11. Release (#15, integration sync point only)
 Refs: [repo-and-deployment §7, §8](../platform/repo-and-deployment.md)

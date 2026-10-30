@@ -189,19 +189,38 @@ assistant test-run cost.
 Start with `plans/p0/prompts/main-session.md` and this section. First check GitHub (open PRs, issues, comments since
 2026-10-30 20:30 local time, CET).
 
-**Open stream A PRs at the end of session 7.** All are reviewed, and the main session re-ran each one's proofs. Ask the
-user to merge them in this order, merging `origin/main` into each before its turn (they all conflict in
-`results-a.md`/`progress-a.md`):
+**Stream A at the end of session 7:** #43, #36, #37, #40 and #42 are merged (`05973c1`, `a9590dd`, `46a1c54`,
+`e9ebdb3`, `b8ad795`); H8 is open as #48. Open:
 
-| PR | Item | What | CI | After merge |
-|---|---|---|---|---|
-| #43 | shared | `.gitignore`: `deploy/upload-backup/`, `deploy/openwebui-data/` | running | – |
-| #36 | 8 (#17) | Entra package 1 Bicep, `entra.yml` | **merged** `a9590dd` | **H7 deferred to P2**: the pilot signs in with Keycloak (user, 2026-10-30) |
-| #37 | 9 (#22) | `scripts/capacity/capacity.py` (stdlib), tried on FakeGateway | green `05d4a86` | open **H8** |
-| #40 | 5 (#14, 2/2) | `deploy/host/`, backup/restore/escrow scripts, local PITR drill (RPO ≤ 43 s, RTO 23 s) | green `9e9998c`, then `d6ea118` (init step order) pushed: re-check | – |
-| #42 | 10 (#19) | docs: local development, production setup, runbook, upgrade guide | running | runbook box stays open (G1 public-records export) |
+| PR / branch | What | State |
+|---|---|---|
+| #49 (`../rag-a12`) | `verify.yml` admin-ui job + `scripts/admin-ui-size-budget.mjs` (fixes #44) | green, **merge approved**, blocked by the token's missing `workflow` scope (see below) |
+| #50 (`../rag-a13`, stacked on #49) | Parser CI speed-up (A + B): own `parser.yml` with a narrow trigger, pytest inside the image build (`RUN --network=none`), jobs `parser`, `parser-image`, `contract` | green, measured ≈ 4.2 min (was ≈ 7); **merge approved** after #49 |
 
-**Pilot sign-in = Keycloak, not Entra** (user, 2026-10-30; Decisions table "P1 pilot sign-in"; identity plan §1).
+**Later in session 7 (all on `main`, see the Decisions table rows of 2026-10-30):**
+- **P1a is planned:** `plans/p1/` (22-item checklist in its README, stream briefs, progress files, prompts). P1 code
+  starts only after `v0.1.0`. Start the streams with `plans/p1/prompts/` when P0 integration is done.
+- **M2 triggered:** everything is EU-hosted through the gateway until on-prem hardware exists. Testing uses the
+  cheapest host; P1a is shown locally; the test-host deploy, drill and #90 move to P1b; G1 is in P1b with the
+  EU-processing risk accepted.
+- **Gateway work** runs in a separate session in `~/git/llmgateway`, started from
+  `plans/gateway-changes/prompt-gateway-session.md` (release 1 = feature B; shared Keycloak project; production
+  prepared, deployed late). It reports back with an issue labelled `main`.
+- **Done for the user's items:** U1 (robots.txt checked, about page drafted in
+  `plans/ingestion-worker/u1-crawler-about-page.md`); P2 (licence review, no blockers,
+  `plans/licence-review-p2.md`, obligations in issues #51 and #52); W1 (Team Turkos built `chat.umea.se`).
+- **Parser CI:** #50 (stacked on #49) measured ≈ 4.2 min for a parser PR (was ≈ 7), 5 s otherwise.
+- **First thing in session 8:** the user approved merging #49 then #50, but `gh pr merge 49` was refused:
+  *"refusing to allow an OAuth App to create or update workflow `.github/workflows/verify.yml` without `workflow`
+  scope"*. Ask the user to run `! gh auth refresh -h github.com -s workflow` (or merge in the browser). Then:
+  merge #49 (green, merges cleanly); `gh pr edit 50 --base main`; in `../rag-a13` merge `origin/main` and push;
+  merge #50 once `Verify` and `Parser` are green; close #44 if it did not auto-close; remove worktrees `../rag-a12`,
+  `../rag-a13`.
+- **Still needed from the user:** start the gateway session; the platform's own licence (EUPL-1.2 suggested, only
+  before distribution); names and dates for A1, N1, U1 (page URL/owner from the web editors) and the gold-set owner
+  in the pilot department; a browser check of the admin UI once stream B's stack (#39, #45, #46 left) is merged.
+
+ (user, 2026-10-30; Decisions table "P1 pilot sign-in"; identity plan §1).
 The Keycloak is **shared with the gateway**: its own Compose project on the gateway's production host, defined in the
 gateway repo (the user's; not stream work here), database `keycloak` in the gateway's Postgres, realm `ume`. Local
 accounts for the pilot (admins with OTP), LDAP federation to AD later. Follow-ups for the P1 briefs: RAG's realm
@@ -261,7 +280,7 @@ a fresh build), and they run only when parser paths change. A single combined jo
 (PR #19, closed). The hosted runner needs the "Free runner disk" step for that image. Testcontainers needs locally
 built images to carry a registry part with a dot (`ume-rag.local/...`), or the Docker Hub mirror prefix rewrites them.
 
-**Worktrees:** `../rag-a7` (#36), `../rag-a8` (#37), `../rag-a9` (#40), `../rag-a10` (#42), `../rag-a11` (#43);
+**Worktrees:** `../rag-a12` (#49), `../rag-a13` (#50);
 remove each with `git worktree remove` once its PR has
 merged. The Aspire CLI is at `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on
 PATH; `start`, `describe`, `otel traces <resource>`, `stop`). On WSL its first run asks to trust the dev certificate in

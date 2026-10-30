@@ -1,0 +1,10 @@
+[Unit]
+Description=Ume Rag: upload copy every 10 minutes (an upload reaches the backup target within 15)
+Documentation=file:@DEPLOY_DIR@/host/README.md
+
+[Timer]
+OnCalendar=*:0/10
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

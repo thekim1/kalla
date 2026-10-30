@@ -22,7 +22,8 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
             """)];
         all.ShouldContain("content.RunItems");
 
-        string[] configRead = ["config.ConfigVersion", "config.ConfigOutbox", "config.DataProtectionKeys"];
+        string[] configRead = ["config.ConfigVersion", "config.ConfigOutbox", "config.DataProtectionKeys", "config.Departments", "config.Teams"];
+        string[] organisation = ["config.Departments", "config.Teams"];
         string[] workerTables = ["content.Jobs", "content.WorkerInstances", "content.RunItems"];
 
         string[] keys = ["config.Clients", "config.Keys"];
@@ -33,9 +34,9 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         (await PrivilegesAsync(Api, "DELETE")).ShouldBeEmpty();
 
         (await PrivilegesAsync(Admin, "SELECT")).ShouldBe(all, ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "audit.AuditLog"], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, "config.AdminSessions", "config.ConfigVersion"], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, "config.AdminSessions"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "audit.AuditLog"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, "config.AdminSessions", "config.ConfigVersion"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, "config.AdminSessions"], ignoreOrder: true);
 
         (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. workerTables], ignoreOrder: true);
         (await PrivilegesAsync(Worker, "INSERT")).ShouldBe([.. workerTables, "audit.AuditLog"], ignoreOrder: true);

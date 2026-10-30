@@ -299,3 +299,6 @@ static async Task Sse(HttpContext ctx, object payload)
     await ctx.Response.WriteAsync("data: " + JsonSerializer.Serialize(payload) + "\n\n");
     await ctx.Response.Body.FlushAsync();
 }
+
+/// <summary>Entry point, public for <c>WebApplicationFactory</c> tests.</summary>
+public partial class Program;

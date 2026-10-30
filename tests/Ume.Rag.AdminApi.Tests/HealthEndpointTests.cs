@@ -1,10 +1,10 @@
 using System.Net;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Ume.Rag.AdminApi.Tests;
 
-/// <summary>Every service answers the probes and /version (P0 checklist #4).</summary>
-public sealed class HealthEndpointTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+/// <summary>Every service answers the probes and /version (P0 checklist #4); the admin API now needs its database.</summary>
+[Collection(AdminDatabaseGroup.Name)]
+public sealed class HealthEndpointTests(AdminDatabaseFixture database)
 {
     [Theory]
     [InlineData("/health/live")]
@@ -12,6 +12,7 @@ public sealed class HealthEndpointTests(WebApplicationFactory<Program> factory) 
     [InlineData("/version")]
     public async Task Endpoint_answers_ok(string path)
     {
+        await using var factory = database.Factory();
         using var client = factory.CreateClient();
 
         using var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
