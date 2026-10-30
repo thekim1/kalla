@@ -106,19 +106,54 @@ public sealed class SchemaTests(RagDatabaseFixture database)
                 """);
         }
 
-        await using (var connection = new NpgsqlConnection(database.Connection(Worker)))
-        {
-            await connection.OpenAsync(Ct);
-            await using var command = new NpgsqlCommand("SELECT created, dropped FROM content.rag_partition_maintain()", connection);
-            await using var reader = await command.ExecuteReaderAsync(Ct);
-            (await reader.ReadAsync(Ct)).ShouldBeTrue();
-            reader.GetInt32(0).ShouldBe(0);
-            reader.GetInt32(1).ShouldBe(1);
-        }
+        (await MaintainAsync()).ShouldBe((0, 1, 0L));
 
         (await Sql.ScalarAsync<string>(migrator, $"SELECT to_regclass('content.\"{PartitionName(expired)}\"')::text")).ShouldBeNull();
         (await Sql.ScalarAsync<string>(migrator, $"SELECT to_regclass('content.\"{PartitionName(kept)}\"')::text")).ShouldNotBeNull();
         await Sql.ExecuteAsync(migrator, $"""DROP TABLE content."{PartitionName(kept)}" """);
+    }
+
+    [Fact]
+    public async Task Maintenance_moves_rows_that_landed_in_the_default_partition_into_their_new_day()
+    {
+        // Issue #10: a row in DEFAULT for a day without a partition must not block creating that day's partition.
+        var migrator = database.Connection(Migrator);
+        var day = DateTime.UtcNow.Date.AddDays(7);
+        await Sql.ExecuteAsync(migrator, $"""DROP TABLE content."{PartitionName(day)}" """);
+        var runId = Guid.NewGuid();
+        await Sql.ExecuteAsync(database.Connection(Worker), $"""
+            INSERT INTO content."RunItems" ("CreatedAt", "RunId", "Classification", "Identity", "Outcome")
+            VALUES ('{day:yyyy-MM-dd}T12:00:00Z', '{runId}', 'public', 'https://www.umea.se/', 'added')
+            """);
+        (await PartitionOfAsync()).ShouldBe("content.\"RunItems_default\"");
+        var id = await Sql.ScalarAsync<long>(database.Connection(Worker), $"""SELECT "Id" FROM content."RunItems" WHERE "RunId" = '{runId}'""");
+
+        (await MaintainAsync()).ShouldBe((1, 0, 0L));
+        (await PartitionOfAsync()).ShouldBe($"content.\"{PartitionName(day)}\"");
+        (await Sql.ScalarAsync<long>(database.Connection(Worker), $"""SELECT "Id" FROM content."RunItems" WHERE "RunId" = '{runId}'""")).ShouldBe(id);
+        (await MaintainAsync()).ShouldBe((0, 0, 0L));
+
+        // Later rows of that day go to the attached partition, and its indexes came with it.
+        await Sql.ExecuteAsync(database.Connection(Worker), $"""
+            INSERT INTO content."RunItems" ("CreatedAt", "RunId", "Classification", "Identity", "Outcome")
+            VALUES ('{day:yyyy-MM-dd}T13:00:00Z', '{runId}', 'public', 'https://www.umea.se/a', 'added')
+            """);
+        (await Sql.ScalarAsync<long>(database.Connection(null), $"""
+            SELECT count(*) FROM pg_indexes WHERE schemaname = 'content' AND tablename = '{PartitionName(day)}'
+            """)).ShouldBe(2);
+
+        Task<string> PartitionOfAsync() => Sql.ScalarAsync<string>(database.Connection(Worker),
+            $"""SELECT tableoid::regclass::text FROM content."RunItems" WHERE "RunId" = '{runId}' ORDER BY "Id" LIMIT 1""");
+    }
+
+    private async Task<(int Created, int Dropped, long DefaultRows)> MaintainAsync()
+    {
+        await using var connection = new NpgsqlConnection(database.Connection(Worker));
+        await connection.OpenAsync(Ct);
+        await using var command = new NpgsqlCommand("SELECT created, dropped, default_rows FROM content.rag_partition_maintain()", connection);
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        (await reader.ReadAsync(Ct)).ShouldBeTrue();
+        return (reader.GetInt32(0), reader.GetInt32(1), reader.GetInt64(2));
     }
 
     [Fact]

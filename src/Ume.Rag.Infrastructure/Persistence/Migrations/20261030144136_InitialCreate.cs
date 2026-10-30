@@ -272,15 +272,19 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                 CREATE INDEX "IX_RunItems_RunId" ON content."RunItems" ("RunId");
                 CREATE TABLE content."RunItems_default" PARTITION OF content."RunItems" DEFAULT;
 
-                CREATE FUNCTION content.rag_partition_maintain() RETURNS TABLE (created integer, dropped integer)
+                CREATE FUNCTION content.rag_partition_maintain()
+                RETURNS TABLE (created integer, dropped integer, default_rows bigint)
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
                 DECLARE
                     retention_days constant integer := 90;
                     today date := (now() AT TIME ZONE 'UTC')::date;
                     day date;
                     part text;
+                    lower_bound timestamptz;
+                    upper_bound timestamptz;
                     n_created integer := 0;
                     n_dropped integer := 0;
+                    n_default bigint;
                 BEGIN
                     -- One maintenance run at a time (transaction lock: pooler-safe).
                     PERFORM pg_advisory_xact_lock(hashtext('content.rag_partition_maintain'));
@@ -288,8 +292,15 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         day := today + i;
                         part := 'RunItems_' || to_char(day, 'YYYYMMDD');
                         IF to_regclass(format('content.%I', part)) IS NULL THEN
-                            EXECUTE format('CREATE TABLE content.%I PARTITION OF content."RunItems" FOR VALUES FROM (%L) TO (%L)',
-                                part, day::timestamp AT TIME ZONE 'UTC', (day + 1)::timestamp AT TIME ZONE 'UTC');
+                            lower_bound := day::timestamp AT TIME ZONE 'UTC';
+                            upper_bound := (day + 1)::timestamp AT TIME ZONE 'UTC';
+                            -- Rows of this day already in DEFAULT (maintenance lagged) would make CREATE ... PARTITION OF
+                            -- fail on the default partition's constraint: move them into the new table, then attach it.
+                            EXECUTE format('CREATE TABLE content.%I (LIKE content."RunItems" INCLUDING DEFAULTS INCLUDING CONSTRAINTS)', part);
+                            EXECUTE format('WITH moved AS (DELETE FROM content."RunItems_default" WHERE "CreatedAt" >= %L AND "CreatedAt" < %L RETURNING *) '
+                                || 'INSERT INTO content.%I SELECT * FROM moved', lower_bound, upper_bound, part);
+                            EXECUTE format('ALTER TABLE content."RunItems" ATTACH PARTITION content.%I FOR VALUES FROM (%L) TO (%L)',
+                                part, lower_bound, upper_bound);
                             n_created := n_created + 1;
                         END IF;
                     END LOOP;
@@ -302,7 +313,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                             n_dropped := n_dropped + 1;
                         END IF;
                     END LOOP;
-                    RETURN QUERY SELECT n_created, n_dropped;
+                    -- Rows left in DEFAULT belong to days outside today + 7: a lagging maintenance shows up here.
+                    SELECT count(*) INTO n_default FROM content."RunItems_default";
+                    RETURN QUERY SELECT n_created, n_dropped, n_default;
                 END $$;
                 REVOKE ALL ON FUNCTION content.rag_partition_maintain() FROM PUBLIC;
                 """);
