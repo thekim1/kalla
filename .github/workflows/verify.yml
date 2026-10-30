@@ -1,8 +1,8 @@
 name: Verify
 # A pull request is verified on the merge with main (pull_request); a push only verifies main, so a branch with a pull
 # request is not built twice. A branch without one can be verified from the Actions tab (workflow_dispatch).
-# Stage 0: ownership and backend. Stream A adds the ui, deploy-checks and images jobs (P0 checklist #3,
-# plans/platform/repo-and-deployment.md §8.2).
+# Jobs: ownership and backend (Stage 0), images (P0 checklist #5). Stream A adds the ui and deploy-checks jobs (P0
+# checklist #3, plans/platform/repo-and-deployment.md §8.2).
 on:
   push:
     branches: [main]
@@ -61,14 +61,36 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.401
+      - name: Build the Postgres image
+        # The integration tests run against ume-rag/postgres as built from this commit, not only the stock base (hand-off
+        # H3). The name has a registry part with a dot, so Testcontainers does not prefix it with the Docker Hub mirror
+        # below (it would then pull mirror.gcr.io/ume-rag/postgres) and uses the local image.
+        run: docker build -f images/postgres/Dockerfile -t ume-rag.local/postgres:ci --build-arg REVISION=${{ github.sha }} .
       - name: Build and test backend
         env:
           # Testcontainers pulls Postgres and its Ryuk image from Docker Hub, whose anonymous pull limit is shared by every
           # job on the runner's address; Google's mirror of Docker Hub is not subject to it (as the gateway).
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
+          UME_RAG_TEST_POSTGRES_IMAGE: ume-rag.local/postgres:ci
         run: |
           dotnet build UmeRag.slnx -c Release --nologo
           # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here.
           dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
           dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > /tmp/ume-package-audit.json
           python -c "import json; d=json.load(open('/tmp/ume-package-audit.json')); p=[p for x in d.get('projects',[]) for f in x.get('frameworks',[]) for k in ('topLevelPackages','transitivePackages') for p in f.get(k,[]) if p.get('vulnerabilities')]; assert not p, 'Vulnerable .NET dependencies detected'"
+
+  images:
+    # ume-rag/postgres: the image test of repo-and-deployment §5.2 (pgvector version, HNSW build, pg_stat_statements,
+    # wal_compression=lz4, TLS, archive-push, backup and restore from inside the image, read-only root, uid 999). The
+    # image is pushed to ghcr only by release.yml (§8.1).
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ume-rag/postgres
+        run: |
+          docker build -f images/postgres/Dockerfile -t ume-rag/postgres:ci --build-arg REVISION=${{ github.sha }} .
+          docker image ls ume-rag/postgres:ci
+      - name: Image test
+        run: bash deploy/postgres/test.sh ume-rag/postgres:ci
