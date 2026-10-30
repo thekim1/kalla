@@ -1,6 +1,6 @@
 # Handover
 
-Status of the Ume.Rag design work, for the next session. Updated 2026-10-30 (session 3, steps 7–8).
+Status of the Ume.Rag design work, for the next session. Updated 2026-10-30 (session 3, steps 7–9).
 
 ## What this is
 
@@ -28,6 +28,7 @@ and a "kitchen sink" monolith.
 | `plans/ingestion-worker/design-processing.md` | **Detail step 6c** (done): auto-parse rules and ranges, stitching, clean, split, chunk (tokenizer), metadata, quality check, PII detection + parser `/v1/ner`, embed, noise re-key, evaluation sets, gate, go-live floor |
 | `plans/knowledge-api/design.md` | **Detail step 7** (done): `Ume.Rag.Retrieval` engine shared with the evaluator and test panel, `IRetriever` for the chat role, `/v1/retrieve` (problem details), keyword statement parallel to the query embedding then vector then one hydrate batch, RRF in .NET, exact scan ≤ 10,000 chunks, degrade to keyword-only, per-collection coverage, dedup/variants/cap 3, section expansion from neighbouring chunks (`OverlapChars`), citations with 7-day signed download grants, no result cache, OpenSearch seam, MCP outline. pgvector 0.8.7, `Pgvector` 0.3.2 and MCP SDK 2.3.0 checked against package source |
 | `plans/chat-api/design.md` | **Detail step 8** (done): OpenAI-compatible contract, client-sent history authoritative (0 SQL on the hot path), Open WebUI with one connection and our `owui-tasks` task model, condense on follow-ups (on-prem), token budget, untrusted-source prompt frame, residency + echo checks before the first byte (follow-ups with history at max(level, client ceiling)), `[n]` renumbered by first citation, `source` events vs `url_citation`, output filter, fixed not-found/degraded texts, signed conversation ids, background writer with 7-day key epochs, Open WebUI feedback import and pruning job, C1 attachments (P2, chat-scoped). Open WebUI claims checked against v0.12.5 source |
+| `plans/tools/design.md` | **Detail step 9** (done, all P2): tool hub `rag-tools` as the only credential holder (mTLS + service key), skills in `config` per the Agent Skills spec (no scripts, SemVer + served pointer, MAJOR auto-pin across departments, gate = retrieval + routing), tool servers with clearance + result level (agent run level fixed at start), deny-by-default policy with one list/call function, pinned definitions + 15-min drift + two-person re-approval, agent loop limits and cost estimate, stateless `/mcp` with per-skill endpoints, .NET template + OpenAPI code generator, mock `ume-mcp-avgifter`, events 5012–5015. MCP SDK 2.3.0 (protocol 2026-07-28, no sessions) and Agent Skills spec checked |
 | `plans/postponed-decisions.md` | **Register of postponed decisions** (K1 key service, T1 sensitive tier, A1 archive law, R1 runner, ...), with stopgap, deadline, owner. Review at each phase start; add new postponements here |
 
 Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{dify,ragflow,onyx,open-webui,kernel-memory,bifrost}`.
@@ -65,8 +66,8 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | 6c. Processing | `plans/ingestion-worker/design-processing.md` | done, reviewed | `e804c72` |
 | 7. Knowledge API | `plans/knowledge-api/design.md` | done, reviewed | `2fe838d` |
 | 8. Chat API (C1 decided) | `plans/chat-api/design.md` | done, reviewed | `00f2242` |
-| **9. Tools** (skills, tool hub, MCP server, template) | `plans/tools/` | **next** | – |
-| 10. Admin API + UI | `plans/admin/` | todo | – |
+| 9. Tools (skills, tool hub, MCP server, template) | `plans/tools/design.md` | done, reviewed | `e2b8dee` |
+| **10. Admin API + UI** | `plans/admin/` | **next** | – |
 
 After step 10: a consistency pass across all detail documents, then P0 implementation (P0 checklist in
 `repo-and-deployment.md` §11).
@@ -93,19 +94,20 @@ After step 10: a consistency pass across all detail documents, then P0 implement
 - R1 self-hosted runner (IT security), A1 archive law (owner to be named), N1 product name: see the register.
 - Nothing else is waiting on the user right now.
 
-## Next step in detail: step 9, tools
+## Next step in detail: step 10, admin API + UI
 
-Brief a subagent to write `plans/tools/design.md` (all P2 scope, designed now). Fixed inputs: tools plan (skills,
-tool hub, platform MCP server, hosted municipal MCP servers, tool policy and lethal-trifecta rule), chat design §2.2
-(`IAnswerStrategy`, `AnswerEvent.ToolCall`, agent loop limits), §7.4, §9.4 (injection and output filter), knowledge
-design §14 (`search_knowledge`, `list_collections`, `document://`, MCP grants), identity design §4.3 step 12 (tool
-policy), §7–§9 (OAuth, MCP protected-resource metadata, OBO P3), data-model (`Skills`, `SkillVersions`,
-`SkillVersionLinks`, `ToolServers`, `ToolDefinitions`, `ToolApprovals`, `chat."ToolCalls"`), postponed M1 (MCP and
-skills unknowns), O2 (real tools), E1 (OBO via Open WebUI). Cover: skill format (Agent Skills) and versioning,
-`load_skill`, tool hub as MCP client (transport, auth, credentials vault, timeouts, result size, schema pinning and
-drift), tool policy intersection, two-approval registration, tool-call audit, agent loop (max steps/time/cost,
-parallel calls, errors), platform MCP server (tools, auth, ceilings, per-skill endpoints), MCP server template and the
-first mock municipal server, hosting zones, observability, tests incl. injection suites. Check the MCP C# SDK (2.3.0
-checked in step 7) and the Agent Skills format against real sources. Before briefing, ask the user anything only
-they can decide (e.g. agent step/cost limits, who approves tools, which first real tool to target, whether skills
-can be authored by department editors).
+Brief a subagent to write `plans/admin/design.md`. Fixed inputs: admin plan (as updated by steps 7–9: collection
+RetrievalSettings form and coverage proposal, assistant form fields, P1 Feedback page with one-click comment reason,
+Clients page, Skills page, Tool servers page with approvals/grants/drift, risk acceptance, `GatewayModels` sync, test
+panel incl. `building` collections and raw vs filtered answer); identity design §1 (BFF copied from the gateway,
+roles incl. `rag-skill-editor`, `/bff/user`), §4.8 (admin as internal caller), §12 (Bicep); data-model §2.1 (`config`
+tables), §5 (outbox, versioning, fail closed), audit tables; engine design (pipeline canvas: P1 forms + templates,
+P2 visual canvas with Vue Flow, preview, publish = plan → gate → confirm, rollback); processing design §14 (gate
+results, overrides); connectors (sources, deletion confirmations, crawl settings); chat design §13–§14 (conversation
+review with reason, feedback import health); gateway admin UI (`~/git/llmgateway/src/admin-ui`, copy its stack,
+layout, i18n, auth flow, API client patterns). Cover: admin API surface (resources, validation incl. the cross-rules
+from steps 7–9, concurrency tokens, outbox writes), UI information architecture per role, pages P1 vs P2, pipeline
+forms and canvas, evaluation and gate pages, conversation review and access audit, organisation sync, Swedish UI
+texts, accessibility (WCAG 2.1 AA, municipal requirement), tests (Playwright), performance. Before briefing, ask the
+user anything only they can decide (e.g. UI language(s), which pages the pilot department sees, whether department
+admins may override gates, canvas in P2 vs later). After step 10: a consistency pass across all detail documents.
