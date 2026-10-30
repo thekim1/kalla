@@ -1,15 +1,15 @@
 # Chat API: plan
 
 Data-plane service that turns assistants into OpenAI-compatible "models": a client sends a chat completion with
-`model = <assistant>`, and the service retrieves knowledge (and, for agent assistants, calls tools through the tool
-hub), builds the prompt, streams the answer from the gateway with citations, and stores the conversation for 90 days.
+`model = <assistant>`, and the service retrieves knowledge (and, for assistants with tool-bearing skills, calls tools
+through the tool hub), builds the prompt, streams the answer from the gateway with citations, and stores the conversation for 90 days.
 Review items applied: R1, R4, R5, R7, plus the smaller conversation-id finding. Detailed in [`design.md`](design.md)
 (detail step 8).
 
 ## 1. Scope
 
-**Does:** assistant resolution and access, the fixed query-step sequence for RAG assistants, the tool loop for agent
-assistants (P2), prompt building, streaming through the gateway, residency enforcement, citations, "not found"
+**Does:** assistant resolution (the published version) and access, the fixed query-step sequence, the tool loop for
+assistants with tool-bearing skills (P2), prompt building, streaming through the gateway, residency enforcement, citations, "not found"
 answers, conversation history with retention, feedback.
 
 **Does not:** a chat UI (clients: Open WebUI, widget, Teams, apps), retrieval internals (knowledge API), tool
@@ -32,18 +32,23 @@ Every request resolves to a **client** from the client registry, which sets a cl
 
 ## 3. Assistant modes
 
-- **RAG assistant** (P1): fixed query steps, one model call. Fast and predictable; the default.
-- **Agent assistant** (P2): built from skills; the model may call `search_knowledge`, `load_skill` and the read-only
-  tools of its skills in a bounded loop: per user message 8 tool calls, 60 s until the final answer starts and $0.05
-  model cost by default (assistants may lower; platform admins raise to ≤ 20 / 120 s / $0.25; tools design §6.5,
+One assistant type (simplification pass §15): instructions, the collections it links directly (its only knowledge)
+and, from P2, skills (know-how and tools, never collections). Chat serves the assistant's **published version**; edits
+are drafts tested in the admin test panel until published (data-model §2.1). The mode is derived, not chosen:
+
+- **Fixed RAG path** (P1; any assistant without tool-bearing skills): fixed query steps, one model call. Fast and
+  predictable.
+- **Agent loop** (P2; an assistant that links a skill with tools, shown as "Använder verktyg"): the model may call
+  `search_knowledge`, `load_skill` and the read-only tools of its skills in a bounded loop: per user message 8 tool
+  calls, 60 s until the final answer starts and $0.05 model cost by default (assistants may lower; platform admins raise to ≤ 20 / 120 s / $0.25; tools design §6.5,
   answered 1). No condense in agent mode: the model writes its own `search_knowledge` queries. Tool calls go to the
   tool hub (`../tools/plan.md`, `../tools/design.md` §6).
 
 ## 4. Request path (RAG assistant)
 
-1. Authenticate; resolve client and assistant from in-memory caches **at the current config version**; if the
-   version has not been confirmed for longer than the grace window (`Config:MaxUnconfirmedSeconds`, default 90 s),
-   refuse (fail closed for keys, access and classification, R7).
+1. Authenticate; resolve client and assistant (its published version) from in-memory caches **at the current config
+   version**; if the version has not been confirmed for longer than the grace window (`Config:MaxUnconfirmedSeconds`,
+   default 90 s), refuse (fail closed for keys, access and classification, R7).
 2. Check access (`IAccessPolicy`: user, groups, department, client) and classification: the assistant's level must not
    exceed the client's ceiling (R5).
 3. **Query steps** (fixed order, configurable per assistant). A short conversational message (no content words:
@@ -53,8 +58,8 @@ Every request resolves to a **client** from the client registry, which sets a cl
       `Settings.Chat.CondenseModel` (**on-prem**) with a hard 600 ms timeout, falling back to the raw question; used
       for retrieval only (design §5). This is the only query rewriting: the Knowledge API uses the query as given
       (knowledge design §5.1).
-   2. *Retrieve*: Knowledge API (in-process `IRetriever`) with `AssistantId` (it resolves the assistant's
-      collections), `Expand = Section`, the assistant's filters and top-k (default 10, max 50; knowledge design §2.2).
+   2. *Retrieve*: Knowledge API (in-process `IRetriever`) with `AssistantId` (it resolves the published version's
+      direct collections), `Expand = Section`, the assistant's filters and top-k (default 10, max 50; knowledge design §2.2).
    3. *Rerank*: `IReranker` seam in P1 (off); gateway-served rerank per assistant in P2 when the evaluation shows a
       gain (knowledge design §6.7).
    4. *Coverage check*: coverage is `Low` only when the vector **and** the keyword side are both weak (knowledge
@@ -141,7 +146,7 @@ Full settings: design §4.3 (Open WebUI v0.12.5).
 |---|---|
 | P1 | `/v1/models` filtered by caller and client, streaming RAG completions, citations (both formats), not-found answers, residency check, issued conversation ids, history + retention, Open WebUI pilot with its data-handling profile; `/v1/feedback`, **Open WebUI feedback import** and the **Feedback page** in the admin UI (design §14; admin design §8) |
 | P1 (late) | Nightly answer-level evaluation in `rag-admin`: an on-prem judge over the evaluation sets through `Ume.Rag.Answering` (faithfulness, citation precision); `uncited_answer` rate per assistant (design §18.8) |
-| P2 | Agent assistants with skills and read-only tools via the tool hub, public widget (`ume-rag-pk-` keys, origins, rate limits), chat attachments (design §15.2), gateway-served rerank per assistant, feedback review beyond P1, condense tuning with the advisory evaluation |
+| P2 | Skills with read-only tools via the tool hub (an assistant linking one runs the agent loop), public widget (`ume-rag-pk-` keys, origins, rate limits), chat attachments (design §15.2), gateway-served rerank per assistant, feedback review beyond P1, condense tuning with the advisory evaluation |
 | P3 | Teams client, user-delegated tools (OBO), write tools with confirmation |
 
 ## 8. Open questions
@@ -176,7 +181,7 @@ Answered (user, 2026-10-30; details in [`design.md`](design.md) §21.1):
 
 ## 9. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8, §9:
+Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8, §9, §15:
 
 | Item | Where it went |
 |---|---|
@@ -190,3 +195,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8,
 | Rerank in P3 | seam P1, gateway rerank P2 (§4, §7) |
 | Nightly SQL pruning sidecar against Open WebUI's database | removed; feedback pruning via its HTTP API, chat retention open (§6) |
 | Strict fail-closed on an unconfirmed config version | grace window (§4) |
+| RAG and agent as two assistant kinds chosen by the editor; knowledge from skills' collections | one assistant type, mode derived from tool-bearing skills; direct collections only; the published version is served (§3) |

@@ -64,7 +64,7 @@ The chat role maps its routes only when `Rag:Roles` contains `chat` (repo-and-de
 // Ume.Rag.Domain
 public interface IAnswerStrategy
 {
-    AssistantMode Mode { get; }                                            // Rag (P1), Agent (P2)
+    AssistantMode Mode { get; }                                            // Rag, Agent (P2); derived, never stored
     IAsyncEnumerable<AnswerEvent> RunAsync(ChatContext context, CancellationToken ct);
 }
 
@@ -83,7 +83,12 @@ public sealed record ChatContext(
     Guid MessageId, ParsedRequest Request, Classification EffectiveLevel, Language Language, DateTimeOffset ReceivedAt);
 ```
 
-`ChatPipeline` (§4) selects the strategy by `Assistants.Mode`, feeds its events through `AnswerFilter` and
+`AssistantSnapshot` is the assistant's **published version** (data-model §2.1: the api reads only the view
+`config."PublishedAssistantVersions"`, so a draft never reaches chat; drafts run only in the admin test panel through
+the same `Ume.Rag.Answering` core), and each turn records it (`Messages.AssistantVersionId`). Its `Mode` is derived when
+the snapshot is built: `Agent` iff the published version links a skill whose served version has a tool not in that
+link's `excludedToolIds` (P2), else `Rag`; there is no mode field to edit (simplification pass §15).
+`ChatPipeline` (§4) selects the strategy by `AssistantSnapshot.Mode`, feeds its events through `AnswerFilter` and
 `CitationEmitter` (§9) into `ChatStreamWriter` (SSE or JSON per client kind) and hands the finished `ChatTurn` to the
 `ConversationWriter` (§12). The P2 agent strategy reuses everything except the middle: a bounded loop of gateway calls
 with `tools`, tool calls through the tool hub (`../tools/plan.md` §3), `search_knowledge` mapped to `IRetriever`, limits
@@ -104,16 +109,22 @@ All chat routes answer errors in the OpenAI shape (identity §4.4), `Cache-Contr
 ```json
 { "object": "list",
   "data": [ { "id": "bygglov", "object": "model", "created": 1764000000, "owned_by": "umea-kommun",
-              "name": "Bygglovsassistenten", "description": "Svarar på frågor om bygglov utifrån umea.se." } ] }
+              "name": "Bygglovsassistenten", "description": "Svarar på frågor om bygglov utifrån umea.se. Kontakt: …",
+              "info": { "meta": { "description": "Svarar på frågor om bygglov utifrån umea.se. Kontakt: …" } } } ] }
 ```
 
-- Assistants with `State = published` that pass `IAccessPolicy.Filter(who, …, ListModels)` (identity §4.3 steps
-  1–11, silently): client enabled, key scope, **level ≤ client ceiling**, `anonymous` ⇒ `public`, data handling (step 9),
+- Assistants with `State = active` and a published version that pass `IAccessPolicy.Filter(who, …, ListModels)`
+  (identity §4.3 steps 1–11, silently): client enabled, key scope, **level ≤ client ceiling**, `anonymous` ⇒ `public`, data handling (step 9),
   **audience** (client/department/group). Memoised 30 s per `(ConfigVersion, ClientId, KeyId, MembershipHash)`
   (identity §4.6).
 - `created` = the assistant's first publication; `name` is used by Open WebUI (`ow/routers/openai.py:756`,
-  `model.get('name', model_id)`); `description` is our extension (ignored by OpenAI clients). No level, team or
-  gateway model is revealed.
+  `model.get('name', model_id)`); `description` is our extension (ignored by OpenAI clients): `Assistants.Description`
+  followed by the contact owner ("Kontakt: " + `ContactName`, `ContactEmail`), since no client has an owner field
+  (`owned_by` is overwritten with `openai` by Open WebUI, `ow/routers/openai.py:757`). Open WebUI shows a model's
+  `info.meta.description` (`src/lib/utils/localizedContent.ts:165-168`), not a top-level `description`, and keeps the
+  upstream model object as is (`**model`, `ow/routers/openai.py:755`), so the same text is also sent as
+  `info.meta.description`; whether it survives Open WebUI's model merge is to verify (§22; fallback: the platform
+  team enters it in Open WebUI's model editor). No level, team, version or gateway model is revealed.
 - Open WebUI without a user JWT (it lists models outside user requests): the client-level list (identity §5.4).
 
 ### 3.2 `POST /v1/chat/completions`: request
@@ -132,7 +143,7 @@ whole chat), else 413.
 | `stream_options.include_usage` | honoured: one final usage chunk with the **answer call's** usage (condense not included) |
 | `max_tokens`, `max_completion_tokens` | min(value, assistant `MaxOutputTokens`); never raises it |
 | `n` | only 1, else 400 `unsupported_parameter` |
-| `tools`, `functions`, `tool_choice` | absent or empty array accepted; non-empty → 400 `tools_not_supported` (P1; P2 agent assistants define their own tools, a client's tools are still refused) |
+| `tools`, `functions`, `tool_choice` | absent or empty array accepted; non-empty → 400 `tools_not_supported` (P1; from P2 an assistant's tools come from its skills, a client's tools are still refused) |
 | `response_format` | absent or `{"type":"text"}`; JSON modes → 400 `unsupported_parameter` (citations need prose) |
 | `logprobs`, `top_logprobs`, `audio`, `modalities`, `prediction` | 400 `unsupported_parameter` |
 | `temperature`, `top_p`, `seed`, `stop`, `presence_penalty`, `frequency_penalty`, `user`, `metadata`, `store`, `parallel_tool_calls`, `reasoning_effort` | **ignored** (assistant settings decide; `user` is never stored or forwarded) |
@@ -437,7 +448,7 @@ Authorization: Bearer <rag-api delegating key of the ceiling>
 x-ume-on-behalf-of: <assistant OwnerTeamId>
 x-ume-max-residency: Eu                                  (effective level, §8.2: public External; internal Eu; sensitive OnPrem)
 x-ume-run-id: <message id, N format>                     (opaque, gateway §7.1)
-x-ume-step: answer | condense
+x-ume-step: answer | condense | assistant-test   (assistant-test: test runs in rag-admin, admin design §7.4)
 x-ume-session: <conversation id>                         (session affinity for on-prem prefix caches)
 traceparent: …
 
@@ -1023,12 +1034,20 @@ worker runs only retrieval evaluation and references neither `Ume.Rag.Answering`
 §14.8). From live traffic, the `uncited_answer` rate per assistant comes from `AssistantDailyTotals.UncitedAnswers`
 (§20); `rag.chat.citations{kind=uncited_answer}` stays the platform-wide counter.
 
+**Assistant tests** (P1, with assistant versions; simplification pass §15). Each assistant's test questions
+(`config."AssistantTestQuestions"`, ≤ 30: question, expected behaviour, optional expected source and phrase) run through
+the same core after every publish, on the new published version, and on demand against the draft from the test panel.
+Expected source and phrase are checked in code; the same judge gives a verdict (`pass`/`fail`/`unsure`) against the
+expected behaviour. Run kind `assistant-tests` in `rag-admin`; question, answer and verdict are kept in
+`content."EvaluationResults"` (data-model §2.2) and shown next to the previous version's run. Advisory: publish never
+waits for or depends on it.
+
 ## 19. Milestones
 
 | Phase | Deliverable |
 |---|---|
 | P1 | `/v1/models`; `/v1/chat/completions` stream and JSON; conversational check; condense on follow-ups with skip heuristic and 600 ms timeout; retrieval with coverage handling; token budget; prompt frame; per-level keys, `ResidencyCeilingHandler`, residency and echo checks; marker renumbering, Open WebUI `source` events and `url_citation`; output filter; not-found and degraded texts; signed conversation ids; writer with bucket-key encryption and daily totals; conversation endpoints; user delete; `/v1/feedback`; Open WebUI feedback import and feedback pruning over its API; Open WebUI configuration; P1 refusal of attachments; metrics, traces, events 5003/5011; benchmarks, audit, overhead run, R1. Late P1: answer-level evaluation (§18.8) |
-| P2 | Agent assistants (`AgentAnswerStrategy`, tool hub, skills; detail in `../tools/design.md` §6, milestones §12); chat attachments (§15.2); public widget (`pk` keys, sessions, server-side history); gateway-served rerank per assistant (knowledge §6.7); cost reconciliation from the gateway usage feed; condense tuning with the advisory evaluation; feedback review workflow beyond P1 |
+| P2 | Agent loop for assistants with tool-bearing skills (`AgentAnswerStrategy`, tool hub, skills; detail in `../tools/design.md` §6, milestones §12); chat attachments (§15.2); public widget (`pk` keys, sessions, server-side history); gateway-served rerank per assistant (knowledge §6.7); cost reconciliation from the gateway usage feed; condense tuning with the advisory evaluation; feedback review workflow beyond P1 |
 | P3 | Teams client; OBO tools; write tools with confirmation |
 
 ## 20. Changes to other documents
@@ -1129,10 +1148,15 @@ worker runs only retrieval evaluation and references neither `Ume.Rag.Answering`
   content word must not be classified conversational); the Snowball stop lists in .NET match Postgres's.
 - Answer-level judge (§18.8): agreement of the on-prem judge's faithfulness and citation-precision scores with human
   ratings on a sample, before the scores are shown to editors.
+- Open WebUI v0.12.5 (§3.1): an `info.meta.description` in our `/v1/models` entry survives the model merge
+  (`ow/utils/models.py`, default metadata and workspace overrides) and is shown in the model selector; a top-level
+  `description` is not shown. Sending `info.meta` must not change capabilities (`ow/main.py:1206`).
+- Assistant tests (§18.8): judge cost and duration of an `assistant-tests` run (≤ 30 questions × answer + judge call)
+  per publish; whether the verdict against free-text expected behaviour agrees with editors on a sample.
 
 ## 23. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8, §9, §14:
+Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8, §9, §14, §15:
 
 | Item | Where it went |
 |---|---|
@@ -1149,4 +1173,5 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8,
 | `MarkCited` with every chunk of every cited document | only the cited ranks (§9.5) |
 | Gateway headers timeout 60 s | 15 s, proposed (§8.3) |
 | Strict fail-closed on an unconfirmed config version | grace window (§4.1) |
+| `Assistants.Mode` as an editable field; knowledge from linked skills' collections; chat serving the current assistant row (simplification pass §15) | mode derived from tool-bearing skills; direct collections only (knowledge §4.2); chat serves the published version (§2.2) |
 | Redis rate limit per user in P1 ("not applied" when Redis is down) | P2, first multi-host deployment; P1 limits in process behind `IRateLimitStore`, P2 falls back to per-instance limits (§4.1 step 4, simplification pass §9, §14) |

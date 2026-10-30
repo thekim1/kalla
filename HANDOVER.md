@@ -40,7 +40,8 @@ design), also published as a private artifact (share from its menu): https://cla
 | Chat API | `plans/chat-api/plan.md` | `design.md` (OpenAI-compatible API, Open WebUI without task generation, condense skip + 600 ms timeout, residency checks before the first byte, same level every turn, bucket keys, feedback import via HTTP API) |
 | Tools (P2) | `plans/tools/plan.md` | `design.md` (in-process tool hub, `hosted` servers only, `ume-mcp-kommun`, skills with served pointer + rollback, static small skills, sharing, third-party text, drift pre-registration, `/mcp` early) |
 | Admin | `plans/admin/plan.md` | `design.md` (BFF + Swedish journey pages, generic forms for platform objects, test panel, nightly answer judge and skill gate in `rag-admin`, serialised config writes, cross-rules V1–V32 with V20/V27 retired, site-profile pages) |
-| Cross-cutting | – | `plans/simplification-pass.md`; `plans/consistency-pass.md`; `plans/performance-pass.md` (capacity model incl. umea.se numbers, triggers); `plans/postponed-decisions.md` (register); `plans/to-verify.md` (≈ 160 checks by topic and phase) |
+| Workspaces (P2) | `plans/workspaces/plan.md` (ask-a-file: personal and team knowledge bases from uploaded files, "Mina kunskapsbaser" in `rag-admin`, interactive priority, on-prem summaries, four answer modes, quotas, lifecycle; 12 questions for the detail round) | – (detail round next) |
+| Cross-cutting | – | `plans/simplification-pass.md` (§14 six containers, §15 many assistants per department); `plans/consistency-pass.md`; `plans/performance-pass.md` (capacity model incl. umea.se numbers, triggers); `plans/postponed-decisions.md` (register); `plans/to-verify.md` (≈ 160 checks by topic and phase) |
 
 Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is now sharing by cache, not by row),
 `platforms/` (Eneo, Dify, RAGFlow, Onyx, Open WebUI, Kernel Memory, OpenSearch, Bifrost; synthesis
@@ -51,6 +52,9 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 
 - **Pilot containers (6)**: `rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`, `postgres` (pgBackRest
   inside the image); no Redis until the first multi-host deployment (P2) (`simplification-pass.md` §14).
+- **Assistants**: one type (agent loop only when a linked skill carries tools), knowledge only through directly linked
+  collections (skills carry know-how and tools), versioned from P1 (draft, test questions, publish, history, restore);
+  owner-team edit scoping in P2. Many assistants per department share knowledge banks.
 - **Services**: `Ume.Rag.Api` (roles chat, knowledge, mcp), `Ume.Rag.AdminApi` + Swedish admin UI (also hosts the
   nightly answer judge and, in P2, the skill gate), ingestion worker (`Worker:Classes` per instance; retrieval
   evaluation only, no tools), Python Docling parser (all PDFs, OCR, gated NER), ClamAV; renderer only in P2 if a
@@ -101,6 +105,7 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 | Architecture diagrams | `plans/architecture.md` | `74f8b61` |
 | Performance pass | `plans/performance-pass.md` | `3b79baa` |
 | Overall review → simplification pass (10 changes) + umea.se site profiles | `plans/simplification-pass.md`, every plan document | `6f0602f` |
+| Six pilot containers; many assistants per department (§15); ask-a-file workspaces plan | `simplification-pass.md` §14–§15, `plans/workspaces/plan.md` | `0e91d81` and the next commit |
 | **P0 implementation** | `plans/platform/repo-and-deployment.md` §11 | **next** |
 
 ## Open items
@@ -116,6 +121,8 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 - **P2** licences of models, OCR data, dictionaries and the `sv_SE` word list, before the pilot.
 - **D1** Postgres streaming standby, before production beyond the pilot.
 - **R1** self-hosted GitHub runner; **S2** object store server (P2).
+- **W3** Open WebUI per-user model lists: one process-wide model registry in v0.12.5 breaks per-user lists; gates
+  the first P2 group/user audience in Open WebUI (workspaces included).
 - **C2** visual pipeline builder: P3, built only when its trigger fires (editors need flows that template
   parameters cannot express).
 

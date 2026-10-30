@@ -87,7 +87,7 @@ public enum RetrievalPurpose { Chat, Http, Mcp, TestPanel }
 
 public sealed record RetrievalRequest(
     string Query,
-    Guid? AssistantId,                         // chat: collections come from the assistant (§4.2)
+    Guid? AssistantId,                         // chat: the published version's direct collections (§4.2)
     IReadOnlyList<Guid>? CollectionIds,        // optional narrowing; must be visible (404 otherwise)
     int TopK = 10,                             // 1..50
     RetrievalMode Mode = RetrievalMode.Hybrid,
@@ -95,12 +95,7 @@ public sealed record RetrievalRequest(
     ExpandMode Expand = ExpandMode.None,
     RetrievalPurpose Purpose = RetrievalPurpose.Chat,
     bool AllowDegraded = true,
-    Guid? RunId = null)                        // sent as x-ume-run-id (chat: the message id)
-{
-    // P2 (tools design §6.3): skill versions whose linked collections join the scope: the run's loaded skills (agent);
-    // P3: the served version for a per-skill MCP endpoint (AssistantId = null); validated against the snapshot
-    public IReadOnlyList<Guid>? SkillVersionIds { get; init; }
-}
+    Guid? RunId = null);                       // sent as x-ume-run-id (chat: the message id)
 
 public sealed record RetrievalFilters(
     IReadOnlyList<string>? Tags, IReadOnlyList<string>? DocumentTypes, DateTimeOffset? ModifiedAfter);
@@ -338,12 +333,11 @@ Steps 0–5 run in memory against one snapshot; nothing touches Postgres or the 
 
 | Caller | Collections searched |
 |---|---|
-| Chat (in process) and `rag-internal` (`assistant_id`) | the assistant's `AssistantCollections` from the snapshot; P2 RAG assistants: plus the collections of all linked skills (served version, tools design §3.9); P2 agent assistants: plus the collections of loaded skills (`SkillVersionLinks`, kind `collection`; `SkillVersionIds`, §2.2); `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
+| Chat (in process) and `rag-internal` (`assistant_id`) | the `CollectionIds` of the assistant's **published version** from the snapshot (data-model §2.1), and nothing else: skills carry no collections (simplification pass §15), in either mode; `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
 | Integration key (P2) | requested slugs, each in `Keys.Scopes`; no slugs → all collections in the key's scope |
 | Token caller (P2) | requested slugs, each allowed by `CollectionAudiences` (new P2 table, §18) for the client, department or group; no slugs → `Filter` over all |
-| Admin test panel | the assistant's or the chosen collections, **including unpublished ones**, checked with the admin's role scope (identity §4.8); runs in the admin process through `KnowledgeService` (`Ume.Rag.Answering`) on `Ume.Rag.Retrieval` |
+| Admin test panel | the collections of the assistant's draft (or a chosen version) or the chosen collections, **including unpublished ones**, checked with the admin's role scope (identity §4.8); runs in the admin process through `KnowledgeService` (`Ume.Rag.Answering`) on `Ume.Rag.Retrieval` |
 | Download grant | exactly the grant's collection (§4.6) |
-| Per-skill MCP endpoint (P3, `/mcp/skills/<slug>`, `AssistantId = null`) | the served skill version's linked collections (`SkillVersionIds = [served]`); audience = `SkillAudiences` (tools design §7.4) |
 
 At most 20 collections per query (an assistant with more is refused on save by the admin API).
 
@@ -870,7 +864,7 @@ change makes it unreachable without invalidation code (identity §4.6 pattern):
 | Map | Content |
 |---|---|
 | collection → | slug, name, level, department, owner team, `EmbeddingProfileId` + its SQL literal and dimensions, published flag, **resolved** `RetrievalSettings` (collection values over `Settings.Retrieval` defaults) |
-| assistant → | collection ids (+ skills' in P2), level, owner team, `QuerySteps` retrieval part (top-k, filters, expand, mode, rerank) |
+| assistant → | the published version's collection ids, level, owner team, `QuerySteps` retrieval part (top-k, filters, expand, mode, rerank) |
 | collection → | visible source ids (for D's `$3`) |
 | slug → | collection id |
 
@@ -947,7 +941,7 @@ Authentication and metadata: identity §8 (delegated `Mcp.Use`, pre-registered `
 | Collections | `CollectionAudiences` for the user's client, department or group (§4.2) |
 | Output shaping | `structuredContent` = the §3.2 response without `scores` and `config_version`, `top_k` ≤ 20, `expand` off, each `text` ≤ 2,000 characters, total ≤ 24,000 characters; `content` = one text block per result wrapped as `<source n="…" title="…" url="…">…</source>` with the untrusted-content label (tools plan §3 rule 1) |
 | Links | `download_url` grants bound to the MCP client (`cl`), lifetime 1 hour |
-| Other tools | `list_collections()` = §3.3. P3 (tools design §7): `get_document({ id })` and resources `document://{id}` (§3.4), per-skill endpoints `/mcp/skills/<slug>` (served version's collections, `SkillAudiences`), `ask_assistant` |
+| Other tools | `list_collections()` = §3.3. P3 (tools design §7): `get_document({ id })` and resources `document://{id}` (§3.4), `ask_assistant` |
 | Attribution | query embeddings charged to the first searched collection's owner team (§5.2) |
 | Coverage | returned as `coverage` in `structuredContent`, so agents can say "not found" too |
 
@@ -1073,8 +1067,8 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 |---|---|
 | P0 | `Ume.Rag.Retrieval` skeleton; stock pgvector image (0.8.7); role defaults for `hnsw.*`; `SwedishDecompounder` unit tests and one Postgres match test |
 | P1 | In-process `IRetriever` for the chat role; K (lexeme OR query) / V / H+D statements with the exact/HNSW selectivity rule on the halfvec index (recall vs exact measured with the evaluation sets); RRF, dedup, identity-group collapse, cap 3; coverage (vector and keyword) with per-collection thresholds and calibration metrics; `IReranker` seam (no-op, FakeGateway implementation); section expansion with `OverlapChars`; citations incl. upload names and attachment parents; download grants and `/content` streaming with envelope decryption; query embedding with L1/L2 cache, circuit and degrade; `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; problem details, OpenAPI/Scalar; counters; metrics, traces; contract test; evaluation smoke; interaction audit; retrieval load test |
-| P2 | `/mcp` early with `search_knowledge` and `list_collections` (ceiling `public`); HTTP access for integrations and tokens (`CollectionAudiences`, key scopes, rate limits); gateway-served rerank (§6.7) per assistant when the evaluation shows a gain; agent assistants' skill collections; coverage calibration with control questions; tuning per collection with the advisory evaluation report; range requests if a PDF viewer needs them; optional Entra sign-in for downloads (§4.6) |
-| P3 | MCP `get_document`, `document://` resources, per-skill endpoints (`SkillVersionIds`, tools §7.4); multi-query/HyDE behind evaluation (answered 3); cross-profile fusion during an embedding-profile migration; OpenSearch behind `ISearchIndex` if a trigger fires |
+| P2 | `/mcp` early with `search_knowledge` and `list_collections` (ceiling `public`); HTTP access for integrations and tokens (`CollectionAudiences`, key scopes, rate limits); gateway-served rerank (§6.7) per assistant when the evaluation shows a gain; coverage calibration with control questions; tuning per collection with the advisory evaluation report; range requests if a PDF viewer needs them; optional Entra sign-in for downloads (§4.6) |
+| P3 | MCP `get_document`, `document://` resources; multi-query/HyDE behind evaluation (answered 3); cross-profile fusion during an embedding-profile migration; OpenSearch behind `ISearchIndex` if a trigger fires |
 
 ## 18. Changes to other documents
 
@@ -1100,7 +1094,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | `platform/repo-and-deployment.md` §4.4 / gateway setup notes | the `OnPrem`-only delegating key used for query embeddings has `RequireMaxResidency`, `ApplyTeamPolicy` false and `PiiPolicy` `Off` or `Allow` (§5.2) |
 | `gateway-changes/plan.md`, `design.md` | P2 item: a rerank endpoint serving `bge-reranker-v2-m3` on-prem (contract to define), honouring `x-ume-max-residency` |
 | `performance-pass.md` §3.1, §3.3 | retrieval concurrency 4 on a pool of 12 per instance (⌊(pool − 3) ÷ 2⌋); `hnsw.max_scan_tuples` is a role default (100,000), no per-query `SET LOCAL` from selectivity |
-| `tools/plan.md` §4, `tools/design.md` §7 | `search_knowledge` schema and output shaping of §14; `/mcp` early in P2 with ceiling `public`; `get_document`, `document://` and per-skill endpoints P3; MCP download grants 1 hour |
+| `tools/plan.md` §4, `tools/design.md` §7 | `search_knowledge` schema and output shaping of §14; `/mcp` early in P2 with ceiling `public`; `get_document` and `document://` P3; MCP download grants 1 hour |
 | `admin/plan.md` | test panel runs the knowledge core in the admin process (`KnowledgeService` in `Ume.Rag.Answering` over `Ume.Rag.Retrieval`, incl. unpublished collections), so the admin host needs `Gateway:*` for query embeddings; collection page: `RetrievalSettings` form (§12.1), coverage-threshold proposal from the evaluation set (§7) |
 
 ## 19. Questions
@@ -1162,7 +1156,7 @@ None.
 
 ## 21. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §5, §6, §8–§10, §14:
+Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §5, §6, §8–§10, §14, §15:
 
 | Item | Where it went |
 |---|---|
@@ -1183,3 +1177,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §5, §6,
 | Attachments as child documents (`ParentDocumentId`, `attachment` identity kind, `parent` citation field, "Bilaga *name* i *subject*", separate caps) | P2 with email (Z1, §10.3) |
 | `DocumentKeys` per-document blob keys | data key in the blob header (data-model §7, §3.5) |
 | Redis L2 query-embedding cache and Redis download rate limit in P1 | P2, first multi-host deployment; P1 uses the in-memory `ISharedCache` and `IRateLimitStore` (simplification pass §14; §5.4, §3.5) |
+| Skill collections in the retrieval scope (P2 RAG assistants: every linked skill's; agent: loaded skills' via `SkillVersionIds`), the per-skill MCP endpoint's collection scope (P3) | removed (simplification pass §15): the scope is the published version's direct collections (§4.2); skills carry no collections, so `SkillVersionIds` is gone |

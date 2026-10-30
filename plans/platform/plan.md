@@ -97,7 +97,7 @@ Tables, roles, indexes, queue, encryption, retention and blob layout in detail: 
 
 | Schema | Written by | Read by | Contents |
 |---|---|---|---|
-| `config` | admin | api, worker | collections, sources, pipeline versions, assistants, skills, tool servers, clients, keys, embedding profiles, settings, **config outbox** |
+| `config` | admin | api, worker | collections, sources, pipeline versions, assistants (published, draft and superseded versions; test questions; templates), skills, tool servers, clients, keys, embedding profiles, settings, **config outbox** |
 | `content` | worker (admin only inserts `Jobs`, incl. `command` jobs for its decisions; api only via the retrieval-counter function) | api (read-only), admin (read) | documents and chunk sets per source, chunks, caches (stage outputs, embeddings), site profiles, runs, jobs, parse observations and rules, evaluation sets and results |
 | `chat` | api | admin (audited read) | conversations, messages, feedback, tool-call records |
 | `audit` | all (append-only) | admin | audit entries |
@@ -210,6 +210,7 @@ blobs are tombstoned and purged with the blob purge delay.
 | Uploads | while the source exists | – |
 | Blob tombstones | purged after the Postgres backup retention (35 days, proposed), so every restore point finds its blobs | Platform setting |
 | Evaluation sets and results | per collection, until removed | Collection |
+| Assistant versions / assistant test runs | superseded versions 1 year, at least the last 20 kept / last 20 runs per assistant (proposed) | Platform setting |
 | Jobs (terminal) / run items / runs | 7 days / 90 days / 13 months (proposed) | Platform setting |
 | Parse observations / retrieval statistics | 180 days / 13 months (proposed) | Platform setting |
 | Embedding cache entries | unused for 30 days (proposed) | Platform setting |
@@ -304,7 +305,9 @@ compared with the previous run on the publish screen, and the owner decides to k
 are kept 14 days for one-click rollback). A collection goes live when its owner publishes it. The worker runs the
 retrieval evaluation; from late P1 a nightly on-prem judge in `rag-admin` (which already runs `Ume.Rag.Answering`
 and holds the keys of every level) measures answer faithfulness and citation precision; the P2 skill gate runs there
-too. A blocking gate is reconsidered only when measured
+too. Each assistant also has a small **test-question set** (question, expected behaviour, optional expected source or
+phrase) that `rag-admin` re-runs with the answer judge after every publish of a new assistant version, advisory like
+the collection report (run kind `assistant-tests`, data-model §2.2). A blocking gate is reconsidered only when measured
 run-to-run variance shows it can tell versions apart. The postponed Swedish benchmark becomes the curated part of
 these sets.
 
@@ -370,4 +373,5 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 | Graph member-group lookup; `rag-renderer` (only if needed); a/b slots and the multi-host seams | P2 |
 | Separate `rag-tools` service (with the first external, OBO or write tool) | P3 |
 | 10-second fail-closed config rule | Replaced by the grace window (§9 there) |
+| Editable assistant mode (`rag`/`agent`), knowledge through skills, assistant settings edited in place (§15 there) | Removed: mode derived from tool-bearing skills, direct collections only, draft and published assistant versions with test questions (data-model §2.1) |
 | `redis` and `rag-pgbackrest` containers in the pilot (eight long-running containers → six, §14 there) | Redis: P2 (first multi-host deployment, `ConnectionStrings:redis`), in-memory seams and Postgres admin sessions in P1; pgBackRest inside the Postgres image |

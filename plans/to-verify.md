@@ -13,8 +13,9 @@ or team named in the row).
 
 Document names are relative to `plans/`; "gateway design" is `gateway-changes/design.md`. Rows whose subject the
 simplification pass ([`simplification-pass.md`](simplification-pass.md)) removed are struck with "dropped
-(simplification pass)"; its new checks are rows 127–140, the follow-up round of that pass added rows 141–160, and the container cut (§14
-there: six containers, no Redis in P1, pgBackRest inside the Postgres image) added rows 161–163.
+(simplification pass)"; its new checks are rows 127–140, the follow-up round of that pass added rows 141–160, the container cut (§14
+there: six containers, no Redis in P1, pgBackRest inside the Postgres image) added rows 161–163, and many assistants per
+department (§15 there: assistant versions, test questions, derived mode) added rows 164–166.
 
 ## Postgres and pgvector
 
@@ -104,6 +105,7 @@ there: six containers, no Redis in P1, pgBackRest inside the Postgres image) add
 | 134 | Open WebUI v0.12.5 settings that switch off title, tag and follow-up generation (none of them reaches the RAG assistants) | `simplification-pass.md` §1 | P0 | source + test |
 | 135 | Feedback import and feedback pruning through Open WebUI's HTTP API only (no SQL against its database): feedback list paging by `updated_at`, admin `DELETE /api/v1/evaluations/feedback/{id}` with an endpoint-restricted API key, admin service account. Chat copies cannot be pruned without `ENABLE_ADMIN_CHAT_ACCESS`: postponed W2 | `simplification-pass.md` §1, §11a; `chat-api/design.md` §13.3, §14.2, §22 | P1 | source + test |
 | 52 | `status` events from an external connection forwarded, stored and rendered with `source` events; `hidden: true`; `: ping` comments ignored | `tools/design.md` §6.7 | P2 | test |
+| 165 | Open WebUI shows an assistant's description and contact: an `info.meta.description` in our `/v1/models` entry survives the model merge (default metadata, workspace overrides) and appears in the model selector (a top-level `description` does not, `src/lib/utils/localizedContent.ts:165-168`); sending `info.meta` leaves capabilities unchanged; else the platform team enters it in Open WebUI's model editor | `chat-api/design.md` §3.1, §22; `simplification-pass.md` §15 | P1 | source + test |
 
 ## MCP and skills
 
@@ -201,8 +203,10 @@ there: six containers, no Redis in P1, pgBackRest inside the Postgres image) add
 | 108 | Exact cosine over ≤ 2,000 decrypted attachment chunks within 5 ms | `chat-api/design.md` §15.2 | P2 | measure |
 | 154 | Conversational check: no false positives on real questions (a short question of stop words plus one content word is not conversational); the .NET Snowball stop lists match Postgres's | `chat-api/design.md` §6.2, §22 | P1 | test + measure (pilot data) |
 | 155 | Answer-level nightly run in `rag-admin`: agreement of the on-prem judge's faithfulness and citation-precision scores with human ratings on a sample (before editors see them); cost per assistant | `chat-api/design.md` §18.8, §22; `ingestion-worker/design-processing.md` §14.8, §21 | P1 (late) | measure |
+| 167 | Owner-team scoping (P2): the `teamCodes` claim is filled for department staff in Entra (or the IdP) and matches `Teams.Code` from the gateway's organisation data; otherwise member groups on teams (a gateway change) | `identity/design.md`, `admin/design.md` §3.2, `platform/data-model.md` `DepartmentSettings` | P2 start | check the claim with test users |
 | 156 | Static skill budget: ≈ 4,000 tokens of skill bodies in the system prompt keeps tool choice and answer quality on the pilot models (static vs progressive on the Bygglov skill) | `tools/design.md` §3.9, §15 | P2 | measure |
 | 157 | Tool bulkhead values: `MaxConcurrentCalls` 8, circuit 5 failures / 30 s, in the R1 agent scenario | `tools/design.md` §2.2, §15 | P2 | measure |
+| 166 | Assistant tests: judge cost and duration of an `assistant-tests` run (≤ 30 questions, an answer and a judge call each) per publish across a department's assistants; the verdict against free-text expected behaviour agrees with editors on a sample | `chat-api/design.md` §18.8, §22; `platform/data-model.md` §2.2 | P1 | measure |
 
 ## Licences and external data
 
@@ -232,6 +236,7 @@ there: six containers, no Redis in P1, pgBackRest inside the Postgres image) add
 | 125 | BGE-M3 tokens/s per GPU class and on CPU at the gateway's provider; head-of-line blocking of a query embedding behind 64- vs 32-input batches (extends #98) | `performance-pass.md` §3.9; `ingestion-worker/design-processing.md` §11 | P1 (R1) | measure |
 | 126 | uvicorn client-certificate verification for the optional multi-endpoint parser mode (`PARSER_TLS_CLIENT_CA`) | `performance-pass.md` §3.8; `parser/design.md` §13.1 | P3 | test |
 | 140 | `rag-api` pool 12 with `Retrieval:MaxConcurrentSearches` 4 = ⌊(pool − 3) ÷ 2⌋ (each search may hold 2 connections while K and V overlap); admin 5, worker 10, `max_connections` 100: pool waits and 503s at 20 msg/s next to the chat writer and the stats flush | `simplification-pass.md` §9; `performance-pass.md` §3.1; `knowledge-api/design.md` §6.6, §20; `platform/data-model.md` §1.1, §14 | P0 (measure), P1 (R1) | measure |
+| 164 | Config snapshot with many assistants: build time and memory of the api snapshot with 300 published assistant versions (instructions up to 20 KB each), reloaded whole on any assistant change (reload by outbox `EntityId` if over 50 ms); draft saves never bump the config version | `platform/data-model.md` §5, §14; `simplification-pass.md` §15 | P1 | measure + test |
 
 ## umea.se and site profiles
 

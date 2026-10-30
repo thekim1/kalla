@@ -73,7 +73,7 @@ extend before expiry, never more than `Admin:MaxSessionHours` (12) from sign-in;
 |---|---|
 | `roles` | Role values (below) |
 | `departmentCodes` | Cost-centre codes of the user's departments; matched against the department's cost-centre code from the gateway |
-| `teamCodes` | Team codes, for team-scoped roles (none in the pilot) |
+| `teamCodes` | Team codes: from P2, owner-team scoping of admin writes where a department switches it on (design §1.3); no team-scoped role |
 | `name`, `email`, `oid`, `sub` | Display and audit (`oid`, fallback `sub`) |
 
 **Role values** are namespaced (`rag-*`), so they can never be mistaken for gateway roles:
@@ -87,6 +87,11 @@ extend before expiry, never more than `Admin:MaxSessionHours` (12) from sign-in;
 | `rag-viewer` | Read status, runs, evaluation, usage in own departments (like `viewer`) |
 | `rag-skill-editor` (P2) | Drafts, publishes and serves skills in own departments (tools design §3.6) |
 | `rag-editor` (from P2) | Sources, collections and assistants via forms in own departments; links published skills, cannot edit them |
+
+**Owner-team scoping (P2, `../simplification-pass.md` §15)**: assistants, collections and skills keep an owner team; a
+department may limit editors' writes to members of the owner team (user's `teamCodes` matched to the team's code).
+Department and platform admins still see and edit everything. It is an admin rule, not a role and not part of
+`IAccessPolicy` (design §1.3).
 
 **Configuration keys**: the gateway's OIDC settings with a `UME_RAG_` prefix and the same defaults and semantics:
 `UME_RAG_OIDC_AUTHORITY`, `_CLIENT_ID`, `_CLIENT_SECRET` (file, as `init-deployment.sh` does), `_ROLE_CLAIM`
@@ -146,6 +151,10 @@ secret, short expiry, only from the Open WebUI instance's network.
   tokens. For Open WebUI users they wait for E1 (a real Entra token through Open WebUI, §7); Open WebUI's e-mail is
   never the basis of a grant.
 
+**Assistant versions** (`../simplification-pass.md` §15): audience and classification belong to the assistant, not to
+its versions, so publishing or restoring a version never changes who may use it; only the published version reaches
+the data plane (design §4.3).
+
 **Decision** = subject may use the resource (audience) **and** the resource's classification ≤ the client's ceiling
 **and** the subject type is allowed (no anonymous access to `internal`) **and**, for tools, the tool policy allows it.
 
@@ -192,7 +201,7 @@ systems to the SIEM. Every denial is a security event.
 |---|---|
 | P0 | Keycloak realm with the gateway's claims for dev and CI; OIDC and claim mapping copied from the gateway (`UME_RAG_OIDC_*`); keys in gateway style; package 1 submitted |
 | P1 | Admin sign-in on the municipal IdP (`ume-rag-admin`); `rag-reviewer` role; department scope from groups in the claim (feature C, both systems); Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; explain access; security events; package 2 submitted |
-| P2 | `rag-api` tokens and OAuth machine clients, department/group audiences, Graph member-group lookup, MCP server authorisation, `rag-ingestion`, tool identity `ume-rag-tools` (in-process hub), `ume-rag-pk-` widget keys |
+| P2 | `rag-api` tokens and OAuth machine clients, department/group audiences, Graph member-group lookup, owner-team scoping of admin writes, MCP server authorisation, `rag-ingestion`, tool identity `ume-rag-tools` (in-process hub), `ume-rag-pk-` widget keys |
 | P3 | OBO for user-delegated tools (with the `rag-tools` service), Teams client, claims-challenge handling |
 
 ## 9. Answered questions (2026-10-29)
@@ -212,6 +221,8 @@ systems to the SIEM. Every denial is a security event.
    admin consent, role assignments and client secrets stay manual approval steps (design §12).
 9. **Admin credential type**: a client secret of our own, identical to the gateway's setup; certificates later for
    both systems together.
+10. **Many assistants per department** (2026-10-30, simplification pass §15): owner-team scoping of admin writes in P2
+    from `teamCodes` (§3); assistant versions do not change access (§5).
 
 ## 10. Deferred or removed (simplification pass)
 

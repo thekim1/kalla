@@ -47,7 +47,8 @@ Response: results with `chunk_id`, `text`, `score`, `scores` (vector, keyword, f
 Authentication and authorisation follow `../identity/plan.md`: Entra access tokens (delegated `Knowledge.Read` or
 app role `Knowledge.Read.All`), `ume-rag-sk-` keys scoped to collections, or the in-process call from the Chat API carrying
 the original caller. The client's classification ceiling (R5) and the caller's access are checked, at the current
-config version, before any query runs (R7).
+config version, before any query runs (R7). For chat the scope is the collections the assistant's **published
+version** links directly, and only those: skills carry no collections (design §4.2).
 
 ## 3. Retrieval design
 
@@ -130,7 +131,7 @@ Answered (2026-10-30; detail in [`design.md`](design.md) §19.1):
 
 ## 7. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §8, §14:
+Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §8, §14, §15:
 
 | Item | Where it went |
 |---|---|
@@ -140,3 +141,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §8, §14
 | Rerank in P3 | `IReranker` seam P1, gateway rerank P2 (§3, §5) |
 | `building` collections, tuning "behind the evaluation gate" | removed; unpublished collections are not searched, evaluation is advisory |
 | Redis query-embedding cache in P1 | P2, first multi-host deployment; P1 caches in process (§3, simplification pass §14) |
+| Collections of linked skills in an assistant's scope (P2) | removed (simplification pass §15); the published version's direct collections only (§2) |

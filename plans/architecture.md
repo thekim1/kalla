@@ -30,7 +30,7 @@ flowchart LR
     end
 
     subgraph control_plane["Control plane zone"]
-        admin["rag-admin<br/>BFF + Swedish journey pages<br/>test panel, config writer<br/>nightly answer judge (late P1)<br/>skill gate, in-process tool hub (P2)"]
+        admin["rag-admin<br/>BFF + Swedish journey pages<br/>test panel, config writer<br/>assistant drafts, versions, test questions<br/>nightly answer judge (late P1)<br/>skill gate, in-process tool hub (P2)"]
     end
 
     subgraph ingestion_zone["Ingestion zone (rag-ingestion.slice)"]
@@ -110,6 +110,9 @@ OBO or write tool (P3).
 
 ## 2. Chat request (RAG assistant, P1)
 
+Every assistant without a tool-bearing skill takes this path; chat serves the assistant's published version, and
+retrieval searches only the collections that version links directly (simplification pass §15).
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -121,14 +124,14 @@ sequenceDiagram
     participant W as Background writer
 
     U->>C: POST /v1/chat/completions (model = assistant, history, user JWT, chat id)
-    C->>C: authenticate, IAccessPolicy at the confirmed config version (grace window 90 s)
+    C->>C: authenticate, published assistant version and IAccessPolicy at the confirmed config version (grace window 90 s)
     C->>C: effective level = max(assistant level, client ceiling), fixed from the first message
     C->>C: per-user rate limit (in process in the pilot, Redis from P2)
     opt follow-up question that is not self-contained (length, anaphora)
         C->>G: condense on Settings.Chat.CondenseModel (x-ume-step: condense, explicit ceiling)
         G-->>C: standalone query (timeout 600 ms or failure: raw question)
     end
-    C->>K: RetrieveAsync(assistant, query, top_k 10, expand section)
+    C->>K: RetrieveAsync(assistant, query, top_k 10, expand section) over the version's direct collections
     par keyword in parallel with the embedding
         K->>P: K: keyword candidates (decompounded lexemes, built-in swedish, top 100)
     and
@@ -204,8 +207,9 @@ flowchart TD
 
 ## 4. Tool call from an agent assistant (P2)
 
-The tool hub runs in-process in the chat role (`IToolHub`), and in `rag-admin` for discovery, the test panel and the
-skill gate; never in the worker. Skills totalling ≤ about 4k tokens are included statically
+An assistant runs this loop when its published version links a skill with tools; the mode is derived from its skills,
+not chosen (simplification pass §15). The tool hub runs in-process in the chat role (`IToolHub`), and in `rag-admin`
+for discovery, the test panel and the skill gate; never in the worker. Skills totalling ≤ about 4k tokens are included statically
 with their tools visible from step 1, and `search_knowledge` is prefetched with the user question.
 
 ```mermaid

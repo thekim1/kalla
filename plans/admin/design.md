@@ -1,7 +1,7 @@
 # Admin API and admin UI: detailed design
 
 Detail step 10 of the Ume.Rag design, rewritten by the simplification pass
-([`../simplification-pass.md`](../simplification-pass.md) §1, §2, §5, §7–§10, §13; it wins where an older passage
+([`../simplification-pass.md`](../simplification-pass.md) §1, §2, §5, §7–§10, §13, §15; it wins where an older passage
 differs). Details [`plan.md`](plan.md) (binding, incl. its answered questions 1–3 and §14 here) and the Decisions table
 in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consumes, without redesigning: the BFF, claim mapping,
 `RagPrincipal`, internal callers, keys and security events of [`../identity/design.md`](../identity/design.md) (§1–§4,
@@ -60,7 +60,7 @@ gateway counterpart.
 | 4 | Roles | **`rag-reviewer`** (answered 3): policies `Review`, `FeedbackComments`, `Read`. Feedback **comments**: `rag-reviewer` and `rag-department-admin`. **Full conversations: `rag-reviewer` only.** No administrative role implies conversation content (§3). Roles come from RAG's own Entra registration `ume-rag-admin`; the audit actor is `oid` (fallback `sub`) |
 | 5 | Concurrency | Every editable aggregate carries `version` (Postgres `xmin`); a mismatch is 409 `concurrent_change` (§4.3) |
 | 6 | Write path | One transaction: **`SELECT … FOR UPDATE` on `config."ConfigVersion"` first** (serialises admin config writes) → cross-rules → entity change → outbox trigger (version bump) → audit row with that `ConfigVersion` → optional job rows; `pg_notify` at commit (§4.4) |
-| 7 | Validation | Field rules on request records; **cross-rules** in one `ConfigRules` service: **V1–V32 with V20 and V27 retired (30 rules)** (§4.6), run on save, on dependent changes and again before publish, under the version lock; CHECK violations (23514) answer 400 |
+| 7 | Validation | Field rules on request records; **cross-rules** in one `ConfigRules` service: **V1–V34 with V20 and V27 retired (32 rules)** (§4.6), run on save, on dependent changes and again before publish, under the version lock; CHECK violations (23514) answer 400 |
 | 8 | Jobs | The admin inserts `content."Jobs"` rows only (preview, sync, command, eval); every result is read from `Jobs.Result`, `Runs`, `EvaluationRuns` (§4.7) |
 | 9 | Pilot UI | P1 has **dedicated Swedish pages only for the department journey** (collection, source, preview, publish with the evaluation report, assistant, test panel, audience, feedback, limited review), built for non-specialists (answered 2): setup checklist, template parameters with defaults, preflight and preview before saving, impact before scope changes (§5.4) |
 | 10 | Pipelines | A pipeline is a **template + parameters**; the source form shows the template's parameters; pipeline editors edit parameters. No node editor, no canvas (dropped from the roadmap) (§6) |
@@ -75,6 +75,9 @@ gateway counterpart.
 | 19 | Platform objects | In P1, settings, data protection, clients, templates, site profiles, embedding profiles, gateway models and keys use **generic schema-driven forms** plus the OpenAPI UI (Scalar), not dedicated pages (§5.8) |
 | 20 | Site profiles | The source preview shows the learned profile's before/after text on sample pages; platform admins see profiles per host with versions and proposals and approve or roll back (generic form + preview in P1) (§4.5, §6.4) |
 | 21 | Explain access | `POST /api/access/explain` returns the stable id of the first failing `IAccessPolicy` step and its reason code for (client, subject, assistant); platform admins, and department admins for their own department's assistants and clients; no security event (§4.5, identity §4.9) |
+| 22 | Assistant versions | **One assistant type**: no `rag`/`agent` choice; an assistant uses the agent loop (P2) exactly when a linked skill carries tools, shown as **Använder verktyg**. Edits go to a **draft** (`AssistantVersions`, `State = draft`); the test panel runs the draft; **Publicera** makes it the published version (`Assistants.PublishedVersionId`), the only one chat reads (data-model view `PublishedAssistantVersions`); history with a diff and one-click **Återställ** (= a new version). Audience, level, retention, owner team, description and contact belong to the assistant, not to a version, so publishing never changes who may use it (§4.5, §5.5.4) |
+| 23 | Assistant tests | Each assistant has up to 50 **test questions** (question, expected behaviour as free text, optional expected document and phrase), run by `AssistantTestRunner` in `rag-admin` through `Ume.Rag.Answering` and the on-prem answer judge after every publish and on demand; **advisory**, shown as the §7.2 card with **Behåll** / **Återställ förra versionen** (§7.4) |
+| 24 | Many assistants | Platform-owned **assistant templates** (generic form); **copy** an assistant; a **department map** (sources → kunskapsbanker → assistenter → målgrupper); an impact line on source and collection saves ("påverkar 3 assistenter"); an attention item for assistants unused 90 days; P2: a department may limit writes to the object's **owner team** (§3.2, §5.5.6) |
 
 ## 2. Placement and interfaces
 
@@ -82,7 +85,7 @@ gateway counterpart.
 
 | Project | Owns (admin) | Notes |
 |---|---|---|
-| `Ume.Rag.AdminApi` | BFF (identity §1, adapted from `AdminApi/AdminAuthentication.cs`), endpoint groups (§4.5), `AdminContext` (scope, version lock, audit, save), `ConfigRules` (§4.6), `JobEnqueuer` (§4.7), `ContentReader`/`ChatReader` (§4.8), `TestPanelService` (§4.9), `AccessExplainer`, `FormSchemas` (§5.8), `OrganisationSync`, `GatewayModelSync` (§4.10), `RetentionService` (data-model §8), `ConversationAccessService` (§8), late P1 `AnswerEvaluationService` (run kind `answers`, processing §14.8); P2 `DefinitionDriftMonitor` (tools §4.4), `SkillGateRunner` (tools §3.7) | serves `src/admin-ui/dist` as `wwwroot` (`PublishAdminUi=true`) |
+| `Ume.Rag.AdminApi` | BFF (identity §1, adapted from `AdminApi/AdminAuthentication.cs`), endpoint groups (§4.5), `AdminContext` (scope, version lock, audit, save), `ConfigRules` (§4.6), `JobEnqueuer` (§4.7), `ContentReader`/`ChatReader` (§4.8), `TestPanelService` (§4.9), `AssistantVersions` (draft, publish, restore, diff; §4.5), `AssistantTestRunner` (§7.4), `DepartmentMap` (§5.5.6), `AccessExplainer`, `FormSchemas` (§5.8), `OrganisationSync`, `GatewayModelSync` (§4.10), `RetentionService` (data-model §8), `ConversationAccessService` (§8), late P1 `AnswerEvaluationService` (run kind `answers`, processing §14.8); P2 `DefinitionDriftMonitor` (tools §4.4), `SkillGateRunner` (tools §3.7) | serves `src/admin-ui/dist` as `wwwroot` (`PublishAdminUi=true`) |
 | `Ume.Rag.Pipelines` | `PipelineValidator` (parameters against the template's schema, template version supported by a running worker), `FormModel` (JSON Schema → form description, §6.3) | shared with the worker |
 | `Ume.Rag.Retrieval` | retrieval core | test panel |
 | **`Ume.Rag.Answering`** | `KnowledgeService` core (access within a given scope, hydrate, sections, citations), chat answer core (`RagAnswerStrategy`, `PromptBuilder`, `TokenBudget`, `Condenser`, `AnswerFilter`, `CitationEmitter`, `LanguageGuess`), P2 `AgentAnswerStrategy` | the knowledge and chat roles keep HTTP, SSE, writer and importer; the test panel shows the real prompt, budget and filter (chat §9.4) |
@@ -109,6 +112,7 @@ gateway counterpart.
 | `DefinitionDriftMonitor` (P2) | 15 min | advisory lock (the one drift leader) | `Tools.State`, repins from pre-registrations (tools §4.4) |
 | `ConfigVersionMonitor` | `rag_config` + 2 s poll | every instance | none (keeps the admin's own snapshot for validators and the test panel) |
 | `AnswerEvaluationService` (late P1) | nightly | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Ume.Rag.Answering` and the on-prem judge (processing §14.8) |
+| `AssistantTestRunner` | on assistant publish/restore and **Kör testfrågor** | `pg_try_advisory_xact_lock` on (assistant, version); an unfinished run is restarted after a restart | `EvaluationRuns` of kind `assistant-tests` and their `EvaluationResults` (§7.4) |
 | `SkillGateRunner` (P2) | on publish and **Kör igen** | `pg_try_advisory_xact_lock` on the version id; an unfinished run is restarted after a restart | `EvaluationRuns` with `Trigger = skill-publish` (tools §3.7) |
 
 - Request body: 1 MB like the gateway (`AdminApi/Program.cs:20`), except the upload file route (50 MB + multipart
@@ -137,13 +141,13 @@ gateway counterpart.
 | To | How | Used for |
 |---|---|---|
 | `config` | EF `RagDbContext`, role `ume_rag_admin` S I U D (data-model §1.2) | all configuration |
-| `content` | S, plus I on `Jobs`, I U on `EvaluationRuns`, `EvaluationResults` (`answers` runs, P2 skill gate) | documents, runs, reports, evaluation, previews, site profiles, test panel retrieval |
+| `content` | S, plus I on `Jobs`, I U on `EvaluationRuns`, `EvaluationResults` (`answers` and `assistant-tests` runs, P2 skill gate) | documents, runs, reports, evaluation, previews, site profiles, test panel retrieval |
 | `chat` | S, plus **U on `Feedback.ReviewState`** (§13) | feedback page, comment reveal, conversation review |
 | `audit` | S I on `AuditLog`, `ConversationAccess`, `AuthFailures`; S on tool tables (P2 S I on `ToolDefinitionObservations`) | audit list, access log |
 | Blobs | `rag-blobs` rw (uploads; preview outputs read); `internal` blobs unwrapped with the level's master key, `public` blobs are not envelope-encrypted (simplification pass §4) | uploads, preview outputs, PII highlight previews |
 | `IKeyProvider` | chat master keys (file provider in the pilot) | comment and conversation decryption (§8) |
-| Gateway | `Gateway:*` delegating keys per level (`Gateway__Keys__OnPrem`, `__Eu`, `__External`; simplification pass §6); Data API key `OrgSync__DataApiKey` (`catalog.read`) | test panel embedding + answer, `/v1/models` validation (§4.6 V8), answer-level evaluation and its on-prem judge, P2 skill gate, §4.10 |
-| Hosted MCP servers (P2) | in-process `Ume.Rag.Tools`, `client-credentials` with the `ume-rag-tools` certificate (tools §4.6) | discovery, connection test, drift polling, agent test-panel and skill-gate tool calls |
+| Gateway | `Gateway:*` delegating keys per level (`Gateway__Keys__OnPrem`, `__Eu`, `__External`; simplification pass §6); Data API key `OrgSync__DataApiKey` (`catalog.read`) | test panel embedding + answer, `/v1/models` validation (§4.6 V8), answer-level evaluation and assistant test questions with the on-prem judge, P2 skill gate, §4.10 |
+| Hosted MCP servers (P2) | in-process `Ume.Rag.Tools`, `client-credentials` with the `ume-rag-tools` certificate (tools §4.6) | discovery, connection test, drift polling, test-panel and skill-gate tool calls |
 
 ## 3. Roles and permissions
 
@@ -181,6 +185,16 @@ with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-6
   may share a collection or skill with named departments (`CollectionShares`, `SkillShares`). An assistant links
   collections and skills of its own department, those shared with its department, and platform skills (V11, V12).
   Sharing gives read use through assistants only: the other department cannot edit, see sources' settings, or publish.
+  Knowledge reaches an assistant only through its own collection links; skills carry know-how and tools, never
+  collections (simplification pass §15).
+- **Owner-team scoping (P2, simplification pass §15)**: assistants, collections (with their sources, pipelines and
+  test questions) and skills keep an owner team (`OwnerTeamId`). A department may switch on
+  `DepartmentSettings.EditOwnerTeamOnly` (`Manage`, audited `departmentsettings.update`); while it is on, an `Edit`,
+  `EditPipelines` or `EditSkills` write to such an object needs membership of its owner team (identity §1.3) **or**
+  `Manage` in the department, so department and platform admins are unaffected. Reads are unchanged. A refused write
+  is 403 `owner_team_only` (6006); creating or copying sets the owner team to one of the writer's teams; changing an
+  object's owner team needs `Manage` while the setting is on. `AdminContext.CanWrite(entity)` applies it after the
+  department filter, and the generated role tests cover it (§11.2).
 - A source belongs to exactly one collection; keys only for teams of the department (identity §6.4).
 - Users with several departments get a department filter in the page header (URL query `dept=`), defaulting to all.
 
@@ -193,15 +207,17 @@ schema-driven form (§5.8).
 | Page (Swedish label) | Phase | PA | DA | PE | RV | SE | ED | VW |
 |---|---|---|---|---|---|---|---|---|
 | Översikt | P1 | R (all + platform health) | R | R | R | R | R | R |
+| Karta (department map) | P1 | R | R | R | R | R | R | R |
 | Kunskapsbanker (incl. Dokument, Testfrågor och kvalitet, Sökinställningar, Delning) | P1 | W | W | R | R | R | W (no sharing) | R |
 | Källor, körningar, filer, borttagningar (incl. mallinställningar) | P1 | W | W | W (template parameters only) | R | R | W (no deletion decisions) | R |
 | Publicering (plan, rapport, behåll/återställ) | P1 | W | W | W | R | – | W | R |
-| Assistenter (incl. Testa) | P1 | W | W | R | R | R (+ test) | W | R |
+| Assistenter (incl. Testa, Testfrågor, Versioner) | P1 | W | W | R | R | R (+ test) | W | R |
 | Målgrupp (assistant audiences) | P1 | W | W | – | R | – | R | R |
 | Återkoppling | P1 | R | R + comments | – | R + comments | – | – | R (no comments) |
 | Samtalsgranskning, Åtkomstlogg | P1 (limited) / P2 | access log R | access log R (own depts) | – | W | – | – | – |
 | Nycklar (generic) | P1 | W | W (own teams) | – | – | – | – | – |
-| Inställningar, Dataskydd, Klienter, Mallar, Webbplatsprofiler, Inbäddningsprofiler, Gateway-modeller, Organisation (generic) | P1 | W | R (data-protection matrix, models, clients) | – | – | – | R (models) | – |
+| Inställningar, Dataskydd, Klienter, Mallar, Assistentmallar, Webbplatsprofiler, Inbäddningsprofiler, Gateway-modeller, Organisation (generic) | P1 | W | R (data-protection matrix, models, clients) | – | – | – | R (models) | – |
+| Förvaltningsinställningar (owner-team scoping, generic) | P2 | W | W (own departments) | – | – | – | R | R |
 | Granskningslogg (list) | P1 | R (all) | R (own departments' entries) | – | – | – | – | – |
 | Tolkningsförslag (parse-profile proposals) | P2 | W (approve, reject) | R | R | – | – | R | R |
 | Färdigheter | P2 | W (platform skills) | W | – | R | W | R (link only) | R |
@@ -218,13 +234,13 @@ The matrix is data (`PermissionMatrix` in `Ume.Rag.Domain`), used for endpoint a
 | Policy | Actions (department-scoped unless noted) |
 |---|---|
 | `Read` | list/detail of everything in scope; runs, reports, documents (metadata), evaluation reports, feedback metadata |
-| `Edit` | collections (create, edit, retrieval settings, test retrieval, run evaluation), sources (create, edit, pause/resume, sync now, retry failed, upload, delete files), assistants (create, edit, activate, test panel), human test questions, generate test questions, link served skills (P2) |
+| `Edit` | collections (create, edit, retrieval settings, test retrieval, run evaluation), sources (create, edit, pause/resume, sync now, retry failed, upload, delete files), assistants (create from a template, copy, edit the draft, publish, restore a version, archive/unarchive, test panel, assistant test questions and runs), human test questions, generate test questions, link served skills (P2); P2 limited to the owner team when the department says so (§3.2) |
 | `EditPipelines` | template parameters of the department's sources (preview, plan, publish, roll back), pipeline test retrieval |
 | `EditSkills` (P2) | skills of own departments: draft, publish, serve, roll back, share list, re-run the gate; skill test panel |
-| `Manage` | collection publish, collection share lists, delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients |
+| `Manage` | collection publish, collection share lists, delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients, P2 department settings (owner-team scoping) and owner-team changes while it is on |
 | `FeedbackComments` | reveal one feedback comment (`public`/`internal`) |
 | `Review` | open a conversation with a reason; P2: request/approve `sensitive` access, search conversations |
-| `Admin` (platform) | templates, site profiles (edit, approve, roll back), embedding profiles, clients, `GatewayModels` manual rows, settings, data protection, raised agent limits, tool servers, approvals (platform side, incl. pre-registrations), grants, platform skills, parse-profile proposals (P2), audit log (all), organisation sync now, explain access |
+| `Admin` (platform) | templates, assistant templates, site profiles (edit, approve, roll back), embedding profiles, clients, `GatewayModels` manual rows, settings, data protection, raised agent limits, tool servers, approvals (platform side, incl. pre-registrations), grants, platform skills, parse-profile proposals (P2), audit log (all), organisation sync now, explain access |
 
 ## 4. Admin API
 
@@ -269,11 +285,13 @@ concurrent_change: 'Någon annan har ändrat detta medan du arbetade. Ladda om s
 ### 4.3 Concurrency
 
 - Every editable aggregate root maps Postgres `xmin` as a row-version token (`uint`, Npgsql EF; *to verify*, §15).
-  Child rows (`AssistantCollections`, `AssistantAudiences`, `CollectionShares`, `SkillVersionLinks`, …) are saved
-  through the root, and every root save sets `UpdatedAt`/`UpdatedBy`, so `xmin` changes whenever any part of the
-  aggregate does.
+  Child rows (`AssistantAudiences`, `CollectionShares`, `SkillVersionLinks`, …) are saved through the root, and every
+  root save sets `UpdatedAt`/`UpdatedBy`, so `xmin` changes whenever any part of the aggregate does.
 - DTOs carry `version` (string); `PUT`/`DELETE`/state actions require it; mismatch → 409 `concurrent_change` with the
   current `version`. The form keeps the user's input and offers "Ladda om och jämför".
+- An assistant's draft (its `AssistantVersions` row with `State = draft`) carries its own `version`, so editing the
+  draft and editing the assistant's own fields (audience, level, retention) do not conflict; publish and restore
+  require both.
 - Singletons (`Settings` per section, `DataProtectionPolicies` per level) use the same rule.
 - Job-backed actions are idempotent by `DedupKey` (§4.7), not by version.
 
@@ -316,13 +334,15 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 | `GET /api/gateway/models` | Read | `GatewayModels` with residencies, `SupportsTools`, context window, prices, `Source` |
 | `POST /api/gateway/models/sync`; `PUT /api/gateway/models/{name}` | Admin | run now; manual row (aliases, `SupportsTools` until the catalogue has `features`) |
 | `GET /api/gateway/status` | Admin | per level key: one `x-ume-max-residency` embedding call and the delegation echo |
+| `GET /api/departments/{id}/map` | Read | department map (§5.5.6): sources → collections (own and shared in) → assistants (published links; draft-only links flagged) → audiences (clients), from the admin's snapshot; no content |
+| `GET/PUT /api/departments/{id}/settings` (P2) | Read / Manage | `DepartmentSettings` (`EditOwnerTeamOnly`, `version`); audited `departmentsettings.update` (§3.2) |
 | `POST /api/access/explain` `{ clientId, subject, assistantId }` | Admin; Manage (own department's assistants and clients) | runs the pure `IAccessPolicy` steps (identity §4.3) against the admin's snapshot for that client, subject (`oid`, key id or Open WebUI user) and assistant; returns `{ allowed, step, reason, status, effectiveLevel, maxResidency, configVersion }` (`step` = the stable step id, `reason` = the stable deny code, identity §4.9); no content; no security event |
 
 **Collections and retrieval**
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET/POST /api/collections`, `GET/PUT/DELETE /api/collections/{id}` | Read / Edit / Manage (delete) | create: name, slug (from name, ASCII), department, owner team, classification; profile = default; delete refused while an assistant links it (409 `collection_in_use` with the list) |
+| `GET/POST /api/collections`, `GET/PUT/DELETE /api/collections/{id}` | Read / Edit / Manage (delete) | create: name, slug (from name, ASCII), department, owner team, classification; profile = default; the detail carries `usedBy[]` (assistants whose published version or draft links it, with `published`/`draft`), which the save drawer shows as "Påverkar 3 assistenter: …"; delete refused while a published version or a draft links it (409 `collection_in_use` with the list; superseded versions do not block, a restore of one fails V34) |
 | `PUT /api/collections/{id}/shares` `{ departmentIds, version }` | Manage | share list (V11); removing a department refused while one of its assistants links the collection |
 | `PUT /api/collections/{id}/retrieval-settings` | Edit | saved directly within the V16 ranges; enqueues an advisory evaluation run (§4.7) whose report is compared with the previous run |
 | `POST /api/collections/{id}/test-retrieval` | Edit, EditPipelines | retrieval-only test panel (§4.9), incl. unpublished |
@@ -334,7 +354,7 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 |---|---|---|
 | `POST /api/collections/{id}/sources`, `GET/PUT/DELETE /api/sources/{id}` | Edit / Manage (delete) | settings per `contracts/sources/v1/{type}.schema.json`; template + parameters (§6.1); schedule default per type; `ContainsThirdPartyText` (default true) writable by `Admin` only (tools §5.4, V13) |
 | `POST /api/sources/preflight` | Edit | unsaved settings → `preview` `preflight` job (§4.7) |
-| `POST /api/sources/{id}/impact` | Edit | effect tags of a changed settings object with counts ("38 dokument tas bort"); returns `impactToken` that the `PUT` must echo when the tag is `scope`/`identity` (V25) |
+| `POST /api/sources/{id}/impact` | Edit | effect tags of a changed settings object with counts ("38 dokument tas bort") and the collection's `usedBy[]` ("påverkar 3 assistenter"); returns `impactToken` that the `PUT` must echo when the tag is `scope`/`identity` (V25) |
 | `POST /api/sources/{id}/sync`, `/retry-failed`, `/pause`, `/resume` | Edit | sync now answers 200 with the existing run when one is queued/running (dedup) |
 | `GET /api/sources/{id}/runs` (keyset), `GET /api/runs/{id}`, `GET /api/runs/{id}/items` (keyset; `outcome`, `reason`, `q`) | Read | crawl report from `Runs.Report` (incl. the site-profile version used, extraction quality, the "no complete traversal for N runs" alert) |
 | `POST /api/runs/{id}/cancel` | Edit | `command` `cancel-run` |
@@ -399,13 +419,21 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET/POST /api/assistants`, `GET/PUT/DELETE /api/assistants/{id}` | Read / Edit / Manage (delete) | form of §5.5.4; `Mode` `rag` (P1), `agent` (P2); save runs V8's `/v1/models` check |
-| `POST /api/assistants/{id}/activate`, `/deactivate` | Edit | `State`; activation runs every V-rule |
-| `PUT /api/assistants/{id}/audiences` | Manage | P1 kind `client` only; V7–V9 |
-| `PUT /api/assistants/{id}/retention` | Manage | `HistoryMode`, `RetentionDays` within the level's policy (V10) |
-| `POST /api/assistants/{id}/test`; `POST /api/assistants/test` (unsaved form) | Edit, EditSkills | §4.9; never stored |
+| `GET/POST /api/assistants`, `GET/PUT/DELETE /api/assistants/{id}` | Read / Edit / Manage (delete) | the assistant's own fields, saved directly under the V-rules: name, slug, owner team, classification, **description** (≤ 500 characters) and **contact** (`ContactName`, `ContactEmail`); create takes an optional `templateId` and starts with only a draft prefilled from the template (or `Settings.Chat` defaults), so `PublishedVersionId` is null and no client lists it; the detail carries `state` (`active`/`archived`), `publishedVersion`, `draft { number, updatedAt, baseChanged }`, `usesTools` (derived, never written: a linked skill's served version links a tool not excluded) and `lastUsedAt` |
+| `GET/PUT/DELETE /api/assistants/{id}/draft` | Read / Edit / Edit | the version fields: instructions, model, collections, skills (with excluded tools), query steps, P2 agent limits, not-found texts and links. One draft per assistant (`DraftVersionId`), created on the first edit as a copy of the published version with `Number` + 1; saving applies field rules and returns the assistant V-rules as `warnings[]` (never refused, so work in progress can be saved); `DELETE` discards it |
+| `POST /api/assistants/{id}/publish` `{ draftVersion, version, confirmBaseChanged? }` | Edit | V34, then every assistant rule (V3–V17) as refusals and V8's `/v1/models` call; one transaction (§4.4) marks the draft `published` and the previous one `superseded`, sets `PublishedVersionId` and clears `DraftVersionId` (data-model §2.1); starts the test run (§7.4). A draft created before the current published version (a restore happened since; its `Number` is lower) answers 409 `draft_base_changed` with the diff until confirmed |
+| `GET /api/assistants/{id}/versions`, `GET …/versions/{n}`, `GET …/versions/{n}/diff?against={m}` (`m` = a number or `draft`) | Read | number, state, who and when, restored-from, test-run summary; the diff is structured: changed settings by name, collections and skills added or removed, and a line diff of instructions and not-found texts (in-house Myers diff over ≤ 20,000 characters, no package) |
+| `POST /api/assistants/{id}/versions/{n}/restore` `{ version }` | Edit | one click: a **new** version with version n's settings (`RestoredFromVersionId`), published at once exactly as publish; an open draft is kept (its base is now older); refused with the list when a link no longer resolves (V34) |
+| `POST /api/assistants/{id}/copy` `{ name, slug, departmentId, ownerTeamId }` | Read (source) + Edit (target department) | new assistant with only a draft = the source's published version (its draft if never published); test questions copied; audiences, keys, versions and statistics not copied; V11/V12 for the target department as warnings; audited `assistant.copy` |
+| `POST /api/assistants/{id}/archive`, `/unarchive` | Edit | `State = archived` hides the assistant from every client (identity §4.3 step 5) and keeps versions, audiences and statistics; unarchive returns `State = active` with the same published version |
+| `GET/POST/PUT/DELETE /api/assistants/{id}/test-questions[/{qid}]` | Read / Edit | V33; the expected document is picked by title search in the draft's collections |
+| `POST /api/assistants/{id}/test-runs` `{ target: draft \| published }`; `GET /api/assistants/{id}/test-runs` | Edit / Read | §7.4: on demand (the publish run starts by itself); one running run per assistant (409 `test_run_running`); results through `GET /api/evaluation-runs/{id}/results` |
+| `PUT /api/assistants/{id}/audiences` | Manage | P1 kind `client` only; V7–V9; not versioned |
+| `PUT /api/assistants/{id}/retention` | Manage | `HistoryMode`, `RetentionDays` within the level's policy (V10); not versioned |
+| `POST /api/assistants/{id}/test` `{ target: draft \| published, … }` | Edit, EditSkills | §4.9; never stored |
 | `GET /api/assistants/{id}/stats?from=&to=` | Read | `AssistantDailyTotals` |
-| `PUT /api/assistants/{id}/limits` (P2) | Edit (≤ defaults) / Admin (≤ hard caps) | V14 |
+| `PUT /api/assistants/{id}/limits` (P2) | Edit (≤ defaults) / Admin (≤ hard caps) | writes the draft's `QuerySteps.agent`; V14 |
+| `GET/POST/PUT/DELETE /api/assistant-templates[/{id}]` | Read / Admin | platform-owned **assistant templates** through the generic form (§5.8): name, description, instructions, not-found texts sv/en with links, query steps; copied into a new assistant's draft at creation, never linked afterwards; audited `assistanttemplate.*` |
 
 **Skills and tool servers (P2)** — rules as tools design §3.5–§3.7, §4.4–§4.5 and §9.2: `/api/skills` (draft, validate,
 publish → skill gate (run in the admin, tools §3.7), gate report, serve, rollback, retire, share list, re-run the gate), `/api/tool-servers`
@@ -429,11 +457,14 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 **Feedback, conversations, audit, overview** — §8, §9; `GET /api/overview` returns the attention items of §5.5.1 for
 the caller's scope.
 
-### 4.6 Cross-rules (V1–V32; V20 and V27 retired)
+### 4.6 Cross-rules (V1–V34; V20 and V27 retired)
 
 Run by `ConfigRules` under the `ConfigVersion` lock (§4.4) on save of the entity, on every change that can break a
-dependant (column *Re-checked when*), and again inside the publish/activate transaction. A failing dependant lists every
-affected object by name (problem extension `affected[]`). Levels order `public < internal < sensitive`; residency
+dependant (column *Re-checked when*), and again inside the publish transaction. A failing dependant lists every
+affected object by name (problem extension `affected[]`). For an assistant, rules on version fields (instructions,
+model, collections, skills, query steps, not-found texts) answer as `warnings[]` on draft save and refuse on publish and
+restore; dependants are re-checked against the published version, and a draft is checked again when it is published.
+Levels order `public < internal < sensitive`; residency
 ladder `public → External`, `internal → Eu`, `sensitive → OnPrem`, ordered `OnPrem < Eu < External`. Retired numbers are
 kept so references stay stable.
 
@@ -441,22 +472,22 @@ kept so references stay stable.
 |---|---|---|---|---|
 | V1 | source level ≤ its collection's level | `source_above_collection` | source save; collection level lowered | data-model §2.1 |
 | V2 | lowering a collection's level below a source or below a linking assistant's need is refused; raising it is a config change the worker applies (engine §15; no membership recompute) | `collection_level_conflict` | collection save | engine §15 |
-| V3 | assistant level ≥ every linked collection (direct, shared, and through linked skills) | `assistant_below_collection` | assistant save; collection level raised; skill served | data-model §2.1, knowledge §4.3 |
-| V4 | assistant level ≥ every linked skill; skill level ≥ its collections and its tools' **result level** | `assistant_below_skill`, `skill_below_link` | skill draft/serve; tool server result level | tools §3.10 |
-| V5 | for every reachable tool server: max(assistant level, ceilings of history-resending audience clients) ≤ **clearance** | `tool_clearance` | assistant save/audience; skill serve; server edit | tools §5.3 |
+| V3 | assistant level ≥ every linked collection (own or shared; collections are linked directly only) | `assistant_below_collection` | assistant save; publish; collection level raised | data-model §2.1, knowledge §4.3 |
+| V4 | assistant level ≥ every linked skill; skill level ≥ its tools' **result level** | `assistant_below_skill`, `skill_below_link` | skill draft/serve; tool server result level | tools §3.10 |
+| V5 | for every reachable tool server: max(assistant level, ceilings of history-resending audience clients) ≤ **clearance** | `tool_clearance` | publish; level or audience save; skill serve; server edit | tools §5.3 |
 | V6 | every reachable tool server's result level ≤ assistant level | `tool_result_level` | as V5 | tools §5.3 |
 | V7 | an audience client's ceiling ≥ assistant level (else the assistant is invisible to it) | `audience_above_ceiling` | audience save; client ceiling lowered; assistant level raised | identity §4.1 |
-| V8 | **residency**: the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on save, the model is listed by the gateway's `/v1/models` called with `x-ume-max-residency` = the level's ceiling** (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later) | `model_residency`, `model_not_listed`, `gateway_unavailable` | save; activate; audience save; model sync changed residency (warning on Overview; chat checks per call) | chat §8.2, simplification pass §7 |
+| V8 | **residency**: the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on publish and on a level or audience save, the model is listed by the gateway's `/v1/models` called with `x-ume-max-residency` = the level's ceiling** (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later) | `model_residency`, `model_not_listed`, `gateway_unavailable` | publish; level save; audience save; model sync changed residency (warning on Overview; chat checks per call) | chat §8.2, simplification pass §7 |
 | V9 | `sensitive` assistants only for clients with `StoresHistory = false` when `DataProtectionPolicies.ClientsWithoutHistoryOnly` | `client_stores_history` | audience save; policy change | platform §8a |
 | V10 | `HistoryMode` ∈ allowed modes, `RetentionDays` ≤ level max (default ≤ max ≤ 90) | `retention_outside_policy` | assistant save; policy tightened (lists assistants) | data-model §2.1 |
-| V11 | ≤ 20 collections per assistant (union with skills'); each of the assistant's department or shared with it | `too_many_collections`, `collection_not_shared` | assistant save; skill serve; share list narrowed | knowledge §4.2, §3.2 here |
-| V12 | ≤ 20 skills per assistant, each of its department, shared with it, or a platform skill; RAG-mode skill bodies ≤ 6,000 estimated tokens in total | `too_many_skills`, `skill_not_shared`, `skill_bodies_too_long` | assistant save; skill serve; share list narrowed | tools §3.4, §3.9 |
-| V13 | lethal trifecta false — a hard refusal, no acceptance in P2 | `lethal_trifecta` | assistant save/activate; skill link/serve; tool approval/grant; `ContainsThirdPartyText` changed | tools §5.4 |
-| V14 | agent: `SupportsTools`, synced price; limits ≤ `AgentDefaults` unless `Admin`, always ≤ `AgentHardCaps` | `model_no_tools`, `price_unknown`, `limit_above_default`, `limit_above_cap` | assistant save; settings change | tools §6.4–§6.5 |
-| V15 | not-found texts ≤ 1,000 characters each, ≤ 5 links, `https`, host matches `Settings.Chat.AllowedLinkHosts` | `link_host_not_allowed` | assistant save; allow-list narrowed | chat §9.4, §10.1 |
+| V11 | ≤ 20 collections per assistant; each of the assistant's department or shared with it | `too_many_collections`, `collection_not_shared` | publish; share list narrowed | knowledge §4.2, §3.2 here |
+| V12 | ≤ 20 skills per assistant, each of its department, shared with it, or a platform skill; for an assistant without tools, skill bodies ≤ 6,000 estimated tokens in total | `too_many_skills`, `skill_not_shared`, `skill_bodies_too_long` | publish; skill serve; share list narrowed | tools §3.4, §3.9 |
+| V13 | lethal trifecta false — a hard refusal, no acceptance in P2 | `lethal_trifecta` | publish; skill serve; tool approval/grant; `ContainsThirdPartyText` changed | tools §5.4 |
+| V14 | assistant that uses tools (a linked skill's served version links a tool): `SupportsTools`, synced price; limits ≤ `AgentDefaults` unless `Admin`, always ≤ `AgentHardCaps` | `model_no_tools`, `price_unknown`, `limit_above_default`, `limit_above_cap` | publish; skill serve (it can switch an assistant to tools); settings change | tools §6.4–§6.5 |
+| V15 | not-found texts ≤ 1,000 characters each, ≤ 5 links, `https`, host matches `Settings.Chat.AllowedLinkHosts` | `link_host_not_allowed` | publish; allow-list narrowed | chat §9.4, §10.1 |
 | V16 | `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–400, `efSearch` 40–400, `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows) | `retrieval_settings_invalid` | collection settings save | knowledge §12.1 |
-| V17 | `QuerySteps`: `topK` 1–50, history 0–20 messages / ≤ 8,000 tokens, `contextTokens` ≤ the model's `ContextWindow` when known, `maxOutputTokens` 64–4,096, temperature 0–1, language `auto`/`sv`; condense model on-prem | `query_steps_invalid` | assistant save; model sync | chat §5–§6, §10.3 |
-| V18 | skill version label > every existing; **serve** only after the version's gate run finished, and only if V3–V6, V11–V14 and V19 hold for every assistant linking the skill | `version_not_increasing`, `gate_not_finished`, `serve_breaks_assistants` | skill publish/serve/rollback | tools §3.5 |
+| V17 | `QuerySteps`: `topK` 1–50, history 0–20 messages / ≤ 8,000 tokens, `contextTokens` ≤ the model's `ContextWindow` when known, `maxOutputTokens` 64–4,096, temperature 0–1, language `auto`/`sv`; condense model on-prem | `query_steps_invalid` | publish; model sync | chat §5–§6, §10.3 |
+| V18 | skill version label > every existing; **serve** only after the version's gate run finished, and only if V4–V6, V12–V14 and V19 hold for every assistant whose published version links the skill | `version_not_increasing`, `gate_not_finished`, `serve_breaks_assistants` | skill publish/serve/rollback | tools §3.5 |
 | V19 | skill tool links need a `ToolDepartmentGrant` for the skill's department; platform skills only `AllDepartments` tools; sharing never grants: a linking assistant of another department sees a shared skill's tool only with its own grant (warning lists the tools) | `tool_grant_missing` | skill draft; grant revoked (lists skills); share list widened | tools §3.6 |
 | V20 | *retired* (skill MCP exposure vs audience ceilings: per-skill endpoints moved to P3) | – | – | – |
 | V21 | clients: `StoresHistory` ⇒ ceiling ≠ `sensitive`; `mcp-client` ⇒ ceiling ≤ `internal`; `ToolPolicy` per kind default | `client_ceiling_rule` | client save | data-model `CK_Clients_*`, tools §5.1 |
@@ -471,6 +502,8 @@ kept so references stay stable.
 | V30 | `Settings` ranges as the `CK_Settings_*` checks (guard 1–100 %, min/max counts, sample sizes, …) | `setting_out_of_range` | settings save | data-model §2.1 |
 | V31 | embedding profile fixed per collection (`platform-default`); other profiles only `Admin` (P3) | `profile_admin_only` | collection save | R3 |
 | V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` are `GatewayModels` rows servable `OnPrem` (`SkillGateModel` also `SupportsTools`) | `settings_model_residency` | settings save; model sync changed residency (warning on Overview) | processing §13.1, chat §5, tools §3.7 |
+| V33 | assistant test questions: ≤ 30 per assistant; question 1–2,000 characters; expected behaviour 1–2,000; expected phrase ≤ 200; an expected document must belong to a collection the draft or published version links (unlinking it later marks the question in the report, never refuses) | `test_question_invalid`, `test_question_document_unlinked` | test-question save | §7.4 |
+| V34 | publish and restore: the definition resolves (collections not deleted, skills not retired and usable by the department, the model in `GatewayModels`); description and contact are set; a draft created before the current published version (lower `Number`) is published only when confirmed | `version_link_missing`, `assistant_contact_missing`, `draft_base_changed` | publish; restore | §4.5, simplification pass §15 |
 
 ### 4.7 Jobs for the worker
 
@@ -499,6 +532,11 @@ pass §9) and `pg_notify('rag_jobs', class)` in the same transaction as any conf
 | Site profile approve / reject / roll back / edit | `command` `approve-site-profile` / `reject-site-profile` / `rollback-site-profile` / `edit-site-profile` | `site-profile:{siteProfileId}` | – | `SiteProfileVersions`, `SiteProfiles.AppliedVersionId` |
 | Approve / reject a parse-profile proposal (P2) | `command` `approve-profile` / `reject-profile` | `profile:{id}` | – | `ParseProfiles` |
 
+Assistant publish, restore and copy enqueue nothing: they are config changes only. Assistant test runs (§7.4) are not
+worker jobs either: like answer-level evaluation and the skill gate they run in `rag-admin` (`AssistantTestRunner`,
+§2.2), which needs `Ume.Rag.Answering` and the gateway keys of every level; the `EvaluationRuns` row is their durable
+state.
+
 The UI polls `GET /api/jobs/{id}` (or the run/evaluation it created) every 2 s, every 5 s after 30 s, every 15 s after 5
 minutes, and not while the tab is hidden; there is no push channel. A `dead` or `failed` job shows its `LastError` code
 through the §4.2 table.
@@ -519,18 +557,20 @@ Runs `Ume.Rag.Answering` in the admin process (identity §4.8): principal `admin
 by the admin's role scope (assistant's department ∈ caller's departments), assistant audiences ignored, **collections
 not yet published included**, attribution to the assistant's owner team (knowledge §4.2, §4.5), residency ceiling at the
 assistant's level (with test history: chat §8.2's rule if the assistant has a history-resending client in its
-audience). Nothing is stored. Query embeddings use the in-process L1 cache only, keyed with a per-process random HMAC
+audience). It runs the assistant's **draft** by default (the published version when there is no draft, or on request
+with `target = published`), so a change is tried before **Publicera**; the draft's V-rule warnings are shown above the
+answer. Nothing is stored. Query embeddings use the in-process L1 cache only, keyed with a per-process random HMAC
 key. **Release coupling**: `rag-admin` and `rag-api` are built and deployed from one release (`release.yml`), and the
 panel ships in the same P1 release as the chat role, so it never runs a different `Ume.Rag.Answering` than chat does.
 
 | Input | Output (JSON, non-streamed; ≤ 60 s) |
 |---|---|
-| `question`; optional `history[]` (≤ 10 messages, to test condense); saved assistant id **or** the unsaved form (validated with warnings allowed); optional `collectionIds` subset | `retrieval`: searched collections (with a not-published flag), coverage `{status, bestDistance, threshold, collection}`, candidates `{rank, title, url or file name, headingPath, text (600 characters, expandable), distance, keywordRank, vectorRank, fused, cited}`, timings; `condense` `{used, skipped, question}`; `prompt` token budget per part against the limit; `answer` `{raw, delivered, filtered[] (kind, text), citations [n] → document, outcome, language}`; `gateway` `{model, residency, latencyMs, ttftMs, inputTokens, outputTokens, costUsd}`; P2 `toolCalls[]` `{tool, state, durationMs, arguments (admin view), resultExcerpt}`, skill mode (static/progressive) |
+| `question`; optional `history[]` (≤ 10 messages, to test condense); assistant id and `target` (`draft` default, `published`); optional `collectionIds` subset | `retrieval`: searched collections (with a not-published flag), coverage `{status, bestDistance, threshold, collection}`, candidates `{rank, title, url or file name, headingPath, text (600 characters, expandable), distance, keywordRank, vectorRank, fused, cited}`, timings; `condense` `{used, skipped, question}`; `prompt` token budget per part against the limit; `answer` `{raw, delivered, filtered[] (kind, text), citations [n] → document, outcome, language}`; `gateway` `{model, residency, latencyMs, ttftMs, inputTokens, outputTokens, costUsd}`; `usesTools`; P2 `toolCalls[]` `{tool, state, durationMs, arguments (admin view), resultExcerpt}`, skill inclusion (static/progressive) |
 
 - Rate: 20 test questions per minute per user, metric `rag.admin.test_panel{outcome}`; no audit entry, no 6007 (the
   content is the caller's own department's).
 - The answer is shown as **plain text** with preserved line breaks and `[n]` chips (no Markdown renderer).
-- P2 agent assistants call hosted MCP servers through the admin's in-process hub as `admin-console` (needs
+- P2: an assistant that uses tools (its draft, when testing the draft) calls hosted MCP servers through the admin's in-process hub as `admin-console` (needs
   `Clients.ToolPolicy = read` for that client, §13), with the same limits; write tools stay impossible.
 - Retrieval-only variant `POST /api/collections/{id}/test-retrieval` for pipeline editors and collection editors.
 
@@ -575,6 +615,7 @@ Assistenter, Återkoppling, Meny.
 │   Umeå kommun            ├──────────────────────────────────────────────────────────────────────────────────────┤
 │ ÖVERBLICK                │                                                                                      │
 │   Översikt          (3)  │   <main id="main">                                                                   │
+│   Karta                  │                                                                                      │
 │ KUNSKAP                  │                                                                                      │
 │   Kunskapsbanker         │                                                                                      │
 │ ASSISTENTER              │                                                                                      │
@@ -586,7 +627,7 @@ Assistenter, Återkoppling, Meny.
 │   Samtalsgranskning      │                                                                                      │
 │ PLATTFORM (formulär)     │                                                                                      │
 │   Inställningar · Dataskydd · Klienter · Nycklar                                                                  │
-│   Mallar · Webbplatsprofiler · Inbäddningsprofiler                                                                │
+│   Mallar · Assistentmallar · Webbplatsprofiler · Inbäddningsprofiler                                              │
 │   Gateway-modeller · Organisation · Granskningslogg                                                               │
 │ ↗ API (Scalar) · ↗ AI-gatewayens admin                                                                            │
 └──────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────┘
@@ -601,10 +642,11 @@ drift and pending approvals appear as attention cards and badges, plus SIEM even
 | Page | P1 | P2 | P3 |
 |---|---|---|---|
 | Översikt | attention items, setup checklist, sync health per department, queue age, org/model sync | drift, approvals, parse-profile proposals | trends |
+| Karta | department map (§5.5.6) | skills and workspaces in the map | – |
 | Kunskapsbanker | list; detail tabs Översikt (checklist, sources, counts, state), Källor, Dokument (incl. personuppgifter), Testfrågor och kvalitet, Sökinställningar, Delning | Historik tab, coverage-threshold histogram and proposal | analytics |
 | Källa | URL list, crawl, upload forms with template parameters; preflight; preview with site-profile before/after; impact; runs; crawl report; files; quarantine; deletions; held | SharePoint with preflight, crawl hierarchy tree, parameter diff | more connectors |
 | Publicering | plan, re-process progress, evaluation report, keep/roll back | – | – |
-| Assistenter | RAG form, test panel, audiences (clients), retention, stats | agent mode, skills, limits, widget audiences, Historik tab | risk acceptance |
+| Assistenter | create from a template, copy, draft form with description and contact, test panel on the draft, Publicera, Versioner (diff, restore), Testfrågor with the test report, audiences (clients), retention, stats, archive | skills (with **Använder verktyg** when one carries tools), limits, widget audiences | risk acceptance |
 | Färdigheter, Verktygsservrar | – | tools §3, §4 pages | import/export |
 | Återkoppling | ratings, comment reveal, import health | rewrite into test question | trends |
 | Samtalsgranskning | conversation behind a feedback item (`public`/`internal`), access log | search by assistant and period, `sensitive` two-person flow | user notification |
@@ -627,10 +669,11 @@ progress flags), which disappears when the collection has a published assistant 
 | 6 | Spara och hämta | source page → run page | saves, enqueues the first sync; live counters, failures by reason in plain Swedish | – |
 | 7 | Testfrågor | Testfrågor och kvalitet | generated after the first runs; cost shown before; own questions with expected documents | – |
 | 8 | Publicera kunskapsbanken | collection page | latest evaluation report shown ("Träffsäkerhet 0,78 · 86 frågor"); **Publicera** | – |
-| 9 | Skapa assistent | assistant drawer | instructions template, collections (the new one preselected; unpublished ones work in Testa only), model picker showing only models servable for the level, checked against the gateway on save (V8), not-found texts prefilled, contact link to umea.se | V3, V8, V15 |
-| 10 | Testa | test panel | sample questions from the evaluation set as one-click prompts; sources, coverage, raw vs delivered answer | – |
-| 11 | Gör tillgänglig | Målgrupp | pick client "Open WebUI (pilot)"; residency check explained if refused ("Modellen kör utanför EU; välj en modell inom EU eller kommunens servrar") | V7–V9 |
-| 12 | Öppna i Open WebUI | assistant page | link from the client's `PortalUrl`; the model appears under its slug | API lists it by audience |
+| 9 | Skapa assistent | assistant drawer → assistant page | pick an **assistant template** ("Allmän rådgivning" preselected); name, description, contact person; collections (the new one preselected; unpublished ones work in Testa only), model picker showing only models servable for the level, not-found texts and contact link from the template; saved as **utkast** | warnings only (V3, V8, V15 at publish) |
+| 10 | Testa | Testa tab | runs the draft; sample questions from the evaluation set as one-click prompts; sources, coverage, raw vs delivered answer; **Spara som testfråga** turns a tried question into a test question with the expected behaviour typed in | V33 |
+| 11 | Publicera | assistant page | **Publicera**; the model is checked against the gateway (V8); the test-question report follows on the Testfrågor tab (advisory, §7.4) | V3–V17, V34 |
+| 12 | Gör tillgänglig | Målgrupp | pick client "Open WebUI (pilot)"; residency check explained if refused ("Modellen kör utanför EU; välj en modell inom EU eller kommunens servrar") | V7–V9 |
+| 13 | Öppna i Open WebUI | assistant page | link from the client's `PortalUrl`; the model appears under its slug | API lists it by audience |
 
 ### 5.5 Key pages (wireframe level)
 
@@ -653,7 +696,9 @@ Attention item sources: runs `awaiting-deletion-confirmation`; evaluation report
 (after a publish or nightly); PII-flagged documents in `public` collections; degraded runs; sources with ≥ 3 failed
 runs; sources with N (default 3) runs without a complete traversal (simplification pass §2); feedback import failing ≥ 4
 runs; org or model sync failing; template versions without a supporting worker; site-profile proposals (platform
-admins); P2 drift and pending approvals.
+admins); published assistants without a message in 90 days (`AssistantDailyTotals`; published ≥ 90 days ago), with
+**Arkivera** and **Behåll** (dismissed for 90 days) (simplification pass §15); a test report on an assistant's new
+version with more questions not as expected than the previous version's; P2 drift and pending approvals.
 
 #### 5.5.2 Kunskapsbank
 
@@ -683,7 +728,8 @@ Inställningar  Körningar  Genomsökningsrapport  Borttagningar (1)  Behållna 
 │ Webbplatsprofil: Sitevision, version 3 (inlärd 30 okt.)                          [Förhandsgranska]         │
 │ ▸ Avancerat (mallinställningar: textavsnittens längd, överlapp, …)                                         │
 └───────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-  ⓘ Ändringen gör att 38 dokument hamnar utanför avgränsningen och tas bort direkt.   [Avbryt] [Spara ändå]
+  ⓘ Ändringen gör att 38 dokument hamnar utanför avgränsningen och tas bort direkt.
+    Påverkar 2 assistenter: Bygglovsassistenten, Kundtjänst bygg (utkast).             [Avbryt] [Spara ändå]
 
 Borttagning väntar på beslut · körning 30 okt. 01:12
   212 av 840 dokument (25 %) hittades inte. Gränsen är 20 % (minst 5).
@@ -695,23 +741,44 @@ Borttagning väntar på beslut · körning 30 okt. 01:12
 #### 5.5.4 Assistent with test panel
 
 ```
-Assistenter › Bygglovsassistenten  (modellnamn: bygglov)          [Intern] [Utkast]          [Aktivera] [⋯]
-Inställningar  Testa  Målgrupp  Lagring  Statistik
-┌ Inställningar ───────────────────────────────┐ ┌ Testa ────────────────────────────────────────────────┐
-│ Instruktioner  [textarea, mall ifylld]       │ │ Fråga [Behöver jag bygglov för en altan?     ] [Fråga]│
-│ Kunskapsbanker [Bygglov ×] [+]               │ │ Förslag: · Vad kostar ett bygglov? · …               │
-│ Modell  [ume/chat-eu ▾] EU · 128k ✓ gateway  │ │ Träffar (täckning: god, 0,31 ≤ 0,50)                  │
-│ När svar saknas (sv) [Jag hittar inget …]    │ │ 1 Altaner och uteplatser – umea.se/…  0,31  citerad   │
-│ När svar saknas (en) [I cannot find …]       │ │ 2 Bygglov – vad gäller   – umea.se/…  0,37            │
-│ Kontaktlänkar [Kontaktcenter 090-16 10 00]   │ │ Svar som användaren ser                    | Råtext   │
-│ ▸ Avancerat: följdfrågor, historik, längd    │ │ Nej, om altanen är lägre än 1,8 m … [1]               │
-│                                              │ │ Modell ume/chat-eu · EU · 2,1 s · 0,0012 USD          │
-└──────────────────────────────────────────────┘ └───────────────────────────────────────────────────────┘
+Assistenter › Bygglovsassistenten  (modellnamn: bygglov)   [Intern] [Publicerad: version 3] [Utkast ändrat 30 okt.]
+Svarar på frågor om bygglov, anmälan och avgifter. Kontakt: Anna Andersson, bygglov@umea.se  [Ändra]
+Använder verktyg (P2)                                          [Publicera utkastet]  [⋯ Kopiera, Arkivera]
+Utkast  Testa  Testfrågor (8)  Versioner (3)  Målgrupp  Lagring  Statistik
+┌ Utkast (ändrat mot version 3) ───────────────────┐ ┌ Testa (kör utkastet ▾) ────────────────────────────┐
+│ Instruktioner  [textarea, mall ifylld]           │ │ Fråga [Behöver jag bygglov för en altan?] [Fråga]  │
+│ Kunskapsbanker [Bygglov ×] [Detaljplaner ×] [+]  │ │ Förslag: · Vad kostar ett bygglov? · …             │
+│ Färdigheter (P2) [Bygglov ×] [+]                 │ │ Träffar (täckning: god, 0,31 ≤ 0,50)               │
+│ Modell  [ume/chat-eu ▾] EU · 128k                │ │ 1 Altaner och uteplatser – umea.se/…  0,31  citerad│
+│ När svar saknas (sv) [Jag hittar inget …]        │ │ Svar som användaren ser               | Råtext     │
+│ När svar saknas (en) [I cannot find …]           │ │ Nej, om altanen är lägre än 1,8 m … [1]            │
+│ Kontaktlänkar [Kontaktcenter 090-16 10 00]       │ │ Modell ume/chat-eu · EU · 2,1 s · 0,0012 USD       │
+│ ▸ Avancerat: följdfrågor, historik, längd        │ │ [Spara som testfråga]                              │
+│ ⚠ 1 varning (visas vid Publicera)                │ │                                                    │
+│ [Spara utkast]  [Släng utkastet]                 │ │                                                    │
+└──────────────────────────────────────────────────┘ └────────────────────────────────────────────────────┘
 ```
+
+- **Badges**: `[Utkast]` alone before the first publish; `[Publicerad: version n]` afterwards, plus `[Utkast ändrat …]`
+  while a draft exists; `[Arkiverad]` when archived. **Använder verktyg** is a derived label (P2), never a
+  setting: it appears when a linked skill's served version carries tools, and the Färdigheter field explains that such
+  a skill switches the assistant to the agent loop. Description and contact (name and e-mail) are the assistant's own
+  fields, saved directly, like Målgrupp and Lagring; everything in the Utkast tab is versioned.
+- **Publicera utkastet** opens a dialog with the diff against the published version, the remaining warnings (refusals
+  block) and the cost of the test run; after publish the Testfrågor tab shows the
+  report as it arrives.
+- **Versioner**: a list (number, published by, when, "återställd från version n", test summary "7 av 8 som
+  förväntat"); **Jämför** shows the structured diff (settings by name, collections and skills added or removed, a line
+  diff of the instructions with additions and removals as text marked `<ins>`/`<del>`, not by colour alone);
+  **Återställ** on any earlier version publishes it again as a new version after one confirmation ("Version 2
+  publiceras igen som en ny version. Ditt utkast finns kvar.").
+- **Testfrågor**: the set (question, expected behaviour, expected document or phrase), **Lägg till**, **Kör
+  testfrågor** (on the draft or the published version), and the latest report as the §7.2 card (§7.4).
+- **Kopiera** (in ⋯) asks for name, slug, department and owner team and opens the copy's draft.
 
 The *Statistik* tab shows the **latest answer evaluation** (late P1): faithfulness and citation precision of the last
 `answers` run with question counts, compared with the previous run, next to the live `uncited_answer` rate
-(processing §14.8, `AnswerEvaluationService` §2.2).
+(processing §14.8, `AnswerEvaluationService` §2.2), and the date of last use.
 
 #### 5.5.5 Återkoppling
 
@@ -725,6 +792,23 @@ The *Statistik* tab shows the **latest answer evaluation** (late P1): faithfulne
 Import från Open WebUI: senast 10:45, lyckad · 2 kunde inte kopplas till ett svar senaste dygnet
 ```
 
+#### 5.5.6 Karta (department map)
+
+```
+Karta · Stadsbyggnad                                                  Visa: [Allt ▾]  [Tabell]
+Källor                    Kunskapsbanker               Assistenter                       Målgrupper
+umea.se/bygga  ─────────▶ Bygglov (Intern) ──────────▶ Bygglovsassistenten (v3) ───────▶ Open WebUI (pilot)
+Blanketter     ─────────▶                    └───────▶ Kundtjänst bygg (utkast)          –
+umea.se/plan   ─────────▶ Detaljplaner ─────────────▶ Bygglovsassistenten (v3)
+                          Avfall (delad från Teknik) ─▶ Kundtjänst bygg (utkast)
+```
+
+One column per stage, each item a link to its page; selecting an item highlights what it feeds and what feeds it. The
+lines are drawn as plain SVG next to lists that carry the same relations as text ("matar: …", "används av: …"), and
+**Tabell** shows one row per source → collection → assistant → audience path, so nothing depends on the drawing (no
+graph library, §10.2). Shared collections appear with their owning department; assistants show their published
+version, draft-only links are marked "(utkast)". Source: `GET /api/departments/{id}/map`.
+
 ### 5.6 Empty and error states
 
 | Situation | Text (Swedish) and action |
@@ -734,6 +818,7 @@ Import från Open WebUI: senast 10:45, lyckad · 2 kunde inte kopplas till ett s
 | No run yet | "Ingen hämtning har gjorts. Den första startar när du sparar källan." |
 | Not published | "Ej publicerad: kunskapsbanken syns bara i Testa tills du publicerar den." |
 | No test questions | "Testfrågor skapas automatiskt när den första hämtningen är klar (cirka 10–20 minuter)." |
+| Assistant without test questions | "Assistenten har inga testfrågor än. Lägg till några frågor som den ska klara, så körs de varje gång du publicerar." [Lägg till testfråga] |
 | No feedback | "Ingen återkoppling ännu. Den kommer när användare ger tummen upp eller ned i Open WebUI." |
 | No role | copied no-access page in Swedish: "Din roll ger inte åtkomst till den här sidan. Kontakta plattformsteamet om du behöver den." |
 | Load failure | copied `AsyncState` with "Försök igen" (`components/ui/AsyncState.vue:14`) |
@@ -762,11 +847,15 @@ Import från Open WebUI: senast 10:45, lyckad · 2 kunde inte kopplas till ett s
 | feedback / comment / reason | återkoppling / kommentar / skäl | conversation / reviewer | samtal / granskare |
 | `public` / `internal` / `sensitive` | offentlig / intern / känslig | `OnPrem` / `Eu` / `External` | kommunens servrar / EU / utanför EU |
 | department / team | förvaltning / team | audit log | granskningslogg |
+| assistant version / published version / draft | version / publicerad version / utkast | restore / copy / archive | återställ / kopiera / arkivera |
+| assistant test question / expected behaviour | testfråga / förväntat beteende | uses tools (derived) | använder verktyg |
+| assistant template / department map | assistentmall / karta | owner team | ägarteam |
 
 ### 5.8 Generic forms for platform objects (P1)
 
 Platform-admin objects get no dedicated pages in P1 (simplification pass §10): settings sections, data protection,
-clients, keys, templates, site profiles, embedding profiles (read), gateway models, organisation mirror (read).
+clients, keys, templates, assistant templates (simplification pass §15), site profiles, embedding profiles (read),
+gateway models, organisation mirror (read); P2 department settings (owner-team scoping, also for department admins).
 
 - `GenericList` + `GenericForm` render any resource from `GET /api/forms/{resource}`: the JSON Schema of the resource's
   request record (generated from the same DataAnnotations the API validates with, so the form and the server agree) and
@@ -883,7 +972,7 @@ demonstrably need custom flows (§16).
 - Retrieval settings form (Sökinställningar tab): all values within V16 ranges saved directly; the following
   evaluation report shows the effect; the previous values can be restored from the report.
 
-### 7.2 Evaluation report card (publish, collection; P2 skill)
+### 7.2 Evaluation report card (publish, collection, assistant; P2 skill)
 
 ```
 Utvärdering · Webbplats umea.se/bygga, publicering 30 okt. 11:02 (jämfört med 29 okt.)
@@ -895,19 +984,51 @@ Utvärdering · Webbplats umea.se/bygga, publicering 30 okt. 11:02 (jämfört me
 
 "Om utvärderingen" explains: the report is advisory and stops nothing; differences of a few points can be chance;
 below 20 questions it says "för få frågor för att jämföra". The skill gate's report (tools §3.7) uses the same card
-per model with tool use and restraint lines and **Servera** instead of Behåll/Återställ.
+per model with tool use and restraint lines and **Servera** instead of Behåll/Återställ. The assistant test report
+(§7.4) uses it with the counts of §7.4.
 
 ### 7.3 Overrides
 
 Removed (simplification pass): no gate, so no overrides (§16).
+
+### 7.4 Testfrågor per assistent (simplification pass §15)
+
+- **Set**: `AssistantTestQuestions` per assistant (V33, ordered by `Ordinal`): question, expected behaviour as free text ("Ska hänvisa till
+  kontaktcenter och inte ange någon avgift"), optional expected document (picked by title in the linked collections)
+  and optional expected phrase. Added on the Testfrågor tab, from **Spara som testfråga** in Testa, or from a feedback
+  row (P2, "rewrite into test question"). The set belongs to the assistant, not to a version, so every version is
+  measured against the same questions; copying an assistant copies its set.
+- **When**: after every publish and restore (on the new published version), and on demand with **Kör testfrågor** on
+  the draft or the published version. One run per assistant at a time; an assistant without questions gets no run.
+- **How**: `AssistantTestRunner` in `rag-admin` (§2.2) runs each question once through `Ume.Rag.Answering` exactly as
+  the test panel does (principal `admin-console`, the target version's definition, residency at the assistant's level,
+  temperature as configured, `x-ume-step: assistant-test`), then:
+  - **expected document**: cited or not (deterministic, from the answer's citations);
+  - **expected phrase**: present in the delivered answer or not (case-insensitive, after Unicode normalisation);
+  - **expected behaviour**: the answer judge (`Settings.EvaluationJudgeModel`, on-prem, V32; the prompt family of the
+    `answers` run, processing §14.8) gets the question, the expected behaviour, the delivered answer and the cited
+    titles, and returns `pass`, `fail` or `unsure` with a short note.
+  A question passes ("som förväntat") when every check it has passes. Stored (data-model §2.2): an `EvaluationRuns`
+  row (`Kind = assistant-tests`, `SubjectId` = assistant, `SubjectVersion` = the version number, a draft's included,
+  `ComparedRunId` = the previous published version's last run; the published version's `TestRunId` points at it) and
+  one `EvaluationResults` row per question (`Verdict`, `Hit` for the expected document and phrase, the question as
+  asked, the answer at the assistant's level, `JudgeNote`). The report shows question, answer and note; **Testa**
+  re-runs one question in the panel.
+- **Report**: the §7.2 card: "8 testfrågor · 7 som förväntat (förra versionen 8) · 1 sämre, 0 bättre" with the
+  questions that changed and the judge's reasons; after a publish it carries **Behåll** and **Återställ förra
+  versionen** (a restore, §4.5); a worse result than the previous version also becomes an Översikt attention item.
+  "Om testfrågorna" says the judge can be wrong and that nothing is blocked.
+- **Cost**: questions × (one answer + one judge call), shown before **Publicera** and **Kör testfrågor**; at most 50
+  questions (V33), metric `rag.admin.assistant_tests{outcome}`. Old runs: the last 20 per assistant are kept (data-model
+  §8).
 
 ## 8. Feedback, conversation review and access audit
 
 ### 8.1 Återkoppling (P1)
 
 - Rows from `chat."Feedback"` of the caller's assistants (keyset by `CreatedAt`), joined in memory with message
-  metadata (`Outcome`, `Coverage`, `Language`), cited document titles (`MessageSources.DocumentId` →
-  `Documents.Title`), assistant and client names. **No content**: no question, answer, title or comment.
+  metadata (`Outcome`, `Coverage`, `Language`, the assistant version that answered from `Messages.AssistantVersionId`),
+  cited document titles (`MessageSources.DocumentId` → `Documents.Title`), assistant and client names. **No content**: no question, answer, title or comment.
 - **Reason category** in plaintext: `Feedback.ReasonCategory` filled by the importer and `/v1/feedback` only from the
   fixed Open WebUI keys (`RateComment.svelte:17-35`), else `other`; the free text stays in the ciphertext. Swedish
   labels in `labels.ts`.
@@ -964,7 +1085,8 @@ Admin entries: `collection.create|update|delete|publish|share|retrieval_settings
 `source.create|update|delete|pause|resume|sync`, `upload.batch|delete|restore`, `deletion.confirm|reject`,
 `hold.release`, `pii.view|clear`, `pipeline.publish|cancel|rollback`, `template.*`,
 `siteprofile.update|approve|reject|rollback`, `evaluation.generate|question|run`,
-`assistant.create|update|delete|activate|deactivate|audience|retention|limits`, `client.*`,
+`assistant.create|update|delete|draft|discard_draft|publish|restore|copy|archive|unarchive|audience|retention|limits`,
+`assistanttest.create|update|delete|run`, `assistanttemplate.*`, `departmentsettings.update` (P2), `client.*`,
 `key.create|update|rotate|reveal|copy|revoke`, `gatewaymodel.update`, `settings.update`, `dataprotection.update`,
 `organisation.sync`, `feedback.review_state`, plus tools design §9.2 and the conversation access events of §8 (in
 `ConversationAccess`). The actor is the `oid`.
@@ -1024,7 +1146,8 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 - Metrics (meter `Ume.Rag`, low cardinality): `rag.admin.validation.refusals{code}`, `rag.admin.jobs.enqueued{class,
   kind}`, `rag.admin.sync{kind,outcome}`, `rag.admin.test_panel{outcome}` + `.duration`,
   `rag.admin.conversation_access{scope,level}`, `rag.admin.uploads{outcome}` + `.bytes`, `rag.admin.publish{kind,
-  outcome}`, `rag.admin.config_lock.wait` (histogram, ms), `rag.admin.access_explain{allowed}`.
+  outcome}`, `rag.admin.config_lock.wait` (histogram, ms), `rag.admin.access_explain{allowed}`, `rag.admin.assistant_publish{kind}` (`publish`/`restore`),
+  `rag.admin.assistant_tests{outcome}`.
 - Dashboard *Config & security* gains admin panels (refusals by code, access events, sync health, lock waits).
 
 ## 11. Tests
@@ -1036,6 +1159,9 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 - `FormModel`: every template's `paramsSchema` and every generic-form resource renders; unsupported constructs fall
   back to JSON; Swedish labels present on templates.
 - `AccessExplainer`: one case per `IAccessPolicy` step (identity §4.3) returns that step and code.
+- Assistant versions: the structured diff (settings, links, line diff of instructions incl. Swedish characters and
+  empty texts); `usesTools` derivation (no skills, skills without tools, a tool excluded by `ExcludedToolIds`, a served
+  version adding a tool); the test verdict rule (every check passes) and phrase matching.
 - Audit snapshots never contain secret columns (reflection over `*Audit` records vs a deny list: `EncryptedSecret`,
   `KeyHash`, `EncryptedKey`).
 - Error-code coverage: every `ValidationCode` has an English message and is in `contracts/admin/v1/error-codes.json`.
@@ -1058,6 +1184,15 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
   insert → no plaintext returned, events present); department admin can reveal comments but gets 403 on conversations;
   platform admin without `rag-reviewer` gets 403 on both; `sensitive` → `review_flow_required`; access window expiry.
 - **Sync**: org and model sync write nothing when unchanged; alias residency rule; failure keeps the mirror.
+- **Assistant versions**: a draft save with a broken rule is stored with `warnings[]` and bumps no config version;
+  publish refuses it; publish moves `PublishedVersionId` and the api's view `PublishedAssistantVersions` shows only that
+  version; restore creates a new version and keeps the draft; `draft_base_changed` after a restore; audiences, level
+  and retention unchanged by publish and restore; copy carries no audiences or keys; deleting a collection a draft
+  links is refused.
+- **Assistant tests**: a publish starts one run (FakeGateway answers and a scripted judge); a restart mid-run restarts
+  it; the report compares with the previous version's run; results are readable only within the assistant's scope.
+- **Owner-team scoping (P2)**: with `EditOwnerTeamOnly` an editor outside the owner team gets 403 `owner_team_only`
+  on assistant, collection, source and skill writes and still reads them; a department admin is unaffected.
 
 ### 11.3 Worker in the loop (`Ume.Rag.IntegrationTests`)
 
@@ -1067,14 +1202,15 @@ the admin reads the results through its own endpoints.
 
 ### 11.4 Browser (Playwright TypeScript, gateway `tests/e2e` setup; nightly and release)
 
-- **Pilot journey** (`pilot.spec.ts`, department admin of department 1000): §5.4 steps 1–12 against a static fixture site
+- **Pilot journey** (`pilot.spec.ts`, department admin of department 1000): §5.4 steps 1–13 against a static fixture site
   (nginx container with saved Swedish pages incl. the umea.se fixture set, and 3 PDFs), FakeGateway, real worker and
   parser; ends by calling `/v1/models` with the Open WebUI client's key and finding the assistant. Run twice: mouse,
   and **keyboard only**.
 - Role journeys: viewer read-only, pipeline editor (template parameters, preview, publish, roll back), platform admin
   (generic forms for settings, clients, a site-profile proposal approve and rollback), reviewer (comment reveal,
   conversation view, access log), no-role user sees the no-access page, deletion confirmation and rejection, upload with
-  a refused file type.
+  a refused file type; assistant change → Testa on the draft → Publicera → test report → Återställ from Versioner; copy
+  an assistant; the department map's table view.
 - Accessibility spec copied and extended (§10.1); CSP violations collected with `page.on('console')` and
   `securitypolicyviolation` listeners must be zero.
 
@@ -1089,17 +1225,17 @@ component axe checks.
 |---|---|
 | P0 | BFF against `ume-rag-admin` + roles (incl. `rag-reviewer` in the realm and Bicep), design system and shell in Swedish, `labels.ts`/`messages.ts` skeleton, `AdminContext` write path (version lock + rules + audit + outbox + version), `PermissionMatrix` with generated role tests, org sync, error-code export |
 | P1 a | collections (incl. documents tab, PII view/clear), sources (URL list, crawl, upload batches), preflight, preview with site-profile before/after, impact, runs and crawl report, deletion decisions, template parameters, publish (plan → re-process → report → keep or roll back), rollback |
-| P1 b | evaluation set and reports, retrieval settings, collection publish, share lists, assistants (RAG), test panel (`Ume.Rag.Answering`, same release as `rag-api`), V8 `/v1/models` check, audiences (clients), retention, `GatewayModels` sync, generic forms (settings, data protection, clients, keys, templates, site profiles, embedding profiles, gateway models, organisation), audit list, explain access |
-| P1 c | feedback page, comment reveal, conversation review behind feedback (`public`/`internal`), access log, import health; accessibility pass and tillgänglighetsredogörelse; pilot journey E2E green |
-| P2 | skills (share lists, gate report, serve); tool servers (registration, approvals, pre-registration, grants, drift leader); agent assistants (limits, tool test panel); parse-profile proposals; SharePoint; crawl hierarchy tree; parameter diff; coverage histogram and proposal; audit diff viewer and Historik tabs; conversation search and `sensitive` two-person flow; feedback → test question; widget keys; dedicated pages where generic forms prove too thin |
+| P1 b | evaluation set and reports, retrieval settings, collection publish, share lists, assistants (templates, copy, draft → publish, versions with diff and restore, archive, description and contact), test panel on the draft (`Ume.Rag.Answering`, same release as `rag-api`), assistant test questions and `AssistantTestRunner`, department map and impact lines, V8 `/v1/models` check, audiences (clients), retention, `GatewayModels` sync, generic forms (settings, data protection, clients, keys, templates, assistant templates, site profiles, embedding profiles, gateway models, organisation), audit list, explain access |
+| P1 c | unused-assistant attention item; feedback page, comment reveal, conversation review behind feedback (`public`/`internal`), access log, import health; accessibility pass and tillgänglighetsredogörelse; pilot journey E2E green |
+| P2 | skills (share lists, gate report, serve); tool servers (registration, approvals, pre-registration, grants, drift leader); tool use through skills (the derived **Använder verktyg**, limits, tool calls in the test panel); owner-team scoping; parse-profile proposals; SharePoint; crawl hierarchy tree; parameter diff; coverage histogram and proposal; audit diff viewer and Historik tabs; conversation search and `sensitive` two-person flow; feedback → test question; widget keys; dedicated pages where generic forms prove too thin |
 | P3 | analytics, OBO configuration, risk acceptance, skill import/export, embedding profile changes |
 
 ## 13. Changes to other documents
 
 | Document | Change |
 |---|---|
-| `01-general-idea.md` §10 | row "Admin (step 10)" restated: journey pages only in P1, generic forms for platform objects, publish = plan → re-process → advisory report → keep or roll back, no canvas, serialised config writes, **V1–V32 with V20 and V27 retired (30 rules)** (replaces "V1–V31", "`gating`", "Vue Flow 1.48.2", "`building` collections") |
-| `HANDOVER.md` | admin row: drop "Vue Flow canvas P2"; cross-rules "V1–V32 (V20, V27 retired)" |
+| `01-general-idea.md` §10 | row "Admin (step 10)" restated: journey pages only in P1, generic forms for platform objects, publish = plan → re-process → advisory report → keep or roll back, no canvas, serialised config writes, **V1–V34 with V20 and V27 retired (32 rules)**, one assistant type with draft/publish and versions (replaces "V1–V31", "`gating`", "Vue Flow 1.48.2", "`building` collections") |
+| `HANDOVER.md` | admin row: drop "Vue Flow canvas P2"; cross-rules "V1–V34 (V20, V27 retired)" |
 | `identity/design.md` §1.3, §1.4 | `rag-reviewer` → `Review`, `FeedbackComments`, `Read`; `rag-pipeline-editor` = template parameters; roles on `ume-rag-admin`; env `UME_RAG_OIDC_GROUPS_REVIEWER` |
 | `identity/design.md` §4.3, §4.8 | explain-access endpoint consumes the pure `IAccessPolicy` steps and needs a stable step id and reason code per step; test panel runs `Ume.Rag.Answering` with the admin's `oid`, unpublished collections included; P2 agent test calls through the admin's in-process hub as `admin-console` (`ToolPolicy = read`) |
 | `identity/design.md` §10 | 6004 attributes `RequestId`, `Event`, `Scope`, `ConversationId`, `Classification`, `AssistantId`; 6007 also for feedback lists, access log and conversation views (not explain access, identity §4.9); audit actor `oid` |
@@ -1118,6 +1254,13 @@ component axe checks.
 | `platform/repo-and-deployment.md` §6.1, §8.2, §9 | proxy `client_max_body_size` 60 MB on the admin upload route; e2e row = pilot journey (mouse and keyboard) + extended accessibility spec + static fixture site container with the umea.se fixtures; admin metrics of §10.3; `rag-admin` on network `mcp` in P2 |
 | `gateway-changes/design.md` | done: §3.4 states today's `/v1/models` filtering (key residencies only) and that the combined release adds `x-ume-max-residency` for every key, delegating keys included (V8 relies on it); optional `GET /v1/catalog/routes` |
 | `postponed-decisions.md` V1 | Vue Flow struck (canvas dropped) |
+| `platform/data-model.md` §1.2, §2.1, §2.2, §5, §8 (simplification pass §15) | done in the parallel pass (`Assistants.PublishedVersionId`/`DraftVersionId`, `State` `active`/`archived`, `AssistantVersions` with `CollectionIds`/`Skills`, the view `PublishedAssistantVersions`, `AssistantTestQuestions`, `AssistantTemplates`, `DepartmentSettings.EditOwnerTeamOnly`, `Skills.OwnerTeamId`, `EvaluationRuns` kind `assistant-tests`, `Messages.AssistantVersionId`); this design uses those names. Remaining: the `EditOwnerTeamOnly` note should say it limits `Edit`, `EditPipelines` and `EditSkills` (§3.2) |
+| `chat-api/design.md` (simplification pass §15) | done in the parallel pass (published version only, derived mode, description and contact in `/v1/models`); add `x-ume-step: assistant-test` for the test runner (§7.4) |
+| `knowledge-api/design.md` §2.2, §4.2 (simplification pass §15) | done in the parallel pass (direct collections only, no `SkillVersionIds`) |
+| `ingestion-worker/design-processing.md` §14.8 | the answer judge's prompt family also judges assistant test questions (expected behaviour as free text) in `rag-admin` (§7.4) |
+| `gateway-changes/design.md` (P2, only if needed) | owner-team scoping reads team membership from `teamCodes`; if IT cannot supply that claim, member groups on teams as feature C does for departments, in both systems (§15) |
+| `identity/design.md` §1.3, §4.3, §4.8 | done in the same pass: owner-team scoping, versions do not change access, test panel on the draft |
+| `tools/design.md`, `tools/plan.md` | done in the same pass: skills without collections, mode derived from tool-bearing skills |
 
 ## 14. Questions
 
@@ -1142,12 +1285,21 @@ User, 2026-10-30 (simplification pass §1, §2, §8, §10, §13): journey pages 
 template + parameters, advisory evaluation on the publish screen, serialised config writes, share lists, explain
 access, `/v1/models` validation, site profiles in the source preview and a small platform-admin view.
 
+User, 2026-10-30 (simplification pass §15, many assistants per department): one assistant type with the mode derived
+from tool-bearing skills; knowledge only through the assistant's own collection links; assistant drafts, publish,
+version history with diff and one-click restore; per-assistant test questions judged after publish (advisory); copy,
+platform-owned assistant templates, the department map and impact lines, the 90-day unused attention item, description
+and contact; P2 owner-team scoping of writes (§1 rows 22–24, §3.2, §4.5, §5.5.4, §5.5.6, §7.4).
+
 Earlier answers this design builds on: admin plan answered 1–3 (separate app; `rag-editor` from P2; tool servers
 registered by platform admins); chat answered 7 (one-click comment reason); tools answered 2 (skill editors).
 
 Decisions taken here that the user may want to revisit: platform admins without implicit content access (§3.1); no
 e-mail notifications in P1/P2 (§5.2); the test panel shows answers as plain text (§4.9); explain access for platform
-admins and for department admins on their own department's assistants and clients (§4.5); keys managed through a generic form in P1 (§5.8).
+admins and for department admins on their own department's assistants and clients (§4.5); keys managed through a generic form in P1 (§5.8);
+audience, level, retention, description and contact are not versioned (§4.5); publish needs `Edit` (not `Manage`)
+and a description and contact (V34); the assistant test run follows publish instead of gating it (§7.4); owner-team
+scoping also covers `EditPipelines` and `EditSkills` (§3.2).
 
 ### 14.2 Open (user)
 
@@ -1174,6 +1326,12 @@ None.
 - **DOS-lagen scope** for an intranet admin application and the required content of its tillgänglighetsredogörelse
   (municipal web/accessibility coordinator).
 - **Budgets**: API p95 numbers and the overview query at 100k run items in the R1 test.
+- **Assistant tests** (new): that the on-prem judge's verdicts on free-text expected behaviour agree with a person's on
+  the pilot assistant's first 20 questions (spot check before the report is shown to departments).
+- **Open WebUI v0.12.5** (new): whether a description returned with an external connection's model (`/v1/models`)
+  is shown to users at all, or must be set in Open WebUI's own model settings (chat design owns the field).
+- **Team membership** (new, P2): the municipality has no team attribute, as it had no department attribute; whether
+  owner-team scoping can use `teamCodes` or needs member groups on teams (identity §1.3).
 
 ## 16. Deferred or removed (simplification pass)
 
@@ -1202,3 +1360,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 | Second admin slot in the pilot | P2 with the a/b slots (§1) |
 | Shred-bucket destruction in `RetentionService` | Off until A1 (§5) |
 | Admin sessions in Redis (`ume-rag:admin-session:{sessionId}`), `data` network reaching Redis | Postgres `config."AdminSessions"`, expired rows deleted by `RetentionService`; Redis returns in P2 only for shared limits, leases and the embedding cache (§14) |
+| Assistant `Mode` choice (`rag`/`agent`), `activate`/`deactivate` (`assistant.activate`), the unsaved-form test route `POST /api/assistants/test`, collections reached through skills (V3, V11 "union with skills'") | Removed (§15): mode derived from tool-bearing skills; draft → **Publicera**, `archive`/`unarchive`; the test panel runs the saved draft; collections only through the assistant's own links |

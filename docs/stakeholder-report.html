@@ -233,6 +233,12 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
         and lets an assistant answer from them. The assistant shows up as a model in the chat tool staff already use
         (Open WebUI in the pilot). Other systems, such as the intranet or a case system, can call the same assistant
         through a standard API.</p>
+      <p>A department can run as many assistants as it needs, for example one for building permits and one for its
+        own staff handbook. Each one links the knowledge banks it should answer from, and a knowledge bank used by
+        several assistants is fetched and indexed only once. Changes to an assistant are saved as a draft, tested with
+        the assistant's own test questions and then published, and every earlier version can be restored with one
+        click. From phase 2, people and teams can also create their own small knowledge bases by uploading files
+        ("Mina kunskapsbaser"), then ask questions, get summaries and compare documents in the chat.</p>
     </div>
     <div class="chat" aria-label="Example conversation">
       <div class="msg q">
@@ -484,9 +490,9 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
       <div class="phase now"><span class="code">P0 · next</span><h3>Foundation</h3>
         <p>A skeleton that builds, deploys, can be monitored and can be restored from backup. Test sign-in, the database with Swedish search, and agreement on one gateway release.</p></div>
       <div class="phase"><span class="code">P1</span><h3>Pilot</h3>
-        <p>One department uses an assistant in Open WebUI. Web pages, websites (umea.se) and file uploads, learned site profiles, quality reports, feedback and limited conversation review.</p></div>
+        <p>One department uses an assistant in Open WebUI. Web pages, websites (umea.se) and file uploads, learned site profiles, quality reports, assistant versions with draft, test and publish, feedback and limited conversation review.</p></div>
       <div class="phase"><span class="code">P2</span><h3>Broaden</h3>
-        <p>More departments, SharePoint, a website widget for citizens, read-only AI tools and MCP, re-ranking for better answers, older file formats, 3 servers with a database standby.</p></div>
+        <p>More departments, self-service knowledge bases from uploaded files for people and teams, SharePoint, a website widget for citizens, read-only AI tools and MCP, re-ranking for better answers, older file formats, 3 servers with a database standby.</p></div>
       <div class="phase"><span class="code">P3</span><h3>Scale and refine</h3>
         <p>Driven by measurements: a Swedish benchmark, a dedicated search engine if needed, a Teams client, tools that act on the user's behalf, write actions with confirmation, and a visual pipeline builder if editors need flows the settings forms cannot express.</p></div>
     </div>

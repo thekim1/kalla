@@ -1,7 +1,7 @@
 # Skills, tool hub and MCP: detailed design
 
 Detail step 9 of the Ume.Rag design, rewritten by the simplification pass ([`../simplification-pass.md`](../simplification-pass.md)
-§10, which wins where an older passage differs). Details [`plan.md`](plan.md) (binding, incl. its answered questions 2–4
+§10 and §15, which win where an older passage differs). Details [`plan.md`](plan.md) (binding, incl. its answered questions 2–4
 and the recommendation of question 1, and §14 here) and the Decisions table in
 [`../../01-general-idea.md`](../../01-general-idea.md) §10. All of it is **P2 scope** unless marked (OBO, write tools,
 external servers P3). Consumes, without redesigning: `IAnswerStrategy`, `AnswerEvent.ToolCall`, the request path, token
@@ -57,7 +57,7 @@ sampling, elicitation or roots requests.
 | 3 | Skill storage | Everything in `config` (instructions, manifest, test questions, **text** reference files ≤ 200,000 characters per version in `SkillVersionFiles`); no blobs (§3.3) |
 | 4 | Versioning | Immutable published versions with SemVer labels (display); one **served** pointer; every linking assistant uses the served version; rollback = move the pointer (§3.5) |
 | 5 | Authoring | Role **`rag-skill-editor`** (policy `EditSkills`, own departments) drafts, publishes and serves; publishing runs the **skill gate** (advisory) in `rag-admin`; the skill's owner serves; linking a tool needs a **department grant**; **share lists** to named departments (§3.6–§3.7) |
-| 6 | Skill inclusion | Skills ≤ about **4k tokens** in total are included statically (tools visible from step 1); above that a catalogue + `load_skill(name)`; `read_skill_file` for references; RAG assistants always static (§3.8–§3.9) |
+| 6 | Skill inclusion | Skills ≤ about **4k tokens** in total are included statically (tools visible from step 1); above that a catalogue + `load_skill(name)`; `read_skill_file` for references; assistants without tools always static (§3.8–§3.9) |
 | 7 | MCP client | Official SDK 2.3.0; **Streamable HTTP only**; protocol version negotiated by the SDK (2026-07-28 first); pooled client per (server, config version); `hosted` servers only in P2 (§4.2–§4.3) |
 | 8 | Pinning and drift | Definition hash = SHA-256 of canonical `{name, title, description, inputSchema, outputSchema, annotations}`; verified on every connection and by one drift leader every 15 min; a **pre-registered** definition (owner, one approver) is pinned when observed; any other difference disables the tool until **two-person** re-approval (§4.4–§4.5) |
 | 9 | Credentials | P2: `client-credentials` only (certificate of the platform's tool identity `ume-rag-tools`, held by `rag-api` and `rag-admin` only; in-house token client); `obo` designed (P3); the hub refuses to start without its certificate when an active server needs it (§4.6) |
@@ -72,6 +72,7 @@ sampling, elicitation or roots requests.
 | 18 | Hosted servers | .NET template only (answered 3): stateless MCP SDK server, Entra token with app role `Tools.Invoke`, read-only conventions, golden `tools/list`, contract tests, chiseled image; own internal network plus one egress network per server (§8) |
 | 19 | First server | **`ume-mcp-kommun`** (one container, one registration) starting with the mock fee calculator: tariffs as versioned JSON data (sample values), decimal arithmetic, structured output (§8.5) |
 | 20 | Audit | Every hub call in `audit."ToolCallEvents"` (metadata + keyed HMAC of arguments); full arguments/results only encrypted in `chat."ToolCalls"`; events 5012–5015 (§9) |
+| 21 | Skills and assistants | **Skills carry know-how and tools, never collections**: an assistant's knowledge is only its own collection links (knowledge §4.2). **One assistant type**: it runs the agent loop exactly when its published version links a skill whose served version has a tool it does not exclude, else the fixed RAG path; no mode field (admin shows "Använder verktyg"). Assistant versions pin nothing about skills: every assistant uses each linked skill's served version (§3.5, §5.1, §6.1; simplification pass §15) |
 
 ## 2. Placement and interfaces
 
@@ -207,7 +208,6 @@ inom detaljplan innan du anger om lov krävs. Använd verktyget för avgifter i 
   "classification": "public",
   "owner": { "department": "SBF" },
   "language": "sv",
-  "collections": [ "bygg-och-miljo" ],
   "tools": [ { "server": "kommun", "tool": "calculate_fee" }, { "server": "kommun", "tool": "list_fee_types" } ] }
 ```
 
@@ -237,7 +237,7 @@ loaded) for unrelated questions. `expected_documents` are stored as document ids
 | Identity, served pointer, slug, department, classification | `config."Skills"` | – |
 | Version: frontmatter fields, body (`Instructions`), manifest, `evals.json` (`TestQuestions`), content hash, state | `config."SkillVersions"` (adds `License`, `Metadata jsonb`, `ContentHash bytea`, `CreatedBy`, `PublishedBy`, `GateRunId`; `ReferenceBlobPrefix` dropped, §13) | – |
 | Reference and asset files | `config."SkillVersionFiles"` (`SkillVersionId`, `Path varchar(200)`, `MediaType varchar(100)`, `Content text`, `Bytes int`, `Sha256 bytea`; PK (`SkillVersionId`, `Path`)) | written in the publish transaction with the version; immutable; audited with the version |
-| Links to collections and tools | `config."SkillVersionLinks"` | resolved by id |
+| Links to tools | `config."SkillVersionLinks"` (`SkillVersionId`, `ToolId`) | resolved by id; a skill links no collections |
 | Share list | `config."SkillShares"` (`SkillId`, `DepartmentId`, `SharedBy`, `SharedAt`; PK both ids) | §3.6 |
 
 The chat role's snapshot holds versions' metadata, bodies and file **lists**; file contents are read on demand by
@@ -255,7 +255,6 @@ The chat role's snapshot holds versions' metadata, bodies and file **lists**; fi
 | Files per version | 20, text only (`.md`, `.txt`, `.csv`, `.json`; UTF-8, NFC), each ≤ 32,000 characters, total ≤ 200,000 | one `read_skill_file` result fits the per-call cap (§4.8) |
 | Paths | relative, `[a-z0-9._/-]`, one directory level under `references/` or `assets/`, no `..`, ≤ 200 characters | – |
 | Test questions | ≥ 5 to publish (≥ 1 negative), ≤ 100 | gate report (§3.7) |
-| Linked collections | union with the assistant's direct collections ≤ 20 | knowledge §4.2 per-query cap |
 | Linked tools | 15 per skill | tool lists stay short |
 
 ### 3.5 Versions, served pointer, rollback
@@ -264,12 +263,16 @@ The chat role's snapshot holds versions' metadata, bodies and file **lists**; fi
   label must be greater than every existing one; the editor proposes the next label from the diff. States: `draft`
   (one per skill, mutable) → `published` (immutable; the skill gate starts, §3.7) → `retired` (cannot be served).
 - **Served pointer** `Skills.ServedVersionId`: **every assistant linking the skill uses the served version**; there is
-  no per-assistant pin.
+  no per-assistant pin. Assistant versions (admin design §4.5) pin nothing about skills either: a published assistant
+  version names its skills (and excluded tools), never a skill version, so a serve or rollback reaches every linking
+  assistant at once and restoring an old assistant version does not bring back an old skill version.
 - **Serve** (the gate → served transition): an explicit action by the skill's owner (`EditSkills` on the skill's
   department; platform skills: `rag-platform-admin`) in the admin, after the version's gate run has finished, whatever
-  its result. The admin API validates it against every assistant linking the skill — level (assistant ≥ skill),
-  collection cap, lethal trifecta (§5.4), tool grants of each assistant's department, RAG static size (§3.9) — and
-  refuses with the list of affected assistants on any failure. Audited `skill.serve`.
+  its result. The admin API validates it against every assistant whose published version links the skill — level
+  (assistant ≥ skill), lethal trifecta (§5.4), tool grants of each assistant's department, static size without tools
+  (§3.9), and, when the version adds the skill's first tool and so switches those assistants to the agent loop, the
+  model's `SupportsTools` and price (admin design V14) — and refuses with the list of affected assistants on any
+  failure. Drafts that link the skill are checked again when they are published. Audited `skill.serve`.
 - **Rollback** = serve an older published version (same validation, no new gate run: the version already has its
   report), audited `skill.rollback`.
 - Version used by a run = the served version **at the config version of the run** (snapshot), recorded in
@@ -293,7 +296,8 @@ questions) → **validate** (format §3.1, limits §3.4, links visible to the de
 **Sharing**: a department skill is usable by assistants of its own department and of every department on its share
 list (`SkillShares`), set by `EditSkills` of the owning department (audited `skill.share`); platform skills by all.
 Sharing never widens tool access: a shared skill's tool is visible only to assistants whose department has its own
-grant for it (§5.1 layer 1). Removing a department from the list is refused while one of its assistants links the
+grant for it (§5.1 layer 1). It never shares knowledge either: skills carry no collections, so a department that links
+a shared skill searches only its own (or separately shared) collections. Removing a department from the list is refused while one of its assistants links the
 skill (the list is shown).
 
 ### 3.7 Skill gate (`GateKind.SkillPublish`, advisory)
@@ -305,11 +309,11 @@ unfinished by a restart is started again); results in `EvaluationRuns` with the 
 skill-publish`); questions copied into `EvaluationQuestions` with `Layer = skill` (processing §13.4). The worker takes
 no part.
 
-- **Models**: every distinct `GatewayModel` of the active assistants linking the skill (on publish of a first version,
+- **Models**: every distinct `GatewayModel` of the published versions of active assistants linking the skill (on publish of a first version,
   `Settings.Tools.SkillGateModel`, on-prem and tool-capable), each at the residency ceiling of the linking assistant's
   level.
-- **End to end**: each question runs through `Ume.Rag.Answering` exactly as the assistant would (agent strategy with
-  the skill included or loaded, RAG strategy for RAG assistants), **executing the skill's read-only tools** through the
+- **End to end**: each question runs through `Ume.Rag.Answering` exactly as the assistant would (the agent loop with
+  the skill included or loaded when the version under test carries tools, otherwise the RAG path), **executing the skill's read-only tools** through the
   admin's in-process hub (hosted servers, §2.2); `x-ume-step: skill-gate`, temperature 0. Tool calls are audited with
   `SubjectKind = service` and count against the tools' per-tool rate limits.
 
@@ -332,7 +336,7 @@ only when a version is published or an owner asks for one (**Kör igen**, e.g. a
 ```json
 { "type": "function", "function": {
     "name": "load_skill",
-    "description": "Läser in instruktionerna för en färdighet. Anropa när frågan matchar en färdighets beskrivning i <available_skills>. Färdighetens verktyg och kunskapsbanker blir tillgängliga efter anropet.",
+    "description": "Läser in instruktionerna för en färdighet. Anropa när frågan matchar en färdighets beskrivning i <available_skills>. Färdighetens verktyg blir tillgängliga efter anropet.",
     "parameters": { "type": "object", "additionalProperties": false, "required": ["name"],
       "properties": { "name": { "type": "string", "enum": ["bygglov", "klarsprak", "hanvisa-till-kontaktcenter"] } } } } }
 ```
@@ -352,7 +356,7 @@ Svara utifrån plan- och bygglagen …
 ```
 
 - Effects: the skill version joins the run's `LoadedSkills`; from the **next** model call its permitted tools are in
-  `tools` (§5.2) and its collections join `search_knowledge`'s scope (knowledge §4.2). A second load returns
+  `tools` (§5.2); `search_knowledge`'s scope does not change (skills carry no collections). A second load returns
   `<skill_content name="bygglov" loaded="true"/>`. Counts as a tool call (answered 1).
 - `read_skill_file(name, path)`: registered when an included or loaded skill has files; `name` enum of those skills,
   `path` enum of their files; returns `<skill_file name="bygglov" path="references/avgifter.md">…</skill_file>`,
@@ -365,18 +369,18 @@ Svara utifrån plan- och bygglagen …
 
 ### 3.9 Static inclusion (agent ≤ budget, RAG always)
 
-- **Agent assistants** whose linked skills' bodies total ≤ `StaticSkillTokens` (4,000, estimated at ÷ 3): every body is
+- **Assistants that use tools** (agent loop) whose linked skills' bodies total ≤ `StaticSkillTokens` (4,000, estimated at ÷ 3): every body is
   appended to the system prompt as `<skill_content name="…">…</skill_content>` in link order; all their permitted tools
   are in `tools` from step 1; no catalogue, no `load_skill`. Above the budget the assistant is progressive: catalogue +
   `load_skill` for **all** its skills (no mixing). The admin shows which mode applies.
-- **RAG assistants** include their skills statically always; their collections are added to retrieval; reference files
-  and tools are not used ("används inte i RAG-läge"). The bodies count to the mandatory part `M` of chat §6.3; a RAG
-  assistant whose skills exceed 6,000 estimated tokens is refused on save.
+- **Assistants without tools** (the RAG path; their skills are know-how only) include their skills statically always;
+  reference files are not used there (no `read_skill_file`). The bodies count to the mandatory part `M` of chat §6.3;
+  such an assistant whose skills exceed 6,000 estimated tokens is refused on publish (admin design V12).
 
 ### 3.10 Classification of skills
 
-`Skills.Classification` is set by the editor and must be ≥ every linked collection's level, ≥ every linked tool's
-server **result level** (§5.3), and ≥ the sensitivity of the body itself. An assistant's level ≥ each linked skill's
+`Skills.Classification` is set by the editor and must be ≥ every linked tool's server **result level** (§5.3) and ≥
+the sensitivity of the body itself. An assistant's level ≥ each linked skill's
 level (platform plan §6).
 
 ### 3.11 Import and export (P3, designed now)
@@ -386,7 +390,8 @@ level (platform plan §6).
   `ume-rag.owner`); requires `EditSkills` on the skill's department; audited `skill.export`.
 - **Import**: zip ≤ 2 MB, ≤ 100 entries, no links, no absolute or `..` paths, text files only, one top-level folder whose
   name equals `name`; `scripts/` and binary files refused; YAML frontmatter parsed by an in-house parser of the six spec
-  fields; links resolved by slug and `server/tool` within the importer's department (unresolved → dropped with a
+  fields; tool links resolved by `server/tool` within the importer's department (a `collections` entry from an older
+manifest is dropped with a warning) (unresolved → dropped with a
   warning). The result is a **draft** that a `rag-platform-admin` must approve (a person reads the body; audited
   `skill.import.approve`) before it can be published (plan §6 rule 7).
 
@@ -601,8 +606,8 @@ Messages are fixed texts: no server error body except for `tool_error` (labelled
 | # | Layer | A tool passes when | Empty means |
 |---|---|---|---|
 | 1 | **Server** | usable (§4.1); the run's department has a grant (`ToolDepartmentGrants` for the assistant's department, or `AllDepartments`); clearance ≥ effective level; result level ≤ effective level (§5.3) | no server tool at all |
-| 2 | **Skill** | the tool is linked (`SkillVersionLinks`, kind `tool`) in a served skill version that is **included** (static) or **loaded** in this run | only built-ins |
-| 3 | **Assistant** | the skill is linked to the assistant (`AssistantSkills`) and the tool is not in `AssistantSkills.ExcludedToolIds`; assistant `Mode = agent` | – (a RAG assistant never calls tools) |
+| 2 | **Skill** | the tool is linked (`SkillVersionLinks`) in a served skill version that is **included** (static) or **loaded** in this run | only built-ins |
+| 3 | **Assistant** | the skill is linked in the assistant's published version (`AssistantVersions.Skills`) and the tool is not in that link's `excludedToolIds` | – (an assistant with no tool left here runs the RAG path and calls no tools) |
 | 4 | **Client** | `Clients.ToolPolicy` = `read` (P2 values `none` / `read`; P3 adds `confirm`): defaults `open-webui`, `own-client`, `teams`, `widget` → `read`; `integration`, `entra-app`, `mcp-client`, `internal` → `none`, raised by a platform admin | built-ins only |
 
 Built-ins (`search_knowledge`, `load_skill`, `read_skill_file`, `current_date`) pass by construction (they run in process
@@ -634,7 +639,7 @@ counted as a call. The hub repeats `Authorize` before executing (Bifrost does th
 
 | Field | Meaning | Rule |
 |---|---|---|
-| `Clearance` (renames `Classification`) | the highest level of conversation data the server may **receive** in arguments | max(assistant level, ceiling of every history-resending client in the audience) ≤ clearance, since follow-ups run at that level (chat §8.2; validated on assistant save, audience change and serve; re-checked per call against the run's effective level) |
+| `Clearance` (renames `Classification`) | the highest level of conversation data the server may **receive** in arguments | max(assistant level, ceiling of every history-resending client in the audience) ≤ clearance, since follow-ups run at that level (chat §8.2; validated on assistant publish, audience change and serve; re-checked per call against the run's effective level) |
 | `ResultClassification` | the level of the data the server **returns** | result level ≤ assistant level (validated on save; a skill's level ≥ its tools' result levels, §3.10) |
 | `Residency` (`OnPrem`/`Eu`/`External`) | where the server and anything it forwards to runs | `CK_ToolServers_Clearance`: clearance `sensitive` ⇒ `OnPrem`; `internal` ⇒ `OnPrem` or `Eu`; `External` ⇒ clearance `public` (platform plan §6) |
 
@@ -647,8 +652,8 @@ rises**. The hub re-checks both rules per call (`level_refused`, 5015) as defenc
 
 ### 5.4 Lethal trifecta (plan §6 rule 2; hard refusal)
 
-`LethalTrifecta.Evaluate(assistant composition)` runs on assistant save and activation, on skill link/unlink, on a serve
-that affects the assistant, and on tool approval/grant changes; it considers the served version of every linked skill
+`LethalTrifecta.Evaluate(assistant composition)` runs on assistant publish and restore (a warning on draft save), on a
+serve that affects the assistant, and on tool approval/grant changes; it considers the served version of every linked skill
 and all their tools:
 
 | Leg | True when any of |
@@ -679,11 +684,11 @@ filter (chat §9.4).
 ### 6.1 Steps
 
 Steps 0–8 of chat §4.1 are unchanged (receive, authenticate, parse, rate limit, policy, effective level, language).
-Agent assistants replace steps 9–14:
+Assistants that use tools (§1 row 21) replace steps 9–14:
 
 | # | Step | Detail |
 |---|---|---|
-| 9 | Prefetch | `search_knowledge` with the user question exactly as the RAG path retrieves (condense rules and coverage of chat §5, scope = direct ∪ included skills' collections); its `<sources>` block (numbers from 1, §6.8) goes into the first prompt; not counted as a tool call |
+| 9 | Prefetch | `search_knowledge` with the user question exactly as the RAG path retrieves (condense rules and coverage of chat §5, scope = the assistant's collections); its `<sources>` block (numbers from 1, §6.8) goes into the first prompt; not counted as a tool call |
 | 10 | Prompt | §6.2; `RunPolicyState` with the statically included skills active |
 | 11 | Loop | for each step: limits check (§6.5) → gateway call with `tools = ToolPolicy.Visible(...)` (§6.4) → stream parse (§6.7) → if the step ends with tool calls: authorise and execute them (§6.6), append the assistant message and one `tool` message per call, update `LoadedSkills`, continue; else the step is the final answer |
 | 12 | Final answer | streamed through `AnswerFilter` and `CitationEmitter` (chat §9) exactly as a RAG answer |
@@ -732,7 +737,7 @@ Descriptions are tag-neutralised.
 
 | Tool | Parameters | Result | Notes |
 |---|---|---|---|
-| `search_knowledge` | `query` (1–2,000), `collections` (enum of slugs in the current scope, optional), `top_k` (1–10, default 6), `document_types`, `modified_after` (as knowledge §14) | `<sources>` block of chat §7.2 with **run-wide numbers** (§6.8) and coverage line | `IRetriever.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, collections, topK, Hybrid, filters, Section, Chat, AllowDegraded: true, RunId: messageId) { SkillVersionIds = active })` (knowledge §2.2; `SkillVersionIds` is new, §13); scope = direct ∪ active skills' collections; ≤ 4,000 estimated tokens per result |
+| `search_knowledge` | `query` (1–2,000), `collections` (enum of slugs in the current scope, optional), `top_k` (1–10, default 6), `document_types`, `modified_after` (as knowledge §14) | `<sources>` block of chat §7.2 with **run-wide numbers** (§6.8) and coverage line | `IRetriever.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, collections, topK, Hybrid, filters, Section, Chat, AllowDegraded: true, RunId: messageId))` (knowledge §2.2); scope = the assistant's collections; ≤ 4,000 estimated tokens per result |
 | `load_skill` | `name` enum | §3.8 | progressive assistants only |
 | `read_skill_file` | `name`, `path` enums | §3.8 | when an active skill has files |
 | `current_date` | `add_working_days` (integer −60..250, optional) | `{"date":"2026-11-12","weekday":"torsdag","iso_week":46,"time":"09:14","time_zone":"Europe/Stockholm","is_working_day":true,"result_date":"2026-11-26"}` | `SwedishCalendar`: weekends, Swedish public holidays, midsommarafton, julafton, nyårsafton as non-working days (in-house, table-tested 2020–2040) |
@@ -748,8 +753,8 @@ All four count as tool calls when the model calls them (answered 1), are stored 
 | Gateway compatibility | function tools are client-run tools, accepted for every key without the provider-tool permission (`src/Ume.LlmGateway.Domain/Services/ProviderFeaturePolicy.cs:8-23`); `tools`/`tool_choice` are protected from request policies; passthrough and order covered by the combined gateway release's tests (gateway-changes §7.2). We never send provider tools |
 | Model names | built-ins as named; server tools `{serverSlug}_{toolName}` (`^[a-zA-Z0-9_-]{1,64}$`; a longer name is cut to 55 characters + `_` + 8 hex of its SHA-256) |
 | Descriptions and schemas | the **pinned** definition's `description` (≤ 1,024 characters, tag-neutralised) and `inputSchema`; `title`, annotations, icons and `_meta` are never sent |
-| Which models | agent assistants need a `GatewayModel` with `SupportsTools` (from the gateway's `tools` feature tag, `ModelDeployment.Features`, `src/Ume.LlmGateway.Domain/Entities/Entities.cs:310-311`); the Data API's `/v1/catalog/models` does not expose `Features` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:152-154`): gateway change (§13); until then a platform admin sets `SupportsTools` by hand |
-| Residency | as chat §8.1–§8.2 per call, at the run's effective level; `sensitive` agent assistants need an **on-prem tool-capable** model (*to verify*, §15); the admin refuses an agent assistant whose model cannot be served within that residency or lacks `SupportsTools` (admin design §4.6 V8, V14) |
+| Which models | assistants that use tools need a `GatewayModel` with `SupportsTools` (from the gateway's `tools` feature tag, `ModelDeployment.Features`, `src/Ume.LlmGateway.Domain/Entities/Entities.cs:310-311`); the Data API's `/v1/catalog/models` does not expose `Features` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:152-154`): gateway change (§13); until then a platform admin sets `SupportsTools` by hand |
+| Residency | as chat §8.1–§8.2 per call, at the run's effective level; `sensitive` assistants that use tools need an **on-prem tool-capable** model (*to verify*, §15); the admin refuses publishing such an assistant (or serving a skill version that makes one use tools) when its model cannot be served within that residency or lacks `SupportsTools` (admin design §4.6 V8, V14) |
 | Headers | chat §8.1 plus `x-ume-step: agent-{n}` and `x-ume-run-id` = message id; `x-ume-session` = conversation id |
 
 ### 6.5 Limits and cost (answered 1)
@@ -760,7 +765,7 @@ All four count as tool calls when the model calls them (answered 1), are stored 
 | Wall clock from receipt until the **final answer starts streaming** | **60 s** | lower | **120 s** |
 | Estimated model cost per user message (all steps incl. the final answer) | **$0.05** | lower | **$0.25** |
 
-Stored in `Assistants.QuerySteps.agent = { maxToolCalls, maxSeconds, maxCostUsd, maxParallelCalls: 4 }`; defaults and
+Stored in the assistant version's `QuerySteps.agent = { maxToolCalls, maxSeconds, maxCostUsd, maxParallelCalls: 4 }`; defaults and
 hard caps in `Settings.Tools` (`AgentDefaults`, `AgentHardCaps`); raising above the defaults is a platform-admin action
 (audited `assistant.limits`). The final answer's stream is bounded by chat's `MaxAnswerDuration` (chat §8.3).
 
@@ -779,7 +784,7 @@ otherwise          →  final step: same messages + "Gränsen för verktygsanrop
 
 **Unknown price fails closed**: when the answering deployment has no price in `GatewayModels`, the step is costed at the
 run's hard cap (`AgentHardCaps.maxCostUsd`), so no further tool step is allowed and the loop goes to its final step;
-`rag.agent.cost_unknown` is counted. Publishing an agent assistant requires a synced price (on-prem models have
+`rag.agent.cost_unknown` is counted. Publishing an assistant that uses tools requires a synced price (on-prem models have
 price 0). The cost reconciliation by run id (chat §12.4) later replaces the estimate in `Messages.CostUsd`.
 
 ### 6.6 Parallel calls
@@ -962,7 +967,7 @@ Removed (simplification pass): dropped; none of the first tools has an OpenAPI s
 
 ### 8.5 First server: `ume-mcp-kommun` with the mock fee calculator
 
-Reference for the template, the hub and agent assistants (plan question 1, O2). **Sample data only**: the numbers below
+Reference for the template, the hub and the agent loop (plan question 1, O2). **Sample data only**: the numbers below
 are invented and marked as such in every result until the owning department supplies the real taxa. The address lookup
 and contact directory (plan §7) are added to the same server later.
 
@@ -992,7 +997,7 @@ validated (fail to start on an invalid file):
   tariffs); auth `client-credentials`; no egress network while it wraps no system.
 - Tariff updates: a pull request changing a JSON file, contract tests, release; the tool definitions do not change, so
   no approval is needed. Descriptions never enumerate fee type ids (ids are data).
-- The first skill using it: "Bygglov" (§3.2) in a pilot agent assistant; its test questions include fee questions with
+- The first skill using it: "Bygglov" (§3.2) in a pilot assistant, which it makes use tools; its test questions include fee questions with
   `expected_tools: ["kommun/calculate_fee"]`.
 
 ## 9. Audit and security events
@@ -1074,7 +1079,10 @@ histograms; tool ids appear in logs and the audit).
 - `ToolCallStreamParser`: deltas split at every byte, interleaved indexes, arguments > 8 KiB, hold-back cases.
 - Arguments validator, name mapping, result normaliser, tag neutraliser.
 - Skills: spec validation (`specification.mdx:67-89`), limits, static/progressive switch at the budget, serve
-  validation, share list (removal refused while linked), `evals.json` round trip.
+  validation (incl. a version adding the first tool: linking assistants switch to the agent loop and need V14), share
+  list (removal refused while linked), `evals.json` round trip, a manifest with `collections` refused on save.
+- Mode derivation: no skills, skills without tools, every tool excluded, a served version adding or removing the only
+  tool → RAG path or agent loop as §1 row 21.
 - `SwedishCalendar` 2020–2040; `current_date` output.
 
 ### 11.2 Integration (Testcontainers: Postgres, Keycloak, Redis for the multi-host rate limits; FakeGateway; `FakeMcpServer`)
@@ -1154,11 +1162,11 @@ streams).
 | `platform/data-model.md` §1.2 | no `ume_rag_tools` role in P2; `api`: S on `SkillVersionFiles`, `SkillShares`, `ToolDepartmentGrants`, `GatewayModels`, `ToolServers` (no encrypted credential column in P2), I on `audit."ToolCallEvents"`, `audit."ToolDefinitionObservations"`; `worker`: no skill or tool tables; `admin`: S I U D on the new config tables, I on `audit."ToolCallEvents"`, S I on `ToolDefinitionObservations` |
 | `platform/data-model.md` §2.1 `Skills`, `SkillVersions` | `Slug` per spec `name` (ASCII, ≤ 64); add `Name`, `CreatedBy`; versions add `License`, `Metadata jsonb`, `ContentHash bytea`, `CreatedBy`, `PublishedBy`, `GateRunId`; `State` `draft`/`published`/`retired` (no `gating`, `gate-failed`); drop `ReferenceBlobPrefix` |
 | `platform/data-model.md` §2.1 new | `SkillVersionFiles` (§3.3); `SkillShares` (`SkillId`, `DepartmentId`, `SharedBy`, `SharedAt`); `ToolDepartmentGrants`; no `SkillAudiences` in P2 |
-| `platform/data-model.md` §2.1 `AssistantSkills` | add `ExcludedToolIds uuid[] NOT NULL DEFAULT '{}'`; **no** `PinnedVersionId`, `PinnedReason` |
+| `platform/data-model.md` §2.1 `AssistantVersions.Skills` | `[{ skillId, excludedToolIds[] }]` per version (replaces `AssistantSkills`; done in the parallel pass, simplification pass §15); **no** pinned skill version; `SkillVersionLinks` (`SkillVersionId`, `ToolId`) without a kind |
 | `platform/data-model.md` §2.1 `ToolServers` | add `Slug varchar(20)` (U); `Classification` → `Clearance`; add `ResultClassification`, `ContainsThirdPartyText bool NOT NULL DEFAULT true`, `MaxConcurrentCalls smallint` (8); `Residency` `OnPrem`/`Eu`/`External` with `CK_ToolServers_Clearance`; `Hosting` = `hosted` in P2 (`municipal`/`external` P3); `SystemOwnerSubjects text[]` (`oid`); add `OwnerTeamId`, `AuthSettings jsonb`, `ProtocolVersion`, `ServerInfo jsonb`, `InstructionsHash bytea`, `LastDiscoveredAt`; `TimeoutMs` default 10,000 (≤ 30,000), `MaxResponseBytes` 262,144; `EncryptedCredential` and `PerCallConnection` P3 |
 | `platform/data-model.md` §2.1 `Tools`, `ToolDefinitions`, `ToolApprovals` | `Tools` add `Title`, `AllDepartments`, `CallsPerMinute` (600), `CallsPerMinutePerUser` (30), `State` adds `removed`; `ToolDefinitions` add `Title`, `Annotations jsonb`, `ObservationId bigint NULL`, `PreRegistered bool`, `PreRegisteredBy`; `ToolApprovals` add `Comment`; app rule: two different approvers for new and unexpected definitions, one for pre-registered |
 | `platform/data-model.md` §2.1 `Sources` | `ContainsThirdPartyText bool NOT NULL DEFAULT true` (platform admin sets false) |
-| `platform/data-model.md` §2.1 `Clients`, `Assistants`, `Settings` | `Clients.ToolPolicy` (`none`/`read`); `Assistants.QuerySteps.agent` as §6.5, agent `contextTokens` 32,768; **no** `Assistants.RiskAcceptance` in P2; `Settings.Tools` = `AgentDefaults`, `AgentHardCaps`, `WriteToolsEnabled` false, `SkillGateModel`, `StaticSkillTokens` 4,000, `CallsPerMinutePerUser` 60 (no `SkillRoutingFloor`) |
+| `platform/data-model.md` §2.1 `Clients`, `Assistants`, `Settings` | `Clients.ToolPolicy` (`none`/`read`); `AssistantVersions.QuerySteps.agent` as §6.5, agent `contextTokens` 32,768; **no** `Assistants.RiskAcceptance` in P2; `Settings.Tools` = `AgentDefaults`, `AgentHardCaps`, `WriteToolsEnabled` false, `SkillGateModel`, `StaticSkillTokens` 4,000, `CallsPerMinutePerUser` 60 (no `SkillRoutingFloor`) |
 | `platform/data-model.md` §2.3, §2.4 | `ToolCalls` as §6.11 (bucket key); `AssistantDailyTotals` add `ToolCalls`, `ToolErrors`, `AgentLimitHits`; `ToolCallEvents` as §9.1; `ToolDefinitionObservations` add `ToolServerId`, `ToolName`, `Kind`, `ToolId` nullable |
 | `platform/data-model.md` §5, §9, §11 | `SecurityRelevant` adds `ToolDepartmentGrants`, `SkillShares`, `SkillVersions`; remove the skill-files blob row; Redis keys `rl:tooluser`, `rl:tools`, `rl:mcp` |
 | `identity/design.md` §1.3, §11, §12 | `rag-skill-editor` → `EditSkills`, `Read`; RAG's Bicep adds app registration `ume-rag-tools` (certificate credential) and `Tools.Invoke` assignments on each `ume-mcp-*` registration (first: `ume-mcp-kommun`) |
@@ -1166,12 +1174,12 @@ streams).
 | `identity/design.md` §10 | 5002 reasons of §9.3; 5012–5015 emitted by api and admin; SIEM rules |
 | `chat-api/design.md` §2.2, §7.2–§7.4 | agent effective level fixed at start; neutralised tags of §3.8; RAG skills as `<skill_content>` ≤ 6,000 tokens; lethal trifecta → tools §5.4 (hard refusal); agent prefetch of `search_knowledge` |
 | `chat-api/plan.md` §3 | agent: limits 8 / 60 s / $0.05, prefetch with the user question, static skills ≤ ~4k tokens |
-| `knowledge-api/design.md` §2.2, §4.2, §14 | `RetrievalRequest.SkillVersionIds` (active skills); RAG and agent assistants add linked skills' collections (served version; shared skills included); `/mcp` = `search_knowledge` + `list_collections` only, no `document://`, `get_document`, `ask_assistant` or skill endpoints in P2 |
+| `knowledge-api/design.md` §2.2, §4.2, §14 | no `RetrievalRequest.SkillVersionIds`: an assistant searches only its published version's collections, whatever its skills (simplification pass §15; done in the parallel pass); `/mcp` = `search_knowledge` + `list_collections` only, no `document://`, `get_document`, `ask_assistant` or skill endpoints in P2 |
 | `ingestion-worker/design-processing.md` §13.4, §14 | skill gate = end-to-end run on linked models against read-only tools, advisory (no floor, no relative rule, no weekly re-check); `Settings.Tools.SkillGateModel` for first versions |
 | `ingestion-worker/design-engine.md` | no `eval` kind `skill-gate` (the gate runs in `rag-admin`); the worker is not on network `mcp` and holds no tool certificate |
 | `platform/repo-and-deployment.md` §1, §2.2, §3 | `Ume.Rag.Tools` as a library; no `tools/Ume.Rag.McpGen`, no `Microsoft.OpenApi`; `templates/mcp-server/`, `deploy/compose.mcp.yaml`; settings `Tools:*` (`DriftCheckInterval`, `MaxResultChars`, `MaxArgumentBytes`, `MaxPooledClients`, `AllowWrite=false`), `Agent:*`, `Mcp:CallsPerMinutePerUser`; no `ToolHub:*` settings in P2 |
 | `platform/repo-and-deployment.md` §4, §6 | AppHost adds `ume-mcp-kommun`; networks `mcp` (members `rag-api`, `rag-admin`, servers), `mcp-<name>-egress`; no `tools`, `tools-egress` networks in P2; secrets: `ume-rag-tools-entra.pfx` and `Security__ToolAuditKey` for `rag-api` and `rag-admin` |
-| `admin/plan.md`, `admin/design.md` | done in the same pass (Skills: served pointer, share list, gate report and serve; Tool servers: pre-registration, approvals, grants, drift; no request flow) |
+| `admin/plan.md`, `admin/design.md` | done in the same pass (Skills: served pointer, share list, gate report and serve; Tool servers: pre-registration, approvals, grants, drift; no request flow); §15: V3, V4, V11, V12, V14, V18 without skill collections and with the derived mode, "Använder verktyg" |
 | `gateway-changes/design.md` §7.3 | optional item: `features` (incl. `tools`) next to `contextWindow` on `/v1/catalog/models` |
 
 ## 14. Questions
@@ -1187,6 +1195,10 @@ User, 2026-10-30 (this step):
    publishing runs the skill's test questions through the skill gate (advisory since the simplification pass); linking a
    tool needs a department grant; the platform team owns platform skills (§3.6–§3.7).
 3. **MCP server template**: **.NET only** (§8.1); the OpenAPI → MCP generator is dropped (simplification pass).
+
+User, 2026-10-30 (simplification pass §15): skills carry know-how and tools, never collections; one assistant type, the
+agent loop starting when the published version links at least one tool-bearing skill; assistant versions pin nothing
+about skills; the skill gate and the served-pointer flow unchanged (§1 row 21, §3.5, §5.1, §6.1).
 
 User, 2026-10-30 (simplification pass §10): in-process hub with bulkheads; `hosted` only; one first server
 `ume-mcp-kommun`; served pointer + rollback; static skills ≤ ~4k tokens; early `/mcp`; share lists;
@@ -1226,7 +1238,7 @@ labelling municipal tool results `trust="municipal"` (§4.8).
 
 ## 16. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §10, §14:
+Per [`../simplification-pass.md`](../simplification-pass.md) §10, §14, §15:
 
 | Removed or deferred | Where it went |
 |---|---|
@@ -1249,3 +1261,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §10, §14:
 | Hub-unreachable rule (2 failures drop tools) | Replaced by per-server bulkheads and circuits |
 | Skill gate as a worker `eval` job, the worker on network `mcp` with the tool certificate | The gate runs in `rag-admin`; the worker has no tool access (§3.7) |
 | Tool rate limits always in Redis | `IRateLimitStore`: in process on one host, Redis only when tools run on several hosts (§4.9, §7.6) |
+| Collections linked by skills (`SkillVersionLinks` kind `collection`, `collections` in `ume-rag.json`), skill levels over collections, skill collections in retrieval scope (`RetrievalRequest.SkillVersionIds`, `load_skill` widening `search_knowledge`), the assistant `Mode` (`rag`/`agent`) | Removed (§15): skills carry know-how and tools only; an assistant searches its own collections; the agent loop starts when a linked skill carries a tool |

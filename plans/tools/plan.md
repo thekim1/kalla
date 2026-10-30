@@ -3,8 +3,9 @@
 How assistants gain know-how (skills) and capabilities (tools), how the platform speaks MCP, and how municipal MCP
 servers are built and hosted. Decisions (2026-10-29): skills are **both** know-how packages and tool bundles; tools are
 **read-only first**; user-delegated access (Entra OBO) is **designed now, built later** (`../identity/plan.md` §7).
-Simplified on 2026-10-30 ([`../simplification-pass.md`](../simplification-pass.md) §10): a smaller P2 with the tool hub
-in process, `hosted` servers only and one first server. Detail: [`design.md`](design.md) (detail step 9).
+Simplified on 2026-10-30 ([`../simplification-pass.md`](../simplification-pass.md) §10, §15): a smaller P2 with the
+tool hub in process, `hosted` servers only and one first server; skills without collections; one assistant type.
+Detail: [`design.md`](design.md) (detail step 9).
 
 ## 1. Concepts
 
@@ -12,29 +13,33 @@ in process, `hosted` servers only and one first server. Detail: [`design.md`](de
 |---|---|
 | **Tool server** | A registered MCP server hosted by the municipality (P2; servers run by others in P3), reached over Streamable HTTP |
 | **Tool** | One tool on a tool server, individually allowed or not, with a risk level (`read` / `write`) and a pinned definition |
-| **Skill** | A versioned package: instructions, reference files, examples, optional linked collections and tools, test questions, classification |
-| **Assistant** | Model + persona prompt + skills (+ direct collections). Mode `rag` (fixed steps, no tools) or `agent` (tool loop) |
+| **Skill** | A versioned package of know-how and tools: instructions, reference files, examples, optional linked tools, test questions, classification; **never collections** |
+| **Assistant** | Model + persona prompt + its own collections + skills. One type: the fixed RAG steps, or the tool loop (P2) when a linked skill carries tools (derived, shown as "Använder verktyg") |
 
 An assistant is assembled from skills, so know-how is written once and reused: e.g. a skill "Bygglov" (instructions on
-how the municipality answers building-permit questions, the bygglov collection, the fee calculator tool, 30 test
-questions) used by both the citizen-facing and the internal building-department assistant.
+how the municipality answers building-permit questions, the fee calculator tool, 30 test questions) used by both the
+citizen-facing and the internal building-department assistant, each of which links the bygglov collection itself:
+what an assistant knows is always its own collection links, shown in one place.
 
 ## 2. Skills
 
 - **Format**: compatible with the Agent Skills format (a folder with `SKILL.md`: name, description, instruction body,
   plus reference files), checked against the spec (design §3.1). A platform manifest (`ume-rag.json`) adds linked
-  collections, linked tools, classification, owner department; test questions in `evals/evals.json` (the spec's eval
+  tools, classification, owner department; test questions in `evals/evals.json` (the spec's eval
   convention). `allowed-tools` is ignored: tool access comes only from manifest links and the tool policy.
 - **Storage**: everything in `config` (instructions, manifest, test questions, text reference files in
   `SkillVersionFiles`); no blobs (design §3.3).
 - **Static first**: when an assistant's skills total ≤ about **4k tokens** they are included in the system prompt and
   their tools are visible from the first step; only above that does the agent see a catalogue (name + description) and
-  call `load_skill` (design §3.8–§3.9). RAG-mode assistants always include their skills statically.
+  call `load_skill` (design §3.8–§3.9). Assistants without tools (the RAG path) always include their skills statically.
 - **No executable scripts**: `scripts/` is refused on save and import; running scripts needs a sandbox (P3+).
 - **Lifecycle**: immutable published versions with SemVer labels (for display); one **served** pointer per skill;
   every assistant linking the skill uses the served version; rollback is moving the pointer (design §3.5). Publishing
   runs the **skill gate** (design §3.7) in `rag-admin`: the skill's test questions end to end on the linked assistants'
-  models against read-only tools; the report is advisory and the skill's owner serves the version.
+  models against read-only tools; the report is advisory and the skill's owner serves the version. Assistant versions
+  pin nothing about skills: a version names its skills, and every assistant always uses each skill's served version.
+  Serving a version that adds a skill's first tool switches the linking assistants to the agent loop, so serve checks
+  those assistants too.
 - **Sharing**: department skills are usable by their own department and by departments on the skill's **share list**;
   platform skills (e.g. "Klarspråk", "Hänvisa till kontaktcenter") by all. Sharing never grants tools (design §3.6).
 - **Never served unauthenticated**; export requires the same access as editing (P3).
@@ -147,7 +152,7 @@ frequent questions; a clear gain over plain retrieval. All three live in `ume-mc
 | 2 | **Address lookup** (`lookup_address`) | Property designation, detaljplan, school catchment area, district, nearest recycling station | Common citizen and contact-centre questions; per-address answers cannot be indexed sensibly | Municipal GIS services (WFS / OGC API Features) |
 | 3 | **Organisation and contact directory** (`find_contact`) | Which unit handles a matter, phone numbers, opening hours, visiting addresses | Changes often, so crawled copies go stale | Contact-centre directory or the website CMS's API |
 
-Built-in tools in every agent assistant: `search_knowledge`, `current_date`, and `load_skill` when skills exceed the
+Built-in tools in every assistant that uses tools: `search_knowledge`, `current_date`, and `load_skill` when skills exceed the
 static budget.
 
 **Pilot fit**: a contact-centre assistant would use all three plus the website collection (P2 candidate).
@@ -160,13 +165,13 @@ static budget.
 |---|---|
 | P1 | Client registry only (needed for ceilings); P1 assistants have a prompt and collections, no skills (decision) |
 | P2 (early) | `/mcp` with `search_knowledge` and `list_collections` (client ceiling `public`) |
-| P2 | In-process tool hub with bulkheads, read-only tools, service identity, `hosted` servers; `ume-mcp-kommun` with the **mock** fee calculator; skills (static and progressive), share lists, skill gate; agent assistants; real tools (§7) after the data sources are inventoried |
+| P2 | In-process tool hub with bulkheads, read-only tools, service identity, `hosted` servers; `ume-mcp-kommun` with the **mock** fee calculator; skills (static and progressive), share lists, skill gate; the agent loop for assistants with tool-bearing skills; real tools (§7) after the data sources are inventoried |
 | P3 | `rag-tools` as a separate service (with the first external, OBO or write tool); `municipal`/`external` servers; Entra OBO; write tools with confirmation and risk acceptance; per-skill MCP endpoints, `ask_assistant`, MCP prompts and resources; skill import/export; sandbox evaluation for skill scripts |
 
 ## 9. Open questions
 
 1. **First tools**: start with **one mock tool server** (`ume-mcp-kommun` with a fee calculator on sample tariff data)
-   as the reference for the template, the tool hub and agent assistants. The real tools in §7 are inventoried and
+   as the reference for the template, the tool hub and the agent loop. The real tools in §7 are inventoried and
    built later.
 
 Answered (2026-10-29):
@@ -189,7 +194,7 @@ Answered (2026-10-30; detail in design.md §14.1):
 
 ## 10. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §10:
+Per [`../simplification-pass.md`](../simplification-pass.md) §10, §15:
 
 | Item | Where it went |
 |---|---|
@@ -203,3 +208,4 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §10:
 | Risk acceptance for the lethal trifecta | P3 (with write/OBO tools); hard refusal in P2 |
 | Own-department-only links for skills | Replaced by share lists |
 | Two approvals for every definition change | Only for unexpected drift; planned changes pre-registered with one approver |
+| Collections linked by skills (`SkillVersionLinks` kind `collection`, `collections` in `ume-rag.json`) and the `rag`/`agent` assistant mode | Removed (§15): skills carry know-how and tools only; the mode is derived from tool-bearing skills |

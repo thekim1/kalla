@@ -4,7 +4,8 @@ Detail step 3 of the Ume.Rag design. Details [`plan.md`](plan.md) (binding, incl
 Decisions table in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consistent with
 [`../platform/data-model.md`](../platform/data-model.md) (step 1) and
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (step 2); deviations are listed in §14.
-Rewritten for [`../simplification-pass.md`](../simplification-pass.md) (2026-10-30); what it removed is listed in §17.
+Rewritten for [`../simplification-pass.md`](../simplification-pass.md) (2026-10-30; §15 adds assistant versions and
+owner-team scoping, §1.3, §4.3); what it removed is listed in §17.
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); Open WebUI citations are in
 `~/git/rag-platforms/open-webui`. "Copy" means the file is copied with namespace and names changed only; "adapt" means
@@ -99,8 +100,17 @@ groups intersect the group claim (`:40-48`).
 As in the gateway, policies are `RequireRole(any of …)` (`AdminAuthentication.cs:151-158`), so several roles add up
 and the highest one counts (`docs/identity-and-roles.md:22-24`). Role values that are not `rag-*` are ignored. `Review` (open a conversation) and `FeedbackComments` (reveal one
 feedback comment) are not implied by `Admin`: no administrative role grants conversation content, so a platform admin
-who must review is also given `rag-reviewer`. `teamCodes` is read and shown but grants nothing in P1 (no team-scoped
-role yet, plan §3).
+who must review is also given `rag-reviewer`. `teamCodes` grants nothing in P1 (no team-scoped role).
+
+**Owner-team scoping (P2, simplification pass §15).** Assistants, collections and skills keep an owner team; a
+department may switch on `DepartmentSettings.EditOwnerTeamOnly` (data-model §2.1). Then an `Edit`, `EditPipelines` or
+`EditSkills` write to such an object also needs the object's owner team among the user's teams; holders of `Manage` in
+the department (department and platform admins) are unaffected, and reads never change. The user's teams are the
+`teamCodes` claim values matched case-insensitively to `Teams.Code` from the gateway mirror, so no new claim or
+configuration key is needed. It is an admin authorisation rule (`AdminContext.CanWrite`, admin design §3.2), not a
+role and not an `IAccessPolicy` step: the data plane never asks who may edit. A refused write is 403 `owner_team_only`
+with event 6006; there is no new security event. Whether the municipality can fill `teamCodes` at all is to verify
+(§16); without it, member groups on teams would follow the feature C pattern in both systems.
 
 ### 1.4 Settings
 
@@ -365,7 +375,9 @@ public sealed record AccessDecision(
 ```
 
 `PolicySnapshot` is the config snapshot (data-model §5) with `Version`, `Confirmed` (last confirmed at most
-`Config:MaxUnconfirmedSeconds` ago, default 90 s), clients, keys' scopes, assistants with audiences and collections,
+`Config:MaxUnconfirmedSeconds` ago, default 90 s), clients, keys' scopes, assistants with audiences and their
+**published** version's collections (the api reads only `config."PublishedAssistantVersions"`, so a draft never
+reaches a decision),
 collections, skills, tools, data-protection policies and the department mirror. Membership comes from the token's
 claims as `MembershipFacts { Departments, Groups, Known: bool }` (`Known = false` for an overage token), so the policy
 itself never waits.
@@ -380,7 +392,7 @@ itself never waits.
 | 2 | Credential kind allowed for the client kind (`open-webui`: sk key + JWT; `widget`: pk key; `integration`: sk key or app token; `own-client`/`teams`/`mcp-client`: delegated token; `internal`: service key or in-process) | `credential_not_allowed` | 403 |
 | 3 | Subject kind allowed for the client kind (`widget` ⇒ `Anonymous` only; `Anonymous` only via `widget`) | `subject_not_allowed` | 403 |
 | 4 | Permission for the action: delegated `scp` (`Chat.Use` for `ListModels`/`Chat`/`Feedback`, `Knowledge.Read` for `Search`/`ReadDocument`, `Mcp.Use` for `McpCall`), app `roles` (`Chat.Invoke.All`, `Knowledge.Read.All`), keys: key kind (`pk` ⇒ `ListModels`/`Chat`/`Feedback` only) | `permission_missing` | 403 |
-| 5 | Resource exists and is live (assistant `State = published`, collection not deleted) | `not_found` | 404 |
+| 5 | Resource exists and is live (assistant `State = active` with a published version, collection not deleted) | `not_found` | 404 |
 | 6 | Key scope: if `Keys.Scopes` lists assistants/collections, the resource is in it | `key_scope` | 404 |
 | 7 | **Classification ceiling**: resource level ≤ client ceiling | `ceiling_exceeded` (event 5005) | 404 |
 | 8 | **Anonymous**: resource level = `public` | `anonymous_not_allowed` | 404 |
@@ -389,6 +401,14 @@ itself never waits.
 | 11 | Step 10 needs a department/group row and `Membership.Known = false` | `membership_unavailable` | 503 |
 | 12 | Tools (P2): tool policy = tools design §5.1 (server → skill → assistant → client, `ToolPolicy.Visible`/`Authorize`); inside an agent loop a denial is a `denied` tool message + 5002, not an HTTP 403; on `/mcp` the SDK's unknown-tool error (tools design §5.2) | `tool_not_allowed` | 403 / tool message |
 | ✓ | Allowed: `EffectiveLevel` = resource level; `MaxResidency` per §4.7 | – | – |
+
+**Assistant versions do not change access** (decided, simplification pass §15). Audience, level (`Classification`),
+history mode, retention, owner team and key scopes belong to the **assistant**, not to a version, and are changed only
+by their own admin actions (admin design §4.5). A version holds what the assistant answers with (instructions, model,
+collections, skills), and publish or restore refuses one that the assistant's level does not cover (admin design §4.6
+V3–V6, V8). So steps 1–11 give the same answer before and after a publish or restore, except step 5 on the first
+publish; step 12 can change only through the published version's skills and tools, which are bounded by the same
+level. Explain access (§4.9) always evaluates the published version.
 
 Steps 5–10 answer **404** (`model_not_found` in the OpenAI error shape for chat), so a caller cannot probe which
 assistants exist above its ceiling or outside its audience; the security event still records the real reason.
@@ -458,16 +478,18 @@ checked, case-insensitively by order `OnPrem < Eu < External`, against the same 
 with `Retry-After` (in-ceiling targets drained or circuit-open) is retryable; `403 max_residency_not_met` (no target
 configured within the ceiling) is not.
 
-**Model validation on save**: when an assistant is saved, the admin calls the gateway's `GET /v1/models` with the key
-and ceiling of the assistant's effective level (for an audience client that keeps history, max(level, client
-ceiling)) on behalf of its team, and refuses the save if a linked model is not listed (gateway design §3.4).
+**Model validation on publish**: when an assistant version is published (and when its level or audience is saved), the
+admin calls the gateway's `GET /v1/models` with the key and ceiling of the assistant's effective level (for an
+audience client that keeps history, max(level, client ceiling)) on behalf of its team, and refuses the action if the
+version's model is not listed (gateway design §3.4).
 
 ### 4.8 Internal callers
 
 - **Admin test panel**: runs in the admin process, builds a `RagPrincipal` for client `admin-console` with the
   admin's `oid` (fallback `sub`), and checks access with the admin's role scope (department of the assistant ∈ admin's departments),
   not with assistant audiences. Answers are not stored as conversations. It runs the real chat path in process through
-  the `Ume.Rag.Answering` library (admin design §2.1, §4.9). P2 agent test calls go to the hub as `admin-console`
+  the `Ume.Rag.Answering` library on the assistant's **draft** (or a chosen version), so drafts are tried only here and
+  in the admin's assistant test runs, under the same principal (admin design §2.1, §4.9, §7.4). P2 agent test calls go to the hub as `admin-console`
   (needs `ToolPolicy = read` on that client, tools design §2.2).
 - **`rag-internal`**: the chat role sends `assistantId` and the already-made decision's level; the knowledge role
   recomputes the assistant's collections from its own snapshot (same version or newer) and refuses if the assistant's
@@ -827,6 +849,10 @@ policy denials (P2, `ResourceType` `tool`/`skill`, attributes + `ToolId`, `Skill
 is `Security:ConversationIdKeys` (secret files `Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, made by
 `init-deployment.sh`; newest signs, all verify, as the download-grant keys).
 
+Assistant versions and owner-team scoping (simplification pass §15) add **no event**: publish, restore, copy and
+archive are admin changes (6001 with `assistant.publish|restore|copy|archive`, admin design §9.2), a refused
+owner-team write is a 403 (6006), and a draft never reaches the data plane, so it cannot cause a 5xxx event.
+
 Gateway counterparts (gateway design §10): our 5001 with `wrong_tenant`/`guest_refused` = gateway 2008 (admin) or
 3003 (Data API).
 
@@ -981,6 +1007,12 @@ membership of the pilot groups is maintained by IT, not by IaC.
   passes, wrong `tid`).
 - Role resolution: several roles add up; non-`rag-*` roles ignored; no role ⇒ every policy fails. Audit actor `oid`,
   `sub` when there is no `oid` (Keycloak).
+- Assistant versions: for every row of the policy matrix, `Decide` gives the same result for two published versions of
+  one assistant that differ in instructions, model, collections or skills (within its level); an assistant without a
+  published version is `not_found`; a draft's collections never appear in `PolicySnapshot`.
+- Owner-team scoping (P2): with `EditOwnerTeamOnly` on, `CanWrite` is true for an owner-team member with `Edit`, false
+  for another team's member (403 `owner_team_only`, 6006), true for `Manage`; `teamCodes` matched case-insensitively to
+  `Teams.Code`; off ⇒ unchanged.
 - Key hasher: both prefixes, wrong prefix for the stored kind, gateway key shape refused, display prefix length.
 
 ### 13.3 Integration (`Ume.Rag.Api.Tests`, `Ume.Rag.AdminApi.Tests`, `Ume.Rag.IntegrationTests` with Keycloak and Postgres containers)
@@ -1041,12 +1073,25 @@ The step 3 changes were applied in the step 3 review commit (2026-10-29). Needed
    rows from §16.
 7. **`../postponed-decisions.md`**: nothing (E1 already covers Open WebUI group audiences).
 
+Needed for simplification pass §15 (assistant versions, owner-team scoping):
+
+8. **`../platform/data-model.md`** (done in the parallel pass): `Teams.Code` is used for owner-team membership, so it
+   is no longer "display only"; `DepartmentSettings.EditOwnerTeamOnly` limits `Edit`, `EditPipelines` and `EditSkills`
+   (§1.3).
+9. **`../admin/design.md`** (done in the same pass): §3.2 owner-team scoping; publish and restore never change
+   audiences or level; test panel and assistant tests run drafts as `admin-console`.
+10. **`../gateway-changes/design.md`**: only if `teamCodes` cannot be filled (§16): member groups on teams, as feature C
+    for departments, in both systems.
+
 ## 15. Answered questions (2026-10-29, revised 2026-10-30)
 
 1. **Registration ownership** (revised in the simplification pass): `ume-rag/infra/entra/` owns only RAG's
    registrations (`ume-rag-admin`, Open WebUI); the gateway's registration stays the gateway's (§12.2).
 2. **Admin credential**: a client secret of our own, identical to the gateway's setup; certificates later for both
    systems together (§12.2).
+3. **Many assistants per department** (user, 2026-10-30, simplification pass §15): P2 owner-team scoping of admin
+   writes, decided here as an admin rule on `teamCodes` (not a role, not an `IAccessPolicy` step) (§1.3); assistant
+   versions do not change access, because audience and level belong to the assistant (§4.3).
 
 ## 16. To verify (before or during P0/P1)
 
@@ -1059,6 +1104,9 @@ The step 3 changes were applied in the step 3 review commit (2026-10-29). Needed
 - **New**: Entra ID tokens of `ume-rag-admin` carry `oid` with the scopes the BFF requests (`openid profile email`).
 - **New**: `groupMembershipClaims = SecurityGroup` puts cloud and synced member groups as object ids into the ID
   token's `groups` claim; how many pilot admins exceed the token's group limit (overage, §2.5).
+- **New (P2)**: whether IT can put team codes matching the gateway's `Teams.Code` into a `teamCodes` claim on
+  `ume-rag-admin` (the municipality has no department attribute either); otherwise owner-team scoping needs member
+  groups on teams (§1.3, §14 item 10).
 
 ## 17. Deferred or removed (simplification pass)
 

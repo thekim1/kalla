@@ -370,3 +370,29 @@ The user asked whether the pilot's eight long-running containers could be fewer.
   answer judge and test panel would share CPU with live chat); merging ClamAV into the parser (ClamAV needs egress for
   signature updates, the parser must have none); merging the worker into `rag-api` (ingestion must never compete with
   chat).
+
+## 15. Many assistants per department (user, 2026-10-30)
+
+Analysis of a department or team building several chatbots and agents over websites and files: the chain source →
+knowledge bank (collection) → assistant → audience is sound and reusable, but P2 offered several ways to attach
+knowledge, two assistant kinds, and no versioning or tests per assistant. Decided:
+
+1. **Knowledge only through direct links.** An assistant = instructions + the knowledge banks (and, P2, workspaces)
+   it links directly + skills. **Skills carry know-how and tools only, never collections**: `SkillVersionLinks` of kind
+   `collection` are removed, and so are the rules and retrieval scopes that added a skill's collections. One place
+   shows what an assistant knows.
+2. **One assistant type, mode derived.** No `rag`/`agent` choice: an assistant with no tool-bearing skills runs the
+   fixed RAG path; linking a skill with tools switches it to the agent loop (P2), shown as a label ("Använder
+   verktyg"). `Assistants.Mode` becomes a computed value, not an editable field.
+3. **Light assistant versioning in P1.** Edits are saved to a **draft**; the test panel runs the draft; **Publicera**
+   makes it the live version; version history with a diff and one-click restore (restore = a new version). Each
+   assistant has a small **test-question set** (question, expected behaviour as free text and optional expected
+   source/phrase), re-run on publish through `Ume.Rag.Answering` in `rag-admin` with the answer judge, **advisory**
+   like collection evaluation. The chat role serves the published version only.
+4. **Owner-team scoping in P2.** Assistants, collections and (P2) skills keep their owner team; from P2 a department may
+   limit `Edit` to members of the owner team (department admins still see and edit all).
+5. **Smaller additions** (main session, low risk): copy an assistant; assistant templates (instructions, not-found
+   texts, settings) maintained by the platform team; a department map (sources → knowledge banks → assistants →
+   audiences) and an impact notice on saving a source or knowledge bank ("påverkar 3 assistenter"); an attention item
+   for assistants without use in 90 days (suggest archiving); every assistant has a description and a contact owner,
+   shown where clients can display them (Open WebUI model description, to verify).
