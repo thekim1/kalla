@@ -571,6 +571,14 @@ provider unchanged and in order, and that tool-call answers (JSON and streamed d
 Order matters: a test with three tools and interleaved `tool` messages compares the upstream body's arrays element by
 element. Shipped with B because B touches routing and these tests guard the paths Ume.Rag depends on from the start.
 
+### 7.3 `contextWindow` on `/v1/catalog/models` (optional, a later release)
+
+Not needed for P1. The catalog model entry (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:152-154`) has no context size,
+so the RAG admin cannot prefill an assistant's `QuerySteps.answer.contextTokens` (chat design §6.3) and editors type
+it. Small item for any later release: add `ModelDeployment.ContextWindow` (already `int?` on the entity,
+`src/Ume.LlmGateway.Domain/Entities/Entities.cs:309`) to the projection as `contextWindow` (null when unset).
+Additive field, no migration.
+
 ## 8. Data model, migrations, Redis
 
 ### 8.1 Migrations

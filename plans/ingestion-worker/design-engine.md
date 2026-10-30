@@ -444,6 +444,7 @@ Data-model §4.2 holds order, leases and attempts. Concurrency defaults below ar
 | `parse` | `min(Settings, /v1/info capacity.convert_slots)` | `documentId`, `level`, `executionId`, `pipelineVersionId`, `nodeId`, `inputKey`, `slice` | §7, §9.5 |
 | `embed` | 4, adaptive (§18) | `documentId`, `level`, `executionId`, `pipelineHash`, served `(sourceId, runId)` pairs, `inputKey` | §7, §14 |
 | `eval` | 1 | 6c | 6c |
+| `attachment` (P2) | 2 | `attachmentId`, `conversationId`, `level` (chat design §15.2) | scan (ClamAV, fail-closed) → sniff/type check → parse → chunk → PII (recorded, not blocking) → embed on-prem → post chunks to the API's internal route; high priority (dispatched right after `preview`); never writes `chat` and holds no chat keys |
 
 `Worker:Classes` lists the classes an instance runs (`crawl` is not a class: discovery is part of `sync`/`fetch`, §21).
 

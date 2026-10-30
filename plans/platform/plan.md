@@ -144,6 +144,12 @@ Levels `public` < `internal` < `sensitive` on sources, collections, skills, tool
   if it is above the ceiling. The level of a call is the highest level of the data in it (e.g. an `internal`
   assistant answering from a `public` collection still sends `Eu`). Values are the gateway's `DataResidency` names
   (`OnPrem`, `Eu`, `External`; case-insensitive); the response check compares by that order (gateway design §3.1).
+  **Follow-ups with client-sent history** (chat design §8.2): a client that resends history (Open WebUI) lets a user
+  switch the model mid-chat, so earlier turns may come from a higher-level assistant; when a request carries any
+  earlier assistant turn its effective level is **max(assistant level, client ceiling)**. Consequence: an assistant
+  offered to such a client needs a `GatewayModel` the gateway can serve at that residency, else every follow-up fails
+  with `max_residency_not_met`; the admin API refuses such a publish or audience link (in the pilot, `public`
+  assistants in Open WebUI use EU or on-prem models).
 - **Embeddings are always on-prem** (R3): the platform embedding profile is an on-prem multilingual model, so
   indexing never sends content out of the municipality, whatever its classification.
 

@@ -260,7 +260,8 @@ stated reason, which is itself audited.
   - it forwards the signed user JWT (`ENABLE_FORWARD_USER_INFO_HEADERS`), and our API decides access from it;
   - `/v1/models` is filtered in our API (`BYPASS_MODEL_ACCESS_CONTROL=true`);
   - citations travel as streaming `source` events;
-  - title and follow-up generation go to a separate task model.
+  - title, tag and follow-up generation go to our virtual task model `owui-tasks` (an on-prem model through the
+    Chat API, `plans/chat-api/design.md` §4.2), so Open WebUI has only one connection.
 
   Licence: BSD-3 plus a branding clause. It is free at any scale, but the "Open WebUI" branding must stay above 50
   users unless there is written permission or an enterprise licence. That is fine for a branded pilot. If
@@ -331,6 +332,8 @@ stated reason, which is itself audited.
 | Processing (step 6c) | `plans/ingestion-worker/design-processing.md`: per-page parse rules on inspect signals; built-in parse profiles with observations recorded from P1; BGE-M3 tokenizer in .NET; 400-token budget incl. heading path, sentence overlap, row-group tables; PII patterns in .NET plus `/v1/ner` on its own lane and a `ner` job class; public collections blocked for personnummer/samordningsnummer/external email always, names and contacts only in list-like documents; noise-only changes re-key chunk sets; evaluation on documents with intervals; sub-corpus gate with escalation; collections `building` until 0.70; flat chunks with section expansion in the knowledge API. |
 | Knowledge API (step 7 questions) | Top-k default 10, max 50. Citations without a public URL link to an access-checked download via 7-day signed grant links (staff network only, access re-checked at each download). No query rewriting in P1. No recency boost. |
 | Knowledge API (step 7) | `plans/knowledge-api/design.md`: shared `Ume.Rag.Retrieval` engine (API, evaluator, test panel); keyword search in parallel with the query embedding, then vector, then one hydrate batch, RRF in .NET; exact scan for scopes ≤ 10,000 chunks; degrade to keyword-only if embedding fails; coverage per collection by cosine distance; dedup + one variant per URL + max 3 chunks per document; section expansion from neighbouring chunks (`OverlapChars`); no result cache; query text never stored. |
+| Chat API (step 8 questions) | Condense on, follow-ups only, on an on-prem task model. History: last 10 messages, ≤ 4k tokens. Not found: fixed sv/en text + contacts, no model call. Feedback in P1, incl. import of Open WebUI ratings. C1 chat attachments (P2): chat-scoped with conversation retention. P1 uploads disabled in Open WebUI. Editors read feedback comments after a one-click audited reason (`sensitive`: full review flow). |
+| Chat API (step 8) | `plans/chat-api/design.md`: client-sent history authoritative, 0 SQL on the hot path; Open WebUI with one connection and our `owui-tasks` task model; residency checked before the first byte, follow-ups with history at max(level, client ceiling); `[n]` renumbered by first citation, Open WebUI `source` events vs `url_citation` for others; output filter against exfiltration; signed issued conversation ids; background writer with per-conversation 7-day key epochs, no journal; Open WebUI pruning job. |
 
 Sections 3–9 above describe the original idea; where they differ from the plans, the plans and this table win.
 

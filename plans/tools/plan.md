@@ -54,6 +54,11 @@ tool credentials.
   hashed arguments); full arguments/results only in the conversation record, under the same 90-day retention.
 - **Agent loop limits** enforced by the Chat API with the tool hub: max tool calls per message, wall-clock time,
   and cost per message.
+- **Where the loop lives**: in the Chat API, as the P2 `AgentAnswerStrategy` behind `IAnswerStrategy`
+  (`../chat-api/design.md` §2.2). It yields the same `AnswerEvent`s as the RAG strategy (text deltas, usage,
+  failures) plus `ToolCall` events (shown as Open WebUI `status` events, stored as `chat."ToolCalls"` rows), so
+  residency checks, output filter, citations and the writer are reused; `search_knowledge` maps to `IRetriever`, and
+  the effective level rises to the highest level of every tool server called.
 
 **Lessons from Bifrost** (`../../platforms/bifrost.md`), adopted:
 

@@ -319,6 +319,7 @@ public sealed record RagPrincipal(
 | Public widget | `ume-rag-pk-` key + `Origin` + issued session (§6.5) | `Anonymous` | `anon:{HMAC(session)}` | the key's `ClientId` (kind `widget`) | P2 |
 | Own chat client, Teams | delegated token, `scp` `Chat.Use` (§7) | `EntraUser` | `oid` (Keycloak: `sub`) | `azp` | P2/P3 |
 | MCP client | delegated token, `scp` `Mcp.Use` (§8) | `EntraUser` | `oid` | `azp` (kind `mcp-client`) | P2 |
+| Worker → API internal attachment route (`POST /internal/attachments/{id}/chunks`, chat design §15.2) | internal service key, internal network only | `Application` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P2 |
 | Chat role → knowledge role over HTTP (`Retrieval:Mode=Http`) | internal `ume-rag-sk-` service key | `Application` + forwarded decision | `svc:{keyId}` | client `rag-internal` (kind `internal`) | when split |
 | Admin test panel | admin session (in-process, no HTTP) | `EntraUser` | admin `sub` | client `admin-console` (kind `internal`) | P1 |
 | Browser following a citation link (`GET /v1/documents/{id}` and `/content` only) | signed download grant `?grant=g1.…` (knowledge design §4.6) | none (no subject; the grant carries ids only) | – | the grant's `cl` (client that received the citation) | P1 |
@@ -328,8 +329,10 @@ Rules:
 - `SubjectId` is what conversations (`chat."Conversations"."SubjectId"`, data-model §2.3), per-user rate limits
   (`ume-rag:rl:user:{subjectHash}`) and `ToolCallEvents` use. It is pseudonymous but personal data, so security
   events carry it only where the gateway carries an actor (§10).
-- Conversations are unique per (`ClientId`, `SubjectId`, `ExternalChatId`) (data-model §2.3), so an Open WebUI user
-  id never meets an Entra `oid` in one namespace, and two Open WebUI instances never share conversations.
+- Conversations are unique per (`ClientId`, `SubjectId`, `ExternalChatId`, `AssistantId`) (data-model §2.3, chat
+  design §11.1), so an Open WebUI user id never meets an Entra `oid` in one namespace, and two Open WebUI instances
+  never share conversations. Issued conversation ids of other clients are signed (`c1.…`, HMAC over client, subject
+  and id); a foreign or forged id is a 404 with 5002 reason `conversation_not_owned` (§10).
 - `EntraUser` uses `oid` when present, else `sub` (Keycloak and AD FS; both are stable per user).
 - The internal service key never carries end-user identity downstream: the chat role has already made the decision
   for the assistant, and the knowledge role checks only "client `rag-internal` may retrieve the collections of
@@ -490,6 +493,13 @@ There is **no `aud`**, and if minting fails Open WebUI silently falls back to th
 headers (`headers.py:70-86`). The chat id travels unsigned in `X-OpenWebUI-Chat-Id` (`headers.py:196-199`). The
 connection key goes in `Authorization: Bearer` (`headers.py:204-206`) unless `auth_type` says otherwise.
 
+Open WebUI has **one connection** (ours, chat design §4.2–§4.3); its title/tags/follow-up tasks go to our virtual
+model `owui-tasks` (answered by the client's on-prem `TaskModel`), so there is no gateway connection and the JWT goes
+only to `rag-api`. The connection also sends the custom headers `X-Rag-Owui-Task`, `X-Rag-Owui-Message-Id` and
+`X-Rag-Owui-User-Message-Id` (templated by Open WebUI, `headers.py:139-157`). They are **unsigned**: they only route
+task requests and map messages and feedback **inside the caller's own conversation** (keyed by the JWT `sub`), never
+grant access.
+
 ### 5.2 Validation (`OpenWebUiUserJwt`, new)
 
 1. The request authenticated with an `ume-rag-sk-` key whose client has `Kind = open-webui` (§6). The JWT is never a
@@ -516,9 +526,13 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
   so users' browsers can follow citation download links (signed grants, knowledge design §4.6); every other `rag-api`
   path stays restricted to the Open WebUI host.
 - `FORWARD_USER_INFO_HEADER_JWT_SECRET` is used for nothing else. Open WebUI sends the same JWT to every connection
-  (forwarding is global), including the gateway connection for the on-prem task model (chat-api §6). Without `aud` a
-  receiver could replay it within its lifetime, but it is useless without our connection key (§5.2 step 1), so other
-  connections are allowed; they must be municipal services (the gateway), never a third-party endpoint.
+  (forwarding is global); it has **one connection only** (ours): the earlier gateway connection for the on-prem task
+  model is removed, tasks go to our `owui-tasks` model (chat design §4.2), so the JWT reaches only `rag-api`. Without
+  `aud` a receiver could replay it within its lifetime, but it is useless without our connection key (§5.2 step 1);
+  any connection added later must be a municipal service, never a third-party endpoint.
+- The feedback import (chat design §14.2) calls Open WebUI's admin API with a service account's API key
+  (`OpenWebUi__AdminApiKey`); Open WebUI restricts every API key to `/api/v1/evaluations/feedbacks/list`, and
+  `ENABLE_ADMIN_CHAT_ACCESS=false` keeps its admins out of users' chats (chat design §4.3).
 - Open WebUI settings required for user trust: `ENABLE_LOGIN_FORM=false` and `ENABLE_SIGNUP=false` (only Entra
   login; `backend/open_webui/config.py:1702-1704`), `ENABLE_OAUTH_SIGNUP=true` (`:2586`),
   `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false` (`:2593`), `OPENID_REDIRECT_URI=https://<owui host>/oauth/oidc/callback`
@@ -774,6 +788,7 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 | 5008 | `rag.key.unexpected_use` | api | a key in grace period used after its replacement was used (leak signal), once per key | `KeyId`, `KeyPrefix`, `RotatedToKeyId`, `SourceAddress` |
 | 5009 | `rag.mcp.client_refused` | api | delegated token from an `azp` not registered as an enabled `mcp-client` | `ClientId` (azp), `SubjectId`, `SourceAddress` |
 | 5010 | `rag.obo.refused` | tools (P3) | OBO exchange failed (`claims_required`, `consent_required`, `assertion_expired`, `error`) | `Reason`, `ToolServerId`, `SubjectId`, `ClientId` |
+| 5011 | `rag.gateway.delegation_missing` | api (Warning) | after gateway release A: the response lacks the `x-ume-on-behalf-of` echo of the team sent; call aborted before the first byte (chat design §8.2) | `Step`, `AssistantId`, `TeamId`, `GatewayRequestId` |
 | 5104 | `rag.parser.limit_exceeded` | worker | parser refused a file for a bomb or size limit (parser design §7.5) | `DocumentId`, `Limit` |
 | 5105 | `rag.pipeline.refused` | worker | refused to run a published pipeline version that fails validation (engine design §17); SIEM alerts on any | `PipelineId`, `PipelineVersionId`, `Reason` |
 | 5101–5103 | `rag.egress.blocked`, `rag.malware.detected`, `rag.pii.flagged` | worker | 5101/5102: connectors design §7, §11; 5103 on every transition to flagged (processing design §9.5) | 5103: `DocumentId`, `Classification`, `Types`, `Counts` (numbers only), `SourceId`, `RunId`, `Reflag`; SIEM rule for public references with a personnummer. Admin audit actions `pii.clear`, `gate.override` |
@@ -789,13 +804,16 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 `key_disabled`, `owner_inactive`, `address_not_allowed`; `SecurityEvents.cs:51-61`) plus `origin_not_allowed`,
 `user_jwt_missing`, `user_jwt_invalid`, `user_jwt_expired`, `user_jwt_role`, `user_jwt_mismatch`, `token_invalid`,
 `token_expired`, `wrong_tenant`, `guest_refused`, `client_unknown`, `permission_missing`, `grant_invalid`,
-`grant_expired` (download grants, knowledge design §4.6). 5002 `Reason` = §4.3 reasons.
+`grant_expired` (download grants, knowledge design §4.6). 5002 `Reason` = §4.3 reasons plus `conversation_not_owned`
+(an issued conversation id whose MAC does not match the caller's client and subject, chat design §11.1). The MAC key
+is `Security:ConversationIdKeys` (secret files `Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, made by
+`init-deployment.sh`; newest signs, all verify, as the download-grant keys).
 
 Gateway counterparts (gateway design §10): our 5001 with `wrong_tenant`/`guest_refused` = gateway 2008 (admin) or
 3003 (Data API); our 5007 = gateway 2007.
 
 SIEM alerts to add to the gateway's list (`docs/security-events.md:29-34`): any 5008; 5005 from one client repeatedly
-(a client probing above its ceiling); 5004 for more than a minute (config monitor broken); 5007 bursts (Graph outage
+(a client probing above its ceiling); any 5003 or 5011 from the chat role; 5004 for more than a minute (config monitor broken); 5007 bursts (Graph outage
 or permission removed); 5001 `user_jwt_invalid` at all (Open WebUI secret mismatch or forgery).
 
 ## 11. Keycloak realm (dev and CI)

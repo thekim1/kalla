@@ -102,7 +102,10 @@ public sealed record RetrievalResult(
     Coverage Coverage,
     string? Degraded,                          // null | "embedding_unavailable" | "embedding_residency"
     long ConfigVersion,
-    RetrievalTimings Timings);                 // stage milliseconds, for metrics and the test panel
+    RetrievalTimings Timings)                  // stage milliseconds, for metrics and the test panel
+{
+    [JsonIgnore] public ReadOnlyMemory<float>? QueryEmbedding { get; init; }  // P2, internal: chat attachment search
+}
 
 public sealed record RetrievedChunk(
     int Rank, Guid ChunkId, Guid DocumentId, byte[] TextHash, string Text, string HeadingPath,
@@ -116,7 +119,11 @@ public enum CoverageStatus { Ok, Low, Unknown }
 ```
 
 `RetrievedChunk.Citation` is §10's record. The result is a plain object graph: no JSON on the in-process path, so
-serialisation costs nothing for chat. Exceptions: `RetrievalDeniedException(int status, string code)` (the chat role maps
+serialisation costs nothing for chat. `QueryEmbedding` (P2) is the query vector already computed for this request, so
+the chat role can search a conversation's attachments without a second embedding call (chat design §15.2); it is
+**never serialised** in the public contract (not in §3.2). With the roles split, `HttpRetriever` asks for it with the
+internal-only request flag `include_query_embedding` (accepted only from `internal` clients, base64 float32 in an
+internal response field), so attachment search still needs no second embedding call. Exceptions: `RetrievalDeniedException(int status, string code)` (the chat role maps
 404 to `model_not_found` in the OpenAI shape, identity §4.3), `ConfigUnconfirmedException` (503).
 
 When the roles are split (`Retrieval:Mode=Http`, repo-and-deployment §3), `HttpRetriever : IRetriever` posts the same
@@ -771,11 +778,13 @@ clean attachment may be in one (processing §9.5), and the email subject must no
 citation. Display (chat role): "Bilaga *display_name* i *parent.title*"; without a visible parent just the
 attachment's title.
 
-### 10.4 How the chat role numbers them (recommendation for step 8)
+### 10.4 How the chat role numbers them (decided in chat design §7.2, §9.2)
 
-One number `[n]` per **document** (variant group), in order of the document's best rank; the prompt lists each
-document once with its sections (or chunk texts) and their page ranges; `MessageSources` keeps one row per used chunk
-with the document's number. Rendered link: `url` (or `download_url`) plus `#page={page}` for PDFs, so the viewer opens
+One number `[n]` per **document** (variant group). The **prompt number** is the order of the document's best rank;
+the prompt lists each document once with its sections (or chunk texts) and their page ranges. The **display number**
+the user sees is the order of the document's **first citation** in the answer (the chat role renumbers the streamed
+markers, so Open WebUI's `[k]` = k-th emitted source; uncited documents are never shown); `MessageSources` keeps
+`Rank` and the display `Number` (null if not cited). Rendered link: `url` (or `download_url`) plus `#page={page}` for PDFs, so the viewer opens
 at the cited page; label: title, heading path tail, "s. 12–13", modified date.
 
 ## 11. Latency budget (chat time to first token)

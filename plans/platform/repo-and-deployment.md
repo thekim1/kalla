@@ -57,15 +57,15 @@ tests/
   evaluation/smoke/                  fixture collection (documents) + 30 questions, used by CI
   fixtures/                          documents for parser and node tests (Swedish PDFs, DOCX, scanned pages)
 benchmarks/
-  release-test/                      R1 test: k6 chat streams during crawl + OCR (from the gateway's benchmarks/compare/k6)
-  Ume.Rag.Benchmarks/                BenchmarkDotNet: RetrievalBenchmarks, InteractionAudit (copy of the gateway's; knowledge design §11)
+  release-test/                      R1 test: k6 chat streams during crawl + OCR (from the gateway's benchmarks/compare/k6); chat overhead run (k6/chat.js, FakeGateway, chat design §16.2)
+  Ume.Rag.Benchmarks/                BenchmarkDotNet: RetrievalBenchmarks, ChatBenchmarks (chat design §16.2), InteractionAudit (copy of the gateway's; knowledge design §11)
 deploy/
   compose.prod.yaml                  data plane + control zone (host A)
   compose.ingestion.yaml             ingestion zone (same host in the pilot, host B later)
   compose.ingestion-remote.yaml      overlay for a separate ingestion host
   compose.rolling.yaml               b slots for rag-api and rag-admin
   compose.hardening.yaml             overlay for `aspire publish` output (deploy/generated/)
-  compose.openwebui.yaml             optional Open WebUI pilot stack (chat-api §6)
+  compose.openwebui.yaml             optional Open WebUI pilot stack: env of chat design §4.3, nightly pruning sidecar (chat design §13.3)
   init-deployment.sh  rolling-update.sh  build-release-bundle.sh  Test-Deployment.ps1
   Backup-Database.ps1  Restore-Database.ps1  backup-blobs.sh  restore-blobs.sh
   postgres/                          init.sql, init-tier.sql, app-roles.sql, app-roles-tier.sql, pg_hba.conf, postgresql.conf, upgrade-extensions.sql
@@ -140,7 +140,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | | `Scalar.AspNetCore` | 2.18.0 | gateway |
 | Vectors | `Pgvector` / `Pgvector.EntityFrameworkCore` | 0.3.2 / 0.3.0 | NuGet-checked; EF 10 compatibility *to verify* in P0 |
 | | `CommunityToolkit.VectorData.PgVector`, `Microsoft.Extensions.VectorData.Abstractions` | 1.0.2 / 10.11.0 | **not added**: retrieval is hand-written SQL (knowledge design §6) |
-| AI | `Microsoft.Extensions.AI`, `Microsoft.Extensions.AI.OpenAI` | 10.11.0 | NuGet-checked (`.OpenAI` *to verify*: listed together) |
+| AI | `Microsoft.Extensions.AI`, `Microsoft.Extensions.AI.OpenAI` | 10.11.0 | NuGet-checked (`.OpenAI` *to verify*: listed together); **not used by the chat role**, whose gateway calls are a raw `HttpClient` + copied `SseReader` (response headers must be read before the body, chat design §2.1) |
 | | `Microsoft.ML.Tokenizers` | 2.0.1 | NuGet-checked (chunk sizing) |
 | Ingestion | `AngleSharp` 1.8.6, `SmartReader` 0.11.1, `PdfPig` 0.1.16 | as listed | NuGet-checked |
 | | `Microsoft.Graph` | 6.9.0 | NuGet-checked; P2 (SharePoint, feature C) |
@@ -197,7 +197,7 @@ src/parser/
 | Project | SDK | References | Image | Runs as |
 |---|---|---|---|---|
 | `Ume.Rag.Domain` | `Microsoft.NET.Sdk` | – (no packages except `Microsoft.Extensions.AI.Abstractions` types if needed) | – | – |
-| `Ume.Rag.Infrastructure` | `Microsoft.NET.Sdk` + `Microsoft.AspNetCore.App` | Domain; Npgsql EF, Pgvector, Aspire Npgsql/Redis, DataProtection EF, M.E.AI.OpenAI | – | – |
+| `Ume.Rag.Infrastructure` | `Microsoft.NET.Sdk` + `Microsoft.AspNetCore.App` | Domain; Npgsql EF, Pgvector, Aspire Npgsql/Redis, DataProtection EF, M.E.AI.OpenAI (not on the chat path: `IGatewayClient` uses a raw `HttpClient`, chat design §2.1) | – | – |
 | `Ume.Rag.ServiceDefaults` | `Microsoft.NET.Sdk`, `IsAspireSharedProject` | OTel, resilience, service discovery | – | – |
 | `Ume.Rag.Api` | `Microsoft.NET.Sdk.Web` | Infrastructure, ServiceDefaults; JwtBearer, OpenApi, Scalar, MCP SDK (P2) | `ume-rag/api` | `rag-api` (+ `rag-api-b`) |
 | `Ume.Rag.Worker` | `Microsoft.NET.Sdk.Web` (health + metrics endpoint) | Infrastructure, ServiceDefaults; AngleSharp, SmartReader, PdfPig, Playwright, Graph, Cronos, Tokenizers | `ume-rag/worker` | `rag-worker` |
@@ -231,6 +231,14 @@ Knowledge-role settings (knowledge design §2.3, §3.5, §4.6, §5.3, §6, §9, 
 (8), `Retrieval:ExpandTotalMaxTokens` (8,000), `Retrieval:Index` (`postgres` \| `opensearch` \| `shadow`). The admin
 host also needs `Gateway:*` for test-panel query embeddings (knowledge design §4.2).
 
+Chat-role settings (chat design §3.7, §8, §12, §14.2): `Chat:PublishApiReference` (default `true`, off in production
+until P2), `Chat:CondenseTimeout` (1,200 ms), `Chat:GatewayHeadersTimeout` (60 s), `Chat:StreamIdleTimeout` (60 s),
+`Chat:MaxAnswerDuration` (240 s), `Chat:WriterEnqueueTimeout` (2 s), `Chat:CharsPerToken` (3); `Gateway:AttributionMode`
+(linked keys / platform key), `Gateway:SendResidencyCeiling`, `Gateway:RequireDelegationEcho` (after gateway release
+A); `OpenWebUi:BaseUrl`, `OpenWebUi:AdminApiKey` (feedback import; per instance `OpenWebUi:Instances:<name>:*`).
+Platform-wide chat values (condense model, link allow-list, per-user rate) live in `config."Settings".Chat`
+(data-model §2.1).
+
 ## 4. Local development
 
 ### 4.1 AppHost resource graph (`src/Ume.Rag.AppHost/Program.cs`)
@@ -254,7 +262,7 @@ persistent secrets through the same `Secret(name, length)` helper, `WaitFor`/`Wa
 | `worker` | `AddProject<…Worker>("worker", "https")` | – | references parser, clamav, renderer |
 | `adminapi` | `AddProject<…AdminApi>("adminapi", "https")` | – | `Oidc__ClientId=ume-rag-admin`; `Oidc:*` passed through when external |
 | `admin-ui` | `AddViteApp("admin-ui", "../admin-ui")`, port **5174** (gateway: 5173), `PublishWithContainerFiles(adminUi, "wwwroot")` | – | both stacks can run side by side |
-| `open-webui` | `AddContainer("open-webui", "ghcr.io/open-webui/open-webui", <pinned tag>)` | `OpenWebUi:Enabled` (default false) | env from chat-api §6, `OPENAI_API_BASE_URLS` = api endpoint, key = seeded dev key; tag *to verify* |
+| `open-webui` | `AddContainer("open-webui", "ghcr.io/open-webui/open-webui", <pinned tag>)` | `OpenWebUi:Enabled` (default false) | env of chat design §4.3 (one connection = our api endpoint with the seeded dev key, `X-Rag-Owui-*` headers, `TASK_MODEL_EXTERNAL=owui-tasks`); tag *to verify* (designed against v0.12.5) |
 
 Ports in `launchSettings.json` and the AppHost's dashboard port are chosen outside the gateway's (gateway admin
 7212, Vite 5173), so a developer can run the gateway's AppHost and ours at once (§4.4).
@@ -285,7 +293,8 @@ streaming code, and adds:
 | Endpoint / behaviour | Purpose |
 |---|---|
 | `POST /v1/embeddings`: **1024 dimensions**, L2-normalised feature hashing of word unigrams and character trigrams | texts that share words are close, so retrieval and evaluation tests mean something |
-| `POST /v1/chat/completions` (stream and not), answers built from the last user message and any `[n]` context, so citation tests can assert | chat, condense, evaluation generation and judging |
+| `POST /v1/chat/completions` (stream and not), answers built from the last user message and any `[n]` context, so citation tests can assert; answers Open WebUI task prompts (`### Task:` title/tags/follow-ups) with fixed JSON | chat, condense, `owui-tasks`, evaluation generation and judging |
+| Stream modes (chat design §18.4): configurable usage-only final chunk (on/off), broken stream mid-way, stall (> idle timeout), missing `[DONE]`, empty deltas, `finish_reason: length`; echoes `x-ume-session` | streaming edge cases |
 | `GET /v1/models`; per-model residency in `appsettings.json` (`OnPrem`, `Eu`, `External`: the gateway's `DataResidency` names) | – |
 | Response header `x-ume-residency`; honours `x-ume-max-residency` (case-insensitive names; other values 400 `invalid_request`; `403 max_residency_not_met` if no model fits); records `x-ume-on-behalf-of` and echoes it (gateway design §3, §5.2) | fail-closed tests (plan §6, §7) |
 | `GET /v1/catalog/departments` (Data API shape incl. `memberGroups`; department 3000 lists `Byggnadsnämnden`) and `/v1/catalog/teams` (incl. `code`, gateway release C) | organisation sync without the gateway |
@@ -421,7 +430,7 @@ Fixed subnets so the host firewall (`deploy/host/docker-user-firewall.sh`, `DOCK
 
 | Network | Subnet | `internal` | Members | Egress |
 |---|---|---|---|---|
-| `edge` | 172.30.1.0/24 | no | rag-api(+b), rag-admin(+b) | admin: OIDC authority, Graph (feature C); api from P2: OIDC authority (JWKS), Graph (P2 audiences), OBO (P3) (identity design §7–§9) |
+| `edge` | 172.30.1.0/24 | no | rag-api(+b), rag-admin(+b) | admin: OIDC authority, Graph (feature C); api: the Open WebUI host (feedback import, chat design §14.2); api from P2: OIDC authority (JWKS), Graph (P2 audiences), OBO (P3) (identity design §7–§9) |
 | `data` | 172.30.2.0/24 | **yes** | postgres, redis, rag-api(+b), rag-admin(+b), rag-worker, rag-migrate | none |
 | `llm` | 172.30.3.0/24 | no | rag-api(+b), rag-worker, rag-admin(+b) | firewall: only the gateway's address and port (gateway's `llm` name) |
 | `ingestion` | 172.30.4.0/24 | **yes** | rag-worker, rag-clamav, rag-renderer | none |
@@ -479,7 +488,7 @@ busy. The R1 release test (§8.3) confirms or corrects these numbers.
 Secrets and certificates are files, never environment variables (gateway `compose.prod.yaml`): `${UME_RAG_SECRETS_DIR}/<service>`
 → `/run/app-secrets` (key-per-file: `ConnectionStrings__ragdb`, `ConnectionStrings__redis`, `Security__KeyPepper`,
 `Gateway__ServiceKey`, `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`,
-`Security__DownloadGrantKeys__<kid>` and `Security__CacheKeyPepper` (api; knowledge design §4.6, §5.4)), `${UME_RAG_CERTS_DIR}/<service>`
+`Security__DownloadGrantKeys__<kid>` and `Security__CacheKeyPepper` (api; knowledge design §4.6, §5.4), `Security__ConversationIdKeys__<kid>` and `OpenWebUi__AdminApiKey` (api; chat design §11.1, §14.2)), `${UME_RAG_CERTS_DIR}/<service>`
 → `/run/certs` (service cert/key, `ca.pem`, `data-protection.pfx`), Postgres secrets → `/run/postgres-secrets`.
 
 Hardening: every service uses the `x-hardened` anchor (`read_only`, `cap_drop: [ALL]`, `no-new-privileges`, tmpfs
@@ -525,7 +534,9 @@ It generates: the internal CA and service certificates (api, admin, worker, pars
 Protection certificate, passwords for `bootstrap`, `ume_rag_migrator`, `ume_rag_api`, `ume_rag_admin`, `ume_rag_worker`
 (`ume_rag_tools` in P2), the Redis password and ACL from `users.acl.example` (user `ume-rag`, `~ume-rag:*`), the key
 pepper, the download-grant key (`Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes; a new `kid` on rotation) and the query
-cache-key pepper (`Security__CacheKeyPepper`), the Open WebUI JWT secret, the renderer WebSocket path secret, and `deploy/.env` (non-secret settings only).
+cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, chat design §11.1), the Open WebUI JWT secret, the renderer WebSocket path secret, and `deploy/.env` (non-secret settings only).
+The Open WebUI admin API key (`OpenWebUi__AdminApiKey`) is not generated: an operator creates the service account and
+its key in Open WebUI and places the file (chat design §14.2).
 Ownership: 70 (postgres), 999 (redis), 1654 (.NET services), 10001 (parser), 10002 (renderer), 100 (clamav).
 
 ### 7.2 `build-release-bundle.sh`
@@ -623,7 +634,9 @@ FakeGateway as the model (latency profile `FirstTokenMs=400`, `TokenIntervalMs=2
 gateway's `benchmarks/compare`). Phase 1 idle: k6 (from `benchmarks/compare/k6`) sends streamed chat at 5 req/s for
 10 min; phase 2 the same during a full crawl of a static copy of 2 000 umea.se pages (served by nginx on the runner) plus
 an OCR batch of 50 scanned PDFs. Pass: chat p95 TTFT (phase 2) ≤ 1.10 × phase 1, no error responses, no Postgres
-connection refusals. Output: a Markdown report as the gateway's `latency_report.py`, attached to the release.
+connection refusals. Output: a Markdown report as the gateway's `latency_report.py`, attached to the release. The same
+harness runs the chat **overhead run** (chat design §16.2 item 3: Open WebUI-shaped requests, `rag.chat.overhead`
+p50/p95/p99).
 
 ### 8.4 Supply chain
 
@@ -654,17 +667,21 @@ connection refusals. Output: a Markdown report as the gateway's `latency_report.
   rag.admin.signout`, `6004 rag.conversation.access`; 5101/5102 attributes per connectors design §7, §11 (SIEM: any 5102; 5101 from `Render`); the engine design adds `5105 rag.pipeline.refused` (SIEM alert on any) and log scopes `ExecutionId`, `NodeId`; the parser design adds `5104 rag.parser.limit_exceeded` (worker); identity adds `5006 rag.auth.throttled`, `5007
   rag.identity.lookup_failed`, `5008 rag.key.unexpected_use`, `5009 rag.mcp.client_refused`, `5010 rag.obo.refused`,
   `6005 rag.admin.session.extended`, `6006 rag.admin.access.denied`, `6007 rag.admin.data.read` and the attribute
-  `DepartmentLookup` on 6002 (full table: identity design §10). Names and ids are a public contract (add, never rename).
+  `DepartmentLookup` on 6002; the chat design adds `5011 rag.gateway.delegation_missing` (full table: identity design
+  §10). Names and ids are a public contract (add, never rename).
 - **Log scopes** (`BeginScope` in middleware and job runner): `ConfigVersion` (every service, every request and job),
   `RunId`, `JobId`, `JobClass`, `DocumentId`, `SourceId` (worker), `AssistantId`, `ClientId`, `Classification`,
   `ConversationId` hash (api), `Tier`.
-- **Metrics** (meter `Ume.Rag`): `rag.chat.ttft` (histogram, by assistant level and client), `rag.retrieval.duration`,
+- **Metrics** (meter `Ume.Rag`): `rag.chat.ttft` (histogram, by `level`, `client_kind`, `outcome`), `rag.retrieval.duration`,
   `rag.gateway.request.duration` and `rag.gateway.residency_refusals`, `rag.jobs.queued` / `rag.jobs.age` by class,
   `rag.parse.duration_per_page`, `rag.clamav.detections`, `rag.config.version` per instance and `rag.config.lag`,
   `rag.db.pool.in_use` per role, `rag.retention.deleted` by table, `rag.evaluation.recall_at_10` by collection;
   retrieval adds `rag.retrieval.stage.duration`, `.embedding.cache`, `.embedding.failures`, `.degraded`, `.coverage`,
   `.candidates`, `.results`, `.collections_skipped`, `.concurrency_rejections`, `.stats.flush` and
-  `rag.documents.downloads` / `.download.bytes` (knowledge design §15).
+  `rag.documents.downloads` / `.download.bytes` (knowledge design §15); chat adds `rag.chat.overhead`,
+  `.stage.duration`, `.requests`, `.condense`, `.citations`, `.filtered`, `.tokens`, `.prompt.estimate_ratio`,
+  `.stream.stalls`, `.writer.queue` / `.queue_bytes` / `.batch.duration` / `.dropped`, `.feedback`, `.tasks`,
+  `.gateway.pii` (chat design §17; low-cardinality dimensions only, never assistant slugs on hot histograms).
 - **Dashboards** (`deploy/otel/dashboards/`, Grafana JSON, *new*: the gateway ships none): *Data plane* (TTFT p50/p95,
   retrieval p50/p95 per stage, degraded rate, coverage `low` share per level, embedding cache hit rate, downloads,
   gateway latency, refusals), *Ingestion* (queue depth and age, parse throughput, failures, ClamAV),
@@ -729,7 +746,7 @@ Review fix: Chromium keeps its sandbox via a seccomp profile (§5.4).
 | 5 | Entra IaC tool | Bicep vs Terraform | **Decided: Bicep** with the Microsoft Graph extension in `infra/entra/` |
 | 6 | Hunspell memory per backend | Ispell dictionaries load per backend (data-model §3.1); with ~60–90 backends using FTS this can be GBs inside a 3 GB Postgres limit | Measure in P0 (§5.2 test). If > 15 MB per backend: lower API pool sizes, or the `shared_ispell` extension (PG 17 support *to verify*), or decompound in the worker (data-model §12.18) |
 | 7 | P0 Entra registrations | Plan §11.7 says "Entra app registrations for test" in P0; identity §2/§9.6 say none is needed for P0 and package 1 is only *submitted* in P0 | Follow identity: P0 = package 1 submitted (checklist #17); change plan §11.7 wording |
-| 8 | Open WebUI hosting | Chat-api §6 configures it but no plan says where it runs or what database it uses | Separate Compose project `compose.openwebui.yaml` on the pilot host (24 GB) or its own VM, own SQLite on an encrypted volume (never in `ragdb`), pruning job as a sidecar; ceiling `internal` |
+| 8 | Open WebUI hosting | Chat-api §6 configures it but no plan says where it runs or what database it uses | Separate Compose project `compose.openwebui.yaml` on the pilot host (24 GB) or its own VM, own SQLite on an encrypted volume (never in `ragdb`), pruning job as a sidecar; ceiling `internal`. Env per chat design §4.3: **one connection** (ours, no gateway connection; tasks via `owui-tasks`), `X-Rag-Owui-*` headers, uploads, admin chat access and export off, API keys restricted to the feedback list endpoint; the pruning sidecar deletes chats and feedback older than `ClientRetentionDays` (chat design §13.3) |
 | 9 | Portainer | The gateway ships `compose.portainer.yaml`; operations may expect it | Skip in P0/P1 (init-deployment covers the pilot host); add if operations ask |
 | 10 | Supply chain in both repos | Gateway pins actions by tag and signs nothing | Propose for both repos together (compatibility): actions pinned by SHA, `attest-build-provenance` on images |
 | 11 | Pilot key service | Envelope encryption needs a production `IKeyProvider` from P1 | **Postponed: file key provider in the pilot** with the rules in plan §8a (`--key-provider file --allow-file-keys`, key files only in api/admin, key backups ≤ 30 days, no `sensitive` data); Azure Key Vault later via the `rewrap` command (`../postponed-decisions.md` K1) |

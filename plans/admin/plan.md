@@ -22,6 +22,10 @@ tool servers; clients and keys; conversation review with justification; settings
   refuses to publish a pipeline that no running worker supports (R7).
 - Validates assistant composition: classification of collections, skills and tool servers ≤ assistant level; the
   prompt-injection rule in `../tools/plan.md` §6.
+- Validates residency on publish and on every audience link (chat design §8.2): an assistant offered to a client that
+  resends history (Open WebUI) runs follow-ups at max(assistant level, client ceiling), so its `GatewayModel` must be
+  servable within that residency; otherwise the publish or link is refused (pilot: `public` assistants in Open WebUI
+  need EU or on-prem models). Not-found contact links must pass the chat link allow-list (chat design §9.4, §10.1).
 - Reads departments and teams from the gateway (single source of truth for codes, R4).
 - OpenAPI + Scalar for platform admins.
 
@@ -56,13 +60,14 @@ and security events: `../identity/design.md` §1, §6.4, §10.
 | Pipelines | Templates; canvas (Vue Flow) for pipeline editors with typed ports and the node palette from the manifest; generated parameter forms; per-node preview; draft/published versions, diff, restore; publish with re-processing plan, cost estimate and **evaluation gate result** |
 | Parse profiles | Learned and manual profiles, confidence, sample count, trial results, gate results, auto-applied/proposed state, rollback, kill switch |
 | Evaluation | Per collection and assistant: generated, skill and human questions; add/edit questions; turn flagged feedback into rewritten questions without personal data; run history per version; gate thresholds (R6) |
-| Assistants | Mode (RAG / agent), prompt, model, collections, skills, query-step form, classification, audience (who may use it), retention, allowed origins; **test panel** with retrieved chunks, tool calls and the answer; the panel runs `Ume.Rag.Retrieval` in the admin process (also over `building` collections, with the admin's role scope; knowledge design §4.2), so the admin host needs `Gateway:*` settings for query embeddings |
+| Assistants | Mode (RAG / agent), prompt, model, collections, skills, query-step form (condense toggle, history window messages/tokens, context and output tokens, temperature, language mode `auto`/`sv`; chat design §5–§6, §10.3), not-found texts sv/en + contact links (chat design §10.1), classification, audience (who may use it), retention, allowed origins; **test panel** with retrieved chunks, tool calls and the answer (raw model text next to the filtered, delivered text, chat design §9.4); the panel runs `Ume.Rag.Retrieval` in the admin process (also over `building` collections, with the admin's role scope; knowledge design §4.2), so the admin host needs `Gateway:*` settings for query embeddings |
 | Skills | Versioned skill packages: instructions, references, linked collections and tools, test questions, classification; import/export in Agent Skills format (`../tools/plan.md`) |
 | Tool servers | Registered MCP servers: URL, auth mode, classification, allowed tools, pinned tool definitions with re-approval on change |
-| Clients | Client registry (R5): Entra app registrations, keys, Open WebUI and widget instances; classification ceiling; data-handling profile (stores history? retention? task model?) |
+| Clients | Client registry (R5): Entra app registrations, keys, Open WebUI and widget instances; classification ceiling; data-handling profile (stores history? retention? task model: the on-prem alias behind `owui-tasks`, chat design §4.2); warning when an `open-webui` client's requests arrive without the `X-Rag-Owui-Message-Id` header (chat design §11.4) |
 | Keys | `ume-rag-sk-`/`ume-rag-pk-` keys per team: scopes, origins, rotation, revoke |
 | Gateway | Platform service key status and delegation check; interim per-team key links; residency verification for sensitive use (R4) |
 | Embedding profiles | Platform admins: the on-prem default profile, exceptions, migration status (R3) |
+| Feedback (P1) | Department-scoped ratings from `/v1/feedback` and the Open WebUI import: rating, reason category, assistant, time, outcome, cited documents (titles), without content; import health. A comment (`public`/`internal`) is shown after a one-click, pre-filled reason ("Granskning av återkoppling"), audited as a conversation access; only the comment, never the conversation; `sensitive` comments only through the full review flow with a second approver (chat design §14.4) |
 | Conversations | Feedback review; reading a conversation requires a reason, audited; for `sensitive` also a second approver before content is decrypted |
 | Audit | All changes and privileged reads |
 | Settings | Retention defaults, deletion guard thresholds, crawl defaults, evaluation gate defaults |
@@ -75,7 +80,7 @@ Search (Ctrl K), mobile layout and accessibility as in the gateway admin UI (`~/
 | Phase | Deliverable |
 |---|---|
 | P0 | Entra/Keycloak BFF login, app roles, audit infrastructure, config outbox, design system wired in |
-| P1 | Collections, sources (URL list, crawl, upload) with run history, documents page, template-based pipelines with preview, publish and gate, evaluation page (generated sets), RAG assistants with test panel, clients registry, keys, gateway page, retention settings |
+| P1 | Collections, sources (URL list, crawl, upload) with run history, documents page, template-based pipelines with preview, publish and gate, evaluation page (generated sets), RAG assistants with test panel, **feedback page** (chat design §14.4), clients registry, keys, gateway page, retention settings |
 | P2 | Canvas for pipeline editors, parse profiles, SharePoint source with pre-flight, skills, tool servers, agent assistants, conversation review, widget configuration |
 | P3 | Query-side canvas, analytics (retrieval, feedback and evaluation trends), OBO tool configuration |
 

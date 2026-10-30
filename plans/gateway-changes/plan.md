@@ -86,6 +86,8 @@ similar texts get similar vectors. Until then, developers add Ollama `bge-m3` to
 - **Tool passthrough guarantee**: tests asserting that `tools`, `tool_choice` and tool messages pass through the
   gateway unchanged and in the same order on every endpoint, including the translated ones (Anthropic ↔ OpenAI,
   Responses API).
+- **Optional, later release** (chat design §6.3): `contextWindow` on `/v1/catalog/models`, so the RAG admin can prefill
+  an assistant's context size (design §7.3). Not needed for P1.
 
 **Placement decision: MCP and tools stay out of the gateway.** Bifrost runs MCP inside its gateway; for us the tool
 hub belongs in the RAG platform, because the gateway only knows team keys (not users), never sees the user's Entra
