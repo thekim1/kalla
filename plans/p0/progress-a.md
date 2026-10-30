@@ -56,11 +56,11 @@ Refs: [repo-and-deployment §6, §7.4](../platform/repo-and-deployment.md), [per
 
 ## 6. Worker dispatcher (#20, after H2)
 Refs: [design-engine.md](../ingestion-worker/design-engine.md) §9, §16, §20; [data-model §4](../platform/data-model.md)
-- [ ] `WorkerInstances` heartbeat, leases, `LISTEN rag_jobs` (heartbeat and leases done; wake-ups are the 2 s poll plus local signals until `rag_jobs` can share the config monitor's listening connection)
+- [x] `WorkerInstances` heartbeat, leases, `LISTEN rag_jobs` (`rag_jobs` rides the config monitor's listening connection, #21; the 2 s poll stays as the fallback)
 - [x] Reaper: reclaim ≠ attempt; poison suspect after 3 reclaims
 - [x] `command` job kind applied end to end (test enqueues through `IJobQueue`)
 - [x] **Done:** a killed worker's job is reclaimed within 45 s without using an attempt
-- [ ] **Hand-off H4:** issue to stream B
+- [x] **Hand-off H4:** issue to stream B (#28)
 
 ## 7. Scale seams, your part (#21)
 Refs: [performance-pass §8](../performance-pass.md), [data-model §9](../platform/data-model.md)
