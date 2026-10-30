@@ -70,14 +70,14 @@ Refs: [performance-pass §8](../performance-pass.md), [data-model §9](../platfo
 
 ## 8. Entra package 1 (#17)
 Refs: [identity/design.md §12](../identity/design.md), [repo-and-deployment §8.1](../platform/repo-and-deployment.md)
-- [ ] `infra/entra/` Bicep (Graph extension) for RAG's own registrations
-- [ ] `entra.yml` (plan only on PR)
-- [ ] to-verify #84 recorded
+- [x] `infra/entra/` Bicep (Graph extension) for RAG's own registrations
+- [x] `entra.yml` (plan only on PR)
+- [x] to-verify #84 recorded
 - [ ] **Hand-off H7:** issue to the user to submit package 1
 
 ## 9. On-prem capacity (#22)
 Refs: [weakness-review §5](../weakness-review.md), [performance-pass §3.9](../performance-pass.md)
-- [ ] `scripts/capacity/` scripts, tried against a local gateway
+- [x] `scripts/capacity/` scripts, tried against a local gateway (FakeGateway, #37)
 - [ ] Run on the real gateway hardware (after H8): embedding throughput by batch size, query-embedding p95 under ingestion load, condense/answer p95, TTFT p99 at 16k tokens
 - [ ] Numbers recorded against the performance-pass estimates (to-verify #98, #99, #104, #125, #149); user told if register M2 is triggered
 
