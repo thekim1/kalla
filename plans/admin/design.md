@@ -99,8 +99,8 @@ gateway counterpart.
   simplification pass §1); `rag-admin-b` with the a/b slots of P2. Control zone; sessions in Postgres
   (`config."AdminSessions"`, owned by `rag-admin`; identity §1.1), so either slot serves any user; no Redis in P1
   (simplification pass §14).
-- Networks: `edge` (proxy; OIDC authority; Graph for feature C from P2), `data` (Postgres), `llm` (gateway: test
-  panel, model validation, answer-level evaluation, P2 skill gate, Data API sync), P2 `mcp` (hosted MCP servers:
+- Networks: `edge` (proxy, inbound only), `data` (Postgres), `llm` (the default route, so also the OIDC authority and,
+  from P2, Graph for feature C; repo-and-deployment §6.1, as built in P0 #14, PR #40; gateway: test panel, model validation, answer-level evaluation, P2 skill gate, Data API sync), P2 `mcp` (hosted MCP servers:
   discovery, connection test, drift polling, test-panel and skill-gate tool calls; the worker is not on it).
 - Background services:
 

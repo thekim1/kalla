@@ -53,4 +53,4 @@ gateway's conventions for names, config keys, claims, key format and security ev
 - **Every model call goes through the gateway** with an explicit residency ceiling. Locally and in tests that means
   `Ume.Rag.FakeGateway`.
 
-Build, test and run commands are in `README.md` once Stage 0 has landed.
+Build, test and run commands are in `README.md`; operating the platform is in `docs/`.

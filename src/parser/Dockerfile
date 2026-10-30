@@ -1,7 +1,7 @@
 # ume-rag/parser: FastAPI + Docling with Tesseract `swe` and the models baked in (parser design §12,
 # plans/platform/repo-and-deployment.md §5.3). Build with this directory as the context:
 #   docker build -t ume-rag/parser:dev src/parser
-#   docker build --target test -t ume-rag/parser:test src/parser && docker run --rm --network none ume-rag/parser:test
+#   docker build --target test src/parser    (runs the tests during the build, with no network)
 # Nothing is downloaded at run time: the venv, the models and the Debian packages are all in the image.
 
 # uv 0.13.5 (released 2026-10-22).
@@ -85,8 +85,10 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=10m --retries=3 CMD ["pyt
 ENTRYPOINT ["tini", "--"]
 CMD ["python", "-m", "ume_parser"]
 
-# Runtime plus the dev dependencies and the tests, for test_offline.py with --network none. The tests generate the
-# fixtures with scripts/make_fixtures.py, the same bytes as tests/fixtures/parser/ in the repository.
+# Runtime plus the dev dependencies and the tests. The tests run during the build with no network at all (BuildKit's
+# `RUN --network=none`: loopback only), test_offline.py included, so a failing test fails the build and
+# a built test image has passed. The tests generate the fixtures with scripts/make_fixtures.py, the same bytes as
+# tests/fixtures/parser/ in the repository. `docker run --rm --network none` on the image runs them again.
 FROM runtime AS test
 USER root
 COPY --from=uv /uv /usr/local/bin/uv
@@ -96,6 +98,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY scripts ./scripts
 COPY tests ./tests
 USER 10001
+RUN --network=none python -m pytest -q -p no:cacheprovider
 CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
 
 # The default target is the runtime image.

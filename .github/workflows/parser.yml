@@ -1,0 +1,150 @@
+name: Parser
+# The parser sidecar and its contract (P0 checklist #13; plans/parser/design.md §15.1, §15.2), out of verify.yml so
+# that only a change to the parser, its contract, the parser contract tests and fixtures, the worker's parser client or
+# this workflow builds the 3 GB parser image. The workflow itself runs on every pull request and push to main, and the
+# jobs skip when nothing of that changed: a skipped job counts as passed for a required check, while a workflow left
+# out by an `on.*.paths` filter never reports and would block a pull request that requires it.
+# Jobs: parser (lock, lint, unit tests, schemas, pip-audit on the runner), parser-image (the image's test target, whose
+# tests run during the build with no network) and contract (Ume.Rag.ContractTests against the runtime image).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: parser-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      parser: ${{ steps.filter.outputs.parser }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        name: The parser or its contract changed
+        env:
+          BEFORE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then range="$BEFORE...HEAD"; else range="$BEFORE..HEAD"; fi
+          if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
+            || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "parser=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # The parser, its contract, the parser contract tests (the files at the top of tests/Ume.Rag.ContractTests/,
+          # its project file included; Blobs/ holds the blob store tests, which the backend job runs), the fixtures and
+          # goldens, the worker's parser client, or this workflow.
+          parser="$(git diff --name-only "$range" | grep -E '^(src/parser/|contracts/parser/|tests/Ume\.Rag\.ContractTests/[^/]+$|tests/fixtures/parser/|src/Ume\.Rag\.Worker/Parsing/|\.github/workflows/parser\.yml$)' || true)"
+          if [ -n "$parser" ]; then echo "parser=true"; else echo "parser=false"; fi >> "$GITHUB_OUTPUT"
+
+  parser:
+    # Lock, lint, unit and supervisor tests and the schema export on the runner (repo-and-deployment §8.2). The tests
+    # that need the models and Tesseract skip here and run in parser-image.
+    needs: changes
+    if: needs.changes.outputs.parser == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/parser
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv from the image the Dockerfile pins
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          cid="$(docker create ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff x)"
+          docker cp "$cid:/uv" "$RUNNER_TEMP/bin/uv"
+          docker rm "$cid"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Lock, lint and tests
+        run: |
+          uv lock --check
+          uv sync --frozen
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pytest
+      - name: Committed schemas match the models
+        run: |
+          uv run python -m scripts.export_schema
+          git diff --exit-code -- ../../contracts/
+          test -z "$(git status --porcelain --untracked-files=all -- ../../contracts/)"
+      - name: pip-audit against the locked export
+        # torch and torchvision come from the PyTorch CPU index, which pip-audit cannot look up; it lists them as skipped.
+        run: |
+          uv export --frozen --no-emit-project --format requirements.txt -o "$RUNNER_TEMP/requirements.txt"
+          uv run pip-audit -r "$RUNNER_TEMP/requirements.txt" --require-hashes --disable-pip --progress-spinner off
+
+  parser-image:
+    # The image's test target: real Docling, models and Tesseract, test_offline.py included. The Dockerfile runs pytest
+    # in a `RUN --network=none` step, so a failing test fails the build; nothing is loaded into the Docker daemon (no
+    # second 3 GB copy, so no disk cleanup), the result only goes to the cache. No REVISION build argument: the tests do
+    # not read it, and without it an unchanged parser hits the cached test layer. The layers come from the GitHub
+    # Actions cache, shared with the contract job (the blobs are content-addressed, so the two scopes store them once).
+    needs: changes
+    if: needs.changes.outputs.parser == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Build the image's test target (runs the tests without network)
+        uses: docker/build-push-action@v7
+        with:
+          context: src/parser
+          target: test
+          outputs: type=cacheonly
+          cache-from: |
+            type=gha,scope=parser-test
+            type=gha,scope=parser-runtime
+          cache-to: type=gha,scope=parser-test,mode=max
+      - name: Disk left
+        if: always()
+        run: df -h / | tail -1
+
+  contract:
+    # Ume.Rag.ContractTests (parser design §15.2): the worker's parser client against the parser image built from this
+    # commit; responses and error cases validated against contracts/parser/v1/ and compared with the goldens. Same
+    # trigger and cache as parser-image. The backend job (verify.yml) runs the same project without the image, so there
+    # the image tests skip and the blob store tests run.
+    needs: changes
+    if: needs.changes.outputs.parser == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free runner disk (in the background)
+        # Testcontainers needs the image in the Docker daemon, so buildx loads it and holds a second copy meanwhile
+        # (about 3 GB each, plus the compressed cache blobs). The Android SDK, the largest preinstalled toolchain, is
+        # removed while .NET and buildx are set up; the next step waits for it.
+        run: |
+          df -h / | tail -1
+          nohup sh -c "sudo rm -rf /usr/local/lib/android; touch '$RUNNER_TEMP/disk-freed'" >/dev/null 2>&1 &
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.401
+      - uses: docker/setup-buildx-action@v4
+      - name: Wait for the disk
+        run: |
+          timeout 600 sh -c "until [ -e '$RUNNER_TEMP/disk-freed' ]; do sleep 2; done"
+          df -h / | tail -1
+      - name: Build the parser image
+        # The name has a registry part with a dot, so Testcontainers does not prefix it with the Docker Hub mirror below.
+        uses: docker/build-push-action@v7
+        with:
+          context: src/parser
+          build-args: REVISION=${{ github.sha }}
+          tags: ume-rag.local/parser:ci
+          load: true
+          cache-from: |
+            type=gha,scope=parser-runtime
+            type=gha,scope=parser-test
+          cache-to: type=gha,scope=parser-runtime,mode=max
+      - name: Contract tests
+        env:
+          TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
+          UME_RAG_TEST_PARSER_IMAGE: ume-rag.local/parser:ci
+        run: |
+          df -h / | tail -1
+          dotnet test --project tests/Ume.Rag.ContractTests/Ume.Rag.ContractTests.csproj -c Release

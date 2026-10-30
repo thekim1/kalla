@@ -39,7 +39,7 @@ Refs: [repo-and-deployment §4, §5.5](../platform/repo-and-deployment.md)
 
 ## 4. CI beyond Stage 0 (#3)
 Refs: [repo-and-deployment §8](../platform/repo-and-deployment.md)
-- [ ] `verify.yml` jobs `ui`, `deploy-checks`, `images`
+- [x] `verify.yml` jobs `ui` (named `admin-ui`, #49), `deploy-checks` (#31), `images` (#5); parser jobs in `parser.yml` (#50)
 - [ ] to-verify #91 (Syft SBOM) recorded
 - [ ] **Done:** green PR with all jobs
 

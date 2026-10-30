@@ -265,21 +265,26 @@ prompt (a single user message starting with `### Task:`, `ow/config.py:2289`, `:
 itself (`ow/utils/task.py:17-28`), i.e. as a RAG question to our assistant; the contract test (§18.3) asserts that no
 such request arrives with the §4.3 settings.
 
-### 4.3 Open WebUI configuration (pilot, v0.12.5)
+### 4.3 Open WebUI configuration (pilot, v0.12.3)
+
+`deploy/compose.openwebui.yaml` pins **v0.12.3** by digest (P0, PR #31): v0.12.4 and v0.12.5 were under 7 days old.
+The settings below exist under the same names at v0.12.3 and the environment wins with
+`ENABLE_PERSISTENT_CONFIG=false` (to-verify #134); the line numbers in this table are at v0.12.3 (settled at the P0
+integration sync point). Elsewhere this document still cites v0.12.5 source.
 
 | Setting | Value | Why |
 |---|---|---|
 | `OPENAI_API_BASE_URLS`, `OPENAI_API_KEYS` | our API, the `ume-rag-sk-` connection key | chat plan §6 |
-| `OPENAI_API_CONFIGS` `"0".headers` | `{"X-Rag-Owui-Message-Id":"{{MESSAGE_ID}}","X-Rag-Owui-User-Message-Id":"{{USER_MESSAGE_ID}}"}` | feedback mapping, regeneration dedup (`ow/utils/headers.py:139-157`); unsigned, so only meaningful inside the caller's own conversation |
-| `ENABLE_FORWARD_USER_INFO_HEADERS=true`, `FORWARD_USER_INFO_HEADER_JWT_SECRET` | set | identity §5.1–§5.2; chat id in `X-OpenWebUI-Chat-Id` (`headers.py:196-199`, name `ow/env.py:1043`) |
-| `ENABLE_TITLE_GENERATION`, `ENABLE_TAGS_GENERATION`, `ENABLE_FOLLOW_UP_GENERATION` | `false` | no task calls at all (§4.2; defaults `True`, `ow/config.py:2376-2380`); chats keep Open WebUI's default title |
-| `ENABLE_RETRIEVAL_QUERY_GENERATION`, `ENABLE_SEARCH_QUERY_GENERATION`, `ENABLE_AUTOCOMPLETE_GENERATION` | `false` | no RAG or search in Open WebUI (`ow/config.py:2383-2414`) |
-| `ENABLE_CONTEXT_COMPACTION` | `false` (default, `ow/config.py:2262`) | a compaction summary would rewrite history with a model we do not control |
-| `USER_PERMISSIONS_CHAT_FILE_UPLOAD`, `USER_PERMISSIONS_CHAT_WEB_UPLOAD` | `false` | answered 6 (`ow/config.py:1905-1907`) |
-| `USER_PERMISSIONS_CHAT_SYSTEM_PROMPT`, `USER_PERMISSIONS_CHAT_PARAMS` | `false` | user system prompts and sampling params would be ignored by us anyway (§3.2); hiding them avoids confusion (`ow/config.py:1901-1903`) |
-| `ENABLE_ADMIN_CHAT_ACCESS`, `ENABLE_ADMIN_EXPORT` | `false` | Open WebUI admins can otherwise read every user's chats (`ow/env.py:371`, `ow/config.py:2150`); our rule is review only in our admin UI with a reason (plan §5; none in P1, weakness review §4) |
-| `WEBUI_BANNERS` | `[{"id":"ume-rag-input","type":"warning","content":"Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.","dismissible":false,"timestamp":<release time>}]` | fixed input warning (weakness review §4; residual risk recorded in the DPIA, G1). JSON list of `BannerModel` (`id`, `type`, `title?`, `content`, `dismissible`, `timestamp`, `i18n?`; `ow/config.py:2218-2235`); with `ENABLE_PERSISTENT_CONFIG=false` the env value is used and an admin edit lasts only until restart (`ow/models/config.py`); shown on the new-chat screen only (`src/lib/components/chat/Navbar.svelte:349`) |
-| `ENABLE_API_KEYS=true`, `ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS=true`, `API_KEYS_ALLOWED_ENDPOINTS=/api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback`, `USER_PERMISSIONS_FEATURES_API_KEYS=false` | as listed | only the feedback service account has a key and it reaches the feedback list and per-id feedback routes (prefix match, `ow/utils/auth.py:506-547`; admin delete, `ow/routers/evaluations.py:488-497`; `ow/config.py:1976`, `:2553-2567`) |
+| `OPENAI_API_CONFIGS` `"0".headers` | `{"X-Rag-Owui-Message-Id":"{{MESSAGE_ID}}","X-Rag-Owui-User-Message-Id":"{{USER_MESSAGE_ID}}"}` | feedback mapping, regeneration dedup (`ow/utils/headers.py:138-155`); unsigned, so only meaningful inside the caller's own conversation |
+| `ENABLE_FORWARD_USER_INFO_HEADERS=true`, `FORWARD_USER_INFO_HEADER_JWT_SECRET` | set | identity §5.1–§5.2; chat id in `X-OpenWebUI-Chat-Id` (`headers.py:196-198`, name `ow/env.py:1005`) |
+| `ENABLE_TITLE_GENERATION`, `ENABLE_TAGS_GENERATION`, `ENABLE_FOLLOW_UP_GENERATION` | `false` | no task calls at all (§4.2; defaults `True`, `ow/config.py:2353-2357`, mapped to `task.*` keys at `:3243-3245`); chats keep Open WebUI's default title |
+| `ENABLE_RETRIEVAL_QUERY_GENERATION`, `ENABLE_SEARCH_QUERY_GENERATION`, `ENABLE_AUTOCOMPLETE_GENERATION` | `false` | no RAG or search in Open WebUI (`ow/config.py:2360-2391`) |
+| `ENABLE_CONTEXT_COMPACTION` | `false` (default, `ow/config.py:2239`) | a compaction summary would rewrite history with a model we do not control |
+| `USER_PERMISSIONS_CHAT_FILE_UPLOAD`, `USER_PERMISSIONS_CHAT_WEB_UPLOAD` | `false` | answered 6 (`ow/config.py:1885-1887`) |
+| `USER_PERMISSIONS_CHAT_SYSTEM_PROMPT`, `USER_PERMISSIONS_CHAT_PARAMS` | `false` | user system prompts and sampling params would be ignored by us anyway (§3.2); hiding them avoids confusion (`ow/config.py:1881-1883`) |
+| `ENABLE_ADMIN_CHAT_ACCESS`, `ENABLE_ADMIN_EXPORT` | `false` | Open WebUI admins can otherwise read every user's chats (`ow/env.py:371`, `ow/config.py:2127`); our rule is review only in our admin UI with a reason (plan §5; none in P1, weakness review §4) |
+| `WEBUI_BANNERS` | `[{"id":"ume-rag-input","type":"warning","content":"Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.","dismissible":false,"timestamp":<release time>}]` | fixed input warning (weakness review §4; residual risk recorded in the DPIA, G1). JSON list of `BannerModel` (`id`, `type`, `title?`, `content`, `dismissible`, `timestamp`, `i18n?`; `ow/config.py:2195-2212`); with `ENABLE_PERSISTENT_CONFIG=false` the env value is used and an admin edit lasts only until restart (`ow/models/config.py`; tested in P0); shown on the new-chat screen only (`src/lib/components/chat/Navbar.svelte:283`). **`dismissible: false` is not "cannot be closed"**: the banner always draws its close button (`common/Banner.svelte:142-149`), and × hides it until the page reloads; only `dismissible: true` is remembered in `localStorage` (`Navbar.svelte:311-327`). Whether hidden-until-reload is enough is for the DPIA (G1) (P0, PR #31, to-verify #172) |
+| `ENABLE_API_KEYS=true`, `ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS=true`, `API_KEYS_ALLOWED_ENDPOINTS=/api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback`, `USER_PERMISSIONS_FEATURES_API_KEYS=false` | as listed | only the feedback service account has a key and it reaches the feedback list and per-id feedback routes (prefix match, `ow/utils/auth.py:539-542`; admin delete, `ow/routers/evaluations.py:488-497`; `ow/config.py:1956`, `:2530-2544`) |
 | `BYPASS_MODEL_ACCESS_CONTROL=true`, `ENABLE_PERSISTENT_CONFIG=false`, Open WebUI RAG/web/code/tools off | as chat plan §6 | – |
 
 Per-model `stream_response` stays default (streaming); the `usage` capability is not set, so Open WebUI does not
@@ -514,7 +519,7 @@ WebUI use EU or on-prem models.
 | Topic | Rule |
 |---|---|
 | HttpClient | named `gateway-chat`, standard resilience handler **removed** (`RemoveStandardResilienceHandler()`, as knowledge §5.3 and the gateway, `src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:51-68`); `SocketsHttpHandler` with `PooledConnectionLifetime` 5 min, no automatic decompression |
-| Headers timeout | `Chat:GatewayHeadersTimeout` **15 s** (proposed): a stuck model gives an error, not a long spinner; a long prompt on a large on-prem model must still reach its first event within it (*to verify*, §22) |
+| Headers timeout | `Chat:GatewayHeadersTimeout` **15 s** (proposed): a stuck model gives an error, not a long spinner; a long prompt on a large on-prem model must still reach its first event within it (*to verify*, §22). The check's "full 16k-token prompt" is **15,360 prompt tokens + `max_tokens` 1,024**: `ContextTokens` 16,384 minus the answer reserve (§6.3); `scripts/capacity/capacity.py answer-ttft` measures it (`--prompt-tokens` changes it) (P0 #22, PR #37; settled at the integration sync point) |
 | Idle timeout | `Chat:StreamIdleTimeout` **60 s** between events: the gateway relays a stream as long as the client is connected and has no idle limit (`OpenAICompatibleAdapter.cs:44`), so we impose one |
 | Total | `Chat:MaxAnswerDuration` **240 s** (below Open WebUI's default 300 s client timeout, `ow/env.py:614-618`) |
 | Retries | none by us after the request was accepted: the gateway already falls back and retries before its first byte and never after (`docs/routing-rules.md:170-171`, `Pipeline/GatewayRequestHandler.cs:245-252`). One retry only for a **connection failure** (no response) within 300 ms |
@@ -1006,7 +1011,7 @@ totals).
 
 ### 18.3 Contract with Open WebUI (recorded requests)
 
-- Fixtures recorded from Open WebUI v0.12.5 (pinned tag, V1) with the §4.3 configuration: first message, follow-up,
+- Fixtures recorded from Open WebUI v0.12.3 (pinned tag, V1) with the §4.3 configuration: first message, follow-up,
   regenerate, edit, model switch, temporary chat, stop button; no `### Task:` request is sent. Each replayed against
   the API; assertions on stored rows and dedup.
 - The SSE output of §9.1 replayed into Open WebUI's middleware (`deploy-e2e`: real Open WebUI container + Playwright):
@@ -1147,7 +1152,7 @@ waits for or depends on it.
 
 ## 22. To verify
 
-- Open WebUI v0.12.5: the stop button closes the upstream connection (our `RequestAborted` fires); `source` events
+- Open WebUI v0.12.3 (the pinned tag): the stop button closes the upstream connection (our `RequestAborted` fires); `source` events
   written before the content chunk render the `[n]` chip correctly when the chunk arrives in the same flush; the
   `metadata.external` label path and a `#page=` link combined with the text-fragment link of `CitationModal.svelte:68-98`.
 - Open WebUI: whether `USER_PERMISSIONS_CHAT_FILE_UPLOAD=false` is enforced by the backend for chat files, not only in
@@ -1155,9 +1160,11 @@ waits for or depends on it.
 - Open WebUI: with `ENABLE_TITLE_GENERATION`, `ENABLE_TAGS_GENERATION`, `ENABLE_FOLLOW_UP_GENERATION` = `false` no task
   request reaches the chat model on any path (new chat, regenerate, edit, multi-model); feedback list paging by
   `updated_at` and admin `DELETE /api/v1/evaluations/feedback/{id}` with an endpoint-restricted API key (§13.3).
-- Open WebUI v0.12.5: `WEBUI_BANNERS` (§4.3) with `dismissible: false` shows on every new chat for every user and cannot
-  be closed; it is not shown inside an existing chat (`Navbar.svelte:349`), which is accepted or needs an upstream
-  change (weakness review §4).
+- Open WebUI v0.12.3: `WEBUI_BANNERS` (§4.3) with `dismissible: false` shows on every new chat for every user (browser
+  check, P1b); it is not shown inside an existing chat (`Navbar.svelte:283`), which is accepted or needs an upstream
+  change (weakness review §4). **Partly refuted in P0** (PR #31, to-verify #172): it can be closed until the page
+  reloads (§4.3); whether that is enough is for the DPIA (G1). Served from the environment and back after a restart
+  (tested).
 - Open WebUI: creating the admin service account when `ENABLE_LOGIN_FORM=false` (Entra-only login): an Entra service
   user, or a one-time local account before the form is disabled.
 - Open WebUI: headers template `{{MESSAGE_ID}}` is non-empty for every chat completion (multi-model and legacy paths,
@@ -1172,15 +1179,16 @@ waits for or depends on it.
 - That the gateway's usage-only final chunk keeps `choices: []` for every provider adapter (Anthropic and Responses
   bridge translations, `ResponsesBridge.cs:371`), so our parser does not mistake it for content.
 - BGE-M3 exact cosine over ≤ 2,000 decrypted attachment chunks within 5 ms (P2).
-- Gateway headers timeout 15 s (§8.3): TTFT p99 of the slowest pilot answer model for a full 16k-token prompt stays
-  below it.
+- Gateway headers timeout 15 s (§8.3): TTFT p99 of the slowest pilot answer model for a full 16k-token prompt
+  (15,360 prompt tokens + `max_tokens` 1,024) stays below it; `capacity.py answer-ttft` is ready, the run waits for the
+  pilot models (H8).
 - Condense: share of follow-ups the §5 heuristic skips and the retrieval recall of skipped vs condensed follow-ups on
   real pilot questions; whether 600 ms covers the on-prem model's p95.
 - Conversational check (§6.2): false positives on real questions (a short question that is only stop words plus one
   content word must not be classified conversational); the Snowball stop lists in .NET match Postgres's.
 - Answer-level judge (§18.8, P2): agreement of the on-prem judge's faithfulness and citation-precision scores with human
   ratings on a sample, before the scores are shown to editors.
-- Open WebUI v0.12.5 (§3.1): an `info.meta.description` in our `/v1/models` entry survives the model merge
+- Open WebUI v0.12.3 (§3.1; source read at v0.12.5): an `info.meta.description` in our `/v1/models` entry survives the model merge
   (`ow/utils/models.py`, default metadata and workspace overrides) and is shown in the model selector; a top-level
   `description` is not shown. Sending `info.meta` must not change capabilities (`ow/main.py:1206`).
 - Assistant tests (§18.8, P2): judge cost and duration of an `assistant-tests` run (≤ 30 questions × answer + judge call)

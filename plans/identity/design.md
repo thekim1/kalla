@@ -528,8 +528,9 @@ and nothing to clean up; no security event is emitted (nothing is accessed). Who
 ### 5.1 What Open WebUI sends
 
 With `ENABLE_FORWARD_USER_INFO_HEADERS=true` and `FORWARD_USER_INFO_HEADER_JWT_SECRET` set, every request to a
-connection carries `X-OpenWebUI-User-Jwt` (`backend/open_webui/env.py:1045-1054`), an HS256 JWT minted per request
-(`backend/open_webui/utils/headers.py:42-53`):
+connection carries `X-OpenWebUI-User-Jwt` (`backend/open_webui/env.py:997-1016`), an HS256 JWT minted per request
+(`backend/open_webui/utils/headers.py:41-52`). Line numbers in this section are at the pinned **v0.12.3**, which keeps
+the JWT as designed (P0, PR #31, to-verify #46):
 
 ```json
 { "sub": "<Open WebUI user id>", "email": "...", "name": "...", "role": "user|admin|pending",
@@ -537,13 +538,13 @@ connection carries `X-OpenWebUI-User-Jwt` (`backend/open_webui/env.py:1045-1054`
 ```
 
 There is **no `aud`**, and if minting fails Open WebUI silently falls back to the unsigned `X-OpenWebUI-User-*`
-headers (`headers.py:70-86`). The chat id travels unsigned in `X-OpenWebUI-Chat-Id` (`headers.py:196-199`). The
-connection key goes in `Authorization: Bearer` (`headers.py:204-206`) unless `auth_type` says otherwise.
+headers (`headers.py:70-86`). The chat id travels unsigned in `X-OpenWebUI-Chat-Id` (`headers.py:196-198`). The
+connection key goes in `Authorization: Bearer` (`headers.py:210-228`) unless `auth_type` says otherwise.
 
 Open WebUI has **one connection** (ours, chat design §4.2–§4.3); its title, tag and follow-up generation is switched
 off (`../simplification-pass.md` §1), so there is no gateway connection and the JWT goes only to `rag-api`. The
 connection also sends the custom headers `X-Rag-Owui-Message-Id` and `X-Rag-Owui-User-Message-Id` (templated by Open
-WebUI, `headers.py:139-157`). They are **unsigned**: they only map messages and feedback **inside the caller's own
+WebUI, `headers.py:138-155`). They are **unsigned**: they only map messages and feedback **inside the caller's own
 conversation** (keyed by the JWT `sub`), never grant access.
 
 ### 5.2 Validation (`OpenWebUiUserJwt`, new)
@@ -558,7 +559,7 @@ conversation** (keyed by the JWT `sub`), never grant access.
    WebUI instance per department, each its own client with its own ceiling and audience, until W3 and E1 are solved
    (weakness review §5, plan §5).
 4. `iss = "open-webui"`; `exp` and `iat` required; clock skew 30 s; `exp − iat ≤ OpenWebUi:MaxLifetimeSeconds`
-   (600; Open WebUI's default is 300, `env.py:1050-1052`); `iat` not more than 30 s in the future.
+   (600; Open WebUI's default is 300, `env.py:1012-1016`); `iat` not more than 30 s in the future.
 5. `sub` non-empty, ≤ 100 characters, printable; `role` ∈ {`user`, `admin`} (`pending` refused).
 6. Plain `X-OpenWebUI-User-*` headers are **never** read. If they are present without a JWT (the fallback above) the
    request is refused with `user_jwt_missing`, so a misconfigured secret is noticed at once.
@@ -582,9 +583,15 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
   (`OpenWebUi__AdminApiKey`); Open WebUI restricts every API key to `/api/v1/evaluations/feedbacks/list`, and
   `ENABLE_ADMIN_CHAT_ACCESS=false` keeps its admins out of users' chats (chat design §4.3).
 - Open WebUI settings required for user trust: `ENABLE_LOGIN_FORM=false` and `ENABLE_SIGNUP=false` (only Entra
-  login; `backend/open_webui/config.py:1702-1704`), `ENABLE_OAUTH_SIGNUP=true` (`:2586`),
-  `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false` (`:2593`), `OPENID_REDIRECT_URI=https://<owui host>/oauth/oidc/callback`
-  (`:2652`, route `backend/open_webui/main.py:2957-2958`). Assignment required on its enterprise app decides who
+  login; `backend/open_webui/config.py:1692-1694`), `ENABLE_OAUTH_SIGNUP=true` (`:2563`),
+  `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false` (`:2570`),
+  `OPENID_REDIRECT_URI=https://<owui host>/oauth/oidc/callback` (`:2629`; the `oidc` provider registers only
+  with `OAUTH_CLIENT_ID`, `OPENID_PROVIDER_URL` and a client secret or PKCE method, `:2792`). At v0.12.3 the callback
+  route is `/oauth/{provider}/login/callback`; the older `/oauth/{provider}/callback` is still served as a "legacy
+  endpoint" (`backend/open_webui/main.py:2932-2933`). The pilot keeps the legacy path, which P0 built into
+  `compose.openwebui.yaml`, the Keycloak realm and the Entra Bicep; the move to `/oauth/oidc/login/callback` happens
+  in all four together at the next Open WebUI pin bump, before the legacy route is removed (settled at the P0
+  integration sync point, to-verify #46). Assignment required on its enterprise app decides who
   can sign in (plan §5, P1 audience).
 
 ### 5.4 User mapping
@@ -594,7 +601,7 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
 - Without the JWT: `GET /v1/models` answers the **client-level** list (assistants with a `client` audience row for
   this client, level ≤ ceiling), because Open WebUI also lists models outside a user request (`routers/openai.py:94-105`
   sends user headers only when it has a user). Chat completions and feedback need the JWT (401 otherwise).
-- `X-OpenWebUI-Auth-Type: api_key` (a user calling Open WebUI's API with a personal key, `headers.py:66-68`) is
+- `X-OpenWebUI-Auth-Type: api_key` (a user calling Open WebUI's API with a personal key, `headers.py:65-67`) is
   accepted; the subject is still the user.
 - Department and group audiences for Open WebUI users wait for E1 (a real Entra token through Open WebUI, §9.4);
   until then Open WebUI users match `client` audience rows only.
@@ -897,32 +904,41 @@ from the gateway's file; passwords and secrets are import placeholders like `${U
 | Client `ume-rag-admin` | confidential, standard flow only, PKCE S256, redirect and post-logout URIs for `https://localhost:5174` and the adminapi https port (as `ume-realm.json:28-37`); mappers copied: `roles` realm-role mapper (`:41-52`), `departmentCodes` and `teamCodes` attribute mappers (`:54-79`), all to the ID token; **`groups`** group-membership mapper (full path off, ID token on) |
 | Client `ume-rag-api-dev` | client credentials only (as `ume-data-dev`, `:84-107`); audience mapper `ume-rag-api`; realm-role mapper to `roles` (access token); service account roles `Knowledge.Read.All`, `Chat.Invoke.All` |
 | Client `ume-rag-chat-dev` | **new**: public client, code + PKCE, redirect `http://localhost:*` style loopback for test tools; default scope `Chat.Use`, optional `Knowledge.Read`, `Mcp.Use`; for delegated-token and MCP tests |
-| Client `open-webui-dev` | confidential, code flow, redirect `http://localhost:<owui port>/oauth/oidc/callback`; `email` in ID token; used when `OpenWebUi:Enabled` |
+| Client `open-webui-dev` | confidential, code flow, redirect `http://localhost:<owui port>/oauth/oidc/callback` (§5.3); `email` in ID token; used when `OpenWebUi:Enabled` |
 | Groups | `Byggnadsnämnden` (member: `rag-group-member`), `rag-pilot-users` (members: all test users) |
 | Users | `rag-platform-admin` (1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), **`rag-reviewer`** (1000), **`rag-skill-editor`** (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute; via `Byggnadsnämnden` → department 3000), **`rag-no-role`** (1000, no role: every `/api` call 403), **`rag-chat-user`** (no admin role; for delegated chat tokens) |
 | Seed | the FakeGateway catalogue (repo-and-deployment §4.3) returns department 3000 with `memberGroups: ["Byggnadsnämnden"]`, so the org sync fills the mirror in dev |
 
 ## 12. Approval package 1 as Bicep (Microsoft Graph extension)
 
+Built in P0 (checklist #17, PR #36) as `infra/entra/` and `entra.yml`; not yet applied in a tenant. Entra sign-in is
+**P2**: the pilot (P1) signs in with Keycloak (`01-general-idea.md` §10, row "P1 pilot sign-in"), so package 1 is
+submitted for P2.
+
 ### 12.1 Content
 
 Only RAG's own registrations (plan §2); nothing on the gateway's registration changes, and no Graph application
-permission is requested in package 1.
+permission is requested in package 1. Every registration, service principal and group gets the deployer as an
+**owner**, so the deployer can update it on the next run; Graph says a group created with `Group.Create` and no owner
+"isn't modifiable". Both registrations turn implicit grant off explicitly, and both service principals carry the
+Enterprise-apps tag (`WindowsAzureActiveDirectoryIntegratedApp`), so the role assignments can be made under
+Enterprise applications (as built in P0 #17, PR #36; settled at the integration sync point).
 
 | Object | Change | Needs admin consent / privileged role |
 |---|---|---|
-| `ume-rag-admin` registration (new) | Web redirect URIs `https://<rag admin host>/signin-oidc`, `/signout-callback-oidc`; `rag-*` app roles (Users/Groups); optional ID-token claims `email`, `acct`; `groupMembershipClaims = SecurityGroup` (§2.5); delegated `openid profile email`; its own client secret, added by an operator, not Bicep (§12.2) | admin consent for the delegated scopes (recommended, avoids prompts) |
+| `ume-rag-admin` registration (new) | Web redirect URIs `https://<rag admin host>/signin-oidc`, `/signout-callback-oidc`; `rag-*` app roles (Users/Groups); optional ID-token claims `email`, `acct`; `groupMembershipClaims = SecurityGroup` (§2.5); `acceptMappedClaims` (parameter, default true) for the `departmentCodes` claims-mapping policy, as the gateway's Entra step 4 (plan §2); delegated `openid profile email`; its own client secret, added by an operator, not Bicep (§12.2) | admin consent for the delegated scopes (recommended, avoids prompts) |
 | Its service principal | `appRoleAssignmentRequired = true` | no |
-| `open-webui` registration (new) | Web redirect `https://<owui host>/oauth/oidc/callback`; ID-token optional claims `email`, `acct`; delegated Graph `openid profile email` (user consent is enough, but granted tenant-wide by admin to avoid prompts); its own client secret (§12.2) | admin consent for the delegated scopes (recommended) |
+| `ume-rag-open-webui` registration (new) | Web redirect `https://<owui host>/oauth/oidc/callback` (§5.3); ID-token optional claims `email`, `acct`; delegated Graph `openid profile email` (user consent is enough, but granted tenant-wide by admin to avoid prompts); its own client secret (§12.2) | admin consent for the delegated scopes (recommended) |
 | Its service principal | `appRoleAssignmentRequired = true` | no |
-| Pilot groups (new) | `Ume.Rag pilot users` (Open WebUI access), `Ume.Rag platform admins`, `Ume.Rag department admins – <pilot department>` (names agreed with IT; no convention exists, plan answered question 5) | `Group.Create` for the deployer |
-| Tool identity and MCP server registrations (P2) | app registration `ume-rag-tools` with a certificate credential (`keyCredentials`) for client credentials (`/run/certs/ume-rag-tools-entra.pfx`, mounted in `rag-api` and `rag-admin` only, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-kommun`) with app role `Tools.Invoke` (Application) and its assignment to `ume-rag-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
-| App role assignments | pilot users group → `open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin`, reviewer groups per department → `rag-reviewer` (P2: skill editor groups → `rag-skill-editor`) on `ume-rag-admin` | a manual approval step (§12.3) |
+| Pilot groups (new) | `Ume.Rag pilot users` (Open WebUI access), `Ume.Rag platform admins`, `Ume.Rag department admins – <pilot department>` (names agreed with IT; no convention exists, plan answered question 5) | `Group.Create` or `Group.ReadWrite.All` for the deployer (open, §12.4) |
+| Tool identity and MCP server registrations (**package 2**, P2; not in `infra/entra/` yet) | app registration `ume-rag-tools` with a certificate credential (`keyCredentials`) for client credentials (`/run/certs/ume-rag-tools-entra.pfx`, mounted in `rag-api` and `rag-admin` only, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-kommun`) with app role `Tools.Invoke` (Application) and its assignment to `ume-rag-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
+| App role assignments | pilot users group → `ume-rag-open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin`, reviewer groups per department → `rag-reviewer` (P2: skill editor groups → `rag-skill-editor`) on `ume-rag-admin` | a manual approval step (§12.3) |
 
 ### 12.2 Credentials
 
-The Graph Bicep extension cannot create client secrets (`passwordCredentials` are not writable from Bicep; *to
-verify*). **Decision (2026-10-29): client secrets, identical to the gateway's setup and code.** Our BFF's secret on
+The Graph Bicep extension cannot create client secrets: `passwordCredentials` appear on `applications` and
+`servicePrincipals`, but `secretText` is read-only and Microsoft's limitations page supports only `keyCredentials`
+(confirmed in P0, to-verify #84). **Decision (2026-10-29): client secrets, identical to the gateway's setup and code.** Our BFF's secret on
 `ume-rag-admin` is created by an operator with `az ad app credential reset --append` and passed to
 `init-deployment.sh --oidc-client-secret-file` (`Oidc__ClientSecret`), exactly as in the gateway. Open WebUI's OIDC
 client supports only a client secret (`OAUTH_CLIENT_SECRET`), created the same way. Certificates (`private_key_jwt`)
@@ -935,20 +951,23 @@ manual portal change to one of our registrations is overwritten on the next run,
 ### 12.3 Sketch (`infra/entra/`)
 
 ```bicep
-// bicepconfig.json: "extensions": { "microsoftGraphV1": "br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0:<version to verify>" }
+// bicepconfig.json: "extensions": { "microsoftGraphV1": "br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0@sha256:<digest of 1.0.0>" }
+// (1.0.0 GA, needs Bicep >= 0.36.1; built with Bicep v0.48.1; to-verify #84). Abridged: the real templates are
+// main.bicep, admin.bicep and open-webui.bicep, and every object also gets owners: { relationships: [deployer().objectId] }.
 extension microsoftGraphV1
 
 param ragAdminHost string
 param openWebUiHost string
 
+// App role ids derive from the role value, so they stay the same once assigned (P0 #17, PR #36).
 var ragRoles = [
-  { id: guid('rag-platform-admin'),   value: 'rag-platform-admin',   displayName: 'RAG platform admin',   allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: everything' }
-  { id: guid('rag-department-admin'), value: 'rag-department-admin', displayName: 'RAG department admin', allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: own departments' }
-  { id: guid('rag-pipeline-editor'),  value: 'rag-pipeline-editor',  displayName: 'RAG pipeline editor',  allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: pipelines' }
-  { id: guid('rag-reviewer'),         value: 'rag-reviewer',         displayName: 'RAG reviewer',         allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: feedback comments and conversations with a reason' }
-  { id: guid('rag-viewer'),           value: 'rag-viewer',           displayName: 'RAG viewer',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: read' }
-  { id: guid('rag-editor'),           value: 'rag-editor',           displayName: 'RAG editor',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: forms in own departments (P2)' }
-  { id: guid('rag-skill-editor'),     value: 'rag-skill-editor',     displayName: 'RAG skill editor',     allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: skills in own departments (P2)' }
+  { id: guid('ume-rag-admin', 'rag-platform-admin'),   value: 'rag-platform-admin',   displayName: 'RAG platform admin',   allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: everything' }
+  { id: guid('ume-rag-admin', 'rag-department-admin'), value: 'rag-department-admin', displayName: 'RAG department admin', allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: own departments' }
+  { id: guid('ume-rag-admin', 'rag-pipeline-editor'),  value: 'rag-pipeline-editor',  displayName: 'RAG pipeline editor',  allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: pipelines' }
+  { id: guid('ume-rag-admin', 'rag-reviewer'),         value: 'rag-reviewer',         displayName: 'RAG reviewer',         allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: feedback comments and conversations with a reason' }
+  { id: guid('ume-rag-admin', 'rag-viewer'),           value: 'rag-viewer',           displayName: 'RAG viewer',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: read' }
+  { id: guid('ume-rag-admin', 'rag-editor'),           value: 'rag-editor',           displayName: 'RAG editor',           allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: forms in own departments (P2)' }
+  { id: guid('ume-rag-admin', 'rag-skill-editor'),     value: 'rag-skill-editor',     displayName: 'RAG skill editor',     allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: skills in own departments (P2)' }
 ]
 
 resource adminApp 'Microsoft.Graph/applications@v1.0' = {
@@ -976,25 +995,34 @@ resource pilotAdmins 'Microsoft.Graph/groups@v1.0' = {
 ```
 
 Not in Bicep: the admin consent for the delegated scopes and the group → app role assignments of §12.1 (admin groups
-→ `rag-*` roles, pilot users → `open-webui` default access). They are the approval itself: an Entra administrator
+→ `rag-*` roles, pilot users → `ume-rag-open-webui` default access). They are the approval itself: an Entra administrator
 makes them in the portal (or runs the `az rest` commands the workflow prints) after reviewing the run. Group
 membership of the pilot groups is maintained by IT, not by IaC.
 
 ### 12.4 Workflow (`entra.yml`, repo-and-deployment §8.1)
 
 1. **PR** touching `infra/entra/**`: `bicep build` + `bicep lint`; `azure/login` (OIDC federation, environment
-   `entra-plan`, read-only identity); `az deployment group what-if` if it supports Graph resources (*to verify*), else a
-   script that prints the desired vs live `az ad app show` diff for the touched applications. Plan as a PR comment.
+   `entra-plan`, read-only identity with `Application.Read.All`). What-if does **not** support Graph resources
+   (Microsoft's Bicep Graph limitations page), so the plan compares `bicep snapshot` (the desired state, resolved
+   offline) with the live applications and service principals (`entra.py plan`); groups are listed, not compared,
+   because the plan identity cannot read them. Plan as a PR comment (as built in P0 #17, PR #36; settled at the
+   integration sync point).
 2. **Dispatch** (`environment: entra-test` / `entra-prod`, required reviewers = the municipality's approvers or a
-   change-ticket link): `az deployment group create --template-file infra/entra/main.bicep --parameters
-   @infra/entra/<env>.bicepparam`. The deployment needs an Azure subscription and resource group for the deployment
-   record (Graph Bicep deploys through ARM).
+   change-ticket link): the job builds `main.bicep` and `<env>.bicepparam` to JSON with the pinned Bicep and deploys
+   that JSON with `az deployment group create`, not the `.bicepparam` through az's own Bicep. Only
+   `sample.bicepparam` is committed; the user adds `test.bicepparam` and `prod.bicepparam` (host names, pilot
+   department, no secrets) in a PR, whose plan shows the result (P0 #17, PR #36). The deployment needs an Azure
+   subscription and resource group for the deployment record (Graph Bicep deploys through ARM).
 3. **Deployer identity**: a dedicated app with a federated credential for this repository and environment only;
-   Graph permissions `Application.ReadWrite.OwnedBy` (it is made an **owner** of the `ume-rag-admin` and Open WebUI
-   registrations) and `Group.Create`; no `AppRoleAssignment.ReadWrite.All` and no directory role, so it cannot grant
-   consent to itself or others.
-4. **After apply**: the job summary lists what still needs a person: admin consent and group → role assignments
-   (§12.3), client secrets, group membership. The ticket id is recorded in P0 checklist item 17.
+   Graph permissions `Application.ReadWrite.OwnedBy` (it is made an **owner** of every object it creates, §12.1) and
+   a group permission; no `AppRoleAssignment.ReadWrite.All` and no directory role, so it cannot grant consent to
+   itself or others. **Open question (H7, asked of IT):** which group permission. Option A, `Group.Create` plus
+   ownership of the groups it created (this design's choice so far, the narrower grant); whether that is enough for
+   an update run is not documented. Option B, `Group.ReadWrite.All`, which Graph's group upsert documents as the least
+   privilege (wider: every group in the tenant). The templates work with either; the answer needs a tenant.
+4. **After apply**: the job summary lists what still needs a person (`entra.py next-steps`, with the object ids
+   filled in): admin consent and group → role assignments (§12.3), client secrets, group membership, the
+   `departmentCodes` claims-mapping policy. The ticket id is recorded in P0 checklist item 17.
 
 ## 13. Test cases
 
@@ -1115,13 +1143,19 @@ Needed for simplification pass §15 (assistant versions, owner-team scoping):
 
 ## 16. To verify (before or during P0/P1)
 
-- Graph Bicep extension: current version, `passwordCredentials` not writable, `members` relationship on groups,
-  what-if support, `groupMembershipClaims` settable on `Microsoft.Graph/applications`.
+- Graph Bicep extension: **mostly done in P0** (PR #36, to-verify #84): version `1.0.0` pinned by digest,
+  `passwordCredentials` not writable (§12.2), `members` is a relationship (unused), what-if not supported (§12.4),
+  `groupMembershipClaims` writable. Still open, needs a tenant (H7, now P2): the group permission (§12.4 step 3), the
+  apply with `Application.ReadWrite.OwnedBy` and the owners the deployer sets on itself, and the plan's
+  `GET /applications(uniqueName='…')` (only `PATCH` by `uniqueName` is documented).
 - Keycloak: `client_id` claim in client-credentials tokens and `sid` absence (§7.1 step 4) on the version Aspire
   pins.
 - Entra: `acct` optional claim values and `idp` behaviour for B2B guests in ID and access tokens.
-- Open WebUI tag chosen at P0 (V1): JWT fields and fallback behaviour unchanged from `headers.py:42-86`.
+- Open WebUI tag chosen at P0 (V1): **done in P0** (PR #31, to-verify #46): v0.12.3, JWT fields and fallback as
+  designed (`headers.py:41-86`), callback path per §5.3. Still open: an end-to-end request from Open WebUI to
+  `rag-api` (needs the chat API, P1).
 - **New**: Entra ID tokens of `ume-rag-admin` carry `oid` with the scopes the BFF requests (`openid profile email`).
+  Not run in P0: needs the package 1 registration, now P2 (to-verify #151).
 - **New**: `groupMembershipClaims = SecurityGroup` puts cloud and synced member groups as object ids into the ID
   token's `groups` claim; how many pilot admins exceed the token's group limit (overage, §2.5).
 - **New (P2)**: whether IT can put team codes matching the gateway's `Teams.Code` into a `teamCodes` claim on
