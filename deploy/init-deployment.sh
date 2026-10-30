@@ -154,7 +154,7 @@ pki=0
 if [ -n "$api_cert$api_key$adm_cert$adm_key" ]; then
   pki=1
   for f in "$api_cert" "$api_key" "$adm_cert" "$adm_key"; do
-    [ -n "$f" ] && [ -r "$f" ] || die "PKI mode needs readable --api-cert, --api-key, --admin-cert and --admin-key"
+    if [ -z "$f" ] || [ ! -r "$f" ]; then die "PKI mode needs readable --api-cert, --api-key, --admin-cert and --admin-key"; fi
   done
 fi
 if [ -z "$bind" ]; then bind="127.0.0.1"; [ "$proxy" = 1 ] && bind="0.0.0.0"; fi
@@ -296,7 +296,7 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
       s3://*)
         [ -n "$s3_credentials" ] || die "an s3:// backup target needs --backup-s3-credentials-file"
         location="${backup_target#s3://}"; endpoint="${location%%/*}"; bucket_path="${location#*/}"
-        [ "$bucket_path" != "$location" ] && [ -n "$bucket_path" ] || die "--backup-target s3://ENDPOINT/BUCKET[/PATH]"
+        if [ "$bucket_path" = "$location" ] || [ -z "$bucket_path" ]; then die "--backup-target s3://ENDPOINT/BUCKET[/PATH]"; fi
         bucket="${bucket_path%%/*}"; path="${bucket_path#"$bucket"}"; path="${path#/}"; path="${path%/}"
         echo "repo1-type=s3"
         echo "repo1-path=/${path:-ume-rag}"
