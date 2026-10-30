@@ -1,6 +1,6 @@
 # Handover
 
-Status of the Ume.Rag design work, for the next session. Updated 2026-10-30 (session 3, step 7).
+Status of the Ume.Rag design work, for the next session. Updated 2026-10-30 (session 3, steps 7–8).
 
 ## What this is
 
@@ -27,6 +27,7 @@ and a "kitchen sink" monolith.
 | `plans/ingestion-worker/design-connectors.md` | **Detail step 6b** (done): connector contracts and checkpoints, URL identity, URL list, crawl (robots, sitemaps, scope, traps, traversals), shared frontier with claims and releaser, egress guard, renderer fed by worker fetches, variants, uploads, attachments, ClamAV, change detection and effect tags, deletion guard with reconcile phase, SharePoint P2 outline |
 | `plans/ingestion-worker/design-processing.md` | **Detail step 6c** (done): auto-parse rules and ranges, stitching, clean, split, chunk (tokenizer), metadata, quality check, PII detection + parser `/v1/ner`, embed, noise re-key, evaluation sets, gate, go-live floor |
 | `plans/knowledge-api/design.md` | **Detail step 7** (done): `Ume.Rag.Retrieval` engine shared with the evaluator and test panel, `IRetriever` for the chat role, `/v1/retrieve` (problem details), keyword statement parallel to the query embedding then vector then one hydrate batch, RRF in .NET, exact scan ≤ 10,000 chunks, degrade to keyword-only, per-collection coverage, dedup/variants/cap 3, section expansion from neighbouring chunks (`OverlapChars`), citations with 7-day signed download grants, no result cache, OpenSearch seam, MCP outline. pgvector 0.8.7, `Pgvector` 0.3.2 and MCP SDK 2.3.0 checked against package source |
+| `plans/chat-api/design.md` | **Detail step 8** (done): OpenAI-compatible contract, client-sent history authoritative (0 SQL on the hot path), Open WebUI with one connection and our `owui-tasks` task model, condense on follow-ups (on-prem), token budget, untrusted-source prompt frame, residency + echo checks before the first byte (follow-ups with history at max(level, client ceiling)), `[n]` renumbered by first citation, `source` events vs `url_citation`, output filter, fixed not-found/degraded texts, signed conversation ids, background writer with 7-day key epochs, Open WebUI feedback import and pruning job, C1 attachments (P2, chat-scoped). Open WebUI claims checked against v0.12.5 source |
 | `plans/postponed-decisions.md` | **Register of postponed decisions** (K1 key service, T1 sensitive tier, A1 archive law, R1 runner, ...), with stopgap, deadline, owner. Review at each phase start; add new postponements here |
 
 Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{dify,ragflow,onyx,open-webui,kernel-memory,bifrost}`.
@@ -63,8 +64,8 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | 6b. Connectors | `plans/ingestion-worker/design-connectors.md` | done, reviewed | `e2a99d9` |
 | 6c. Processing | `plans/ingestion-worker/design-processing.md` | done, reviewed | `e804c72` |
 | 7. Knowledge API | `plans/knowledge-api/design.md` | done, reviewed | `2fe838d` |
-| **8. Chat API** (decide C1 chat attachments here) | `plans/chat-api/` | **next** | – |
-| 9. Tools (skills, tool hub, MCP server, template) | `plans/tools/` | todo | – |
+| 8. Chat API (C1 decided) | `plans/chat-api/design.md` | done, reviewed | `00f2242` |
+| **9. Tools** (skills, tool hub, MCP server, template) | `plans/tools/` | **next** | – |
 | 10. Admin API + UI | `plans/admin/` | todo | – |
 
 After step 10: a consistency pass across all detail documents, then P0 implementation (P0 checklist in
@@ -92,18 +93,19 @@ After step 10: a consistency pass across all detail documents, then P0 implement
 - R1 self-hosted runner (IT security), A1 archive law (owner to be named), N1 product name: see the register.
 - Nothing else is waiting on the user right now.
 
-## Next step in detail: step 8, chat API
+## Next step in detail: step 9, tools
 
-Brief a subagent to write `plans/chat-api/design.md`. Fixed inputs: chat plan (§4 request path as updated by step 7,
-answered 1–3), knowledge design §2.2 (`IRetriever`, `RetrievalResult`, `Coverage` incl. `Unknown`, `MarkCited`),
-§4.6 (download grants), §5.5 (degraded retrieval), §10.4 (citation numbering), §11 (latency budget); identity design
-§3–§5 (`RagPrincipal`, `IAccessPolicy`, OpenAI error shape, Open WebUI JWT and `X-OpenWebUI-Chat-Id`, residency
-ceiling per request); gateway design (delegation `x-ume-on-behalf-of` + echo, `x-ume-max-residency`, `x-ume-residency`,
-run headers, interim linked keys, releases B → C → A); data-model §2.3 (chat tables), §6 (tier resolver), §7
-(envelope encryption), §8 (retention, crypto-shredding); `platforms/open-webui.md` §9 (source events). Cover:
-`/v1/models`, `/v1/chat/completions` (OpenAI compatibility, streaming SSE, non-streaming), assistant resolution,
-condense step, prompt building with untrusted sources and history window, residency check before the first byte,
-citation parsing and both citation formats, not-found and degraded answers, conversation ids and history modes,
-background writer, encryption and retention, feedback, errors, TTFT budget and the benchmark, observability, tests.
-Decide C1 (chat attachments) here. Before briefing, ask the user anything only they can decide (e.g. condense on by
-default, history window, feedback in P1, C1 scope, what the not-found answer contains).
+Brief a subagent to write `plans/tools/design.md` (all P2 scope, designed now). Fixed inputs: tools plan (skills,
+tool hub, platform MCP server, hosted municipal MCP servers, tool policy and lethal-trifecta rule), chat design §2.2
+(`IAnswerStrategy`, `AnswerEvent.ToolCall`, agent loop limits), §7.4, §9.4 (injection and output filter), knowledge
+design §14 (`search_knowledge`, `list_collections`, `document://`, MCP grants), identity design §4.3 step 12 (tool
+policy), §7–§9 (OAuth, MCP protected-resource metadata, OBO P3), data-model (`Skills`, `SkillVersions`,
+`SkillVersionLinks`, `ToolServers`, `ToolDefinitions`, `ToolApprovals`, `chat."ToolCalls"`), postponed M1 (MCP and
+skills unknowns), O2 (real tools), E1 (OBO via Open WebUI). Cover: skill format (Agent Skills) and versioning,
+`load_skill`, tool hub as MCP client (transport, auth, credentials vault, timeouts, result size, schema pinning and
+drift), tool policy intersection, two-approval registration, tool-call audit, agent loop (max steps/time/cost,
+parallel calls, errors), platform MCP server (tools, auth, ceilings, per-skill endpoints), MCP server template and the
+first mock municipal server, hosting zones, observability, tests incl. injection suites. Check the MCP C# SDK (2.3.0
+checked in step 7) and the Agent Skills format against real sources. Before briefing, ask the user anything only
+they can decide (e.g. agent step/cost limits, who approves tools, which first real tool to target, whether skills
+can be authored by department editors).
