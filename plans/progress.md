@@ -7,7 +7,7 @@ listed done-when holds.
 
 ## P0 Foundation ([`p0/README.md`](p0/README.md))
 
-- [ ] Stage 0, main session: [`p0/progress-stage-0.md`](p0/progress-stage-0.md)
+- [x] Stage 0, main session: [`p0/progress-stage-0.md`](p0/progress-stage-0.md)
 - [ ] Stream A, platform and the ingestion side: [`p0/progress-a.md`](p0/progress-a.md)
 - [ ] Stream B, application and the serving side: [`p0/progress-b.md`](p0/progress-b.md)
 - [ ] Sync point after H2: schema checked against [`platform/data-model.md`](platform/data-model.md); `results-a.md`

@@ -38,8 +38,8 @@ Branch `stage-0`. Tick a box in the same commit as the work it describes; add th
 - [x] GitHub labels `stream-a`, `stream-b`, `main` (confirm with the user first)
 
 ## 7. Hand-off
-- [ ] Stage 0 merged to `main`; issue opened for each stream announcing **H1**
-- [ ] [`progress.md`](../progress.md) P0 Stage 0 box ticked
+- [x] Stage 0 merged to `main`; issue opened for each stream announcing **H1** (PR #1, `84dedbe`; issues #3 stream A, #4 stream B)
+- [x] [`progress.md`](../progress.md) P0 Stage 0 box ticked
 
 ## Evidence and notes (2026-10-30)
 

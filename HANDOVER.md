@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Updated 2026-10-30, session 5.
+State of the Ume.Rag work for the next session. Updated 2026-10-30, session 6.
 Repo `~/research/rag`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
 
@@ -12,7 +12,8 @@ gateway and wants to do better than **Eneo** (`~/git/eneo`), which they find slo
 
 This repo holds the design and, from P0, the code (decided session 5: no separate `ume-rag` repo). The design is **complete**: ten detail steps, a consistency pass, a performance pass
 and (session 4) a **simplification pass**, all reviewed and pushed. Session 5 split P0 into **Stage 0 + two parallel streams** (`plans/p0/`) and added the
-agent harness (`AGENTS.md`, `CLAUDE.md`, `.github/stream-ownership.txt`, PR template). **Next is Stage 0.**
+agent harness (`AGENTS.md`, `CLAUDE.md`, `.github/stream-ownership.txt`, PR template). Session 6 built **Stage 0**
+(PR #1, `84dedbe`). **Next: streams A and B in parallel** (H1 issues #3, #4).
 
 Plain-language overview for stakeholders: `docs/stakeholder-report.html` (open in a browser; keep it in step with the
 design), also published as a private artifact (share from its menu): https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM
@@ -114,7 +115,8 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 | P0 split into Stage 0 + streams A/B; agent harness | `plans/p0/`, `AGENTS.md`, `CLAUDE.md`, `.github/` | (this session) |
 | Weakness review: five fixes (P1a/P1b, gold set + go-live gate, freshness, history mode `none` + DPIA, gateway release split + P0 capacity) | `plans/weakness-review.md`, every plan document | `f9a12b2` … `abbc3d7` |
 | Progress files (checkboxes) and stream prompts | `plans/progress.md`, `plans/p0/progress-*.md`, `plans/p0/prompts/` | (this session) |
-| **P0 Stage 0** (main session), then streams A and B | `plans/p0/README.md` §1 | **next** |
+| P0 Stage 0: solution, health, AppHost, TestKit, `verify.yml` + ownership check, labels | `plans/p0/progress-stage-0.md` | `84dedbe` (PR #1) |
+| **P0 streams A and B**, then the sync point after H2 | `plans/p0/stream-a.md`, `stream-b.md` | **next** |
 
 ## Open items
 
@@ -145,20 +147,24 @@ against Postgres `ispell`, the stock pgvector image tag, pgBackRest with that im
 acceptance page, the cost of the per-document swap, pool 12 / 4 searches, the Postgres admin session store, and the
 assistant test-run cost.
 
-## Next step: P0 Stage 0
+## Next step: P0 streams A and B
 
-Decided in session 5 (Decisions table, "P0 set-up"): code in this repo; the combined gateway release is agreed in P0
-and built in P1; the user owns the people items (Entra submission #17, gateway-team agreement #18, backup target and
-escrow `to-verify.md` #145, test-host access #16); the main session runs Stage 0.
+Stage 0 is merged (`plans/p0/progress-stage-0.md`, with evidence and seven choices the design left open, numbered
+1–7). The H1 issues are open: #3 (stream A) and #4 (stream B).
 
-Start a session with `plans/p0/prompts/main-session.md`; streams start with `plans/p0/prompts/stream-a.md` and
-`stream-b.md`. Progress lives in `plans/progress.md` and `plans/p0/progress-*.md`.
+1. Start each stream in its own worktree with `plans/p0/prompts/stream-a.md` and `stream-b.md`.
+2. Main session, at each sync point (`plans/p0/README.md` §4): fold `plans/p0/results-*.md` into `to-verify.md`,
+   settle "Design deviations" from the PRs in the design documents, answer issues labelled `main`. At the first sync
+   point, also fold Stage 0's choices 1–7 into `repo-and-deployment.md` (parser port 8000 is provisional).
+3. Main session prompt: `plans/p0/prompts/main-session.md` (item 2 from now on).
 
-1. Stage 0 as listed in `plans/p0/README.md` §1, on branch `stage-0`, with the 7-day package rule (V1). It
-   includes the CI ownership check against `.github/stream-ownership.txt` and the GitHub labels.
-2. Then hand `plans/p0/stream-a.md` and `stream-b.md` to two agents or people, one worktree each.
-3. At each sync point (`plans/p0/README.md` §4): fold `plans/p0/results-*.md` into `to-verify.md`, settle "Design
-   deviations" from the PRs in the design documents.
+Local notes from Stage 0:
+- On WSL the Aspire CLI (fetched by `AspireUseCliBundle`) trusts the dev certificate in the Windows store on first run
+  through `powershell.exe` and waits for the Windows dialog; the user ran `dotnet dev-certs https --trust`. The CLI
+  binary is under `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/`; `aspire describe` and `aspire otel traces <resource>`
+  check health and traces without the browser.
+- Not pinned yet (7-day rule): AngleSharp 1.8.6 (released 2026-10-25), SmartReader and the P1/P2 packages without a
+  checked version; stream A pins the worker's.
 
 Not yet done: `.claude/settings.json` with a build/test command allowlist was refused by the permission classifier
 (self-modification); the user decides whether to add it.
