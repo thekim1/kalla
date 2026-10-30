@@ -1,0 +1,101 @@
+# Progress: stream A (the worker side, P1a)
+
+Owner: stream A. Brief: [`stream-a.md`](stream-a.md). Rules: [`../../AGENTS.md`](../../AGENTS.md). Checklist and binding
+done-when criteria: [`README.md`](README.md) §3.
+
+**How to use:** work top to bottom; item 2 (contracts) early, because stream B waits on it. Take the first unticked
+step whose hand-off has landed; if blocked, take the next item and come back. Tick each box in the PR that does the
+work and put the PR number after it (`[x] … (#12)`). Record every `to-verify` row in `results-a.md` before ticking it here.
+
+## Waiting on (tick when it lands)
+- [ ] **J1** `v0.1.0` tagged, P1 ownership rules and these briefs merged
+- [ ] **J2** B's schema part 1 merged (needed for item 7)
+- [ ] **J5** B's `RetrievalEngine` merged (needed for item 9)
+- [ ] **J7** B's admin set-up endpoints in Scalar (needed for item 12)
+- [ ] **J8** B's realm-additions file; **J9** B's chat API (needed for item 10)
+- [ ] **J10** gateway session: gateway reachable with EU embedding, condense and answer routes and the `Eu` key (needed for items 11–13)
+- [ ] **J12** user: U1 done (about page, robots.txt) (needed for the `lastmod` sample and item 12)
+- [ ] **J13** user and pilot department: gold set written (needed for item 13)
+- [x] **J14** user: P1a is shown locally (decided 2026-10-30)
+
+## 1. Pilot-start checks (#1)
+Refs: [connectors §5.4, §8.1](../ingestion-worker/design-connectors.md), [weakness review §3](../weakness-review.md)
+- [ ] Sitemap inventory script in `scripts/`: formats, legacy share (Z1), JavaScript need; to-verify #139 recorded
+- [ ] 500-URL `lastmod` sample: first pass stored (after J12); re-fetch date noted (#170, result in P1b)
+
+## 2. Worker contracts (#4)
+Refs: [engine §3, §4, §9.1, §13.1](../ingestion-worker/design-engine.md), [connectors §2.1, §12.3](../ingestion-worker/design-connectors.md), [admin §4.7](../admin/design.md)
+- [ ] `contracts/sources/v1/{url-list,crawl,upload}.schema.json` with `x-effect`
+- [ ] `contracts/pipeline/v2/definition.schema.json`; templates `website`, `url-list`, `files` in `src/Ume.Rag.MigrationService/Templates/`
+- [ ] `contracts/jobs/v1/`: payloads and results of `sync`, `fetch`, `parse`, `embed`, `command` (P1a kinds), `eval` `on-demand`
+- [ ] `contracts/site-profiles/v1/` profile schema
+- [ ] JSON Schema 2020-12 validator chosen (to-verify #17); `Ume.Rag.Pipelines` validator and stage keys with tests
+- [ ] **Hand-off J3:** issue to stream B
+
+## 3. Parser P1 formats (#5)
+Refs: [parser §3, §6–§10, §15, §16](../parser/design.md)
+- [ ] `/v1/inspect`; per-page signals and garble detector
+- [ ] All P1 formats; legacy Office, RTF, e-mail → `format_deferred`; OCR and table modes; page ranges with `partial`
+- [ ] `/v1/ner` with its two schemas; limits, RSS watchdog, recycling
+- [ ] OCR acceptance (#131); text-layer vs Docling on 200 umea.se PDFs (#132); #79, #80 (latency), #110 recorded
+
+## 4. Sitevision preset and the umea.se profile (#8)
+Refs: [connectors §5.6](../ingestion-worker/design-connectors.md), [processing §17](../ingestion-worker/design-processing.md), [simplification pass §13](../simplification-pass.md)
+- [ ] Preset in code; umea.se manual profile JSON, hand-checked
+- [ ] ≈ 20 saved umea.se pages in `tests/fixtures/umea/`
+- [ ] **Done:** acceptance page extracts exactly (main text, breadcrumb, date 2026-01-15); #31, #138, #158 recorded
+
+## 5. Connectors (#6)
+Refs: [connectors §3–§7, §9, §11–§13, §18](../ingestion-worker/design-connectors.md)
+- [ ] Canonicaliser; egress guard (`ConnectCallback`, redirects re-checked); robots and sitemaps
+- [ ] URL list; crawl with one frontier per source and `CrawlHosts`; full traversals; stricter deletion rule
+- [ ] Uploads by slot; ClamAV `INSTREAM` client, fail closed, quarantine
+- [ ] Change detection with noise normalisation; deletion guard
+- [ ] **Done:** §18 tests for these parts (incl. C7); #10, #27, #28, #81, #112 recorded
+
+## 6. Processing stages (#7)
+Refs: [processing §2–§11, §17](../ingestion-worker/design-processing.md), [README §1](README.md)
+- [ ] `detect`, parse routing with built-in rules and fixed ranges, worker-side parsers, `clean`, split
+- [ ] `chunk` with breadcrumb prefix and `SearchText` (`SwedishDecompounder`); metadata; quality facts
+- [ ] `personal-data`: patterns, gated NER, flag rules, `held`
+- [ ] `embed`: cache, canary, fixed concurrency, the profile's model, dimensions and ceiling (`Eu` in P1a)
+- [ ] **Done:** goldens, PII targets, flag lifecycle green; #26, #43, #111 recorded
+
+## 7. Engine and index writer (#9, after J2)
+Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md), [data-model §9](../platform/data-model.md)
+- [ ] Stage manifest and support rows; execution with segments, fence, output cache; sync fan-out
+- [ ] Runs, run items, finalizer; scheduler (Cronos)
+- [ ] Index writer: invisible batches, swap, re-key, `held`, orphan sweep
+- [ ] Blob-tombstone purge sweep (#34); blob root ownership (#41)
+- [ ] **Done:** integration and crash-recovery tests; a URL-list source syncs into live chunks; #21, #119, #141 recorded
+- [ ] **Hand-off J4:** issue to stream B
+
+## 8. Evaluation smoke job (#17, your part)
+- [ ] `evaluation-smoke` job in `verify.yml`, green on a PR
+
+## 9. Commands and evaluation runs (#10, after J5)
+Refs: [processing §13.4–§13.6](../ingestion-worker/design-processing.md), [engine §9.1](../ingestion-worker/design-engine.md)
+- [ ] `edit-site-profile`, `rollback-site-profile`, `edit-eval-question`
+- [ ] `eval` `on-demand` over the `human` layer: vector, hybrid, hybrid without the decompounder (`reindex-fts` scratch copy)
+- [ ] Per-question coverage and the threshold proposal as numbers
+- [ ] **Done:** reproducibility test; evaluator == `/v1/retrieve` order
+- [ ] **Hand-off J6:** issue to stream B
+
+## 10. Pilot stack (#18, after J8, J9)
+Refs: [repo-and-deployment §6, §7.1](../platform/repo-and-deployment.md), [chat §4.3](../chat-api/design.md)
+- [ ] Compose: `rag-admin` and Open WebUI OIDC to the shared Keycloak (dev Keycloak until J11); Open WebUI → `rag-api` key and JWT secret; gateway URL and `Eu` key
+- [ ] Run book for the local P1a run; #92 recorded
+- [ ] **Done:** stack healthy locally
+
+## 11. EU-route capacity (#19, after J10)
+- [ ] `scripts/capacity/` against the EU embedding and chat routes; umea.se initial-load time and cost told to the user
+
+## 12. umea.se set-up and crawl (#20, after J7, J10, J12)
+- [ ] Pilot collection, umea.se crawl source with the manual profile, pilot URL list, one upload, set up through Scalar
+- [ ] Full traversal with EU embeddings; crawl report reviewed; #94 recorded
+
+## 13. Gold set three-way run (#21, after J13)
+- [ ] Three-way run recorded (#168); proposal handed to stream B for the thresholds
+
+## 14. P1a done (#22)
+- [ ] A pilot member's cited answer from umea.se content shown in Open WebUI
