@@ -3,4 +3,9 @@
     <ProjectReference Include="..\Ume.Rag.Domain\Ume.Rag.Domain.csproj" />
     <ProjectReference Include="..\Ume.Rag.Infrastructure\Ume.Rag.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The sv_SE Hunspell word list for SwedishDecompounder (Text/sv_SE/README.md: source, version, licence). -->
+    <EmbeddedResource Include="Text\sv_SE\sv_SE.aff" LogicalName="Ume.Rag.Retrieval.Text.sv_SE.sv_SE.aff" />
+    <EmbeddedResource Include="Text\sv_SE\sv_SE.dic" LogicalName="Ume.Rag.Retrieval.Text.sv_SE.sv_SE.dic" />
+  </ItemGroup>
 </Project>
