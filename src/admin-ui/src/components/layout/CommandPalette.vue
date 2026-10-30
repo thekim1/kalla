@@ -1,0 +1,137 @@
+<script setup lang="ts">
+import { COMMON, PALETTE } from '@/utils/labels'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { focusSection } from '@/router'
+import { filterEntries, navGroups, searchEntries, type SearchEntry } from '@/router/nav'
+import { useAuthStore } from '@/stores/auth'
+import AppIcon from '@/components/ui/AppIcon.vue'
+import ModalDialog from '@/components/ui/ModalDialog.vue'
+
+const props = defineProps<{ open: boolean }>()
+const emit = defineEmits<{ (e: 'update:open', v: boolean): void }>()
+const router = useRouter()
+const auth = useAuthStore()
+const query = ref('')
+const active = ref(0)
+
+const entries = computed(() =>
+  searchEntries(navGroups.map((g) => ({ ...g, items: g.items.filter((i) => auth.canOpen(i)) }))),
+)
+const results = computed(() => filterEntries(entries.value, query.value))
+/** Without a query the list is the menu, so show its section headings. */
+const grouped = computed(() => !query.value.trim())
+
+watch(() => props.open, (o) => {
+  if (o) {
+    query.value = ''
+    active.value = 0
+  }
+})
+watch(query, () => (active.value = 0))
+
+// On phones the panel fills the screen. The on-screen keyboard does not shrink 100dvh on iOS, so follow the visible
+// part of the page instead; otherwise the last results sit behind the keyboard and cannot be scrolled into view.
+const viewport = ref<{ height: number; top: number } | null>(null)
+function measure(): void {
+  const vv = window.visualViewport
+  viewport.value = vv ? { height: vv.height, top: vv.offsetTop } : null
+}
+function follow(on: boolean): void {
+  for (const type of ['resize', 'scroll'] as const) {
+    if (on) window.visualViewport?.addEventListener(type, measure)
+    else window.visualViewport?.removeEventListener(type, measure)
+  }
+}
+watch(() => props.open, (o) => {
+  if (o) measure()
+  follow(o)
+}, { immediate: true })
+onBeforeUnmount(() => follow(false))
+
+const optionId = (i: number) => `palette-opt-${i}`
+
+function move(step: number): void {
+  const n = results.value.length
+  if (!n) return
+  active.value = (active.value + step + n) % n
+  void nextTick(() => document.getElementById(optionId(active.value))?.scrollIntoView({ block: 'nearest' }))
+}
+
+async function go(entry: SearchEntry | undefined): Promise<void> {
+  if (!entry) return
+  emit('update:open', false)
+  const failure = await router.push(entry.to)
+  // Already there: jump to the section again instead of doing nothing.
+  const hash = typeof entry.to === 'object' && 'hash' in entry.to ? entry.to.hash : undefined
+  if (failure && hash) focusSection(hash)
+}
+
+function showsHeading(i: number): boolean {
+  return grouped.value && (i === 0 || results.value[i - 1]?.group !== results.value[i]?.group)
+}
+</script>
+
+<template>
+  <ModalDialog
+    v-slot="{ titleId, descriptionId }"
+    :open="open"
+    class="material-overlay flex flex-col overflow-hidden text-fg max-md:inset-x-0 max-md:top-[var(--vv-top,0px)] max-md:h-[var(--vv-height,100dvh)] max-md:w-full md:inset-x-0 md:top-[12vh] md:mx-auto md:max-h-[76vh] md:w-[560px] md:rounded-dialog"
+    :style="viewport ? { '--vv-height': `${viewport.height}px`, '--vv-top': `${viewport.top}px` } : undefined"
+    @update:open="emit('update:open', $event)"
+  >
+    <h2 :id="titleId" class="sr-only">{{ PALETTE.title }}</h2>
+    <p :id="descriptionId" class="sr-only">{{ PALETTE.help }}</p>
+    <div class="flex items-center gap-2 border-b border-border px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
+      <AppIcon name="search" class="text-fg-3" />
+      <label for="palette-q" class="sr-only">{{ PALETTE.title }}</label>
+      <input
+        id="palette-q"
+        v-model="query"
+        data-autofocus
+        class="h-ctl-lg min-w-0 flex-1 bg-transparent [&::-webkit-search-cancel-button]:hidden text-body-lg text-fg outline-none placeholder:text-fg-3"
+        type="search"
+        role="combobox"
+        autocomplete="off"
+        enterkeyhint="go"
+        aria-autocomplete="list"
+        aria-controls="palette-list"
+        aria-expanded="true"
+        :aria-activedescendant="results.length ? optionId(active) : undefined"
+        :placeholder="PALETTE.title"
+        @keydown.down.prevent="move(1)"
+        @keydown.up.prevent="move(-1)"
+        @keydown.enter.prevent="go(results[active])"
+      />
+      <button type="button" class="h-ctl shrink-0 rounded-control px-3 text-small font-medium text-fg-2 hover:bg-hover hover:text-fg" @click="emit('update:open', false)">
+        <span class="md:hidden">{{ COMMON.cancel }}</span>
+        <span class="hidden md:inline"><kbd class="text-caption">{{ PALETTE.escape }}</kbd><span class="sr-only"> {{ COMMON.close }}</span></span>
+      </button>
+    </div>
+    <ul id="palette-list" role="listbox" :aria-label="PALETTE.list" class="flex min-h-0 flex-1 flex-col overflow-auto overscroll-contain p-2 pb-[max(8px,env(safe-area-inset-bottom))]">
+      <template v-for="(entry, i) in results" :key="entry.id">
+        <li v-if="showsHeading(i)" role="presentation" class="px-2.5 pb-1 pt-3 text-caption font-medium uppercase tracking-wide text-fg-3 first:pt-1">{{ entry.group }}</li>
+        <li
+          :id="optionId(i)"
+          role="option"
+          :aria-selected="i === active"
+          tabindex="-1"
+          class="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-control px-2.5 py-1.5 text-small aria-selected:bg-hover"
+          @click="go(entry)"
+          @keydown.enter="go(entry)"
+          @pointermove="active = i"
+        >
+          <AppIcon :name="entry.parent ? 'subdirectory_arrow_right' : entry.icon" class="shrink-0 text-fg-2" />
+          <span class="flex min-w-0 flex-1 flex-col">
+            <span class="truncate text-fg">
+              <template v-if="entry.parent"><span class="text-fg-3">{{ entry.parent }} › </span></template>{{ entry.label }}
+            </span>
+            <span v-if="entry.description" class="truncate text-caption font-normal text-fg-3">{{ entry.description }}</span>
+          </span>
+          <span v-if="!grouped && !entry.parent" class="hidden shrink-0 text-caption text-fg-3 sm:inline">{{ entry.group }}</span>
+        </li>
+      </template>
+      <li v-if="!results.length" role="presentation" class="px-2.5 py-6 text-center text-small text-fg-3">{{ PALETTE.noMatch(query) }}</li>
+    </ul>
+  </ModalDialog>
+</template>

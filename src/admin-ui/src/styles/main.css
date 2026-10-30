@@ -1,0 +1,102 @@
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@import 'tailwindcss';
+@config '../../tailwind.config.cjs';
+
+/* Unlayered CSS beats every Tailwind utility in v4, so these must live in layers. */
+@import './tokens.css' layer(base);
+@import './icons.css' layer(components);
+
+@layer base {
+  html {
+    scroll-padding-top: 76px;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-canvas-fixed font-sans text-body text-fg;
+    min-height: 100vh;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  a {
+    @apply text-accent-ink hover:text-accent-hover;
+  }
+  h1, h2, h3, h4 {
+    margin: 0;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  th {
+    font-weight: inherit;
+    text-align: left;
+  }
+  button {
+    cursor: pointer;
+  }
+  button[aria-disabled='true'],
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  /* iOS Safari zooms the page in when a field with text smaller than 16px gets focus, and stays zoomed. */
+  @supports (-webkit-touch-callout: none) {
+    input:not([type='checkbox'], [type='radio']),
+    select,
+    textarea {
+      font-size: max(16px, 1em) !important;
+    }
+  }
+  input[type='checkbox'] {
+    accent-color: var(--accent);
+    width: 18px;
+    height: 18px;
+  }
+  /* Native modal dialogs (ModalDialog.vue): drop the browser's box so the panel classes decide placement and look. */
+  dialog.modal {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    max-width: none;
+    max-height: none;
+    background: transparent;
+    color: inherit;
+    overflow: visible;
+  }
+  dialog.modal::backdrop {
+    background: var(--scrim);
+  }
+  [data-theme='lumen'] body {
+    background-attachment: fixed;
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    [data-theme='lumen'] {
+      --blur: none;
+      --surface: var(--surface-2);
+    }
+  }
+  @media (forced-colors: active) {
+    .badge {
+      border: 1px solid CanvasText;
+    }
+  }
+}
+
+@layer components {
+  .badge {
+    @apply inline-flex h-badge items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-caption;
+  }
+  .field-input {
+    @apply h-10 w-full rounded-control bg-surface px-3 text-fg shadow-inset-input placeholder:text-fg-3;
+  }
+  .field-input[aria-invalid='true'] {
+    @apply shadow-inset-error;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-control px-3.5 font-medium transition-colors duration-fast;
+  }
+}

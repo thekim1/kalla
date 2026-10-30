@@ -1,0 +1,218 @@
+{
+  "source": "github.com/thekim1/llmgateway",
+  "sourceDirectory": "src/admin-ui",
+  "commit": "e25b491dac6edaa28e3b65091f5b6fe7c84aa688",
+  "note": "The design system copied from the gateway admin UI (repo-and-deployment \u00a72.3). sha256 is the gateway file at the commit; an adapted file differs on purpose (Swedish texts through utils/labels.ts, RAG navigation). npm run design-system reports drift as a warning.",
+  "files": [
+    {
+      "path": "tailwind.config.cjs",
+      "sha256": "695e9e99390edd8a94e515f7cecc7fac5822544e92f0c335af48e4580559a25a",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/styles/icons.css",
+      "sha256": "5266d12e9f46488b5a25f299a6520ec4c479f10c6cab9f8f3789c5a3afb7878a",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/styles/main.css",
+      "sha256": "5205e93118570c58cb65b41a1288cb918a45db9b3afe8f2374a70a180eac2424",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/styles/tokens.css",
+      "sha256": "cb893803e6166bcd02705efacb27e3ad4c3a9530bea085499e9245e866a4d96e",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/AppIcon.vue",
+      "sha256": "61145fc9f8c287a7cab8bf0a184676208a77b6a71ee21e79a67223acd88adbf9",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/AsyncState.vue",
+      "sha256": "4f6be080062c11d0f2bd946230888eebccacbf4c78d5538e8aaacd181c37aab6",
+      "copy": "adapted"
+    },
+    {
+      "path": "src/components/ui/AttentionCard.vue",
+      "sha256": "e89d088a66c77ad4d1f4620ef8857cb40bb61bd5e7b42b0eb86a2d139f576c91",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/CheckField.vue",
+      "sha256": "a9a18f1e1abd12cddb08eb09f7bc082448844fcee6ecaa915c8be62d7d38036d",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/ConfirmDialog.vue",
+      "sha256": "883b62f406b0767b33e231f400d8d515c8fc8b323475756383dd6dc07e776593",
+      "copy": "adapted"
+    },
+    {
+      "path": "src/components/ui/DataTable.vue",
+      "sha256": "a51f16dc549d352b7cdbf51b80ace24288123da3e5c4a987551271da42fb6054",
+      "copy": "adapted"
+    },
+    {
+      "path": "src/components/ui/DetailRow.vue",
+      "sha256": "7b495abe47e7edd72fd770bedd727a65811a7d2356d32e86764a384cbef73e63",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/DetailSection.vue",
+      "sha256": "885c41bad5a25f5cbbce77b736889f4ac7f540820aaa6c99d4489478135f026e",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/FieldGroup.vue",
+      "sha256": "bf0df7251b4f2dd0cef1eec8cadc3549832e8219671b949b940241bbc6c68c48",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/FilterSelect.vue",
+      "sha256": "1b5bb925189b4ed83a6a5333732d4f5a06b321649459f17e6669a7850b3606ba",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/FormField.vue",
+      "sha256": "4df0ecafd41dce64327d226bdd17d1010a1fdd136c8043523cc7b91bbc96b793",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/InlineError.vue",
+      "sha256": "554eda143752ab58d97949462c83da13628a8dbae6ce359e500e5d33d82609c1",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/MetricTile.vue",
+      "sha256": "1fff2744c2330d34819472d18591900fb7a881f053bca06a7b04dc69d858697e",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/ModalDialog.vue",
+      "sha256": "cc84400de7fe3a0859a108a3847b5dc8ea4bfd452678adc2a56f1735f52d7e8b",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/PageHeader.vue",
+      "sha256": "5815933ecef71d0a04aea3c5e261bd0451b52fdbb82a8dc59d5b3699584f66ed",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/Pagination.vue",
+      "sha256": "8188cf7e4a5f06a5b2812a6480559af5b4ccd52dc7663428e11623ac5eff0abf",
+      "copy": "adapted"
+    },
+    {
+      "path": "src/components/ui/SegmentedControl.vue",
+      "sha256": "1e61cecca1684a3471000e0f5fe311045d1b4a3faf97670ad33e7626cd9cd884",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/SelectField.vue",
+      "sha256": "574775e4d118afba45b9db32f4db18c87bd8068e04f726bf12c657178c535888",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/TextAreaField.vue",
+      "sha256": "d2e4fd7fd364af552b541733bcaa806aa4dbb05df959748f81874b5f54853bf7",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/TextField.vue",
+      "sha256": "c95d5fb9c8e355216b87159301f74be7209332d6686975ed9cfe24d09aa72182",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/ToastRegion.vue",
+      "sha256": "8551297b4e32261dfa6248f95cf8bc19df0aae317c787e8afddccd1b4c9e772d",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/ToggleChip.vue",
+      "sha256": "e5b09a9726cfa3ad9fa08d9bf68d10140ca994b0254138d2b416e0eb2d032e75",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/UiBadge.vue",
+      "sha256": "165361ababc5818b532e42bdfebbaad6eb8356d422161cde75a43b228ca488a7",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/UiButton.vue",
+      "sha256": "f6543c259fb28ca53eb5d77a233bffdb08113b5ca1ed50f9e1b744d5368e3fd1",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/UiCard.vue",
+      "sha256": "53fed0adb47307b30afa8cdfa7b5aa59ff5a668b05be0f942dfca2b0fe41b305",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/UiDialog.vue",
+      "sha256": "5c92f80b6dfd9eaaaa12eefa3801817f65da9e2b39bfaee707fd11ac33abf27c",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/UiDrawer.vue",
+      "sha256": "cb243fa507699ae1af0a63190d2064116cdb30edd6f489e906b742e2659567ae",
+      "copy": "adapted"
+    },
+    {
+      "path": "src/components/ui/UiMeter.vue",
+      "sha256": "97657939819cae6aa2259a8a17cd6953d8f8c42fd5f5205914e321564cd4126b",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/UiSwitch.vue",
+      "sha256": "49da95f28e4dc1a380d2280ae0f2f8109c1e8519275dac41d0ef460f73daf95c",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/UiTabs.spec.ts",
+      "sha256": "68bc32d50aa96f63d2aa5c594b11a1924951abf1ec0268208f1e5affea8cd37e",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/ui/UiTabs.vue",
+      "sha256": "c490d4c796c1dcb15c08b80bb6afbff191af8c5ebb5140639d99786c4eb246ce",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/components/layout/AppShell.vue",
+      "sha256": "a77fc0684fef8551c3191acd6c94b9369365c822c910291eb226a66e518d8514",
+      "copy": "adapted"
+    },
+    {
+      "path": "src/components/layout/CommandPalette.vue",
+      "sha256": "da7c216cc93a96a72809bf1cccf5820cdf3aa72127828eaf51a74a27f593eff1",
+      "copy": "adapted"
+    },
+    {
+      "path": "src/components/layout/MobileMenu.vue",
+      "sha256": "425a8609fccffc2b882db3a6fb43488dbe86596aba54e80136969ee480374eb6",
+      "copy": "adapted"
+    },
+    {
+      "path": "src/components/layout/SessionExpiryDialog.vue",
+      "sha256": "e8c214854912fc468779dfa67984f4c40bcd8393515cf5c2691e59944ab92bec",
+      "copy": "adapted"
+    },
+    {
+      "path": "src/components/layout/SignIn.vue",
+      "sha256": "ebf4b451ad0ae94ccefb01799aa0ecd719361b67e357ff07bdc313fd4dc47c0d",
+      "copy": "adapted"
+    },
+    {
+      "path": "src/assets/material-symbols-rounded-filled.woff2",
+      "sha256": "ac7743da0496a36374a8062c4e01975b291d9acd37bf17f167349a993294ece2",
+      "copy": "unchanged"
+    },
+    {
+      "path": "src/assets/material-symbols-rounded-outline.woff2",
+      "sha256": "c94dd7d4ed010bc552d642266af6dfb769589d790aa04441a75b20c66b4d0187",
+      "copy": "unchanged"
+    }
+  ]
+}

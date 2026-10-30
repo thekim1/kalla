@@ -1,0 +1,62 @@
+import { fileURLToPath, URL } from 'node:url'
+import { defineConfig } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
+import tailwindcss from '@tailwindcss/vite'
+
+/**
+ * Admin API target for the dev proxy. Aspire injects service discovery variables; explicit
+ * ADMINAPI_HTTP/ADMINAPI_HTTPS variables take precedence. Prefer discovered HTTPS for secure BFF cookies.
+ */
+function resolveAdminApiTarget(env: NodeJS.ProcessEnv): string {
+  return (
+    env.ADMINAPI_HTTPS ||
+    env.ADMINAPI_HTTP ||
+    env['services__adminapi__https__0'] ||
+    env['services__adminapi__http__0'] ||
+    'https://localhost:7402'
+  )
+}
+
+// 5174, so the gateway's admin UI (5173) can run next to it (admin design §2.1).
+const port = process.env.PORT ? Number(process.env.PORT) : 5174
+const target = resolveAdminApiTarget(process.env)
+const proxyOptions = { target, changeOrigin: false, xfwd: true, secure: false }
+
+export default defineConfig({
+  plugins: [vue(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+  server: {
+    host: 'localhost',
+    port,
+    strictPort: Boolean(process.env.PORT),
+    // The UI's error texts are checked against the API's exported codes (contracts/admin/v1/error-codes.json).
+    fs: { allow: ['.', fileURLToPath(new URL('../../contracts/admin', import.meta.url))] },
+    proxy: {
+      '/api': proxyOptions,
+      '/bff': proxyOptions,
+      '/signin-oidc': proxyOptions,
+      '/signout-callback-oidc': proxyOptions,
+    },
+  },
+  preview: {
+    host: 'localhost',
+    port,
+    strictPort: Boolean(process.env.PORT),
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    chunkSizeWarningLimit: 900,
+  },
+  test: {
+    environment: 'jsdom',
+    globals: false,
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.spec.ts'],
+    css: false,
+  },
+})
