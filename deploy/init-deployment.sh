@@ -26,9 +26,10 @@
 #   --key-provider file [file] --allow-file-keys
 #                           the file key provider (pilot and test hosts, postponed decision K1) needs --allow-file-keys
 #   --backup-target DIR|s3://ENDPOINT/BUCKET[/PATH]|local
-#                           pgBackRest repo1: the backup share mounted on this host, an S3-compatible store (with
-#                           --backup-s3-credentials-file FILE: access key and secret key on two lines, and
-#                           --backup-s3-region R [us-east-1]), or `local` (a Docker volume on this host: test hosts only)
+#                           pgBackRest repo1 and the upload copy: the backup share mounted on this host (DIR/pgbackrest
+#                           and DIR/uploads), an S3-compatible store (with --backup-s3-credentials-file FILE: access key
+#                           and secret key on two lines, and --backup-s3-region R [us-east-1]; the upload copy to S3 is
+#                           not built yet), or `local` (a Docker volume and deploy/upload-backup: test hosts only)
 #   --crawl-allow CIDR[,CIDR]  private ranges the crawler may fetch (municipal hosts)
 #   --host-memory 16|24 [16]  the host profile of §6.2 (24 adds compose.host-24g.yaml and the ClamAV 24 GB confs)
 #   --freshclam-proxy HOST:PORT  freshclam reaches database.clamav.net through this HTTP proxy
@@ -57,7 +58,7 @@ proxy=0; upstream_host=""; api_cert=""; api_key=""; adm_cert=""; adm_key=""
 yes=0; renew=0; renew_ca=0; chown=1
 gateway_keys=()
 
-usage() { sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -285,7 +286,7 @@ fi
 
 # pgBackRest repository (§7.4). The passphrase is generated once and escrowed; repo.conf is rewritten from it.
 new_file "$secrets/pgbackrest/cipher-pass" && openssl rand -base64 48 | tr -d '\n' > "$secrets/pgbackrest/cipher-pass"
-backup_dir=""
+backup_dir=""; upload_dir=""; backup_endpoint=""
 if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
   {
     echo "# Written by init-deployment.sh (repo-and-deployment §7.4); the passphrase is pgbackrest/cipher-pass."
@@ -298,6 +299,7 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
         location="${backup_target#s3://}"; endpoint="${location%%/*}"; bucket_path="${location#*/}"
         if [ "$bucket_path" = "$location" ] || [ -z "$bucket_path" ]; then die "--backup-target s3://ENDPOINT/BUCKET[/PATH]"; fi
         bucket="${bucket_path%%/*}"; path="${bucket_path#"$bucket"}"; path="${path#/}"; path="${path%/}"
+        backup_endpoint="$endpoint"
         echo "repo1-type=s3"
         echo "repo1-path=/${path:-ume-rag}"
         echo "repo1-s3-endpoint=$endpoint"
@@ -310,16 +312,17 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
       local)
         echo "repo1-type=posix"
         echo "repo1-path=/var/lib/pgbackrest"
+        upload_dir="$here/upload-backup"
         ;;
       /*)
         echo "repo1-type=posix"
         echo "repo1-path=/var/lib/pgbackrest"
-        backup_dir="$backup_target"
+        backup_target="${backup_target%/}"; backup_dir="$backup_target/pgbackrest"; upload_dir="$backup_target/uploads"
         ;;
       *) die "--backup-target is an absolute path, s3://ENDPOINT/BUCKET[/PATH] or local";;
     esac
   } > "$secrets/pgbackrest/repo.conf"
-  if [ -n "$backup_dir" ]; then mkdir -p "$backup_dir"; fi
+  for d in "$backup_dir" "$upload_dir"; do [ -z "$d" ] || mkdir -p "$d"; done
 fi
 
 # --- ClamAV confs (compose.clamav-conf.yaml): copies of the image's, written only when a setting differs -------------
@@ -384,6 +387,7 @@ own() { # own UID PATH... (needs root; falls back to a printed command)
 chown_todo=()
 own 999 "$certs/postgres" "$secrets/postgres" "$secrets/pgbackrest"
 [ -z "$backup_dir" ] || own 999 "$backup_dir"
+[ -z "$upload_dir" ] || own 1654 "$upload_dir"
 own 1654 "$certs/api" "$certs/admin" "$certs/worker" "$certs/migrations" \
   "$secrets/api" "$secrets/admin" "$secrets/worker" "$secrets/migrations" "$secrets/keys"
 own 10001 "$certs/parser"
@@ -416,9 +420,14 @@ UME_RAG_API_BIND=$bind
 UME_RAG_API_PORT=$api_port
 UME_RAG_ADMIN_BIND=$bind
 UME_RAG_ADMIN_PORT=$admin_port
-# pgBackRest posix repository on the host (empty: the pgbackrest-repo volume, or unused with S3).
+# pgBackRest posix repository on the host (empty: the pgbackrest-repo volume, or unused with S3), the S3 endpoint
+# (host firewall), and the upload copy's directory (deploy/backup-uploads.sh).
 UME_RAG_BACKUP_DIR=$backup_dir
+UME_RAG_BACKUP_ENDPOINT=$backup_endpoint
+UME_RAG_UPLOAD_BACKUP_DIR=$upload_dir
 UME_RAG_CRAWL_ALLOW=$crawl_allow
+# freshclam's HTTP proxy (host firewall: the mirror network reaches only this).
+UME_RAG_FRESHCLAM_PROXY=$freshclam_proxy
 # UME_RAG_OTEL_ENDPOINT=
 # Empty where deploy/host/rag-ingestion.slice is not installed (a developer machine):
 # UME_RAG_INGESTION_SLICE=
@@ -447,7 +456,8 @@ if [ ${#chown_todo[@]} -gt 0 ]; then
 fi
 backup_note=""
 [ "$backup_target" = local ] && backup_note="
-     The backup repository is a Docker volume on this host (--backup-target local): not a backup off the host."
+     The backup repository is a Docker volume and the upload copy $here/upload-backup, both on this host
+     (--backup-target local): not a backup off the host."
 proxy_note=""
 if [ "$proxy" = 1 ]; then
   proxy_note="
@@ -479,11 +489,13 @@ $own_step
   2. docker compose --env-file deploy/.env up -d --wait
   3. docker compose --env-file deploy/.env exec -T postgres pgbackrest --stanza=ragdb stanza-create
      Once per new database or repository (safe to repeat): WAL archiving fails until the stanza exists.$backup_note
-  4. Escrow the long-lived keys (escrow-keys.sh): $secrets/keys/rag-blob-internal and
-     $secrets/pgbackrest/cipher-pass. Back up $secrets/.pepper and $certs/data-protection.pfx
-     separately from database backups: without them a restored database is unusable.
-  5. Internal certificates last 825 days; re-issue with: $0 --renew-certs
-  6. Move $certs/ca.key off this host (with the backups in step 4). Anyone who can read it can
+  4. Escrow the long-lived keys: $here/escrow-keys.sh /media/<escrow>, then --verify it
+     ($secrets/keys/rag-blob-internal and $secrets/pgbackrest/cipher-pass). Back up $secrets/.pepper and
+     $certs/data-protection.pfx separately from database backups: without them a restored database is unusable.
+  5. As root: $here/host/install.sh (the ingestion slice, the firewall, and the backup, upload copy and
+     restart-unhealthy timers; deploy/host/README.md).
+  6. Internal certificates last 825 days; re-issue with: $0 --renew-certs
+  7. Move $certs/ca.key off this host (with the backups in step 4). Anyone who can read it can
      issue certificates the services trust; it is only needed again for --renew-certs.
 $proxy_note$owui_note
 EOF

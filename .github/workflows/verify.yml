@@ -113,7 +113,8 @@ jobs:
   deploy-checks:
     # Production Compose (P0 checklist #14, repo-and-deployment §8.2): every supported combination of the files renders
     # with `docker compose config` against placeholder settings, the image defaults stay the local :latest dev images
-    # (a release bundle pins the pushed ones by digest, §7.2), and the deployment scripts pass shellcheck.
+    # (a release bundle pins the pushed ones by digest, §7.2), the host firewall's subnets are the Compose networks', the
+    # deployment scripts pass shellcheck and the host units pass systemd-analyze verify (deploy/host/).
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
@@ -146,8 +147,20 @@ jobs:
             echo "docker compose ${args[*]} config --quiet"
             docker compose "${args[@]}" config --quiet
           done
+          # The upload copy job (profile backup).
+          docker compose -f deploy/compose.prod.yaml --profile backup config --quiet
+          # deploy/host/docker-user-firewall.sh targets each network by its subnet.
+          { docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml config --format json
+            docker compose -f deploy/compose.openwebui.yaml config --format json; } \
+            | jq -r '.networks | to_entries[] | "\(.key) \(.value.ipam.config[0].subnet)"' | sort > "$RUNNER_TEMP/subnets"
+          bash deploy/host/docker-user-firewall.sh --print-subnets | sort | diff -u "$RUNNER_TEMP/subnets" -
       - name: Deployment scripts pass shellcheck
-        run: shellcheck deploy/*.sh deploy/postgres/*.sh
+        run: shellcheck deploy/*.sh deploy/postgres/*.sh deploy/host/*.sh
+      - name: Host units pass systemd-analyze verify
+        run: |
+          units="$RUNNER_TEMP/units"
+          bash deploy/host/install.sh --unit-dir "$units" --host-memory 24 --no-enable
+          systemd-analyze verify "$units"/rag-*.slice "$units"/rag-*.service "$units"/rag-*.timer
 
   parser:
     # The parser sidecar (plans/parser/design.md §15.1, repo-and-deployment §8.2): lock, lint, unit and supervisor tests
