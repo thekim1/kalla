@@ -103,7 +103,7 @@ gateway counterpart.
 |---|---|---|---|
 | `OrganisationSync` | 5 min + on demand | `pg_try_advisory_xact_lock` per run, as `AdminApi/ModelListSync.cs:148-153` | `Departments`, `Teams` (changed rows only) |
 | `GatewayModelSync` (P1, moved from P2) | 5 min + on demand | same pattern | `GatewayModels` (changed rows only) |
-| `RetentionService` | nightly | slot a only (`Admin:Retention=true`) | chat/audit/config steps, shred-bucket destruction (data-model §7–§8) |
+| `RetentionService` | nightly | **both slots**; each step batch is idempotent and runs under `pg_try_advisory_xact_lock(<step>)`, so the slots share or skip work and either slot's host may be down ([`../performance-pass.md`](../performance-pass.md) §3.5); `Admin:Retention` (default `true`) stays as an off switch | chat/audit/config steps, shred-bucket destruction (data-model §7–§8) |
 | `DriftWatcher` (P2) | 60 s | advisory lock | `Tools.State` from `ToolDefinitionObservations` (tools §4.4) |
 | `ConfigVersionMonitor` | `rag_config` + 2 s poll | every instance | none (keeps the admin's own snapshot for validators and the test panel) |
 

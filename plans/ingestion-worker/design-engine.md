@@ -85,7 +85,7 @@ exists (another source, or a gate shadow set, §12) only needs a membership chan
 
 Callers: the fetch path after new content (6b), the document-stage commit, a new `DocumentSources` row, a published
 pipeline version (`reprocess` run), a cleared PII flag, and the **nightly drift sweep** (`Worker:Maintenance`
-instance, 01:30): `DocumentSources` rows whose `PipelineVersionId` is not the published one, or whose chunk set's
+instances, 01:30, run by the holder of its lease in `content."LeaderLeases"`, §9.4): `DocumentSources` rows whose `PipelineVersionId` is not the published one, or whose chunk set's
 `ContentHash` differs from the document's. The sweep is what makes "no lost work" independent of any single job
 surviving (Onyx F6 silent stalls, `../../platforms/onyx.md:267`; Dify documents stuck "Queuing",
 `../../platforms/dify.md:265`).
@@ -378,7 +378,7 @@ UPDATE content."Jobs" SET "State" = 'succeeded', "CompletedAt" = now(), "Result"
 
 | Effect | Where | Why it is safe to repeat |
 |---|---|---|
-| Node output blobs | written **before** the DB commit, at content-addressed paths (`…/{cacheKey}…`), write-to-temp then rename/put-if-absent | same key → same bytes; orphans (no `NodeOutputs` row after 24 h) removed by the sweeper |
+| Node output blobs | written **before** the DB commit, at content-addressed paths (`…/{cacheKey}…`), one atomic `IBlobStore.PutAsync` (file system: temp + rename; S3: one PUT or completed multipart upload; no rename on S3, [`../performance-pass.md`](../performance-pass.md) §3.13); `Overwrite` is correct for content-addressed keys, `IfAbsent` only an optimisation | same key → same plaintext (either ciphertext is valid); orphans (no `NodeOutputs` row after 24 h) removed by the sweeper |
 | `NodeOutputs` rows | document-stage commit, `INSERT … ON CONFLICT ("CacheKey") DO NOTHING` | content-addressed |
 | `Documents` facts (media type, language, page count, strategy, parse outcome and cache key, PII counts and flag) | document-stage commit, fenced | last fenced writer wins; fence rejects stale executions |
 | Continuation jobs | same transaction, `DedupKey` (`parse:{doc}:{exec}:{node}`, `embed:{doc}:{hash}:{pipelineHash}`) | enqueue is idempotent (data-model §4.2 advisory lock) |
@@ -438,8 +438,11 @@ fatal `gateway.delegation_not_applied`. `x-ume-cost-usd` is added to the node's 
 
 ### 9.1 Classes
 
-Data-model §4.2 holds order, leases and attempts. Concurrency defaults below are per instance and may be overridden in
-`config."Settings"."WorkerConcurrency"` (repo-and-deployment §3), read at the confirmed config version.
+Data-model §4.2 holds order, leases and attempts. Concurrency defaults below are per instance and are overridden per
+instance by the deployment value `Worker:Concurrency:<class>` (repo-and-deployment §3 settings rule: per-process
+concurrency is a deployment knob, so heterogeneous hosts can differ); `config."Settings"."WorkerConcurrency"` holds only
+fleet-wide shares and caps (e.g. `departmentShare`), read at the confirmed config version
+([`../performance-pass.md`](../performance-pass.md) §3.4).
 
 | Class | Concurrency | Payload (ids and parameters only, ≤ 4 KB) | Runs |
 |---|---|---|---|
@@ -447,13 +450,17 @@ Data-model §4.2 holds order, leases and attempts. Concurrency defaults below ar
 | `command` | 2 | `kind` + ids: `clear-pii-flag`, `confirm-deletion`, `reject-deletion`, `approve-profile`, `rollback-profile`, `edit-eval-question`, `recompute-membership`, `reprocess-document`, `cancel-run`, `release-hold` (admin design §4.7) | 6a/6b/6c each own their kinds |
 | `sync` | 2 | `sourceId`, `runId`, `kind` (`sync`/`retry-failed`/`reprocess`), `phase` (`list`/`fetch`/`reconcile`), `scheduledFor`, `force`, `fromNode`, checkpoint reference (`ConnectorCheckpoints`, 6b §2.3); uploads `batchId` | 6b (listing, reconcile), §9.2 |
 | `fetch` | 8 (frontier limits per host) | `sourceId`, `runId`, identity or frontier entry; `executionId` once known | 6b, then §7 |
-| `parse` | `min(Settings, /v1/info capacity.convert_slots)` | `documentId`, `level`, `executionId`, `pipelineVersionId`, `nodeId`, `inputKey`, `slice` | §7, §9.5 |
+| `parse` | `min(Worker:Concurrency:parse, /v1/info capacity.convert_slots)` | `documentId`, `level`, `executionId`, `pipelineVersionId`, `nodeId`, `inputKey`, `slice` | §7, §9.5 |
 | `ner` | `/v1/info capacity.ner_slots` × 2 (6c §9.6) | as `parse` | §7, 6c §9 |
 | `embed` | 4, adaptive (§18) | `documentId`, `level`, `executionId`, `pipelineHash`, served `(sourceId, runId)` pairs, `inputKey` | §7, §14 |
 | `eval` | 1 | `kind`: `generate-set`, `top-up-set`, `pipeline-publish`, `collection-publish`, `retrieval-change`, `scheduled`, P2 `skill-gate`, `profile-auto-apply` (admin design §4.7); subject ids, candidate settings | 6c §13–§14 |
 | `attachment` (P2) | 2 | `attachmentId`, `conversationId`, `level` (chat design §15.2) | scan (ClamAV, fail-closed) → sniff/type check → parse → chunk → PII (recorded, not blocking) → embed on-prem → post chunks to the API's internal route; high priority (dispatched right after `preview`); never writes `chat` and holds no chat keys |
 
 `Worker:Classes` lists the classes an instance runs (`crawl` is not a class: discovery is part of `sync`/`fetch`, §21).
+
+**Mixed versions during a rolling update**: payloads are additive (tolerant reader); a job that needs a newer build
+carries `MinBuild` in its payload, and an older instance requeues it without an attempt
+(`rag.jobs.requeued{reason=build}`) ([`../performance-pass.md`](../performance-pass.md) §3.4).
 
 > **Refined by 6c** (`design-processing.md` §19), applied inline in the consistency pass: job class **`ner`** (§6,
 > §7.4, above); missing pages (§7.3); `OutputHash` without volatile facts (§8); sub-corpus gate and shadow executions
@@ -495,6 +502,17 @@ class order (`preview`, P2 `attachment`, `command`, `sync`, `fetch`, `parse`, `n
 
 Fairness is per instance; with several instances it is approximate, which is enough.
 
+Queue access goes through the **`IJobQueue`** seam in `Ume.Rag.Infrastructure` (Postgres implementation = the
+data-model §4.2 SQL; enqueue takes the caller's transaction; a broker only behind the performance pass's §6 trigger),
+and at scale it batches ([`../performance-pass.md`](../performance-pass.md) §3.4):
+
+- **batched dequeue**: one statement takes `LIMIT @n` jobs, n = the free slots the department may take in that class;
+- **batched completion**: completions outside a fenced effect transaction (e.g. fetch `unchanged`, `shared`) are
+  buffered ≤ 100 ms and written with one `UPDATE … FROM unnest(…)`; fenced completions stay in their transaction (§7.6);
+- **coalesced wake-ups**: `rag_jobs` notifications are coalesced per class (≤ 1 probe round per 50 ms, a capacity-1
+  channel per class) and ignored when the instance has no free slot for the class (local check, no SQL); the sender
+  side debounces `NOTIFY` (data-model §4.3).
+
 ### 9.4 Leases, heartbeats, reaper, shutdown
 
 | Mechanism | Rule |
@@ -507,6 +525,13 @@ Fairness is per instance; with several instances it is approximate, which is eno
 
 Early reclaim keeps a killed worker from idling the parser for a 15-minute `parse` lease. With the drift sweep (§2.3)
 this is the "worker restart loses no work" target.
+
+**Lease leaders for maintenance** ([`../performance-pass.md`](../performance-pass.md) §3.5): partition maintenance,
+content retention and the drift sweep are no longer tied to "exactly one instance". `Worker:Maintenance=true` may be set
+on ≥ 2 instances; each task takes its row in `content."LeaderLeases"` (renewed every 10 s, lease 30 s → failover
+≤ 30 s), writes carry the lease's fence so a paused former leader cannot write, and a task resumes from its batch
+checkpoint. Tick leaders (reaper, scheduler §9.6, frontier releaser) keep `pg_try_advisory_xact_lock` per tick
+(failover = next tick) and hold no in-memory state the next leader needs.
 
 ### 9.5 Parse concurrency and slicing
 
@@ -801,6 +826,13 @@ A retrieval statement sees either the old or the new set (one snapshot), never b
 chunks per set (above: outcome `too-large`, §16). Large membership changes (shared sets above 10,000 chunks) are
 applied in `command` jobs outside office hours, as data-model §2.2 states.
 
+**At scale** ([`../performance-pass.md`](../performance-pass.md) §3.1, §3.10): a set above 5,000 chunks is written on a
+**dedicated short-lived connection** (its COPY batches with HNSW inserts at 10M chunks may hold the transaction
+60–200 s: allowed, not idle, but it pins the vacuum horizon; measured, to-verify #21). At bulk rates ≥ 2 writers run in
+parallel (separate `embed` jobs; contention is per document only); an `embed` job serving several small documents
+commits each document separately (fence per document) but reuses one connection and one `NpgsqlBatch` for the fence,
+set and pointer statements, COPY per set.
+
 ## 15. Config and mid-run changes
 
 - The worker reads its config tables (data-model §1.2) through the config-version library (data-model §5); the
@@ -900,6 +932,11 @@ Protection of chat:
 
 `perf.yml` (repo-and-deployment §8.3) measures pages per hour, chat p95 TTFT idle vs. during crawl + OCR batch, Postgres
 CPU and pool waits, and the embed limit's behaviour.
+
+**Beyond the pilot (≈ 10×: 100k pages/h checked, 10–20k changed, 5–10M chunks on 3–5 hosts)**: the per-stage capacity
+table, binding resources (politeness, the gateway's BGE-M3, the NER lane, HNSW memory), the fleet-wide embedding cap,
+≥ 2 parallel index writers and the scale test are in [`../performance-pass.md`](../performance-pass.md) §2, §3.9, §3.10
+and §7.
 
 ## 19. Tests
 

@@ -15,6 +15,9 @@ section, with phase and method: [`to-verify.md`](to-verify.md).
 Architecture diagrams (Mermaid: system overview, chat request, ingestion, agent tool call):
 [`architecture.md`](architecture.md).
 
+Performance and scalability (≈ 10× the pilot on 3–5 hosts: capacity model, bottlenecks, topologies, scaling triggers,
+scale test): [`performance-pass.md`](performance-pass.md).
+
 Working name for the platform and its code: **Ume.Rag** (placeholder, to be renamed).
 
 | Folder | Area | Plane | Owns |

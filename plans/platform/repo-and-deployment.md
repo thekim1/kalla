@@ -156,6 +156,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | Pipelines | JSON Schema 2020-12 validator (candidate `JsonSchema.Net`) | *to verify* (engine design §23: licence, maintenance, 2020-12 support) | P1, `Ume.Rag.Pipelines` (node `paramsSchema`, admin and worker) |
 | MCP | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` | 2.3.0 | NuGet-checked (knowledge design step 7: attribute and transport names); P2 (MCP endpoint group, template); recheck at P2 start |
 | OpenAPI | `Microsoft.OpenApi` | 3.11.0 | NuGet-checked (tools design §8.2); P2, generator `tools/Ume.Rag.McpGen` only. No further JSON-Schema package, no YAML or MSAL package in P2 (tool arguments: in-house subset validator, or the Pipelines validator above once adopted, decided at P2 start; frontmatter parser; client-credentials token client); MSAL in P3 for OBO |
+| Blobs | `AWSSDK.S3` (only dependency `AWSSDK.Core`) | ≥ 7 days old at pin time (4.0.104.6 checked 2026-10-30) | `Ume.Rag.Infrastructure` `S3BlobStore` (P1, contract-tested against the chosen server; `Minio` not used) ([`../performance-pass.md`](../performance-pass.md) §3.13) |
 | Keys | `Azure.Security.KeyVault.Keys`, `Azure.Identity` | *to verify* | `IKeyProvider` for Azure; OpenBao via plain `HttpClient` (transit API), no package |
 | Testing | `xunit.v3` 4.0.2, `xunit.runner.visualstudio` 4.0.1, `Microsoft.NET.Test.Sdk` 18.11.0, `Shouldly` 4.3.0, `NSubstitute` 6.2.0, `WireMock.Net` 2.19.0, `Microsoft.AspNetCore.Mvc.Testing` 10.0.13, `Microsoft.Extensions.TimeProvider.Testing` 10.11.0, `Testcontainers.PostgreSql` / `.Redis` 4.16.0 | as listed | gateway (no `EntityFrameworkCore.Sqlite`: every DB test needs pgvector) |
 | Benchmarks | `BenchmarkDotNet` | 0.15.8 | gateway |
@@ -236,9 +237,9 @@ Every service project starts with `if (await WebDefaults.ExitIfHealthProbeAsync(
 |---|---|---|---|
 | `Rag:Roles` (env `Rag__Roles`) on `Ume.Rag.Api` | comma list of `knowledge`, `chat`, `mcp` | `knowledge,chat` (P1), `knowledge,chat,mcp` (P2) | maps only those endpoint groups; health reports the active roles; `/version` lists them |
 | `Retrieval:Mode` | `InProcess`, `Http` | `InProcess` | `chat` without `knowledge` requires `Http` and `Retrieval:BaseUrl`; `IRetriever` is then the HTTP client with a `ume-rag-sk-` service key |
-| `Worker:Classes` on `Ume.Rag.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `ner`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; concurrency per class stays in `config."Settings"` |
-| `Worker:Maintenance` | `true`/`false` | `true` | partition maintenance and content retention (exactly one instance in a deployment) |
-| `Admin:Retention` on `Ume.Rag.AdminApi` | `true`/`false` | `true` | runs the config/chat/audit retention steps (one slot only: `rag-admin-b` sets `false`) |
+| `Worker:Classes` on `Ume.Rag.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `ner`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; per-instance concurrency per class is the deployment setting `Worker:Concurrency:<class>` (defaults = engine design §9.1 table), `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps ([`../performance-pass.md`](../performance-pass.md) §3.4) |
+| `Worker:Maintenance` | `true`/`false` | `true` | partition maintenance, content retention and the drift sweep; may be `true` on several instances: each task runs as a lease leader (`content."LeaderLeases"`, failover ≤ 30 s, [`../performance-pass.md`](../performance-pass.md) §3.5) |
+| `Admin:Retention` on `Ume.Rag.AdminApi` | `true`/`false` | `true` | runs the config/chat/audit retention steps on **both slots**, each batch idempotent under `pg_try_advisory_xact_lock(<step>)`, so the slots share or skip work; `false` is an off switch ([`../performance-pass.md`](../performance-pass.md) §3.5) |
 
 Splitting Chat from Knowledge later is a Compose change: a second `rag-api` service with `Rag__Roles=chat`,
 `Retrieval__Mode=Http`; no code change (plan §1).
@@ -287,6 +288,14 @@ Admin settings (admin design §2.2–§2.3, §4.10): `Admin:GatewayAdminUrl` (cr
 
 Worker settings besides `Worker:*` (connectors design §7, §8): `Crawl:AllowedPrivateRanges` (fed from
 `UME_RAG_CRAWL_ALLOW`, §7.1), `Renderer:MaxPages` (2). Platform-wide crawl values live in `config."Settings".Crawl`.
+
+Scale-out settings ([`../performance-pass.md`](../performance-pass.md) §3.1, §3.4, §3.8, §3.9, §3.13; all deployment
+values): `Worker:Concurrency:<class>` (per instance, above); `Embedding:GlobalMaxInFlight` (fleet-wide embedding cap via
+a Redis lease, default 2 × provider replicas); `Parser:Endpoints` (optional multi-endpoint parser list, not used in the
+3- and 5-host topologies); `BlobStore:Kind` (`FileSystem` | `S3`; `FileSystem` on the single-host pilot),
+`BlobStore:S3:ServiceUrl`, `BlobStore:S3:Bucket:<tier>` (`rag-main`, `rag-sensitive`); `ConnectionStrings__ragdb-listen`
+(LISTEN on its own connection string, same server today, so the pooled strings stay pooler-safe) and
+`ConnectionStrings__ragdb-read` (read replica for K, V, H+D and the evaluator, only when its trigger fires).
 
 ## 4. Local development
 
@@ -499,7 +508,8 @@ Fixed subnets so the host firewall (`deploy/host/docker-user-firewall.sh`, `DOCK
 Ports, as the gateway (`${…_BIND:-127.0.0.1}`): `rag-api` `127.0.0.1:8543`, `rag-api-b` `:8544`, `rag-admin`
 `127.0.0.1:9543`, `rag-admin-b` `:9544` → container 8443. The municipal reverse proxy terminates public TLS and
 re-encrypts to these (gateway runbook *Reverse proxy and PKI*; `init-deployment.sh --proxy` writes the nginx file).
-Nothing else is published.
+Nothing else is published. These networks are per host; across hosts (§6.4) services talk over the routed LAN with
+TLS, never a Docker overlay network.
 The proxy keeps the gateway's 1 MB body limit except on the admin upload route
 (`PUT /api/upload-batches/{batchId}/files/{n}`): `client_max_body_size 60m` and `proxy_request_buffering off` there
 (admin design §2.2).
@@ -516,15 +526,15 @@ verify* on the host image).
 | postgres | data | 3.0 | 1024 | 2g | 3g | 5g | 512 | `shm_size: 1g`; settings below |
 | redis | data | 0.5 | 1024 | 64m | 256m | 256m | 64 | no persistence (gateway) |
 | rag-api / rag-api-b | data | 2.0 each | 1024 | 384m | 1g each | 1.5g each | 512 | `DOTNET_GCHeapHardLimitPercent=75` |
-| rag-admin / rag-admin-b | control | 1.0 each | 512 | 256m | 512m each | 768m each | 256 | – |
-| rag-migrate | – | 1.0 | 512 | – | 512m | 512m | 128 | one-shot |
-| rag-worker | ingestion | 1.5 | 256 | 512m | 1.5g | 2g | 512 | – |
+| rag-admin / rag-admin-b | control | 1.0 each | 512 | 256m | 512m each | 768m each | 256 | `DOTNET_GCHeapHardLimitPercent=75` |
+| rag-migrate | – | 1.0 | 512 | – | 512m | 512m | 128 | one-shot; `DOTNET_GCHeapHardLimitPercent=75` |
+| rag-worker | ingestion | 1.5 | 256 | 512m | 1.5g | 2g | 512 | `DOTNET_GCHeapHardLimitPercent=75` |
 | rag-parser | ingestion | **4.0** (half the host) | 128 | 2g | 3.5g (1 worker × 4 threads) | 6g (2 workers × 2 threads) | 256 | `PARSER_WORKERS`, `PARSER_THREADS`, `PARSER_SLOT_MAX_RSS_MB`, `PARSER_OCR_DEFAULT`, `NER_*`; the NER lane (`ner-0`, ≈ 0.5 GB model) shares this limit with a 2 800 MB slot watchdog, tight at 3.5g: measured in P0/R1 (*to verify*) |
 | rag-renderer | ingestion | 1.0 | 128 | 256m | 1g | 1.5g | 512 | P1 |
 | rag-clamav | ingestion | 1.0 | 128 | 1.2g | 1.5g | 3g | 128 | `ConcurrentDatabaseReload` §5.5 |
 | `rag-ingestion.slice` | ingestion | `CPUQuota=500%` | `CPUWeight=25` | – | `MemoryMax=7G` | `MemoryMax=11G` | – | zone cap |
 | open-webui (optional) | edge | 1.0 | 512 | 512m | not co-hosted | 1.5g | 256 | §12.8 |
-| rag-tools (P2) | data | 1.0 | 1024 | 192m | 512m | 512m | 256 | tool hub (tools design §2.2) |
+| rag-tools (P2) | data | 1.0 | 1024 | 192m | 512m | 512m | 256 | tool hub (tools design §2.2); `DOTNET_GCHeapHardLimitPercent=75` |
 | `ume-mcp-<name>` (P2) | tools-hosted | 0.5 each | 256 | – | 384m each | 384m each | – | hosted MCP servers, `compose.mcp.yaml` (tools design §8.3) |
 
 Sum of memory limits (ingestion containers counted at the slice cap, the one-shot migrator included): 16 GB host
@@ -541,20 +551,28 @@ busy. The R1 release test (§8.3) confirms or corrects these numbers.
 `work_mem=8MB`, `maintenance_work_mem=512MB / 1GB` (HNSW builds), `max_parallel_maintenance_workers=2`,
 `max_worker_processes=8`, `wal_compression=on`, `ssl=on` with the internal CA, `log_statement=none` (gateway),
 `autovacuum_vacuum_scale_factor=0.02` and `autovacuum_vacuum_cost_limit=2000` (data-model §4.4),
-`shared_preload_libraries=''`.
+`shared_preload_libraries='pg_stat_statements'` (capacity metrics, §9; was empty). `wal_compression=lz4` instead of `on`
+if our image's build supports it (*to verify*, `images/postgres/test.sh`). `DOTNET_GCHeapHardLimitPercent=75` is set on
+**every** .NET container (api, worker, admin, tools, migrations), not only the api ([`../performance-pass.md`](../performance-pass.md) §4).
+
+**Multi-host database profile** (64 GB database host, D in [`../performance-pass.md`](../performance-pass.md) §5; estimate, confirmed by the scale test):
+`max_connections=200` (5-host budget, data-model §1.1), `shared_buffers=16GB`, `effective_cache_size=48GB`,
+`autovacuum_work_mem=2GB`, `autovacuum_max_workers=5`, `max_parallel_maintenance_workers=4`, `max_wal_size=16GB`,
+`checkpoint_timeout=15min`, `random_page_cost=1.1`, `effective_io_concurrency=200`; per-table settings on `Chunks`,
+`CrawlHosts`, `CrawlRuns` are in data-model §2.2 ([`../performance-pass.md`](../performance-pass.md) §3.2).
 
 ### 6.3 Volumes, secrets, hardening
 
 | Volume | Mounted in | Notes |
 |---|---|---|
 | `postgres-data` | postgres | LUKS-encrypted host disk (plan §8a baseline) |
-| `rag-blobs` → `/data/blobs` | rag-worker (rw), rag-admin (rw, uploads), rag-api (**read-only**, citation downloads, knowledge design §3.5) | containers `rag-main/`, later `rag-sensitive/` (data-model §9); single host only (§6.4). Master key files (file key provider, plan §8a): `rag-chat-*` only in rag-api and rag-admin; `rag-blob-<level>` in rag-worker and rag-admin (uploads) and read-only in rag-api (downloads). P2: rag-api also writes `chat-tmp/` (chat attachments, chat design §15.2), so its mount becomes read-only plus a writable `chat-tmp/` sub-mount |
+| `rag-blobs` → `/data/blobs` | rag-worker (rw), rag-admin (rw, uploads), rag-api (**read-only**, citation downloads, knowledge design §3.5) | containers `rag-main/`, later `rag-sensitive/` (data-model §9); single host only: beyond one host the S3-compatible object store (buckets `rag-main`, `rag-sensitive`) replaces this volume (§6.4). Master key files (file key provider, plan §8a): `rag-chat-*` only in rag-api and rag-admin; `rag-blob-<level>` in rag-worker and rag-admin (uploads) and read-only in rag-api (downloads). P2: rag-api also writes `chat-tmp/` (chat attachments, chat design §15.2), so its mount becomes read-only plus a writable `chat-tmp/` sub-mount |
 | `clamav-db` → `/var/lib/clamav` | rag-clamav | signatures |
 | `openwebui-data` | open-webui | its own SQLite DB on an encrypted volume (§12.8) |
 
 Secrets and certificates are files, never environment variables (gateway `compose.prod.yaml`): `${UME_RAG_SECRETS_DIR}/<service>`
 → `/run/app-secrets` (key-per-file: `ConnectionStrings__ragdb`, `ConnectionStrings__redis`, `Security__KeyPepper`,
-`Gateway__ServiceKey`, `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`,
+`Gateway__ServiceKey`, `BlobStore__S3__AccessKey`/`BlobStore__S3__SecretKey` (**per service**, only with `BlobStore:Kind=S3`; bucket policies mirror the mounts above: worker read/write, admin write on `uploads/` and read, api read-only, P2 write on `chat-tmp/`; [`../performance-pass.md`](../performance-pass.md) §3.13), `Security__CrawlKeyPepper` (worker: HMAC of host names in the Redis crawl leases, [`../performance-pass.md`](../performance-pass.md) §3.6), `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`,
 `Security__DownloadGrantKeys__<kid>` and `Security__CacheKeyPepper` (api; knowledge design §4.6, §5.4), `Security__ConversationIdKeys__<kid>` and `OpenWebUi__AdminApiKey` (api; chat design §11.1, §14.2), `Security__ToolAuditKey` (api, tools; P2), `ToolHub__ServiceKey` (api: client `rag-internal`; admin: client `admin-console`;
 P2, tools design §2.2), `Api__ServiceKey` (worker, P2: client `rag-internal`, posts chat-attachment chunks to the
 api's internal route, chat design §15.2; issued in the admin UI like `ToolHub__ServiceKey`)), `${UME_RAG_CERTS_DIR}/<service>`
@@ -578,12 +596,26 @@ From day one the ingestion zone is a separate file: the pilot runs
 |---|---|---|
 | Compose | `compose.prod.yaml` only | `compose.ingestion.yaml -f compose.ingestion-remote.yaml` |
 | Postgres | publish `5432` on host A's LAN address; `pg_hba.conf` adds `hostssl ragdb ume_rag_worker <host B>/32 scram-sha-256` | worker connection string `Host=<host A>;SSL Mode=VerifyFull` |
-| Blobs | switch `IBlobStore` to S3-compatible or Azure Blob (plan §12.1) for admin uploads and worker; migrate `rag-blobs` with `rag-blob-migrate` command | – |
+| Blobs | switch `IBlobStore` to S3 (`BlobStore:Kind=S3`, `AWSSDK.S3`; server: the municipality's S3-capable storage if IT offers one, else SeaweedFS, never MinIO built from archived source; postponed decision S2) or Azure Blob (plan §12.1) for admin uploads and worker; migrate `rag-blobs` with `rag-blob-migrate` command | – |
 | Gateway | – | worker on its own `llm` network to the gateway |
 | Sizes | ingestion rows removed; postgres gets 4 cpus / 6 GB | parser gets ≥ 6 cpus, 2–4 workers |
 
 `init-deployment.sh --role data|ingestion|all` writes the matching `.env` and only that host's secrets (host B gets
 the worker's secrets only).
+
+**Three and five hosts** ([`../performance-pass.md`](../performance-pass.md) §5, answered 2026-10-30: Compose per host, roles per host; P2 onwards).
+Same images on every host; each host runs a chosen set of services and `Worker:Classes`; all share one Postgres, one
+Redis and one object store (single node on its own encrypted disk) on the data host D.
+
+| Topic | Rule |
+|---|---|
+| Networks | routed LAN + host firewall + TLS, no Docker overlay; each host publishes only the ports its peers need on its LAN address (D: 5432, 6379 TLS, 443 S3); `deploy/host/docker-user-firewall.sh` gains a peer list per role; `pg_hba.conf` lists each peer host per role |
+| Compose files | `compose.data.yaml`, `compose.api.yaml`, `compose.admin.yaml`, `compose.ingestion.yaml` (exists), `compose.parser.yaml`; `init-deployment.sh --role data\|api\|ingestion\|processing\|all` writes that host's `.env`, certificates and only its secrets |
+| Host-local only | parser (each parser host runs its own `parse,ner` worker on its internal `parser` network), renderer and clamd (one per fetch host): never published on the LAN |
+| Blobs | the object store replaces the `rag-blobs` volume beyond one host; backups by bucket replication or `rclone`/server tooling instead of `backup-blobs.sh`'s file copy |
+| Must be single | Postgres primary, Redis, object store, migrations (one-shot), lease leaders |
+| Connections | Σ over instances of pool + LISTEN per role within the role's limit (data-model §1.1), checked at deploy time by `deploy/postgres/connection-budget.sh` |
+| Secrets | generated once on the operator's machine, copied per role; master key files reach more hosts, so postponed decision K1 is decided before the first multi-host deployment |
 
 ## 7. Release bundle and upgrades
 
@@ -600,18 +632,23 @@ the worker's secrets only).
 | `--gateway-service-key-file FILE` | – (interim: per-team keys entered in the admin UI) | `secrets/{api,worker,admin}/Gateway__ServiceKey` |
 | `--key-provider file\|openbao\|azure` + `--openbao-addr`, `--openbao-role-file` / `--keyvault-uri` | `file` refuses Production unless `--allow-file-keys` (test hosts and the pilot: postponed decision K1, plan §8a) | `KeyProvider__*`; with `file`: the master key files `secrets/keys/<key name>` (mode 0400) |
 | `--crawl-allow CIDR[,…]` | none | `.env`, `deploy/host/` firewall input and `Crawl__AllowedPrivateRanges` for the worker's `IEgressGuard` (connectors design §7). (`--clamav-mirror` dropped: no mirror, §5.5) |
-| `--role data\|ingestion\|all` | `all` | §6.4 |
+| `--role data\|api\|ingestion\|processing\|all` | `all` | §6.4 (multi-host roles: that host's `.env`, certificates and only its secrets) |
 | `--proxy`, `--upstream-host`, `--rolling`, `--no-chown`, PKI file options, `--renew-certs`, `--renew-ca`, `--yes` | as gateway | as gateway |
 
 It generates: the internal CA and service certificates (api, admin, worker, parser, postgres, redis), the Data
 Protection certificate, passwords for `bootstrap`, `ume_rag_migrator`, `ume_rag_api`, `ume_rag_admin`, `ume_rag_worker`
 (`ume_rag_tools` in P2), the Redis password and ACL from `users.acl.example` (user `ume-rag`, `~ume-rag:*`), the key
 pepper, the download-grant key (`Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes; a new `kid` on rotation) and the query
-cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, chat design §11.1), the tool audit HMAC key (`Security__ToolAuditKey`, P2, tools design §9.1), the Open WebUI JWT secret, the renderer WebSocket path secret, and `deploy/.env` (non-secret settings only).
+cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, chat design §11.1), the tool audit HMAC key (`Security__ToolAuditKey`, P2, tools design §9.1), the Open WebUI JWT secret, the renderer WebSocket path secret, the crawl key pepper (`Security__CrawlKeyPepper`), and `deploy/.env` (non-secret settings only).
 The Open WebUI admin API key (`OpenWebUi__AdminApiKey`) is not generated: an operator creates the service account and
 its key in Open WebUI and places the file (chat design §14.2). Likewise `ToolHub__ServiceKey` (P2): a platform admin issues
 the `ume-rag-sk-` keys of clients `rag-internal` and `admin-console` in the admin UI and an operator places the files
 (tools design §2.2).
+**Worker-only gateway key** ([`../performance-pass.md`](../performance-pass.md) §3.9, answered 2026-10-30): one `Gateway__ServiceKey` is shared by
+api, worker and admin today; proposed to the gateway team now: a separate worker-only platform key with the gateway's
+existing per-key `MaxConcurrentRequests` cap, so a misconfigured worker fleet cannot starve chat's query embeddings;
+when issued, `secrets/worker/Gateway__ServiceKey` holds that key instead. A separate BGE-M3 query route/replica follows
+only when its trigger fires (query embedding p95 during ingestion > 2 × idle).
 Ownership: 70 (postgres), 999 (redis), 1654 (.NET services), 10001 (parser), 10002 (renderer), 100 (clamav).
 
 ### 7.2 `build-release-bundle.sh`
@@ -629,6 +666,11 @@ the migrator cannot, since it is not superuser) → `run --rm migrations` → re
 `rag-admin`/`rag-admin-b`, each only while the other is healthy (gateway logic) → **worker stop-then-start** (no
 overlap: its pool would exceed the role's connection limit, and job leases make a short pause harmless) → parser,
 renderer, clamav recreated if their image changed (the worker retries the in-flight range).
+
+**Several hosts** (§6.4, [`../performance-pass.md`](../performance-pass.md) §5.4): `rolling-update.sh --role` per host, in order: extensions + migrations
+once (from D's operator shell) → A1 then A2 (each a/b as above) → admin → F → P (worker stop-then-start per host; parser
+recreated). Mixed versions are safe because migrations are expand/contract and jobs that need a newer build carry
+`MinBuild` in their payload (older instances requeue them without an attempt).
 
 Migrations are expand/contract only (data-model §10, gateway ADR 017); every release notes *Rolling update: yes/no*.
 Postgres image changes that restart Postgres itself are never rolling (a short data-plane outage, announced).
@@ -685,6 +727,7 @@ then the gateway's six-step *Upgrade procedure* and *Certificate and secret rota
 | `flake-hunt.yml` | weekly Mon 03:17, dispatch | copy | 5 runs incl. `Category=Flaky` |
 | `parser-robustness.yml` | weekly in P1, nightly once stable; dispatch | new | Atheris fuzzing of our own parser code (attachment splitter, zip pre-check, sniffing, name sanitiser), 10 minutes each, and the mutation run against the container (parser design §15.4) |
 | `perf.yml` | weekly + before each release (dispatch) | new | R1 release test (§8.3) |
+| `scale.yml` | dispatch (manual) on 3 test hosts: before the P2 multi-host rollout and after changes to the scale decisions; not per release | new | scale test ([`../performance-pass.md`](../performance-pass.md) §7): `tests/scale/Ume.Rag.FakeSites` (synthetic multi-host site), `tests/scale/Ume.Rag.ScaleSeed` (1M/5M/10M-chunk binary-COPY seed), FakeGateway with a GPU throughput model, 300-VU k6 chat; same pass rule as R1 for chat p95 TTFT |
 | `evaluation.yml` | nightly, dispatch | new | evaluation sets against the **test** deployment with real BGE-M3 (self-hosted runner, §12.4) |
 | `entra.yml` | dispatch, PR touching `infra/entra/**` (plan only) | new | `azure/login` with OIDC federation (no stored secret) → `what-if`/plan on PR → apply after approval by the GitHub environment `entra-test` / `entra-prod` (required reviewers = the municipality's approvers, or a link to their change ticket); Bicep with the Microsoft Graph extension (or Terraform `azuread`, §12.5) in `infra/entra/`, which owns the **shared** admin registration's definition incl. the gateway's roles and redirect URIs (decided 2026-10-29); deployer identity `Application.ReadWrite.OwnedBy` + `Group.Create` only, so admin consent, role assignments and client secrets stay manual steps (identity design §12) |
 
@@ -767,14 +810,23 @@ p50/p95/p99).
   `.gateway.pii` (chat design §17; low-cardinality dimensions only, never assistant slugs on hot histograms); tools add
   `rag.agent.*`, `rag.tools.*`, `rag.mcp.requests`, `rag.skills.loads`, `rag.skills.gate` (tools design §10); the admin
   adds `rag.admin.validation.refusals`, `.jobs.enqueued`, `.sync`, `.test_panel` (+ `.duration`),
-  `.conversation_access`, `.uploads` (+ `.bytes`), `.publish` (admin design §10.3).
+  `.conversation_access`, `.uploads` (+ `.bytes`), `.publish` (admin design §10.3); capacity metrics ([`../performance-pass.md`](../performance-pass.md)
+  §3.14): `rag.jobs.slots.busy` / `.slots.total`, `rag.crawl.host_budget.utilisation`, `rag.crawl.inflight_refusals`,
+  `rag.embed.global_refusals`, `rag.embed.tokens_per_second`, `rag.embed.queue_wait` (by lane `ingest`/`query`),
+  `rag.parser.slots_busy` / `slots_ready`, `rag.parser.ner.queue`, `rag.db.connections` per role vs limit,
+  `rag.db.pool.wait`, `rag.db.hnsw.bytes`, `rag.db.hnsw.cache_hit`, `rag.db.vacuum.duration`, `rag.db.dead_tuples`,
+  `rag.db.wal.bytes_per_second`, `rag.db.replication.lag`, `rag.blob.duration`, `rag.leader.changes`. Postgres-side
+  values come from the OpenTelemetry Collector's `postgresql` receiver (role `ume_rag_monitor`, data-model §1.1;
+  metric set *to verify*) plus `pg_stat_statements` (§6.2).
 - **Dashboards** (`deploy/otel/dashboards/`, Grafana JSON, *new*: the gateway ships none): *Data plane* (TTFT p50/p95,
   retrieval p50/p95 per stage, degraded rate, coverage `low` share per level, embedding cache hit rate, downloads,
   gateway latency, refusals), *Ingestion* (queue depth and age, parse throughput, failures, ClamAV),
   *Database* (connections per role vs. limits, pool waits, slow statements, partition sizes), *Config & security*
   (version lag per instance, fail-closed refusals, security events; admin refusals by code, conversation access events,
   sync health), *Tools* (P2: calls and outcomes per server, p95
-  duration, drift observations, approvals pending, agent limit hits, cost per run p95, MCP requests; tools design §10). The Aspire dashboard is used in development only.
+  duration, drift observations, approvals pending, agent limit hits, cost per run p95, MCP requests; tools design §10),
+  *Capacity* (per-stage saturation, queue age per class, host budget utilisation, embedding tokens/s vs cap, HNSW
+  memory, connections vs budget; [`../performance-pass.md`](../performance-pass.md) §3.14). The Aspire dashboard is used in development only.
 
 ## 10. Kubernetes (later; mirrors `docs/kubernetes.md`)
 
@@ -818,6 +870,7 @@ References: plan §11 items 1–7, identity §8 (P0), [`../README.md`](../README
 | 18 | Gateway changes agreed with the gateway team: design and ADR drafts 018–020 (`../gateway-changes/adr-drafts.md`; each row is copied into the gateway repo with its release B → C → A); FakeLlm `dimensions` is part of release B (§12.2) | design and drafts accepted by the gateway team; release B scheduled | README P0, gateway-changes plan §6 |
 | 19 | Docs: `local-development.md`, `production-setup.md` (sizing from §6.2), `runbook.md`, `upgrade-guide.md`, `security-events.md` | reviewed by the operations owner | plan §10 |
 | 20 | Worker dispatcher skeleton (after #6): `WorkerInstances` heartbeat, leases, reaper, `LISTEN rag_jobs`; one `command` kind end to end (admin enqueues, worker applies) | integration test: the command is applied; a killed worker's job is reclaimed within 45 s | engine design §20 (P0) |
+| 21 | Scale seams (after #6, #20): `IBlobStore` S3-safe contract with the file-system implementation; `IJobQueue` seam (Postgres implementation); pooler-safe SQL rules + scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` and `Worker:Classes` per instance; `content."LeaderLeases"`; `deploy/postgres/connection-budget.sh`; role `ume_rag_monitor`; `DOTNET_GCHeapHardLimitPercent=75` on every .NET service (the halfvec HNSW index follows in P1) | unit test finds no forbidden session-state SQL; budget script fails a rollout over a role limit; contract tests pass on the file-system store | [`../performance-pass.md`](../performance-pass.md) §8 (P0) |
 
 ## 12. Open decisions and contradictions found
 

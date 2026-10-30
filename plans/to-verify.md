@@ -180,3 +180,21 @@ Document names are relative to `plans/`; "gateway design" is `gateway-changes/de
 | 111 | Skatteverket test personnummer/samordningsnummer data and SCB name statistics (gazetteer) | `ingestion-worker/design-processing.md` §9.3, §21; postponed P2 | P1 | source |
 | 112 | Google's robotstxt test corpus | `ingestion-worker/design-connectors.md` §18, §22; postponed P2 | P1 | source |
 | 113 | `sv_SE` Hunspell dictionary | `platform/repo-and-deployment.md` §5.2; postponed P2 | P1 (before the pilot) | source |
+
+## Performance and scale
+
+| # | Item | Where | Phase | How |
+|---|---|---|---|---|
+| 114 | The chosen S3 server (municipal S3 service or SeaweedFS) passes the `IBlobStore` contract test with `AWSSDK.S3` (`WHEN_REQUIRED` checksums, path style, `UseChunkEncoding`/`DisablePayloadSigning`, `If-None-Match: *`, range GET, multipart) | `performance-pass.md` §3.13; postponed S2 | P1 | test |
+| 115 | `AWSSDK.S3` version at pin time (7-day rule; 4.0.104.6 read in the pass) and its `AWSSDK.Core` | `performance-pass.md` §3.13; `platform/repo-and-deployment.md` §2.2; postponed V1 | P1 | source |
+| 116 | Licence or service terms of the chosen object store for the municipality (SeaweedFS Apache-2.0, or the municipal S3 service's terms; MinIO excluded) | `performance-pass.md` §3.13; postponed S2, P2 | P2 | ask (legal) |
+| 117 | HNSW element size on disk for `vector(1024)` vs `halfvec(1024)` vs `bit(1024)` (`pg_relation_size`) and the recall delta of halfvec on the evaluation sets | `performance-pass.md` §3.3; `platform/data-model.md` §3.2, §12.16 | P1 | measure |
+| 118 | Filtered HNSW recall and latency by selectivity band at 1M/5M/10M chunks with `relaxed_order` and per-query `hnsw.max_scan_tuples` | `performance-pass.md` §3.3, §7; `knowledge-api/design.md` §6.4 | P2 (scale test) | measure |
+| 119 | Npgsql binary `COPY` into `Chunks` with `Vector` and the generated `SearchVector`; HNSW insert cost at 10M chunks (extends #21) | `performance-pass.md` §3.1, §4; `ingestion-worker/design-engine.md` §14 | P1/P2 | test + measure |
+| 120 | `NOTIFY` lock waits at ≈ 85 notifying commits/s with and without the debounce | `performance-pass.md` §3.4; `platform/data-model.md` §4.3 | P2 (scale test) | measure |
+| 121 | PgBouncer (1.24.1 trixie / 1.26 PGDG) with Npgsql 10 auto-prepare, `No Reset On Close`, `connect_query` warm-up, TLS on both sides, SCRAM `auth_query` | `performance-pass.md` §3.1 | P3 (by trigger) | test |
+| 122 | `wal_compression = lz4` available in our Postgres image | `performance-pass.md` §3.2; `platform/repo-and-deployment.md` §6.2 | P0 | test (`images/postgres/test.sh`) |
+| 123 | OpenTelemetry Collector `postgresql` receiver metric set (connections per role, dead tuples, index sizes) | `performance-pass.md` §3.14; `platform/repo-and-deployment.md` §9 | P1 | source + test |
+| 124 | .NET 10 GC defaults in containers (DATAS with Server GC; `DOTNET_GCHeapHardLimitPercent`) | `performance-pass.md` §4; `platform/repo-and-deployment.md` §6.2 | P0 | source + test |
+| 125 | BGE-M3 tokens/s per GPU class and on CPU at the gateway's provider; head-of-line blocking of a query embedding behind 64- vs 32-input batches (extends #98) | `performance-pass.md` §3.9; `ingestion-worker/design-processing.md` §11 | P1 (R1) | measure |
+| 126 | uvicorn client-certificate verification for the optional multi-endpoint parser mode (`PARSER_TLS_CLIENT_CA`) | `performance-pass.md` §3.8; `parser/design.md` §13.1 | P3 | test |

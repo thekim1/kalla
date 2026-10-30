@@ -41,7 +41,7 @@ flowchart LR
     subgraph data_zone["Data zone"]
         pg[("Postgres + pgvector + Swedish Hunspell<br/>config | content | chat | audit")]
         redis[("Redis")]
-        blobs[("Blob store<br/>envelope-encrypted")]
+        blobs[("Blob store, envelope-encrypted<br/>file system (pilot); S3 object store beyond one host")]
     end
 
     subgraph hosted["Hosted MCP servers (P2)"]
@@ -71,6 +71,7 @@ flowchart LR
     admin --> redis
     worker -- "jobs, documents, chunks" --> pg
     worker --> blobs
+    worker -- "crawl and embedding in-flight leases" --> redis
 
     pg -. "LISTEN/NOTIFY: config version, jobs" .-> api
     pg -. "LISTEN/NOTIFY" .-> worker
@@ -90,6 +91,13 @@ flowchart LR
     admin -- "OIDC sign-in" --> idp
     api -- "JWKS (P2)" --> idp
 ```
+
+The zones are one host in the pilot. Beyond one host ([`performance-pass.md`](performance-pass.md) §5) the same images
+run per host by role, Compose per host: three hosts in P2 (**D** data: Postgres, Redis, object store; **A** data plane
+and control; **I** ingestion), five in P3 (D; **A1/A2** rag-api and rag-admin; **F** fetch: worker
+`preview,command,sync,fetch,eval`, renderer, clamd, small parser; **P** processing: worker `parse,ner,embed` with its
+own parser). Parser, renderer and clamd stay host-local to their worker; all hosts share the one Postgres, Redis and
+object store over a routed LAN with TLS.
 
 ## 2. Chat request (RAG assistant, P1)
 

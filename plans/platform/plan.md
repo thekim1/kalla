@@ -60,12 +60,23 @@ zones** from day one, even when they share a host (P2 adds a third, `tools-hoste
 - **Pilot**: one host is allowed: **8 vCPU / 16 GB minimum, 24 GB recommended** (Docling models, ClamAV signatures
   and Chromium need several GB together), with Docker CPU shares and limits giving the data plane priority. The
   parser gets at most half the cores. BGE-M3 runs at the gateway's on-prem provider, not on this host.
-- **Production**: ingestion zone on its own host or node pool; the data plane host never runs OCR.
+- **Production**: ingestion zone on its own host or node pool; the data plane host never runs OCR. Scale-out is
+  **Compose per host, roles per host** (decided 2026-10-30; [`../performance-pass.md`](../performance-pass.md) §5): same images, `Worker:Classes` and
+  deployment settings per instance, one Postgres, one Redis and one S3-compatible object store (the municipality's S3
+  service if IT offers one, else SeaweedFS; decided with IT before the first multi-host deployment, postponed decision
+  S2), routed LAN with TLS and host firewalls, no overlay network:
+
+  | Topology | Hosts and what they run |
+  |---|---|
+  | 3 hosts (P2) | **D** data (8–16 vCPU, 64 GB, NVMe): postgres, redis, object store, OTel collector; **A** data plane + control (8 vCPU, 16 GB): rag-api a/b, rag-admin a/b, P2 rag-tools (Open WebUI on its own VM); **I** ingestion (16 vCPU, 32 GB): rag-worker (all classes), rag-parser, rag-renderer, rag-clamav |
+  | 5 hosts (P3) | **D** as above; **A1**/**A2**: two rag-api instances each, rag-admin a on A1 and b on A2, rag-tools one each (P2); **F** fetch: worker `preview,command,sync,fetch,eval`, renderer ×2, clamav, small parser for inspect/preview (crawl egress host); **P** processing: worker `parse,ner,embed`, parser 4 × 2 slots + `NER_LANES` 4 (16–24 vCPU, 48 GB), no crawl network. A sixth host is a second **P** |
 - **Database protection**: one connection pool per service role with a hard cap (worker smallest), a
   `statement_timeout` per role, chunk writes in batches, and queue/run tables partitioned by day so old partitions
   are dropped rather than deleted (no vacuum storms).
 - **Release test**: chat p95 time to first token is measured during a full crawl plus an OCR batch, with the
-  gateway's benchmark harness, and must stay within 10% of the idle figure.
+  gateway's benchmark harness, and must stay within 10% of the idle figure. The same rule applies at scale in the
+  manual **scale test** (`scale.yml`, before the P2 multi-host rollout: chat p95 TTFT during a 100k-page crawl + OCR
+  batch ≤ 1.10 × idle; [`../performance-pass.md`](../performance-pass.md) §7).
 
 **Decided (2026-10-29): our Postgres and Redis are separate instances from the gateway's**, each system with its own
 database. Reasons: the gateway's ADR 015 (other teams' data goes through interfaces, never the database; we read

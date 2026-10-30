@@ -556,23 +556,24 @@ WITH q AS (   -- OR semantics: plainto_tsquery ANDs lexemes, so the operators ar
 SELECT kw.*, d."IdentityKind", d."IdentityHash", d."ParentDocumentId"
 FROM kw JOIN content."Documents" d ON d."Id" = kw."DocumentId" AND d."Classification" = kw."Classification";
 
--- V: vector candidates, approximate (HNSW partial index per profile, data-model §3.2)
+-- V: vector candidates, approximate (HNSW partial index per profile on the halfvec expression, data-model §3.2;
+--    the column stays vector, performance-pass §3.3)
 WITH vec AS MATERIALIZED (
     SELECT c."Id", c."DocumentId", c."ChunkSetId", c."Ordinal", c."TextHash", c."CollectionIds", c."Classification",
-           c."Embedding"::vector(1024) <=> $1 AS distance
+           c."Embedding"::halfvec(1024) <=> $1::halfvec(1024) AS distance
     FROM content."Chunks" c
     WHERE c."EmbeddingProfileId" = '01929b6e-0000-7000-8000-00000000b6e3'
       AND c."DeletedAt" IS NULL
       AND c."CollectionIds" && $2
       AND c."Classification" = ANY ($3)
       /* same optional filters as K */
-    ORDER BY c."Embedding"::vector(1024) <=> $1
+    ORDER BY c."Embedding"::halfvec(1024) <=> $1::halfvec(1024)
     LIMIT 100
 )
 SELECT vec.*, d."IdentityKind", d."IdentityHash", d."ParentDocumentId"
 FROM vec JOIN content."Documents" d ON d."Id" = vec."DocumentId" AND d."Classification" = vec."Classification";
 
--- V, exact variant (§6.4): identical except
+-- V, exact variant (§6.4): identical except full precision for the distance and
 --     ORDER BY (c."Embedding"::vector(1024) <=> $1) + 0     -- not an index ordering: GIN on CollectionIds + top-N sort
 ```
 
@@ -632,9 +633,15 @@ walking until 100 rows match or `hnsw.max_scan_tuples` (20,000) is reached (READ
   `SELECT unnest("CollectionIds"), sum("ChunkCount") FROM content."ChunkSets" WHERE "DeletedAt" IS NULL GROUP BY 1`
   every 10 minutes per tier (sets ≈ documents, so cheap).
 - Scope ≤ `Settings.Retrieval.exactScanMaxChunks` (**10,000**, tuned by the §11 benchmark; §12.1) → exact variant: a GIN bitmap scan
-  on `CollectionIds` and a top-100 sort over at most 10,000 distances. Larger → HNSW with `hnsw.ef_search = 100` and
-  `hnsw.iterative_scan = relaxed_order`; the .NET fusion re-sorts by distance, which pgvector requires for relaxed
-  results.
+  on `CollectionIds` and a top-100 sort over at most 10,000 distances. Larger → chosen by **selectivity** *s* (the
+  scope's share of the profile's index, from `ScopeSizeCache`; [`../performance-pass.md`](../performance-pass.md) §3.3): *s* ≥
+  `Settings.Retrieval.minHnswSelectivity` (**0.2 %**, §12.1) → HNSW with `hnsw.ef_search = 100`,
+  `hnsw.iterative_scan = relaxed_order` and `SET LOCAL hnsw.max_scan_tuples = least(100000, ceil(200 / s))` in the
+  read-only batch below; else exact, counted as `rag.retrieval.exact_large`. The .NET fusion re-sorts by distance, which
+  pgvector requires for relaxed results.
+- HNSW runs on the half-precision expression index `("Embedding"::halfvec(1024))` from P1 (column stays `vector`, so
+  the exact variant keeps full precision); its recall against exact is measured with the evaluation sets before the
+  first large collection ([`../performance-pass.md`](../performance-pass.md) §3.3).
 - Evaluator `ChunkSets` scopes (gate sub-corpora ≤ 300 documents) are always exact. Both gate arms therefore measure
   chunking, not ANN noise, and the pilot's collections (a few thousand chunks each) get exact recall in production.
 
@@ -642,7 +649,8 @@ The HNSW settings are **role defaults** (`ALTER ROLE ume_rag_api IN DATABASE rag
 `hnsw.iterative_scan`, and for the worker and admin roles), applied by `app-roles.sql` like the timeouts (data-model
 §1.1), so no `SET` runs per query. A collection whose gated `RetrievalSettings.efSearch` differs runs V as one
 `NpgsqlBatch` `BEGIN READ ONLY; SET LOCAL hnsw.ef_search = <int>; <V>; COMMIT` (the integer comes from validated
-config, never from the request; *to verify* that the batch is one round trip, §20).
+config, never from the request; *to verify* that the batch is one round trip, §20). The selectivity rule adds its
+`SET LOCAL hnsw.max_scan_tuples` to the same batch (computed from cached counts, never from the request).
 
 ### 6.5 Fusion (`RrfFusion`, .NET)
 
@@ -668,7 +676,8 @@ order: rrf desc, distance asc (nulls last), chunk Id asc
 |---|---|---|
 | Data source | one `NpgsqlDataSource` per tier with `UseVector()` (`Pgvector` 0.3.2), `Maximum Pool Size` 25 (data-model §1.1), `Minimum Pool Size` 8, `Max Auto Prepare` 64, `Auto Prepare Min Usages` 2 | retrieval statements are prepared per connection after first use |
 | Warm-up | at startup each of the 8 minimum connections runs `SELECT to_tsvector('content.rag_swedish', 'bygglovsansökan')` | Ispell dictionaries load per backend (data-model §3.1) |
-| Concurrency | `Retrieval:MaxConcurrentSearches` 16 per instance (each search holds ≤ 2 connections briefly); wait ≤ 200 ms, then 503 `search_unavailable` | retrieval can never take the whole pool from chat writes (R1) |
+| Concurrency | `Retrieval:MaxConcurrentSearches` per instance, default ⌊(pool − 3) ÷ 2⌋ = **11** (each search holds ≤ 2 connections briefly; 16 × 2 exceeded the pool of 25), validated against the pool size at start; wait ≤ 200 ms, then 503 `search_unavailable`; more chat throughput comes from more instances ([`../performance-pass.md`](../performance-pass.md) §3.1) | retrieval can never take the whole pool from chat writes and the stats flush (R1) |
+| Read replica | optional `ConnectionStrings__ragdb-read` (only when the [`../performance-pass.md`](../performance-pass.md) §6 trigger fires): K, V, H+D and the evaluator read from it; writes (stats flush, writer) stay on the primary | spreads retrieval load off the primary |
 | Timeout | `CommandTimeout` 2 s per statement (client cancel); role `statement_timeout` 5 s backstop (data-model §1.1) | a slow plan fails fast instead of queueing |
 | Transactions | none (autocommit, read-only role grants) except the `SET LOCAL` batch | fewer round trips |
 
@@ -855,8 +864,8 @@ change makes it unreachable without invalidation code (identity §4.6 pattern):
 
 The first five change rankings and are gated (processing §14.5); `coverageMaxDistance` and `expandMaxTokens` are not.
 `top_k` is not a collection setting: it belongs to the request (assistant `QuerySteps`, default 10). Platform-only
-values live in `Settings.Retrieval`: the defaults above plus `exactScanMaxChunks` 10,000, `expandTotalMaxTokens`
-8,000. The grant lifetime is a deployment setting (`Knowledge:DownloadGrantLifetime`, §4.6), not a `Settings` value:
+values live in `Settings.Retrieval`: the defaults above plus `exactScanMaxChunks` 10,000, `minHnswSelectivity` 0.2 %
+(§6.4), `expandTotalMaxTokens` 8,000. The grant lifetime is a deployment setting (`Knowledge:DownloadGrantLifetime`, §4.6), not a `Settings` value:
 it is bound to the signing keys of the deployment, so one value exists.
 
 Security-relevant decisions use the snapshot only when confirmed (data-model §5 fail closed); the statement texts are
@@ -899,7 +908,7 @@ public sealed record Candidate(Guid ChunkId, Guid DocumentId, Guid ChunkSetId, i
 | Rebuild | worker command `search-reindex` streams `Chunks` per tier (keyset pagination on `Id`) into a new index, then swaps an alias; nothing is re-embedded (`../../platforms/opensearch.md` §8 rule 2) |
 | Incremental | the index writer (6a §14) appends `(ChunkSetId, op)` to a new tier-local `content."SearchIndexOutbox"` in its transaction (table and the `search-reindex`/`search-sync` kinds join data-model §2.2/§4.2 only when the switch is built); a `search-sync` job applies batches; lag metric `rag.search.index_lag` |
 | Switch | `Retrieval:Index` = `postgres` \| `opensearch` \| `shadow` (`shadow` queries both, serves Postgres, logs rank overlap: the evaluation for the switch) |
-| Triggers | `01-general-idea.md` §6 / `../../platforms/opensearch.md` §8: hybrid recall@10 ≥ 5 points better on the Swedish benchmark, > 2–3M chunks or HNSW no longer in RAM, retrieval p95 > 300 ms after tuning, a facets/highlighting product need; measured by the evaluation sets and §11 |
+| Triggers | `01-general-idea.md` §6 / `../../platforms/opensearch.md` §8, restated in [`../performance-pass.md`](../performance-pass.md) §3.3 as measured values instead of a chunk count: (a) HNSW index size > 50 % of the database host's RAM (`rag.db.hnsw.bytes`; binary-quantized index + re-rank tried first), (b) V p95 > 50 ms or retrieval p95 > 300 ms after tuning, (c) filtered recall: HNSW recall@100 against exact < 0.95 for collections in the 0.05–2 % selectivity band, (d) hybrid recall@10 ≥ 5 points better on the Swedish benchmark, or a facets/highlighting product need; measured by the evaluation sets, §11 and the scale test |
 
 ## 14. MCP exposure (P2 outline)
 
@@ -1056,8 +1065,8 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | Phase | Deliverable |
 |---|---|
 | P0 | `Ume.Rag.Retrieval` skeleton; Postgres image with pgvector 0.8.7 and Hunspell; role defaults for `hnsw.*`; `SwedishTextSearchTests` |
-| P1 | In-process `IRetriever` for the chat role; K/V/H+D statements with exact/HNSW rule; RRF, dedup, variant collapse, cap 3; coverage with per-collection thresholds; section expansion with `OverlapChars`; citations incl. upload names and attachment parents; download grants and `/content` streaming with envelope decryption; query embedding with L1/L2 cache, circuit and degrade; `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; problem details, OpenAPI/Scalar; counters; metrics, traces; contract test; evaluation smoke; interaction audit; retrieval load test |
-| P2 | HTTP access for integrations and tokens (`CollectionAudiences`, key scopes, rate limits); MCP `search_knowledge`, `list_collections`, `get_document`, `document://`, per-skill endpoints (`SkillVersionIds`, tools §7.4); agent assistants' skill collections; coverage calibration with control questions; tuning per collection behind the gate; `halfvec` evaluation (data-model §12.16); range requests if a PDF viewer needs them; optional Entra sign-in for downloads (§4.6) |
+| P1 | In-process `IRetriever` for the chat role; K/V/H+D statements with the exact/HNSW selectivity rule on the halfvec index (recall vs exact measured with the evaluation sets); RRF, dedup, variant collapse, cap 3; coverage with per-collection thresholds; section expansion with `OverlapChars`; citations incl. upload names and attachment parents; download grants and `/content` streaming with envelope decryption; query embedding with L1/L2 cache, circuit and degrade; `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; problem details, OpenAPI/Scalar; counters; metrics, traces; contract test; evaluation smoke; interaction audit; retrieval load test |
+| P2 | HTTP access for integrations and tokens (`CollectionAudiences`, key scopes, rate limits); MCP `search_knowledge`, `list_collections`, `get_document`, `document://`, per-skill endpoints (`SkillVersionIds`, tools §7.4); agent assistants' skill collections; coverage calibration with control questions; tuning per collection behind the gate; range requests if a PDF viewer needs them; optional Entra sign-in for downloads (§4.6) |
 | P3 | Rerank (gateway-served, behind evaluation) between diversity and hydration; multi-query/HyDE behind evaluation (answered 3); cross-profile fusion during an embedding-profile migration; OpenSearch behind `ISearchIndex` if a trigger fires |
 
 ## 18. Changes to other documents
@@ -1128,7 +1137,7 @@ None.
 - `plainto_tsquery('content.rag_swedish', …)::text` shape when Hunspell returns several lexemes for one compound
   (grouping and operators), so the `' & '` → `' | '` replacement yields the intended OR query.
 - Exact-scan cost at 10,000 chunks of `vector(1024)` (TOASTed 4 KB values): detoast + distance within 25 ms p95; else
-  lower `Settings.Retrieval.exactScanMaxChunks` or move to `halfvec`.
+  lower `Settings.Retrieval.exactScanMaxChunks` or scan the `halfvec` expression (the HNSW index is halfvec from P1).
 - Npgsql/Aspire tracing does not record parameter values (only statement text) by default.
 - `Pgvector` 0.3.2 `UseVector()` with Npgsql 10.0.x (package declares Npgsql ≥ 8.0.5; repo-and-deployment lists EF 10
   compatibility as unverified too).

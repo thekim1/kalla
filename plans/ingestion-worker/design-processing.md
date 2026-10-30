@@ -512,6 +512,10 @@ Response:
   depend on it, `/v1/info` reports `capacity.ner_slots`, `ner_ready` and the model block.
 - CPU: `NER_THREADS` (default 2) on the parser's 4 CPUs. During OCR batches the convert slot and the NER lane
   oversubscribe; acceptable at night, decided by the R1 test (§16).
+- Lanes: new `NER_LANES` (default 1; parser hosts 2–6), each a `ner-N` process with `NER_THREADS` 2; `/v1/info`
+  `capacity.ner_slots` = lanes, so the worker's `ner` class scales with them. NER is fail-closed per document
+  (`ner_pending`, §9.6), so a lagging lane delays, never leaks; at bulk rates the NER lane is a binding resource
+  ([`../performance-pass.md`](../performance-pass.md) §2.1, §3.8).
 - Image: `config.json`, `vocab.txt`, `tokenizer_config.json`, `special_tokens_map.json`, `model.safetensors`
   (≈ 499 MB, fp32) from the pinned revision with SHA-256 in `download_models.py`; `/opt/models/kb-ner`;
   `HF_HUB_OFFLINE` already set (parser §11). Image size target rises from ≤ 3.5 GB to ≤ 4.0 GB until the OCR bake-off
@@ -531,7 +535,11 @@ Response:
 | Request | `POST /v1/embeddings` `{model: "bge-m3", input: [...], encoding_format: "float"}`; headers by the engine (6a §7.7): `x-ume-on-behalf-of` = owner team of the triggering source's collection, `x-ume-max-residency: OnPrem` always, `x-ume-run-id`, `x-ume-step: embed` |
 | Response checks | count equals inputs; each vector 1024 finite floats (else fatal `embed.bad_vector`); `x-ume-residency` ≤ `OnPrem` (else fatal, 5003); stored as returned (cosine is scale-invariant) |
 | Canary | at startup and hourly the worker embeds a fixed Swedish canary text and compares it with `EmbeddingProfiles.CanaryEmbedding` (new, §19): cosine < 0.999 → the `embed` class stops on this instance, health `unhealthy`, alert: the gateway alias now serves another model, which would silently mix vector spaces |
-| Concurrency | AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `WorkerConcurrency.embed` |
+| Concurrency | AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1) |
+| Fleet-wide cap | on top of the per-instance AIMD, a Redis lease set `ume-rag:embed:inflight` (same Lua as the crawl in-flight lease, 6b §6.3) limits in-flight embedding requests of **all** worker instances to `Embedding:GlobalMaxInFlight` (deployment; default 2 × provider replicas); a refusal requeues without an attempt; Redis down → per-instance AIMD only ([`../performance-pass.md`](../performance-pass.md) §3.9) |
+| Batching at scale | when `Embedding:GlobalMaxInFlight` > 4: `batchSize` 32 and ≤ 8,192 tokens per request (shorter head-of-line blocking for chat's query embeddings at equal throughput, *to measure*); 64 / 16,384 stays the single-host default |
+| Bulk share | onboarding and publishes that re-chunk large shared corpora run at `Priority` −5 inside the night window and never take more than `Settings.Ingestion.bulkEmbedShare` (0.75) of the global cap; the admin forecasts them from measured tokens/s (§14.7) |
+| Chat protection at the gateway | proposed to the gateway team now: a **worker-only platform key** with the gateway's existing `MaxConcurrentRequests` cap (429 + `Retry-After`, honoured above), so a misconfigured worker fleet cannot starve chat's query embeddings. A separate BGE-M3 **query route/replica** for `x-ume-step: query` only when the performance pass's §6 trigger fires (query embedding p95 during ingestion > 2 × idle); the canary then checks both routes ([`../performance-pass.md`](../performance-pass.md) §3.9, §6, §10.1 answer 8) |
 | Failures | 6a §7.3 table; a 400 for one input fails the document (`embed.input_rejected`, a bug: 400 tokens ≪ 8192); partial results of a failed batch are discarded and the batch retried whole |
 
 **Profile migration (P3 outline).** New profile row `building`; `rag_ensure_profile_index` (data-model §3.2); a

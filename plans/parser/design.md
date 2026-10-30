@@ -456,7 +456,7 @@ tini (PID 1)
    ├─ convert-slot-0 … N-1         spawned processes: Docling pipelines warm, PARSER_THREADS torch/OMP threads
    │   └─ soffice (per job)        own process group, rlimits (§4)
    ├─ inspect-0                    spawned process: pypdfium2 only, RLIMIT_AS 1 GB
-   └─ ner-0                        spawned process: KB BERT NER warm, NER_THREADS threads (§7.8, step 6c)
+   └─ ner-0 … L-1                  spawned processes (L = NER_LANES): KB BERT NER warm, NER_THREADS threads each (§7.8, step 6c)
 ```
 
 - **Why not `uvicorn --workers N`** (repo-and-deployment §5.3): each uvicorn worker would run Docling in the
@@ -469,9 +469,14 @@ tini (PID 1)
   queue**: the worker's `parse` concurrency equals the capacity, which it reads from `/v1/info` `capacity.convert_slots`
   at start and every minute (so a change of `PARSER_WORKERS` needs no worker config).
 - Slots: `PARSER_WORKERS` × `PARSER_THREADS` = the container's `cpus` (16 GB host 1 × 4; 24 GB host 2 × 2,
-  repo-and-deployment §6.2). Inspect lane: one process, recycled after 200 jobs. NER lane: one process, self-test on a
-  fixed Swedish sentence at start, at most `NER_QUEUE` (4) waiting requests else `503 busy`, recycled after 5 000
-  requests or RSS growth > 40 %; readiness does not depend on it (`ner_ready` in `/v1/info`).
+  repo-and-deployment §6.2). Inspect lane: one process, recycled after 200 jobs. NER lanes: `NER_LANES` processes
+  (default 1; dedicated parser hosts 2–6, [`../performance-pass.md`](../performance-pass.md) §3.8), each with a
+  self-test on a fixed Swedish sentence at start, at most `NER_QUEUE` (4) waiting requests else `503 busy`, recycled
+  after 5 000 requests or RSS growth > 40 %; readiness does not depend on them (`ner_ready` in `/v1/info`).
+- Scale-out ([`../performance-pass.md`](../performance-pass.md) §3.8): a parser host runs its own `parse,ner` worker on
+  the host's internal `parser` network, so the parser keeps no other network. Only the optional multi-endpoint mode
+  (`Parser:Endpoints`, cross-host parser traffic) adds `PARSER_TLS_CLIENT_CA` (uvicorn client-certificate
+  verification, *to verify*); not used in the 3- and 5-host topologies.
 
 ### 10.2 Warm-up and readiness
 
@@ -549,7 +554,7 @@ Inputs arrive after ClamAV but are untrusted. The container is the outer sandbox
 | Python | uv lock with hashes, `no-build = true`, `exclude-newer` 7 days before lock (repo-and-deployment §2.4). `docling-slim` with only the extras needed (standard formats, `feat-ocr-easyocr`, email), not the `docling` meta package's full set. Adds: `easyocr`, `pypdfium2` (also a Docling dependency), `python-oxmsg` (Docling's `.msg` reader), `defusedxml`, `psutil`, `pillow`. CPU wheels for `torch` and `torchvision` from the PyTorch CPU index |
 | Docling extras | layout and TableFormer models only; picture classification, code/formula enrichment and picture description **off and not baked** |
 | Entry | `ENTRYPOINT ["tini","--"]`, `CMD ["python","-m","ume_parser"]` (supervisor starts uvicorn programmatically on 8443 with the TLS files) |
-| Env | `PARSER_WORKERS`, `PARSER_THREADS`, `OMP_NUM_THREADS`, `PARSER_OCR_DEFAULT`, `PARSER_SLOT_MAX_RSS_MB`, `NER_THREADS` (2), `NER_QUANTIZE` (1), `NER_QUEUE` (4), `NER_PERSON_LABELS` (`PER,PRS`), offline variables (§11) |
+| Env | `PARSER_WORKERS`, `PARSER_THREADS`, `OMP_NUM_THREADS`, `PARSER_OCR_DEFAULT`, `PARSER_SLOT_MAX_RSS_MB`, `NER_LANES` (1), `NER_THREADS` (2), `NER_QUANTIZE` (1), `NER_QUEUE` (4), `NER_PERSON_LABELS` (`PER,PRS`), offline variables (§11) |
 | Size target | ≤ 4.0 GB with the NER model (≤ 3.5 GB before it; §5.1 says 2.5–3.5 GB): base ≈ 150 MB, torch CPU + torchvision ≈ 800 MB, other Python ≈ 500 MB, models ≈ 500 MB, LibreOffice + fonts ≈ 500 MB, Tesseract ≈ 50 MB. Measured in P0; above 3.5 GB, the first cut is the bake-off loser |
 
 Models baked (sizes approximate, *to verify* at P0):
@@ -578,7 +583,7 @@ Carlito/Caladea fonts OFL-1.1, DejaVu fonts Bitstream Vera licence; `python-oxms
 |---|---|
 | `/health/live` | 200 while the supervisor loop runs (no slot check) |
 | `/health/ready` | 200 when the self-tests of §10.2 passed and ≥ 1 slot is warm; 503 otherwise. Never blocked by conversions |
-| `/v1/info` | `parser` version and git revision; Python; `docling`, `docling-core`, `docling-parse`, `docling-ibm-models`, `torch`, `pypdfium2` (+ pdfium build), `easyocr`, Tesseract version and tessdata languages; LibreOffice version; each model with repository, revision and SHA-256; `ocr_default`; the NER model block (repository, revision, SHA-256, labels, quantised); `capacity` (`convert_slots`, `slots_ready`, `inspect_slots`, `ner_slots`, `ner_ready`); `limits` (§11.1); supported formats; `build_hash` = SHA-256 of the canonical JSON of everything except capacity |
+| `/v1/info` | `parser` version and git revision; Python; `docling`, `docling-core`, `docling-parse`, `docling-ibm-models`, `torch`, `pypdfium2` (+ pdfium build), `easyocr`, Tesseract version and tessdata languages; LibreOffice version; each model with repository, revision and SHA-256; `ocr_default`; the NER model block (repository, revision, SHA-256, labels, quantised); `capacity` (`convert_slots`, `slots_ready`, `inspect_slots`, `ner_slots` = `NER_LANES`, `ner_ready`); `limits` (§11.1); supported formats; `build_hash` = SHA-256 of the canonical JSON of everything except capacity |
 
 The worker records `build_hash` on every run item and stores the full info JSON once per hash (§17). The release smoke
 test already calls `/v1/info` from the worker container (repo-and-deployment §8.1).

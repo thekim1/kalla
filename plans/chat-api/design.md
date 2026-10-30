@@ -715,7 +715,9 @@ residency, tokens, cost, latency, TTFT), timestamps. Plaintext lives in memory o
 
 ### 12.2 Batch processing (per tier, one transaction)
 
-1. Group turns by tier (`ITierResolver.Resolve(level)`, data-model §6) and conversation.
+1. Group turns by tier (`ITierResolver.Resolve(level)`, data-model §6) and conversation; conversations and every
+   multi-row upsert's keys are processed in **sorted key order**, so instances flushing overlapping key sets cannot
+   deadlock ([`../performance-pass.md`](../performance-pass.md) §3.2).
 2. **Conversation upsert**: `INSERT … ON CONFLICT (ClientId, SubjectId, ExternalChatId, AssistantId) DO UPDATE SET
    "LastMessageAt" = excluded."LastMessageAt", "ExpiresAt" = … WHERE "DeletedByUserAt" IS NULL RETURNING "Id"`
    (issued ids: `ON CONFLICT ("Id", "Classification")`); no row returned = tombstone → drop the turn.
@@ -727,7 +729,8 @@ residency, tokens, cost, latency, TTFT), timestamps. Plaintext lives in memory o
 6. One `NpgsqlBatch`: messages (`ON CONFLICT (ConversationId, ExternalMessageId) DO NOTHING` for user messages),
    `MessageSources` (multi-row insert), **`AssistantDailyTotals`** upsert with the batch's aggregated deltas per
    (Europe/Stockholm day, assistant, client, level) (data-model §2.3: statistics never depend on rows retention
-   removes), commit.
+   removes), placed as the **last** statement of the batch with its keys sorted, so the hot totals row lock is held for
+   one statement only ([`../performance-pass.md`](../performance-pass.md) §3.2), commit.
 7. Failure: the batch is retried after 2 s (as `UsageWriter`'s `RetryInterval`); a batch failing three times is split
    and retried per turn; a turn failing alone three times is dropped (`rag.chat.writer.dropped{reason=poison}`, ids
    logged). While Postgres is down the queue fills, then the enqueue rule applies.

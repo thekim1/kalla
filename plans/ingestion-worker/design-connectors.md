@@ -271,7 +271,9 @@ with an example pattern in the report.
   complete or not.
 - **Incremental** run (optional `incrementalSchedule`, e.g. daily for a news site with a sitemap): fetches seeds
   whose sitemap `lastmod` is newer than the stored `FetchedAt` plus sitemap URLs not yet known, expands links only
-  from changed pages, never marks a traversal complete, so it deletes only on `Gone`.
+  from changed pages, never marks a traversal complete, so it deletes only on `Gone`. The municipal `website` template
+  sets a daily `incrementalSchedule` **by default** when the host's sitemaps carry `lastmod`; the crawl report measures
+  the share of `lastmod` hits that really changed ([`../performance-pass.md`](../performance-pass.md) §2.3).
 - `revalidateEvery` (default 4): every 4th traversal sends no validators (§4).
 
 ### 5.5 Crawl report
@@ -330,6 +332,11 @@ RETURNING "UrlHash";
 
 Two departments crawling umea.se on the default Saturday schedule therefore cause one request per page (plan §9).
 
+**Nav-link claim cache** ([`../performance-pass.md`](../performance-pass.md) §3.6): per run and instance, an LRU
+(100k entries) of URL hashes already admitted in this run; site-chrome links (header, footer, menus: most of a page's
+≈ 100 links) skip the claims upsert after the first page. Exactness is kept because the upsert remains the authority
+for the first sighting on each instance.
+
 ### 6.3 Releaser and host budgets
 
 `FrontierReleaser`: `BackgroundService`, `PeriodicTimer` 1 s, leader by `pg_try_advisory_xact_lock` (6a §9.6
@@ -356,9 +363,18 @@ RETURNING "NextAllowedAt" - make_interval(secs => @interval) AS "Slot";
 | Interval | `max(1/rate, Crawl-delay, LatencyEwma / 4) × BackoffFactor` | `max(1/rate, Crawl-delay, LatencyEwma) × BackoffFactor` |
 
 Rates are per host and shared by every source, preview and render of every level (the table is main-only). The
-connection cap is enforced in memory per instance; with k worker instances it is k × the cap while the rate stays
-exact (accepted until the ingestion zone moves to its own host, repo-and-deployment §6.4). Platform admins may
-override a host's budget (`Settings.Crawl.HostOverrides`) and block hosts.
+connection cap is enforced across instances by a **Redis in-flight lease per host** (sorted set
+`ume-rag:crawl:inflight:{hostMac}`, the gateway's in-flight limiter pattern; lease 60 s > fetch timeout, released in
+`finally`; `hostMac` = HMAC of the host name with the worker secret `Security__CrawlKeyPepper`, so no host names reach
+Redis). A refused lease requeues the job at `now + interval` without an attempt (`rate_limited`). Redis down: fall
+back to ⌈`MaxConnections` ÷ k⌉ per instance, k = live `WorkerInstances` running `fetch` (heartbeat < 45 s); slot pacing
+still bounds in-flight requests ([`../performance-pass.md`](../performance-pass.md) §3.6). Platform admins may
+block hosts and override a host's budget (`Settings.Crawl.HostOverrides`).
+
+**The crawler rules stay** (answered 4; performance pass answered 7): ≤ 10 req/s per municipal host and the night
+window (§6.5). Higher rates for allow-listed municipal hosts and a **daytime trickle** (e.g. 2 req/s outside the
+window) are per-host settings in `Settings.Crawl.HostOverrides`, **off by default**, enabled only with the web team's
+written consent ([`../performance-pass.md`](../performance-pass.md) §2.3, §10.1).
 
 ### 6.4 Back-off and circuit breaker
 
@@ -377,6 +393,8 @@ Traversals release claims only inside the source's `crawlWindow` (default `22:00
 day; answered 4). A traversal not finished at 06:00 pauses and continues the next night; the run stays `running`
 and shows "waiting for crawl window". At 10 req/s a 10,000-page municipal site takes ~17 minutes; at 1 req/s an
 external one ~2.8 h, both inside one window. Manual "sync now" and URL lists (nightly by default) ignore the window.
+A daytime trickle outside the window exists only as an off-by-default per-host override with the web team's written
+consent (§6.3).
 
 ## 7. Egress / SSRF guard
 
@@ -445,6 +463,7 @@ public sealed record RenderResult(Uri FinalUrl, string Html, string? Title, IRea
 | Popups, dialogs, downloads | new pages closed at once, dialogs dismissed, a download aborts the page (`render.download_attempt`) |
 | Wait | `networkidle` (default) or a selector, then `document.documentElement.outerHTML`; DOM > 10 MB → truncated + `degraded` |
 | Concurrency | per host **1** (answered 2) via `CrawlHosts.RenderLeaseUntil` (45 s lease, shared across instances); globally `Renderer:MaxPages` = 2 (1 CPU container) |
+| Placement | the worker fulfils every browser request itself (§8.3), so a renderer is **host-local to its fetch worker**, never published on the LAN: one renderer per fetch host, `cpus` 1–2, `Renderer:MaxPages` = 2 per CPU; one JavaScript-only site still renders at ≈ 1 page/s (per-host lease), more renderers help only for many such sites ([`../performance-pass.md`](../performance-pass.md) §3.7) |
 | Timeouts | page 30 s; whole render job 45 s; on timeout the origin content is indexed, outcome `degraded` `render.timeout` |
 | Subresource politeness | ≤ 4 in flight per page; assets cached in worker memory per run (LRU 200 MB, by URL + validators), so a site's bundles are fetched once per run, not per page |
 
@@ -568,9 +587,10 @@ document (metadata title or first heading), never from a file name.
 
 | Topic | Rule |
 |---|---|
+| Placement | clamd has no TLS or authentication on TCP 3310, so it stays **host-local** on the `ingestion` network of every host that runs `sync`/`fetch`, never published on the LAN; each instance updates its signatures through its host's `mirror` network ([`../performance-pass.md`](../performance-pass.md) §3.7) |
 | Client | own `IMalwareScanner` over TCP 3310 (`ingestion` network): `zINSTREAM\0`, chunks of 64 KiB as `<uint32 BE length><bytes>`, zero-length terminator; reply `stream: OK`, `stream: <signature> FOUND`, or `… size limit exceeded. ERROR`. `zPING` for health, `zVERSION` for signatures. ~150 lines, no package |
 | What is scanned | every upload, every attachment, every crawled or listed non-HTML/non-text file (PDF, Office, images, email) before it is stored as document content or sent to the parser. Fetched HTML, text and CSV, parsed in-process, are not scanned |
-| Streaming | the body is written to an encrypted temp blob `tmp/{jobId}/…` while hashing, then streamed to clamd and renamed into place if clean; no 50 MB buffers in memory; orphaned temp blobs swept after 24 h |
+| Streaming | the encrypted body is written to a **local** temp file (`/tmp` tmpfs or a scratch volume, ≤ 60 MB) while hashing, streamed to clamd, and if clean stored with one atomic `IBlobStore.PutAsync` to its final key: no `tmp/` object and no rename, which S3 lacks ([`../performance-pass.md`](../performance-pass.md) §3.13); no 50 MB buffers in memory; the local file is deleted in `finally`. Uploads are already blobs (`uploads/…`) and are scanned by the worker reading them |
 | Limits | `StreamMaxLength 60M`, `MaxFileSize 60M`, `MaxScanSize 200M` (repo-and-deployment §5.5); a size-limit reply → `too-large` `clamav.limit` (never "clean") |
 | Timeouts | connect 5 s, scan 120 s; on timeout transient with attempt |
 | Signature freshness | `zVERSION` → `ClamAV <engine>/<db version>/<db date>`, read every 10 minutes: > 48 h old → health `degraded`, > 7 days → `unhealthy` and **no new files** (repo-and-deployment §5.5); `rag.clamav.signature_age_hours` gauge |
