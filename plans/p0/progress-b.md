@@ -51,7 +51,7 @@ Refs: [repo-and-deployment §4.3](../platform/repo-and-deployment.md), [gateway-
 Refs: [identity/design.md](../identity/design.md) §1–§3, §10, §11; [identity/plan.md §3](../identity/plan.md) (P1 department scope from hand-entered member groups)
 - [ ] `dev/keycloak/ume-rag-realm.json` incl. `rag-reviewer`
 - [ ] OIDC/BFF and claim mapping copied from the gateway admin API (`UME_RAG_OIDC_*`); audit actor `oid`
-- [ ] Postgres admin session store; `AdminSessionTests` copied (to-verify #163)
+- [x] Postgres admin session store; `AdminSessionTests` copied (to-verify #163)
 - [ ] `OidcClaimMappingTests` copied; member-group resolver tested against FakeGateway data
 - [ ] to-verify #83, #151 recorded
 - [ ] **Done:** sign-in to the empty admin UI as each test user shows the right roles and departments (incl. one from a group claim)

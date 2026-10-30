@@ -42,6 +42,26 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("DataProtectionKeys", "config");
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.AdminSession", b =>
+                {
+                    b.Property<string>("SessionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("Value")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("SessionId");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("AdminSessions", "config");
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.ApiKey", b =>
                 {
                     b.Property<Guid>("Id")

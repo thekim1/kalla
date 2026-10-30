@@ -31,6 +31,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON config."Clients", config."Keys" TO ume_r
 GRANT SELECT ON config."Clients", config."Keys" TO ume_rag_api;
 GRANT SELECT ON config."KeyLastUse" TO ume_rag_admin;
 GRANT SELECT, INSERT, UPDATE ON config."KeyLastUse" TO ume_rag_api;
+-- Admin BFF sessions: only the admin reads and writes them (data-model §2.1).
+GRANT SELECT, INSERT, UPDATE, DELETE ON config."AdminSessions" TO ume_rag_admin;
 
 -- content: the worker owns it; the admin reads it and enqueues jobs (decisions are command jobs, data-model §12.2).
 GRANT SELECT, INSERT, UPDATE, DELETE ON content."Jobs", content."WorkerInstances", content."RunItems" TO ume_rag_worker;
@@ -46,4 +48,5 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA config, content, chat, audit FROM ume_rag_
 GRANT EXECUTE ON FUNCTION content.rag_or_query(tsvector), content.rag_tsquery_or_agg(tsquery)
   TO ume_rag_api, ume_rag_admin, ume_rag_worker;
 GRANT EXECUTE ON FUNCTION content.rag_partition_maintain() TO ume_rag_worker;
+GRANT EXECUTE ON FUNCTION config.rag_retention_config_step(integer) TO ume_rag_admin;
 COMMIT;

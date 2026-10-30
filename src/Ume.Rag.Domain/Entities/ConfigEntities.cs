@@ -28,3 +28,14 @@ public sealed class ConfigOutboxEntry
 
     public bool SecurityRelevant { get; set; }
 }
+
+/// <summary>
+/// An admin BFF session (data-model §2.1 <c>AdminSessions</c>): the cookie's random id and the Data-Protection-encrypted
+/// ticket. A read ignores expired rows; sign-out deletes the row; the retention step deletes expired ones.
+/// </summary>
+public sealed class AdminSession
+{
+    public required string SessionId { get; set; }
+    public required byte[] Value { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+}
