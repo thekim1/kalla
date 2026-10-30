@@ -33,7 +33,7 @@ Branch `stage-0`. Tick a box in the same commit as the work it describes; add th
 ## 6. CI and coordination
 - [x] `.github/workflows/verify.yml` backend job (build + test), ignoring `plans/**`, `platforms/**`, root `*.md`
 - [x] Ownership check: every PR's changed paths against [`.github/stream-ownership.txt`](../../.github/stream-ownership.txt) by branch prefix (`scripts/check-ownership.py`)
-- [ ] **Done:** green on a PR; a test PR from `a/…` touching `src/Ume.Rag.Api/` fails the check
+- [x] **Done:** green on a PR; a test PR from `a/…` touching `src/Ume.Rag.Api/` fails the check (#1 green: changes, ownership, backend; #2 from `a/test-ownership`: ownership failed with `src/Ume.Rag.Api/Program.cs: owned by 'b'`, run 41069321845; closed)
 - [x] Aspire agent skills copied from the gateway (`.agents/skills/`, `.github/skills/`)
 - [x] GitHub labels `stream-a`, `stream-b`, `main` (confirm with the user first)
 
