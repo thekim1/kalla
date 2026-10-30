@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>ume-rag-api</UserSecretsId>
+    <ContainerRepository>ume-rag/api</ContainerRepository>
+    <UmeServiceContainer>true</UmeServiceContainer>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Ume.Rag.Infrastructure\Ume.Rag.Infrastructure.csproj" />
+    <ProjectReference Include="..\Ume.Rag.ServiceDefaults\Ume.Rag.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\Ume.Rag.Answering\Ume.Rag.Answering.csproj" />
+  </ItemGroup>
+</Project>

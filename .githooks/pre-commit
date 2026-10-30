@@ -1,0 +1,31 @@
+#!/bin/sh
+# Same lint gates as CI (zero warnings) for admin UI and parser changes. Enable once per clone:
+#   git config core.hooksPath .githooks
+# Each gate skips with a warning (CI still enforces) when its tool is not reachable from the git client,
+# for example Visual Studio's git environment or a clone without installed dependencies.
+root="$(git rev-parse --show-toplevel)"
+staged="$(git diff --cached --name-only)"
+
+if echo "$staged" | grep -q '^src/admin-ui/'; then
+  PATH="$PATH:/c/Program Files/nodejs:/mnt/c/Program Files/nodejs"
+  # Call node directly: the npm shell wrapper does not run under every Windows git client.
+  if ! command -v node >/dev/null 2>&1; then
+    echo "pre-commit: node not found, skipping admin UI lint (CI will run it)" >&2
+  elif [ ! -f "$root/src/admin-ui/node_modules/eslint/bin/eslint.js" ]; then
+    echo "pre-commit: no node_modules, skipping admin UI lint (run 'npm ci')" >&2
+  else
+    (cd "$root/src/admin-ui" && node node_modules/eslint/bin/eslint.js . --max-warnings 0) \
+      || { echo "pre-commit: lint failed. Try 'npm run lint:fix' in src/admin-ui." >&2; exit 1; }
+  fi
+fi
+
+if echo "$staged" | grep -q '^src/parser/'; then
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "pre-commit: uv not found, skipping parser ruff check (CI will run it)" >&2
+  elif [ ! -f "$root/src/parser/pyproject.toml" ]; then
+    echo "pre-commit: no src/parser/pyproject.toml yet, skipping parser ruff check" >&2
+  else
+    (cd "$root/src/parser" && uv run --frozen ruff check .) \
+      || { echo "pre-commit: ruff failed. Try 'uv run ruff check --fix .' in src/parser." >&2; exit 1; }
+  fi
+fi

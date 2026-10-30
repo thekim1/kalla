@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Stage 0: no tests yet, and Microsoft.Testing.Platform exits with 8 when zero tests ran. Remove with the first test. -->
+    <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --ignore-exit-code 8</TestingPlatformCommandLineArguments>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ume.Rag.Retrieval\Ume.Rag.Retrieval.csproj" />
+  </ItemGroup>
+</Project>

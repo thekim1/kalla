@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Ume.Rag.Domain\Ume.Rag.Domain.csproj" />
+  </ItemGroup>
+</Project>

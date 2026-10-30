@@ -1,0 +1,74 @@
+name: Verify
+# A pull request is verified on the merge with main (pull_request); a push only verifies main, so a branch with a pull
+# request is not built twice. A branch without one can be verified from the Actions tab (workflow_dispatch).
+# Stage 0: ownership and backend. Stream A adds the ui, deploy-checks and images jobs (P0 checklist #3,
+# plans/platform/repo-and-deployment.md §8.2).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+jobs:
+  ownership:
+    # Every pull request, design-only ones included: a stream branch may change only its own and the shared paths.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Changed paths belong to the branch's stream
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA" | python3 -I scripts/check-ownership.py "$HEAD_REF"
+
+  changes:
+    # Design documents (plans/**, platforms/**, root *.md) do not build anything (repo-and-deployment §1).
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        name: Anything besides design documents changed
+        env:
+          BEFORE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then range="$BEFORE...HEAD"; else range="$BEFORE..HEAD"; fi
+          if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
+            || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          code="$(git diff --name-only "$range" | grep -vE '^(plans/|platforms/)|^[^/]+\.md$' || true)"
+          echo "code=$([ -n "$code" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  backend:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.401
+      - name: Build and test backend
+        env:
+          # Testcontainers pulls Postgres and its Ryuk image from Docker Hub, whose anonymous pull limit is shared by every
+          # job on the runner's address; Google's mirror of Docker Hub is not subject to it (as the gateway).
+          TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
+        run: |
+          dotnet build UmeRag.slnx -c Release --nologo
+          # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here.
+          dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
+          dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > /tmp/ume-package-audit.json
+          python -c "import json; d=json.load(open('/tmp/ume-package-audit.json')); p=[p for x in d.get('projects',[]) for f in x.get('frameworks',[]) for k in ('topLevelPackages','transitivePackages') for p in f.get(k,[]) if p.get('vulnerabilities')]; assert not p, 'Vulnerable .NET dependencies detected'"

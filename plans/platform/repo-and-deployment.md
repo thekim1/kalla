@@ -141,7 +141,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | | `Aspire.Hosting.Keycloak` | 13.6.1-preview.1.26506.6 | gateway |
 | | `CommunityToolkit.Aspire.Hosting.Ollama` | 13.6.0 | gateway (optional local BGE-M3, §4.4) |
 | | `MessagePack` | 2.5.307 | gateway (GHSA pin) |
-| | `Aspire.Hosting.Python` | 13.6.1 | *to verify* (only for `Parser:Mode=local`, §4.1) |
+| | `Aspire.Hosting.Python` | 13.6.1 | checked in Stage 0 (2026-10-07 release; only for `Parser:Mode=local`, §4.1) |
 | Runtime (gateway) | `Microsoft.Extensions.Http.Resilience`, `Microsoft.Extensions.ServiceDiscovery` | 10.11.0 | gateway |
 | | `OpenTelemetry.Exporter.OpenTelemetryProtocol`, `OpenTelemetry.Extensions.Hosting` | 1.19.1 | gateway |
 | | `OpenTelemetry.Instrumentation.AspNetCore`, `.Http`, `.Runtime` | 1.19.0 | gateway |
@@ -149,14 +149,14 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | | `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.3 | gateway |
 | | `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.StackExchange.Redis` | 13.6.1 | gateway |
 | | `Scalar.AspNetCore` | 2.18.0 | gateway |
-| Vectors | `Pgvector` / `Pgvector.EntityFrameworkCore` | 0.3.2 / 0.3.0 | NuGet-checked; EF 10 compatibility *to verify* in P0 |
+| Vectors | `Pgvector` / `Pgvector.EntityFrameworkCore` | 0.3.2 / 0.3.0 | NuGet-checked; dependency ranges admit Npgsql EF 10.0.3 (Stage 0); EF 10 compatibility test in P0 #6 |
 | | `CommunityToolkit.VectorData.PgVector`, `Microsoft.Extensions.VectorData.Abstractions` | 1.0.2 / 10.11.0 | **not added**: retrieval is hand-written SQL (knowledge design §6) |
-| AI | `Microsoft.Extensions.AI`, `Microsoft.Extensions.AI.OpenAI` | 10.11.0 | NuGet-checked (`.OpenAI` *to verify*: listed together); **not used by the chat role**, whose gateway calls are a raw `HttpClient` + copied `SseReader` (response headers must be read before the body, chat design §2.1) |
+| AI | `Microsoft.Extensions.AI`, `Microsoft.Extensions.AI.OpenAI` | 10.11.0 | NuGet-checked (`.OpenAI` 10.11.0 released 2026-10-14 with the abstractions, Stage 0); **not used by the chat role**, whose gateway calls are a raw `HttpClient` + copied `SseReader` (response headers must be read before the body, chat design §2.1) |
 | | `Microsoft.ML.Tokenizers` | 2.0.1 | NuGet-checked (chunk sizing) |
 | Ingestion | `AngleSharp` 1.8.6, `SmartReader` 0.11.1 | as listed | NuGet-checked (the worker parses HTML, text, Markdown and CSV only; every PDF goes to the parser) |
 | | `Microsoft.Graph` | 6.9.0 | NuGet-checked; P2, worker only (SharePoint). The P2 Graph member-group lookup needs no SDK: the admin copies the gateway's plain `GraphTokenClient` + `HttpClient` (identity design §2.4, gateway design §4.4) |
 | | `Microsoft.Playwright` | same as renderer image (§5.4) | P2, only with the renderer; *to verify*; exact match required |
-| | `Cronos` | *to verify* | schedules (worker) |
+| | `Cronos` | 0.13.0 (2026-04-29; syntax and DST tests with the scheduler) | schedules (worker) |
 | Pipelines | JSON Schema 2020-12 validator (candidate `JsonSchema.Net`) | *to verify* (engine design §23: licence, maintenance, 2020-12 support) | P1, `Ume.Rag.Pipelines` (template parameter schemas, admin and worker; generic schema-driven admin forms) |
 | Text | `sv_SE` Hunspell word list (LibreOffice dictionaries, pinned commit and SHA-256) | – | embedded resource of `SwedishDecompounder` (data-model §3.1); licence in postponed P2 |
 | MCP | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` | 2.3.0 | NuGet-checked (knowledge design step 7: attribute and transport names); P2 (MCP endpoint group, tool hub, template); recheck at P2 start. No further JSON-Schema, YAML or MSAL package in P2; MSAL in P3 for OBO |

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Ume.Rag.TestKit\Ume.Rag.TestKit.csproj" />
+    <ProjectReference Include="..\..\src\Ume.Rag.Api\Ume.Rag.Api.csproj" />
+  </ItemGroup>
+</Project>
