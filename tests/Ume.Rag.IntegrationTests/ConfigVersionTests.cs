@@ -12,7 +12,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 using Ume.Rag.Infrastructure;
+using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Config;
+using Ume.Rag.Infrastructure.Persistence;
 using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.ServiceDefaults;
 using Ume.Rag.TestKit;
@@ -201,6 +203,54 @@ public sealed partial class ConfigVersionTests(RagDatabaseFixture database) : IA
         }
     }
 
+    [Fact]
+    public async Task A_retried_config_write_saves_its_changes_once()
+    {
+        // Review of #13: the retrying strategy reuses the context; a failed attempt must not leave entities tracked.
+        var action = "retry-test-" + Guid.NewGuid().ToString("N");
+        var interceptor = new FailFirstCommit();
+        await using var db = new RagDbContext(new DbContextOptionsBuilder<RagDbContext>()
+            .UseNpgsql(database.Connection(Migrator), o =>
+            {
+                RagDbContext.ConfigureNpgsql(o);
+                o.EnableRetryOnFailure(3, TimeSpan.FromMilliseconds(10), null);
+            })
+            .AddInterceptors(interceptor).Options);
+        var attempts = 0;
+
+        await db.ExecuteConfigWriteAsync(async (_, ct) =>
+        {
+            attempts++;
+            db.AuditLog.Add(new AuditLogEntry { Timestamp = DateTimeOffset.UtcNow, Actor = "system:test", Action = action, EntityType = "Test" });
+            await db.SaveChangesAsync(ct);
+            return 0;
+        }, Ct);
+
+        attempts.ShouldBe(2);
+        interceptor.Failed.ShouldBeTrue();
+        (await Sql.ScalarAsync<long>(database.Connection(null), $"""SELECT count(*) FROM audit."AuditLog" WHERE "Action" = '{action}'""")).ShouldBe(1);
+        db.ChangeTracker.Entries<AuditLogEntry>().Count().ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_failing_handler_is_logged_keeps_the_version_unconfirmed_and_is_retried()
+    {
+        var logs = new CapturingLoggerProvider();
+        var cache = new ProbeKeyCache(database.Connection(Migrator));
+        await using var service = await StartServiceAsync(cache, logs: logs);
+        var before = service.State.Version;
+        cache.FailNext = true;
+
+        await Sql.ExecuteAsync(database.Connection(Migrator), $"""INSERT INTO keyprobe."Keys" VALUES ('{Guid.NewGuid()}', NULL)""");
+        await WaitUntilAsync(() => logs.Entries.Any(e => e.Level == LogLevel.Error && e.Exception is InvalidOperationException));
+        service.State.Version.ShouldBe(before);
+        logs.Entries.First(e => e.Level == LogLevel.Error).Message.ShouldContain(nameof(ProbeKeyCache));
+
+        // The next poll offers the change again.
+        await WaitUntilAsync(() => service.State.Version > before, TimeSpan.FromSeconds(5));
+        logs.Text.ShouldNotContain("lost its database connection");
+    }
+
     private async Task<TestService> StartServiceAsync(ProbeKeyCache cache, FakeTimeProvider? time = null, CapturingLoggerProvider? logs = null, int maxUnconfirmedSeconds = 90)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development, ApplicationName = "config-test" });
@@ -273,6 +323,25 @@ public sealed partial class ConfigVersionTests(RagDatabaseFixture database) : IA
         }
     }
 
+    /// <summary>Throws a transient Npgsql error on the first commit, before it reaches the server.</summary>
+    private sealed class FailFirstCommit : Microsoft.EntityFrameworkCore.Diagnostics.DbTransactionInterceptor
+    {
+        public bool Failed { get; private set; }
+
+        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult> TransactionCommittingAsync(
+            System.Data.Common.DbTransaction transaction, Microsoft.EntityFrameworkCore.Diagnostics.TransactionEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult result, CancellationToken cancellationToken = default)
+        {
+            if (!Failed)
+            {
+                Failed = true;
+                throw new NpgsqlException("injected transient failure", new TimeoutException());
+            }
+
+            return ValueTask.FromResult(result);
+        }
+    }
+
     /// <summary>A key cache as P0 #10 builds it: reloads revocations whenever an outbox row of type Keys arrives.</summary>
     private sealed class ProbeKeyCache(string connectionString) : IConfigChangeHandler
     {
@@ -294,8 +363,17 @@ public sealed partial class ConfigVersionTests(RagDatabaseFixture database) : IA
 
         public bool IsRevoked(Guid keyId) => _revoked.GetValueOrDefault(keyId);
 
+        /// <summary>Makes the next reload throw once, like a key cache bug.</summary>
+        public bool FailNext { get; set; }
+
         public async Task ApplyAsync(ConfigChange change, CancellationToken cancellationToken)
         {
+            if (FailNext)
+            {
+                FailNext = false;
+                throw new InvalidOperationException("injected handler failure");
+            }
+
             if (change.Affects("Keys"))
             {
                 var revoked = new Dictionary<Guid, bool>();

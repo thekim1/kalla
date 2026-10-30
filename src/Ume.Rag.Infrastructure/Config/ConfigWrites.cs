@@ -15,6 +15,14 @@ public static class ConfigWrites
     /// strategy, and commits. <paramref name="work"/> gets the version before the change; it runs the cross-rules, saves
     /// its changes and returns a result. Throwing rolls everything back.
     /// </summary>
+    /// <remarks>
+    /// A transient failure retries the whole attempt on the same context (Aspire's Npgsql integration enables retries).
+    /// Each attempt starts with an empty change tracker, so <paramref name="work"/> must load and build every change
+    /// inside the delegate: entities loaded or added before the call are detached and would not be saved. A failure while
+    /// committing whose outcome is unknown (the connection drops during <c>COMMIT</c>) can still apply a change twice; a
+    /// caller that cannot tolerate that uses EF's <c>ExecuteInTransactionAsync</c> overload with a <c>verifySucceeded</c>
+    /// check instead.
+    /// </remarks>
     public static Task<T> ExecuteConfigWriteAsync<T>(this RagDbContext db, Func<long, CancellationToken, Task<T>> work, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
@@ -22,6 +30,8 @@ public static class ConfigWrites
         var strategy = db.Database.CreateExecutionStrategy();
         return strategy.ExecuteAsync(async ct =>
         {
+            // A failed attempt leaves its entities tracked (added, or unchanged after a save that was rolled back).
+            db.ChangeTracker.Clear();
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
             var version = await db.Database
                 .SqlQueryRaw<long>("""SELECT "Version" AS "Value" FROM config."ConfigVersion" WHERE "Id" = 1 FOR UPDATE""")

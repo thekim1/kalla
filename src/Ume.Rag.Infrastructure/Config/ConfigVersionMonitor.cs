@@ -48,9 +48,10 @@ public sealed partial class ConfigVersionMonitor(
                 while (true)
                 {
                     Interlocked.Exchange(ref _notified, 0);
-                    await RefreshAsync(connection, stoppingToken);
-                    // A notification that arrived while refreshing was consumed by the refresh's own commands.
-                    if (Volatile.Read(ref _notified) == 0)
+                    var applied = await RefreshAsync(connection, stoppingToken);
+                    // A notification that arrived while refreshing was consumed by the refresh's own commands; after a
+                    // handler failure the next poll offers the change again.
+                    if (!applied || Volatile.Read(ref _notified) == 0)
                     {
                         await connection.WaitAsync(PollInterval, stoppingToken);
                     }
@@ -63,7 +64,7 @@ public sealed partial class ConfigVersionMonitor(
             catch (Exception ex)
             {
                 // The grace window keeps decisions working for Config:MaxUnconfirmedSeconds (identity design §4.5).
-                LogConnectionFailed(logger, ex.GetType().Name, state.Version);
+                LogConnectionFailed(logger, ex, state.Version);
                 await Task.Delay(ReconnectDelay, time, stoppingToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             }
         }
@@ -81,14 +82,18 @@ public sealed partial class ConfigVersionMonitor(
         return new NpgsqlConnectionStringBuilder(value) { Pooling = false }.ConnectionString;
     }
 
-    private async Task RefreshAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    /// <summary>
+    /// Confirms the database's version, applying the change first if it moved. False when a handler failed: the version
+    /// stays unconfirmed (fail-closed; 503 after the grace window) and the change is offered again on the next poll.
+    /// </summary>
+    private async Task<bool> RefreshAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
     {
         var current = await ScalarAsync<long>(connection, """SELECT "Version" FROM config."ConfigVersion" WHERE "Id" = 1""", cancellationToken);
         var cached = state.Version;
         if (cached == current)
         {
             state.Confirm(current);
-            return;
+            return true;
         }
 
         var change = await ChangeAsync(connection, cached, current, cancellationToken);
@@ -97,12 +102,21 @@ public sealed partial class ConfigVersionMonitor(
         {
             foreach (var handler in scope.ServiceProvider.GetServices<IConfigChangeHandler>())
             {
-                await handler.ApplyAsync(change, cancellationToken);
+                try
+                {
+                    await handler.ApplyAsync(change, cancellationToken);
+                }
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+                {
+                    LogHandlerFailed(logger, ex, handler.GetType().Name, cached, current);
+                    return false;
+                }
             }
         }
 
         state.Confirm(current);
         LogApplied(logger, cached, current, change.FullReload, string.Join(',', change.EntityTypes), Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        return true;
     }
 
     private static async Task<ConfigChange> ChangeAsync(NpgsqlConnection connection, long cached, long current, CancellationToken cancellationToken)
@@ -142,6 +156,9 @@ public sealed partial class ConfigVersionMonitor(
     [LoggerMessage(LogLevel.Information, "Config version {From} -> {To} applied (full reload {FullReload}, types {EntityTypes}) in {ElapsedMs:F1} ms")]
     private static partial void LogApplied(ILogger logger, long from, long to, bool fullReload, string entityTypes, double elapsedMs);
 
-    [LoggerMessage(LogLevel.Warning, "Config monitor lost its connection ({ExceptionType}); serving version {Version} within the grace window")]
-    private static partial void LogConnectionFailed(ILogger logger, string exceptionType, long version);
+    [LoggerMessage(LogLevel.Warning, "Config monitor lost its database connection; serving version {Version} within the grace window and reconnecting")]
+    private static partial void LogConnectionFailed(ILogger logger, Exception exception, long version);
+
+    [LoggerMessage(LogLevel.Error, "Config change handler {Handler} failed applying version {From} -> {To}; version {From} stays unconfirmed and the change is retried on the next poll")]
+    private static partial void LogHandlerFailed(ILogger logger, Exception exception, string handler, long from, long to);
 }

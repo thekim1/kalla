@@ -15,6 +15,10 @@ public sealed record ConfigChange(long FromVersion, long ToVersion, bool FullRel
 /// <see cref="ConfigVersionMonitor"/> before the new version is confirmed, one change at a time; an exception leaves the
 /// old version in place and the change is offered again on the next notification or poll.
 /// </summary>
+/// <remarks>
+/// A handler may see the same change more than once (after its own or another handler's failure, or a reconnect in the
+/// middle of a refresh), so it must be an idempotent reload of what the change affects, never an incremental update.
+/// </remarks>
 public interface IConfigChangeHandler
 {
     Task ApplyAsync(ConfigChange change, CancellationToken cancellationToken);
