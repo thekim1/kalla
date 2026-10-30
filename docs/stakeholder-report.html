@@ -214,8 +214,8 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
     <h1>One place where the municipality's own knowledge answers questions, in Swedish, with sources</h1>
     <p class="lead col">Ume.Rag is a knowledge platform for Umeå kommun. Departments point it at web pages, websites and
       documents. It reads and indexes them, and builds assistants that answer staff questions with links to the exact
-      sources. It runs on the municipality's own servers, and every AI call goes through the LLM gateway the
-      municipality already operates.</p>
+      sources. It runs on the municipality's own servers, and every AI call goes through the municipality's LLM gateway,
+      which goes into production together with the pilot.</p>
     <div class="facts" role="list">
       <div class="fact" role="listitem"><b>One server</b><span>The pilot runs on a single 8-core machine with 16–24 GB of memory.</span></div>
       <div class="fact" role="listitem"><b>Built for Swedish</b><span>Search splits compound words, so <i>bygglovsansökan</i> also finds <i>bygglov</i>.</span></div>
@@ -235,9 +235,9 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
         through a standard API.</p>
       <p>A department can run as many assistants as it needs, for example one for building permits and one for its
         own staff handbook. Each one links the knowledge banks it should answer from, and a knowledge bank used by
-        several assistants is fetched and indexed only once. Changes to an assistant are saved as a draft, tested with
-        the assistant's own test questions and then published, and every earlier version can be restored with one
-        click. From phase 2, people and teams can also create their own small knowledge bases by uploading files
+        several assistants is fetched and indexed only once. Changes to an assistant are saved as a draft and then
+        published, and every earlier version can be restored with one click; testing each assistant with its own
+        test questions follows in phase 2. From phase 2, people and teams can also create their own small knowledge bases by uploading files
         ("Mina kunskapsbaser"), then ask questions, get summaries and compare documents in the chat.</p>
     </div>
     <div class="chat" aria-label="Example conversation">
@@ -274,7 +274,7 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
         <h3>The platform</h3>
         <div class="box core"><b>Ingestion worker</b><span>Fetches, checks for changes and viruses, cleans, splits and indexes, in the background</span></div>
         <div class="box core"><b>Document reader</b><span>Turns PDFs, Office files and scans into text, with tables and headings kept</span></div>
-        <div class="box core"><b>Knowledge store</b><span>One PostgreSQL database: documents, search index, settings, encrypted chat history</span></div>
+        <div class="box core"><b>Knowledge store</b><span>One PostgreSQL database: documents, search index, settings, chat metadata and ratings</span></div>
         <div class="box core"><b>Assistants API</b><span>Searches, builds the answer, streams it with sources</span></div>
         <div class="box"><b>Admin</b><span>Swedish web pages where departments set up sources and assistants and test them</span></div>
       </div>
@@ -286,14 +286,14 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
         <div class="box"><b>Website widget</b><span>Public assistants, phase 2</span></div>
         <div class="box"><b>AI tools (MCP)</b><span>Phase 2</span></div>
       </div>
-      <div class="gateway"><b>LLM gateway</b><span>Every AI call, for answers and for indexing, goes through the municipality's existing gateway. It handles budgets, cost per team and which providers each call may use. Embeddings (the "meaning" index) are always computed on the municipality's own servers.</span></div>
+      <div class="gateway"><b>LLM gateway</b><span>Every AI call, for answers and for indexing, goes through the municipality's gateway. It handles budgets, cost per team and which providers each call may use. There is no AI hardware of the municipality's own yet, so until there is, the AI models (including the embeddings, the "meaning" index) run with EU-hosted providers under a processor agreement.</span></div>
     </div>
 
     <h3>What happens when a document is added</h3>
     <ol class="steps">
       <li><b>Fetch</b><span>Downloads the page or file, follows robots.txt and keeps a polite pace (at most 10 requests per second to municipal sites, at night).</span></li>
       <li><b>Check</b><span>Skips anything unchanged since last time. Files are scanned for viruses before anything opens them.</span></li>
-      <li><b>Read</b><span>Pulls out the real text. Web pages use the site's learned profile; PDFs and Office files go to the document reader, with OCR for scans.</span></li>
+      <li><b>Read</b><span>Pulls out the real text. Web pages use the site's profile; PDFs and Office files go to the document reader, with OCR for scans.</span></li>
       <li><b>Split</b><span>Cuts the text into passages of about 400 words' worth of tokens, each labelled with its page title and heading path.</span></li>
       <li><b>Protect</b><span>Looks for personal identity numbers and other personal data. Documents with personal data are kept out of public assistants.</span></li>
       <li><b>Index</b><span>Stores each passage twice: as Swedish keywords and as a "meaning" vector, so both exact terms and paraphrases are found.</span></li>
@@ -307,7 +307,7 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
       <li><b>Search</b><span>Searches by Swedish keywords and by meaning at the same time, then merges the two result lists.</span></li>
       <li><b>Enough sources?</b><span>If nothing relevant is found, it gives a fixed "I can't find an answer" with contact details instead of guessing.</span></li>
       <li><b>Answer</b><span>The language model writes the answer from the found passages only, citing them. The answer is streamed as it is written.</span></li>
-      <li><b>Remember safely</b><span>The conversation is stored encrypted and deleted after 90 days (pending the archive question below).</span></li>
+      <li><b>Remember little</b><span>In the pilot the platform stores no chat text, only metadata and ratings, deleted after 90 days. The conversation itself stays in Open WebUI.</span></li>
     </ol>
   </section>
 
@@ -340,16 +340,18 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
         <div><dt class="k">Main content</dt><dd>The page's <code>&lt;main&gt;</code> area</dd></div>
         <div><dt class="k">Breadcrumb</dt><dd><span class="crumb">Kommun och politik › Kommunens organisation › …</span> added to every passage so the assistant knows where it belongs</dd></div>
         <div><dt class="k">Page date</dt><dd>"Sidan uppdaterades 2026-01-15", matching the sitemap's date</dd></div>
-        <div><dt class="k">Change signal</dt><dd>The server sends no change headers, so the sitemap dates decide what to fetch again. A daily run fetches only changed pages.</dd></div>
+        <div><dt class="k">Change signal</dt><dd>The server sends no change headers, so the sitemap dates decide what to fetch again, once a check of 500 pages shows the dates can be trusted. Until then each run reads the whole site.</dd></div>
         <div><dt class="k">Page identity</dt><dd>The Sitevision page id (<code>4.88db09b1724ee319ca45d</code>) survives when a page is moved in the menu tree. It is used once confirmed by comparing content.</dd></div>
         <div><dt class="k">JavaScript</dt><dd>Not needed: the text is in the page as delivered, so no browser engine is required</dd></div>
       </dl>
     </div>
     <div class="col stack">
-      <p>The platform learns this profile on its own from a sample of 30–50 pages. It applies the profile to a new source
-        automatically and shows a before-and-after preview. If the site is redesigned and extraction gets worse, it
-        learns again. A new profile replaces the old one only if no sample page loses real text; otherwise an
-        administrator is asked first. Every profile version can be rolled back with one click.</p>
+      <p>In the pilot the umea.se profile is a Sitevision preset checked by hand and versioned like any setting. From
+        phase 2 the platform learns profiles on its own from a sample of 30–50 pages, shows a before-and-after preview,
+        and learns again if a site is redesigned. Every profile version can be rolled back with one click.</p>
+      <p>Outdated content is handled too: older PDFs count slightly less when answers are ranked, archive sections such
+        as old minutes can be ranked lower, and a page that leaves the sitemap is checked and removed once the site
+        reports it gone.</p>
     </div>
   </section>
 
@@ -370,10 +372,10 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
     <div class="two">
       <div class="panel"><h3>Protecting what people write</h3>
         <ul>
-          <li>Chat history is encrypted inside the database. A copied database or backup alone reveals nothing.</li>
-          <li>Kept 90 days by default, then deleted. Destroying the keys so that even backups become unreadable waits for the archive decision (A1 below).</li>
+          <li>In the pilot the platform stores no chat text, only metadata and ratings, kept 90 days. Encrypted chat history, and reviewing it, wait for the archive decision (A1 below).</li>
+          <li>Open WebUI keeps its own copy of each chat. A data protection impact assessment (G1 below) covers that copy and the EU AI providers, and is finished before go-live.</li>
+          <li>Open WebUI shows a fixed notice: do not enter confidential information or sensitive personal data.</li>
           <li>No chat or document text ever goes into logs, metrics or caches.</li>
-          <li>Reading another person's conversation needs a reviewer role, a stated reason and an audit entry. For sensitive data a second person must approve.</li>
         </ul></div>
       <div class="panel"><h3>Failures are visible, never silent</h3>
         <ul>
@@ -405,11 +407,11 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
           users. Open WebUI freezes during document ingestion.</p></div>
       <div class="strength"><h3>Small enough to run ourselves</h3>
         <p>The pilot is six small containers on one server, on the same technology and operations model as the LLM
-          gateway, which the same team already runs. It grows to 3–5 servers for about ten times the pilot's load.</p>
+          gateway, which the same team builds and runs. It grows to 3–5 servers for about ten times the pilot's load.</p>
         <p class="vs">Dify ships 16 containers and about 1,400 settings. Onyx needs 13 containers and at least 10 GB of
           memory.</p></div>
-      <div class="strength"><h3>Learns each website instead of indexing menus</h3>
-        <p>Learned site profiles find the real content, breadcrumb and date of each site. Pages are fetched again only
+      <div class="strength"><h3>Reads each website instead of indexing menus</h3>
+        <p>Site profiles find the real content, breadcrumb and date of each site. Pages are fetched again only
           when the sitemap says they changed, and nothing is re-indexed unless its text changed.</p>
         <p class="vs">Eneo indexes whole pages including menus and re-embeds every page on every crawl.</p></div>
       <div class="strength"><h3>Safe with deletions and failures</h3>
@@ -468,7 +470,7 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
     <div class="two">
       <div class="panel"><h3>Where others are ahead today</h3>
         <ul>
-          <li><b>They exist.</b> Ume.Rag is a finished design with no code yet. The others can be installed today.</li>
+          <li><b>They exist.</b> Ume.Rag's foundation is built, but it answers its first questions only in phase 1. The others can be installed today.</li>
           <li><b>Breadth.</b> Onyx and Dify have many more connectors and a large plugin ecosystem.</li>
           <li><b>Visual building.</b> Dify has a drag-and-drop workflow canvas. Ume.Rag deliberately uses fixed pipelines with settings forms.</li>
           <li><b>A polished chat interface.</b> Open WebUI's is much better than anything we would build, which is why the pilot uses it as the front end.</li>
@@ -487,12 +489,12 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
     <p class="eyebrow">Roadmap</p>
     <h2 id="roadmap-h">Four phases, each driven by what the previous one measured</h2>
     <div class="phases">
-      <div class="phase now"><span class="code">P0 · next</span><h3>Foundation</h3>
-        <p>A skeleton that builds, deploys, can be monitored and can be restored from backup. Test sign-in, the database with Swedish search, and agreement on one gateway release.</p></div>
-      <div class="phase"><span class="code">P1</span><h3>Pilot</h3>
-        <p>One department uses an assistant in Open WebUI. Web pages, websites (umea.se) and file uploads, learned site profiles, quality reports, assistant versions with draft, test and publish, feedback and limited conversation review.</p></div>
+      <div class="phase now"><span class="code">P0 · now</span><h3>Foundation</h3>
+        <p>Built and in its final integration step: a skeleton that builds, deploys, can be monitored and can be restored from backup. Test sign-in, the database with Swedish search, the admin skeleton, and agreement on the first of two gateway releases.</p></div>
+      <div class="phase"><span class="code">P1 · after v0.1.0</span><h3>Pilot</h3>
+        <p>First a walking skeleton: a member of the pilot department asks a question in Open WebUI and gets a cited answer from umea.se content, shown on a local machine. Test questions are written with the department. Then pilot hardening: feedback, assistant drafts with publish and restore, freshness rules and the data protection assessment. The pilot goes live only when the department's reviewers, grading answers by hand, find at least 80 % correct. Staff sign in through Keycloak, shared with the gateway: pilot accounts first, linked to the municipality's AD later.</p></div>
       <div class="phase"><span class="code">P2</span><h3>Broaden</h3>
-        <p>More departments, self-service knowledge bases from uploaded files for people and teams, SharePoint, a website widget for citizens, read-only AI tools and MCP, re-ranking for better answers, older file formats, 3 servers with a database standby.</p></div>
+        <p>More departments with the second gateway release, sign-in through Entra ID, learned site profiles and assistant test questions, stored chat history once A1 allows it, self-service knowledge bases from uploaded files for people and teams, SharePoint, a website widget for citizens, read-only AI tools and MCP, re-ranking for better answers, older file formats, 3 servers with a database standby.</p></div>
       <div class="phase"><span class="code">P3</span><h3>Scale and refine</h3>
         <p>Driven by measurements: a Swedish benchmark, a dedicated search engine if needed, a Teams client, tools that act on the user's behalf, write actions with confirmation, and a visual pipeline builder if editors need flows the settings forms cannot express.</p></div>
     </div>
@@ -500,20 +502,23 @@ footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--l
 
   <section id="open" aria-labelledby="open-h">
     <p class="eyebrow">Waiting on people</p>
-    <h2 id="open-h">Decisions needed before the pilot</h2>
+    <h2 id="open-h">Decisions and checks waiting on people</h2>
     <div class="questions">
-      <div class="question"><span class="id">A1</span><span><b>Archive law.</b> Are chat logs public records (allmänna handlingar), and does deleting them after 90 days need a gallringsbeslut? This blocks the pilot. Owner not yet named.</span><span class="when">Registrar / archivist</span></div>
-      <div class="question"><span class="id">W1</span><span><b>The existing chat on umea.se.</b> The website already allows an AI chat service (chat.umea.se). What is it, and how does it overlap with this platform?</span><span class="when">Web team</span></div>
-      <div class="question"><span class="id">W2</span><span><b>Copies in Open WebUI.</b> Open WebUI keeps its own copy of chats and cannot easily delete other users' chats. Decide how that copy is handled, together with A1.</span><span class="when">Platform team + archivist</span></div>
+      <div class="question"><span class="id">A1</span><span><b>Archive law.</b> Are chat logs public records (allmänna handlingar), and does deleting them after 90 days need a gallringsbeslut? No longer blocks the pilot, which stores no chat text; it decides when chat history may be stored. Owner to be named before P0 ends.</span><span class="when">Registrar / archivist</span></div>
+      <div class="question"><span class="id">G1</span><span><b>Data protection impact assessment</b> of the pilot. Covers Open WebUI's own chat copy and lists the processor agreement with the EU AI providers. Finished before go-live.</span><span class="when">Project + data protection officer</span></div>
+      <div class="question"><span class="id">M2</span><span><b>No AI hardware of our own yet.</b> Everything runs EU-hosted until there is. Accepted risk: if the assessment (G1) refuses EU processing, the pilot waits for hardware or another provider.</span><span class="when">Accepted risk</span></div>
+      <div class="question"><span class="id">W1</span><span><b>The existing chat on umea.se.</b> Answered: chat.umea.se is built by Team Turkos, so it is not an overlap risk. The product owner decides with them how it relates to the pilot assistant.</span><span class="when">Product owner</span></div>
+      <div class="question"><span class="id">W2</span><span><b>Copies in Open WebUI.</b> Open WebUI keeps its own copy of chats and cannot easily delete other users' chats. Decided within the assessment (G1), before go-live.</span><span class="when">Platform team + G1 and A1 owners</span></div>
       <div class="question"><span class="id">N1</span><span><b>Product name.</b> "Ume.Rag" is a working name.</span><span class="when">Product owner</span></div>
-      <div class="question"><span class="id">U1</span><span><b>Crawler contact page.</b> The page the crawler links to, and a check with the web editors before the first crawl of umea.se.</span><span class="when">Web editors</span></div>
-      <div class="question"><span class="id">P2</span><span><b>Licences</b> of the AI models, OCR data and Swedish dictionaries the platform ships with.</span><span class="when">Platform team</span></div>
+      <div class="question"><span class="id">U1</span><span><b>Crawler contact page.</b> Prepared: umea.se's robots.txt allows the crawler and the page is drafted. Open: its address, owner and contact, before the first crawl of umea.se.</span><span class="when">Web editors</span></div>
+      <div class="question"><span class="id">P2</span><span><b>Licences</b> of the AI models, OCR data and Swedish dictionaries the platform ships with. Reviewed: no blockers.</span><span class="when">Platform team</span></div>
     </div>
+    <p class="note col">Every item that blocks the next phase gets a named person and a date before that phase starts. Names and dates for A1, N1, U1 and the pilot department's test-question owner are still needed.</p>
   </section>
 
   <footer>
-    <span>Ume.Rag design, state after the simplification pass of 2026-10-30. The design is complete; implementation (phase P0) is next.</span>
-    <span>Detailed documents: the <code>plans/</code> folder of the design repository, starting with <code>plans/README.md</code> and <code>plans/simplification-pass.md</code>.</span>
+    <span>Ume.Rag design, state after the weakness review and the pilot decisions of 2026-10-30. The foundation (P0) is built and in its integration step; the pilot (P1) starts after release v0.1.0.</span>
+    <span>Detailed documents: the <code>plans/</code> folder of the repository, starting with <code>plans/README.md</code>, <code>plans/weakness-review.md</code> and <code>plans/progress.md</code>.</span>
   </footer>
 </div>
 </body>

@@ -73,6 +73,12 @@ Evaluated per PDF page (and TIFF frame) on the inspect signals (parser §6.2), f
 | 5 | clean as in 4, `path_objects < 40` | `text-layer` (parser fast path, pypdfium2) | clean text layer |
 | 6 | otherwise (few characters with images, or garble 0.2–0.4) | `docling-ocr` (OCR `auto`: bitmaps only) | scanned or mixed |
 
+As built in P0 (parser §3; P0 #13, PR #16; settled at the integration sync point): the parser checks rule 5 again
+before its fast path, and if any page of a `text-layer` request fails it, converts the **whole request** with Docling
+and OCR and adds the warning `text_layer_rejected`; so the worker groups only rule-5 pages into `text-layer` requests.
+Layout headings on PDFs always need the re-levelling of rule 6 (§5): Heron gives every heading, the title included,
+level 1. `/v1/inspect` answers `501 not_implemented` in P0; the rules above run from P1.
+
 After conversion, per page (parser §6.4 signals):
 
 - **Re-render** once: `chars < 20` and `image_coverage ≥ 0.5` → `docling-ocr-force@3` (`image_scale` 3.0), the

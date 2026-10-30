@@ -5,7 +5,18 @@ RAG, crawling and chat platform for Umeå kommun: small .NET 10 services on top 
 orchestrated with Aspire 13.6. The design lives beside the code: start at [`AGENTS.md`](AGENTS.md) and
 [`HANDOVER.md`](HANDOVER.md).
 
-P0 skeleton: every service answers `/health/live`, `/health/ready` and `/version` and does nothing else yet.
+**Status: P0 (foundation), in integration.** Built so far:
+- the Postgres image (stock pgvector + pgBackRest) and the schema with its database roles;
+- the Docling parser sidecar (PDF) with its v1 contract;
+- the ClamAV image;
+- the worker's job queue, dispatcher and reaper, and the write-once blob store;
+- keys and clients in gateway style, the FakeGateway with its residency-ceiling handler, and the config-version library;
+- the admin BFF with Keycloak sign-in, its write path and the admin UI skeleton (Swedish);
+- production Compose with host units, backups, point-in-time restore and key escrow;
+- Entra as Bicep (for P2);
+- the on-prem capacity scripts.
+
+Chat, retrieval and ingestion pipelines come in P1. Progress: [`plans/progress.md`](plans/progress.md).
 
 ## Requirements
 
@@ -35,8 +46,8 @@ aspire run      # or: dotnet run --project src/Ume.Rag.AppHost
 ```
 
 The Aspire dashboard opens at `https://localhost:17470`. The AppHost starts postgres (stock pgvector image), keycloak,
-the fake gateway, the parser and ClamAV placeholders, the migration service, api, worker and adminapi. The admin UI
-(`https://localhost:5174`) joins once `src/admin-ui` exists. The resource graph and its switches (`Parser:Mode`,
+the fake gateway, the parser and ClamAV (built from their Dockerfiles), the migration service, api, worker, adminapi
+and the admin UI (`https://localhost:5174`). The resource graph and its switches (`Parser:Mode`,
 `ClamAv:Enabled`, `FakeGateway:Enabled`, `Ollama:Enabled`, `Redis:Enabled`, `Oidc:Authority`) are in
 [`plans/platform/repo-and-deployment.md`](plans/platform/repo-and-deployment.md) §4.1. Set them as AppHost user secrets:
 
@@ -46,6 +57,25 @@ dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
 
 Container health probe: every .NET service image runs its own probe with `--health-check` (exit 0 healthy, 1 not),
 against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
+
+## Docs
+
+- [`docs/local-development.md`](docs/local-development.md): the dev stack in detail and the start scripts.
+- [`docs/production-setup.md`](docs/production-setup.md): host sizing, `init-deployment.sh`, Compose files.
+- [`docs/runbook.md`](docs/runbook.md): backups, restore, key escrow, certificates, operations.
+- [`docs/upgrade-guide.md`](docs/upgrade-guide.md): upgrading between releases.
+
+## CI
+
+`verify.yml` runs on every pull request and push to `main`:
+- `ownership` (stream paths);
+- `backend` (build and tests);
+- `images`;
+- `deploy-checks` (Compose and host scripts);
+- `admin-ui`.
+
+`parser.yml` runs the `parser`, `parser-image` and `contract` jobs only when the parser or its contract changed.
+`entra.yml` plans the Entra registrations.
 
 ## Packages
 
