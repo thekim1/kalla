@@ -25,13 +25,13 @@ public sealed class WorkerOptions
     public bool Maintenance { get; set; } = true;
 
     /// <summary>
-    /// Instance heartbeat and job-lease renewal (engine design §5.2, §9.4: 15 s; at most a third of the shortest lease).
+    /// Instance heartbeat and job-lease renewal (10 s, so the 30 s instance timeout tolerates two missed heartbeats; at most a third of the shortest lease).
     /// </summary>
     [Range(1, 20)]
-    public int HeartbeatSeconds { get; set; } = 15;
+    public int HeartbeatSeconds { get; set; } = 10;
 
     /// <summary>
-    /// The reaper reclaims the jobs of an instance silent for this long: 30 s, two missed heartbeats. With the 10 s reaper a
+    /// The reaper reclaims the jobs of an instance silent for this long: 30 s, so two heartbeats (10 s) may be missed. With the 10 s reaper a
     /// killed worker's jobs are back in the queue at most 40 s after the kill (P0 #20 done-when: within 45 s; settled by
     /// the main session, data-model §4.2).
     /// </summary>

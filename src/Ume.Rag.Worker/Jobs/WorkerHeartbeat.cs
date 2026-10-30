@@ -5,7 +5,7 @@ using Ume.Rag.Infrastructure.Jobs;
 namespace Ume.Rag.Worker.Jobs;
 
 /// <summary>
-/// Registers this instance in <c>content."WorkerInstances"</c>, then every <c>Worker:HeartbeatSeconds</c> (15 s) renews its
+/// Registers this instance in <c>content."WorkerInstances"</c>, then every <c>Worker:HeartbeatSeconds</c> (10 s) renews its
 /// heartbeat and, in one statement, the leases of its running jobs (engine design §5.2, §9.4). A job whose lease the
 /// database no longer holds for this instance is cancelled; its commit would fail anyway. A clean stop removes the row
 /// after the dispatcher has drained (hosted services stop in reverse order).
