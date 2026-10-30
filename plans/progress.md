@@ -24,21 +24,31 @@ Owned by the user, outside the streams ([`p0/README.md`](p0/README.md) §5,
 - [ ] DPIA started with the data protection officer (register G1)
 - [ ] A named person and a date for A1, G1, W1, W2, N1, U1 and P2 (phase-start rule; P0 ends only when all have both)
 
-## P1a Walking skeleton ([`README.md`](README.md) P1a row, [`weakness-review.md`](weakness-review.md) §1)
+## P1a Walking skeleton ([`p1/README.md`](p1/README.md), [`README.md`](README.md) P1a row, [`weakness-review.md`](weakness-review.md) §1)
 
 Done when a member of the pilot department asks a question in Open WebUI and gets a cited answer from umea.se content.
-Detailed progress files are written with the P1 stream briefs.
+Checklist and hand-offs: [`p1/README.md`](p1/README.md) §3–§4. Every model call is EU-hosted until on-prem hardware
+exists (M2 triggered, user 2026-10-30; `p1/README.md` §1).
 
-- [ ] P1 stream briefs, progress files and prompts written (same A/B seam, [`p0/README.md`](p0/README.md) §6)
-- [ ] Pilot-start checks: source inventory, JavaScript need, existing umea.se chat (register W1)
-- [ ] Parser and ingestion worker: URL list, umea.se crawl (full traversals; hand-checked Sitevision preset), upload
-      ([`ingestion-worker/plan.md`](ingestion-worker/plan.md), [`parser/plan.md`](parser/plan.md))
-- [ ] Knowledge API: hybrid retrieval with citations, not-found gate on the vector side
-      ([`knowledge-api/plan.md`](knowledge-api/plan.md))
-- [ ] Chat API and one assistant in Open WebUI ([`chat-api/plan.md`](chat-api/plan.md))
+- [x] P1 stream briefs, progress files and prompts written (same A/B seam, [`p0/README.md`](p0/README.md) §6):
+      [`p1/stream-a.md`](p1/stream-a.md), [`p1/stream-b.md`](p1/stream-b.md), [`p1/prompts/`](p1/prompts/)
+- [ ] J1: `v0.1.0` tagged; P1 ownership rules (`p1/README.md` §2) merged
+- [ ] Stream A, the worker side: [`p1/progress-a.md`](p1/progress-a.md)
+- [ ] Stream B, the serving side: [`p1/progress-b.md`](p1/progress-b.md)
+- [ ] Pilot-start checks: source inventory, JavaScript need (`to-verify.md` #139); W1 answered (Team Turkos's
+      `chat.umea.se`; the product owner decides the relation)
+- [ ] Sync point after J2/J3: schema and contracts checked; results folded into [`to-verify.md`](to-verify.md)
+- [ ] Local skeleton: fixture pages answered with a citation in Open WebUI on FakeGateway (`p1/README.md` §5)
+- [ ] Gateway session: gateway reachable with EU routes and the pilot team's keys (J10); shared Keycloak with RAG's
+      realm additions (J11)
 - [ ] Pilot gold set written with the department; three-way run recorded; not-found thresholds calibrated
       ([`weakness-review.md`](weakness-review.md) §2; `to-verify.md` #143, #168, #169)
-- [ ] **P1a done:** first cited answer in Open WebUI
+- [ ] **P1a done:** first cited answer in Open WebUI, shown locally with the pilot member present
+
+Owned by the user, outside the streams ([`p1/README.md`](p1/README.md) §7):
+- [x] P1a shown locally (U-a, decided 2026-10-30)
+- [ ] The EU embedding model (U-b); pilot accounts (U-c)
+- [ ] Gateway production session briefed and run (U-d); U1 with the web editors (U-e); gold set owner and date (U-f)
 
 ## P1b Pilot hardening ([`README.md`](README.md) P1b row)
 
