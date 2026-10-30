@@ -128,7 +128,12 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       rag-migrate: {condition: service_completed_successfully}
-    networks: [edge, data, llm]
+    # All egress leaves through the network that holds the default route, so gw_priority pins it to llm (gateway, OIDC
+    # authority, Open WebUI host: the host firewall's allow-list); edge only carries the published port.
+    networks:
+      edge: {}
+      data: {}
+      llm: {gw_priority: 1}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.Api.dll, --health-check]
       interval: 15s
@@ -172,13 +177,39 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       rag-migrate: {condition: service_completed_successfully}
-    networks: [edge, data, llm]
+    # All egress leaves through the network that holds the default route, so gw_priority pins it to llm (gateway, OIDC
+    # authority, Open WebUI host: the host firewall's allow-list); edge only carries the published port.
+    networks:
+      edge: {}
+      data: {}
+      llm: {gw_priority: 1}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.AdminApi.dll, --health-check]
       interval: 15s
       timeout: 10s
       start_period: 30s
       retries: 5
+
+  # The upload copy (§7.4): deploy/backup-uploads.sh runs it from rag-upload-backup.timer with `docker compose run`;
+  # the profile keeps `up` from starting it. It copies new files below uploads/ to the backup target and never
+  # overwrites one (blob keys are write-once). The postgres image is used for its shell and coreutils only.
+  rag-upload-backup:
+    <<: *hardened
+    image: ${POSTGRES_IMAGE:-ume-rag/postgres:latest}
+    profiles: [backup]
+    user: "1654:1654"
+    restart: "no"
+    cpus: 0.5
+    cpu_shares: 128
+    mem_limit: 256m
+    pids_limit: 64
+    volumes:
+      - rag-blobs:/data/blobs:ro
+      # A directory on the backup share (init-deployment.sh), owned by uid 1654; ./upload-backup with --backup-target
+      # local (test hosts only: it is not off the host).
+      - ${UME_RAG_UPLOAD_BACKUP_DIR:-./upload-backup}:/backup
+    # No network: the target is a host directory. An S3 target would join backup, as postgres does.
+    network_mode: none
 
 # Fixed subnets, so deploy/host/docker-user-firewall.sh can give each network its egress rule (§6.1). The networks of
 # the ingestion zone are in compose.ingestion.yaml.

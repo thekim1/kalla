@@ -1,0 +1,12 @@
+# The ingestion zone's cap (repo-and-deployment §6.2): rag-worker, rag-parser and rag-clamav run below it through
+# cgroup_parent (compose.ingestion.yaml), which needs cgroup v2 and Docker's systemd cgroup driver. The values are the
+# 16 GB host's; install.sh adds a drop-in with MemoryMax=11G on a 24 GB host (UME_RAG_HOST_MEMORY=24).
+[Unit]
+Description=Ume Rag ingestion zone (rag-worker, rag-parser, rag-clamav)
+Documentation=file:@DEPLOY_DIR@/host/README.md
+Before=slices.target
+
+[Slice]
+CPUQuota=500%
+CPUWeight=25
+MemoryMax=7G
