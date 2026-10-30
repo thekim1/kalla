@@ -70,9 +70,9 @@ Refs: [performance-pass §8](../performance-pass.md), [data-model §9](../platfo
 
 ## 8. Entra package 1 (#17)
 Refs: [identity/design.md §12](../identity/design.md), [repo-and-deployment §8.1](../platform/repo-and-deployment.md)
-- [ ] `infra/entra/` Bicep (Graph extension) for RAG's own registrations
-- [ ] `entra.yml` (plan only on PR)
-- [ ] to-verify #84 recorded
+- [x] `infra/entra/` Bicep (Graph extension) for RAG's own registrations
+- [x] `entra.yml` (plan only on PR)
+- [x] to-verify #84 recorded
 - [ ] **Hand-off H7:** issue to the user to submit package 1
 
 ## 9. On-prem capacity (#22)

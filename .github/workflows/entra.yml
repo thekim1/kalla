@@ -1,0 +1,166 @@
+name: Entra
+# Approval package 1 as Bicep with the Microsoft Graph extension (plans/identity/design.md §12.4, repo-and-deployment
+# §8.1; infra/entra/README.md). A pull request only builds, lints and plans; nothing is applied from a pull request.
+# An apply is a manual dispatch from main into the GitHub environment entra-test or entra-prod, whose required reviewers
+# are the municipality's approvers; the run waits for them after its plan is shown.
+on:
+  pull_request:
+    paths:
+      - infra/entra/**
+      - .github/workflows/entra.yml
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment to apply to (infra/entra/<test|prod>.bicepparam)
+        type: choice
+        options: [entra-test, entra-prod]
+        required: true
+permissions:
+  contents: read
+concurrency:
+  # One apply per environment at a time, never cancelled; a newer push to a pull request cancels its older plan.
+  group: entra-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  # Bicep CLI, pinned with the sha256 the release lists for bicep-linux-x64 (v0.48.1, 2026-10-05). The Graph extension
+  # is pinned by digest in infra/entra/bicepconfig.json.
+  BICEP_VERSION: v0.48.1
+  BICEP_SHA256: b09ec25a9d376c1f8e33ede6ed22b587f915ad68488d5db77a6f9541748c7f6e
+jobs:
+  build:
+    # No Azure credentials: build, lint and format check of every template and parameter file.
+    runs-on: ubuntu-latest
+    outputs:
+      plan: ${{ steps.gate.outputs.plan }}
+    defaults:
+      run:
+        working-directory: infra/entra
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Bicep
+        run: &install-bicep |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL -o "$RUNNER_TEMP/bin/bicep" "https://github.com/Azure/bicep/releases/download/$BICEP_VERSION/bicep-linux-x64"
+          echo "$BICEP_SHA256  $RUNNER_TEMP/bin/bicep" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/bin/bicep"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Build, lint and format check
+        run: |
+          bicep --version
+          for f in *.bicep; do
+            bicep build "$f" --stdout > /dev/null
+            bicep lint "$f"
+            bicep format "$f" --stdout | diff -u "$f" -
+          done
+          for p in *.bicepparam; do
+            bicep build-params "$p" --stdout > /dev/null
+            bicep format "$p" --stdout | diff -u "$p" -
+          done
+      - id: gate
+        name: Plan only where a read-only identity is configured
+        # The plan signs in with the federated credential of a read-only identity (environment entra-plan). Until the
+        # repository variables ENTRA_TENANT_ID and ENTRA_PLAN_CLIENT_ID exist, and for pull requests from forks (no
+        # OIDC token), the plan is skipped and the summary says so.
+        env:
+          TENANT: ${{ vars.ENTRA_TENANT_ID }}
+          CLIENT: ${{ vars.ENTRA_PLAN_CLIENT_ID }}
+          FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ -n "$TENANT" ] && [ -n "$CLIENT" ] && [ "$FORK" != true ]; then
+            echo "plan=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "plan=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Entra plan skipped"
+              echo
+              echo "Bicep build and lint passed. No desired-versus-live plan: the repository variables"
+              echo "ENTRA_TENANT_ID and ENTRA_PLAN_CLIENT_ID are not set, or the run comes from a fork."
+              echo "See infra/entra/README.md, \"Identities\"."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  plan:
+    # What-if does not support Microsoft Graph resources (to-verify #84), so the plan compares `bicep snapshot` with
+    # the live objects, read with Application.Read.All only (infra/entra/entra.py).
+    needs: build
+    if: needs.build.outputs.plan == 'true'
+    runs-on: ubuntu-latest
+    environment: entra-plan
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: infra/entra
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Bicep
+        run: *install-bicep
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.ENTRA_PLAN_CLIENT_ID }}
+          tenant-id: ${{ vars.ENTRA_TENANT_ID }}
+          allow-no-subscriptions: true
+      - name: Desired versus live
+        env:
+          TARGET: ${{ inputs.environment }}
+        run: |
+          # A dispatch plans its own environment; a pull request every environment that has a parameter file.
+          if [ -n "$TARGET" ]; then files="${TARGET#entra-}.bicepparam"; else files="$(ls test.bicepparam prod.bicepparam 2>/dev/null || true)"; fi
+          [ -n "$files" ] || files=sample.bicepparam
+          for p in $files; do
+            [ -f "$p" ] || { echo "::error::infra/entra/$p is missing"; exit 1; }
+            bicep snapshot "$p" --mode overwrite
+            { echo "### Entra plan: \`$p\`"; echo; python3 -I entra.py plan "${p%.bicepparam}.snapshot.json"; echo; } >> "$RUNNER_TEMP/plan.md"
+          done
+          cat "$RUNNER_TEMP/plan.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Plan as a pull request comment
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR" --body-file "$RUNNER_TEMP/plan.md" --edit-last --create-if-none
+
+  apply:
+    # Manual, from main only, after the environment's required reviewers approve. The deployer identity has
+    # Application.ReadWrite.OwnedBy and Group.Create only: it cannot consent, assign roles or create secrets.
+    needs: [build, plan]
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+      && needs.build.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.plan.result)
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: infra/entra
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Bicep
+        run: *install-bicep
+      - name: Build the template and parameters
+        env:
+          TARGET: ${{ inputs.environment }}
+        run: |
+          p="${TARGET#entra-}.bicepparam"
+          [ -f "$p" ] || { echo "::error::infra/entra/$p is missing (copy sample.bicepparam)"; exit 1; }
+          bicep build main.bicep --outfile "$RUNNER_TEMP/main.json"
+          bicep build-params "$p" --outfile "$RUNNER_TEMP/parameters.json"
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.ENTRA_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ vars.ENTRA_TENANT_ID }}
+          subscription-id: ${{ vars.ENTRA_SUBSCRIPTION_ID }}
+      - name: Deploy
+        # Graph resources deploy through Azure Resource Manager, so the deployment record needs a resource group.
+        env:
+          RESOURCE_GROUP: ${{ vars.ENTRA_RESOURCE_GROUP }}
+        run: |
+          az deployment group create --resource-group "$RESOURCE_GROUP" --name "ume-rag-entra-${{ github.run_id }}" \
+            --template-file "$RUNNER_TEMP/main.json" --parameters "@$RUNNER_TEMP/parameters.json" \
+            --query properties.outputs --output json > "$RUNNER_TEMP/outputs.json"
+      - name: What still needs a person
+        run: python3 -I entra.py next-steps "$RUNNER_TEMP/outputs.json" >> "$GITHUB_STEP_SUMMARY"
