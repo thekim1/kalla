@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Updated 2026-10-30, end of session 4.
+State of the Ume.Rag work for the next session. Updated 2026-10-30, session 5.
 Repo `~/research/rag`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
 
@@ -10,8 +10,9 @@ every commit).
 of the team's existing **LLM gateway** (`~/git/llmgateway`, https://github.com/thekim1/llmgateway). The user owns the
 gateway and wants to do better than **Eneo** (`~/git/eneo`), which they find slow and a "kitchen sink" monolith.
 
-This repo holds **design only**. The design is **complete**: ten detail steps, a consistency pass, a performance pass
-and (session 4) a **simplification pass**, all reviewed and pushed. **Next is P0 implementation.**
+This repo holds the design and, from P0, the code (decided session 5: no separate `ume-rag` repo). The design is **complete**: ten detail steps, a consistency pass, a performance pass
+and (session 4) a **simplification pass**, all reviewed and pushed. Session 5 split P0 into **Stage 0 + two parallel streams** (`plans/p0/`) and added the
+agent harness (`AGENTS.md`, `CLAUDE.md`, `.github/stream-ownership.txt`, PR template). **Next is Stage 0.**
 
 Plain-language overview for stakeholders: `docs/stakeholder-report.html` (open in a browser; keep it in step with the
 design), also published as a private artifact (share from its menu): https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM
@@ -109,7 +110,8 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 | Performance pass | `plans/performance-pass.md` | `3b79baa` |
 | Overall review → simplification pass (10 changes) + umea.se site profiles | `plans/simplification-pass.md`, every plan document | `6f0602f` |
 | Six pilot containers; many assistants per department (§15); ask-a-file workspaces plan | `simplification-pass.md` §14–§15, `plans/workspaces/plan.md` | `0e91d81`, `00e531c` |
-| **P0 implementation** | `plans/platform/repo-and-deployment.md` §11 | **next** |
+| P0 split into Stage 0 + streams A/B; agent harness | `plans/p0/`, `AGENTS.md`, `CLAUDE.md`, `.github/` | (this session) |
+| **P0 Stage 0** (main session), then streams A and B | `plans/p0/README.md` §1 | **next** |
 
 ## Open items
 
@@ -134,19 +136,17 @@ against Postgres `ispell`, the stock pgvector image tag, pgBackRest with that im
 acceptance page, the cost of the per-document swap, pool 12 / 4 searches, the Postgres admin session store, and the
 assistant test-run cost.
 
-## Next step: P0 implementation
+## Next step: P0 Stage 0
 
-P0 = a skeleton that builds, deploys, is observable and can be restored. Ordered checklist:
-`plans/platform/repo-and-deployment.md` §11 (repo, projects, `verify.yml`, ServiceDefaults, stock pgvector image +
-.NET decompounder test, migrations with outbox and unpartitioned `Jobs`, config-version library with the 90 s grace
-window, FakeGateway with per-level keys and the 403/503 modes, Keycloak realm, keys, admin skeleton with serialised
-writes, AppHost, parser contract, single-slot Compose, pgBackRest PITR restore drill, `release.yml`, test host, RAG's
-own Entra registrations, the combined gateway release agreed, worker dispatcher).
+Decided in session 5 (Decisions table, "P0 set-up"): code in this repo; the combined gateway release is agreed in P0
+and built in P1; the user owns the people items (Entra submission #17, gateway-team agreement #18, backup target and
+escrow `to-verify.md` #145, test-host access #16); the main session runs Stage 0.
 
-The workspaces detail round (its 12 questions) belongs to P2 and can wait.
+1. Stage 0 as listed in `plans/p0/README.md` §1, on branch `stage-0`, with the 7-day package rule (V1). It
+   includes the CI ownership check against `.github/stream-ownership.txt` and the GitHub labels.
+2. Then hand `plans/p0/stream-a.md` and `stream-b.md` to two agents or people, one worktree each.
+3. At each sync point (`plans/p0/README.md` §4): fold `plans/p0/results-*.md` into `to-verify.md`, settle "Design
+   deviations" from the PRs in the design documents.
 
-Before starting:
-1. Review the postponed-decisions register (phase-start rule) and the P0 rows of `plans/to-verify.md`.
-2. Ask the user where the code lives (a new repo, or `src/` here), the order of the P0 items, and whether the combined
-   gateway release starts in parallel in the gateway repo.
-3. Apply the 7-day package rule (V1) when pinning versions.
+Not yet done: `.claude/settings.json` with a build/test command allowlist was refused by the permission classifier
+(self-modification); the user decides whether to add it.

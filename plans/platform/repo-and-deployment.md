@@ -13,7 +13,10 @@ marked **copy** (as-is apart from names), **adapt** (same structure, our content
 
 ## 1. Repository layout
 
-Repository `ume-rag` (GitHub, same organisation as the gateway), solution `UmeRag.slnx` (gateway: `UmeLlmGateway.slnx`),
+Code lives in the design repository `ume-rag-platform` (decided 2026-10-30): the tree below sits at the repo root beside
+`plans/`, `platforms/` and the numbered design documents, `docs/` holds both the design-side `stakeholder-report.html`
+and the operations documents, and `verify.yml` ignores changes under `plans/**`, `platforms/**` and the root `*.md`
+files. Solution `UmeRag.slnx` (gateway: `UmeLlmGateway.slnx`),
 namespaces and assembly names `Ume.Rag.*`, image repositories `ume-rag/<service>`, Compose project `ume-rag`.
 
 ```
@@ -810,7 +813,7 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (simpli
 
 | # | Task (each a small, verifiable deliverable) | Done when | Refs |
 |---|---|---|---|
-| 1 | Create repo `ume-rag`; copy `global.json`, `Directory.Build.*`, `.editorconfig`, `.gitattributes`, `dotnet-tools.json`, `aspire.config.json`, `.githooks/pre-commit` | `dotnet build` of an empty solution passes with warnings as errors | plan §11.1 |
+| 1 | Add the code layout to this repo (§1); copy `global.json`, `Directory.Build.*`, `.editorconfig`, `.gitattributes`, `dotnet-tools.json`, `aspire.config.json`, `.githooks/pre-commit` | `dotnet build` of an empty solution passes with warnings as errors | plan §11.1 |
 | 2 | Projects from §3 (empty endpoints; P2 `Ume.Rag.Tools` and the MCP template not yet), incl. the `Ume.Rag.Retrieval`, `Ume.Rag.Pipelines` and `Ume.Rag.Answering` skeletons, `UmeRag.slnx`, `tests/` projects and `TestKit` | `dotnet test` runs (0 tests is fine) | plan §11.1, knowledge design §17, engine design §20 |
 | 3 | `verify.yml` (backend, ui, deploy-checks, images) | green PR in GitHub | plan §11.1 |
 | 4 | `Ume.Rag.ServiceDefaults` copied; health `/health/live`, `/health/ready`, `/version`, `--health-check` in every service | probe exits 0/1 in a container; OTLP traces visible in the Aspire dashboard | plan §11.2 |
@@ -833,6 +836,12 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (simpli
 | 21 | Scale seams (after #6, #20): `IBlobStore` write-once contract (`IfAbsent`, tombstones) with the file-system implementation; `IJobQueue` seam (Postgres implementation); pooler-safe SQL rules + scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` and `Worker:Classes` per instance; `DOTNET_GCHeapHardLimitPercent=75` on every .NET service (the halfvec HNSW index follows in P1) | unit test finds no forbidden session-state SQL; contract tests pass on the file-system store (an overwrite attempt is refused) | [`../performance-pass.md`](../performance-pass.md) §8 (P0) |
 
 `perf.yml` and the nightly `evaluation.yml` follow in P1, before the pilot (§8.1).
+
+**Who does what (decided 2026-10-30):** the main session runs Stage 0 (#1, #2 and the shared files), then two
+streams build the rest in parallel; the split, file ownership and hand-offs are in [`../p0/`](../p0/). The parts that
+need other people are owned by the user, outside both streams: submitting Entra package 1 (#17), agreeing the combined
+gateway release with the gateway team (#18; it is built in P1, before the pilot), the backup target and key escrow
+with IT (`to-verify.md` #145) and access to the test host (#16).
 
 ## 12. Open decisions and contradictions found
 

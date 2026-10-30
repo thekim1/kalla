@@ -1,0 +1,48 @@
+# .NET, Node, Playwright, Aspire: copied from the gateway
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/*
+!.vscode/extensions.json
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+playwright/.auth/
+.aspire/
+aspire-output/
+*.log
+TestResults/
+BenchmarkDotNet.Artifacts/
+benchmarks/release-test/results/
+
+# Secrets and certificates: never committed
+.env
+.env.*
+!.env.example
+*.pfx
+*.crt
+*.pem
+*.key
+deploy/generated/.env*
+deploy/secrets/
+deploy/certs/
+
+# Python (src/parser)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Agents: per-user settings, worktrees, scratch
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+.playwright-cli/

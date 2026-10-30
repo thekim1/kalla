@@ -1,0 +1,67 @@
+# Who may change which path during P0. One rule per line: <glob> <owner>. The first matching rule wins.
+# Owners: a = stream A (platform and ingestion side), b = stream B (application and serving side),
+#         shared = either stream, append-only, in a PR of its own, main = main session (design and coordination).
+# Globs follow gitignore rules: * stays inside one directory, ** crosses directories; a path that matches no rule
+# fails the check, so add a rule here first (main session). A PR from branch a/* or b/* may touch only its own paths
+# and shared paths (check: Stage 0, verify.yml).
+# Rationale and hand-offs: plans/p0/README.md.
+
+# Stream results files
+plans/p0/results-a.md                         a
+plans/p0/results-b.md                         b
+
+# Design, coordination and the root build files (Stage 0; later changes through an issue to the main session)
+plans/**                                      main
+platforms/**                                  main
+docs/stakeholder-report.html                  main
+README.md                                     shared
+CHANGELOG.md                                  shared
+*.md                                          main
+global.json                                   main
+Directory.Build.*                             main
+.editorconfig                                 main
+.gitattributes                                main
+dotnet-tools.json                             main
+aspire.config.json                            main
+.github/stream-ownership.txt                  main
+.github/pull_request_template.md              main
+.claude/**                                    main
+.agents/**                                    main
+
+# Shared, append-only
+UmeRag.slnx                                   shared
+Directory.Packages.props                      shared
+.gitignore                                    shared
+
+# Stream A: platform and the ingestion side
+.github/**                                    a
+.githooks/**                                  a
+images/**                                     a
+infra/**                                      a
+scripts/**                                    a
+deploy/postgres/init.sql                      b
+deploy/postgres/app-roles.sql                 b
+deploy/postgres/pg_hba.conf                   b
+deploy/**                                     a
+src/parser/**                                 a
+contracts/parser/**                           a
+contracts/pipeline/**                         a
+src/Ume.Rag.Worker/**                         a
+src/Ume.Rag.Pipelines/**                      a
+src/Ume.Rag.Domain/Ports/IJobQueue.cs         a
+src/Ume.Rag.Domain/Ports/IBlobStore.cs        a
+src/Ume.Rag.Infrastructure/Jobs/**            a
+src/Ume.Rag.Infrastructure/Blobs/**           a
+tests/Ume.Rag.Worker.Tests/**                 a
+tests/Ume.Rag.Pipelines.Tests/**              a
+tests/Ume.Rag.ContractTests/**                a
+tests/fixtures/**                             a
+docs/security-events.md                       b
+docs/**                                       a
+
+# Stream B: application and the serving side
+src/Ume.Rag.AppHost/**                        b
+src/**                                        b
+tests/**                                      b
+contracts/admin/**                            b
+dev/**                                        b
