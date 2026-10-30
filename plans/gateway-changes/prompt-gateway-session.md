@@ -10,7 +10,8 @@ project, **Ume.Rag** (`~/research/rag`, github.com/thekim1/ume-rag-platform), a 
 kommun, will call this gateway for every model call. Its pilot needs three things from the gateway. The gateway runs
 only in dev today.
 
-**Read first:** this repo's `AGENTS.md`/`CLAUDE.md`, `docs/introduction.md`, `docs/runbook.md`,
+**Start** with `git pull` on `main` (the latest release on `origin` is v0.8.6). **Read first:** this repo's `HANDOVER.md` and
+`README.md`, `CHANGELOG.md` (release practice), `docs/introduction.md`, `docs/runbook.md`,
 `docs/identity-and-roles.md`, `docs/production-setup.md`, and `docs/upgrade-guide.md`. From the RAG repo (read only;
 never edit it), read:
 - `plans/gateway-changes/design.md` (the specification of every change below, with file and line citations into this
