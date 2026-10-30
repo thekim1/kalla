@@ -69,6 +69,7 @@ public sealed class WorkerOptionsTests
             ["ConnectionStrings:ragdb"] = "Host=127.0.0.1;Port=1;Database=ragdb;Username=nobody",
             ["Worker:Classes"] = "command,crawl",
         });
+        builder.AddRagDatabase();
         builder.AddRagConfigMonitor();
         builder.AddRagWorker();
         await using var app = builder.Build();
@@ -94,6 +95,7 @@ public sealed class WorkerOptionsTests
             builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(int.Parse(hostSeconds, System.Globalization.CultureInfo.InvariantCulture)));
         }
 
+        builder.AddRagDatabase();
         builder.AddRagWorker();
 
         using var services = builder.Services.BuildServiceProvider();
