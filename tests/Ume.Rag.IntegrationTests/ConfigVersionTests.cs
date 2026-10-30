@@ -204,6 +204,43 @@ public sealed partial class ConfigVersionTests(RagDatabaseFixture database) : IA
     }
 
     [Fact]
+    public async Task Other_channels_reach_their_listener_without_config_reads()
+    {
+        // Issue #21: the worker's rag_jobs rides on the monitor's one listening connection.
+        var jobs = new RecordingListener("rag_jobs");
+        var cache = new ProbeKeyCache(database.Connection(Migrator));
+        await using var service = await StartServiceAsync(cache, listener: jobs);
+        await WaitUntilAsync(() => service.Monitor.Refreshes >= 2); // first load done and one poll in: a quiet moment
+        var before = service.Monitor.Refreshes;
+
+        var burst = Stopwatch.StartNew();
+        await Sql.ExecuteAsync(database.Connection(Migrator),
+            string.Join(";", Enumerable.Range(0, 20).Select(i => $"SELECT pg_notify('rag_jobs', 'parse-{i}')")));
+        await WaitUntilAsync(() => jobs.Payloads.Count == 20);
+
+        burst.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(1));
+        jobs.Payloads.ShouldBe(Enumerable.Range(0, 20).Select(i => $"parse-{i}"));
+        // At most the one 2 s poll that may fall into the burst; never one read per job notification.
+        (service.Monitor.Refreshes - before).ShouldBeLessThanOrEqualTo(1);
+
+        // A config notification still wakes the monitor at once.
+        var keyId = Guid.NewGuid();
+        await Sql.ExecuteAsync(database.Connection(Migrator), $"""INSERT INTO keyprobe."Keys" VALUES ('{keyId}', NULL)""");
+        await WaitUntilAsync(() => cache.Known(keyId), TimeSpan.FromSeconds(1));
+    }
+
+    [Theory]
+    [InlineData("rag-jobs")]
+    [InlineData("Rag_Jobs")]
+    [InlineData("jobs; DROP TABLE x")]
+    [InlineData("")]
+    public void A_channel_name_that_is_not_a_plain_identifier_is_refused(string channel)
+    {
+        Should.Throw<InvalidOperationException>(() => new ConfigVersionMonitor(null!, null!, null!, TimeProvider.System,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ConfigVersionMonitor>.Instance, [new RecordingListener(channel)]));
+    }
+
+    [Fact]
     public async Task A_retried_config_write_saves_its_changes_once()
     {
         // Review of #13: the retrying strategy reuses the context; a failed attempt must not leave entities tracked.
@@ -251,7 +288,8 @@ public sealed partial class ConfigVersionTests(RagDatabaseFixture database) : IA
         logs.Text.ShouldNotContain("lost its database connection");
     }
 
-    private async Task<TestService> StartServiceAsync(ProbeKeyCache cache, FakeTimeProvider? time = null, CapturingLoggerProvider? logs = null, int maxUnconfirmedSeconds = 90)
+    private async Task<TestService> StartServiceAsync(ProbeKeyCache cache, FakeTimeProvider? time = null, CapturingLoggerProvider? logs = null, int maxUnconfirmedSeconds = 90,
+        INotificationListener? listener = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development, ApplicationName = "config-test" });
         builder.WebHost.UseTestServer();
@@ -270,6 +308,11 @@ public sealed partial class ConfigVersionTests(RagDatabaseFixture database) : IA
         builder.AddUmeWebDefaults(1024);
         builder.AddRagConfigMonitor();
         builder.Services.AddSingleton<IConfigChangeHandler>(cache);
+        if (listener is not null)
+        {
+            builder.Services.AddSingleton(listener);
+        }
+
         var app = builder.Build();
         app.UseUmeWebDefaults();
         app.UseConfigVersionLogScope();
@@ -321,6 +364,17 @@ public sealed partial class ConfigVersionTests(RagDatabaseFixture database) : IA
             await app.StopAsync();
             await app.DisposeAsync();
         }
+    }
+
+    private sealed class RecordingListener(string channel) : INotificationListener
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _payloads = new();
+
+        public string Channel => channel;
+
+        public IReadOnlyList<string> Payloads => [.. _payloads];
+
+        public void OnNotification(string payload) => _payloads.Enqueue(payload);
     }
 
     /// <summary>Throws a transient Npgsql error on the first commit, before it reaches the server.</summary>

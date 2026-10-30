@@ -23,12 +23,19 @@ public sealed partial class ConfigVersionMonitor(
     IServiceScopeFactory scopes,
     IConfiguration configuration,
     TimeProvider time,
-    ILogger<ConfigVersionMonitor> logger) : BackgroundService
+    ILogger<ConfigVersionMonitor> logger,
+    IEnumerable<INotificationListener> listeners) : BackgroundService
 {
     public const string ListenConnectionName = "ragdb-listen";
+    public const string ConfigChannel = "rag_config";
     public static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(1);
+    private readonly ILookup<string, INotificationListener> _listeners = Validated(listeners).ToLookup(l => l.Channel, StringComparer.Ordinal);
     private int _notified;
+    private long _refreshes;
+
+    /// <summary>How many times the version was read (tests: other channels must not cause config reads).</summary>
+    internal long Refreshes => Interlocked.Read(ref _refreshes);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -38,10 +45,12 @@ public sealed partial class ConfigVersionMonitor(
             try
             {
                 await using var connection = new NpgsqlConnection(connectionString);
-                connection.Notification += (_, _) => Interlocked.Exchange(ref _notified, 1);
+                connection.Notification += (_, e) => OnNotification(e.Channel, e.Payload);
                 await connection.OpenAsync(stoppingToken);
-                await using (var listen = new NpgsqlCommand("LISTEN rag_config", connection))
+                // Channel names are validated identifiers (Validated), so they can be put into the statement.
+                foreach (var channel in _listeners.Select(g => g.Key).Prepend(ConfigChannel).Distinct(StringComparer.Ordinal))
                 {
+                    await using var listen = new NpgsqlCommand($"LISTEN {channel}", connection);
                     await listen.ExecuteNonQueryAsync(stoppingToken);
                 }
 
@@ -49,11 +58,16 @@ public sealed partial class ConfigVersionMonitor(
                 {
                     Interlocked.Exchange(ref _notified, 0);
                     var applied = await RefreshAsync(connection, stoppingToken);
-                    // A notification that arrived while refreshing was consumed by the refresh's own commands; after a
-                    // handler failure the next poll offers the change again.
-                    if (!applied || Volatile.Read(ref _notified) == 0)
+                    // A notification that arrived while refreshing was consumed by the refresh's own commands, so it
+                    // refreshes again at once; after a handler failure the next poll offers the change again.
+                    if (!applied)
                     {
-                        await connection.WaitAsync(PollInterval, stoppingToken);
+                        Interlocked.Exchange(ref _notified, 0);
+                    }
+
+                    if (Volatile.Read(ref _notified) == 0)
+                    {
+                        await WaitForConfigAsync(connection, stoppingToken);
                     }
                 }
             }
@@ -88,6 +102,7 @@ public sealed partial class ConfigVersionMonitor(
     /// </summary>
     private async Task<bool> RefreshAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _refreshes);
         var current = await ScalarAsync<long>(connection, """SELECT "Version" FROM config."ConfigVersion" WHERE "Id" = 1""", cancellationToken);
         var cached = state.Version;
         if (cached == current)
@@ -117,6 +132,61 @@ public sealed partial class ConfigVersionMonitor(
         state.Confirm(current);
         LogApplied(logger, cached, current, change.FullReload, string.Join(',', change.EntityTypes), Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         return true;
+    }
+
+    /// <summary>
+    /// Waits for a config notification or the poll deadline. Notifications on other channels wake the wait up, are passed
+    /// to their listeners by <see cref="OnNotification"/>, and the wait goes on to the same deadline, so a burst of job
+    /// notifications costs no config reads.
+    /// </summary>
+    private async Task WaitForConfigAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+        while (Volatile.Read(ref _notified) == 0)
+        {
+            var remaining = PollInterval - Stopwatch.GetElapsedTime(started);
+            if (remaining <= TimeSpan.Zero)
+            {
+                return;
+            }
+
+            await connection.WaitAsync(remaining, cancellationToken);
+        }
+    }
+
+    private void OnNotification(string channel, string payload)
+    {
+        if (channel == ConfigChannel)
+        {
+            Interlocked.Exchange(ref _notified, 1);
+            return;
+        }
+
+        foreach (var listener in _listeners[channel])
+        {
+            try
+            {
+                listener.OnNotification(payload);
+            }
+            catch (Exception ex)
+            {
+                LogListenerFailed(logger, ex, listener.GetType().Name, channel);
+            }
+        }
+    }
+
+    private static IEnumerable<INotificationListener> Validated(IEnumerable<INotificationListener> listeners)
+    {
+        foreach (var listener in listeners)
+        {
+            if (listener.Channel is not { Length: > 0 and <= 63 } channel || !channel.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_') ||
+                char.IsDigit(channel[0]))
+            {
+                throw new InvalidOperationException($"Notification channel '{listener.Channel}' must be a lower-case identifier.");
+            }
+
+            yield return listener;
+        }
     }
 
     private static async Task<ConfigChange> ChangeAsync(NpgsqlConnection connection, long cached, long current, CancellationToken cancellationToken)
@@ -158,6 +228,9 @@ public sealed partial class ConfigVersionMonitor(
 
     [LoggerMessage(LogLevel.Warning, "Config monitor lost its database connection; serving version {Version} within the grace window and reconnecting")]
     private static partial void LogConnectionFailed(ILogger logger, Exception exception, long version);
+
+    [LoggerMessage(LogLevel.Error, "Notification listener {Listener} failed on channel {Channel}")]
+    private static partial void LogListenerFailed(ILogger logger, Exception exception, string listener, string channel);
 
     [LoggerMessage(LogLevel.Error, "Config change handler {Handler} failed applying version {From} -> {To}; version {From} stays unconfirmed and the change is retried on the next poll")]
     private static partial void LogHandlerFailed(ILogger logger, Exception exception, string handler, long from, long to);
