@@ -65,5 +65,6 @@ def test_info_hashes_everything_but_capacity(settings):
 
 def test_build_hash_changes_with_the_revision(settings):
     static = info.collect(settings)
-    changed = {**static, "parser": {**static["parser"], "revision": "other"}}
+    changed = static.model_copy(update={"parser": static.parser.model_copy(update={"revision": "other"})})
+    assert info.build_hash(static) == info.build_hash(info.collect(settings))
     assert info.build_hash(static) != info.build_hash(changed)

@@ -2,9 +2,11 @@
 
 Needs the baked models and Tesseract, so it runs in the image (`docker build --target test`, then
 `docker run --network none`) and is skipped elsewhere. Every Python process of the test refuses IP connections and
-name lookups (`offline_guard/sitecustomize.py`), on top of the container having no network.
+name lookups (`offline_guard/sitecustomize.py`), on top of the container having no network. The app test converts
+the text-layer fixture through both pipelines and the scanned fixture through Docling with OCR.
 """
 
+import json
 import shutil
 import time
 from pathlib import Path
@@ -12,6 +14,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from helpers import fixture_bytes, options, parts
 from offline_guard import sitecustomize as guard
 from ume_parser import slot
 from ume_parser.app import create_app
@@ -27,11 +30,24 @@ pytestmark = pytest.mark.skipif(
 
 def test_slot_warms_up_without_network(monkeypatch):
     guard.install(monkeypatch.setattr)
-    _converter, problems = slot.warm_up(Settings().models_dir, threads=2)
+    _pipeline, problems = slot.warm_up(Settings().models_dir, threads=2)
     assert problems == []
 
 
-def test_app_becomes_ready_without_network(monkeypatch, settings):
+def _convert(client: TestClient, name: str, pipeline: str) -> tuple[str, int]:
+    """Converts a fixture through `/v1/convert`; returns the pipeline that ran and the OCR'd pages."""
+    response = client.post(
+        "/v1/convert",
+        files={"file": ("input", fixture_bytes(name), "application/pdf")},
+        data={"options": options(f"offline-{name}-{pipeline}", pipeline=pipeline)},
+    )
+    assert response.status_code == 200, response.text
+    result = json.loads(parts(response.headers["content-type"], response.content)[0].get_payload(decode=True))
+    ocr_pages = sum(1 for page in result["pages"] if page["signals"]["ocr_applied"] != "none")
+    return result["input"]["pipeline"], ocr_pages
+
+
+def test_app_becomes_ready_and_converts_without_network(monkeypatch, settings):
     monkeypatch.setenv("PYTHONPATH", str(GUARD_DIR))
     guard.install(monkeypatch.setattr)
     app = create_app(settings)
@@ -43,6 +59,9 @@ def test_app_becomes_ready_without_network(monkeypatch, settings):
             assert app.state.supervisor._slots[0].failures == 0, app.state.supervisor._slots[0].problems
             time.sleep(1)
         body = client.get("/v1/info").json()
+        assert _convert(client, "text-layer.pdf", "text_layer") == ("text_layer", 0)
+        assert _convert(client, "text-layer.pdf", "docling") == ("docling", 0)
+        assert _convert(client, "scanned.pdf", "docling") == ("docling", 1)
     assert body["capacity"]["slots_ready"] == 1
     assert body["build_hash"].startswith("sha256:")
     assert body["tesseract"]["languages"] == ["eng", "osd", "swe"]

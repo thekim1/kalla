@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/parser/v1/error.schema.json",
+  "$defs": {
+    "Build": {
+      "properties": {
+        "parser": {
+          "title": "Parser",
+          "type": "string"
+        },
+        "docling": {
+          "title": "Docling",
+          "type": "string"
+        },
+        "build_hash": {
+          "title": "Build Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "parser",
+        "docling",
+        "build_hash"
+      ],
+      "title": "Build",
+      "type": "object"
+    },
+    "ErrorBody": {
+      "properties": {
+        "code": {
+          "enum": [
+            "invalid_request",
+            "duplicate_in_flight",
+            "too_large",
+            "format_deferred",
+            "unsupported_format",
+            "encrypted",
+            "corrupt",
+            "too_many_pages",
+            "limit_exceeded",
+            "ocr_failed",
+            "conversion_failed",
+            "timeout",
+            "worker_crashed",
+            "resource_limit",
+            "busy",
+            "not_ready",
+            "not_implemented"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "description": "a fixed sentence per code, never a library message",
+          "title": "Detail",
+          "type": "string"
+        },
+        "retry": {
+          "enum": [
+            "none",
+            "later",
+            "same",
+            "smaller_range"
+          ],
+          "title": "Retry",
+          "type": "string"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "which limit, for limit_exceeded",
+          "title": "Limit"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "archive",
+                "macro_enabled",
+                "executable",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "for unsupported_format",
+          "title": "Reason"
+        },
+        "pages_completed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "detail",
+        "retry",
+        "limit",
+        "reason",
+        "pages_completed"
+      ],
+      "title": "ErrorBody",
+      "type": "object"
+    },
+    "PageSpan": {
+      "properties": {
+        "from": {
+          "title": "From",
+          "type": "integer"
+        },
+        "to": {
+          "title": "To",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "PageSpan",
+      "type": "object"
+    }
+  },
+  "description": "Every non-200 response of `/v1/convert` and `/v1/inspect` (§7.5).",
+  "properties": {
+    "error": {
+      "$ref": "#/$defs/ErrorBody"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Request Id"
+    },
+    "build": {
+      "$ref": "#/$defs/Build"
+    }
+  },
+  "required": [
+    "error",
+    "request_id",
+    "build"
+  ],
+  "title": "ErrorResponse",
+  "type": "object"
+}

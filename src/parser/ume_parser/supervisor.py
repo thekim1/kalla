@@ -4,6 +4,11 @@ It runs inside the API process on the asyncio loop and never imports Docling. Ea
 spawn process with a pipe (`ume_parser.slot.run`). A monitor task polls every slot: it records the warm-up report,
 respawns a slot that died, failed its self-test or did not warm up within `warmup_timeout_s`, and keeps the
 readiness rule of §10.2: ready once every slot has passed its self-test at start, then while at least one is warm.
+
+A request takes a free warm slot at once or is refused with `busy` (or `not_ready`): there is no queue (§10.1). While
+a slot converts, the request's own task owns its pipe and the monitor leaves it alone. The task kills the slot when
+the deadline plus `KILL_GRACE_S` passes (`timeout`), when the client disconnects, or finds it dead (`worker_crashed`);
+the monitor then respawns it like any other dead slot.
 """
 
 import asyncio
@@ -13,11 +18,14 @@ import logging
 import multiprocessing
 import shutil
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
+from typing import Any
 
 from ume_parser import slot
+from ume_parser.errors import ParserError
 from ume_parser.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -25,6 +33,15 @@ log = logging.getLogger(__name__)
 POLL_INTERVAL_S = 0.5
 STOP_GRACE_S = 5.0
 RESPAWN_BACKOFF_S = (1.0, 5.0, 30.0, 120.0)
+JOB_POLL_S = 0.05
+DISCONNECT_POLL_S = 1.0
+KILL_GRACE_S = 10.0  # the slot is killed this long after the request's deadline (§10.3)
+BUSY_RETRY_AFTER_S = 2
+NOT_READY_RETRY_AFTER_S = 5
+
+
+class ClientDisconnectedError(Exception):
+    """The client closed the connection while its conversion ran; the slot was killed."""
 
 
 class SlotState(enum.StrEnum):
@@ -44,15 +61,19 @@ class Slot:
     failures: int = 0
     warmup_ms: int | None = None
     problems: list[str] = field(default_factory=list)
+    busy: bool = False
 
 
 class Supervisor:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, target: Callable[..., None] = slot.run) -> None:
+        """`target` is the slot process's entry point; tests pass a fake converter with the same pipe protocol."""
         self._settings = settings
+        self._target = target
         self._context = multiprocessing.get_context("spawn")
         self._slots = [Slot(i) for i in range(settings.workers)]
         self._all_warmed_once = False
         self._task: asyncio.Task[None] | None = None
+        self._in_flight: set[str] = set()
 
     @property
     def convert_slots(self) -> int:
@@ -69,6 +90,64 @@ class Supervisor:
     @property
     def ready(self) -> bool:
         return self.live and self._all_warmed_once and self.slots_ready >= 1
+
+    def check_capacity(self) -> None:
+        """Refuses at once when no slot could take a request (`not_ready`, `busy`), before its body is read."""
+        if not self.ready:
+            raise ParserError("not_ready", retry_after_s=NOT_READY_RETRY_AFTER_S)
+        if not any(s.state is SlotState.READY and not s.busy for s in self._slots):
+            raise ParserError("busy", retry_after_s=BUSY_RETRY_AFTER_S)
+
+    def reserve(self, request_id: str) -> Slot:
+        """Takes a free warm slot for `request_id`, or refuses at once (`not_ready`, `busy`, `duplicate_in_flight`)."""
+        if request_id in self._in_flight:
+            raise ParserError("duplicate_in_flight")
+        self.check_capacity()
+        for s in self._slots:
+            if s.state is SlotState.READY and not s.busy:
+                s.busy = True
+                self._in_flight.add(request_id)
+                return s
+        raise ParserError("busy", retry_after_s=BUSY_RETRY_AFTER_S)
+
+    def release(self, s: Slot, request_id: str) -> None:
+        s.busy = False
+        self._in_flight.discard(request_id)
+
+    async def convert(
+        self, s: Slot, job: dict[str, Any], deadline_s: float, is_disconnected: Callable[[], Awaitable[bool]]
+    ) -> dict[str, Any]:
+        """Runs `job` on the reserved slot `s` and returns the slot's result; raises `ParserError` or
+        `ClientDisconnectedError`."""
+        process, conn = s.process, s.conn
+        if process is None or conn is None or s.state is not SlotState.READY:
+            raise ParserError("busy", retry_after_s=BUSY_RETRY_AFTER_S)
+        conn.send(("convert", job))
+        now = time.monotonic()
+        kill_at, check_at = now + deadline_s + KILL_GRACE_S, now + DISCONNECT_POLL_S
+        while True:
+            if conn.poll():
+                try:
+                    kind, payload = conn.recv()
+                except EOFError:
+                    self._down(s, "crashed")
+                    raise ParserError("worker_crashed") from None
+                if kind == "result":
+                    return payload
+                raise ParserError.from_wire(payload)
+            if not process.is_alive():
+                self._down(s, f"crashed with code {process.exitcode}")
+                raise ParserError("worker_crashed")
+            now = time.monotonic()
+            if now >= kill_at:
+                self._down(s, "deadline")
+                raise ParserError("timeout")
+            if now >= check_at:
+                if await is_disconnected():
+                    self._down(s, "disconnect")
+                    raise ClientDisconnectedError
+                check_at = now + DISCONNECT_POLL_S
+            await asyncio.sleep(JOB_POLL_S)
 
     async def start(self) -> None:
         """Wipes the job directory, spawns every slot and starts the monitor (§10.2 step 1)."""
@@ -89,7 +168,7 @@ class Supervisor:
     def _spawn(self, s: Slot) -> None:
         parent, child = self._context.Pipe(duplex=True)
         process = self._context.Process(
-            target=slot.run,
+            target=self._target,
             args=(s.id, str(self._settings.models_dir), self._settings.threads, child),
             name=f"convert-slot-{s.id}",
             daemon=True,
@@ -136,6 +215,8 @@ class Supervisor:
             self._down(s, "self-test failed: " + "; ".join(s.problems))
 
     def _check(self, s: Slot, now: float) -> None:
+        if s.busy:
+            return  # the request's task owns the pipe while the slot converts
         process, conn = s.process, s.conn
         if process is None or conn is None:
             if now >= s.respawn_at:

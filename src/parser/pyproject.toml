@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest==9.1.1", "ruff==0.17.2", "httpx2==2.16.0"]
+dev = ["pytest==9.1.1", "ruff==0.17.2", "httpx2==2.16.0", "pip-audit==2.10.1"]
 
 [tool.uv]
 package = false
@@ -45,7 +45,7 @@ target-version = "py312"
 select = ["E", "W", "F", "I", "B", "UP", "S", "SIM", "RUF"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["ume_parser", "offline_guard"]
+known-first-party = ["ume_parser", "offline_guard", "scripts", "helpers", "fake_slot"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
