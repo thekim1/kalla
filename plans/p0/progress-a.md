@@ -64,7 +64,7 @@ Refs: [design-engine.md](../ingestion-worker/design-engine.md) §9, §16, §20; 
 
 ## 7. Scale seams, your part (#21)
 Refs: [performance-pass §8](../performance-pass.md), [data-model §9](../platform/data-model.md)
-- [ ] `IBlobStore` write-once contract (`IfAbsent`, tombstones) + file-system store; contract tests (an overwrite is refused)
+- [x] `IBlobStore` write-once contract (`IfAbsent`, tombstones) + file-system store; contract tests (an overwrite is refused)
 - [x] `IJobQueue` Postgres implementation
 - [x] `ConnectionStrings__ragdb-listen`, `Worker:Classes`, `Worker:Concurrency:<class>`
 
