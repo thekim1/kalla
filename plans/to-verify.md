@@ -6,7 +6,7 @@ them. When an item is resolved, record the result in the document's section and 
 follow postponed decision V1 and the 7-day package rule (`platform/repo-and-deployment.md` §12.12); licences feed
 postponed decision P2 ([`postponed-decisions.md`](postponed-decisions.md)).
 
-Phases: P0 foundation, P1 MVP/pilot (the one combined gateway release happens in P1), P2 broaden, P3 scale (README). *How*:
+Phases: P0 foundation, P1 MVP/pilot (P1a walking skeleton, P1b pilot hardening; the one combined gateway release happens in P1), P2 broaden, P3 scale (README). *How*:
 **test** (a unit, integration or manual test that proves the behaviour), **source** (read the package's source, release
 notes or documentation at the pinned version), **measure** (benchmark, R1 release test or pilot data), **ask** (a person
 or team named in the row).
@@ -15,7 +15,9 @@ Document names are relative to `plans/`; "gateway design" is `gateway-changes/de
 simplification pass ([`simplification-pass.md`](simplification-pass.md)) removed are struck with "dropped
 (simplification pass)"; its new checks are rows 127–140, the follow-up round of that pass added rows 141–160, the container cut (§14
 there: six containers, no Redis in P1, pgBackRest inside the Postgres image) added rows 161–163, and many assistants per
-department (§15 there: assistant versions, test questions, derived mode) added rows 164–166.
+department (§15 there: assistant versions, test questions, derived mode) added rows 164–166. Rows only verifiable for features the
+[weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer) moved out of P1
+(site-profile learning, answer judge, assistant tests, adaptive range sizing) carry phase "P2 (weakness review §1)".
 
 ## Postgres and pgvector
 
@@ -130,7 +132,7 @@ department (§15 there: assistant versions, test questions, derived mode) added 
 | 64 | `python-oxmsg` embedded messages and reference attachments | `parser/design.md` §5, §19 | P2 (e-mail) | test |
 | 65 | Docling pipeline caching per option set and its memory cost | `parser/design.md` §10.2, §19 | P0 | measure |
 | 66 | Layout model name, Hugging Face repos, revisions and sizes; TableFormer sizes | `parser/design.md` §12, §19 | P0 | source |
-| 67 | Docling `timings` granularity for per-page milliseconds | `ingestion-worker/design-processing.md` §21 | P1 | test |
+| 67 | Docling `timings` granularity for per-page milliseconds | `ingestion-worker/design-processing.md` §21 | P2 (weakness review §1) | test |
 | 68 | LibreOffice `-nogui` package names and size on trixie; `--convert-to` filter names | `parser/design.md` §4, §19 | P2 (legacy Office) | source |
 | 69 | LibreOffice registry keys (macro security, macro execution, link update, update check) | `parser/design.md` §4, §19 | P2 (legacy Office) | source + test |
 | 70 | No local-file link leak with links set to "never update" (the fixture is the proof) | `parser/design.md` §15.3, §19 | P2 (legacy Office) | test |
@@ -192,7 +194,7 @@ department (§15 there: assistant versions, test questions, derived mode) added 
 | 98 | Embedding throughput of the gateway's on-prem BGE-M3 (tokens/s, batch size) and its effect on chat query embeddings | `ingestion-worker/design-engine.md` §18, §23; `ingestion-worker/design-processing.md` §21 | P1 (R1) | measure |
 | 99 | BGE-M3 without a query instruction prefix; on-prem query-embedding p95 on production hardware | `knowledge-api/design.md` §5.1, §11; `ingestion-worker/design-processing.md` §11, §21 | P1 | measure |
 | 100 | Planning numbers: CPU and statements per page | `ingestion-worker/design-engine.md` §18, §23; `ingestion-worker/design-connectors.md` §17, §22; `ingestion-worker/design-processing.md` §14.7, §16, §21 | P1 (R1) | measure |
-| 101 | Ingestion targets: 10k pages/h without moving chat p95 > 10 %; unchanged re-crawl runs no parse/embed; one fetch and parse per URL for two departments (caches); restart loses no work | `ingestion-worker/plan.md` §9 | P1 (R1) | measure |
+| 101 | Ingestion targets: 10k pages/h without moving chat p95 > 10 %; unchanged re-crawl runs no parse/embed; one parse per URL for two departments (caches; one fetch only with the shared frontier, P2, weakness review §1); restart loses no work | `ingestion-worker/plan.md` §9 | P1 (R1) | measure |
 | 102 | Knowledge database part p95 < 100 ms at 100k chunks | `knowledge-api/plan.md` §4; `knowledge-api/design.md` §11 | P1 | measure (load test) |
 | 103 | Character estimate ÷ 3 vs real tokenizers (Swedish, English), via `rag.chat.prompt.estimate_ratio` | `chat-api/design.md` §6.3 | P1 | measure |
 | 104 | On-prem condense model latency p95 within the 600 ms timeout | `chat-api/design.md` §5, §16 | P1 | measure |
@@ -202,11 +204,11 @@ department (§15 there: assistant versions, test questions, derived mode) added 
 | 107 | ≈ 100 tokens per catalogue entry, ÷ 3 for skill bodies; `Agent:StepTimeEstimate` 8 s | `tools/design.md` §3.4, §6.5 | P2 | measure |
 | 108 | Exact cosine over ≤ 2,000 decrypted attachment chunks within 5 ms | `chat-api/design.md` §15.2 | P2 | measure |
 | 154 | Conversational check: no false positives on real questions (a short question of stop words plus one content word is not conversational); the .NET Snowball stop lists match Postgres's | `chat-api/design.md` §6.2, §22 | P1 | test + measure (pilot data) |
-| 155 | Answer-level nightly run in `rag-admin`: agreement of the on-prem judge's faithfulness and citation-precision scores with human ratings on a sample (before editors see them); cost per assistant | `chat-api/design.md` §18.8, §22; `ingestion-worker/design-processing.md` §14.8, §21 | P1 (late) | measure |
+| 155 | Answer-level nightly run in `rag-admin`: agreement of the on-prem judge's faithfulness and citation-precision scores with human ratings on a sample (before editors see them); cost per assistant | `chat-api/design.md` §18.8, §22; `ingestion-worker/design-processing.md` §14.8, §21 | P2 (weakness review §1) | measure |
 | 167 | Owner-team scoping (P2): the `teamCodes` claim is filled for department staff in Entra (or the IdP) and matches `Teams.Code` from the gateway's organisation data; otherwise member groups on teams (a gateway change) | `identity/design.md`, `admin/design.md` §3.2, `platform/data-model.md` `DepartmentSettings` | P2 start | check the claim with test users |
 | 156 | Static skill budget: ≈ 4,000 tokens of skill bodies in the system prompt keeps tool choice and answer quality on the pilot models (static vs progressive on the Bygglov skill) | `tools/design.md` §3.9, §15 | P2 | measure |
 | 157 | Tool bulkhead values: `MaxConcurrentCalls` 8, circuit 5 failures / 30 s, in the R1 agent scenario | `tools/design.md` §2.2, §15 | P2 | measure |
-| 166 | Assistant tests: judge cost and duration of an `assistant-tests` run (≤ 30 questions, an answer and a judge call each) per publish across a department's assistants; the verdict against free-text expected behaviour agrees with editors on a sample | `chat-api/design.md` §18.8, §22; `platform/data-model.md` §2.2 | P1 | measure |
+| 166 | Assistant tests: judge cost and duration of an `assistant-tests` run (≤ 30 questions, an answer and a judge call each) per publish across a department's assistants; the verdict against free-text expected behaviour agrees with editors on a sample | `chat-api/design.md` §18.8, §22; `platform/data-model.md` §2.2 | P2 (weakness review §1) | measure |
 
 ## Licences and external data
 
@@ -242,9 +244,9 @@ department (§15 there: assistant versions, test questions, derived mode) added 
 
 | # | Item | Where | Phase | How |
 |---|---|---|---|---|
-| 137 | Site-profile learning on umea.se: 30–50 sampled pages give the Sitevision preset, main root `main`, boilerplate (share widget, short-URL line, "Undersidor" list kept as links only), breadcrumb `nav[aria-label="Brödsmulor"]` without `sr-only` text, date pattern "Sidan uppdaterades", identity rule by node id (id-only URL gives the same content hash on sampled pages), `lastmod` reliability across runs | `simplification-pass.md` §13 | P1 | test |
+| 137 | Site-profile learning on umea.se: 30–50 sampled pages give the Sitevision preset, main root `main`, boilerplate (share widget, short-URL line, "Undersidor" list kept as links only), breadcrumb `nav[aria-label="Brödsmulor"]` without `sr-only` text, date pattern "Sidan uppdaterades", identity rule by node id (id-only URL gives the same content hash on sampled pages), `lastmod` reliability across runs | `simplification-pass.md` §13 | P2 (weakness review §1); P1 checks the same values by hand for the Sitevision preset (#138) | test |
 | 138 | umea.se acceptance page (`…/digitalomstallningochit.4.88db09b1724ee319ca45d.html`): exactly its main text, breadcrumb "Kommun och politik › Kommunens organisation › Förvaltningar och verksamheter › Teknik och fastighet" (path to verify on the live page), date 2026-01-15; ≈ 20 saved umea.se pages (HTML and PDF) as the regression corpus | `simplification-pass.md` §13.2 | P1 | test |
 | 139 | Pilot source inventory at P1 start: share of legacy `.doc`/`.xls`/`.ppt`, RTF and e-mail (Z1), and whether any pilot site needs JavaScript (renderer) | `simplification-pass.md` §1; postponed Z1 | P1 (start) | measure |
 | 158 | Sitevision fingerprint and the preset's session parameters (`sv.*` query parameters) on two or three other Sitevision municipal sites | `ingestion-worker/design-connectors.md` §22 | P1 | test |
-| 159 | Site-profile re-learn thresholds (empty-root rate, boilerplate share, text-yield change) on the umea.se corpus | `ingestion-worker/design-connectors.md` §22 | P1 | measure |
-| 160 | The worker's preview returns site-profile before/after text for a host without a profile within the 2-minute preview deadline | `admin/design.md` §15 | P1 | test |
+| 159 | Site-profile re-learn thresholds (empty-root rate, boilerplate share, text-yield change) on the umea.se corpus | `ingestion-worker/design-connectors.md` §22 | P2 (weakness review §1) | measure |
+| 160 | The worker's preview returns site-profile before/after text for a host without a profile within the 2-minute preview deadline | `admin/design.md` §15 | P2 (weakness review §1) | test |

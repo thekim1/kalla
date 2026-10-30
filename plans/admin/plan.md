@@ -3,14 +3,15 @@
 The control plane: where departments set up sources, collections and assistants (later skills), and where the
 platform team runs the platform. Its own app (decision), with the gateway's design system, login pattern and role
 model, so it feels like the same family without being coupled to the gateway's releases. Review items applied: R2–R7.
-Simplified on 2026-10-30 ([`../simplification-pass.md`](../simplification-pass.md) §1, §2, §8, §10, §15). Detailed design:
+Simplified on 2026-10-30 ([`../simplification-pass.md`](../simplification-pass.md) §1, §2, §8, §10, §15) and thinned by
+the [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer) (P1 split into P1a and P1b; assistant extras to P2, §8). Detailed design:
 [`design.md`](design.md) (detail step 10); where they differ, the design wins.
 
 ## 1. Scope
 
 **Does:** configuration CRUD with validation and audit; the department journey in Swedish pages (collection, source
 with template parameters and preview, publish with the evaluation report, assistant with draft, publish, versions and
-test questions, test panel, audience, department map, feedback, limited review); platform-admin objects through generic schema-driven forms and the OpenAPI UI; site profiles;
+restore, test panel, audience, feedback, limited review; P2: version diff, test questions, department map); platform-admin objects through generic schema-driven forms and the OpenAPI UI; site profiles;
 status of syncs and runs; evaluation sets and reports; skills and tool servers (P2); clients and keys; settings and
 retention.
 
@@ -29,11 +30,11 @@ retention.
   template version that no running worker supports (R7).
 - **Assistants** (simplification pass §15): one type; it uses the agent loop (P2) exactly when a linked skill carries
   tools (label "Använder verktyg", never a setting). Edits go to a **draft**, the test panel runs the draft,
-  **Publicera** makes it the published version (the only one chat serves); version history with a diff and one-click
-  restore (= a new version). Each assistant has a small set of **test questions** (question, expected behaviour as
-  free text, optional expected document or phrase), run after every publish by the answer judge in `rag-admin`,
-  advisory like collection evaluation. Audience, level, retention, description and contact belong to the assistant,
-  not to a version. Assistants can be copied and created from platform-owned **templates**.
+  **Publicera** makes it the published version (the only one chat serves); version history with one-click restore (= a
+  new version). **P2 ([weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)):** a version diff; a small set of **test questions** per assistant (question,
+  expected behaviour as free text, optional expected document or phrase), run after every publish by the answer judge
+  in `rag-admin`, advisory like collection evaluation; copy and platform-owned **templates**. Audience, level,
+  retention, description and contact belong to the assistant, not to a version.
 - Validates assistant composition: collections (own or shared with the department; knowledge reaches an assistant only
   through its own collection links, never through skills), skills and tool servers' **result level** ≤ assistant
   level, tool servers' **clearance** ≥ max(assistant level, ceiling of history-resending audience clients) (design
@@ -80,23 +81,24 @@ with no `rag-*` role gets 403 on every page and API call.
 
 | Page | Contents |
 |---|---|
-| Overview | Setup checklist, paused deletions waiting for confirmation, evaluation reports that got worse, PII-flagged documents in `public` collections, recent failures, assistants unused for 90 days (suggest archiving) |
-| Map | The department's sources → collections → assistants → audiences, with a table view; saving a source or collection names the assistants it affects ("påverkar 3 assistenter") |
+| Overview | Setup checklist, paused deletions waiting for confirmation, evaluation reports that got worse, PII-flagged documents in `public` collections, recent failures; assistants unused for 90 days (suggest archiving) from P2 ([weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)) |
+| Map (**P2**, [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)) | The department's sources → collections → assistants → audiences, with a table view. The impact notice on saving a source or collection ("påverkar 3 assistenter") stays in P1 on the Sources and Collections pages |
 | Collections | Classification, sources, documents (incl. PII list per chunk set and clearance of the document with a reason), share list (named departments), retrieval settings (saved directly; knowledge design §12.1), **evaluation set and latest reports** |
-| Sources | Type-specific form (URL list, crawl, upload) with template parameters under "Avancerat", pre-flight check, preview of sample pages (for a crawl source with the learned site profile's before/after text), impact count before saving scope/identity changes, schedule, "sync now", run history, crawl reports, failed items, upload list, quarantine list, deletion confirmations, held references |
-| Publish | Plan (counts, time, cost) → re-process → **evaluation report** (recall@10 and MRR with counts against the previous run) → keep or roll back (one click within 14 days) |
-| Assistants | Create from a template or copy; description and contact; **draft** with prompt, model (validated against the gateway at the level's ceiling on publish), collections, query-step form, not-found texts sv/en + contact links (P2 skills, "Använder verktyg" when one carries tools); **test panel** on the draft (retrieved chunks, raw vs delivered answer; P2 tool calls), running `Ume.Rag.Answering` in the admin, deployed from the same release as `rag-api`; **Publicera**; **Versioner** (diff, restore); **Testfrågor** with the advisory test report after each publish; classification, retention, archive; the **latest answer evaluation** (faithfulness and citation precision of the nightly `answers` run, late P1, run in the admin) |
+| Sources | Type-specific form (URL list, crawl, upload) with template parameters under "Avancerat", pre-flight check, preview of sample pages (for a crawl source with the site profile's before/after text; the profile is the manual Sitevision preset in P1, learned from P2), impact count before saving scope/identity changes, schedule, "sync now", run history, crawl reports, failed items, upload list, quarantine list, deletion confirmations, held references |
+| Publish | Plan (counts, time, cost; in P1 every document of the collection, effect-tag plans from P2, [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)) → re-process → **evaluation report** (recall@10 and MRR with counts against the previous run) → keep or roll back (one click within 14 days) |
+| Assistants | Create (from a template or copy from P2); description and contact; **draft** with prompt, model (validated against the gateway at the level's ceiling on publish), collections, query-step form, not-found texts sv/en + contact links (P2 skills, "Använder verktyg" when one carries tools); **test panel** on the draft (retrieved chunks, raw vs delivered answer; P2 tool calls), running `Ume.Rag.Answering` in the admin, deployed from the same release as `rag-api`; **Publicera**; **Versioner** (restore; diff from P2); classification, retention, archive. **P2** ([weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)): **Testfrågor** with the advisory test report after each publish; the **latest answer evaluation** (faithfulness and citation precision of the nightly `answers` run, run in the admin) |
 | Audience | Clients the assistant is offered to, with the residency check explained |
 | Feedback | Department-scoped ratings without content; a comment after a one-click reason; import health |
 | Conversations | `rag-reviewer` only; **P1 limited to the conversation behind a feedback item** (`public`/`internal`) plus the access log |
 
 **P1 platform objects (generic schema-driven forms + OpenAPI UI, platform admins):** settings, data protection
-(shredding switched off until A1), clients, templates, assistant templates, site profiles (versions, proposals, approve/rollback),
+(shredding switched off until A1), clients, templates, site profiles (manual profile JSON: versions, rollback; proposals with learning in P2),
 embedding profiles (read), gateway models, keys, organisation mirror (read), audit log list.
 
 **P2 pages:** Skills (draft editor, gate report from the skill gate the admin runs, serve/rollback, share list), Tool servers (registration, discovery,
 approvals by platform admin and system owner, pre-registration, grants, drift), parse-profile proposals, conversation
-search and the `sensitive` two-person flow, dedicated pages for keys and clients if the generic forms prove too thin.
+search and the `sensitive` two-person flow, dedicated pages for keys and clients if the generic forms prove too thin; from [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer): department map,
+assistant templates (generic form), assistant copy, version diff, test questions, latest answer evaluation.
 
 Search (Ctrl K), mobile layout and accessibility as in the gateway admin UI (`~/git/llmgateway/docs/admin-ui.md`), with
 Swedish texts (answered 4) and one NVDA screen-reader pass of the pilot journey before the pilot (answered 7).
@@ -106,10 +108,11 @@ Swedish texts (answered 4) and one NVDA screen-reader pass of the pilot journey 
 | Phase | Deliverable |
 |---|---|
 | P0 | Entra/Keycloak BFF login against RAG's own registration, app roles (incl. `rag-reviewer`), audit infrastructure, write path (lock + rules + change + outbox + version + audit), design system and shell in Swedish, error-code export, org sync |
-| P1 a | Collections, sources (URL list, crawl, upload) with preflight, preview (site-profile before/after), impact and run history, deletion decisions, documents tab with PII view/clear, template parameters, publish (plan → re-process → evaluation report → keep or roll back) |
-| P1 b | Evaluation set and reports, retrieval settings, assistants (templates, copy, draft → publish, versions with diff and restore, test questions) with test panel (same release as `rag-api`), department map, audiences (clients), retention, `GatewayModels` sync, generic forms for platform objects (settings, data protection, clients, templates, assistant templates, site profiles, embedding profiles, gateway models, keys), audit list, explain access |
-| P1 c | **Feedback page** with comment reveal, conversation review behind feedback (`public`/`internal`), access log, import health; accessibility pass (incl. NVDA) and tillgänglighetsredogörelse; pilot journey E2E green |
-| P2 | Skills (`rag-skill-editor`, share lists, gate report, serve), tool servers (approvals, pre-registration, grants, drift), tool use through skills, owner-team scoping, parse-profile proposals, SharePoint source, crawl hierarchy tree, parameter diff, conversation search and `sensitive` two-person review, feedback → test question, widget configuration |
+| P1a (walking skeleton) | The pilot's collection, crawl, URL-list and upload sources and its one assistant created through the write path with the OpenAPI UI and generic forms; the umea.se site profile entered as a manual profile JSON (hand-checked Sitevision preset); `GatewayModels` sync; clients |
+| P1b (1) | Collections, sources (URL list, crawl, upload) with preflight, preview (site-profile before/after), impact and run history, deletion decisions, documents tab with PII view/clear, template parameters, publish (re-process every document → evaluation report → keep or roll back) |
+| P1b (2) | Evaluation set and reports, retrieval settings, assistants (draft → publish, versions with restore) with test panel (same release as `rag-api`), audiences (clients), retention, generic forms for platform objects (settings, data protection, clients, templates, site profiles, embedding profiles, gateway models, keys), audit list, explain access |
+| P1b (3) | **Feedback page** with comment reveal, conversation review behind feedback (`public`/`internal`), access log, import health; accessibility pass (incl. NVDA) and tillgänglighetsredogörelse; pilot journey E2E green |
+| P2 | From [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer): assistant version diff, test questions and the answer evaluation, templates and copy, department map and 90-day attention item, site-profile proposals (learning), effect-tag publish plans. Skills (`rag-skill-editor`, share lists, gate report, serve), tool servers (approvals, pre-registration, grants, drift), tool use through skills, owner-team scoping, parse-profile proposals, SharePoint source, crawl hierarchy tree, parameter diff, conversation search and `sensitive` two-person review, feedback → test question, widget configuration |
 | P3 | Analytics (retrieval, feedback and evaluation trends), OBO tool configuration, risk acceptance, skill import/export, embedding profile changes |
 
 ## 6. Open questions
@@ -139,7 +142,8 @@ Answered (2026-10-30; detail in design.md §14.1):
 9. **Many assistants per department** (simplification pass §15): one assistant type (mode derived from tool-bearing
    skills); knowledge only through direct collection links; drafts, publish, versions with diff and restore; test
    questions per assistant, advisory; copy, templates, department map, impact notice, 90-day attention item,
-   description and contact; P2 owner-team scoping (design §3.2, §4.5, §5.5.4, §5.5.6, §7.4).
+   description and contact; P2 owner-team scoping (design §3.2, §4.5, §5.5.4, §5.5.6, §7.4). Diff, test questions,
+   copy, templates, department map and the 90-day attention item later moved to P2 ([weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)).
 
 ## 7. Deferred or removed (simplification pass)
 
@@ -161,3 +165,17 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 | Risk acceptance for the lethal trifecta | P3 (§10) |
 | "(+ request)" right for tool servers | Removed: requests through the platform team's intake (§10) |
 | Assistant mode choice (`rag`/`agent`), activate/deactivate, collections reached through skills | Removed: mode derived from tool-bearing skills, draft → publish, direct collection links only (§15) |
+
+## 8. Deferred or removed (weakness review)
+
+Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+
+| Item | Where it went |
+|---|---|
+| Assistant version diff, per-assistant test questions with the advisory test report | P2 |
+| Assistant templates, copy an assistant | P2 |
+| Department map page, assistants-unused-for-90-days attention item | P2 (the impact notice on saving stays in P1) |
+| Latest answer evaluation (nightly `answers` run) on the assistant page | P2 |
+| Site-profile proposals, approval of re-learned profiles | P2 with learning; P1 edits the manual profile JSON |
+| Publish plan from effect tags | P2; P1 publish re-processes every document of the collection, still with report and keep or roll back |
+| Journey pages for sources and the assistant | P1b; the walking skeleton (P1a) uses the OpenAPI UI and generic forms |

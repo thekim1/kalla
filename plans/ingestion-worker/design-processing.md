@@ -27,7 +27,7 @@ F1 0.922 on SUC 3.0).
 | 1 | Routing | Per document by detected media type: HTML, text/Markdown and CSV in the worker; PDF, Office, ODF and images to the parser. The worker parses **no untrusted binary format** (§3) |
 | 2 | Per-page strategy | Six ordered rules on the `/v1/inspect` signals; clean text-layer pages use the parser's **text-layer fast path** (pypdfium2); post-conversion checks re-run garbled pages with forced OCR and empty scanned pages once at scale 3.0 (§3.1) |
 | 3 | Parse rules | Built-in rules (`default`, `regulations`, `protokoll`) plus platform-admin parse rules, versioned; `ParseObservations` recorded; no auto-apply learning of parse strategies (§3.5) |
-| 4 | HTML | Extraction set by the host's **site profile** (main root, boilerplate, breadcrumb, date pattern, metadata, link lists for discovery only), learned and versioned by 6b; built-in presets (Sitevision first) when no profile exists (§3.7) |
+| 4 | HTML | Extraction set by the host's **site profile** (main root, boilerplate, breadcrumb, date pattern, metadata, link lists for discovery only), versioned by 6b (manual in P1, learned from P2, weakness review §1); built-in presets (Sitevision first) when no profile exists (§3.7) |
 | 5 | Single-page failures | A page that fails alone after halving is a **missing page** (`degraded`) while ≤ 10 % of pages; above that the document fails (§3.3) |
 | 6 | Headings | Layout headings re-levelled by Swedish numbering patterns (`1.2`, `Kapitel 3`, `3 kap.`, `§ 4`, `Bilaga 2`); deeper than `maxLevel` becomes bold body text (§5) |
 | 7 | Tokenizer | `Microsoft.ML.Tokenizers` 2.0.1 `SentencePieceTokenizer` over BGE-M3's own SentencePiece model, embedded in the worker; counts must equal the Hugging Face tokenizer on a fixture corpus (§6.1) |
@@ -105,7 +105,8 @@ version bump, 6a §5.1); P1 tunes them once on the fixture corpus (§17). OCR is
 1. Consecutive pages with the same strategy form a run; each run is cut into ranges (parser §8.1). `blank` pages never
    go to the parser.
 2. First range size: 20 (`text-layer`, `docling-text`, `docling-tables`), 8 (`docling-ocr`, `-force`), 4 (`@3`).
-   After each range: `msPerPage = EWMA(α 0.5)` of `timings.docling_ms / pages` per strategy, and
+   **P1** (weakness review §1): these sizes are fixed per strategy from configuration (`Worker:Parse:RangePages:<strategy>`)
+   and only halved on failure (item 4). **P2**: after each range `msPerPage = EWMA(α 0.5)` of `timings.docling_ms / pages` per strategy, and
    `next = clamp(⌊0.5 × 110,000 / msPerPage⌋, 1, 20)` (half the 110 s request deadline).
 3. Ranges run sequentially in the document's `parse` job; completed ranges are written as `ranges/{from}-{to}`
    (6a §8) so a crash, slice yield (6a §9.5) or retry resumes at the next range.
@@ -167,7 +168,7 @@ The worker parses only HTML, text, Markdown and CSV (simplification pass §9).
 | `plain-text` | charset (BOM, strict UTF-8, Windows-1252 fallback, parser §3); Markdown via Markdig (`level_source: markdown`), plain text as paragraphs split on blank lines |
 | `csv-table` | delimiter sniffed among `;`, `,`, tab, `\|` on the first 50 lines; header row = first row all non-numeric and distinct; one table block; 200,000-cell cap as parser §7.4 |
 
-The **site-profile check** (6b: a re-learned profile is applied automatically only when, on the sample, no page loses
+The **site-profile check** (P2, weakness review §1; 6b: a re-learned profile is applied automatically only when, on the sample, no page loses
 more than 10 % of its main-text words, none ends up empty and the boilerplate share does not rise) runs this same
 extraction in preview mode on both profile versions; its procedure and thresholds are 6b's.
 
@@ -356,7 +357,7 @@ document (there are no branches) and only missing pages make it `degraded`.
 | `missingPages` | Parsed | §3.3 | any → `degraded` |
 | `emptyChunkRatio` | Chunks | chunks with < 20 body tokens ÷ chunks | `> 0.2` |
 | `duplicateChunkRatio` | Chunks | chunks sharing a `TextHash` within the set ÷ chunks | `> 0.3` |
-| `boilerplateShare`, `emptyRoot` | HTML | stripped ÷ root text; root selector matched nothing | feed 6b's re-learning trigger |
+| `boilerplateShare`, `emptyRoot` | HTML | stripped ÷ root text; root selector matched nothing | feed 6b's re-learning trigger (P2); reported in the run from P1 |
 
 `Score` (observations) = `min(1, chars/(1500 × pages)) × (1 − garble) × coalesce(ocrConfidence, 1) × (1 − emptyPageRatio)`,
 in [0, 1].
@@ -495,7 +496,7 @@ Swedish pitfalls (fixtures in §17):
 | Request | `POST /v1/embeddings` `{model: "bge-m3", input: [...], encoding_format: "float"}`; headers by the engine (6a §7.7): `x-ume-on-behalf-of` = owner team of the collection, `x-ume-max-residency: OnPrem` always (the worker's `OnPrem` key), `x-ume-run-id`, `x-ume-step: embed` |
 | Response checks | count equals inputs; each vector 1024 finite floats (else fatal `embed.bad_vector`); `x-ume-residency` ≤ `OnPrem` (else fatal, 5003); stored as returned (cosine is scale-invariant) |
 | Canary | at startup and hourly the worker embeds a fixed Swedish canary text and compares it with `EmbeddingProfiles.CanaryEmbedding`: cosine < 0.999 → the `embed` class stops on this instance, health `unhealthy`, alert: the gateway alias now serves another model, which would silently mix vector spaces |
-| Concurrency | AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1) |
+| Concurrency | P1: fixed `Worker:Concurrency:embed` from configuration. **P2** (weakness review §1): AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1) |
 | Chat protection at the gateway | the worker's own delegating key with the gateway's existing `MaxConcurrentRequests` cap (429 + `Retry-After`, honoured), so a misconfigured worker cannot starve chat's query embeddings. A separate BGE-M3 query route only when the performance pass's §6 trigger fires ([`../performance-pass.md`](../performance-pass.md) §3.9, §6) |
 | Failures | 6a §7.3 table; a 400 for one input fails the document (`embed.input_rejected`, a bug: 400 tokens ≪ 8192); partial results of a failed batch are discarded and the batch retried whole |
 
@@ -670,7 +671,7 @@ Removed (simplification pass): parse strategies are not learned automatically (�
 | Publish report, nightly | ≤ 100 queries on the full collection | < 1 min |
 | On-demand settings comparison | 2 × 100 queries | < 1 min |
 | Set generation | ≈ 200k on-prem LLM tokens | model-bound, ≈ 10–20 min |
-| Answer-level run (late P1, `rag-admin`) | ≤ 100 answers + judge calls on-prem | model-bound, minutes |
+| Answer-level run (P2, weakness review §1; `rag-admin`) | ≤ 100 answers + judge calls on-prem | model-bound, minutes |
 
 The re-processing itself is forecast by the publish plan (6a §12.2); the `eval` class (concurrency 1) runs only
 generation and measuring.
@@ -681,7 +682,7 @@ generation and measuring.
   evaluation page and `rag.evaluation.recall_at_10` (repo-and-deployment §9). Alert (admin overview) when recall@10
   falls 5 points below the 4-week median. Onyx found an ingestion bug only through poor evaluation scores
   (`../../platforms/onyx.md:322`); this makes that routine.
-- **Answers** (from late P1): nightly per assistant, the evaluation sets of its collections are answered through
+- **Answers** (P2, weakness review §1): nightly per assistant, the evaluation sets of its collections are answered through
   `Ume.Rag.Answering` with the assistant's settings, and an on-prem judge (`Settings.EvaluationJudgeModel`, ceiling
   `OnPrem`, `x-ume-step: eval-answer`) rates **faithfulness** (every claim supported by the cited chunks) and
   **citation precision** (cited chunks support the claims); results per assistant with counts. The `uncited_answer`
@@ -747,8 +748,8 @@ pages, so the parser path dominates its first full crawl. Evaluation uses the in
 
 | Phase | Deliverable |
 |---|---|
-| P1 | *Detect* with inspect; parse routing, per-page rules, ranges, joining, re-render; built-in and admin parse rules, observations; HTML extraction with site profiles and presets (Sitevision first), breadcrumb, date, description and keywords; text and CSV parsers; *Clean*; split with re-levelling; *Chunk* with the BGE-M3 tokenizer, breadcrumb prefix, row groups, `SearchText`; metadata; quality facts; *Personal data* with patterns, gated `/v1/ner`, flag rules, `held` sets, clear command, carry-over and re-flag, 5103; *Embed* with cache and canary; noise re-key; generated sets with filtering; human questions; `Ume.Rag.Retrieval`; publish reports, nightly runs, on-demand settings comparison; late P1 answer-level nightly run (in `rag-admin`); umea.se acceptance corpus; tests of §17 |
-| P2 | parse-rule proposals from observations (approval required); `pii-mask`; feedback-derived questions; parent-child chunks only if §5.3's condition is met; `halfvec` evaluation (data-model §12.16); legacy Office, RTF and email (with child documents); describe pictures; WordPress and Episerver/Optimizely presets |
+| P1 | *Detect* with inspect; parse routing, per-page rules, ranges (fixed sizes from configuration), joining, re-render; built-in and admin parse rules, observations; HTML extraction with site profiles and presets (Sitevision first), breadcrumb, date, description and keywords; text and CSV parsers; *Clean*; split with re-levelling; *Chunk* with the BGE-M3 tokenizer, breadcrumb prefix, row groups, `SearchText`; metadata; quality facts; *Personal data* with patterns, gated `/v1/ner`, flag rules, `held` sets, clear command, carry-over and re-flag, 5103; *Embed* with cache and canary; noise re-key; generated sets with filtering; human questions; `Ume.Rag.Retrieval`; publish reports, nightly runs, on-demand settings comparison; umea.se acceptance corpus; tests of §17 |
+| P2 | from weakness review §1: answer-level nightly run (in `rag-admin`), range sizing by EWMA (§3.3), AIMD embed concurrency (§11); parse-rule proposals from observations (approval required); `pii-mask`; feedback-derived questions; parent-child chunks only if §5.3's condition is met; `halfvec` evaluation (data-model §12.16); legacy Office, RTF and email (with child documents); describe pictures; WordPress and Episerver/Optimizely presets |
 | P3 | embedding-profile migration tooling; keyed PII fingerprints if count-based re-flagging proves too weak |
 
 ## 19. Changes to other documents
@@ -822,3 +823,14 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 | Fleet-wide Redis embedding cap, scale batching, bulk embed share | P2, first multi-host deployment ([`../performance-pass.md`](../performance-pass.md) §3.9) |
 | Answer faithfulness as a P3 assistant layer | moved earlier: nightly answer-level run from late P1 (§14.8) |
 | `ChunkSets` evaluation scope with exact search | dropped with the gate; collection scope only (§13.5) |
+
+## 23. Deferred or removed (weakness review)
+
+Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+
+| Mechanism | Where it went |
+|---|---|
+| Nightly answer-level judge (`answers` runs, §14.8) | P2 |
+| Range sizing from measured time per page (EWMA, §3.3) | P2; fixed range sizes per strategy from configuration in P1 |
+| AIMD embedding concurrency (§11) | P2; fixed `Worker:Concurrency:embed` in P1 |
+| Site-profile learning and its check (§3.7) | P2 (6b §24); P1 extraction uses the manual profile |

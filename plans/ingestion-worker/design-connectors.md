@@ -8,7 +8,7 @@ run outcomes (§10.2), the index writer (§14), config rules (§15) and the exec
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §5.5, §6, §9 and
 [`../parser/design.md`](../parser/design.md) §3, §11. Rewritten to the simplification pass
 ([`../simplification-pass.md`](../simplification-pass.md), incl. §13 umea.se findings); removed and deferred items are
-listed in §23. Nothing is implemented. Changes needed elsewhere: §20; questions: §21.
+listed in §23; items moved to P2 by the [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer) in §24. Nothing is implemented. Changes needed elsewhere: §20; questions: §21.
 
 Citations: `onyx/…` = `~/git/rag-platforms/onyx/backend/onyx/…`, `owui/…` =
 `~/git/rag-platforms/open-webui/backend/open_webui/…`, `eneo/…` = `~/git/eneo/backend/src/intric/…`;
@@ -20,8 +20,8 @@ Citations: `onyx/…` = `~/git/rag-platforms/onyx/backend/onyx/…`, `owui/…` 
 |---|---|---|
 | 1 | Contracts | Onyx-style capability interfaces; listing in the `sync` job, fetching in the `fetch` job; a typed checkpoint is committed with the work it covers (§2) |
 | 2 | Identity | Own URL normaliser (RFC 3986 + fixed tracking/session parameter list + the site profile's session parameters); identity = **final URL after redirects**, mapped by the site profile's identity rule only when verified; `rel=canonical` folds an alias **only when verified** by equal content hash (§3) |
-| 3 | Politeness | Per-URL `fetch` jobs are **released by a frontier releaser** at each host's rate, so the queue never holds more than ~2 s of work per host; `CrawlHosts.NextAllowedAt` is the shared budget (§6) |
-| 4 | Sharing | Documents belong to one source; reuse is by cache: one frontier row per (level, URL) with one **claim** per source, one request serves every claim, raw blobs are content-addressed, and a fetch younger than 12 h is reused by scheduled runs (§6.2) |
+| 3 | Politeness | `CrawlHosts.NextAllowedAt` is the per-host budget shared by every source; each `fetch` takes its slot before the request. P1: each source has its own frontier (§6.0). **P2 (weakness review §1)**: per-URL `fetch` jobs are **released by a frontier releaser** at each host's rate, so the queue never holds more than ~2 s of work per host (§6) |
+| 4 | Sharing | Documents belong to one source; raw blobs are content-addressed, parse output and embeddings cached by content (P1). **P2 (weakness review §1)**: one frontier row per (level, URL) with one **claim** per source, one request serves every claim, and a fetch younger than 12 h is reused by scheduled runs (§6.2) |
 | 5 | Crawl runs | Every scheduled crawl is a full **traversal** with stored outlinks, skipping unchanged pages by conditional GET or reliable sitemap `lastmod`; deletions only after a **complete** traversal; an alert after 3 runs without one (§5.4) |
 | 6 | Egress | `IEgressGuard` resolves once and connects only to the checked addresses (`ConnectCallback`), max 5 redirects re-checked per hop; host firewall as second layer plus a startup canary; cookies never stored or sent (§7) |
 | 7 | Renderer | **P2**, and only if a P1-start check shows that pilot sites need JavaScript (umea.se does not); `IRenderer` stays as a seam; short pages are an info note in the crawl report (§8) |
@@ -33,7 +33,7 @@ Citations: `onyx/…` = `~/git/rag-platforms/onyx/backend/onyx/…`, `owui/…` 
 | 13 | Effect tags | Declared per setting in the source JSON schemas (`x-effect`); the worker plans from per-tag settings hashes, the admin shows the impact before save (§12.3) |
 | 14 | Deletion guard | Proposals collected per run, applied in a **reconcile phase** after all fetches; pause above 20 % (min 5) or 500, or on an empty source; held documents after a rejection (§13) |
 | 15 | SharePoint (P2) | Stored `deltaLink` per drive, tombstones and moves processed, 410 → enumeration through the guard, subscriptions as hints only; ACLs not mirrored (§14) |
-| 16 | Site profiles | A **learned, versioned profile per host** (CMS preset such as Sitevision, extraction selectors, verified identity rule, session parameters, excluded types, `lastmod` reliability, JavaScript need), applied automatically with guardrails, audited, one-click rollback (§5.6) |
+| 16 | Site profiles | A **versioned profile per host**; P1: a manual profile JSON (umea.se: the hand-checked Sitevision preset); **P2 (weakness review §1)**: **learned**, (CMS preset such as Sitevision, extraction selectors, verified identity rule, session parameters, excluded types, `lastmod` reliability, JavaScript need), applied automatically with guardrails, audited, one-click rollback (§5.6) |
 
 ## 2. Connector contracts
 
@@ -315,11 +315,17 @@ Built by the finalizer from `RunItems` and `CrawlRuns` into `Runs.Report` (jsonb
 | Traps | kind, pattern, count, example |
 | Duplicates | groups of URLs with equal content hash; folded aliases; canonicals elsewhere not verified (§3.3); suggested setting |
 | Short pages | info note: pages with < 200 visible characters while the HTML is > 5 KB; never `degraded` (rendering is not part of P1, §8.1) |
-| Site profile | profile version used; empty-root rate, boilerplate share and text yield against the previous run (the re-learn trigger, §5.6) |
+| Site profile | profile version used; empty-root rate, boilerplate share and text yield against the previous run (the re-learn trigger from P2, §5.6) |
 | Noise | pages whose hash changed but whose parsed output did not (§12.2), by host |
 | Deletions | proposed / applied / held, by reason (§13) |
 
 ### 5.6 Site profiles (learned per host)
+
+**P1 ([weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)):** profiles are **manual**. The umea.se profile is a **hand-checked Sitevision preset**: a
+profile JSON with the schema below (every field set by hand and checked against the fixture corpus), stored as a
+`manual` version and versioned like any config (edit and one-click rollback through `edit-site-profile` and
+`rollback-site-profile`). Learning, automatic application, proposals and re-learning below are **P2** and add to
+manual profiles of the same schema. `lastmodReliable` is set by hand in P1.
 
 A **site profile** belongs to a (level, host), is shared by every source crawling that host, and is versioned JSON:
 `content."SiteProfiles"` (one row per level and host, `PresetId`, `AppliedVersionId`, `NextLearnAfter`) and immutable
@@ -343,12 +349,12 @@ deterministic, previewed and checked, not trial-and-score learning.
 | `lastmodReliable` | `lastmod` against visible dates and content-hash changes across runs | `lastmod` skip and default incremental runs (§5.4) |
 | `javascriptNeeded` | raw text yield of the sampled pages | the P1-start renderer check (§8.1) |
 
-- **Learning** (deterministic, no LLM): when a crawl source's host has no profile (at its first preview or first
+- **Learning** (P2; deterministic, no LLM): when a crawl source's host has no profile (at its first preview or first
   sync) a `preview` job of kind `site-profile` samples 30–50 pages from the sitemap, spread over path sections and
   fetched through the frontier's host budget (§6.3), and derives the profile. Built-in presets live in code next to
   `IPipelineNode` (Sitevision in P1; WordPress and Episerver/Optimizely later); learned values override the preset
   field by field.
-- **Applied automatically, with guardrails**: a new host's profile is applied at once and shown in the source form
+- **Applied automatically, with guardrails** (P2): a new host's profile is applied at once and shown in the source form
   preview (before/after text of sample pages, admin design). A **re-learned** profile for a host in use is applied
   automatically only when its check passes on the sample: no page loses more than 10 % of its main-text words, no page
   ends up empty, and the boilerplate share does not rise; otherwise it is stored `proposed` for a platform admin.
@@ -357,7 +363,7 @@ deterministic, previewed and checked, not trial-and-score learning.
   version) and `rollback-site-profile` (one click, to the previous version). Each document records the version that
   extracted it
   (`Documents.SiteProfileVersionId`).
-- **Re-learning** runs when a run report shows a quality drop (empty-root rate, boilerplate share or text yield moved
+- **Re-learning** (P2) runs when a run report shows a quality drop (empty-root rate, boilerplate share or text yield moved
   by more than a threshold, e.g. after a CMS redesign; thresholds *to tune* on the fixture corpus) and at most weekly
   per host.
 - **Effects of a new version** (§12.3): extraction fields re-process the host's HTML documents from stored raw
@@ -368,6 +374,18 @@ deterministic, previewed and checked, not trial-and-score learning.
   pages (HTML and PDF) are checked in as a regression corpus (§18).
 
 ## 6. Shared crawl frontier and politeness (R2)
+
+### 6.0 P1: one frontier per source
+
+The shared frontier with claims and the releaser (§6.1–§6.3) is **P2** ([weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)). In P1 each source has
+**its own frontier**: `CrawlFrontier` rows are keyed by (`Classification`, `SourceId`, `UrlHash`) and carry the source's
+`RunId`, `Depth` and `Leaf`, so admission is one upsert per URL and no `CrawlClaims` table, freshness-window reuse
+across sources or `fetch.shared` fact exists. The source's own `sync` traversal enqueues its `fetch` jobs from its
+`pending` rows in small batches per host (`Crawl:FetchBatchPerHost` in configuration), topping up as they finish. The
+host budget does not change: every `fetch` takes its slot in `CrawlHosts` as in §6.3, so rates, connection caps,
+back-off, breaker (§6.4) and the night window (§6.5) hold across all sources and previews. Two sources on one host
+fetch a page twice; the content-addressed raw blob and the parse and embedding caches still make the second one cheap.
+The rest of §6 is the P2 design.
 
 ### 6.1 Tables
 
@@ -663,7 +681,7 @@ with the last completed run's at every sync, so a lost "apply" job cannot leave 
 | `name`, `description` | all | cosmetic | none |
 | `schedule`, `incrementalSchedule`, `crawlWindow` | url-list, crawl, sharepoint | cosmetic | none (the scheduler reads them) |
 | `classification` | all | identity (level) | full re-sync into the new level; old-level documents removed at reconcile (exempt); jobs at the old level fail the commit check (6a §15) |
-| pipeline parameters | all | behaviour | re-processing plan from the changed parameters, via `EnsureCurrent`, no fetching (6a §12) |
+| pipeline parameters | all | behaviour | P1: every document of the collection re-processed via `EnsureCurrent`, no fetching, unchanged stages from the caches; P2 (weakness review §1): re-processing plan from the changed parameters (6a §12) |
 | `urls` | url-list | scope | added: claims for the added URLs only; removed: documents soft-deleted at once (`removed-from-list`, exempt) |
 | `startUrls`, `sitemaps`, `extraHosts`, `include`, `exclude` | crawl | scope | widening: a traversal now (unchanged pages cost a 304, a `lastmod` skip or a hash compare); narrowing: documents whose stored URL fails the new scope removed without fetching (`scope-narrowed`, exempt, count shown on save) |
 | `maxDepth`, `maxPages` | crawl | scope | raise: traversal now; lower: next traversal, never deletes (a limit makes it partial) |
@@ -824,7 +842,7 @@ New metrics (meter `Ume.Rag`; dimensions low-cardinality; **never** host names, 
   status class, outcome.
 - **Logs**: URLs only at Debug and only for `public` sources; otherwise `UrlHash`.
 - **Events**: 5101 (§7), 5102 (§11). SIEM alerts to add: any 5102; the canary failure (§7).
-- **Health**: ClamAV (ping, signature age), egress canary, releaser lag (oldest due `pending` entry), feeding the
+- **Health**: ClamAV (ping, signature age), egress canary, releaser lag (P2; oldest due `pending` entry), feeding the
   *Ingestion* dashboard; alert `rag.crawl.incomplete_runs` ≥ 3 (§5.4).
 
 ## 17. Performance (R1: 10,000 pages/hour)
@@ -834,7 +852,7 @@ New metrics (meter `Ume.Rag`; dimensions low-cardinality; **never** host names, 
 | One GET (municipal host; conditional where validators exist) | 1 politeness slot, ~200 ms latency | 2.8 req/s of 10 allowed; `fetch` concurrency 8 covers latency |
 | AngleSharp parse for links + noise hash | ≈ 10–15 ms CPU | ≈ 0.04 cores (on top of 6a §18's 80 ms per page) |
 | Frontier statements: claims upsert (1 per page, ~100 links), slot update, document upsert, run items batch | ≈ 4 statements | ≈ 11 statements/s |
-| Releaser | 1 query/s | – |
+| Releaser (P2) | 1 query/s | – |
 | ClamAV | files only (PDF ≈ 50–200 ms) | negligible for HTML-heavy sites |
 
 An unchanged re-crawl costs per page at most one request plus one parse for links, and no blob write, parse or
@@ -848,7 +866,7 @@ external host is capped at 3,600 pages/hour by politeness (answered 4), so the R
 | Unit (`Ume.Rag.Worker.Tests`) | canonicaliser: every §3.1 rule with RFC 3986 normalisation vectors and IDN/punycode cases, incl. the Sitevision identity rule; tracking list; glob/regex patterns (Eneo's unescaped-regex case); robots parser against the RFC 9309 examples and Google's robotstxt test cases (*to verify* licence); sitemap parser (index, gzip, XXE payload refused, oversize, `lastmod`); noise normaliser (CSRF tokens, nonces, cache busters, dates: equal hashes; a changed paragraph: different hash); trap detectors; guard arithmetic incl. exempt reasons and min/max counts; effect-tag hashes per §12.3 row; site-profile derivation on synthetic samples (root, ≥ 60 % repetition, breadcrumb, date pattern, guardrail check); ClamAV client against recorded replies (`OK`, `FOUND`, size limit, garbage); outcome mapping table §15 |
 | SSRF fixtures | guard with a fake resolver: every blocked range, embedded IPv4 in IPv6 (mapped, NAT64, 6to4, Teredo), mixed public/private answers (refused), DNS answer changing between calls (pinning: connect goes to the checked address), decimal/octal/hex IP literals, IDN homographs, userinfo, ports, redirect to `169.254.169.254`, https → http, 6 hops |
 | Integration (Testcontainers + an in-process Kestrel test site) | crawl of a generated site: robots allow/disallow/5xx/404, `Crawl-delay`, sitemap index, redirects (loops, chains, off-site 302 sign-in wall, 301 out of scope), calendar and faceted traps, session ids, `noindex`/`nofollow` on a "municipal" vs "external" host name, 429 with `Retry-After`, slow responses, gzip bomb, oversize body, wrong `Content-Type`, `Set-Cookie` never echoed; a server without validators and with `lastmod` (the umea.se shape: `lastmod` skip, `revalidateEvery` full pass); aliases served with 200 and a canonical (folded only when hashes match; a canonical to the start page not folded); images and video not admitted; two sources on one host (one request per page, two documents, rate never above budget); preview fetch with the releaser running; URL list ETag/Last-Modified/304 and a server with changing ETags |
-| umea.se corpus (§5.6) | ≈ 20 saved umea.se pages (HTML and PDF) served by the test site: Sitevision preset detected, profile learned, the example page's main text, breadcrumb and date exact (acceptance), identity rule verified on node-id URLs; a "redesigned" variant of the corpus triggers re-learning and the guardrail turns a lossy profile into a proposal |
+| umea.se corpus (§5.6) | ≈ 20 saved umea.se pages (HTML and PDF) served by the test site: the hand-checked Sitevision preset applied, the example page's main text, breadcrumb and date exact (acceptance), identity rule verified on node-id URLs; P2: profile learned from the corpus, and a "redesigned" variant triggers re-learning and the guardrail turns a lossy profile into a proposal |
 | Deletion guard (integration) | 25 % removed → pause; confirm, reject (hold), supersede; empty listing (S4); 404 storm with the breaker; page-limit run deletes nothing (**C7**, Eneo partial crawl); revival within 14 days without re-processing; three incomplete traversals raise the alert |
 | ClamAV (integration, real image) | EICAR upload → `malware`, quarantine row and blob, 5102, run degraded; clamd stopped → files requeue, HTML continues, after 24 h `failed`; stale signatures (fake `VERSION` reply) → no new files |
 | Uploads | sniff vs declared (PDF named `.docx`, EXE named `.pdf`, `.docm`, zip, OOXML zip accepted; `.doc`, `.rtf`, `.msg` → `upload.format_deferred`); same bytes in two departments → two documents, second parse a cache hit, title not from the name; replace keeps the document id and swaps the chunk set; delete and restore; duplicate add skipped; upload blob present on the backup target within 15 minutes |
@@ -861,8 +879,8 @@ external host is capped at 3,600 pages/hour by politeness (answered 4), so the R
 
 | Phase | Deliverable |
 |---|---|
-| P1 | connector interfaces and runner with checkpoints; canonicaliser incl. verified identity rules and canonical folding; URL list; crawl with robots, sitemaps (`lastmod`), scope, traps, traversal with `lastmod` skip, incremental runs, report, incomplete-traversal alert; site profiles (Sitevision preset, learning, guardrails, rollback) with the umea.se acceptance test; frontier claims, releaser, host budgets (in-process connection cap), back-off, breaker, night window; egress guard + canary; uploads (slots, batches, sniffing, replace/delete, backup copy); ClamAV + quarantine; change detection with noise rules v1; effect tags; deletion guard with reconcile phase and commands; preflight for URL list and crawl; P1-start check whether pilot sites need JavaScript; tests of §18 |
-| P2 | SharePoint (§14, S1–S10) with `IHierarchyConnector`; Redis per-host in-flight leases (first multi-host deployment); renderer behind `IRenderer` only if the P1-start check found a pilot site that needs JavaScript (§8); email with attachments as child documents and legacy Office/RTF (Z1); presets for WordPress and Episerver/Optimizely; PDF link extraction for crawls; quarantine release workflow if needed |
+| P1 | (items moved by weakness review §1 in §24) connector interfaces and runner with checkpoints; canonicaliser incl. verified identity rules and canonical folding; URL list; crawl with robots, sitemaps (`lastmod`), scope, traps, traversal with `lastmod` skip, incremental runs, report, incomplete-traversal alert; site profiles (manual profile JSON, the hand-checked Sitevision preset for umea.se, edit and rollback) with the umea.se acceptance test; one frontier per source (§6.0), host budgets (in-process connection cap), back-off, breaker, night window; egress guard + canary; uploads (slots, batches, sniffing, replace/delete, backup copy); ClamAV + quarantine; change detection with noise rules v1; effect tags; deletion guard with reconcile phase and commands; preflight for URL list and crawl; P1-start check whether pilot sites need JavaScript; tests of §18 |
+| P2 | site-profile learning, guardrails, proposals and re-learning (§5.6); shared frontier with claims and releaser (§6.1–§6.3); SharePoint (§14, S1–S10) with `IHierarchyConnector`; Redis per-host in-flight leases (first multi-host deployment); renderer behind `IRenderer` only if the P1-start check found a pilot site that needs JavaScript (§8); email with attachments as child documents and legacy Office/RTF (Z1); presets for WordPress and Episerver/Optimizely; PDF link extraction for crawls; quarantine release workflow if needed |
 | P3 | more connectors on the same contracts; an alternative renderer backend behind `IRenderer` if anti-bot sites must be crawled (answered 14) |
 
 ## 20. Changes to other documents
@@ -920,7 +938,7 @@ max 500 (§13.2); holds after rejection (§13.3).
   (`lastmodReliable`), and the breadcrumb path of the example page.
 - The Sitevision fingerprint and the preset's session parameters (`sv.*` query parameters seen in umea.se's
   robots.txt) on two or three other Sitevision municipal sites.
-- Site-profile re-learn thresholds (empty-root rate, boilerplate share, text yield) on the umea.se corpus.
+- P2: site-profile re-learn thresholds (empty-root rate, boilerplate share, text yield) on the umea.se corpus.
 - At P1 start: whether any pilot site needs JavaScript (decides the P2 renderer), and the pilot source inventory's
   share of legacy Office, RTF and email files (decides whether they stay deferred).
 - P2 renderer only: Playwright .NET `RouteAsync("**/*")` + `FulfillAsync` for every resource type (module scripts,
@@ -945,3 +963,13 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 | "`rel=canonical` never trusted" | Replaced by "trusted only when verified" (§13.1) |
 | Per-document upload encryption for `public` sources | Removed: `public` blobs are not envelope-encrypted (§4) |
 | Blob moves (quarantine, raw per document) | Replaced by write-once keys, content-addressed raw blobs, tombstone + delayed purge (§2, §4) |
+
+## 24. Deferred or removed (weakness review)
+
+Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+
+| Item | Where it went |
+|---|---|
+| Site-profile learning (`preview` kind `site-profile`, sampling, field derivation), automatic application with guardrails, `proposed` versions with approve/reject, re-learning and its thresholds, `NextLearnAfter` | P2; P1 uses manual profiles of the same schema (umea.se: a hand-checked Sitevision preset) (§5.6) |
+| Crawl frontier shared between sources: `CrawlClaims`, one request serving every claim, freshness-window reuse across sources, `fetch.shared`, `FrontierReleaser`, nav-link claim cache | P2; P1 has one frontier per source with the shared host budget (§6.0) |
+| Re-processing plan from changed pipeline parameters | P2; P1 re-processes every document of the collection (§12.3) |

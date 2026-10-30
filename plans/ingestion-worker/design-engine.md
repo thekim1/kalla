@@ -5,7 +5,7 @@ Detail step 6a of the Ume.Rag design. Details [`plan.md`](plan.md) §2, §4 and 
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §3, §6, §9, [`../parser/design.md`](../parser/design.md)
 §7, §8, §10 and [`../gateway-changes/design.md`](../gateway-changes/design.md) §3, §5, §7.1. Rewritten to the
 decided form of [`../simplification-pass.md`](../simplification-pass.md) (2026-10-30): fixed linear pipelines,
-documents and chunk sets per source, per-stage cache keys, short chunk-write transactions, advisory evaluation. Nothing
+documents and chunk sets per source, per-stage cache keys, short chunk-write transactions, advisory evaluation. Items moved to P2 by the [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer) are listed in §25. Nothing
 is implemented.
 
 Sibling documents (where they refine this one, they win): [`design-connectors.md`](design-connectors.md) (6b: connector
@@ -51,7 +51,7 @@ are listed in §21; questions in §22; removed mechanisms in §24.
 
 | Stage | Does | Writes | Reused across sources by |
 |---|---|---|---|
-| `fetch` | fetch or upload (6b); raw blob by content hash | `Documents` facts, raw blob | crawl frontier (one request per URL per freshness window) and raw blob key |
+| `fetch` | fetch or upload (6b); raw blob by content hash | `Documents` facts, raw blob | crawl frontier (P1 per source; from P2 shared, one request per URL per freshness window) and raw blob key |
 | `scan` | ClamAV for files (6b §11) | quarantine on a finding | – |
 | `detect` | sniff media type and language; `/v1/inspect` for parser-bound types (6c §2) | facts | cache (intermediate) |
 | `parse` | routes per document: HTML extraction with the host's site profile, text/Markdown, CSV in the worker; PDF, Office, ODF, images to the parser (6c §3) | `NodeOutputs` (+ blobs) | parse cache: (content hash, parser settings hash, parser build), or the worker stage key |
@@ -63,7 +63,8 @@ are listed in §21; questions in §22; removed mechanisms in §24.
 
 The root (`fetch`) runs at source level in `sync`/`fetch` jobs (6b) and yields one raw content per document; every
 other stage runs at document level (the separation KM lacked, `../../platforms/kernel-memory-and-dotnet.md:214-219`).
-Sources of two departments crawling the same site share the frontier request, the raw blob and the parse cache, but
+Sources of two departments crawling the same site share the raw blob and the parse cache (and from P2 the frontier
+request), but
 each has its own documents and chunk sets: nothing couples departments.
 
 ### 2.2 Stage values
@@ -134,7 +135,7 @@ template is a new version) names its stages with their code versions and declare
 
 - `stage` is the parameter's **effect tag**: the first stage its change affects. `appliesTo` narrows it to a route
   (`html`, `parser`, `text`, `csv`), so a changed OCR mode does not re-process HTML pages. The publish plan is computed
-  from these tags (§12.2).
+  from these tags (§12.2) from P2 (weakness review §1); P1 publish re-processes every document.
 - The embedding profile is not a parameter: it comes from the collection (`Collections.EmbeddingProfileId`, set by
   platform admins only, R3). Personal-data detection has no switch: every template contains the stage.
 - **Stage manifest (R7)**: at startup the worker registers each stage type and code version it contains in
@@ -592,7 +593,7 @@ cannot double-count and no hot row is updated per document.
 | Step | Who | What |
 |---|---|---|
 | 1 | admin | validate the draft (§4 incl. live support); enqueue the plan (`preview`, `kind = publish-plan`), storing `PlanJobId` and the definition's hash |
-| 2 | worker | the **re-processing plan** (§12.2) and cost/time forecast into `Jobs.Result` |
+| 2 | worker | the **re-processing plan** (§12.2) and cost/time forecast into `Jobs.Result`; in P1 the plan is every live document of the affected sources (§12.2) |
 | 3 | user | sees plan and forecast; confirms or cancels. Confirm is refused if the draft changed since the plan |
 | 4 | admin | one config transaction: version → `published` (`PublishedAt`), previous → `superseded`, `Pipelines.PublishedVersionId`; audit 6001; enqueues a `reprocess` `sync` per source using the pipeline |
 | 5 | worker | `EnsureCurrent` per live document: new sets are written not live next to the live ones and **swapped per document** (§14); unaffected documents are re-keyed (`unchanged`) |
@@ -607,7 +608,13 @@ versions that produced it, and the run shows progress until every document is cu
 
 ### 12.2 Re-processing plan
 
-For each live document of the affected sources:
+**P1 ([weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)):** publish re-processes **every live document** of the affected sources. `EnsureCurrent`
+still recomputes each stage key, so stages whose key did not change are served from the per-stage caches (§8) and cost
+nothing; the forecast is the document count with a conservative time and cost estimate for the full pipeline from
+`parse`, and the run reports how many documents were in fact re-keyed only. The report and keep or roll back (§12.3) are
+unchanged. The plan by effect tags below is **P2**.
+
+For each live document of the affected sources (P2):
 
 1. take its route (`html`, `parser`, `text`, `csv`) from the stored facts;
 2. **first affected stage** = the earliest `stage` tag (§3.2) among the parameters that differ between the published
@@ -621,7 +628,8 @@ Example result: "1,240 documents; 1,180 from *Chunk* (re-chunk + re-embed, ~0 pa
 ~25 min), 60 from *Parse* (~900 parser pages, ~1 h); 0 re-keyed; estimated cost 0.00 USD (on-prem)".
 
 A new site-profile version for a host (6b) uses the same plan logic for that host's HTML documents, with `parse` as
-the affected stage; its auto-apply check and proposal flow are 6b's.
+the affected stage (in P1 every HTML document of the host, from `parse`); its auto-apply check and proposal flow are
+6b's (P2).
 
 ### 12.3 Rollback
 
@@ -810,7 +818,8 @@ Protection of chat:
 
 - Zones, `cpu_shares`, the ingestion slice and the worker's connection cap (repo-and-deployment §6.2, data-model
   §1.1); jobs hold connections only for short statements (§7.6).
-- **Adaptive embed concurrency** (AIMD): the worker tracks p95 latency of its embedding calls per minute; above 2× the
+- **Adaptive embed concurrency** (AIMD; **P2**, weakness review §1; in P1 `embed` concurrency is the fixed
+  `Worker:Concurrency:embed` from configuration, set from the P0 throughput measurement): the worker tracks p95 latency of its embedding calls per minute; above 2× the
   idle baseline it halves `embed` concurrency (min 1), below it adds one per minute up to the configured value.
   Chat's query embeddings use the same on-prem model, so this keeps ingestion from queuing ahead of them;
   `rag.embed.concurrency_limit` shows it working.
@@ -818,11 +827,11 @@ Protection of chat:
   text, plan §5).
 - An unchanged re-crawl costs at most one GET per page (none for pages whose `lastmod` did not change, 6b) and a
   batched `unchanged` run item: no parse, no embed (plan §9; Eneo re-embeds everything, `../../platforms/eneo.md:234`).
-- Two departments with the same site: one fetch (frontier, 6b), one parse (parse cache by content hash); chunking and
+- Two departments with the same site: one fetch (shared frontier, 6b; P2, two fetches in P1), one parse (parse cache by content hash); chunking and
   embedding run per department, embedding mostly from the cache.
 
 `perf.yml` (repo-and-deployment §8.3, P1) measures pages per hour, chat p95 TTFT idle vs. during crawl + OCR batch,
-Postgres CPU and pool waits, and the embed limit's behaviour.
+Postgres CPU and pool waits, and the embed limit's behaviour (P2; in P1 the fixed limit's effect on chat p95).
 
 **Beyond the pilot** (≈ 10×: 100k pages/h checked, 10–20k changed, 5–10M chunks on 3–5 hosts): the per-stage capacity
 table, binding resources (politeness, the gateway's BGE-M3, HNSW memory), the fleet-wide embedding cap (P2) and the
@@ -845,8 +854,8 @@ scale test are in [`../performance-pass.md`](../performance-pass.md) §2, §3.9,
 | Phase | Deliverable |
 |---|---|
 | P0 | `Jobs` table (unpartitioned, partial unique `DedupKey`); dispatcher skeleton with leases, heartbeat, reaper; `WorkerInstances`; one `command` kind end to end |
-| P1 | `Ume.Rag.Pipelines` (format, validator, keys, plan); stage manifest and support check; engine with segments, fence, cache; all P1 stages (internals 6b/6c); slicing, parser capacity; scheduler with defaults and jitter; runs, outcomes, finalizer; preview; publish plan, swap per document, publish report, rollback; templates `website`, `url-list`, `files`; index writer with invisible batches, swap, re-key, orphan sweep; drift sweep; metrics, 5105; the tests of §19; R1 test passed |
-| P2 | per-department fairness (loose index scan), batched dequeue, coalesced `NOTIFY`, lease leaders, fleet-wide embedding cap (first multi-host deployment); `attachment` class (chat design §15.2); P2 stages; parent-child chunks only if evaluation shows section expansion insufficient (6c §5.3); office-hours concurrency profiles if the R1 data asks for them; per-department caps in `Settings` |
+| P1 | `Ume.Rag.Pipelines` (format, validator, keys, plan); stage manifest and support check; engine with segments, fence, cache; all P1 stages (internals 6b/6c); slicing, parser capacity; scheduler with defaults and jitter; runs, outcomes, finalizer; preview; publish (every document re-processed, weakness review §1), swap per document, publish report, rollback; templates `website`, `url-list`, `files`; index writer with invisible batches, swap, re-key, orphan sweep; drift sweep; metrics, 5105; the tests of §19; R1 test passed |
+| P2 | from weakness review §1: re-processing plan from effect tags (§12.2), adaptive embed concurrency (§18); per-department fairness (loose index scan), batched dequeue, coalesced `NOTIFY`, lease leaders, fleet-wide embedding cap (first multi-host deployment); `attachment` class (chat design §15.2); P2 stages; parent-child chunks only if evaluation shows section expansion insufficient (6c §5.3); office-hours concurrency profiles if the R1 data asks for them; per-department caps in `Settings` |
 | P3 | more connectors; per-class worker deployments next to a separate parser host (`Worker:Classes`) |
 
 ## 21. Changes to other documents
@@ -910,3 +919,13 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 | Email child documents, legacy Office, RTF in the P1 templates | P2 (simplification pass §1) |
 | `approve-profile`/`rollback-profile` commands (parse-profile auto-apply) | dropped; parse rules without auto-apply (6c §3.5); site-profile rollback is `rollback-site-profile` (6b) |
 | `GatewayKeyLinks` interim keys, `DataTiers` in the fail-closed config set, tier-matrix test, `Tier` log scope | dropped (simplification pass §5, §7) |
+
+## 25. Deferred or removed (weakness review)
+
+Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+
+| Item | Where it went |
+|---|---|
+| Re-processing plan by first affected stage from effect tags (§12.2) | P2; P1 publish re-processes every live document of the affected sources, unchanged stages free from the per-stage caches, still with report and keep or roll back |
+| Adaptive embed concurrency (AIMD, §18) | P2; P1 uses the fixed `Worker:Concurrency:embed` from configuration |
+| Shared crawl frontier and site-profile learning (6b) | P2 (6b §24) |

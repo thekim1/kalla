@@ -105,7 +105,8 @@ Tables, roles, indexes, queue, encryption, retention and blob layout in detail: 
 **Share by cache, not by row (R2).** A document is (source, identity) and a chunk set is (document, pipeline
 version, embedding profile); a source belongs to exactly one collection, so every chunk carries one scalar
 `CollectionId` and membership changes never rewrite chunks. Reuse between departments comes from content-addressed
-caches: the shared crawl frontier makes one request per URL per freshness window for every source that wants it; raw
+caches: from P2 (weakness review §1) the shared crawl frontier makes one request per URL per freshness window for every
+source that wants it (P1: one frontier per source, shared host budgets); raw
 content is keyed by content hash, parse output by (content hash, parser settings, parser build), embeddings by (text
 hash, profile). Every copy after the first is cheap and nothing couples departments. Classification and access live on
 collections; documents carry their source's level.
@@ -303,9 +304,9 @@ on-prem model (judge-filtered), plus human questions and rewritten feedback ques
 **advisory**: it runs on the full collection after each publish and nightly, reports recall@10 and MRR with counts
 compared with the previous run on the publish screen, and the owner decides to keep or roll back (previous chunk sets
 are kept 14 days for one-click rollback). A collection goes live when its owner publishes it. The worker runs the
-retrieval evaluation; from late P1 a nightly on-prem judge in `rag-admin` (which already runs `Ume.Rag.Answering`
+retrieval evaluation; from P2 (weakness review §1) a nightly on-prem judge in `rag-admin` (which already runs `Ume.Rag.Answering`
 and holds the keys of every level) measures answer faithfulness and citation precision; the P2 skill gate runs there
-too. Each assistant also has a small **test-question set** (question, expected behaviour, optional expected source or
+too. From P2 each assistant also has a small **test-question set** (question, expected behaviour, optional expected source or
 phrase) that `rag-admin` re-runs with the answer judge after every publish of a new assistant version, advisory like
 the collection report (run kind `assistant-tests`, data-model §2.2). A blocking gate is reconsidered only when measured
 run-to-run variance shows it can tell versions apart. The postponed Swedish benchmark becomes the curated part of
@@ -375,3 +376,14 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 | 10-second fail-closed config rule | Replaced by the grace window (§9 there) |
 | Editable assistant mode (`rag`/`agent`), knowledge through skills, assistant settings edited in place (§15 there) | Removed: mode derived from tool-bearing skills, direct collections only, draft and published assistant versions with test questions (data-model §2.1) |
 | `redis` and `rag-pgbackrest` containers in the pilot (eight long-running containers → six, §14 there) | Redis: P2 (first multi-host deployment, `ConnectionStrings:redis`), in-memory seams and Postgres admin sessions in P1; pgBackRest inside the Postgres image |
+
+## 14. Deferred or removed (weakness review)
+
+Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+
+| Item | Where it went |
+|---|---|
+| Crawl frontier shared between sources (claims, releaser) | P2; P1 has one frontier per source with shared host budgets (§3) |
+| Nightly answer-level judge, per-assistant test-question sets | P2 (§9) |
+| Assistant version diff, templates, copy, department map | P2 (admin plan §8) |
+| Site-profile learning, publish plans from effect tags, adaptive embedding concurrency and range sizing | P2 (ingestion plan §13) |

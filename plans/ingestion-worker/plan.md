@@ -4,7 +4,7 @@
 [`design-connectors.md`](design-connectors.md) (6b: connectors, frontier, site profiles, change detection, deletion
 guard) and [`design-processing.md`](design-processing.md) (6c: parsing, HTML extraction, chunking, personal data,
 embedding, evaluation). Where they differ, the designs win. Rewritten to the decided form of
-[`../simplification-pass.md`](../simplification-pass.md) (2026-10-30).
+[`../simplification-pass.md`](../simplification-pass.md) (2026-10-30) and thinned by the [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer) (§13).
 
 Background service that keeps the document store and collection indexes in step with their sources: it runs
 connectors, executes each source's fixed linear pipeline, decides how to parse each document, embeds through the
@@ -31,8 +31,8 @@ plane, a small capped Postgres connection pool and its own `statement_timeout`.
 | Scheduler | Turns source schedules, "sync now", uploads and (P2) SharePoint change notifications into jobs |
 | Job queue | Postgres, `FOR UPDATE SKIP LOCKED`, woken by `LISTEN/NOTIFY`; retries with back-off; job classes with their own concurrency limits; unpartitioned, dedup by a partial unique index; per-department fairness in P2 |
 | Connectors | Implement the capability interfaces below |
-| Crawl frontier | One frontier and one politeness budget per host, shared by every source that crawls it (R2) |
-| Site profiles | Per host, learned from a sample and versioned: main content, boilerplate, breadcrumb, date pattern, identity rule (6b) |
+| Crawl frontier | P1: one frontier per source, with one politeness budget per host shared by every source (`CrawlHosts`). P2 (weakness review §1): one frontier shared by every source that crawls a host, with claims and a releaser (R2) |
+| Site profiles | Per host and versioned: main content, boilerplate, breadcrumb, date pattern, identity rule (6b). P1: manual profile JSON (umea.se: a hand-checked Sitevision preset); learned from a sample in P2 (weakness review §1) |
 | Document store writer | One document per (source, identity); raw content, parse output and embeddings reused across sources through content-addressed caches (R2) |
 | Pipeline engine | Executes the fixed pipeline of a published version per document; caches stage outputs by per-stage keys |
 | Stage manifest | `IPipelineNode` stages with versions, registered at startup (R7) |
@@ -62,7 +62,7 @@ A document belongs to **one source**: its identity within the source is the norm
 without tracking parameters (a site profile's verified identity rule may fold aliases; `rel=canonical` is trusted only
 when verified), the SharePoint drive item id, or the **upload slot** (the content hash is the version, so replacing a
 file keeps the document id; design-connectors §3, §9). Two sources of different departments that see the same URL
-share the frontier request, the raw blob and the parse output through content-addressed caches, but keep their own
+share the raw blob and the parse output through content-addressed caches (and from P2 the frontier request), but keep their own
 documents and chunk sets (simplification pass §2); across classification levels nothing is shared (platform plan §3).
 Every LLM call in a pipeline (evaluation generation and judging; P2 enrichment) sends an explicit residency ceiling
 (platform plan §6; the worker holds `OnPrem` and `Eu` keys, never the open key). Source settings are tagged by effect
@@ -72,8 +72,8 @@ Every LLM call in a pipeline (evaluation generation and judging; P2 enrichment) 
 
 - *URL list*: exactly the listed URLs; conditional GET (ETag / Last-Modified) where the host supports it.
 - *Website crawl*: start URL or sitemap, include/exclude patterns, max depth/pages, robots.txt, identifying user
-  agent, SSRF protection, crawl report with failure reasons. Sources crawling the same host share the frontier and
-  its rate limit. Incremental runs by sitemap `lastmod` where the host's site profile marks it reliable (umea.se:
+  agent, SSRF protection, crawl report with failure reasons. Sources crawling the same host share its rate limit (each source has its own frontier in P1; a shared frontier is
+  P2, weakness review §1). Incremental runs by sitemap `lastmod` where the host's site profile marks it reliable (umea.se:
   24,184 URLs, all with `lastmod`; design-connectors). Images and video are excluded by default. No headless
   rendering in P1: umea.se is server-rendered; a renderer (`IRenderer` seam) comes in P2 only if a P1-start check
   shows pilot sites need JavaScript. Short pages are an info note in the crawl report, never `degraded`.
@@ -111,8 +111,9 @@ and Eneo's SharePoint issues (#13583, #16590; #427, #521, #522, #429, #1081) bec
   `none` (design-engine §8).
 - **Preview**: same engine, `preview` job class (highest priority), never writes to `content` except `Jobs.Result`
   and `CrawlHosts.NextAllowedAt`; returns each stage's output, the personal-data state and estimated LLM cost.
-- **Publish** = plan → re-process → report → keep or roll back: the worker computes a re-processing plan (documents ×
-  first affected stage, from the parameters that changed and their effect tags); after confirmation new chunk sets
+- **Publish** = plan → re-process → report → keep or roll back. In P1 the plan is **every document of the collection**;
+  the per-stage caches make unchanged stages free. From P2 (weakness review §1) the worker computes a re-processing plan
+  (documents × first affected stage, from the parameters that changed and their effect tags). After confirmation new chunk sets
   are written next to the live ones and swapped per document; when the run finishes, the evaluation report (§7) is
   shown; the user keeps the version or rolls back in one click (previous sets kept 14 days). Each chunk set records
   the pipeline version that produced it (design-engine §12).
@@ -139,7 +140,8 @@ child documents.
   collection and classification. Content is never sent off-premises to be indexed.
 - Calls go through the gateway with the worker's `OnPrem` delegating key on behalf of the collection's owning team,
   with the explicit `OnPrem` residency ceiling header.
-- Embedding cache by (profile, text hash): re-chunking only embeds new text; batches sized for the gateway.
+- Embedding cache by (profile, text hash): re-chunking only embeds new text; batches sized for the gateway. Embedding
+  concurrency is a fixed value from configuration in P1; adaptive concurrency (AIMD) is P2 (weakness review §1).
 - Other profiles are an explicit exception set by platform admins. A profile change (P3) re-embeds every affected
   chunk in the background into new, invisible sets, shows the evaluation comparison, then swaps.
 
@@ -153,10 +155,12 @@ child documents.
    path; empty/garbled → Docling OCR (Tesseract `swe`); nothing found → re-render; table-dense → Docling tables.
    Signals come from the parser's cheap `/v1/inspect` (page count, per-page text-layer facts, garble score; parser
    design §6) with starting thresholds in parser design §6.1. Pages with the same strategy are grouped into ranges of
-   ≤ 20 pages sized from measured time per page, and range outputs are joined in order (parser design §8.2). Parse concurrency is read from the parser's `/v1/info`; `busy`, `not_ready` and
+   ≤ 20 pages (P1: a fixed size per strategy from configuration; sized from measured time per page in P2, weakness review §1), and range outputs are joined in order (parser design §8.2). Parse concurrency is read from the parser's `/v1/info`; `busy`, `not_ready` and
    `duplicate_in_flight` requeue without counting an attempt; other errors map per parser design §7.5. Spreadsheets
    and CSV are tables: chunked as row groups with the header row repeated.
-3. **Site profiles for HTML** (simplification pass §13): per host, learned deterministically from a sample of 30–50
+3. **Site profiles for HTML** (simplification pass §13): per host. **P1** (weakness review §1): a manual profile JSON with
+   the fields below; for umea.se a hand-checked Sitevision preset, versioned like any config, with one-click rollback.
+   **P2**: learned deterministically from a sample of 30–50
    sitemap pages on a crawl source's first run (design-connectors): CMS preset (Sitevision first), main-content root,
    boilerplate selectors and phrases, breadcrumb selector, date pattern, verified identity rule, URL normalisation,
    excluded URL types, `lastmod` reliability, link lists kept for discovery only. A new source's profile is applied and
@@ -184,7 +188,7 @@ child documents.
 - **Advisory, not a gate**: runs on the **full collection** after each publish and nightly; the result is shown on the
   publish screen and the evaluation page and never blocks. A collection goes live when its owner publishes it. A gate
   is reconsidered only when measured run-to-run variance shows it can tell versions apart (design-processing §14).
-- **Answer-level evaluation** from late P1: a nightly on-prem judge over the evaluation sets through
+- **Answer-level evaluation** (P2, weakness review §1): a nightly on-prem judge over the evaluation sets through
   `Ume.Rag.Answering` measuring faithfulness and citation precision per assistant, run by `rag-admin` (run kind
   `answers`; design-processing §14.8). The worker runs retrieval evaluation only and references neither
   `Ume.Rag.Answering` nor `Ume.Rag.Tools`; the skill gate (P2) also runs in `rag-admin`.
@@ -215,7 +219,7 @@ child documents.
 - Ingest 10k typical web pages per hour on the ingestion zone without moving chat p95 by more than 10% (R1 release
   test, `perf.yml` in P1).
 - A re-crawl of an unchanged site does no parsing and no embedding.
-- Two departments adding the same site cause one crawl request per URL and one parse; chunking and embedding run per
+- Two departments adding the same site cause one parse (from P2, with the shared frontier, also one crawl request per URL); chunking and embedding run per
   department, embedding mostly from the cache.
 - Worker restart loses no work (jobs are leased, not lost) and costs no attempts.
 - The umea.se example page extracts to exactly its main text with the right breadcrumb and date (design-processing
@@ -226,8 +230,9 @@ child documents.
 | Phase | Deliverable |
 |---|---|
 | P0 | worker dispatcher skeleton: `Jobs` (unpartitioned), leases, heartbeat, reaper, one `command` kind end to end |
-| P1 | Queue + LISTEN/NOTIFY, scheduler, document store per source, shared crawl frontier, URL list + crawl (incremental by `lastmod`) + upload connectors, site profiles with the Sitevision preset, fixed pipelines with templates per source type, stage manifest, preview, publish plan + swap + report + rollback, auto-parse rules with built-in and admin rules, personal-data detection (patterns + gated NER, flag rules, held sets), platform embedding profile, change detection, deletion guard, run records, generated and human evaluation sets, advisory reports and nightly runs, `perf.yml` |
-| P2 | SharePoint, renderer if needed, parse-rule proposals, per-department fairness and the multi-host queue features, P2 stages, legacy Office/RTF/email, retrieval-signal feedback loop, skill test questions in evaluation |
+| P1a (weakness review §1) | Queue + LISTEN/NOTIFY, scheduler, document store per source, one crawl frontier per source, URL list + crawl (incremental by `lastmod`) + upload connectors, the umea.se site profile as a hand-checked Sitevision preset (manual profile JSON), fixed pipelines with templates per source type, stage manifest, auto-parse rules with built-in rules, personal-data detection (patterns + gated NER, flag rules, held sets), platform embedding profile with fixed concurrency and range sizes from configuration, change detection, deletion guard, run records |
+| P1b | preview, publish (every document of the collection re-processed) + swap + report + rollback, admin parse rules, site-profile edit and rollback, generated and human evaluation sets, advisory reports and nightly runs, `perf.yml` |
+| P2 | from weakness review §1: site-profile learning and re-learning, shared crawl frontier (claims, releaser), publish plans from effect tags, adaptive embedding concurrency (AIMD) and moving-average range sizing, nightly answer judge; SharePoint, renderer if needed, parse-rule proposals, per-department fairness and the multi-host queue features, P2 stages, legacy Office/RTF/email, retrieval-signal feedback loop, skill test questions in evaluation |
 | P3 | More connectors, embedding-profile migration tooling, OpenSearch indexing if adopted |
 
 ## 11. Open questions
@@ -236,13 +241,13 @@ Answered (2026-10-29):
 
 1. **Auto-apply defaults**: answered with confidence ≥ 0.9, trial runs and automatic rollback; revised 2026-10-30
    (simplification pass §2): no auto-apply of parse strategies; P2 rule proposals need approval. Site profiles for
-   HTML are applied automatically under the guardrails of §6 item 3.
+   HTML are applied automatically under the guardrails of §6 item 3 (P2 with learning; manual in P1, weakness review §1).
 2. **Headless rendering**: answered as needed in P1; revised 2026-10-30 (simplification pass §1, §13): P2, and only if
    a P1-start check shows pilot sites need JavaScript (umea.se is server-rendered).
 3. **Uploads**: 50 MB per file; types as the P1 list in §3. Everything is virus-scanned (ClamAV) before parsing.
 4. **Crawl politeness**: municipal (allow-listed) hosts up to 10 requests/s, external sites 1 request/s with one
    connection; robots.txt always respected; full crawls of large sites scheduled at night. Per-host limits are shared
-   by all sources through the crawl frontier.
+   by all sources through the host budget (`CrawlHosts`).
 
 Answered (2026-10-29, step 6 questions):
 
@@ -257,7 +262,7 @@ Answered (2026-10-29, step 6 questions):
 8. **Default chunking**: split by headings, then ≈ 400 BGE-M3 tokens with ≈ 15 % overlap, breadcrumb and heading path
    prepended; tables as row groups with the header repeated; flat chunks (no parent-child) in P1.
 9. **Shared documents across departments** (6a): answered with follow runs; revised 2026-10-30 (simplification pass
-   §2): each source has its own documents and chunk sets; reuse is by content-addressed caches (frontier request, raw
+   §2): each source has its own documents and chunk sets; reuse is by content-addressed caches (frontier request from P2, raw
    blob, parse output, embeddings).
 
 Answered (2026-10-29, step 6b questions):
@@ -328,3 +333,15 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 | Legacy Office, RTF, email with child documents | P2 (§3) |
 | Per-department fairness, batched dequeue, coalesced `NOTIFY`, lease leaders, fleet-wide embedding cap | P2, first multi-host deployment (§2) |
 | Interim per-team gateway keys | dropped; one combined gateway release before the pilot (§5) |
+
+## 13. Deferred or removed (weakness review)
+
+Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+
+| Mechanism | Where it went |
+|---|---|
+| Site-profile learning, automatic application with guardrails, proposals, re-learning | P2; P1 uses manual profiles of the same schema (umea.se: a hand-checked Sitevision preset) (§6) |
+| Crawl frontier shared between sources (claims, releaser) | P2; P1 has one frontier per source, host budgets still shared (§3) |
+| Publish plans from effect tags | P2; P1 publish re-processes every document of the collection, still with report and keep or roll back (§4) |
+| Adaptive embedding concurrency (AIMD), parse ranges sized by moving average | P2; fixed values from configuration in P1 (§5, §6) |
+| Nightly answer-level judge (`answers` runs) | P2 (§7) |

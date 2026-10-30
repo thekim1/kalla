@@ -1,7 +1,8 @@
 # Architecture diagrams
 
 Mermaid views of the Ume.Rag design as it stands after the simplification pass
-([`simplification-pass.md`](simplification-pass.md)). Sources: networks and containers
+([`simplification-pass.md`](simplification-pass.md)) and the P1 split of the
+[weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer). Sources: networks and containers
 [`platform/repo-and-deployment.md`](platform/repo-and-deployment.md) §6, data ownership
 [`platform/data-model.md`](platform/data-model.md), request paths [`chat-api/design.md`](chat-api/design.md) §4,
 [`knowledge-api/design.md`](knowledge-api/design.md) §6, ingestion
@@ -30,7 +31,7 @@ flowchart LR
     end
 
     subgraph control_plane["Control plane zone"]
-        admin["rag-admin<br/>BFF + Swedish journey pages<br/>test panel, config writer<br/>assistant drafts, versions, test questions<br/>nightly answer judge (late P1)<br/>skill gate, in-process tool hub (P2)"]
+        admin["rag-admin<br/>BFF + Swedish journey pages<br/>test panel, config writer<br/>assistant drafts, versions<br/>test questions, nightly answer judge,<br/>skill gate, in-process tool hub (P2)"]
     end
 
     subgraph ingestion_zone["Ingestion zone (rag-ingestion.slice)"]
@@ -65,7 +66,7 @@ flowchart LR
     proxy --> admin
 
     api -- "chat, condense, query embeddings<br/>key per level: OnPrem, Eu, open<br/>x-ume-on-behalf-of, explicit x-ume-max-residency" --> gateway
-    admin -- "test panel, answer judge, Data API sync,<br/>/v1/models at the level's ceiling,<br/>skill gate (P2)" --> gateway
+    admin -- "test panel, Data API sync,<br/>/v1/models at the level's ceiling,<br/>answer judge, skill gate (P2)" --> gateway
     worker -- "embeddings, LLM stages<br/>OnPrem and Eu keys only, explicit ceiling" --> gateway
 
     api --> pg
@@ -161,16 +162,16 @@ sequenceDiagram
 flowchart TD
     subgraph admin_side["Admin (rag-admin)"]
         form["Source form + template parameters<br/>preflight, preview with site-profile before/after"]
-        publish["Publish: plan from changed parameters"]
+        publish["Publish: re-process every document (P1),<br/>plan from changed parameters (P2)"]
         decide{"Owner: keep or roll back<br/>(previous chunk sets kept 14 days)"}
         cfg[("config tables<br/>+ outbox, version bump")]
-        judge["Nightly answer judge (late P1)<br/>Ume.Rag.Answering + on-prem judge"]
+        judge["Nightly answer judge (P2)<br/>Ume.Rag.Answering + on-prem judge"]
     end
 
     subgraph worker_side["Worker (rag-worker): one fixed pipeline per source type"]
         sched["Scheduler / EnsureCurrent"]
         sync["sync job: sitemap lastmod (incremental by default),<br/>change detection, deletion guard,<br/>alert after 3 runs without a full traversal"]
-        profile["Site profile per host<br/>preset (Sitevision) + learned from 30–50 sample pages,<br/>versioned, checked, rollback"]
+        profile["Site profile per host<br/>P1: hand-checked Sitevision preset (manual JSON),<br/>P2: learned from 30–50 sample pages;<br/>versioned, rollback"]
         fetch["fetch job: final URL identity (verified profile rule),<br/>content hash, ClamAV for files"]
         parse["parse: HTML, text, Markdown, CSV in the worker<br/>every PDF, Office file and image to the parser<br/>(cache: content hash, settings, build)"]
         proc["clean (profile: root, boilerplate, breadcrumb, date),<br/>split by headings, chunk ~400 tokens"]
@@ -188,10 +189,10 @@ flowchart TD
 
     form --> cfg
     cfg --> sched
-    publish -- "re-processing plan" --> jobs
+    publish -- "reprocess run" --> jobs
     sched --> jobs
     jobs --> sync --> fetch --> parse --> proc --> pii --> embed --> index
-    fetch -. "sample pages (first run, re-learn)" .-> profile
+    fetch -. "sample pages (first run, re-learn; P2)" .-> profile
     profile -. "HTML stage parameters" .-> proc
     parse -. "PDF, Office, images" .-> parserp
     pii -. "names, gated" .-> parserp

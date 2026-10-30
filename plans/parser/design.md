@@ -336,8 +336,10 @@ adds `ner_ready` and the model block inside `build_hash`; readiness does not dep
 1. Worker calls `/v1/inspect` (cheap) → page count, `rangeable`, per-page signals.
 2. Auto-parse assigns a strategy per page (§6.1): text-layer fast path, Docling with an OCR and table mode, or blank.
 3. Consecutive pages with the **same** strategy (pipeline, OCR mode, table mode, scale) form runs; each run is cut
-   into ranges of at most 20 pages. Range size starts at 20 (fast path or no OCR) or 8 (OCR) and adapts: after each
-   range the worker sets the next size so that `measured ms/page × size ≤ 50 % of the deadline`.
+   into ranges of at most 20 pages. Range size starts at 20 (fast path or no OCR) or 8 (OCR) and, from P2, adapts: after each
+   range the worker sets the next size so that `measured ms/page × size ≤ 50 % of the deadline`. In P1 (weakness
+   review §1) the sizes are fixed per strategy in the worker's configuration, set from fixture measurements so that a
+   range stays within 50 % of the deadline; a failing range is halved.
 4. Ranges of one document run sequentially in its `parse` job (the lease heartbeat covers it); different documents
    use the parallel slots. One parse job per document keeps run records and caching simple.
 
@@ -733,3 +735,11 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 | Parse output keyed per document (`documents/{documentId}/nodes/docling-parse/{cacheKey}/`) | Replaced by the content-addressed cache (content hash, parser settings hash, parser build) (§2) |
 | Parser fuzzing (Atheris, mutation run, `parser-robustness.yml`) | P2 (§1) |
 | Docling HTML backend as a fallback for failed main-content extraction (`html_base_url` option) | Removed: HTML is extracted in the worker only, with the site profile or a preset (processing design §3.7) |
+
+## 21. Deferred or removed (weakness review)
+
+Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+
+| Item | Where it went |
+|---|---|
+| Range size adapted from measured ms per page (§8) | P2; fixed sizes per strategy from the worker's configuration in P1 |

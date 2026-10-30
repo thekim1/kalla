@@ -63,7 +63,8 @@ dropped).
   `Chunks."CollectionId"` is a **scalar** with a B-tree index; `CollectionIds` arrays, their GIN index, follow runs,
   `RunIds` arrays, the shared-chunk rule and cross-department set revival are removed. Membership changes no longer
   rewrite chunks.
-- **Reuse is by content-addressed caches**: the shared crawl frontier still makes one request per URL per freshness
+- **Reuse is by content-addressed caches** (the shared crawl frontier is **P2**, [weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer); in P1 each source has its
+  own frontier): the shared crawl frontier still makes one request per URL per freshness
   window for every source that wants it (politeness unchanged); raw content blobs are keyed by content hash; parse
   output is cached by (content hash, parser settings hash, parser build); embeddings by (text hash, profile). Every
   per-department copy after the first is cheap, and nothing couples departments.
@@ -72,7 +73,8 @@ dropped).
   id, so evaluation questions, feedback and citation history survive revisions.
 - **Fixed pipelines.** Each source type has one linear pipeline: fetch → scan (ClamAV, files) → parse (auto-parse
   rules) → clean → chunk → personal data → embed → index. A pipeline version is (template id, parameter set) as
-  versioned JSON; publish computes the re-processing plan from which parameters changed (effect tags kept).
+  versioned JSON; publish computes the re-processing plan from which parameters changed (effect tags kept; **P2**, [weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+  P1 publish re-processes every document of the collection, unchanged stages free from the per-stage caches).
   `IPipelineNode` stays as the internal way to add stages in code. Removed: the DAG executor, typed ports, user-added
   nodes, locked nodes, the Vue Flow canvas (a **P3 item behind a trigger**, register C2, decided by the user 2026-10-30: built only when
   editors ask for a flow that template parameters cannot express, seen in at least two departments or one recurring platform-team request). The *pipeline editor* right becomes "edit template parameters".
@@ -189,7 +191,7 @@ dropped).
   variance shows it can tell versions apart.
 - **Publish** = plan → re-process (new chunk sets written next to the live ones, swapped per document, §9) →
   evaluation report → keep or roll back; previous chunk sets kept 14 days for one-click rollback.
-- **Answer-level evaluation** from late P1: a nightly on-prem judge over the evaluation sets through
+- **Answer-level evaluation** (moved to **P2**, [weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)): a nightly on-prem judge over the evaluation sets through
   `Ume.Rag.Answering` measuring faithfulness and citation precision; the `uncited_answer` rate per assistant is a
   metric.
 - **Breadcrumbs**: the page breadcrumb (`BreadcrumbList` or breadcrumb nav) is put in front of the heading path in the
@@ -346,6 +348,10 @@ is routed dynamically (HTML extraction in the worker; PDF fast path, Docling or 
   verksamheter › Teknik och fastighet" (path to verify on the live page) and date 2026-01-15; a fixture set of ≈ 20
   saved umea.se pages (HTML and PDF) is checked in as a regression corpus.
 
+**Later change ([weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)).** Learning and automatic re-learning move to **P2**. In P1 (P1a) the umea.se site
+profile is a **hand-checked Sitevision preset**: a manual profile JSON with the same schema, versioned like any config;
+learning adds to such profiles later. The acceptance test above stays in P1a.
+
 ## 14. Fewer containers in the pilot (user, 2026-10-30)
 
 The user asked whether the pilot's eight long-running containers could be fewer. Decided: **six** (`rag-api`,
@@ -396,3 +402,7 @@ knowledge, two assistant kinds, and no versioning or tests per assistant. Decide
    audiences) and an impact notice on saving a source or knowledge bank ("påverkar 3 assistenter"); an attention item
    for assistants without use in 90 days (suggest archiving); every assistant has a description and a contact owner,
    shown where clients can display them (Open WebUI model description, to verify).
+
+**Later change ([weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)).** Of item 3, only draft → publish with history and restore stays in P1 (P1b); the
+version diff and the per-assistant test-question set (with the answer judge) move to **P2**. Of item 5, copy,
+assistant templates, the department map and the unused-assistant attention item move to **P2**.

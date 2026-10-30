@@ -1022,7 +1022,7 @@ carry `x-ume-max-residency: Eu` with the `Eu` key; gateway `503` + `Retry-After`
 
 §16.2 items 1–4; the audit counts are a CI assertion, latency targets are reported by the weekly `perf.yml`.
 
-### 18.8 Answer-level evaluation (late P1)
+### 18.8 Answer-level evaluation (P2, weakness review §1)
 
 Nightly, per assistant: up to 50 questions (proposed) from its collections' evaluation sets (processing §13) run
 through the answer core of `Ume.Rag.Answering` (same frame, prompt, filter and renumbering as chat; nothing stored)
@@ -1034,7 +1034,7 @@ worker runs only retrieval evaluation and references neither `Ume.Rag.Answering`
 §14.8). From live traffic, the `uncited_answer` rate per assistant comes from `AssistantDailyTotals.UncitedAnswers`
 (§20); `rag.chat.citations{kind=uncited_answer}` stays the platform-wide counter.
 
-**Assistant tests** (P1, with assistant versions; simplification pass §15). Each assistant's test questions
+**Assistant tests** (P2, weakness review §1; designed with assistant versions, simplification pass §15). Each assistant's test questions
 (`config."AssistantTestQuestions"`, ≤ 30: question, expected behaviour, optional expected source and phrase) run through
 the same core after every publish, on the new published version, and on demand against the draft from the test panel.
 Expected source and phrase are checked in code; the same judge gives a verdict (`pass`/`fail`/`unsure`) against the
@@ -1046,8 +1046,8 @@ waits for or depends on it.
 
 | Phase | Deliverable |
 |---|---|
-| P1 | `/v1/models`; `/v1/chat/completions` stream and JSON; conversational check; condense on follow-ups with skip heuristic and 600 ms timeout; retrieval with coverage handling; token budget; prompt frame; per-level keys, `ResidencyCeilingHandler`, residency and echo checks; marker renumbering, Open WebUI `source` events and `url_citation`; output filter; not-found and degraded texts; signed conversation ids; writer with bucket-key encryption and daily totals; conversation endpoints; user delete; `/v1/feedback`; Open WebUI feedback import and feedback pruning over its API; Open WebUI configuration; P1 refusal of attachments; metrics, traces, events 5003/5011; benchmarks, audit, overhead run, R1. Late P1: answer-level evaluation (§18.8) |
-| P2 | Agent loop for assistants with tool-bearing skills (`AgentAnswerStrategy`, tool hub, skills; detail in `../tools/design.md` §6, milestones §12); chat attachments (§15.2); public widget (`pk` keys, sessions, server-side history); gateway-served rerank per assistant (knowledge §6.7); cost reconciliation from the gateway usage feed; condense tuning with the advisory evaluation; feedback review workflow beyond P1 |
+| P1 | `/v1/models`; `/v1/chat/completions` stream and JSON; conversational check; condense on follow-ups with skip heuristic and 600 ms timeout; retrieval with coverage handling; token budget; prompt frame; per-level keys, `ResidencyCeilingHandler`, residency and echo checks; marker renumbering, Open WebUI `source` events and `url_citation`; output filter; not-found and degraded texts; signed conversation ids; writer with bucket-key encryption and daily totals; conversation endpoints; user delete; `/v1/feedback`; Open WebUI feedback import and feedback pruning over its API; Open WebUI configuration; P1 refusal of attachments; metrics, traces, events 5003/5011; benchmarks, audit, overhead run, R1 |
+| P2 | answer-level evaluation and assistant tests (§18.8; weakness review §1); agent loop for assistants with tool-bearing skills (`AgentAnswerStrategy`, tool hub, skills; detail in `../tools/design.md` §6, milestones §12); chat attachments (§15.2); public widget (`pk` keys, sessions, server-side history); gateway-served rerank per assistant (knowledge §6.7); cost reconciliation from the gateway usage feed; condense tuning with the advisory evaluation; feedback review workflow beyond P1 |
 | P3 | Teams client; OBO tools; write tools with confirmation |
 
 ## 20. Changes to other documents
@@ -1146,12 +1146,12 @@ waits for or depends on it.
   real pilot questions; whether 600 ms covers the on-prem model's p95.
 - Conversational check (§6.2): false positives on real questions (a short question that is only stop words plus one
   content word must not be classified conversational); the Snowball stop lists in .NET match Postgres's.
-- Answer-level judge (§18.8): agreement of the on-prem judge's faithfulness and citation-precision scores with human
+- Answer-level judge (§18.8, P2): agreement of the on-prem judge's faithfulness and citation-precision scores with human
   ratings on a sample, before the scores are shown to editors.
 - Open WebUI v0.12.5 (§3.1): an `info.meta.description` in our `/v1/models` entry survives the model merge
   (`ow/utils/models.py`, default metadata and workspace overrides) and is shown in the model selector; a top-level
   `description` is not shown. Sending `info.meta` must not change capabilities (`ow/main.py:1206`).
-- Assistant tests (§18.8): judge cost and duration of an `assistant-tests` run (≤ 30 questions × answer + judge call)
+- Assistant tests (§18.8, P2): judge cost and duration of an `assistant-tests` run (≤ 30 questions × answer + judge call)
   per publish; whether the verdict against free-text expected behaviour agrees with editors on a sample.
 
 ## 23. Deferred or removed (simplification pass)
@@ -1175,3 +1175,12 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8,
 | Strict fail-closed on an unconfirmed config version | grace window (§4.1) |
 | `Assistants.Mode` as an editable field; knowledge from linked skills' collections; chat serving the current assistant row (simplification pass §15) | mode derived from tool-bearing skills; direct collections only (knowledge §4.2); chat serves the published version (§2.2) |
 | Redis rate limit per user in P1 ("not applied" when Redis is down) | P2, first multi-host deployment; P1 limits in process behind `IRateLimitStore`, P2 falls back to per-instance limits (§4.1 step 4, simplification pass §9, §14) |
+
+## 24. Deferred or removed (weakness review)
+
+Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+
+| Item | Where it went |
+|---|---|
+| Nightly answer-level evaluation (run kind `answers`, §18.8) | P2 |
+| Assistant tests (run kind `assistant-tests`, §18.8) | P2, with the assistant version diff, templates and copy (admin design §17) |

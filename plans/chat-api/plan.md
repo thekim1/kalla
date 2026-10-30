@@ -144,8 +144,9 @@ Full settings: design §4.3 (Open WebUI v0.12.5).
 
 | Phase | Deliverable |
 |---|---|
-| P1 | `/v1/models` filtered by caller and client, streaming RAG completions, citations (both formats), not-found answers, residency check, issued conversation ids, history + retention, Open WebUI pilot with its data-handling profile; `/v1/feedback`, **Open WebUI feedback import** and the **Feedback page** in the admin UI (design §14; admin design §8) |
-| P1 (late) | Nightly answer-level evaluation in `rag-admin`: an on-prem judge over the evaluation sets through `Ume.Rag.Answering` (faithfulness, citation precision); `uncited_answer` rate per assistant (design §18.8) |
+| P1a (weakness review §1) | `/v1/models` filtered by caller and client, streaming RAG completions, citations (both formats), not-found answers, residency check; one assistant in Open WebUI for the pilot department |
+| P1b | issued conversation ids, history + retention, Open WebUI pilot with its data-handling profile; `/v1/feedback`, **Open WebUI feedback import** and the **Feedback page** in the admin UI (design §14; admin design §8) |
+| P2 (moved from late P1, weakness review §1) | Nightly answer-level evaluation in `rag-admin`: an on-prem judge over the evaluation sets through `Ume.Rag.Answering` (faithfulness, citation precision); `uncited_answer` rate per assistant (design §18.8) |
 | P2 | Skills with read-only tools via the tool hub (an assistant linking one runs the agent loop), public widget (`ume-rag-pk-` keys, origins, rate limits), chat attachments (design §15.2), gateway-served rerank per assistant, feedback review beyond P1, condense tuning with the advisory evaluation |
 | P3 | Teams client, user-delegated tools (OBO), write tools with confirmation |
 
@@ -196,3 +197,12 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8,
 | Nightly SQL pruning sidecar against Open WebUI's database | removed; feedback pruning via its HTTP API, chat retention open (§6) |
 | Strict fail-closed on an unconfirmed config version | grace window (§4) |
 | RAG and agent as two assistant kinds chosen by the editor; knowledge from skills' collections | one assistant type, mode derived from tool-bearing skills; direct collections only; the published version is served (§3) |
+
+## 10. Deferred or removed (weakness review)
+
+Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+
+| Item | Where it went |
+|---|---|
+| Nightly answer-level judge (`answers` runs) in `rag-admin` | P2 (§7; design §18.8) |
+| Per-assistant test questions (`assistant-tests` runs) | P2 (design §18.8) |
