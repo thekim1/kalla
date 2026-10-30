@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Infrastructure.Config;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Infrastructure.Keys;
 using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Infrastructure.Persistence;
@@ -85,5 +86,27 @@ public static class InfrastructureExtensions
         builder.Services.TryAddSingleton<KeyStore>();
         builder.Services.AddSingleton<IConfigChangeHandler>(sp => sp.GetRequiredService<KeyStore>());
         return builder;
+    }
+
+    /// <summary>
+    /// A named gateway <see cref="HttpClient"/> (<c>gateway-chat</c>, <c>gateway-query</c>, …) with the
+    /// <see cref="ResidencyCeilingHandler"/>: base address <c>Gateway:BaseUrl</c>, the per-level keys from
+    /// <c>Gateway:Keys</c>, and no standard resilience handler (the gateway retries before its first byte; chat design
+    /// §8.3). Every gateway call of the services goes through a client registered here.
+    /// </summary>
+    public static IHttpClientBuilder AddGatewayClient(this IHostApplicationBuilder builder, string name)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.Services.AddOptions<GatewayOptions>().BindConfiguration(GatewayOptions.SectionName);
+        builder.Services.TryAddTransient<ResidencyCeilingHandler>();
+        return builder.Services.AddHttpClient(name, (sp, client) =>
+            {
+                if (sp.GetRequiredService<IOptions<GatewayOptions>>().Value.BaseUrl is { Length: > 0 } baseUrl)
+                {
+                    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+                }
+            })
+            .RemoveStandardResilienceHandler()
+            .AddHttpMessageHandler<ResidencyCeilingHandler>();
     }
 }

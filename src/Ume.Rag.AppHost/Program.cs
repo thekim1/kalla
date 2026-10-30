@@ -56,9 +56,19 @@ var fakeGateway = builder.ExecutionContext.IsRunMode && builder.Configuration.Ge
         .WithHttpHealthCheck(HealthEndpoints.ReadyPath, endpointName: "https")
     : null;
 
+// Per-level dev keys (OnPrem, Eu, External), like the pilot team's gateway keys: the fake accepts them, the services
+// hold them as Gateway:Keys:<level> (the worker never the External one, simplification pass §6).
+string[] residencyLevels = ["OnPrem", "Eu", "External"];
+var gatewayKeys = residencyLevels.ToDictionary(level => level, level => Secret($"gateway-key-{level.ToLowerInvariant()}", 43));
+
 // FakeGateway:Latency:* (AppHost user secrets) gives the fake a real gateway's timing, as the gateway's FakeLlm.
 if (fakeGateway is not null)
 {
+    foreach (var (level, key) in gatewayKeys)
+    {
+        fakeGateway.WithEnvironment($"FakeGateway__Keys__{level}", key);
+    }
+
     foreach (var setting in builder.Configuration.GetSection("FakeGateway:Latency").GetChildren())
     {
         fakeGateway.WithEnvironment($"FakeGateway__Latency__{setting.Key}", setting.Value);
@@ -176,6 +186,13 @@ if (fakeGateway is not null)
     foreach (var service in new[] { api, worker, adminApi })
     {
         service.WithEnvironment("Gateway__BaseUrl", fakeGateway.GetEndpoint("https")).WaitFor(fakeGateway);
+        foreach (var (level, key) in gatewayKeys)
+        {
+            if (service != worker || level != "External")
+            {
+                service.WithEnvironment($"Gateway__Keys__{level}", key);
+            }
+        }
     }
 }
 else

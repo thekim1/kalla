@@ -5,6 +5,7 @@
     <ContainerFamily>noble-chiseled</ContainerFamily>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Ume.Rag.Domain\Ume.Rag.Domain.csproj" />
     <ProjectReference Include="..\Ume.Rag.ServiceDefaults\Ume.Rag.ServiceDefaults.csproj" />
   </ItemGroup>
 </Project>

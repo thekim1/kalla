@@ -5,5 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.TestKit\Ume.Rag.TestKit.csproj" />
     <ProjectReference Include="..\..\src\Ume.Rag.Api\Ume.Rag.Api.csproj" />
+    <!-- Its top-level Program would clash with the api's: referenced under an alias (FakeGatewayFactory). -->
+    <ProjectReference Include="..\..\src\Ume.Rag.FakeGateway\Ume.Rag.FakeGateway.csproj" Aliases="fakegateway" />
   </ItemGroup>
 </Project>
