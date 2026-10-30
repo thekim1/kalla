@@ -560,7 +560,7 @@ embedding tokens/s vs cap, HNSW memory, connections vs budget, archive lag).
 | Batching | claims upsert per page (`unnest`), run items in batches, embeddings ≤ 64 (32 at scale) inputs, chunk writes ≤ 1,000 per batch, completions buffered from P2 (§3.4), stats flush 30 s |
 | Npgsql | one `NpgsqlDataSource` with `UseVector()`; `NpgsqlBatch` for multi-statement round trips (to-verify #19, #20); **binary COPY** for chunks (below); `Max Auto Prepare` 64; `Multiplexing` not used (complexity; revisit only with a trigger) |
 | HTTP | `IHttpClientFactory` with one `SocketsHttpHandler` per downstream: gateway (`PooledConnectionLifetime` 5 min as `ProviderHttpClient.cs:50-56`, `MaxConnectionsPerServer` = `Embedding:GlobalMaxInFlight` share + query lane), parser (`MaxConnectionsPerServer` = slots + 2, long timeouts), crawl (egress-guard `ConnectCallback`, `MaxConnectionsPerServer` 4) |
-| GC | Server GC (Web SDK default) with DATAS (default since .NET 9, *to verify* for .NET 10); `DOTNET_GCHeapHardLimitPercent=75` on **every** .NET container (today only api, repo §6.2); the gateway's memory study (`docs/performance-improvement-plan.md:72-81`) decides further knobs for both repos |
+| GC | Server GC (Web SDK default) with DATAS (default since .NET 9, *to verify* for .NET 10); `DOTNET_GCHeapHardLimitPercent=0x4B` on **every** .NET container (today only api, repo §6.2); the gateway's memory study (`docs/performance-improvement-plan.md:72-81`) decides further knobs for both repos |
 
 ```csharp
 // Index writer: chunks with binary COPY; Pgvector 0.3.2 maps Vector → "vector" and HalfVector → "halfvec" by default
@@ -699,7 +699,7 @@ each decision lives.
 | `platform/repo-and-deployment.md` | §2.2 | `AWSSDK.S3` (≥ 7 days old at pin time; 4.0.104.6 checked here) in `Directory.Packages.props` for `Ume.Rag.Infrastructure` |
 | `platform/repo-and-deployment.md` | §3 | `Worker:Concurrency:<class>`; P2: `Worker:Maintenance` on several instances (lease leaders), `Admin:Retention` on both slots (lock-guarded batches); `BlobStore:*`, `Embedding:GlobalMaxInFlight`, `Parser:Endpoints` (optional), `ConnectionStrings__ragdb-listen`, `ConnectionStrings__ragdb-read` (by trigger) |
 | `platform/repo-and-deployment.md` | §6.1–§6.4 | P2 multi-host: routed LAN + peer firewall lists, compose split per role, `init-deployment.sh --role data|api|ingestion|processing|all`, host-local parser/renderer/clamd (§5.4); object store replaces the `rag-blobs` volume beyond one host |
-| `platform/repo-and-deployment.md` | §6.2 | `DOTNET_GCHeapHardLimitPercent=75` on worker, admin, migrations; `shared_preload_libraries = 'pg_stat_statements'`; 64 GB database-host settings (§3.2) as the multi-host profile; `wal_compression = lz4` if the stock image supports it |
+| `platform/repo-and-deployment.md` | §6.2 | `DOTNET_GCHeapHardLimitPercent=0x4B` on worker, admin, migrations; `shared_preload_libraries = 'pg_stat_statements'`; 64 GB database-host settings (§3.2) as the multi-host profile; `wal_compression = lz4` if the stock image supports it |
 | `platform/repo-and-deployment.md` | §6.3 | Secrets `BlobStore__S3__AccessKey`/`SecretKey` per service; `Security__CrawlKeyPepper` (worker, P2) |
 | `platform/repo-and-deployment.md` | §7.3 | Per-host rolling order (§5.4, P2); one slot with a maintenance window in the pilot |
 | `platform/repo-and-deployment.md` | §8 | `perf.yml` (P1); `scale.yml` (manual) and `tests/scale/` (`FakeSites`, `ScaleSeed`) in P2 |
