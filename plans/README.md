@@ -12,6 +12,9 @@ Decisions put off on purpose, with their stopgaps and deadlines: [`postponed-dec
 (reviewed at the start of every phase). Package, behaviour and estimate checks from every document's "To verify"
 section, with phase and method: [`to-verify.md`](to-verify.md).
 
+Architecture diagrams (Mermaid: system overview, chat request, ingestion, agent tool call):
+[`architecture.md`](architecture.md).
+
 Working name for the platform and its code: **Ume.Rag** (placeholder, to be renamed).
 
 | Folder | Area | Plane | Owns |
