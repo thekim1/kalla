@@ -1,109 +1,144 @@
 # Handover
 
-Status of the Ume.Rag design work, for the next session. Updated 2026-10-30 (session 3, steps 7–11; branch `main`, remote `origin` = github.com/thekim1/ume-rag-platform).
+State of the Ume.Rag work for the next session. Updated 2026-10-30, end of session 3.
+Repo `~/research/rag`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
+every commit).
 
 ## What this is
 
-Design (no code yet) of **Ume.Rag**, a RAG / crawling / chatbot platform for Umeå kommun, built as small .NET 10
-services on top of the existing **LLM gateway** (`~/git/llmgateway`, https://github.com/thekim1/llmgateway), by the
-same team. The user (gateway owner) explicitly wants to improve on **Eneo** (`~/git/eneo`), which they consider slow
-and a "kitchen sink" monolith.
+**Ume.Rag** (working name, N1) is a RAG / crawling / chatbot platform for Umeå kommun: small .NET 10 services on top
+of the team's existing **LLM gateway** (`~/git/llmgateway`, https://github.com/thekim1/llmgateway). The user owns the
+gateway and wants to do better than **Eneo** (`~/git/eneo`), which they find slow and a "kitchen sink" monolith.
 
-## Where everything is
+This repo holds **design only**. The design is **complete**: ten detail steps, a consistency pass and a performance
+pass, all reviewed and pushed. **Next is P0 implementation.**
 
-| Path | Contents |
-|---|---|
-| `01-general-idea.md` | The design idea. **§10 Decisions table is authoritative**; sections 3–9 are the original idea, where they differ the plans and the table win |
-| `02-architecture-review.md` | Review items R1–R7, all adopted and applied (the plans refer to them as R1–R7) |
-| `platforms/` | Analyses of Eneo, Dify, RAGFlow, Onyx, Open WebUI, Kernel Memory/.NET, OpenSearch, Bifrost; `00-comparison.md` is the synthesis |
-| `plans/README.md` | Index of plan folders and phases P0–P3 |
-| `plans/*/plan.md` | First-level plan per area: `platform`, `identity`, `knowledge-api`, `chat-api`, `tools`, `ingestion-worker`, `parser`, `admin`, `gateway-changes`. Each ends with answered and open questions |
-| `plans/platform/data-model.md` | **Detail step 1** (done): schemas, roles, every table, Swedish FTS, hybrid SQL, queue, outbox, tiers, encryption, retention, blobs, migrations |
-| `plans/identity/design.md` | **Detail step 3** (done): BFF copied from the gateway, feature C, `RagPrincipal`, `IAccessPolicy` (13 ordered steps), Open WebUI JWT trust, keys, OAuth, MCP metadata, OBO (P3), security events 5001–6007, Keycloak realm, Bicep package 1, tests |
-| `plans/platform/repo-and-deployment.md` | **Detail step 2** (done): repo layout, build, roles, Aspire/Keycloak/FakeGateway, images, compose and resource zones, release, backup, GitHub Actions, observability, P0 checklist |
-| `plans/gateway-changes/design.md`, `adr-drafts.md` | **Detail step 4** (done): residency ceiling (B), member groups + tenant/guest refusal (C), delegation (A), FakeLlm dimensions, run headers, tool tests; releases B → C → A; ADR rows 018–020 to copy into the gateway repo |
-| `plans/parser/design.md` | **Detail step 5** (done): routing worker vs parser, `/v1/inspect`, Docling native legacy/ODF/email backends behind a sandboxed `soffice` wrapper, attachment splitter → child documents, multipart contract, stored DoclingDocument, page ranges + stitching, OCR modes and bake-off, supervisor process model, security, image, tests. Docling claims checked against `docling-slim` 2.145.0 |
-| `plans/ingestion-worker/design-engine.md` | **Detail step 6a** (done): engine model, definition format + validator + Merkle hashes (`Ume.Rag.Pipelines`), node interface and P1 catalogue, execution with segments and fence, cache, jobs/fairness/scheduler, runs, preview, publish/rollback, templates, index writer, config mid-run, observability, capacity, tests |
-| `plans/ingestion-worker/design-connectors.md` | **Detail step 6b** (done): connector contracts and checkpoints, URL identity, URL list, crawl (robots, sitemaps, scope, traps, traversals), shared frontier with claims and releaser, egress guard, renderer fed by worker fetches, variants, uploads, attachments, ClamAV, change detection and effect tags, deletion guard with reconcile phase, SharePoint P2 outline |
-| `plans/ingestion-worker/design-processing.md` | **Detail step 6c** (done): auto-parse rules and ranges, stitching, clean, split, chunk (tokenizer), metadata, quality check, PII detection + parser `/v1/ner`, embed, noise re-key, evaluation sets, gate, go-live floor |
-| `plans/knowledge-api/design.md` | **Detail step 7** (done): `Ume.Rag.Retrieval` engine shared with the evaluator and test panel, `IRetriever` for the chat role, `/v1/retrieve` (problem details), keyword statement parallel to the query embedding then vector then one hydrate batch, RRF in .NET, exact scan ≤ 10,000 chunks, degrade to keyword-only, per-collection coverage, dedup/variants/cap 3, section expansion from neighbouring chunks (`OverlapChars`), citations with 7-day signed download grants, no result cache, OpenSearch seam, MCP outline. pgvector 0.8.7, `Pgvector` 0.3.2 and MCP SDK 2.3.0 checked against package source |
-| `plans/chat-api/design.md` | **Detail step 8** (done): OpenAI-compatible contract, client-sent history authoritative (0 SQL on the hot path), Open WebUI with one connection and our `owui-tasks` task model, condense on follow-ups (on-prem), token budget, untrusted-source prompt frame, residency + echo checks before the first byte (follow-ups with history at max(level, client ceiling)), `[n]` renumbered by first citation, `source` events vs `url_citation`, output filter, fixed not-found/degraded texts, signed conversation ids, background writer with 7-day key epochs, Open WebUI feedback import and pruning job, C1 attachments (P2, chat-scoped). Open WebUI claims checked against v0.12.5 source |
-| `plans/tools/design.md` | **Detail step 9** (done, all P2): tool hub `rag-tools` as the only credential holder (mTLS + service key), skills in `config` per the Agent Skills spec (no scripts, SemVer + served pointer, MAJOR auto-pin across departments, gate = retrieval + routing), tool servers with clearance + result level (agent run level fixed at start), deny-by-default policy with one list/call function, pinned definitions + 15-min drift + two-person re-approval, agent loop limits and cost estimate, stateless `/mcp` with per-skill endpoints, .NET template + OpenAPI code generator, mock `ume-mcp-avgifter`, events 5012–5015. MCP SDK 2.3.0 (protocol 2026-07-28, no sessions) and Agent Skills spec checked |
-| `plans/admin/design.md` | **Detail step 10** (done): gateway BFF/CSP/problem details copied; `Ume.Rag.Answering` library so the test panel runs the real chat path in process; Swedish UI (the gateway's UI is English: deliberate divergence) with error codes mapped to Swedish; `rag-reviewer` role; `xmin` concurrency; one-transaction write path (change + outbox + audit + jobs); cross-rules V1–V31; pipeline `gating` state; `GatewayModels` sync in P1; pilot setup checklist; Vue Flow 1.48.2 canvas (P2) with keyboard list editor; WCAG 2.2 AA + one NVDA pass before the pilot |
-| `plans/consistency-pass.md`, `plans/to-verify.md` | **Step 11** (done): what the consistency pass changed, the settings rule, decisions; the merged to-verify register (113 items by topic and phase) |
-| `plans/performance-pass.md`, `plans/architecture.md` | **Performance pass** (done, after step 11): capacity model for the pilot and 10× (≈ 100k pages/h checked, 5–10M chunks, 3–5 hosts), binding resources (politeness, on-prem BGE-M3, NER lane, HNSW memory), Compose per host with roles, `IJobQueue` seam, lease leaders, Redis crawl leases, S3-safe `IBlobStore` (municipal S3 else SeaweedFS, S2), halfvec HNSW from P1, numeric scale triggers, scale test; Mermaid architecture diagrams |
-| `plans/postponed-decisions.md` | **Register of postponed decisions** (K1 key service, T1 sensitive tier, A1 archive law, R1 runner, ...), with stopgap, deadline, owner. Review at each phase start; add new postponements here |
+## Reading order
 
-Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{dify,ragflow,onyx,open-webui,kernel-memory,bifrost}`.
+1. `01-general-idea.md` §10 **Decisions table**: authoritative; later rows win over earlier ones. Sections 3–9 are
+   the original idea; where they differ, the plans and the table win.
+2. `plans/README.md`: plan folders, phases P0–P3, links to the registers.
+3. `plans/architecture.md`: Mermaid diagrams (system overview, chat request, ingestion, agent tool call).
+4. The detail documents for the area being worked on (map below); each ends with "Changes to other documents",
+   answered questions and "To verify".
+
+## Document map
+
+| Area | First-level plan | Detail documents |
+|---|---|---|
+| Platform | `plans/platform/plan.md` (deployables, zones, residency matrix, level policies §8a) | `data-model.md` (schemas, roles and grants, Swedish FTS, indexes, job queue, outbox, tiers, encryption, retention, blobs, Redis); `repo-and-deployment.md` (repo layout, build, Aspire, FakeGateway, images, Compose, networks, zones, secrets, settings rule §3, CI, observability, Kubernetes later, **P0 checklist §11**) |
+| Identity | `plans/identity/plan.md` | `design.md` (BFF copied from the gateway, feature C member groups, `RagPrincipal`, `IAccessPolicy`, Open WebUI JWT trust, keys, OAuth, MCP metadata, OBO P3, security events 5001–5015 / 6001–6007, Keycloak realm, Bicep package 1) |
+| Gateway changes | `plans/gateway-changes/plan.md` | `design.md` (residency ceiling B, member groups C, delegation A; releases B → C → A; catalogue additions), `adr-drafts.md` (rows 018–020 for the gateway repo; gateway repo untouched) |
+| Parser | `plans/parser/plan.md` | `design.md` (Docling sidecar, `/v1/inspect`, `/v1/ner`, legacy Office/ODF/email, OCR modes, supervisor, image) |
+| Ingestion | `plans/ingestion-worker/plan.md` | `design-engine.md` (pipelines, Merkle hashes, jobs, scheduler, preview, publish/gating/rollback, index writer); `design-connectors.md` (URL list, crawl, shared frontier, egress guard, renderer, uploads, attachments, ClamAV, deletion guard, SharePoint P2); `design-processing.md` (auto-parse, chunking, PII + NER, embed, evaluation sets, gates) |
+| Knowledge API | `plans/knowledge-api/plan.md` | `design.md` (`/v1/retrieve`, hybrid search in three statements, RRF in .NET, halfvec HNSW, coverage, sections, citations, download grants, OpenSearch seam) |
+| Chat API | `plans/chat-api/plan.md` | `design.md` (OpenAI-compatible API, Open WebUI integration with `owui-tasks`, condense, prompt frame, residency checks before the first byte, citations, writer with key epochs, feedback import, retention, C1 attachments P2) |
+| Tools (P2) | `plans/tools/plan.md` | `design.md` (tool hub `rag-tools`, skills per the Agent Skills spec, tool policy, clearance/result level, drift and two-person approval, agent loop, `/mcp`, .NET MCP server template, mock fee calculator) |
+| Admin | `plans/admin/plan.md` | `design.md` (BFF + Swedish UI, `Ume.Rag.Answering` test panel, roles incl. `rag-reviewer`, write path, cross-rules V1–V32, pilot setup checklist, Vue Flow canvas P2, WCAG 2.2 AA) |
+| Cross-cutting | – | `plans/consistency-pass.md` (what the pass changed, settings rule); `plans/performance-pass.md` (capacity model, bottlenecks, scale-out, triggers, scale test); `plans/postponed-decisions.md` (register); `plans/to-verify.md` (126 checks by topic and phase) |
+
+Background: `02-architecture-review.md` (R1–R7, all applied), `platforms/` (Eneo, Dify, RAGFlow, Onyx, Open WebUI,
+Kernel Memory, OpenSearch, Bifrost; synthesis `00-comparison.md`). Reference clones: `~/git/llmgateway`,
+`~/git/eneo`, `~/git/rag-platforms/{dify,ragflow,onyx,open-webui,kernel-memory,bifrost}`.
+
+## Key decisions (full list: Decisions table)
+
+- **Services**: `Ume.Rag.Api` (roles chat, knowledge, mcp; shared `Ume.Rag.Answering` + `Ume.Rag.Retrieval`),
+  `Ume.Rag.AdminApi` + Swedish admin UI, ingestion worker (`Worker:Classes` per instance), Python Docling parser
+  sidecar (incl. OCR and Swedish NER), headless renderer, ClamAV, tool hub `rag-tools` (P2); own Postgres
+  (pgvector + Swedish Hunspell) and Redis, separate from the gateway.
+- **Gateway**: every model call goes through it (delegated platform key `x-ume-on-behalf-of`, residency ceiling
+  `x-ume-max-residency`, interim per-team keys); embeddings always on-prem BGE-M3 (1024 dims).
+- **Classification**: `public` / `internal` / `sensitive`; residency public any, internal EU or on-prem, sensitive
+  on-prem; client registry with ceilings (Open WebUI `internal`, MCP clients `public` by default); follow-ups with
+  client-sent history run at max(assistant level, client ceiling).
+- **Identity**: the gateway's model (OIDC/BFF, `roles`/`departmentCodes`/`teamCodes`, `UME_RAG_OIDC_*`, `rag-*` roles
+  on the gateway's admin registration); feature C added to both systems; no Entra registration needed before the
+  pilot.
+- **Data protection**: chat content and blobs envelope-encrypted at every level; monthly shred-bucket keys for
+  crypto-shredding; file key provider in the pilot (Key Vault K1); 90-day chat history (A1 pending).
+- **Pilot (P1)**: URL lists, website crawl (≤ 10 req/s per host, night window), uploads (50 MB), shared document
+  store, flat ~400-token chunks with section expansion, evaluation sets with publish gates, RAG assistants
+  (prompt + collections), Open WebUI for one department set up by its own admins, feedback incl. Open WebUI import,
+  limited conversation review by `rag-reviewer`.
+- **P2**: skills, agent assistants, tool hub, `/mcp`, hosted MCP servers, SharePoint, pipeline canvas, chat
+  attachments, widget; scale-out over 3–5 hosts (Compose per host with roles, S3 object store, Open WebUI on its own
+  VM).
+- **Settings rule**: deployment knobs are `Section:Key`; run-time values editors or admins change are
+  `Settings.<Section>.<Key>` in `config."Settings"`.
 
 ## How we work (user preferences)
 
-- **Ask questions in rounds before each level of detail**, using the question tool (up to 4 at a time, a
-  recommended option first). The user answers briefly; record every answer in the relevant plan ("Answered" list) and
-  in the `01-general-idea.md` Decisions table.
-- **Detail round = one subagent per step, sequentially.** The main session writes a precise brief, the subagent
-  writes one document and does not commit, the main session **reviews** (reads the whole document, checks claims
-  against the gateway code, fixes problems, carries accepted findings into other plans, asks the user what only they
-  can decide), then **commits**. One step at a time.
-- **Be as compatible with the gateway as possible**: copy its conventions, files, claims, config keys, key format,
-  security-event scheme; when something is missing, add it to both systems (see `gateway-changes`).
-- Commit only when asked or at the end of a reviewed step; the repo is `~/research/rag` (branch `main`, pushed to `origin`).
+- **Ask before each level of detail**, with the question tool: up to 4 questions per round, recommended option
+  first. Record every answer in the relevant document ("Answered") and in the Decisions table.
+- **Verify a premise before putting it in a question.** In step 10 a question claimed the gateway admin UI was
+  Swedish; it is English, and the user had to answer again.
+- **One subagent writes one document from a precise brief and does not commit.** The main session reads the whole
+  document, checks claims against the gateway and real package source, fixes problems and asks the user only what
+  they must decide. A second subagent then carries the "Changes to other documents" rows into the other files. The
+  main session reviews that diff, commits and pushes.
+- Wide passes can run several subagents in parallel when each owns separate files and reports cross-cluster issues
+  instead of editing them (step 11). A Workflow needs the user's explicit opt-in.
+- **Stay compatible with the gateway**: copy its conventions, files, claims, config keys, key format and
+  security-event scheme; when something is missing, add it to both systems (`gateway-changes`).
+- **Check library claims against real source**: download packages into the scratchpad (`pip download --no-deps`,
+  NuGet flat container, npm tarball), extract, read only, never execute. This caught Docling's legacy Office support
+  (step 5), MCP protocol 2026-07-28 without sessions (step 9) and MinIO being archived (performance pass).
 - A formatter in the user's editor sometimes realigns markdown tables: **re-read a file before editing it**.
-- **Check library claims against real source**: when a subagent cannot find a library locally, download the package
-  into the scratchpad (`pip download --no-deps`, extract, read only) and verify. In step 5 this showed Docling 2.145
-  already reads legacy Office, ODF and email, which the draft had assumed it did not.
+- Commit at the end of each reviewed step, then push to `origin main`. All files are committed, including
+  `platforms/`.
+- The global agent-memory instructions (`.agent/`) do not apply: this repo has no `.agent/` directory.
 
 ## Progress
 
-| Step | Document | State | Commit |
-|---|---|---|---|
-| Research, general idea, review, first-level plans | – | done | `8160fcd` |
-| 1. Platform data model | `plans/platform/data-model.md` | done, reviewed | `d889cd9` |
-| 2. Platform repo, local dev, deployment | `plans/platform/repo-and-deployment.md` | done, reviewed | `320fc82`, `d329b8d` |
-| Postpone Key Vault, postponed-decisions register | `plans/postponed-decisions.md` | done | `d2fcff3` |
-| 3. Identity detail | `plans/identity/design.md` | done, reviewed | `ffdccaf` |
-| 4. Gateway changes | `plans/gateway-changes/design.md`, `adr-drafts.md` (drafts; gateway repo untouched) | done, reviewed | `11908e4` |
-| 5. Parser | `plans/parser/design.md` | done, reviewed | `5c9e414` |
-| 6a. Ingestion engine | `plans/ingestion-worker/design-engine.md` | done, reviewed | `080d4bd` |
-| 6b. Connectors | `plans/ingestion-worker/design-connectors.md` | done, reviewed | `e2a99d9` |
-| 6c. Processing | `plans/ingestion-worker/design-processing.md` | done, reviewed | `e804c72` |
-| 7. Knowledge API | `plans/knowledge-api/design.md` | done, reviewed | `2fe838d` |
-| 8. Chat API (C1 decided) | `plans/chat-api/design.md` | done, reviewed | `00f2242` |
-| 9. Tools (skills, tool hub, MCP server, template) | `plans/tools/design.md` | done, reviewed | `e2b8dee` |
-| 10. Admin API + UI | `plans/admin/design.md` | done, reviewed | `ec29ea9` |
-| 11. Consistency pass | `plans/consistency-pass.md` | done | see git log |
-| **P0 implementation** | `plans/platform/repo-and-deployment.md` §11 | **next** | – |
+| Step | Document | Commit |
+|---|---|---|
+| Research, general idea, review, first-level plans | `01-general-idea.md`, `02-architecture-review.md`, `platforms/`, `plans/*/plan.md` | `8160fcd` |
+| 1. Data model | `plans/platform/data-model.md` | `d889cd9` |
+| 2. Repo, local dev, deployment | `plans/platform/repo-and-deployment.md` | `320fc82`, `d329b8d` |
+| Postponed-decisions register | `plans/postponed-decisions.md` | `d2fcff3` |
+| 3. Identity | `plans/identity/design.md` | `ffdccaf` |
+| 4. Gateway changes | `plans/gateway-changes/design.md`, `adr-drafts.md` | `11908e4` |
+| 5. Parser | `plans/parser/design.md` | `5c9e414` |
+| 6a–6c. Ingestion engine, connectors, processing | `plans/ingestion-worker/design-*.md` | `080d4bd`, `e2a99d9`, `e804c72` |
+| 7. Knowledge API | `plans/knowledge-api/design.md` | `2fe838d` |
+| 8. Chat API (C1 decided) | `plans/chat-api/design.md` | `00f2242` |
+| 9. Tools | `plans/tools/design.md` | `e2b8dee` |
+| 10. Admin API + UI | `plans/admin/design.md` | `ec29ea9` |
+| 11. Consistency pass + to-verify register | `plans/consistency-pass.md`, `plans/to-verify.md` | `55b6113` |
+| Architecture diagrams | `plans/architecture.md` | `74f8b61` |
+| Performance pass | `plans/performance-pass.md` | `3b79baa` |
+| **P0 implementation** | `plans/platform/repo-and-deployment.md` §11 | **next** |
 
-After step 10: a consistency pass across all detail documents, then P0 implementation (P0 checklist in
-`repo-and-deployment.md` §11).
+## Open items
 
-## Key decisions to keep in mind (full list: Decisions table)
+**Waiting on people** (`plans/postponed-decisions.md`):
+- **A1** archive law: are chat logs allmänna handlingar, is a gallringsbeslut needed? **Pilot blocker**; owner still
+  to be named.
+- **N1** product name, before the pilot.
+- **R1** self-hosted GitHub runner (IT security), before the first release performance test.
+- **S2** object store server (municipal S3, else SeaweedFS; with IT), before the first multi-host deployment (P2).
+- **U1** crawler about page and robots.txt check with the web editors, before the first production crawl.
+- **P2** licences of models, OCR weights, LibreOffice, fonts and dictionaries, before the pilot.
 
-- Services: Knowledge API + Chat API + MCP (one binary `Ume.Rag.Api`, roles), tool hub (P2), ingestion worker,
-  Python Docling parser sidecar, admin API/UI; Postgres + pgvector + Swedish Hunspell (own image, own instance,
-  separate from the gateway), own Redis; GitHub Actions; Bicep for Entra IaC.
-- All model calls through the gateway (delegated platform key `x-ume-on-behalf-of`, residency ceiling
-  `x-ume-max-residency`; interim per-team keys). Residency: public any, internal EU/on-prem, sensitive on-prem.
-- Three classification levels; client registry with ceilings (Open WebUI and MCP clients capped); embeddings always
-  on-prem (BGE-M3, 1024 dims).
-- Identity identical to the gateway's model (OIDC/BFF, `roles`/`departmentCodes`/`teamCodes`, `UME_RAG_OIDC_*`,
-  `rag-*` roles on the gateway's existing admin registration with its own credential); department scope from member
-  groups = gateway feature C, added to both systems. No Entra registration needed before the pilot.
-- Chat content and blobs envelope-encrypted at every level; monthly shred-bucket master keys for crypto-shredding;
-  **file key provider in the pilot** (Key Vault postponed, K1).
-- Pilot: URL lists, crawl (with headless renderer), uploads (50 MB, ClamAV direct updates), Open WebUI for one
-  department, RAG assistants (prompt + collections); skills, tools and MCP in P2.
+**Measured or checked during implementation**: 126 rows in `plans/to-verify.md`, grouped by topic with the phase
+they must be resolved by. Two proposals still need numbers: the `ner` job lease and attempts (data-model §4.2), and
+whether tool arguments get their own validator or the JSON Schema validator (P2 start).
 
-## Open with the user
+## Next step: P0 implementation
 
-- R1 self-hosted runner (IT security), A1 archive law (owner to be named), N1 product name: see the register.
-- Nothing else is waiting on the user right now.
+P0 builds the foundation: a skeleton that builds, deploys and is observable. The ordered checklist is in
+`plans/platform/repo-and-deployment.md` §11. It covers:
+- the repo skeleton, Aspire AppHost and ServiceDefaults;
+- migrations with the config outbox;
+- the Postgres image with pgvector 0.8.7 and Swedish Hunspell;
+- resource zones, the Keycloak realm, gateway-style keys and FakeGateway;
+- CI and approval package 1;
+- the P0 seams from the performance pass: S3-safe `IBlobStore`, `IJobQueue`, pooler-safe database access,
+  `Worker:Concurrency:<class>`.
 
-## Next step in detail: P0 implementation
-
-The design is complete and consistent (`plans/consistency-pass.md`). Next is P0 (foundation): the checklist in
-`plans/platform/repo-and-deployment.md` §11 (repo skeleton, Aspire AppHost, ServiceDefaults, migrations with config
-outbox, Postgres image with pgvector 0.8.7 + Swedish Hunspell, resource zones, Keycloak realm, gateway-style keys,
-FakeGateway, CI, approval package 1). Before starting: review `plans/postponed-decisions.md` (phase-start rule) and the
-P0 rows of `plans/to-verify.md`; ask the user about the implementation repo (this repo holds design only) and the
-order of P0 items. Open with the user: R1 runner, A1 archive law (pilot blocker), N1 product name.
+Before starting:
+1. Review the postponed-decisions register (phase-start rule) and the P0 rows of `plans/to-verify.md`.
+2. Ask the user where the code lives (a new repo, or `src/` here), the order of the P0 items, and whether the gateway
+   changes (releases B → C → A) start in parallel in the gateway repo.
+3. Apply the 7-day package rule (V1) when pinning versions.
