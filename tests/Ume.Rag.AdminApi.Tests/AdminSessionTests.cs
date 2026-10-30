@@ -3,7 +3,12 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
@@ -14,15 +19,43 @@ using Ume.Rag.TestKit;
 
 namespace Ume.Rag.AdminApi.Tests;
 
-/// <summary>A ragdb with the production roles for the admin API's database tests.</summary>
-public sealed class AdminDatabaseFixture : RagDatabase, IAsyncLifetime;
+/// <summary>A ragdb with the production roles for the admin API's database tests (one per test run).</summary>
+public sealed class AdminDatabaseFixture : RagDatabase, IAsyncLifetime
+{
+    /// <summary>The admin API on this database as <c>ume_rag_admin</c>, with a placeholder identity provider.</summary>
+    public WebApplicationFactory<Program> Factory() => new WebApplicationFactory<Program>().WithWebHostBuilder(web =>
+    {
+        web.UseEnvironment("Development");
+        web.UseSetting("ConnectionStrings:ragdb", Connection(Admin));
+        web.UseSetting("Oidc:Authority", "https://idp.invalid/realms/ume");
+        web.UseSetting("Oidc:ClientSecret", "test-secret");
+        // As the gateway's AdminFixture: a static OIDC configuration, so nothing is fetched from the placeholder authority.
+        web.ConfigureTestServices(services => services.Configure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, o =>
+            o.Configuration = new OpenIdConnectConfiguration
+            {
+                Issuer = "https://idp.invalid/realms/ume", AuthorizationEndpoint = "https://idp.invalid/authorize",
+                TokenEndpoint = "https://idp.invalid/token", EndSessionEndpoint = "https://idp.invalid/logout",
+            }));
+    });
+
+    /// <summary>An HTTPS client: the session and antiforgery cookies are Secure.</summary>
+    public static HttpClient HttpsClient(WebApplicationFactory<Program> factory, bool allowAutoRedirect = true) =>
+        factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = allowAutoRedirect });
+}
+
+[CollectionDefinition(Name)]
+public sealed class AdminDatabaseGroup : ICollectionFixture<AdminDatabaseFixture>
+{
+    public const string Name = "admin-db";
+}
 
 /// <summary>
 /// Server-side admin sessions (signing out ends every copy of the cookie) and the absolute session limit. Copied from the
 /// gateway's <c>AdminSessionTests</c>; the store is <see cref="PostgresAdminSessionStore"/> on <c>config."AdminSessions"</c>
 /// as <c>ume_rag_admin</c> instead of the gateway's in-memory one (to-verify #163).
 /// </summary>
-public sealed class AdminSessionTests(AdminDatabaseFixture database) : IClassFixture<AdminDatabaseFixture>
+[Collection(AdminDatabaseGroup.Name)]
+public sealed class AdminSessionTests(AdminDatabaseFixture database)
 {
     private static readonly TimeSpan MaxSession = TimeSpan.FromHours(12);
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

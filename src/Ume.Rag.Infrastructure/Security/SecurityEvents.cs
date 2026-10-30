@@ -42,6 +42,11 @@ public static partial class SecurityEvents
         return factory.CreateLogger(Category);
     }
 
+    /// <summary>A refused credential; for the admin, one per refused sign-in (credential <c>oidc-signin</c>).</summary>
+    [LoggerMessage(5001, LogLevel.Warning,
+        "Authentication failed: {Reason} ({Credential}) on {Endpoint} from {SourceAddress}", EventName = "rag.auth.failed")]
+    public static partial void AuthFailed(ILogger logger, string reason, string credential, string endpoint, string? sourceAddress);
+
     [LoggerMessage(5003, LogLevel.Warning,
         "Gateway answer discarded: residency {Observed} above the ceiling {Ceiling} on {Endpoint} (gateway request {GatewayRequestId})",
         EventName = "rag.residency.refused")]
@@ -51,4 +56,16 @@ public static partial class SecurityEvents
         "Security-relevant decisions refused: config not confirmed since {LastConfirmedAt} (cached version {CachedVersion}) on {Service}, x{Count}",
         EventName = "rag.config.stale_refused")]
     public static partial void ConfigStaleRefused(ILogger logger, string service, long cachedVersion, DateTimeOffset? lastConfirmedAt, int count);
+
+    [LoggerMessage(6002, LogLevel.Information,
+        "Admin {Actor} signed in from {SourceAddress} with roles {Roles}, departments {Departments}; session {SessionId}", EventName = "rag.admin.signin")]
+    public static partial void AdminSignIn(ILogger logger, string actor, string? sourceAddress, string roles, string departments, string? sessionId);
+
+    [LoggerMessage(6003, LogLevel.Information,
+        "Admin {Actor} signed out from {SourceAddress}; session {SessionId}", EventName = "rag.admin.signout")]
+    public static partial void AdminSignOut(ILogger logger, string actor, string? sourceAddress, string? sessionId);
+
+    [LoggerMessage(6005, LogLevel.Information,
+        "Admin {Actor} extended session {SessionId} until {ExpiresAt} from {SourceAddress}", EventName = "rag.admin.session.extended")]
+    public static partial void AdminSessionExtended(ILogger logger, string actor, string? sessionId, DateTimeOffset expiresAt, string? sourceAddress);
 }

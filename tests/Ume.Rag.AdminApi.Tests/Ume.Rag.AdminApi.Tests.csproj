@@ -6,5 +6,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.TestKit\Ume.Rag.TestKit.csproj" />
     <ProjectReference Include="..\..\src\Ume.Rag.AdminApi\Ume.Rag.AdminApi.csproj" />
+    <!-- The member-group tests run against its catalogue; its top-level Program would clash with the admin API's. -->
+    <ProjectReference Include="..\..\src\Ume.Rag.FakeGateway\Ume.Rag.FakeGateway.csproj" Aliases="fakegateway" />
   </ItemGroup>
 </Project>

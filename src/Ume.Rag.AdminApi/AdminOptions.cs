@@ -18,3 +18,41 @@ public sealed class AdminOptions
     [Range(1, 24)]
     public int MaxSessionHours { get; set; } = 12;
 }
+
+/// <summary>
+/// Bound from the <c>Oidc</c> configuration section (the gateway's, adapted; identity design §1.4). Defaults match the
+/// bundled Keycloak realm; other identity providers remap claims or map groups to roles.
+/// </summary>
+public sealed class OidcOptions
+{
+    public const string SectionName = "Oidc";
+
+    /// <summary>The identity provider's issuer URL.</summary>
+    [Required]
+    public string? Authority { get; set; }
+
+    /// <summary>Ume.Rag's own registration (identity design §1.6), never the gateway's <c>ume-admin</c>.</summary>
+    [Required]
+    public string ClientId { get; set; } = "ume-rag-admin";
+
+    public string? ClientSecret { get; set; }
+
+    public string RoleClaim { get; set; } = "roles";
+    public string DepartmentClaim { get; set; } = "departmentCodes";
+    public string TeamClaim { get; set; } = "teamCodes";
+
+    /// <summary>The group claim: role groups (<see cref="RoleGroups"/>) and member groups of departments (identity design §2).</summary>
+    public string GroupClaim { get; set; } = "groups";
+
+    /// <summary>Role name (rag-platform-admin, rag-department-admin, …) to the group names that grant it, separated by ';'.</summary>
+    public Dictionary<string, string> RoleGroups { get; set; } = [];
+
+    /// <summary>Extra scopes to request, for example "groups".</summary>
+    public string[] ExtraScopes { get; set; } = [];
+
+    /// <summary>When set, the <c>tid</c> claim must equal it; a missing <c>tid</c> is refused too (identity design §1.7).</summary>
+    public string? TenantId { get; set; }
+
+    /// <summary>Refuse guests: <c>acct</c> = 1, or an <c>idp</c> from another tenant or IdP (identity design §1.7).</summary>
+    public bool RefuseGuests { get; set; } = true;
+}
