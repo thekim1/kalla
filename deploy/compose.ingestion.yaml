@@ -55,8 +55,14 @@ services:
       # reports them in its own health and retries.
       rag-parser: {condition: service_started}
       rag-clamav: {condition: service_started}
-    # crawl: the only network with Internet egress, filtered by the host firewall (§6.1).
-    networks: [data, llm, ingestion, parser, crawl]
+    # crawl: the only network with Internet egress, filtered by the host firewall (§6.1). All egress leaves through the
+    # network that holds the default route, so gw_priority pins it to crawl, whose allow-list also has the gateway.
+    networks:
+      data: {}
+      llm: {}
+      ingestion: {}
+      parser: {}
+      crawl: {gw_priority: 1}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.Worker.dll, --health-check]
       interval: 15s

@@ -18,7 +18,7 @@ listed done-when holds.
 Owned by the user, outside the streams ([`p0/README.md`](p0/README.md) §5,
 [`postponed-decisions.md`](postponed-decisions.md)):
 - [ ] Test-host access (#16) and backup target + key escrow location (`to-verify.md` #145)
-- [ ] Entra package 1 submitted (#17); ticket id recorded
+- [ ] ~~Entra package 1 submitted (#17)~~: moved to P2; the pilot signs in with Keycloak (Decisions table, P1 pilot sign-in)
 - [ ] Gateway release 1 agreed with the gateway team (#18; ADR 018)
 - [ ] Access to the real gateway hardware for the capacity measurement (#22); register M2 decided if triggered
 - [ ] DPIA started with the data protection officer (register G1)
