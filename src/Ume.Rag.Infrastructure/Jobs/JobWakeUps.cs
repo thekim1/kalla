@@ -1,17 +1,24 @@
 using System.Collections.Concurrent;
+using Ume.Rag.Domain.Entities;
+using Ume.Rag.Infrastructure.Config;
 
 namespace Ume.Rag.Infrastructure.Jobs;
 
 /// <summary>
-/// Wakes this process's dispatcher for a job class (data-model §4.3). Signalled by local enqueues; the dispatcher also
-/// polls every <c>Worker:PollSeconds</c> (2 s), so jobs enqueued by another process are seen within the poll interval.
-/// <c>rag_jobs</c> notifications are not received yet: the worker's one listening connection (data-model §1.1) belongs to
-/// the config monitor, and routing that channel through it to <see cref="Signal"/> is pending. Signals collapse: one
-/// pending wake-up per class at most.
+/// Wakes this process's dispatcher for a job class (data-model §4.3). Signalled by local enqueues and, as the
+/// <c>rag_jobs</c> <see cref="INotificationListener"/> on the config monitor's listening connection (data-model §1.1,
+/// issue #21), by every other process's enqueue, whose notification payload is the job class. The dispatcher also polls
+/// every <c>Worker:PollSeconds</c> (2 s), so a missed notification costs at most one poll. Signals collapse: one pending
+/// wake-up per class at most.
 /// </summary>
-public sealed class JobWakeUps(TimeProvider time)
+public sealed class JobWakeUps(TimeProvider time) : INotificationListener
 {
+    /// <summary>The channel <c>PostgresJobQueue.EnqueueAsync</c> notifies at commit.</summary>
+    public const string ChannelName = "rag_jobs";
+
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _signals = new(StringComparer.Ordinal);
+
+    public string Channel => ChannelName;
 
     public void Signal(string jobClass)
     {
@@ -28,6 +35,18 @@ public sealed class JobWakeUps(TimeProvider time)
         catch (SemaphoreFullException)
         {
             // Signalled concurrently: one pending wake-up is enough.
+        }
+    }
+
+    /// <summary>
+    /// A <c>rag_jobs</c> notification. Only the classes of <see cref="JobClasses.All"/> (what <c>CK_Jobs_Class</c> lets
+    /// into the queue) are signalled: any role may <c>pg_notify</c>, and every new payload would keep a semaphore for good.
+    /// </summary>
+    public void OnNotification(string payload)
+    {
+        if (JobClasses.All.Contains(payload, StringComparer.Ordinal))
+        {
+            Signal(payload);
         }
     }
 
