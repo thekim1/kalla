@@ -18,10 +18,12 @@ design), also published as a private artifact (share from its menu): https://cla
 
 ## Reading order
 
-1. `01-general-idea.md` §10 **Decisions table**: authoritative; later rows win over earlier ones. The last two rows
-   (simplification pass, site profiles) override much of what comes before. Sections 3–9 are the original idea.
+1. `01-general-idea.md` §10 **Decisions table**: authoritative; later rows win over earlier ones. The rows from "Simplification
+   pass" on (site profiles, visual builder, fewer containers, workspaces, many assistants) override much of what
+   comes before. Sections 3–9 are the original idea.
 2. `plans/simplification-pass.md`: the ten review changes in decided form, §11a conflicts settled during the
-   rewrite, §13 umea.se findings and learned site profiles. Read this before any detail document.
+   rewrite, §13 umea.se findings and learned site profiles, §14 six pilot containers, §15 many assistants per department. Read
+   this before any detail document.
 3. `plans/README.md`: plan folders, phases P0–P3, links to the registers and passes.
 4. `plans/architecture.md`: Mermaid diagrams (system overview, chat request, ingestion, agent tool call).
 5. The detail documents for the area being worked on (map below). Each ends with "Changes to other documents",
@@ -31,17 +33,17 @@ design), also published as a private artifact (share from its menu): https://cla
 
 | Area | First-level plan | Detail documents |
 |---|---|---|
-| Platform | `plans/platform/plan.md` (deployables, zones, residency matrix, data protection §8a) | `data-model.md` (schemas, roles and grants, `SearchText` + built-in `swedish`, per-source documents and chunk sets, unpartitioned `Jobs`, outbox, bucket keys, site profiles, retention, blobs, Redis-down behaviour); `repo-and-deployment.md` (repo layout, build, Aspire, FakeGateway, stock pgvector image, pgBackRest, Compose, networks, secrets, settings rule §3, CI, **P0 checklist §11**) |
+| Platform | `plans/platform/plan.md` (deployables, zones, residency matrix, data protection §8a) | `data-model.md` (schemas, roles and grants, `SearchText` + built-in `swedish`, per-source documents and chunk sets, unpartitioned `Jobs`, outbox, bucket keys, site profiles, `AssistantVersions` and test questions, `AdminSessions`, retention, blobs, Redis from P2); `repo-and-deployment.md` (repo layout, build, Aspire, FakeGateway, stock pgvector image, pgBackRest, Compose, networks, secrets, settings rule §3, CI, **P0 checklist §11**) |
 | Identity | `plans/identity/plan.md` | `design.md` (BFF copied from the gateway, RAG's own Entra registrations, member groups from claims (Graph lookup P2), `RagPrincipal`, `IAccessPolicy`, explain access, Open WebUI JWT trust, keys, per-level gateway keys and explicit ceiling, security events, Keycloak realm) |
 | Gateway changes | `plans/gateway-changes/plan.md` | `design.md` (one combined release: residency ceiling + `RequireMaxResidency`, delegation with key-only request policy, claims-only member groups, 503 vs 403, `/v1/models` filtered by the ceiling; P2 rerank endpoint), `adr-drafts.md` (018–020, accepted together) |
 | Parser | `plans/parser/plan.md` | `design.md` (Docling sidecar, every PDF incl. the pypdfium2 text-layer path, Tesseract `swe` only, `/v1/inspect`, gated `/v1/ner`, `format_deferred` for legacy Office/RTF/email) |
 | Ingestion | `plans/ingestion-worker/plan.md` | `design-engine.md` (fixed linear pipelines, per-stage cache keys, jobs, scheduler, publish = plan → re-process → report → keep/roll back, index writer with per-document swap); `design-connectors.md` (URL list, crawl, shared frontier, sitemap `lastmod`, learned site profiles §5.6, egress guard, uploads by slot, ClamAV, deletion guard); `design-processing.md` (HTML extraction by site profile, chunking with breadcrumbs, personal data on chunk sets, advisory evaluation) |
 | Knowledge API | `plans/knowledge-api/plan.md` | `design.md` (`/v1/retrieve`, hybrid search in three statements, lexeme OR query, scalar `CollectionId`, coverage needing vector and keyword weak, `IReranker` seam, citations, download grants) |
-| Chat API | `plans/chat-api/plan.md` | `design.md` (OpenAI-compatible API, Open WebUI without task generation, condense skip + 600 ms timeout, residency checks before the first byte, same level every turn, bucket keys, feedback import via HTTP API) |
+| Chat API | `plans/chat-api/plan.md` | `design.md` (OpenAI-compatible API, Open WebUI without task generation, condense skip + 600 ms timeout, residency checks before the first byte, same level every turn, serves the published assistant version, bucket keys, feedback import via HTTP API) |
 | Tools (P2) | `plans/tools/plan.md` | `design.md` (in-process tool hub, `hosted` servers only, `ume-mcp-kommun`, skills with served pointer + rollback, static small skills, sharing, third-party text, drift pre-registration, `/mcp` early) |
-| Admin | `plans/admin/plan.md` | `design.md` (BFF + Swedish journey pages, generic forms for platform objects, test panel, nightly answer judge and skill gate in `rag-admin`, serialised config writes, cross-rules V1–V32 with V20/V27 retired, site-profile pages) |
+| Admin | `plans/admin/plan.md` | `design.md` (BFF + Swedish journey pages, generic forms for platform objects, test panel, nightly answer judge and skill gate in `rag-admin`, serialised config writes, assistant drafts/publish/versions/test questions/copy/templates, department map, cross-rules V1–V34 with V20/V27 retired (32 rules), site-profile pages; owner-team scoping P2) |
 | Workspaces (P2) | `plans/workspaces/plan.md` (ask-a-file: personal and team knowledge bases from uploaded files, "Mina kunskapsbaser" in `rag-admin`, interactive priority, on-prem summaries, four answer modes, quotas, lifecycle; 12 questions for the detail round) | – (detail round next) |
-| Cross-cutting | – | `plans/simplification-pass.md` (§14 six containers, §15 many assistants per department); `plans/consistency-pass.md`; `plans/performance-pass.md` (capacity model incl. umea.se numbers, triggers); `plans/postponed-decisions.md` (register); `plans/to-verify.md` (≈ 160 checks by topic and phase) |
+| Cross-cutting | – | `plans/simplification-pass.md` (§14 six containers, §15 many assistants per department); `plans/consistency-pass.md`; `plans/performance-pass.md` (capacity model incl. umea.se numbers, triggers); `plans/postponed-decisions.md` (register); `plans/to-verify.md` (≈ 167 checks by topic and phase) |
 
 Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is now sharing by cache, not by row),
 `platforms/` (Eneo, Dify, RAGFlow, Onyx, Open WebUI, Kernel Memory, OpenSearch, Bifrost; synthesis
@@ -51,7 +53,8 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 ## Key decisions (full list: Decisions table)
 
 - **Pilot containers (6)**: `rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`, `postgres` (pgBackRest
-  inside the image); no Redis until the first multi-host deployment (P2) (`simplification-pass.md` §14).
+  inside the image); no Redis until the first multi-host deployment (P2): admin sessions in Postgres, rate limits and
+  the query-embedding cache in process (`simplification-pass.md` §14).
 - **Assistants**: one type (agent loop only when a linked skill carries tools), knowledge only through directly linked
   collections (skills carry know-how and tools), versioned from P1 (draft, test questions, publish, history, restore);
   owner-team edit scoping in P2. Many assistants per department share knowledge banks.
@@ -105,7 +108,7 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 | Architecture diagrams | `plans/architecture.md` | `74f8b61` |
 | Performance pass | `plans/performance-pass.md` | `3b79baa` |
 | Overall review → simplification pass (10 changes) + umea.se site profiles | `plans/simplification-pass.md`, every plan document | `6f0602f` |
-| Six pilot containers; many assistants per department (§15); ask-a-file workspaces plan | `simplification-pass.md` §14–§15, `plans/workspaces/plan.md` | `0e91d81` and the next commit |
+| Six pilot containers; many assistants per department (§15); ask-a-file workspaces plan | `simplification-pass.md` §14–§15, `plans/workspaces/plan.md` | `0e91d81`, `00e531c` |
 | **P0 implementation** | `plans/platform/repo-and-deployment.md` §11 | **next** |
 
 ## Open items
@@ -126,9 +129,10 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 - **C2** visual pipeline builder: P3, built only when its trigger fires (editors need flows that template
   parameters cannot express).
 
-**Measured or checked during implementation**: `plans/to-verify.md` (rows up to #160), including the decompounder
+**Measured or checked during implementation**: `plans/to-verify.md` (rows up to #167), including the decompounder
 against Postgres `ispell`, the stock pgvector image tag, pgBackRest with that image, the umea.se site profile and
-acceptance page, the cost of the per-document swap, and pool 12 / 4 searches.
+acceptance page, the cost of the per-document swap, pool 12 / 4 searches, the Postgres admin session store, and the
+assistant test-run cost.
 
 ## Next step: P0 implementation
 
@@ -138,6 +142,8 @@ P0 = a skeleton that builds, deploys, is observable and can be restored. Ordered
 window, FakeGateway with per-level keys and the 403/503 modes, Keycloak realm, keys, admin skeleton with serialised
 writes, AppHost, parser contract, single-slot Compose, pgBackRest PITR restore drill, `release.yml`, test host, RAG's
 own Entra registrations, the combined gateway release agreed, worker dispatcher).
+
+The workspaces detail round (its 12 questions) belongs to P2 and can wait.
 
 Before starting:
 1. Review the postponed-decisions register (phase-start rule) and the P0 rows of `plans/to-verify.md`.
