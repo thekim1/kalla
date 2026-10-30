@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
+using Ume.Rag.Infrastructure.Persistence;
 
 namespace Ume.Rag.TestKit;
 
@@ -17,4 +19,23 @@ public static class TestPostgres
         Environment.GetEnvironmentVariable("UME_RAG_TEST_POSTGRES_IMAGE") is { Length: > 0 } image ? image : DefaultImage;
 
     public static PostgreSqlBuilder Builder() => new(Image);
+
+    /// <summary>A context with the connection's rights, outside any host.</summary>
+    public static RagDbContext Context(string connectionString) =>
+        new(new DbContextOptionsBuilder<RagDbContext>().UseNpgsql(connectionString, RagDbContext.ConfigureNpgsql).Options);
+
+    /// <summary>A file of the repository, found by walking up from the test output directory.</summary>
+    public static string RepositoryFile(string relativePath)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, relativePath);
+            if (File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        throw new FileNotFoundException($"{relativePath} not found above the test output directory.");
+    }
 }

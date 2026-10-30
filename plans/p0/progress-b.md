@@ -8,20 +8,20 @@ hand-off has landed; if blocked, take the next item and come back. Tick each box
 the PR number after it (`[x] … (#12)`). Record every `to-verify` row in [`results-b.md`](results-b.md) before ticking it here.
 
 ## Waiting on (tick when it lands)
-- [ ] **H1** Stage 0 merged ([`progress-stage-0.md`](progress-stage-0.md))
-- [ ] **H3** A's `ume-rag/postgres` image in CI (then switch `TestPostgres` to it)
+- [x] **H1** Stage 0 merged ([`progress-stage-0.md`](progress-stage-0.md))
+- [x] **H3** A's `ume-rag/postgres` image in CI (then switch `TestPostgres` to it) (A's #5: CI sets `UME_RAG_TEST_POSTGRES_IMAGE`, issue #6)
 - [ ] **H4** worker applies the `command` kind (then wire the admin enqueue)
 
 ## 1. Schema and roles (#6, first)
 Refs: [data-model](../platform/data-model.md) §1, §2, §4, §5, §10, §14; [knowledge-api/design.md](../knowledge-api/design.md) §6, §15, §17
-- [ ] `deploy/postgres/init.sql`, `app-roles.sql`, `pg_hba.conf` (roles and grants of data-model §1)
-- [ ] `Ume.Rag.MigrationService`: schemas, config outbox, unpartitioned `Jobs` with the partial unique `DedupKey` index, `WorkerInstances`
-- [ ] Day-partitioned `RunItems`, `rag_partition_maintain()`
-- [ ] Role defaults `hnsw.ef_search`/`iterative_scan`/`max_scan_tuples`; `content.rag_or_query`
-- [ ] **Hand-off H2:** migrations merged; issue to stream A
-- [ ] `DatabaseRoleTests`; connection caps and `statement_timeout` asserted
-- [ ] Pool sizes measured
-- [ ] to-verify #2, #13, #18, #140, #142 recorded
+- [x] `deploy/postgres/init.sql`, `app-roles.sql`, `pg_hba.conf` (roles and grants of data-model §1)
+- [x] `Ume.Rag.MigrationService`: schemas, config outbox, unpartitioned `Jobs` with the partial unique `DedupKey` index, `WorkerInstances`
+- [x] Day-partitioned `RunItems`, `rag_partition_maintain()`
+- [x] Role defaults `hnsw.ef_search`/`iterative_scan`/`max_scan_tuples`; `content.rag_or_query`
+- [x] **Hand-off H2:** migrations merged; issue to stream A
+- [x] `DatabaseRoleTests`; connection caps and `statement_timeout` asserted
+- [ ] Pool sizes measured (P0 part recorded under to-verify #140: the connection budget holds; pool waits under load need the P1 chat path)
+- [x] to-verify #2, #13, #18, #140, #142 recorded
 
 ## 2. Swedish decompounder (#5, .NET part)
 Refs: [simplification-pass §3](../simplification-pass.md), [data-model §3, §14](../platform/data-model.md)
@@ -75,5 +75,5 @@ Refs: [performance-pass §8](../performance-pass.md)
 - [ ] `docs/security-events.md` ([identity/design.md §10](../identity/design.md))
 
 ## 10. Follow-ups
-- [ ] `TestPostgres` switched to `ume-rag/postgres` (after H3)
+- [x] `TestPostgres` switched to `ume-rag/postgres` (after H3) (A's #5 sets the image in CI; nothing to change in TestKit)
 - [ ] Integration support: issues from the main session's review answered before `v0.1.0`
