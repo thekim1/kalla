@@ -202,9 +202,9 @@ blobs are tombstoned and purged with the blob purge delay.
 
 | Data | Default | Where set |
 |---|---|---|
-| Messages, tool-call records | 90 days per message (`sensitive`: 30 days); see §8a | Assistant within the per-level limits (§8a) |
+| Messages, tool-call records | 90 days per message (`sensitive`: 30 days); see §8a. In the pilot (history mode `none`, weakness review §4) the rows hold metadata only | Assistant within the per-level limits (§8a) |
 | Conversations | deleted when their last message has expired | – |
-| Feedback | follows its message | – |
+| Feedback | follows its message (pilot: ratings only, weakness review §4) | – |
 | Documents, chunk sets, chunks | as long as the source has them; soft delete with 14-day grace; superseded chunk sets 14 days (rollback) | Source |
 | Parse output | while a live document references it | – |
 | Other stage outputs (cache) | unused 30 days | Platform setting |
@@ -225,10 +225,18 @@ blobs are tombstoned and purged with the blob purge delay.
 Copies held by clients are covered by the client's data-handling profile (R5), never by SQL against their databases.
 Open WebUI's feedback is pruned to the same 90 days through its HTTP API; its chat copies cannot be pruned for other
 users at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`, so they stay unpruned in the pilot (stated in its
-data-handling profile) until register item W2 is decided together with A1. Nightly retention
-job per schema, logged and audited. Pilot blocker (postponed A1): confirm with the registrar/archivist whether chat
-logs are allmänna handlingar and whether a gallringsbeslut covers 90-day deletion; A1 also gates crypto-shredding
-(§8a).
+data-handling profile) until register item W2 is decided (within the DPIA, G1; weakness review §4). Nightly retention
+job per schema, logged and audited. Postponed A1 (named owner before P0 ends): confirm with the registrar/archivist
+whether chat logs are allmänna handlingar and whether a gallringsbeslut covers 90-day deletion; A1 gates stored chat
+content and crypto-shredding (§8a). It no longer blocks the pilot, which runs history mode `none` until A1 is answered
+(weakness review §4).
+
+**Open WebUI is the primary copy** (weakness review §4). Because the pilot assistant runs history mode `none`, every
+chat and feedback snapshot with content exists only in Open WebUI's own store (its database and volume). The
+**DPIA** (register item G1, started in P0, finished before go-live) covers that store, its volume and who holds its
+admin role, decides W2 and records the residual risk of user input (§8a). **Public-records requests** for a
+conversation are answered from Open WebUI's copy in the pilot (where, in general, the DPIA and the A1 owner decide);
+the runbook has a section on finding and exporting one conversation for the registrar (repo-and-deployment §11 #19).
 
 ## 8a. Data protection policy per classification level
 
@@ -239,6 +247,13 @@ deployment** (postponed T1/K2).
 **Baseline for every level**: encrypted volumes and encrypted backups (Postgres has no built-in transparent
 encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, traces, metrics or Redis at any level
 (the query cache holds hashes and embeddings only).
+
+**Pilot: history mode `none` until A1 is answered** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)).
+The pilot assistant stores metadata and ratings only, no message content. So P1 does **not** build the chat bucket
+keys, chat content encryption, crypto-shredding or conversation review by `rag-reviewer`; the data model keeps their
+columns and tables, and they are built when A1 allows stored content. Until then no assistant can be set to `stored` or
+`session`, the matrix below is the target once they are built, and feedback comments stay in Open WebUI (mode `none`
+refuses them, chat design §3.5). Blob encryption for `internal` uploads is unchanged.
 
 **Policy matrix.** Platform admins set, per level, the defaults and the **limits** an assistant may choose within
 (an assistant can tighten, never loosen). Proposed starting values:
@@ -254,7 +269,7 @@ encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, t
 | Allowed clients | per ceiling | per ceiling | only clients without their own history store |
 | Feedback comments, tool results, cited source text | same policy as messages | same | same |
 
-**Application-level (envelope) encryption of chat.**
+**Application-level (envelope) encryption of chat** (built when A1 allows stored content, weakness review §4).
 
 - One data key (AES-256-GCM) per (level, expiry month) **bucket**, wrapped by that level's master key; each message is
   encrypted under the bucket of its own expiry month. Message text, titles, feedback comments, tool arguments and
@@ -265,11 +280,12 @@ encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, t
   Vault or an HSM on-prem, a local key file in development. **Postponed (2026-10-29): the pilot uses the file key
   provider**; Azure Key Vault is the intended target (`../postponed-decisions.md`, item K1). Pilot rules for file keys:
   - master keys are 256-bit random files in the deployment secrets directory (`secrets/keys/<key name>`, mode 0400),
-    never mounted into Postgres; the chat keys (`rag-chat-<level>`) only into `rag-api` and `rag-admin`, the blob key
+    never mounted into Postgres; the chat keys (`rag-chat-<level>`, created only once A1 allows stored content) only
+    into `rag-api` and `rag-admin`, the blob key
     (`rag-blob-internal`) into `rag-worker`, `rag-admin` (uploads) and read-only into `rag-api` (citation downloads;
     repo-and-deployment §6.3); created by `init-deployment.sh --key-provider file --allow-file-keys`;
-  - **two key classes**: long-lived keys (blob master keys, chat master keys and the pgBackRest repository passphrase)
-    are **escrowed** offline, separately from database backups, with retention ≥ the data they protect; shred-class
+  - **two key classes**: long-lived keys (blob master keys, chat master keys once they exist, and the pgBackRest
+    repository passphrase; in P0/P1 the escrow covers the blob keys and the passphrase only) are **escrowed** offline, separately from database backups, with retention ≥ the data they protect; shred-class
     keys (per-month chat wrapping keys, only once shredding is switched on) follow the shred rule below;
   - the host disk is LUKS-encrypted (baseline), so a stolen disk or a database backup alone reveals nothing;
   - **no `sensitive` data** while file keys are used.
@@ -285,6 +301,12 @@ encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, t
   unreadable (data-model §7).
 - Consequence: no server-side full-text search in other people's chats; a user's own history list shows decrypted
   titles through the Chat API.
+
+**User input** (weakness review §4). Users can type anything into an `internal` assistant. Open WebUI shows a fixed
+banner: "Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter." (chat design §4.3). The pilot
+client's ceiling stays `internal` only for EU providers covered by a processor agreement (PUB-avtal) and listed in the
+DPIA (G1); if the DPIA requires more, the pilot runs on on-prem models only, set by model choice on its assistants
+(answer and condense models without EU fallbacks; identity design §4.1). The DPIA records the residual risk.
 
 **Content beyond chat logs.** `internal` blobs (uploads, raw content, parse outputs) are envelope-encrypted; `public`
 blobs rely on the encrypted disk only. Chunk text cannot be column-encrypted because full-text search needs it, so
@@ -358,6 +380,9 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (ordere
    Postgres queue; `Worker:Classes` and `Worker:Concurrency:<class>`.
 7. Entra approval package 1 (RAG's own registrations) submitted; no Entra registration is needed for P0 itself; the
    combined gateway release agreed with the gateway team.
+8. Data protection (weakness review §4, owned by the user, outside the build streams): the DPIA (register G1) started
+   with the data protection officer; A1 has a named owner. Key escrow covers the blob master key and the pgBackRest
+   passphrase only (no chat master keys before A1 allows stored content).
 
 ## 12. Answered questions (2026-10-29)
 
@@ -397,3 +422,12 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | Nightly answer-level judge, per-assistant test-question sets | P2 (§9) |
 | Assistant version diff, templates, copy, department map | P2 (admin plan §8) |
 | Site-profile learning, publish plans from effect tags, adaptive embedding concurrency and range sizing | P2 (ingestion plan §13) |
+
+Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
+
+| Item | Where it went |
+|---|---|
+| Stored chat content in P1 (history modes `stored`/`session` for the pilot assistant) | When A1 allows stored content; the pilot runs history mode `none` (§8a) |
+| Chat bucket keys, chat content encryption, chat master keys `rag-chat-<level>` and their escrow | When A1 allows stored content; the data model keeps the columns and tables (§8a, data-model §7) |
+| Crypto-shredding | Still behind A1 (now also behind stored content) |
+| Conversation review and reading feedback comments by `rag-reviewer`/`rag-department-admin` | When A1 allows stored content; feedback comments stay in Open WebUI (§8a) |

@@ -152,7 +152,7 @@ sequenceDiagram
         G-->>C: SSE deltas
         C-->>U: filtered text, [n] renumbered, Open WebUI source events
     end
-    C->>W: enqueue turn (encrypted under the bucket key of its level and expiry month)
+    C->>W: enqueue turn (P1: metadata only, history mode none; content encrypted under its bucket key once A1 allows)
     W->>P: one transaction per batch: messages, sources, cited ranks, daily totals
 ```
 

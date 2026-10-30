@@ -66,8 +66,8 @@ gateway counterpart.
 | 10 | Pipelines | A pipeline is a **template + parameters**; the source form shows the template's parameters; pipeline editors edit parameters. No node editor, no canvas (dropped from the roadmap) (§6) |
 | 11 | Publish | **Plan → re-process → evaluation report → keep or roll back**; no `gating` state, no blocking gate; previous chunk sets kept 14 days for one-click rollback (§6.6) |
 | 12 | Evaluation | **Advisory reports** (recall@10, MRR with counts, compared with the previous run) on the publish screen and the collection page; no floor, no `building` state, no overrides (§7) |
-| 13 | Feedback | P1 page from metadata (rating, fixed reason category, outcome, coverage, cited titles); a comment opens after a one-click pre-filled reason, audited in `ConversationAccess` (§8.1–§8.2) |
-| 14 | Conversation review | `rag-reviewer` opens a conversation with a free-text reason (≥ 20 characters), 30-minute access window, audited; **P1 for conversations behind a feedback item** (`public`/`internal`), P2 search and the `sensitive` second-approver flow (§8.3–§8.4) |
+| 13 | Feedback | P1 page from metadata (rating, fixed reason category, outcome, coverage, cited titles); a comment opens after a one-click pre-filled reason, audited in `ConversationAccess`, once A1 allows stored content (the P1 pilot runs history mode `none`: no comments in our store, weakness review §4) (§8.1–§8.2) |
+| 14 | Conversation review | `rag-reviewer` opens a conversation with a free-text reason (≥ 20 characters), 30-minute access window, audited; first for conversations behind a feedback item (`public`/`internal`), then search and the `sensitive` second-approver flow; **built when A1 allows stored content, not in P1** (weakness review §4) (§8.3–§8.4) |
 | 15 | Model catalogue | `GatewayModels` sync in **P1** (rows with `Kind` and `Residencies[]`); on assistant save the model is also checked against the gateway's **`/v1/models` at the level's ceiling** (§4.6 V8, §4.10) |
 | 16 | Notifications | In-app only (attention cards, nav badges) plus SIEM events; no e-mail in P1/P2 (§5.2) |
 | 17 | Accessibility | Gateway target WCAG 2.2 AA; copied axe/target-size/reflow tests, a keyboard-only Playwright run of the pilot journey, one NVDA pass; tillgänglighetsredogörelse as the gateway's (§10.1) |
@@ -145,7 +145,7 @@ gateway counterpart.
 | `chat` | S, plus **U on `Feedback.ReviewState`** (§13) | feedback page, comment reveal, conversation review |
 | `audit` | S I on `AuditLog`, `ConversationAccess`, `AuthFailures`; S on tool tables (P2 S I on `ToolDefinitionObservations`) | audit list, access log |
 | Blobs | `rag-blobs` rw (uploads; preview outputs read); `internal` blobs unwrapped with the level's master key, `public` blobs are not envelope-encrypted (simplification pass §4) | uploads, preview outputs, PII highlight previews |
-| `IKeyProvider` | chat master keys (file provider in the pilot) | comment and conversation decryption (§8) |
+| `IKeyProvider` | chat master keys (file provider in the pilot), once A1 allows stored content (weakness review §4) | comment and conversation decryption (§8) |
 | Gateway | `Gateway:*` delegating keys per level (`Gateway__Keys__OnPrem`, `__Eu`, `__External`; simplification pass §6); Data API key `OrgSync__DataApiKey` (`catalog.read`) | test panel embedding + answer, `/v1/models` validation (§4.6 V8), answer-level evaluation and assistant test questions with the on-prem judge, P2 skill gate, §4.10 |
 | Hosted MCP servers (P2) | in-process `Ume.Rag.Tools`, `client-credentials` with the `ume-rag-tools` certificate (tools §4.6) | discovery, connection test, drift polling, test-panel and skill-gate tool calls |
 
@@ -161,7 +161,7 @@ roles add up.
 | `rag-platform-admin` | P0 | `Admin`, `Manage`, `EditPipelines`, `EditSkills`, `Edit`, `Read` | every department; platform objects |
 | `rag-department-admin` | P0 | `Manage`, `EditPipelines`, `EditSkills`, `Edit`, `Read`, **`FeedbackComments`** | `departmentCodes` + feature C |
 | `rag-pipeline-editor` | P0 | `EditPipelines`, `Read` | same |
-| **`rag-reviewer`** | P1 | **`Review`**, **`FeedbackComments`**, `Read` | same |
+| **`rag-reviewer`** | P1 (defined; nothing to read until A1 allows stored content, weakness review §4) | **`Review`**, **`FeedbackComments`**, `Read` | same |
 | `rag-skill-editor` | P2 | `EditSkills`, `Read` | same |
 | `rag-editor` | P2 | `Edit`, `Read` | same |
 | `rag-viewer` | P0 | `Read` | same |
@@ -213,8 +213,8 @@ schema-driven form (§5.8).
 | Publicering (plan, rapport, behåll/återställ) | P1 | W | W | W | R | – | W | R |
 | Assistenter (incl. Testa, Versioner; Testfrågor P2, weakness review §1) | P1 | W | W | R | R | R (+ test) | W | R |
 | Målgrupp (assistant audiences) | P1 | W | W | – | R | – | R | R |
-| Återkoppling | P1 | R | R + comments | – | R + comments | – | – | R (no comments) |
-| Samtalsgranskning, Åtkomstlogg | P1 (limited) / P2 | access log R | access log R (own depts) | – | W | – | – | – |
+| Återkoppling | P1 (comments when A1 allows stored content, weakness review §4) | R | R + comments | – | R + comments | – | – | R (no comments) |
+| Samtalsgranskning, Åtkomstlogg | when A1 allows stored content (weakness review §4; limited first, then full) | access log R | access log R (own depts) | – | W | – | – | – |
 | Nycklar (generic) | P1 | W | W (own teams) | – | – | – | – | – |
 | Inställningar, Dataskydd, Klienter, Mallar, Assistentmallar (P2, weakness review §1), Webbplatsprofiler, Inbäddningsprofiler, Gateway-modeller, Organisation (generic) | P1 | W | R (data-protection matrix, models, clients) | – | – | – | R (models) | – |
 | Förvaltningsinställningar (owner-team scoping, generic) | P2 | W | W (own departments) | – | – | – | R | R |
@@ -450,7 +450,7 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 | `GET /api/clients/{id}/health` | Admin | missing `X-Rag-Owui-Message-Id` warning (chat §11.4), feedback import state (§8.1) |
 | `/api/keys…` | Manage (own teams) / Admin | copied from the gateway (`KeyEndpoints.cs:61-133`): create (secret once), update, rotate (immediate or 24 h grace), reveal/copy (Admin, audited), revoke; `ume-rag-sk-`/`-pk-` (identity §6.4) |
 | `GET/PUT /api/settings/{section}` (`retention`, `deletion-guard`, `crawl`, `evaluation`, `retrieval`, `chat`, `tools`, `pii`, `worker`) | Admin | sections of `config."Settings"` with `version` each |
-| `GET/PUT /api/data-protection/{level}` | Read / Admin | V29; key service status read-only; the shredding switch stays off until A1 |
+| `GET/PUT /api/data-protection/{level}` | Read / Admin | V29; key service status read-only; allowed history modes `none` only and the shredding switch off until A1 (weakness review §4) |
 | `GET/PUT /api/embedding-profiles…` | Read / Admin | P1 read-only; changes P3 (R3) |
 | `GET /api/forms/{resource}` | Read | JSON Schema of the resource's request record + list columns for the generic form (§5.8) |
 
@@ -498,7 +498,7 @@ kept so references stay stable.
 | V26 | reasons: PII clear ≥ 10 and the document's source in the caller's departments; conversation access ≥ 20 (comment reveal: the fixed one-click text) | `reason_too_short`, `not_in_scope` | the action | processing §9.5 |
 | V27 | *retired* (collection floor before publish: evaluation is advisory) | – | – | – |
 | V28 | deletion decisions only by `Manage` of the source's department, while the run is `awaiting-deletion-confirmation` and the proposal is the current one | `deletion_superseded` | confirm/reject | connectors §13.3 |
-| V29 | data protection: `internal`/`sensitive` ⇒ chat encryption required; default ≤ max ≤ 90; changes apply to messages written afterwards (their expiry-month bucket); bucket-key destruction cannot be switched on before A1 is recorded as answered | `policy_rule` | policy save | data-model `CK_DataProtectionPolicies_*`, simplification pass §5 |
+| V29 | data protection: history modes other than `none` refused until stored chat content is built after A1 (weakness review §4); `internal`/`sensitive` ⇒ chat encryption required; default ≤ max ≤ 90; changes apply to messages written afterwards (their expiry-month bucket); bucket-key destruction cannot be switched on before A1 is recorded as answered | `policy_rule` | policy save | data-model `CK_DataProtectionPolicies_*`, simplification pass §5 |
 | V30 | `Settings` ranges as the `CK_Settings_*` checks (guard 1–100 %, min/max counts, sample sizes, …) | `setting_out_of_range` | settings save | data-model §2.1 |
 | V31 | embedding profile fixed per collection (`platform-default`); other profiles only `Admin` (P3) | `profile_admin_only` | collection save | R3 |
 | V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` are `GatewayModels` rows servable `OnPrem` (`SkillGateModel` also `SupportsTools`) | `settings_model_residency` | settings save; model sync changed residency (warning on Overview) | processing §13.1, chat §5, tools §3.7 |
@@ -648,8 +648,8 @@ drift and pending approvals appear as attention cards and badges, plus SIEM even
 | Publicering | plan, re-process progress, evaluation report, keep/roll back | – | – |
 | Assistenter | create, draft form with description and contact, test panel on the draft, Publicera, Versioner (restore), audiences (clients), retention, stats, archive | create from a template, copy, version diff, Testfrågor with the test report, latest answer evaluation (weakness review §1); skills (with **Använder verktyg** when one carries tools), limits, widget audiences | risk acceptance |
 | Färdigheter, Verktygsservrar | – | tools §3, §4 pages | import/export |
-| Återkoppling | ratings, comment reveal, import health | rewrite into test question | trends |
-| Samtalsgranskning | conversation behind a feedback item (`public`/`internal`), access log | search by assistant and period, `sensitive` two-person flow | user notification |
+| Återkoppling | ratings, import health; comment reveal when A1 allows stored content (weakness review §4) | rewrite into test question | trends |
+| Samtalsgranskning | – (when A1 allows stored content, weakness review §4: conversation behind a feedback item, access log) | search by assistant and period, `sensitive` two-person flow | user notification |
 | Platform objects | generic forms (§5.8) | dedicated pages where generic forms prove too thin; Tolkningsförslag | OBO configuration, profile changes |
 | Granskningslogg | list with filters | field-level diff viewer | – |
 
@@ -1048,19 +1048,24 @@ Removed (simplification pass): no gate, so no overrides (§16).
 
 ## 8. Feedback, conversation review and access audit
 
+**P1: ratings only** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant runs history mode `none` until A1 is
+answered, so our store holds no comment and no conversation content: §8.1 shows ratings, reason categories and import
+health, the "has comment" filter is empty, and comments stay in Open WebUI. §8.2–§8.5 (comment reveal, conversation
+review, `sensitive` flow, access log) are built when A1 allows stored content.
+
 ### 8.1 Återkoppling (P1)
 
 - Rows from `chat."Feedback"` of the caller's assistants (keyset by `CreatedAt`), joined in memory with message
   metadata (`Outcome`, `Coverage`, `Language`, the assistant version that answered from `Messages.AssistantVersionId`),
   cited document titles (`MessageSources.DocumentId` → `Documents.Title`), assistant and client names. **No content**: no question, answer, title or comment.
 - **Reason category** in plaintext: `Feedback.ReasonCategory` filled by the importer and `/v1/feedback` only from the
-  fixed Open WebUI keys (`RateComment.svelte:17-35`), else `other`; the free text stays in the ciphertext. Swedish
+  fixed Open WebUI keys (`RateComment.svelte:17-35`), else `other`; the free text stays in the ciphertext (in P1 it is not stored, weakness review §4). Swedish
   labels in `labels.ts`.
 - `ReviewState` (`open`/`reviewed`/`dismissed`) set by `FeedbackComments` holders ("Markera som hanterad"). Filters:
   period, assistant, rating, outcome, has comment, state. Totals from `AssistantDailyTotals`.
 - Import health per Open WebUI client from `FeedbackImportState` (last run, outcome, unmapped) (chat §14.2–§14.3).
 
-### 8.2 Comment reveal (`FeedbackComments`, P1)
+### 8.2 Comment reveal (`FeedbackComments`; when A1 allows stored content)
 
 1. "Läs kommentar" → dialog with the fixed reason "Granskning av återkoppling" (one click, chat answered 7).
 2. Server: feedback in scope; level `public`/`internal` (`sensitive` → 403 `review_flow_required`); write
@@ -1072,7 +1077,7 @@ Removed (simplification pass): no gate, so no overrides (§16).
 
 ### 8.3 Conversation review (`Review`)
 
-- P1: from a feedback row, **Läs samtalet** (reviewer only). P2: also by assistant and period (metadata list).
+- First (when A1 allows stored content, weakness review §4): from a feedback row, **Läs samtalet** (reviewer only). Then also by assistant and period (metadata list).
 - Request: free-text reason ≥ 20 characters (V26); `public`/`internal` → events `requested` and `decrypted`; access
   window **30 minutes** per request id; each fetch within the window checks scope again; one `decrypted` event per
   request id, 6004 per fetch.
@@ -1251,7 +1256,7 @@ component axe checks.
 | P1a (walking skeleton, weakness review §1) | none of the journey pages: the pilot's collection, sources and one assistant are created through the write path with Scalar and generic forms; the umea.se site profile as a manual profile JSON; `GatewayModels` sync; clients; the pilot gold set entered as `human` questions through Scalar (weakness review §2) |
 | P1b (1) | collections (incl. documents tab, PII view/clear), sources (URL list, crawl, upload batches), preflight, preview with site-profile before/after, impact, runs and crawl report, deletion decisions, template parameters, publish (plan of every document → re-process → report → keep or roll back), rollback |
 | P1b (2) | evaluation set and reports (led by the gold set; coverage-threshold proposal as numbers, weakness review §2), retrieval settings, collection publish, share lists, assistants (draft → publish, versions with restore, archive, description and contact), test panel on the draft (`Ume.Rag.Answering`, same release as `rag-api`), impact lines, V8 `/v1/models` check, audiences (clients), retention, generic forms (settings, data protection, clients, keys, templates, site profiles, embedding profiles, gateway models, organisation), audit list, explain access |
-| P1b (3) | feedback page, comment reveal, conversation review behind feedback (`public`/`internal`), access log, import health; accessibility pass and tillgänglighetsredogörelse; pilot journey E2E green |
+| P1b (3) | feedback page (ratings, import health; comment reveal, conversation review behind feedback and the access log when A1 allows stored content, weakness review §4); accessibility pass and tillgänglighetsredogörelse; pilot journey E2E green |
 | P2 | from weakness review §1: assistant templates and copy, version diff, assistant test questions and `AssistantTestRunner`, department map, unused-assistant attention item, latest answer evaluation (`AnswerEvaluationService`), site-profile proposals with learning, effect-tag publish plans; skills (share lists, gate report, serve); tool servers (registration, approvals, pre-registration, grants, drift leader); tool use through skills (the derived **Använder verktyg**, limits, tool calls in the test panel); owner-team scoping; parse-profile proposals; SharePoint; crawl hierarchy tree; parameter diff; coverage histogram and proposal; audit diff viewer and Historik tabs; conversation search and `sensitive` two-person flow; feedback → test question; widget keys; dedicated pages where generic forms prove too thin |
 | P3 | analytics, OBO configuration, risk acceptance, skill import/export, embedding profile changes |
 
@@ -1401,3 +1406,11 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | Learned site profiles, proposals, approve/reject | P2; P1 has manual profile versions (edit, roll back), the umea.se one a hand-checked Sitevision preset |
 | Publish plan split by effect tags | P2; P1 re-processes every document of the collection, still with report and keep or roll back |
 | Dedicated journey pages before the first answer | P1b; the walking skeleton (P1a) uses Scalar and the generic forms |
+
+Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
+
+| Item | Where it went |
+|---|---|
+| Comment reveal (§8.2), conversation review behind a feedback item (§8.3), Åtkomstlogg (§8.5), `ConversationAccess` writes and event 6004 | When A1 allows stored content; P1 pilot runs history mode `none`, the Feedback page shows ratings only |
+| Chat master keys in the admin (`IKeyProvider` for comment and conversation decryption) | Same; the admin still unwraps `internal` blobs |
+| History modes `stored`/`session` in the data-protection form and the assistant retention form (V10, V29) | Same; P1 allows `none` only |

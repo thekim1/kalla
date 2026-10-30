@@ -258,6 +258,10 @@ design §3.3, V26; processing design §9.5), which releases the set by the same 
 | `Attachments` (P2) | Chat-scoped attachment, conversation retention (chat design §15.2) | `Id`, `ConversationId`, `Classification`, `DataKeyId`, **`FileNameCiphertext`**, `MediaType`, `Bytes`, `Sha256`, `State` (`received`/`scanning`/`clean`/`parsed`/`ready`/`malware`/`refused`/`failed`), `Reason`, `PiiTypes text[]`, `ChunkCount`, `CreatedAt` | FK `ConversationId` Cascade |
 | `AttachmentChunks` (P2) | Parsed chunks of an attachment, searched only within the conversation | `Id`, `AttachmentId`, `ConversationId`, `Classification`, `Ordinal`, `Page`, `PageEnd`, `DataKeyId`, **`TextCiphertext`**, **`EmbeddingCiphertext`** (1024 float32), `TokenCount` | FK `AttachmentId` Cascade; FK `ConversationId` Cascade |
 
+**P1: metadata and ratings only** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)).
+The pilot assistant runs history mode `none` until A1 is answered, so P1 writes no ciphertext column, no `DataKeyId`
+and no `DataKeys` row. The tables and columns stay in the schema, built when A1 allows stored content.
+
 The background writer upserts `AssistantDailyTotals` in the transaction that inserts the message, so statistics never
 depend on rows that retention later removes. The worker never writes `chat`: P2 attachment chunks reach these tables
 through the API's internal route (chat design §15.2).
@@ -267,7 +271,7 @@ through the API's internal route (chat design §15.2).
 | Table | Purpose | Key columns | Indexes |
 |---|---|---|---|
 | `AuditLog` | Changes and privileged reads | gateway `AuditLogEntry` columns (`Id bigint identity`, `Timestamp`, `Actor` (`oid`, fallback `sub`; `system:<job>` for jobs), `Action`, `EntityType`, `EntityId`, `Details jsonb` masked, `ActorName`, `ActorRoles`, `ActorDepartments`, `SourceAddress`, `SessionId`, `RequestId`, `UserAgent`, `RecordedAt`) + `Service varchar(30)`, `Reason varchar(1000)`, `ConfigVersion bigint`, `Classification`, `DepartmentId uuid NULL` (department admins see their departments' entries, admin design §9.1) | IX `Timestamp`; IX (`EntityType`, `EntityId`); IX `DepartmentId` |
-| `ConversationAccess` | Admin review workflow as append-only events: `requested` (reason), `approved` (second approver, `sensitive`), `decrypted` | `Id bigint identity`, `RequestId uuid`, `Event`, `Scope varchar(20)` (`comment`/`conversation`), `ConversationId`, `FeedbackId uuid NULL` (comment reveals), `AssistantId uuid`, `DepartmentId uuid`, `Classification`, `Actor`, `Reason`, `ExpiresAt timestamptz` (access window, admin design §8.3), `Timestamp` | IX `RequestId`; `CK_` approver ≠ requester enforced by app + test |
+| `ConversationAccess` | Written only once A1 allows stored chat content (weakness review §4). Admin review workflow as append-only events: `requested` (reason), `approved` (second approver, `sensitive`), `decrypted` | `Id bigint identity`, `RequestId uuid`, `Event`, `Scope varchar(20)` (`comment`/`conversation`), `ConversationId`, `FeedbackId uuid NULL` (comment reveals), `AssistantId uuid`, `DepartmentId uuid`, `Classification`, `Actor`, `Reason`, `ExpiresAt timestamptz` (access window, admin design §8.3), `Timestamp` | IX `RequestId`; `CK_` approver ≠ requester enforced by app + test |
 | `ToolCallEvents` | Tool hub audit (tools design §9.1): metadata and keyed HMAC of arguments | `Id bigint identity`, `Timestamp`, `AssistantId`, `ToolServerId`, `ToolId`, `DefinitionId`, `SkillVersionId`, `SubjectId`, `ClientId`, `ConversationId`, `RunId` (message id), `CallIndex`, `Classification` (effective level), `ResultLevel`, `DurationMs`, `Outcome`, `ErrorCode`, `Truncated`, `ArgumentsBytes`, `ResultBytes`, `ArgumentsHmac bytea` | IX `Timestamp`; IX (`ToolId`, `Timestamp`) |
 | `AuthFailures` | Refused credentials, aggregated per 10 s bucket (identity design §6.3) | gateway `AuthFailure` columns + `Credential varchar(20)`, `ClientId uuid`; never the presented value | IX `FirstSeen` |
 | `ToolDefinitionObservations` | Tool hub saw a definition differing from the pinned one (tool disabled in memory at once, re-approval shown in admin) | `Id bigint identity`, `ToolServerId`, `ToolId` (null for `added`/`instructions-changed`), `ToolName`, `Kind` (`changed`/`removed`/`added`/`instructions-changed`, tools design §4.4), `ObservedHash bytea`, `Definition jsonb`, `ObservedAt` | IX (`ToolId`, `ObservedAt`) |
@@ -543,6 +547,11 @@ reached over the existing HTTP seam (`Retrieval:Mode=Http`; postponed T1/K2), no
 
 ## 7. Envelope encryption
 
+**Chat: built when A1 allows stored content** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)).
+In P1 the pilot assistant runs history mode `none`: no bucket keys, no chat master keys `rag-chat-<level>`, no content
+encryption, no shredding. `DataProtectionPolicies.AllowedHistoryModes` holds only `none` until this is built. The
+design below is kept for that point. Blob encryption (below) is built in P1 unchanged.
+
 **Chat** (all ciphertext columns are `bytea`: `0x01` format byte ‖ 12-byte nonce ‖ AES-256-GCM ciphertext ‖ 16-byte
 tag; AAD = `"<table>:<row id>:<column>:<conversation id>"`, so ciphertext cannot be moved between rows):
 
@@ -587,9 +596,9 @@ Nightly, batched step functions in the gateway style (ADR 016): `SECURITY DEFINE
 
 | Schema / table | Rule (platform §8 unless marked *proposed*) | Mechanism |
 |---|---|---|
-| `chat."Messages"` + `MessageSources`, `Feedback`, `ToolCalls` (cascade) | `ExpiresAt` = `CreatedAt` + assistant retention (default 90 d, `sensitive` 30 d, max per level policy; `session` 24 h) | `chat.rag_retention_chat_step(batch)` |
+| `chat."Messages"` + `MessageSources`, `Feedback`, `ToolCalls` (cascade) | `ExpiresAt` = `CreatedAt` + assistant retention (default 90 d, `sensitive` 30 d, max per level policy; `session` 24 h); in P1 metadata rows only (history mode `none`, weakness review §4) | `chat.rag_retention_chat_step(batch)` |
 | `chat."Conversations"` (+ P2 `Attachments`, `AttachmentChunks`) | deleted when no message remains and `ExpiresAt` passed; user delete: rows deleted at once | same function / Chat API `DELETE` |
-| `chat."DataKeys"` | bucket row deleted when its month has passed and no row references it; shred key destroyed only when `Settings.ChatShreddingEnabled` (§7) | same function; then shred-key destruction |
+| `chat."DataKeys"` | when A1 allows stored content (none in P1, weakness review §4): bucket row deleted when its month has passed and no row references it; shred key destroyed only when `Settings.ChatShreddingEnabled` (§7) | same function; then shred-key destruction |
 | `chat."AssistantDailyTotals"` | 3 years *proposed* | same function |
 | `content."Documents"`, `"ChunkSets"`, `"Chunks"` | removed from source → soft delete, purge after 14 days | worker; cascade from `Documents` |
 | `content."ChunkSets"` (`superseded`) + chunks | 14 days after `SupersededAt` (rollback window) | worker |
@@ -612,7 +621,7 @@ Nightly, batched step functions in the gateway style (ADR 016): `SECURITY DEFINE
 | `config."AssistantVersions"` | `superseded` versions older than 1 year, keeping the last 20 per assistant *proposed* (longer than any message that names its version) | `config.rag_retention_config_step` |
 | `config."AdminSessions"` | rows past `ExpiresAt` (sign-out deletes at once) | `config.rag_retention_config_step`, run by the admin's `RetentionService` |
 | `audit.*` | 2 years (`Settings.AuditRetentionDays`, minimum 90, may be "forever") | `audit.rag_retention_audit_step` |
-| Open WebUI's own database | client data-handling profile (90 days): feedback pruned through its HTTP API; chat copies of other users cannot be pruned at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`, so they stay unpruned in the pilot (stated in its data-handling profile) until register item W2 is decided with A1 | Open WebUI's HTTP API, never SQL against its database |
+| Open WebUI's own database | client data-handling profile (90 days): feedback pruned through its HTTP API; chat copies of other users cannot be pruned at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`, so they stay unpruned in the pilot (stated in its data-handling profile) until register item W2 is decided within the DPIA (G1). In the pilot this store is the **primary copy** of every chat and feedback snapshot with content (weakness review §4) | Open WebUI's HTTP API, never SQL against its database |
 
 ## 9. Blob layout (`IBlobStore`)
 
@@ -764,7 +773,7 @@ See [`../simplification-pass.md`](../simplification-pass.md) (section numbers th
 | Swap transaction duration: flipping `DeletedAt` on a set's chunks is a non-HOT update that inserts every newly visible chunk into the partial HNSW and GIN indexes inside the swap; p95 per document (sets of 50–500 chunks) during a large publish, and whether it stays short beside chat traffic | P1 | measure |
 | `content.rag_tsquery_or_agg` over the built-in `tsquery_or` on the stock image; `rag_or_query` returns an OR query and `NULL` for stop words only | P0 | test |
 | `ALTER ROLE … SET hnsw.*` accepted before the `vector` library is loaded in the session, and visible via `SHOW` on each role's connections | P0 | test |
-| Bucket-key creation race: one `DataKeys` row per (level, month) under concurrent first writes | P1 | test |
+| Bucket-key creation race: one `DataKeys` row per (level, month) under concurrent first writes | when A1 allows stored content (weakness review §4) | test |
 | `PostgresAdminSessionStore` with the copied `AdminTicketStore`: sign-out ends every copy of the cookie, an expired row is not returned, extension stops at 12 h, the retention step deletes expired rows | P0 | test |
 | Config snapshot with many assistants: build time and memory of the api snapshot with 300 assistants' published versions (instructions up to 20 KB each), reloaded whole on any assistant change; if a reload exceeds 50 ms, reload by the outbox `EntityId` instead; draft saves do not bump the config version (`WHEN` clauses, §5) | P1 | measure + test |
 
@@ -777,3 +786,12 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | `AssistantTestQuestions`, `AssistantTemplates`; `EvaluationRuns` kinds `answers` and `assistant-tests` | Built in P2 |
 | `CrawlClaims` and the shared (level, URL) key of `CrawlFrontier` | Built in P2; P1 keys the frontier per source |
 | Learning columns of `SiteProfiles`/`SiteProfileVersions` (`LastLearnedAt`, `NextLearnAfter`, `LearnedFromRunId`, `Sample`, states `proposed`/`rejected`, origin `learned`) | Written from P2; P1 stores `manual` versions only |
+
+Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected). The schema stays as designed; these are built (or first written) when A1 allows stored chat content:
+
+| Item | Where it went |
+|---|---|
+| `chat."DataKeys"`, every chat ciphertext column and its `DataKeyId`/`TitleDataKeyId` | Built when A1 allows stored content; P1 writes metadata and ratings only (history mode `none`, §2.3, §7) |
+| `DataProtectionPolicies` history modes `stored`/`session`, `ChatMasterKeyName` keys `rag-chat-<level>` | Same; P1 allows only `none` |
+| `audit."ConversationAccess"` (conversation review, comment reveals) | Same |
+| `Settings.ChatShreddingEnabled` and shred keys | Same (still also behind A1's answer on deletion) |

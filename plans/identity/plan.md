@@ -83,7 +83,7 @@ extend before expiry, never more than `Admin:MaxSessionHours` (12) from sign-in;
 | `rag-platform-admin` | Everything (like `gateway-admin`) |
 | `rag-department-admin` | Everything in own departments (like `department-admin`) |
 | `rag-pipeline-editor` | Pipeline editing in own departments (template forms in P1, canvas in P2) |
-| `rag-reviewer` (P1) | Reads feedback comments and, with a reason (audited; `sensitive` with a second approver), conversations in own departments; not implied by any admin role (design §1.3, admin design §3.1) |
+| `rag-reviewer` (P1) | Reads feedback comments and, with a reason (audited; `sensitive` with a second approver), conversations in own departments; not implied by any admin role (design §1.3, admin design §3.1). The role is defined in P1 but has nothing to read while the pilot runs history mode `none`; conversation review is built when A1 allows stored content (weakness review §4) |
 | `rag-viewer` | Read status, runs, evaluation, usage in own departments (like `viewer`) |
 | `rag-skill-editor` (P2) | Drafts, publishes and serves skills in own departments (tools design §3.6) |
 | `rag-editor` (from P2) | Sources, collections and assistants via forms in own departments; links published skills, cannot edit them |
@@ -159,7 +159,10 @@ the data plane (design §4.3).
 **and** the subject type is allowed (no anonymous access to `internal`) **and**, for tools, the tool policy allows it.
 
 **Client registry** (review R5): every client has an id, a classification ceiling and a data-handling profile. Pilot
-defaults: own chat client `sensitive`, Open WebUI `internal`, widget `public`, integrations as configured.
+defaults: own chat client `sensitive`, Open WebUI `internal`, widget `public`, integrations as configured. The
+Open WebUI pilot client keeps `internal` only for EU providers covered by a processor agreement (PUB-avtal) and listed
+in the DPIA (register G1); if the DPIA requires more, it is limited to on-prem models (weakness review §4; how that is
+expressed in the registry is open, design §4.1).
 
 - **MCP clients: `public` by default**; a platform admin may raise a vetted client to `internal`, never `sensitive`.
 - **Clients that keep their own copy of conversations** (Open WebUI, Teams) have a ceiling of at most `internal`.

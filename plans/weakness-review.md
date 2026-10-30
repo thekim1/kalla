@@ -150,6 +150,19 @@ There is no data-protection impact assessment (DPIA) and no process for public-r
   - The pilot client's ceiling stays `internal` only for EU providers covered by a processor agreement (PUB-avtal),
     listed in the DPIA. If the DPIA requires more, the pilot client's ceiling drops to `onprem`.
 - **A1 gets a named owner before P0 ends** (phase-start rule of §5).
+- **Settled while applying:**
+  - **A1 no longer blocks the pilot.** It now gates stored chat content: history modes `stored` and `session`, chat
+    bucket keys, content encryption, crypto-shredding, conversation review, and the P2 features that store content.
+    In P1 every assistant runs `none`.
+  - **Feedback.** Comments stay in Open WebUI. Our import keeps ratings and reason categories. 90-day retention
+    applies to metadata rows.
+  - **Keys.** Chat master keys are neither created nor escrowed in P0 or P1. Blob keys are unchanged.
+  - **`rag-reviewer`.** The role stays defined (P0 ships it) but has nothing to read in P1.
+  - **The on-prem fallback** is a model choice, not a registry ceiling. The client keeps ceiling `internal`. Every
+    assistant offered to it uses on-prem answer and condense models without EU fallbacks.
+  - **Export route.** The route for a public-records request is decided within G1 (`to-verify.md` #173): the user's
+    own export, a temporary logged admin-access window, or another route. Direct SQL stays ruled out.
+  - **Banner.** Open WebUI shows the banner only when a new chat is opened (`to-verify.md` #172).
 
 ## 5. The pilot's critical path runs through things the team does not control
 

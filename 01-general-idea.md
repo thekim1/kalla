@@ -377,8 +377,9 @@ into sections 2, 5, 5a, 6, 7, 8 and 9.
 
 ## 11. Open questions for the detailed plan
 
-1. **Open blocker for the pilot** (owner to be named later): are chat logs allmänna handlingar, and is a
-   gallringsbeslut needed for 90-day deletion? (Default retention decided: 90 days; deletion by crypto-shredding.)
+1. **Open, gates stored chat content** (no longer a pilot blocker: the pilot runs history mode `none`, weakness review
+   §4; owner named before P0 ends): are chat logs allmänna handlingar, and is a gallringsbeslut needed for 90-day
+   deletion? (Default retention decided: 90 days; deletion by crypto-shredding.)
 2. ~~PII in sources~~ Answered: detect and flag at ingestion; flagged documents blocked from public collections.
 3. ~~Embedding model~~ Answered: BGE-M3 on-prem via the gateway, confirmed by evaluation sets.
 4. ~~SharePoint access~~ Answered: one `rag-ingestion` registration with `Sites.Selected`, granted per site by admins.

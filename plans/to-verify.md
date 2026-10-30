@@ -18,6 +18,9 @@ there: six containers, no Redis in P1, pgBackRest inside the Postgres image) add
 department (§15 there: assistant versions, test questions, derived mode) added rows 164–166. The [weakness review §2](weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch) (pilot gold set) added rows 168–169. The [weakness review §3](weakness-review.md#3-outdated-or-removed-content-keeps-being-answered) (freshness) added rows 170–171. Rows only verifiable for features the
 [weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer) moved out of P1
 (site-profile learning, answer judge, assistant tests, adaptive range sizing) carry phase "P2 (weakness review §1)".
+The [weakness review §4](weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)
+(data protection) added rows 172–173; rows only verifiable for the chat-key work it defers carry phase "when A1 allows
+stored content (weakness review §4)".
 
 ## Postgres and pgvector
 
@@ -45,7 +48,7 @@ department (§15 there: assistant versions, test questions, derived mode) added 
 | 168 | Three-way run of the pilot gold set: vector-only vs hybrid vs hybrid without the decompounder (recall@10 and MRR on answerable questions, coverage outcomes on unanswerable ones); hybrid and the decompounder stay only if they beat vector-only; result recorded (weakness review §2) | `knowledge-api/design.md` §1, §20; `ingestion-worker/design-processing.md` §13.4 | P1a | measure (gold set) |
 | 169 | Not-found thresholds from the gold set: `coverageMaxDistance` and `coverageMinKeywordScore` at the values that best separate answerable from unanswerable questions (replaces "95th percentile of answerable + 0.03"); resulting false not-found ≤ 10 % and off-topic not-found ≥ 80 % before the go-live gate (weakness review §2) | `knowledge-api/design.md` §7; `ingestion-worker/design-processing.md` §13.6 | P1a | measure (gold set) |
 | 171 | Age decay and `demote` on the pilot gold set's temporal questions: with the `website` template's `recency` (half-life 730 days, weight 0.15, PDFs) the current document ranks above the outdated one, and recall@10 on the other answerable questions does not drop against `recency` off; values adjusted if either fails (weakness review §3) | `knowledge-api/design.md` §6.5, §20; `ingestion-worker/design-processing.md` §13.4 | P1b | measure (gold set) |
-| 144 | Chat bucket-key creation race: one `DataKeys` row per (level, expiry month) under concurrent first writes | `platform/data-model.md` §14 | P1 | test |
+| 144 | Chat bucket-key creation race: one `DataKeys` row per (level, expiry month) under concurrent first writes | `platform/data-model.md` §14 | when A1 allows stored content (weakness review §4) | test |
 
 ## .NET, Npgsql, EF Core and NuGet packages
 
@@ -111,6 +114,8 @@ department (§15 there: assistant versions, test questions, derived mode) added 
 | 135 | Feedback import and feedback pruning through Open WebUI's HTTP API only (no SQL against its database): feedback list paging by `updated_at`, admin `DELETE /api/v1/evaluations/feedback/{id}` with an endpoint-restricted API key, admin service account. Chat copies cannot be pruned without `ENABLE_ADMIN_CHAT_ACCESS`: postponed W2 | `simplification-pass.md` §1, §11a; `chat-api/design.md` §13.3, §14.2, §22 | P1 | source + test |
 | 52 | `status` events from an external connection forwarded, stored and rendered with `source` events; `hidden: true`; `: ping` comments ignored | `tools/design.md` §6.7 | P2 | test |
 | 165 | Open WebUI shows an assistant's description and contact: an `info.meta.description` in our `/v1/models` entry survives the model merge (default metadata, workspace overrides) and appears in the model selector (a top-level `description` does not, `src/lib/utils/localizedContent.ts:165-168`); sending `info.meta` leaves capabilities unchanged; else the platform team enters it in Open WebUI's model editor | `chat-api/design.md` §3.1, §22; `simplification-pass.md` §15 | P1 | source + test |
+| 172 | `WEBUI_BANNERS` at v0.12.5: the fixed input warning (`dismissible: false`) shows on every new chat for every user and cannot be closed, and survives a restart with `ENABLE_PERSISTENT_CONFIG=false`. Source read 2026-10-30: env JSON list of `BannerModel` (`id`, `type`, `title?`, `content`, `dismissible`, `timestamp`, `i18n?`, `ow/config.py:2218-2235`); shown only on the new-chat screen (`src/lib/components/chat/Navbar.svelte:349`) (weakness review §4) | `chat-api/design.md` §4.3, §22 | P1b | test |
+| 173 | Public-records request: how one user's conversation is found and exported for the registrar from Open WebUI v0.12.5 with `ENABLE_ADMIN_CHAT_ACCESS=false` and `ENABLE_ADMIN_EXPORT=false` (the user's own export, a temporary admin-access window, or a read-only query), for the runbook section (weakness review §4) | `chat-api/design.md` §13.3; `platform/repo-and-deployment.md` §11 #19 | P1b (before go-live, with the DPIA G1) | source + test |
 
 ## MCP and skills
 

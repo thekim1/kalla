@@ -217,8 +217,8 @@ level = max(`internal`, client ceiling) = `internal` → ceiling `Eu`, so full t
 ## 10. Archive and data protection
 
 Files uploaded to a workspace and the answers given over them may be **allmänna handlingar** (inkomna or upprättade),
-and expiry or owner-left deletion may need a gallringsbeslut. This extends register **A1** (pilot blocker for chat
-logs) to workspace files and summaries; until answered, P2a must not ship with automatic deletion switched on (question
+and expiry or owner-left deletion may need a gallringsbeslut. This extends register **A1** (for chat
+logs; the pilot runs history mode `none` until it is answered, weakness review §4) to workspace files and summaries; until answered, P2a must not ship with automatic deletion switched on (question
 8). Personal data: detection runs and is shown per file; a personnummer gives a warning in the area, not a block
 (question 9). Open WebUI's own chat copies (register W2) apply to workspace chats too.
 

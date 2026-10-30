@@ -91,7 +91,7 @@ groups intersect the group claim (`:40-48`).
 | `rag-platform-admin` | `Admin`, `Manage`, `EditPipelines`, `EditSkills`, `Edit`, `Read` (neither `Review` nor `FeedbackComments`) | every department (like `gateway-admin`, `AdminContext.cs:81-86`) |
 | `rag-department-admin` | `Manage`, `EditPipelines`, `EditSkills`, `Edit`, `Read`, `FeedbackComments` | `departmentCodes` (+ feature C) |
 | `rag-pipeline-editor` | `EditPipelines`, `Read` | same |
-| `rag-reviewer` (P1) | `Review`, `FeedbackComments`, `Read` | same (feedback comments and conversations with a reason, audited; admin design §3.1, §8) |
+| `rag-reviewer` (P1) | `Review`, `FeedbackComments`, `Read` | same (feedback comments and conversations with a reason, audited; admin design §3.1, §8). Nothing to read while the pilot runs history mode `none` (weakness review §4) |
 | `rag-skill-editor` (P2) | `EditSkills`, `Read` | same (draft, publish, serve, roll back skills; tools design §3.6) |
 | `rag-editor` (P2) | `Edit`, `Read` | same; links published skills to assistants, cannot edit skills (tools design §3.6) |
 | `rag-viewer` | `Read` | same |
@@ -344,12 +344,19 @@ Pilot rows (seeded by the migration service in dev, created by a platform admin 
 
 | Client | Kind | Ceiling | StoresHistory |
 |---|---|---|---|
-| Open WebUI pilot | `open-webui` | `internal` | yes (90 days, its own pruning) |
+| Open WebUI pilot | `open-webui` | `internal` (only for EU providers under a processor agreement listed in the DPIA, G1; weakness review §4) | yes (90 days; its chat copies unpruned until W2, decided within G1) |
 | `admin-console` | `internal` | `sensitive` | no |
 | `rag-internal` | `internal` | `sensitive` | no |
 | widget (P2) | `widget` | `public` | no |
 | own chat client (P2) | `own-client` | `sensitive` | no |
 | MCP clients (P2) | `mcp-client` | `public` (a platform admin may raise to `internal`) | n/a (treated as yes) |
+
+**Pilot client and the DPIA** (weakness review §4): if the DPIA (G1) does not list a processor agreement (PUB-avtal)
+for the EU providers, the Open WebUI pilot client is limited to on-prem models. **Form (settled):** by model choice,
+not by the registry: the client keeps ceiling `internal` (the registry has no on-prem ceiling, and `StoresHistory ⇒
+ceiling ≠ sensitive` rules out `sensitive`), and the platform team sets the answer and condense models of every
+assistant offered to it to on-prem gateway models without EU fallbacks, which the `internal` residency already
+allows. No new registry field.
 
 ### 4.2 Interface
 

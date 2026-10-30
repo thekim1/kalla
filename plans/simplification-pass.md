@@ -135,6 +135,12 @@ dropped).
   filter. If `sensitive` ever needs isolation it becomes a **separate deployment** reached over the existing HTTP seam
   (`Retrieval:Mode=Http`); register T1 is restated so (K2 stays with it).
 
+**Later change ([weakness review §4](weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)).**
+The pilot assistant runs history mode `none` until A1 is answered (metadata and ratings only). The chat bucket keys,
+content encryption, crypto-shredding and conversation review above are not built in P1; the data model keeps them for
+when A1 allows stored content. Escrow in P0/P1 covers the blob keys and the pgBackRest passphrase. Feedback review
+therefore has ratings only; comments stay in Open WebUI, whose store is the primary copy covered by the DPIA (G1).
+
 ## 6. Residency enforced by structure (security)
 
 - **Gateway keys per level**: delegating keys `OnPrem`-only, `Eu`-max and open, each issued per deployable that needs

@@ -62,7 +62,7 @@ and read here).
 |---|---|
 | `rag-platform-admin` | Everything except conversation content (comments and conversations only with `rag-reviewer` as well); templates, site profiles, embedding profiles, clients, tool servers, tool grants, platform skills, parse-profile proposals (P2), platform settings, audit log |
 | `rag-department-admin` | Everything inside own departments: sources, collections (incl. share lists), assistants, skills, keys, evaluation; feedback comments (`public`/`internal`) after a one-click reason (`FeedbackComments`), no conversations |
-| `rag-reviewer` (P1) | Read feedback comments (`public`/`internal`, one-click reason) and, with a free-text reason, the conversation behind a feedback item, audited; `sensitive` also needs a second reviewer (P2); policies `Review`, `FeedbackComments`, `Read` |
+| `rag-reviewer` (P1) | Read feedback comments (`public`/`internal`, one-click reason) and, with a free-text reason, the conversation behind a feedback item, audited; `sensitive` also needs a second reviewer (P2); policies `Review`, `FeedbackComments`, `Read`. Nothing to read in P1: the pilot runs history mode `none` until A1 allows stored content ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)) |
 | `rag-pipeline-editor` | Edit template parameters of sources in own departments |
 | `rag-editor` (from P2) | Sources, collections and assistants in own departments; links served skills usable by the department to assistants but cannot edit skills |
 
@@ -88,11 +88,11 @@ with no `rag-*` role gets 403 on every page and API call.
 | Publish | Plan (counts, time, cost; in P1 every document of the collection, effect-tag plans from P2, [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)) → re-process → **evaluation report** (recall@10 and MRR with counts against the previous run) → keep or roll back (one click within 14 days) |
 | Assistants | Create (from a template or copy from P2); description and contact; **draft** with prompt, model (validated against the gateway at the level's ceiling on publish), collections, query-step form, not-found texts sv/en + contact links (P2 skills, "Använder verktyg" when one carries tools); **test panel** on the draft (retrieved chunks, raw vs delivered answer; P2 tool calls), running `Ume.Rag.Answering` in the admin, deployed from the same release as `rag-api`; **Publicera**; **Versioner** (restore; diff from P2); classification, retention, archive. **P2** ([weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)): **Testfrågor** with the advisory test report after each publish; the **latest answer evaluation** (faithfulness and citation precision of the nightly `answers` run, run in the admin) |
 | Audience | Clients the assistant is offered to, with the residency check explained |
-| Feedback | Department-scoped ratings without content; a comment after a one-click reason; import health |
-| Conversations | `rag-reviewer` only; **P1 limited to the conversation behind a feedback item** (`public`/`internal`) plus the access log |
+| Feedback | Department-scoped ratings without content; import health. A comment after a one-click reason only once A1 allows stored content; in P1 comments stay in Open WebUI (weakness review §4) |
+| Conversations | **Built when A1 allows stored content** (weakness review §4; not in P1). `rag-reviewer` only; first limited to the conversation behind a feedback item (`public`/`internal`) plus the access log |
 
 **P1 platform objects (generic schema-driven forms + OpenAPI UI, platform admins):** settings, data protection
-(shredding switched off until A1), clients, templates, site profiles (manual profile JSON: versions, rollback; proposals with learning in P2),
+(history mode `none` only and shredding switched off until A1, weakness review §4), clients, templates, site profiles (manual profile JSON: versions, rollback; proposals with learning in P2),
 embedding profiles (read), gateway models, keys, organisation mirror (read), audit log list.
 
 **P2 pages:** Skills (draft editor, gate report from the skill gate the admin runs, serve/rollback, share list), Tool servers (registration, discovery,
@@ -111,7 +111,7 @@ Swedish texts (answered 4) and one NVDA screen-reader pass of the pilot journey 
 | P1a (walking skeleton) | The pilot's collection, crawl, URL-list and upload sources and its one assistant created through the write path with the OpenAPI UI and generic forms; the umea.se site profile entered as a manual profile JSON (hand-checked Sitevision preset); `GatewayModels` sync; clients; the pilot gold set entered as `human` evaluation questions through the OpenAPI UI (weakness review §2) |
 | P1b (1) | Collections, sources (URL list, crawl, upload) with preflight, preview (site-profile before/after), impact and run history, deletion decisions, documents tab with PII view/clear, template parameters, publish (re-process every document → evaluation report → keep or roll back) |
 | P1b (2) | Evaluation set and reports, retrieval settings, assistants (draft → publish, versions with restore) with test panel (same release as `rag-api`), audiences (clients), retention, generic forms for platform objects (settings, data protection, clients, templates, site profiles, embedding profiles, gateway models, keys), audit list, explain access |
-| P1b (3) | **Feedback page** with comment reveal, conversation review behind feedback (`public`/`internal`), access log, import health; accessibility pass (incl. NVDA) and tillgänglighetsredogörelse; pilot journey E2E green |
+| P1b (3) | **Feedback page** (ratings, reason categories, import health; comment reveal, conversation review behind feedback and the access log move to when A1 allows stored content, weakness review §4); accessibility pass (incl. NVDA) and tillgänglighetsredogörelse; pilot journey E2E green |
 | P2 | From [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer): assistant version diff, test questions and the answer evaluation, templates and copy, department map and 90-day attention item, site-profile proposals (learning), effect-tag publish plans. Skills (`rag-skill-editor`, share lists, gate report, serve), tool servers (approvals, pre-registration, grants, drift), tool use through skills, owner-team scoping, parse-profile proposals, SharePoint source, crawl hierarchy tree, parameter diff, conversation search and `sensitive` two-person review, feedback → test question, widget configuration |
 | P3 | Analytics (retrieval, feedback and evaluation trends), OBO tool configuration, risk acceptance, skill import/export, embedding profile changes |
 
@@ -138,7 +138,8 @@ Answered (2026-10-30; detail in design.md §14.1):
    `rag-department-admin`; full conversations only by `rag-reviewer`; platform admins get neither implicitly.
 7. **Screen reader**: one NVDA + Firefox pass of the pilot journey before the pilot.
 8. **Conversation review in P1**: limited to the conversation behind a feedback item (`public`/`internal`); general
-   search and the `sensitive` two-person flow in P2.
+   search and the `sensitive` two-person flow in P2. *Later change ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)):* not in P1;
+   comment reveal and conversation review are built when A1 allows stored content.
 9. **Many assistants per department** (simplification pass §15): one assistant type (mode derived from tool-bearing
    skills); knowledge only through direct collection links; drafts, publish, versions with diff and restore; test
    questions per assistant, advisory; copy, templates, department map, impact notice, 90-day attention item,
@@ -179,3 +180,10 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | Site-profile proposals, approval of re-learned profiles | P2 with learning; P1 edits the manual profile JSON |
 | Publish plan from effect tags | P2; P1 publish re-processes every document of the collection, still with report and keep or roll back |
 | Journey pages for sources and the assistant | P1b; the walking skeleton (P1a) uses the OpenAPI UI and generic forms |
+
+Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
+
+| Item | Where it went |
+|---|---|
+| Comment reveal on the Feedback page, conversation review behind a feedback item, access log (Åtkomstlogg) | When A1 allows stored content; the P1 pilot runs history mode `none` (ratings only), comments stay in Open WebUI |
+| History modes `stored`/`session` in the data-protection form | Same; P1 offers `none` only |

@@ -27,7 +27,7 @@ package source had to be checked for this step.
 |---|---|---|
 | 1 | Placement | Chat role of `Ume.Rag.Api` (HTTP, SSE, writer, importer) over the answer core in `Ume.Rag.Answering` (shared with the admin test panel, admin design §2.1); `IRetriever` in process; gateway calls through the shared `IGatewayClient` with a raw `HttpClient` + copied `SseReader` (headers must be read before the body); P2 agent loop behind `IAnswerStrategy` (§2) |
 | 2 | Contract | OpenAI-compatible `/v1/models`, `/v1/chat/completions` (stream and not); unknown fields ignored, a fixed list refused; text content parts only (§3, answered 6) |
-| 3 | History | **The messages the client sends are authoritative for the prompt**; our store is a record for the user, review, feedback and retention. 0 SQL on the hot path (§11.3) |
+| 3 | History | **The messages the client sends are authoritative for the prompt**; our store is a record for the user, review, feedback and retention. 0 SQL on the hot path (§11.3). **P1 pilot: history mode `none`** until A1 is answered: metadata and ratings only (§11.2, weakness review §4) |
 | 4 | Open WebUI tasks | One connection only (ours); Open WebUI title, tag and follow-up generation **switched off**; no task model of ours (§4.2, §4.3) |
 | 5 | Condense | On by default, **follow-ups only**, skipped when the question is self-contained (length, no anaphora); one call ≤ 96 output tokens to `Settings.Chat.CondenseModel` (on-prem), hard **600 ms** timeout, falls back to the raw question (§5, answered 1) |
 | 6 | History window | Last **10 messages, ≤ 4,000 tokens**, oldest dropped first, old markers stripped, sources never resent; per assistant (§6.3, answered 2) |
@@ -38,8 +38,8 @@ package source had to be checked for this step.
 | 11 | Output filter | Markdown/HTML images removed; links to hosts outside the allow-list de-linked; bounded look-ahead transducer (§9.4) |
 | 12 | Not found | Coverage `Low` (vector and keyword both weak) → the assistant's fixed Swedish or English text + contact links, no model call; conversational messages skip retrieval and the gate; a failed condense never yields the not-found text; `Unknown` → model answer from keyword results with a caveat, or a "search unavailable" text when nothing was found (§6.2, §10, answered 3) |
 | 13 | Conversation ids | Open WebUI: (client, `sub`, chat id, assistant); others: issued **signed** ids `c1.…` verified without SQL; temporary Open WebUI chats stored as `none` (§11) |
-| 14 | Writer | Bounded channel (bytes and items), batches of ≤ 200 turns / 250 ms, encryption in the writer, one transaction per batch, no journal (no content outside the encrypted tables); loss bound stated (§12) |
-| 15 | Feedback | `POST /v1/feedback` + a 15-minute import of Open WebUI ratings via its admin API, mapped by chat id and the forwarded message id; comments encrypted under the message's bucket key; department roles see ratings in P1, comments only `rag-reviewer` and `rag-department-admin` (§14, answered 4, 7; admin design §3) |
+| 14 | Writer | Bounded channel (bytes and items), batches of ≤ 200 turns / 250 ms, encryption in the writer (built when A1 allows stored content; P1 writes metadata only, weakness review §4), one transaction per batch, no journal (no content outside the encrypted tables); loss bound stated (§12) |
+| 15 | Feedback | `POST /v1/feedback` + a 15-minute import of Open WebUI ratings via its admin API, mapped by chat id and the forwarded message id; comments encrypted under the message's bucket key (P1 pilot in mode `none`: ratings only, comments stay in Open WebUI, weakness review §4); department roles see ratings in P1, comments only `rag-reviewer` and `rag-department-admin` (§14, answered 4, 7; admin design §3) |
 | 16 | Attachments C1 | P1: refused with `attachments_not_supported`, uploads off in Open WebUI. P2: chat-scoped storage in the `chat` schema under the chat bucket keys, parsed by the worker, written back through the API, searched only within that conversation (§15, answered 5–6) |
 | 17 | Latency | Chat overhead < 10 ms p95 excluding condense and retrieval; 0 Postgres statements and 0 Redis commands of our own per message (P1 has no Redis); measured by benchmarks, interaction audit, a `benchmarks/compare`-style run and the R1 test (§16) |
 
@@ -182,6 +182,7 @@ Non-streaming (`object: chat.completion`):
 | `GET` | `/v1/conversations/{id}` | messages (decrypted) with their cited sources (number, title, link from the stored snapshot), feedback state; 404 `conversation_not_found` for anything not owned |
 | `DELETE` | `/v1/conversations/{id}` | deletes the conversation's rows at once (§13.2); 204; idempotent |
 
+In P1 every conversation is in history mode `none` (§11.2): titles and messages come back empty, metadata only.
 Accepts the issued id (`c1.…`, §11.1) or the conversation's UUID together with the owner check. These routes are off
 the chat hot path (Postgres is allowed). Open WebUI never calls them (users reach only Open WebUI; identity §5.3).
 
@@ -276,7 +277,8 @@ such request arrives with the §4.3 settings.
 | `ENABLE_CONTEXT_COMPACTION` | `false` (default, `ow/config.py:2262`) | a compaction summary would rewrite history with a model we do not control |
 | `USER_PERMISSIONS_CHAT_FILE_UPLOAD`, `USER_PERMISSIONS_CHAT_WEB_UPLOAD` | `false` | answered 6 (`ow/config.py:1905-1907`) |
 | `USER_PERMISSIONS_CHAT_SYSTEM_PROMPT`, `USER_PERMISSIONS_CHAT_PARAMS` | `false` | user system prompts and sampling params would be ignored by us anyway (§3.2); hiding them avoids confusion (`ow/config.py:1901-1903`) |
-| `ENABLE_ADMIN_CHAT_ACCESS`, `ENABLE_ADMIN_EXPORT` | `false` | Open WebUI admins can otherwise read every user's chats (`ow/env.py:371`, `ow/config.py:2150`); our rule is review only in our admin UI with a reason (plan §5) |
+| `ENABLE_ADMIN_CHAT_ACCESS`, `ENABLE_ADMIN_EXPORT` | `false` | Open WebUI admins can otherwise read every user's chats (`ow/env.py:371`, `ow/config.py:2150`); our rule is review only in our admin UI with a reason (plan §5; none in P1, weakness review §4) |
+| `WEBUI_BANNERS` | `[{"id":"ume-rag-input","type":"warning","content":"Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.","dismissible":false,"timestamp":<release time>}]` | fixed input warning (weakness review §4; residual risk recorded in the DPIA, G1). JSON list of `BannerModel` (`id`, `type`, `title?`, `content`, `dismissible`, `timestamp`, `i18n?`; `ow/config.py:2218-2235`); with `ENABLE_PERSISTENT_CONFIG=false` the env value is used and an admin edit lasts only until restart (`ow/models/config.py`); shown on the new-chat screen only (`src/lib/components/chat/Navbar.svelte:349`) |
 | `ENABLE_API_KEYS=true`, `ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS=true`, `API_KEYS_ALLOWED_ENDPOINTS=/api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback`, `USER_PERMISSIONS_FEATURES_API_KEYS=false` | as listed | only the feedback service account has a key and it reaches the feedback list and per-id feedback routes (prefix match, `ow/utils/auth.py:506-547`; admin delete, `ow/routers/evaluations.py:488-497`; `ow/config.py:1976`, `:2553-2567`) |
 | `BYPASS_MODEL_ACCESS_CONTROL=true`, `ENABLE_PERSISTENT_CONFIG=false`, Open WebUI RAG/web/code/tools off | as chat plan §6 | – |
 
@@ -674,6 +676,11 @@ row under the same id (§13.2).
 Mode = the assistant's `HistoryMode` (within the level policy, identity §4.3 step 9), tightened to `none` for Open
 WebUI temporary chats.
 
+**P1: `none` only** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant runs history mode `none` until A1 is
+answered; `stored` and `session` (and with them the bucket keys of §12.3, content encryption and crypto-shredding) are
+built when A1 allows stored content. Until then the level policies allow `none` only (admin V29), and Open WebUI's own
+store is the primary copy of every conversation (§13.3).
+
 ### 11.3 Which history is authoritative (decision)
 
 **The client's messages.** Reasons: (1) OpenAI semantics: a completion request is self-contained, and Open WebUI
@@ -716,7 +723,8 @@ bounded wait before dropping (`Pipeline/GatewayRequestHandler.Accounting.cs:118-
 `ChatTurn` holds: conversation key, assistant, client, subject, level, history mode, retention, user message
 (text, external id), assistant message (text, external id, outcome, coverage, degraded, language, condense used),
 cited and uncited source rows (ids, rank, number, page, snippet text), gateway facts (model, request id, observed
-residency, tokens, cost, latency, TTFT), timestamps. Plaintext lives in memory only until the batch is encrypted.
+residency, tokens, cost, latency, TTFT), timestamps. Plaintext lives in memory only until the batch is encrypted. In
+mode `none` (all of P1, §11.2) the turn carries no text at all.
 
 ### 12.2 Batch processing (one transaction)
 
@@ -725,11 +733,11 @@ residency, tokens, cost, latency, TTFT), timestamps. Plaintext lives in memory o
    ([`../performance-pass.md`](../performance-pass.md) §3.2).
 2. **Conversation upsert**: `INSERT … ON CONFLICT (ClientId, SubjectId, ExternalChatId, AssistantId) DO UPDATE SET
    "LastMessageAt" = excluded."LastMessageAt", "ExpiresAt" = … RETURNING "Id"` (issued ids: `ON CONFLICT ("Id")`).
-3. **Bucket key** (§12.3) for each message with content.
+3. **Bucket key** (§12.3) for each message with content (none in P1, mode `none`).
 4. `Seq` = `max(Seq) + 1` under a row lock on the conversation (`SELECT … FOR UPDATE`, in the same batch); the lock is
    held for the batch only.
 5. Encrypt (AES-256-GCM, AAD per data-model §7) the title (first question, ≤ 120 characters, on conversation insert),
-   the messages, snippets.
+   the messages, snippets (skipped in mode `none`: all of P1).
 6. One `NpgsqlBatch`: messages (`ON CONFLICT (ConversationId, ExternalMessageId) DO NOTHING` for user messages),
    `MessageSources` (multi-row insert), **`AssistantDailyTotals`** upsert with the batch's aggregated deltas per
    (Europe/Stockholm day, assistant, client, level) (data-model §2.3: statistics never depend on rows retention
@@ -739,7 +747,7 @@ residency, tokens, cost, latency, TTFT), timestamps. Plaintext lives in memory o
    and retried per turn; a turn failing alone three times is dropped (`rag.chat.writer.dropped{reason=poison}`, ids
    logged). While Postgres is down the queue fills, then the enqueue rule applies.
 
-### 12.3 Bucket keys
+### 12.3 Bucket keys (built when A1 allows stored content, weakness review §4)
 
 - One data key per (level, expiry month) **bucket** (data-model §7), wrapped by `IKeyProvider` with the level's chat
   master key; every message (and its snippets, feedback comment and P2 attachment rows) is encrypted under the bucket
@@ -767,7 +775,7 @@ Nightly `chat.rag_retention_chat_step` (admin, batched; data-model §8) **delete
 (with their sources, feedback, tool calls and P2 attachment rows), then conversations without messages whose
 `ExpiresAt` passed. The title shares the first message's bucket and is cleared when that message expires. Metadata of
 mode `none` messages goes with their conversation. Bucket-key destruction (§12.3) is off until A1. `AssistantDailyTotals`
-3 years.
+3 years. In P1 (mode `none`, weakness review §4) the 90-day retention applies to metadata rows only.
 
 ### 13.2 User delete
 
@@ -794,12 +802,22 @@ our `source` snippets inside them, and feedback with a **full chat snapshot** (`
 - A user deleting a chat in Open WebUI does **not** reach us (no callback); our copy follows our retention. The privacy
   notice of the pilot says so.
 - Client data-handling profile (registry): `StoresHistory = true`, `ClientRetentionDays = 90`.
+- **Primary copy** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). With the pilot in mode `none`, this store holds the only
+  content of every pilot conversation and feedback comment. The **DPIA** (register G1, the user with the data
+  protection officer; started in P0, finished before go-live) covers it: chats, feedback snapshots, the
+  `openwebui-data` volume and who holds Open WebUI's admin role; it decides W2. A **public-records request** for a
+  conversation is answered from this copy in the pilot; the runbook has a section on finding and exporting one
+  conversation for the registrar (repo-and-deployment §11 #19). *Open*: with `ENABLE_ADMIN_CHAT_ACCESS=false` and
+  `ENABLE_ADMIN_EXPORT=false` no admin can open another user's chat, so the runbook's route (a temporary admin-access
+  window, the user's own export, or a read-only query) is settled in the DPIA.
 
 ### 13.4 Archive law
 
-The 90-day deletion depends on **A1** (postponed-decisions; pilot blocker): if chat logs are allmänna handlingar that
-need a gallringsbeslut, retention and the Open WebUI pruning wait for it; nothing in this design changes, only the
-configured days. A1 also gates switching on bucket-key destruction (§12.3).
+The 90-day deletion depends on **A1** (postponed-decisions; owner named before P0 ends): if chat logs are allmänna
+handlingar that need a gallringsbeslut, retention and the Open WebUI pruning wait for it; nothing in this design
+changes, only the configured days. A1 also gates switching on bucket-key destruction (§12.3) and, since weakness
+review §4, stored content itself: the pilot runs history mode `none` until A1 is answered, so A1 no longer blocks the
+pilot.
 
 ## 14. Feedback (answered 4)
 
@@ -808,7 +826,7 @@ configured days. A1 also gates switching on bucket-key destruction (§12.3).
 `POST /v1/feedback` (§3.5) writes synchronously (not hot path): resolve the message by id within the caller's
 conversations (`ClientId`, `SubjectId`), upsert `chat."Feedback"` by (`MessageId`, `Source = api`), encrypt `reason` +
 `comment` as one JSON plaintext under the rated message's bucket key (§12.3; data-model §7: comments are personal
-data, same retention), store `ReasonCategory` in plaintext (the reason if it is one of the fixed Open WebUI keys,
+data, same retention; in P1, mode `none`, a comment is refused with `comment_not_stored`, weakness review §4), store `ReasonCategory` in plaintext (the reason if it is one of the fixed Open WebUI keys,
 `RateComment.svelte:17-35`, else `other`; admin design §8.1), adjust `AssistantDailyTotals.ThumbsUp/Down` by the delta.
 
 ### 14.2 Open WebUI import job (`FeedbackImporter`)
@@ -823,7 +841,7 @@ data, same retention), store `ReasonCategory` in plaintext (the reason if it is 
 | Discarded at once | `user.email`, `user.name` and every other user field of the response, `data.tags`, `meta.base_models`; never logged |
 | Mapping | `data.model_id` must be one of our assistant slugs (else skipped: not ours); conversation by (client, `SubjectId = user_id`, `ExternalChatId = meta.chat_id`, assistant of `model_id`); message by `Messages.ExternalMessageId = meta.message_id` (= the assistant message id we received as `X-Rag-Owui-Message-Id`, `ow/main.py:1842-1847`) |
 | Upsert | `chat."Feedback"` by (`Source = owui-import`, `ExternalId = id`): rating, score, `ReasonCategory` (plaintext, as §14.1), `reason` + `comment` encrypted under the message's bucket key, `UpdatedAt`; daily totals adjusted by the delta (a changed rating moves one count) |
-| Privacy | comments are personal data: encrypted, conversation retention, readable only through the review path (§14.4); the importer runs with the API's keys and grants (chat writer) |
+| Privacy | comments are personal data: encrypted, conversation retention, readable only through the review path (§14.4); the importer runs with the API's keys and grants (chat writer). In P1 every conversation is in mode `none`, so the import stores ratings only and drops `reason` + `comment` (§14.3; weakness review §4) |
 
 ### 14.3 When mapping fails
 
@@ -842,7 +860,8 @@ documents (ids resolved to titles) and outcome, without content. Reading a comme
 conversation access with a reason, audited in `audit."ConversationAccess"`; for `sensitive` with a second approver
 (platform plan §8a). For `public`/`internal` the comment alone is shown after a one-click, pre-filled reason ("Granskning av återkoppling"), audited the same way (answered 7). Who (admin design §3.1, §8): comments by `rag-reviewer` and
 `rag-department-admin`; full conversations by `rag-reviewer` only (P1: the conversation behind a feedback item);
-platform admins neither implicitly.
+platform admins neither implicitly. *Weakness review §4:* in P1 the page shows ratings only; comment reveal and
+conversation review are built when A1 allows stored content.
 
 ## 15. Chat attachments
 
@@ -970,12 +989,13 @@ totals).
   annotation indices for JSON answers.
 - `LanguageGuess` labelled set; `ConversationIds` MAC round trip, tamper, wrong subject/client, key rotation.
 - Writer: batching by time and size, byte cap, enqueue timeout, poison split; messages of one turn in different
-  expiry months use their own bucket keys.
+  expiry months use their own bucket keys (that case when A1 allows stored content, weakness review §4).
 
 ### 18.2 Integration (Testcontainers: our Postgres, Keycloak; FakeGateway; Redis from P2)
 
-- Full turn persisted: conversation upsert, `Seq`, ciphertext decrypts with the bucket key and fails with another
-  conversation's AAD, `MessageSources` numbers, daily totals; mode `none` writes no ciphertext; `session` expiry.
+- Full turn persisted: conversation upsert, `Seq`, `MessageSources` numbers, daily totals; mode `none` writes no
+  ciphertext and no `DataKeys` row (P1). When A1 allows stored content (weakness review §4): ciphertext decrypts with
+  the bucket key and fails with another conversation's AAD; `session` expiry.
 - User delete: conversation and all rows under it gone; retention step deletes expired messages, then empty expired
   conversations; no bucket key is destroyed while the A1 setting is off.
 - Feedback import against a recorded Open WebUI list response (WireMock): mapping, update, unmapped retry window,
@@ -1046,7 +1066,8 @@ waits for or depends on it.
 
 | Phase | Deliverable |
 |---|---|
-| P1 | `/v1/models`; `/v1/chat/completions` stream and JSON; conversational check; condense on follow-ups with skip heuristic and 600 ms timeout; retrieval with coverage handling; token budget; prompt frame; per-level keys, `ResidencyCeilingHandler`, residency and echo checks; marker renumbering, Open WebUI `source` events and `url_citation`; output filter; not-found and degraded texts; signed conversation ids; writer with bucket-key encryption and daily totals; conversation endpoints; user delete; `/v1/feedback`; Open WebUI feedback import and feedback pruning over its API; Open WebUI configuration; P1 refusal of attachments; metrics, traces, events 5003/5011; benchmarks, audit, overhead run, R1 |
+| P1 | `/v1/models`; `/v1/chat/completions` stream and JSON; conversational check; condense on follow-ups with skip heuristic and 600 ms timeout; retrieval with coverage handling; token budget; prompt frame; per-level keys, `ResidencyCeilingHandler`, residency and echo checks; marker renumbering, Open WebUI `source` events and `url_citation`; output filter; not-found and degraded texts; signed conversation ids; writer with daily totals (history mode `none`: metadata and ratings only, weakness review §4); conversation endpoints; user delete; `/v1/feedback` (ratings; comments refused in mode `none`); Open WebUI feedback import (ratings) and feedback pruning over its API; Open WebUI configuration incl. the `WEBUI_BANNERS` input warning; P1 refusal of attachments; metrics, traces, events 5003/5011; benchmarks, audit, overhead run, R1 |
+| When A1 allows stored content (weakness review §4) | history modes `stored`/`session`; bucket keys and encryption in the writer (§12.3); crypto-shredding behind its own A1 setting; feedback comments; conversation review in the admin |
 | P2 | answer-level evaluation and assistant tests (§18.8; weakness review §1); agent loop for assistants with tool-bearing skills (`AgentAnswerStrategy`, tool hub, skills; detail in `../tools/design.md` §6, milestones §12); chat attachments (§15.2); public widget (`pk` keys, sessions, server-side history); gateway-served rerank per assistant (knowledge §6.7); cost reconciliation from the gateway usage feed; condense tuning with the advisory evaluation; feedback review workflow beyond P1 |
 | P3 | Teams client; OBO tools; write tools with confirmation |
 
@@ -1093,9 +1114,11 @@ waits for or depends on it.
    not-found text (§10).
 4. **Feedback in P1**: `/v1/feedback` plus a scheduled import of Open WebUI ratings through its API, mapped by chat id
    and message id; comments encrypted under the chat bucket keys, same retention; editors see ratings in P1 (§14).
+   *Later change (weakness review §4):* the P1 pilot runs history mode `none`, so ratings only; comments stay in Open
+   WebUI until A1 allows stored content.
 5. **C1 chat attachments (P2)**: chat-scoped storage with conversation retention, parsed and chunked by the worker,
    encrypted under the chat bucket keys, never in the shared document store or a collection, searched only within
-   the conversation (§15.2).
+   the conversation (§15.2). *Later change (weakness review §4):* needs the bucket keys, so it also waits for A1.
 6. **P1 file uploads in Open WebUI**: disabled in Open WebUI's user permissions; our API refuses file and image
    content parts with an OpenAI-shaped error (§15.1).
 
@@ -1103,7 +1126,8 @@ waits for or depends on it.
    pre-filled reason ("Granskning av återkoppling"), audited as a conversation access, for `public` and `internal`;
    `sensitive` comments only through the full conversation-review flow with a second approver. Only the comment is
    shown, never the conversation. *Who* was settled in step 10 (admin design §14.1 answer 3): `rag-reviewer` and
-   `rag-department-admin`, not platform admins implicitly (§14.4).
+   `rag-department-admin`, not platform admins implicitly (§14.4). *Later change (weakness review §4):* built when A1
+   allows stored content, not in P1.
 
 ### 21.2 Open (user)
 
@@ -1114,7 +1138,9 @@ waits for or depends on it.
    unpruned Open WebUI copies in the pilot, stated in the privacy notice. Recommendation: (b) for the pilot together
    with A1, unless the registrar requires the 90 days in Open WebUI too, then (a). Registered as postponed item **W2**
    "Open WebUI chat-copy retention", decided together with A1 before the pilot; stopgap: unpruned copies in the pilot,
-   stated in Open WebUI's data-handling profile. Feedback pruning through the API stays (§13.3).
+   stated in Open WebUI's data-handling profile. Feedback pruning through the API stays (§13.3). *Later change
+   (weakness review §4):* W2 is decided within the DPIA (G1) before go-live, as part of assessing Open WebUI's store as
+   the primary copy.
 
 ## 22. To verify
 
@@ -1126,6 +1152,9 @@ waits for or depends on it.
 - Open WebUI: with `ENABLE_TITLE_GENERATION`, `ENABLE_TAGS_GENERATION`, `ENABLE_FOLLOW_UP_GENERATION` = `false` no task
   request reaches the chat model on any path (new chat, regenerate, edit, multi-model); feedback list paging by
   `updated_at` and admin `DELETE /api/v1/evaluations/feedback/{id}` with an endpoint-restricted API key (§13.3).
+- Open WebUI v0.12.5: `WEBUI_BANNERS` (§4.3) with `dismissible: false` shows on every new chat for every user and cannot
+  be closed; it is not shown inside an existing chat (`Navbar.svelte:349`), which is accepted or needs an upstream
+  change (weakness review §4).
 - Open WebUI: creating the admin service account when `ENABLE_LOGIN_FORM=false` (Entra-only login): an Entra service
   user, or a one-time local account before the form is disabled.
 - Open WebUI: headers template `{{MESSAGE_ID}}` is non-empty for every chat completion (multi-model and legacy paths,
@@ -1184,3 +1213,11 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 |---|---|
 | Nightly answer-level evaluation (run kind `answers`, §18.8) | P2 |
 | Assistant tests (run kind `assistant-tests`, §18.8) | P2, with the assistant version diff, templates and copy (admin design §17) |
+
+Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
+
+| Item | Where it went |
+|---|---|
+| History modes `stored`/`session`, bucket keys (§12.3), content encryption in the writer, crypto-shredding | When A1 allows stored content; P1 pilot runs history mode `none` (§11.2) |
+| Feedback comments in our store (`/v1/feedback`, import), comment reveal, conversation review | Same; comments are refused (`comment_not_stored`) or dropped on import and stay in Open WebUI (§14) |
+| Chat attachments (§15.2), widget conversations stored for review, server-side history (P2) | Also wait for A1 to allow stored content |

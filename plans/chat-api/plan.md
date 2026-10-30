@@ -2,7 +2,7 @@
 
 Data-plane service that turns assistants into OpenAI-compatible "models": a client sends a chat completion with
 `model = <assistant>`, and the service retrieves knowledge (and, for assistants with tool-bearing skills, calls tools
-through the tool hub), builds the prompt, streams the answer from the gateway with citations, and stores the conversation for 90 days.
+through the tool hub), builds the prompt, streams the answer from the gateway with citations, and stores the conversation's metadata for 90 days (its content only once A1 allows, weakness review §4).
 Review items applied: R1, R4, R5, R7, plus the smaller conversation-id finding. Detailed in [`design.md`](design.md)
 (detail step 8).
 
@@ -114,14 +114,20 @@ against a fake gateway, idle and during the R1 ingestion load test.
   data key of its (level, expiry month) **bucket**. Retention and a user's delete remove rows; destroying bucket keys
   (crypto-shredding, which reaches backups) stays switched off until the registrar answers A1. Copies in clients are
   governed by the client's data-handling profile (R5).
-- Public widget conversations are stored for quality review without user identity; the widget tells visitors not to
+- **Pilot: history mode `none` until A1 is answered** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant stores
+  metadata and ratings only, no message content. The bucket keys, content encryption and crypto-shredding above are
+  **not built in P1**; the data model keeps their columns and they are built when A1 allows stored content. Feedback
+  comments are refused (`comment_not_stored`) or dropped on import, so they stay only in Open WebUI.
+- Public widget conversations (P2) are stored for quality review without user identity once A1 allows stored content; the widget tells visitors not to
   enter personal data.
 - Reading other people's conversations happens only in the admin UI, by `rag-reviewer`, with a stated reason, audited
-  (admin design §8).
+  (admin design §8); built when A1 allows stored content (weakness review §4).
 
 ## 6. Open WebUI pilot setup (R5)
 
-Registered as a client with ceiling **`internal`**; `sensitive` assistants never appear in its model list.
+Registered as a client with ceiling **`internal`**; `sensitive` assistants never appear in its model list. The ceiling
+stays `internal` only for EU providers covered by a processor agreement (PUB-avtal) listed in the DPIA (register G1);
+if the DPIA requires more, the client is limited to on-prem models (weakness review §4).
 
 Full settings: design §4.3 (Open WebUI v0.12.5).
 
@@ -133,12 +139,17 @@ Full settings: design §4.3 (Open WebUI v0.12.5).
 - Its own RAG, web search, tools, code execution, query/autocomplete generation and context compaction off; **title,
   tag and follow-up generation off** (no task model); user system prompts and parameters off; **file and web uploads
   off** (P1).
-- `ENABLE_ADMIN_CHAT_ACCESS=false`, `ENABLE_ADMIN_EXPORT=false`: review happens only in our admin UI with a reason.
+- `ENABLE_ADMIN_CHAT_ACCESS=false`, `ENABLE_ADMIN_EXPORT=false`: review happens only in our admin UI with a reason
+  (none in P1, weakness review §4).
+- A fixed, non-dismissible banner (`WEBUI_BANNERS`): "Skriv inte in sekretessbelagda uppgifter eller känsliga
+  personuppgifter." (weakness review §4; design §4.3).
 - API keys restricted to the feedback endpoints for the service account of our **feedback import** (every 15
   minutes, design §14.2) and feedback pruning; users get no API keys. No direct SQL against Open WebUI's database.
 - Its own chat copies: v0.12.5 has no age-based retention setting, and its API deletes other users' chats only with
-  admin chat access on; how the 90 days are enforced is open register item **W2**, decided together with A1 before
-  the pilot (stopgap: unpruned copies, stated in Open WebUI's data-handling profile; design §13.3, §21.2).
+  admin chat access on; how the 90 days are enforced is open register item **W2**, decided within the DPIA (**G1**)
+  before go-live (stopgap: unpruned copies, stated in Open WebUI's data-handling profile; design §13.3, §21.2). In the
+  pilot this store is the **primary copy** of every conversation and feedback comment; a public-records request for a
+  conversation is answered from it (runbook section, weakness review §4).
 - Login to Open WebUI itself with Entra (its own app registration). Branding stays (licence clause).
 
 ## 7. Milestones
@@ -146,7 +157,8 @@ Full settings: design §4.3 (Open WebUI v0.12.5).
 | Phase | Deliverable |
 |---|---|
 | P1a (weakness review §1) | `/v1/models` filtered by caller and client, streaming RAG completions, citations (both formats), not-found answers, residency check; one assistant in Open WebUI for the pilot department |
-| P1b | issued conversation ids, history + retention, Open WebUI pilot with its data-handling profile; `/v1/feedback`, **Open WebUI feedback import** and the **Feedback page** in the admin UI (design §14; admin design §8) |
+| P1b | issued conversation ids, metadata history (mode `none`, weakness review §4) + retention, Open WebUI pilot with its data-handling profile and input banner; `/v1/feedback`, **Open WebUI feedback import** and the **Feedback page** in the admin UI (design §14; admin design §8) |
+| When A1 allows stored content (weakness review §4) | history modes `stored`/`session`, chat bucket keys and content encryption in the writer, feedback comments, conversation review in the admin (design §11.2, §12.3, §14) |
 | P2 (moved from late P1, weakness review §1) | Nightly answer-level evaluation in `rag-admin`: an on-prem judge over the evaluation sets through `Ume.Rag.Answering` (faithfulness, citation precision); `uncited_answer` rate per assistant (design §18.8) |
 | P2 | Skills with read-only tools via the tool hub (an assistant linking one runs the agent loop), public widget (`ume-rag-pk-` keys, origins, rate limits), chat attachments (design §15.2), gateway-served rerank per assistant, feedback review beyond P1, condense tuning with the advisory evaluation |
 | P3 | Teams client, user-delegated tools (OBO), write tools with confirmation |
@@ -172,14 +184,17 @@ Answered (user, 2026-10-30; details in [`design.md`](design.md) §21.1):
 6. ~~Not found?~~ **Answered**: coverage `Low` (vector and keyword both weak) → the assistant's fixed sv/en text +
    contact links, no model call; `Unknown` answers from keyword results with a caveat, never the not-found text.
 7. ~~Feedback in P1?~~ **Answered**: yes: `/v1/feedback` plus a scheduled import of Open WebUI ratings, comments
-   encrypted under the chat bucket keys; editors see ratings in P1.
+   encrypted under the chat bucket keys; editors see ratings in P1. *Later change (weakness review §4):* the P1 pilot
+   runs history mode `none`, so only ratings are stored; comments stay in Open WebUI.
 8. ~~C1 chat attachments (P2)?~~ **Answered**: chat-scoped storage with conversation retention, parsed by the worker,
-   encrypted under the chat bucket keys, searched only within the conversation.
+   encrypted under the chat bucket keys, searched only within the conversation. *Later change (weakness review §4):*
+   needs the bucket keys, so it waits for A1 to allow stored content too.
 9. ~~P1 uploads in Open WebUI?~~ **Answered**: disabled in Open WebUI's permissions; file and image content parts
    refused with `attachments_not_supported`.
 10. ~~Feedback comments for editors?~~ **Answered**: `public`/`internal`: shown after a one-click, pre-filled reason,
     audited as a conversation access, only the comment; `sensitive`: the full review flow with a second approver.
     Readers settled in step 10: `rag-reviewer` and `rag-department-admin`, not platform admins (admin answered 6).
+    *Later change (weakness review §4):* built when A1 allows stored content, not in P1.
 
 ## 9. Deferred or removed (simplification pass)
 
@@ -207,3 +222,11 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 |---|---|
 | Nightly answer-level judge (`answers` runs) in `rag-admin` | P2 (§7; design §18.8) |
 | Per-assistant test questions (`assistant-tests` runs) | P2 (design §18.8) |
+
+Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
+
+| Item | Where it went |
+|---|---|
+| History modes `stored`/`session`, chat bucket keys, content encryption in the writer, crypto-shredding | When A1 allows stored content; the P1 pilot runs history mode `none` (metadata and ratings) (§5) |
+| Feedback comments in our store, comment reveal, conversation review by `rag-reviewer` | Same; comments stay in Open WebUI (§5, answered 7, 10) |
+| P2 features that store chat content (chat attachments, widget conversations for review, server-side history) | Need A1 to allow stored content as well |
