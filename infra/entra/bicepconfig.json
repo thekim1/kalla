@@ -1,0 +1,12 @@
+{
+  // Microsoft Graph Bicep extension 1.0.0 (GA, released 2025-07-29; needs Bicep >= 0.36.1), pinned by the digest of the
+  // tag in mcr.microsoft.com (to-verify #84, plans/p0/results-a.md).
+  "extensions": {
+    "microsoftGraphV1": "br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0@sha256:c773df81906701cb8d460573df013e5abb62631498e6c0d572277ad062b16a7d"
+  },
+  "analyzers": {
+    "core": {
+      "enabled": true
+    }
+  }
+}
