@@ -31,9 +31,9 @@ Refs: [simplification-pass §3](../simplification-pass.md), [data-model §3, §1
 
 ## 3. Config-version library (#7)
 Refs: [repo-and-deployment §4](../platform/repo-and-deployment.md), [data-model §5](../platform/data-model.md)
-- [ ] `ConfigVersionMonitor`: LISTEN `rag_config` + 2 s poll, `Config:MaxUnconfirmedSeconds`; log scope
-- [ ] Serialised config writes (`FOR UPDATE` on the version row)
-- [ ] **Done:** tests for revoked-key refusal on notification, 503 after the window, readiness green within it, two concurrent saves cannot both pass a cross-rule
+- [x] `ConfigVersionMonitor`: LISTEN `rag_config` + 2 s poll, `Config:MaxUnconfirmedSeconds`; log scope
+- [x] Serialised config writes (`FOR UPDATE` on the version row)
+- [x] **Done:** tests for revoked-key refusal on notification, 503 after the window, readiness green within it, two concurrent saves cannot both pass a cross-rule (`ConfigVersionTests`; the revocation runs against a stand-in key table until `config."Keys"` lands with #10)
 
 ## 4. Keys (#10)
 Refs: [identity/design.md §6](../identity/design.md)
