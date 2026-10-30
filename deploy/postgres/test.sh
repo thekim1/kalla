@@ -124,7 +124,9 @@ EOF
 plan="$(sql "$main" -c 'SET enable_seqscan = off' -c \
   'EXPLAIN SELECT id FROM image_test ORDER BY embedding <=> (SELECT embedding FROM image_test WHERE id = 1) LIMIT 5')"
 grep -q 'image_test_hnsw' <<<"$plan" || fail "the nearest-neighbour query does not use the HNSW index: $plan"
-nearest="$(sql "$main" -c \
+# HNSW is approximate: on 2000 random 1024-dim vectors the default ef_search (40) can miss even an exact match, so the
+# self-match check widens the search for this one query (it proves the index answers, not its recall).
+nearest="$(sql "$main" -c 'SET hnsw.ef_search = 1000' -c \
   'SELECT id FROM image_test ORDER BY embedding <=> (SELECT embedding FROM image_test WHERE id = 1) LIMIT 1')"
 [ "$nearest" = 1 ] || fail "nearest neighbour of row 1 is '$nearest'"
 ok "HNSW index built on 2000 x vector(1024), used by the nearest-neighbour query"

@@ -113,6 +113,13 @@ jobs:
         working-directory: src/parser
     steps:
       - uses: actions/checkout@v4
+      - name: Free runner disk
+        # The parser image is about 3 GB and buildx keeps a second copy while loading it; the hosted runner's free space
+        # is not enough without removing preinstalled toolchains this job does not use.
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          docker system prune -af >/dev/null
+          df -h / | tail -1
       - name: Install uv from the image the Dockerfile pins
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
@@ -163,6 +170,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Free runner disk
+        # The parser image is about 3 GB and buildx keeps a second copy while loading it; the hosted runner's free space
+        # is not enough without removing preinstalled toolchains this job does not use.
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          docker system prune -af >/dev/null
+          df -h / | tail -1
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.401
