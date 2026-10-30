@@ -203,7 +203,7 @@ delivered with gateway release 2 in P2 (weakness review §5); until then `Member
 
 | Table | Purpose | Key columns | Keys and indexes |
 |---|---|---|---|
-| `WorkerInstances` | Running workers (heartbeat 15 s) | `InstanceId uuid`, `BuildVersion`, `StartedAt`, `LastHeartbeatAt`, `Classes varchar(20)[]` (job classes it runs, engine design §5.2) | PK |
+| `WorkerInstances` | Running workers (heartbeat 10 s) | `InstanceId uuid`, `BuildVersion`, `StartedAt`, `LastHeartbeatAt`, `Classes varchar(20)[]` (job classes it runs, engine design §5.2) | PK |
 | `NodeManifest` | Registered stage types and their parameter schemas (template forms in the admin, engine design §3.2) | `NodeType varchar(100)`, `TypeVersion int`, `ParamsSchema jsonb`, `Metadata jsonb` (job class, cache class, effect tags, display names, deprecated), `FirstRegisteredAt` | PK (`NodeType`, `TypeVersion`); schema immutable per pair |
 | `WorkerNodeSupport` | Which live instance supports which stage version; publish refused unless a row exists with heartbeat < 60 s | `InstanceId` FK (Cascade), `NodeType`, `TypeVersion` | PK all three |
 | `Jobs` | Queue, unpartitioned (§4) | see §4 | |
@@ -429,7 +429,7 @@ CREATE INDEX "IX_Jobs_RunId" ON content."Jobs" ("RunId") WHERE "State" IN ('queu
 - **Capacity refusals** (parser `busy`/`not_ready`, gateway 429 or 503 with `Retry-After`, unconfirmed config) requeue
   with `Attempts − 1`, so they never use up attempts (engine design §7.3).
 - **Leases**: dequeue sets `LeaseOwner`, `LeaseUntil`, `Attempts + 1`; a reaper (every 10 s) returns expired leases to
-  `queued`, and also jobs of instances without a heartbeat for 30 s (two missed 15 s heartbeats; a killed worker's jobs are
+  `queued`, and also jobs of instances without a heartbeat for 30 s (the 10 s heartbeat may miss two beats; a killed worker's jobs are
   back within 40 s, P0 #20, settled 2026-10-30). A reclaim after an instance died sets
   `Attempts − 1` and `Reclaims + 1`; a job reclaimed 3 times is dead-lettered as a poison suspect
   (`LastError = 'poison-suspect'`). A worker restart loses no work (worker §9).

@@ -224,7 +224,7 @@ At startup, before the dispatcher dequeues anything:
 3. Log a warning for every **published** pipeline version whose template version uses a stage version this instance
    lacks.
 
-Heartbeat every 15 s (`WorkerInstances.LastHeartbeatAt`); clean stop deletes the instance (support cascades); any
+Heartbeat every 10 s (`WorkerInstances.LastHeartbeatAt`); clean stop deletes the instance (support cascades); any
 instance deletes instances silent for 5 minutes. A job that needs a stage version this instance does not support is
 released (`AvailableAt + 30 s`, no attempt); after 10 minutes without any supporting instance it fails with outcome
 `failed`, reason `node.version_unsupported`.
