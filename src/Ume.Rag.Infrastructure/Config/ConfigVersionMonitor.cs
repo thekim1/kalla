@@ -30,6 +30,7 @@ public sealed partial class ConfigVersionMonitor(
     public const string ConfigChannel = "rag_config";
     public static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan MinimumWait = TimeSpan.FromMilliseconds(10);
     private readonly ILookup<string, INotificationListener> _listeners = Validated(listeners).ToLookup(l => l.Channel, StringComparer.Ordinal);
     private int _notified;
     private long _refreshes;
@@ -144,8 +145,10 @@ public sealed partial class ConfigVersionMonitor(
         var started = Stopwatch.GetTimestamp();
         while (Volatile.Read(ref _notified) == 0)
         {
+            // Npgsql takes the timeout in whole milliseconds and 0 means "wait forever"; its timer may also return a little
+            // early. A remainder under MinimumWait therefore counts as the deadline reached, never as a near-zero wait.
             var remaining = PollInterval - Stopwatch.GetElapsedTime(started);
-            if (remaining <= TimeSpan.Zero)
+            if (remaining < MinimumWait)
             {
                 return;
             }
