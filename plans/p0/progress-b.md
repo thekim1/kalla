@@ -72,7 +72,7 @@ Refs: [performance-pass §8](../performance-pass.md)
 - [ ] Pooler-safe SQL rules + scan test over all SQL (no forbidden session-state SQL)
 
 ## 9. Docs (#19, your part)
-- [ ] `docs/security-events.md` ([identity/design.md §10](../identity/design.md))
+- [x] `docs/security-events.md` ([identity/design.md §10](../identity/design.md)) (#54)
 
 ## 10. Follow-ups
 - [x] `TestPostgres` switched to `ume-rag/postgres` (after H3) (A's #5 sets the image in CI; nothing to change in TestKit)
