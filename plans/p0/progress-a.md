@@ -77,7 +77,7 @@ Refs: [identity/design.md §12](../identity/design.md), [repo-and-deployment §8
 
 ## 9. On-prem capacity (#22)
 Refs: [weakness-review §5](../weakness-review.md), [performance-pass §3.9](../performance-pass.md)
-- [x] `scripts/capacity/` scripts, tried against a local gateway (FakeGateway)
+- [x] `scripts/capacity/` scripts, tried against a local gateway (FakeGateway, #37)
 - [ ] Run on the real gateway hardware (after H8): embedding throughput by batch size, query-embedding p95 under ingestion load, condense/answer p95, TTFT p99 at 16k tokens
 - [ ] Numbers recorded against the performance-pass estimates (to-verify #98, #99, #104, #125, #149); user told if register M2 is triggered
 
