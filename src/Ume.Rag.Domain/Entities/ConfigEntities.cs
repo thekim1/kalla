@@ -39,3 +39,31 @@ public sealed class AdminSession
     public required byte[] Value { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
 }
+
+/// <summary>
+/// Mirror of a gateway department (data-model §2.1), synced from the gateway's Data API catalogue (P0 #11). The id is the
+/// gateway's. <see cref="MemberGroups"/> are group-claim values that place a signed-in admin in this department
+/// (identity design §2); empty until gateway release 2 delivers them (weakness review §5).
+/// </summary>
+public sealed class Department
+{
+    public Guid Id { get; set; }
+    public required string Name { get; set; }
+    public required string CostCenterCode { get; set; }
+    public string[] MemberGroups { get; set; } = [];
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset SyncedAt { get; set; }
+    public List<Team> Teams { get; set; } = [];
+}
+
+/// <summary>Mirror of a gateway team (data-model §2.1); <see cref="Code"/> comes with gateway release 2 (display only in P1).</summary>
+public sealed class Team
+{
+    public Guid Id { get; set; }
+    public Guid DepartmentId { get; set; }
+    public Department? Department { get; set; }
+    public required string Name { get; set; }
+    public string? Code { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset SyncedAt { get; set; }
+}

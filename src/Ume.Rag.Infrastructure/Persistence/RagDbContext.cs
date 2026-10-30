@@ -29,6 +29,8 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<ApiKey> Keys => Set<ApiKey>();
     public DbSet<KeyLastUse> KeyLastUse => Set<KeyLastUse>();
     public DbSet<AdminSession> AdminSessions => Set<AdminSession>();
+    public DbSet<Department> Departments => Set<Department>();
+    public DbSet<Team> Teams => Set<Team>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<WorkerInstance> WorkerInstances => Set<WorkerInstance>();
     public DbSet<RunItem> RunItems => Set<RunItem>();
@@ -114,6 +116,27 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
             e.Property(x => x.Scopes).HasColumnType("jsonb").HasConversion(
                 new ValueConverter<KeyScopes, string>(v => JsonSerializer.Serialize(v, ScopesJson), v => JsonSerializer.Deserialize<KeyScopes>(v, ScopesJson) ?? KeyScopes.None),
                 new ValueComparer<KeyScopes>((a, b) => Equals(a, b), v => v.GetHashCode(), v => new KeyScopes(v.AssistantIds.ToArray(), v.CollectionIds.ToArray())));
+        });
+
+        modelBuilder.Entity<Department>(e =>
+        {
+            e.ToTable("Departments", ConfigSchema);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.CostCenterCode).HasMaxLength(50);
+            e.Property(x => x.MemberGroups).HasColumnType("varchar(256)[]");
+            e.HasIndex(x => x.CostCenterCode).IsUnique();
+            // As the gateway: a department with teams cannot be deleted.
+            e.HasMany(x => x.Teams).WithOne(x => x.Department).HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Team>(e =>
+        {
+            e.ToTable("Teams", ConfigSchema);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Code).HasMaxLength(100);
+            e.HasIndex(x => x.Code).IsUnique();
         });
 
         modelBuilder.Entity<AdminSession>(e =>
