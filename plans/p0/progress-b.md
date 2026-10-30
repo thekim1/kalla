@@ -60,10 +60,10 @@ Refs: [identity/design.md](../identity/design.md) §1–§3, §10, §11; [identi
 ## 7. Admin skeleton and write path (#11)
 Refs: [admin/design.md](../admin/design.md) §2–§4, §11, §12
 - [ ] Admin UI skeleton: copied design system, Swedish `labels.ts`/`messages.ts`, Vite on 5174, `design-system.lock`
-- [ ] `AdminContext` write path: change + outbox + audit in one transaction
-- [ ] `PermissionMatrix` role tests
+- [x] `AdminContext` write path: change + outbox + audit in one transaction (#38)
+- [x] `PermissionMatrix` role tests (#38)
 - [ ] Org sync against the FakeGateway catalogue
-- [ ] `contracts/admin/v1/error-codes.json` export
+- [x] `contracts/admin/v1/error-codes.json` export (#38)
 - [ ] **Done:** lint/typecheck/test/build green; a saved change bumps the config version with one audit entry; synced departments visible
 - [ ] `command` enqueue from the admin (after H4)
 
