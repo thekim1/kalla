@@ -1,0 +1,177 @@
+import { RELATIVE } from './labels'
+
+// Adapted from the gateway (admin design §5.7): dates `30 okt. 2026`, 24 h Europe/Stockholm, money `0,0012 USD`.
+export const TIME_ZONE = 'Europe/Stockholm'
+const NUMBER_LOCALE = 'sv-SE'
+
+const numberFormatter = new Intl.NumberFormat(NUMBER_LOCALE)
+const decimalFormatter = new Intl.NumberFormat(NUMBER_LOCALE, { maximumFractionDigits: 1 })
+const usdFormatter = new Intl.NumberFormat(NUMBER_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+const dayFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: TIME_ZONE, day: 'numeric', month: 'short', year: 'numeric' })
+const shortDayFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: TIME_ZONE, day: 'numeric', month: 'short' })
+const timeFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false })
+const timeSecondsFormatter = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+})
+
+const DASH = '—'
+const NBSP = '\u00A0'
+
+function isMissing(value: number | null | undefined): value is null | undefined {
+  return value === null || value === undefined || Number.isNaN(value)
+}
+
+/** Swedish number formatting uses NBSP thousands separators; normalise any narrow variants. */
+function nbsp(text: string): string {
+  return text.replace(/[\u00A0\u202F]/g, NBSP).replace(/\u2212/g, '-')
+}
+
+export function formatUsd(value: number | null | undefined): string {
+  if (isMissing(value)) return DASH
+  return nbsp(usdFormatter.format(value))
+}
+
+const usdCostFormatter = new Intl.NumberFormat(NUMBER_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const smallUsdCostFormatter = new Intl.NumberFormat(NUMBER_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+
+/** A cost in USD with its currency, e.g. `24,32 USD`; amounts under one dollar keep up to four decimals. */
+export function formatUsdCost(value: number | null | undefined): string {
+  if (isMissing(value)) return DASH
+  return `${nbsp((Math.abs(value) > 0 && Math.abs(value) < 1 ? smallUsdCostFormatter : usdCostFormatter).format(value))}${NBSP}USD`
+}
+
+/** Tokens per second, e.g. `38,8 tok/s`. */
+export function formatTokensPerSecond(value: number | null | undefined): string {
+  if (isMissing(value)) return DASH
+  return `${nbsp(decimalFormatter.format(value))}${NBSP}tok/s`
+}
+
+export function formatNumber(value: number | null | undefined): string {
+  if (isMissing(value)) return DASH
+  return nbsp(numberFormatter.format(value))
+}
+
+/** Compact count, e.g. `1.2M`, for tight spaces. */
+export function formatCompact(value: number | null | undefined): string {
+  if (isMissing(value)) return DASH
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000) return `${decimalFormatter.format(value / 1_000_000)}M`
+  if (abs >= 10_000) return `${decimalFormatter.format(value / 1_000)}k`
+  return formatNumber(value)
+}
+
+/** Formats a value already expressed in percent (0-100). */
+export function formatPercent(value: number | null | undefined): string {
+  if (isMissing(value)) return DASH
+  return `${nbsp(decimalFormatter.format(value))}%`
+}
+
+/** Formats a ratio (0-1) as percent. */
+export function formatRatio(value: number | null | undefined): string {
+  if (isMissing(value)) return DASH
+  return formatPercent(value * 100)
+}
+
+export function formatMs(value: number | null | undefined): string {
+  if (isMissing(value)) return DASH
+  if (value >= 1000) return `${decimalFormatter.format(value / 1000)}${NBSP}s`
+  return `${numberFormatter.format(Math.round(value))}${NBSP}ms`
+}
+
+function toDate(value: string | Date | null | undefined): Date | null {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/** `30 okt. 2026`. */
+export function formatDate(value: string | Date | null | undefined): string {
+  const date = toDate(value)
+  return date ? nbsp(dayFormatter.format(date)) : DASH
+}
+
+/** `30 okt.`. */
+export function formatShortDate(value: string | Date | null | undefined): string {
+  const date = toDate(value)
+  return date ? nbsp(shortDayFormatter.format(date)) : DASH
+}
+
+/** `14:32`, 24 h Europe/Stockholm. */
+export function formatTime(value: string | Date | null | undefined, seconds = false): string {
+  const date = toDate(value)
+  return date ? (seconds ? timeSecondsFormatter : timeFormatter).format(date) : DASH
+}
+
+/** `30 okt. 2026 14:32`. */
+export function formatDateTime(value: string | Date | null | undefined, seconds = false): string {
+  const date = toDate(value)
+  return date ? `${formatDate(date)} ${formatTime(date, seconds)}` : DASH
+}
+
+/** Relative time for anything under 7 days ("för 2 min sedan"), absolute date otherwise. */
+export function formatRelative(value: string | Date | null | undefined, now: Date = new Date()): string {
+  const date = toDate(value)
+  if (!date) return DASH
+  const seconds = Math.round((now.getTime() - date.getTime()) / 1000)
+  if (seconds < 0) return formatDate(date)
+  if (seconds < 45) return RELATIVE.justNow
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return RELATIVE.minutesAgo(minutes)
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return RELATIVE.hoursAgo(hours)
+  const days = Math.round(hours / 24)
+  if (days === 1) return RELATIVE.yesterday
+  if (days < 7) return RELATIVE.daysAgo(days)
+  return formatDate(date)
+}
+
+/** Time until a future instant, e.g. `6 h 12 min`. */
+export function formatDuration(ms: number): string {
+  const totalMinutes = Math.max(0, Math.floor(ms / 60000))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`
+}
+
+/** YYYY-MM-DD for the given instant in Europe/Stockholm (for `<input type="date">`). */
+export function toIsoDate(value: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')}`
+}
+
+export function startOfMonthIso(now: Date = new Date()): string {
+  return `${toIsoDate(now).slice(0, 8)}01`
+}
+
+export function todayIso(now: Date = new Date()): string {
+  return toIsoDate(now)
+}
+
+/** The last `count` calendar days up to today (Stockholm), oldest first, as `yyyy-mm-dd`. */
+export function lastDaysIso(count: number, now: Date = new Date()): string[] {
+  const [y, m, d] = toIsoDate(now).split('-').map(Number) as [number, number, number]
+  // Calendar arithmetic in UTC, so a daylight saving change cannot skip or repeat a day.
+  return Array.from({ length: count }, (_, i) => new Date(Date.UTC(y, m - 1, d - (count - 1 - i))).toISOString().slice(0, 10))
+}
+
+export function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, Math.min(100, value))
+}
+
+export function initials(name: string | null | undefined): string {
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  const letters = parts.length > 1 ? [parts[0]?.[0], parts[parts.length - 1]?.[0]] : [parts[0]?.slice(0, 2)]
+  return letters.filter(Boolean).join('').toUpperCase() || '?'
+}
