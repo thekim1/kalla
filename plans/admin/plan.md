@@ -1,126 +1,145 @@
 # Admin API and Admin UI: plan
 
-The control plane: where departments set up sources, pipelines, skills and assistants, and where the platform team
-runs the platform. Its own app (decision), with the gateway's design system, login pattern and role model, so it
-feels like the same family without being coupled to the gateway's releases. Review items applied: R2–R7. Detailed
-design: [`design.md`](design.md) (detail step 10); where they differ, the design wins.
+The control plane: where departments set up sources, collections and assistants (later skills), and where the
+platform team runs the platform. Its own app (decision), with the gateway's design system, login pattern and role
+model, so it feels like the same family without being coupled to the gateway's releases. Review items applied: R2–R7.
+Simplified on 2026-10-30 ([`../simplification-pass.md`](../simplification-pass.md) §1, §2, §8, §10). Detailed design:
+[`design.md`](design.md) (detail step 10); where they differ, the design wins.
 
 ## 1. Scope
 
-**Does:** configuration CRUD with validation and audit; pipeline canvas and template forms; preview and publish
-flows; status of syncs and runs; parse profiles; evaluation sets and gates; assistants and skills with a test panel;
-tool servers; clients and keys; conversation review with justification; settings and retention.
+**Does:** configuration CRUD with validation and audit; the department journey in Swedish pages (collection, source
+with template parameters and preview, publish with the evaluation report, assistant, test panel, audience, feedback,
+limited review); platform-admin objects through generic schema-driven forms and the OpenAPI UI; site profiles;
+status of syncs and runs; evaluation sets and reports; skills and tool servers (P2); clients and keys; settings and
+retention.
 
 **Does not:** sit in any data-plane request path; execute pipelines or evaluations (it asks the worker through jobs).
 
 ## 2. Admin API
 
-- ASP.NET Core BFF like the gateway's Admin API: Entra OIDC code + PKCE, secure HttpOnly cookie, CSRF, no tokens in
-  the browser; thin endpoints, logic in services, typed contracts, audit snapshot per change.
-- Writes the `config` schema; **every change writes the config outbox row and bumps the config version in the same
-  transaction** (R7); reads `content` and `chat` (chat only with justification); appends to `audit`.
-- Validates pipelines and generates node forms from the **registered node manifest**, not a compiled-in library, and
-  refuses to publish a pipeline that no running worker supports (R7).
-- Validates assistant composition: collections, skills and tool servers' **result level** ≤ assistant level, tool
-  servers' **clearance** ≥ max(assistant level, ceiling of history-resending audience clients) (tools design §5.3;
-  rules V3–V6, design §4.6); the prompt-injection rule in `../tools/plan.md` §6.
-- Validates residency on publish and on every audience link (chat design §8.2): an assistant offered to a client that
-  resends history (Open WebUI) runs follow-ups at max(assistant level, client ceiling), so its `GatewayModel` must be
-  servable within that residency; otherwise the publish or link is refused (pilot: `public` assistants in Open WebUI
-  need EU or on-prem models). Not-found contact links must pass the chat link allow-list (chat design §9.4, §10.1).
+- ASP.NET Core BFF like the gateway's Admin API: Entra OIDC code + PKCE against RAG's own registration
+  (`ume-rag-admin`), secure HttpOnly cookie, CSRF, no tokens in the browser; thin endpoints, logic in services, typed
+  contracts, audit snapshot per change with the actor's `oid`.
+- Writes the `config` schema; **every config transaction first locks `config."ConfigVersion"` (`SELECT … FOR UPDATE`),
+  then runs the cross-rules, then writes the change, the outbox row, the version bump and the audit row** (R7;
+  simplification pass §9: two concurrent saves cannot each pass the cross-rules). Reads `content` and `chat` (chat only
+  with justification); appends to `audit`.
+- Pipelines are templates + parameters: the admin validates parameters against the template's schema and refuses a
+  template version that no running worker supports (R7).
+- Validates assistant composition: collections (own or shared with the department), skills and tool servers' **result
+  level** ≤ assistant level, tool servers' **clearance** ≥ max(assistant level, ceiling of history-resending audience
+  clients) (design §4.6); the lethal-trifecta refusal (`../tools/plan.md` §6).
+- Validates residency on save and on every audience link (chat design §8.2): the `GatewayModel` must be servable at
+  max(assistant level, client ceiling), and on save the model must be listed by the gateway's `/v1/models` called at the
+  level's ceiling (simplification pass §7). Not-found contact links pass the chat link allow-list.
+- **Explain access**: `POST /api/access/explain` returns, for (client, subject, assistant), the stable id of the first
+  failing `IAccessPolicy` step and its reason code (`../identity/design.md` §4.9); for platform admins, and for
+  department admins on their own department's assistants and clients; no security event (simplification pass §7).
 - Reads departments and teams from the gateway (single source of truth for codes, R4).
-- OpenAPI + Scalar for platform admins.
+- OpenAPI + Scalar for platform admins; in P1 it is also their UI for objects without a dedicated page.
 - **Swedish-only UI** (answered 4): `lang="sv"`, texts in components and a labels file as in the gateway, no i18n
   library; the API, logs, OpenAPI and docs stay English, and server errors carry a stable `code` the UI maps to a
-  Swedish text (design §4.2). The gateway's own UI texts are English; we diverge on purpose for non-specialist users.
+  Swedish text (design §4.2).
 
 ## 3. Roles
 
-Same model as the gateway (`../identity/plan.md` §3): roles from the `roles` claim (Entra app roles assigned to
-groups, values `rag-*`) or from `UME_RAG_OIDC_GROUPS_<ROLE>`; departments from `departmentCodes` plus the departments'
-member groups (feature C, shared with the gateway; member groups are edited in the gateway's *Organisation* page and
-read here). Assistant audiences by group (P2) are picked by searching Entra groups.
+Same model as the gateway (`../identity/plan.md` §3): roles from the `roles` claim of RAG's own Entra registration
+(values `rag-*`) or from `UME_RAG_OIDC_GROUPS_<ROLE>`; departments from `departmentCodes` plus the departments' member
+groups (feature C; claims only in P1, Graph lookup in P2; member groups are edited in the gateway's *Organisation* page
+and read here).
 
 | Role | Can |
 |---|---|
-| `rag-platform-admin` | Everything except conversation content (comments and conversations only with `rag-reviewer` as well); node catalogue, templates, locked nodes, embedding profiles, clients, tool servers, tool grants, platform skills, gate overrides, risk acceptances, platform settings, audit log |
-| `rag-department-admin` | Everything inside own departments: sources, collections, assistants, skills, keys, evaluation; feedback comments (`public`/`internal`) after a one-click reason (`FeedbackComments`), no conversations |
-| `rag-reviewer` (P1) | Read feedback comments (`public`/`internal`, one-click reason) and, with a free-text reason, the conversation behind a feedback item, audited; `sensitive` also needs a second reviewer (P2); policies `Review`, `FeedbackComments`, `Read` (design §3.1, §8) |
-| `rag-pipeline-editor` | Edit pipelines on the canvas in own departments (copy templates, change parameters, add approved nodes) |
-| `rag-editor` (from P2) | Sources, collections and assistants in own departments; links published skills (own department + platform skills) to assistants but cannot edit skills; template forms, not the canvas |
-| `rag-skill-editor` (from P2) | Draft, publish (behind the skill gate), serve and roll back skills of own departments (`EditSkills`, tools design §3.6) |
+| `rag-platform-admin` | Everything except conversation content (comments and conversations only with `rag-reviewer` as well); templates, site profiles, embedding profiles, clients, tool servers, tool grants, platform skills, parse-profile proposals (P2), platform settings, audit log |
+| `rag-department-admin` | Everything inside own departments: sources, collections (incl. share lists), assistants, skills, keys, evaluation; feedback comments (`public`/`internal`) after a one-click reason (`FeedbackComments`), no conversations |
+| `rag-reviewer` (P1) | Read feedback comments (`public`/`internal`, one-click reason) and, with a free-text reason, the conversation behind a feedback item, audited; `sensitive` also needs a second reviewer (P2); policies `Review`, `FeedbackComments`, `Read` |
+| `rag-pipeline-editor` | Edit template parameters of sources in own departments |
+| `rag-editor` (from P2) | Sources, collections and assistants in own departments; links served skills usable by the department to assistants but cannot edit skills |
+| `rag-skill-editor` (from P2) | Draft, publish, serve, roll back and share skills of own departments (`EditSkills`, tools design §3.6) |
 | `rag-viewer` | Read status, runs, evaluation results and usage in own departments |
 
-`Review` and `FeedbackComments` are not part of `Admin`: no administrative role implies conversation content.
-Scoped by `departmentCodes` / `teamCodes` claims, as in the gateway. A signed-in user with no `rag-*` role gets 403 on
-every page and API call (the gateway shows such users its catalogue; we have no public page). The organisation page
-shows member groups read-only and links to the gateway's *Organisation* page to edit them. Sign-in, sessions, keys page
-and security events: `../identity/design.md` §1, §6.4, §10.
+`Review` and `FeedbackComments` are not part of `Admin`: no administrative role implies conversation content. A user
+with no `rag-*` role gets 403 on every page and API call.
 
 ## 4. Admin UI pages
 
+**P1 department journey (dedicated Swedish pages):**
+
 | Page | Contents |
 |---|---|
-| Overview | Sync health per department, degraded sources, paused deletions waiting for confirmation, failed evaluation gates, recent failures |
-| Documents | The shared document store: which collections and sources use a document, parse strategy and profile, last fetch (R2); chunks; PII list with highlight preview and clearance with a reason (design §4.5, §9.3) |
-| Collections | Classification, sources, document counts, retrieval settings (`RetrievalSettings` form: weights, candidates, `efSearch`, chunks per document behind the evaluation gate; coverage threshold and section budget saved directly; knowledge design §12.1), coverage-threshold proposal from the evaluation set's best-distance distribution (knowledge design §7), **evaluation set and latest results** |
-| Sources | Type-specific form, pre-flight check, hierarchy tree for crawl patterns, impact count before saving scope/identity changes, two-variant warning, schedule, "sync now", run history, crawl reports, failed items, upload list with states, quarantine list, deletion confirmations, held references; notice when another department already crawls the same site (connectors design §4–§5, §9, §11, §13; design §4.5) |
-| Pipelines | Templates; canvas (Vue Flow) for pipeline editors with typed ports and the node palette from the manifest; generated parameter forms; per-node preview; draft/published versions, diff, restore; publish with re-processing plan, cost estimate and **evaluation gate result** (plan → gate → confirm, version `gating` meanwhile); rollback never blocked by the gate; run views; P1 editing through template forms and a node list with JSON view, canvas in P2 (design §6) |
-| Parse profiles | Learned and manual profiles, confidence, sample count, trial results, gate results, auto-applied/proposed state, rollback, kill switch |
-| Evaluation | Per collection and assistant: generated, skill and human questions (layers, stale and retired counts, generation cost); add/edit questions; turn flagged feedback into rewritten questions without personal data (P2); run history per version; gate cards with arms, wins/losses, intervals, escalation and override (platform admins); collection floor before publish; gate thresholds (R6) (design §7) |
-| Assistants | Mode (RAG / agent), prompt, model (agent mode: `SupportsTools` required), collections, skills (pin or follow, tool exclusions), agent limits within the platform caps (tools design §6.5), lethal-trifecta result and risk acceptance (platform admins, tools design §5.4), query-step form (condense toggle, history window messages/tokens, context and output tokens, temperature, language mode `auto`/`sv`; chat design §5–§6, §10.3), not-found texts sv/en + contact links (chat design §10.1), classification, audience (who may use it), retention, allowed origins; **test panel** with retrieved chunks, tool calls and the answer (raw model text next to the filtered, delivered text, chat design §9.4); the panel runs the real chat path (`Ume.Rag.Answering`, design §4.9) in the admin process (also over `building` collections, with the admin's role scope; knowledge design §4.2), so the admin host needs `Gateway:*` settings for query embeddings |
-| Skills | Versioned skill packages (tools design §3): draft editor (Markdown body with token estimate, reference files, linked collections and tools, test questions, classification); skill gate result; publish/serve/rollback with the served pointer; MAJOR auto-pin notice for other departments' assistants; MCP exposure and audiences (`SkillAudiences`); import/export in Agent Skills format (P3) |
-| Tool servers | Registered MCP servers (tools design §4): registration (URL, slug, hosting, auth mode and credential, clearance, result level, residency, owner team, system owners) with connection test; discovery; approvals by platform admin and system owner with a definition diff; department grants; drift observations; catalogue of hosted servers (owner, wrapped systems, repository, image digest, version) |
-| Clients | Client registry (R5): Entra app registrations, keys, Open WebUI and widget instances; classification ceiling; data-handling profile (stores history? retention? task model: the on-prem alias behind `owui-tasks`, chat design §4.2); warning when an `open-webui` client's requests arrive without the `X-Rag-Owui-Message-Id` header (chat design §11.4); tool policy `ToolPolicy` (`none`/`read`, tools design §5.1) |
-| Keys | `ume-rag-sk-`/`ume-rag-pk-` keys per team: scopes, origins, rotation, revoke |
-| Gateway | Platform service key status and delegation check; interim per-team key links; residency verification for sensitive use (R4); `GatewayModels` sync in P1 (kind, residencies, `SupportsTools`, context window, prices; manual rows for route aliases; design §4.10) |
-| Embedding profiles | Platform admins: the on-prem default profile, exceptions, migration status (R3) |
-| Feedback (P1) | Department-scoped ratings from `/v1/feedback` and the Open WebUI import: rating, reason category, assistant, time, outcome, cited documents (titles), without content; import health. A comment (`public`/`internal`) is shown after a one-click, pre-filled reason ("Granskning av återkoppling"), audited as a conversation access; only the comment, never the conversation; readable by `rag-reviewer` and `rag-department-admin`, not by platform admins implicitly; `sensitive` comments only through the full review flow with a second approver (chat design §14.4) |
-| Conversations | `rag-reviewer` only; reading a conversation requires a reason, audited; **P1 limited to the conversation behind a feedback item** (`public`/`internal`) plus the access log (answered 8); P2 search by assistant and period and, for `sensitive`, a second approver before content is decrypted |
-| Audit | All changes and privileged reads |
-| Settings | Retention defaults, deletion guard thresholds, crawl defaults (municipal host patterns, host overrides, blocked hosts), evaluation gate defaults, retrieval, chat and tools defaults (`Settings` sections, design §4.5) |
-| Data protection | Per classification level: history modes allowed, retention default and maximum, encryption required, review rules, allowed clients; key service status and master-key rotation; data tier configuration (`../platform/plan.md` §8a). Platform admins only |
+| Overview | Setup checklist, paused deletions waiting for confirmation, evaluation reports that got worse, PII-flagged documents in `public` collections, recent failures |
+| Collections | Classification, sources, documents (incl. PII list per chunk set and clearance of the document with a reason), share list (named departments), retrieval settings (saved directly; knowledge design §12.1), **evaluation set and latest reports** |
+| Sources | Type-specific form (URL list, crawl, upload) with template parameters under "Avancerat", pre-flight check, preview of sample pages (for a crawl source with the learned site profile's before/after text), impact count before saving scope/identity changes, schedule, "sync now", run history, crawl reports, failed items, upload list, quarantine list, deletion confirmations, held references |
+| Publish | Plan (counts, time, cost) → re-process → **evaluation report** (recall@10 and MRR with counts against the previous run) → keep or roll back (one click within 14 days) |
+| Assistants | Mode (RAG; agent P2), prompt, model (validated against the gateway at the level's ceiling), collections, query-step form, not-found texts sv/en + contact links, classification, retention; **test panel** (retrieved chunks, raw vs delivered answer; P2 tool calls), running `Ume.Rag.Answering` in the admin, deployed from the same release as `rag-api`; the **latest answer evaluation** (faithfulness and citation precision of the nightly `answers` run, late P1, run in the admin) |
+| Audience | Clients the assistant is offered to, with the residency check explained |
+| Feedback | Department-scoped ratings without content; a comment after a one-click reason; import health |
+| Conversations | `rag-reviewer` only; **P1 limited to the conversation behind a feedback item** (`public`/`internal`) plus the access log |
+
+**P1 platform objects (generic schema-driven forms + OpenAPI UI, platform admins):** settings, data protection
+(shredding switched off until A1), clients, templates, site profiles (versions, proposals, approve/rollback),
+embedding profiles (read), gateway models, keys, organisation mirror (read), audit log list.
+
+**P2 pages:** Skills (draft editor, gate report from the skill gate the admin runs, serve/rollback, share list), Tool servers (registration, discovery,
+approvals by platform admin and system owner, pre-registration, grants, drift), parse-profile proposals, conversation
+search and the `sensitive` two-person flow, dedicated pages for keys and clients if the generic forms prove too thin.
 
 Search (Ctrl K), mobile layout and accessibility as in the gateway admin UI (`~/git/llmgateway/docs/admin-ui.md`), with
-Swedish texts (answered 4) and, beyond the gateway, one NVDA screen-reader pass of the pilot journey before the pilot
-(answered 7).
+Swedish texts (answered 4) and one NVDA screen-reader pass of the pilot journey before the pilot (answered 7).
 
 ## 5. Milestones
 
 | Phase | Deliverable |
 |---|---|
-| P0 | Entra/Keycloak BFF login, app roles (incl. `rag-reviewer`), audit infrastructure, config outbox, write path (audit + outbox + version), design system and shell in Swedish, error-code export, org sync |
-| P1 a | Collections, sources (URL list, crawl, upload) with preflight, impact and run history, deletion decisions, documents page with PII view/clear, template-based pipelines (template forms, node list + JSON view) with preview, diff, publish (plan → gate → confirm) and rollback |
-| P1 b | Evaluation page (generated sets), gate cards, collection floor and publish, retrieval settings, RAG assistants with test panel, audiences (clients), retention, `GatewayModels` sync, clients registry, keys, gateway page, settings, data protection, audit log |
-| P1 c | **Feedback page** (chat design §14.4) with comment reveal, conversation review behind feedback (`public`/`internal`), access log, import health; accessibility pass (incl. NVDA) and tillgänglighetsredogörelse; pilot journey E2E green |
-| P2 | Canvas for pipeline editors, parse profiles, SharePoint source with pre-flight, skills (`rag-skill-editor`, skill gate), tool servers (approvals, grants, drift), agent assistants, conversation search and `sensitive` two-person review, feedback → test question, widget configuration |
-| P3 | Query-side canvas, analytics (retrieval, feedback and evaluation trends), OBO tool configuration, skill import/export, embedding profile changes |
+| P0 | Entra/Keycloak BFF login against RAG's own registration, app roles (incl. `rag-reviewer`), audit infrastructure, write path (lock + rules + change + outbox + version + audit), design system and shell in Swedish, error-code export, org sync |
+| P1 a | Collections, sources (URL list, crawl, upload) with preflight, preview (site-profile before/after), impact and run history, deletion decisions, documents tab with PII view/clear, template parameters, publish (plan → re-process → evaluation report → keep or roll back) |
+| P1 b | Evaluation set and reports, retrieval settings, RAG assistants with test panel (same release as `rag-api`), audiences (clients), retention, `GatewayModels` sync, generic forms for platform objects (settings, data protection, clients, templates, site profiles, embedding profiles, gateway models, keys), audit list, explain access |
+| P1 c | **Feedback page** with comment reveal, conversation review behind feedback (`public`/`internal`), access log, import health; accessibility pass (incl. NVDA) and tillgänglighetsredogörelse; pilot journey E2E green |
+| P2 | Skills (`rag-skill-editor`, share lists, gate report, serve), tool servers (approvals, pre-registration, grants, drift), agent assistants, parse-profile proposals, SharePoint source, crawl hierarchy tree, parameter diff, conversation search and `sensitive` two-person review, feedback → test question, widget configuration |
+| P3 | Analytics (retrieval, feedback and evaluation trends), OBO tool configuration, risk acceptance, skill import/export, embedding profile changes |
 
 ## 6. Open questions
 
 Answered (2026-10-29):
 
-1. **One or two admin UIs**: separate apps, same design system and sign-in, cross-linked between related pages
-   (e.g. a team's gateway budget from its RAG department page); independent releases.
+1. **One or two admin UIs**: separate apps, same design system and sign-in, cross-linked between related pages;
+   independent releases from the gateway (the RAG admin is released together with `rag-api`).
 2. **Editor role**: not for the pilot; the pilot uses `department-admin` and `pipeline-editor`. `editor` is added
    when more departments join (P2).
-
-3. **Tool servers**: registered by platform admins only, on request from departments; new servers and changed tool
-   definitions need approval by the platform admin and the wrapped system's owner (`../tools/plan.md` §9).
+3. **Tool servers**: registered by platform admins only; departments ask through the platform team's normal intake
+   (no request flow in the admin); new tool definitions need approval by the platform admin and the system owner, a
+   pre-registered change one approver, unexpected drift two (`../tools/plan.md` §9).
 
 Answered (2026-10-30; detail in design.md §14.1):
 
-4. **UI language**: Swedish, with the gateway's mechanism (texts in components and a labels file, no i18n); API, logs
-   and docs in English. The gateway's own UI texts are English: the RAG admin diverges on purpose for its
-   non-specialist users.
-5. **Pilot setup**: the pilot department's own admins set up their collections and assistants in the P1 pages (forms
-   and templates), with the platform team pairing at first; P1 pages are built for non-specialists (setup checklist,
-   design §5.4).
-6. **Conversation review**: new role `rag-reviewer`, granted per department, reads conversations with a reason,
-   audited; `sensitive` also needs a second approver. Feedback comments (`public`/`internal`, one-click reason) are
-   readable by `rag-reviewer` and `rag-department-admin`; full conversations only by `rag-reviewer`; platform admins
-   get neither implicitly.
-7. **Screen reader**: one NVDA + Firefox pass of the pilot journey before the pilot; findings fixed or listed in the
-   tillgänglighetsredogörelse.
-8. **Conversation review in P1**: limited: a `rag-reviewer` opens the conversation behind a feedback item
-   (`public`/`internal`); general search and the `sensitive` two-person flow in P2.
+4. **UI language**: Swedish, with the gateway's mechanism; API, logs and docs in English. The generic forms for
+   platform objects show schema titles (Swedish where given).
+5. **Pilot setup**: the pilot department's own admins set up their collections and assistants in the P1 journey
+   pages, with the platform team pairing at first (setup checklist, design §5.4).
+6. **Conversation review**: role `rag-reviewer`, granted per department, reads conversations with a reason, audited;
+   `sensitive` also needs a second approver. Feedback comments are readable by `rag-reviewer` and
+   `rag-department-admin`; full conversations only by `rag-reviewer`; platform admins get neither implicitly.
+7. **Screen reader**: one NVDA + Firefox pass of the pilot journey before the pilot.
+8. **Conversation review in P1**: limited to the conversation behind a feedback item (`public`/`internal`); general
+   search and the `sensitive` two-person flow in P2.
+
+## 7. Deferred or removed (simplification pass)
+
+Per [`../simplification-pass.md`](../simplification-pass.md):
+
+| Item | Where it went |
+|---|---|
+| Pipeline canvas (Vue Flow), node palette, typed ports, locked nodes | Dropped from the roadmap (§2) |
+| P1 node editor and JSON view | Removed: pipelines are template + parameters (§2) |
+| Version diff, rebase | P2 if needed (parameter diff) (§10) |
+| Blocking evaluation gates, gate cards with intervals/escalation, collection floor, `gating` and `building` states, platform-admin gate overrides | Removed; advisory evaluation report on the publish screen (§8) |
+| Parse-profile auto-apply (confidence, trials, kill switch) | Removed; P2 proposals approved by platform admins (§2) |
+| Crawl hierarchy tree, coverage-threshold histogram, audit diff viewer | P2 (§10); the audit list stays in P1 |
+| Dedicated P1 pages for settings, data protection, clients, keys, gateway, embedding profiles | Generic schema-driven forms + OpenAPI UI in P1 (§10) |
+| Interim per-team gateway key links | Removed with `GatewayKeyLinks` (§7) |
+| Data tier configuration | Removed (§5) |
+| Open WebUI task model on clients (`owui-tasks`) | Removed (§1) |
+| Own-department-only collection and skill links | Share lists to named departments (§10) |
+| Risk acceptance for the lethal trifecta | P3 (§10) |
+| "(+ request)" right for tool servers | Removed: requests through the platform team's intake (§10) |

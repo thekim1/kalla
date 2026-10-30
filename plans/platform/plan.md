@@ -3,7 +3,8 @@
 Shared conventions and infrastructure for every service. Mirrors the LLM gateway (`~/git/llmgateway`) wherever
 possible, because **the gateway team builds and operates both** (decision 2026-10-29), on separate hosts and
 databases. Incorporates the architecture review
-(`../../02-architecture-review.md`, items R1–R7).
+(`../../02-architecture-review.md`, items R1–R7) and the simplification pass
+([`../simplification-pass.md`](../simplification-pass.md), 2026-10-30).
 
 ## 1. Repository and solution layout
 
@@ -12,23 +13,23 @@ One repository, one solution, like the gateway:
 ```
 src/
   Ume.Rag.Domain/            entities, enums, port types, classification, access policy, shared contracts
-  Ume.Rag.Infrastructure/    EF Core DbContexts, Postgres queue + outbox, Redis keys, gateway client, blob storage
-  Ume.Rag.Retrieval/         search core shared by the knowledge API, the evaluator and the admin test panel
-  Ume.Rag.Answering/         knowledge and chat answer core without HTTP (API and the admin test panel)
-  Ume.Rag.Pipelines/         pipeline definition format, validator, Merkle hashes (admin and worker)
+  Ume.Rag.Infrastructure/    EF Core DbContext, Postgres queue + outbox, Redis keys, gateway client, blob storage
+  Ume.Rag.Retrieval/         search core and SwedishDecompounder, shared by the knowledge API, the worker and the admin test panel
+  Ume.Rag.Answering/         knowledge and chat answer core without HTTP (API; admin test panel, answer-level judge, P2 skill gate)
+  Ume.Rag.Pipelines/         pipeline templates and versioned parameter sets, validator, per-stage cache keys (admin and worker)
   Ume.Rag.ServiceDefaults/   OpenTelemetry, health, problem responses, security headers (copy of gateway's)
   Ume.Rag.Api/               data plane: Knowledge API + Chat API + MCP server endpoint groups (role setting)
-  Ume.Rag.Tools/             tool hub: MCP client, tool policy re-check, credentials, audit (skills runtime is in the chat role; see ../tools)
-  Ume.Rag.Worker/            ingestion worker: connectors, pipeline engine, scheduler, evaluation runs
+  Ume.Rag.Tools/             P2: tool hub (IToolHub), in-process in the chat role and in the admin; see ../tools
+  Ume.Rag.Worker/            ingestion worker: connectors, fixed pipelines, scheduler, retrieval evaluation runs
   Ume.Rag.AdminApi/          control plane: BFF + admin endpoints, serves the admin UI
   Ume.Rag.MigrationService/  one-shot migrator (DDL role), dev seeder
   Ume.Rag.AppHost/           Aspire orchestration for local dev
   Ume.Rag.FakeGateway/       OpenAI-compatible fake gateway: chat, 1024-dim embeddings, residency headers, catalog (the gateway's FakeLlm returns 8-dim vectors, so it cannot be reused)
-  admin-ui/                  Vue 3 + Pinia + Vue Flow, gateway design system
+  admin-ui/                  Vue 3 + Pinia, gateway design system
   parser/                    Python sidecar (Docling), own Dockerfile
-templates/mcp-server/        template for municipal MCP servers (see ../tools)
+templates/mcp-server/        P2: template for municipal MCP servers (see ../tools)
 tests/
-deploy/                      compose files, Postgres image, init and backup scripts (gateway style)
+deploy/                      compose files, Postgres init and pgBackRest configuration, backup scripts (gateway style)
 docs/
 ```
 
@@ -45,45 +46,46 @@ zones** from day one, even when they share a host (P2 adds a third, `tools-hoste
 
 | Zone | Container | Image | Notes |
 |---|---|---|---|
-| data plane | `rag-api` | Ume.Rag.Api | Knowledge + Chat + MCP server roles |
-| data plane | `rag-tools` | Ume.Rag.Tools | P2; tool hub, the only holder of tool credentials; `cpus` 1.0, `cpu_shares` 1024, `mem_reservation` 192m, `mem_limit` 512m, `pids_limit` 256 (tools design §2.2) |
-| tools-hosted | `ume-mcp-<name>` | one per hosted MCP server | P2; own zone (`cpu_shares` 256, `cpus` 0.5, `mem_limit` 384m each), networks `mcp` and its own `mcp-<name>-egress` (tools design §2.2, §8.3); first: mock fee calculator `ume-mcp-avgifter` |
-| data plane | `postgres` | Postgres 17 + pgvector + Hunspell `sv_SE` | **Our own image**, Azure and on-prem alike (decision) |
+| data plane | `rag-api` | Ume.Rag.Api | Knowledge + Chat + MCP server roles; from P2 also the in-process tool hub (tools design §2) |
+| tools-hosted | `ume-mcp-<name>` | one per hosted MCP server | P2; own zone (`cpu_shares` 256, `cpus` 0.5, `mem_limit` 384m each), networks `mcp` and its own `mcp-<name>-egress` (tools design §2.2, §8.3); first and only in P2: `ume-mcp-kommun`, starting with the mock fee calculator |
+| data plane | `postgres` | stock `pgvector/pgvector` (pgvector 0.8.7 on Postgres 17; tag *to verify*) | Managed Postgres is allowed where pgvector ≥ 0.8 and the needed settings are available (decided 2026-10-30, simplification pass §3) |
+| data plane | `rag-pgbackrest` | pgBackRest | WAL archiving and backups (repo-and-deployment §7.4) |
 | data plane | `redis` | Redis | Rate limits, caches |
-| control | `rag-admin` | Ume.Rag.AdminApi | Admin API + static admin UI |
+| control | `rag-admin` | Ume.Rag.AdminApi | Admin API + static admin UI; test panel, answer-level evaluation and (P2) the skill gate and tool discovery through the in-process hub |
 | ingestion | `rag-worker` | Ume.Rag.Worker | Hard CPU/memory limits, lower CPU priority |
 | ingestion | `rag-parser` | parser | Hard limits; no egress; internal network only; first to move to its own host |
-| ingestion | `rag-renderer` | Playwright + Chromium | Headless rendering for JavaScript-only pages (P1); no egress: the worker fetches every browser request through its egress guard (connectors design §8.3) |
 | ingestion | `rag-clamav` | ClamAV | Scans uploads and fetched files before parsing; signatures updated directly from database.clamav.net (decided: no mirror) |
 | – | `rag-migrate` | Ume.Rag.MigrationService | One-shot on deploy |
 
-- **Pilot**: one host is allowed: **8 vCPU / 16 GB minimum, 24 GB recommended** (Docling models, ClamAV signatures
-  and Chromium need several GB together), with Docker CPU shares and limits giving the data plane priority. The
-  parser gets at most half the cores. BGE-M3 runs at the gateway's on-prem provider, not on this host.
+- **Pilot**: one host is allowed: **8 vCPU / 16 GB minimum, 24 GB recommended** (Docling models and ClamAV
+  signatures need several GB together), with Docker CPU shares and limits giving the data plane priority. The parser
+  gets at most half the cores. BGE-M3 runs at the gateway's on-prem provider, not on this host. The pilot runs **one
+  slot** per service; updates use a short announced maintenance window (a/b slots come with P2).
 - **Production**: ingestion zone on its own host or node pool; the data plane host never runs OCR. Scale-out is
   **Compose per host, roles per host** (decided 2026-10-30; [`../performance-pass.md`](../performance-pass.md) §5): same images, `Worker:Classes` and
-  deployment settings per instance, one Postgres, one Redis and one S3-compatible object store (the municipality's S3
-  service if IT offers one, else SeaweedFS; decided with IT before the first multi-host deployment, postponed decision
-  S2), routed LAN with TLS and host firewalls, no overlay network:
+  deployment settings per instance, one Postgres (with a streaming standby, §10), one Redis and one S3-compatible
+  object store (the municipality's S3 service if IT offers one, else SeaweedFS; decided with IT before the first
+  multi-host deployment, postponed decision S2), routed LAN with TLS and host firewalls, no overlay network:
 
   | Topology | Hosts and what they run |
   |---|---|
-  | 3 hosts (P2) | **D** data (8–16 vCPU, 64 GB, NVMe): postgres, redis, object store, OTel collector; **A** data plane + control (8 vCPU, 16 GB): rag-api a/b, rag-admin a/b, P2 rag-tools (Open WebUI on its own VM); **I** ingestion (16 vCPU, 32 GB): rag-worker (all classes), rag-parser, rag-renderer, rag-clamav |
-  | 5 hosts (P3) | **D** as above; **A1**/**A2**: two rag-api instances each, rag-admin a on A1 and b on A2, rag-tools one each (P2); **F** fetch: worker `preview,command,sync,fetch,eval`, renderer ×2, clamav, small parser for inspect/preview (crawl egress host); **P** processing: worker `parse,ner,embed`, parser 4 × 2 slots + `NER_LANES` 4 (16–24 vCPU, 48 GB), no crawl network. A sixth host is a second **P** |
-- **Database protection**: one connection pool per service role with a hard cap (worker smallest), a
-  `statement_timeout` per role, chunk writes in batches, and queue/run tables partitioned by day so old partitions
-  are dropped rather than deleted (no vacuum storms).
+  | 3 hosts (P2) | **D** data (8–16 vCPU, 64 GB, NVMe): postgres (+ standby elsewhere), redis, object store, OTel collector; **A** data plane + control (8 vCPU, 16 GB): rag-api a/b, rag-admin a/b (Open WebUI on its own VM); **I** ingestion (16 vCPU, 32 GB): rag-worker (all classes), rag-parser, rag-clamav |
+  | 5 hosts (P3) | **D** as above; **A1**/**A2**: two rag-api instances each, rag-admin a on A1 and b on A2; **F** fetch: worker `preview,command,sync,fetch,eval`, clamav, small parser for inspect/preview (crawl egress host); **P** processing: worker `parse,embed`, parser 4 × 2 slots (16–24 vCPU, 48 GB), no crawl network. A sixth host is a second **P** |
+- **Database protection**: one connection pool per service role with a hard cap (starting values per instance api 12,
+  admin 5, worker 10, measured in P0; retrieval limited to 4 concurrent searches per api instance; data-model §1.1), a `statement_timeout` per role, chunk writes in batches of ≤ 1,000 rows with one
+  short swap transaction per document, `RunItems` partitioned by day so old partitions are dropped rather than
+  deleted, and `Jobs` unpartitioned with terminal jobs deleted nightly in batches (data-model §4).
 - **Release test**: chat p95 time to first token is measured during a full crawl plus an OCR batch, with the
-  gateway's benchmark harness, and must stay within 10% of the idle figure. The same rule applies at scale in the
-  manual **scale test** (`scale.yml`, before the P2 multi-host rollout: chat p95 TTFT during a 100k-page crawl + OCR
-  batch ≤ 1.10 × idle; [`../performance-pass.md`](../performance-pass.md) §7).
+  gateway's benchmark harness, and must stay within 10% of the idle figure (`perf.yml`, from P1). The same rule
+  applies at scale in the manual **scale test** (`scale.yml`, P2, before the multi-host rollout: chat p95 TTFT during
+  a 100k-page crawl + OCR batch ≤ 1.10 × idle; [`../performance-pass.md`](../performance-pass.md) §7).
 
 **Decided (2026-10-29): our Postgres and Redis are separate instances from the gateway's**, each system with its own
 database. Reasons: the gateway's ADR 015 (other teams' data goes through interfaces, never the database; we read
 organisation data through the gateway's API); the gateway stores no content while ours holds documents and chat
-logs, so backups, admin access and retention must not be shared; our Postgres needs a custom image (pgvector,
-Swedish Hunspell); ingestion load must never reach the gateway's database (R1); and a later `sensitive` tier has its
-own keys and hosting. Operations reuse the gateway's backup/restore scripts, migrator/role pattern and runbook.
+logs, so backups, admin access and retention must not be shared; ingestion load must never reach the gateway's
+database (R1); and a later `sensitive` deployment has its own keys and hosting (§8a). Operations reuse the gateway's
+migrator/role pattern and runbook.
 
 ## 3. Data ownership
 
@@ -92,49 +94,52 @@ Tables, roles, indexes, queue, encryption, retention and blob layout in detail: 
 
 | Schema | Written by | Read by | Contents |
 |---|---|---|---|
-| `config` | admin | api, tools, worker | collections, sources, pipeline versions, assistants, skills, tool servers, clients, keys, embedding profiles, settings, **config outbox** |
-| `content` | worker (admin only inserts `Jobs`, incl. `command` jobs for its decisions; api only via the retrieval-counter function) | api (read-only), admin (read) | **document store** (platform-wide), collection index (chunks, embeddings), runs, jobs, parse observations, parse profiles, evaluation sets and results, node catalogue manifest |
+| `config` | admin | api, worker | collections, sources, pipeline versions, assistants, skills, tool servers, clients, keys, embedding profiles, settings, **config outbox** |
+| `content` | worker (admin only inserts `Jobs`, incl. `command` jobs for its decisions; api only via the retrieval-counter function) | api (read-only), admin (read) | documents and chunk sets per source, chunks, caches (stage outputs, embeddings), site profiles, runs, jobs, parse observations and rules, evaluation sets and results |
 | `chat` | api | admin (audited read) | conversations, messages, feedback, tool-call records |
 | `audit` | all (append-only) | admin | audit entries |
 
-**Two content layers (R2).** The *document store* holds one document per canonical identity (normalised URL,
-SharePoint item id, file hash), fetched and parsed once. The *collection index* holds each collection's chunks and
-embeddings, referencing documents. Several departments using the same umea.se pages share one fetch, one parse and,
-when their pipelines match, one set of chunks. Classification and access live on collections; the document store is
-never queried directly by clients.
+**Share by cache, not by row (R2).** A document is (source, identity) and a chunk set is (document, pipeline
+version, embedding profile); a source belongs to exactly one collection, so every chunk carries one scalar
+`CollectionId` and membership changes never rewrite chunks. Reuse between departments comes from content-addressed
+caches: the shared crawl frontier makes one request per URL per freshness window for every source that wants it; raw
+content is keyed by content hash, parse output by (content hash, parser settings, parser build), embeddings by (text
+hash, profile). Every copy after the first is cheap and nothing couples departments. Classification and access live on
+collections; documents carry their source's level.
 
-**Classification in the document store**: every document carries the classification of the source that fetched it,
-and **documents are shared only between sources of the same level**. The same URL fetched by a `public` and a
-`sensitive` source is stored twice, so a sensitive copy never feeds a lower-level collection, and the separate
-`sensitive` tier (§8a) can hold its documents without cross-tier references.
-
-Blob storage (`IBlobStore`): uploaded files, raw fetched content and node outputs. Implementations: file system
-volume, S3-compatible, Azure Blob.
+Blob storage (`IBlobStore`): uploaded files, raw fetched content and stage outputs; **write-once** keys (new content =
+new key), deletion = tombstone + delayed purge. Implementations: file system volume, S3-compatible, Azure Blob.
 
 ## 4. Configuration changes: transactional and versioned (R7)
 
 - Every change in `config` writes a row to a **config outbox** in the same transaction, with a monotonically
-  increasing **config version**.
-- Postgres `LISTEN/NOTIFY` wakes the data plane, tool hub and worker (the same mechanism wakes the job queue); each
-  service also polls the current version every few seconds, so a missed notification costs seconds, not a TTL.
+  increasing **config version**. Admin config transactions are serialised (`SELECT … FOR UPDATE` on the version row
+  before the cross-rules run), so two concurrent saves cannot each pass a cross-rule.
+- Postgres `LISTEN/NOTIFY` wakes the data plane and worker (the same mechanism wakes the job queue); each service also
+  polls the current version every few seconds, so a missed notification costs seconds, not a TTL.
 - Caches hold the version they were built from. **Security-relevant entities** (keys, clients, access rules,
-  classification, tool permissions) are used only if the cache is at the current version; if the version cannot be
-  confirmed, the request is refused (fail closed). Other settings may serve slightly stale.
-- Redis is used for rate limits and short-lived caches only, not as the source of change events.
+  classification, tool permissions) use the last confirmed snapshot for up to `Config:MaxUnconfirmedSeconds` (90 s);
+  beyond that, keyed requests are refused with 503. Notifications still apply changes (revocations included) at once.
+  Readiness does not fail on staleness within the window, so one stalled database does not drain every instance at
+  once. Other settings may serve slightly stale.
+- Redis is used for rate limits and short-lived caches only, not as the source of change events; every Redis use has
+  a stated Redis-down behaviour (data-model §11).
 
 ## 5. Identity and access
 
 Detailed in [`../identity/plan.md`](../identity/plan.md). In short:
 
-- People sign in exactly as in the gateway: the same OIDC/BFF mechanism, the same claims (`roles`,
-  `departmentCodes`, `teamCodes`) and configuration keys (`UME_RAG_OIDC_*`), preferably the **same Entra
-  registration** as the gateway admin with namespaced `rag-*` roles. Departments without a department attribute come
-  from department member groups, a feature added to both systems (`../gateway-changes/plan.md` feature C).
+- People sign in exactly as in the gateway: the same OIDC/BFF mechanism and code, the same claims (`roles`,
+  `departmentCodes`, `teamCodes`) and configuration keys (`UME_RAG_OIDC_*`), on **RAG's own Entra registrations**
+  (`ume-rag-admin`) with `rag-*` roles; RAG's Bicep owns only RAG's registrations. The audit actor is `oid` (fallback
+  `sub`). In P1 departments without a department attribute come from **groups in the claim** (claims-only member
+  groups in the combined gateway release); the Graph-based member-group lookup is P2.
 - No Entra registration is needed for P0 or development (Keycloak + keys); admin and Open WebUI sign-in must be
   approved before the pilot.
 - Every caller is a **client** from the client registry (R5): an Entra app registration, an `ume-rag-sk-`/`ume-rag-pk-` key, or a
   trusted front end such as Open WebUI. Each client has a **classification ceiling** and a data-handling profile.
-- One `IAccessPolicy` in `Ume.Rag.Domain` decides (subject, client, resource, action) for every service.
+- One `IAccessPolicy` in `Ume.Rag.Domain` decides (subject, client, resource, action) for every service; an admin
+  "explain access" endpoint returns the failing policy step and reason.
 - **Organisation data** (departments, teams, codes) is read from the gateway, the single source of truth, because
   gateway delegation (R4) charges budgets by team (the team id is sent; gateway design §5.2).
 
@@ -152,23 +157,24 @@ Levels `public` < `internal` < `sensitive` on sources, collections, skills, tool
 - **Residency matrix** (decision 2026-10-29), for every model call: chat, condense, LLM pipeline steps, evaluation
   generation and judging, tool servers:
 
-  | Level | Allowed processing | Ceiling header sent |
-  |---|---|---|
-  | `public` | Any provider the gateway allows | none |
-  | `internal` | On-prem or EU providers | `x-ume-max-residency: Eu` |
-  | `sensitive` | On-prem only | `x-ume-max-residency: OnPrem` |
+  | Level | Allowed processing | Ceiling header sent | Gateway key |
+  |---|---|---|---|
+  | `public` | Any provider the gateway allows | `x-ume-max-residency: External` | open |
+  | `internal` | On-prem or EU providers | `x-ume-max-residency: Eu` | `Eu`-max |
+  | `sensitive` | On-prem only | `x-ume-max-residency: OnPrem` | `OnPrem`-only |
 
-  Enforced in three layers (R4): the gateway request carries the ceiling header, the response's `x-ume-residency` is
-  checked before any byte is streamed (or before an ingestion result is stored), and the call is aborted (fail closed)
-  if it is above the ceiling. The level of a call is the highest level of the data in it (e.g. an `internal`
-  assistant answering from a `public` collection still sends `Eu`). Values are the gateway's `DataResidency` names
-  (`OnPrem`, `Eu`, `External`; case-insensitive); the response check compares by that order (gateway design §3.1).
-  **Follow-ups with client-sent history** (chat design §8.2): a client that resends history (Open WebUI) lets a user
-  switch the model mid-chat, so earlier turns may come from a higher-level assistant; when a request carries any
-  earlier assistant turn its effective level is **max(assistant level, client ceiling)**. Consequence: an assistant
-  offered to such a client needs a `GatewayModel` the gateway can serve at that residency, else every follow-up fails
-  with `max_residency_not_met`; the admin API refuses such a publish or audience link (in the pilot, `public`
-  assistants in Open WebUI use EU or on-prem models).
+  Enforced structurally in three layers (R4): an **explicit ceiling on every call** (a `DelegatingHandler` in the
+  gateway client refuses a request without one and checks that the key matches the level; unit-tested per call site;
+  the gateway refuses a request without the header, key flag `RequireMaxResidency`); **delegating keys per level**,
+  issued per deployable that needs them, with `AllowedIpRanges` (the worker never holds the open key); and the
+  response's `x-ume-residency` checked before any byte is streamed or an ingestion result stored (fail closed). The
+  level of a call is the highest level of the data in it. Values are the gateway's `DataResidency` names (gateway
+  design §3.1). The gateway answers **503 with `Retry-After`** when targets within the ceiling are drained or
+  circuit-open, and `403 max_residency_not_met` only when no configured target is within it.
+  **Same effective level on every turn** (chat design §8.2): for a client that keeps history (Open WebUI) the level is
+  **max(assistant level, client ceiling)** from the first message. The admin validates an assistant's model against
+  the gateway's `/v1/models` at that ceiling on save (in the pilot, `public` assistants in Open WebUI use EU or on-prem
+  models).
 - **Embeddings are always on-prem** (R3): the platform embedding profile is an on-prem multilingual model, so
   indexing never sends content out of the municipality, whatever its classification.
 
@@ -176,27 +182,29 @@ Levels `public` < `internal` < `sensitive` on sources, collections, skills, tool
 
 Detailed in [`../gateway-changes/plan.md`](../gateway-changes/plan.md):
 
-- One **platform service key** with delegated attribution (`x-ume-on-behalf-of: <team id>`): gateway budgets,
-  policies and usage reports stay per team, and we hold one secret instead of one per team.
-- A **per-request residency ceiling** (`x-ume-max-residency: OnPrem`) that can only narrow what the key allows.
-- **Interim**, until the gateway releases ship: per-team linked keys (encrypted with Data Protection), plus the
-  `x-ume-residency` response check, which already catches a key whose residencies were widened later. Gateway
-  releases B → C → A (gateway design §13): after B the separate `onprem` linked keys go; after A all linked keys go
-  and the platform service key is used.
+- **One combined gateway release before the pilot**: residency ceiling, delegation (`x-ume-on-behalf-of: <team id>`:
+  delegated requests charge the effective team's budgets and attribution, but **request policy comes from the key
+  only**) and member groups in claims-only mode, plus the key flags `RequireMaxResidency` and `ApplyTeamPolicy`
+  (false for delegating keys). `/v1/models` lists only models within the request's ceiling, which the admin's model
+  validation relies on. ADR drafts 018–020 are scheduled together.
+- **Delegating keys per level** (§6), not one platform key; each deployable holds only the levels it needs.
+- Development and test use the FakeGateway; the pilot waits for the release (no interim per-team keys).
 
 ## 8. Retention and personal data
 
-Ingestion additions (connectors design §9.3, §11): quarantined files kept 30 days, metadata only; deleted upload blobs
-purged 14 days after deletion.
+Ingestion additions (connectors design §9.3, §11): quarantined files kept 30 days, metadata only; deleted upload
+blobs are tombstoned and purged with the blob purge delay.
 
 | Data | Default | Where set |
 |---|---|---|
-| Conversations, messages, tool-call records | 90 days (`sensitive`: 30 days); see §8a | Assistant within the per-level limits (§8a) |
-| Feedback | follows its conversation | – |
-| Documents, chunks | as long as the source has them; soft delete with 14-day grace | Source |
-| Parse output (last version per document) | as long as the document exists | – |
-| Other intermediate node outputs | 30 days | Platform setting |
+| Messages, tool-call records | 90 days per message (`sensitive`: 30 days); see §8a | Assistant within the per-level limits (§8a) |
+| Conversations | deleted when their last message has expired | – |
+| Feedback | follows its message | – |
+| Documents, chunk sets, chunks | as long as the source has them; soft delete with 14-day grace; superseded chunk sets 14 days (rollback) | Source |
+| Parse output | while a live document references it | – |
+| Other stage outputs (cache) | unused 30 days | Platform setting |
 | Uploads | while the source exists | – |
+| Blob tombstones | purged after the Postgres backup retention (35 days, proposed), so every restore point finds its blobs | Platform setting |
 | Evaluation sets and results | per collection, until removed | Collection |
 | Jobs (terminal) / run items / runs | 7 days / 90 days / 13 months (proposed) | Platform setting |
 | Parse observations / retrieval statistics | 180 days / 13 months (proposed) | Platform setting |
@@ -205,15 +213,21 @@ purged 14 days after deletion.
 | Config outbox | 30 days (proposed) | Platform setting |
 | Assistant daily totals (statistics without content) | 3 years (proposed) | Platform setting |
 | Audit | separate, longer (e.g. 2 years) | Platform setting |
+| Postgres backups (pgBackRest) | 35 days (proposed) | Deployment |
 
-Copies held by clients are covered by the client's data-handling profile (R5): e.g. Open WebUI's own chat database is
-pruned to the same 90 days. Nightly retention job per schema, logged and audited. Pilot blocker: confirm with the
-registrar/archivist whether chat logs are allmänna handlingar and whether a gallringsbeslut covers 90-day deletion.
+Copies held by clients are covered by the client's data-handling profile (R5), never by SQL against their databases.
+Open WebUI's feedback is pruned to the same 90 days through its HTTP API; its chat copies cannot be pruned for other
+users at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`, so they stay unpruned in the pilot (stated in its
+data-handling profile) until register item W2 is decided together with A1. Nightly retention
+job per schema, logged and audited. Pilot blocker (postponed A1): confirm with the registrar/archivist whether chat
+logs are allmänna handlingar and whether a gallringsbeslut covers 90-day deletion; A1 also gates crypto-shredding
+(§8a).
 
 ## 8a. Data protection policy per classification level
 
-Decisions (2026-10-29): three levels stay (`sensitive` = the municipality's highest category); chat-log protection is
-**configurable per level**; the separate data tier is **designed for now and decided later**.
+Decisions (2026-10-29, simplified 2026-10-30): three levels stay (`sensitive` = the municipality's highest category);
+chat-log protection is **configurable per level**; isolation of `sensitive`, if ever needed, is a **separate
+deployment** (postponed T1/K2).
 
 **Baseline for every level**: encrypted volumes and encrypted backups (Postgres has no built-in transparent
 encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, traces, metrics or Redis at any level
@@ -226,75 +240,68 @@ encryption; LUKS on-prem, Azure disk encryption in Azure). No content in logs, t
 |---|---|---|---|
 | History mode (`stored` / `session` (24 h) / `none`) | stored | stored | stored, short retention |
 | Retention (default / max) | 90 / 90 days | 90 / 90 days | 30 / 90 days |
-| Application-level encryption of content | optional (default on) | **required** | **required** |
-| Key scope | per conversation | per conversation | per conversation, separate master key |
+| Application-level encryption of chat content | optional (default on) | **required** | **required** |
+| Key scope | per (level, expiry month) bucket | per (level, expiry month) bucket | per (level, expiry month) bucket, separate master key |
 | Admin review of conversations (`rag-reviewer` only; admin design §3.1, §8) | reason | reason | reason **+ second approver** |
 | Admin reading a single feedback comment (`rag-reviewer` or `rag-department-admin`) | one-click reason, audited | one-click reason, audited | only through the review flow above |
 | Allowed clients | per ceiling | per ceiling | only clients without their own history store |
 | Feedback comments, tool results, cited source text | same policy as messages | same | same |
 
-**Application-level (envelope) encryption.**
+**Application-level (envelope) encryption of chat.**
 
-- Each conversation has its own data key (AES-256-GCM). Message text, titles, feedback comments, tool arguments and
+- One data key (AES-256-GCM) per (level, expiry month) **bucket**, wrapped by that level's master key; each message is
+  encrypted under the bucket of its own expiry month. Message text, titles, feedback comments, tool arguments and
   results, and the snapshot of cited source text are encrypted before they reach the database. Metadata (times,
-  assistant, subject id, token counts, cost, outcome) stays readable for statistics and retention.
-- Data keys are stored wrapped by a **master key per level** held in a key service behind `IKeyProvider`: Azure Key
-  Vault / Managed HSM in Azure, OpenBao/HashiCorp Vault or an HSM on-prem, a local key file in development.
-  **Postponed (2026-10-29): the pilot uses the file key provider**; Azure Key Vault is the intended target (see
-  `../postponed-decisions.md`, item K1). Pilot rules for file keys:
-  - master keys (one per level and shred month) are 256-bit random files in the deployment secrets directory
-    (`secrets/keys/<key name>`, mode 0400), never mounted into Postgres; the chat keys (`rag-chat-*`) only into
-    `rag-api` and `rag-admin`, the blob keys (`rag-blob-<level>`) into `rag-worker`, `rag-admin` (uploads) and read-only
-    into `rag-api` (citation downloads; repo-and-deployment §6.3); created by `init-deployment.sh --key-provider file --allow-file-keys`;
-  - backed up **separately** from database backups, and those key backups kept **no longer than the shred schedule**
-    (≤ 30 days), otherwise destroyed bucket keys come back from backup;
-  - destroying a shred bucket = deleting its key file, logged in `audit."AuditLog"`;
+  assistant, subject id, token counts, cost, outcome) stays readable for statistics and retention. A user deleting a
+  conversation deletes its rows.
+- Master keys are held in a key service behind `IKeyProvider`: Azure Key Vault / Managed HSM in Azure, OpenBao/HashiCorp
+  Vault or an HSM on-prem, a local key file in development. **Postponed (2026-10-29): the pilot uses the file key
+  provider**; Azure Key Vault is the intended target (`../postponed-decisions.md`, item K1). Pilot rules for file keys:
+  - master keys are 256-bit random files in the deployment secrets directory (`secrets/keys/<key name>`, mode 0400),
+    never mounted into Postgres; the chat keys (`rag-chat-<level>`) only into `rag-api` and `rag-admin`, the blob key
+    (`rag-blob-internal`) into `rag-worker`, `rag-admin` (uploads) and read-only into `rag-api` (citation downloads;
+    repo-and-deployment §6.3); created by `init-deployment.sh --key-provider file --allow-file-keys`;
+  - **two key classes**: long-lived keys (blob master keys, chat master keys and the pgBackRest repository passphrase)
+    are **escrowed** offline, separately from database backups, with retention ≥ the data they protect; shred-class
+    keys (per-month chat wrapping keys, only once shredding is switched on) follow the shred rule below;
   - the host disk is LUKS-encrypted (baseline), so a stolen disk or a database backup alone reveals nothing;
   - **no `sensitive` data** while file keys are used.
 
-  Switching to Key Vault later: create the keys in Key Vault, run the `rewrap` command (unwraps every data key with the
-  file key and re-wraps it with Key Vault; no message is re-encrypted), then delete the key files. When Key Vault is
-  adopted: soft-delete retention at the minimum (7 days), since it delays destroying shred-bucket keys; on-prem hosts
-  need network access to Key Vault (unwrapped keys are cached 5 minutes). Whether `sensitive` needs an on-prem key
-  service is decided together with the separate `sensitive` tier (§8a).
+  Switching to Key Vault later: create the keys in Key Vault, run the `rewrap` command (unwraps every bucket key with
+  the file key and re-wraps it with Key Vault; no message is re-encrypted), then delete the key files. On-prem hosts
+  need network access to Key Vault (unwrapped keys are cached 5 minutes).
 - Only the Chat API (a user's own history) and the admin review path (audited, with reason and, for `sensitive`, a
-  second approver) can unwrap data keys. Database admins, a dumped table or a stolen backup see ciphertext only.
-- **Crypto-shredding**: retention deletes the conversation's wrapped data keys in the live database. Backups still
-  hold those key rows, so to reach backups the wrapping master keys are **monthly shred buckets** per level (by
-  latest possible expiry): once a month's last conversation has expired, its bucket key is destroyed in the key
-  service, and every backup copy becomes unreadable. Data keys rotate per 7-day epoch per conversation, so every
-  message is gone within retention + 7 days. Key Vault purge protection delays destruction by its configured days
-  (7–90); OpenBao key deletion must be enabled (`data-model.md` §7).
-- Unwrapped keys are cached in memory for minutes only; encryption cost is negligible next to model latency.
+  second approver) can unwrap bucket keys. Database admins, a dumped table or a stolen backup see ciphertext only.
+- **Crypto-shredding waits for A1.** Until the registrar answers A1, retention deletes rows only. The format supports
+  shredding: if A1 allows deletion, a setting switches it on; new buckets are then wrapped by per-month shred keys in
+  the key service, and destroying a month's shred key after its last expiry makes every backup copy of that month
+  unreadable (data-model §7).
 - Consequence: no server-side full-text search in other people's chats; a user's own history list shows decrypted
   titles through the Chat API.
 
-**Content beyond chat logs.** At `sensitive`, the documents themselves are equally sensitive: chunk text, embeddings
-(text can partly be reconstructed from them), parse outputs and uploads. Chunk text cannot be column-encrypted
-because full-text search needs it, which is why the separate tier below exists. Blobs (uploads, parse outputs) are
-envelope-encrypted per document with the same key service.
+**Content beyond chat logs.** `internal` blobs (uploads, raw content, parse outputs) are envelope-encrypted; `public`
+blobs rely on the encrypted disk only. Chunk text cannot be column-encrypted because full-text search needs it, so
+`sensitive` documents need isolation before they are onboarded.
 
-**Separate data tier: designed now, decided later.**
-
-- Storage access goes through a **tier resolver**: (classification) → (Postgres connection, blob container, master
-  key). Default configuration: one tier for everything.
-- Rules that keep a later split cheap: no foreign keys or joins across classification levels; content and chat rows
-  carry their level; retrieval already fuses result lists with RRF in .NET (knowledge design §6.5), so an assistant spanning tiers
-  queries each tier and fuses.
-- Turning on a `sensitive` tier (its own on-prem Postgres instance, encrypted volume, master key and database
-  credentials) is a configuration change plus a migration job that moves existing `sensitive` rows.
-- **Decision point**: before the first `sensitive` source is onboarded.
+**Isolation of `sensitive`.** Rows carry a plain `Classification` column and retrieval filters by level. If `sensitive`
+needs isolation, it becomes a **separate deployment** (its own on-prem Postgres, volume, keys and credentials) reached
+over the existing HTTP seam (`Retrieval:Mode=Http`). **Decision point** (T1, with K2): before the first `sensitive`
+source is onboarded.
 
 ## 9. Evaluation as a platform capability (R6)
 
-Detail: `../ingestion-worker/design-processing.md` §13–§14: questions point at documents; gates compare a
-sub-corpus under old and new versions; a new collection stays `building` until recall@10 ≥ 0.70 (decided
-2026-10-29); overrides only by platform admins with a reason.
+Detail: `../ingestion-worker/design-processing.md` §13–§14.
 
 Every collection has an **evaluation set**: question/answer pairs generated automatically from sampled chunks by an
-on-prem model, plus human questions, rewritten feedback questions and skill test questions over time. Pipeline publish,
-parse-profile auto-apply, retrieval-setting changes and embedding-profile changes are **gated** on it. Details in the
-worker plan (§7) and admin plan. The postponed Swedish benchmark becomes the curated part of these sets.
+on-prem model (judge-filtered), plus human questions and rewritten feedback questions over time. The harness is
+**advisory**: it runs on the full collection after each publish and nightly, reports recall@10 and MRR with counts
+compared with the previous run on the publish screen, and the owner decides to keep or roll back (previous chunk sets
+are kept 14 days for one-click rollback). A collection goes live when its owner publishes it. The worker runs the
+retrieval evaluation; from late P1 a nightly on-prem judge in `rag-admin` (which already runs `Ume.Rag.Answering`
+and holds the keys of every level) measures answer faithfulness and citation precision; the P2 skill gate runs there
+too. A blocking gate is reconsidered only when measured
+run-to-run variance shows it can tell versions apart. The postponed Swedish benchmark becomes the curated part of
+these sets.
 
 ## 10. Cross-cutting engineering
 
@@ -303,28 +310,58 @@ worker plan (§7) and admin plan. The postponed Swedish benchmark becomes the cu
 - **Observability**: OpenTelemetry traces, metrics and logs from every service; one trace follows a chat message
   through retrieval, tool calls and the gateway; ingestion runs carry the run id; config version in every log scope.
 - **Security**: crawler egress blocks private ranges unless allow-listed (SSRF); parser and MCP servers have no egress
-  beyond what they need; uploads limited by size and type; secrets as files, key-per-file, never environment variables (repo-and-deployment §6.3); prompt
-  injection rules in `../tools/plan.md` §6.
+  beyond what they need; the worker parses only HTML, text, Markdown and CSV, every PDF and binary format goes to the
+  parser; uploads limited by size and type; secrets as files, key-per-file, never environment variables
+  (repo-and-deployment §6.3); prompt injection rules in `../tools/plan.md` §6.
 - **Testing**: unit; integration against real Postgres/Redis (Aspire/Testcontainers); fake gateway; end-to-end
-  browser tests; evaluation sets in CI on a fixture collection; the R1 release test.
-- **Releases**: release bundle with compose files, init script, backup/restore, upgrade guide, rolling update.
+  browser tests; evaluation sets in CI on a fixture collection; the R1 release test (P1).
+- **Backup and recovery**: pgBackRest with continuous WAL archiving (`archive_timeout` 60 s) and point-in-time
+  restore; RPO ≤ 5 min, RTO ≤ 4 h for the pilot; uploads copied to the backup target within 15 minutes; a
+  point-in-time restore drill in P0. A streaming standby is an **availability** requirement before production beyond
+  the pilot (P2). Detail: repo-and-deployment §7.4.
+- **Releases**: release bundle with compose files, init script, backup/restore, upgrade guide; rolling update from
+  P2 (a/b slots), a short announced maintenance window in the single-host pilot.
 
 ## 11. P0 deliverables
 
-1. Repository skeleton, builds and tests in CI.
-2. Postgres image with pgvector and Swedish Hunspell; test proving compound splitting (`bygglovsansökan` → `bygglov`).
-3. Migration service with schemas, roles, connection caps, partitioned queue/run tables, config outbox.
-4. AppHost running everything locally with the fake gateway and Keycloak (Entra in test/prod).
-5. ServiceDefaults, health endpoints, OpenTelemetry; config-version propagation library.
-6. Compose files with resource zones for a single host; deploy to a test host.
-7. Approval package 1 submitted (see identity plan §2); no Entra registration is needed for P0 itself.
+P0 is a skeleton that builds, deploys, is observable and can be restored (ordered checklist: repo-and-deployment §11).
+
+1. Repository skeleton, projects, `verify.yml` (incl. the image test job), builds and tests in CI.
+2. ServiceDefaults, health endpoints, OpenTelemetry; config-version library with the grace window (§4).
+3. Migration service with schemas, roles, connection caps, config outbox, `Jobs` and day-partitioned `RunItems`, on
+   the stock pgvector image; .NET `SwedishDecompounder` test (`bygglovsansökan` → `bygglov`, `ansökan`) plus one
+   integration test that a part matches through Postgres.
+4. FakeGateway, Keycloak realm, keys, admin UI skeleton and write path, AppHost, parser contract, worker dispatcher
+   skeleton.
+5. Single-host Compose with resource zones; pgBackRest with WAL archiving and a **point-in-time restore drill**;
+   `release.yml`; deploy to a test host.
+6. Scale seams: pooler-safe SQL rule and scan test; `IBlobStore` with the write-once contract; `IJobQueue` over the
+   Postgres queue; `Worker:Classes` and `Worker:Concurrency:<class>`.
+7. Entra approval package 1 (RAG's own registrations) submitted; no Entra registration is needed for P0 itself; the
+   combined gateway release agreed with the gateway team.
 
 ## 12. Answered questions (2026-10-29)
 
-1. **Blob storage in the pilot**: a file system volume behind `IBlobStore`; switch to S3-compatible or Azure Blob
-   when ingestion moves to its own host.
+1. **Blob storage in the pilot**: a file system volume behind `IBlobStore` (write-once contract); switch to
+   S3-compatible or Azure Blob when ingestion moves to its own host.
 2. **Virus scanning**: yes, a ClamAV container in the ingestion zone scans every upload and fetched file before
    parsing; infected files are quarantined and reported in the run.
 3. **Name**: keep `Ume.Rag` as the working name; the user-facing name is decided before the pilot.
 4. **Embedding model**: **BGE-M3** (multilingual, 1024 dimensions, 8k-token input, MIT licence) as the on-prem
    platform profile, served through the gateway; confirmed with the generated evaluation sets in P1.
+
+## 13. Deferred or removed (simplification pass)
+
+See [`../simplification-pass.md`](../simplification-pass.md).
+
+| Item | Where it went |
+|---|---|
+| Own Postgres image with Hunspell `sv_SE` ("own container everywhere") | Removed: stock pgvector image, .NET decompounder (§3 there) |
+| Platform-wide document store, shared chunk sets | Removed: per-source documents and chunk sets, reuse by caches (§2 there) |
+| Tier resolver and data tiers | Removed: separate deployment if ever needed (T1/K2) |
+| Per-conversation keys, 7-day epochs, always-on shred buckets, one ≤ 30-day key backup rule | Removed: bucket keys, shredding after A1, two key classes with escrow (§4–§5 there) |
+| Interim linked keys, releases B → C → A, one platform service key, shared Entra registration | Removed: one combined release, keys per level, RAG's own registrations (§6–§7 there) |
+| Evaluation gates, `building` state, parse auto-apply, `ner` job class | Removed (§1, §2, §8 there) |
+| Graph member-group lookup; `rag-renderer` (only if needed); a/b slots and the multi-host seams | P2 |
+| Separate `rag-tools` service (with the first external, OBO or write tool) | P3 |
+| 10-second fail-closed config rule | Replaced by the grace window (§9 there) |

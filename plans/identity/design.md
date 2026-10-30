@@ -4,6 +4,7 @@ Detail step 3 of the Ume.Rag design. Details [`plan.md`](plan.md) (binding, incl
 Decisions table in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consistent with
 [`../platform/data-model.md`](../platform/data-model.md) (step 1) and
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (step 2); deviations are listed in §14.
+Rewritten for [`../simplification-pass.md`](../simplification-pass.md) (2026-10-30); what it removed is listed in §17.
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); Open WebUI citations are in
 `~/git/rag-platforms/open-webui`. "Copy" means the file is copied with namespace and names changed only; "adapt" means
@@ -43,7 +44,8 @@ copied and changed as stated; "new" means there is no gateway counterpart.
   `:281-305`).
 - A random session id claim `ume_session` is added at first sign-in only (not on extension) and goes into audit
   entries and security events (`:100-107`, `:255-256`).
-- Audit actor = `sub`, else name (`AdminContext.cs:76-79`); actor context (name, roles, departments, address,
+- Audit actor = **`oid`**, else `sub`, else name (adapted from `AdminContext.cs:76-79`, which uses `sub`; `oid` is the
+  same user id in every registration of the tenant, §1.6); actor context (name, roles, departments, address,
   session, request id, user agent) from `AdminActor` (`AdminActivity.cs:18-57`).
 
 ### 1.2 Class map
@@ -52,17 +54,17 @@ copied and changed as stated; "new" means there is no gateway counterpart.
 |---|---|---|
 | `AdminAuthentication.ApplyClaimMapping`, `CopyClaims` (`AdminAuthentication.cs:18-65`) | same | copy |
 | `AdminAuthentication.AddAdminAuthentication` (`:71-174`) | same | adapt: cookie names (below), policies for `rag-*` roles, `OnTokenValidated` adds §1.7 and §2.3 |
-| `AdminAuthentication.MapAdminAuthentication` (`:176-233`) | same | adapt: `/bff/user` adds `departmentSources` and `departmentLookup` (§1.5) |
+| `AdminAuthentication.MapAdminAuthentication` (`:176-233`) | same | adapt: `/bff/user` adds `departmentSources` (§1.5) |
 | `AdminRoles` (`:237-245`) | `RagAdminRoles` | adapt: values in §1.3 |
-| `AdminClaims` (`:248-257`) | same | copy (`sub`, `roles`, `departmentCodes`, `teamCodes`, `ume_session`) |
+| `AdminClaims` (`:248-257`) | same | adapt: adds `oid` (`sub`, `roles`, `departmentCodes`, `teamCodes`, `ume_session`) |
 | `AdminPolicies` (`:260-279`) | same | adapt: §1.3 |
 | `AdminAntiforgeryMiddleware` (`:281-305`) | same | copy |
-| `OidcOptions` (`AdminOptions.cs:107-131`) | same | adapt: default `ClientId` `ume-rag-admin`; new `GroupLookup`, `TenantId`, `RefuseGuests` (§1.4) |
+| `OidcOptions` (`AdminOptions.cs:107-131`) | same | adapt: default `ClientId` `ume-rag-admin`; new `TenantId`, `RefuseGuests` (§1.4) |
 | `AdminOptions` (`AdminOptions.cs:7-51`) | same | adapt: keep `RequestsPerMinute`, `MaxSessionHours`, `AuditSourceAddress`; drop price/release settings |
 | `AdminTicketStore`, `AdminSessionLimit` (`AdminSessions.cs`) | same | copy; protector purpose `Ume.Rag.AdminApi.Session.v1` |
 | `AdminActor`, `AdminActivityMiddleware`, `AccessDeniedThrottle`, `AdminClientAddresses` (`AdminActivity.cs`) | same | copy |
-| `AdminContext` scope methods (`AdminContext.cs:69-130`) | `AdminContext` | adapt: `IsAdmin` = `rag-platform-admin`; `Departments()` unchanged; teams/keys per RAG roles |
-| – | `DepartmentMembershipResolver`, `GraphGroupClient` | new (§2) |
+| `AdminContext` scope methods (`AdminContext.cs:69-130`) | `AdminContext` | adapt: `IsAdmin` = `rag-platform-admin`; `Departments()` unchanged; teams/keys per RAG roles; actor `oid` (§1.1) |
+| – | `DepartmentMembershipResolver` | new (§2) |
 
 Cookie names must differ from the gateway's: browsers ignore the port, so on `localhost` the gateway admin (5173)
 and ours (5174) would overwrite each other's `__Host-ume-admin` and `XSRF-TOKEN`. Ours: `__Host-ume-rag-admin`
@@ -88,9 +90,7 @@ groups intersect the group claim (`:40-48`).
 | none | nothing: every `/api` call is 403 (the gateway allows the catalogue to role-less users, `docs/identity-and-roles.md:18`; we have no public page) | – |
 
 As in the gateway, policies are `RequireRole(any of …)` (`AdminAuthentication.cs:151-158`), so several roles add up
-and the highest one counts (`docs/identity-and-roles.md:22-24`). Role values that are not `rag-*` are ignored, so a
-token from the shared registration carrying `gateway-admin` grants nothing here, and the gateway ignores `rag-*`
-because its policies name only its own roles. `Review` (open a conversation) and `FeedbackComments` (reveal one
+and the highest one counts (`docs/identity-and-roles.md:22-24`). Role values that are not `rag-*` are ignored. `Review` (open a conversation) and `FeedbackComments` (reveal one
 feedback comment) are not implied by `Admin`: no administrative role grants conversation content, so a platform admin
 who must review is also given `rag-reviewer`. `teamCodes` is read and shown but grants nothing in P1 (no team-scoped
 role yet, plan §3).
@@ -102,9 +102,9 @@ with the `UME_RAG_` prefix; for local runs the same keys as `Oidc:<Setting>` in 
 
 | Env (`deploy/.env`) | Setting | Default | Notes |
 |---|---|---|---|
-| `UME_RAG_OIDC_AUTHORITY` | `Oidc:Authority` | – (required) | Entra: `https://login.microsoftonline.com/<tid>/v2.0`; shared registration: same value as the gateway's |
-| `UME_RAG_OIDC_CLIENT_ID` | `Oidc:ClientId` | `ume-rag-admin` | shared registration: the gateway's client id (`init-deployment.sh --oidc-client-id`, repo-and-deployment §7.1) |
-| (secret file) `Oidc__ClientSecret` | `Oidc:ClientSecret` | – | our **own** secret on the shared registration (§12.2), never the gateway's; `init-deployment.sh --oidc-client-secret-file` as in the gateway |
+| `UME_RAG_OIDC_AUTHORITY` | `Oidc:Authority` | – (required) | Entra: `https://login.microsoftonline.com/<tid>/v2.0` |
+| `UME_RAG_OIDC_CLIENT_ID` | `Oidc:ClientId` | `ume-rag-admin` | Entra: the `ume-rag-admin` application id (`init-deployment.sh --oidc-client-id`, repo-and-deployment §7.1) |
+| (secret file) `Oidc__ClientSecret` | `Oidc:ClientSecret` | – | the registration's own secret (§12.2); `init-deployment.sh --oidc-client-secret-file` as in the gateway |
 | `UME_RAG_OIDC_ROLE_CLAIM` | `Oidc:RoleClaim` | `roles` | |
 | `UME_RAG_OIDC_DEPARTMENT_CLAIM` | `Oidc:DepartmentClaim` | `departmentCodes` | |
 | `UME_RAG_OIDC_TEAM_CLAIM` | `Oidc:TeamClaim` | `teamCodes` | |
@@ -117,7 +117,6 @@ with the `UME_RAG_` prefix; for local runs the same keys as `Oidc:<Setting>` in 
 | `UME_RAG_OIDC_GROUPS_EDITOR` | `Oidc:RoleGroups:rag-editor` | – | P2 |
 | `UME_RAG_OIDC_GROUPS_VIEWER` | `Oidc:RoleGroups:rag-viewer` | – | |
 | `UME_RAG_OIDC_EXTRA_SCOPE` | `Oidc:ExtraScopes:0` | `email` | |
-| `UME_RAG_OIDC_GROUP_LOOKUP` | `Oidc:GroupLookup` | `Claims` | **new (feature C, both systems)**: `Claims` or `Graph` (§2.4) |
 | `UME_RAG_OIDC_TENANT_ID` | `Oidc:TenantId` | – | **new**: when set, `tid` must equal it (§1.7) |
 | `UME_RAG_OIDC_REFUSE_GUESTS` | `Oidc:RefuseGuests` | `true` | **new** (§1.7) |
 | – | `Admin:MaxSessionHours` | 12 | copy (`AdminOptions.cs:19-20`) |
@@ -127,48 +126,37 @@ with the `UME_RAG_` prefix; for local runs the same keys as `Oidc:<Setting>` in 
 ### 1.5 `/bff/user`
 
 Copied (`AdminAuthentication.cs:188-208`): `isAuthenticated`, `environment`, `name`, `email`, `roles`,
-`departmentCodes`, `teamCodes`, `sessionExpiresAt`, `sessionLimitAt`. Two additions, proposed for the gateway too
-(feature C, §2.7): `departmentSources` (`[{ code, source: "claim" | "group" }]`) and `departmentLookup`
-(`"claims"`, `"graph"` or `"failed"`), so the setup check in `docs/identity-and-roles.md:217-229` also shows where a
-department came from and whether the Graph lookup worked. No group ids are returned.
+`departmentCodes`, `teamCodes`, `sessionExpiresAt`, `sessionLimitAt`. One addition, also in the gateway (feature C,
+§2.7): `departmentSources` (`[{ code, source: "claim" | "group" }]`), so the setup check in
+`docs/identity-and-roles.md:217-229` also shows where a department came from. No group ids are returned.
 
-### 1.6 Shared gateway registration (decided) vs twin (fallback)
+### 1.6 Own registration (decided)
 
-**Shared** (plan §2, answered question 7): our BFF uses the gateway's existing admin registration with its **own
-credential** (a client secret of its own, decided 2026-10-29; §12.2). Same authority and client id in both `.env` files; redirect URIs of both hosts on
-the registration; app roles of both systems on it; users and groups assigned once.
-
-Consequences, accepted:
-
-- The ID token carries both systems' roles; each ignores the other's (§1.3).
-- A user assigned only a `rag-*` role can sign in to the gateway admin and see its catalogue (the gateway gives
-  role-less users the catalogue, `docs/identity-and-roles.md:18`). The catalogue lists models and the base URL, which
-  every key holder sees anyway. The reverse is harmless: a gateway-only user sees nothing here (§1.3).
-- *Assignment required* on the enterprise application covers both systems. Assigning department member groups to the
-  application is not needed (§2.4).
-- Revoking our credential never affects the gateway's, and the reverse.
-
-**Twin** (only if the gateway admin is not on Entra yet or IT refuses the change): registration `ume-rag-admin`
-configured exactly like the gateway's (`docs/identity-and-roles.md:160-182`) plus §12's additions. Nothing in the code
-differs; only `UME_RAG_OIDC_CLIENT_ID` and the Bicep module (§12.3) change. **Development and CI always use the twin
-model** (Keycloak client `ume-rag-admin`, §11), so both stacks run side by side.
+Our BFF uses its **own** registration `ume-rag-admin` (plan §2, answered question 7, revised 2026-10-30), configured
+like the gateway's (`docs/identity-and-roles.md:160-182`) plus §12's additions, with its own client secret (§12.2).
+The code is the gateway's; only `UME_RAG_OIDC_CLIENT_ID` and the Bicep module differ. Users get `rag-*` roles on it;
+the gateway's registration and its assignments are untouched, so rotating or revoking either system's credential never
+affects the other, and a user with only `rag-*` roles gets nothing in the gateway admin. Because `sub` is pairwise per
+application in Entra, the audit actor is `oid` (§1.1). Development and CI use the same model (Keycloak client
+`ume-rag-admin`, §11), so both stacks run side by side.
 
 ### 1.7 Tenant and guests (new, both systems)
 
 Run in `OnTokenValidated` before claim mapping; a refusal ends the OIDC callback with a redirect to an explanatory
 page (no session; same in both systems, gateway design §4.6) and event 5001 (`Reason`
-`wrong_tenant` / `guest_refused`):
+`wrong_tenant` / `guest_refused`). **One rule in both systems:**
 
-- `Oidc:TenantId` set ⇒ `tid` must equal it. (The v2 issuer already contains the tenant; this also covers a
-  misconfigured `common` authority.)
-- `Oidc:RefuseGuests` ⇒ refuse when the optional claim `acct` is `1` (guest), or when an `idp` claim is present and
-  differs from the issuer (Entra sets `idp` for users from another tenant or IdP). `acct` is requested as an optional
-  ID-token claim on the registration (§12.3). Keycloak and AD FS emit neither claim, so the check is a no-op there.
+- `Oidc:TenantId` set ⇒ `tid` must equal it (a missing `tid` is refused too). (The v2 issuer already contains the
+  tenant; this also covers a misconfigured `common` authority.)
+- `Oidc:RefuseGuests` (default `true`) ⇒ refuse when the optional claim `acct` is `1` (guest), or when an `idp` claim
+  is present and differs from both the issuer and `https://sts.windows.net/{tid}/` (Entra sets `idp` for users from
+  another tenant or IdP). `acct` is requested as an optional ID-token claim on the registration (§12.3). Keycloak and
+  AD FS emit neither claim, so the check is a no-op there.
 
-The gateway has neither check today; with a shared registration a guest assigned by mistake would reach the gateway
-admin but not ours. Added to `gateway-changes` as a small item next to feature C (§14).
+The same two checks guard RAG API tokens (§7.1) and, in the gateway, admin sign-in and Data API tokens (combined
+gateway release, gateway design §4.6).
 
-## 2. Feature C: department scope from member groups (both systems)
+## 2. Feature C: department scope from member groups (both systems, claims only)
 
 ### 2.1 Where member groups live
 
@@ -177,18 +165,17 @@ admin but not ours. Added to `gateway-changes` as a small item next to feature C
   entry (`admin.change`).
 - **Data API**: `GET /v1/catalog/departments` (`DataApi/DataEndpoints.cs:140`, permission `catalog.read`,
   `docs/data-access.md:162`) gains `memberGroups: string[]`.
-- **Ume.Rag (mirror)**: `config."Departments"."MemberGroups"` (data-model §2.1). The admin API's `OrgSync` job reads
-  `/v1/catalog/departments` and `/teams` every **5 minutes** and on demand (*Sync now* on our organisation page),
-  with a gateway **Data API key** (`ume-dk-…`, permission `catalog.read` only; secret file
-  `secrets/admin/OrgSync__DataApiKey`). A key needs no IdP registration, which keeps the "no registration before the
-  pilot" rule (plan §2). Only changed rows are written, so an unchanged sync does not bump the config version
+- **Ume.Rag (mirror)**: `config."Departments"."MemberGroups"` (data-model §2.1, no GIN index: never queried by group).
+  The admin API's `OrgSync` job reads `/v1/catalog/departments` and `/teams` every **5 minutes** and on demand
+  (*Sync now* on our organisation page), with a gateway **Data API key** (`ume-dk-…`, permission `catalog.read` only;
+  secret file `secrets/admin/OrgSync__DataApiKey`). A key needs no IdP registration, which keeps the "no registration
+  before the pilot" rule (plan §2). Only changed rows are written, so an unchanged sync does not bump the config version
   (data-model §2.1). Member groups are never edited in our admin UI; it links to the gateway's page.
 
 **Freshness**: a change in the gateway reaches our mirror within 5 minutes (or at once with *Sync now*), and a
 signed-in admin's scope at their next sign-in (scopes are fixed at sign-in, §1.1). If the sync fails, the last mirror
 stays in use (it is never wider than the gateway was at that time); after 3 failed runs a warning shows on the
-*Gateway* page and in health (`degraded`). If the mirror is older than `OrgSync:MaxAgeHours` (24), group-derived
-department scope is switched off in both places (§2.6), because a removal in the gateway would otherwise never arrive.
+*Gateway* page and in health (`degraded`).
 
 ### 2.2 Group values: claim values, not only object ids (decision)
 
@@ -197,8 +184,7 @@ where the group claim holds **names** (`docs/identity-and-roles.md:116`, `:146-1
 `Oidc:RoleGroups` already matches claim values case-insensitively (`AdminAuthentication.cs:40-48`). So a member group
 is **a value of the group claim**: an Entra object id, an AD FS/Keycloak group name. Matching is case-insensitive
 like `RoleGroups`. On Entra this is exactly the plan's "object id" rule; on Keycloak the dev realm can use a plain
-group mapper (repo-and-deployment §4.2). Graph lookups (§2.4) only ever consider values that parse as GUIDs.
-Data-model column type changes accordingly (§14).
+group mapper (repo-and-deployment §4.2).
 
 ### 2.3 Sign-in resolution order
 
@@ -208,76 +194,55 @@ In `OnTokenValidated`, after `ApplyClaimMapping` (identical in both systems; `De
 2. `candidates` = member groups of every **active** department in the mirror (gateway: its own table) whose
    cost-centre code is not already in step 1.
 3. `known` = the group claim values (`Oidc:GroupClaim`) ∩ `candidates`.
-4. If `Oidc:GroupLookup = Graph` and the user has an `oid`: for GUID-shaped `candidates` not in `known`, ask Graph
-   (§2.4); add the ones it confirms. Overage (§2.4) is handled the same way, since then `known` is empty.
-5. For each department with at least one member group in `known`: add a `departmentCodes` claim with its cost-centre
+4. For each department with at least one member group in `known`: add a `departmentCodes` claim with its cost-centre
    code → source `group`.
-6. Event `admin.signin` / `rag.admin.signin` gets the extra attribute `DepartmentLookup` (§10).
 
 Because the result is written as ordinary `departmentCodes` claims, every scoped query (`AdminContext.Departments()`,
 `AdminContext.cs:81-90`) works unchanged in both systems, and `/bff/user` shows the result. Roles still come only from
-`roles` or `Oidc:RoleGroups` (plan §3): membership never grants a role.
+`roles` or `Oidc:RoleGroups` (plan §3): membership never grants a role. Only the token is read: a member group the
+token does not show adds nothing.
 
 ### 2.4 Graph lookup (Entra)
 
-- **Why not only the claim.** With `groupMembershipClaims = ApplicationGroup` (the gateway's recommendation is app
-  roles, `docs/identity-and-roles.md:184-185`), Entra emits only groups **assigned to the application**, so a
-  department member group is in the claim only if someone also assigned it to the admin application, which would let
-  the whole department sign in. We therefore do not assign member groups and ask Graph for whatever the claim does
-  not show. Admin sign-ins are rare, so this costs about one Graph call per sign-in.
-- **Overage**: when a user is in too many groups, Entra omits `groups` and sets `_claim_names.groups`; step 4 covers
-  it without special handling. We never follow `_claim_sources` (it points at the old AAD Graph).
-- **Call**: `POST https://graph.microsoft.com/v1.0/users/{oid}/checkMemberGroups` with up to 20 `groupIds` per call
-  (chunked), application permission `GroupMember.Read.All` (package 1; whether `User.ReadBasic.All` is also needed for
-  the `/users/{id}` path is *to verify*, §12.3). It is transitive, which matches how departments nest groups.
-  Token by client credentials with the same registration and our own credential, through the gateway's small
-  `GraphTokenClient` copied as is (no MSAL; token cached until 5 minutes before expiry; gateway design §4.4).
-  `GroupLookup = Graph` requires `Oidc:TenantId` (validated at start).
-- **Cache**: Redis `ume-rag:groups:{oid}` (data-model §11), 10 minutes, value `{ checked: [ids], member: [ids] }`.
-  A later lookup only asks Graph for ids not in `checked` (a new member group added to config is checked at once). The
-  gateway uses its own prefix (`ume:groups:{oid}`; the gateway's `RedisKeys.cs` decides the exact name).
-- **Timeouts**: 3 s per call, one retry, Polly circuit (copied `AddStandardResilienceHandler` from ServiceDefaults).
-- **Display names** of groups (admin UI, gateway Organisation page, P2 audience picker): `GET /groups/{id}` and
-  `GET /groups?$search="displayName:…"` (header `ConsistencyLevel: eventual`), same permission.
+Removed (simplification pass): the Graph `checkMemberGroups` lookup moves to P2 with package 2 (§17).
 
-### 2.5 Keycloak and AD FS
+### 2.5 Group claim per IdP
 
-`Oidc:GroupLookup = Claims` (default). Keycloak: a *Group Membership* mapper (claim `groups`, *Full group path* off,
-*Add to ID token* on, `docs/identity-and-roles.md:145-147`) and member groups entered as names. AD FS: group claim
-`group` with unqualified names (`:199-215`). No overage and no Graph.
+- **Entra**: `ume-rag-admin` sets `groupMembershipClaims = SecurityGroup` (§12.3), so the ID token's `groups` claim
+  carries the object ids of the user's security groups, cloud and synced, without assigning department groups to the
+  application (assigning them would let whole departments sign in). Roles still come from app roles. Above the token's
+  group limit Entra omits `groups` and sets `_claim_names.groups` (overage); that user then gets claim codes only
+  (§2.6). We never follow `_claim_sources`.
+- **Keycloak**: a *Group Membership* mapper (claim `groups`, *Full group path* off, *Add to ID token* on,
+  `docs/identity-and-roles.md:145-147`) and member groups entered as names.
+- **AD FS**: group claim `group` with unqualified names (`:199-215`).
 
-### 2.6 Failure behaviour (decision: claims-only, never fail open)
+### 2.6 Failure behaviour (decision: claims only, never fail open)
 
-| Situation | Admin sign-in (both systems) | Data plane (P2 department/group audiences, §4.3) |
-|---|---|---|
-| Graph error, timeout or circuit open | Sign-in **succeeds** with step 1 + 3 only; `departmentLookup: "failed"`; banner "Avdelningar från grupper kunde inte hämtas"; event `rag.identity.lookup_failed` (5007); result not cached | Decision needs membership that is unknown ⇒ **503 `membership_unavailable`** (not 403), event 5007; requests whose access does not depend on groups are unaffected |
-| Mirror older than `OrgSync:MaxAgeHours` (RAG only) | steps 2–5 skipped, `departmentLookup: "failed"` | department audiences deny with 503 `membership_unavailable` |
-| User has no `oid` (Keycloak, AD FS) | Graph skipped (`departmentLookup: "claims"`) | audiences evaluated from claims only |
+- No group claim, or an overage token: sign-in succeeds with step 1 codes only; `/bff/user` shows only `claim`
+  sources, so the narrowing is visible.
+- Mirror sync failing: the last mirror is used (§2.1).
 
-Justification: failing the whole sign-in would lock out platform admins (who need no departments) whenever Graph is
-down; claims-only can only **narrow** a user's scope compared to a successful lookup, never widen it, so it is fail
-closed with respect to access. The banner and the event make the narrowing visible. On the data plane a narrowed
-answer would look like "no access" to the user, so a retryable 503 is honest.
+Claims only can only **narrow** a user's scope compared to the gateway's configuration, never widen it, and platform
+admins (who need no departments) are never locked out.
 
 ### 2.7 Gateway work items for feature C (detailed in `../gateway-changes/design.md` §4)
 
 1. Migration: `Departments.MemberGroups varchar(256)[] NOT NULL DEFAULT '{}'` (no index: never queried by group).
-2. Admin API/UI *Organisation*: edit member groups (gateway admins; department admins read them); Graph search when
-   `GroupLookup = Graph`, free text otherwise; audit `Update Department`.
-3. `OidcOptions`: `GroupLookup`, `TenantId`, `RefuseGuests` (§1.4, §1.7). `DepartmentMembershipResolver` +
-   `GraphGroupClient` in `AdminApi`, called from `OnTokenValidated` after `ApplyClaimMapping`
-   (`AdminAuthentication.cs:123-127`).
-4. `/bff/user`: `departmentSources`, `departmentLookup`. `admin.signin` (2002): attribute `DepartmentLookup`
-   (attributes are only ever added, `docs/data-access.md:60-62`). New events 2007 `admin.group_lookup.failed`,
-   2008 `admin.signin.refused` and Data API 3003 `data.token.refused` (tenant/guest refusals).
+2. Admin API/UI *Organisation*: edit member groups (gateway admins; department admins read them), free text; audit
+   `Update Department`.
+3. `OidcOptions`: `TenantId`, `RefuseGuests` (§1.4, §1.7). `DepartmentMembershipResolver` in `AdminApi`, called from
+   `OnTokenValidated` after `ApplyClaimMapping` (`AdminAuthentication.cs:123-127`).
+4. `/bff/user`: `departmentSources`. New events 2008 `admin.signin.refused` and Data API 3003 `data.token.refused`
+   (tenant/guest refusals).
 5. Data API: `memberGroups` on `/v1/catalog/departments`; `code` on `/v1/catalog/teams` (missing today).
-6. Redis key `ume:groups:{oid}`; `UME_OIDC_GROUP_LOOKUP`, `UME_OIDC_TENANT_ID`, `UME_OIDC_REFUSE_GUESTS` in
-   `compose.prod.yaml` and the Portainer templates.
-7. Docs: `identity-and-roles.md` (Entra step 4 alternative "member groups"), runbook *Identity provider*.
+6. `UME_OIDC_TENANT_ID`, `UME_OIDC_REFUSE_GUESTS` in `compose.prod.yaml` and the Portainer templates.
+7. Docs: `identity-and-roles.md` (Entra step 4 alternative "member groups in the group claim"), runbook *Identity
+   provider*.
 8. Tests (§2.8), shared in spirit with ours.
 
 The two implementations are deliberately the same code shape (`DepartmentMembershipResolver` takes the departments,
-the principal, the options and an `IGroupMembershipSource`), so the class can be copied either way.
+the principal and the options), so the class can be copied either way.
 
 ### 2.8 Tests (both systems)
 
@@ -286,12 +251,8 @@ the principal, the options and an `IGroupMembershipSource`), so the class can be
 | Claim codes and group codes are merged without duplicates; sources reported correctly | unit |
 | Group matching is case-insensitive; unmapped groups add nothing; inactive departments add nothing | unit |
 | Membership never adds a role | unit |
-| Overage token (`_claim_names.groups`, no `groups`) → Graph asked for all GUID candidates | unit, fake `IGroupMembershipSource` |
-| Graph asked only for candidates not already in the claim and not in the cache's `checked` set; ≤ 20 ids per call | unit |
-| Graph failure → sign-in succeeds with claim codes only, `departmentLookup = failed`, event 5007 / 2007, nothing cached | unit |
-| Non-GUID candidates never sent to Graph | unit |
+| Overage token (`_claim_names.groups`, no `groups`) → claim codes only, no group codes | unit |
 | Keycloak user `rag-group-member` (no attribute, group `Byggnadsnämnden`) sees department 3000 in `/bff/user` | integration (Keycloak container) |
-| Mirror older than 24 h → group codes skipped | unit with `TestClock` |
 
 ## 3. Principal model
 
@@ -306,12 +267,12 @@ public sealed record RagPrincipal(
     SubjectKind Kind,
     string SubjectId,              // stable id, see table; never an email
     string? DisplayName,           // display only, never logged
-    string? Email,                 // display / P2 Graph lookup only, never logged or stored
+    string? Email,                 // display only, never logged or stored
     ClientEntry Client,            // from the registry snapshot (§4.1)
     CredentialKind Credential,
     KeyEntry? Key,                 // key id, prefix, team, scopes (keys only)
     IReadOnlySet<string> Permissions,          // Chat.Use, Knowledge.Read, Mcp.Use, *.All (§7.2)
-    MembershipFacts Membership,    // departments/groups and whether they are known (§4.3)
+    MembershipFacts Membership,    // departments/groups from token claims and whether they are known (§4.3)
     string? EntraObjectId, string? TenantId,
     long ConfigVersion);
 ```
@@ -327,9 +288,9 @@ public sealed record RagPrincipal(
 | MCP client (`/mcp` and `/mcp/skills/<slug>`, same principal) | delegated token, `scp` `Mcp.Use` (§8) | `EntraUser` | `oid` | `azp` (kind `mcp-client`) | P2 |
 | Worker → API internal attachment route (`POST /internal/attachments/{id}/chunks`, chat design §15.2) | internal service key, internal network only | `Application` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P2 |
 | Chat role → knowledge role over HTTP (`Retrieval:Mode=Http`) | internal `ume-rag-sk-` service key | `Application` + forwarded decision | `svc:{keyId}` | client `rag-internal` (kind `internal`) | when split |
-| Chat and `mcp` roles → tool hub (`/internal/v1/tool-calls`, tools design §2.4) | **mTLS** client certificate **and** internal `ume-rag-sk-` service key (tools design §2.2) | `Application` + forwarded `ToolCallContext` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P2 |
-| Admin → tool hub (discovery, connection test) | mTLS **and** service key | `Application` | `svc:{keyId}` | client `admin-console` (kind `internal`) | P2 |
-| Admin test panel | admin session (in-process, no HTTP) | `EntraUser` | admin `sub` | client `admin-console` (kind `internal`) | P1 |
+| Chat and `mcp` roles → `rag-tools` service (P2: in-process hub, no hop; tools design §2) | **mTLS** client certificate **and** internal `ume-rag-sk-` service key | `Application` + forwarded `ToolCallContext` | `svc:{keyId}` | client `rag-internal` (kind `internal`) | P3 |
+| Admin → `rag-tools` service (discovery, connection test; P2 in-process) | mTLS **and** service key | `Application` | `svc:{keyId}` | client `admin-console` (kind `internal`) | P3 |
+| Admin test panel | admin session (in-process, no HTTP) | `EntraUser` | admin `oid` (fallback `sub`) | client `admin-console` (kind `internal`) | P1 |
 | Browser following a citation link (`GET /v1/documents/{id}` and `/content` only) | signed download grant `?grant=g1.…` (knowledge design §4.6) | none (no subject; the grant carries ids only) | – | the grant's `cl` (client that received the citation) | P1 |
 
 Rules:
@@ -356,10 +317,9 @@ Rules:
 | `Kind` | `open-webui`, `widget`, `integration`, `own-client`, `teams`, `mcp-client`, `entra-app`, **`internal`** | `internal` added (§14) |
 | `OAuthClientId varchar(200)` | `azp`/`appid`/`client_id` for token callers | replaces `EntraAppId uuid` (Keycloak client ids are strings) (§14) |
 | `ClassificationCeiling` | caps every resource | – |
-| `StoresHistory`, `ClientRetentionDays`, `TaskModel`, `TaskModelResidency` | data-handling profile (R5) | – |
+| `StoresHistory`, `ClientRetentionDays` | data-handling profile (R5) | – |
 | `AllowedOrigins` | widget | – |
 | `AllowedSubjectKinds` (derived from `Kind`, not stored) | §4.3 step 3 | – |
-| `ResolveUsersByEmail bool` | P2: Open WebUI users mapped to Entra by email (§5.4) | new (§14) |
 | `ToolPolicy varchar(10)` | P2: client layer of the tool policy, `none`/`read` (P3 `confirm`); defaults `read` for `open-webui`, `own-client`, `teams`, `widget`, `none` for `integration`, `entra-app`, `mcp-client`, `internal` (tools design §5.1) | new (tools design §13) |
 
 Database checks stay as designed: `StoresHistory ⇒ ceiling ≠ sensitive`, `mcp-client ⇒ ceiling ≠ sensitive`.
@@ -393,20 +353,21 @@ public sealed record AccessDecision(
     DenyReason Reason,                 // None when allowed
     int HttpStatus,                    // 200/401/403/404/503
     Classification EffectiveLevel,     // the resource's level (drives residency)
-    Residency? MaxResidency,           // null = no header (public)
+    Residency MaxResidency,            // always sent; public = External (§4.7)
     long ConfigVersion);
 ```
 
-`PolicySnapshot` is the config snapshot (data-model §5) with `Version`, `Confirmed` (version confirmed ≤ 10 s ago),
-clients, keys' scopes, assistants with audiences and collections, collections, skills, tools, data-protection
-policies and the department mirror. Group membership that needs Graph is resolved **before** the call by
-Infrastructure into `MembershipFacts { Departments, Groups, Known: bool }`, so the policy itself never waits.
+`PolicySnapshot` is the config snapshot (data-model §5) with `Version`, `Confirmed` (last confirmed at most
+`Config:MaxUnconfirmedSeconds` ago, default 90 s), clients, keys' scopes, assistants with audiences and collections,
+collections, skills, tools, data-protection policies and the department mirror. Membership comes from the token's
+claims as `MembershipFacts { Departments, Groups, Known: bool }` (`Known = false` for an overage token), so the policy
+itself never waits.
 
 ### 4.3 Evaluation order (first failing step decides)
 
 | # | Check | Deny reason | Status |
 |---|---|---|---|
-| 0 | Snapshot confirmed (`Version == lastConfirmed`, ≤ 10 s; data-model §5) | `config_unconfirmed` | 503 |
+| 0 | Snapshot confirmed within `Config:MaxUnconfirmedSeconds` (default 90 s; data-model §5) | `config_unconfirmed` | 503 |
 | 1 | Client exists and `IsEnabled`; the key's client is the client | `client_disabled` / `client_unknown` | 403 |
 | 1a | Knowledge routes only: client kind in `Knowledge:OpenToClientKinds` (P1 `internal`; knowledge design §2.3); download grants are checked by their own re-check instead (knowledge design §4.6) | `client_not_allowed` | 403 |
 | 2 | Credential kind allowed for the client kind (`open-webui`: sk key + JWT; `widget`: pk key; `integration`: sk key or app token; `own-client`/`teams`/`mcp-client`: delegated token; `internal`: service key or in-process) | `credential_not_allowed` | 403 |
@@ -437,8 +398,11 @@ reason in the `code` extension; knowledge design §3.6); the in-process path car
 
 ### 4.5 Fail-closed rules
 
-1. No confirmed config version ⇒ every security-relevant decision (authentication with a key, any `Decide`) is 503
-   `config_unconfirmed` + event 5004. `/health/ready` reports `config_unconfirmed` so the proxy drains the instance.
+1. No snapshot confirmed within `Config:MaxUnconfirmedSeconds` (deployment setting, default 90 s) ⇒ every
+   security-relevant decision (authentication with a key, any `Decide`) is 503 `config_unconfirmed` + event 5004.
+   Within the window the last confirmed snapshot decides and `/health/ready` stays ready, so one stalled database does
+   not drain every instance at once; beyond it `/health/ready` reports `config_unconfirmed`. Notifications still apply
+   changes, revocations included, as soon as they arrive.
 2. Unknown client (`azp` not in the registry, key without enabled client) ⇒ refused; there is no default client.
 3. A resource or client field that fails to parse (unknown classification, unknown kind) ⇒ the row is treated as
    disabled and logged at error level; never as `public` or "no ceiling".
@@ -453,42 +417,65 @@ reason in the `code` extension; knowledge design §3.6); the in-process path car
 - `/v1/models` and `list_collections` results are memoised in process for 30 s keyed by
   `(ConfigVersion, ClientId, KeyId, MembershipHash)`; a new version makes every entry unreachable (data-model §5:
   caches hold the version they were built from).
-- Membership: Redis `ume-rag:groups:{oid}` 10 min (§2.4); Open WebUI email → `oid` in `ume-rag:owui-oid:{hmac(email)}`
-  for 1 h (P2, §5.4).
 - Nothing about a decision is cached in Redis.
 
 ### 4.7 Residency ceiling per request
 
-`MaxResidency` comes from the **level of the data in the call** (platform plan §6), not from the client:
+`MaxResidency` comes from the **level of the data in the call** (platform plan §6), not from the client, and is
+**always explicit**:
 
-| Effective level | `x-ume-max-residency` | Interim (no feature B) |
+| Effective level | `x-ume-max-residency` | Gateway key |
 |---|---|---|
-| `public` | none | default team key |
-| `internal` | `Eu` | `x-ume-residency` response check |
-| `sensitive` | `OnPrem` | linked `onprem` key + response check |
+| `public` | `External` | open |
+| `internal` | `Eu` | `Eu`-max |
+| `sensitive` | `OnPrem` | `OnPrem`-only |
+
+The keys are delegating gateway keys per level, issued per deployable that needs them, with `AllowedIpRanges`,
+`RequireMaxResidency` (the gateway refuses a request without the header) and `ApplyTeamPolicy = false` (gateway
+design §13.4); the worker never holds the open key. A `DelegatingHandler` in the gateway client refuses any request
+without an explicit ceiling and checks that the key it uses belongs to that level; it is unit-tested for every call
+site (chat, condense, judge, evaluation generation, NER/LLM stages).
 
 Effective level for chat = the assistant's level (≥ all its collections, skills and tool servers' result levels,
-validated on save); for condense and title calls inside a conversation the same; a follow-up from a client that resends
-history (Open WebUI) runs at **max(assistant level, client ceiling)**, because earlier turns may come from another
-assistant (chat design §8.2, platform plan §6); for P2 agent runs it is fixed at the run's start
-and never rises: tool servers are bounded by clearance (assistant level ≤ clearance) and result level (result level ≤
-assistant level) (tools design §5.3). The Chat API sends the header from `AccessDecision.MaxResidency` and
-`x-ume-on-behalf-of` = the assistant's team **id** (gateway design §5.2; codes can change), and the echo of that header
-is required once gateway release A is in use. Header values are the gateway's `DataResidency` names (`Eu`, `OnPrem`,
-case-insensitive). The gateway answer's `x-ume-residency` is checked, case-insensitively by order
-`OnPrem < Eu < External`, against the same
-value (chat-api §4).
+validated on save); for condense calls inside a conversation the same. For a client that keeps history (Open WebUI)
+**every turn, the first included,** runs at **max(assistant level, client ceiling)**, because earlier turns may come
+from another assistant, so model and residency do not change between turn 1 and turn 2 (chat design §8.2, platform
+plan §6). For P2 agent runs it is fixed at the run's start and never rises: tool servers are bounded by clearance
+(assistant level ≤ clearance) and result level (result level ≤ assistant level) (tools design §5.3).
+
+The Chat API sends the header from `AccessDecision.MaxResidency` and `x-ume-on-behalf-of` = the assistant's team
+**id** (gateway design §5.2; codes can change). A missing echo of that header fails closed (5011) when
+`Gateway:RequireDelegationEcho` is on (default `true`; the FakeGateway echoes too). Header values are the gateway's
+`DataResidency` names (`OnPrem`, `Eu`, `External`, case-insensitive). The gateway answer's `x-ume-residency` is
+checked, case-insensitively by order `OnPrem < Eu < External`, against the same value (chat-api §4). A gateway `503`
+with `Retry-After` (in-ceiling targets drained or circuit-open) is retryable; `403 max_residency_not_met` (no target
+configured within the ceiling) is not.
+
+**Model validation on save**: when an assistant is saved, the admin calls the gateway's `GET /v1/models` with the key
+and ceiling of the assistant's effective level (for an audience client that keeps history, max(level, client
+ceiling)) on behalf of its team, and refuses the save if a linked model is not listed (gateway design §3.4).
 
 ### 4.8 Internal callers
 
 - **Admin test panel**: runs in the admin process, builds a `RagPrincipal` for client `admin-console` with the
-  admin's `sub`, and checks access with the admin's role scope (department of the assistant ∈ admin's departments),
+  admin's `oid` (fallback `sub`), and checks access with the admin's role scope (department of the assistant ∈ admin's departments),
   not with assistant audiences. Answers are not stored as conversations. It runs the real chat path in process through
   the `Ume.Rag.Answering` library (admin design §2.1, §4.9). P2 agent test calls go to the hub as `admin-console`
   (needs `ToolPolicy = read` on that client, tools design §2.2).
 - **`rag-internal`**: the chat role sends `assistantId` and the already-made decision's level; the knowledge role
   recomputes the assistant's collections from its own snapshot (same version or newer) and refuses if the assistant's
   level is now above what was forwarded (the stricter answer wins).
+
+### 4.9 Explain access (admin, new)
+
+`POST /api/access/explain` `{ clientId, subject: { kind, id, departments?, groups? }, assistantId }` → `{ allowed,
+step, reason, status, effectiveLevel, maxResidency, configVersion }`. The admin API builds a `RagPrincipal` from the
+input (the client kind's normal credential and permissions, membership as given with `Known = true`) and calls
+`IAccessPolicy.Decide` on its current snapshot. `step` is the stable id of the first failing §4.3 step (`0`, `1`,
+`1a`, … `12`; an id never changes meaning, a new step gets a new id) and `reason` its stable deny code from the same
+table, so the admin UI and support notes can key on both. Because the policy is pure there is no gateway or Graph call
+and nothing to clean up; no security event is emitted (nothing is accessed). Who: `rag-platform-admin`, and
+`rag-department-admin` for their own department's assistants and clients (`Manage`). The UI is the admin design's.
 
 ## 5. Open WebUI trust
 
@@ -507,12 +494,11 @@ There is **no `aud`**, and if minting fails Open WebUI silently falls back to th
 headers (`headers.py:70-86`). The chat id travels unsigned in `X-OpenWebUI-Chat-Id` (`headers.py:196-199`). The
 connection key goes in `Authorization: Bearer` (`headers.py:204-206`) unless `auth_type` says otherwise.
 
-Open WebUI has **one connection** (ours, chat design §4.2–§4.3); its title/tags/follow-up tasks go to our virtual
-model `owui-tasks` (answered by the client's on-prem `TaskModel`), so there is no gateway connection and the JWT goes
-only to `rag-api`. The connection also sends the custom headers `X-Rag-Owui-Task`, `X-Rag-Owui-Message-Id` and
-`X-Rag-Owui-User-Message-Id` (templated by Open WebUI, `headers.py:139-157`). They are **unsigned**: they only route
-task requests and map messages and feedback **inside the caller's own conversation** (keyed by the JWT `sub`), never
-grant access.
+Open WebUI has **one connection** (ours, chat design §4.2–§4.3); its title, tag and follow-up generation is switched
+off (`../simplification-pass.md` §1), so there is no gateway connection and the JWT goes only to `rag-api`. The
+connection also sends the custom headers `X-Rag-Owui-Message-Id` and `X-Rag-Owui-User-Message-Id` (templated by Open
+WebUI, `headers.py:139-157`). They are **unsigned**: they only map messages and feedback **inside the caller's own
+conversation** (keyed by the JWT `sub`), never grant access.
 
 ### 5.2 Validation (`OpenWebUiUserJwt`, new)
 
@@ -540,8 +526,8 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
   so users' browsers can follow citation download links (signed grants, knowledge design §4.6); every other `rag-api`
   path stays restricted to the Open WebUI host.
 - `FORWARD_USER_INFO_HEADER_JWT_SECRET` is used for nothing else. Open WebUI sends the same JWT to every connection
-  (forwarding is global); it has **one connection only** (ours): the earlier gateway connection for the on-prem task
-  model is removed, tasks go to our `owui-tasks` model (chat design §4.2), so the JWT reaches only `rag-api`. Without
+  (forwarding is global); it has **one connection only** (ours; task generation is off, chat design §4.2), so the JWT
+  reaches only `rag-api`. Without
   `aud` a receiver could replay it within its lifetime, but it is useless without our connection key (§5.2 step 1);
   any connection added later must be a municipal service, never a third-party endpoint.
 - The feedback import (chat design §14.2) calls Open WebUI's admin API with a service account's API key
@@ -555,19 +541,15 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
 
 ### 5.4 User mapping
 
-- P1: `SubjectKind = OwuiUser`, `SubjectId = sub`. Email and name from the JWT live only in the request's principal
-  (e.g. for the P2 lookup below); they are never stored or logged.
+- `SubjectKind = OwuiUser`, `SubjectId = sub`. Email and name from the JWT live only in the request's principal
+  (display); they are never stored or logged, and never the basis of a grant.
 - Without the JWT: `GET /v1/models` answers the **client-level** list (assistants with a `client` audience row for
   this client, level ≤ ceiling), because Open WebUI also lists models outside a user request (`routers/openai.py:94-105`
   sends user headers only when it has a user). Chat completions and feedback need the JWT (401 otherwise).
 - `X-OpenWebUI-Auth-Type: api_key` (a user calling Open WebUI's API with a personal key, `headers.py:66-68`) is
   accepted; the subject is still the user.
-- **P2, department/group audiences for Open WebUI users** (client flag `ResolveUsersByEmail`): look up the email via
-  Graph `GET /users?$filter=mail eq '{email}' or userPrincipalName eq '{email}'&$select=id,userType,accountEnabled`
-  (rag-api registration, `User.ReadBasic.All`, package 2), require exactly one enabled `Member`, cache `oid` 1 h, then
-  §2.4 membership. No match ⇒ `Membership.Known = true` with no groups (the user simply gets client audiences).
-  Trust caveat recorded in the client page: this makes Open WebUI's email the basis of a grant, so it is only enabled
-  for instances whose login is Entra-only (5.3) and whose ceiling is `internal`.
+- Department and group audiences for Open WebUI users wait for E1 (a real Entra token through Open WebUI, §9.4);
+  until then Open WebUI users match `client` audience rows only.
 
 ## 6. Key authentication
 
@@ -600,9 +582,9 @@ Copied behaviour (`Gateway/Pipeline/KeyAuthenticator.cs`):
 
 Adapted: invalidation comes from the **config version** instead of the gateway's Redis invalidation bus (`:45-51`):
 the config monitor calls `InvalidateAll()` (`:195-200`) whenever an outbox row with `EntityType` `Keys` or `Clients`
-arrives (data-model §5; Redis has no channels in our design, data-model §11). Because a missed `NOTIFY` is covered by
-the 2 s poll and the 10 s confirmation rule (§4.5), a revoked key stops working within seconds, and a key is never
-accepted while the version is unconfirmed. Creating a key bumps the version and clears the negative cache, as in the
+arrives (data-model §5; Redis has no channels in our design, data-model §11). A missed `NOTIFY` is covered by the 2 s
+poll, so a revoked key stops working within seconds while the database is reachable; if it is not, the last confirmed
+snapshot serves for at most `Config:MaxUnconfirmedSeconds` (§4.5), then keyed requests get 503. Creating a key bumps the version and clears the negative cache, as in the
 gateway (`docs/security-events.md:35-37`).
 
 Settings mirror `Gateway:*` (`Gateway/Pipeline/GatewayOptions.cs:12-22`, `docs/security-events.md:39-45`):
@@ -683,7 +665,7 @@ without it only keys work, as in the Data API (`:26-31`). A key's permissions an
 Added checks after signature/issuer/audience/lifetime (JWKS cached by the handler's configuration manager):
 
 1. `tid = RagApi:TenantId` (when set) ⇒ else `wrong_tenant`.
-2. Guests refused (`acct = 1`, or `idp` ≠ issuer) ⇒ `guest_refused` (delegated tokens only).
+2. Guests refused by the §1.7 rule (`RagApi:RefuseGuests`) ⇒ `guest_refused` (delegated tokens only).
 3. Client = `ClientId(user)` (`client_id` ?? `azp` ?? `appid`, `DataApiAuthentication.cs:80-85`, without the `sub`
    fallback) looked up in `Clients.OAuthClientId`; unknown ⇒ `client_unknown`.
 4. Token type: **app-only** when `idtyp = app` (Entra optional claim, requested on `rag-api`) or, on Keycloak, when the
@@ -761,7 +743,8 @@ scope value on one registration. This is stricter than the Data API's "any confi
   lifetime, process-local only (no Redis, so nothing to encrypt at rest); a restart costs one exchange per user.
   Should several tool-hub instances ever need a shared cache, it is Redis with Data Protection encryption and a key
   per user (plan §7).
-- `rag-tools` stays for service-identity calls (P2); it never performs OBO.
+- P2 service-identity calls (client credentials) run in the in-process hub of `rag-api` and `rag-admin` (tools design
+  §4.6); OBO arrives with the separate `rag-tools` service (P3, tools design §2).
 
 ### 9.3 Claims challenges and consent
 
@@ -789,7 +772,8 @@ Copied pattern: one static partial `SecurityEvents` class in `Ume.Rag.Infrastruc
 (`SecurityEvents.cs:63-114`), `Printable()` on every client-supplied value (`:30-49`), names and attributes only ever
 added (`:7-11`, `docs/data-access.md:58-62`). Never logged: key material, tokens, JWTs, passwords, prompts, emails,
 display names, group names. Allowed identifiers: key id + display prefix, client id, `SubjectId` (oid / Open WebUI id /
-key id / anonymous HMAC), admin `sub` (as the gateway's `Actor`), truncated source address (`Api:Security:SourceAddress`).
+key id / anonymous HMAC), admin `oid` (fallback `sub`; the gateway's `Actor` is `sub`), truncated source address
+(`Api:Security:SourceAddress`).
 
 Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and ingestion; 6001–6099 admin. Repo-and-deployment
 §9 ids are kept unchanged; new ids are additions.
@@ -797,25 +781,25 @@ Ranges: 5001–5099 data-plane identity and access; 5101–5199 content and inge
 | Id | Name | Emitted by | When | Attributes |
 |---|---|---|---|---|
 | 5001 | `rag.auth.failed` | api, admin (sign-in refusals) | Once per bucket per flush (§6.3); admin: per refused sign-in | `Reason`, `Credential` (`sk`, `pk`, `token`, `owui-jwt`, `oidc-signin`, `grant`), `Endpoint`, `KeyId`, `KeyPrefix`, `ClientId`, `TeamId`, `DepartmentId`, `SourceAddress`, `Count`, `FirstSeen`, `LastSeen` |
-| 5002 | `rag.access.denied` | api, tools | `IAccessPolicy` denial on an explicit request (not `Filter`), at most once a minute per (subject, reason, resource) with `Count` (like `AccessDeniedThrottle`, `AdminActivity.cs:172`) | `Reason`, `Action`, `ResourceType`, `ResourceId`, `SubjectKind`, `SubjectId`, `ClientId`, `KeyId`, `ConfigVersion`, `SourceAddress`, `Count` |
+| 5002 | `rag.access.denied` | api | `IAccessPolicy` denial on an explicit request (not `Filter`), at most once a minute per (subject, reason, resource) with `Count` (like `AccessDeniedThrottle`, `AdminActivity.cs:172`) | `Reason`, `Action`, `ResourceType`, `ResourceId`, `SubjectKind`, `SubjectId`, `ClientId`, `KeyId`, `ConfigVersion`, `SourceAddress`, `Count` |
 | 5003 | `rag.residency.refused` | api, worker | gateway answered with a residency above the ceiling | (as step 2) |
-| 5004 | `rag.config.stale_refused` | api, tools, worker | `config_unconfirmed` refusal, once a minute per instance with `Count` | `Service`, `CachedVersion`, `LastConfirmedAt`, `Count` |
+| 5004 | `rag.config.stale_refused` | api, worker | `config_unconfirmed` refusal, once a minute per instance with `Count` | `Service`, `CachedVersion`, `LastConfirmedAt`, `Count` |
 | 5005 | `rag.ceiling.refused` | api | step 7 denial (instead of 5002) | 5002's attributes + `ResourceLevel`, `ClientCeiling` |
 | 5006 | `rag.auth.throttled` | api | an address crossed `AuthFailuresPerMinute` (once per address per window) | `SourceAddress`, `Endpoint`, `Count` |
-| 5007 | `rag.identity.lookup_failed` | admin, api | Graph membership or user lookup failed (§2.6) | `Service`, `Operation` (`checkMemberGroups`, `userByEmail`), `Status`, `SubjectId` |
+| 5007 | – | – | reserved for the P2 Graph member-group lookup (§17) | – |
 | 5008 | `rag.key.unexpected_use` | api | a key in grace period used after its replacement was used (leak signal), once per key | `KeyId`, `KeyPrefix`, `RotatedToKeyId`, `SourceAddress` |
 | 5009 | `rag.mcp.client_refused` | api | delegated token from an `azp` not registered as an enabled `mcp-client` | `ClientId` (azp), `SubjectId`, `SourceAddress` |
 | 5010 | `rag.obo.refused` | tools (P3) | OBO exchange failed (`claims_required`, `consent_required`, `assertion_expired`, `error`) | `Reason`, `ToolServerId`, `SubjectId`, `ClientId` |
-| 5011 | `rag.gateway.delegation_missing` | api (Warning) | after gateway release A: the response lacks the `x-ume-on-behalf-of` echo of the team sent; call aborted before the first byte (chat design §8.2) | `Step`, `AssistantId`, `TeamId`, `GatewayRequestId` |
-| 5012 | `rag.tool.definition_changed` | tools (Warning, P2) | tool definition drift observed, once per (tool, observed hash) (tools design §4.4) | `ToolServerId`, `ToolId`, `ToolName`, `Kind` (`changed`/`removed`/`added`/`instructions-changed`), `PinnedHash`, `ObservedHash` |
-| 5013 | `rag.tool.upstream_refused` | tools (Warning, P2) | a tool server refused our credential or it could not be used, once a minute per (server, reason) with `Count` | `ToolServerId`, `Reason` (`unauthorized`, `forbidden`, `token_failed`, `credential_unavailable`, `tls`), `Status`, `Count` |
-| 5014 | `rag.content.tag_neutralised` | api, tools (Information, P2) | reserved tags (tools design §3.8) neutralised in untrusted text, once a minute per (kind, resource) with `Count` | `SourceKind` (`source`, `tool_result`, `tool_description`, `skill_description`), `ResourceId`, `Count` |
-| 5015 | `rag.tool.result_refused` | tools (Warning, P2) | a tool result refused: `too_large`, `level_refused`, `protocol_error` | `ToolServerId`, `ToolId`, `Reason`, `ResultBytes`, `ResultLevel`, `EffectiveLevel` |
-| 5101–5103 | `rag.egress.blocked`, `rag.malware.detected`, `rag.pii.flagged` | worker | 5101/5102: connectors design §7, §11; 5103 on every transition to flagged (processing design §9.5) | 5103: `DocumentId`, `Classification`, `Types`, `Counts` (numbers only), `SourceId`, `RunId`, `Reflag`; SIEM rule for public references with a personnummer. Admin audit actions `pii.clear`, `gate.override` |
+| 5011 | `rag.gateway.delegation_missing` | api (Warning) | the response lacks the `x-ume-on-behalf-of` echo of the team sent and `Gateway:RequireDelegationEcho` is on; call aborted before the first byte (chat design §8.2) | `Step`, `AssistantId`, `TeamId`, `GatewayRequestId` |
+| 5012 | `rag.tool.definition_changed` | api, admin (Warning, P2) | tool definition drift observed, once per (tool, observed hash) (tools design §4.4) | `ToolServerId`, `ToolId`, `ToolName`, `Kind` (`changed`/`removed`/`added`/`instructions-changed`), `PinnedHash`, `ObservedHash` |
+| 5013 | `rag.tool.upstream_refused` | api, admin (Warning, P2) | a tool server refused our credential or it could not be used, once a minute per (server, reason) with `Count` | `ToolServerId`, `Reason` (`unauthorized`, `forbidden`, `token_failed`, `credential_unavailable`, `tls`), `Status`, `Count` |
+| 5014 | `rag.content.tag_neutralised` | api, admin (Information, P2) | reserved tags (tools design §3.8) neutralised in untrusted text, once a minute per (kind, resource) with `Count` | `SourceKind` (`source`, `tool_result`, `tool_description`, `skill_description`), `ResourceId`, `Count` |
+| 5015 | `rag.tool.result_refused` | api, admin (Warning, P2) | a tool result refused: `too_large`, `level_refused`, `protocol_error` | `ToolServerId`, `ToolId`, `Reason`, `ResultBytes`, `ResultLevel`, `EffectiveLevel` |
+| 5101–5103 | `rag.egress.blocked`, `rag.malware.detected`, `rag.pii.flagged` | worker | 5101/5102: connectors design §7, §11; 5103 on every transition to flagged (processing design §9.5) | 5103: `DocumentId`, `ChunkSetId`, `Classification`, `Types`, `Counts` (numbers only), `SourceId`, `RunId`, `Reflag`; SIEM rule for public references with a personnummer. Admin audit action `pii.clear` (a decision on the document) |
 | 5104 | `rag.parser.limit_exceeded` | worker | parser refused a file for a bomb or size limit (parser design §7.5) | `DocumentId`, `Limit` |
-| 5105 | `rag.pipeline.refused` | worker | refused to run a published pipeline version that fails validation (engine design §17); SIEM alerts on any | `PipelineId`, `PipelineVersionId`, `Reason` |
+| 5105 | `rag.pipeline.refused` | worker | refused to run a published pipeline version that fails validation (engine design §17) | `PipelineId`, `PipelineVersionId`, `Reason` |
 | 6001 | `rag.admin.change` | admin | every audit entry (gateway 2001) | `Actor`, `Action`, `EntityType`, `EntityId` |
-| 6002 | `rag.admin.signin` | admin | sign-in, not extension (gateway 2002, `AdminAuthentication.cs:100-107`) | `Actor`, `SourceAddress`, `Roles`, `Departments`, `SessionId`, **`DepartmentLookup`** |
+| 6002 | `rag.admin.signin` | admin | sign-in, not extension (gateway 2002, `AdminAuthentication.cs:100-107`) | `Actor`, `SourceAddress`, `Roles`, `Departments`, `SessionId` |
 | 6003 | `rag.admin.signout` | admin | (gateway 2003) | `Actor`, `SourceAddress`, `SessionId` |
 | 6004 | `rag.conversation.access` | admin | conversation review events: comment reveal and conversation access, before decrypting; per fetch within an access window (admin design §8.2–§8.3) | `Actor`, `RequestId`, `Event`, `Scope` (`comment`/`conversation`), `ConversationId`, `Classification`, `AssistantId` |
 | 6005 | `rag.admin.session.extended` | admin | *Stay signed in* (gateway 2004) | `Actor`, `SessionId`, `ExpiresAt`, `SourceAddress` |
@@ -835,14 +819,13 @@ is `Security:ConversationIdKeys` (secret files `Security__ConversationIdKeys__<k
 `init-deployment.sh`; newest signs, all verify, as the download-grant keys).
 
 Gateway counterparts (gateway design §10): our 5001 with `wrong_tenant`/`guest_refused` = gateway 2008 (admin) or
-3003 (Data API); our 5007 = gateway 2007.
+3003 (Data API).
 
 SIEM alerts to add to the gateway's list (`docs/security-events.md:29-34`): any 5008; 5005 from one client repeatedly
-(a client probing above its ceiling); any 5003 or 5011 from the chat role; 5004 for more than a minute (config monitor broken); any 5102 (malware); 5101
-from `Render` to private address classes (connectors design §7); any 5105 (engine design §17); 5103 on a `public`
-reference with a personnummer (processing design §9.5); 5007 bursts (Graph outage
-or permission removed); 5001 `user_jwt_invalid` at all (Open WebUI secret mismatch or forgery); P2 (tools design §9.3): any 5012 (definition
-changed without a planned release), 5013 bursts, any 5015 `level_refused`, 5014 from one tool or document repeatedly
+(a client probing above its ceiling); any 5003 or 5011 from the chat role; any 5004 (config unconfirmed beyond the
+grace window); any 5102 (malware); P2 with the renderer: 5101 from `Render` to private address classes (connectors
+design §7); 5103 on a `public` reference with a personnummer (processing design §9.5); 5001 `user_jwt_invalid` at all (Open WebUI secret mismatch or forgery); P2 (tools design §9.3): any 5012 (definition
+changed without a pre-registration), 5013 bursts, any 5015 `level_refused`, 5014 from one tool or document repeatedly
 (planted markup).
 
 ## 11. Keycloak realm (dev and CI)
@@ -864,38 +847,35 @@ from the gateway's file; passwords and secrets are import placeholders like `${U
 | Users | `rag-platform-admin` (1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), **`rag-reviewer`** (1000), **`rag-skill-editor`** (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute; via `Byggnadsnämnden` → department 3000), **`rag-no-role`** (1000, no role: every `/api` call 403), **`rag-chat-user`** (no admin role; for delegated chat tokens) |
 | Seed | the FakeGateway catalogue (repo-and-deployment §4.3) returns department 3000 with `memberGroups: ["Byggnadsnämnden"]`, so the org sync fills the mirror in dev |
 
-Development uses `Oidc:GroupLookup = Claims`; the Graph path is covered by unit tests with a fake
-`IGroupMembershipSource` (no Graph mock server).
-
 ## 12. Approval package 1 as Bicep (Microsoft Graph extension)
 
 ### 12.1 Content
 
+Only RAG's own registrations (plan §2); nothing on the gateway's registration changes, and no Graph application
+permission is requested in package 1.
+
 | Object | Change | Needs admin consent / privileged role |
 |---|---|---|
-| Gateway admin registration (shared) | add RAG redirect URIs (`https://<rag admin host>/signin-oidc`, `/signout-callback-oidc`); add `rag-*` app roles (Users/Groups); our own client secret is added by an operator, not Bicep (§12.2); optional ID-token claims `email`, `acct`; `requiredResourceAccess` Graph `GroupMember.Read.All` (Application) (+ `User.ReadBasic.All` if §2.4's check shows it is needed) | **yes**: the Graph application permission needs admin consent (an app role assignment on the Microsoft Graph service principal) |
-| Its service principal | `appRoleAssignmentRequired = true` (already, if the gateway followed `docs/identity-and-roles.md:169-170`) | no |
+| `ume-rag-admin` registration (new) | Web redirect URIs `https://<rag admin host>/signin-oidc`, `/signout-callback-oidc`; `rag-*` app roles (Users/Groups); optional ID-token claims `email`, `acct`; `groupMembershipClaims = SecurityGroup` (§2.5); delegated `openid profile email`; its own client secret, added by an operator, not Bicep (§12.2) | admin consent for the delegated scopes (recommended, avoids prompts) |
+| Its service principal | `appRoleAssignmentRequired = true` | no |
 | `open-webui` registration (new) | Web redirect `https://<owui host>/oauth/oidc/callback`; ID-token optional claims `email`, `acct`; delegated Graph `openid profile email` (user consent is enough, but granted tenant-wide by admin to avoid prompts); its own client secret (§12.2) | admin consent for the delegated scopes (recommended) |
 | Its service principal | `appRoleAssignmentRequired = true` | no |
 | Pilot groups (new) | `Ume.Rag pilot users` (Open WebUI access), `Ume.Rag platform admins`, `Ume.Rag department admins – <pilot department>` (names agreed with IT; no convention exists, plan answered question 5) | `Group.Create` for the deployer |
-| `rag-tools` credential and MCP server registrations (P2) | a certificate credential (`keyCredentials`) for `rag-tools` client credentials (`/run/certs/rag-tools-entra.pfx`, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-avgifter`) with app role `Tools.Invoke` (Application) and its assignment to `rag-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
-| App role assignments | pilot users group → `open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin`, reviewer groups per department → `rag-reviewer` (P2: skill editor groups → `rag-skill-editor`) on the shared registration | assigning on an app the deployer does not own needs `AppRoleAssignment.ReadWrite.All` or app ownership |
+| Tool identity and MCP server registrations (P2) | app registration `ume-rag-tools` with a certificate credential (`keyCredentials`) for client credentials (`/run/certs/ume-rag-tools-entra.pfx`, mounted in `rag-api` and `rag-admin` only, tools design §4.6); per hosted MCP server a registration `ume-mcp-<name>` (first: `ume-mcp-kommun`) with app role `Tools.Invoke` (Application) and its assignment to `ume-rag-tools` (tools design §8.1, §8.3) | assignments need app ownership or `AppRoleAssignment.ReadWrite.All` (manual step, §12.3) |
+| App role assignments | pilot users group → `open-webui` (default access); admin groups → `rag-platform-admin` / `rag-department-admin`, reviewer groups per department → `rag-reviewer` (P2: skill editor groups → `rag-skill-editor`) on `ume-rag-admin` | a manual approval step (§12.3) |
 
 ### 12.2 Credentials
 
 The Graph Bicep extension cannot create client secrets (`passwordCredentials` are not writable from Bicep; *to
-verify*). **Decision (2026-10-29): client secrets, identical to the gateway's setup and code.** Our BFF gets its own
-secret on the shared registration, created by an operator with `az ad app credential reset --append` (so the gateway's
-secret is untouched) and passed to `init-deployment.sh --oidc-client-secret-file` (`Oidc__ClientSecret`), exactly as
-in the gateway; the Graph client (§2.4) uses the same secret. Open WebUI's OIDC client supports only a client secret
-(`OAUTH_CLIENT_SECRET`), created the same way. Certificates (`private_key_jwt`) can later be added to **both** systems
-together (a `gateway-changes` candidate), not to ours alone.
+verify*). **Decision (2026-10-29): client secrets, identical to the gateway's setup and code.** Our BFF's secret on
+`ume-rag-admin` is created by an operator with `az ad app credential reset --append` and passed to
+`init-deployment.sh --oidc-client-secret-file` (`Oidc__ClientSecret`), exactly as in the gateway. Open WebUI's OIDC
+client supports only a client secret (`OAUTH_CLIENT_SECRET`), created the same way. Certificates (`private_key_jwt`)
+can later be added to **both** systems together (a `gateway-changes` candidate), not to ours alone.
 
-Because `keyCredentials` and `appRoles` are arrays that a Bicep deployment **replaces as a whole**, the shared
-registration's module must declare the gateway's roles, redirect URIs and `keyCredentials` (if any) too. So `infra/entra/`
-becomes the owner of the shared registration's definition; the gateway's client secret (a `passwordCredential`) is not
-touched by Bicep. Any manual portal change to the registration is overwritten on the next run, which the PR plan
-shows first.
+`infra/entra/` owns only RAG's registrations (`ume-rag-admin`, `ume-rag-open-webui`, P2 `rag-*`) and never declares
+or touches the gateway's. `appRoles` and `keyCredentials` are arrays a Bicep deployment replaces as a whole, so a
+manual portal change to one of our registrations is overwritten on the next run, which the PR plan shows first.
 
 ### 12.3 Sketch (`infra/entra/`)
 
@@ -903,13 +883,9 @@ shows first.
 // bicepconfig.json: "extensions": { "microsoftGraphV1": "br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0:<version to verify>" }
 extension microsoftGraphV1
 
-param gatewayAdminHost string
 param ragAdminHost string
 param openWebUiHost string
-param graphAppId string = '00000003-0000-0000-c000-000000000000'
-param groupMemberReadAllId string           // Graph app role id of GroupMember.Read.All, looked up by the workflow
 
-var gatewayRoles = [ /* gateway-admin, department-admin, viewer, team-admin: ids copied from the live registration */ ]
 var ragRoles = [
   { id: guid('rag-platform-admin'),   value: 'rag-platform-admin',   displayName: 'RAG platform admin',   allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: everything' }
   { id: guid('rag-department-admin'), value: 'rag-department-admin', displayName: 'RAG department admin', allowedMemberTypes: ['User'], isEnabled: true, description: 'Ume.Rag: own departments' }
@@ -921,18 +897,13 @@ var ragRoles = [
 ]
 
 resource adminApp 'Microsoft.Graph/applications@v1.0' = {
-  uniqueName: 'ume-admin'                   // set once on the existing registration (write-once alternate key)
-  displayName: 'Umeå kommun – LLM gateway och Ume.Rag admin'
+  uniqueName: 'ume-rag-admin'
+  displayName: 'Umeå kommun – Ume.Rag admin'
   signInAudience: 'AzureADMyOrg'
-  web: {
-    redirectUris: [
-      'https://${gatewayAdminHost}/signin-oidc', 'https://${gatewayAdminHost}/signout-callback-oidc'
-      'https://${ragAdminHost}/signin-oidc',     'https://${ragAdminHost}/signout-callback-oidc'
-    ]
-  }
-  appRoles: concat(gatewayRoles, ragRoles)
+  web: { redirectUris: [ 'https://${ragAdminHost}/signin-oidc', 'https://${ragAdminHost}/signout-callback-oidc' ] }
+  appRoles: ragRoles
+  groupMembershipClaims: 'SecurityGroup'
   optionalClaims: { idToken: [ { name: 'email' }, { name: 'acct' } ] }
-  requiredResourceAccess: [ { resourceAppId: graphAppId, resourceAccess: [ { id: groupMemberReadAllId, type: 'Role' } ] } ]
 }
 
 resource adminSp 'Microsoft.Graph/servicePrincipals@v1.0' = { appId: adminApp.appId, appRoleAssignmentRequired: true }
@@ -947,14 +918,12 @@ resource pilotAdmins 'Microsoft.Graph/groups@v1.0' = {
 
 // open-webui.bicep: application 'ume-rag-open-webui' (web redirect, optional claims), service principal with
 // appRoleAssignmentRequired, group 'Ume.Rag pilot users' (its default-access assignment is a manual step too).
-// twin-admin.bicep (fallback): application 'ume-rag-admin' with ragRoles only, same claims and permission.
 ```
 
-Not in Bicep: the admin consent for `GroupMember.Read.All` (the app role assignment on the Graph service principal)
-and the group → app role assignments of §12.1 (admin groups → `rag-*` roles, pilot users → `open-webui` default
-access). They are the approval itself: an Entra administrator makes them in the portal (or runs the `az rest`
-commands the workflow prints) after reviewing the run. Group membership of the pilot groups is maintained by IT, not
-by IaC.
+Not in Bicep: the admin consent for the delegated scopes and the group → app role assignments of §12.1 (admin groups
+→ `rag-*` roles, pilot users → `open-webui` default access). They are the approval itself: an Entra administrator
+makes them in the portal (or runs the `az rest` commands the workflow prints) after reviewing the run. Group
+membership of the pilot groups is maintained by IT, not by IaC.
 
 ### 12.4 Workflow (`entra.yml`, repo-and-deployment §8.1)
 
@@ -962,15 +931,15 @@ by IaC.
    `entra-plan`, read-only identity); `az deployment group what-if` if it supports Graph resources (*to verify*), else a
    script that prints the desired vs live `az ad app show` diff for the touched applications. Plan as a PR comment.
 2. **Dispatch** (`environment: entra-test` / `entra-prod`, required reviewers = the municipality's approvers or a
-   change-ticket link): look up Graph app role ids (`az ad sp show --id 00000003-…`), `az deployment group create
-   --template-file infra/entra/main.bicep --parameters @infra/entra/<env>.bicepparam`. The deployment needs an Azure
-   subscription and resource group for the deployment record (Graph Bicep deploys through ARM).
+   change-ticket link): `az deployment group create --template-file infra/entra/main.bicep --parameters
+   @infra/entra/<env>.bicepparam`. The deployment needs an Azure subscription and resource group for the deployment
+   record (Graph Bicep deploys through ARM).
 3. **Deployer identity**: a dedicated app with a federated credential for this repository and environment only;
-   Graph permissions `Application.ReadWrite.OwnedBy` (it is made an **owner** of the shared, Open WebUI and twin
+   Graph permissions `Application.ReadWrite.OwnedBy` (it is made an **owner** of the `ume-rag-admin` and Open WebUI
    registrations) and `Group.Create`; no `AppRoleAssignment.ReadWrite.All` and no directory role, so it cannot grant
    consent to itself or others.
 4. **After apply**: the job summary lists what still needs a person: admin consent and group → role assignments
-   (§12.3), Open WebUI client secret, group membership. The ticket id is recorded in P0 checklist item 17.
+   (§12.3), client secrets, group membership. The ticket id is recorded in P0 checklist item 17.
 
 ## 13. Test cases
 
@@ -990,12 +959,19 @@ by IaC.
   ceiling × audience kind × membership known/unknown × key scope → expected reason and status. Must include: Open WebUI
   (`internal`) never sees a `sensitive` assistant; MCP client at `public` never sees `internal`; anonymous never sees
   `internal`; `StoresHistory` client refused where the level requires no-history clients; app subject never matches a
-  department audience; empty audience list denies everybody; unconfirmed snapshot denies everything with 503.
-- Residency derivation: `public` → none, `internal` → `Eu`, `sensitive` → `OnPrem`; agent run level fixed at the
-  run's start whatever the tool results (tools design §5.3).
-- `Filter` returns exactly the resources `Decide` allows (property test over random snapshots).
-- Feature C resolver (§2.8). Tenant and guest checks (`acct=1`, foreign `idp`, wrong `tid`).
-- Role resolution: several roles add up; non-`rag-*` roles ignored; no role ⇒ every policy fails.
+  department audience; empty audience list denies everybody; a snapshot older than `Config:MaxUnconfirmedSeconds`
+  denies everything with 503, a younger unconfirmed one still decides.
+- Residency derivation: `public` → `External`, `internal` → `Eu`, `sensitive` → `OnPrem`, never absent; a
+  history-keeping client gets the same level on turn 1 and turn 2; agent run level fixed at the run's start whatever
+  the tool results (tools design §5.3).
+- Gateway client handler: a request without an explicit ceiling is refused, a key of another level is refused; one
+  case per call site (chat, condense, judge, evaluation generation, NER/LLM stages).
+- `Filter` returns exactly the resources `Decide` allows (property test over random snapshots); explain access (§4.9)
+  returns the reason `Decide` gives for every row of the policy matrix.
+- Feature C resolver (§2.8). Tenant and guest checks (`acct=1`, foreign `idp`, `idp` equal to the v1 issuer form
+  passes, wrong `tid`).
+- Role resolution: several roles add up; non-`rag-*` roles ignored; no role ⇒ every policy fails. Audit actor `oid`,
+  `sub` when there is no `oid` (Keycloak).
 - Key hasher: both prefixes, wrong prefix for the stored kind, gateway key shape refused, display prefix length.
 
 ### 13.3 Integration (`Ume.Rag.Api.Tests`, `Ume.Rag.AdminApi.Tests`, `Ume.Rag.IntegrationTests` with Keycloak and Postgres containers)
@@ -1006,8 +982,9 @@ by IaC.
 - Delegated token from `ume-rag-chat-dev` with `Chat.Use` lists only assistants allowed for client `ume-rag-chat-dev`.
 - Key revoked in the admin API stops working on the api within the poll interval (≤ 3 s in the test), with event 5001
   `key_revoked`; key created clears the negative cache.
-- Config monitor stopped (Postgres `NOTIFY` and poll blocked) ⇒ after 10 s every keyed request is 503
-  `config_unconfirmed` + 5004; resumes when the monitor confirms.
+- Config monitor stopped (Postgres `NOTIFY` and poll blocked) with `Config:MaxUnconfirmedSeconds = 5` ⇒ keyed
+  requests keep working and `/health/ready` stays ready for 5 s, then every keyed request is 503 `config_unconfirmed`
+  + 5004; resumes when the monitor confirms.
 - Open WebUI: real `open-webui` container (nightly e2e) sends the JWT; our API accepts it and stores the conversation
   under (client, `sub`, chat id).
 
@@ -1031,59 +1008,63 @@ by IaC.
 
 ## 14. Changes to other documents
 
-All applied in the step 3 review commit (2026-10-29).
+The step 3 changes were applied in the step 3 review commit (2026-10-29). Needed for the simplification pass
+(2026-10-30), applied by the owners of those documents:
 
-1. **`../platform/data-model.md`**
-   - §2.1 `Departments`: `MemberGroupIds uuid[]` → `MemberGroups varchar(256)[]` (group claim values, §2.2); GIN
-     index unchanged.
-   - §2.1 `AssistantAudiences`: for `Kind = group` store the value in a new `GroupValue varchar(256)` (null for other
-     kinds); `SubjectId` becomes nullable for `group` rows; PK → unique index over (`AssistantId`, `Kind`,
-     `coalesce(SubjectId::text, GroupValue)`).
-   - §2.1 `Clients`: `EntraAppId uuid` → `OAuthClientId varchar(200)` (Keycloak client ids are strings), unique; `Kind`
-     gains `internal`; new `ResolveUsersByEmail bool` (P2).
-   - §2.4 new `audit."AuthFailures"` (copy of the gateway's table + `Credential`, `ClientId`), `INSERT` for api and
-     admin, retention with the audit step; add to the §1.2 grants table.
-   - §11 Redis: add `ume-rag:owui-oid:{hmac(email)}` (1 h, P2); value shape of `ume-rag:groups:{oid}` is
-     `{checked, member}`.
-   - §12.9: Data API field is `memberGroups` (strings), credential is a Data API key (`catalog.read`), not a
-     `rag-sync` client.
-2. **`../platform/repo-and-deployment.md`**
-   - §4.2 realm: realm roles `Chat.Use` → client scopes `Chat.Use`/`Knowledge.Read`/`Mcp.Use`, app roles
-     `Knowledge.Read.All` + `Chat.Invoke.All`; add user profile, client `ume-rag-chat-dev`, users `rag-no-role` and
-     `rag-chat-user`, group `rag-pilot-users`; FakeGateway catalogue returns `memberGroups`.
-   - §6.3 secrets: add `OrgSync__DataApiKey` (admin); §7.1 `init-deployment.sh`: `--org-sync-key-file`.
-   - §6.1 networks: in P2 `rag-api` needs egress to `login.microsoftonline.com` and `graph.microsoft.com` (JWKS,
-     Graph membership, OBO in P3); P1 only the admin needs it.
-   - §8.1 `entra.yml`: deployer identity and steps as §12.4; note that the shared registration's definition moves to
-     `infra/entra/` (§12.2).
-   - §9 security events: add 5006–5010 and 6005–6007; attribute `DepartmentLookup` on 6002.
-3. **`../gateway-changes/plan.md`** §3b feature C: member groups are group claim values (§2.2); Data API field
-   `memberGroups`; work items of §2.7; new event 2007 `admin.group_lookup.failed`; `/bff/user` additions. New small
-   item: `tid` and guest refusal for admin sign-in and the Data API (`TenantId`, `RefuseGuests`).
-4. **`plan.md`** (this folder) §3: "Groups are stored by object id" → "by group claim value (Entra object ids;
-   names for Keycloak/AD FS)"; §2 package 1: own credential is a client secret created by an operator; consent and role assignments are
-   granted by a person after the workflow; §4 table: app permissions `Chat.Invoke.All`/`Knowledge.Read.All`.
-5. **`../chat-api/plan.md`** §8.1: conversations of Open WebUI users are keyed by (client, Open WebUI user id, chat id),
-   not by `oid`; §5 "Stored per user (Entra `oid`)" → "per `SubjectId`" (§3).
-6. **`../admin/plan.md`** §3 roles table: role-less users get 403 everywhere; organisation page links to the gateway
-   for member groups; keys page per §6.4.
-7. **`../postponed-decisions.md`** M1: add the RFC 8707 `resource`-parameter and OIDC-discovery questions (§8).
+1. **`../platform/data-model.md`**: §2.1 `Clients` without `ResolveUsersByEmail`, `TaskModel`, `TaskModelResidency`;
+   `Departments.MemberGroups` without GIN index; `GatewayKeyLinks` removed; audit actor columns hold `oid` (fallback
+   `sub`); §11 Redis without `ume-rag:groups:{oid}` and `ume-rag:owui-oid:*` (P2 or dropped); references to identity
+   design §5.4 (e-mail mapping) removed.
+2. **`../platform/repo-and-deployment.md`**: §6.1 networks: in P1 the admin needs only `login.microsoftonline.com`
+   (no Graph); §8.1 `entra.yml`: Bicep owns only RAG's registrations (§12); §9 events: 5007 reserved (P2), no
+   `DepartmentLookup` on 6002; settings `Config:MaxUnconfirmedSeconds` (90), `Gateway:RequireDelegationEcho` (default
+   `true`); `Gateway:SendResidencyCeiling` and `Gateway:AttributionMode` removed (the ceiling is always sent, there is
+   one attribution mode); §4.2 realm unchanged.
+3. **`../admin/plan.md`, `../admin/design.md`**: explain-access endpoint and page (§4.9); model validation against
+   `/v1/models` on assistant save (§4.7); organisation page shows member groups (entered in the gateway) without a
+   lookup banner; roles on `ume-rag-admin`; audit actor `oid`.
+4. **`../chat-api/plan.md`, `../chat-api/design.md`**: same effective level from turn 1 for history-keeping clients;
+   `External` for `public`; `X-Rag-Owui-Task` and `owui-tasks` removed; gateway `503` + `Retry-After` retryable, `403
+   max_residency_not_met` not; `Gateway:RequireDelegationEcho` default `true`.
+5. **`../platform/plan.md`** §7: "gateway budgets, policies and usage reports stay per team" → policies are the key's
+   for delegated requests (`ApplyTeamPolicy = false`).
+6. **`../to-verify.md`**: row 82 (Graph `checkMemberGroups`) moves to P2; row 84 without `uniqueName` adoption; new
+   rows from §16.
+7. **`../postponed-decisions.md`**: nothing (E1 already covers Open WebUI group audiences).
 
-## 15. Answered questions (2026-10-29)
+## 15. Answered questions (2026-10-29, revised 2026-10-30)
 
-1. **Shared registration ownership**: `ume-rag/infra/entra/` owns the shared admin registration's definition (the
-   gateway's roles and redirect URIs included, since Bicep replaces those arrays whole); the gateway's docs keep the
-   manual steps for other adopters (§12.2).
+1. **Registration ownership** (revised in the simplification pass): `ume-rag/infra/entra/` owns only RAG's
+   registrations (`ume-rag-admin`, Open WebUI); the gateway's registration stays the gateway's (§12.2).
 2. **Admin credential**: a client secret of our own, identical to the gateway's setup; certificates later for both
    systems together (§12.2).
 
 ## 16. To verify (before or during P0/P1)
 
-- Graph `checkMemberGroups` for `/users/{id}` with application permissions: whether `User.ReadBasic.All` is needed
-  besides `GroupMember.Read.All`.
 - Graph Bicep extension: current version, `passwordCredentials` not writable, `members` relationship on groups,
-  what-if support, `uniqueName` adoption of an existing registration.
+  what-if support, `groupMembershipClaims` settable on `Microsoft.Graph/applications`.
 - Keycloak: `client_id` claim in client-credentials tokens and `sid` absence (§7.1 step 4) on the version Aspire
   pins.
 - Entra: `acct` optional claim values and `idp` behaviour for B2B guests in ID and access tokens.
 - Open WebUI tag chosen at P0 (V1): JWT fields and fallback behaviour unchanged from `headers.py:42-86`.
+- **New**: Entra ID tokens of `ume-rag-admin` carry `oid` with the scopes the BFF requests (`openid profile email`).
+- **New**: `groupMembershipClaims = SecurityGroup` puts cloud and synced member groups as object ids into the ID
+  token's `groups` claim; how many pilot admins exceed the token's group limit (overage, §2.5).
+
+## 17. Deferred or removed (simplification pass)
+
+Per [`../simplification-pass.md`](../simplification-pass.md) §1, §6, §7 and §9:
+
+| Removed or deferred | Where it went |
+|---|---|
+| RAG admin on the gateway's existing admin registration (own secret, shared roles), the twin fallback, `infra/entra/` owning the gateway's registration | removed: own `ume-rag-admin` registration; Bicep owns only RAG's registrations (§1.6, §12) |
+| Graph `checkMemberGroups` lookup (`Oidc:GroupLookup`, `GraphGroupClient`/`IGroupMembershipSource`), `GroupMember.Read.All` in package 1, Redis `ume-rag:groups:{oid}`, circuit, event 5007 (id reserved), `departmentLookup` on `/bff/user`, attribute `DepartmentLookup` on 6002, the "failed" banner, `OrgSync:MaxAgeHours`, group search by name | P2, with data-plane audiences and package 2 (plan §2) |
+| `ResolveUsersByEmail` (Open WebUI e-mail → Entra `oid` via Graph, `ume-rag:owui-oid:*`) | dropped; group audiences through Open WebUI wait for E1 (§5.4) |
+| Audit actor `sub` | `oid`, fallback `sub` (§1.1) |
+| Strict 10 s config confirmation, readiness failing at once | grace window `Config:MaxUnconfirmedSeconds` (90 s) (§4.3 step 0, §4.5) |
+| No ceiling header for `public`; interim linked keys and the `onprem` key; "echo required once release A is in use" | `External` always sent, keys per level, `Gateway:RequireDelegationEcho` (§4.7) |
+| Follow-up-only rule for history-keeping clients | same effective level from the first turn (§4.7) |
+| `rag-tools` as a P2 service (mTLS hop from the chat and admin roles, tool credential held by it) | P3 with the first external, OBO or write tool; P2 tool calls run in the in-process hub of `rag-api` and `rag-admin`, which hold the `ume-rag-tools` certificate (§9.2, §12.1) |
+| SIEM alert on any 5105; admin audit action `gate.override` | removed (§10) |
+| `owui-tasks`, `X-Rag-Owui-Task`, `Clients.TaskModel`/`TaskModelResidency` | removed with Open WebUI task generation (§4.1, §5.1) |
+| Guest rule "`idp` ≠ issuer" | one rule in both systems (§1.7) |

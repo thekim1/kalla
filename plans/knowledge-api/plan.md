@@ -19,7 +19,7 @@ classification checks, query embedding through the gateway.
 | `POST` | `/v1/retrieve` | Search one or more collections |
 | `GET` | `/v1/collections` | Collections the caller may search |
 | `GET` | `/v1/documents/{id}` | Document metadata and link (for showing a citation) |
-| `GET` | `/v1/documents/{id}/content` | Access-checked download of a document without a public URL (uploads, attachments; SharePoint in P2) |
+| `GET` | `/v1/documents/{id}/content` | Access-checked download of a document without a public URL (uploads; SharePoint in P2) |
 
 P1: these routes are open over HTTP only to `internal` clients (`rag-internal` when chat and knowledge are split) and,
 for `/v1/documents/{id}` and `/content`, to signed **download grants** issued with citations (7 days, `sensitive` 1
@@ -53,28 +53,33 @@ config version, before any query runs (R7).
 
 - **Search interface** `ISearchIndex` with a Postgres implementation; Postgres is the master copy, so a future
   OpenSearch index can be rebuilt from it (`../../platforms/opensearch.md`).
-- **Three short statements** (design §6): **keyword** candidates (`tsvector` with a Swedish Hunspell configuration,
-  GIN index, `plainto_tsquery` with OR semantics) run **in parallel with the query embedding**, then **vector**
-  candidates (pgvector, cosine; exact scan for scopes ≤ 10,000 chunks, HNSW above), then one batched **hydrate**
-  statement; reciprocal rank fusion, dedup and diversity in .NET (`Ume.Rag.Retrieval`); filters (collection, tags via
-  GIN, type, dates) in both candidate statements.
+- **Three short statements** (design §6): **keyword** candidates (`SearchVector` over `SearchText` with the built-in
+  `swedish` configuration, GIN index; the query is decompounded in .NET by `SwedishDecompounder` and turned into an OR
+  query built from its lexeme array) run **in parallel with the query embedding**, then **vector** candidates
+  (pgvector, cosine; exact scan for scopes ≤ 10,000 chunks, HNSW above), then one batched **hydrate** statement;
+  reciprocal rank fusion, dedup and diversity in .NET (`Ume.Rag.Retrieval`); filters (scalar `CollectionId` via
+  B-tree, tags via GIN, type, dates) in both candidate statements.
 - **Embedding profiles (R3)**: in the normal case every collection uses the one on-prem platform profile, so a query
   is embedded **once** and one HNSW index serves all collections. Chunks store `embedding_profile_id`; there is one
   partial HNSW index per profile. If an assistant spans collections in different profiles (exception), the API
   searches each profile separately and fuses the result lists with RRF, which is rank-based and so does not need
   comparable scores.
-- **Shared documents (R2)**: citations point at the document store's canonical document, so the same page appears
-  once in results even if it is indexed in several of the searched collections (deduplicated by document and chunk
-  text hash; one variant per URL, at most 3 chunks per document).
+- **One citation per page**: documents belong to one source, so a page crawled for two searched collections is two
+  documents; results collapse them by identity (URL) and dedup by document and chunk text hash, at most 3 chunks per
+  document (design §8).
 - **Section expansion**: with `expand=section` the hit's section is rebuilt from neighbouring chunks (≤ 1,500 tokens,
   returned once per section; design §9).
 - **Query embedding** through the gateway on the on-prem profile (attribution: the assistant's or caller's team);
   cached by (profile, normalised query hash) for a few minutes: in Redis for `public`/`internal` queries, in process
   memory only for `sensitive` (embeddings partly reveal text).
-- **No-answer signal**: `coverage: low` when the best hit's **cosine distance** is above a per-collection threshold
-  (RRF scores are rank-only, so they cannot signal coverage), so callers can say "I don't know" without guessing.
+- **No-answer signal**: `coverage: low` only when the best hit's **cosine distance** is above a per-collection
+  threshold **and** the keyword list is empty or below its floor (RRF scores are rank-only, so they cannot signal
+  coverage), so callers can say "I don't know" without guessing; outcomes and near-threshold distances are metrics
+  (never query text) for calibration (design §7).
 - Exact SQL of the statements: design §6; indexes: `../platform/data-model.md` §3.
-- **Rerank**: interface only in P1; implemented in P3 if the gateway serves a reranker and evaluation shows a gain.
+- **Rerank**: `IReranker` seam in P1 (FakeGateway implementation, off for every assistant); a gateway rerank endpoint
+  for `bge-reranker-v2-m3` on-prem in P2, enabled per assistant when the evaluation shows a gain; coverage then uses
+  the reranker score (design §6.7).
 
 ## 4. Performance and isolation
 
@@ -84,16 +89,16 @@ config version, before any query runs (R7).
   embedding), on the data-plane connection pool with its own `statement_timeout`; the worker cannot exhaust it (R1).
   Retrieval latency is part of the R1 release test.
 - Retrieval statistics (returned and cited counts per document and chunk text hash) are counted asynchronously from
-  P1 and feed the parse learner and evaluation; query text is never stored (answered 2, design §4.7).
+  P1 and feed evaluation; query text is never stored (answered 2, design §4.7).
 
 ## 5. Milestones
 
 | Phase | Deliverable |
 |---|---|
-| P0 | Postgres image, Swedish Hunspell config, compound-splitting test |
-| P1 | `/v1/retrieve` hybrid + filters + section expansion (HTTP for `internal` clients and download grants only), access + ceiling checks, single-profile query embedding + cache, coverage signal, document dedup, retrieval counters, evaluation set run in CI |
-| P2 | Tuning per collection (weights, thresholds) behind the evaluation gate; `search_knowledge` exposed through the MCP server |
-| P3 | Rerank, cross-profile fusion if any exception profile exists, OpenSearch implementation if a trigger fires |
+| P0 | `Ume.Rag.Retrieval` skeleton on the stock pgvector image; `SwedishDecompounder` compound tests in .NET plus one Postgres match test |
+| P1 | `/v1/retrieve` hybrid + filters + section expansion (HTTP for `internal` clients and download grants only), access + ceiling checks, single-profile query embedding + cache, coverage signal (vector and keyword), document dedup, `IReranker` seam, retrieval counters, evaluation set run in CI |
+| P2 | Gateway-served rerank per assistant (advisory evaluation shows the gain); tuning per collection (weights, thresholds) with the advisory evaluation report; `search_knowledge` and `list_collections` through `/mcp` |
+| P3 | Cross-profile fusion if any exception profile exists, OpenSearch implementation if a trigger fires |
 
 ## 6. Open questions
 
@@ -107,8 +112,8 @@ Answered (2026-10-29):
    (up to ~1,500 tokens) at query time from the chunk's heading path and the stored parse output, giving the same
    context without a second chunk kind (design §9: rebuilt from neighbouring chunks, not the parse output; the
    parameter value is `section`). Retrieval runs through the shared `Ume.Rag.Retrieval` library (also used by
-   the evaluator), excludes `building` collections (except the admin test panel), and embeds queries without an
-   instruction prefix (processing design §13.5, §14.3).
+   the evaluator), excludes unpublished collections (except the admin test panel), and embeds queries without an
+   instruction prefix (processing design §13.5).
 
 Answered (2026-10-30; detail in [`design.md`](design.md) §19.1):
 
@@ -121,3 +126,15 @@ Answered (2026-10-30; detail in [`design.md`](design.md) §19.1):
 7. **No recency boost**: relevance only; `modified_after` filter; citations carry the modified date.
 8. **Download links for Open WebUI users**: signed grant link valid 7 days (`sensitive`: 1 hour), reachable only from
    the staff network, access re-checked at every download; Entra sign-in on the download path a possible P2 addition.
+
+## 7. Deferred or removed (simplification pass)
+
+Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §8:
+
+| Item | Where it went |
+|---|---|
+| Swedish Hunspell configuration in Postgres, `plainto_tsquery` with `' & '` → `' | '` | .NET `SwedishDecompounder` + built-in `swedish`; OR query from lexeme arrays (§3) |
+| `CollectionIds` arrays with GIN filter, shared documents across collections (R2 sharing by row) | scalar `CollectionId` (B-tree); documents per source, collapsed by URL at query time (§3) |
+| Coverage from vector distance alone | vector **and** keyword weak (§3) |
+| Rerank in P3 | `IReranker` seam P1, gateway rerank P2 (§3, §5) |
+| `building` collections, tuning "behind the evaluation gate" | removed; unpublished collections are not searched, evaluation is advisory |

@@ -19,7 +19,8 @@ invented on one side.
    client is the front end or integration it arrived through. Both are part of every authorisation decision.
 3. **One policy engine** (`IAccessPolicy` in `Ume.Rag.Domain`) used by the Chat/Knowledge API, the MCP server, the
    tool hub and the admin.
-4. **Fail closed**: security-relevant configuration is used only at the current config version (platform plan §4).
+4. **Fail closed**: security-relevant configuration is used only from a snapshot confirmed within
+   `Config:MaxUnconfirmedSeconds` (90 s; platform plan §4); beyond that, keyed requests get 503.
 5. **Least privilege downstream**: e.g. `Sites.Selected` instead of `Sites.Read.All`.
 6. **No approval blocks development**: local development, CI and most of P1 run on Keycloak and keys.
 
@@ -28,44 +29,43 @@ invented on one side.
 | Need | Works without an Entra registration? | Needed from |
 |---|---|---|
 | Development and CI | Yes: Keycloak with the same claims | never |
-| Platform → gateway | Yes: gateway virtual key (delegating) | never |
+| Platform → gateway | Yes: delegating gateway keys per level (`../gateway-changes/plan.md`) | never |
 | Open WebUI → Chat API | Yes: gateway-style key (`ume-rag-sk-…`) for the connection + Open WebUI's signed user JWT | never |
 | Integrations → our APIs | Yes: keys | only if an app prefers OAuth tokens |
 | URL lists, crawling, uploads | Yes | never |
 | **Staff sign-in to the admin UI** | Only with Keycloak/local accounts | **pilot** |
 | **Pilot users' sign-in to Open WebUI** | Only with local Open WebUI accounts | **pilot** (if municipal accounts are wanted) |
 | Group- or department-based assistant audiences for chat users | No | P2 (pilot audience = "users of this client") |
+| Graph lookup of member groups the claim does not show | No | P2 (package 2) |
 | `rag-api` scopes (own chat client, MCP server, OBO) | No | P2–P3 |
 | SharePoint (`rag-ingestion`) | No | P2 |
 
 **Approval packages** (created by the deployment pipelines as infrastructure as code, approved by a person):
 
-- **Package 1, submitted during P0, approved before the pilot**:
-  - *Admin sign-in* (**decided**: the easiest route): a change to the **gateway's existing admin registration**, which
-    adds:
-    - the RAG admin's redirect URIs (`https://<rag admin host>/signin-oidc`, `/signout-callback-oidc`);
-    - the `rag-*` app roles (§3);
-    - **its own client secret** (decided; created by an operator, as the gateway's) for the RAG BFF, so the two systems rotate credentials independently
-      and never share a secret;
-    - `GroupMember.Read.All` for feature C.
-
-    One registration, one sign-in experience, and the existing user/group assignments carry over. Fallback, only if
-    the gateway admin is not on Entra yet or IT refuses the change: a twin `rag-admin` registration configured
-    exactly like the gateway's (`identity-and-roles.md`, *Entra ID* steps 1–5).
+- **Package 1, submitted during P0, approved before the pilot**: RAG's **own** registrations, created and owned by
+  RAG's Bicep (`infra/entra/`), which never touches the gateway's registrations (decided 2026-10-30,
+  `../simplification-pass.md` §7):
+  - *Admin sign-in*: an `ume-rag-admin` registration configured like the gateway's (`identity-and-roles.md`, *Entra
+    ID* steps 1–5; same code), with the RAG admin's redirect URIs, the `rag-*` app roles (§3), the group claim for
+    member groups (§3) and its own client secret (created by an operator, as the gateway's). No Graph application
+    permission.
   - *Open WebUI sign-in*: an `open-webui` registration (its own app).
   - Pilot groups and their assignments.
 - **Package 2, submitted during P1, for P2**: `rag-api` (scopes and app roles), `rag-ingestion` (`Sites.Selected`),
-  `rag-tools`, `rag-chat-client`, the first municipal MCP server.
+  `ume-rag-tools` (the tool identity), `rag-chat-client`, the first municipal MCP server (`ume-mcp-kommun`), `GroupMember.Read.All` on `ume-rag-admin` for the
+  Graph member-group lookup.
 - **Later**: OBO downstream consents (P3). Per-site `Sites.Selected` grants are made by admins without the slow
   approval (answered question 2).
 
 On Azure, daemons use managed identities or workload identity federation; on-prem, certificates rather than secrets.
-Only tokens from the municipality's own tenant are accepted (`tid` check); guest accounts are refused.
+Only tokens from the municipality's own tenant are accepted (`tid` check); guest accounts are refused, with one rule
+in both systems (design §1.7).
 
 ## 3. People in the admin UI (same model as the gateway)
 
 **Mechanism**: the gateway's BFF pattern unchanged: OIDC code + PKCE, secure HttpOnly cookie, CSRF, 8-hour session,
-extend before expiry, never more than `Admin:MaxSessionHours` (12) from sign-in; audit actor is the `sub` claim.
+extend before expiry, never more than `Admin:MaxSessionHours` (12) from sign-in; audit actor is the **`oid`** claim
+(fallback `sub`), which is the same user id in every registration of the tenant.
 
 **Claims**: exactly the gateway's names and meanings:
 
@@ -74,10 +74,9 @@ extend before expiry, never more than `Admin:MaxSessionHours` (12) from sign-in;
 | `roles` | Role values (below) |
 | `departmentCodes` | Cost-centre codes of the user's departments; matched against the department's cost-centre code from the gateway |
 | `teamCodes` | Team codes, for team-scoped roles (none in the pilot) |
-| `name`, `email`, `sub` | Display and audit |
+| `name`, `email`, `oid`, `sub` | Display and audit (`oid`, fallback `sub`) |
 
-**Role values** are namespaced so they can share one registration with the gateway without ever granting gateway
-rights (or the reverse):
+**Role values** are namespaced (`rag-*`), so they can never be mistaken for gateway roles:
 
 | Role value | Meaning in the RAG platform |
 |---|---|
@@ -92,8 +91,7 @@ rights (or the reverse):
 **Configuration keys**: the gateway's OIDC settings with a `UME_RAG_` prefix and the same defaults and semantics:
 `UME_RAG_OIDC_AUTHORITY`, `_CLIENT_ID`, `_CLIENT_SECRET` (file, as `init-deployment.sh` does), `_ROLE_CLAIM`
 (`roles`), `_DEPARTMENT_CLAIM` (`departmentCodes`), `_TEAM_CLAIM` (`teamCodes`), `_GROUP_CLAIM` (`groups`),
-`_GROUPS_<ROLE>` (groups that grant a role, `;`-separated), `_EXTRA_SCOPE`. If both systems use one registration,
-authority and client id are the same values in both `.env` files.
+`_GROUPS_<ROLE>` (groups that grant a role, `;`-separated), `_EXTRA_SCOPE`.
 
 **Roles from Entra**: as the gateway recommends, **app roles assigned to groups** (`roles` claim), so no token group
 lists and no 200-group overage. Group mapping through `UME_RAG_OIDC_GROUPS_<ROLE>` (object ids) works as an
@@ -101,21 +99,19 @@ alternative, exactly as in the gateway.
 
 **Departments without a department attribute.** Both systems get department scope only from `departmentCodes`, and
 the municipality has no such attribute today (answered: users are organised in groups). Rather than a RAG-only
-mapping, the same small feature is added to **both systems** (see `../gateway-changes/plan.md`, feature C):
+mapping, the same small feature is added to **both systems** (see `../gateway-changes/plan.md`, feature C), **claims
+only** in P1:
 
 - A department (in the gateway's *Organisation* page, and mirrored here because organisation data comes from the
-  gateway) may list **member groups** (Entra object ids).
+  gateway) may list **member groups** (group claim values).
 - At sign-in, a user's department scope = codes from the `departmentCodes` claim **plus** departments whose member
-  groups the user is in. Their *role* still comes from `roles`.
-- Group membership comes from the `groups` claim (groups assigned to the application) plus a Graph
-  `checkMemberGroups` call for member groups the claim does not show (overage, or groups not assigned to the app),
-  cached for 10 minutes; if Graph fails, sign-in continues with claims only (design §2.6). This needs `GroupMember.Read.All` (application) on the admin
-  registration, requested in package 1.
+  groups appear in the user's group claim. Their *role* still comes from `roles`.
+- A group the token does not show adds nothing (scope can only narrow). A Graph lookup for such groups is P2 (§2).
 - When IT later adds a department attribute, the claim takes over without any code change.
 
 Groups are stored as group claim values: Entra object ids (works for cloud groups now and synced AD groups later,
-answered question 1), group names on Keycloak/AD FS (design §2.2); names
-are looked up via Graph for display; there is no naming convention, so admins pick groups by search (question 5).
+answered question 1), group names on Keycloak/AD FS (design §2.2). In P1 they are entered as values; picking groups
+by name search comes with the Graph lookup in P2 (there is no naming convention, question 5).
 
 ## 4. Callers of the data-plane APIs
 
@@ -146,8 +142,9 @@ secret, short expiry, only from the Open WebUI instance's network.
 
 - **P1**: `clients` only: e.g. "everyone who can sign in to the pilot's Open WebUI". Open WebUI's own Entra login
   (with *assignment required* on its enterprise app) decides who that is. No Graph lookup needed.
-- **P2**: also `departments` (department scope as in §3) and `groups` (group claim values), for callers with real tokens, and
-  for Open WebUI users resolved via Graph by email.
+- **P2**: also `departments` (department scope as in §3) and `groups` (group claim values), for callers with real
+  tokens. For Open WebUI users they wait for E1 (a real Entra token through Open WebUI, §7); Open WebUI's e-mail is
+  never the basis of a grant.
 
 **Decision** = subject may use the resource (audience) **and** the resource's classification ≤ the client's ceiling
 **and** the subject type is allowed (no anonymous access to `internal`) **and**, for tools, the tool policy allows it.
@@ -157,6 +154,11 @@ defaults: own chat client `sensitive`, Open WebUI `internal`, widget `public`, i
 
 - **MCP clients: `public` by default**; a platform admin may raise a vetted client to `internal`, never `sensitive`.
 - **Clients that keep their own copy of conversations** (Open WebUI, Teams) have a ceiling of at most `internal`.
+
+**Explain access**: `POST /api/access/explain` takes (client, subject, assistant) and returns the stable id of the
+first failing policy step and its reason code (design §4.9); cheap because `IAccessPolicy` is pure, and no security
+event (nothing is accessed). Platform admins, and department admins for their own department's assistants and
+clients.
 
 **Security events** use the gateway's scheme: a `Ume.Rag.Security` log category with stable event names and numbers
 (a separate number range from the gateway's), sent over OpenTelemetry, so the same collector rules route both
@@ -171,14 +173,15 @@ systems to the SIEM. Every denial is a security event.
 
 ## 7. Downstream access: service identity now, on-behalf-of later
 
-- **P2, service identity**: the tool hub calls MCP servers with `rag-tools` client credentials or an API key the tool
-  server requires. Read-only tools only.
+- **P2, service identity**: the in-process tool hub calls hosted MCP servers with client credentials of the tool
+  identity `ume-rag-tools`, whose certificate only `rag-api` and `rag-admin` hold (never the worker). Read-only tools
+  only. A separate `rag-tools` service comes only with the first external, OBO or write tool (P3).
 - **P3, on-behalf-of**: the tool hub exchanges the user's `rag-api` token for a downstream token with Entra OBO.
   - Needs a real Entra token: our own client, Teams and MCP clients send one; Open WebUI can too with
     `auth_type: system_oauth` if its login requests `api://rag-api/Chat.Use`
     (`open-webui/backend/open_webui/utils/headers.py:209-212`; to test in P2).
   - **Decided**: the exchange uses the `rag-api` registration's credential (Entra requires the token to be issued to
-    the app doing the exchange); `rag-tools` stays for service-identity calls.
+    the app doing the exchange); `ume-rag-tools` stays for service-identity calls.
   - The user token is an internal, short-lived hand-off from the Chat API, never stored or logged; OBO caches are
     process-local in the tool hub (no Redis), per user and short-lived (design §9.2); claims challenges are passed back to the client.
 - Non-Entra per-user OAuth for third-party tools: out of scope until a concrete need appears.
@@ -188,9 +191,9 @@ systems to the SIEM. Every denial is a security event.
 | Phase | Deliverable |
 |---|---|
 | P0 | Keycloak realm with the gateway's claims for dev and CI; OIDC and claim mapping copied from the gateway (`UME_RAG_OIDC_*`); keys in gateway style; package 1 submitted |
-| P1 | Admin sign-in on the municipal IdP (shared or twin registration); `rag-reviewer` role; department scope from groups (feature C, both systems); Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; security events; package 2 submitted |
-| P2 | `rag-api` tokens and OAuth machine clients, department/group audiences, MCP server authorisation, `rag-ingestion`, `rag-tools`, `ume-rag-pk-` widget keys |
-| P3 | OBO for user-delegated tools, Teams client, claims-challenge handling |
+| P1 | Admin sign-in on the municipal IdP (`ume-rag-admin`); `rag-reviewer` role; department scope from groups in the claim (feature C, both systems); Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; explain access; security events; package 2 submitted |
+| P2 | `rag-api` tokens and OAuth machine clients, department/group audiences, Graph member-group lookup, MCP server authorisation, `rag-ingestion`, tool identity `ume-rag-tools` (in-process hub), `ume-rag-pk-` widget keys |
+| P3 | OBO for user-delegated tools (with the `rag-tools` service), Teams client, claims-challenge handling |
 
 ## 9. Answered questions (2026-10-29)
 
@@ -198,13 +201,27 @@ systems to the SIEM. Every denial is a security event.
 2. **SharePoint site grants**: made by admins without the slow approval; only `rag-ingestion` needs approval.
 3. **Guests**: no; only accounts in the municipality's tenant.
 4. **Citizen login**: out of scope for now.
-5. **Group naming**: no convention; groups are picked by search.
+5. **Group naming**: no convention; groups are picked by search once the Graph lookup arrives (P2); in P1 they are
+   entered as object ids.
 6. **Approval timing**: no registration is needed for P0 or development; package 1 (admin and Open WebUI sign-in)
    only has to be approved before the pilot.
 
-7. **Admin registration**: add the RAG admin to the gateway's existing admin registration (easiest), with its own
-   credential; a twin `rag-admin` registration only as a fallback.
-8. **Who owns the shared registration as code**: `ume-rag/infra/entra/` (Bicep), including the gateway's roles and
-   redirect URIs on it; admin consent, role assignments and client secrets stay manual approval steps (design §12).
+7. **Admin registration** (revised 2026-10-30, simplification pass): RAG gets its own `ume-rag-admin` registration
+   (same code as the gateway's), with its own credential.
+8. **Registrations as code**: `ume-rag/infra/entra/` (Bicep) owns only RAG's registrations, never the gateway's;
+   admin consent, role assignments and client secrets stay manual approval steps (design §12).
 9. **Admin credential type**: a client secret of our own, identical to the gateway's setup; certificates later for
    both systems together.
+
+## 10. Deferred or removed (simplification pass)
+
+Per [`../simplification-pass.md`](../simplification-pass.md) §1, §6, §7 and §9:
+
+| Removed or deferred | Where it went |
+|---|---|
+| RAG admin on the gateway's existing admin registration (and the twin fallback); RAG's Bicep owning the gateway's registration | removed: own `ume-rag-admin` registration, Bicep owns only RAG's registrations (§2) |
+| Graph `checkMemberGroups` lookup, `GroupMember.Read.All` in package 1, membership cache, circuit, its security events, the "failed" banner, `OrgSync:MaxAgeHours` | P2, with data-plane audiences and package 2 (§2) |
+| Open WebUI e-mail as the basis of grants (`ResolveUsersByEmail`) | dropped; group audiences through Open WebUI wait for E1 (§5) |
+| Audit actor `sub` | `oid`, fallback `sub` (§3) |
+| Strict "current config version" rule (10 s confirmation) | grace window `Config:MaxUnconfirmedSeconds` (§1) |
+| `rag-tools` as a P2 service holding the tool credential | P3 with the first external, OBO or write tool; in P2 `rag-api` and `rag-admin` hold the `ume-rag-tools` certificate (§7) |

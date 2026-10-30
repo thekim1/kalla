@@ -1,11 +1,13 @@
 # Gateway changes: plan
 
 **Detailed design: [`design.md`](design.md)** (step 4) and ADR drafts 018–020 in [`adr-drafts.md`](adr-drafts.md);
-where they differ from this plan, they win (header values, error codes, the team id, events, releases).
+where they differ from this plan, they win (header values, error codes, the team id, events, the release).
 
-Two small features in the LLM gateway (`~/git/llmgateway`, our own code) so the RAG platform does not have to store
+Small features in the LLM gateway (`~/git/llmgateway`, our own code), shipped as **one combined release before the
+pilot** ([`../simplification-pass.md`](../simplification-pass.md) §6–§7), so the RAG platform does not have to store
 one gateway key per team, and so the `sensitive` → on-prem rule is enforced by the gateway on every request rather
-than by key settings checked once (review R4, `../../02-architecture-review.md`).
+than by key settings checked once (review R4, `../../02-architecture-review.md`). The letters A, B and C below name
+features, not releases.
 
 ## 1. Why
 
@@ -13,15 +15,19 @@ than by key settings checked once (review R4, `../../02-architecture-review.md`)
   Attribution would require the RAG platform to hold a key per team (two for teams with sensitive assistants):
   many secrets to store and rotate.
 - A key's residencies can be changed later by its team admins (`docs/identity-and-roles.md`). A "sensitive key"
-  verified once at link time can silently be widened.
+  verified once at link time can silently be widened. The RAG platform therefore holds one delegating key per level
+  and sends an explicit ceiling on every call; the gateway enforces both (§3).
 
 ## 2. Feature A: delegated attribution
 
 - A key can be marked **delegating** by a gateway admin (only gateway admins), with an explicit **list of teams** it
   may act for (decision: listed teams, not whole departments); new teams are added explicitly.
-- Requests from such a key may carry `x-ume-on-behalf-of: <team id or code>` (Ume.Rag sends the id; codes can change). The gateway then:
-  - applies that team's budgets, quotas and request policies, and the key's own allowed models/residencies, taking
-    the **intersection** (delegation can never widen access);
+- Requests from such a key may carry `x-ume-on-behalf-of: <team id or code>` (Ume.Rag sends the id; codes can change).
+  The gateway then:
+  - applies that team's budgets, quotas and routing rules, and the key's own allowed models/residencies (the
+    **intersection**: delegation can never widen access);
+  - applies **only the key's request policy**, never the effective team's (key flag `ApplyTeamPolicy`, default false
+    for delegating keys; design §5.3);
   - records usage against the team, with the delegating key id (no content and no end-user id: per-user limits and
     statistics stay in the RAG platform);
   - refuses unknown or inactive teams and teams outside the delegation list (`403 delegation_not_allowed`, event 1006);
@@ -33,43 +39,45 @@ than by key settings checked once (review R4, `../../02-architecture-review.md`)
 ## 3. Feature B: per-request residency ceiling
 
 - Header `x-ume-max-residency: OnPrem | Eu | External` (the `DataResidency` names, case-insensitive; omit for no
-  ceiling; malformed `400 invalid_request`). It removes every
-  candidate provider above the ceiling before routing, after routing rules and fallback lists are computed, like the
-  existing hard constraints in `IRouteResolver`. It can only narrow.
-- If the ceiling removes every candidate: `403 max_residency_not_met` (no silent fallback to a wider residency).
+  ceiling; malformed `400 invalid_request`). It removes every candidate provider above the ceiling before routing,
+  after routing rules and fallback lists are computed, like the existing hard constraints in `IRouteResolver`. It can
+  only narrow.
+- Key flag **`RequireMaxResidency`**: the gateway refuses a request from that key without the header
+  (`400 invalid_request`). Every Ume.Rag key has it.
+- No configured target within the ceiling: `403 max_residency_not_met` (no silent fallback to a wider residency).
+  Targets within the ceiling exist but are drained or circuit-open: `503 no_eligible_provider` with `Retry-After`.
 - The response's existing `x-ume-residency` header (`GatewayHeaders.cs:15`) reports where the request actually went,
   so callers can verify (the Chat API does, before streaming).
 - Applies to every endpoint: chat, responses, messages, embeddings, audio, images, realtime and `GET /v1/models`.
+- **`GET /v1/models` at a ceiling**: today it lists the models the key may use, filtered by the key's own allowed
+  models, providers and residencies (and enabled, not drained providers), with no request-side filter
+  (`GatewayRequestHandler.Models.cs:22`). The release intersects that list with the request's `x-ume-max-residency`
+  for every key, delegating keys included, and `ume.residencies` then shows only residencies within the ceiling.
+  Ume.Rag's model check on assistant save relies on this (`../admin/design.md` §4.6 V8; design §3.4).
 
 ## 3b. Feature C: department scope from groups (shared with the RAG platform)
 
 Both systems get a user's department scope only from the `departmentCodes` claim, and the municipality has no
-department attribute in Entra today. Added to the gateway first, and implemented identically in the RAG platform
-(`../identity/plan.md` §3):
+department attribute in Entra today. Added to the gateway and implemented identically in the RAG platform
+(`../identity/plan.md` §3), **claims only**:
 
 - A department gets an optional list of **member groups** (`MemberGroups varchar(256)[]`: group claim values, i.e.
   Entra object ids or Keycloak/AD FS group names, matched case-insensitively like `Oidc:RoleGroups`), edited on the
   *Organisation* page by gateway admins.
-- At sign-in, department scope = `departmentCodes` claim values **plus** departments whose member groups the user is
-  in. Roles still come from `roles` (or `UME_OIDC_GROUPS_<ROLE>`).
-- Membership from the group claim, plus (with `UME_OIDC_GROUP_LOOKUP=Graph`) a Graph `checkMemberGroups` call for
-  member groups the claim does not show (overage, or groups not assigned to the app), cached 10 minutes in
-  `ume:groups:{oid}` (needs `GroupMember.Read.All` on the admin registration). If Graph fails, sign-in continues with
-  claims only (scope can only narrow), `/bff/user` shows `departmentLookup: "failed"` and event 2007
-  `admin.group_lookup.failed` is logged.
+- At sign-in, department scope = `departmentCodes` claim values **plus** departments whose member groups appear in the
+  user's group claim. Roles still come from `roles` (or `UME_OIDC_GROUPS_<ROLE>`).
 - No change for adopters that have a department attribute: the claim alone still works.
 - The member groups travel with the organisation data the RAG platform reads from the gateway, so both systems
   always agree on who belongs to which department: the Data API's `catalog.read` endpoint
   `GET /v1/catalog/departments` gains a `memberGroups` field (the RAG admin syncs from it every 5 minutes with a Data
   API key, `catalog.read` only).
-- `/bff/user` gains `departmentSources` (claim or group per code) and `departmentLookup`; `admin.signin` (2002) gains
-  the attribute `DepartmentLookup`.
+- `/bff/user` gains `departmentSources` (claim or group per code).
 - Full design, shared by both systems (`DepartmentMembershipResolver`, work items, tests):
   `../identity/design.md` §2.
 
 **Small item with feature C: tenant and guest refusal.** `UME_OIDC_TENANT_ID` (when set, `tid` must match) and
-`UME_OIDC_REFUSE_GUESTS` (default on: refuse `acct = 1` or a foreign `idp`) for admin sign-in and the Data API, so a
-guest assigned by mistake to the shared registration reaches neither system (`../identity/design.md` §1.7).
+`UME_OIDC_REFUSE_GUESTS` (default on: refuse `acct = 1` or a foreign `idp`, one rule in both systems,
+`../identity/design.md` §1.7) for admin sign-in and the Data API.
 
 ## 3c. FakeLlm: honour the `dimensions` parameter
 
@@ -97,35 +105,47 @@ hub belongs in the RAG platform, because the gateway only knows team keys (not u
 token (needed for OBO), stores no content by design, and should stay small and fast. The gateway's job for tools is
 to pass them through faithfully and account for the calls.
 
+## 3d. P2: rerank endpoint (separate release)
+
+Not part of the combined pre-pilot release. The gateway has no rerank endpoint today; Ume.Rag's `IReranker` seam
+(`../knowledge-api/design.md` §6.7) runs against a FakeGateway rerank endpoint in P1. For P2, a separate gateway
+change adds a rerank endpoint serving `bge-reranker-v2-m3` on-prem: query plus passages in, one score per passage out,
+honouring `x-ume-max-residency` and `RequireMaxResidency` like every other endpoint, with usage recorded per key and
+team. Path and request shape are to be defined with the gateway team (to verify); the FakeGateway mirrors them.
+
 ## 4. Interim without the gateway changes
 
-Per-team gateway keys linked in the RAG admin (encrypted with Data Protection), a separate on-prem-only key for
-sensitive use, and the `x-ume-residency` response check in the Chat API and worker. This works with the current
-gateway but has the drawbacks above.
+Removed (simplification pass): no interim; development and test use the FakeGateway, and the pilot waits for the
+combined release.
 
 ## 5. Work items (gateway repo)
 
-1. Domain: delegation scope on keys; residency ceiling parsing.
-2. Request pipeline: resolve the effective team from the header after HMAC authentication; budget reservation and
-   policies against that team; ceiling filter in route resolution.
-3. Usage records: delegating key id and effective team.
-4. Admin API/UI: delegation scope (gateway admins only), audit entries.
-5. Tests: intersection rules, unknown team, ceiling removes all candidates, fallback never exceeds ceiling, budgets
-   charged to the right team, benchmarks unchanged.
-6. Docs: routing rules, identity and roles, ADR for delegation.
-7. Feature C and tenant/guest refusal: the work items in `../identity/design.md` §2.7 (migration, Organisation page,
-   `OidcOptions`, resolver + Graph client, `/bff/user`, event 2007, Data API field, settings, docs, tests).
+Detailed per file in `design.md` (§3.5, §4, §5, §6, §7); the release plan is design §13.
+
+1. Domain: delegation scope and the key flags `RequireMaxResidency`, `ApplyTeamPolicy`; residency ceiling parsing.
+2. Request pipeline: header check after HMAC authentication; resolve the effective team from the header; budget
+   reservation against that team; request policy per `ApplyTeamPolicy`; ceiling filter in route resolution with the
+   403/503 rule.
+3. Usage records: delegating key id, effective team, run grouping.
+4. Admin API/UI: delegation scope and key flags (gateway admins only on delegating keys), audit entries; member groups
+   on *Organisation*.
+5. Tests: intersection rules, unknown team, ceiling removes all candidates, drained in-ceiling target → 503, fallback
+   never exceeds the ceiling, budgets charged to the right team, team policy not applied, benchmarks unchanged.
+6. Docs: routing rules, identity and roles, ADRs 018–020.
+7. Feature C (claims only) and tenant/guest refusal: the work items in `../identity/design.md` §2.7.
+8. P2, separate release: the rerank endpoint (§3d).
 
 ## 6. Milestones
 
 | Phase | Deliverable |
 |---|---|
-| P0 | ADR and design agreed in the gateway repo |
-| P1 | Three releases B → C → A (design §13), with FakeLlm `dimensions` and tool-passthrough tests in B and run grouping headers in A; RAG platform drops the `onprem` linked keys after B, syncs member groups after C, and switches to the platform service key after A, before the pilot if ready |
+| P0 | ADRs and design agreed in the gateway repo |
+| P1 | One combined release (design §13) before the pilot; Ume.Rag switches to its per-level delegating keys, sends the ceiling on every call and syncs member groups. Development and test run on the FakeGateway until then |
+| P2 | Rerank endpoint for `bge-reranker-v2-m3` on-prem (§3d), its own release |
 
 ## 7. Open questions
 
-Answered (2026-10-29):
+Answered (2026-10-29, release order revised 2026-10-30):
 
 1. **Delegation scope**: an explicit list of teams.
 2. **End-user id at the gateway**: no. The gateway only sees teams; per-user rate limits and statistics are done in
@@ -134,10 +154,22 @@ Answered (2026-10-29):
    team's and its department's budgets, **and** the delegating key's own key budget and rate limit apply as an
    overall cap on the platform key.
 4. **Who may send `x-ume-max-residency`**: any key (it can only narrow); documented as a general gateway feature.
-5. **Release order**: three separate, rolling-update-safe releases: B (residency ceiling) → C (department scope from
-   groups, with tenant/guest refusal) → A (delegation).
+   Keys with `RequireMaxResidency` must send it.
+5. **Release order**: one combined, rolling-update-safe release with features B, C (claims only) and A, ADRs 018–020
+   accepted together (`../simplification-pass.md` §7).
 6. **Step 4 output**: drafts in this repo (`plans/gateway-changes/`: ADR rows in the gateway's table format + a design
    document), copied into the gateway repo when implementation starts.
-
 7. **Guests refused by default** for every gateway adopter (`RefuseGuests = true`), with an upgrade-guide note.
 8. **Delegating keys** are editable by gateway admins only (rotate and revoke excepted).
+
+## 8. Deferred or removed (simplification pass)
+
+Per [`../simplification-pass.md`](../simplification-pass.md) §6–§7:
+
+| Item | Where it went |
+|---|---|
+| Three releases B → C → A | one combined release (§6, design §13) |
+| Interim per-team linked keys (`GatewayKeyLinks`, `onprem` keys) | removed; FakeGateway for development and test, pilot waits for the release |
+| Graph `checkMemberGroups` lookup, `GroupMember.Read.All`, membership cache, circuit, event 2007, `departmentLookup` and its banner | P2, with data-plane audiences and approval package 2 (identity plan §2) |
+| Effective team's request policy on delegated requests | removed; key's policy only unless `ApplyTeamPolicy` |
+| `403 max_residency_not_met` for drained in-ceiling targets | replaced by `503` with `Retry-After` |

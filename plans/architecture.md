@@ -1,6 +1,7 @@
 # Architecture diagrams
 
-Mermaid views of the Ume.Rag design as it stands after the consistency pass. Sources: networks and containers
+Mermaid views of the Ume.Rag design as it stands after the simplification pass
+([`simplification-pass.md`](simplification-pass.md)). Sources: networks and containers
 [`platform/repo-and-deployment.md`](platform/repo-and-deployment.md) §6, data ownership
 [`platform/data-model.md`](platform/data-model.md), request paths [`chat-api/design.md`](chat-api/design.md) §4,
 [`knowledge-api/design.md`](knowledge-api/design.md) §6, ingestion
@@ -9,7 +10,7 @@ Where a diagram and a document differ, the document wins.
 
 ## 1. System overview
 
-Dashed boxes and edges marked P2 are not in the pilot.
+Dashed edges and boxes marked P2 are not in the pilot.
 
 ```mermaid
 flowchart LR
@@ -23,32 +24,33 @@ flowchart LR
     proxy["Municipal reverse proxy<br/>(TLS)"]
 
     subgraph data_plane["Data plane zone"]
-        api["rag-api + rag-api-b<br/>roles: chat, knowledge, mcp<br/>Ume.Rag.Answering + Ume.Rag.Retrieval"]
-        tools["rag-tools (P2)<br/>tool hub, only credential holder"]
+        api["rag-api (one slot in the pilot; a/b from P2)<br/>roles: chat, knowledge, mcp (P2)<br/>Ume.Rag.Answering + Ume.Rag.Retrieval<br/>in-process tool hub (P2)"]
     end
 
     subgraph control_plane["Control plane zone"]
-        admin["rag-admin + rag-admin-b<br/>BFF + Swedish admin UI<br/>test panel, config writer"]
+        admin["rag-admin<br/>BFF + Swedish journey pages<br/>test panel, config writer<br/>nightly answer judge (late P1)<br/>skill gate, in-process tool hub (P2)"]
     end
 
     subgraph ingestion_zone["Ingestion zone (rag-ingestion.slice)"]
-        worker["rag-worker<br/>connectors, pipeline engine,<br/>evaluator, index writer"]
-        parser["rag-parser<br/>Docling, OCR, NER"]
-        renderer["rag-renderer<br/>headless browser"]
+        worker["rag-worker<br/>connectors, fixed pipelines,<br/>site profiles, retrieval evaluator, index writer<br/>(no tools, not on network mcp)"]
+        parser["rag-parser<br/>every PDF: pypdfium2, Docling, Tesseract swe<br/>Office, images, gated NER"]
+        renderer["rag-renderer (P2)<br/>headless browser, only if a source needs JavaScript"]
         clamav["rag-clamav"]
     end
 
     subgraph data_zone["Data zone"]
-        pg[("Postgres + pgvector + Swedish Hunspell<br/>config | content | chat | audit")]
+        pg[("Postgres, stock pgvector image<br/>config | content | chat | audit")]
         redis[("Redis")]
-        blobs[("Blob store, envelope-encrypted<br/>file system (pilot); S3 object store beyond one host")]
+        blobs[("Blob store, write-once<br/>internal: envelope-encrypted; public: encrypted disk<br/>file system (pilot); S3 object store beyond one host")]
     end
+
+    backup[("Backup target<br/>pgBackRest WAL archive + PITR,<br/>upload copies, key escrow offline")]
 
     subgraph hosted["Hosted MCP servers (P2)"]
-        mcpsrv["ume-mcp-avgifter<br/>(mock fee calculator)"]
+        mcpsrv["ume-mcp-kommun<br/>(mock fee calculator first)"]
     end
 
-    gateway["LLM gateway<br/>(separate repo and database)<br/>chat, embeddings BGE-M3, residency"]
+    gateway["LLM gateway (separate repo and database)<br/>one combined release: residency ceiling,<br/>delegation, member groups from claims<br/>chat, embeddings BGE-M3"]
     idp["Entra ID / Keycloak"]
     web["Municipal and external websites"]
     clamdb["database.clamav.net"]
@@ -60,44 +62,47 @@ flowchart LR
     proxy --> api
     proxy --> admin
 
-    api -- "chat, embeddings<br/>x-ume-on-behalf-of, x-ume-max-residency" --> gateway
-    admin -- "test panel, Data API sync" --> gateway
-    worker -- "embeddings, LLM nodes" --> gateway
+    api -- "chat, condense, query embeddings<br/>key per level: OnPrem, Eu, open<br/>x-ume-on-behalf-of, explicit x-ume-max-residency" --> gateway
+    admin -- "test panel, answer judge, Data API sync,<br/>/v1/models at the level's ceiling,<br/>skill gate (P2)" --> gateway
+    worker -- "embeddings, LLM stages<br/>OnPrem and Eu keys only, explicit ceiling" --> gateway
 
     api --> pg
-    api --> redis
+    api -- "rate limits, query-embedding cache" --> redis
     api -- "download grants (read-only)" --> blobs
-    admin -- "config + outbox, jobs" --> pg
+    admin -- "config + outbox (serialised writes), jobs" --> pg
     admin --> redis
-    worker -- "jobs, documents, chunks" --> pg
+    worker -- "jobs, documents, chunk sets" --> pg
     worker --> blobs
-    worker -- "crawl and embedding in-flight leases" --> redis
+    worker -. "crawl and embedding in-flight leases (P2, multi-host)" .-> redis
 
     pg -. "LISTEN/NOTIFY: config version, jobs" .-> api
     pg -. "LISTEN/NOTIFY" .-> worker
+    pg -- "WAL archiving (archive_timeout 60 s)" --> backup
+    blobs -- "uploads within 15 min" --> backup
 
-    worker -- "multipart parse, /v1/ner" --> parser
-    worker -- "fetches every request" --> renderer
-    worker -- "scan" --> clamav
+    worker -- "multipart parse, /v1/inspect,<br/>gated /v1/ner" --> parser
+    worker -. "JavaScript sources only (P2)" .-> renderer
+    worker -- "scan files" --> clamav
     clamav --> clamdb
     worker -- "crawl network, egress guard" --> web
 
-    api -. "mTLS + service key (P2)" .-> tools
-    admin -. "discovery, test (P2)" .-> tools
-    tools -. "MCP Streamable HTTP" .-> mcpsrv
-    tools --> pg
+    api -. "MCP Streamable HTTP via the in-process hub (P2)" .-> mcpsrv
+    admin -. "discovery, test panel, skill gate (P2)" .-> mcpsrv
 
-    api -- "feedback import" --> owui
+    api -- "feedback import (HTTP API)" --> owui
     admin -- "OIDC sign-in" --> idp
-    api -- "JWKS (P2)" --> idp
+    api -. "JWKS (P2)" .-> idp
 ```
 
-The zones are one host in the pilot. Beyond one host ([`performance-pass.md`](performance-pass.md) §5) the same images
-run per host by role, Compose per host: three hosts in P2 (**D** data: Postgres, Redis, object store; **A** data plane
-and control; **I** ingestion), five in P3 (D; **A1/A2** rag-api and rag-admin; **F** fetch: worker
-`preview,command,sync,fetch,eval`, renderer, clamd, small parser; **P** processing: worker `parse,ner,embed` with its
-own parser). Parser, renderer and clamd stay host-local to their worker; all hosts share the one Postgres, Redis and
-object store over a routed LAN with TLS.
+The zones are one host in the pilot, with one slot per service and an announced maintenance window for updates. From
+the first multi-host deployment (P2, [`performance-pass.md`](performance-pass.md) §5) the same images run per host by
+role, Compose per host: three hosts in P2 (**D** data: Postgres, Redis, object store; **A** data plane and control;
+**I** ingestion), five in P3 (D; **A1/A2** rag-api and rag-admin; **F** fetch: worker
+`preview,command,sync,fetch,eval`, clamd, small parser, renderer if needed; **P** processing: worker `parse,embed` with
+its own parser). A Postgres streaming standby is required before production beyond the pilot (register D1). Parser,
+renderer and clamd stay host-local to their worker; all hosts share the one Postgres, Redis and object store over a
+routed LAN with TLS. A separate `rag-tools` service (mTLS hop, own database role) comes only with the first external,
+OBO or write tool (P3).
 
 ## 2. Chat request (RAG assistant, P1)
 
@@ -113,34 +118,35 @@ sequenceDiagram
     participant W as Background writer
 
     U->>C: POST /v1/chat/completions (model = assistant, history, user JWT, chat id)
-    C->>C: authenticate, IAccessPolicy at confirmed config version (memory only)
-    C->>R: per-user rate limit (1 command)
-    opt follow-up question
-        C->>G: condense on on-prem task model (x-ume-step: condense)
-        G-->>C: standalone query (fallback: raw question)
+    C->>C: authenticate, IAccessPolicy at the confirmed config version (grace window 90 s)
+    C->>C: effective level = max(assistant level, client ceiling), fixed from the first message
+    C->>R: per-user rate limit (1 command, in-memory fallback)
+    opt follow-up question that is not self-contained (length, anaphora)
+        C->>G: condense on Settings.Chat.CondenseModel (x-ume-step: condense, explicit ceiling)
+        G-->>C: standalone query (timeout 600 ms or failure: raw question)
     end
     C->>K: RetrieveAsync(assistant, query, top_k 10, expand section)
     par keyword in parallel with the embedding
-        K->>P: K: Swedish full-text candidates (top 100)
+        K->>P: K: keyword candidates (decompounded lexemes, built-in swedish, top 100)
     and
         K->>R: query embedding cache (public/internal)
         K->>G: embed query on-prem on a miss
     end
-    K->>P: V: vector candidates (exact scan or HNSW)
-    K->>K: RRF fusion, dedup, cap 3 per document, coverage
-    K->>P: H+D: hydrate hits, sections, documents (one batch)
+    K->>P: V: vector candidates (exact scan or halfvec HNSW, CollectionId filter)
+    K->>K: RRF fusion, dedup, cap 3 per document (P2: IReranker), coverage
+    K->>P: H+D: hydrate hits, sections, documents, breadcrumbs (one batch)
     K-->>C: results, sections, citations, coverage
-    alt coverage low
+    alt coverage low (best distance above threshold and keyword list below its floor)
         C-->>U: fixed not-found text + contact links (no model call)
-    else coverage ok or degraded
-        C->>G: stream answer (x-ume-on-behalf-of, x-ume-max-residency)
-        G-->>C: headers: x-ume-residency, delegation echo
+    else coverage ok or degraded, or no content words (gate skipped, no-sources frame)
+        C->>G: stream answer (per-level key, x-ume-on-behalf-of, explicit x-ume-max-residency)
+        G-->>C: headers: x-ume-residency, delegation echo (503 + Retry-After when targets are drained)
         C->>C: check residency and echo before the first byte
         G-->>C: SSE deltas
         C-->>U: filtered text, [n] renumbered, Open WebUI source events
     end
-    C->>W: enqueue turn (encrypted per conversation, 7-day key epochs)
-    W->>P: one transaction per batch: messages, sources, daily totals
+    C->>W: enqueue turn (encrypted under the bucket key of its level and expiry month)
+    W->>P: one transaction per batch: messages, sources, cited ranks, daily totals
 ```
 
 ## 3. Ingestion and publishing
@@ -148,58 +154,70 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     subgraph admin_side["Admin (rag-admin)"]
-        form["Source form + template<br/>preflight, preview"]
-        publish["Publish: plan, gate, confirm<br/>(version state 'gating')"]
+        form["Source form + template parameters<br/>preflight, preview with site-profile before/after"]
+        publish["Publish: plan from changed parameters"]
+        decide{"Owner: keep or roll back<br/>(previous chunk sets kept 14 days)"}
         cfg[("config tables<br/>+ outbox, version bump")]
+        judge["Nightly answer judge (late P1)<br/>Ume.Rag.Answering + on-prem judge"]
     end
 
-    subgraph worker_side["Worker (rag-worker)"]
+    subgraph worker_side["Worker (rag-worker): one fixed pipeline per source type"]
         sched["Scheduler / EnsureCurrent"]
-        sync["sync job: list sources,<br/>change detection, deletion guard"]
-        fetch["fetch job: URL identity,<br/>render variant, ClamAV"]
-        parse["parse job: auto-parse rules<br/>(worker or parser)"]
-        proc["inline nodes: clean, split by headings,<br/>chunk ~400 tokens, metadata, quality"]
-        ner["ner job: personal data<br/>(patterns + parser /v1/ner)"]
-        embed["embed job: BGE-M3 on-prem<br/>via gateway"]
-        index["index writer: chunk sets,<br/>collection membership"]
-        evalj["eval job: evaluation sets,<br/>gates (recall@10)"]
+        sync["sync job: sitemap lastmod (incremental by default),<br/>change detection, deletion guard,<br/>alert after 3 runs without a full traversal"]
+        profile["Site profile per host<br/>preset (Sitevision) + learned from 30–50 sample pages,<br/>versioned, checked, rollback"]
+        fetch["fetch job: final URL identity (verified profile rule),<br/>content hash, ClamAV for files"]
+        parse["parse: HTML, text, Markdown, CSV in the worker<br/>every PDF, Office file and image to the parser<br/>(cache: content hash, settings, build)"]
+        proc["clean (profile: root, boilerplate, breadcrumb, date),<br/>split by headings, chunk ~400 tokens"]
+        pii["personal data: patterns<br/>+ gated name check (/v1/ner) in processing"]
+        embed["embed job: BGE-M3 on-prem via gateway<br/>(cache: text hash, profile)"]
+        index["index writer: new chunk set written with DeletedAt set,<br/>batches of 1,000, short swap per document"]
+        evalj["eval job (advisory, retrieval only): full collection,<br/>recall@10 and MRR vs the previous run"]
     end
 
     jobs[("content.Jobs<br/>LISTEN/NOTIFY")]
-    store[("Shared document store<br/>Documents, ChunkSets, Chunks")]
-    parserp["rag-parser<br/>Docling, OCR"]
+    store[("Documents and chunk sets per source<br/>Chunks with scalar CollectionId")]
+    report["Evaluation report<br/>on the publish screen"]
+    parserp["rag-parser<br/>/v1/inspect routes: pypdfium2 text layer,<br/>Docling layout, Tesseract OCR"]
     gw["LLM gateway"]
 
     form --> cfg
     cfg --> sched
-    publish --> jobs
+    publish -- "re-processing plan" --> jobs
     sched --> jobs
-    jobs --> sync --> fetch --> parse --> proc --> ner --> embed --> index
-    parse -. "hard formats" .-> parserp
-    ner -. "names" .-> parserp
+    jobs --> sync --> fetch --> parse --> proc --> pii --> embed --> index
+    fetch -. "sample pages (first run, re-learn)" .-> profile
+    profile -. "HTML stage parameters" .-> proc
+    parse -. "PDF, Office, images" .-> parserp
+    pii -. "names, gated" .-> parserp
     embed --> gw
+    judge -- "answers, faithfulness and citation precision" --> gw
     index --> store
-    jobs --> evalj
-    evalj --> store
-    evalj -- "gate result" --> publish
-    store -- "published collections only" --> retrieval["Knowledge API retrieval"]
+    index -- "after publish, nightly" --> evalj
+    evalj --> report
+    report --> decide
+    decide -. "roll back: the same swap back" .-> store
+    store -- "live chunk sets of published collections" --> retrieval["Knowledge API retrieval"]
 ```
 
 ## 4. Tool call from an agent assistant (P2)
+
+The tool hub runs in-process in the chat role (`IToolHub`), and in `rag-admin` for discovery, the test panel and the
+skill gate; never in the worker. Skills totalling ≤ about 4k tokens are included statically
+with their tools visible from step 1, and `search_knowledge` is prefetched with the user question.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant M as Agent loop (Ume.Rag.Answering, chat role)
     participant G as LLM gateway
-    participant H as rag-tools (tool hub)
-    participant S as MCP server
+    participant H as Tool hub (in-process, chat role)
+    participant S as Hosted MCP server
 
-    M->>G: step n with tools = ToolPolicy.Visible (loaded skills only)
+    M->>G: step n with tools = ToolPolicy.Visible (explicit x-ume-max-residency)
     G-->>M: tool_calls (streamed deltas)
-    M->>M: ToolPolicy.Authorize (same function), limits 8 calls / 60 s / $0.05
-    M->>H: POST /internal/v1/tool-calls (mTLS + service key, pinned definition id)
-    H->>H: policy re-check, schema validation, rate limits
+    M->>M: ToolPolicy.Authorize (same function), lethal-trifecta check (hard refusal), limits 8 calls / 60 s / $0.05
+    M->>H: IToolHub call (pinned definition id)
+    H->>H: bulkhead per server (concurrency, timeout, circuit), schema validation, rate limits
     H->>S: tools/call (credential from resolver)
     S-->>H: result
     H->>H: normalise, cap, label untrusted, audit (HMAC of arguments)

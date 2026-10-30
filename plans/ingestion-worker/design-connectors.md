@@ -1,13 +1,14 @@
 # Ingestion worker, part B: connectors, crawl frontier, change detection, deletion guard
 
 Detail step 6b of the Ume.Rag design. Details [`plan.md`](plan.md) §3 and §8 (binding, incl. answered items 1–14)
-and consumes the contracts of [`design-engine.md`](design-engine.md) (6a): root nodes `http-fetch`, `crawl`, `upload`
-and `headless-render`, the `sync`/`fetch` jobs and their fan-out (§9.2), dedup keys, `EnsureCurrent` and the drift
-sweep (§2.3), follow runs, run outcomes (§10.2), the index writer (§14), config rules (§15) and the execution-id fence
-(§7.5). Limits come from [`../platform/data-model.md`](../platform/data-model.md) §2, §4, §7–§9,
-[`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §5.4, §5.5, §6, §9 and
-[`../parser/design.md`](../parser/design.md) §3, §5, §11. Nothing is implemented. Changes needed elsewhere: §20;
-questions: §21.
+and consumes the contracts of [`design-engine.md`](design-engine.md) (6a): fetch stages `http-fetch`, `crawl` and
+`upload`, the `sync`/`fetch` jobs and their fan-out (§9.2), dedup keys, `EnsureCurrent` and the drift sweep (§2.3),
+run outcomes (§10.2), the index writer (§14), config rules (§15) and the execution-id fence (§7.5). Limits come from
+[`../platform/data-model.md`](../platform/data-model.md) §2, §4, §7–§9,
+[`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §5.5, §6, §9 and
+[`../parser/design.md`](../parser/design.md) §3, §11. Rewritten to the simplification pass
+([`../simplification-pass.md`](../simplification-pass.md), incl. §13 umea.se findings); removed and deferred items are
+listed in §23. Nothing is implemented. Changes needed elsewhere: §20; questions: §21.
 
 Citations: `onyx/…` = `~/git/rag-platforms/onyx/backend/onyx/…`, `owui/…` =
 `~/git/rag-platforms/open-webui/backend/open_webui/…`, `eneo/…` = `~/git/eneo/backend/src/intric/…`;
@@ -17,21 +18,22 @@ Citations: `onyx/…` = `~/git/rag-platforms/onyx/backend/onyx/…`, `owui/…` 
 
 | # | Topic | Decision |
 |---|---|---|
-| 1 | Contracts | Onyx-style small capability interfaces; listing runs in the `sync` job, fetching in the root node of the `fetch` job; a typed checkpoint is a listing event and is committed with the work it covers (§2) |
-| 2 | Identity | Own URL normaliser (RFC 3986 + fixed tracking/session parameter list); identity = **final URL after redirects**; `rel=canonical` is recorded and used for discovery, **never** for identity (§3) |
+| 1 | Contracts | Onyx-style capability interfaces; listing in the `sync` job, fetching in the `fetch` job; a typed checkpoint is committed with the work it covers (§2) |
+| 2 | Identity | Own URL normaliser (RFC 3986 + fixed tracking/session parameter list + the site profile's session parameters); identity = **final URL after redirects**, mapped by the site profile's identity rule only when verified; `rel=canonical` folds an alias **only when verified** by equal content hash (§3) |
 | 3 | Politeness | Per-URL `fetch` jobs are **released by a frontier releaser** at each host's rate, so the queue never holds more than ~2 s of work per host; `CrawlHosts.NextAllowedAt` is the shared budget (§6) |
-| 4 | Sharing | One frontier row per (level, URL) with one **claim** per source; one fetch serves every claim; a fetch younger than 12 h is reused by scheduled runs (§6.2) |
-| 5 | Crawl runs | Every scheduled crawl is a full **traversal** with conditional GETs and stored outlinks (a 304 page still yields its links); deletions only after a **complete** traversal (Eneo deletes after partial crawls) (§5.4) |
-| 6 | Egress | `IEgressGuard` resolves once and connects only to the checked addresses (`ConnectCallback`), max 5 redirects re-checked per hop; host firewall as second layer plus a startup canary (§7) |
-| 7 | Renderer | The worker **fetches every browser request itself** and fulfils it, so Chromium makes no connection of its own; the renderer leaves the `crawl` network (§8.3) |
-| 8 | Render coexistence | **Variant in the document key**: `Documents.Variant` = `origin` / `rendered`; a source references one variant per URL; variants never share content hash, cache or chunk sets (§8.4) |
-| 9 | Uploads | Identity `sha256:<hex>` shared across sources of a level; file names live on the reference (`DocumentSources.DisplayName`), never in `Documents.Title` (§9) |
-| 10 | Attachments | Created in the parent's fenced parse commit; scanned in their own `fetch` job; references mirror the parent's; removed by identity on re-parse (§10) |
+| 4 | Sharing | Documents belong to one source; reuse is by cache: one frontier row per (level, URL) with one **claim** per source, one request serves every claim, raw blobs are content-addressed, and a fetch younger than 12 h is reused by scheduled runs (§6.2) |
+| 5 | Crawl runs | Every scheduled crawl is a full **traversal** with stored outlinks, skipping unchanged pages by conditional GET or reliable sitemap `lastmod`; deletions only after a **complete** traversal; an alert after 3 runs without one (§5.4) |
+| 6 | Egress | `IEgressGuard` resolves once and connects only to the checked addresses (`ConnectCallback`), max 5 redirects re-checked per hop; host firewall as second layer plus a startup canary; cookies never stored or sent (§7) |
+| 7 | Renderer | **P2**, and only if a P1-start check shows that pilot sites need JavaScript (umea.se does not); `IRenderer` stays as a seam; short pages are an info note in the crawl report (§8) |
+| 8 | Render coexistence | Removed (simplification pass): no document variants; the fetch mode will be a document attribute (§8.4) |
+| 9 | Uploads | Identity = (source, **upload slot**); the content hash is the version, so a replace keeps the document id; the file name is the document's `DisplayName`, never `Title` (§9) |
+| 10 | Attachments | P2 with email (Z1); none in P1 (§10) |
 | 11 | ClamAV | Own `INSTREAM` client; fail closed (no file enters parsing unscanned); quarantine blob kept 30 days, metadata only in the UI (§11) |
-| 12 | Change detection | ETag/Last-Modified, then a hash over **noise-normalised** HTML (raw bytes for other types); a metric measures the remaining noise (§12) |
+| 12 | Change detection | ETag/Last-Modified where sent, sitemap `lastmod` where reliable, then a hash over **noise-normalised** HTML (raw bytes for other types); a metric measures the remaining noise (§12) |
 | 13 | Effect tags | Declared per setting in the source JSON schemas (`x-effect`); the worker plans from per-tag settings hashes, the admin shows the impact before save (§12.3) |
-| 14 | Deletion guard | Proposals collected per run, applied in a **reconcile phase** after all fetches; pause above 20 % (min 5) or 500, or on an empty source; held references after a rejection (§13) |
+| 14 | Deletion guard | Proposals collected per run, applied in a **reconcile phase** after all fetches; pause above 20 % (min 5) or 500, or on an empty source; held documents after a rejection (§13) |
 | 15 | SharePoint (P2) | Stored `deltaLink` per drive, tombstones and moves processed, 410 → enumeration through the guard, subscriptions as hints only; ACLs not mirrored (§14) |
+| 16 | Site profiles | A **learned, versioned profile per host** (CMS preset such as Sitevision, extraction selectors, verified identity rule, session parameters, excluded types, `lastmod` reliability, JavaScript need), applied automatically with guardrails, audited, one-click rollback (§5.6) |
 
 ## 2. Connector contracts
 
@@ -48,7 +50,7 @@ public interface IFetchConnector<TCheckpoint> : IConnector where TCheckpoint : C
 {
     // sync job: yields work and failures; a Checkpoint event is a safe resume point; Done states completeness.
     IAsyncEnumerable<ListingEvent<TCheckpoint>> ListAsync(ListingContext context, TCheckpoint from, CancellationToken ct);
-    // fetch job, root node: one work item → content, 304, gone, skipped, refused or transient.
+    // fetch job, fetch stage: one work item → content, 304, gone, skipped, refused or transient.
     ValueTask<FetchOutcome> FetchAsync(FetchContext context, WorkItem item, CancellationToken ct);
 }
 
@@ -62,13 +64,13 @@ public abstract record ListingEvent<TCheckpoint>
     public sealed record Done(Completeness Completeness) : ListingEvent<TCheckpoint>;   // Complete | Partial(reason)
 }
 
-public sealed record WorkItem(IdentityKind Kind, string CanonicalIdentity, DocumentVariant Variant,
-    Uri? Url, short Depth, WorkHints Hints);                                // hints: sitemap lastmod, render score, upload id
+public sealed record WorkItem(IdentityKind Kind, string CanonicalIdentity, Uri? Url, short Depth,
+    WorkHints Hints);                                                       // hints: sitemap lastmod, upload slot
 
 public abstract record FetchOutcome
 {
     public sealed record Content(RawContentRef Raw, Validators Validators, IReadOnlyList<Link> Links, FetchFacts Facts) : FetchOutcome;
-    public sealed record NotModified(Validators Validators) : FetchOutcome;   // links come from the stored outlinks (§5.4)
+    public sealed record NotModified(Validators Validators) : FetchOutcome;   // 304 or lastmod skip; links from stored outlinks (§5.4)
     public sealed record Gone(string Reason) : FetchOutcome;                  // http.404, http.410, http.moved_out_of_scope
     public sealed record Skipped(string Reason) : FetchOutcome;               // robots.*, trap.*, redirect.out_of_scope
     public sealed record Refused(RunItemOutcome Outcome, string Reason) : FetchOutcome; // blocked, unsupported, too-large, malware
@@ -81,7 +83,7 @@ public interface IIdListingConnector : IConnector        // cheap "what exists n
 public interface IRetryFailedConnector : IConnector      // rebuild a work item from a failed run item
 { WorkItem FromIdentity(string canonicalIdentity, FailedItem last); }
 
-public interface IHierarchyConnector : IConnector        // tree for the admin (crawl: host → path prefixes; SharePoint: site → drive → folder)
+public interface IHierarchyConnector : IConnector        // tree for the admin (P2: SharePoint site → drive → folder)
 { IAsyncEnumerable<HierarchyNode> GetChildrenAsync(HierarchyContext context, string? parentId, CancellationToken ct); }
 
 public interface IPreflightCheck : IConnector            // runs on an unsaved configuration
@@ -93,37 +95,33 @@ public sealed record PreflightResult(string Check, PreflightState State /* pass 
 
 C# async iterators cannot return a value, so the checkpoint is an event (Onyx returns it from the generator and its
 runner enforces "exactly one, at the end", `onyx/connectors/connector_runner.py:58-95`); our runner enforces "the last
-event before `Done` is a `Checkpoint`". Connectors get no `DbContext` (as nodes, 6a §5.1): frontier, documents and
+event before `Done` is a `Checkpoint`". Connectors get no `DbContext` (as stages, 6a §5.1): frontier, documents and
 run items are written by the runner.
 
 | Connector | Fetch | Id listing | Retry failed | Hierarchy | Preflight |
 |---|---|---|---|---|---|
 | `UrlListConnector` | yes | yes (the configured list) | yes | – | yes |
-| `CrawlConnector` | yes | no: deletions come from a complete traversal (§5.4) | yes | yes (frontier path tree) | yes |
-| `UploadConnector` | yes | yes (`Uploads` not deleted) | yes | – | – |
+| `CrawlConnector` | yes | no: deletions come from a complete traversal (§5.4) | yes | – | yes |
+| `UploadConnector` | yes | yes (`Uploads` slots not deleted) | yes | – | – |
 | `SharePointConnector` (P2) | yes | yes (delta state / enumeration) | yes | yes | yes (grants) |
 
-### 2.2 Mapping onto 6a jobs and roots
+### 2.2 Mapping onto 6a jobs and stages
 
 | Step | Job (6a §9.1) | What runs |
 |---|---|---|
-| Listing | `sync`, phase `list` | `ListAsync`; items become frontier **claims** (URL list, crawl) or direct `fetch` jobs (uploads, attachments, SharePoint); yields after 1,000 items or 2 min (6a §9.2) |
-| Fetch | `fetch` | root node `http-fetch` / `crawl` / `upload` calls `FetchAsync`; on `Content` with a new content hash it commits the document (new `CurrentExecutionId`, 6a §7.5) and continues the pipeline in-process; on `NotModified` or same hash it calls `EnsureCurrent` (6a §2.3) |
+| Listing | `sync`, phase `list` | `ListAsync`; items become frontier **claims** (URL list, crawl) or direct `fetch` jobs (uploads, SharePoint); yields after 1,000 items or 2 min (6a §9.2) |
+| Fetch | `fetch` | fetch stage `http-fetch` / `crawl` / `upload` calls `FetchAsync`; the raw blob is written once under its content hash; for each served source whose document gets a new content hash it commits the document (new `CurrentExecutionId`, 6a §7.5) and continues that document's pipeline; on `NotModified` or same hash it calls `EnsureCurrent` (6a §2.3) |
 | Discovery | `fetch` | `Content.Links` / stored outlinks become new claims for every source claiming the URL (§6.2) |
 | Reconcile | `sync`, phase `reconcile` | deletion candidates, guard, soft deletes (§13); enqueued by the finalizer when a run has no open jobs |
 | Retry | `sync` (`kind = retry-failed`) | `FromIdentity` for each failed item of the last run; no reconcile deletions |
-| Preflight, hierarchy | `preview` (new kinds `preflight`, `hierarchy`) | interactive, highest priority; results in `Jobs.Result`; a URL-list preflight samples ≤ 20 URLs (admin design §4.7) |
-
-Email attachments are not listed by any connector: the parent's parse commit creates them (§10) and their `fetch`
-job runs the **attachment intake** instead of a root (roots hash alike, 6a §3.3, so the child's document stage
-matches the parent's pipeline).
+| Preflight, site profile | `preview` (new kinds `preflight`, `site-profile`) | interactive, highest priority; results in `Jobs.Result`; a URL-list preflight samples ≤ 20 URLs (admin design §4.7); `site-profile` learns or checks a host's profile (§5.6) |
 
 ### 2.3 Checkpoints and resume
 
-- Stored in `content."ConnectorCheckpoints"` (tier-local: may hold paths), not in the job payload (4 KB cap, a
-  SharePoint delta link alone is ~500 bytes per drive): `SourceId`, `Classification`, `Kind` (`run` = position of
-  the current listing; `state` = durable cursor such as delta links), `SchemaVersion`, `Checkpoint jsonb`,
-  `RunId`, `UpdatedAt`. Serialised with System.Text.Json source generation.
+- Stored in `content."ConnectorCheckpoints"` (may hold paths), not in the job payload (4 KB cap, a SharePoint delta
+  link alone is ~500 bytes per drive): `SourceId`, `Classification`, `Kind` (`run` = position of the current listing;
+  `state` = durable cursor such as delta links), `SchemaVersion`, `Checkpoint jsonb`, `RunId`, `UpdatedAt`. Serialised
+  with System.Text.Json source generation.
 - A `Checkpoint` event is committed **in the same transaction** as the claims, `fetch` jobs and run items produced
   since the previous one. A crash or lease loss (6a §9.4) loses only uncommitted work; resuming re-lists from the
   last checkpoint, and dedup keys plus upserts absorb repeated items. A yield re-enqueues the `sync` job with the
@@ -147,45 +145,58 @@ split components; the rules below are our own, so .NET's escaping quirks never c
 | 4 | Empty path → `/`; dot segments removed (RFC 3986 §5.2.4); duplicate slashes kept (servers differ) | `/a/./b/../c` → `/a/c` |
 | 5 | Percent-encoding: decode unreserved (`A–Z a–z 0–9 - . _ ~`), upper-case remaining hex, encode non-ASCII as UTF-8; reserved escapes (`%2F`, `%3F`) kept | `%7e` → `~`; `ö` → `%C3%B6` |
 | 6 | Fragment removed (also `#!`); SPA hash routing is not supported in P1 | `/a#top` → `/a` |
-| 7 | Query: drop the parameters in the list below and the source's `ignoreQueryParams`; sort the rest by name (stable for repeated names); drop an empty `?` | `?b=2&utm_source=x&a=1` → `?a=1&b=2` |
+| 7 | Query: drop the parameters in the list below, the site profile's `ignoreQueryParams` (§5.6) and the source's `ignoreQueryParams`; sort the rest by name (stable for repeated names); drop an empty `?` | `?b=2&utm_source=x&a=1` → `?a=1&b=2` |
 | 8 | Session tokens in the path removed: `;jsessionid=…`, ASP.NET `/(S(…))/` | `/p;jsessionid=AB` → `/p` |
 | 9 | Trailing slash **not** changed; `index.html` **not** removed (both can be different resources); the source setting `directoryIndexNames` opts in | – |
+| 10 | Site-profile **identity rule** (§5.6), only when verified for the host: the URL maps to the rule's form (Sitevision: the node id, `/{path}.4.88db09b1724ee319ca45d.html` → `/4.88db09b1724ee319ca45d.html`), so a page moved in the tree keeps its identity; `Documents.Url` keeps the URL as fetched for citations | – |
 
 Dropped query parameters (case-insensitive): `utm_*`, `gclid`, `gbraid`, `wbraid`, `dclid`, `fbclid`, `msclkid`,
 `yclid`, `twclid`, `igshid`, `mc_cid`, `mc_eid`, `_ga`, `_gl`, `_hsenc`, `_hsmi`, `hsCtaTracking`, `mkt_tok`,
 `jsessionid`, `phpsessid`, `aspsessionid*`, `sessionid`, `cfid`, `cftoken`. The list and rules carry a version
-(`Settings.Crawl.IdentityRulesVersion`); changing it is a release-notes item
-with a one-time identity re-sync of crawl and URL-list sources (identity tag, §12.3).
+(`Settings.Crawl.IdentityRulesVersion`); changing it is a release-notes item with a one-time identity re-sync of crawl
+and URL-list sources (identity tag, §12.3). A site profile's identity-relevant fields carry the profile version; a
+change is an identity re-sync of the sources on that host.
 
 `IdentityHash` = SHA-256 of the canonical identity (data-model §2.2). Duplicates the rules leave (trailing slash,
-`index.html`, mirror hosts) are **reported**, not guessed: the crawl report lists groups of URLs with equal content
-hash and suggests a setting or an exclude pattern (§5.5).
+`index.html`, mirror hosts, unverified aliases) are **reported**, not guessed: the crawl report lists groups of URLs
+with equal content hash and suggests a setting or an exclude pattern (§5.5).
 
 ### 3.2 Redirects
 
 - Followed manually, at most **5 hops**, each hop re-checked by the egress guard, the source scope and the target
   host's robots.txt (§7). Loops and hop 6 → `failed` `redirect.limit`; https → http → `blocked` `redirect.downgrade`.
-- **Identity = final URL**, whatever the redirect type, so `/` and `/start` that both land on `/start` are one
-  document. The run item records the chain; the frontier row of the first URL stores `RedirectTo`.
-- Target outside the source scope: permanent (301/308) on a known reference → deletion candidate
+- **Identity = final URL** (then rule 10, if the host's profile has a verified identity rule), whatever the redirect
+  type, so `/` and `/start` that both land on `/start` are one document. The run item records the chain; the frontier
+  row of the first URL stores `RedirectTo`.
+- Target outside the source scope: permanent (301/308) on a known document → deletion candidate
   `http.moved_out_of_scope`; temporary (302/303/307, typically a sign-in wall) → `skipped` `redirect.out_of_scope`,
   never a deletion. Target blocked by robots → `blocked` (6a §10.2).
 
-### 3.3 `rel=canonical`
+### 3.3 `rel=canonical`: trusted only when verified
 
-Not trusted for identity. Misconfigured canonicals (every page pointing at the start page, at a staging host, at
-http) are common on CMS sites, and acting on one drops content silently, the worst failure class here (comparison
-F6/F7). The declared canonical is stored (`Documents.CanonicalHint`), its URL is added as a discovered link (same
-scope rules), and the crawl report lists pages whose canonical points elsewhere so an admin can add an exclude.
+Misconfigured canonicals (every page pointing at the start page, at a staging host, at http) are common on CMS sites,
+and acting on one blindly drops content silently, the worst failure class here (comparison F6/F7). Aliases that serve
+a page with 200 and no redirect are common too (umea.se: `/doit` and the id-only URL serve the same page and declare
+the full path canonical, simplification pass §13.1). The rule is therefore **trust only when verified**:
 
-### 3.4 Uploads and attachments
+- The declared canonical is stored (`Documents.CanonicalHint`) and its URL is added as a discovered link (same scope
+  rules).
+- A page is **folded** into its canonical's identity only when the canonical is in scope on the same host and its
+  content hash (from the frontier: fetched in this run or within the freshness window, §6.2) equals the page's own
+  normalised content hash. A folded alias creates no document of its own; the run item records `identity.folded`.
+- Otherwise the page keeps its own identity and the crawl report lists it under "canonical elsewhere, not verified" so
+  an admin can add an exclude.
+
+### 3.4 Uploads
 
 | Kind | `IdentityKind` | `CanonicalIdentity` | Notes |
 |---|---|---|---|
-| URL | `url` | canonical final URL | + `Variant` (§8.4) |
-| Upload | `file` | `sha256:<hex of bytes>` | shared by every source of the level that uploads the same bytes (R2); file name on the reference (§9.4) |
-| Attachment | `attachment` | `<parent identity>#att/<ordinal>/<sha256>` | parser design §5.4; identical attachments in two emails are two documents (data-model §12.13) |
+| URL | `url` | canonical final URL (§3.1, incl. rule 10) | – |
+| Upload | `upload` | `upload:<uploadId>` (the upload slot, §9) | the content hash is the version; a replace keeps the document (§9.3) |
 | SharePoint item (P2) | `sharepoint` | `sharepoint:<driveId>:<itemId>` | stable across moves and renames (§14) |
+
+A document is (source, identity): two sources with the same URL or the same file have two documents, which share the
+frontier request, the content-addressed raw blob and the parse and embedding caches (simplification pass §2).
 
 ## 4. URL list
 
@@ -193,16 +204,19 @@ scope rules), and the crawl report lists pages whose canonical points elsewhere 
   the form shows duplicates), never following links. Listing yields claims at depth 0; politeness and sharing are
   the frontier's (§6).
 - **Conditional GET**: `If-None-Match` with the stored ETag (weak ETags sent as received) and `If-Modified-Since`
-  with the stored `Last-Modified` string (never our own clock). Validators are stored only from 200 responses.
-  A forced run (`force`, or every `revalidateEvery`-th run, default 4) sends no validators, catching servers whose
-  304s are wrong.
+  with the stored `Last-Modified` string (never our own clock). Validators are stored only from 200 responses, on the
+  frontier row (one request serves every source, §6.2). A forced run (`force`, or every `revalidateEvery`-th run,
+  default 4) sends no validators, catching servers whose 304s are wrong. Hosts that send neither (umea.se: no `ETag`,
+  no `Last-Modified`, `Cache-Control: no-store`) get a plain GET; change detection then rests on sitemap `lastmod`
+  (crawl, §5.4) and the content hash (§12).
+- **Cookies are never stored or sent** (`UseCookies = false`, `Set-Cookie` ignored; umea.se sets session cookies).
 
 | Response | Result | Outcome / reason | Deletion |
 |---|---|---|---|
 | 200 | content; stage 2 change detection (§12) | `added` / `updated` / `unchanged` | – |
 | 304 | `NotModified`; `EnsureCurrent` | `unchanged` | – |
 | 301/302/303/307/308 | follow (§3.2) | – | §3.2 |
-| 404, 410 | `Gone` | known reference: `deleted` after reconcile; never indexed: `failed` `http.404` (a listed URL is broken) | candidate |
+| 404, 410 | `Gone` | known document: `deleted` after reconcile; never indexed: `failed` `http.404` (a listed URL is broken) | candidate |
 | 401, 403 | failure | `failed` `http.403` | after 4 consecutive runs and 14 days (§13.1) |
 | 429, 503 with `Retry-After` | `Transient`, no attempt; host back-off (§6.4) | – | – |
 | other 5xx, timeout, connection reset, DNS failure | `Transient` with attempt (5, data-model §4.2), then `failed` `http.5xx` / `net.timeout` / `net.dns` | – | as 401 |
@@ -210,8 +224,9 @@ scope rules), and the crawl report lists pages whose canonical points elsewhere 
 
 **Limits**: HTML/XHTML ≤ 10 MB, other types ≤ 50 MB (= upload limit; parser body 60 MB, parser §11.1), counted
 after decompression (a gzip bomb hits the cap); response headers within 15 s; whole body within 30 s (HTML) or 120 s
-(files). Accepted content types are the template's `route` cases (6a §13.1) plus `application/xml`/`text/xml` for
-sitemaps; anything else stops before download (`unsupported` `http.content_type`, only the headers are read).
+(files). Accepted content types are the formats of the source type's pipeline (6a §13.1, parser design §3) plus
+`application/xml`/`text/xml` for sitemaps; anything else stops before download (`unsupported` `http.content_type`,
+only the headers are read).
 
 ## 5. Website crawl
 
@@ -228,7 +243,9 @@ sitemaps; anything else stops before download (`unsupported` `http.content_type`
 - `Crawl-delay` is honoured only when it **lowers** our rate, capped at 60 s.
 - **Sitemaps**: `XmlReader` with `DtdProcessing.Prohibit` and no resolver; gzip allowed; sitemap index depth ≤ 2;
   ≤ 50,000 URLs and ≤ 50 MB uncompressed per file (sitemaps.org limits) and ≤ `maxPages` in total; out-of-scope
-  entries dropped and counted. `lastmod` is used only by incremental runs (§5.4).
+  and excluded-type entries dropped and counted. Each URL's `lastmod` is stored on its frontier row
+  (`SitemapLastMod`) and used by the `lastmod` skip and incremental runs (§5.4). umea.se: `robots.txt` →
+  `sitemapindex.xml` → one `sitemap1.xml.gz` with 24,184 URLs, all with `lastmod`.
 
 ### 5.2 Scope
 
@@ -238,10 +255,10 @@ sitemaps; anything else stops before download (`unsupported` `http.content_type`
 | Patterns | `include` / `exclude` lists over the canonical URL without scheme (`host/path?query`). Glob: `*` = any characters except `/`, `**` = any characters, everything else literal (also `?` and `.`); host part case-insensitive, path case-sensitive. Advanced: `re:<regex>` (.NET `RegexOptions.NonBacktracking`, 50 ms timeout). Exclude wins; empty `include` = everything on the scope hosts. Eneo passes the start URL itself as a regex (`LinkExtractor(allow=url)`, `eneo/crawler/spiders/crawl_spider.py:25-34`), so `.` and `?` match anything |
 | Off-site | a link to a non-scope host is admitted **only** if an `include` pattern names that host explicitly; it is fetched as a **leaf** (its links are never followed). Otherwise counted in the report, not fetched (answered 13) |
 | Depth | link distance from a seed; default `maxDepth` 10 (answered 12); a redirect does not add depth |
-| Pages | default `maxPages` 10,000 (answered 12), counted as **admitted claims** per run (`CrawlRuns.Admitted`), seeds included. Reaching it: no more admissions, run `degraded` `crawl.limit_pages`, traversal partial → no deletions |
+| Pages | default `maxPages` 10,000 (answered 12), counted as **admitted claims** per run (`CrawlRuns.Admitted`), seeds included. Reaching it: no more admissions, run `degraded` `crawl.limit_pages`, traversal partial → no deletions. umea.se has ≈ 14,100 HTML and PDF sitemap URLs, so its source needs `maxPages` ≥ 20,000 (the preflight warns when the sitemaps alone exceed `maxPages`) |
 | Municipal host | host name matches `Settings.Crawl.MunicipalHosts` (platform-admin list, e.g. `umea.se`, `*.umea.se`; audited). Decides rate (§6.3) and `noindex` handling. Separate from the **address** allow-list `UME_RAG_CRAWL_ALLOW` (§7), which only lifts the private-range block: an internal municipal host on 10.x must be in both |
 | `noindex` / `nofollow` | meta robots and `X-Robots-Tag` (also the `UmeaKommunBot:`-prefixed form; `none` = both). **External host**: `noindex` → `skipped` `robots.noindex` (links still followed unless `nofollow`); `nofollow` → no links taken from that page. **Municipal host**: both ignored, recorded as facts (answered 11). `rel="nofollow"` on single links is a ranking hint and ignored everywhere |
-| Content types | links to types outside the template's cases are not admitted (`.zip`, `.exe` never fetched); archives and macro-enabled files that are fetched anyway end `unsupported` (Z1) |
+| Content types | links to types outside the pipeline's formats are not admitted (`.zip`, `.exe` never fetched). **Images and video are excluded by default** (site profile `excludedTypes`, §5.6; their alt text and captions come from the pages; umea.se lists ≈ 8,900 images and 233 videos). Archives and macro-enabled files fetched anyway end `unsupported` (Z1); legacy Office, RTF and email end `unsupported` `http.format_deferred` in P1 (§9.2) |
 
 ### 5.3 URL-space traps
 
@@ -253,44 +270,102 @@ with an example pattern in the report.
 | Endless paths | URL > 1,024 chars, > 15 path segments, or a segment sequence repeated ≥ 3 times (`/a/b/a/b/a/b`) | not admitted |
 | Faceted search, sorting | > 50 distinct query strings admitted for one (host, path) in a run, or > 6 query parameters | further variants not admitted (`trap.query_variants`) |
 | Calendars | a path or query value parses as a date/year outside [now − 5 y, now + 2 y], or > 100 date-like URLs under one path prefix | not admitted (`trap.calendar`) |
-| Session ids | removed by normalisation (§3.1 rule 7–8); > 20 URLs whose only difference is one unknown parameter → that parameter is reported as a candidate for `ignoreQueryParams` | report |
+| Session ids | removed by normalisation (§3.1 rule 7–8); > 20 URLs whose only difference is one unknown parameter → that parameter is reported as a candidate for `ignoreQueryParams` (and proposed to the site profile, §5.6) | report |
 | Soft-404 / duplicate fan-out | ≥ 20 URLs in a run with the same content hash | their links are expanded once per content hash (a page already expanded adds nothing new) |
 | Default excludes in the `website` template form | `**/sok?*`, `**/search?*`, `**?*sort=*`, `**?*print=*`, `**/login*`, `**/logout*` | editable |
 
 ### 5.4 Traversal, incremental runs and deletions
 
 - **Traversal** (every scheduled crawl, default weekly Saturday 01:00 with jitter, 6a §9.6; answered 7): BFS from the
-  seeds through the frontier. Every reached URL gets a conditional GET; a 304 or an unchanged hash expands links from
-  the **stored outlinks** of that content (`documents/{id}/raw/{contentHash}.links.json.gz`, written with the raw
-  blob), so an unchanged site costs one request per page and no parsing (plan §9 target).
+  seeds through the frontier. For every reached URL, one of: a **`lastmod` skip** (no request) when the host's site
+  profile marks `lastmod` reliable (§5.6) and the URL's `SitemapLastMod` is not newer than the frontier's
+  `LastFetchedAt`; otherwise a GET, conditional when validators are stored (§4). A skip, a 304 or an unchanged hash
+  expands links from the **stored outlinks** of that content (`raw/{level}/{contentHash}.links.json.gz`, written with
+  the raw blob), so an unchanged site costs at most one request per page and no parsing (plan §9 target).
 - **Complete** traversal = no admitted claim of the run is left pending, no seed failed, no host was paused for the
-  run (§6.4) and the page limit was not hit (`CrawlRuns.Complete`). Only then are references not reached in this run
+  run (§6.4) and the page limit was not hit (`CrawlRuns.Complete`). Only then are documents not reached in this run
   deletion candidates (`not-seen`). Eneo salvages a timed-out crawl and then deletes every page it did not reach
   (`eneo/worker/crawl_tasks.py:1008-1014`, `:1206-1232`); acceptance test C7 (§18) covers that case.
 - Explicit `Gone` (404/410, permanent redirect out of scope, robots now disallowing) is a candidate in any run,
   complete or not.
-- **Incremental** run (optional `incrementalSchedule`, e.g. daily for a news site with a sitemap): fetches seeds
-  whose sitemap `lastmod` is newer than the stored `FetchedAt` plus sitemap URLs not yet known, expands links only
-  from changed pages, never marks a traversal complete, so it deletes only on `Gone`. The municipal `website` template
-  sets a daily `incrementalSchedule` **by default** when the host's sitemaps carry `lastmod`; the crawl report measures
-  the share of `lastmod` hits that really changed ([`../performance-pass.md`](../performance-pass.md) §2.3).
-- `revalidateEvery` (default 4): every 4th traversal sends no validators (§4).
+- **Incremental** run (`incrementalSchedule`, e.g. daily): fetches seeds whose sitemap `lastmod` is newer than the
+  stored `LastFetchedAt` plus sitemap URLs not yet known, expands links only from changed pages, never marks a
+  traversal complete, so it deletes only on `Gone`. The `website` template sets a daily `incrementalSchedule` **by
+  default** when the host's site profile marks `lastmod` reliable (umea.se: every URL has `lastmod`, and the example
+  page's `lastmod` equals its visible "Sidan uppdaterades" date); the crawl report measures the share of `lastmod`
+  hits that really changed ([`../performance-pass.md`](../performance-pass.md) §2.3), which feeds the profile's
+  reliability flag.
+- `revalidateEvery` (default 4): every 4th traversal sends no validators and makes no `lastmod` skips (§4), catching
+  wrong 304s and stale `lastmod` values.
+- **Incomplete-traversal alert**: a source whose last N traversals (`Settings.Crawl.IncompleteRunsAlert`, default 3)
+  were all incomplete raises an alert (metric `rag.crawl.incomplete_runs`, the source page and the Overview page),
+  because its deletions never run and removed pages stay in the index. A URL-list or upload listing that ends
+  `Partial` counts the same way.
 
 ### 5.5 Crawl report
 
 Built by the finalizer from `RunItems` and `CrawlRuns` into `Runs.Report` (jsonb) and shown on the source page
-(admin plan §4). URLs appear only in the admin (tier-local data), never in telemetry (§16).
+(admin plan §4). URLs appear only in the admin, never in telemetry (§16).
 
 | Section | Contents |
 |---|---|
-| Summary | traversal complete or why not (limit, seeds failed, host paused, cancelled); pages admitted / fetched / not modified / indexed; duration; requests per host and effective rate |
+| Summary | traversal complete or why not (limit, seeds failed, host paused, cancelled) and the count of consecutive incomplete traversals (§5.4); pages admitted / fetched / `lastmod`-skipped / not modified / indexed; duration; requests per host and effective rate |
 | Failures by reason | count per `Reason` code with ≤ 10 example URLs each; broken links (`http.404` of never-indexed URLs) separately; Eneo's `failure_counts` idea (`eneo/worker/crawl_tasks.py:956-958`) |
-| Exclusions | robots-disallowed, out of scope, off-site, excluded by pattern, `noindex`: counts + top path prefixes |
+| Exclusions | robots-disallowed, out of scope, off-site, excluded by pattern or type, `noindex`: counts + top path prefixes |
 | Traps | kind, pattern, count, example |
-| Duplicates | groups of URLs with equal content hash; pages with a canonical elsewhere; suggested setting |
-| Rendering | pages rendered, JavaScript-only detections, render failures, `render.not_enabled` pages |
+| Duplicates | groups of URLs with equal content hash; folded aliases; canonicals elsewhere not verified (§3.3); suggested setting |
+| Short pages | info note: pages with < 200 visible characters while the HTML is > 5 KB; never `degraded` (rendering is not part of P1, §8.1) |
+| Site profile | profile version used; empty-root rate, boilerplate share and text yield against the previous run (the re-learn trigger, §5.6) |
 | Noise | pages whose hash changed but whose parsed output did not (§12.2), by host |
 | Deletions | proposed / applied / held, by reason (§13) |
+
+### 5.6 Site profiles (learned per host)
+
+A **site profile** belongs to a (level, host), is shared by every source crawling that host, and is versioned JSON:
+`content."SiteProfiles"` (one row per level and host, `PresetId`, `AppliedVersionId`, `NextLearnAfter`) and immutable
+`content."SiteProfileVersions"` (`Profile jsonb`, `Origin` `learned`/`manual`/`preset`, `State`
+`proposed`/`applied`/`superseded`/`rejected`, `Sample jsonb` with the check result, `CreatedBy` `system:worker` or an
+admin `oid`, `AppliedAt`, `AppliedBy`; data-model §2.2). Platform admins may edit it (a `manual` version).
+It is the one place where learning configures a stage automatically (simplification pass §2 exception, §13.2): it is
+deterministic, previewed and checked, not trial-and-score learning.
+
+| Field | Derived from the sample | Used by |
+|---|---|---|
+| `cms` | fingerprint (Sitevision: `sv-*` classes, `/sitevision/` resources, `svid…` ids) | selects the built-in **preset** whose values seed every field below |
+| `mainRoot` | landmark (`main`, `article`, `role=main`), else text density | HTML extraction (processing design) |
+| `boilerplate` | DOM blocks and phrases inside the root repeated on ≥ 60 % of sampled pages (umea.se: share widget, short-URL line) | HTML extraction strips them |
+| `linkBlocks` | repeated child-link lists inside the root (umea.se: "Undersidor") | kept for link discovery, not chunk text |
+| `breadcrumb` | `aria-label` (Brödsmulor/breadcrumb), `BreadcrumbList`, or class name; screen-reader text removed | chunk prefix (processing design) |
+| `datePattern` | visible dates matched against sitemap `lastmod` ("Sidan uppdaterades YYYY-MM-DD") | `SourceModifiedAt`, fallback `lastmod` |
+| `identityRule` | id-only URLs fetched for a few sampled pages; verified when their content hashes equal the full URL's | identity (§3.1 rule 10) |
+| `ignoreQueryParams` | preset list plus parameters whose values differ between fetches of the same page | URL normalisation (§3.1 rule 7) |
+| `excludedTypes` | default `image/*`, `video/*` | scope (§5.2) |
+| `lastmodReliable` | `lastmod` against visible dates and content-hash changes across runs | `lastmod` skip and default incremental runs (§5.4) |
+| `javascriptNeeded` | raw text yield of the sampled pages | the P1-start renderer check (§8.1) |
+
+- **Learning** (deterministic, no LLM): when a crawl source's host has no profile (at its first preview or first
+  sync) a `preview` job of kind `site-profile` samples 30–50 pages from the sitemap, spread over path sections and
+  fetched through the frontier's host budget (§6.3), and derives the profile. Built-in presets live in code next to
+  `IPipelineNode` (Sitevision in P1; WordPress and Episerver/Optimizely later); learned values override the preset
+  field by field.
+- **Applied automatically, with guardrails**: a new host's profile is applied at once and shown in the source form
+  preview (before/after text of sample pages, admin design). A **re-learned** profile for a host in use is applied
+  automatically only when its check passes on the sample: no page loses more than 10 % of its main-text words, no page
+  ends up empty, and the boilerplate share does not rise; otherwise it is stored `proposed` for a platform admin.
+  Every application moves `AppliedVersionId` and is written to the admin audit log; a platform admin's decisions are
+  `command` jobs: `approve-site-profile` and `reject-site-profile` (a proposal), `edit-site-profile` (a manual
+  version) and `rollback-site-profile` (one click, to the previous version). Each document records the version that
+  extracted it
+  (`Documents.SiteProfileVersionId`).
+- **Re-learning** runs when a run report shows a quality drop (empty-root rate, boilerplate share or text yield moved
+  by more than a threshold, e.g. after a CMS redesign; thresholds *to tune* on the fixture corpus) and at most weekly
+  per host.
+- **Effects of a new version** (§12.3): extraction fields re-process the host's HTML documents from stored raw
+  content without fetching; `identityRule` and `ignoreQueryParams` changes are an identity re-sync of the sources on
+  the host; `excludedTypes` is a scope change.
+- **Acceptance (P1)**: the umea.se example page (simplification pass §13.1) extracts to exactly its main text, without
+  share widget, short-URL line and child-link list, with its breadcrumb and the date 2026-01-15; ≈ 20 saved umea.se
+  pages (HTML and PDF) are checked in as a regression corpus (§18).
 
 ## 6. Shared crawl frontier and politeness (R2)
 
@@ -298,37 +373,38 @@ Built by the finalizer from `RunItems` and `CrawlRuns` into `Runs.Report` (jsonb
 
 | Table | Tier | Columns (new in **bold**) |
 |---|---|---|
-| `CrawlHosts` | M | `Host` PK, `RequestsPerSecond`, `MaxConnections`, `NextAllowedAt`, `RobotsBlobPath`, `RobotsFetchedAt`, **`Kind`** (`municipal`/`external`, derived from settings), **`RobotsStatus`**, **`CrawlDelaySeconds`**, **`BackoffFactor numeric(6,2)`**, **`PausedUntil`**, **`LatencyEwmaMs`**, **`RenderLeaseOwner`**, **`RenderLeaseUntil`**, **`BlockedAt`** (platform admin block) |
-| `CrawlFrontier` | L | PK (`Classification`, `UrlHash`), `Url`, `Host`, `State` (**`idle`/`pending`/`released`**), `NextFetchAt`, **`LastFetchedAt`**, **`LastStatus smallint`**, **`RedirectTo`**; `SourceIds` and `Depth` move to claims |
-| **`CrawlClaims`** | L | PK (`Classification`, `UrlHash`, `SourceId`), `RunId`, `Depth smallint`, `Variant`, `Leaf bool`, `ClaimedAt`; IX (`RunId`) |
+| `CrawlHosts` | M | `Host` PK, `RequestsPerSecond`, `MaxConnections`, `NextAllowedAt`, `RobotsBlobPath`, `RobotsFetchedAt`, **`Kind`** (`municipal`/`external`, derived from settings), **`RobotsStatus`**, **`CrawlDelaySeconds`**, **`BackoffFactor numeric(6,2)`**, **`PausedUntil`**, **`LatencyEwmaMs`**, **`BlockedAt`** (platform admin block) |
+| `CrawlFrontier` | L | PK (`Classification`, `UrlHash`), `Url`, `Host`, `State` (**`idle`/`pending`/`released`**), `NextFetchAt`, **`LastFetchedAt`**, **`LastStatus smallint`**, **`RedirectTo`**, **`ETag`**, **`LastModified`**, **`ContentHash`**, **`SitemapLastMod`** (the last response's facts: one request serves every source, §6.2); `SourceIds` and `Depth` move to claims |
+| **`CrawlClaims`** | L | PK (`Classification`, `UrlHash`, `SourceId`), `RunId`, `Depth smallint`, `Leaf bool`, `ClaimedAt`; IX (`RunId`) |
 | **`CrawlRuns`** | L | `RunId` PK, `Classification`, `SourceId`, `Admitted int`, `MaxPages`, `MaxDepth`, `LimitHit`, `SeedsFailed`, `PausedHosts jsonb`, `TrapStats jsonb`, `Complete bool` |
+| **`SiteProfiles`**, **`SiteProfileVersions`** | L | §5.6 (per level and host) |
 
-### 6.2 Claims: one fetch for every source
+### 6.2 Claims: one request for every source
 
 1. A source admits a URL by upserting its claim; the statement returns only claims new to this run, so a URL is
    admitted once per run and the page counter stays exact:
 
 ```sql
-INSERT INTO content."CrawlClaims" ("Classification", "UrlHash", "SourceId", "RunId", "Depth", "Variant", "Leaf", "ClaimedAt")
-SELECT @level, u.h, @source, @run, @depth, u.v, u.leaf, now() FROM unnest(@hashes, @variants, @leaf) AS u(h, v, leaf)
+INSERT INTO content."CrawlClaims" ("Classification", "UrlHash", "SourceId", "RunId", "Depth", "Leaf", "ClaimedAt")
+SELECT @level, u.h, @source, @run, @depth, u.leaf, now() FROM unnest(@hashes, @leaf) AS u(h, leaf)
 ON CONFLICT ("Classification", "UrlHash", "SourceId") DO UPDATE
-   SET "RunId" = EXCLUDED."RunId", "Depth" = EXCLUDED."Depth", "Variant" = EXCLUDED."Variant", "ClaimedAt" = now()
+   SET "RunId" = EXCLUDED."RunId", "Depth" = EXCLUDED."Depth", "ClaimedAt" = now()
  WHERE content."CrawlClaims"."RunId" IS DISTINCT FROM EXCLUDED."RunId"
 RETURNING "UrlHash";
 ```
 
 2. The frontier row (insert if absent) goes to `pending`, unless it was fetched within the **freshness window**
    (`Settings.Crawl.FreshnessHours`, 12 h; 0 for manual and forced runs): then the claim is served at once from the
-   stored document and outlinks, without a request.
-3. The **releaser** (§6.3) enqueues one `fetch` job per (URL, variant) with `DedupKey =
-   fetch:{level}:{identityHash}` (`:r` appended for the rendered variant, §8.4).
-4. The `fetch` job reads all claims of open runs for its URL at commit and serves each `(source, run)`: reference
-   upsert (`DocumentSources.LastSeenAt`, `LastRunId`), run item, and new claims from the links under **that**
-   source's scope and depth. The pipeline continues for the first claim's pipeline; the others get `EnsureCurrent`
-   (6a §2.3).
-5. Outcome per served run: the real one (`added`, `updated`, `unchanged`, …) when that run's reference changed or its
-   collection stage ran in this run; `shared` (6a §10.2, reason names the run) when another run had already brought
-   it current.
+   frontier's last response (content hash, raw blob, outlinks), without a request.
+3. The **releaser** (§6.3) enqueues one `fetch` job per URL with `DedupKey = fetch:{level}:{identityHash}`.
+4. The `fetch` job writes the raw blob once under its content hash (`raw/{level}/{contentHash}`; write-once, so an
+   existing key is not written again), updates the frontier row, then reads all claims of open runs for its URL at
+   commit and serves each `(source, run)`: upsert of **that source's** document (`LastSeenAt`, `LastRunId`), run
+   item, and new claims from the links under that source's scope and depth. A document whose content hash changed gets
+   a new execution and its pipeline; parse output and embeddings are cached by content and text hash (6a §8), so every
+   source after the first is cheap. Unchanged documents get `EnsureCurrent` (6a §2.3).
+5. Outcome per served run: the real one for that source's document (`added`, `updated`, `unchanged`, …); a run item
+   served by another run's request carries the fact `fetch.shared` (run id).
 
 Two departments crawling umea.se on the default Saturday schedule therefore cause one request per page (plan §9).
 
@@ -340,7 +416,7 @@ for the first sighting on each instance.
 ### 6.3 Releaser and host budgets
 
 `FrontierReleaser`: `BackgroundService`, `PeriodicTimer` 1 s, leader by `pg_try_advisory_xact_lock` (6a §9.6
-pattern), per tier. For each host with `pending` entries and `NextAllowedAt < now() + 2 s`, not paused or blocked:
+pattern). For each host with `pending` entries and `NextAllowedAt < now() + 2 s`, not paused or blocked:
 release `max(0, ⌈rate × 2 s⌉ − released-but-unfinished)` entries, ordered by manual runs first, then depth, then
 `ClaimedAt` (BFS), as `fetch` jobs with `AvailableAt` spaced by the host interval. The queue then never holds more
 than ~2 s of work per host, and a 10,000-page external crawl does not churn 10,000 waiting jobs.
@@ -362,14 +438,11 @@ RETURNING "NextAllowedAt" - make_interval(secs => @interval) AS "Slot";
 | Connections | 4 | 1 (answered 4) |
 | Interval | `max(1/rate, Crawl-delay, LatencyEwma / 4) × BackoffFactor` | `max(1/rate, Crawl-delay, LatencyEwma) × BackoffFactor` |
 
-Rates are per host and shared by every source, preview and render of every level (the table is main-only). The
-connection cap is enforced across instances by a **Redis in-flight lease per host** (sorted set
-`ume-rag:crawl:inflight:{hostMac}`, the gateway's in-flight limiter pattern; lease 60 s > fetch timeout, released in
-`finally`; `hostMac` = HMAC of the host name with the worker secret `Security__CrawlKeyPepper`, so no host names reach
-Redis). A refused lease requeues the job at `now + interval` without an attempt (`rate_limited`). Redis down: fall
-back to ⌈`MaxConnections` ÷ k⌉ per instance, k = live `WorkerInstances` running `fetch` (heartbeat < 45 s); slot pacing
-still bounds in-flight requests ([`../performance-pass.md`](../performance-pass.md) §3.6). Platform admins may
-block hosts and override a host's budget (`Settings.Crawl.HostOverrides`).
+Rates are per host and shared by every source, preview and profile sample of every level (`CrawlHosts` has no level).
+On the single-host pilot the connection cap is an **in-process semaphore per host** in the one worker instance; slot
+pacing bounds in-flight requests as well. A refused slot requeues the job at `now + interval` without an attempt
+(`rate_limited`). Platform admins may block hosts and override a host's budget (`Settings.Crawl.HostOverrides`).
+P2 (first multi-host deployment): the cap moves to a Redis in-flight lease per host (§23).
 
 **The crawler rules stay** (answered 4; performance pass answered 7): ≤ 10 req/s per municipal host and the night
 window (§6.5). Higher rates for allow-listed municipal hosts and a **daytime trickle** (e.g. 2 req/s outside the
@@ -391,10 +464,10 @@ written consent ([`../performance-pass.md`](../performance-pass.md) §2.3, §10.
 
 Traversals release claims only inside the source's `crawlWindow` (default `22:00–06:00` Europe/Stockholm, every
 day; answered 4). A traversal not finished at 06:00 pauses and continues the next night; the run stays `running`
-and shows "waiting for crawl window". At 10 req/s a 10,000-page municipal site takes ~17 minutes; at 1 req/s an
-external one ~2.8 h, both inside one window. Manual "sync now" and URL lists (nightly by default) ignore the window.
-A daytime trickle outside the window exists only as an off-by-default per-host override with the web team's written
-consent (§6.3).
+and shows "waiting for crawl window". At 10 req/s a 10,000-page municipal site takes ~17 minutes (umea.se's ≈ 14,100
+HTML and PDF URLs ~24 minutes); at 1 req/s an external one ~2.8 h, both inside one window. Manual "sync now" and URL
+lists (nightly by default) ignore the window. A daytime trickle outside the window exists only as an off-by-default
+per-host override with the web team's written consent (§6.3).
 
 ## 7. Egress / SSRF guard
 
@@ -405,12 +478,12 @@ public interface IEgressGuard
     // Resolves once; throws EgressBlockedException (→ outcome blocked, event 5101) if any address is not allowed.
     ValueTask<IReadOnlyList<IPAddress>> ResolveAsync(string asciiHost, EgressPurpose purpose, CancellationToken ct);
 }
-public enum EgressPurpose { Fetch, Robots, Sitemap, Render, Preflight, Preview }
+public enum EgressPurpose { Fetch, Robots, Sitemap, Preflight, Preview }   // Render added with the renderer (P2)
 ```
 
 | Topic | Rule |
 |---|---|
-| DNS pinning | One `SocketsHttpHandler` for all crawling with `ConnectCallback`: resolve via the guard, then connect **only** to the returned addresses (no second lookup, no rebinding window). TLS still uses the URL host for SNI and certificate checks. `PooledConnectionLifetime` 2 min, `UseProxy = false`, `AllowAutoRedirect = false`, `UseCookies = false`. Same as Open WebUI's pinned connect (`owui/retrieval/web/utils.py:187-215`) and Onyx's pinned request (`onyx/utils/url.py:417-435`) |
+| DNS pinning | One `SocketsHttpHandler` for all crawling with `ConnectCallback`: resolve via the guard, then connect **only** to the returned addresses (no second lookup, no rebinding window). TLS still uses the URL host for SNI and certificate checks. `PooledConnectionLifetime` 2 min, `UseProxy = false`, `AllowAutoRedirect = false`, `UseCookies = false` (no cookie is ever stored or sent). Same as Open WebUI's pinned connect (`owui/retrieval/web/utils.py:187-215`) and Onyx's pinned request (`onyx/utils/url.py:417-435`) |
 | Any-address rule | if **any** resolved address is blocked, the host is refused (round-robin rebinding cannot win by luck) |
 | Blocked IPv4 | `0.0.0.0/8`, `10/8`, `100.64/10`, `127/8`, `169.254/16`, `172.16/12` (covers our compose subnets), `192.0.0/24`, `192.0.2/24`, `192.88.99/24`, `192.168/16`, `198.18/15`, `198.51.100/24`, `203.0.113/24`, `224/4`, `240/4` |
 | Blocked IPv6 | `::/128`, `::1`, `fc00::/7`, `fe80::/10`, `ff00::/8`, `2001:db8::/32`, `100::/64`; addresses that **embed** IPv4 (`::ffff:0:0/96`, `::/96`, `64:ff9b::/96`, `64:ff9b:1::/48`, 6to4 `2002::/16`, Teredo `2001::/32`) are judged by the embedded address too (Open WebUI `_embedded_ipv4`, `owui/retrieval/web/utils.py:73-93`). IPv4 is tried first; the `crawl` network may have no IPv6 at all (*to verify*) |
@@ -421,100 +494,51 @@ public enum EgressPurpose { Fetch, Robots, Sitemap, Render, Preflight, Preview }
 | Canary | at startup in Production the worker opens a raw socket (bypassing the guard) to `169.254.169.254:80` and to a private address outside the allow-list; a successful connect means the firewall is missing: critical log, health `degraded`, crawling disabled until fixed |
 | Event 5101 `rag.egress.blocked` | Warning; at most once a minute per (source, reason) with `Count`. Attributes: `Reason` (`private_address`, `embedded_address`, `scheme`, `port`, `userinfo`, `blocked_host`, `redirect_downgrade`), `AddressClass` (`loopback`, `rfc1918`, `link_local`, `cgnat`, `ula`, `multicast`, `reserved`), `Purpose`, `SourceId`, `RunId`, `Classification`, `HostHash` (HMAC); the host name itself only for `public` sources |
 
-## 8. Renderer
+## 8. Renderer (P2, conditional)
 
 ### 8.1 When to render
 
-Source setting `render`: `off` (default) / `auto` / `always`; the `crawl` root's param `render` (6a §6) keeps its
-meaning: `never` = never at the root, `if-enabled` = per the source setting, `always` = every HTML page if the
-source allows rendering at all.
+Not in P1. At P1 start a check over the pilot sites (the site profile's `javascriptNeeded`, §5.6, and the crawl
+report's short-page note, §5.5) decides whether any pilot site needs JavaScript; umea.se is server-rendered
+(simplification pass §13.1), so none is expected. Only if one does is a renderer built, in P2: a source then either
+renders or not (a source setting), identity stays the final URL, and the fetch mode is a document attribute. Short
+pages are an info note in the crawl report, never `degraded` because rendering is off.
 
-| Source `render` | Root renders a page when | Fallback node `headless-render` (6a §13.1) |
-|---|---|---|
-| `off` | never | passes through, fact `render.not_enabled`, outcome `degraded` |
-| `auto` | the origin HTML scores as JavaScript-only (below), or `Documents.RenderRecommendedAt` is set for the URL | renders; if the rendered text is ≥ 2× the origin's, sets `RenderRecommendedAt`, so the next run renders at the root |
-| `always` | every HTML page | renders (rarely reached) |
-
-**JavaScript-only score** (cheap, on the origin DOM the root already parses for links): visible body text < 200
-characters while the HTML is > 5 KB (+2); an empty mount element `#root`, `#app`, `#__next`, `#__nuxt`, `[ng-app]`
-(+2); `<noscript>` text asking to enable JavaScript (`JavaScript`, `aktivera`, `enable`) (+2); ≥ 1 script bundle
-> 100 KB (+1); embedded server data with text (`__NEXT_DATA__`, `__NUXT__`, `application/ld+json` with content)
-(−3). Score ≥ 4 → render. The score and its parts are facts on the run item, so wrong guesses are visible.
-
-### 8.2 Contract (`IRenderer`, backend-agnostic per answered 14)
+### 8.2 Contract (`IRenderer`, the seam)
 
 ```csharp
 public interface IRenderer
 {
     ValueTask<RenderResult> RenderAsync(RenderRequest request, IRenderFetcher fetcher, CancellationToken ct);
 }
-public sealed record RenderRequest(Uri Url, FetchedResponse MainDocument, TimeSpan Timeout /* 30 s */,
-    RenderWait WaitFor /* NetworkIdle | Load | Selector */, string? Selector, long MaxDomBytes /* 10 MB */,
-    int MaxSubrequests /* 200 */, long MaxTransferBytes /* 20 MB */);
+public sealed record RenderRequest(Uri Url, FetchedResponse MainDocument, TimeSpan Timeout, RenderWait WaitFor,
+    string? Selector, long MaxDomBytes, int MaxSubrequests, long MaxTransferBytes);
 public sealed record RenderResult(Uri FinalUrl, string Html, string? Title, IReadOnlyList<Link> Links,
-    RenderStats Stats /* subrequests, blocked by reason, bytes, console errors, durations */, bool Truncated);
+    RenderStats Stats, bool Truncated);
 ```
 
-| Rule | Value |
-|---|---|
-| Browser | Playwright `BrowserType.ConnectAsync` to the `rag-renderer` server (repo-and-deployment §5.4); **one fresh context per page**, closed afterwards |
-| Context | `JavaScriptEnabled`, `AcceptDownloads = false`, `ServiceWorkers = Block`, no permissions, no geolocation, locale `sv-SE`, viewport 1280×2000, our user agent (answered 10), no stored cookies, no consent clicks |
-| Blocked resource types | `image`, `media`, `font`, `websocket`, `eventsource`, `manifest`, `other`; scripts, stylesheets, XHR/fetch allowed |
-| Popups, dialogs, downloads | new pages closed at once, dialogs dismissed, a download aborts the page (`render.download_attempt`) |
-| Wait | `networkidle` (default) or a selector, then `document.documentElement.outerHTML`; DOM > 10 MB → truncated + `degraded` |
-| Concurrency | per host **1** (answered 2) via `CrawlHosts.RenderLeaseUntil` (45 s lease, shared across instances); globally `Renderer:MaxPages` = 2 (1 CPU container) |
-| Placement | the worker fulfils every browser request itself (§8.3), so a renderer is **host-local to its fetch worker**, never published on the LAN: one renderer per fetch host, `cpus` 1–2, `Renderer:MaxPages` = 2 per CPU; one JavaScript-only site still renders at ≈ 1 page/s (per-host lease), more renderers help only for many such sites ([`../performance-pass.md`](../performance-pass.md) §3.7) |
-| Timeouts | page 30 s; whole render job 45 s; on timeout the origin content is indexed, outcome `degraded` `render.timeout` |
-| Subresource politeness | ≤ 4 in flight per page; assets cached in worker memory per run (LRU 200 MB, by URL + validators), so a site's bundles are fetched once per run, not per page |
+The interface is backend-agnostic (answered 14); P1 has no implementation and no `rag-renderer` container.
 
-### 8.3 Egress: the worker fetches for the browser
+### 8.3 Egress rule for a P2 renderer
 
-A route handler on `**/*` that only *checks* URLs is not enough: Chromium resolves the host again after the check
-(rebinding), and Playwright route handlers do not see redirect hops (`onyx/utils/playwright_fetch.py:407`). Open
-WebUI therefore fetches every intercepted request itself and fulfils it (`owui/retrieval/web/utils.py:850-900`). We
-do the same: `Page.RouteAsync("**/*")` → blocked type → `AbortAsync`; otherwise the worker fetches the request with
-the guarded client (`IRenderFetcher`: method, allowed headers, body; redirects followed and re-checked; size caps)
-and calls `FulfillAsync` with the final response. The main document is fulfilled from the bytes the root already
-fetched. Consequence: **Chromium never opens a network connection**, so `rag-renderer` leaves the `crawl` network
-and stays on the internal `ingestion` network only (change, §20); the browser's egress rules are the crawler's by
-construction (answered 2). WebSockets are blocked (no interception in our fetcher).
+Decided now so the seam fits: the worker **fetches every browser request itself** with the guarded client
+(`IRenderFetcher`) and fulfils it (`Page.RouteAsync("**/*")` → `FulfillAsync`), as Open WebUI does
+(`owui/retrieval/web/utils.py:850-900`), because a route handler that only checks URLs leaves Chromium free to resolve
+again (rebinding) and does not see redirect hops (`onyx/utils/playwright_fetch.py:407`). Chromium then opens no
+network connection, the renderer sits only on the internal `ingestion` network, one fresh context per page, no
+cookies, downloads aborted, per-host concurrency 1 (answered 2).
 
-### 8.4 Rendered and non-rendered content of one URL (6a §13.1 open item)
+### 8.4 Rendered and non-rendered content of one URL
 
-**Decision: the variant is part of the document key.** `Documents.Variant` = `origin` (HTTP response as served) or
-`rendered` (serialised DOM after rendering), unique key (`Classification`, `IdentityKind`, `IdentityHash`, `Variant`).
-
-| Alternative | Why not |
-|---|---|
-| One document, both raw blobs | one `ContentHash` per document: two sources (one rendering) would overwrite each other's hash and execution id on every fetch, so the document would ping-pong between "changed" states and never be unchanged |
-| Rendering only as a node on the origin document | change detection would see only the origin bytes; for a JavaScript-only page the HTML shell never changes while the content (loaded by XHR) does, so updates would be missed |
-
-Consequences:
-
-- A source references **one** variant per URL, chosen at the root (§8.1). When the choice flips, the reference
-  moves: the new variant's reference is added and the old one removed in the same run with reason
-  `variant-changed`, exempt from the deletion guard (it is a replacement).
-- **Content hash**: origin = §12 hash of the HTTP body; rendered = §12 hash of the serialised DOM. Change detection
-  for the rendered variant: conditional GET of the main document first; a 304 still re-renders only when the page
-  is JavaScript-only (its data may have changed), otherwise the stored rendered content is kept.
-- **Sharing**: same-level sources share a variant only if they make the same choice. Fetch, cache, parse and chunk
-  sets are per variant. The fetch dedup key gets `:r` for the rendered variant; both variants respect the same host
-  budget.
-- **Retrieval**: two variants of one URL in one collection (two sources with different settings) give two documents
-  with the same `Url`; the admin source form warns when this would happen. Citations show the URL either way.
-- The fallback node (6a §13.1) stays: it renders inside the origin document's stage (output cached on the origin
-  hash) and feeds §8.1's `RenderRecommendedAt`.
+Removed (simplification pass): no `origin`/`rendered` document variants; identity is the final URL and the fetch mode
+is a document attribute (§8.1).
 
 ### 8.5 Alternatives considered: a self-hosted crawler service
 
-A self-hosted Firecrawl was considered instead of our own crawler and rejected (plan answered 14, 2026-10-29). It
-covers fetch, render and HTML → Markdown, but the hard parts here (shared frontier and claims, per-host budgets across
-sources, conditional GETs and noise-normalised change detection, the deletion guard and reconcile phase, the crawl
-rules of answered 11–13, the egress guard, variants and pipeline/run integration) would still be ours. It would add a
-second queue stack (its own API and workers, Playwright, Redis, RabbitMQ and a Postgres queue) and an AGPL-3.0
-component, and its Markdown output duplicates our HTML extraction while we keep raw HTML for re-parsing. Its main
-strength, scraping sites with anti-bot protection, is not a pilot need. If that need appears, such a service can sit
-behind `IRenderer` (§8.2) without changing the rest of this design.
+A self-hosted Firecrawl was rejected (plan answered 14, 2026-10-29): the hard parts here (frontier and claims,
+per-host budgets, change detection, deletion guard, crawl rules, egress guard, site profiles, run integration) would
+still be ours, and it adds a second queue stack and an AGPL-3.0 component. If anti-bot sites ever matter, such a
+service can sit behind `IRenderer` (§8.2).
 
 ## 9. Uploads
 
@@ -522,66 +546,54 @@ behind `IRenderer` (§8.2) without changing the rest of this design.
 
 | Step | Who | What |
 |---|---|---|
-| 1 | admin API | batch create (`POST /api/sources/{id}/upload-batches` → `batchId`), then **one request per file** (raw body, per-file progress and retry; admin design §4.5); streams each file: per file ≤ `maxFileSizeMb` (default 50, platform cap 50; answered 3), ≤ 100 files and ≤ 500 MB per batch; extension pre-check gives an immediate 415 for refused types (archives, macro-enabled, executables); SHA-256 while streaming |
-| 2 | admin API | writes each file to `uploads/{sourceId}/{uploadId}/{sha256}` encrypted with a per-upload data key wrapped by `rag-blob-<level>` (data-model §7); at **commit** (`POST /api/upload-batches/{batchId}/commit`) writes the batch manifest `uploads/{sourceId}/batches/{batchId}.json` (names, declared types, sizes, hashes, wrapped keys); inserts one `sync` job, `Trigger = upload`, payload `{sourceId, batchId}`, `DedupKey = sync-upload:{batchId}` (uploads never wait for a running crawl-style sync); uncommitted batches and their blobs are swept after 24 h |
-| 3 | worker, `sync` | reads the manifest, upserts `Uploads` rows, opens the run, enqueues one `fetch` job per file (`DedupKey = fetch:{level}:{identityHash}`) and applies the batch's deletes |
-| 4 | worker, `fetch` (root `upload`) | ClamAV scan (§11) → sniff → type check → document upsert by `sha256:<hex>` → raw blob `documents/{id}/raw/{contentHash}` (key moved to `DocumentKeys`) → pipeline continues |
+| 1 | admin API | batch create (`POST /api/sources/{id}/upload-batches` → `batchId`), then **one request per file** (raw body, per-file progress and retry; admin design §4.5); each file is an `add` (new slot) or a `replace {uploadId}`, and a batch may carry `delete {uploadId}` entries; streams each file: per file ≤ `maxFileSizeMb` (default 50, platform cap 50; answered 3), ≤ 100 files and ≤ 500 MB per batch; extension pre-check gives an immediate 415 for refused and deferred types (§9.2); SHA-256 while streaming |
+| 2 | admin API | writes each file once to `uploads/{sourceId}/{slot}/{sha256}` (`slot` = the `uploadId`; write-once; `internal`: envelope-encrypted with the data key wrapped by `rag-blob-<level>` in the blob header, data-model §7; `public`: not envelope-encrypted, simplification pass §4); uploads are the only content that cannot be fetched again, so they are **copied to the backup target within 15 minutes** (repo-and-deployment backup); at **commit** (`POST /api/upload-batches/{batchId}/commit`) writes the batch manifest `uploads/{sourceId}/batches/{batchId}.json` (entries, names, declared types, sizes, hashes); inserts one `sync` job, `Trigger = upload`, payload `{sourceId, batchId}`, `DedupKey = sync-upload:{batchId}` (uploads never wait for a running crawl-style sync); uncommitted batches and their blobs are swept after 24 h |
+| 3 | worker, `sync` | reads the manifest, upserts the `Uploads` slots, opens the run, enqueues one `fetch` job per added or replaced file (`DedupKey = fetch:{level}:{identityHash}`) and applies the batch's deletes |
+| 4 | worker, `fetch` (stage `upload`) | ClamAV scan (§11) → sniff → type check → upsert of the source's document `upload:<uploadId>` with the file's content hash → the upload blob is the document's raw content (no copy) → pipeline continues |
 
-`content."Uploads"` (L, written by the worker): `Id`, `SourceId`, `Classification`, `BatchId`, `FileName`,
-`DeclaredMediaType`, `SniffedMediaType`, `Bytes`, `Sha256`, `State` (`received`/`clean`/`malware`/`refused`/
-`indexed`/`deleted`), `Reason`, `DocumentId`, `UploadedBy`, `UploadedAt`, `DeletedAt`. The admin reads it for the
-source's file list.
+`content."Uploads"` (L, written by the worker), one row per **upload slot**: `Id` (the slot, used in the identity),
+`SourceId`, `Classification`, `BatchId` (last change), `FileName`, `DeclaredMediaType`, `SniffedMediaType`, `Bytes`,
+`Sha256` (current version), `State` (`received`/`clean`/`malware`/`refused`/`indexed`/`deleted`), `Reason`,
+`DocumentId`, `UploadedBy`, `UploadedAt`, `ReplacedAt`, `DeletedAt`. The admin reads it for the source's file list.
 
 ### 9.2 Types
 
-- Allowed (pilot list, plan §3 / parser design §3; answered 3 is the earlier subset): PDF, DOCX/PPTX/XLSX, `.doc`/
-  `.xls`/`.ppt`, `.odt`/`.ods`/`.odp`, `.rtf`, JPG/PNG/TIFF, `.eml`/`.msg`, TXT/MD/CSV, HTML.
+- Allowed in P1 (simplification pass §1; answered 3 is the earlier subset): PDF, DOCX/PPTX/XLSX,
+  `.odt`/`.ods`/`.odp`, JPG/PNG/TIFF, TXT/MD/CSV, HTML.
+- **Deferred to P2** (postponed Z1; refused in P1 unless the pilot source inventory taken at P1 start shows them
+  common): `.doc`/`.xls`/`.ppt`, `.rtf`, `.eml`/`.msg` → `unsupported` `upload.format_deferred` (crawled:
+  `http.format_deferred`). The parser refuses them too (parser §3).
 - **Sniffed type wins** (magic bytes; OOXML `[Content_Types].xml` incl. `macroEnabled` content types; OLE root
-  CLSIDs for legacy Office and `.msg`; text heuristics). Declared type and extension are compared: a mismatch is a
-  fact; a declared allowed type whose sniffed type is not allowed → `unsupported` `upload.type_mismatch`.
+  CLSIDs, which recognise legacy Office and `.msg` to refuse them; text heuristics). Declared type and extension are
+  compared: a mismatch is a fact; a declared allowed type whose sniffed type is not allowed → `unsupported`
+  `upload.type_mismatch`.
 - Refused (Z1, postponed): zip/7z/rar/tar/gz that are not OOXML/ODF → `upload.archive`; `.docm`/`.xlsm`/`.pptm` →
   `upload.macro_enabled`; executables and unknown → `upload.type_unknown`. The parser refuses them again (parser §3).
 - Uploaded HTML is never rendered and its links are never followed (`files` template, 6a §13.1).
 
 ### 9.3 Replace and delete
 
-- **Delete**: the admin adds a delete entry to a batch; the sync soft-deletes the reference (`upload.deleted`,
-  exempt from the guard: an explicit admin action); `Uploads.DeletedAt` set; the upload blob is purged after the
-  14-day grace, so an accidental delete can be undone within it (admin "restore" adds the entry back and the
-  reference is revived, §13.4).
-- **Replace** = delete + add in one batch: identity is the hash, so the new bytes are a new document; the old
-  reference goes in the same run. Two uploads of the same bytes in one source are one reference: the second is
-  `unchanged` `upload.duplicate`, its name added to the reference's `DisplayName` history in `Uploads`.
+- **Replace**: a `replace` entry writes new bytes into the same slot, so identity and document id stay; the new
+  content hash is a new version: the document gets a new execution and its chunk set is swapped (6a §14), and
+  evaluation questions, feedback and citation history keep pointing at the same document. The previous version's blob
+  is tombstoned and purged after 14 days (the chunk-set rollback window). Identical bytes → `unchanged`.
+- **Delete**: the admin adds a delete entry to a batch; the sync soft-deletes the document (`upload.deleted`, exempt
+  from the guard: an explicit admin action); `Uploads.DeletedAt` set; the upload blob is tombstoned and purged after
+  the 14-day grace, so an accidental delete can be undone within it (admin "restore" adds the entry back and the
+  document is revived, §13.4).
+- **Duplicate**: an `add` whose bytes equal a live slot of the same source → `skipped` `upload.duplicate`, no new slot.
 
 ### 9.4 Identity and names
 
-Identity is the file hash, so two departments uploading the same PDF at the same level share fetch, parse and (if
-their pipelines match) chunks (R2). The **file name stays per source** (`DocumentSources.DisplayName`) because a
-name can reveal another department's context ("Uppsägning_….pdf"); `Documents.Title` comes from the parsed
-document (metadata title or first heading), never from a file name.
+Identity is the slot, not the hash: two departments uploading the same PDF have two documents, because documents
+belong to one source; the second is cheap because parse output and embeddings are cached by content and text hash
+(simplification pass §2). The file name is the document's `DisplayName` (used in citations); `Documents.Title` comes
+from the parsed document (metadata title or first heading), never from a file name.
 
 ## 10. Email attachments as child documents
 
-1. The parser returns `attachments[]` with binary parts (parser §5.2). Inside the parent's `parse` job, before its
-   fenced commit (6a §7.5), the worker writes each part to `documents/{childId}/raw/{sha256}` (content-addressed,
-   child key in `DocumentKeys`); parts with `skipped` and parts that would be at depth 3 get no document (run item
-   `skipped` `attachment.depth` / `attachment.reference`).
-2. In the parent's **fenced document-stage commit**: upsert child `Documents` (`IdentityKind = attachment`,
-   identity `<parent>#att/<ordinal>/<sha256>`, `ParentDocumentId`, `AttachmentOrdinal`, `Depth = parent + 1`,
-   same `Classification` by the composite FK); mirror every live `DocumentSources` row of the parent (same
-   `SourceId`s), writing the attachment's sanitised file name (parser §5.2 `name`) into `DisplayName` of every mirrored
-   row (knowledge design §10.2; like uploads, never into `Documents.Title`); soft-delete child references whose identity is no longer among the parts; enqueue one `fetch` job
-   per new or changed child (`DedupKey` as uploads). A superseded parent execution therefore never creates children.
-3. The child's `fetch` job runs the **attachment intake**: ClamAV scan of the part (§11), sniff, type check, depth
-   check, then the pipeline of each referencing source from the first node after the root. A malware child is
-   `malware` (run degraded, 5102); the parent stays indexed.
-4. Later changes: a new reference to the parent (another source) mirrors to the children in the same transaction;
-   `SoftDeleteReferencesAsync` on a parent reference also removes the children's references for that source; a
-   parent purge cascades (FK). Children are excluded from deletion-guard counts (they follow their parent).
-5. Citations: "Bilaga *name* i *subject*" through `ParentDocumentId` (knowledge design §10.3; parser §5.4): *name* is
-   the child's `DisplayName`, *subject* the parent's `Documents.Title`, which for an email document is its subject
-   (parser §5.2 `email.subject`; empty subject → first heading or "Dokument utan titel"). The parent part is shown only
-   when the parent is visible to the caller.
+Removed (simplification pass): email (`.eml`/`.msg`) with attachments as child documents moves to P2 with postponed
+item Z1; in P1 email files are refused (§9.2), so no connector creates child documents.
 
 ## 11. ClamAV
 
@@ -589,13 +601,13 @@ document (metadata title or first heading), never from a file name.
 |---|---|
 | Placement | clamd has no TLS or authentication on TCP 3310, so it stays **host-local** on the `ingestion` network of every host that runs `sync`/`fetch`, never published on the LAN; each instance updates its signatures through its host's `mirror` network ([`../performance-pass.md`](../performance-pass.md) §3.7) |
 | Client | own `IMalwareScanner` over TCP 3310 (`ingestion` network): `zINSTREAM\0`, chunks of 64 KiB as `<uint32 BE length><bytes>`, zero-length terminator; reply `stream: OK`, `stream: <signature> FOUND`, or `… size limit exceeded. ERROR`. `zPING` for health, `zVERSION` for signatures. ~150 lines, no package |
-| What is scanned | every upload, every attachment, every crawled or listed non-HTML/non-text file (PDF, Office, images, email) before it is stored as document content or sent to the parser. Fetched HTML, text and CSV, parsed in-process, are not scanned |
-| Streaming | the encrypted body is written to a **local** temp file (`/tmp` tmpfs or a scratch volume, ≤ 60 MB) while hashing, streamed to clamd, and if clean stored with one atomic `IBlobStore.PutAsync` to its final key: no `tmp/` object and no rename, which S3 lacks ([`../performance-pass.md`](../performance-pass.md) §3.13); no 50 MB buffers in memory; the local file is deleted in `finally`. Uploads are already blobs (`uploads/…`) and are scanned by the worker reading them |
+| What is scanned | every upload and every crawled or listed non-HTML/non-text file (PDF, Office, images) before it is stored as document content or sent to the parser. Fetched HTML, text and CSV, parsed in-process, are not scanned |
+| Streaming | the body (encrypted for `internal`; `public` blobs are not envelope-encrypted) is written to a **local** temp file (`/tmp` tmpfs or a scratch volume, ≤ 60 MB) while hashing, streamed to clamd, and if clean stored with one `IBlobStore.PutAsync` to its content-addressed key (write-once: an existing key is not written again): no `tmp/` object and no rename, which S3 lacks ([`../performance-pass.md`](../performance-pass.md) §3.13); no 50 MB buffers in memory; the local file is deleted in `finally`. Uploads are already blobs (`uploads/…`) and are scanned by the worker reading them |
 | Limits | `StreamMaxLength 60M`, `MaxFileSize 60M`, `MaxScanSize 200M` (repo-and-deployment §5.5); a size-limit reply → `too-large` `clamav.limit` (never "clean") |
 | Timeouts | connect 5 s, scan 120 s; on timeout transient with attempt |
 | Signature freshness | `zVERSION` → `ClamAV <engine>/<db version>/<db date>`, read every 10 minutes: > 48 h old → health `degraded`, > 7 days → `unhealthy` and **no new files** (repo-and-deployment §5.5); `rag.clamav.signature_age_hours` gauge |
 | Down or stale (fail closed) | file jobs requeue without attempt (`clamav.unavailable`, 30 s); after 24 h waiting the item ends `failed` `clamav.unavailable` and the run degrades. HTML continues. Nothing unscanned reaches the parser |
-| Malware | outcome `malware`; blob moved to `quarantine/{sourceId}/{sha256}` (data-model §9) with its wrapped key; `content."QuarantinedFiles"` (L: `Id`, `SourceId`, `RunId`, `Classification`, `Sha256`, `Signature`, `Origin` (`upload`/`crawl`/`attachment`), `Name` or `Url`, `DetectedAt`, `PurgeAfter`); event **5102**; run `degraded` (6a §10.3). A crawled page that was clean before keeps its last clean version (not a deletion) |
+| Malware | outcome `malware`; the content is written to `quarantine/{sourceId}/{sha256}` (data-model §9; self-contained, the wrapped key is in the blob header; an upload blob is copied there and the original tombstoned: blobs are write-once, no move); `content."QuarantinedFiles"` (L: `Id`, `SourceId`, `RunId`, `Classification`, `Sha256`, `Signature`, `Origin` (`upload`/`crawl`), `Name` or `Url`, `DetectedAt`, `PurgeAfter`); event **5102**; run `degraded` (6a §10.3). A crawled page that was clean before keeps its last clean version (not a deletion) |
 | Who sees it | department admins: name/URL, signature, time; platform admins also the hash. **No download or release in P1** (§21 Q3); a false positive is resolved by IT security adding an ignore signature and re-uploading. Purged after 30 days (platform plan §8, proposed) |
 | Event 5102 `rag.malware.detected` | Warning; attributes `Signature`, `Sha256`, `Origin`, `SourceId`, `RunId`, `DocumentId` (if any), `Classification`; SIEM alert on any |
 
@@ -605,17 +617,19 @@ document (metadata title or first heading), never from a file name.
 
 | Stage | Check | Unchanged → |
 |---|---|---|
-| 1 | conditional GET (§4); SharePoint (P2): delta reports no change | `NotModified`: validators and `FetchedAt` updated, reference touched, `EnsureCurrent`, run item `unchanged`; no blob read |
+| 1 | conditional GET (§4) or `lastmod` skip (§5.4); SharePoint (P2): delta reports no change | `NotModified`: validators and `FetchedAt` updated, document touched, `EnsureCurrent`, run item `unchanged`; no blob read |
 | 2 | `ContentHash` = SHA-256 over the **normalised** content: HTML per §12.2 (rules version in `Documents.ContentHashVersion`), everything else the raw bytes | no new blob, no new execution id; as above |
 
-Only a new hash writes `raw/{contentHash}`, sets `CurrentExecutionId` (6a §7.5) and runs the pipeline. The first
-node's input hash is this `ContentHash` (6a §8), so the whole engine agrees on what "changed" means. Onyx gates the
-same way but only after parsing (`../../platforms/onyx.md:122-123`); Eneo stores the hash and never compares it
-(`../../platforms/eneo.md:78-82`).
+Stage 1 saves nothing on hosts without validators and without reliable `lastmod`; stage 2 always applies (umea.se:
+no validators, so `lastmod` and the hash carry change detection). Only a new hash for a document sets
+`CurrentExecutionId` (6a §7.5) and runs the pipeline; the raw blob is written only if its content-addressed key does
+not exist yet. The first stage's input hash is this `ContentHash` (6a §8), so the whole engine agrees on what "changed"
+means. Onyx gates the same way but only after parsing (`../../platforms/onyx.md:122-123`); Eneo stores the hash and
+never compares it (`../../platforms/eneo.md:78-82`).
 
 ### 12.2 HTML noise normalisation (rules v1)
 
-On the AngleSharp DOM the root already builds for links: drop comments; drop `<script>` except
+On the AngleSharp DOM the fetch stage already builds for links: drop comments; drop `<script>` except
 `application/json` and `application/ld+json` (SPA data stays significant); drop `<style>`, `<template>`; drop the
 attributes `nonce`, `integrity`, `data-csrf*`; blank `<input type=hidden>` values and `<meta>` named `csrf-token`,
 `csrf-param`, `__RequestVerificationToken`, `__VIEWSTATE`, `__EVENTVALIDATION`; strip query strings from `src`/`href`
@@ -639,8 +653,8 @@ with the last completed run's at every sync, so a lost "apply" job cannot leave 
 
 ```json
 { "startUrls": ["https://www.umea.se/"], "sitemaps": [], "extraHosts": [],
-  "include": ["www.umea.se/**"], "exclude": ["**/sok?*", "**?*print=*"], "maxDepth": 10, "maxPages": 10000,
-  "render": "auto", "ignoreQueryParams": [], "directoryIndexNames": [], "noiseSelectors": [],
+  "include": ["www.umea.se/**"], "exclude": ["**/sok?*", "**?*print=*"], "maxDepth": 10, "maxPages": 20000,
+  "ignoreQueryParams": [], "directoryIndexNames": [], "noiseSelectors": [],
   "conditionalGet": true, "revalidateEvery": 4, "crawlWindow": "22:00-06:00", "incrementalSchedule": null }
 ```
 
@@ -648,16 +662,16 @@ with the last completed run's at every sync, so a lost "apply" job cannot leave 
 |---|---|---|---|
 | `name`, `description` | all | cosmetic | none |
 | `schedule`, `incrementalSchedule`, `crawlWindow` | url-list, crawl, sharepoint | cosmetic | none (the scheduler reads them) |
-| `classification` | all | identity (level) | full re-sync into the new level; old-level references removed at reconcile (exempt); jobs at the old level fail the commit check (6a §15) |
-| `pipelineId` | all | behaviour | `reprocess` run via `EnsureCurrent`, no fetching (6a §12) |
-| `urls` | url-list | scope | added: claims for the added URLs only; removed: references soft-deleted at once (`removed-from-list`, exempt) |
-| `startUrls`, `sitemaps`, `extraHosts`, `include`, `exclude` | crawl | scope | widening: a traversal now (unchanged pages cost a 304); narrowing: references whose stored URL fails the new scope removed without fetching (`scope-narrowed`, exempt, count shown on save) |
+| `classification` | all | identity (level) | full re-sync into the new level; old-level documents removed at reconcile (exempt); jobs at the old level fail the commit check (6a §15) |
+| pipeline parameters | all | behaviour | re-processing plan from the changed parameters, via `EnsureCurrent`, no fetching (6a §12) |
+| `urls` | url-list | scope | added: claims for the added URLs only; removed: documents soft-deleted at once (`removed-from-list`, exempt) |
+| `startUrls`, `sitemaps`, `extraHosts`, `include`, `exclude` | crawl | scope | widening: a traversal now (unchanged pages cost a 304, a `lastmod` skip or a hash compare); narrowing: documents whose stored URL fails the new scope removed without fetching (`scope-narrowed`, exempt, count shown on save) |
 | `maxDepth`, `maxPages` | crawl | scope | raise: traversal now; lower: next traversal, never deletes (a limit makes it partial) |
 | `ignoreQueryParams`, `directoryIndexNames` | url-list, crawl | identity | full re-sync: every URL re-canonicalised and fetched; old identities not re-found removed at reconcile (exempt, count shown on save) |
-| `render` | url-list, crawl | identity (variant) | variant re-chosen per URL on the next fetch; moved references `variant-changed` (exempt) |
 | `noiseSelectors` | url-list, crawl | behaviour | next sync; pages whose hash changes re-process once |
 | `conditionalGet`, `revalidateEvery`, `timeoutSeconds` | url-list, crawl | behaviour | next sync |
 | `maxFileSizeMb` | upload | behaviour | new uploads only |
+| site profile version (host, §5.6) | url-list, crawl on the host | behaviour; `identityRule`/`ignoreQueryParams`: identity; `excludedTypes`: scope | extraction fields: the host's HTML documents re-processed from stored raw content; identity fields: identity re-sync of the host's sources (exempt removals); `excludedTypes`: as scope |
 | `sites`, `drives`, `folders`, `includeSitePages`, `excludedPaths` (P2) | sharepoint | scope | widening: enumerate the new scope; narrowing: from stored paths, exempt |
 | `certificate`, `tenantId` (P2) | sharepoint | behaviour | preflight, then next sync |
 
@@ -669,7 +683,7 @@ A source never moves between collections (a new source is created), so `collecti
 |---|---|---|---|
 | cosmetic | none | – | – |
 | behaviour | none (next scheduled) | per normal rules | normal guard |
-| scope | immediate `sync`, `Trigger = config-change` | only newly in-scope items (crawl: traversal with conditional GET) | narrowing removals exempt (admin confirmed the shown count) |
+| scope | immediate `sync`, `Trigger = config-change` | only newly in-scope items (crawl: traversal with conditional GET or `lastmod` skip) | narrowing removals exempt (admin confirmed the shown count) |
 | identity | immediate full `sync`, `force` | everything | identity removals exempt; unexpected losses still go through the guard |
 
 > **Decided in 6c** (`design-processing.md` §12): a noise-only change (new `ContentHash`, same parsed output)
@@ -684,18 +698,17 @@ Collected during the run in `content."DeletionProposals"` (L: `RunId`, `Document
 
 | Reason | Source | Exempt |
 |---|---|---|
-| `not-seen` | complete traversal or id listing without the reference | no |
+| `not-seen` | complete traversal or id listing without the document | no |
 | `http.404`, `http.410`, `http.moved_out_of_scope` | fetch | no |
 | `robots.disallow` | robots.txt now disallows a known URL | no (a staging robots.txt deployed to production must not empty the index) |
-| `persistent-failure` | 401/403/5xx/TLS for ≥ 4 consecutive runs **and** ≥ 14 days since `LastSeenAt` (`DocumentSources.ConsecutiveFailures`) | no |
+| `persistent-failure` | 401/403/5xx/TLS for ≥ 4 consecutive runs **and** ≥ 14 days since `LastSeenAt` (`Documents.ConsecutiveFailures`) | no |
 | `sharepoint.deleted`, `sharepoint.moved_out_of_scope` (P2) | delta | no |
-| `removed-from-list`, `scope-narrowed`, `identity-changed`, `level-changed`, `variant-changed`, `upload.deleted` | configuration or explicit admin action | yes |
+| `removed-from-list`, `scope-narrowed`, `identity-changed`, `level-changed`, `upload.deleted` | configuration or explicit admin action | yes |
 
 ### 13.2 The guard
 
-Runs in the `reconcile` phase, after every `fetch` job of the run is terminal (the finalizer enqueues it, 6a §10.4
-changed in §20). Let `n` = non-exempt candidates, `N` = live references of the source (children and held references
-excluded):
+Runs in the `reconcile` phase, after every `fetch` job of the run is terminal (the finalizer enqueues it, 6a §10.4).
+Let `n` = non-exempt candidates, `N` = live documents of the source (held documents excluded):
 
 - **ratio**: `n ≥ DeletionGuardMinCount` (5) and `n / N > 0.20` (plan §8, `Settings`);
 - **absolute**: `n > DeletionGuardMaxCount` (500): 20 % of a 50,000-document source is too many to delete unasked;
@@ -705,7 +718,7 @@ excluded):
 - **404 storm**: covered twice: the circuit breaker (§6.4) makes the traversal partial (so `not-seen` cannot fire),
   and explicit 404s still count in `n`.
 
-Not tripped → exempt and non-exempt candidates are applied with `SoftDeleteReferencesAsync` (6a §14) in batches of
+Not tripped → exempt and non-exempt candidates are soft-deleted through the index writer (6a §14) in batches of
 1,000, run items `deleted`. Tripped → exempt ones are applied, the rest wait; `Runs.ProposedDeletions = n`; the run
 finishes all other work and the finalizer sets **`awaiting-deletion-confirmation`**.
 
@@ -713,25 +726,26 @@ finishes all other work and the finalizer sets **`awaiting-deletion-confirmation
 
 | Event | Effect |
 |---|---|
-| `command` `confirm-deletion {runId}` (`Manage` policy of the source's department: `rag-department-admin` or `rag-platform-admin`, admin design V28) | re-validates each proposal (a reference seen again by a later run is dropped), soft-deletes the rest, run items `deleted`; the finalizer recomputes the run state; audit 6001 |
-| `command` `reject-deletion {runId}` | nothing deleted; the references get `DocumentSources.HeldAt/HeldBy`, excluded from later guards and listed as "kept by decision" on the source page until they are seen again (hold cleared) or an admin releases the hold (`command` `release-hold {sourceId}`, admin design §4.7: holds cleared, references become candidates at the next reconcile); run → `degraded` `deletion.rejected` |
+| `command` `confirm-deletion {runId}` (`Manage` policy of the source's department: `rag-department-admin` or `rag-platform-admin`, admin design V28) | re-validates each proposal (a document seen again by a later run is dropped), soft-deletes the rest, run items `deleted`; the finalizer recomputes the run state; audit 6001 |
+| `command` `reject-deletion {runId}` | nothing deleted; the documents get `Documents.HeldAt/HeldBy`, excluded from later guards and listed as "kept by decision" on the source page until they are seen again (hold cleared) or an admin releases the hold (`command` `release-hold {sourceId}`, admin design §4.7: holds cleared, documents become candidates at the next reconcile); run → `degraded` `deletion.rejected` |
 | a newer run of the source reaches reconcile while a proposal waits | the newer run computes afresh; the older run → `degraded` `deletion.superseded`; one waiting proposal per source at a time |
 | no decision | waits indefinitely, never auto-confirmed; shown on the Overview page (admin plan §4) and as a daily reminder metric `rag.deletion.awaiting` |
 
 ### 13.4 Grace and store removal
 
-`SoftDeleteReferencesAsync` sets `DocumentSources.DeletedAt` and `PurgeAfter = +14 days` and recomputes membership,
-so chunks leave the collection at once. A reference seen again within the grace is **revived** (`DeletedAt = null`,
-membership recomputed, no re-processing; chunk sets are kept 14 days, data-model §2.2). A document gets `DeletedAt`/
-`PurgeAfter` only when no live reference remains (plan §8), and the worker's content retention purges it (with
-children, keys, outputs and blobs) after `PurgeAfter`.
+A soft delete sets `Documents.DeletedAt` and `PurgeAfter = +14 days` and sets `DeletedAt` on the chunks of its live
+set in the same transaction (6a §14), so they leave retrieval at once. A document seen again within the grace is
+**revived** (`DeletedAt = null` on the document and its live set's chunks, no re-processing; chunk sets are kept 14
+days, data-model §2.2). After `PurgeAfter` the worker's content retention purges the document with its chunk sets,
+outputs and own blobs; content-addressed raw and parse blobs are tombstoned when no live document of the level references their
+hash any more, and purged after the delay (write-once blobs, simplification pass §4).
 
 ### 13.5 What the admin sees
 
 The run page in state `awaiting-deletion-confirmation`: `n`, `N` and the ratio, the rule that tripped, a breakdown by
 reason, traversal facts (pages reached this run vs. the previous run, paused hosts, seed failures), 50 example URLs
 or names with `LastSeenAt` and last status, a CSV of all proposals, and **Confirm** / **Reject** buttons that insert
-the `command` jobs. The source page shows held references and the exempt removals of config changes.
+the `command` jobs. The source page shows held documents and the exempt removals of config changes.
 
 ## 14. SharePoint (P2 outline)
 
@@ -744,9 +758,10 @@ the `command` jobs. The source page shows held references and the exempt removal
 | Deletes | `deleted` facet → candidate `sharepoint.deleted` at once (Onyx skips tombstones, `onyx/connectors/microsoft_utils/drive_items.py:686`, so deletes wait for a weekly prune) |
 | Moves | item id stable → same document; the new `parentReference.path` is re-evaluated against the scope: out → `sharepoint.moved_out_of_scope` (Eneo #522 orphans), in → added (Onyx #16590). A moved or renamed **folder** triggers a BFS of its subtree, because delta may not repeat every child. Paths compared decoded and case-insensitively by segment (Eneo #429) |
 | Duplicates in one delta | last occurrence of an item wins |
-| 410 `resyncRequired` | full enumeration from a fresh delta; references not seen → `not-seen` candidates **through the guard** (Onyx's 410 restart, `drive_delta.py:275-312`; Eneo `clients/sharepoint_content_client.py:563`, `:637`) |
+| 410 `resyncRequired` | full enumeration from a fresh delta; documents not seen → `not-seen` candidates **through the guard** (Onyx's 410 restart, `drive_delta.py:275-312`; Eneo `clients/sharepoint_content_client.py:563`, `:637`) |
 | Throttling | 429/503 `Retry-After` honoured through a pseudo-host budget `graph:{tenantId}` in `CrawlHosts` (Eneo #427) |
 | Subscriptions | one per drive (`changeType = updated`), renewed at half their lifetime and at least 48 h before expiry (Eneo renews every 12 h, `eneo/integration/infrastructure/sharepoint_subscription_worker.py:125`); random `clientState` per subscription **always** checked (Eneo checks only if configured, `sharepoint_webhook_service.py:84-85`); endpoint on the admin API behind the reverse proxy, validation handshake, notifications enqueue a `sync` (`Trigger = notification`, dedup per source); lifecycle notifications (`missed`, `reauthorizationRequired`) → delta run. Notifications are **hints**: delta also runs every 6 h |
+| Hierarchy | `IHierarchyConnector`: site → drive → folder for scope picking (admin) |
 | Health | per source: last delta, subscription expiry, last notification, last error (Eneo #521 silent death, #1081 sync health); `rag.sharepoint.subscription.expires_in` alerts below 24 h |
 | Permissions | **not mirrored** (§21 Q2): access stays per collection like every other source; the preflight lists libraries/folders with unique permissions below the selected scope (*to verify* which Graph call shows this under `Sites.Selected`) so the department picks content matching the collection's audience. Mirroring ACLs needs per-chunk ACLs, group expansion and broader grants (Onyx needs `Sites.FullControl` + `GroupMember.Read.All` for it, `../../platforms/onyx.md:139-142`), against least privilege; Eneo has none either (`../../platforms/eneo.md:93-94`) |
 
@@ -771,17 +786,15 @@ Connector results mapped onto 6a §10.2 (reasons `<area>.<code>`):
 
 | Situation | Outcome | Reason examples | Attempt |
 |---|---|---|---|
-| 200 new / changed / same hash; 304 | `added` / `updated` / `unchanged` | – | – |
-| served by another run's fetch | `shared` | `shared.run:<id>` | – |
-| robots, `noindex` (external), trap, duplicate upload, depth, broken discovered link | `skipped` | `robots.disallow`, `robots.noindex`, `trap.calendar`, `upload.duplicate`, `attachment.depth`, `http.404` (never indexed, found by a link) | – |
-| render failed or not enabled | `degraded` | `render.timeout`, `render.not_enabled`, `render.truncated` | – |
+| 200 new / changed / same hash; 304; `lastmod` skip | `added` / `updated` / `unchanged` | – | – |
+| robots, `noindex` (external), trap, duplicate upload, broken discovered link | `skipped` | `robots.disallow`, `robots.noindex`, `trap.calendar`, `upload.duplicate`, `http.404` (never indexed, found by a link) | – |
 | applied deletion | `deleted` | `http.410`, `not-seen`, `upload.deleted` | – |
-| refused type | `unsupported` | `http.content_type`, `upload.archive`, `upload.macro_enabled` | – |
+| refused or deferred type | `unsupported` | `http.content_type`, `upload.archive`, `upload.macro_enabled`, `upload.format_deferred`, `http.format_deferred` | – |
 | size cap | `too-large` | `http.body_limit`, `clamav.limit` | – |
 | ClamAV finding | `malware` | `clamav.<signature family>` | – |
 | egress guard, robots on a redirect target, downgrade | `blocked` | `egress.private_address`, `redirect.downgrade` | – |
 | listed URL 404, 401/403, TLS, 5xx after retries, ClamAV down 24 h | `failed` | `http.404`, `http.403`, `tls.invalid_certificate`, `http.5xx`, `clamav.unavailable` | 5 for transient |
-| 429/503, host slot not yet due, ClamAV down, render lease busy | requeue | `rate_limited`, `politeness`, `clamav.unavailable`, `render.busy` | no |
+| 429/503, host slot not yet due, ClamAV down | requeue | `rate_limited`, `politeness`, `clamav.unavailable` | no |
 
 Run-level: seeds unreachable → run `failed` `crawl.seeds_unreachable` (no deletions); page limit → `degraded`
 `crawl.limit_pages`; host paused → `degraded` `crawl.host_paused`; malware → `degraded` (6a §10.3).
@@ -793,54 +806,53 @@ New metrics (meter `Ume.Rag`; dimensions low-cardinality; **never** host names, 
 | Metric | Type | Dimensions |
 |---|---|---|
 | `rag.connector.fetch.duration` (s), `rag.connector.fetch.bytes` | histogram | source type, status class (`2xx`, `304`, `3xx`, `4xx`, `5xx`, `error`), host kind |
-| `rag.connector.items` | counter | source type, result (`new`, `changed`, `not_modified`, `same_hash`, `gone`, `skipped`) |
+| `rag.connector.items` | counter | source type, result (`new`, `changed`, `not_modified`, `lastmod_skip`, `same_hash`, `gone`, `skipped`) |
 | `rag.connector.change.noise` | counter | host kind |
 | `rag.crawl.frontier.pending`, `rag.crawl.released` | gauge, counter | host kind |
 | `rag.crawl.politeness.wait` (s), `rag.crawl.backoff`, `rag.crawl.host_paused` | histogram, counter, counter | host kind; reason (`429`, `503`, `breaker`) |
 | `rag.crawl.traps` | counter | kind |
-| `rag.render.duration` (s), `rag.render.subrequests_blocked` | histogram, counter | outcome; reason |
+| `rag.crawl.incomplete_runs` | gauge (max consecutive incomplete traversals over sources) | – |
+| `rag.site_profile.applied`, `rag.site_profile.proposed` | counter | origin (`learned`, `admin`, `rollback`) |
 | `rag.egress.blocked` | counter | reason, purpose |
 | `rag.clamav.scan.duration` (s), `rag.clamav.detections` (existing), `rag.clamav.signature_age_hours` | histogram, counter, gauge | origin |
 | `rag.deletion.proposed`, `.applied`, `.guard_tripped`, `.awaiting` | counter, counter, counter, gauge | reason / rule |
 | `rag.sharepoint.subscription.expires_in` (P2) | gauge (min over sources) | – |
 
-- **Traces**: spans `rag.connector.list`, `rag.connector.fetch`, `rag.render`, `rag.clamav.scan` under the job
-  span (6a §17); HTTP client spans have `url.full` and `server.address` **removed** for every source (a filter in
+- **Traces**: spans `rag.connector.list`, `rag.connector.fetch`, `rag.clamav.scan`, `rag.site_profile.learn` under the
+  job span (6a §17); HTTP client spans have `url.full` and `server.address` **removed** for every source (a filter in
   the worker's OTel setup; repo-and-deployment §9 already strips query strings). Attributes: source type, host kind,
   status class, outcome.
 - **Logs**: URLs only at Debug and only for `public` sources; otherwise `UrlHash`.
-- **Events**: 5101 (§7), 5102 (§11). SIEM alerts to add: any 5102; any 5101 with `Purpose = Render` and an address
-  class in `rfc1918`/`loopback`/`link_local` (a page probing the internal network); the canary failure (§7).
-- **Health**: ClamAV (ping, signature age), renderer (connect), egress canary, releaser lag (oldest due `pending`
-  entry), feeding the *Ingestion* dashboard.
+- **Events**: 5101 (§7), 5102 (§11). SIEM alerts to add: any 5102; the canary failure (§7).
+- **Health**: ClamAV (ping, signature age), egress canary, releaser lag (oldest due `pending` entry), feeding the
+  *Ingestion* dashboard; alert `rag.crawl.incomplete_runs` ≥ 3 (§5.4).
 
 ## 17. Performance (R1: 10,000 pages/hour)
 
 | Connector cost per typical page | Estimate (*to measure*) | At 2.8 pages/s |
 |---|---|---|
-| One conditional GET (municipal host) | 1 politeness slot, ~200 ms latency | 2.8 req/s of 10 allowed; `fetch` concurrency 8 covers latency |
+| One GET (municipal host; conditional where validators exist) | 1 politeness slot, ~200 ms latency | 2.8 req/s of 10 allowed; `fetch` concurrency 8 covers latency |
 | AngleSharp parse for links + noise hash | ≈ 10–15 ms CPU | ≈ 0.04 cores (on top of 6a §18's 80 ms per page) |
 | Frontier statements: claims upsert (1 per page, ~100 links), slot update, document upsert, run items batch | ≈ 4 statements | ≈ 11 statements/s |
-| Releaser | 1 query/s per tier | – |
+| Releaser | 1 query/s | – |
 | ClamAV | files only (PDF ≈ 50–200 ms) | negligible for HTML-heavy sites |
 
-An unchanged re-crawl costs one request + one parse for links per page and no blob write, parse or embedding. Rendering
-is **outside** the R1 target: at ~1–3 s per page and 2 concurrent pages a rendered site runs at ~1 page/s, which is
-why rendering is per page (§8.1) and not per source by default. One external host is capped at 3,600 pages/hour by
-politeness (answered 4), so the R1 test uses a municipal test host.
+An unchanged re-crawl costs per page at most one request plus one parse for links, and no blob write, parse or
+embedding; a `lastmod` skip costs no request, which matters on hosts without validators (umea.se, ≈ 7,960 PDFs). One
+external host is capped at 3,600 pages/hour by politeness (answered 4), so the R1 test uses a municipal test host.
 
 ## 18. Tests
 
 | Level | What |
 |---|---|
-| Unit (`Ume.Rag.Worker.Tests`) | canonicaliser: every §3.1 rule with RFC 3986 normalisation vectors and IDN/punycode cases; tracking list; glob/regex patterns (Eneo's unescaped-regex case); robots parser against the RFC 9309 examples and Google's robotstxt test cases (*to verify* licence); sitemap parser (index, gzip, XXE payload refused, oversize); JavaScript-only score fixtures; noise normaliser (CSRF tokens, nonces, cache busters, dates: equal hashes; a changed paragraph: different hash); trap detectors; guard arithmetic incl. exempt reasons and min/max counts; effect-tag hashes per §12.3 row; ClamAV client against recorded replies (`OK`, `FOUND`, size limit, garbage); outcome mapping table §15 |
+| Unit (`Ume.Rag.Worker.Tests`) | canonicaliser: every §3.1 rule with RFC 3986 normalisation vectors and IDN/punycode cases, incl. the Sitevision identity rule; tracking list; glob/regex patterns (Eneo's unescaped-regex case); robots parser against the RFC 9309 examples and Google's robotstxt test cases (*to verify* licence); sitemap parser (index, gzip, XXE payload refused, oversize, `lastmod`); noise normaliser (CSRF tokens, nonces, cache busters, dates: equal hashes; a changed paragraph: different hash); trap detectors; guard arithmetic incl. exempt reasons and min/max counts; effect-tag hashes per §12.3 row; site-profile derivation on synthetic samples (root, ≥ 60 % repetition, breadcrumb, date pattern, guardrail check); ClamAV client against recorded replies (`OK`, `FOUND`, size limit, garbage); outcome mapping table §15 |
 | SSRF fixtures | guard with a fake resolver: every blocked range, embedded IPv4 in IPv6 (mapped, NAT64, 6to4, Teredo), mixed public/private answers (refused), DNS answer changing between calls (pinning: connect goes to the checked address), decimal/octal/hex IP literals, IDN homographs, userinfo, ports, redirect to `169.254.169.254`, https → http, 6 hops |
-| Integration (Testcontainers + an in-process Kestrel test site) | crawl of a generated site: robots allow/disallow/5xx/404, `Crawl-delay`, sitemap index, redirects (loops, chains, off-site 302 sign-in wall, 301 out of scope), calendar and faceted traps, session ids, `noindex`/`nofollow` on a "municipal" vs "external" host name, 429 with `Retry-After`, slow responses, gzip bomb, oversize body, wrong `Content-Type`; two sources on one host (one request per page, `shared` outcomes, rate never above budget); preview fetch with the releaser running; URL list ETag/Last-Modified/304 and a server with changing ETags |
-| Deletion guard (integration) | 25 % removed → pause; confirm, reject (hold), supersede; empty listing (S4); 404 storm with the breaker; page-limit run deletes nothing (**C7**, Eneo partial crawl); revival within 14 days without re-processing |
-| Renderer (integration, real `rag-renderer` image) | SPA fixture rendered and its links followed; every browser request goes through the worker (test server sees only worker connections; renderer on an internal network with no egress); blocked types; download and popup attempts; 30 s timeout → origin indexed `degraded`; per-host lease; variant switch moves the reference with `variant-changed` |
-| ClamAV (integration, real image) | EICAR upload → `malware`, quarantine row and blob, 5102, run degraded; EICAR as an email attachment → parent indexed, child `malware`; clamd stopped → files requeue, HTML continues, after 24 h `failed`; stale signatures (fake `VERSION` reply) → no new files |
-| Uploads | sniff vs declared (PDF named `.docx`, EXE named `.pdf`, `.docm`, zip, OOXML zip accepted); same bytes in two departments → one document, two display names, title not from the name; replace and delete; email with nested email → depth 2 indexed, depth 3 `skipped` |
-| Crash/resume | kill the worker during listing (resume from checkpoint, no duplicate claims or run items), during a fetch after the blob write and before commit (orphan swept, retry idempotent), during reconcile (guard decision computed once), during a render; leader loss of the releaser (another instance takes over, no double release beyond dedup) |
+| Integration (Testcontainers + an in-process Kestrel test site) | crawl of a generated site: robots allow/disallow/5xx/404, `Crawl-delay`, sitemap index, redirects (loops, chains, off-site 302 sign-in wall, 301 out of scope), calendar and faceted traps, session ids, `noindex`/`nofollow` on a "municipal" vs "external" host name, 429 with `Retry-After`, slow responses, gzip bomb, oversize body, wrong `Content-Type`, `Set-Cookie` never echoed; a server without validators and with `lastmod` (the umea.se shape: `lastmod` skip, `revalidateEvery` full pass); aliases served with 200 and a canonical (folded only when hashes match; a canonical to the start page not folded); images and video not admitted; two sources on one host (one request per page, two documents, rate never above budget); preview fetch with the releaser running; URL list ETag/Last-Modified/304 and a server with changing ETags |
+| umea.se corpus (§5.6) | ≈ 20 saved umea.se pages (HTML and PDF) served by the test site: Sitevision preset detected, profile learned, the example page's main text, breadcrumb and date exact (acceptance), identity rule verified on node-id URLs; a "redesigned" variant of the corpus triggers re-learning and the guardrail turns a lossy profile into a proposal |
+| Deletion guard (integration) | 25 % removed → pause; confirm, reject (hold), supersede; empty listing (S4); 404 storm with the breaker; page-limit run deletes nothing (**C7**, Eneo partial crawl); revival within 14 days without re-processing; three incomplete traversals raise the alert |
+| ClamAV (integration, real image) | EICAR upload → `malware`, quarantine row and blob, 5102, run degraded; clamd stopped → files requeue, HTML continues, after 24 h `failed`; stale signatures (fake `VERSION` reply) → no new files |
+| Uploads | sniff vs declared (PDF named `.docx`, EXE named `.pdf`, `.docm`, zip, OOXML zip accepted; `.doc`, `.rtf`, `.msg` → `upload.format_deferred`); same bytes in two departments → two documents, second parse a cache hit, title not from the name; replace keeps the document id and swaps the chunk set; delete and restore; duplicate add skipped; upload blob present on the backup target within 15 minutes |
+| Crash/resume | kill the worker during listing (resume from checkpoint, no duplicate claims or run items), during a fetch after the blob write and before commit (orphan swept, retry idempotent), during reconcile (guard decision computed once); leader loss of the releaser (another instance takes over, no double release beyond dedup) |
 | Telemetry | captured spans, metrics and logs of a `internal`-source crawl contain no URL, host or file name |
 | SharePoint (P2) | S1–S10 against a Graph fake (WireMock) plus one run against a test tenant |
 | Performance | `perf.yml` (6a §18): 10,000-page generated municipal site; unchanged re-crawl does no parse/embed |
@@ -849,37 +861,30 @@ politeness (answered 4), so the R1 test uses a municipal test host.
 
 | Phase | Deliverable |
 |---|---|
-| P1 | connector interfaces and runner with checkpoints; canonicaliser; URL list; crawl with robots, sitemaps, scope, traps, traversal/incremental, report; frontier claims, releaser, host budgets, back-off, breaker, night window; egress guard + canary; renderer with worker-side fetching and variants; uploads (batches, sniffing, replace/delete); attachments; ClamAV + quarantine; change detection with noise rules v1; effect tags; deletion guard with reconcile phase and commands; preflight for URL list and crawl; crawl hierarchy for pattern building; tests of §18 |
-| P2 | SharePoint (§14, S1–S10); learned noise selectors (proposed per host like cleanup rules, plan §6); PDF link extraction for crawls; quarantine release workflow if needed; per-instance-independent connection caps if the ingestion zone gets several instances |
+| P1 | connector interfaces and runner with checkpoints; canonicaliser incl. verified identity rules and canonical folding; URL list; crawl with robots, sitemaps (`lastmod`), scope, traps, traversal with `lastmod` skip, incremental runs, report, incomplete-traversal alert; site profiles (Sitevision preset, learning, guardrails, rollback) with the umea.se acceptance test; frontier claims, releaser, host budgets (in-process connection cap), back-off, breaker, night window; egress guard + canary; uploads (slots, batches, sniffing, replace/delete, backup copy); ClamAV + quarantine; change detection with noise rules v1; effect tags; deletion guard with reconcile phase and commands; preflight for URL list and crawl; P1-start check whether pilot sites need JavaScript; tests of §18 |
+| P2 | SharePoint (§14, S1–S10) with `IHierarchyConnector`; Redis per-host in-flight leases (first multi-host deployment); renderer behind `IRenderer` only if the P1-start check found a pilot site that needs JavaScript (§8); email with attachments as child documents and legacy Office/RTF (Z1); presets for WordPress and Episerver/Optimizely; PDF link extraction for crawls; quarantine release workflow if needed |
 | P3 | more connectors on the same contracts; an alternative renderer backend behind `IRenderer` if anti-bot sites must be crawled (answered 14) |
 
 ## 20. Changes to other documents
 
-Applied in the step 6b review commit (2026-10-29), except: the admin plan items (step 10) and the knowledge-api
-items (step 7), which those steps take up; design-engine.md got a pointer note, and the consistency pass (step 11)
-applied its rows inline (6a §9.1, §10.1, §10.4, §14, §17).
+Applied in the step 6b review commit (2026-10-29) and the consistency pass (step 11). Restated here in their
+simplification-pass form; items marked **(SP)** are new with this rewrite and still to be applied by the owners.
 
 | Document | Change |
 |---|---|
-| `platform/data-model.md` §2.2 `Documents` | `Variant varchar(10) NOT NULL DEFAULT 'origin'` (`origin`/`rendered`); unique key → (`Classification`, `IdentityKind`, `IdentityHash`, `Variant`); `CanonicalHint text NULL`; `RenderRecommendedAt timestamptz NULL`; `ContentHashVersion smallint NOT NULL`; `Title` never from an upload file name |
-| `platform/data-model.md` §2.2 `DocumentSources` | `DisplayName varchar(300) NULL` (upload name per source); `HeldAt`, `HeldBy` (rejected deletions); `ConsecutiveFailures smallint NOT NULL DEFAULT 0` |
-| `platform/data-model.md` §2.2 crawl tables | `CrawlHosts` columns of §6.1; `CrawlFrontier` reshaped (`State` `idle`/`pending`/`released`, `LastFetchedAt`, `LastStatus`, `RedirectTo`; `SourceIds`, `Depth` removed); new `CrawlClaims` (L) and `CrawlRuns` (L) |
-| `platform/data-model.md` §2.2 new tables | `ConnectorCheckpoints` (L, §2.3), `Uploads` (L, §9.1), `DeletionProposals` (L, §13.1), `QuarantinedFiles` (L, §11); grants: worker S I U D, admin S |
-| `platform/data-model.md` §2.2 `Runs` | `Phase varchar(20)` (`list`/`fetch`/`reconcile`/`done`), `Report jsonb`, `SettingsHashes jsonb`; `Trigger` adds `config-change`, `notification` (P2) |
-| `platform/data-model.md` §2.1 `Settings` | `DeletionGuardMinCount` 5, `DeletionGuardMaxCount` 500; `Crawl jsonb` (municipal host patterns, rates and connections per kind, host overrides, blocked hosts, allowed ports, freshness 12 h, default window, default limits 10,000/10, HTML cap 10 MB, file cap 50 MB, max redirects 5, identity rules version); `QuarantineRetentionDays` 30 |
-| `platform/data-model.md` §4.2, §9 | fetch dedup key `fetch:{level}:{identityHash}[:r]`; upload sync dedup `sync-upload:{batchId}`; blobs `documents/{id}/raw/{contentHash}.links.json.gz`, `uploads/{sourceId}/batches/{batchId}.json`, `tmp/{jobId}/…` (24 h sweep) |
-| `ingestion-worker/design-engine.md` §9.1–§9.2 | `preview` kinds `preflight`, `hierarchy`; `sync` payload `phase` and checkpoint reference instead of inline checkpoint; §9.2 step 2: URL-list and crawl items become frontier claims released by the releaser (uploads, attachments, SharePoint enqueue directly); step 4: deletions in the reconcile phase |
-| `ingestion-worker/design-engine.md` §10.1, §10.4 | `Runs.Phase`; triggers `config-change`, `notification`; the finalizer enqueues the reconcile phase when a run's fetches are done, and finalizes after it; `awaiting-deletion-confirmation` set from `DeletionProposals` |
-| `ingestion-worker/design-engine.md` §13.1, §14, §17 | the 6b open item is decided (§8.4: variants); `headless-render` sets `RenderRecommendedAt`; `SoftDeleteReferencesAsync` also removes child (attachment) references of the same source and revives within the grace; metrics of §16 |
-| `ingestion-worker/plan.md` §3, §8 | identity rules incl. variant and final-URL identity; upload types: answered 3 is superseded by the §3 pilot list (state it); deletion guard min/max counts and exempt reasons; rendering per page (`auto`) |
-| `platform/repo-and-deployment.md` §5.4, §6.1 | renderer: the worker fetches and fulfils every browser request; `rag-renderer` **removed from the `crawl` network** (only `ingestion`) |
-| `platform/repo-and-deployment.md` §5.5, §7.1, §9 | ClamAV freshness via `zVERSION`; `UME_RAG_CRAWL_ALLOW` also feeds `Crawl__AllowedPrivateRanges`; egress canary; metrics of §16; trace filter removing `url.full`/`server.address` in the worker |
-| `identity/design.md` §10 | attributes of 5101 (§7) and 5102 (§11); SIEM alerts: any 5102, 5101 from `Render` to private classes |
-| `platform/plan.md` §8 | quarantine 30 days (confirm); upload blobs purged 14 days after deletion |
-| `admin/plan.md` §4 | Sources: preflight results, hierarchy tree for patterns, impact count before saving scope/identity changes, two-variant warning, crawl report (§5.5), upload list with states, quarantine list, deletion confirmation view (§13.5), held references; Settings: municipal host patterns, host overrides, blocked hosts |
-| `knowledge-api` (step 7) | upload citations use `DocumentSources.DisplayName` of the citing collection's source; consider de-duplicating chunks by `TextHash` across documents of one collection (duplicate URLs the normaliser cannot merge, §3.1) |
-| `postponed-decisions.md` | the crawler about page (answered 10) needs an owner and URL before the pilot; SharePoint ACL mirroring if §21 Q2 is answered "later" |
-| `01-general-idea.md` §10 | after review, a "Connectors (step 6b)" row: final-URL identity, canonical not trusted, claims + releaser, worker-fetched rendering, variants, guard with reconcile phase |
+| `platform/data-model.md` §2.2 `Documents` | `CanonicalHint text NULL`; `ContentHashVersion smallint NOT NULL`; `Title` never from an upload file name. **(SP, applied in data-model)** one row per (source, identity) with the former `DocumentSources` columns; `IdentityKind` `upload`; `SiteProfileVersionId`; no variants or attachment columns. **(SP, still needed)** uploads' `CanonicalIdentity` = `upload:<uploadId>` |
+| `platform/data-model.md` §2.2 crawl and connector tables | `CrawlHosts` columns of §6.1; `CrawlFrontier` reshaped (§6.1); new `CrawlClaims`, `CrawlRuns`, `ConnectorCheckpoints`, `Uploads`, `DeletionProposals`, `QuarantinedFiles` (L); grants: worker S I U D, admin S. **(SP, applied)** no `RenderLease*`; claims without `Variant`; `SiteProfiles`/`SiteProfileVersions`. **(SP, still needed)** `CrawlFrontier` adds `ETag`, `LastModified`, `ContentHash`, `SitemapLastMod` (validators per URL, since one request serves every source; `Documents.ETag`/`LastModified` then redundant); `Uploads` one row per slot (§9.1 columns); `QuarantinedFiles.Origin` without `attachment` |
+| `platform/data-model.md` §2.1, §4.2, §9 | `Runs.Phase`, `Report`, `SettingsHashes`; `Trigger` adds `config-change`, `notification` (P2); `Settings`: `DeletionGuardMinCount` 5, `DeletionGuardMaxCount` 500, `Crawl jsonb` (§6.3 budgets, overrides, blocked hosts, ports, freshness 12 h, window, limits, caps, redirects, identity rules version), `QuarantineRetentionDays` 30; dedup keys `fetch:{level}:{identityHash}`, `sync-upload:{batchId}`. **(SP)** `Settings.Crawl.IncompleteRunsAlert` 3; raw blobs content-addressed `raw/{level}/{contentHash}` (+ `.links.json.gz`; `internal`: wrapped key in the blob header, no per-upload or per-document keys); the upload blob is the document's raw content; no `:r` suffix, no child raw blobs |
+| `ingestion-worker/design-engine.md` §9–§10 | `sync` phases and checkpoint reference; URL-list and crawl items become claims released by the releaser; reconcile phase and `awaiting-deletion-confirmation`. **(SP)** fetch stages `http-fetch`, `crawl`, `upload` only; `preview` kinds `preflight`, `site-profile`; `command` kinds `approve-site-profile`, `reject-site-profile`, `edit-site-profile`, `rollback-site-profile`; connectors give each source's document its real outcome (fact `fetch.shared`, no `shared` outcome needed) |
+| `ingestion-worker/design-processing.md` **(SP)** | HTML extraction applies the host's site profile (main root, boilerplate, link blocks, breadcrumb, date pattern) in place of `cleanupRules: learned`; breadcrumb into the chunk prefix; email and child documents (§3.2) to P2 |
+| `ingestion-worker/plan.md` §3, §8 | final-URL identity; deletion guard min/max counts and exempt reasons. **(SP)** identity per source and upload slot; verified canonical folding and identity rules; site profiles; renderer P2 conditional; upload types per §9.2 |
+| `platform/repo-and-deployment.md` | ClamAV freshness via `zVERSION`; `UME_RAG_CRAWL_ALLOW` feeds `Crawl__AllowedPrivateRanges`; egress canary; metrics of §16; trace filter removing `url.full`/`server.address`. **(SP)** no `rag-renderer` in P1; Redis crawl lease P2; upload backup copy within 15 minutes |
+| `identity/design.md` §10 | attributes of 5101 (§7) and 5102 (§11); SIEM alert on any 5102. **(SP)** the 5101 `Purpose = Render` alert moves to P2 |
+| `platform/plan.md` §8 | quarantine 30 days (confirm); upload blobs purged 14 days after deletion or replacement |
+| `admin/plan.md` §4 | preflight results, impact count before scope/identity changes, crawl report (§5.5), upload list, quarantine list, deletion confirmation (§13.5), held documents; municipal hosts, host overrides, blocked hosts. **(SP)** no crawl hierarchy tree or two-variant warning; site profile preview in the source form, profile versions, proposals and rollback; upload replace; incomplete-traversal alert |
+| `knowledge-api` | upload citations use the document's `DisplayName` **(SP: no "Bilaga … i …" in P1)**; consider de-duplicating chunks by `TextHash` within a collection (§3.1) |
+| `postponed-decisions.md` | the crawler about page (answered 10) needs an owner and URL; SharePoint ACL mirroring if §21 Q2 is answered "later". **(SP)** Z1 joined by legacy Office, RTF and email with child documents |
+| `01-general-idea.md` §10 | "Connectors (step 6b)" row: final-URL identity, canonical trusted only when verified, claims + releaser, site profiles, guard with reconcile phase |
 
 ## 21. Answered questions (2026-10-29)
 
@@ -890,16 +895,15 @@ applied its rows inline (6a §9.1, §10.1, §10.4, §14, §17).
 3. **Malware findings**: SIEM alert, metadata-only admin view, no download or release in P1, quarantine purged after
    30 days.
 
-Decided here without asking (reasons in the sections): final-URL identity (§3.2); canonical not trusted (§3.3);
-trailing slash and `index.html` kept (§3.1); releaser instead of eager enqueue (§6.3); 12 h fetch freshness (§6.2);
-night window for all traversals (§6.5); 5 redirects (§7); worker-side browser fetching (§8.3); variants (§8.4);
-crawled HTML not virus-scanned (§11); guard min 5 / max 500 (§13.2); holds after rejection (§13.3).
+Decided here without asking (reasons in the sections): final-URL identity (§3.2); canonical trusted only when verified
+by content hash (§3.3, replaces "never trusted" after the umea.se findings); trailing slash and `index.html` kept
+(§3.1); releaser instead of eager enqueue (§6.3); 12 h fetch freshness (§6.2); night window for all traversals (§6.5);
+5 redirects (§7); worker-side browser fetching for a P2 renderer (§8.3); `lastmod` skip only for hosts whose profile
+marks it reliable, with a full pass every 4th traversal (§5.4); crawled HTML not virus-scanned (§11); guard min 5 /
+max 500 (§13.2); holds after rejection (§13.3).
 
 ## 22. To verify
 
-- Playwright .NET: `RouteAsync("**/*")` + `FulfillAsync` for every resource type the page needs (incl. module
-  scripts, CORS preflights), behaviour when the fulfilled response is a redirect, `ServiceWorkers = Block`, and
-  whether any request can bypass routing (WebSockets via `RouteWebSocketAsync` in recent versions; DNS prefetch).
 - `System.Uri` escaping and IDN behaviour vs our rules (`IdnHost`, `UriKind`, `%2F` handling); `IdnMapping`
   UTS 46 flags in .NET 10.
 - `SocketsHttpHandler.ConnectCallback` with HTTP/2 and TLS SNI to the URL host; decompression counting with
@@ -911,3 +915,33 @@ crawled HTML not virus-scanned (§11); guard min 5 / max 500 (§13.2); holds aft
 - Licence of Google's robotstxt test corpus for reuse as fixtures.
 - Planning numbers of §17 (link-extraction CPU, frontier statements per page) in the R1 test.
 - The about-page URL for the user agent (answered 10) and that umea.se's robots.txt does not block the new agent.
+- umea.se: that the id-only Sitevision URL returns the same normalised content hash as the full path on a sample
+  (identity rule), that `lastmod` changes exactly when the visible date or content changes over several weeks
+  (`lastmodReliable`), and the breadcrumb path of the example page.
+- The Sitevision fingerprint and the preset's session parameters (`sv.*` query parameters seen in umea.se's
+  robots.txt) on two or three other Sitevision municipal sites.
+- Site-profile re-learn thresholds (empty-root rate, boilerplate share, text yield) on the umea.se corpus.
+- At P1 start: whether any pilot site needs JavaScript (decides the P2 renderer), and the pilot source inventory's
+  share of legacy Office, RTF and email files (decides whether they stay deferred).
+- P2 renderer only: Playwright .NET `RouteAsync("**/*")` + `FulfillAsync` for every resource type (module scripts,
+  CORS preflights), fulfilled redirects, `ServiceWorkers = Block`, and requests that bypass routing (WebSockets, DNS
+  prefetch).
+
+## 23. Deferred or removed (simplification pass)
+
+Per [`../simplification-pass.md`](../simplification-pass.md):
+
+| Item | Where it went |
+|---|---|
+| Renderer (`rag-renderer`, Playwright, render leases `CrawlHosts.RenderLease*`, JavaScript-only score, `render` source setting, `headless-render` fallback node, render metrics and health, `EgressPurpose.Render`) | P2, only if the P1-start check finds a pilot site that needs JavaScript (§1, §13.1); `IRenderer` seam and its egress rule kept (§8) |
+| Document variants `origin`/`rendered` (`Documents.Variant`, `RenderRecommendedAt`, `:r` dedup suffix, `variant-changed` exempt reason) | Removed: fetch mode will be a document attribute (§1) |
+| `degraded` `render.not_enabled` for short pages | Removed: info note in the crawl report (§1) |
+| Shared documents across sources (`DocumentSources` references, mirrored references, one pipeline per URL plus `EnsureCurrent` for the others, `shared` outcome) | Removed: documents per source, reuse by frontier and content-addressed caches (§2) |
+| Upload identity `sha256:<hex>` shared across sources; replace = delete + add | Removed: identity (source, upload slot), content hash as version (§2) |
+| Email attachments as child documents (§10, attachment intake, `attachment.depth`, EICAR attachment test) | P2 with email (Z1, §1) |
+| Legacy `.doc`/`.xls`/`.ppt`, `.rtf`, `.eml`/`.msg` as allowed upload types | P2 (Z1), refused as `format_deferred` in P1 unless the pilot inventory shows them common (§1) |
+| Redis per-host crawl in-flight lease (`ume-rag:crawl:inflight:{hostMac}`, `Security__CrawlKeyPepper`, Redis-down fallback ⌈`MaxConnections` ÷ k⌉) | P2, first multi-host deployment (§1); P1 uses an in-process semaphore |
+| Crawl hierarchy (`IHierarchyConnector` for crawl, `preview` kind `hierarchy`) | Removed from P1 with the admin tree (simplification pass §10); the interface stays for SharePoint (P2) |
+| "`rel=canonical` never trusted" | Replaced by "trusted only when verified" (§13.1) |
+| Per-document upload encryption for `public` sources | Removed: `public` blobs are not envelope-encrypted (§4) |
+| Blob moves (quarantine, raw per document) | Replaced by write-once keys, content-addressed raw blobs, tombstone + delayed purge (§2, §4) |
