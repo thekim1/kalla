@@ -14,9 +14,10 @@ invented on one side.
 ## 1. Principles
 
 1. **An OIDC provider is the identity source**; Keycloak, AD FS and Entra ID work the same way, as in the gateway.
-   **Pilot (P1): a Keycloak container in the pilot Compose** holds the admins' and pilot users' accounts, and both
-   the admin UI and Open WebUI sign in through it (user, 2026-10-30: as simple as possible, no Entra approval on the
-   pilot's critical path). **Entra ID from P2** (approval package 1, `infra/entra/`, is ready but not submitted), a
+   **Pilot (P1): one Keycloak shared with the LLM gateway** (realm `ume`, its own Compose project on the gateway's
+   production host, defined in the gateway repo) holds the admins' and pilot users' accounts (local accounts, admins
+   with OTP; LDAP federation to the municipal AD later), and the admin UI and Open WebUI sign in through it (user,
+   2026-10-30: as simple as possible, no Entra approval on the pilot's critical path; Decisions table). **Entra ID from P2** (approval package 1, `infra/entra/`, is ready but not submitted), a
    configuration change, not code. The RAG services store no passwords; Keycloak does, for the pilot only.
 2. **Every request has a subject and a client.** The subject is a user, an application or an anonymous visitor; the
    client is the front end or integration it arrived through. Both are part of every authorisation decision.

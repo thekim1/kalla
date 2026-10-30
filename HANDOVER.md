@@ -202,10 +202,12 @@ user to merge them in this order, merging `origin/main` into each before its tur
 | #42 | 10 (#19) | docs: local development, production setup, runbook, upgrade guide | running | runbook box stays open (G1 public-records export) |
 
 **Pilot sign-in = Keycloak, not Entra** (user, 2026-10-30; Decisions table "P1 pilot sign-in"; identity plan §1).
-Follow-ups for the P1 briefs: a `keycloak` service in the pilot Compose with its database in the pilot Postgres
-(stream A, `deploy/`); a production realm without test users and with the `rag-*` roles, the `departmentCodes`
-attribute and the `ume-rag-admin`/`open-webui` clients (stream B, from `dev/keycloak/ume-realm.json`); Open WebUI's
-OIDC settings pointed at it; account administration in the runbook. Keep the stakeholder report in step.
+The Keycloak is **shared with the gateway**: its own Compose project on the gateway's production host, defined in the
+gateway repo (the user's; not stream work here), database `keycloak` in the gateway's Postgres, realm `ume`. Local
+accounts for the pilot (admins with OTP), LDAP federation to AD later. Follow-ups for the P1 briefs: RAG's realm
+additions file (clients `ume-rag-admin`, `open-webui`, `ume-rag-api`; `rag-*` roles; full scope off; stream B, from
+`dev/keycloak/ume-realm.json`); `--oidc-authority` and Open WebUI's OIDC settings pointed at it (stream A, `deploy/`);
+account administration in the runbook. Keep the stakeholder report in step.
 
 The H7 issue (Entra, now P2) and the H8 issue texts were drafted in session 7's scratchpad, which does not survive.
 Rewrite them when needed from:
