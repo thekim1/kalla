@@ -98,6 +98,14 @@ jobs:
           docker image ls ume-rag/postgres:ci
       - name: Image test
         run: bash deploy/postgres/test.sh ume-rag/postgres:ci
+      - name: Build ume-rag/clamav
+        run: |
+          docker build -t ume-rag/clamav:ci --build-arg REVISION=${{ github.sha }} images/clamav
+          docker image ls ume-rag/clamav:ci
+      - name: ClamAV image test
+        # Offline: a one-line EICAR test signature in a fresh volume, no download from database.clamav.net
+        # (images/clamav/test.sh --online exercises freshclam locally).
+        run: bash images/clamav/test.sh ume-rag/clamav:ci
 
   parser:
     # The parser sidecar (plans/parser/design.md §15.1, repo-and-deployment §8.2): lock, lint, unit and supervisor tests
