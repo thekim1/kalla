@@ -58,7 +58,8 @@ version** links directly, and only those: skills carry no collections (design §
   `swedish` configuration, GIN index; the query is decompounded in .NET by `SwedishDecompounder` and turned into an OR
   query built from its lexeme array) run **in parallel with the query embedding**, then **vector** candidates
   (pgvector, cosine; exact scan for scopes ≤ 10,000 chunks, HNSW above), then one batched **hydrate** statement;
-  reciprocal rank fusion, dedup and diversity in .NET (`Ume.Rag.Retrieval`); filters (scalar `CollectionId` via
+  reciprocal rank fusion, then per-collection age decay and source `demote` patterns (weakness review §3, answer 7),
+  dedup and diversity in .NET (`Ume.Rag.Retrieval`); filters (scalar `CollectionId` via
   B-tree, tags via GIN, type, dates) in both candidate statements.
 - **Embedding profiles (R3)**: in the normal case every collection uses the one on-prem platform profile, so a query
   is embedded **once** and one HNSW index serves all collections. Chunks store `embedding_profile_id`; there is one
@@ -103,7 +104,7 @@ version** links directly, and only those: skills carry no collections (design §
 | Phase | Deliverable |
 |---|---|
 | P0 | `Ume.Rag.Retrieval` skeleton on the stock pgvector image; `SwedishDecompounder` compound tests in .NET plus one Postgres match test |
-| P1 | `/v1/retrieve` hybrid + filters + section expansion (HTTP for `internal` clients and download grants only), access + ceiling checks, single-profile query embedding + cache, coverage signal (vector and keyword; vector side alone until the keyword floor is calibrated), document dedup, `IReranker` seam, retrieval counters, evaluation set run in CI; P1a: three-way gold-set run (vector-only, hybrid, hybrid without decompounder) and thresholds calibrated from the gold set (weakness review §2) |
+| P1 | `/v1/retrieve` hybrid + filters + section expansion (HTTP for `internal` clients and download grants only), access + ceiling checks, single-profile query embedding + cache, coverage signal (vector and keyword; vector side alone until the keyword floor is calibrated), document dedup, `IReranker` seam, retrieval counters, evaluation set run in CI; P1a: three-way gold-set run (vector-only, hybrid, hybrid without decompounder) and thresholds calibrated from the gold set (weakness review §2); P1b: age decay (`RetrievalSettings.recency`) and `demote` multipliers after fusion (weakness review §3) |
 | P2 | Gateway-served rerank per assistant (advisory evaluation shows the gain); tuning per collection (weights, thresholds) with the advisory evaluation report; `search_knowledge` and `list_collections` through `/mcp` |
 | P3 | Cross-profile fusion if any exception profile exists, OpenSearch implementation if a trigger fires |
 
@@ -130,7 +131,12 @@ Answered (2026-10-30; detail in [`design.md`](design.md) §19.1):
    `DisplayName` of a source the caller may see.
 6. **No query rewriting** in P1: the query is used as given; condense stays a chat-API step; multi-query/HyDE only in
    P3 behind evaluation.
-7. **No recency boost**: relevance only; `modified_after` filter; citations carry the modified date.
+7. **No recency boost**: relevance only; `modified_after` filter; citations carry the modified date. **Replaced by
+   [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)**: per-collection
+   age decay `RetrievalSettings.recency` = `{ halfLifeDays, weight, kinds }`, off by default, on for PDFs in the
+   `website` template (730 days, weight 0.15), a multiplier `1 − weight · (1 − 2^(−age/halfLife))` on
+   `SourceModifiedAt` after fusion; source `demote` URL patterns (default factor 0.5) for archive sections; the
+   `modified_after` filter stays (design §6.5).
 8. **Download links for Open WebUI users**: signed grant link valid 7 days (`sensitive`: 1 hour), reachable only from
    the staff network, access re-checked at every download; Entra sign-in on the download path a possible P2 addition.
 

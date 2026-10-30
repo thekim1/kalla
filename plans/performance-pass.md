@@ -66,7 +66,7 @@ The simplification pass then moved the multi-host mechanisms to P2. The other do
 | 13 | Object store server | MinIO's community edition is **archived and source-only** (no maintained images): the municipality's S3 service if IT offers one, else SeaweedFS (answered 5; register S2) |
 | 14 | Chat path | Stateless instances, no sticky sessions; `Retrieval:MaxConcurrentSearches` 4 against a pool of 12 (⌊(pool − 3) ÷ 2⌋); hot-row upserts sorted and placed last; read traffic to the standby only by trigger (§3.11) |
 | 15 | Tests | R1 stays (`perf.yml`, P1); **scale test** (`scale.yml`, P2): synthetic multi-host site, 5M/10M-chunk seed, FakeGateway with a GPU throughput model, 300-VU chat; each decision has a proving metric (§7) |
-| 16 | Change detection on umea.se | No `ETag`/`Last-Modified` (`Cache-Control: no-store`), so conditional GETs save nothing; sitemap `lastmod` (on all 24,184 URLs) + content hash; **incremental `lastmod` runs are the default** for hosts whose sitemaps carry it (§2.3) |
+| 16 | Change detection on umea.se | No `ETag`/`Last-Modified` (`Cache-Control: no-store`), so conditional GETs save nothing; sitemap `lastmod` (on all 24,184 URLs) + content hash; **incremental `lastmod` runs are the default** for hosts whose sitemaps carry it (§2.3); later ([weakness review §3](weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)): only once a 500-URL sample shows `lastmod` reliable, umea.se runs full traversals until then |
 
 ## 2. Capacity model
 
@@ -137,7 +137,7 @@ crawler decisions (user agent, robots always, night window, external 1 req/s, pe
 
 | Lever | Exists? | Effect | Change |
 |---|---|---|---|
-| Sitemap `lastmod` incremental runs (connectors §5.4) | yes, **default** for hosts whose sitemaps carry `lastmod` | a daily run fetches only changed + new URLs (≈ 1–5 % of requests) | the site profile records `lastmod` reliability (visible dates and content-hash changes across runs); unreliable → full traversals |
+| Sitemap `lastmod` incremental runs (connectors §5.4) | yes, **default** for hosts whose sitemaps carry `lastmod` | a daily run fetches only changed + new URLs (≈ 1–5 % of requests) | the site profile records `lastmod` reliability (visible dates and content-hash changes across runs); unreliable → full traversals; set only after a 500-URL sample (weakness review §3) |
 | Conditional GETs, stage-2 hash (connectors §12) | yes | saves bytes, CPU, parse and embed where the host sends validators; **not** requests; umea.se sends none | none |
 | Shared frontier + freshness window 12 h (connectors §6.2; P2, weakness review §1) | yes (from P2) | 20 departments crawling umea.se cost one request per URL per window | none |
 | Content-addressed caches (parse by content hash + settings + build, embeddings by text hash + profile) | yes | an unchanged or already-seen content skips parse and embed; removes ≈ 90 % of downstream cost on re-crawls | none |

@@ -74,8 +74,11 @@ Every LLM call in a pipeline (evaluation generation and judging; P2 enrichment) 
 - *Website crawl*: start URL or sitemap, include/exclude patterns, max depth/pages, robots.txt, identifying user
   agent, SSRF protection, crawl report with failure reasons. Sources crawling the same host share its rate limit (each source has its own frontier in P1; a shared frontier is
   P2, weakness review §1). Incremental runs by sitemap `lastmod` where the host's site profile marks it reliable (umea.se:
-  24,184 URLs, all with `lastmod`; design-connectors). Images and video are excluded by default. No headless
-  rendering in P1: umea.se is server-rendered; a renderer (`IRenderer` seam) comes in P2 only if a P1-start check
+  24,184 URLs, all with `lastmod`; design-connectors); the flag is set only after a sample of 500 random URLs has been
+  fetched and their content hashes compared with `lastmod`, and until then the umea.se source runs full traversals
+  without the `lastmod` skip ([weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)).
+  `demote` URL patterns beside include/exclude lower the rank of archive sections such as old minutes (factor, default
+  0.5). Images and video are excluded by default. No headless rendering in P1: umea.se is server-rendered; a renderer (`IRenderer` seam) comes in P2 only if a P1-start check
   shows pilot sites need JavaScript. Short pages are an info note in the crawl report, never `degraded`.
 - *File upload*: files from the admin API through blob storage in upload batches (create → one request per file →
   commit, which enqueues the `sync`; design-connectors §9.1); size/type limits; file names per source. P1 types:
@@ -217,10 +220,12 @@ child documents.
   noise-normalised); unchanged documents are not re-parsed or re-embedded, and a noise-only change re-keys the chunk
   set instead of rebuilding it (design-processing §12).
 - **Deletion guard**: deletions are applied in a reconcile phase after all fetches of a run, only after a complete
-  traversal or listing. A run whose non-exempt candidates are more than 20 % of a source (and at least
-  `DeletionGuardMinCount` 5), more than `DeletionGuardMaxCount` (500), or a source that returns nothing, pauses for
-  confirmation; configuration changes and explicit admin actions are exempt (design-connectors §13). Soft delete with
-  a 14-day grace period. An alert fires when a source has had 3 runs in a row without a complete traversal
+  traversal or listing (a traversal is complete when ≥ 99 % of seeds are resolved, no host was paused, no admitted
+  claim is pending and the page limit was not hit; a failed seed's document is never a candidate in that run; a URL
+  that leaves the sitemap gets a removal check, 404/410 → `Gone`; weakness review §3). A run whose non-exempt
+  candidates are more than 20 % of a source (and at least `DeletionGuardMinCount` 5), more than
+  `DeletionGuardMaxCount` (500), or a source that returns nothing, pauses for confirmation; configuration changes
+  and explicit admin actions are exempt (design-connectors §13). Soft delete with a 14-day grace period. An alert fires when a source has had 3 runs in a row without a complete traversal
   (deletions never ran, content may be stale).
 - **Short chunk-write transactions**: a new chunk set is written invisible in batches of ≤ 1,000 chunks, then one
   short swap transaction per document; an orphan sweep removes sets never swapped (design-engine §14).
@@ -247,8 +252,8 @@ child documents.
 | Phase | Deliverable |
 |---|---|
 | P0 | worker dispatcher skeleton: `Jobs` (unpartitioned), leases, heartbeat, reaper, one `command` kind end to end |
-| P1a (weakness review §1) | Queue + LISTEN/NOTIFY, scheduler, document store per source, one crawl frontier per source, URL list + crawl (incremental by `lastmod`) + upload connectors, the umea.se site profile as a hand-checked Sitevision preset (manual profile JSON), fixed pipelines with templates per source type, stage manifest, auto-parse rules with built-in rules, personal-data detection (patterns + gated NER, flag rules, held sets), platform embedding profile with fixed concurrency and range sizes from configuration, change detection, deletion guard, run records; human evaluation set (the pilot gold set) and retrieval evaluation runs with the three-way comparison (weakness review §2) |
-| P1b | preview, publish (every document of the collection re-processed) + swap + report + rollback, admin parse rules, site-profile edit and rollback, generated evaluation sets, advisory reports (led by the gold set) and nightly runs, `perf.yml` |
+| P1a (weakness review §1) | Queue + LISTEN/NOTIFY, scheduler, document store per source, one crawl frontier per source, URL list + crawl (incremental by `lastmod` once the host's flag is set; umea.se starts with full traversals, weakness review §3) + upload connectors, the umea.se site profile as a hand-checked Sitevision preset (manual profile JSON), fixed pipelines with templates per source type, stage manifest, auto-parse rules with built-in rules, personal-data detection (patterns + gated NER, flag rules, held sets), platform embedding profile with fixed concurrency and range sizes from configuration, change detection, deletion guard, run records; human evaluation set (the pilot gold set) and retrieval evaluation runs with the three-way comparison (weakness review §2) |
+| P1b | freshness rules of weakness review §3 (completeness by ratio, removal check, `demote` patterns, the 500-URL `lastmod` sample for umea.se, the `website` template's age decay for PDFs), preview, publish (every document of the collection re-processed) + swap + report + rollback, admin parse rules, site-profile edit and rollback, generated evaluation sets, advisory reports (led by the gold set) and nightly runs, `perf.yml` |
 | P2 | from weakness review §1: site-profile learning and re-learning, shared crawl frontier (claims, releaser), publish plans from effect tags, adaptive embedding concurrency (AIMD) and moving-average range sizing, nightly answer judge; SharePoint, renderer if needed, parse-rule proposals, per-department fairness and the multi-host queue features, P2 stages, legacy Office/RTF/email, retrieval-signal feedback loop, skill test questions in evaluation |
 | P3 | More connectors, embedding-profile migration tooling, OpenSearch indexing if adopted |
 
@@ -275,7 +280,8 @@ Answered (2026-10-29, step 6 questions):
    by a Swedish NER model baked into the parser image behind a parser endpoint (on-prem, no gateway call), called only
    when it can change the flag (revised 2026-10-30).
 7. **Default re-sync schedule**: URL lists nightly (conditional GET), website crawls weekly at night (nightly
-   incremental by `lastmod` where reliable), uploads on change only; adjustable per source.
+   incremental by `lastmod` where reliable; reliable only after the 500-URL sample, weakness review §3), uploads on
+   change only; adjustable per source.
 8. **Default chunking**: split by headings, then ≈ 400 BGE-M3 tokens with ≈ 15 % overlap, breadcrumb and heading path
    prepended; tables as row groups with the header repeated; flat chunks (no parent-child) in P1.
 9. **Shared documents across departments** (6a): answered with follow runs; revised 2026-10-30 (simplification pass

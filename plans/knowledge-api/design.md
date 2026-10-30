@@ -38,14 +38,14 @@ materialised CTE); NuGet **`Pgvector` 0.3.2** (depends on `Npgsql` ≥ 8.0.5; co
 | 5 | Query handling | Query used as given: no rewriting, no instruction prefix; NFC, whitespace collapsed, 1–2,000 characters (answered 3) |
 | 6 | Statements | Three short statements instead of one: **keyword** candidates run **in parallel with the query embedding**, then **vector** candidates, then one batched **hydrate** (chunks, sections, documents); fusion in .NET (§6). Hybrid and the decompounder stay only if they beat vector-only on the pilot gold set, run three ways in P1a (weakness review §2, §20) |
 | 7 | Exact vs HNSW | Scopes of ≤ 10,000 chunks are searched **exactly** (B-tree on the scalar `CollectionId` + sort), larger ones through HNSW with `relaxed_order` iterative scan unless the scope is too selective; HNSW settings are role defaults, no per-query `SET`; same rule in the evaluator (§6.4) |
-| 8 | Fusion | RRF k = 60, weights from `RetrievalSettings` (default 1.0 / 1.0); multi-collection queries use the platform defaults unless all collections agree; deterministic tie-breaks (§6.5) |
+| 8 | Fusion | RRF k = 60, weights from `RetrievalSettings` (default 1.0 / 1.0); multi-collection queries use the platform defaults unless all collections agree; after fusion, per-collection **age decay** (`RetrievalSettings.recency`) and source **`demote`** patterns multiply the score (weakness review §3); deterministic tie-breaks (§6.5) |
 | 9 | Embedding failure | `hybrid` degrades to keyword-only with `degraded: "embedding_unavailable"` and coverage `unknown`; `vector` answers 503; the evaluator never degrades (§5.5) |
 | 10 | Embedding cache | In-process cache for every level (P1 has no Redis); from the first multi-host deployment (P2) a shared Redis L2 only for `public`/`internal` behind `ISharedCache`; key is an **HMAC** of the normalised query, 5 min (§5.4) |
 | 11 | Coverage | `low` only when the vector side is weak (best cosine distance above every searched collection's `coverageMaxDistance`, default 0.50) **and** the keyword side is weak (no candidate at or above `coverageMinKeywordScore`); until that floor is calibrated (`null`), `low` is decided by the vector side alone; both thresholds are set from the pilot gold set's answerable and unanswerable questions together (weakness review §2); keyword-only → `unknown`; outcomes and near-threshold margins are metrics for calibration, never query text (§7) |
 | 12 | Diversity | Dedup `(DocumentId, TextHash)`; documents of different sources with the same identity (URL) collapse to one; **max 3 chunks per document** (configurable 1–10) (§8) |
 | 13 | Section expansion | From **neighbouring chunks in Postgres** (`ChunkSetId`, `Ordinal`, heading path), not from blobs; overlap stripped by a new `Chunks.OverlapChars`; ≤ 1,500 tokens per section, ≤ 8,000 per response; hits in one section merged (§9) |
 | 14 | Citations | Title, page range, heading path and modified date always; public `url` or an access-checked **download link**; upload titles from the document's `DisplayName` (§10) |
-| 15 | Ranking | Relevance only, no recency boost; `modified_after` filter (answered 4) |
+| 15 | Ranking | Relevance, then per-collection **age decay** on `SourceModifiedAt` (`RetrievalSettings.recency`, off by default; the `website` template turns it on for PDFs: half-life 730 days, weight 0.15) and source **`demote`** URL patterns (default factor 0.5) for archive sections; the `modified_after` filter stays (weakness review §3, replacing "no recency boost" of answered 4; §6.5) |
 | 16 | Latency | p95 retrieval ≤ 90 ms on an embedding miss, ≤ 40 ms on a hit, at 100k chunks; alert at 250 ms (§11) |
 | 17 | Result cache | None; config snapshot and embeddings are cached, results are not (§12) |
 | 18 | OpenSearch seam | `ISearchIndex` replaces candidate generation only; hydration, access defence and citations stay in Postgres, which re-checks every hit (§13) |
@@ -549,6 +549,7 @@ WITH q AS (   -- OR over the lexemes of the query search text; never by rewritin
     SELECT content.rag_or_query(to_tsvector('swedish', $1)) AS tsq
 ), kw AS MATERIALIZED (
     SELECT c."Id", c."DocumentId", c."ChunkSetId", c."Ordinal", c."TextHash", c."CollectionId", c."Classification",
+           c."DocumentType", c."SourceModifiedAt",                -- age decay (§6.5)
            ts_rank_cd(c."SearchVector", q.tsq) AS score
     FROM content."Chunks" c, q
     WHERE c."SearchVector" @@ q.tsq
@@ -562,13 +563,14 @@ WITH q AS (   -- OR over the lexemes of the query search text; never by rewritin
     ORDER BY score DESC, c."Id"
     LIMIT 100
 )
-SELECT kw.*, d."IdentityKind", d."IdentityHash"
+SELECT kw.*, d."IdentityKind", d."IdentityHash", d."SourceId", d."Url"   -- SourceId, Url: demote patterns (§6.5)
 FROM kw JOIN content."Documents" d ON d."Id" = kw."DocumentId";
 
 -- V: vector candidates, approximate (HNSW partial index per profile on the halfvec expression, data-model §3.2;
 --    the column stays vector, performance-pass §3.3)
 WITH vec AS MATERIALIZED (
     SELECT c."Id", c."DocumentId", c."ChunkSetId", c."Ordinal", c."TextHash", c."CollectionId", c."Classification",
+           c."DocumentType", c."SourceModifiedAt",
            c."Embedding"::halfvec(1024) <=> $1::halfvec(1024) AS distance
     FROM content."Chunks" c
     WHERE c."EmbeddingProfileId" = '01929b6e-0000-7000-8000-00000000b6e3'
@@ -579,7 +581,7 @@ WITH vec AS MATERIALIZED (
     ORDER BY c."Embedding"::halfvec(1024) <=> $1::halfvec(1024)
     LIMIT 100
 )
-SELECT vec.*, d."IdentityKind", d."IdentityHash"
+SELECT vec.*, d."IdentityKind", d."IdentityHash", d."SourceId", d."Url"
 FROM vec JOIN content."Documents" d ON d."Id" = vec."DocumentId";
 
 -- V, exact variant (§6.4): identical except full precision for the distance and
@@ -594,13 +596,14 @@ words only gives `NULL` and K returns nothing.
 
 Compared with data-model §3.3: fusion, dedup and the final `LIMIT` move to .NET (§6.5); the `ParentId`/`ParentText`
 join is gone (flat chunks; sections come from §9); `ChunkSetId`, `Ordinal`, `CollectionId` and the document's
-identity key are returned for diversity and expansion; the `$x IS NULL OR` filters become optional fragments. The
+identity key are returned for diversity and expansion, `DocumentType`, `SourceModifiedAt` and the document's `SourceId`
+and `Url` for age decay and demote patterns (§6.5, weakness review §3); the `$x IS NULL OR` filters become optional fragments. The
 `Kind = 'child'` predicate stays in K only because the partial GIN index requires it; every P1 row is `child`. A
 chunk is searchable iff `DeletedAt IS NULL`: chunks of `writing`, `held` and `superseded` sets carry `DeletedAt`
 (the index writer clears it on the new set's chunks and sets it on the old set's in one swap transaction, engine
 design §14), so K and V need no join to `ChunkSets`.
 
-Both statements return ≤ 100 rows of ids and numbers (≈ 25 KB), never chunk text.
+Both statements return ≤ 100 rows of ids, numbers and the document URL (≈ 35 KB), never chunk text.
 
 ### 6.3 Statement H+D: hydrate (one `NpgsqlBatch`, one round trip)
 
@@ -668,15 +671,30 @@ A walk stops at 100 matching rows, so the higher tuple bound only costs time for
 ```
 for each list L in {vector (by distance asc, Id asc), keyword (by score desc, Id asc)}: rank_L(c) = 1-based position
 rrf(c) = w_v / (60 + rank_v(c)) + w_k / (60 + rank_k(c))         (a missing rank contributes 0)
-order: rrf desc, distance asc (nulls last), chunk Id asc
+score(c) = rrf(c) · decay(c) · demote(c)                          (weakness review §3; both 1 when not set)
+decay(c) = 1 − weight · (1 − 2^(−age(c) / halfLifeDays))           (only when recency is on and c's DocumentType ∈ kinds)
+order: score desc, distance asc (nulls last), chunk Id asc
 ```
 
 - **Weights** `w_v`, `w_k` from the collection's resolved `RetrievalSettings` (§12.1); default 1.0 / 1.0, changed by
   the collection's editors, with the effect shown in the next evaluation report (processing §13). A query over several
   collections uses their weights if all agree, else the platform defaults from `Settings.Retrieval` (one coherent
   ranking).
-- **Modes**: `vector` = vector list only, order by distance; `keyword` = keyword list only, order by `ts_rank_cd`;
-  `hybrid` as above. Candidate depth 100 per list (`candidates`, 20–200).
+- **Age decay** ([weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered),
+  replacing "no recency boost"): `RetrievalSettings.recency` = `{ halfLifeDays, weight, kinds }` of the chunk's
+  collection (§12.1). Off by default (`null`); the `website` template turns it on for PDFs (`halfLifeDays` 730,
+  `weight` 0.15, `kinds` `["pdf"]`; set on the collection when its first `website` source is added, admin design §5.4). `age(c)` = days from the chunk's `SourceModifiedAt` to now; a
+  chunk without `SourceModifiedAt` gets no decay. A document never falls below `1 − weight` (0.85 at the template
+  values): an old answer still ranks when nothing newer competes. The `modified_after` filter stays. The temporal
+  questions of the pilot gold set check it (`to-verify.md` #171).
+- **Demote** (weakness review §3): `demote(c)` = the lowest `factor` of the chunk's source `demote` patterns
+  (connectors design §5.2, default 0.5) that match the document's URL, else 1; uploads have no URL and are never
+  demoted. Patterns come from the config snapshot (§12.1) and are compiled once per config version.
+- Both multipliers apply after fusion in every mode and before dedup and the per-document cap; they never change
+  coverage (§7 uses distances and keyword scores). A query over several collections uses each chunk's own
+  collection `recency`.
+- **Modes**: `vector` = vector list only, order by distance; `keyword` = keyword list only, order by `ts_rank_cd`
+  (in both, `rrf` is the one list's term, so without multipliers the order is unchanged); `hybrid` as above. Candidate depth 100 per list (`candidates`, 20–200).
 - **Several profiles** (P3 exception during an embedding-profile migration): each profile contributes one vector list
   to RRF (rank-based, so incomparable distances do not matter) and all share one keyword list.
 
@@ -870,16 +888,20 @@ change makes it unreachable without invalidation code (identity §4.6 pattern):
 | collection → | slug, name, level, department, owner team, `EmbeddingProfileId` + its SQL literal and dimensions, published flag, **resolved** `RetrievalSettings` (collection values over `Settings.Retrieval` defaults) |
 | assistant → | the published version's collection ids, level, owner team, `QuerySteps` retrieval part (top-k, filters, expand, mode, rerank) |
 | collection → | visible source ids (for D's `$3`) |
+| source → | compiled `demote` patterns and factors (`Sources.DemoteRules`, §6.5, weakness review §3) |
 | slug → | collection id |
 
 `RetrievalSettings` (jsonb, validated by the admin API on save):
 
 ```json
 { "vectorWeight": 1.0, "keywordWeight": 1.0, "candidates": 100, "maxChunksPerDocument": 3,
+  "recency": null,
   "coverageMaxDistance": 0.50, "coverageMinKeywordScore": null, "expandMaxTokens": 1500 }
 ```
 
-The first four change rankings; the next evaluation report shows their effect (processing §13). `top_k` is not a
+`recency` ([weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)) is `null`
+(off) or `{ "halfLifeDays": 730, "weight": 0.15, "kinds": ["pdf"] }` (the `website` template's value, §6.5); `kinds`
+are `DocumentType` values. The first five change rankings; the next evaluation report shows their effect (processing §13). `top_k` is not a
 collection setting: it belongs to the request (assistant `QuerySteps`, default 10). Platform-only values live in
 `Settings.Retrieval`: the defaults above plus `exactScanMaxChunks` 10,000, `minHnswSelectivity` 0.2 % (§6.4),
 `expandTotalMaxTokens` 8,000; P2 adds `rerankCandidates` and `coverageMinRerankScore` (§6.7). The grant lifetime is a
@@ -990,7 +1012,9 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 
 ### 16.1 Unit (`tests/Ume.Rag.Retrieval.Tests`, new; `Ume.Rag.Api.Tests` for the role)
 
-- `RrfFusion`: hand-computed RRF values, weights, missing ranks, tie-breaks, modes; multi-profile fusion.
+- `RrfFusion`: hand-computed RRF values, weights, missing ranks, tie-breaks, modes; multi-profile fusion; age decay
+  (half-life arithmetic, kinds, missing `SourceModifiedAt`, per-collection settings in a multi-collection query) and
+  `demote` (lowest matching factor, uploads never demoted) (weakness review §3).
 - `ResultDiversifier`: text-hash dedup, identity-group collapse (same URL in two sources), cap 1/3/10, stable output
   order.
 - `CoverageEvaluator`: `low` only when vector and keyword sides are both weak (four combinations), keyword floor,
@@ -1071,7 +1095,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | Phase | Deliverable |
 |---|---|
 | P0 | `Ume.Rag.Retrieval` skeleton; stock pgvector image (0.8.7); role defaults for `hnsw.*`; `SwedishDecompounder` unit tests and one Postgres match test |
-| P1 | In-process `IRetriever` for the chat role; K (lexeme OR query) / V / H+D statements with the exact/HNSW selectivity rule on the halfvec index (recall vs exact measured with the evaluation sets); RRF, dedup, identity-group collapse, cap 3; coverage (vector and keyword; vector side alone until the keyword floor is calibrated) with per-collection thresholds calibrated from the pilot gold set (weakness review §2) and calibration metrics; `IReranker` seam (no-op, FakeGateway implementation); section expansion with `OverlapChars`; citations incl. upload names and attachment parents; download grants and `/content` streaming with envelope decryption; query embedding with L1/L2 cache, circuit and degrade; `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; problem details, OpenAPI/Scalar; counters; metrics, traces; contract test; evaluation smoke; interaction audit; retrieval load test |
+| P1 | In-process `IRetriever` for the chat role; K (lexeme OR query) / V / H+D statements with the exact/HNSW selectivity rule on the halfvec index (recall vs exact measured with the evaluation sets); RRF, age decay and `demote` multipliers (P1b, weakness review §3), dedup, identity-group collapse, cap 3; coverage (vector and keyword; vector side alone until the keyword floor is calibrated) with per-collection thresholds calibrated from the pilot gold set (weakness review §2) and calibration metrics; `IReranker` seam (no-op, FakeGateway implementation); section expansion with `OverlapChars`; citations incl. upload names and attachment parents; download grants and `/content` streaming with envelope decryption; query embedding with L1/L2 cache, circuit and degrade; `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; problem details, OpenAPI/Scalar; counters; metrics, traces; contract test; evaluation smoke; interaction audit; retrieval load test |
 | P2 | `/mcp` early with `search_knowledge` and `list_collections` (ceiling `public`); HTTP access for integrations and tokens (`CollectionAudiences`, key scopes, rate limits); gateway-served rerank (§6.7) per assistant when the evaluation shows a gain; coverage calibration with control questions; tuning per collection with the advisory evaluation report; range requests if a PDF viewer needs them; optional Entra sign-in for downloads (§4.6) |
 | P3 | MCP `get_document`, `document://` resources; multi-query/HyDE behind evaluation (answered 3); cross-profile fusion during an embedding-profile migration; OpenSearch behind `ISearchIndex` if a trigger fires |
 
@@ -1085,7 +1109,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | `platform/data-model.md` §1.1 and `app-roles.sql` | `ALTER ROLE ume_rag_api, ume_rag_worker, ume_rag_admin IN DATABASE ragdb SET hnsw.ef_search = 100; … SET hnsw.iterative_scan = relaxed_order; … SET hnsw.max_scan_tuples = 100000` |
 | `platform/data-model.md` §1.2 grants | api: S on `content."Documents"` (incl. `SourceId`, `DisplayName`), `ChunkSets`, `Chunks`, S on `config."Sources"` (columns `Id`, `CollectionId`, `Type`, `Classification`, `State`, `DeletedAt`) |
 | `platform/data-model.md` §2.2 `RetrievalStats` | key (`Day`, `DocumentId`, `TextHash`, `CollectionId`) + `Classification`, not `ChunkId`; `content.rag_count_retrievals` takes those arrays |
-| `platform/data-model.md` §2.1 | `Collections.RetrievalSettings` schema of §12.1 (no `efSearch`; adds `coverageMinKeywordScore`); `Settings.Retrieval` defaults and platform-only values of §12.1 (P2: `rerankCandidates`, `coverageMinRerankScore`); `Assistants.QuerySteps.retrieval.rerank` (P2); P2 table `CollectionAudiences` (`CollectionId`, `Kind` `client`/`department`/`group`, `SubjectId`, `GroupValue`, same checks as `AssistantAudiences`) |
+| `platform/data-model.md` §2.1 | `Collections.RetrievalSettings` schema of §12.1 (no `efSearch`; adds `coverageMinKeywordScore`; weakness review §3: adds `recency`); `Sources.DemoteRules` generated from `Settings -> 'demote'`, readable by the api role (weakness review §3); `Settings.Retrieval` defaults and platform-only values of §12.1 (P2: `rerankCandidates`, `coverageMinRerankScore`); `Assistants.QuerySteps.retrieval.rerank` (P2); P2 table `CollectionAudiences` (`CollectionId`, `Kind` `client`/`department`/`group`, `SubjectId`, `GroupValue`, same checks as `AssistantAudiences`) |
 | `platform/data-model.md` §11, §12.14, §12.15 | P2 Redis key `ume-rag:qemb:{profileId:N}:{queryMac}` with HMAC (`Security:CacheKeyPepper`) and the value format; in process for all levels (P1: the only cache); §12.15 resolved by §7 here |
 | `ingestion-worker/design-processing.md` §6.5 | the chunker writes `OverlapChars` (0 for the first chunk of a section, tables, code) |
 | `ingestion-worker/design-processing.md` §13.5 | the evaluator calls the library with a `Collections` scope over the full collection (no `ChunkSets` scope); same dedup, identity-group collapse and per-document cap (k = 10); P2: compares with and without `IReranker` |
@@ -1114,7 +1138,9 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 3. **No query rewriting** in the knowledge API in P1: the query is used as given; condense stays a chat-API step;
    multi-query/HyDE only in P3 behind evaluation (§5.1, §17).
 4. **No recency boost**: relevance only; callers may filter by `modified_after`; citations carry the modified date;
-   revisit with evaluation (§3.1, §10.1).
+   revisit with evaluation (§3.1, §10.1). **Replaced by [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)**:
+   per-collection age decay (`RetrievalSettings.recency`, off by default, on for PDFs in the `website` template) and
+   source `demote` patterns after fusion (§6.5); the `modified_after` filter and the modified date stay.
 
 5. **Download links for Open WebUI users** (§4.6): a signed grant link valid **7 days** (`sensitive`: 1 hour),
    reachable only from the staff network, access re-checked at every download; an expired link shows a "ask again"
@@ -1143,6 +1169,9 @@ None.
   value, checked against the coverage log events of the first pilot weeks (weakness review §2).
 - Hybrid against vector-only on the pilot gold set (weakness review §2): run three ways in P1a (vector-only, hybrid,
   hybrid without the decompounder); hybrid and the decompounder stay only if they beat vector-only.
+- Age decay and `demote` (weakness review §3, `to-verify.md` #171): on the gold set's temporal questions the current
+  document ranks above the outdated one with the `website` template's `recency` (730 days, 0.15 on PDFs), and recall@10
+  on the other answerable questions does not drop against `recency` off; the values are adjusted if either fails.
 - Pool of 12 with 4 concurrent searches per instance (§6.6): pool waits when K and V overlap on cache hits, measured in
   P0 next to the chat writer and the stats flush.
 - Exact-scan cost at 10,000 chunks of `vector(1024)` (TOASTed 4 KB values): detoast + distance within 25 ms p95; else

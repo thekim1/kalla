@@ -111,6 +111,18 @@ failing URL among 14,000 blocked every such deletion. The `lastmod` skip was tru
 - **`lastmod` is measured before it is trusted.** The site profile's `lastmod reliable` flag is set only after a
   sample of 500 random URLs has been fetched and their content hash compared with `lastmod` (`to-verify.md`). Until
   then the umea.se source runs full traversals without the `lastmod` skip.
+- **Settled while applying:**
+  - **Sample threshold.** The 500-URL sample passes when at most 2 % of the sampled URLs, re-fetched at least 7 days
+    apart, changed their main content without a newer `lastmod`.
+  - **Unreachable robots.txt.** A host whose robots.txt is unreachable counts as paused.
+  - **Demote rules.** Retrieval reads demote rules from the generated column `Sources.DemoteRules`. When several
+    patterns match, the lowest factor applies.
+  - **Template default.** The `website` template sets `recency` on the collection when its first `website` source is
+    added, unless the collection already has a value.
+  - **Removal check in full traversals.** The removal check also runs in full traversals, for sources without
+    incremental runs.
+  - **Phasing.** Decay, demote, completeness by ratio and the removal check are P1b. P1a keeps the stricter deletion
+    rule.
 
 ## 4. Data protection guards the secondary copy while the primary stays unprotected
 

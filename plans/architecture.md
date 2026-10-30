@@ -170,7 +170,7 @@ flowchart TD
 
     subgraph worker_side["Worker (rag-worker): one fixed pipeline per source type"]
         sched["Scheduler / EnsureCurrent"]
-        sync["sync job: sitemap lastmod (incremental by default),<br/>change detection, deletion guard,<br/>alert after 3 runs without a full traversal"]
+        sync["sync job: sitemap lastmod (incremental once a 500-URL sample<br/>shows it reliable; full traversals until then),<br/>change detection, deletion guard (complete at ≥ 99 % seeds),<br/>removal check, alert after 3 runs without a full traversal"]
         profile["Site profile per host<br/>P1: hand-checked Sitevision preset (manual JSON),<br/>P2: learned from 30–50 sample pages;<br/>versioned, rollback"]
         fetch["fetch job: final URL identity (verified profile rule),<br/>content hash, ClamAV for files"]
         parse["parse: HTML, text, Markdown, CSV in the worker<br/>every PDF, Office file and image to the parser<br/>(cache: content hash, settings, build)"]

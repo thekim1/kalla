@@ -360,6 +360,13 @@ is routed dynamically (HTML extraction in the worker; PDF fast path, Docling or 
 profile is a **hand-checked Sitevision preset**: a manual profile JSON with the same schema, versioned like any config;
 learning adds to such profiles later. The acceptance test above stays in P1a.
 
+**Later change ([weakness review §3](weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)).** The
+`lastmod` reliable flag is set only after a sample of 500 random umea.se URLs has been fetched and their content
+hashes compared with `lastmod`; until then the umea.se source runs full traversals without the `lastmod` skip. A
+traversal is complete when ≥ 99 % of seeds are resolved (no longer "no seed failed"); URLs that leave the sitemap get a
+removal check. Ranking gets per-collection age decay (on for PDFs in the `website` template) and `demote` URL patterns
+for archive sections.
+
 ## 14. Fewer containers in the pilot (user, 2026-10-30)
 
 The user asked whether the pilot's eight long-running containers could be fewer. Decided: **six** (`rag-api`,

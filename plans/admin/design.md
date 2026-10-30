@@ -485,7 +485,7 @@ kept so references stay stable.
 | V13 | lethal trifecta false — a hard refusal, no acceptance in P2 | `lethal_trifecta` | publish; skill serve; tool approval/grant; `ContainsThirdPartyText` changed | tools §5.4 |
 | V14 | assistant that uses tools (a linked skill's served version links a tool): `SupportsTools`, synced price; limits ≤ `AgentDefaults` unless `Admin`, always ≤ `AgentHardCaps` | `model_no_tools`, `price_unknown`, `limit_above_default`, `limit_above_cap` | publish; skill serve (it can switch an assistant to tools); settings change | tools §6.4–§6.5 |
 | V15 | not-found texts ≤ 1,000 characters each, ≤ 5 links, `https`, host matches `Settings.Chat.AllowedLinkHosts` | `link_host_not_allowed` | publish; allow-list narrowed | chat §9.4, §10.1 |
-| V16 | `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–400, `efSearch` 40–400, `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `coverageMinKeywordScore` null or > 0 (weakness review §2), `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows) | `retrieval_settings_invalid` | collection settings save | knowledge §12.1 |
+| V16 | `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–400, `efSearch` 40–400, `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `coverageMinKeywordScore` null or > 0 (weakness review §2), `recency` null or `halfLifeDays` 30–3,650, `weight` 0–0.5, `kinds` non-empty subset of the document types (weakness review §3), `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows) | `retrieval_settings_invalid` | collection settings save | knowledge §12.1 |
 | V17 | `QuerySteps`: `topK` 1–50, history 0–20 messages / ≤ 8,000 tokens, `contextTokens` ≤ the model's `ContextWindow` when known, `maxOutputTokens` 64–4,096, temperature 0–1, language `auto`/`sv`; condense model on-prem | `query_steps_invalid` | publish; model sync | chat §5–§6, §10.3 |
 | V18 | skill version label > every existing; **serve** only after the version's gate run finished, and only if V4–V6, V12–V14 and V19 hold for every assistant whose published version links the skill | `version_not_increasing`, `gate_not_finished`, `serve_breaks_assistants` | skill publish/serve/rollback | tools §3.5 |
 | V19 | skill tool links need a `ToolDepartmentGrant` for the skill's department; platform skills only `AllDepartments` tools; sharing never grants: a linking assistant of another department sees a shared skill's tool only with its own grant (warning lists the tools) | `tool_grant_missing` | skill draft; grant revoked (lists skills); share list widened | tools §3.6 |
@@ -494,7 +494,7 @@ kept so references stay stable.
 | V22 | tool servers: `CK_ToolServers_Clearance`; `Hosting = hosted` (P2); approvers differ for new and unexpected definitions; system-owner approval and pre-registration only by a listed subject; `write` tools refused while `WriteToolsEnabled = false` | `toolserver_rule`, `same_approver` | server save; approval; pre-registration | tools §4.4–§4.5, §5.3 |
 | V23 | keys: team in the caller's departments; scopes only assistants/collections of the key team's department; `pk` keys only `public` assistants, exact origins | `key_scope_invalid` | key save; assistant level raised (lists `pk` keys) | identity §6.4–§6.5 |
 | V24 | pipeline: parameters valid against the template version's `paramsSchema`; template version supported by a running worker; the template matches the source type | `pipeline_params_invalid`, `template_unsupported` | parameters save; publish; template version change | engine (templates and parameters) |
-| V25 | source settings: URL list ≤ 5,000 (canonicalised, duplicates listed); crawl `include`/`exclude` compile (`re:` with `NonBacktracking`, 50 ms); `maxPages` ≤ platform cap; `maxFileSizeMb` ≤ 50; cron 5 fields; `collectionId` immutable; `scope`/`identity` changes need the `impactToken` | `source_settings_invalid`, `impact_not_confirmed` | source save | connectors §4–§5, §9, §12.3 |
+| V25 | source settings: URL list ≤ 5,000 (canonicalised, duplicates listed); crawl `include`/`exclude`/`demote` compile (`re:` with `NonBacktracking`, 50 ms), `demote` factor in (0, 1), default 0.5 (weakness review §3); `maxPages` ≤ platform cap; `maxFileSizeMb` ≤ 50; cron 5 fields; `collectionId` immutable; `scope`/`identity` changes need the `impactToken` | `source_settings_invalid`, `impact_not_confirmed` | source save | connectors §4–§5, §9, §12.3 |
 | V26 | reasons: PII clear ≥ 10 and the document's source in the caller's departments; conversation access ≥ 20 (comment reveal: the fixed one-click text) | `reason_too_short`, `not_in_scope` | the action | processing §9.5 |
 | V27 | *retired* (collection floor before publish: evaluation is advisory) | – | – | – |
 | V28 | deletion decisions only by `Manage` of the source's department, while the run is `awaiting-deletion-confirmation` and the proposal is the current one | `deletion_superseded` | confirm/reject | connectors §13.3 |
@@ -663,7 +663,7 @@ progress flags), which disappears when the collection has a published assistant 
 |---|---|---|---|---|
 | 1 | Logga in | Översikt | empty state "Här bygger du kunskapsbanker och assistenter för din förvaltning" + **Skapa kunskapsbank** | role and department from sign-in |
 | 2 | Skapa kunskapsbank | drawer | name → slug; owner team; **informationsklass** as three explained options, none preselected ("Vem får läsa innehållet?") | V1–V2 later |
-| 3 | Lägg till källa | source drawer, type cards *Adresslista*, *Webbplats*, *Filer* | crawl: start URL; include `host/**`, default excludes, 10,000 pages, depth 10, incremental by sitemap `lastmod` where the host supports it, weekly; URL list nightly; template chosen by type, its parameters under "Avancerat" | V25 |
+| 3 | Lägg till källa | source drawer, type cards *Adresslista*, *Webbplats*, *Filer* | crawl: start URL; include `host/**`, default excludes, 10,000 pages, depth 10, incremental by sitemap `lastmod` once the host's site profile marks it reliable (umea.se: weekly full traversals until the 500-URL `lastmod` sample passes, weakness review §3), weekly; optional **Nedprioritera** patterns for archive sections (factor 0.5); the first `website` source of a collection turns on age decay for PDFs (730 days, weight 0.15) unless the collection already has `recency` set, shown in the drawer and editable in Sökinställningar (weakness review §3); URL list nightly; template chosen by type, its parameters under "Avancerat" | V25 |
 | 4 | Kontrollera | same drawer | preflight: reachability, robots status, sitemap found, estimated pages, egress, "samma webbplats hämtas redan av X" (shared crawl frontier, P2; weakness review §1), CMS recognised ("Sitevision") | fail blocks save; warn explains |
 | 5 | Förhandsgranska | preview panel | up to 5 URLs or uploaded files; for a crawl source the site profile the worker would apply (P1: the manual Sitevision preset; learned from P2), shown as **Före / Efter** text per sample page (boilerplate removed, breadcrumb, date); each stage's output (text, sections, chunks with token counts) | preview isolated |
 | 6 | Spara och hämta | source page → run page | saves, enqueues the first sync; live counters, failures by reason in plain Swedish | – |
@@ -724,6 +724,7 @@ Inställningar  Körningar  Genomsökningsrapport  Borttagningar (1)  Behållna 
 ┌ Startadresser ───────────────────────────────────────────────────────────────────────────────────────────┐
 │ https://www.umea.se/bygga                                                                       [Ta bort] │
 │ Ta med   www.umea.se/bygga/**                     Uteslut  **/sok?*  **?*print=*  [+]                      │
+│ Nedprioritera  www.umea.se/bygga/**/arkiv/**  ×0,5  [+]                                                    │
 │ Högst 10 000 sidor · djup 10 · ändrade sidor enligt webbplatskartan · lördagar 01:00                      │
 │ Webbplatsprofil: Sitevision, version 3 (inlärd 30 okt.)                          [Förhandsgranska]         │
 │ ▸ Avancerat (mallinställningar: textavsnittens längd, överlapp, …)                                         │
@@ -854,6 +855,7 @@ version, draft-only links are marked "(utkast)". Source: `GET /api/departments/{
 | assistant version / published version / draft | version / publicerad version / utkast | restore / copy / archive | återställ / kopiera / arkivera |
 | assistant test question / expected behaviour | testfråga / förväntat beteende | uses tools (derived) | använder verktyg |
 | assistant template / department map | assistentmall / karta | owner team | ägarteam |
+| `demote` pattern (weakness review §3) | nedprioritera | age decay `recency` (weakness review §3) | åldersavtagning |
 
 ### 5.8 Generic forms for platform objects (P1)
 
@@ -987,7 +989,9 @@ demonstrably need custom flows (§16).
   (processing §13.6, knowledge design §7), shown as numbers on the card; the editor saves them in Sökinställningar. The
   histogram stays P2 (§16). Until `coverageMinKeywordScore` is set, not-found is decided by the vector side alone.
 - Retrieval settings form (Sökinställningar tab): all values within V16 ranges saved directly; the following
-  evaluation report shows the effect; the previous values can be restored from the report.
+  evaluation report shows the effect; the previous values can be restored from the report. It includes **Åldersavtagning**
+  (`recency`: on/off, half-life in days, weight, document types; weakness review §3), whose effect the gold set's
+  temporal questions show.
 
 ### 7.2 Evaluation report card (publish, collection, assistant; P2 skill)
 

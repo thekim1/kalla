@@ -592,7 +592,9 @@ charged to the collection's owner team; shown before generation.
 - **Pilot gold set** (P1a, before go-live; [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): 100–150 answerable real questions
   (expected source URL(s) as `ExpectedDocumentIds`, the facts a correct answer contains as `ExpectedAnswer`), 30–50
   unanswerable off-topic and near-miss questions (no expected documents; expected outcome "not found") and at least
-  10 temporal questions where an outdated document competes. Stored as `human` questions through the same command
+  10 temporal questions where an outdated document competes (they check the age decay and `demote` patterns of
+  [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered): the current document
+  ranks above the outdated one). Stored as `human` questions through the same command
   (in P1a through Scalar, no journey pages); owned by the pilot department with the platform team; the start of
   register item B1. Unanswerable questions do not count in recall@10 and MRR@10; for them the run records the coverage
   status, best distance and best keyword score (§13.6).
@@ -609,7 +611,8 @@ charged to the collection's owner team; shown before generation.
 
 - Shared project **`Ume.Rag.Retrieval`** (used by `Ume.Rag.Api`, the worker and the admin test panel): runs the
   keyword and vector candidate statements (knowledge design §6.2) with the collection's `RetrievalSettings` and
-  profile literal, the same `SwedishDecompounder` on the query, then fuses in .NET (RRF) and applies the same dedup by
+  profile literal, the same `SwedishDecompounder` on the query, then fuses in .NET (RRF, then the age decay and
+  `demote` multipliers, weakness review §3) and applies the same dedup by
   `(DocumentId, TextHash)`, variant collapse and per-document cap (default 3) as the API (knowledge design §6.5, §8);
   `k = 10`; mode hybrid; no filters; `expand=none`.
 - Scope: the collection over its live sets (`CollectionId = ANY($scope)` and `DeletedAt IS NULL`, as the API; no
@@ -673,7 +676,7 @@ Removed (simplification pass): nothing blocks, so nothing needs an override.
 
 | Change | Run | Shown |
 |---|---|---|
-| `Collections.RetrievalSettings` (`vectorWeight`, `keywordWeight`, `candidates`, `maxChunksPerDocument`; knowledge design §12.1) | `on-demand` with `CandidateSettings` before saving, full set on the full collection (cheap: no rebuild) | current vs candidate, advisory |
+| `Collections.RetrievalSettings` (`vectorWeight`, `keywordWeight`, `candidates`, `maxChunksPerDocument`, `recency` (weakness review §3); knowledge design §12.1) | `on-demand` with `CandidateSettings` before saving, full set on the full collection (cheap: no rebuild) | current vs candidate, advisory |
 | Embedding profile (P3) | full collection under each profile after the background re-embed | old vs new profile, advisory |
 | Coverage thresholds (`coverageMaxDistance`, `coverageMinKeywordScore`) or `expandMaxTokens` only | none | does not change ranking |
 

@@ -490,7 +490,8 @@ A `BackgroundService` on every instance; the instance holding `pg_try_advisory_x
 - **Cron** (`Sources.Schedule`, 5 fields, Cronos *to verify*) evaluated in Europe/Stockholm; DST gaps run once at the
   next valid minute, overlaps once.
 - **Defaults** (answered 7), set by the admin when a source is created: URL list `0 2 * * *` (nightly 02:00), crawl
-  `0 1 * * 6` (Saturday 01:00; a host whose site profile marks `lastmod` reliable runs incrementally every night, 6b),
+  `0 1 * * 6` (Saturday 01:00; a host whose site profile marks `lastmod` reliable runs incrementally every night, 6b;
+  the flag is set only after a 500-URL sample, so umea.se starts with weekly full traversals, weakness review §3),
   upload none (the upload itself enqueues a `sync` with `Trigger = upload`). Adjustable per source.
 - **Jitter**: deterministic per source, `hash(sourceId) mod JitterMinutes` (`Settings`, default 90).
 - **Due**: `next = cron.Next(lastScheduledFor ?? source.CreatedAt)`; when `next + jitter ≤ now` and no `sync` for the
@@ -651,6 +652,12 @@ Platform templates (`Pipelines.DepartmentId = null`, `IsTemplate`), seeded by th
 | `website` | crawl | fetch → detect → parse → clean → chunk → personal data → embed → index | `ocr` (`auto`), `tables` (`accurate`), `chunkTokens` (400), `overlapPercent` (15), `pathRules` (`[]`) |
 | `url-list` | URL list | as `website` | as `website` |
 | `files` | upload | fetch → **scan** → detect → parse → … → index | `ocr`, `tables`, `chunkTokens`, `overlapPercent` |
+
+**Collection default** ([weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)):
+the `website` template also carries a default for its collection's `RetrievalSettings.recency`, age decay for PDFs
+(`{ "halfLifeDays": 730, "weight": 0.15, "kinds": ["pdf"] }`, knowledge design §6.5, §12.1). The admin sets it on the
+collection when the collection's first `website` source is added and `recency` was never set; it is shown in the source
+drawer and edited on the collection. Other templates leave `recency` off.
 
 Fetched PDFs and Office files are scanned in `website` and `url-list` too (6b §11); `scan` is listed for `files` only
 because every upload is a file. HTML extraction settings come from the host's site profile, not from the template;
