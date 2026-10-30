@@ -1,6 +1,6 @@
 # Handover
 
-Status of the Ume.Rag design work, for the next session. Updated 2026-10-30 (end of session 2, steps 3–6).
+Status of the Ume.Rag design work, for the next session. Updated 2026-10-30 (session 3, step 7).
 
 ## What this is
 
@@ -26,6 +26,7 @@ and a "kitchen sink" monolith.
 | `plans/ingestion-worker/design-engine.md` | **Detail step 6a** (done): engine model, definition format + validator + Merkle hashes (`Ume.Rag.Pipelines`), node interface and P1 catalogue, execution with segments and fence, cache, jobs/fairness/scheduler, runs, preview, publish/rollback, templates, index writer, config mid-run, observability, capacity, tests |
 | `plans/ingestion-worker/design-connectors.md` | **Detail step 6b** (done): connector contracts and checkpoints, URL identity, URL list, crawl (robots, sitemaps, scope, traps, traversals), shared frontier with claims and releaser, egress guard, renderer fed by worker fetches, variants, uploads, attachments, ClamAV, change detection and effect tags, deletion guard with reconcile phase, SharePoint P2 outline |
 | `plans/ingestion-worker/design-processing.md` | **Detail step 6c** (done): auto-parse rules and ranges, stitching, clean, split, chunk (tokenizer), metadata, quality check, PII detection + parser `/v1/ner`, embed, noise re-key, evaluation sets, gate, go-live floor |
+| `plans/knowledge-api/design.md` | **Detail step 7** (done): `Ume.Rag.Retrieval` engine shared with the evaluator and test panel, `IRetriever` for the chat role, `/v1/retrieve` (problem details), keyword statement parallel to the query embedding then vector then one hydrate batch, RRF in .NET, exact scan ≤ 10,000 chunks, degrade to keyword-only, per-collection coverage, dedup/variants/cap 3, section expansion from neighbouring chunks (`OverlapChars`), citations with 7-day signed download grants, no result cache, OpenSearch seam, MCP outline. pgvector 0.8.7, `Pgvector` 0.3.2 and MCP SDK 2.3.0 checked against package source |
 | `plans/postponed-decisions.md` | **Register of postponed decisions** (K1 key service, T1 sensitive tier, A1 archive law, R1 runner, ...), with stopgap, deadline, owner. Review at each phase start; add new postponements here |
 
 Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{dify,ragflow,onyx,open-webui,kernel-memory,bifrost}`.
@@ -61,8 +62,8 @@ Cloned reference repos: `~/git/llmgateway`, `~/git/eneo`, `~/git/rag-platforms/{
 | 6a. Ingestion engine | `plans/ingestion-worker/design-engine.md` | done, reviewed | `080d4bd` |
 | 6b. Connectors | `plans/ingestion-worker/design-connectors.md` | done, reviewed | `e2a99d9` |
 | 6c. Processing | `plans/ingestion-worker/design-processing.md` | done, reviewed | `e804c72` |
-| **7. Knowledge API** | `plans/knowledge-api/` | **next** | – |
-| 8. Chat API (decide C1 chat attachments here) | `plans/chat-api/` | todo | – |
+| 7. Knowledge API | `plans/knowledge-api/design.md` | done, reviewed | `2fe838d` |
+| **8. Chat API** (decide C1 chat attachments here) | `plans/chat-api/` | **next** | – |
 | 9. Tools (skills, tool hub, MCP server, template) | `plans/tools/` | todo | – |
 | 10. Admin API + UI | `plans/admin/` | todo | – |
 
@@ -91,17 +92,18 @@ After step 10: a consistency pass across all detail documents, then P0 implement
 - R1 self-hosted runner (IT security), A1 archive law (owner to be named), N1 product name: see the register.
 - Nothing else is waiting on the user right now.
 
-## Next step in detail: step 7, knowledge API
+## Next step in detail: step 8, chat API
 
-Brief a subagent to write `plans/knowledge-api/design.md`. Fixed inputs: data-model §3 (Swedish FTS, hybrid SQL,
-indexes), processing design §13.5 (shared `Ume.Rag.Retrieval` library, used by the evaluator too) and §14.3
-(`building` collections excluded), knowledge plan answered 3 as superseded (flat chunks; **section expansion at query
-time** from heading path + stored parse output), identity design §3–§4 (`RagPrincipal`, `IAccessPolicy`, ceilings,
-audiences, 404 for invisible resources), engine/connectors (variants: two documents may share a URL; dedup in
-results; `DocumentSources.DisplayName` for upload citations), gateway design (query embeddings: `OnPrem`, team id).
-Cover: `/v1/retrieve` contract, filters, query embedding + cache, hybrid fusion and weights, coverage signal,
-document dedup and diversity, section expansion, citations (title, URL, page, heading path, attachment parent),
-access checks and audit, latency budget (chat TTFT), caching by config version, OpenSearch seam (O1), MCP tool
-exposure outline (P2), observability, tests incl. evaluation in CI. Before briefing, ask the user anything only they
-can decide (e.g. default top-k, whether to show page numbers/links in citations for internal documents, query
-rewriting in P1).
+Brief a subagent to write `plans/chat-api/design.md`. Fixed inputs: chat plan (§4 request path as updated by step 7,
+answered 1–3), knowledge design §2.2 (`IRetriever`, `RetrievalResult`, `Coverage` incl. `Unknown`, `MarkCited`),
+§4.6 (download grants), §5.5 (degraded retrieval), §10.4 (citation numbering), §11 (latency budget); identity design
+§3–§5 (`RagPrincipal`, `IAccessPolicy`, OpenAI error shape, Open WebUI JWT and `X-OpenWebUI-Chat-Id`, residency
+ceiling per request); gateway design (delegation `x-ume-on-behalf-of` + echo, `x-ume-max-residency`, `x-ume-residency`,
+run headers, interim linked keys, releases B → C → A); data-model §2.3 (chat tables), §6 (tier resolver), §7
+(envelope encryption), §8 (retention, crypto-shredding); `platforms/open-webui.md` §9 (source events). Cover:
+`/v1/models`, `/v1/chat/completions` (OpenAI compatibility, streaming SSE, non-streaming), assistant resolution,
+condense step, prompt building with untrusted sources and history window, residency check before the first byte,
+citation parsing and both citation formats, not-found and degraded answers, conversation ids and history modes,
+background writer, encryption and retention, feedback, errors, TTFT budget and the benchmark, observability, tests.
+Decide C1 (chat attachments) here. Before briefing, ask the user anything only they can decide (e.g. condense on by
+default, history window, feedback in P1, C1 scope, what the not-found answer contains).
