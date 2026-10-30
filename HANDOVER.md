@@ -206,11 +206,11 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
   deviations" settled in the detail documents (Decisions table row "P0 integration, stream A" lists the choices made);
   `README.md` (status, docs, CI), `plans/README.md`, `CHANGELOG.md` (Unreleased: all of P0), `AGENTS.md`, and
   `docs/stakeholder-report.html` brought up to date (the artifact link above was republished).
-- Stream B's #46 reviewed OK. Its `ownership` check is red only because the push came before the retarget from
-  `b/11-admin-ui` to `main` (base `acfbe55`); a new push fixes it (comment on #46). A re-run does not.
+- Stream B's #46 reviewed OK and merged by stream B (`5920efd`); its red `ownership` check came from a push before the
+  retarget to `main` (see "Learned in session 8").
 
 **Next:**
-1. Stream B: #46 (re-push, merge), then `docs/security-events.md`, the pooler-safe SQL scan test and item #11's
+1. Stream B: `docs/security-events.md`, the pooler-safe SQL scan test and item #11's
    sign-in check. Review each PR when it appears.
 2. When stream B's last P0 PR is merged: fold `results-b.md` rows added after 163/83/151, and settle the "Design
    deviations" of #32, #35, #38, #39, #45, #46 and the later ones in the design (stream A's are done).
