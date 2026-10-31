@@ -29,7 +29,7 @@ Refs: [engine §9.1, §11, §12](../ingestion-worker/design-engine.md), [admin �
 - [x] Commands `confirm-deletion`, `reject-deletion`, `release-hold`, `clear-pii-flag`, `reprocess-document` (those not in J3) (#88)
 - [x] `contracts/sources/v1/`: `demote` patterns, `incrementalSchedule`, `revalidateEvery` with `x-effect`; `website` template's `recency` default (#88)
 - [x] Drift test; `Ume.Rag.Pipelines.Tests` for the new keys (#88)
-- [ ] **Hand-off L1:** issue to stream B
+- [x] **Hand-off L1:** issue to stream B (#90)
 
 ### 4. Freshness in the crawler
 Refs: [weakness review §3](../weakness-review.md), [connectors §5.4–§5.6, §18](../ingestion-worker/design-connectors.md)
@@ -58,7 +58,7 @@ Refs: [processing §13, §14](../ingestion-worker/design-processing.md), [ingest
 - [x] `generate-set`/`top-up-set` with filtering on FakeGateway (model and ceiling per README §7 O1) (PR: a/p1b-7-eval-sets)
 - [x] Reports lead with the `human` layer (PR: a/10-eval-on-demand)
 - [x] **Done:** reproducibility test green; set triggers (first syncs, weekly top-up, `D` +25 %) in the evaluation scheduler (PR: a/p1b-7-eval-reproducibility)
-- [ ] **Hand-off L5** (with items 5, 6, 8): issue to stream B
+- [x] **Hand-off L5** (with items 5, 6, 8): issue to stream B (#132)
 
 ### 8. Remaining commands and admin parse rules
 Refs: [admin §4.7](../admin/design.md), [processing §3.5, §9.5](../ingestion-worker/design-processing.md), [connectors §13](../ingestion-worker/design-connectors.md)
