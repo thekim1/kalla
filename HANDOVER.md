@@ -233,12 +233,12 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
    #84 (item 5), #88 (P1b item 2, L1), #94 (item 18 code part; "stack healthy" box open until images are rebuilt and
    J8/J9 land). **Stream B:** #76 (J2) merged; #86 (events 5101/5102), #87 (scanner fix) reviewed OK; open issues to B:
    #80 (J3 questions), #81 (seed templates), #90 (L1), #92 (upload manifest, Settings.Crawl keys), #95 (item 18
-   follow-ups). **J2/J3 sync point done** (`4b0f3a6`). Also merged: #96, #97 (item 6 part 3; item 6 code complete), **#98 (item 7 processing incl. inspect/NER adapters;
-   NER P 1.000 / R 0.985 on fixtures; ContractTests now share one parser-image collection and wait for readiness)**,
-   #99 (P1b item 16 grading script; L8 issue #100 to the user). **Running:** `../rag-a38` item 8 (Sitevision preset,
-   umea.se profile, ~20-page corpus), `../rag-a39` item 9 (engine, J4; fixes #41), `../rag-a34` P1b item 15 (CI
-   harnesses), `../rag-a36` P1b item 4 (crawler freshness). The 5-hour usage limit hit once (12:40 reset): resumed
-   agents with SendMessage.
+   follow-ups). **J2/J3 sync point done** (`4b0f3a6`). Also merged: #96–#99, #101 (P1b item 4 freshness; schema request #102 to B), #103 + #105 (P1b item 15 CI
+   harnesses; `perf.yml` dry run green on GitHub, run 41201645043), **#104 (item 8: Sitevision preset, umea.se profile,
+   20-page corpus; acceptance page exact)**, #106 (README CI). Design fixed: acceptance breadcrumb, connectors §12.2
+   rules v2 (`8e97acc`). **Running:** `../rag-a39` item 9 (engine, J4), `../rag-a41` noise rules v2. **Next after the
+   engine:** item 10 (commands + eval on-demand, after J5), item 17 (evaluation-smoke job, after B's smoke set), P1b
+   items 5–8 (preview, publish, evaluation harness, commands).
    **Implementor agents don't run git writes:** the main session commits and merges `main` into their branches. **Next:** item 8
    (Sitevision preset, after 7), item 9 (engine, after 6 and 7), item 17 (evaluation-smoke job, after B's smoke set),
    P1b items 4–8. Open: `robots.disallow` vs `robots.disallowed` (fetch reason vs preflight example) to unify.
