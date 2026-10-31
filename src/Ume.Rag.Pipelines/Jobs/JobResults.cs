@@ -121,6 +121,7 @@ public sealed record EvaluationRunRef
 
     public required Guid EvaluationRunId { get; init; }
 
+    [Description("Answerable questions (with expected documents): the denominator of recall@k (EvaluationRuns.QuestionCount).")]
     [Range(0, int.MaxValue)]
     public required int QuestionCount { get; init; }
 
@@ -130,6 +131,75 @@ public sealed record EvaluationRunRef
 
     [Description("on-demand with candidateSettings: the run used the candidate settings, not the current ones.")]
     public bool Candidate { get; init; }
+
+    [Description("The run per question layer, human (the gold set) first (processing design §13.4, weakness review §2).")]
+    [MaxLength(2)]
+    public IReadOnlyList<EvaluationLayerResult> Layers { get; init; } = [];
+
+    [Description("The coverage-threshold proposal from the human layer's answerable and unanswerable questions (processing design §13.6); absent without human questions.")]
+    public CoverageProposal? Coverage { get; init; }
+}
+
+/// <summary>One question layer of a run: recall@k and MRR@k over its answerable questions (processing design §13.6).</summary>
+public sealed record EvaluationLayerResult
+{
+    public required EvaluationLayer Layer { get; init; }
+
+    [Description("Answerable questions (with expected documents): the denominator of recall@k.")]
+    [Range(0, int.MaxValue)]
+    public required int Questions { get; init; }
+
+    [Description("Answerable questions with an expected document in the top k.")]
+    [Range(0, int.MaxValue)]
+    public required int Found { get; init; }
+
+    [Description("Questions without expected documents (expected outcome \"not found\"); not counted in recall@k and MRR@k.")]
+    [Range(0, int.MaxValue)]
+    public int Unanswerable { get; init; }
+
+    [Description("Found / Questions; absent without answerable questions.")]
+    [Range(0.0, 1.0)]
+    public double? RecallAtK { get; init; }
+
+    [Range(0.0, 1.0)]
+    public double? Mrr { get; init; }
+}
+
+/// <summary>
+/// The coverage thresholds that separate the human layer's answerable from its unanswerable questions best (fewest
+/// misclassified; knowledge design §7, weakness review §2), and the not-found counts under the run's own thresholds.
+/// </summary>
+public sealed record CoverageProposal
+{
+    [Range(0, int.MaxValue)]
+    public required int Answerable { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public required int Unanswerable { get; init; }
+
+    [Description("Answerable human questions whose coverage was low (false not-found).")]
+    [Range(0, int.MaxValue)]
+    public int FalseNotFound { get; init; }
+
+    [Description("Unanswerable human questions whose coverage was low (correct not-found).")]
+    [Range(0, int.MaxValue)]
+    public int UnanswerableNotFound { get; init; }
+
+    [Description("Proposed coverageMaxDistance; absent until the layer has answerable and unanswerable questions.")]
+    public ThresholdProposal? CoverageMaxDistance { get; init; }
+
+    [Description("Proposed coverageMinKeywordScore; absent in vector runs and until both groups have a keyword score.")]
+    public ThresholdProposal? CoverageMinKeywordScore { get; init; }
+}
+
+/// <summary>A proposed threshold and how many human questions it misclassifies.</summary>
+public sealed record ThresholdProposal
+{
+    [Range(0.0, 1_000_000.0)]
+    public required double Value { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public required int Misclassified { get; init; }
 }
 
 /// <summary>Result of <c>stage-preview</c> (engine design §11): per document and stage; the outputs are blobs under <c>previews/{jobId}/</c>.</summary>
@@ -250,7 +320,7 @@ public sealed record PreflightCheckResult
 
     public required PreflightState State { get; init; }
 
-    [Description("<area>.<code>, e.g. http.404, robots.disallowed, egress.blocked; the admin shows its Swedish text and remediation.")]
+    [Description("<area>.<code>, e.g. http.404, robots.disallow, egress.blocked; the admin shows its Swedish text and remediation.")]
     [MaxLength(100)]
     [RegularExpression(ContractPatterns.Reason)]
     public required string Code { get; init; }
@@ -310,6 +380,7 @@ public sealed record EvalRunResult
     [Description("The run compared with (EvaluationRuns.ComparedRunId); absent for a collection's first run.")]
     public Guid? ComparedRunId { get; init; }
 
+    [Description("Answerable questions (with expected documents): the denominator of recall@k (EvaluationRuns.QuestionCount).")]
     [Range(0, int.MaxValue)]
     public required int QuestionCount { get; init; }
 
@@ -326,6 +397,10 @@ public sealed record EvalRunResult
 
     [Description("nightly: recall@10 fell 5 points or more below the 4-week median (processing design §14.8).")]
     public bool RecallAlert { get; init; }
+
+    [Description("The run per question layer, human (the gold set) first (processing design §13.4, weakness review §2).")]
+    [MaxLength(2)]
+    public IReadOnlyList<EvaluationLayerResult> Layers { get; init; } = [];
 }
 
 /// <summary>Result of <c>generate-set</c> and <c>top-up-set</c> (processing design §13.1, §13.3).</summary>

@@ -31,7 +31,7 @@
           },
           "code": {
             "type": "string",
-            "description": "<area>.<code>, e.g. http.404, robots.disallowed, egress.blocked; the admin shows its Swedish text and remediation.",
+            "description": "<area>.<code>, e.g. http.404, robots.disallow, egress.blocked; the admin shows its Swedish text and remediation.",
             "maxLength": 100,
             "pattern": "^[a-z0-9_-]+(\\.[a-z0-9_-]+)+$"
           },

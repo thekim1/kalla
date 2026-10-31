@@ -58,7 +58,17 @@ public sealed record RunItemRow(Guid RunId, string Classification, Guid? Documen
 
 /// <summary>The response facts the fetch writes to the source's frontier row, with <c>State = idle</c>.</summary>
 public sealed record FrontierCompletion(Guid SourceId, string Classification, byte[] UrlHash, Guid RunId, DateTimeOffset FetchedAt, short? Status,
-    string? ETag, string? LastModified, byte[]? ContentHash);
+    string? ETag, string? LastModified, byte[]? ContentHash)
+{
+    /// <summary>The crawl's redirect target (<c>CrawlFrontier.RedirectTo</c>).</summary>
+    public string? RedirectTo { get; init; }
+
+    /// <summary>No request was made (a crawl's <c>lastmod</c> skip): only <c>State = idle</c>, the last fetch's facts stay.</summary>
+    public bool KeepFacts { get; init; }
+
+    /// <summary>A crawl seed that failed: <c>CrawlRuns.SeedsFailed</c> counts it in the same commit.</summary>
+    public bool SeedFailed { get; init; }
+}
 
 /// <summary>Run item outcomes and identity hashes as the tables hold them.</summary>
 public static class EngineText
@@ -145,7 +155,10 @@ public sealed class DocumentStore(JobDatabase database)
         """;
 
     private const string LiveDocumentsSql = $"""
-        SELECT {Columns} FROM content."Documents" WHERE "SourceId" = $1 AND "DeletedAt" IS NULL ORDER BY "Id"
+        SELECT {Columns} FROM content."Documents"
+        WHERE "SourceId" = $1 AND "DeletedAt" IS NULL AND ($2::uuid IS NULL OR "Id" > $2)
+        ORDER BY "Id"
+        LIMIT $3
         """;
 
     public async Task<DocumentRow?> GetAsync(Guid documentId, CancellationToken cancellationToken) =>
@@ -276,11 +289,11 @@ public sealed class DocumentStore(JobDatabase database)
         return documents;
     }
 
-    /// <summary>The source's live (not soft-deleted) documents, for a <c>reprocess</c> run.</summary>
-    public async Task<IReadOnlyList<DocumentRow>> LiveDocumentsAsync(Guid sourceId, CancellationToken cancellationToken)
+    /// <summary>The source's live (not soft-deleted) documents after <paramref name="after"/> in id order, for a <c>reprocess</c> run.</summary>
+    public async Task<IReadOnlyList<DocumentRow>> LiveDocumentsAsync(Guid sourceId, Guid? after, int limit, CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(LiveDocumentsSql, connection) { Parameters = { Db.P(sourceId) } };
+        await using var command = new NpgsqlCommand(LiveDocumentsSql, connection) { Parameters = { Db.P(sourceId), Db.P(after), Db.P((long)limit) } };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var rows = new List<DocumentRow>();
         while (await reader.ReadAsync(cancellationToken))
@@ -338,9 +351,16 @@ public sealed class EngineCommit : IAsyncDisposable
     private const string FrontierSql = """
         UPDATE content."CrawlFrontier"
            SET "State" = 'idle', "LastFetchedAt" = $5, "LastStatus" = $6, "ETag" = $7, "LastModified" = $8, "ContentHash" = coalesce($9, "ContentHash"),
-               "RedirectTo" = NULL
+               "RedirectTo" = $10
          WHERE "Classification" = $1 AND "SourceId" = $2 AND "UrlHash" = $3 AND "RunId" = $4
         """;
+
+    private const string FrontierIdleSql = """
+        UPDATE content."CrawlFrontier" SET "State" = 'idle'
+         WHERE "Classification" = $1 AND "SourceId" = $2 AND "UrlHash" = $3 AND "RunId" = $4
+        """;
+
+    private const string SeedFailedSql = """UPDATE content."CrawlRuns" SET "SeedsFailed" = "SeedsFailed" + 1 WHERE "RunId" = $1""";
 
     private EngineCommit(NpgsqlConnection connection, NpgsqlTransaction transaction)
     {
@@ -427,16 +447,29 @@ public sealed class EngineCommit : IAsyncDisposable
     public async Task CompleteFrontierAsync(FrontierCompletion completion, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(completion);
-        await using var command = new NpgsqlCommand(FrontierSql, Connection, Transaction)
-        {
-            Parameters =
+        await using (var command = completion.KeepFacts
+            ? new NpgsqlCommand(FrontierIdleSql, Connection, Transaction)
             {
-                Db.P(completion.Classification), Db.P(completion.SourceId), Db.P(completion.UrlHash), Db.P(completion.RunId),
-                Db.P(completion.FetchedAt.ToUniversalTime()), Db.P(completion.Status), Db.P(completion.ETag), Db.P(completion.LastModified),
-                Db.P(completion.ContentHash),
-            },
-        };
-        await command.ExecuteNonQueryAsync(cancellationToken);
+                Parameters = { Db.P(completion.Classification), Db.P(completion.SourceId), Db.P(completion.UrlHash), Db.P(completion.RunId) },
+            }
+            : new NpgsqlCommand(FrontierSql, Connection, Transaction)
+            {
+                Parameters =
+                {
+                    Db.P(completion.Classification), Db.P(completion.SourceId), Db.P(completion.UrlHash), Db.P(completion.RunId),
+                    Db.P(completion.FetchedAt.ToUniversalTime()), Db.P(completion.Status), Db.P(completion.ETag), Db.P(completion.LastModified),
+                    Db.P(completion.ContentHash), Db.P(completion.RedirectTo),
+                },
+            })
+        {
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (completion.SeedFailed)
+        {
+            await using var seed = new NpgsqlCommand(SeedFailedSql, Connection, Transaction) { Parameters = { Db.P(completion.RunId) } };
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     public Task EnqueueAsync(IJobQueue queue, IReadOnlyList<JobRequest> jobs, CancellationToken cancellationToken)

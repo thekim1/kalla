@@ -4,7 +4,7 @@ For the pilot host set up as in [production-setup.md](production-setup.md). Comm
 `deploy/`, as root or a member of the `docker` group; `dc` below stands for `docker compose --env-file deploy/.env`.
 The design behind this page is [`plans/platform/repo-and-deployment.md`](../plans/platform/repo-and-deployment.md)
 §6 and §7.4. Upgrades are in the [upgrade guide](upgrade-guide.md), security events in
-[security-events.md](security-events.md).
+[security-events.md](security-events.md), the test host's deployment and drill in [test-host.md](test-host.md).
 
 ## Ownership and targets
 
@@ -196,8 +196,8 @@ land in production's repository.
 
 §7.4 rule 3: a drill after the first deployment, then **every quarter**. The P0 drill was run locally (PR #40, timings
 above). The **first drill on the test host is scheduled before go-live (P1b)**, together with the test-host deployment
-(decisions table, "M2 and test hosting"); it is still open. Record the date, the achieved RPO and RTO, and anything
-that went wrong.
+(decisions table, "M2 and test hosting"); it is still open, and its specifics are in [test-host.md](test-host.md).
+Record the date, the achieved RPO and RTO, and anything that went wrong.
 
 1. **Isolated host** with its own **copy** of the pgBackRest repository (never production's) and of the blob volume
    (or the upload copy), set up as in *Restoring onto another host*, from the **escrowed** keys: this is the check
@@ -376,6 +376,7 @@ unless they start with `src/`):
 | The user's own export: `GET /api/v1/chats/all` (only the caller's chats), the chat export under *Data Controls* in the user's settings, and *Download > Export chat (.json)* in a chat's menu | works; the menu entry needs `permissions.chat.export`, default `True` (`USER_PERMISSIONS_CHAT_EXPORT`, which we do not set) | `routers/chats.py:1072-1077`; `src/lib/components/chat/Settings/DataControls.svelte:93-97`, `:182-192`; `src/lib/components/layout/Navbar/Menu.svelte:424-443`; `config.py:1913`, `:2024` |
 | Feedback snapshots: an admin reads any feedback with its `snapshot.chat` (`GET /api/v1/evaluations/feedback/{id}`, `GET /api/v1/evaluations/feedbacks/all/export`) | works, but only for rated messages, and only the chat as it was when rated | `routers/evaluations.py:449-459`, `:354-364`; `models/feedbacks.py:92-93` |
 | The feedback service account's API key | reaches only the allow-listed paths (prefix match), so it cannot read chats | `utils/auth.py:538-546` |
+| The feedback service account itself | created as the store's first user, so as admin, from `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` when Open WebUI starts with no users; with `ENABLE_PASSWORD_AUTH=false` (our default) it cannot sign in, and `ENABLE_LOGIN_FORM=false` only hides the form | `main.py:399-403`; `utils/auth.py:631-662`; `routers/auths.py:656-667`; `config.py:1694-1698` |
 | A chat the user deletes | is removed from the database (rows deleted, not flagged) | `models/chats.py:2736-2744` |
 
 **Until G1 decides, a request is handled like this** (it depends on the user):
@@ -386,13 +387,25 @@ unless they start with `src/`):
 3. If the user cannot or will not export it, or has deleted it, there is no admin route with the pilot settings:
    escalate to the records owner and the data protection officer (open points below).
 
-**Open points for G1 and W2** (none of these is a procedure until G1 has decided):
+**The three candidate routes, until G1 picks one** (weakness review §4 "Export route", chat design §13.3, register G1
+with W2, to-verify #173). None of them is the registrar's procedure until G1 has decided; then this section keeps the
+chosen one and drops the others.
 
-- *A temporary, logged admin-access window*: `ENABLE_ADMIN_CHAT_ACCESS=true` on the Open WebUI service, recreate it,
-  an admin signs in and uses *Admin > Users > Chats*, then the flag goes back and the container is recreated again.
-  While it is on, **every** Open WebUI admin can read **every** chat. It needs a person who holds the Open WebUI admin
-  role and signs in through OIDC (W2 prefers that no person holds it), and how the window is logged is not settled.
-  Not tested.
+1. *The user's own export.* Works with the pilot settings and is the interim handling above. It depends on the user:
+   nothing can be exported if the user cannot or will not, or has deleted the conversation.
+2. *A temporary, logged admin-access window.* `ENABLE_ADMIN_CHAT_ACCESS=true` on the Open WebUI service, recreate it,
+   an admin signs in and uses *Admin > Users > Chats*, then the flag goes back and the container is recreated again.
+   While it is on, **every** Open WebUI admin can read **every** chat. In the pilot stack the only admin is the
+   feedback service account (production-setup.md, *Open WebUI*): it cannot sign in, and its key reaches only the
+   feedback routes. So the window needs a person with the admin role for its duration, which W2 prefers to avoid, and
+   how the window is logged is not settled. Not tested.
+3. *Another route G1 names.* The chat design lists a read-only query as the third option, but direct SQL against Open
+   WebUI's database is ruled out (weakness review §4, which overrides the chat design). With the pilot settings Open
+   WebUI's API has no admin route to another user's conversation (table above), so this route exists only once G1
+   defines one.
+
+Also for G1 and W2:
+
 - *Feedback snapshots* cover only rated conversations, as of the rating.
 - *Backups of Open WebUI's data directory*: none in P0, so a deleted conversation cannot be recovered.
 - The Open WebUI stack is off by default and not deployed in P0 (production-setup.md, *Open WebUI*).
@@ -440,3 +453,6 @@ unless they start with `src/`):
   procedure yet (key provider decision K1).
 - **The api's keys** (`Security__DownloadGrantKeys__<kid>`, `Security__ConversationIdKeys__<kid>`): a rotation adds a
   new key id next to `k1`.
+- **The feedback service account's Open WebUI key** (`secrets/api/OpenWebUi__AdminApiKey`): `sudo
+  deploy/openwebui-feedback-key.sh` mints a new one (the old one stops working at once), then `dc restart rag-api`.
+  Its password stays in `secrets/openwebui.env` and is usable only while the script runs.

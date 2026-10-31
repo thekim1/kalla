@@ -32,7 +32,9 @@ public sealed class ParserClientConverter(ParserClient client) : IParserConverte
 /// the ranges in order (fixed sizes, halved on <c>timeout</c>, <c>worker_crashed</c> and <c>resource_limit</c>; a single
 /// page that still fails is a missing page), requests the rest of a <c>partial</c> range, re-runs garbled pages with forced
 /// OCR and re-renders empty scanned pages once at scale 3.0, joins the pages in order and matches the parse rule on the
-/// joined text. Missing pages ≤ 10 % (and ≤ 20) make the document <c>degraded</c>, more end it as <c>failed</c>.
+/// joined text. The document's admin-made candidates (<see cref="AdminParseRuleSet.Candidates"/>) come first: the first
+/// without a text match feeds its overrides to the plan, and every candidate is matched on the joined text before the
+/// built-in rules. Missing pages ≤ 10 % (and ≤ 20) make the document <c>degraded</c>, more end it as <c>failed</c>.
 /// Non-paged formats are one request. Parser codes map per engine design §7.3.
 /// </summary>
 public sealed partial class ParserRoute(IParserConverter converter, IParsePlanner planner, IOptions<ParseOptions> options)
@@ -44,15 +46,24 @@ public sealed partial class ParserRoute(IParserConverter converter, IParsePlanne
     private static readonly HashSet<string> RetryOnce = new(StringComparer.Ordinal) { "ocr_failed", "conversion_failed" };
     private static readonly HashSet<string> Requeue = new(StringComparer.Ordinal) { "busy", "not_ready", "duplicate_in_flight" };
 
-    public async Task<ParsedDocument> ParseAsync(ReadOnlyMemory<byte> file, DetectResult detect, ParseParams parameters, string requestId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Parses the document. With <paramref name="progress"/> (a <c>parse</c> job, engine design §9.5) every range's outcome
+    /// is stored as it completes and a stored one is used instead of a request, and the route throws
+    /// <see cref="ParseYieldException"/> at a range boundary once the slice is used up. <paramref name="rules"/> are the
+    /// document's admin-made candidates in precedence order (none: the built-in rules only).
+    /// </summary>
+    public async Task<ParsedDocument> ParseAsync(ReadOnlyMemory<byte> file, DetectResult detect, ParseParams parameters, string requestId,
+        CancellationToken cancellationToken, ParseProgress? progress = null, IReadOnlyList<ParseRule>? rules = null)
     {
         ArgumentNullException.ThrowIfNull(detect);
         ArgumentNullException.ThrowIfNull(parameters);
+        rules ??= [];
+        var strategyRule = ParseRules.StrategyRule(rules);
         var extension = detect.FileExtension ?? throw new ArgumentException("A parser-bound document needs its file extension.", nameof(detect));
         var inspect = detect.Inspect;
         if (inspect is not null && inspect.Rangeable && inspect.Pages.Count > 0)
         {
-            return await PagedAsync(file, detect, inspect, parameters, extension, requestId, cancellationToken);
+            return await PagedAsync(file, detect, inspect, parameters, extension, requestId, progress, rules, strategyRule, cancellationToken);
         }
 
         // Non-rangeable formats (DOCX, PPTX, XLSX, ODF, single images): one request; a timeout cannot be split.
@@ -60,8 +71,8 @@ public sealed partial class ParserRoute(IParserConverter converter, IParsePlanne
         {
             MediaType = detect.MediaType,
             DeadlineMs = options.Value.DeadlineMs,
-            Ocr = new ParserOcrOptions { Mode = parameters.Ocr == "force" ? ParserOcrMode.Force : ParserOcrMode.Auto },
-            Tables = new ParserTableOptions { Mode = parameters.Tables == "fast" ? ParserTableMode.Fast : ParserTableMode.Accurate },
+            Ocr = new ParserOcrOptions { Mode = (strategyRule.Ocr ?? parameters.Ocr) == "force" ? ParserOcrMode.Force : ParserOcrMode.Auto },
+            Tables = new ParserTableOptions { Mode = (strategyRule.Tables ?? parameters.Tables) == "fast" ? ParserTableMode.Fast : ParserTableMode.Accurate },
         };
         ParserConvertResult result;
         try
@@ -76,19 +87,21 @@ public sealed partial class ParserRoute(IParserConverter converter, IParsePlanne
         var collected = new Collected();
         collected.Add(result, strategy: null);
         var parsed = collected.Join(detect, []);
-        var rule = ParseRules.Match(parsed.Title, string.Join('\n', parsed.Blocks.Select(b => b.Text)));
+        var rule = ParseRules.Match(parsed.Title, string.Join('\n', parsed.Blocks.Select(b => b.Text)), rules);
         return parsed with
         {
             ParseRule = rule.Id,
+            RuleHints = rule.Revision is null ? null : rule.Hints(),
             Strategy = StrategyString.Whole(rule, FormatName(detect.MediaType, result.Input.Format)),
         };
     }
 
     private async Task<ParsedDocument> PagedAsync(ReadOnlyMemory<byte> file, DetectResult detect, InspectFacts inspect, ParseParams parameters,
-        string extension, string requestId, CancellationToken cancellationToken)
+        string extension, string requestId, ParseProgress? progress, IReadOnlyList<ParseRule> rules, ParseRule strategyRule,
+        CancellationToken cancellationToken)
     {
-        // Strategy-level matches run before the plan; the built-in rules are text-level only, so the plan uses default.
-        var plan = planner.Plan(inspect, ParseRules.Default, parameters);
+        // Strategy-level matches run before the plan (the built-in rules are text-level only); text-level ones on the joined output.
+        var plan = planner.Plan(inspect, strategyRule, parameters);
         var strategies = plan.Pages.ToDictionary(p => p.Page, p => p.Strategy);
         var collected = new Collected();
         var missing = new SortedSet<int>();
@@ -105,34 +118,48 @@ public sealed partial class ParserRoute(IParserConverter converter, IParsePlanne
                 var range = node.Value;
                 var convert = RangePlanner.Options(range, plan, string.Create(CultureInfo.InvariantCulture, $"{requestId}-r{sequence++}"),
                     extension, detect.MediaType, options.Value.DeadlineMs);
-                ParserConvertResult result;
-                try
+                var result = progress is null ? null : await progress.Ranges.GetAsync(range, cancellationToken);
+                if (result is null)
                 {
-                    result = await converter.ConvertAsync(file, convert, cancellationToken);
-                }
-                catch (ParserException e) when (e.Error?.Error.Code is { } code && (Halving.Contains(code) || RetryOnce.Contains(code)))
-                {
-                    lastFailure = code;
-                    if (RetryOnce.Contains(code) && retried.Add((range.From, range.To)))
+                    if (progress is { ShouldYield: true })
                     {
-                        queue.AddFirst(range);
-                    }
-                    else if (range.Pages == 1)
-                    {
-                        missing.Add(range.From);
-                    }
-                    else
-                    {
-                        var half = range.From + (range.Pages / 2) - 1;
-                        queue.AddFirst(range with { From = half + 1 });
-                        queue.AddFirst(range with { To = half });
+                        throw new ParseYieldException();
                     }
 
-                    continue;
-                }
-                catch (ParserException e)
-                {
-                    throw Map(e, splittable: true);
+                    try
+                    {
+                        result = await converter.ConvertAsync(file, convert, cancellationToken);
+                    }
+                    catch (ParserException e) when (e.Error?.Error.Code is { } code && (Halving.Contains(code) || RetryOnce.Contains(code)))
+                    {
+                        lastFailure = code;
+                        if (RetryOnce.Contains(code) && retried.Add((range.From, range.To)))
+                        {
+                            queue.AddFirst(range);
+                        }
+                        else if (range.Pages == 1)
+                        {
+                            missing.Add(range.From);
+                        }
+                        else
+                        {
+                            var half = range.From + (range.Pages / 2) - 1;
+                            queue.AddFirst(range with { From = half + 1 });
+                            queue.AddFirst(range with { To = half });
+                        }
+
+                        continue;
+                    }
+                    catch (ParserException e)
+                    {
+                        throw Map(e, splittable: true);
+                    }
+
+                    if (progress is not null)
+                    {
+                        await progress.Ranges.PutAsync(range, result, cancellationToken);
+                        progress.Converted();
+                    }
                 }
 
                 collected.Add(result, range.Strategy);
@@ -148,7 +175,7 @@ public sealed partial class ParserRoute(IParserConverter converter, IParsePlanne
 
         // Post-conversion checks (§3.1), once per page; none with OCR off, where an empty page stays missing.
         var rerendered = new SortedSet<int>();
-        if (parameters.Ocr != "off")
+        if ((strategyRule.Ocr ?? parameters.Ocr) != "off")
         {
             var garbled = collected.Pages.Values
                 .Where(p => p.Strategy is ParseStrategies.DoclingOcr or ParseStrategies.TextLayer && p.Signals.GarbledScore >= 0.4)
@@ -188,11 +215,12 @@ public sealed partial class ParserRoute(IParserConverter converter, IParsePlanne
         }
 
         var parsed = collected.Join(detect, missing);
-        var rule = ParseRules.Match(parsed.Title, string.Join('\n', parsed.Blocks.Select(b => b.Text)));
+        var rule = ParseRules.Match(parsed.Title, string.Join('\n', parsed.Blocks.Select(b => b.Text)), rules);
         var final = plan.Pages.Select(p => p with { Strategy = strategies[p.Page] }).ToList();
         return parsed with
         {
             ParseRule = rule.Id,
+            RuleHints = rule.Revision is null ? null : rule.Hints(),
             Strategy = StrategyString.Paged(rule, final, rerendered, missing),
             MissingPages = [.. missing],
         };

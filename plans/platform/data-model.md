@@ -106,7 +106,7 @@ worker runs only retrieval evaluation and reads no assistant, skill or tool tabl
 | `config."AdminSessions"` | S I U D | – | – |
 | `config."ConfigVersion"`, `"ConfigOutbox"` | S, `U` on `ConfigVersion` only for the `FOR UPDATE` lock (§5; writes otherwise only via trigger) | S | S |
 | `config."__EFMigrationsHistory"` | S | – | – |
-| `content` tables | S (incl. test-panel retrieval, knowledge design §4.2), plus **I U on `EvaluationRuns`, `EvaluationResults`** (answer-level runs of kinds `answers` and `assistant-tests` and P2 skill-gate runs, which run in `rag-admin`) | S on `Documents` (columns `Id`, `SourceId`, `Classification`, `IdentityKind`, `IdentityHash`, `Title`, `Url`, `MediaType`, `DisplayName`, `SourceModifiedAt`, `PageCount`, `LiveChunkSetId`, `DeletedAt`; citations and downloads, knowledge design §3.5), `ChunkSets`, `Chunks` | S I U D (all) |
+| `content` tables | S (incl. test-panel retrieval, knowledge design §4.2), plus **I U on `EvaluationRuns`, `EvaluationResults`** (answer-level runs of kinds `answers` and `assistant-tests` and P2 skill-gate runs, which run in `rag-admin`) | S on `Documents` (columns `Id`, `SourceId`, `Classification`, `IdentityKind`, `IdentityHash`, `Title`, `Url`, `MediaType`, `DisplayName`, `SourceModifiedAt`, `PageCount`, `LiveChunkSetId`, `DeletedAt`, `Language`, `FetchedAt`; citations and downloads, knowledge design §3.5, §6.3, §10.1), `ChunkSets`, `Chunks` | S I U D (all) |
 | `content."Jobs"` | S I | – | S I U D |
 | `content."BlobTombstones"` (§9) | S I (the admin tombstones the upload blobs it replaces or deletes) | – | S I U D (all `content`; it tombstones stage outputs and quarantine and runs the purge sweep) |
 | `chat` tables | S, plus **U on `Feedback` column `ReviewState`** (admin design §8.1) | S I U D | – |
@@ -123,6 +123,9 @@ Partitioned tables are only accessed through their parent, so grants on the pare
 As built in P1a item 2 (PR #76, 2026-10-31): the api's column grant on `Sources` stops at `ContainsThirdPartyText`
 until `DemoteRules` exists; `BlobTombstones` is granted as in the row above (issue #34 proposed worker S I D; the
 worker keeps the S I U D it has on every `content` table).
+
+As built in P1a item 11 (PR #112, 2026-10-31): the api's column grant on `Documents` adds `Language` and `FetchedAt`,
+which statement D reads for the citation fields (knowledge design §6.3, §10.1).
 
 ## 2. Tables
 
@@ -309,6 +312,11 @@ strings, as received (connectors design §4). `DeletionProposals.Decision` has n
   nullable until the run finishes; `Seed` is `bytea` (SHA-256, processing design §13); strata are not a column.
 - **`EvaluationResults`**: `Hit` is nullable; CHECKs on `Coverage` and `ExpectedRank ≥ 1`; no FK on `QuestionId`,
   because P2 results point elsewhere.
+- **Column meaning as built in P1a item 10 + P1b item 7** (PR #128, 2026-10-31): `EvaluationRuns.QuestionCount`
+  counts answerable questions (the recall denominator); `EvaluationResults.Hit` is set only for answerable questions
+  (null for unanswerable ones). The `candidate` flag and the threshold proposal have no column and live in
+  `Jobs.Result` only (processing design §13.6). A generation round is the highest `Origin.round` of the set (no
+  column; PR #130).
 - **`rag_count_retrievals`** (§12 row 3): additionally checks its input (arrays of equal length, counts ≥ 0, known
   levels), caps a call at 10,000 keys, folds duplicate keys (a key reported at two levels in one call keeps the
   higher) and sorts them before the upsert, and returns the number of rows written (`int`); `REVOKE ALL FROM
@@ -426,7 +434,7 @@ cannot drift:
   its `SourceId` and `Url` for the age decay and `demote` multipliers of weakness review §3), never chunk text. Optional filters (tags,
   document types, modified after) are **appended only when present**, not `($x IS NULL OR …)`. The profile id is
   **inlined as a literal** (from config, never user input), so the planner matches the partial indexes under a generic
-  plan.
+  plan; as built in P1a item 11 (PR #112, 2026-10-31) the dimensions and the candidate depth are inlined too.
 - **H+D** (hydrate, one `NpgsqlBatch`): the final hits with their section neighbours by (`ChunkSetId`, `Ordinal`)
   range (the unique index of §3.2), re-checking scope, levels, `DeletedAt` and that the chunk's set is its document's
   `LiveChunkSetId` as a safety net (non-live sets are already invisible through `DeletedAt`, §2.2); the documents of
@@ -771,11 +779,11 @@ per writable mount.
 | Upload | `uploads/{sourceId}/{slot}/{sha256}`; batch manifest `uploads/{sourceId}/batches/{batchId}.json` (names, hashes; connectors design §9.1) | while the source exists | copied to the backup target within 15 minutes (the only content that cannot be fetched again) |
 | Quarantined file (ClamAV) | `quarantine/{sourceId}/{sha256}` | `Settings.QuarantineRetentionDays` (30) | none |
 | Raw fetch | `raw/{level}/{contentHash}`; extracted links `raw/{level}/{contentHash}.links.json.gz` (connectors design §5) | while a document references it | nightly or none (re-creatable) |
-| Parse output | prefix `parse/{level}/{parseCacheKey}/` with `result.json`, `docling/{from}-{to}.json.gz` and `ranges/{from}-{to}.result.json` (intermediate) (parser design §7.6) | while a live document references it; else unused 30 days | nightly or none (re-creatable) |
+| Parse output | prefix `parse/{level}/{parseCacheKey}/` with `result.json`, `docling/{from}-{to}.json.gz` and `ranges/{from}-{to}.{strategy}.result.json` (intermediate; strategy in the name as built in P1a item 9, PR #121, 2026-10-31) (parser design §7.6) | while a live document references it; else unused 30 days | nightly or none (re-creatable) |
 | Other stage output | `stages/{level}/{nodeType}/{cacheKey}.{ext}` | unused 30 days | none |
 | Job scratch | `tmp/{jobId}/…` (the worker scans a local temp file with ClamAV, then one `PutAsync`, performance pass §3.13) | 24 hours (sweep) | none |
 | Chat attachment upload (P2) | `chat-tmp/{attachmentId}` (written by the API; chat design §15.2) | deleted after parsing; orphans swept after 24 hours | none |
-| Preview output | `previews/{jobId}/{nodeType}.json` (engine design §11) | 24 hours | none |
+| Preview output | `previews/{jobId}/{n}/{stage}.json` plus `keys/` and the redirected connector paths (engine design §11; as built in P1b item 5, PR #117, 2026-10-31) | 24 hours | none |
 | robots.txt | `crawl/{host}/robots-{fetchedAt}.txt` | refreshed daily | none |
 
 **Cache keys** (per stage, no whole-pipeline hashes): `CacheKey` = SHA-256 of `inputHash ‖ nodeType ‖ nodeVersion ‖

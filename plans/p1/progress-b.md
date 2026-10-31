@@ -31,9 +31,9 @@ Refs: [data-model §2.1, §2.2](../platform/data-model.md), [weakness review §2
 
 ## 3. Retrieval core (#11)
 Refs: [knowledge §6–§8, §16.1–§16.2](../knowledge-api/design.md)
-- [ ] Statements K, V, H+D; exact/HNSW rule; RRF; dedup and cap
-- [ ] Coverage (vector side alone until the keyword floor is calibrated); `IReranker` no-op seam; query normaliser
-- [ ] **Done:** §16.1, §16.2 tests; #4, #5, #6, #7, #19 recorded
+- [x] Statements K, V, H+D; exact/HNSW rule; RRF; dedup and cap (this PR)
+- [x] Coverage (vector side alone until the keyword floor is calibrated); `IReranker` no-op seam; query normaliser (this PR)
+- [x] **Done:** §16.1, §16.2 tests; #4, #5, #6, #7, #19 recorded (this PR; the knowledge role's parts of §16.1 — section assembly, download grants, cache keys, request table — are item 12, age decay and `demote` P1b, Keycloak P2)
 - [ ] **Hand-off J5:** issue to stream A
 
 ## 4. Gateway client, release-1 side (#13)
