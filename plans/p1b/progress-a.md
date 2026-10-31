@@ -62,7 +62,7 @@ Refs: [processing §13, §14](../ingestion-worker/design-processing.md), [ingest
 
 ### 8. Remaining commands and admin parse rules
 Refs: [admin §4.7](../admin/design.md), [processing §3.5, §9.5](../ingestion-worker/design-processing.md), [connectors §13](../ingestion-worker/design-connectors.md)
-- [ ] Deletion decisions, release hold, PII clearance, reprocess one document
+- [x] Deletion decisions, release hold, PII clearance, reprocess one document (PR: a/10-commands)
 - [ ] Admin-made parse rules matched and re-keying only matching documents
 
 ### 16. Gold-set grading script
