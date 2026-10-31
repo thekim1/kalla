@@ -192,6 +192,33 @@ var adminApi = builder.AddProject<Projects.Ume_Rag_AdminApi>("adminapi", o => o.
     .WaitForCompletion(migrations)
     .WithHttpHealthCheck(HealthEndpoints.ReadyPath, endpointName: "https");
 
+// The blob master key (data-model §7): KeyProvider:Directory from the AppHost's configuration, else a development key the
+// AppHost creates once under ~/.ume-rag/keys (32 random bytes, base64, as init-deployment.sh writes it). The worker writes
+// internal blobs with it, the admin writes uploads, and rag-api reads them for citation downloads (#158).
+var keyDirectory = builder.Configuration["KeyProvider:Directory"];
+if (string.IsNullOrWhiteSpace(keyDirectory) && builder.ExecutionContext.IsRunMode)
+{
+    keyDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ume-rag", "keys");
+    var keyFile = Path.Combine(keyDirectory, "rag-blob-internal");
+    if (!File.Exists(keyFile))
+    {
+        Directory.CreateDirectory(keyDirectory);
+        File.WriteAllText(keyFile, Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)) + "\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(keyFile, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+    }
+}
+
+if (!string.IsNullOrWhiteSpace(keyDirectory))
+{
+    foreach (var service in new[] { api, worker, adminApi })
+    {
+        service.WithEnvironment("KeyProvider__Directory", keyDirectory);
+    }
+}
+
 if (redis is not null)
 {
     foreach (var service in new[] { api, worker, adminApi })
