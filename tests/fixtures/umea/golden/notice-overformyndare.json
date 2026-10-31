@@ -1,0 +1,207 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/kommunochpolitik/overklagabeslutrattssakerhet/anslagstavlaofficiell/anslagovriga/anslagovriga/oppettiderforoverformyndarenhetenumearegionen.5.63e7f8f819b43e23b49296ce.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Öppettider för överförmyndarenheten Umeåregionen",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Öppettider för överförmyndarenheten Umeåregionen",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Överförmyndarenheten i Umeåregionen (ÖFUR) är administrativ, beredande och verkställande organisation för överförmyndare i Umeå, Bjurholms, Nordmalings, Robertsfors, Vindelns, Vännäs och Örnsköldsviks kommun. Enheten har kontor i Umeå och Örnsköldsvik.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Överförmyndarenheten har telefontid måndag, tisdag, torsdag och fredag klockan 09.00–10.00.\nTelefon: 090-16 61 00",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Övriga tider hänvisar vi till vår e-post:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Umeåkontoret: overformyndarenheten@umea.se\nÖrnsköldsvikskontoret: overformyndarenheten-ovik@umea.se",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Överförmyndarenheten i Umeå",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Besökstider:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "måndag, tisdag och onsdag klockan 13.30-14.30",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "torsdag och fredag klockan 10.00-11.30.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Det går även att lämna in handlingar via Stadshusets reception i Umeå:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "September–maj",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Måndag–torsdag, klockan 07.45–17.00",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Fredag, klockan 07.45–16.00",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Juni–augusti",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Måndag–torsdag, klockan 08.00–16.30 (lunchstängt 12.00–13.00)",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Fredag, klockan 08.00–16.00 (lunchstängt 12.00–13.00)",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Överförmyndarenheten i Örnsköldsvik",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Receptionen, Nygatan 16, är öppen:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "7 januari–14 maj, klockan 07.45–16.30",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "15 maj–15 september, klockan 07.45–15.45.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Träffar med överförmyndaren behöver bokas i förväg.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Personal finns på plats, vardagar mellan 9.00 – 15.00.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Mer information",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Enligt 8 § förmynderskapsförordningen ska överförmyndaren lämna uppgift om mottagningstiden på lämplig plats i anslutning till den lokal där överförmyndaren har sin mottagning samt ska den anslås på kommunens anslagstavla.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Kommun och politik",
+      "Överklaga beslut, rättssäkerhet",
+      "Anslagstavla, officiell",
+      "Anslag, övriga"
+    ],
+    "description": "Överförmyndarenheten i Umeåregionen (ÖFUR) är administrativ, beredande och verkställande organisation för överförmyndare i Umeå, Bjurholms, Nordmalings, Robertsfors, Vindelns, Vännäs och Örnsköldsviks kommun. Enheten har kontor i Umeå och Örnsköldsvik.",
+    "keywords": [],
+    "visibleDate": "2026-01-20",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.5236,
+      "quality.emptyRoot": 0
+    }
+  }
+}

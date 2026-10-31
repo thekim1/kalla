@@ -1,0 +1,100 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/upplevaochgora/idrottmotionochfriluftsliv/bokaanlaggninglokal/avgifter/isytor.4.27a2de8b172da059ace2766.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Isytor",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Avgifter isytor",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Södra Ålidhemsskolans isbana",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Föreningar: 186 kr/timme",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Privatpersoner: 328 kr/timme",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Övriga: 437 kr/timme",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Boka anläggning eller lokal",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Mer information",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Avgifter Nolia idrottscentrum",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakt\nLokalbokning, Föreningsbyrån\n090-16 18 55\nfritid.bokning@umea.se\nVi tar helst emot frågor via mejl, men vill du ändå ringa kan du göra det vardagar klockan 10–12.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Uppleva och göra",
+      "Idrott, motion och friluftsliv",
+      "Boka anläggning, lokal",
+      "Avgifter"
+    ],
+    "description": "Södra Ålidhemsskolans isbana Föreningar: 186 kr/timme Privatpersoner: 328 kr/timme Övriga: 437 kr/timme",
+    "keywords": [],
+    "visibleDate": "2026-08-24",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.7931,
+      "quality.emptyRoot": 0
+    }
+  }
+}

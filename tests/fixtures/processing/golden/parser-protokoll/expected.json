@@ -4,7 +4,7 @@
     "clean": 1,
     "detect": 1,
     "parse.csv": 1,
-    "parse.html": 1,
+    "parse.html": 2,
     "parse.rules": 1,
     "parse.text": 1,
     "personal-data": 1

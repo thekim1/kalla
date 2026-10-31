@@ -17,7 +17,8 @@ public static class ProcessingExtensions
     /// Needs the persistence ports of <see cref="Persistence"/> (<c>IEmbeddingProfileStore</c>, <c>IEmbeddingCache</c>,
     /// <c>IChunkSetStore</c>), registered by the engine with the SQL implementations once the schema is merged (J2, item 9);
     /// the parser ports (<see cref="IParserConverter"/>, <see cref="IDocumentInspector"/>, <see cref="INerClient"/>) are
-    /// optional. Presets: an <see cref="IHtmlPresetCatalog"/> registered before this call (item 8) replaces the generic one.
+    /// optional. Presets: <see cref="HtmlPresets"/> (Sitevision, else generic) unless another
+    /// <see cref="IHtmlPresetCatalog"/> is registered first.
     /// </summary>
     public static IHostApplicationBuilder AddRagProcessing(this IHostApplicationBuilder builder)
     {
