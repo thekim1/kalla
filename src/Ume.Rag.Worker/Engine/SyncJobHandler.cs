@@ -10,6 +10,7 @@ using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Connectors.Uploads;
 using Ume.Rag.Worker.Connectors.UrlList;
 using Ume.Rag.Worker.Jobs;
+using Ume.Rag.Worker.Processing;
 using Outcome = Ume.Rag.Pipelines.Jobs.RunItemOutcome;
 
 namespace Ume.Rag.Worker.Engine;
@@ -17,16 +18,20 @@ namespace Ume.Rag.Worker.Engine;
 /// <summary>
 /// <c>sync</c> jobs (engine design §9.2, §10; connectors design §2.2, §13). The first job of a run (no <c>runId</c>) waits
 /// while another run of the source is running, resolves the source's published pipeline version (fail closed) and opens
-/// the run under its own job id; continuations carry the run. Phase <c>list</c> runs the connector's listing, <c>fetch</c>
-/// tops the run's fetches up again, <c>reconcile</c> (enqueued by the <see cref="RunFinalizer"/>) applies deletions
-/// through the guard. A paused or deleted source cancels the run. P1a runs <c>url-list</c> and <c>upload</c> sources;
-/// <c>crawl</c> and the <c>reprocess</c>/<c>retry-failed</c> kinds are refused with <c>sync.unsupported</c> until wired.
+/// the run under its own job id with the payload's kind and trigger; continuations carry the run. Phase <c>list</c> runs
+/// the connector's listing (<c>sync</c>), the failed identities (<c>retry-failed</c>) or the live documents
+/// (<c>reprocess</c>, <see cref="SourceReruns"/>); <c>fetch</c> tops the run's fetches up again; <c>reconcile</c> (enqueued
+/// by the <see cref="RunFinalizer"/> or a crawl's last top-up) applies deletions through the guard, for a crawl after its
+/// completeness and with its report. A paused or deleted source cancels the run. A <c>reprocess</c> with <c>force</c>
+/// (the cache bypass) is refused with <c>sync.unsupported</c>: it is not built.
 /// </summary>
 public sealed partial class SyncJobHandler(
     SourceContexts sources,
     RunStore runs,
     UrlListSource urlLists,
     UploadSource uploads,
+    CrawlSourceRunner crawls,
+    SourceReruns reruns,
     UrlListConnector urlListConnector,
     UploadConnector uploadConnector,
     DocumentStore documents,
@@ -84,7 +89,7 @@ public sealed partial class SyncJobHandler(
             return new JobResult.Success("""{"cancelled":"source.paused"}""");
         }
 
-        if (payload.Kind != SyncKind.Sync || source.Type is not (SourceTypes.UrlList or SourceTypes.Upload))
+        if ((payload.Kind == SyncKind.Reprocess && payload.Force) || source.Type is not (SourceTypes.UrlList or SourceTypes.Upload or SourceTypes.Crawl))
         {
             LogUnsupported(logger, source.SourceId, source.Type, RunStore.Text(payload.Kind));
             return new JobResult.FatalError(Unsupported);
@@ -124,14 +129,30 @@ public sealed partial class SyncJobHandler(
             return new JobResult.Success();
         }
 
-        return payload.Phase switch
+        try
         {
-            SyncPhase.List when source.Type == SourceTypes.UrlList => await urlLists.ListAsync(source, run, payload, cancellationToken),
-            SyncPhase.List => await uploads.ListAsync(source, run, payload, cancellationToken),
-            SyncPhase.Fetch when source.Type == SourceTypes.UrlList => await TopUpAsync(source, run, cancellationToken),
-            SyncPhase.Fetch => new JobResult.Success(),
-            _ => await ReconcileAsync(source, run, job, cancellationToken),
-        };
+            return (payload.Kind, payload.Phase) switch
+            {
+                (SyncKind.Reprocess, _) => await reruns.ReprocessAsync(source, run, job, cancellationToken),
+                (SyncKind.RetryFailed, SyncPhase.List) => await reruns.RetryFailedAsync(source, run, cancellationToken),
+                (_, SyncPhase.List) when source.Type == SourceTypes.UrlList => await urlLists.ListAsync(source, run, payload, job, cancellationToken),
+                (_, SyncPhase.List) when source.Type == SourceTypes.Crawl => await crawls.ListAsync(source, run, payload, job, cancellationToken),
+                (_, SyncPhase.List) => await uploads.ListAsync(source, run, payload, cancellationToken),
+                (_, SyncPhase.Fetch) when source.Type == SourceTypes.UrlList => await TopUpAsync(source, run, cancellationToken),
+                (_, SyncPhase.Fetch) when source.Type == SourceTypes.Crawl => await crawls.FetchPhaseAsync(source, run, job, cancellationToken),
+                (_, SyncPhase.Fetch) => new JobResult.Success(),
+                _ => await ReconcileAsync(source, run, job, cancellationToken),
+            };
+        }
+        catch (PipelineRefusedException refused)
+        {
+            return new JobResult.FatalError(refused.Reason);
+        }
+        catch (StageTransientException transient)
+        {
+            // A reprocess's segment: the retried job resumes from the run's checkpoint.
+            return StageResults.From(transient);
+        }
     }
 
     private async Task<JobResult> TopUpAsync(SourceContext source, RunRow run, CancellationToken cancellationToken)
@@ -142,30 +163,46 @@ public sealed partial class SyncJobHandler(
 
     /// <summary>
     /// Connectors design §13: candidates from this run's explicit answers (<c>http.404</c>, …) and repeated failures, plus
-    /// the identities the complete listing no longer has (<c>removed-from-list</c>, <c>upload.deleted</c>, exempt); the
-    /// guard decides; an older waiting proposal of the source is superseded; applied deletions are soft deletes with a
-    /// <c>deleted</c> run item; the run's phase ends <c>done</c> in the job's own commit.
+    /// the identities the complete listing no longer has (<c>removed-from-list</c>, <c>upload.deleted</c>, exempt), or for
+    /// a crawl the documents a complete traversal did not reach (<c>not-seen</c>); the guard decides; an older waiting
+    /// proposal of the source is superseded; applied deletions are soft deletes with a <c>deleted</c> run item; a crawl's
+    /// report sections and the run's phase <c>done</c> commit with the job's completion.
     /// </summary>
     private async Task<JobResult> ReconcileAsync(SourceContext source, RunRow run, LeasedJob job, CancellationToken cancellationToken)
     {
         var now = time.GetUtcNow();
         var values = await settings.GetAsync(cancellationToken);
         var all = await documents.SourceDocumentsAsync(source.SourceId, cancellationToken);
-        var context = new ListingContext(source.SourceId, source.Classification, run.Id, source.Settings);
-        var listed = new HashSet<string>(StringComparer.Ordinal);
-        var identities = source.Type == SourceTypes.UrlList
-            ? urlListConnector.ListIdentitiesAsync(context, cancellationToken)
-            : uploadConnector.ListIdentitiesAsync(context, cancellationToken);
-        await foreach (var listedIdentity in identities)
+        var explicitGone = await ExplicitAsync(run.Id, cancellationToken);
+        List<DeletionCandidate> candidates;
+        bool emptyListing;
+        string? report = null;
+        if (source.Type == SourceTypes.Crawl)
         {
-            listed.Add(listedIdentity);
+            var crawl = await crawls.PrepareReconcileAsync(source, run, all, explicitGone, cancellationToken);
+            candidates = [.. crawl.Candidates];
+            emptyListing = crawl.EmptyListing;
+            report = crawl.Report;
+        }
+        else
+        {
+            var context = new ListingContext(source.SourceId, source.Classification, run.Id, source.Settings);
+            var listed = new HashSet<string>(StringComparer.Ordinal);
+            var identities = source.Type == SourceTypes.UrlList
+                ? urlListConnector.ListIdentitiesAsync(context, cancellationToken)
+                : uploadConnector.ListIdentitiesAsync(context, cancellationToken);
+            await foreach (var listedIdentity in identities)
+            {
+                listed.Add(listedIdentity);
+            }
+
+            candidates = [.. DeletionCandidates.FromTraversal(run.Id, all, new TraversalVerdict(false, [], null, null), explicitGone, new HashSet<Guid>(), now)];
+            var reason = source.Type == SourceTypes.UrlList ? DeletionReasons.RemovedFromList : DeletionReasons.UploadDeleted;
+            candidates.AddRange(DeletionCandidates.FromListing(all, listed, listingComplete: true, reason).Where(c => candidates.All(x => x.DocumentId != c.DocumentId)));
+            emptyListing = listed.Count == 0;
         }
 
-        var explicitGone = await ExplicitAsync(run.Id, cancellationToken);
-        var candidates = DeletionCandidates.FromTraversal(run.Id, all, new TraversalVerdict(false, [], null, null), explicitGone, new HashSet<Guid>(), now).ToList();
-        var reason = source.Type == SourceTypes.UrlList ? DeletionReasons.RemovedFromList : DeletionReasons.UploadDeleted;
-        candidates.AddRange(DeletionCandidates.FromListing(all, listed, listingComplete: true, reason).Where(c => candidates.All(x => x.DocumentId != c.DocumentId)));
-        var decision = DeletionGuard.Evaluate(candidates, DeletionCandidates.Live(all), emptyListing: listed.Count == 0, values.Guard);
+        var decision = DeletionGuard.Evaluate(candidates, DeletionCandidates.Live(all), emptyListing, values.Guard);
 
         if (await proposals.WaitingRunAsync(source.SourceId, cancellationToken) is { } waiting && waiting != run.Id)
         {
@@ -195,6 +232,11 @@ public sealed partial class SyncJobHandler(
             }, cancellationToken);
         }
 
+        if (report is not null)
+        {
+            await RunStore.AddReportAsync(run.Id, report, commit.Transaction, cancellationToken);
+        }
+
         await runs.SetPhaseAsync(run.Id, RunPhases.Done, commit.Transaction, cancellationToken);
         if (!await commit.CompleteJobAsync(queue, job.Id, identity.InstanceId, null, cancellationToken))
         {
@@ -202,6 +244,11 @@ public sealed partial class SyncJobHandler(
         }
 
         await commit.CommitAsync(cancellationToken);
+        if (report is not null)
+        {
+            await crawls.RecordIncompleteRunsAsync(cancellationToken);
+        }
+
         return new JobResult.Committed();
     }
 

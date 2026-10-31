@@ -22,11 +22,12 @@ internal static class StageResults
 }
 
 /// <summary>
-/// <c>fetch</c> jobs (engine design §7.4, §9.1): one frontier row of a URL list or one upload slot, fetched within the run's
+/// <c>fetch</c> jobs (engine design §7.4, §9.1): one frontier row of a URL list or a crawl, or one upload slot, fetched within the run's
 /// pinned pipeline version; the document path runs <c>detect</c> to <c>personal-data</c> inline and commits the
 /// continuation. A job of a run that is no longer running, or of a paused source, ends without effect.
 /// </summary>
-public sealed class FetchJobHandler(SourceContexts sources, RunStore runs, UrlListSource urlLists, UploadSource uploads, ConfigVersionState config) : IJobHandler
+public sealed class FetchJobHandler(SourceContexts sources, RunStore runs, UrlListSource urlLists, UploadSource uploads, CrawlSourceRunner crawls,
+    ConfigVersionState config) : IJobHandler
 {
     public string JobClass => JobClasses.Fetch;
 
@@ -52,6 +53,7 @@ public sealed class FetchJobHandler(SourceContexts sources, RunStore runs, UrlLi
             return source.Type switch
             {
                 SourceTypes.UrlList when payload.UrlHash is not null => await urlLists.FetchAsync(source, run, pipeline, payload, context.Job, cancellationToken),
+                SourceTypes.Crawl when payload.UrlHash is not null => await crawls.FetchAsync(source, run, pipeline, payload, context.Job, cancellationToken),
                 SourceTypes.Upload when payload.UploadId is not null => await uploads.FetchAsync(source, run, pipeline, payload, context.Job, cancellationToken),
                 _ => new JobResult.FatalError(SyncJobHandler.Unsupported),
             };

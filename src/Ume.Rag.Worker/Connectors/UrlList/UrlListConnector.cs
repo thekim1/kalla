@@ -50,7 +50,7 @@ public sealed class UrlListConnector(
     RobotsCache robots,
     IMalwareScanner scanner,
     IBlobStore blobs,
-    TimeProvider time) : IFetchConnector<UrlListCheckpoint>, IIdListingConnector
+    TimeProvider time) : IFetchConnector<UrlListCheckpoint>, IIdListingConnector, IRetryFailedConnector
 {
     public const string Type = "url-list";
 
@@ -62,6 +62,8 @@ public sealed class UrlListConnector(
     public string SourceType => Type;
 
     public Type SettingsType => typeof(UrlListSettings);
+
+    public WorkItem? FromIdentity(string canonicalIdentity, FailedItem last) => RetryWork.FromUrl(canonicalIdentity);
 
     public async IAsyncEnumerable<ListingEvent<UrlListCheckpoint>> ListAsync(
         ListingContext context, UrlListCheckpoint from, [EnumeratorCancellation] CancellationToken cancellationToken)
