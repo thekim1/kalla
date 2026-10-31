@@ -33,21 +33,28 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         string[] ingestionConfig = [.. retrievalConfig, "config.Sources", "config.Pipelines", "config.PipelineVersions"];
         string[] ingestionContent = [.. IngestionContentTables.Select(t => "content." + t)];
 
+        // Serving (P1 item 3, data-model §1.2): the api reads published versions only through the view; the worker reads
+        // no assistant tables; the admin also writes evaluation runs and results (answer-level runs in rag-admin).
+        string[] servingConfig = ["config.Assistants", "config.AssistantVersions", "config.AssistantAudiences", "config.GatewayModels"];
+        string[] apiServingConfig = ["config.Assistants", "config.AssistantAudiences", "config.PublishedAssistantVersions", "config.GatewayModels"];
+        string[] evaluationWrites = ["content.EvaluationRuns", "content.EvaluationResults"];
+        string[] servingContent = ["content.EvaluationSets", "content.EvaluationQuestions", .. evaluationWrites, "content.RetrievalStats"];
+
         // config.Sources and content.Documents are column grants for the api (below), so they are not table privileges.
-        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, "content.ChunkSets", "content.Chunks"], ignoreOrder: true);
+        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. apiServingConfig, "content.ChunkSets", "content.Chunks"], ignoreOrder: true);
         (await PrivilegesAsync(Api, "INSERT")).ShouldBe(["config.KeyLastUse", "audit.AuditLog"], ignoreOrder: true);
         (await PrivilegesAsync(Api, "UPDATE")).ShouldBe(["config.KeyLastUse"]);
         (await PrivilegesAsync(Api, "DELETE")).ShouldBeEmpty();
 
         (await PrivilegesAsync(Admin, "SELECT")).ShouldBe(all, ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", "audit.AuditLog"], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, "config.AdminSessions", "config.ConfigVersion"], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, "config.AdminSessions"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions"], ignoreOrder: true);
 
-        (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. ingestionConfig, .. workerTables, .. ingestionContent], ignoreOrder: true);
-        (await PrivilegesAsync(Worker, "INSERT")).ShouldBe([.. workerTables, .. ingestionContent, "audit.AuditLog"], ignoreOrder: true);
-        (await PrivilegesAsync(Worker, "UPDATE")).ShouldBe([.. workerTables, .. ingestionContent], ignoreOrder: true);
-        (await PrivilegesAsync(Worker, "DELETE")).ShouldBe([.. workerTables, .. ingestionContent], ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. ingestionConfig, .. workerTables, .. ingestionContent, .. servingContent], ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "INSERT")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent, "audit.AuditLog"], ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "UPDATE")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent], ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "DELETE")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent], ignoreOrder: true);
 
         // Column grants exist only where data-model §1.2 lists columns: the api's reads of Sources and Documents.
         (await ColumnPrivilegesAsync(Api)).ShouldBe([.. ApiSourceColumns.Select(c => "config.Sources." + c), .. ApiDocumentColumns.Select(c => "content.Documents." + c)], ignoreOrder: true);
@@ -104,6 +111,73 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), """UPDATE content."Documents" SET "Title" = 'x' """);
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), """DELETE FROM content."Chunks" """);
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), """INSERT INTO content."CrawlHosts" ("Host", "RequestsPerSecond", "MaxConnections", "NextAllowedAt", "Kind", "BackoffFactor") VALUES ('x.example', 1, 1, now(), 'external', 1)""");
+    }
+
+    [Fact]
+    public async Task The_api_reads_published_versions_only_through_the_view_and_the_worker_no_assistants()
+    {
+        // data-model §1.2: never AssistantVersions itself, so a draft cannot reach chat.
+        var admin = database.Connection(Admin);
+        var assistantId = Guid.CreateVersion7();
+        var publishedId = Guid.CreateVersion7();
+        var draftId = Guid.CreateVersion7();
+        await Sql.ExecuteAsync(admin, $"""
+            BEGIN;
+            INSERT INTO config."Assistants" ("Id", "Slug", "Name", "DepartmentId", "Classification", "HistoryMode", "RetentionDays", "AllowedOrigins", "State", "UpdatedAt")
+            VALUES ('{assistantId}', 'roles-{assistantId:N}', 'Roller', '{Guid.NewGuid()}', 'public', 'none', 90, '{"{}"}', 'active', now());
+            INSERT INTO config."AssistantVersions" ("Id", "AssistantId", "Number", "State", "GatewayModel", "SystemPrompt", "QuerySteps", "NotFound", "CollectionIds", "CreatedAt", "UpdatedAt", "PublishedBy", "PublishedAt")
+            VALUES ('{publishedId}', '{assistantId}', 1, 'published', 'gpt-test', 'publicerad', '{"{}"}', '{"{}"}', '{"{}"}', now(), now(), 'test', now()),
+                   ('{draftId}', '{assistantId}', 2, 'draft', NULL, 'utkast', '{"{}"}', '{"{}"}', '{"{}"}', now(), now(), NULL, NULL);
+            UPDATE config."Assistants" SET "PublishedVersionId" = '{publishedId}', "DraftVersionId" = '{draftId}' WHERE "Id" = '{assistantId}';
+            COMMIT;
+            """);
+
+        var api = database.Connection(Api);
+        (await Sql.ListAsync(api, $"""SELECT "SystemPrompt" FROM config."PublishedAssistantVersions" WHERE "AssistantId" = '{assistantId}'""")).ShouldBe(["publicerad"]);
+        (await Sql.ScalarAsync<string>(api, $"""SELECT "DraftVersionId"::text FROM config."Assistants" WHERE "Id" = '{assistantId}'""")).ShouldBe(draftId.ToString());
+        await Sql.ShouldBeDeniedAsync(api, """SELECT count(*) FROM config."AssistantVersions" """);
+        await Sql.ShouldBeDeniedAsync(api, $"""SELECT "SystemPrompt" FROM config."AssistantVersions" WHERE "Id" = '{draftId}'""");
+        await Sql.ShouldBeDeniedAsync(api, $"""UPDATE config."Assistants" SET "Name" = 'x' WHERE "Id" = '{assistantId}'""");
+        await Sql.ShouldBeDeniedAsync(api, """DELETE FROM config."AssistantAudiences" """);
+        await Sql.ShouldBeDeniedAsync(api, """INSERT INTO config."GatewayModels" ("Name", "Kind", "Residencies", "Source", "SupportsTools", "SupportsToolsSource") VALUES ('x', 'model', ARRAY['Eu'], 'manual', false, 'manual')""");
+
+        var worker = database.Connection(Worker);
+        foreach (var table in new[] { "Assistants", "AssistantVersions", "AssistantAudiences", "PublishedAssistantVersions", "GatewayModels" })
+        {
+            await Sql.ShouldBeDeniedAsync(worker, $"""SELECT count(*) FROM config."{table}" """);
+        }
+
+        // The admin edits versions in the table; the view is the data plane's.
+        (await Sql.ScalarAsync<long>(admin, $"""SELECT count(*) FROM config."AssistantVersions" WHERE "AssistantId" = '{assistantId}'""")).ShouldBe(2);
+        await Sql.ShouldBeDeniedAsync(admin, """SELECT count(*) FROM config."PublishedAssistantVersions" """);
+    }
+
+    [Fact]
+    public async Task The_admin_writes_evaluation_runs_and_results_but_only_the_worker_writes_sets_and_counters()
+    {
+        var worker = database.Connection(Worker);
+        var admin = database.Connection(Admin);
+        var setId = Guid.CreateVersion7();
+        var runId = Guid.CreateVersion7();
+        await Sql.ExecuteAsync(worker, $"""
+            INSERT INTO content."EvaluationSets" ("Id", "CollectionId", "Classification") VALUES ('{setId}', '{Guid.NewGuid()}', 'public')
+            """);
+        await Sql.ExecuteAsync(admin, $"""
+            INSERT INTO content."EvaluationRuns" ("Id", "SetId", "Classification", "Kind", "K", "Reranked", "StartedAt")
+            VALUES ('{runId}', '{setId}', 'public', 'on-demand', 10, false, now());
+            INSERT INTO content."EvaluationResults" ("RunId", "QuestionId", "Classification", "ExpectedRank")
+            VALUES ('{runId}', '{Guid.NewGuid()}', 'public', 1);
+            UPDATE content."EvaluationRuns" SET "QuestionCount" = 1, "Found" = 1, "FinishedAt" = now() WHERE "Id" = '{runId}';
+            UPDATE content."EvaluationResults" SET "Hit" = true WHERE "RunId" = '{runId}';
+            """);
+        await Sql.ShouldBeDeniedAsync(admin, $"""DELETE FROM content."EvaluationRuns" WHERE "Id" = '{runId}'""");
+        await Sql.ShouldBeDeniedAsync(admin, $"""DELETE FROM content."EvaluationResults" WHERE "RunId" = '{runId}'""");
+        await Sql.ShouldBeDeniedAsync(admin, $"""INSERT INTO content."EvaluationSets" ("Id", "CollectionId", "Classification") VALUES ('{Guid.CreateVersion7()}', '{Guid.NewGuid()}', 'public')""");
+        await Sql.ShouldBeDeniedAsync(admin, $"""UPDATE content."EvaluationQuestions" SET "State" = 'retired' WHERE "SetId" = '{setId}'""");
+        await Sql.ShouldBeDeniedAsync(admin, """DELETE FROM content."RetrievalStats" """);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Api), """SELECT count(*) FROM content."EvaluationRuns" """);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Api), """SELECT count(*) FROM content."RetrievalStats" """);
+        await Sql.ExecuteAsync(worker, $"""DELETE FROM content."EvaluationSets" WHERE "Id" = '{setId}'""");
     }
 
     [Fact]
@@ -277,6 +351,11 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         await Sql.ShouldBeDeniedAsync(database.Connection(Api), $"SELECT content.rag_ensure_profile_index('{unknown}', 3)");
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), $"SELECT content.rag_ensure_profile_index('{unknown}', 3)");
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), "SELECT config.rag_config_changed()");
+        // Retrieval counters (data-model §12.3): only the api flushes them, and only through the function.
+        const string count = "SELECT content.rag_count_retrievals(current_date, '{}', '{}', '{}', '{}', '{}', '{}')";
+        (await Sql.ScalarAsync<int>(database.Connection(Api), count)).ShouldBe(0);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Admin), count);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Worker), count);
     }
 
     [Fact]
