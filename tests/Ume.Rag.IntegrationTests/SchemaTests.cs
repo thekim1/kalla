@@ -72,6 +72,34 @@ public sealed class SchemaTests(RagDatabaseFixture database)
     }
 
     [Fact]
+    public async Task The_shared_data_source_maps_pgvector_for_binary_copy()
+    {
+        // #110 (to-verify #21, #119): the index writer can COPY embeddings in binary on the process's one data source
+        // (superuser only for the temp table; the mapping is the same for every role).
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:ragdb"] = database.Connection(null) });
+        builder.AddRagDatabase();
+        using var host = builder.Build();
+        await using var connection = await host.Services.GetRequiredService<NpgsqlDataSource>().OpenConnectionAsync(Ct);
+        await using (var create = new NpgsqlCommand("""CREATE TEMP TABLE "VectorCopy" ("Id" integer, "Embedding" vector(3))""", connection))
+        {
+            await create.ExecuteNonQueryAsync(Ct);
+        }
+
+        var embedding = new Pgvector.Vector(new[] { 0.25f, -1f, 3.5f });
+        await using (var writer = await connection.BeginBinaryImportAsync("""COPY "VectorCopy" ("Id", "Embedding") FROM STDIN (FORMAT BINARY)""", Ct))
+        {
+            await writer.StartRowAsync(Ct);
+            await writer.WriteAsync(1, Ct);
+            await writer.WriteAsync(embedding, "vector", Ct);
+            await writer.CompleteAsync(Ct);
+        }
+
+        await using var read = new NpgsqlCommand("""SELECT "Embedding" FROM "VectorCopy" WHERE "Id" = 1""", connection);
+        ((Pgvector.Vector)(await read.ExecuteScalarAsync(Ct))!).ToArray().ShouldBe(embedding.ToArray());
+    }
+
+    [Fact]
     public async Task Concurrent_enqueues_with_one_dedup_key_insert_one_job_until_it_finishes()
     {
         // data-model §4.2 and §14: ON CONFLICT infers the partial unique index under concurrent enqueues.

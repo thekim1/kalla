@@ -75,6 +75,12 @@ public static partial class SecurityEvents
     public static partial void MalwareDetected(ILogger logger, string signature, string sha256, string origin, Guid sourceId,
         Guid? runId, Guid? documentId, string classification);
 
+    /// <summary>A published pipeline version failed validation and was not run (engine design §4); one per refused version.</summary>
+    [LoggerMessage(5105, LogLevel.Warning,
+        "Pipeline refused: version {PipelineVersionId} of pipeline {PipelineId} failed validation: {Reason}",
+        EventName = "rag.pipeline.refused")]
+    public static partial void PipelineRefused(ILogger logger, Guid pipelineId, Guid pipelineVersionId, string reason);
+
     /// <summary>Every audit entry the admin writes (identity design §10).</summary>
     [LoggerMessage(6001, LogLevel.Information,
         "Admin {Actor}: {Action} {EntityType} {EntityId}", EventName = "rag.admin.change")]
