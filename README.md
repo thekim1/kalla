@@ -103,17 +103,19 @@ against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 test host). `evaluation.yml` runs the nightly evaluation on the test deployment. `e2e.yml` runs the browser tests
 (nightly, and before a release).
 
-**GitHub Actions are switched off for now** (Decisions table, "CI on a self-hosted runner, Actions off for now"): the
-hosted minutes are used up, and every workflow targets the self-hosted runner `ume-rag` for when Actions come back
-(#124). Until then every pull request is verified locally before it merges: merge `origin/main` into the branch, then
-the build, `Ume.Rag.Worker.Tests` twice (it surfaces order-dependent failures), `Ume.Rag.Pipelines.Tests`,
-`Ume.Rag.ContractTests` and the ownership check, with the output in the pull request body:
+**CI runs on the self-hosted runner `ume-rag`** (Decisions table, "CI on the self-hosted runner for every pull
+request"): `verify.yml` and `parser.yml` run on every pull request that is not a draft (on open, each push, and when it
+leaves draft), with no label. GitHub-hosted minutes are used up, so nothing runs on GitHub's runners, and the schedules
+of `perf.yml`, `evaluation.yml` and `e2e.yml` stay off until the test host exists. GitHub can't enforce required checks
+on this repository, so merge only on a green run (`gh pr checks <number>`).
+
+The main session also verifies each pull request locally after merging `origin/main` into the branch: the build,
+`Ume.Rag.Worker.Tests` twice (it surfaces order-dependent failures), `Ume.Rag.Pipelines.Tests`, `Ume.Rag.ContractTests`
+and the ownership check, with the output in the pull request body:
 
 ```bash
 git diff --name-only origin/main...HEAD | python3 -I scripts/check-ownership.py <branch>
 ```
-
-Don't add the `ci` label or dispatch a workflow while Actions are off.
 
 ## Packages
 
