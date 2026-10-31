@@ -1,0 +1,217 @@
+{
+  "contract": "parser/v1",
+  "request_id": "case-text-odt",
+  "status": "success",
+  "input": {
+    "format": "odt",
+    "media_type_sniffed": "application/vnd.oasis.opendocument.text",
+    "sha256": "863ecbbe510818efa4a2e7aff9ad3bf0292d27bc71c9204bf5e81d6c760f7984",
+    "bytes": 10145,
+    "page_count": null,
+    "pages_requested": null,
+    "pages_completed": null,
+    "pipeline": "docling"
+  },
+  "pages": [
+    {
+      "page": null,
+      "label": null,
+      "width": null,
+      "height": null,
+      "signals": {
+        "chars": 351,
+        "furniture_chars": 0,
+        "garbled_score": 0.0,
+        "text_layer_chars": null,
+        "image_coverage": null,
+        "ocr_applied": "none",
+        "ocr_confidence": null,
+        "table_count": 1,
+        "table_area_ratio": 0.0,
+        "picture_area_ratio": 0.0,
+        "empty": false
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": "b0",
+      "kind": "heading",
+      "level": 1,
+      "level_source": "style",
+      "page": null,
+      "page_end": null,
+      "bbox": null,
+      "layer": "body",
+      "md": "# Riktlinjer för bygglov i Umeå kommun",
+      "ref": "#/texts/0",
+      "table": null
+    },
+    {
+      "id": "b1",
+      "kind": "heading",
+      "level": 2,
+      "level_source": "style",
+      "page": null,
+      "page_end": null,
+      "bbox": null,
+      "layer": "body",
+      "md": "## 1 Ansökan",
+      "ref": "#/texts/1",
+      "table": null
+    },
+    {
+      "id": "b2",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": null,
+      "page_end": null,
+      "bbox": null,
+      "layer": "body",
+      "md": "En ansökan om bygglov lämnas digitalt via kommunens e-tjänst. Handläggningen börjar först när ansökan är komplett, och beslut fattas normalt inom tio veckor.",
+      "ref": "#/texts/2",
+      "table": null
+    },
+    {
+      "id": "b3",
+      "kind": "heading",
+      "level": 2,
+      "level_source": "style",
+      "page": null,
+      "page_end": null,
+      "bbox": null,
+      "layer": "body",
+      "md": "## 2 Avgifter",
+      "ref": "#/texts/3",
+      "table": null
+    },
+    {
+      "id": "b4",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": null,
+      "page_end": null,
+      "bbox": null,
+      "layer": "body",
+      "md": "Avgiften för bygglov beräknas enligt kommunens taxa och tas ut även om ansökan avslås.",
+      "ref": "#/texts/4",
+      "table": null
+    },
+    {
+      "id": "b5",
+      "kind": "list_item",
+      "level": null,
+      "level_source": null,
+      "page": null,
+      "page_end": null,
+      "bbox": null,
+      "layer": "body",
+      "md": "- Situationsplan",
+      "ref": "#/texts/5",
+      "table": null
+    },
+    {
+      "id": "b6",
+      "kind": "list_item",
+      "level": null,
+      "level_source": null,
+      "page": null,
+      "page_end": null,
+      "bbox": null,
+      "layer": "body",
+      "md": "- Fasadritningar",
+      "ref": "#/texts/6",
+      "table": null
+    },
+    {
+      "id": "b7",
+      "kind": "list_item",
+      "level": null,
+      "level_source": null,
+      "page": null,
+      "page_end": null,
+      "bbox": null,
+      "layer": "body",
+      "md": "- Planritningar",
+      "ref": "#/texts/7",
+      "table": null
+    },
+    {
+      "id": "b8",
+      "kind": "table",
+      "level": null,
+      "level_source": null,
+      "page": null,
+      "page_end": null,
+      "bbox": null,
+      "layer": "body",
+      "md": "| Åtgärd                   | Avgift    |\n|--------------------------|-----------|\n| Bygglov för enbostadshus | 25 000 kr |\n| Marklov                  | 8 000 kr  |",
+      "ref": "#/tables/0",
+      "table": "t0"
+    }
+  ],
+  "tables": [
+    {
+      "id": "t0",
+      "rows": 3,
+      "cols": 2,
+      "header_rows": 1,
+      "caption": null,
+      "cells": [
+        {
+          "r": 0,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": true,
+          "text": "Åtgärd"
+        },
+        {
+          "r": 0,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": true,
+          "text": "Avgift"
+        },
+        {
+          "r": 1,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "Bygglov för enbostadshus"
+        },
+        {
+          "r": 1,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "25 000 kr"
+        },
+        {
+          "r": 2,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "Marklov"
+        },
+        {
+          "r": 2,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "8 000 kr"
+        }
+      ]
+    }
+  ],
+  "pictures": [],
+  "warnings": [],
+  "markdown": null
+}

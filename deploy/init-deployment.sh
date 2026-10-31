@@ -1,27 +1,36 @@
 #!/usr/bin/env bash
 # First-run setup for the production Compose files (plans/platform/repo-and-deployment.md §6, §7.1): generates an
-# internal CA, service certificates, the Data Protection certificate, the database passwords, the key pepper and the
-# api's keys, the blob master key, the pgBackRest repository settings and deploy/.env. Safe to re-run: existing
-# secrets are never overwritten (a new pepper, key, passphrase or Data Protection certificate would break existing
-# data or backups); connection strings and other derived files are written again.
+# internal CA, service certificates, the Data Protection certificate, the database passwords, the key pepper, the api's
+# keys, the worker's crawl key pepper, the blob master key, the pgBackRest repository settings and deploy/.env. Safe to
+# re-run: existing secrets are never overwritten (a new pepper, key, passphrase or Data Protection certificate would
+# break existing data or backups); connection strings and other derived files are written again.
 #
 #   ./deploy/init-deployment.sh                      # prompts for what it needs
-#   ./deploy/init-deployment.sh --oidc-authority https://login.microsoftonline.com/<tenant>/v2.0 \
+#   ./deploy/init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume \
+#       --oidc-client-secret-file ume-rag-admin.secret \
 #       --api-host rag-api.intern.umea.se --admin-host rag-admin.intern.umea.se \
-#       --gateway-url https://llm.intern.umea.se --gateway-key-file OnPrem=onprem.key --gateway-key-file Eu=eu.key \
+#       --gateway-url https://<gateway host> --gateway-key-file api:Eu=api-eu.key \
+#       --gateway-key-file admin:Eu=admin-eu.key --gateway-key-file worker:Eu=worker-eu.key \
+#       --openwebui-host chat.intern.umea.se --openwebui-oidc-client-secret-file open-webui.secret \
 #       --backup-target /mnt/backup/ume-rag --allow-file-keys --yes
 #   ./deploy/init-deployment.sh --renew-certs        # re-issue internal certificates only
 #   ./deploy/init-deployment.sh --renew-ca           # new internal CA, then re-issue its certificates
 #
+# Sign-in: P1 uses the Keycloak shared with the gateway (realm ume, RAG's clients from deploy/keycloak/). P2 (Entra):
+# --oidc-authority https://login.microsoftonline.com/<tenant>/v2.0 with the registrations ume-rag-admin and
+# ume-rag-open-webui (--openwebui-oidc-client-id).
+#
 # Options (defaults in brackets):
 #   --oidc-authority URL, --oidc-client-id ID [ume-rag-admin], --oidc-client-secret-file FILE
-#                           the admin BFF's own Entra registration (never the gateway's)
+#                           the admin BFF's own OIDC client (never the gateway's): P1 the shared Keycloak's realm ume
 #   --api-host HOST, --admin-host HOST, --api-port N [8543], --admin-port N [9543], --bind ADDR [127.0.0.1]
 #   --gateway-url URL       the LLM gateway (HTTPS); --ca-file FILE adds its CA (and your PKI chain) to the services'
 #                           trust store
-#   --gateway-key-file LEVEL=FILE
-#                           a gateway key per level (OnPrem, Eu, External; repeat the option): api and admin get all,
-#                           the worker only OnPrem and Eu
+#   --gateway-key-file [SERVICE:]LEVEL=FILE
+#                           a gateway key per level (OnPrem, Eu, External; repeat the option): without SERVICE api and
+#                           admin get it, and the worker too unless it is External; SERVICE (api, admin, worker) gives
+#                           one deployable its own key and wins over the shared one. The worker never holds External.
+#                           P1a calls every model at Eu.
 #   --org-sync-key-file FILE  the gateway Data API key for the admin's org sync (catalog.read only)
 #   --key-provider file [file] --allow-file-keys
 #                           the file key provider (pilot and test hosts, postponed decision K1) needs --allow-file-keys
@@ -33,9 +42,16 @@
 #   --crawl-allow CIDR[,CIDR]  private ranges the crawler may fetch (municipal hosts)
 #   --host-memory 16|24 [16]  the host profile of §6.2 (24 adds compose.host-24g.yaml and the ClamAV 24 GB confs)
 #   --freshclam-proxy HOST:PORT  freshclam reaches database.clamav.net through this HTTP proxy
-#   --openwebui-host HOST, --openwebui-oidc-client-id ID, --openwebui-oidc-provider-url URL,
-#   --openwebui-data-dir DIR [deploy/openwebui-data]
-#                           the optional Open WebUI stack (compose.openwebui.yaml): its secrets, settings and store
+#   --openwebui-host HOST   the optional Open WebUI stack (compose.openwebui.yaml): its secrets, settings and store
+#     --openwebui-oidc-client-id ID [open-webui], --openwebui-oidc-client-secret-file FILE,
+#     --openwebui-oidc-provider-url URL [the OIDC authority's /.well-known/openid-configuration],
+#     --openwebui-oidc-provider-name NAME [Umeå kommun]
+#                           Open WebUI's own OIDC client (P1: Keycloak client open-webui; P2: Entra ume-rag-open-webui)
+#                           and the name on its sign-in button
+#     --openwebui-api-key-file FILE, --openwebui-rag-client-id ID
+#                           the ume-rag-sk- key and the id of Open WebUI's client in rag-api's registry (created in the
+#                           admin API once the stack runs; rag-api's OpenWebUi:ClientId)
+#     --openwebui-data-dir DIR [deploy/openwebui-data]
 #   --role all [all]        multi-host roles (data, ingestion, ...) come with P2
 #   --proxy                 a reverse proxy terminates public TLS and re-encrypts to this host; needs distinct
 #                           hostnames and binds the listeners to 0.0.0.0 (firewall them to the proxy)
@@ -53,12 +69,15 @@ certs="$here/certs"; secrets="$here/secrets"; env_file="$here/.env"
 oidc_authority=""; oidc_client="ume-rag-admin"; oidc_secret_file=""; api_host=""; admin_host=""
 api_port=8543; admin_port=9543; bind=""; gateway_url=""; ca_file=""; org_sync_file=""
 key_provider="file"; allow_file_keys=0; backup_target=""; s3_credentials=""; s3_region="us-east-1"
-crawl_allow=""; host_memory=16; freshclam_proxy=""; owui_host=""; owui_client=""; owui_provider=""; owui_data=""; role="all"
+crawl_allow=""; host_memory=16; freshclam_proxy=""; role="all"
+owui_host=""; owui_client="open-webui"; owui_secret_file=""; owui_provider=""; owui_provider_name="Umeå kommun"
+owui_key_file=""; owui_rag_client=""; owui_data=""
 proxy=0; upstream_host=""; api_cert=""; api_key=""; adm_cert=""; adm_key=""
 yes=0; renew=0; renew_ca=0; chown=1
 gateway_keys=()
 
-usage() { sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+# The comment block at the top of this file.
+usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -85,7 +104,11 @@ while [ $# -gt 0 ]; do
     --freshclam-proxy) freshclam_proxy="$2"; shift 2;;
     --openwebui-host) owui_host="$2"; shift 2;;
     --openwebui-oidc-client-id) owui_client="$2"; shift 2;;
+    --openwebui-oidc-client-secret-file) owui_secret_file="$2"; shift 2;;
     --openwebui-oidc-provider-url) owui_provider="$2"; shift 2;;
+    --openwebui-oidc-provider-name) owui_provider_name="$2"; shift 2;;
+    --openwebui-api-key-file) owui_key_file="$2"; shift 2;;
+    --openwebui-rag-client-id) owui_rag_client="$2"; shift 2;;
     --openwebui-data-dir) owui_data="$2"; shift 2;;
     --role) role="$2"; shift 2;;
     --proxy) proxy=1; shift;;
@@ -144,13 +167,22 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
   fi
   ask backup_target "pgBackRest repository (a mounted share's path, s3://endpoint/bucket[/path], or local)"
 fi
-for f in "$oidc_secret_file" "$org_sync_file" "$ca_file" "$s3_credentials"; do
+for f in "$oidc_secret_file" "$org_sync_file" "$ca_file" "$s3_credentials" "$owui_secret_file" "$owui_key_file"; do
   [ -z "$f" ] || [ -r "$f" ] || die "cannot read $f"
 done
 for spec in ${gateway_keys[@]+"${gateway_keys[@]}"}; do
-  case "${spec%%=*}" in OnPrem|Eu|External) ;; *) die "--gateway-key-file LEVEL=FILE: LEVEL is OnPrem, Eu or External";; esac
+  target="${spec%%=*}"; level="${target#*:}"; svc=""; [ "$target" = "$level" ] || svc="${target%%:*}"
+  case "$svc" in ""|api|admin|worker) ;; *) die "--gateway-key-file SERVICE:LEVEL=FILE: SERVICE is api, admin or worker";; esac
+  case "$level" in OnPrem|Eu|External) ;; *) die "--gateway-key-file [SERVICE:]LEVEL=FILE: LEVEL is OnPrem, Eu or External";; esac
+  [ "$svc:$level" != worker:External ] || die "the worker never holds the External key (simplification pass §6)"
+  [ "$spec" != "$target" ] || die "--gateway-key-file takes [SERVICE:]LEVEL=FILE, not $spec"
   [ -r "${spec#*=}" ] || die "cannot read ${spec#*=}"
 done
+if [ -n "$owui_host" ]; then
+  case "$owui_provider_name" in ""|*"'"*|*$'\n'*) die "--openwebui-oidc-provider-name: a non-empty name without ' or a line break";; esac
+  [ -n "$owui_client" ] || die "--openwebui-oidc-client-id must not be empty"
+  case "$owui_provider" in ""|https://*) ;; *) die "--openwebui-oidc-provider-url must be an https:// URL";; esac
+fi
 pki=0
 if [ -n "$api_cert$api_key$adm_cert$adm_key" ]; then
   pki=1
@@ -265,13 +297,28 @@ new_file "$secrets/api/Security__ConversationIdKeys__k1" && rand > "$secrets/api
 # Shared with Open WebUI (FORWARD_USER_INFO_HEADER_JWT_SECRET), which signs the user JWT with it (identity design §5.2).
 new_file "$secrets/.openwebui-jwt-secret" && rand > "$secrets/.openwebui-jwt-secret"
 tr -d '\n' < "$secrets/.openwebui-jwt-secret" > "$secrets/api/OpenWebUi__JwtSecret"
+# The worker's HMAC key for host names (HostHash of security event 5101, docs/security-events.md; from P2 also the Redis
+# crawl leases, performance pass §3.6): 32 random bytes, hex.
+if new_file "$secrets/worker/Security__CrawlKeyPepper"; then
+  openssl rand -hex 32 | tr -d '\n' > "$secrets/worker/Security__CrawlKeyPepper"
+fi
 
-for spec in ${gateway_keys[@]+"${gateway_keys[@]}"}; do
-  level="${spec%%=*}"
-  for svc in api admin worker; do
-    # The worker never holds the External key (simplification pass §6).
-    [ "$svc" = worker ] && [ "$level" = External ] && continue
-    tr -d '\r\n' < "${spec#*=}" > "$secrets/$svc/Gateway__Keys__$level"
+# Shared keys first, then each deployable's own (the gateway team issues one key per deployable), which win.
+for pass in shared own; do
+  for spec in ${gateway_keys[@]+"${gateway_keys[@]}"}; do
+    target="${spec%%=*}"; level="${target#*:}"
+    if [ "$target" = "$level" ]; then
+      [ "$pass" = shared ] || continue
+      services=(api admin worker)
+    else
+      [ "$pass" = own ] || continue
+      services=("${target%%:*}")
+    fi
+    for svc in "${services[@]}"; do
+      # The worker never holds the External key (simplification pass §6).
+      [ "$svc" = worker ] && [ "$level" = External ] && continue
+      tr -d '\r\n' < "${spec#*=}" > "$secrets/$svc/Gateway__Keys__$level"
+    done
   done
 done
 if [ -n "$oidc_secret_file" ]; then tr -d '\r\n' < "$oidc_secret_file" > "$secrets/admin/Oidc__ClientSecret"; fi
@@ -359,20 +406,38 @@ else
 fi
 
 # --- Open WebUI (optional, compose.openwebui.yaml) ---------------------------------
+# set_env_line FILE KEY VALUE — KEY='VALUE' in FILE, replacing an existing KEY= line (single quotes: Compose takes the
+# value literally, without interpolating $).
+set_env_line() {
+  local tmp
+  case "$3" in ""|*"'"*|*$'\n'*) die "the value for $2 is empty or contains ' or a line break";; esac
+  tmp="$(mktemp "$1.XXXXXX")"
+  K="$2" V="$3" awk 'BEGIN { line = ENVIRON["K"] "=\047" ENVIRON["V"] "\047" }
+    index($0, ENVIRON["K"] "=") == 1 { if (!done) print line; done = 1; next }
+    { print }
+    END { if (!done) print line }' "$1" > "$tmp"
+  mv "$tmp" "$1"
+}
 if [ -n "$owui_host" ]; then
   mkdir -p "$secrets/openwebui"
   owui_data="${owui_data:-$here/openwebui-data}"; mkdir -p "$owui_data"
   new_file "$secrets/openwebui/webui_secret_key" && rand > "$secrets/openwebui/webui_secret_key"
-  # Read by `docker compose` (Open WebUI takes these only from its environment), so it stays owned by you. The two
-  # empty values are yours to fill in; this file is never overwritten.
+  # Read by `docker compose` (Open WebUI takes these only from its environment), so it stays owned by you. Written once;
+  # a re-run changes only the values passed as options, never the JWT secret.
   if new_file "$secrets/openwebui.env"; then
     cat > "$secrets/openwebui.env" <<EOF
 FORWARD_USER_INFO_HEADER_JWT_SECRET=$(cat "$secrets/.openwebui-jwt-secret")
-# The ume-rag-sk- connection key of the Open WebUI client (issued in the admin UI).
+# The ume-rag-sk- connection key of Open WebUI's client in rag-api (issued in the admin API; --openwebui-api-key-file).
 OPENAI_API_KEYS=
-# Open WebUI's own Entra registration.
+# The secret of Open WebUI's own OIDC client (P1: Keycloak client open-webui; --openwebui-oidc-client-secret-file).
 OAUTH_CLIENT_SECRET=
 EOF
+  fi
+  if [ -n "$owui_key_file" ]; then
+    set_env_line "$secrets/openwebui.env" OPENAI_API_KEYS "$(tr -d '\r\n' < "$owui_key_file")"
+  fi
+  if [ -n "$owui_secret_file" ]; then
+    set_env_line "$secrets/openwebui.env" OAUTH_CLIENT_SECRET "$(tr -d '\r\n' < "$owui_secret_file")"
   fi
 fi
 
@@ -436,13 +501,17 @@ UME_RAG_FRESHCLAM_PROXY=$freshclam_proxy
 EOF
   if [ -n "$owui_host" ]; then
     cat >> "$env_file" <<EOF
-# Optional Open WebUI stack (compose.openwebui.yaml, a project of its own).
+# Optional Open WebUI stack (compose.openwebui.yaml, a project of its own). Its OIDC client: P1 the shared Keycloak's
+# open-webui (realm ume), P2 Entra's ume-rag-open-webui.
 UME_RAG_OPENWEBUI_HOST=$owui_host
 UME_RAG_OPENWEBUI_BIND=$bind
 UME_RAG_OPENWEBUI_PORT=3000
 UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=$owui_client
-UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=$owui_provider
+UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=${owui_provider:-${oidc_authority%/}/.well-known/openid-configuration}
+UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME='$owui_provider_name'
 UME_RAG_OPENWEBUI_DATA_DIR=$owui_data
+# Open WebUI's client in rag-api's registry (rag-api's OpenWebUi:ClientId; --openwebui-rag-client-id).
+UME_RAG_OPENWEBUI_CLIENT_ID=$owui_rag_client
 EOF
   fi
 fi
@@ -466,12 +535,30 @@ https://$upstream_host:$admin_port, preserving the Host header; client_max_body_
 on PUT /api/upload-batches/{batchId}/files/{n} of the admin host (admin design §2.2), the gateway's 1 MB elsewhere.
 Restrict those ports to the proxy with the host firewall."
 fi
+gateway_note=""
+missing=""
+for svc in api admin worker; do [ -e "$secrets/$svc/Gateway__Keys__Eu" ] || missing="$missing $svc"; done
+if [ -n "$missing" ]; then
+  gateway_note="
+Gateway: no Eu key for${missing}. P1a calls every model at ceiling Eu: re-run with --gateway-key-file Eu=FILE (or
+SERVICE:Eu=FILE, one per deployable)."
+fi
 owui_note=""
 if [ -n "$owui_host" ]; then
+  owui_todo=""
+  grep -q "^OPENAI_API_KEYS=." "$secrets/openwebui.env" || owui_todo="$owui_todo
+  - the ume-rag-sk- key of its client in rag-api (created in the admin API): --openwebui-api-key-file FILE"
+  # With --renew-certs deploy/.env is kept (and was read above).
+  [ -n "${owui_rag_client:-${UME_RAG_OPENWEBUI_CLIENT_ID:-}}" ] || owui_todo="$owui_todo
+  - that client's id, for rag-api's OpenWebUi:ClientId: --openwebui-rag-client-id ID"
+  grep -q "^OAUTH_CLIENT_SECRET=." "$secrets/openwebui.env" || owui_todo="$owui_todo
+  - the secret of its OIDC client: --openwebui-oidc-client-secret-file FILE"
+  [ -z "$owui_todo" ] || owui_todo="
+Still missing (re-run with these options; the key and the secret may also be filled in $secrets/openwebui.env):$owui_todo"
   owui_note="
-Open WebUI (optional): fill in OPENAI_API_KEYS and OAUTH_CLIENT_SECRET in $secrets/openwebui.env and the
-UME_RAG_OPENWEBUI_OIDC_* values in $env_file, then
-  docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait"
+Open WebUI (optional): register the redirect URI https://$owui_host/oauth/oidc/callback (the legacy callback path,
+identity design §5.3) on its OIDC client '$owui_client'.$owui_todo
+Then: docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait"
 fi
 
 cat <<EOF
@@ -483,7 +570,8 @@ Done. Generated:
 
 Next steps:
 $own_step
-  1. Register these redirect URIs for client '$oidc_client' in Entra (code + PKCE):
+  1. Register these redirect URIs on the OIDC client '$oidc_client' (code + PKCE; P1: the shared Keycloak's realm
+     ume, from RAG's realm additions in deploy/keycloak/; P2: the Entra registration):
        https://$admin_host$public_admin/signin-oidc
        https://$admin_host$public_admin/signout-callback-oidc
   2. As root, before the first up: $here/host/install.sh (the ingestion slice the containers' cgroup_parent
@@ -497,5 +585,5 @@ $own_step
   6. Internal certificates last 825 days; re-issue with: $0 --renew-certs
   7. Move $certs/ca.key off this host (with the backups in step 5). Anyone who can read it can
      issue certificates the services trust; it is only needed again for --renew-certs.
-$proxy_note$owui_note
+$proxy_note$gateway_note$owui_note
 EOF

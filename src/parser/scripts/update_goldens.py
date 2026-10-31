@@ -8,17 +8,16 @@ changes the conversion (a Docling bump, a fast-path change), and review the diff
     docker run --rm -p 8000:8000 ume-rag/parser:dev
     uv run python -m scripts.update_goldens --url http://localhost:8000
 
-Standard library only.
+Standard library only (with `scripts/parser_http.py`).
 """
 
 import argparse
 import json
-import secrets
 import sys
-import urllib.request
-from email import message_from_bytes, policy
 from pathlib import Path
 from typing import Any
+
+from scripts.parser_http import HttpParser
 
 FIXTURES = Path(__file__).resolve().parent.parent.parent.parent / "tests" / "fixtures" / "parser"
 VOLATILE = ("timings", "build")
@@ -35,33 +34,9 @@ def normalise(result: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _multipart_form(fields: dict[str, tuple[str | None, str, bytes]]) -> tuple[bytes, str]:
-    boundary = secrets.token_hex(16)
-    body = b""
-    for name, (filename, content_type, data) in fields.items():
-        disposition = f'form-data; name="{name}"' + (f'; filename="{filename}"' if filename else "")
-        body += f"--{boundary}\r\nContent-Disposition: {disposition}\r\nContent-Type: {content_type}\r\n\r\n".encode()
-        body += data + b"\r\n"
-    return body + f"--{boundary}--\r\n".encode(), f"multipart/form-data; boundary={boundary}"
-
-
-def convert(url: str, case: dict[str, Any]) -> dict[str, Any]:
+def convert(parser: HttpParser, case: dict[str, Any]) -> dict[str, Any]:
     options = {"request_id": request_id(case["name"]), **case["options"]}
-    body, content_type = _multipart_form(
-        {
-            "file": ("input", "application/octet-stream", (FIXTURES / case["file"]).read_bytes()),
-            "options": (None, "application/json", json.dumps(options).encode()),
-        }
-    )
-    request = urllib.request.Request(  # noqa: S310 (the URL is the operator's parser)
-        url.rstrip("/") + "/v1/convert", data=body, headers={"Content-Type": content_type}, method="POST"
-    )
-    with urllib.request.urlopen(request, timeout=180) as response:  # noqa: S310
-        raw = response.read()
-        header = f"Content-Type: {response.headers['Content-Type']}\r\n\r\n".encode()
-    message = message_from_bytes(header + raw, policy=policy.HTTP)
-    (result,) = [p for p in message.iter_parts() if p["Content-ID"] == "result"]
-    return json.loads(result.get_payload(decode=True))
+    return parser.convert((FIXTURES / case["file"]).read_bytes(), options)
 
 
 def main() -> int:
@@ -69,10 +44,11 @@ def main() -> int:
     parser.add_argument("--url", default="http://localhost:8000")
     args = parser.parse_args()
     cases = json.loads((FIXTURES / "cases.json").read_text(encoding="utf-8"))["conversions"]
+    client = HttpParser(args.url)
     out = FIXTURES / "golden"
     out.mkdir(exist_ok=True)
     for case in cases:
-        result = normalise(convert(args.url, case))
+        result = normalise(convert(client, case))
         path = out / f"{case['name']}.json"
         path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"{path.name}: {result['input']['pipeline']}, {len(result['blocks'])} blocks")

@@ -1,4 +1,4 @@
-"""`GET /v1/info` (parser design §13.1): versions, models, limits, formats, capacity and `build_hash`.
+"""`GET /v1/info` (parser design §13.1): versions, models, the NER model block, limits, formats, capacity, `build_hash`.
 
 Everything except `capacity` (`models.StaticInfo`) is collected once at start-up, without importing Docling, and
 hashed into `build_hash`: the SHA-256 of its canonical JSON (sorted keys, no whitespace, UTF-8). The worker records
@@ -20,7 +20,7 @@ from fastapi import APIRouter, Request
 
 from ume_parser import limits
 from ume_parser.models import Build, Capacity, Info, StaticInfo
-from ume_parser.settings import Settings
+from ume_parser.settings import NerSettings, Settings
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 PYPROJECT = PACKAGE_DIR.parent / "pyproject.toml"
@@ -36,7 +36,7 @@ PACKAGES = (
     "transformers",
     "pypdfium2",
 )
-SUPPORTED_FORMATS = ("pdf",)
+SUPPORTED_FORMATS = ("pdf", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jpeg", "png", "tiff")
 DEFERRED_FORMATS = ("doc", "xls", "ppt", "rtf", "eml", "msg")
 
 router = APIRouter()
@@ -75,8 +75,31 @@ def _models() -> list[dict[str, Any]]:
     ]
 
 
-def collect(settings: Settings) -> StaticInfo:
+def _ner(settings: Settings, ner_settings: NerSettings) -> dict[str, Any] | None:
+    """The NER model block (§7.8): the manifest's pin and the labels of the baked `config.json` (none outside the
+    image); null when NER is off."""
+    if not ner_settings.enabled:
+        return None
+    manifest = json.loads(MODEL_MANIFEST.read_text(encoding="utf-8"))
+    (model,) = [m for m in manifest["models"] if m["name"] == "ner"]
+    config = settings.models_dir / model["dir"] / "config.json"
+    labels: list[str] = []
+    if config.is_file():
+        id2label = json.loads(config.read_text(encoding="utf-8"))["id2label"]
+        labels = [id2label[k] for k in sorted(id2label, key=int)]
+    return {
+        "repository": model["repository"],
+        "revision": model["revision"],
+        "sha256": model["files"]["model.safetensors"],
+        "labels": labels,
+        "person_labels": ner_settings.person_label_list,
+        "quantised": ner_settings.quantize,
+    }
+
+
+def collect(settings: Settings, ner_settings: NerSettings | None = None) -> StaticInfo:
     """The hashed part of the info document."""
+    ner_settings = ner_settings or NerSettings()
     return StaticInfo.model_validate(
         {
             "parser": {"version": _parser_version(), "revision": settings.revision},
@@ -85,6 +108,7 @@ def collect(settings: Settings) -> StaticInfo:
             "pdfium": _pdfium(),
             "tesseract": _tesseract(),
             "models": _models(),
+            "ner": _ner(settings, ner_settings),
             "limits": limits.as_dict(),
             "formats": {"supported": list(SUPPORTED_FORMATS), "deferred": list(DEFERRED_FORMATS)},
         }
@@ -111,7 +135,7 @@ def info(request: Request) -> Info:
         capacity=Capacity(
             convert_slots=supervisor.convert_slots,
             slots_ready=supervisor.slots_ready,
-            inspect_slots=0,
-            ner_ready=False,
+            inspect_slots=supervisor.inspect_slots,
+            ner_ready=supervisor.ner_ready,
         ),
     )

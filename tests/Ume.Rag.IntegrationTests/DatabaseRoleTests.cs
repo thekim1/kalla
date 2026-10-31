@@ -28,20 +28,97 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
 
         string[] keys = ["config.Clients", "config.Keys"];
 
-        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse"], ignoreOrder: true);
+        // Ingestion (P1 item 2, data-model §1.2): the admin manages the config, the worker writes the content.
+        string[] retrievalConfig = ["config.Settings", "config.DataProtectionPolicies", "config.EmbeddingProfiles", "config.Collections"];
+        string[] ingestionConfig = [.. retrievalConfig, "config.Sources", "config.Pipelines", "config.PipelineVersions"];
+        string[] ingestionContent = [.. IngestionContentTables.Select(t => "content." + t)];
+
+        // config.Sources and content.Documents are column grants for the api (below), so they are not table privileges.
+        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, "content.ChunkSets", "content.Chunks"], ignoreOrder: true);
         (await PrivilegesAsync(Api, "INSERT")).ShouldBe(["config.KeyLastUse", "audit.AuditLog"], ignoreOrder: true);
         (await PrivilegesAsync(Api, "UPDATE")).ShouldBe(["config.KeyLastUse"]);
         (await PrivilegesAsync(Api, "DELETE")).ShouldBeEmpty();
 
         (await PrivilegesAsync(Admin, "SELECT")).ShouldBe(all, ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "audit.AuditLog"], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, "config.AdminSessions", "config.ConfigVersion"], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, "config.AdminSessions"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", "audit.AuditLog"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, "config.AdminSessions", "config.ConfigVersion"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, "config.AdminSessions"], ignoreOrder: true);
 
-        (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. workerTables], ignoreOrder: true);
-        (await PrivilegesAsync(Worker, "INSERT")).ShouldBe([.. workerTables, "audit.AuditLog"], ignoreOrder: true);
-        (await PrivilegesAsync(Worker, "UPDATE")).ShouldBe(workerTables, ignoreOrder: true);
-        (await PrivilegesAsync(Worker, "DELETE")).ShouldBe(workerTables, ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. ingestionConfig, .. workerTables, .. ingestionContent], ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "INSERT")).ShouldBe([.. workerTables, .. ingestionContent, "audit.AuditLog"], ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "UPDATE")).ShouldBe([.. workerTables, .. ingestionContent], ignoreOrder: true);
+        (await PrivilegesAsync(Worker, "DELETE")).ShouldBe([.. workerTables, .. ingestionContent], ignoreOrder: true);
+
+        // Column grants exist only where data-model §1.2 lists columns: the api's reads of Sources and Documents.
+        (await ColumnPrivilegesAsync(Api)).ShouldBe([.. ApiSourceColumns.Select(c => "config.Sources." + c), .. ApiDocumentColumns.Select(c => "content.Documents." + c)], ignoreOrder: true);
+        (await ColumnPrivilegesAsync(Admin)).ShouldBeEmpty();
+        (await ColumnPrivilegesAsync(Worker)).ShouldBeEmpty();
+    }
+
+    /// <summary>The content tables of P1 item 2 (data-model §2.2, issue #34).</summary>
+    private static readonly string[] IngestionContentTables =
+    [
+        "NodeManifest", "WorkerNodeSupport", "CrawlHosts", "SiteProfiles", "SiteProfileVersions", "CrawlFrontier", "CrawlRuns",
+        "ConnectorCheckpoints", "Uploads", "DeletionProposals", "QuarantinedFiles", "Documents", "NodeOutputs", "ChunkSets",
+        "Chunks", "EmbeddingCache", "Runs", "ParseObservations", "ParseProfiles", "BlobTombstones",
+    ];
+
+    /// <summary>data-model §1.2: what retrieval reads of a source (knowledge design §6.3, §6.5); never its settings.</summary>
+    private static readonly string[] ApiSourceColumns = ["Id", "CollectionId", "Type", "Classification", "State", "DeletedAt", "ContainsThirdPartyText"];
+
+    /// <summary>data-model §1.2: the citation and download columns of a document (knowledge design §3.5).</summary>
+    private static readonly string[] ApiDocumentColumns =
+    [
+        "Id", "SourceId", "Classification", "IdentityKind", "IdentityHash", "Title", "Url", "MediaType", "DisplayName",
+        "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt",
+    ];
+
+    [Fact]
+    public async Task The_api_reads_only_the_granted_columns_of_sources_and_documents()
+    {
+        var api = database.Connection(Api);
+        await Sql.ExecuteAsync(api, $"""SELECT {Columns(ApiSourceColumns)} FROM config."Sources" """);
+        await Sql.ExecuteAsync(api, $"""SELECT {Columns(ApiDocumentColumns)} FROM content."Documents" """);
+        await Sql.ShouldBeDeniedAsync(api, """SELECT * FROM config."Sources" """);
+        await Sql.ShouldBeDeniedAsync(api, """SELECT "Settings" FROM config."Sources" """);
+        await Sql.ShouldBeDeniedAsync(api, """SELECT "Schedule" FROM config."Sources" """);
+        await Sql.ShouldBeDeniedAsync(api, """SELECT * FROM content."Documents" """);
+        await Sql.ShouldBeDeniedAsync(api, """SELECT "CanonicalIdentity" FROM content."Documents" """);
+        await Sql.ShouldBeDeniedAsync(api, """SELECT "PiiClearedBy" FROM content."Documents" """);
+        await Sql.ShouldBeDeniedAsync(api, """UPDATE content."Documents" SET "Title" = 'x' """);
+        // The api never reads pipelines, connector state, uploads or the crawl frontier.
+        foreach (var table in new[] { "config.\"Pipelines\"", "config.\"PipelineVersions\"", "content.\"Uploads\"", "content.\"CrawlFrontier\"", "content.\"Runs\"" })
+        {
+            await Sql.ShouldBeDeniedAsync(api, $"SELECT count(*) FROM {table}");
+        }
+
+        static string Columns(IEnumerable<string> columns) => string.Join(", ", columns.Select(c => $"\"{c}\""));
+    }
+
+    [Fact]
+    public async Task Only_the_admin_writes_ingestion_config_and_only_the_worker_writes_content()
+    {
+        await Sql.ShouldBeDeniedAsync(database.Connection(Worker), """UPDATE config."Collections" SET "Name" = 'x' """);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Api), """UPDATE config."Collections" SET "Name" = 'x' """);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Worker), """DELETE FROM config."Settings" """);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Admin), """UPDATE content."Documents" SET "Title" = 'x' """);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Admin), """DELETE FROM content."Chunks" """);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Admin), """INSERT INTO content."CrawlHosts" ("Host", "RequestsPerSecond", "MaxConnections", "NextAllowedAt", "Kind", "BackoffFactor") VALUES ('x.example', 1, 1, now(), 'external', 1)""");
+    }
+
+    [Fact]
+    public async Task The_admin_tombstones_blobs_but_only_the_worker_purges_them()
+    {
+        // Issue #34: the deleting transaction inserts the tombstone, idempotently; the worker's sweep deletes the row.
+        var key = $"uploads/{Guid.NewGuid()}/{Guid.NewGuid()}/{new string('a', 64)}";
+        var insert = $"""INSERT INTO content."BlobTombstones" ("Key", "Reason") VALUES ('{key}', 'upload.replaced') ON CONFLICT DO NOTHING""";
+        await Sql.ExecuteAsync(database.Connection(Admin), insert);
+        await Sql.ExecuteAsync(database.Connection(Admin), insert);
+        await Sql.ExecuteAsync(database.Connection(Worker), insert);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Admin), $"""DELETE FROM content."BlobTombstones" WHERE "Key" = '{key}'""");
+        await Sql.ShouldBeDeniedAsync(database.Connection(Api), """SELECT count(*) FROM content."BlobTombstones" """);
+        (await Sql.ScalarAsync<long>(database.Connection(Worker), $"""SELECT count(*) FROM content."BlobTombstones" WHERE "Key" = '{key}' AND "DeletedAt" <= now()""")).ShouldBe(1);
+        await Sql.ExecuteAsync(database.Connection(Worker), $"""DELETE FROM content."BlobTombstones" WHERE "Key" = '{key}'""");
     }
 
     [Fact]
@@ -193,6 +270,12 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         await Sql.ExecuteAsync(database.Connection(Worker), "SELECT * FROM content.rag_partition_maintain()");
         await Sql.ShouldBeDeniedAsync(database.Connection(Api), "SELECT * FROM content.rag_partition_maintain()");
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), "SELECT * FROM content.rag_partition_maintain()");
+        // The per-profile HNSW index (data-model §3.2): only the worker creates it; an unknown profile is refused inside.
+        var unknown = Guid.NewGuid();
+        var refused = await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(database.Connection(Worker), $"SELECT content.rag_ensure_profile_index('{unknown}', 3)"));
+        refused.SqlState.ShouldBe(PostgresErrorCodes.RaiseException);
+        await Sql.ShouldBeDeniedAsync(database.Connection(Api), $"SELECT content.rag_ensure_profile_index('{unknown}', 3)");
+        await Sql.ShouldBeDeniedAsync(database.Connection(Admin), $"SELECT content.rag_ensure_profile_index('{unknown}', 3)");
         await Sql.ShouldBeDeniedAsync(database.Connection(Admin), "SELECT config.rag_config_changed()");
     }
 
@@ -216,6 +299,16 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         await using var command = new NpgsqlCommand($"SHOW {setting}", connection);
         return (string?)await command.ExecuteScalarAsync(Ct);
     }
+
+    /// <summary>Column grants (schema.table.column) of <paramref name="role"/> on tables where it has no table-wide grant of the same privilege.</summary>
+    private async Task<List<string>> ColumnPrivilegesAsync(string role) => await Sql.ListAsync(database.Connection(null), $"""
+        SELECT c.table_schema || '.' || c.table_name || '.' || c.column_name || CASE c.privilege_type WHEN 'SELECT' THEN '' ELSE ':' || c.privilege_type END
+        FROM information_schema.column_privileges c
+        WHERE c.table_schema IN ('config', 'content', 'chat', 'audit') AND c.grantee = '{role}'
+          AND NOT EXISTS (SELECT 1 FROM information_schema.table_privileges t
+                          WHERE t.table_schema = c.table_schema AND t.table_name = c.table_name
+                            AND t.grantee = c.grantee AND t.privilege_type = c.privilege_type)
+        """);
 
     /// <summary>Tables (schema.table) on which <paramref name="role"/> holds <paramref name="privilege"/> for the whole table.</summary>
     private async Task<List<string>> PrivilegesAsync(string role, string privilege) => await Sql.ListAsync(database.Connection(null), $"""

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.reprocess-document.payload.schema.json",
+  "title": "reprocess-document command payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "reprocess-document"
+    },
+    "documentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "fromStage": {
+      "type": "string",
+      "enum": [
+        "fetch",
+        "scan",
+        "detect",
+        "parse",
+        "clean",
+        "chunk",
+        "personal-data",
+        "embed",
+        "index"
+      ],
+      "default": "parse"
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "documentId"
+  ],
+  "description": "Payload of the command reprocess-document (admin design §4.7): re-runs one document from fromStage with a new execution id, bypassing the stage caches from there on (engine design §8); fetch re-fetches, later stages start from the stored content. Dedup reprocess:{documentId}."
+}

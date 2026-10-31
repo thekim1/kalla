@@ -38,7 +38,7 @@ public sealed partial class SecurityEventsDocTests
         row.ShouldNotBeNull($"{id} {name} is missing from docs/security-events.md");
         row.Groups["name"].Value.ShouldBe(name);
         row.Groups["level"].Value.ShouldBe(level);
-        row.Groups["status"].Value.Trim().ShouldStartWith("P0", Case.Sensitive, $"{id} is emitted in P0");
+        row.Groups["status"].Value.Trim()[..2].ShouldBeOneOf(["P0", "P1"], $"{id} is defined in code, so its row says P0 or P1");
     }
 
     [Fact]

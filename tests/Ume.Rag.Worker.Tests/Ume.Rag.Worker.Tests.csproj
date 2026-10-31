@@ -3,10 +3,13 @@
     Processing tests (Processing/): goldens over tests/fixtures/processing/, PII targets over tests/fixtures/pii/, the flag
     lifecycle on in-memory stores, and the embed stage against the FakeGateway in process (referenced under an alias: its
     top-level Program would clash with the worker's).
+    Connector tests (Connectors/): the in-process Kestrel test site needs no container; the ClamAV client's integration
+    test runs against the image named by UME_RAG_TEST_CLAMAV_IMAGE and skips without it (verify.yml's backend job sets it).
   -->
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Testcontainers" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.TestKit\Ume.Rag.TestKit.csproj" />

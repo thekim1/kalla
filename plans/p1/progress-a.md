@@ -34,10 +34,12 @@ Refs: [engine §3, §4, §9.1, §13.1](../ingestion-worker/design-engine.md), [c
 
 ## 3. Parser P1 formats (#5)
 Refs: [parser §3, §6–§10, §15, §16](../parser/design.md)
-- [ ] `/v1/inspect`; per-page signals and garble detector
-- [ ] All P1 formats; legacy Office, RTF, e-mail → `format_deferred`; OCR and table modes; page ranges with `partial`
-- [ ] `/v1/ner` with its two schemas; limits, RSS watchdog, recycling
+- [x] `/v1/inspect`; per-page signals and garble detector
+- [x] All P1 formats; legacy Office, RTF, e-mail → `format_deferred`; OCR and table modes; page ranges with `partial`
+- [x] `/v1/ner` with its two schemas; limits, RSS watchdog, recycling
 - [ ] OCR acceptance (#131); text-layer vs Docling on 200 umea.se PDFs (#132); #79, #80 (latency), #110 recorded
+  (code part done: `ocr_check.py` passes the synthetic sample, `compare_paths.py` tested on fixtures, #79 and #80
+  recorded; the real Umeå sample, the 200 umea.se PDFs and #110 are in the live block)
 
 ## 4. Sitevision preset and the umea.se profile (#8)
 Refs: [connectors §5.6](../ingestion-worker/design-connectors.md), [processing §17](../ingestion-worker/design-processing.md), [simplification pass §13](../simplification-pass.md)

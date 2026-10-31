@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/parser/v1/inspect-request.schema.json",
+  "additionalProperties": false,
+  "description": "The optional `options` part of `POST /v1/inspect` (§6.2): what the worker declares, for the mismatch warning.",
+  "properties": {
+    "request_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "file_ext": {
+      "anyOf": [
+        {
+          "pattern": "^\\.[a-z0-9]{1,10}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "File Ext"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "maxLength": 255,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Media Type"
+    }
+  },
+  "title": "InspectRequest",
+  "type": "object"
+}

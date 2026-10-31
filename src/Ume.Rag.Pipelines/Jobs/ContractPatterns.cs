@@ -16,4 +16,7 @@ internal static class ContractPatterns
 
     /// <summary>An <c>&lt;area&gt;.&lt;code&gt;</c> reason (engine design §10.2).</summary>
     public const string Reason = "^[a-z0-9_-]+(\\.[a-z0-9_-]+)+$";
+
+    /// <summary>A blob path under a preview's prefix (engine design §11).</summary>
+    public const string PreviewBlob = "^previews/[^\\s]+$";
 }

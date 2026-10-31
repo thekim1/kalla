@@ -6,6 +6,7 @@ using Ume.Rag.Infrastructure;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Worker.Commands;
+using Ume.Rag.Worker.Connectors;
 
 namespace Ume.Rag.Worker.Jobs;
 
@@ -40,7 +41,8 @@ public static class WorkerExtensions
 
     /// <summary>
     /// The job machinery (engine design §9): options, the Postgres queue, instance registration and heartbeat, the
-    /// dispatcher, the reaper, the nightly maintenance, and the <c>command</c> handler with its kinds. Hosted services stop
+    /// dispatcher, the reaper, the nightly maintenance, the <c>command</c> handler with its kinds, and the connectors'
+    /// shared fetch path (<see cref="ConnectorExtensions.AddRagConnectors"/>). Hosted services stop
     /// in reverse order: the dispatcher drains before the heartbeat removes the instance. Call after <c>AddRagDatabase</c>
     /// (the queue's pool) and with <c>AddRagConfigMonitor</c>, whose listening connection carries <c>rag_jobs</c> to
     /// <see cref="JobWakeUps"/>; without the monitor, other processes' jobs wait for the poll.
@@ -62,6 +64,7 @@ public static class WorkerExtensions
             }
         });
         builder.AddRagJobQueue();
+        builder.AddRagConnectors();
         // The same JobWakeUps the dispatcher waits on. Here, not in AddRagJobQueue: only the worker dispatches, and a service
         // that only enqueues would have its monitor woken by every job notification for semaphores nobody waits on.
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<INotificationListener, JobWakeUps>(sp => sp.GetRequiredService<JobWakeUps>()));

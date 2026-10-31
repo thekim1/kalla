@@ -38,6 +38,8 @@ services:
       Parser__BaseUrl: https://rag-parser:8000
       ClamAv__Host: rag-clamav
       ClamAv__Port: "3310"
+      BlobStore__Root: /data/blobs/rag
+      # Its gateway keys (OnPrem and Eu, never External) and Security__CrawlKeyPepper are secret files.
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
       Crawl__AllowedPrivateRanges: ${UME_RAG_CRAWL_ALLOW:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
@@ -88,6 +90,9 @@ services:
       # PARSER_WORKERS x PARSER_THREADS = cpus (development: 1 x 2; 24 GB pilot host: 2 x 2 on 4 cores, compose.host-24g.yaml).
       PARSER_WORKERS: "1"
       PARSER_THREADS: "2"
+      # Slot RSS cap for the 3.5g container with ner-0 (~1 GB) beside it: the watchdog answers 507 resource_limit
+      # before the container limit is reached (PR for P1a item 5; the 24 GB overlay sets 2600 for 2 x 2).
+      PARSER_SLOT_MAX_RSS_MB: "2200"
       PARSER_TLS_CERT_FILE: /run/certs/parser.crt
       PARSER_TLS_KEY_FILE: /run/certs/parser.key
     volumes:

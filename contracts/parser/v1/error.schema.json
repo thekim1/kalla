@@ -136,7 +136,7 @@
       "type": "object"
     }
   },
-  "description": "Every non-200 response of `/v1/convert` and `/v1/inspect` (§7.5).",
+  "description": "Every non-200 response of `/v1/convert`, `/v1/inspect` and `/v1/ner` (§7.5).",
   "properties": {
     "error": {
       "$ref": "#/$defs/ErrorBody"

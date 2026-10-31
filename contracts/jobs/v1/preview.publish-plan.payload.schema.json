@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/preview.publish-plan.payload.schema.json",
+  "title": "preview publish-plan job payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "publish-plan"
+    },
+    "pipelineId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "pipelineVersionId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The draft to publish, or the superseded version a rollback re-publishes."
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "pipelineId",
+    "pipelineVersionId"
+  ],
+  "description": "Payload of a preview job of kind publish-plan (engine design §12.1, §12.2): the re-processing plan and forecast of publishing (or rolling back to) the pipeline version. P1: every live document of the affected sources. Dedup plan:{pipelineId}."
+}

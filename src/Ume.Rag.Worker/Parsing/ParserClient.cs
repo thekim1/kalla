@@ -9,7 +9,9 @@ namespace Ume.Rag.Worker.Parsing;
 /// <summary>
 /// The worker's client of the parser sidecar (plans/parser/design.md §7). <see cref="ConvertAsync"/> sends one document
 /// or page range as <c>multipart/form-data</c> (<c>file</c> + <c>options</c>) and reads the <c>multipart/mixed</c>
-/// answer: <c>result.json</c>, then <c>docling.json.gz</c> when Docling ran. A non-200 answer is thrown as
+/// answer: <c>result.json</c>, then <c>docling.json.gz</c> when Docling ran. <see cref="InspectAsync"/> sends the same
+/// shape (options optional) and reads the page signals the parse plan is made from (§6.2); <see cref="NerAsync"/> sends
+/// text units as JSON and reads the persons' code-point spans (§7.8). A non-200 answer is thrown as
 /// <see cref="ParserException"/> with the contract's error body. The caller owns the <see cref="HttpClient"/>: its base
 /// address is the parser, its timeout the request deadline plus 15 s (design §10.4).
 /// </summary>
@@ -19,6 +21,8 @@ public sealed class ParserClient(HttpClient http, JsonSerializerOptions? json = 
     public const long MaxPartBytes = 60L * 1024 * 1024;
 
     private static readonly Uri ConvertPath = new("v1/convert", UriKind.Relative);
+    private static readonly Uri InspectPath = new("v1/inspect", UriKind.Relative);
+    private static readonly Uri NerPath = new("v1/ner", UriKind.Relative);
     private static readonly Uri InfoPath = new("v1/info", UriKind.Relative);
 
     private readonly JsonSerializerOptions _json = json ?? ParserJson.Create();
@@ -33,13 +37,7 @@ public sealed class ParserClient(HttpClient http, JsonSerializerOptions? json = 
         Stream? doclingGzip,
         CancellationToken cancellationToken)
     {
-        using var content = new MultipartFormDataContent();
-        var fileContent = new StreamContent(file);
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        // The parser gets the extension in the options only, never a file name (design §7.1).
-        content.Add(fileContent, "file", "input");
-        content.Add(new StringContent(JsonSerializer.Serialize(options, _json), Encoding.UTF8, "application/json"), "options");
-
+        using var content = Form(file, options);
         using var request = new HttpRequestMessage(HttpMethod.Post, ConvertPath) { Content = content };
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (response.StatusCode != HttpStatusCode.OK)
@@ -74,9 +72,51 @@ public sealed class ParserClient(HttpClient http, JsonSerializerOptions? json = 
         return result ?? throw new InvalidDataException("The parser's answer has no result part.");
     }
 
+    /// <summary>Inspects <paramref name="file"/>: page count, rangeability and per-page signals, no models.</summary>
+    public async Task<ParserInspectResult> InspectAsync(
+        Stream file,
+        ParserInspectOptions? options,
+        CancellationToken cancellationToken)
+    {
+        using var content = Form(file, options ?? new ParserInspectOptions());
+        using var request = new HttpRequestMessage(HttpMethod.Post, InspectPath) { Content = content };
+        using var response = await http.SendAsync(request, cancellationToken);
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            throw await ToExceptionAsync(response, cancellationToken);
+        }
+
+        return await response.Content.ReadFromJsonAsync<ParserInspectResult>(_json, cancellationToken)
+            ?? throw new InvalidDataException("The parser's /v1/inspect answer is empty.");
+    }
+
+    /// <summary>Finds person names in <paramref name="request"/>'s texts; spans are code points (<see cref="ParserText"/>).</summary>
+    public async Task<ParserNerResult> NerAsync(ParserNerRequest request, CancellationToken cancellationToken)
+    {
+        using var response = await http.PostAsJsonAsync(NerPath, request, _json, cancellationToken);
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            throw await ToExceptionAsync(response, cancellationToken);
+        }
+
+        return await response.Content.ReadFromJsonAsync<ParserNerResult>(_json, cancellationToken)
+            ?? throw new InvalidDataException("The parser's /v1/ner answer is empty.");
+    }
+
     public async Task<ParserInfo> GetInfoAsync(CancellationToken cancellationToken) =>
         await http.GetFromJsonAsync<ParserInfo>(InfoPath, _json, cancellationToken)
         ?? throw new InvalidDataException("The parser's /v1/info answer is empty.");
+
+    private MultipartFormDataContent Form<TOptions>(Stream file, TOptions options)
+    {
+        var content = new MultipartFormDataContent();
+        var fileContent = new StreamContent(file);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        // The parser gets the extension in the options only, never a file name (design §7.1).
+        content.Add(fileContent, "file", "input");
+        content.Add(new StringContent(JsonSerializer.Serialize(options, _json), Encoding.UTF8, "application/json"), "options");
+        return content;
+    }
 
     private async Task<ParserException> ToExceptionAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/eval.nightly.payload.schema.json",
+  "title": "eval nightly job payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "nightly"
+    },
+    "collectionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "scheduledFor": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The schedule occurrence the run is for (engine design §9.6)."
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "collectionId",
+    "scheduledFor"
+  ],
+  "description": "Payload of an eval job of kind nightly (processing design §14.8): the full set of one published collection, for the trend, rag.evaluation.recall_at_10 and the recall alert. Dedup eval-nightly:{collectionId}."
+}

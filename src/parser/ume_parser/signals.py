@@ -6,20 +6,26 @@ The score is in [0, 1], the maximum of:
 1. the bad-character ratio: U+FFFD, private-use code points, C0 controls and literal `(cid:N)`, per non-space
    character;
 2. a low share of letters and digits among non-space characters (below 0.5 rises linearly to 1 at 0);
-3. mojibake: the share of tokens with a UTF-8-read-as-Latin-1 pair (`Ã¤`, `Ã¶`, `Ã¥`, …), counted double;
+3. plausibility: the share of words (letter runs of at least three letters, outside tokens with digits, `@`, `://`
+   or host names) that are implausible under a Swedish/English character-bigram model, plus the tokens with a
+   UTF-8-read-as-Latin-1 pair (`Ã¤`, `Ã¶`, `Ã¥`, …), which so count double. A word is implausible when the mean log
+   probability of its bigrams (with word boundaries, smoothed) is below `IMPLAUSIBLE_LOG_PROB`: "kommunfullmäktige"
+   scores about -2.8, a font-encoding garble such as "nrppxqixoopçnwljh" about -5.5 (`garble_bigrams.json`, built by
+   `scripts/build_bigrams.py`);
 4. scan noise: an average token length below 2 or above 25, or more than 30 % one-character tokens (scored 1 when
    there are at least 20 tokens).
-
-The design's third criterion also scores token plausibility under a Swedish/English character-bigram model; that
-table is P1, so P0 catches mojibake but not every implausible token.
 
 `page_facts` reads a PDF page with pypdfium2 (no rendering) and gives the facts the worker's strategy rules and the
 text-layer fast path need: `text_chars`, `bad_chars`, `garbled_score`, `image_coverage` and `path_objects`.
 """
 
 import itertools
+import json
+import math
 import re
+from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_c
@@ -27,7 +33,25 @@ import pypdfium2.raw as pdfium_c
 _CID = re.compile(r"\(cid:\d+\)")
 _MOJIBAKE = re.compile(r"Ã[\u0080-¿]|Â[\u0080-¿]")
 _TOKEN = re.compile(r"\S+")
+_WORD = re.compile(r"[^\W\d_]{3,}")
+_NOT_PROSE = re.compile(r"\d|@|://|[^\W\d_]\.[^\W\d_]")  # numbers, codes, e-mail, URLs, host names
 _CONTROL_ALLOWED = {"\t", "\n", "\r"}
+
+IMPLAUSIBLE_LOG_PROB = -4.0
+_SMOOTHING = 0.5
+_BIGRAMS_FILE = Path(__file__).resolve().parent / "garble_bigrams.json"
+
+
+def _load_bigrams() -> tuple[dict[str, int], dict[str, int], int]:
+    table = json.loads(_BIGRAMS_FILE.read_text(encoding="utf-8"))
+    counts: dict[str, int] = table["bigrams"]
+    rows: dict[str, int] = defaultdict(int)
+    for bigram, count in counts.items():
+        rows[bigram[0]] += count
+    return counts, dict(rows), len(table["alphabet"]) + 1
+
+
+_BIGRAMS, _ROWS, _OUTCOMES = _load_bigrams()
 
 # Fast-path eligibility (ingestion-worker design-processing §3.1 rules 4 and 5): a clean text layer that is not
 # table-dense. The worker plans from the same thresholds; the parser checks them again before taking the fast path.
@@ -55,6 +79,28 @@ def non_space_chars(text: str) -> int:
     return sum(1 for ch in text if not ch.isspace())
 
 
+def word_log_prob(word: str) -> float:
+    """Mean log probability of a lower-cased word's bigrams, `^` and `$` marking its ends."""
+    padded = f"^{word}$"
+    total = 0.0
+    for a, b in itertools.pairwise(padded):
+        total += math.log((_BIGRAMS.get(a + b, 0) + _SMOOTHING) / (_ROWS.get(a, 0) + _SMOOTHING * _OUTCOMES))
+    return total / (len(padded) - 1)
+
+
+def _plausibility(tokens: list[str]) -> float:
+    """Implausible words per word; a token with a mojibake pair is one word that counts double."""
+    words = weight = 0
+    for token in tokens:
+        if len(token) >= 3 and _MOJIBAKE.search(token):
+            words, weight = words + 1, weight + 2
+        elif not _NOT_PROSE.search(token):
+            for word in _WORD.findall(token):
+                words += 1
+                weight += word_log_prob(word.lower()) < IMPLAUSIBLE_LOG_PROB
+    return min(1.0, weight / words) if words else 0.0
+
+
 def garbled_score(text: str) -> float:
     visible = non_space_chars(text)
     if visible == 0:
@@ -66,10 +112,7 @@ def garbled_score(text: str) -> float:
     letters = 0.0 if ratio >= 0.5 else (0.5 - ratio) / 0.5
 
     tokens = _TOKEN.findall(text)
-    long_tokens = [t for t in tokens if len(t) >= 3]
-    mojibake = (
-        min(1.0, 2 * sum(1 for t in long_tokens if _MOJIBAKE.search(t)) / len(long_tokens)) if long_tokens else 0.0
-    )
+    plausibility = _plausibility(tokens)
 
     noise = 0.0
     if len(tokens) >= 20:
@@ -78,7 +121,7 @@ def garbled_score(text: str) -> float:
         if average < 2 or average > 25 or single > 0.3:
             noise = 1.0
 
-    return round(max(bad, letters, mojibake, noise), 3)
+    return round(max(bad, letters, plausibility, noise), 3)
 
 
 def _union_area(rects: list[tuple[float, float, float, float]]) -> float:

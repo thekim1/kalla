@@ -4,11 +4,11 @@ The parser sidecar: FastAPI in front of a supervisor that keeps pre-warmed Docli
 Design: [`plans/parser/design.md`](../../plans/parser/design.md); image and layout:
 [`plans/platform/repo-and-deployment.md`](../../plans/platform/repo-and-deployment.md) §2.4, §5.3.
 
-State (P0): the image with Docling, Tesseract `swe` and the models baked in; the supervisor with its slots and
-warm-up self-test; `/health/live`, `/health/ready`, `/v1/info`; `/v1/convert` for PDF through the text-layer fast
-path or Docling, with the contract's limits and errors; the five schemas in `contracts/parser/v1/`. `/v1/inspect`
-answers `501 not_implemented` until P1; then the other formats, `/v1/ner`, the RSS watchdog, recycling and the rest of
-design §16 P1.
+State (P1a item 5): every P1 format of design §3 (PDF through the text-layer fast path or Docling; DOCX, PPTX, XLSX,
+ODT, ODS, ODP through Docling's declarative backends; JPEG, PNG and TIFF through Docling's OCR), with legacy Office,
+RTF and e-mail refused as `format_deferred`; page ranges with `partial` for PDF and TIFF; `/v1/inspect` on its own
+process; `/v1/ner` on `ner-0`; the bomb and size limits; the RSS watchdog and recycling; the garble detector with its
+bigram table. Not yet: OpenTelemetry traces and metrics, the licence inventory, `bench.py` (design §16 P1).
 
 ## Layout
 
@@ -16,23 +16,31 @@ design §16 P1.
 |---|---|
 | `ume_parser/app.py` | FastAPI app; its lifespan collects `/v1/info` and starts the supervisor |
 | `ume_parser/__main__.py` | `python -m ume_parser`: one uvicorn process (no `--workers`, no `--limit-concurrency`) |
-| `ume_parser/api.py` | `/v1/convert` (multipart in, `multipart/mixed` out, limits, errors) and the `/v1/inspect` stub |
+| `ume_parser/api.py` | `/v1/convert` (multipart in, `multipart/mixed` out), `/v1/inspect` and `/v1/ner`; limits, errors |
 | `ume_parser/models.py` | the pydantic contract `parser/v1`: request options, results, info, errors |
 | `ume_parser/errors.py` | error codes with their HTTP status, `retry` and fixed `detail` (design §7.5) |
-| `ume_parser/sniff.py` | format sniffing from the first bytes; refusals |
-| `ume_parser/supervisor.py` | spawns the slots, records warm-up, respawns a dead, failed or stuck slot, readiness; hands a job to a free slot and kills it on deadline or disconnect |
-| `ume_parser/slot.py`, `convert.py` | the slot process; PDF opening and limits, the Docling pipelines (an LRU of three option sets) and their mapping to blocks, tables and page signals |
-| `ume_parser/textlayer.py`, `signals.py` | the pypdfium2 text-layer fast path; the garble score and per-page text-layer facts |
+| `ume_parser/sniff.py` | format sniffing: first bytes and OLE stream names (API process), a zip's parts (worker processes); refusals |
+| `ume_parser/supervisor.py` | the lanes `convert`, `inspect` and `ner`: spawn, warm-up, respawn, readiness, the RSS watchdog and recycling; hands a job to a free process and kills it on deadline or disconnect |
+| `ume_parser/slot.py` | the worker processes' pipe protocol and the conversion slot |
+| `ume_parser/convert.py`, `assemble.py` | conversion by format: PDF ranges and the Docling pipelines (an LRU of option sets), images and TIFF frame ranges, the declarative formats; the mapping to blocks, tables and page signals |
+| `ume_parser/inspect.py` | `inspect-0`: page count and per-page signals without models, under `RLIMIT_AS` |
+| `ume_parser/ner.py` | `ner-0`: the KB BERT NER model, label mapping and code-point spans |
+| `ume_parser/limits.py` | request limits and the bomb pre-checks (zip, pixels, frames) |
+| `ume_parser/textlayer.py`, `signals.py`, `garble_bigrams.json` | the pypdfium2 text-layer fast path; the garble score with its bigram table, and per-page text-layer facts |
 | `ume_parser/selftest.py` | the one-page self-test PDF (text layer, ruled table, scanned strip) and its checks (Docling and fast path) |
 | `ume_parser/health.py` | probes and the container health check `python -m ume_parser.health` |
 | `ume_parser/info.py` | `/v1/info` and `build_hash` |
-| `ume_parser/settings.py`, `limits.py` | `PARSER_*` settings; request limits (design §11.1) |
+| `ume_parser/settings.py` | `PARSER_*` and `NER_*` settings |
 | `ume_parser/model_manifest.json` | models: Hugging Face repository, pinned commit, SHA-256 per file |
 | `scripts/download_models.py` | downloads and checks the manifest's files (image build) |
 | `scripts/export_schema.py` | writes `contracts/parser/v1/*.schema.json` from `models.py` |
 | `scripts/make_fixtures.py` | writes the synthetic fixtures of `tests/fixtures/parser/` (same bytes on every run) |
 | `scripts/update_goldens.py` | writes `tests/fixtures/parser/golden/` from a running parser |
-| `tests/` | pytest; `test_convert.py` and `test_offline.py` need the models and Tesseract, so they run in the image; `fake_slot.py` is a slot without Docling for the API and supervisor tests |
+| `scripts/build_bigrams.py` | writes `ume_parser/garble_bigrams.json` from the repository's Swedish word list and English documents |
+| `scripts/ocr_check.py` | the OCR acceptance check (design §9.3): å/ä/ö recall, CER, ms/page through a running parser |
+| `scripts/compare_paths.py` | text-layer fast path against Docling, page by page, for a URL list of PDFs (to-verify #132) |
+| `scripts/parser_http.py` | the scripts' client of a running parser |
+| `tests/` | pytest; `test_convert.py`, `test_acceptance.py`, `test_offline.py` and the model part of `test_ner.py` need the models and Tesseract, so they run in the image; `fake_slot.py` gives workers without Docling for the API and supervisor tests |
 
 ## Develop
 
@@ -44,13 +52,24 @@ uv run ruff check . && uv run ruff format --check .
 uv run pytest
 ```
 
-Outside the image `test_convert.py` and `test_offline.py` are skipped. To run them, build the test target: the tests
+Outside the image the tests that need the models or Tesseract are skipped. To run them, build the test target: the tests
 run during the build with no network (`RUN --network=none`), and a failing test fails the build. CI's `parser-image`
 job (`.github/workflows/parser.yml`) does the same.
 
 ```bash
 docker build --target test -t ume-rag/parser:test .
 docker run --rm --network none ume-rag/parser:test   # runs them again
+```
+
+## Measuring
+
+Both scripts talk to a running parser and write a Markdown report of numbers (no document text):
+
+```bash
+# OCR acceptance (design §9.3): the repository's synthetic sample, or a directory of page images with <stem>.txt
+uv run python -m scripts.ocr_check --sample /tmp/ocr --generate --url http://localhost:8000 --out ocr.md
+# Fast path against Docling (to-verify #132): one PDF URL per line
+uv run python -m scripts.compare_paths --urls pdfs.txt --url http://localhost:8000 --out compare.md
 ```
 
 ## Contract
@@ -107,6 +126,14 @@ export PARSER_MODELS_DIR="$PWD/.models"
 | `PARSER_JOBS_DIR` | `/tmp/jobs` | per-request job directories; wiped at start |
 | `PARSER_WARMUP_TIMEOUT_S` | 600 | a slot not warm by then is killed and respawned |
 | `PARSER_REVISION` | `unknown` | git revision, set by the image build; part of `build_hash` |
+| `PARSER_SLOT_MAX_RSS_MB` | 2800 | RSS watchdog: a slot above it (with Tesseract) is killed, its request answers `resource_limit` |
+| `PARSER_RECYCLE_JOBS` | 50 | a slot is restarted after this many conversions |
+| `PARSER_RECYCLE_RSS_GROWTH` | 0.4 | a slot is restarted when idle and its RSS exceeds its warm RSS by this share |
+| `PARSER_PIPELINE_CACHE` | 3 | Docling option sets kept warm per slot |
+| `NER_ENABLED` | true | start `ner-0`; when false `/v1/ner` answers `not_ready` and `/v1/info` has `ner: null` |
+| `NER_THREADS`, `NER_QUANTIZE`, `NER_QUEUE` | 2, true, 4 | `ner-0`'s torch threads, int8 quantisation, requests that may wait for it |
+| `NER_PERSON_LABELS` | `PER,PRS` | model labels counted as `person` (mixed labels with them are `person_ambiguous`) |
+| `NER_RECYCLE_REQUESTS` | 5000 | `ner-0` is restarted after this many requests |
 | `UME_HEALTHCHECK_URL` | own listener | URL the health check probes |
 
 ## Updating pins

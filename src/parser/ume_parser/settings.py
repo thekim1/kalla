@@ -1,4 +1,4 @@
-"""Deployment settings, read from `PARSER_*` environment variables (parser design §10.1, §12)."""
+"""Deployment settings, read from `PARSER_*` and `NER_*` environment variables (parser design §7.8, §10, §12)."""
 
 from pathlib import Path
 
@@ -19,7 +19,31 @@ class Settings(BaseSettings):
     revision: str = Field(default="unknown", description="git revision of the build, part of build_hash")
     tls_cert_file: Path | None = None
     tls_key_file: Path | None = None
+    slot_max_rss_mb: int = Field(default=2800, ge=64, description="RSS watchdog: a slot above it is killed (§10.3)")
+    recycle_jobs: int = Field(default=50, ge=1, description="a slot is respawned after this many conversions")
+    recycle_rss_growth: float = Field(
+        default=0.4, gt=0, description="a slot is respawned when its idle RSS exceeds its warm RSS by this share"
+    )
+    pipeline_cache: int = Field(default=3, ge=1, description="Docling option sets kept warm per slot (§10.2)")
 
     @property
     def tls(self) -> bool:
         return self.tls_cert_file is not None and self.tls_key_file is not None
+
+
+class NerSettings(BaseSettings):
+    """`ner-0` (§7.8). `NER_ENABLED=false` starts no NER process: `/v1/ner` answers `not_ready` and `/v1/info`
+    `ner_ready: false`, so the worker holds the sets that need a name check (processing design §9.6)."""
+
+    model_config = SettingsConfigDict(env_prefix="NER_", frozen=True)
+
+    enabled: bool = True
+    threads: int = Field(default=2, ge=1)
+    quantize: bool = Field(default=True, description="int8 dynamic quantisation of the model's linear layers")
+    queue: int = Field(default=4, ge=0, description="requests that may wait for ner-0; more get busy")
+    person_labels: str = Field(default="PER,PRS", description="model labels that are persons, comma-separated")
+    recycle_requests: int = Field(default=5000, ge=1)
+
+    @property
+    def person_label_list(self) -> list[str]:
+        return [label.strip() for label in self.person_labels.split(",") if label.strip()]

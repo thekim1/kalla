@@ -12,6 +12,9 @@ internal static class SettingPatterns
     public const string Host = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$";
     public const string QueryParameter = "^[^\\s=&]+$";
     public const string CrawlWindow = "^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$";
+
+    /// <summary>Five cron fields (as <c>Sources.Schedule</c>, engine design §9.6); the admin parses them with the scheduler's parser.</summary>
+    public const string Cron = "^\\S+( \\S+){4}$";
 }
 
 /// <summary><c>Sources.Settings</c> of a URL-list source (connectors design §4, §12.3).</summary>
@@ -150,6 +153,12 @@ public sealed record CrawlSettings
     [Description("Night window HH:MM-HH:MM, Europe/Stockholm (connectors design §6.5); manual sync ignores it.")]
     [RegularExpression(SettingPatterns.CrawlWindow)]
     public string CrawlWindow { get; init; } = "22:00-06:00";
+
+    [Effect(SettingEffect.Cosmetic)]
+    [Description("Cron (5 fields, Europe/Stockholm) of incremental runs besides Sources.Schedule (connectors design §5.4); null = full traversals only. The scheduler runs them only while the host's site profile has lastmodReliable.")]
+    [MaxLength(100)]
+    [RegularExpression(SettingPatterns.Cron)]
+    public string? IncrementalSchedule { get; init; }
 }
 
 /// <summary>A <c>demote</c> entry (weakness review §3): pages matching the pattern rank lower, nothing else changes.</summary>

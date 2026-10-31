@@ -227,14 +227,16 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
   dependencies). It makes #60 red (only `admin-ui`; every other check green) and any PR that runs that job.
 
 **Next:**
-0. **`v0.1.0` released 2026-10-31 (J1).** Working order (user): **code first, live testing last**; `plans/p1/README.md`
-   §1a and both P1 prompts carry it. **P1b briefs written** (`plans/p1b/`, 19 code + 13 live items, hand-offs L1–L12,
-   O1–O9 settled, **O7 go-live host open for the user**); ownership rules #73. The user authorised merging PRs that
-   are obviously ready without asking (2026-10-31); decisions and gate relaxations still go to the user. Merged today
-   after the tag: #71 (B, audit fix), #72 (`PublishAdminUi` in `release.yml`), #74 (audit strict again), #65 (EUPL),
-   #66. Issues reviewed: #56, #47 closed; #34, #41, #48, #51, #52 commented (scheduled or parked); new stream-b
-   issue for P1b. **Running:** stream A agents in `../rag-a23` (P1a item 4 contracts, J3), `../rag-a24` (item 5 parser),
-   `../rag-a25` (item 6 connectors).
+0. **`v0.1.0` released 2026-10-31 (J1).** Working order (user): **code first, live testing last** (`plans/p1/README.md`
+   §1a; P1b briefs in `plans/p1b/`, O7 go-live host open for the user). The user authorised merging PRs that are
+   obviously ready without asking. **Merged today (stream A):** #77, #78 (item 4, J3), #82 + #91 (item 6 parts 1–2),
+   #84 (item 5), #88 (P1b item 2, L1), #94 (item 18 code part; "stack healthy" box open until images are rebuilt and
+   J8/J9 land). **Stream B:** #76 (J2) merged; #86 (events 5101/5102), #87 (scanner fix) reviewed OK; open issues to B:
+   #80 (J3 questions), #81 (seed templates), #90 (L1), #92 (upload manifest, Settings.Crawl keys), #95 (item 18
+   follow-ups). **J2/J3 sync point done** (`4b0f3a6`). **Running:** `../rag-a30` item 7 (processing), `../rag-a33`
+   item 6 part 3 (DB stores + DB tests), `../rag-a34` P1b item 15 (perf.yml, evaluation.yml, e2e). **Next:** item 8
+   (Sitevision preset, after 7), item 9 (engine, after 6 and 7), item 17 (evaluation-smoke job, after B's smoke set),
+   P1b items 4–8. Open: `robots.disallow` vs `robots.disallowed` (fetch reason vs preflight example) to unify.
 1. **Done 2026-10-31:** #57, #58, #60 merged (#60 with only `admin-ui` red from #61, the user's call); worktrees gone.
    Tick H5 in `progress-a.md` from #60's evidence in the #27 PR. `gh pr merge --admin` is refused by the classifier
    (a branch-protection bypass); a plain merge goes through.

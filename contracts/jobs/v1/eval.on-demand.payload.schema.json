@@ -29,6 +29,14 @@
         "hybrid"
       ]
     },
+    "candidateSettings": {
+      "description": "Unsaved Collections.RetrievalSettings (knowledge design §12.1, checked by the admin against V16): each variant runs with the current and with these settings, current vs candidate (processing design §14.5).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "maxProperties": 30
+    },
     "minBuild": {
       "type": [
         "string",
@@ -50,5 +58,5 @@
     "kind",
     "collectionId"
   ],
-  "description": "Payload of an eval job of kind on-demand (processing design §13.4-§13.6): the collection's evaluation set, once per variant, over its live sets. Dedup eval:{collectionId}."
+  "description": "Payload of an eval job of kind on-demand (processing design §13.4-§13.6, §14.5): the collection's evaluation set, once per variant, over its live sets; with candidateSettings once more per variant under those settings. Dedup eval:{collectionId}."
 }

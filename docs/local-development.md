@@ -210,14 +210,16 @@ docker build -t ume-rag/parser:latest src/parser
 for p in Api AdminApi Worker MigrationService; do dotnet publish src/Ume.Rag.$p -c Release -t:PublishContainer; done
 cp -r deploy ~/rag-deploy-test
 ~/rag-deploy-test/init-deployment.sh --backup-target local --allow-file-keys \
-  --oidc-authority https://<your identity provider> --gateway-url https://<a gateway> --api-host localhost --yes
+  --oidc-authority https://<keycloak host>/realms/ume --gateway-url https://<a gateway> --api-host localhost --yes
 echo 'UME_RAG_INGESTION_SLICE=' >> ~/rag-deploy-test/.env    # no rag-ingestion.slice on a developer machine
 docker compose --env-file ~/rag-deploy-test/.env up -d --wait
 ```
 
 Run the `chown` commands the script prints first, unless it ran as root. The .NET images are tagged
 `ume-rag/<service>:latest` (`ContainerImageTag` in `Directory.Build.props`), which is what the Compose files use by
-default. See [production-setup.md](production-setup.md) for what the script generates.
+default. See [production-setup.md](production-setup.md) for what the script generates, and
+[p1a-local-run.md](p1a-local-run.md) for the local P1a run (now on the dev Keycloak and FakeGateway, then the live
+block's shared Keycloak and gateway).
 
 ## Common problems
 

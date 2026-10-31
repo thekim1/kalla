@@ -4,3 +4,17 @@
 *.doc binary
 *.json text eol=lf
 *.csv text eol=lf
+*.docx binary
+*.docm binary
+*.pptx binary
+*.xlsx binary
+*.odt binary
+*.ods binary
+*.odp binary
+*.png binary
+*.jpg binary
+*.tiff binary
+*.zip binary
+*.msg binary
+*.rtf binary
+*.eml binary

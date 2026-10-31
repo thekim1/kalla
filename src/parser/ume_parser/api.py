@@ -1,11 +1,15 @@
-"""`POST /v1/convert` and `POST /v1/inspect` (parser design §7.1 to §7.5).
+"""`POST /v1/convert`, `POST /v1/inspect` and `POST /v1/ner` (parser design §6.2, §7.1 to §7.5, §7.8).
 
-The API process reads the multipart request (at most 60 MB and two parts: `file` and `options`), validates the
-options, sniffs the first bytes and writes the file into a job directory. It parses nothing itself: the slot opens
-the document. The response is `multipart/mixed`: `result.json`, then `docling.json.gz` when Docling ran and
-`outputs.docling_json` is set. Errors are `ErrorResponse` JSON with a fixed `detail` per code.
+The API process reads the request, validates the options, sniffs the file's first bytes (and an OLE file's stream
+names) and writes the file into a job directory. It parses nothing itself: a worker process opens the document.
 
-`/v1/inspect` is P1 (design §16); P0 has only its schema, and the route answers `501 not_implemented`.
+- `/v1/convert`: multipart (at most 60 MB, two parts: `file` and `options`) to a conversion slot; the answer is
+  `multipart/mixed`: `result.json`, then `docling.json.gz` when Docling ran and `outputs.docling_json` is set.
+- `/v1/inspect`: the same request shape, `options` optional, to `inspect-0` under the 10 s inspect deadline; the
+  answer is `InspectResult` JSON.
+- `/v1/ner`: a JSON `NerRequest` to `ner-0`, which up to `NER_QUEUE` requests may wait for; the answer is `NerResult`.
+
+Errors are `ErrorResponse` JSON with a fixed `detail` per code.
 """
 
 import hashlib
@@ -20,13 +24,13 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from starlette.background import BackgroundTask
 from starlette.datastructures import FormData, UploadFile
 from starlette.formparsers import MultiPartException
 from starlette.types import Message
 
-from ume_parser import limits
+from ume_parser import limits, sniff
 from ume_parser.errors import ParserError
 from ume_parser.models import (
     CONTRACT,
@@ -37,16 +41,37 @@ from ume_parser.models import (
     ConvertWarning,
     ErrorBody,
     ErrorResponse,
+    Format,
+    InspectRequest,
+    InspectResult,
+    InspectTimings,
+    NerRequest,
+    NerResult,
+    NerTimings,
     Timings,
 )
-from ume_parser.sniff import HEAD_BYTES, Sniffed, sniff
-from ume_parser.supervisor import ClientDisconnectedError
+from ume_parser.supervisor import CONVERT, INSPECT, NER, NOT_READY_RETRY_AFTER_S, ClientDisconnectedError, Supervisor
 
 log = logging.getLogger(__name__)
 
 OPTIONS_MAX_BYTES = 64 * 1024
+NER_MAX_BODY_BYTES = 1024 * 1024
 CHUNK = 1024 * 1024
 DOCLING_JSON = "docling.json.gz"  # written by the slot (convert.DOCLING_JSON); the API process imports no Docling
+# Codes a non-rangeable input cannot recover from with a smaller range (design §8.1: a DOCX that times out).
+_RANGE_RETRIES = {"timeout", "worker_crashed", "resource_limit"}
+_INSPECT_FIELDS = (
+    "format",
+    "media_type_sniffed",
+    "page_count",
+    "rangeable",
+    "encrypted",
+    "has_javascript",
+    "has_embedded_files",
+    "has_xfa",
+    "pages",
+    "refusal",
+)
 
 router = APIRouter()
 
@@ -72,8 +97,25 @@ def error_response(exc: ParserError, request_id: str | None, build: Build) -> JS
     return JSONResponse(body.model_dump(mode="json"), status_code=exc.spec.status, headers=headers)
 
 
+def _check_length(request: Request, limit: int) -> None:
+    length = request.headers.get("content-length", "")
+    if length.isdigit() and int(length) > limit:
+        raise ParserError("too_large")
+
+
+async def _read_body(request: Request, limit: int) -> bytes:
+    _check_length(request, limit)
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > limit:
+            raise ParserError("too_large")
+    return bytes(body)
+
+
 async def _read_form(request: Request) -> FormData:
     """The multipart body, refused as `too_large` once more than the limit has arrived (chunked bodies too)."""
+    _check_length(request, limits.MAX_BODY_BYTES)
     received = 0
 
     async def receive() -> Message:
@@ -93,12 +135,14 @@ async def _read_form(request: Request) -> FormData:
         raise ParserError("invalid_request") from None
 
 
-def _options(form: FormData) -> ConvertRequest:
+def _options[T: BaseModel](form: FormData, model: type[T], *, required: bool = True) -> T:
     raw = form.get("options")
+    if raw is None and not required:
+        return model()
     if not isinstance(raw, str):
         raise ParserError("invalid_request")
     try:
-        return ConvertRequest.model_validate_json(raw)
+        return model.model_validate_json(raw)
     except ValidationError:
         raise ParserError("invalid_request") from None
 
@@ -109,21 +153,18 @@ def _spool(upload: UploadFile, target: Path) -> tuple[bytes, str, int]:
     upload.file.seek(0)
     with target.open("wb") as out:
         while chunk := upload.file.read(CHUNK):
-            if len(head) < HEAD_BYTES:
-                head += chunk[: HEAD_BYTES - len(head)]
+            if len(head) < sniff.HEAD_BYTES:
+                head += chunk[: sniff.HEAD_BYTES - len(head)]
             digest.update(chunk)
             size += len(chunk)
             out.write(chunk)
     return head, digest.hexdigest(), size
 
 
-def _mismatch(options: ConvertRequest, sniffed: Sniffed) -> list[ConvertWarning]:
-    declared_ext = options.file_ext.removeprefix(".")
-    extensions = {"jpeg": {"jpeg", "jpg"}, "tiff": {"tiff", "tif"}}.get(sniffed.format, {sniffed.format})
-    mismatch = (options.media_type is not None and options.media_type != sniffed.media_type) or (
-        declared_ext not in extensions
-    )
-    return [ConvertWarning(code="media_type_mismatch", page=None)] if mismatch else []
+def _mismatch(fmt: Format, file_ext: str | None, media_type: str | None) -> list[ConvertWarning]:
+    if sniff.declared_mismatch(fmt, file_ext, media_type):
+        return [ConvertWarning(code="media_type_mismatch", page=None)]
+    return []
 
 
 def _multipart(result_json: bytes, docling: Path | None, boundary: str) -> Iterator[bytes]:
@@ -144,58 +185,79 @@ def _multipart(result_json: bytes, docling: Path | None, boundary: str) -> Itera
     yield f"--{boundary}--\r\n".encode()
 
 
+class _Upload:
+    """A request's file spooled into its own job directory and sniffed; `close` removes the directory."""
+
+    def __init__(self, jobs_dir: Path, request_id: str, upload: UploadFile) -> None:
+        self.dir = jobs_dir / f"{request_id}-{uuid.uuid4().hex[:8]}"
+        self.dir.mkdir(parents=True)
+        self.input = self.dir / "input"
+        try:
+            head, self.sha256, self.size = _spool(upload, self.input)
+            self.sniffed = sniff.sniff_file(self.input, head)
+        except BaseException:
+            self.close()
+            raise
+
+    def job(self, request_id: str) -> dict[str, Any]:
+        return {"request_id": request_id, "input": str(self.input), "dir": str(self.dir), "format": self.sniffed.format}
+
+    def close(self) -> None:
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+
+async def _run(
+    request: Request, lane: str, request_id: str, kind: str, job: dict[str, Any], deadline_s: float
+) -> tuple[dict[str, Any], int]:
+    """Runs a job on a free process of `lane`; returns the worker's payload and the milliseconds waited for one."""
+    supervisor: Supervisor = request.app.state.supervisor
+    queued = time.monotonic()
+    if lane == NER:
+        reserved = await supervisor.acquire(request_id, lane, deadline_s)
+    else:
+        reserved = supervisor.reserve(request_id, lane)
+    wait_ms = round((time.monotonic() - queued) * 1000)
+    try:
+        return await supervisor.run(reserved, kind, job, deadline_s, request.is_disconnected), wait_ms
+    finally:
+        supervisor.release(reserved, request_id)
+
+
 @router.post("/v1/convert")
 async def convert(request: Request) -> Response:
     started = time.monotonic()
     state = request.app.state
-    supervisor = state.supervisor
     request_id: str | None = None
-    job_dir: Path | None = None
+    upload: _Upload | None = None
     form: FormData | None = None
+    rangeable = True
     try:
-        supervisor.check_capacity()
-        length = request.headers.get("content-length", "")
-        if length.isdigit() and int(length) > limits.MAX_BODY_BYTES:
-            raise ParserError("too_large")
+        state.supervisor.check_capacity(CONVERT)
         form = await _read_form(request)
-        options = _options(form)
+        options = _options(form, ConvertRequest)
         request_id = options.request_id
-        upload = form.get("file")
-        if not isinstance(upload, UploadFile):
+        file = form.get("file")
+        if not isinstance(file, UploadFile):
             raise ParserError("invalid_request")
         if options.pages is not None and options.pages.count > limits.MAX_PAGES_PER_REQUEST:
             raise ParserError("too_many_pages", retry="smaller_range")
 
-        job_dir = Path(state.settings.jobs_dir) / f"{request_id}-{uuid.uuid4().hex[:8]}"
-        job_dir.mkdir(parents=True)
-        input_path = job_dir / "input"
-        head, sha256, size = _spool(upload, input_path)
+        upload = _Upload(Path(state.settings.jobs_dir), request_id, file)
         await form.close()
         form = None
-        sniffed = sniff(head)
-
-        queued = time.monotonic()
-        reserved = supervisor.reserve(request_id)
-        try:
-            job: dict[str, Any] = {
-                "input": str(input_path),
-                "dir": str(job_dir),
-                "options": options.model_dump(mode="json", by_alias=True),
-            }
-            wait_ms = round((time.monotonic() - queued) * 1000)
-            payload = await supervisor.convert(reserved, job, options.deadline_ms / 1000, request.is_disconnected)
-        finally:
-            supervisor.release(reserved, request_id)
+        rangeable = upload.sniffed.format in sniff.RANGEABLE
+        job = {**upload.job(request_id), "options": options.model_dump(mode="json", by_alias=True)}
+        payload, wait_ms = await _run(request, CONVERT, request_id, "convert", job, options.deadline_ms / 1000)
 
         result = ConvertResult(
             contract=CONTRACT,
             request_id=request_id,
             status=payload["status"],
             input=ConvertInput(
-                format=sniffed.format,
-                media_type_sniffed=sniffed.media_type,
-                sha256=sha256,
-                bytes=size,
+                format=payload["format"],
+                media_type_sniffed=payload["media_type_sniffed"],
+                sha256=upload.sha256,
+                bytes=upload.size,
                 page_count=payload["page_count"],
                 pages_requested=payload["pages_requested"],
                 pages_completed=payload["pages_completed"],
@@ -205,7 +267,7 @@ async def convert(request: Request) -> Response:
             blocks=payload["blocks"],
             tables=payload["tables"],
             pictures=payload["pictures"],
-            warnings=[*_mismatch(options, sniffed), *payload["warnings"]],
+            warnings=[*_mismatch(payload["format"], options.file_ext, options.media_type), *payload["warnings"]],
             timings=Timings(
                 total_ms=round((time.monotonic() - started) * 1000),
                 wait_ms=wait_ms,
@@ -216,27 +278,30 @@ async def convert(request: Request) -> Response:
             build=state.build,
             markdown=payload["markdown"],
         )
+        completed = result.input.pages_completed
         log.info(
-            "convert %s: %s/%s, %d bytes, pages %d-%d of %d, %d ms",
+            "convert %s: %s %s/%s, %d bytes, pages %s of %s, %d ms",
             request_id,
+            result.input.format,
             result.status,
             result.input.pipeline,
-            size,
-            result.input.pages_completed.from_ if result.input.pages_completed else 0,
-            result.input.pages_completed.to if result.input.pages_completed else 0,
-            result.input.page_count or 0,
+            upload.size,
+            f"{completed.from_}-{completed.to}" if completed else "-",
+            result.input.page_count if result.input.page_count is not None else "-",
             result.timings.total_ms,
         )
         boundary = secrets.token_hex(16)
-        docling = job_dir / DOCLING_JSON if payload["docling_json"] else None
+        docling = upload.dir / DOCLING_JSON if payload["docling_json"] else None
         response = StreamingResponse(
             _multipart(result.model_dump_json().encode("utf-8"), docling, boundary),
             media_type=f"multipart/mixed; boundary={boundary}",
-            background=BackgroundTask(shutil.rmtree, job_dir, ignore_errors=True),
+            background=BackgroundTask(upload.close),
         )
-        job_dir = None  # removed by the response's background task once it is sent
+        upload = None  # removed by the response's background task once it is sent
         return response
     except ParserError as exc:
+        if exc.code in _RANGE_RETRIES and not rangeable:
+            exc.retry = "none"
         log.info("convert %s: %s", request_id, exc.code)
         return error_response(exc, request_id, state.build)
     except ClientDisconnectedError:
@@ -245,10 +310,102 @@ async def convert(request: Request) -> Response:
     finally:
         if form is not None:
             await form.close()
-        if job_dir is not None:
-            shutil.rmtree(job_dir, ignore_errors=True)
+        if upload is not None:
+            upload.close()
 
 
 @router.post("/v1/inspect")
-async def inspect(request: Request) -> JSONResponse:
-    return error_response(ParserError("not_implemented"), None, request.app.state.build)
+async def inspect(request: Request) -> Response:
+    started = time.monotonic()
+    state = request.app.state
+    request_id: str | None = None
+    upload: _Upload | None = None
+    form: FormData | None = None
+    try:
+        state.supervisor.check_capacity(INSPECT)
+        form = await _read_form(request)
+        options = _options(form, InspectRequest, required=False)
+        request_id = options.request_id
+        file = form.get("file")
+        if not isinstance(file, UploadFile):
+            raise ParserError("invalid_request")
+        key = request_id or f"inspect-{uuid.uuid4().hex}"
+        upload = _Upload(Path(state.settings.jobs_dir), key, file)
+        await form.close()
+        form = None
+        payload, wait_ms = await _run(
+            request, INSPECT, key, "inspect", upload.job(key), limits.INSPECT_DEADLINE_MS / 1000
+        )
+        result = InspectResult(
+            contract=CONTRACT,
+            request_id=request_id,
+            **{k: payload[k] for k in _INSPECT_FIELDS},
+            warnings=_mismatch(payload["format"], options.file_ext, options.media_type),
+            timings=InspectTimings(
+                total_ms=round((time.monotonic() - started) * 1000), wait_ms=wait_ms, inspect_ms=payload["inspect_ms"]
+            ),
+            build=state.build,
+        )
+        log.info(
+            "inspect %s: %s, %s pages, refusal %s, %d ms",
+            key,
+            result.format,
+            result.page_count if result.page_count is not None else "-",
+            result.refusal or "-",
+            result.timings.total_ms,
+        )
+        return JSONResponse(result.model_dump(mode="json"))
+    except ParserError as exc:
+        log.info("inspect %s: %s", request_id, exc.code)
+        return error_response(exc, request_id, state.build)
+    except ClientDisconnectedError:
+        log.info("inspect %s: client disconnected, inspect process killed", request_id)
+        return Response(status_code=499)
+    finally:
+        if form is not None:
+            await form.close()
+        if upload is not None:
+            upload.close()
+
+
+@router.post("/v1/ner")
+async def ner(request: Request) -> Response:
+    started = time.monotonic()
+    state = request.app.state
+    request_id: str | None = None
+    try:
+        body = await _read_body(request, NER_MAX_BODY_BYTES)
+        try:
+            ner_request = NerRequest.model_validate_json(body)
+        except ValidationError:
+            raise ParserError("invalid_request") from None
+        request_id = ner_request.request_id
+        if state.static_info.ner is None or not state.supervisor.ner_ready:
+            raise ParserError("not_ready", retry_after_s=NOT_READY_RETRY_AFTER_S)
+        job = {"request_id": request_id, **ner_request.model_dump(mode="json")}
+        payload, wait_ms = await _run(request, NER, request_id, "ner", job, ner_request.deadline_ms / 1000)
+        result = NerResult(
+            contract=CONTRACT,
+            request_id=request_id,
+            entities=payload["entities"],
+            model=state.static_info.ner,
+            timings=NerTimings(
+                total_ms=round((time.monotonic() - started) * 1000), wait_ms=wait_ms, ner_ms=payload["ner_ms"]
+            ),
+            build=state.build,
+        )
+        # Counts only: entity text and spans are never logged (processing design §10).
+        log.info(
+            "ner %s: %d texts, %d entities, %d ms",
+            request_id,
+            len(ner_request.texts),
+            len(result.entities),
+            result.timings.total_ms,
+        )
+        return JSONResponse(result.model_dump(mode="json"))
+    except ParserError as exc:
+        log.info("ner %s: %s", request_id, exc.code)
+        return error_response(exc, request_id, state.build)
+    except ClientDisconnectedError:
+        log.info("ner %s: client disconnected, ner-0 killed", request_id)
+        return Response(status_code=499)

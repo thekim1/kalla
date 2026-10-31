@@ -253,6 +253,212 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.BlobTombstone", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTimeOffset>("DeletedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Key");
+
+                    b.HasIndex("DeletedAt");
+
+                    b.ToTable("BlobTombstones", "content");
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Chunk", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChunkSetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("EmbeddingProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("HeadingPath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("child");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("OverlapChars")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
+                    b.Property<int?>("Page")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PageEnd")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SearchText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("SourceModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.PrimitiveCollection<string[]>("Tags")
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<byte[]>("TextHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<int>("TokenCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CollectionId")
+                        .HasFilter("\"DeletedAt\" IS NULL");
+
+                    b.HasIndex("DocumentId");
+
+                    b.HasIndex("ParentId")
+                        .HasFilter("\"ParentId\" IS NOT NULL");
+
+                    b.HasIndex("Tags")
+                        .HasFilter("\"DeletedAt\" IS NULL");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Tags"), "gin");
+
+                    b.HasIndex("ChunkSetId", "Ordinal")
+                        .IsUnique();
+
+                    b.ToTable("Chunks", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_Chunks_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Chunks_Kind", "\"Kind\" IN ('parent', 'child')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.ChunkSet", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ChunkCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("ContentHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EmbeddingProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("InputHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTimeOffset?>("LiveAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PiiCounts")
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("PiiFlagged")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("PipelineVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SiteProfileVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StageKeys")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("SupersededAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupersededAt");
+
+                    b.HasIndex(new[] { "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash" }, "IX_ChunkSets_Key")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex(new[] { "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash" }, "IX_ChunkSets_Key"), false);
+
+                    b.HasIndex(new[] { "State", "CreatedAt" }, "IX_ChunkSets_Writing")
+                        .HasFilter("\"State\" = 'writing'");
+
+                    b.ToTable("ChunkSets", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_ChunkSets_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_ChunkSets_State", "\"State\" IN ('writing', 'live', 'held', 'superseded')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Client", b =>
                 {
                     b.Property<Guid>("Id")
@@ -333,6 +539,73 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Collection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EmbeddingProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("OwnerTeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RetrievalSettings")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("EmbeddingProfileId");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("Collections", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_Collections_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.ConfigOutboxEntry", b =>
                 {
                     b.Property<long>("Id")
@@ -395,6 +668,337 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.ConnectorCheckpoint", b =>
+                {
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Checkpoint")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SourceId", "Kind");
+
+                    b.ToTable("ConnectorCheckpoints", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_ConnectorCheckpoints_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_ConnectorCheckpoints_Kind", "\"Kind\" IN ('run', 'state')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.CrawlFrontierEntry", b =>
+                {
+                    b.Property<string>("Classification")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("UrlHash")
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("ContentHash")
+                        .HasColumnType("bytea");
+
+                    b.Property<short>("Depth")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("ETag")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<DateTimeOffset?>("LastFetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastModified")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<short?>("LastStatus")
+                        .HasColumnType("smallint");
+
+                    b.Property<bool>("Leaf")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("NextFetchAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RedirectTo")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("SitemapLastMod")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Classification", "SourceId", "UrlHash");
+
+                    b.HasIndex("Host", "NextFetchAt")
+                        .HasFilter("\"State\" = 'pending'");
+
+                    b.ToTable("CrawlFrontier", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_CrawlFrontier_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_CrawlFrontier_State", "\"State\" IN ('idle', 'pending', 'released')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.CrawlHost", b =>
+                {
+                    b.Property<string>("Host")
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<decimal>("BackoffFactor")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
+                    b.Property<DateTimeOffset?>("BlockedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CrawlDelaySeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("LatencyEwmaMs")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("MaxConnections")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateTimeOffset>("NextAllowedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("PausedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("RequestsPerSecond")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("RobotsBlobPath")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTimeOffset?>("RobotsFetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RobotsStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Host");
+
+                    b.ToTable("CrawlHosts", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_CrawlHosts_Kind", "\"Kind\" IN ('municipal', 'external')");
+                        });
+
+                    b
+                        .HasAnnotation("Npgsql:StorageParameter:autovacuum_vacuum_cost_limit", 2000)
+                        .HasAnnotation("Npgsql:StorageParameter:autovacuum_vacuum_scale_factor", 0.02)
+                        .HasAnnotation("Npgsql:StorageParameter:fillfactor", 50);
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.CrawlRun", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Admitted")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("Complete")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("LimitHit")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MaxDepth")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MaxPages")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PausedHosts")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Seeds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SeedsFailed")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TrapStats")
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("RunId");
+
+                    b.ToTable("CrawlRuns", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_CrawlRuns_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
+
+                    b
+                        .HasAnnotation("Npgsql:StorageParameter:autovacuum_vacuum_cost_limit", 2000)
+                        .HasAnnotation("Npgsql:StorageParameter:autovacuum_vacuum_scale_factor", 0.02)
+                        .HasAnnotation("Npgsql:StorageParameter:fillfactor", 50);
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.DataProtectionPolicy", b =>
+                {
+                    b.Property<string>("Classification")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.PrimitiveCollection<string[]>("AllowedHistoryModes")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)[]");
+
+                    b.Property<string>("BlobMasterKeyName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("ClientsWithoutHistoryOnly")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("DefaultHistoryMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("EncryptionRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("RetentionDefaultDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RetentionMaxDays")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ReviewSecondApprover")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Classification");
+
+                    b.ToTable("DataProtectionPolicies", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_DataProtectionPolicies_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_DataProtectionPolicies_Encryption", "\"Classification\" = 'public' OR \"EncryptionRequired\"");
+
+                            t.HasCheckConstraint("CK_DataProtectionPolicies_HistoryModes", "\"AllowedHistoryModes\" <@ ARRAY['none']::varchar(20)[] AND \"DefaultHistoryMode\" = ANY (\"AllowedHistoryModes\")");
+
+                            t.HasCheckConstraint("CK_DataProtectionPolicies_Retention", "\"RetentionDefaultDays\" BETWEEN 1 AND \"RetentionMaxDays\" AND \"RetentionMaxDays\" <= 90");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.DeletionProposal", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecidedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Decision")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("Exempt")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RunId", "DocumentId");
+
+                    b.HasIndex("SourceId");
+
+                    b.ToTable("DeletionProposals", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_DeletionProposals_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Department", b =>
                 {
                     b.Property<Guid>("Id")
@@ -426,6 +1030,259 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Departments", "config");
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Document", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CanonicalHint")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CanonicalIdentity")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<short>("ConsecutiveFailures")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
+                    b.Property<byte[]>("ContentHash")
+                        .HasColumnType("bytea");
+
+                    b.Property<short>("ContentHashVersion")
+                        .HasColumnType("smallint");
+
+                    b.Property<Guid?>("CurrentExecutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("HeldAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("HeldBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<byte[]>("IdentityHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("IdentityKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.PrimitiveCollection<string[]>("Keywords")
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Language")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("LastRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LiveChunkSetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MediaType")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("PageCount")
+                        .HasColumnType("integer");
+
+                    b.Property<byte[]>("ParseCacheKey")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ParseOutcome")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("ParseProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ParseStrategy")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset?>("PiiClearedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PiiClearedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("PiiClearedCounts")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("PipelineVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("PurgeAfter")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SiteProfileVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("SourceModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Url")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PurgeAfter")
+                        .HasFilter("\"DeletedAt\" IS NOT NULL");
+
+                    b.HasIndex("SourceId", "IdentityKind", "IdentityHash")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "SourceId" }, "IX_Documents_SourceId_Live")
+                        .HasFilter("\"DeletedAt\" IS NULL");
+
+                    b.ToTable("Documents", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_Documents_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Documents_IdentityKind", "\"IdentityKind\" IN ('url', 'upload')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.EmbeddingCacheEntry", b =>
+                {
+                    b.Property<string>("Classification")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("EmbeddingProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("TextHash")
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTimeOffset>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Classification", "EmbeddingProfileId", "TextHash");
+
+                    b.HasIndex("LastUsedAt");
+
+                    b.ToTable("EmbeddingCache", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_EmbeddingCache_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.EmbeddingProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CanaryText")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Dimensions")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Distance")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("GatewayModel")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MaxInputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MaxResidency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsDefault")
+                        .IsUnique()
+                        .HasFilter("\"IsDefault\"");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("EmbeddingProfiles", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_EmbeddingProfiles_Dimensions", "\"Dimensions\" BETWEEN 1 AND 4000");
+
+                            t.HasCheckConstraint("CK_EmbeddingProfiles_Distance", "\"Distance\" IN ('cosine')");
+
+                            t.HasCheckConstraint("CK_EmbeddingProfiles_MaxInputTokens", "\"MaxInputTokens\" > 0");
+
+                            t.HasCheckConstraint("CK_EmbeddingProfiles_MaxResidency", "\"MaxResidency\" IN ('OnPrem', 'Eu', 'External')");
+
+                            t.HasCheckConstraint("CK_EmbeddingProfiles_State", "\"State\" IN ('active', 'building', 'retired')");
+                        });
                 });
 
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Job", b =>
@@ -557,6 +1414,554 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("KeyLastUse", "config");
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.NodeManifestEntry", b =>
+                {
+                    b.Property<string>("NodeType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("TypeVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("FirstRegisteredAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ParamsSchema")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("NodeType", "TypeVersion");
+
+                    b.ToTable("NodeManifest", "content");
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.NodeOutput", b =>
+                {
+                    b.Property<byte[]>("CacheKey")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("BlobPath")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("InputHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<bool>("IsParseOutput")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NodeType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("NodeVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<byte[]>("OutputHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("ParamsHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("CacheKey");
+
+                    b.HasIndex("LastUsedAt");
+
+                    b.ToTable("NodeOutputs", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_NodeOutputs_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.ParseObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Domain")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<string>("Metrics")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("ObservedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("PathPattern")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
+                    b.Property<string>("Strategy")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Domain", "PathPattern", "DocumentType");
+
+                    b.ToTable("ParseObservations", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_ParseObservations_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.ParseProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("CleanupRules")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Match")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Strategy")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("State");
+
+                    b.ToTable("ParseProfiles", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_ParseProfiles_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_ParseProfiles_Origin", "\"Origin\" IN ('builtin', 'manual')");
+
+                            t.HasCheckConstraint("CK_ParseProfiles_State", "\"State\" IN ('active', 'disabled')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Pipeline", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("PublishedVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TemplateId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublishedVersionId");
+
+                    b.HasIndex("DepartmentId", "Name")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("DepartmentId", "Name"), false);
+
+                    b.ToTable("Pipelines", "config");
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.PipelineVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("EvaluationRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("PipelineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PipelineId", "Number")
+                        .IsUnique();
+
+                    b.ToTable("PipelineVersions", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_PipelineVersions_State", "\"State\" IN ('draft', 'published', 'superseded')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.PlatformSettings", b =>
+                {
+                    b.Property<short>("Id")
+                        .HasColumnType("smallint");
+
+                    b.Property<int?>("AuditRetentionDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BlobPurgeDelayDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Chat")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Crawl")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("DefaultSchedules")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal>("DegradedFailureRatio")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
+                    b.Property<int>("DeletionGuardMaxCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DeletionGuardMinCount")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("DeletionGuardPercent")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("EvaluationJudgeModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("EvaluationMaxQuestions")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EvaluationModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("NerMinScore")
+                        .HasPrecision(3, 2)
+                        .HasColumnType("numeric(3,2)");
+
+                    b.Property<string>("PiiFlagRules")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.PrimitiveCollection<string[]>("PiiOwnDomains")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<decimal>("PreviewMaxUsd")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)");
+
+                    b.Property<int>("QuarantineRetentionDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("RetentionLastRunAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RetentionLastRunError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Retrieval")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("ScheduleJitterMinutes")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<string[]>("TrustedProxies")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("WorkerConcurrency")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Settings", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_Settings_AuditRetention", "\"AuditRetentionDays\" IS NULL OR \"AuditRetentionDays\" BETWEEN 90 AND 3650");
+
+                            t.HasCheckConstraint("CK_Settings_BlobPurgeDelay", "\"BlobPurgeDelayDays\" BETWEEN 1 AND 3650");
+
+                            t.HasCheckConstraint("CK_Settings_DegradedFailureRatio", "\"DegradedFailureRatio\" BETWEEN 0 AND 1");
+
+                            t.HasCheckConstraint("CK_Settings_DeletionGuardCounts", "\"DeletionGuardMinCount\" >= 1 AND \"DeletionGuardMaxCount\" >= \"DeletionGuardMinCount\"");
+
+                            t.HasCheckConstraint("CK_Settings_DeletionGuardPercent", "\"DeletionGuardPercent\" BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("CK_Settings_EvaluationMaxQuestions", "\"EvaluationMaxQuestions\" BETWEEN 1 AND 10000");
+
+                            t.HasCheckConstraint("CK_Settings_NerMinScore", "\"NerMinScore\" BETWEEN 0 AND 1");
+
+                            t.HasCheckConstraint("CK_Settings_PreviewMaxUsd", "\"PreviewMaxUsd\" >= 0");
+
+                            t.HasCheckConstraint("CK_Settings_QuarantineRetention", "\"QuarantineRetentionDays\" BETWEEN 1 AND 3650");
+
+                            t.HasCheckConstraint("CK_Settings_ScheduleJitter", "\"ScheduleJitterMinutes\" BETWEEN 0 AND 1440");
+
+                            t.HasCheckConstraint("CK_Settings_Singleton", "\"Id\" = 1");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.QuarantinedFile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("DetectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTimeOffset>("PurgeAfter")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Sha256")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("Signature")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Url")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PurgeAfter");
+
+                    b.HasIndex("SourceId");
+
+                    b.ToTable("QuarantinedFiles", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_QuarantinedFiles_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_QuarantinedFiles_Origin", "\"Origin\" IN ('upload', 'crawl')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Run", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Added")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("CostUsd")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<int>("Deleted")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Phase")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("PipelineVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ProposedDeletions")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Report")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("ScheduledFor")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SettingsHashes")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Unchanged")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Updated")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceId", "StartedAt")
+                        .IsDescending(false, true);
+
+                    b.ToTable("Runs", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_Runs_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Runs_Kind", "\"Kind\" IN ('sync', 'retry-failed', 'reprocess')");
+
+                            t.HasCheckConstraint("CK_Runs_Phase", "\"Phase\" IS NULL OR \"Phase\" IN ('list', 'fetch', 'reconcile', 'done')");
+
+                            t.HasCheckConstraint("CK_Runs_State", "\"State\" IN ('running', 'succeeded', 'degraded', 'failed', 'awaiting-deletion-confirmation', 'cancelled')");
+
+                            t.HasCheckConstraint("CK_Runs_Trigger", "\"Trigger\" IN ('schedule', 'manual', 'upload', 'publish', 'rollback', 'site-profile', 'retry', 'config-change')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.RunItem", b =>
                 {
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -625,6 +2030,173 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.SiteProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AppliedVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<string>("PresetId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Classification", "Host")
+                        .IsUnique();
+
+                    b.ToTable("SiteProfiles", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_SiteProfiles_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.SiteProfileVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AppliedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Profile")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("SiteProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SiteProfileId", "Number")
+                        .IsUnique();
+
+                    b.ToTable("SiteProfileVersions", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_SiteProfileVersions_Origin", "\"Origin\" IN ('manual', 'preset')");
+
+                            t.HasCheckConstraint("CK_SiteProfileVersions_State", "\"State\" IN ('applied', 'superseded')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Source", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("ContainsThirdPartyText")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("PipelineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Schedule")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Settings")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CollectionId");
+
+                    b.HasIndex("PipelineId");
+
+                    b.ToTable("Sources", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_Sources_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Sources_State", "\"State\" IN ('active', 'paused')");
+
+                            t.HasCheckConstraint("CK_Sources_Type", "\"Type\" IN ('url-list', 'crawl', 'upload')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Team", b =>
                 {
                     b.Property<Guid>("Id")
@@ -658,6 +2230,79 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("Teams", "config");
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Upload", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Bytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("DeclaredMediaType")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("ReplacedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("Sha256")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("SniffedMediaType")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UploadedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceId");
+
+                    b.ToTable("Uploads", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_Uploads_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Uploads_State", "\"State\" IN ('received', 'clean', 'malware', 'refused', 'indexed', 'deleted')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.WorkerInstance", b =>
                 {
                     b.Property<Guid>("InstanceId")
@@ -683,6 +2328,23 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("WorkerInstances", "content");
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.WorkerNodeSupport", b =>
+                {
+                    b.Property<Guid>("InstanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NodeType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("TypeVersion")
+                        .HasColumnType("integer");
+
+                    b.HasKey("InstanceId", "NodeType", "TypeVersion");
+
+                    b.ToTable("WorkerNodeSupport", "content");
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.ApiKey", b =>
                 {
                     b.HasOne("Ume.Rag.Domain.Entities.Client", "Client")
@@ -699,12 +2361,86 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Navigation("Client");
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Chunk", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.ChunkSet", null)
+                        .WithMany()
+                        .HasForeignKey("ChunkSetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ume.Rag.Domain.Entities.Document", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.ChunkSet", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.Document", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Collection", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.EmbeddingProfile", null)
+                        .WithMany()
+                        .HasForeignKey("EmbeddingProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.KeyLastUse", b =>
                 {
                     b.HasOne("Ume.Rag.Domain.Entities.ApiKey", null)
                         .WithOne()
                         .HasForeignKey("Ume.Rag.Domain.Entities.KeyLastUse", "KeyId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Pipeline", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.PipelineVersion", null)
+                        .WithMany()
+                        .HasForeignKey("PublishedVersionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.PipelineVersion", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.Pipeline", null)
+                        .WithMany()
+                        .HasForeignKey("PipelineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.SiteProfileVersion", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.SiteProfile", null)
+                        .WithMany()
+                        .HasForeignKey("SiteProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Source", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.Collection", null)
+                        .WithMany()
+                        .HasForeignKey("CollectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Ume.Rag.Domain.Entities.Pipeline", null)
+                        .WithMany()
+                        .HasForeignKey("PipelineId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
@@ -717,6 +2453,15 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.WorkerNodeSupport", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.WorkerInstance", null)
+                        .WithMany()
+                        .HasForeignKey("InstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Client", b =>

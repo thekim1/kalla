@@ -1,0 +1,145 @@
+{
+  "contract": "parser/v1",
+  "request_id": "case-slides-odp",
+  "status": "success",
+  "input": {
+    "format": "odp",
+    "media_type_sniffed": "application/vnd.oasis.opendocument.presentation",
+    "sha256": "19a133d599456c0556b34cafa135e903f6f7aaa62a5916034ee0702f71f00171",
+    "bytes": 15452,
+    "page_count": 2,
+    "pages_requested": {
+      "from": 1,
+      "to": 2
+    },
+    "pages_completed": {
+      "from": 1,
+      "to": 2
+    },
+    "pipeline": "docling"
+  },
+  "pages": [
+    {
+      "page": 1,
+      "label": "1",
+      "width": null,
+      "height": null,
+      "signals": {
+        "chars": 33,
+        "furniture_chars": 0,
+        "garbled_score": 0.0,
+        "text_layer_chars": null,
+        "image_coverage": null,
+        "ocr_applied": "none",
+        "ocr_confidence": null,
+        "table_count": 0,
+        "table_area_ratio": 0.0,
+        "picture_area_ratio": 0.0,
+        "empty": false
+      }
+    },
+    {
+      "page": 2,
+      "label": "2",
+      "width": null,
+      "height": null,
+      "signals": {
+        "chars": 60,
+        "furniture_chars": 0,
+        "garbled_score": 0.0,
+        "text_layer_chars": null,
+        "image_coverage": null,
+        "ocr_applied": "none",
+        "ocr_confidence": null,
+        "table_count": 0,
+        "table_area_ratio": 0.0,
+        "picture_area_ratio": 0.0,
+        "empty": false
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": "b0",
+      "kind": "title",
+      "level": null,
+      "level_source": null,
+      "page": 1,
+      "page_end": 1,
+      "bbox": null,
+      "layer": "body",
+      "md": "# Bygglov i Umeå",
+      "ref": "#/texts/0",
+      "table": null
+    },
+    {
+      "id": "b1",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 1,
+      "page_end": 1,
+      "bbox": null,
+      "layer": "body",
+      "md": "Information för sökande",
+      "ref": "#/texts/1",
+      "table": null
+    },
+    {
+      "id": "b2",
+      "kind": "title",
+      "level": null,
+      "level_source": null,
+      "page": 2,
+      "page_end": 2,
+      "bbox": null,
+      "layer": "body",
+      "md": "# Så går ansökan till",
+      "ref": "#/texts/2",
+      "table": null
+    },
+    {
+      "id": "b3",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 2,
+      "page_end": 2,
+      "bbox": null,
+      "layer": "body",
+      "md": "Fyll i e-tjänsten",
+      "ref": "#/texts/3",
+      "table": null
+    },
+    {
+      "id": "b4",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 2,
+      "page_end": 2,
+      "bbox": null,
+      "layer": "body",
+      "md": "Bifoga ritningar",
+      "ref": "#/texts/4",
+      "table": null
+    },
+    {
+      "id": "b5",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 2,
+      "page_end": 2,
+      "bbox": null,
+      "layer": "body",
+      "md": "Betala avgiften",
+      "ref": "#/texts/5",
+      "table": null
+    }
+  ],
+  "tables": [],
+  "pictures": [],
+  "warnings": [],
+  "markdown": null
+}

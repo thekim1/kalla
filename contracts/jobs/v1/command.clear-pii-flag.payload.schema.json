@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.clear-pii-flag.payload.schema.json",
+  "title": "clear-pii-flag command payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "clear-pii-flag"
+    },
+    "documentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "decidedBy": {
+      "type": "string",
+      "description": "The deciding admin's oid, written to Documents.PiiClearedBy.",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "documentId",
+    "decidedBy"
+  ],
+  "description": "Payload of the command clear-pii-flag (processing design §9.5): records the clearance on the document (Documents.PiiClearedAt, PiiClearedBy, PiiClearedCounts = the held set's PiiCounts) and releases its held set without re-processing. Dedup pii-clear:{documentId}."
+}

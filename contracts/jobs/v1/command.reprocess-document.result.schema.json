@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.reprocess-document.result.schema.json",
+  "title": "reprocess-document command result",
+  "type": "object",
+  "properties": {
+    "runId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "executionId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "runId",
+    "executionId"
+  ],
+  "description": "Result of the command reprocess-document: the run its run item is in and the new execution."
+}

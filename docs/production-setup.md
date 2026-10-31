@@ -101,11 +101,11 @@ Images built elsewhere and pushed to a registry are set in `deploy/.env` by dige
 ### 2. `init-deployment.sh`
 
 ```bash
-./deploy/init-deployment.sh --oidc-authority https://login.microsoftonline.com/<tenant>/v2.0 \
+./deploy/init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume \
   --oidc-client-secret-file admin-client.secret \
   --api-host rag-api.intern.umea.se --admin-host rag-admin.intern.umea.se \
   --gateway-url https://llm.intern.umea.se --ca-file municipal-ca.pem \
-  --gateway-key-file OnPrem=onprem.key --gateway-key-file Eu=eu.key --gateway-key-file External=external.key \
+  --gateway-key-file api:Eu=api-eu.key --gateway-key-file admin:Eu=admin-eu.key --gateway-key-file worker:Eu=worker-eu.key \
   --org-sync-key-file org-sync.key --crawl-allow 10.20.0.0/16 \
   --backup-target /mnt/backup/ume-rag --host-memory 24 --freshclam-proxy proxy.intern.umea.se:8080 \
   --allow-file-keys --yes
@@ -114,7 +114,8 @@ Images built elsewhere and pushed to a registry are set in `deploy/.env` by dige
 Without `--yes` it prompts for what is missing. It generates, under `deploy/certs` and `deploy/secrets`: an internal CA
 and certificates for postgres, the worker, the parser and the two public listeners; the Data Protection certificate;
 the database passwords and connection strings; the key pepper; the api's download-grant, cache-key and
-conversation-id keys; the Open WebUI JWT secret; the blob master key `keys/rag-blob-internal`; the pgBackRest
+conversation-id keys; the Open WebUI JWT secret; the worker's crawl key pepper (`Security__CrawlKeyPepper`, the HMAC key
+of the host hash in security event 5101); the blob master key `keys/rag-blob-internal`; the pgBackRest
 passphrase and `pgbackrest/repo.conf`; and `deploy/.env` (non-secret settings only). Secrets and certificates reach the
 RAG services as read-only files, never as environment variables (Open WebUI is the exception: it reads its secrets only
 from its environment, so they come from `secrets/openwebui.env`).
@@ -126,7 +127,7 @@ added by hand. After the first run the files belong to the containers' users, so
 
 | Option | Default | Effect |
 |---|---|---|
-| `--oidc-authority URL` | prompted | the admin BFF's identity provider (HTTPS): `UME_RAG_OIDC_AUTHORITY` |
+| `--oidc-authority URL` | prompted | the admin BFF's identity provider (HTTPS): `UME_RAG_OIDC_AUTHORITY`. P1: the shared Keycloak's realm, `https://<keycloak host>/realms/ume`; P2: `https://login.microsoftonline.com/<tenant>/v2.0` |
 | `--oidc-client-id ID` | `ume-rag-admin` | the admin's own OIDC client (Keycloak in the pilot, Entra from P2), never the gateway's |
 | `--oidc-client-secret-file FILE` | – | the admin registration's secret: `secrets/admin/Oidc__ClientSecret` |
 | `--api-host HOST`, `--admin-host HOST` | prompted (the host name; the admin defaults to the api's) | public host names, in the listener certificates, `UME_RAG_API_PUBLIC_URL` and `UME_RAG_ADMIN_PUBLIC_HOST` |
@@ -134,7 +135,7 @@ added by hand. After the first run the files belong to the containers' users, so
 | `--bind ADDR` | `127.0.0.1` (`0.0.0.0` with `--proxy`) | address the listeners are published on |
 | `--gateway-url URL` | prompted | the LLM gateway (HTTPS): `UME_RAG_GATEWAY_URL` |
 | `--ca-file FILE` | – | appended to the trust store of api, admin and worker: the gateway's CA and your PKI chain |
-| `--gateway-key-file LEVEL=FILE` | – | a gateway key per level (`OnPrem`, `Eu`, `External`; repeat). api and admin get all, the worker only `OnPrem` and `Eu` |
+| `--gateway-key-file [SERVICE:]LEVEL=FILE` | – | a gateway key per level (`OnPrem`, `Eu`, `External`; repeat). Without `SERVICE` api and admin get it, and the worker unless it is `External`; `api:`, `admin:` or `worker:` gives that deployable its own key (the gateway team issues one per deployable), which wins over a shared one. `worker:External` is refused. P1a calls every model at `Eu` |
 | `--org-sync-key-file FILE` | – | the gateway Data API key for the admin's organisation sync (`catalog.read` only) |
 | `--key-provider file` | `file` | the only key provider until postponed decision K1 |
 | `--allow-file-keys` | – | required: accepts that the blob master key lives in a file on this host (pilot and test hosts) |
@@ -144,7 +145,14 @@ added by hand. After the first run the files belong to the containers' users, so
 | `--crawl-allow CIDR[,CIDR]` | – | private ranges the crawler may fetch (municipal hosts): `UME_RAG_CRAWL_ALLOW`, used by the worker and the firewall |
 | `--host-memory 16\|24` | 16 | the host profile; 24 adds `compose.host-24g.yaml` and the ClamAV confs |
 | `--freshclam-proxy HOST:PORT` | – | freshclam reaches `database.clamav.net` through this HTTP proxy |
-| `--openwebui-host HOST`, `--openwebui-oidc-client-id ID`, `--openwebui-oidc-provider-url URL`, `--openwebui-data-dir DIR` | –, –, –, `deploy/openwebui-data` | the optional Open WebUI stack (below) |
+| `--openwebui-host HOST` | – | the optional Open WebUI stack (below); the options below need it |
+| `--openwebui-oidc-client-id ID` | `open-webui` | Open WebUI's own OIDC client (P1: the shared Keycloak's `open-webui`; P2: Entra's `ume-rag-open-webui`) |
+| `--openwebui-oidc-client-secret-file FILE` | – | that client's secret: `OAUTH_CLIENT_SECRET` in `secrets/openwebui.env` |
+| `--openwebui-oidc-provider-url URL` | the OIDC authority + `/.well-known/openid-configuration` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` |
+| `--openwebui-oidc-provider-name NAME` | `Umeå kommun` | the label of Open WebUI's sign-in button |
+| `--openwebui-api-key-file FILE` | – | the `ume-rag-sk-` key of Open WebUI's client in rag-api (created in the admin API): `OPENAI_API_KEYS` in `secrets/openwebui.env` |
+| `--openwebui-rag-client-id ID` | – | that client's id: `UME_RAG_OPENWEBUI_CLIENT_ID`, rag-api's `OpenWebUi:ClientId` |
+| `--openwebui-data-dir DIR` | `deploy/openwebui-data` | Open WebUI's own store |
 | `--role all` | `all` | multi-host roles come with P2 |
 | `--proxy` | – | a reverse proxy terminates public TLS: two distinct host names, listeners on `0.0.0.0` |
 | `--upstream-host HOST` | the host name | the address the proxy uses to reach this host |
@@ -165,14 +173,15 @@ install.
 
 ### 3. Sign-in (OIDC)
 
-**The pilot signs in with Keycloak** (decided 2026-10-30, `01-general-idea.md` §10 "P1 pilot sign-in"): a Keycloak
-container in the pilot Compose holds the admins' and pilot users' accounts, with the `rag-*` roles and the
-`departmentCodes` attribute. The `keycloak` service and its production realm arrive with P1; until then point
-`--oidc-authority` at a Keycloak you run yourself, with a realm like `dev/keycloak/` without its test users.
+**The pilot signs in with the Keycloak shared with the gateway** (`01-general-idea.md` §10 "P1 pilot sign-in";
+identity design §11.2): the gateway repo runs it and its realm `ume`; RAG's realm additions (`deploy/keycloak/`) add the
+clients `ume-rag-admin`, `open-webui` and `ume-rag-api`, the `rag-*` roles and the `departmentCodes` attribute. Point
+`--oidc-authority` at `https://<keycloak host>/realms/ume`; Open WebUI's provider URL follows from it.
 
 Give the admin's client the two redirect URIs the script prints (code + PKCE):
-`https://<admin host>[:<admin port>]/signin-oidc` and `/signout-callback-oidc`. The client secrets go to
-`--oidc-client-secret-file` and Open WebUI's `OAUTH_CLIENT_SECRET`, never into the repository.
+`https://<admin host>[:<admin port>]/signin-oidc` and `/signout-callback-oidc`, and Open WebUI's client
+`https://<owui host>/oauth/oidc/callback`. The client secrets go to `--oidc-client-secret-file` and
+`--openwebui-oidc-client-secret-file`, never into the repository.
 
 **Entra ID from P2:** RAG's own registrations (`ume-rag-admin`, `ume-rag-open-webui`), their app roles and groups are
 Bicep in `infra/entra/`, applied by a GitHub workflow after IT's approval: see
@@ -290,15 +299,22 @@ default. It is started only once the DPIA (register G1) has decided register ite
 the chats are pruned; until then they stay unpruned. It needs the 24 GB host, or a VM of its own.
 
 ```bash
-./deploy/init-deployment.sh ... --openwebui-host chat.intern.umea.se --openwebui-oidc-client-id <id> \
-  --openwebui-oidc-provider-url https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration
-# fill in OPENAI_API_KEYS and OAUTH_CLIENT_SECRET in deploy/secrets/openwebui.env
+./deploy/init-deployment.sh ... --openwebui-host chat.intern.umea.se \
+  --openwebui-oidc-client-secret-file open-webui.secret \
+  --openwebui-api-key-file open-webui.key --openwebui-rag-client-id <client id>
 docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait
 sudo systemctl start rag-firewall.service   # allow the openwebui network its destinations now
 ```
 
+Open WebUI's client in rag-api, and so its key and id, exist only once the main stack runs: create the client in the
+admin API (kind `open-webui`, `AllowedIpRanges` the Open WebUI host), then re-run `init-deployment.sh` with the same
+options plus `--openwebui-api-key-file` and `--openwebui-rag-client-id`, and recreate `rag-api` and Open WebUI. The run
+book for a local P1a run is [p1a-local-run.md](p1a-local-run.md).
+
 It has one connection only, to `rag-api` (`OPENAI_API_KEYS` is the `ume-rag-sk-` key of its client, issued in the admin
-UI), signs in only through its own OIDC client (Keycloak in the pilot), and listens on plain HTTP on port 3000 of the listeners' bind
+UI; its JWT secret is generated once and shared with rag-api's `OpenWebUi__JwtSecret`), signs in only through its own
+OIDC client (`open-webui` on the shared Keycloak in the pilot; Entra's `ume-rag-open-webui` from P2 with
+`--openwebui-oidc-client-id` and `--openwebui-oidc-provider-url`), and listens on plain HTTP on port 3000 of the listeners' bind
 address (loopback unless `--proxy`), so the reverse proxy terminates TLS. Its settings come from the Compose file on
 every start; an admin's edit in Open WebUI lasts until the next restart. Its fixed input warning (`WEBUI_BANNERS`) still
 shows a close button: a closed banner returns on the next reload.
