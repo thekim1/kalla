@@ -546,6 +546,18 @@ engine design §9.1):
 - `edit-site-profile` carries `baseVersion` (`site_profile.version_conflict` on mismatch).
 - Only P1 kinds exist; the P2 rows above have no schema yet.
 
+As built in P1a item 10 and P1b item 8 (PR #115), P1b item 6 (PR #131), 2026-10-31 (engine design §9.1, §12):
+- `reprocess-document` re-runs the document from stored content through the stage caches in a `reprocess` run whose
+  id is the job id; `fromStage: fetch` is refused (`reprocess.fetch_unsupported`). There is no cache bypass yet.
+- `release-hold` clears deletion holds only; a PII-held set is released by `clear-pii-flag`, without re-processing.
+- `edit-site-profile` and `rollback-site-profile` take an optional `decidedBy` (absent = `system:worker`) and enqueue
+  a `sync` `reprocess` (`Trigger = site-profile`, dedup `sync:{sourceId}`) per source with live HTML on the host.
+- `confirm-deletion` sets the run back to `running` for the finalizer; `reject-deletion` sets `degraded` without a
+  stored reason.
+- The worker enqueues `publish-report` for `reprocess` runs with `Trigger = publish` or `rollback` only, whatever
+  state they finished in. The rollback is driven as for a publish: flip the version states and
+  `Pipelines.PublishedVersionId`, then enqueue a `reprocess` with `Trigger = rollback`.
+
 Assistant publish, restore and copy enqueue nothing: they are config changes only. Assistant test runs (§7.4) are not
 worker jobs either: like answer-level evaluation and the skill gate they run in `rag-admin` (`AssistantTestRunner`,
 §2.2), which needs `Ume.Rag.Answering` and the gateway keys of every level; the `EvaluationRuns` row is their durable

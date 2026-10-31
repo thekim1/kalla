@@ -339,7 +339,7 @@ settings hash covers the per-range plan (pipeline, OCR mode, table mode, scale p
 |---|---|---|
 | `result.json` | joined `result.json` of all ranges (§8.2) | input of chunking; **re-chunking never calls the parser** |
 | `docling/{from}-{to}.json.gz` | one `DoclingDocument` per Docling range (not merged) | lossless form for future chunkers or a P2 re-read; no re-parse after a chunker change |
-| `ranges/{from}-{to}.result.json` | per-range results, intermediate (30 days) | a failed range retries alone |
+| `ranges/{from}-{to}.{strategy}.result.json` | per-range results, intermediate (30 days) | a failed range retries alone; the strategy is in the name because a post-conversion check asks for the same pages with another strategy (as built in P1a item 9, PR #121, 2026-10-31) |
 
 Size: a `DoclingDocument` is several times the Markdown (bounding boxes per item); gzip brings it near the Markdown
 size. Acceptable at pilot scale; if not, drop it for `public` web PDFs first.

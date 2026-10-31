@@ -114,7 +114,7 @@ version bump, 6a §5.1); P1 tunes them once on the fixture corpus (§17). OCR is
    **P1** (weakness review §1): these sizes are fixed per strategy from configuration (`Worker:Parse:RangePages:<strategy>`)
    and only halved on failure (item 4). **P2**: after each range `msPerPage = EWMA(α 0.5)` of `timings.docling_ms / pages` per strategy, and
    `next = clamp(⌊0.5 × 110,000 / msPerPage⌋, 1, 20)` (half the 110 s request deadline).
-3. Ranges run sequentially in the document's `parse` job; completed ranges are written as `ranges/{from}-{to}`
+3. Ranges run sequentially in the document's `parse` job; completed ranges are written as `ranges/{from}-{to}.{strategy}`
    (6a §8) so a crash, slice yield (6a §9.5) or retry resumes at the next range.
 4. `status: partial` keeps `pages_completed` and requests the rest. `timeout`, `worker_crashed`, `resource_limit`
    halve the range; a **single page** that still fails is recorded as a missing page. Missing pages ≤ 10 % of the
@@ -144,11 +144,17 @@ patterns, furniture patterns) consumed by *Clean* and *Split by headings* throug
 | `protokoll` | title or first page matches `(?i)\b(protokoll\|sammanträdesprotokoll\|kallelse)\b` | each `§ N` item is a level-1 section; signature blocks (`Justerare`, `Justerandes signatur`, `Utdragsbestyrkande`) are furniture |
 
 - Built-in rules are seeded rows (`ParseProfiles.Origin = builtin`, §19), read-only, versioned with the stage.
-  **Admin-made rules** (`Origin = admin`, platform admins, generic schema-driven form in P1) take the same shape (domain,
-  path glob, media type, text pattern → overrides and hints); each save is a new rule version, audited. The matched
-  rule's id and version are part of the parse stage's settings (6a §3.3), so a rule change re-keys only the documents
-  it matches, which the next run or a `reprocess` brings up to date. Strategy-level matches run before the plan;
-  text-level matches run on the joined output.
+  **Admin-made rules** (`Origin = manual` (data-model §2.2), platform admins, generic schema-driven form in P1) take the
+  same shape (domain, path glob, media type, text pattern → overrides and hints); each save is a new rule version,
+  audited. The matched rule's id and version are part of the parse stage's settings (6a §3.3), so a rule change
+  re-keys only the documents it matches, which the next run or a `reprocess` brings up to date. Strategy-level matches
+  run before the plan; text-level matches run on the joined output.
+  As built in P1b item 8 part 2 (PR #133, 2026-10-31): admin rules are matched like the built-in ones, admin rules
+  first, on the parser route only, and cached per config version. A rule's version is a content hash of the rule
+  (rule ids `{profileId}@{revision}`). A rule with a text pattern is a candidate before the text is known, so it
+  re-keys every document in its scope, not only those it matches. Not built yet: the admin write command, a reconcile
+  trigger on a rule change, a parse-rule part in the chunk-set key (so a re-parse of unchanged content still ends
+  `unchanged` at the embed step), and rule candidates in the preview's parse key.
 - **Observations**: one `ParseObservations` row per non-preview parse: `Domain`, `PathPattern` (path with digits and
   the last segment replaced by `*`), `DocumentType`, `Strategy` (share of pages per strategy), `Score` (§8),
   `Metrics` (quality facts). Retention 180 days (platform plan §8). P1 shows them on the document page; from P2 they
@@ -544,10 +550,10 @@ output's `OutputHash`, not the *Clean* output's; re-key compares chunk outputs, 
 |---|---|
 | When | after a collection's first sync runs finish; weekly top-up check (scheduler, 6a §9.6); on demand from the admin |
 | Size (answered 20) | target `N = min(100, 3 × D, eligible chunks)` for `D` live documents; over-generate 1.6 × N to survive filtering |
-| Eligible chunks | live sets of the collection; body ≥ 50 tokens; not from PII-flagged sets (keeps personal data out of stored questions); not `quality.largeTable` rows beyond the first group |
-| Stratification | by document: round-robin over documents in seeded random order, ≤ `⌈N/D⌉ + 1` per document; by document type: proportional to chunk share, each type with ≥ 5 % of chunks gets ≥ 2; by kind: table row groups and lists at least their share, min(5, available) |
-| Seed | `SHA-256(setId ‖ round)`; the sample is reproducible |
-| Model | `Settings.EvaluationModel` (on-prem chat model in the gateway catalogue; must be a `GatewayModels` row servable `OnPrem`, admin design §4.10) with ceiling `OnPrem`; `x-ume-step: eval-generate`; temperature 0.3; JSON output |
+| Eligible chunks | live sets of the collection; body ≥ 50 tokens; not from PII-flagged sets (keeps personal data out of stored questions); not `quality.largeTable` rows beyond the first group (not applied as built in P1b item 7, PR #130, 2026-10-31: the fact is not stored per chunk) |
+| Stratification | by document: round-robin over documents in seeded random order, ≤ `⌈N/D⌉ + 1` per document; by document type: proportional to chunk share, each type with ≥ 5 % of chunks gets ≥ 2; by kind: table row groups and lists at least their share, min(5, available) (kind not applied as built, PR #130: not stored per chunk) |
+| Seed | `SHA-256(setId ‖ round)`; the sample is reproducible; the round is the set's highest `Origin.round` (no column; PR #130) |
+| Model | `Settings.EvaluationModel` (on-prem chat model in the gateway catalogue; must be a `GatewayModels` row servable `OnPrem`, admin design §4.10) with ceiling `OnPrem`; `x-ume-step: eval-generate`; temperature 0.3; JSON output. As built in P1b item 7 (PR #130, 2026-10-31): unset refuses with `eval.model_unset` (no implicit default); the job refuses unless `/v1/models` at ceiling `OnPrem` lists the model, read through its own client (`gateway-eval-models`) with no answer check, because `ResidencyCeilingHandler` drops a model list without `x-ume-residency`; it still sends `x-ume-max-residency: OnPrem` and the `OnPrem` key |
 
 Prompt outline (Swedish, versioned as `PromptVersion`):
 
@@ -562,9 +568,11 @@ inga personuppgifter. Svara med JSON: {"fraga": "...", "svar": "...", "typ": "fa
 Questions are Swedish whatever the document language (BGE-M3 is cross-lingual). **Filtering** (cheap first):
 
 1. Rules: Swedish (§2 detector), 6–25 words, ends with `?`, no deictic phrases (`texten`, `dokumentet`, `ovan`,
-   `nedan`, `detta avsnitt`), no pattern hit from §9.1.
-2. **Answer leakage**: the normalised expected answer is not a substring of the question; share of the question's
-   content words found verbatim in the chunk ≤ 0.8.
+   `nedan`, `detta avsnitt`), no pattern hit from §9.1. As built in P1b item 7 (PR #130, 2026-10-31): a question is
+   refused as not Swedish if it is detected as English, or if it has ≥ 8 words and is not detected as Swedish (the
+   detector needs 8 words).
+2. **Answer leakage**: the normalised expected answer is not a substring of the question (as built, PR #130: matched
+   on whole words); share of the question's content words found verbatim in the chunk ≤ 0.8.
 3. Judge (`Settings.EvaluationJudgeModel`, default the same model, temperature 0, `x-ume-step: eval-judge`): rates
    *answerable from the text*, *understandable without the text*, *specific to this content* on 1–5; keep only all ≥ 4.
 4. Near-duplicates: BGE-M3 cosine ≥ 0.92 between kept questions → keep one.
@@ -590,9 +598,12 @@ charged to the collection's owner team; shown before generation.
 
 - A question becomes **stale** when an expected document is deleted, or its content hash differs from
   `SourceContentHash` and a judge call on that document's best-matching chunk no longer rates it answerable. Only
-  changed documents are re-checked.
+  changed documents are re-checked. As built in P1b item 7 (PR #130, 2026-10-31): the best-matching chunk is picked
+  lexically; a re-checked question that stays answerable takes the new `SourceContentHash`.
 - Weekly top-up: retire stale questions (`RetiredAt`), regenerate to the target size with a new round seed; also when
-  `D` grew by ≥ 25 % since the last round. Retired questions keep their results for history.
+  `D` grew by ≥ 25 % since the last round. Retired questions keep their results for history. As built (PR #130): a
+  stale question gets `State = stale` and `RetiredAt`; `top-up-set` runs on demand only, since the weekly schedule and
+  the ≥ 25 % trigger are not built (scheduler work).
 - An evaluation run uses the set as it was when the run started; a top-up never runs during a run of the collection.
 
 ### 13.4 Human and other layers
@@ -609,8 +620,11 @@ charged to the collection's owner team; shown before generation.
   register item B1. Unanswerable questions do not count in recall@10 and MRR@10; for them the run records the coverage
   status, best distance and best keyword score (§13.6).
 - **P1a three-way run** (weakness review §2): an `on-demand` run of the gold set in three variants: vector-only (mode
-  `vector`), hybrid, and hybrid without the decompounder on the query side. The result is recorded; hybrid and the
-  decompounder stay only if they beat vector-only.
+  `vector`), hybrid, and hybrid without the decompounder on both sides (weakness review §2: a `reindex-fts` scratch
+  copy of the collection's `SearchText` without compound parts, and queries without them). The result is recorded;
+  hybrid and the decompounder stay only if they beat vector-only. As built in P1a item 10 (PR #128, 2026-10-31): the
+  scratch copy is computed inside statement K from `Chunks.Text`, because the worker has no `TEMPORARY` privilege and
+  this needs no migration; an `on-demand` run covers the whole active set, `human` layer first.
 - **P2**: questions rewritten from flagged chat feedback (plan §7: only the rewritten, personal-data-free question is
   kept, with the collection's classification); skill test questions run by the skill gate in `rag-admin` as the
   tools design specifies.
@@ -629,7 +643,9 @@ charged to the collection's owner team; shown before generation.
   chunk-set scope), following the API's exact/HNSW rule (≤ 10,000 chunks exact, knowledge design §6.4).
 - Query embedding through the same embedding client and normalisation as the API, cached in `EmbeddingCache` by the
   question's hash.
-- Runs in the worker on the ingestion pool (R1: the data plane never pays for evaluation).
+- Runs in the worker on the ingestion pool (R1: the data plane never pays for evaluation). As built in P1a item 10
+  (PR #128, 2026-10-31): the worker's `ragdb` data source gets `UseVector()` for this (one shared pool within the
+  role's cap of 12) until pgvector is mapped in `AddRagDatabase` (PR #118, open); statements time out at 30 s.
 - Contract test: evaluator and `POST /v1/retrieve` return the same ids in the same order.
 
 ### 13.6 Metrics
@@ -645,7 +661,10 @@ Coverage (weakness review §2): per question the run also records the coverage s
 score (knowledge design §7). Over `human` questions the report shows false not-found (answerable questions with `low`)
 and not-found on unanswerable questions, and proposes `coverageMaxDistance` and `coverageMinKeywordScore` as the
 values that separate answerable from unanswerable questions best. These are retrieval-level numbers; the go-live gate
-(`../README.md`) is graded by people on the answers.
+(`../README.md`) is graded by people on the answers. As built in P1a item 10 (PR #128, 2026-10-31): recall@10 and MRR
+count answerable questions only (`EvaluationRuns.QuestionCount`, `EvaluationResults.Hit` null for unanswerable ones);
+the threshold proposal and the `candidate` flag are kept in `Jobs.Result` only, since `EvaluationRuns` has no columns
+for them, so an `on-demand` run is never a comparison baseline.
 
 ## 14. Evaluation runs (advisory)
 
@@ -710,7 +729,8 @@ generation and measuring.
 
 - **Retrieval**: nightly per published collection: full set, kind `nightly`; feeds the trend on the admin
   evaluation page and `rag.evaluation.recall_at_10` (repo-and-deployment §9). Alert (admin overview) when recall@10
-  falls 5 points below the 4-week median. Onyx found an ingestion bug only through poor evaluation scores
+  falls 5 points below the 4-week median. As built in P1a item 10 + P1b item 7 (PR #128, 2026-10-31): enqueued at
+  03:30 Europe/Stockholm under advisory lock `0x5241_4731_0005`; the median is over 28 days. Onyx found an ingestion bug only through poor evaluation scores
   (`../../platforms/onyx.md:322`); this makes that routine.
 - **Answers** (P2, weakness review §1): nightly per assistant, the evaluation sets of its collections are answered through
   `Ume.Rag.Answering` with the assistant's settings, and an on-prem judge (`Settings.EvaluationJudgeModel`, ceiling
