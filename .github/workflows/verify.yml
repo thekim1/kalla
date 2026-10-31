@@ -118,8 +118,9 @@ jobs:
   deploy-checks:
     # Production Compose (P0 checklist #14, repo-and-deployment §8.2): every supported combination of the files renders
     # with `docker compose config` against placeholder settings, the image defaults stay the local :latest dev images
-    # (a release bundle pins the pushed ones by digest, §7.2), the host firewall's subnets are the Compose networks', the
-    # deployment scripts pass shellcheck and the host units pass systemd-analyze verify (deploy/host/).
+    # (a release bundle pins the pushed ones by digest, §7.2, checked here with placeholder digests), the host firewall's
+    # subnets are the Compose networks', the deployment scripts pass shellcheck and the host units pass systemd-analyze
+    # verify (deploy/host/).
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
@@ -159,8 +160,34 @@ jobs:
             docker compose -f deploy/compose.openwebui.yaml config --format json; } \
             | jq -r '.networks | to_entries[] | "\(.key) \(.value.ipam.config[0].subnet)"' | sort > "$RUNNER_TEMP/subnets"
           bash deploy/host/docker-user-firewall.sh --print-subnets | sort | diff -u "$RUNNER_TEMP/subnets" -
+      - name: Release bundle pins every image
+        # deploy/build-release-bundle.sh (§7.2) with placeholder digests: every image of the bundled Compose files is
+        # pinned by digest and they render; an unpinned image is refused. release.yml runs it with the pushed digests.
+        env:
+          UME_RAG_CERTS_DIR: /certs
+          UME_RAG_SECRETS_DIR: /secrets
+          UME_RAG_OIDC_AUTHORITY: https://idp.example.se
+          UME_RAG_GATEWAY_URL: https://llm.example.se
+        run: |
+          digest="sha256:$(printf '0%.0s' $(seq 64))"
+          for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV POSTGRES; do
+            export "${v}_IMAGE=ghcr.io/example/ume-rag/${v,,}:0.0.0@$digest"
+          done
+          if out="$(PARSER_IMAGE=ume-rag/parser:latest bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/unpinned" 2>&1)"; then
+            echo "an unpinned image was accepted"; exit 1
+          fi
+          echo "$out"
+          grep -q 'PARSER_IMAGE=ume-rag/parser:latest is not pinned' <<< "$out"
+          bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/bundle"
+          tar -xzf "$RUNNER_TEMP/bundle/ume-rag-0.0.0.tar.gz" -C "$RUNNER_TEMP/bundle"
+          b="$RUNNER_TEMP/bundle/ume-rag-0.0.0/deploy"
+          # The bundle's defaults, not these variables, must carry the pins.
+          for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV POSTGRES; do unset "${v}_IMAGE"; done
+          images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" --profile backup config --images)"
+          echo "$images"
+          if echo "$images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned images in the bundle"; exit 1; fi
       - name: Deployment scripts pass shellcheck
-        run: shellcheck deploy/*.sh deploy/postgres/*.sh deploy/host/*.sh
+        run: shellcheck deploy/*.sh deploy/postgres/*.sh deploy/host/*.sh deploy/tests/*.sh
       - name: Host units pass systemd-analyze verify
         run: |
           units="$RUNNER_TEMP/units"

@@ -40,7 +40,7 @@ Refs: [repo-and-deployment §4, §5.5](../platform/repo-and-deployment.md)
 ## 4. CI beyond Stage 0 (#3)
 Refs: [repo-and-deployment §8](../platform/repo-and-deployment.md)
 - [x] `verify.yml` jobs `ui` (named `admin-ui`, #49), `deploy-checks` (#31), `images` (#5); parser jobs in `parser.yml` (#50)
-- [ ] to-verify #91 (Syft SBOM) recorded
+- [x] to-verify #91 (Syft SBOM) recorded (partly confirmed: Syft misses source-built pgvector and ClamAV)
 - [ ] **Done:** green PR with all jobs
 
 ## 5. Compose, backups, restore (#14)
@@ -90,7 +90,7 @@ Refs: [platform/plan.md §10](../platform/plan.md), [repo-and-deployment §6.2, 
 
 ## 11. Release (#15, integration sync point only)
 Refs: [repo-and-deployment §7, §8](../platform/repo-and-deployment.md)
-- [ ] `release.yml`, `deploy/build-release-bundle.sh`
+- [x] `release.yml`, `deploy/build-release-bundle.sh`, `deploy/tests/release-smoke.sh` (smoke test green locally on a dry-run bundle)
 - [ ] Tag `v0.1.0`: digest-pinned bundle and SBOM; smoke test green
 
 ## 12. Test-host deploy (#16, with the user)
