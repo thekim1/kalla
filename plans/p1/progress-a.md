@@ -43,9 +43,10 @@ Refs: [parser §3, §6–§10, §15, §16](../parser/design.md)
 
 ## 4. Sitevision preset and the umea.se profile (#8)
 Refs: [connectors §5.6](../ingestion-worker/design-connectors.md), [processing §17](../ingestion-worker/design-processing.md), [simplification pass §13](../simplification-pass.md)
-- [ ] Preset in code; umea.se manual profile JSON, hand-checked
-- [ ] ≈ 20 saved umea.se pages in `tests/fixtures/umea/`
-- [ ] **Done:** acceptance page extracts exactly (main text, breadcrumb, date 2026-01-15); #31, #138, #158 recorded
+- [x] Preset in code; umea.se manual profile JSON, hand-checked (PR: a/8-sitevision)
+- [x] ≈ 20 saved umea.se pages in `tests/fixtures/umea/` (PR: a/8-sitevision: 20 HTML + 1 PDF)
+- [x] **Done:** acceptance page extracts exactly (main text, breadcrumb, date 2026-01-15); #31, #138, #158 recorded
+  (PR: a/8-sitevision; open parts: SmartReader fallback (#31), other Sitevision sites (#158, live block))
 
 ## 5. Connectors (#6)
 Refs: [connectors §3–§7, §9, §11–§13, §18](../ingestion-worker/design-connectors.md)

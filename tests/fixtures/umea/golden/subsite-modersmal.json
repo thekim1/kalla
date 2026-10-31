@@ -1,0 +1,606 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/sida/utforareochleverantorer/forskolaskolaochutbildning/modersmalsundervisning.4.61751ee117c2dfdecc11b8a.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Modersmålsundervisning",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Modersmålsundervisning",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Elever som har en vårdnadshavare med annat modersmål än svenska kan få modersmålsundervisning som ett eget ämne. Rätten till modersmålsundervisning skiljer sig åt beroende på om det handlar om ett nationellt minoritetsspråk eller ett annat modersmål. Modersmålsundervisningen bidrar till att bevara och utveckla elevers flerspråkighet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Modersmålsundervisning erbjuds elever som går i förskoleklass till gymnasiet i kommunala skolor och i fristående skolor som har tecknat ett avtal om modersmålsundervisning med Umeå kommun. Undervisning bedrivs av Kompetens­centrum för flerspråkighet (KCF) antingen som när- eller fjärrundervisning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För fristående skolor som har tecknat ett avtal om modersmålsundervisning med Umeå kommun görs beställningar enligt fastställda rutiner. Vårdnadshavare som önskar modersmålsundervisning vänder sig till elevens skola.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Rutin modersmålsundervisning grundskolan",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Beställning av modersmålsundervisning läsåret 2026/2027",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Beställningsperioden för läsåret 2026/2027 är 15 februari – 14 maj. Skolan mejlar en lösenordsskyddad samlad beställning till KCF, sheila.pjevic@umea.se, över de elever som idag inte läser modersmålsundervisning men som önskar modersmålsundervisning kommande läsår. Använd beställningsformulär nedan. Beställning behöver inte göras för de elever som har modersmålsundervisning idag. Dessa elever behåller sin plats.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Skolan mejlar senast 31 augusti en lösenordsskyddad samlad beställning till KCF, sheila.pjevic@umea.se, för nya elever på skolan som önskar modersmålsundervisning kommande läsår. Använd beställningsformulär nedan.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Beställningar som kommer in efter 31 augusti behandlas som sena ansökningar. Dessa ansökningar behandlas i mån av tid och om det finns plats i befintlig undervisningsgrupp på skolan erbjuds eleven en plats med start till vårterminen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Beställningsformulär grundskolan läsåret 26/27",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För fristående skolor som har tecknat ett avtal om modersmålsundervisning med Umeå kommun görs beställningar enligt fastställda rutiner. Vårdnadshavare som önskar modersmålsundervisning vänder sig till elevens skola.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Rutin modersmålsundervsining gymnasiet",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Beställning av modersmålsundervisning läsåret 2026/2027",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Beställningsperioden för läsåret 2026/2027 är 1 mars - 31 maj. Skolan mejlar en lösenordsskyddad samlad beställning till KCF, jila.sanaie@umea.se, för de elever som nu går i åk1 och åk2, och som önskar modersmålsundervisning kommande läsår. Använd beställningsformulär nedan.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Skolan mejlar en lösenordsskyddad samlad beställning för nya elever på skolan till KCF, jila.sanaie@umea.se, senast 10 september. Använd beställningsformulär nedan.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Om elev börjar på skolan efter 10 september och modersmålsundervisning önskas, ta kontakt med KCF, jila.sanaie@umea.se, men dock senast 30 september. Plats kan inte garanteras.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Elever som nu går årskurs 9 och som önskar läsa Modersmål 1 på gymnasiet ansöker via Gymnasieantagningen i samband med att gymnasievalet görs. Det gäller både kommunala och fristående skolor.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Beställning av modersmålsundervisning gymnasiet 26/27",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Grundskolan",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Umeå kommun erbjuder modersmålsundervisning från och med det år eleven börjar i förskoleklass. Ansökan görs av vårdnadshavare och rektor beviljar utifrån skollagens krav.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En elev som har en vårdnadshavare med ett annat modersmål än svenska ska enligt skollagen (kap 10, 7§) erbjudas modersmålsundervisning i detta språk om",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "eleven använder det angivna språket dagligen i hemmet",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "eleven har grundläggande kunskaper i det angivna språket.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Kartläggning av en elevs grundläggande kunskaper i modersmålet kommer att göras av modersmålsläraren under de första modersmålslektionerna. Kartläggningen genomförs muntligt, eleven behöver inte kunna läsa eller skriva på modersmålet. Efter kartläggningen kommer Kompetenscentrum för flerspråkighet att kontakta rektorn till elever som ej har grundläggande kunskaper i modersmålet. Rektor tar du beslut om fortsatt modersmålsundervisning beviljas eller avslås.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För att modersmålsundervisning ska kunna erbjudas krävs också att minst fem elever önskar och har rätt till undervisning i språket och att lämplig lärare finns att tillgå.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Adoptivbarn har rätt att läsa modersmål om än det inte är det dagliga umgängesspråket. Kravet på grund­läggande kunskaper gäller.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För elever som tillhör någon av de fem nationella minoritetsspråken gäller inte kravet på grundläggande kunskaper. Det krävs inte heller fem elever för att undervisningen ska starta. Nationellt minoritetsspråk kan läsas som ett första- eller andraspråk. Det finns separata kursplaner och kunskapskrav som ska användas. För samiska ska den kursplan som finns för Sameskolan användas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Elev från annan kommun kan delta i modersmålsundervisningen i Umeå kommun under förutsättning att hemkommunen betalar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Gymnasieskolan",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Elever som läser gymnasiet enligt GY25 har rätt att ansöka om undervisning ämnet modersmål. Ämnet modersmål är uppdelat i tre nivåer på vardera 100p.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Eleven ansöker om modersmålsundervisning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Rektor godkänner en elevs ansökan om modersmålsundervisning utom nationella minoritetsspråk utifrån de krav som anges i skollagen;",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "en eller båda vårdnadshavare har annat språk än svenska som modersmål",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "om språket utgör dagligt umgängesspråk för eleven",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "eleven har goda kunskaper i språket.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Elever som inte har ett betyg i ämnet modersmål sedan tidigare kommer modersmålsläraren att träffa inför det att kursen startar för att bedöma om eleven har goda kunskaper i modersmålet, och därmed är berättigad till modersmålsundervisning. Om eleven inte uppfyller kraven för goda kunskaper kommer rektor kontaktas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Rektor godkänner en elevs ansökan om modersmålsundervisning i ett nationellt minoritetsspråk. Undervisning i minoritetsspråket kan läsas som andraspråkare eller förstaspråkare.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Andraspråk nybörjare: Grundskolebetyg i minoritetsspråket som andraspråkare saknas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Andraspråk fortsättning: Elev har grundskolebetyg i minoritetsspråket som andraspråkare.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Förstaspråkare: Eleven har goda kunskaper i språket.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En elev som är adopterad och har ett annat modersmål än svenska har rätt till modersmålsundervisning även om språket inte talas dagligen i hemmet. Eleven behöver dock ha goda kunskaper i det angivna språket för att ha rätt att läsa modersmålet på gymnasienivå.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En elev kan ha flera modersmål, men har rätt till undervisning i ett av dessa.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Modersmålsundervisningen startar om det finns en lämplig lärare och fem elever som beviljats undervisning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För elever som ansöker om modersmålsundervisning i något av de fem nationella minoritetsspråken startar undervisningen oavsett om det finns fem elever eller inte.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Elever som läser enligt GY11 har rätt att ansöka till kurser i ämnet modersmål. Kurser som erbjuds är modersmål 1, modersmål 2 och aktiv tvåspråkighet. Samtliga kurser omfattar vardera 100 poäng.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Eleven ansöker om modersmålsundervisning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Rektor godkänner en elevs ansökan utifrån de krav som anges i skollagen;",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "en eller båda vårdnadshavare har annat språk än svenska som modersmål (gäller ej nationellt minoritetsspråk)",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "om språket utgör dagligt umgängesspråk för eleven (gäller ej nationellt minoritetsspråk)",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "eleven har goda kunskaper i språket.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Elever som inte har ett betyg i ämnet modersmål sedan tidigare kommer modersmålsläraren att träffa inför det att kursen startar för att bedöma om eleven har goda kunskaper i modersmålet, och därmed är berättigad till modersmålsundervisning. Om eleven inte uppfyller kraven för goda kunskaper kommer rektor kontaktas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En elev som är adopterad och har ett annat modersmål än svenska har rätt till modersmålsundervisning även om språket inte talas dagligen i hemmet. Eleven behöver dock ha goda kunskaper i det angivna språket för att ha rätt att läsa modersmålet på gymnasienivå.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En elev kan ha flera modersmål, men har rätt till undervisning i ett av dessa.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Modersmålsundervisningen startar om det finns en lämplig lärare och fem elever som beviljats undervisning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För elever som ansöker om modersmålsundervisning i något av de fem nationella minoritetsspråken startar undervisningen oavsett om det finns fem elever eller inte. Däremot gäller kravet på goda kunskaper i språket.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Grundskolan",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Modersmålsundervisning sker efter eleven slutat sin ordinarie undervisning eller under elevens val-tid.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Modersmålsundervisning bedrivs i grupp motsvarande 60 minuter per vecka. För elever som läser ett nationellt minoritetsspråk erbjuds 120 minuter per vecka.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Då undervisningen erbjuds i grupp kan det innebära att eleven från årskurs 4 får sin undervisning på annan skola än den skola som eleven tillhör. I dessa fall erbjuds eleven busskort till och från undervisningen när avståndet från elevens skola till undervisningsskolan är minst tre kilometer. Kilometer mäts inte mellan hemmet och undervisningsskolan.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När en elev har beviljats modersmål är närvaron på lektionerna obligatorisk. Eventuell frånvaro ska rapporteras enligt gällande rutiner.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Elev från annan kommun kan delta i modersmålsundervisningen i Umeå kommun under förutsättning att hemkommunen betalar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Gymnasieskolan",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Modersmålsundervisning erbjuds utanför timplanebunden tid och sker på Maja Beskowgymnasiet eller Dragonskolan.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När en elev har beviljats modersmål är närvaron på lektionerna obligatorisk. Eventuell frånvaro ska rapporteras enligt gällande rutiner.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Om eleven har praktik och därför inte kan delta i undervisningen är eleven ansvarig för att meddela modersmålsläraren så att eleven inte får ogiltig frånvaro.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Grundskolan",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Kompetescentrum för flerspråkighet skickar en lista över elever med modersmålsundervisning till skolorna vid olika tillfällen:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Inför beställning av modersmålsundervisning nytt läsår får skolan en lista över elever som idag har modersmålsundervisning. Dessa elever behåller sin plats i modersmålsundervisning kommande läsår.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Vid skolstart i augusti får skolan en lista över samtliga som erbjuds modersmålsundervisning aktuellt läsår samt information om vilka elever från beställningen som KCF inte kommer att kunna erbjuda modersmålsundervisning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "I början av oktober efter att sen beställning behandlats får skolan en upptaderad lista över samtliga elever som erbjuds modersmålsundervisning aktuellt läsår.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Efter kartläggningsperiod av nya modersmålselevers grundläggande kunskaper kommer Kompetenscentrum för flerspråkighet att skicka en rekommendation till rektor att ej bevilja fortsatt modersmålsundervisning för de elever som under kartläggningen inte visat ha grundläggande kunskaper.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Gymnasiet",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Kompetescentrum för flerspråkighet skickar en lista över elever med modersmålsundervisning till skolorna vid två olika tillfällen:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Vid skolstart i augusti får skolan en lista över samtliga elever som erbjuds modersmålsundervisning aktuellt läsår samt information om vilka elever från beställningen som KCF inte kommer att kunna erbjuda modersmålsundervisning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "I början av oktober efter att sen beställning behandlats får skolan en uddaterad lista över samtliga elever som erbjuds modersmålsundervisning aktuellt läsår.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Elever som önskar modersmålsundervisning och som inte har ett betyg i ämnet modersmål från åk9, eller som i grundskolan har läst ett nationellt minoritetsspråk som andraspråkare, erbjuds delta vid ett bedömningstillfälle av språkkunskaper under v.36. Detta för att säkerställa att en elev har goda kunskaper i modersmålet, vilket är ett skollagens krav för deltagande i modersmålsundervisning på gymnasiet. Om elev under bedömningstillfället visar ej goda kunskaper kontaktar KCF elevens rektor.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Om vårdnadshavare till elev i grundskolan eller gymnasieelev önskar avsluta modersmålsundervisningen vänder de sig till skolan. Skolan meddelar KCF att platsen i modersmålsundervisningsgrupp sägs upp.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakt\nRochelle Waghorn\nchef, Kompetenscentrum för flerspråkighet\nrochelle.waghorn@umea.se",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakt\nVeronica Sjödin\nverksamhetsutvecklare, Kompetenscentrum för flerspråkighet\nveronica.sjodin@umea.se",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Förskola, skola och utbildning"
+    ],
+    "description": "Modersmålsundervisning erbjuds elever som går i förskoleklass till gymnasiet i kommunala skolor och i fristående skolor som har tecknat ett avtal om undervisningen med Umeå kommun.",
+    "keywords": [
+      "Modersmålsundervisning",
+      "enskild skolhuvudman",
+      "beställning",
+      "skolhuvudman",
+      "grundskola",
+      "gymnasiet"
+    ],
+    "visibleDate": "2026-06-26",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.2841,
+      "quality.emptyRoot": 0
+    }
+  }
+}

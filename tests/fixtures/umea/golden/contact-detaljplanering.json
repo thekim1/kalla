@@ -1,0 +1,164 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/byggaboochmiljo/oversiktsplanochdetaljplaner/detaljplanerochomradesbestammelser/kontaktadetaljplanering.4.23a1f75119ab8d5b42dd2ca.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Kontakta Detaljplanering",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Kontakta Detaljplanering",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Frågor om pågående planärenden",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Kontakta ansvarig handläggare. Kontaktuppgifter hittar du på respektive detaljplans projektsida under Pågående detaljplaner eller via växeln 090-16 10 00.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vill du lämna synpunkter i ett pågående samråd eller granskning? Det gör du på den aktuella detaljplanens projektsida.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Information och handlingar",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Sök efter och läs om alla gällande detaljplaner.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Kontakta Detaljplanering via formuläret nedan eller ring 090-16 64 90 under telefontider:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Måndag: 13–15",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Tisdag: 10–12",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Onsdag: 13–15",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Torsdag: 10–12",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Frågor om vad du får bygga inom en gällande detaljplan besvaras av Bygglovs Rådgivning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Så behandlar vi dina personuppgifter:",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vi behöver spara och behandla dina ifyllda personuppgifter. Vi efterfrågar bara sådana personuppgifter som krävs för att vi ska kunna behandla ditt ärende (på grund av lag, avtal eller andra skäl). Syftet med behandlingen är att kunna hantera ditt ärende och återkoppla till dig på ett enkelt och smidigt sätt. Den rättsliga grunden för behandlingen är rättslig skyldighet enligt Tryckfrihetsförordning, förvaltningslag och arkivlag.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Dina uppgifter kommer att sparas i vårt diarium. Efter diarieföring kommer e-posten raderas i enlighet med aktuell dokumenthanteringsplan. Vi tillämpar vid var tid gällande integritetslagstiftning vid all behandling av personuppgifter. Vi kan komma att dela dina personuppgifter med en tredje part, förutsatt att vi är skyldiga enligt lag, till exempel enligt offentlighetsprincipen.\nDe personuppgifter vi behandlar om dig kan även komma att delas med vårt personuppgiftsbiträde, det vill säga vår leverantör av diariesystemet. Personuppgiftsansvarig är Byggnadsnämnden , 901 84 Umeå.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du har rätt att få ut information om de uppgifter vi har om dig, begära rättelse, överföring, begränsa behandlingen, göra invändningar eller begära radering. För att göra detta kan du kontakta dataskyddsombudet på dataskyddsombud@umea.se eller Dataskyddsombud, Umeå kommun, 901 84 Umeå.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Klagomål på vår behandling av dina personuppgifter lämnas till Integritetsskyddsmyndigheten som är tillsynsmyndighet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Läs mer om dina rättigheter: www.umea.se/gdpr",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Bygga, bo och miljö",
+      "Översiktsplan och detaljplaner",
+      "Detaljplaner och områdesbestämmelser"
+    ],
+    "description": "Kontaktuppgifter och öppettider för bygglovsrådgivningen när du behöver hjälp eller har frågor.",
+    "keywords": [],
+    "visibleDate": "2026-01-19",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.3839,
+      "quality.emptyRoot": 0
+    }
+  }
+}

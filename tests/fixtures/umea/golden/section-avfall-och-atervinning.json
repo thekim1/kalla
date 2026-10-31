@@ -1,0 +1,297 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/byggaboochmiljo/avfallochatervinning.4.7d7d901172bb372c5d1a1.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Avfall och återvinning",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Avfall och återvinning",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Här är information om avfall och återvinning, hur du sorterar ditt avfall och hur du hittar till återvinningsstationer och återvinningscentraler.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Sortera ditt hushållsavfall rätt",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vakin är det kommunala vatten- och avfallsbolaget som ansvarar för avfall och återvinning i Umeå kommun. På vakin.se får du hjälp att sortera ditt hushållsavfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vakins sorteringsguide",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Förpackningsinsamling på återvinningsstationen",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "På en återvinningsstation kan du lämna hushållets sorterade förpackningar. Återvinningsstationer finns även i anslutning till Vakins återvinningscentraler.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Hitta återvinningsstationer, ÅVS",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Grovavfall, trädgårdsavfall och farligt avfall på återvinningscentralen",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "På återvinningscentralerna kan du lämna hushållets grovavfall, trädgårdsavfall och farligt avfall. Återvinningscentraler finns på sju olika ställen i kommunen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Hitta återvinningscentraler, ÅVC",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Sortera material från bygg och rivning rätt",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När du bygger, renoverar och river är det viktigt att hantera vissa material på rätt sätt. Läs i vår materialsorteringsguide om olika typer av avfall som kan uppstå vid byggnation och rivning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Materialsortering vid rivning och renovering",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vem gör vad?",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vakin",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vakin, Vatten- och avfallskompetens i norr AB, är ett kommunalt bolag som ansvarar för avfall och återvinning i Umeå kommun. Vakin administrerar alla sophämtningsabonnemang.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Avfall och återvinning på vakin.se",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Umeå kommun",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En del frågor som rör avfall och återvinning hanteras av Miljö- och hälsoskydd på Umeå kommun. Miljö- och hälsoskydd är tillsynsmyndighet över avfallshanteringen och handlägger anmälningar. Det är till exempel anmälningar av kompostering av avfall, latrin, tillfälligt uppehåll i hämtning av hushållsavfall, användning av avfall för anläggning, användning av järnsand och transport av avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Gator och parker på Umeå kommun ansvarar för att hålla gator och allmänna platser rena.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Arbetsmarknadsavdelningen bedriver verksamheter för återbruk och återvinning på Tegelbruksvägen 7, bland annat Returbutiken som säljer dels kommunens överskottsmaterial och det som lämnas i återbrukshusen på återvinnings­centralerna Gimonäs och Klockar­bäcken. Läs mer om verksamheterna på Tegelbruksvägen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Kommunens e-tjänster",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Här nedan finns e-tjänster för anmälan av kompostering av avfall, anmälan av kompostering av latrin och ansökan om uppehåll i avfallshämtning. Övriga e-tjänster om avfall finns i kommunens förteckning över e-tjänster.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ansök om tillfälligt uppehåll av hämtning av hushållsavfall",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ansök om latrinkompostering",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ansök om kompostering av matavfall",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Mer information",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Föreskrifter om avfallshantering för Umeå kommun",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Om en lågenergilampa går sönder",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Renhållning, papperskorgar och skräp",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Läs mer om avgifter och taxor enligt miljöbalken",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakt\nMiljö- och hälsoskydd\n090-16 10 00 (växel)\nmiljoochhalsoskydd@umea.se\nBesöksadress\nStadshuset, Skolgatan 31A\nPostadress\nUmeå kommun\nMiljö- och hälsoskydd\n901 84 Umeå",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakt\nVakin\nVatten-och avfallskompetens i norr AB\n090-16 19 00\nvakin@vakin.se\nwww.vakin.se",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Bygga, bo och miljö"
+    ],
+    "description": "Återvinning och hantering av avfall.",
+    "keywords": [
+      "återvinningsstation",
+      "återvinningsstationer",
+      "öppettider",
+      "återvinningen",
+      "avfallspåsar",
+      "åvc",
+      "åvs",
+      "klockarbäckens åvc",
+      "återvinningscentral",
+      "återvinningscentraler"
+    ],
+    "visibleDate": "2026-01-02",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.547,
+      "quality.emptyRoot": 0
+    }
+  }
+}

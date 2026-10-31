@@ -1,0 +1,8 @@
+# The harness's Python (standard library only), with the parser's rules (src/parser/pyproject.toml).
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E", "W", "F", "I", "B", "UP", "S", "SIM", "RUF"]
+# The report's dash for "no value" and the page copy's Swedish breadcrumb separator are deliberate.
+allowed-confusables = ["–", "›"]

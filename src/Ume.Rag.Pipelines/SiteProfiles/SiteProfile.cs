@@ -43,7 +43,7 @@ public sealed record SiteProfile
     [Description("Maps a URL path to its stable identity (connectors design §3.1 rule 10); used only when verified.")]
     public SiteProfileIdentityRule? IdentityRule { get; init; }
 
-    [Description("Session and noise query parameters of the host, dropped by the canonicaliser (connectors design §3.1 rule 7).")]
+    [Description("Session and noise query parameters of the host, dropped by the canonicaliser (connectors design §3.1 rule 7); case-insensitive, a trailing * is a prefix (sv.*).")]
     [MaxLength(50)]
     [SchemaItems(MinLength = 1, MaxLength = 100, Pattern = "^[^\\s=&]+$")]
     public IReadOnlyList<string> IgnoreQueryParams { get; init; } = [];

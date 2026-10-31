@@ -135,6 +135,36 @@ public sealed class StageRuleTests
     }
 
     [Fact]
+    public void Html_root_alternatives_are_tried_in_order_not_in_document_order()
+    {
+        Html("<article><p>Puff för en nyhet.</p></article><main><p>Sidans text.</p></main>").Blocks.Single().Text.ShouldBe("Sidans text.");
+        Html("""<div class="top"><h1>Rubrik</h1></div><div class="top"><p>Lista.</p></div>""", new SiteProfile { MainRoot = "main, .top" })
+            .Blocks.Single().Text.ShouldBe("Rubrik");
+    }
+
+    [Theory]
+    [InlineData("main, .top", new[] { "main", ".top" })]
+    [InlineData("a[title='x, y'], li:not(:first-child, .z) , b", new[] { "a[title='x, y']", "li:not(:first-child, .z)", "b" })]
+    [InlineData("main", new[] { "main" })]
+    public void Html_selector_lists_split_at_top_level_commas(string selector, string[] alternatives) =>
+        HtmlExtractor.Alternatives(selector).ShouldBe(alternatives);
+
+    [Fact]
+    public void Html_a_breadcrumb_selector_matching_several_crumbs_gives_one_crumb_each()
+    {
+        var profile = new SiteProfile { MainRoot = "main", Breadcrumb = "nav li:not(:first-child)" };
+        var parsed = Html("""<nav><ol><li><a>Startsida</a></li><li><a>Bo <span class="sr-only">nivå</span></a></li><li><a>Sida</a></li></ol></nav><main><p>Text.</p></main>""", profile);
+        parsed.Breadcrumb.ShouldBe(["Bo"]);
+    }
+
+    [Fact]
+    public void Html_a_list_item_of_paragraphs_keeps_its_lines()
+    {
+        var parsed = Html("<main><ul><li><span>Kontakt</span><p>Enhet</p><address><p>Gatan 1<br>Huset</p></address></li></ul></main>");
+        parsed.Blocks.Single().Text.ShouldBe("Kontakt\nEnhet\nGatan 1\nHuset");
+    }
+
+    [Fact]
     public void Html_tables_keep_header_rows_and_spans()
     {
         var parsed = Html("<main><table><tr><th>A</th><th>B</th></tr><tr><td rowspan=\"2\">x</td><td>1</td></tr><tr><td>2</td></tr></table></main>");

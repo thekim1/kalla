@@ -1,0 +1,201 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/5.705fa82119e61e659693e0d8.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Budget för 2027 antagen",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Budget för 2027 antagen",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Kommunfullmäktige har beslutat om planeringsdirektiv och budget för 2027, samt plan för åren 2028–2030. Den styrande majoritetens förslag antogs efter över fem timmars debatt.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "– Det här är en bra budget som ger oss stabila planeringsförutsättningar för att fortsätta utveckla Umeå. Den innehåller tydliga prioriteringar för verksamheterna och långsiktiga investeringar, säger Hans Lindberg (S), kommunstyrelsens ordförande.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Utöver skattesats, planeringsdirektiv, budget och investeringsramar för 2027 samt plan för perioden 2028–2030 omfattar beslutet bland annat inriktningsmål och program, finansiella mål, personalpolitiska mål samt uppdrag till kommunens nämnder och bolag. Även nettokostnadsbudget för 2027 och planramar för de kommande åren fastställdes, liksom ramar för investeringar och mark- och exploateringsverksamhet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Kommunfullmäktige gav också kommunstyrelsen möjlighet att göra tekniska förändringar av budgetramar, under förutsättning att berörda nämnder är överens och att förändringarna är kostnadsmässigt neutrala. Kommunstyrelsen får även göra tidsmässiga justeringar av investeringar inom fastställda ramar för att anpassa till förändrade förutsättningar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Beslutet föregicks av en beredningsprocess där flera partier har presenterat egna budgetförslag i både näringslivs- och arbetsutskottet och kommunstyrelsen. I kommunfullmäktige ställdes majoritetens förslag mot budgetalternativ från Allianspartierna.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Beslutet fattades med 30 röster för majoritetens förslag, 22 för allianspartiernas förslag och 12 avstod.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Alliansens företrädare reserverade sig till förmån för sitt förslag, som bland annat innehöll en lägre skattesats. Även Vänsterpartiet och Sverigedemokraterna reserverade sig till förmån för sina respektive budgetförslag.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "– Umeå kommun har en av Sveriges högsta skattesatser och därför gör kommunen stora vinster varje år. Vi vill sänka skatten för att göra det mer lönsamt att arbeta, men också för att stärka tillväxten. Dessutom hade vi önskat se ökade satsningar på äldreomsorg och skola, säger Anders Ågren (M), kommunalråd.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Det antagna planeringsdirektivet och budgeten skickas nu vidare till kommunens nämnder och bolag som grund för verksamhetsplanering och genomförande",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Kommunfullmäktige beslutar",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "att fastställa skattesatsen år 2027 till 22,80",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "att fastställa Socialdemokraternas och Miljöpartiets Planeringsdirektiv, budget och investeringar för 2027 och plan 2027–2030 inklusive:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "inriktningsmål och program, finansiellt mål, personalpolitiska mål samt tilläggsuppdrag till kommunens nämnder och bolag",
+        "layer": "body",
+        "listDepth": 1,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "nettokostnadsbudget 2027 och plan 2028–2030 för respektive styrelse eller nämnd",
+        "layer": "body",
+        "listDepth": 1,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "ram för förvärv av finansiell anläggningstillgång",
+        "layer": "body",
+        "listDepth": 1,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "bruttoutgifter i investeringsbudget för 2027 samt investeringsplan för 2028–2030",
+        "layer": "body",
+        "listDepth": 1,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "bruttoutgifter i mark- och exploateringsbudget 2027 och plan 2028-2030.",
+        "layer": "body",
+        "listDepth": 1,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "att godkänna att kommunstyrelsen får göra tekniska förändringar av budgetramar under förutsättning att nämnderna är överens och att förändringarna är kostnadsmässigt neutrala i kommunens budget",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "att kommunstyrelsen inom fastställd investeringsbudget och plan får göra tidsmässiga förskjutningar av investeringar för att anpassa till förändrade förutsättningar",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "att fastställa viktiga datum för kommunens nämnder och bolag 2027.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Mer information",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ta del av partiernas budgetförslag",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Budget, verksamhetsdirektiv",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Kommun och politik",
+      "Nyhetsarkiv"
+    ],
+    "description": "– Det här är en bra budget som ger oss stabila planeringsförutsättningar för att fortsätta utveckla Umeå. Den innehåller tydliga prioriteringar för verksamheterna och långsiktiga investeringar, säger Hans Lindberg (S), kommunstyrelsens ordförande. Utöver skattesats, planeringsdirektiv, budget och investeringsramar för 2027 samt plan för perioden 2028–2030 omfattar beslutet bland annat inriktningsmål och program, finansiella mål, personalpolitiska mål samt uppdrag till kommunens nämnder och bolag. Även nettokostnadsbudget för 2027 och planramar för de kommande åren fastställdes, liksom ramar för investeringar och mark- och exploateringsverksamhet. Kommunfullmäktige gav också kommunstyrelsen möjlighet att göra tekniska förändringar av budgetramar, under förutsättning att berörda nämnder är överens och att förändringarna är kostnadsmässigt neutrala. Kommunstyrelsen får även göra tidsmässiga justeringar av investeringar inom fastställda ramar för att anpassa till förändrade förutsättningar. Beslutet föregicks av en beredningsprocess där flera partier har presenterat egna budgetförslag i både näringslivs- och arbetsutskottet och kommunstyrelsen. I kommunfullmäktige ställdes majoritetens förslag mot budgetalternativ från Allianspartierna. Beslutet fattades med 30 röster för majoritetens förslag, 22 för allianspartiernas förslag och 12 avstod. Alliansens företrädare reserverade sig till förmån för sitt förslag, som bland annat innehöll en lägre skattesats. Även Vänsterpartiet och Sverigedemokraterna reserverade sig till förmån för sina respektive budgetförslag. – Umeå kommun har en av Sveriges högsta skattesatser och därför gör kommunen stora vinster varje år. Vi vill sänka skatten för att göra det mer lönsamt att arbeta, men också för att stärka tillväxten. Dessutom hade vi önskat se ökade satsningar på äldreomsorg och skola, säger Anders Ågren (M), kommunalråd. Det antagna planeringsdirektivet och budgeten skickas nu vidare till kommunens nämnder och bolag som grund för verksamhetsplanering och genomförande Kommunfullmäktige beslutar att fastställa skattesatsen år 2027 till 22,80 att fastställa Socialdemokraternas och Miljöpartiets Planeringsdirektiv, budget och investeringar för 2027 och plan 2027–2030 inklusive: inriktningsmål och program, finansiellt mål, personalpolitiska mål samt tilläggsuppdrag till kommunens nämnder och bolag nettokostnadsbudget 2027 och plan 2028–2030 för respektive styrelse eller nämnd ram för förvärv av finansiell anläggningstillgång bruttoutgifter i investeringsbudget för 2027 samt investeringsplan för 2028–2030 bruttoutgifter i mark- och exploateringsbudget 2027 och plan 2028-2030. att godkänna att kommunstyrelsen får göra tekniska förändringar av budgetramar under förutsättning att nämnderna är överens och att förändringarna är kostnadsmässigt neutrala i kommunens budget att kommunstyrelsen inom fastställd investeringsbudget och plan får göra tidsmässiga förskjutningar av investeringar för att anpassa till förändrade förutsättningar att fastställa viktiga datum för kommunens nämnder och bolag 2027.",
+    "keywords": [],
+    "visibleDate": "2026-06-16",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.4861,
+      "quality.emptyRoot": 0
+    }
+  }
+}

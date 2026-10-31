@@ -1,0 +1,21 @@
+{
+  "description": "One streamed question per request, as a widget or an integration sends it (repo-and-deployment §8.3). {model}, {question} and {uuid} are filled in per request; the questions rotate.",
+  "questions": [
+    "Vilka handlingar behöver jag skicka in för att ansöka om bygglov för ett uterum, och hur lång är handläggningstiden?",
+    "Hur ansöker jag om plats i förskola och hur lång är kötiden?",
+    "När töms soptunnorna i villaområden och hur beställer jag extra hämtning?",
+    "Vad kostar parkeringstillstånd för boende i centrala Umeå?",
+    "Hur gör jag en felanmälan om gatubelysning som inte fungerar?",
+    "Vilka öppettider har stadsbiblioteket under sommaren?",
+    "Hur söker jag ekonomiskt bistånd och vilka papper behöver jag ha med mig?",
+    "Behöver jag anmäla installation av en värmepump till kommunen?"
+  ],
+  "headers": {},
+  "body": {
+    "model": "{model}",
+    "messages": [{"role": "user", "content": "{question}"}],
+    "stream": true,
+    "stream_options": {"include_usage": true},
+    "max_tokens": 400
+  }
+}

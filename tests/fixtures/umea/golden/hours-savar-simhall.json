@@ -1,0 +1,110 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/upplevaochgora/idrottmotionochfriluftsliv/simhallarbadhusutebassanger/savarsimhall/oppettider.4.7d7d901172bb372c5d390d.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Öppettider",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Öppettider",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "På grund av pågående renovering öppnar badet igen preliminärt i början av november. Mer information om exakt datum kommer längre fram under hösten.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Gymmet på övre plan är öppet men källarplanet (både gymmets källarplan och studion) är avstängt på grund av arbete med att förbättra utrymningsvägarna. Vi försöker se över alternativ för att kunna hålla igång viss gruppträning under tiden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du som är aktiv guldkortskund hos oss har under denna period då källaren är stängd och simhallen renoveras möjlighet att nyttja Storsjöhallens och Navets utbud gällande gruppträning samt vattenträning och motionssim.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du som är aktiv gymkortskund hos oss har möjlighet att nyttja Storsjöhallens gym i Holmsund.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Har du frågor kan du alltid nå oss via mejl: savarsimhall@umea.se eller via telefon 090–16 40 90.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Bemannade öppettider under perioden:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Måndag: kl. 10.00–17.00, gruppträning kl. 17.00–19.00",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Onsdag: kl. 10.00–17.00, gruppträning kl. 17.00–19.00",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Fredag: 08.00–15.00",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Med reservation för lunch samt tillfälliga verksamhetsförändringar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Uppleva och göra",
+      "Idrott, motion och friluftsliv",
+      "Simhallar, badhus, utebassänger",
+      "Sävar simhall"
+    ],
+    "description": "Öppettider - Ingen beskrivning.",
+    "keywords": [],
+    "visibleDate": "2026-10-01",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.3897,
+      "quality.emptyRoot": 0
+    }
+  }
+}

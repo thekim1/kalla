@@ -1,0 +1,149 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/kommunochpolitik/kommunensorganisation/kommunstyrelsen/foredragningslistorhandlingarochprotokoll.4.5bc0956b1719ab0ae7f1f9.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Föredragningslistor, handlingar och protokoll",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Kommunstyrelsens föredragningslistor, handlingar och protokoll",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Föredragningslistan är en lista över ärenden på ett möte.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Mötesboken beskriver bakgrund till, beredning av ärenden och förslag till beslut och ibland ingår bilagor. Klicka i innehållsförteckningen i mötesboken för att komma till ett ärende.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Protokollet är en sammanställning av beslut på ett möte.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Beslut blir ofta enligt förslag i mötesboken, men inte alltid. Ett ärende är inte avgjort förrän beslut är fattat på mötet och protokollet är justerat.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Personuppgifter och uppgifter med sekretess publiceras inte i mötesboken.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "2026",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "2025",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "2024",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "2023",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "2022",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "2021",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "2020",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Kommun och politik",
+      "Kommunens organisation",
+      "Kommunstyrelsen"
+    ],
+    "description": "Kommunstyrelsens protokoll och föredragningslistor",
+    "keywords": [
+      "protokoll",
+      "föredragningslista",
+      "föredragningslistor",
+      "kallelse",
+      "kallelser",
+      "dagordning",
+      "dagordningar",
+      "kommunstyrelse",
+      "kommunstyrelsen",
+      "kommunstyrelsens",
+      "KS"
+    ],
+    "visibleDate": "2026-01-13",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.959,
+      "quality.emptyRoot": 0
+    }
+  }
+}

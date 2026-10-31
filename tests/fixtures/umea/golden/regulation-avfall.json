@@ -1,0 +1,3139 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/byggaboochmiljo/avfallochatervinning/foreskrifteromavfallshantering.4.27ee094017f1a27a0465f9.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Föreskrifter om avfallshantering",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Föreskrifter om avfallshantering",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Avfallsföreskrifterna gäller från och med 1 juli 2025.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Samrådet frågor och svar",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Under hösten inför Vakin, på uppdrag av Umeå kommun och enligt gällande lagkrav, fastighetsnära insamling. Det innebär att du får möjlighet att sortera dina förpackningar hemma genom så kallad hemsortering.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Förändringen väcker många frågor. För att göra det enkelt har vi samlat svar på de vanligaste frågorna här.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vi kommer ju i samma utsträckning som tidigare behöva åka och lämna tidningar, glas och metall på åter­vinnings­stationerna. Men mina bilresor kommer inte minska för att jag inte längre behöver ta med mig kartong och plast när jag åker dit. Vad är poängen med att viss återvinning (kartong och plast) ska tas om hand vid tomt­gränsen men inte resten?",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Svar: Ett ställningstagande som Vakin har gjort är att börja med plast- och pappersförpackningar då dessa volymer är de största.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Varför inte som många andra kommuner byta till flerkärlstunnor där man kan sortera även glas och metall? Annars måste man ju ändå åka till återvinningscentralen och hela vitsen med hemsortering går förlorad. Argumentet att man inte behöver byta bilar eller liknande är löjligt utifrån ett långsiktigt perspektiv. Gör en ordentlig investering och rätt från början istället.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Svar: Vakin har utrett alternativen och tagit ställning till att detta system totalt sett är det mest gynnsamma. Det är många aspekter som ska tas hänsyn till. Bland annat flexibilitet att kunna erbjuda hushållen de storlekar på tunnor de behöver, vara kostnadseffektiva, klimatsmarta, insamling som fungerar bra under vintern och längs trafikerade vägar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vår samfällighet omfattas av speciella regler för vår enskilda väg. Vägen får enligt gemensamhets­anläggningens avtal endast vara 3,20 meter bred och på ena sidan av vägen omgärdas all mark av naturreservat som inte får anläggas med bredare diken än vad som nu råder. I samfälligheten är vi 23 åretruntboende och fem sommar­stugeboenden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Sophämtning omfattas i dag av grön och brun tunna för alla åretruntboende samt sommartunnor under sommar­­halvåret. Vakin har i dag, på grund av vägens utformning, svårigheter när det kommer till tömning av fastigheternas två tunnor under delar av vinterhalvåret. Det finns i dagsläget därför inte plats för fyra tunnor per hushåll med de begränsningar och regelverk vi har att förhålla oss till. Om det krävs att vi ska ha fyra tunnor per hushåll måste Umeå kommun stötta samfälligheten gällande ändringar hos Lantmäteriet rörande regelverket för gemensamhetsanläggning för väg samt bidra till förhandlingar med Länsstyrelsen om inkräktande inom natur­reservatet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Svar: Om en väg inte är farbar för en sopbil behöver tunnorna ställas vid närmaste farbara väg. Vägen ska vara hårdgjord och minst 3,5 meter bred. Om mötande trafik förekommer behöver vägen vara 5,5 meter bred. Det är upp till varje fastighetsägare att se till att en väg är farbar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "EU-direktivet innebär krav på fastighetsnära avfallshantering för pappers-, plast-, glas- och metallförpackningar. Som jag förstår det så uppfyller inte ert förslag EU-kravet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Svar: Vi jobbar på en lösning för glas- och metallförpackningar. Vill man ha dessa fraktioner hämtat fastighets­nära kan vi lösa det från och med hösten 2026.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vi funderar över skadedjursfrågan. Hur bedömer kommunen risken för råttor, möss, fåglar och andra djur när sopor ska lagras betydligt längre tid? Finns planer på kommunalt stöd för skadedjursbekämpning när problemen uppstår eller ingår detta numera i villaägarnas del av den gröna omställningen?",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Svar: Se avfallsföreskrifterna, paragraf 17 och 18.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Mer information om fastighetsnära insamling",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Hemsortera mera för en enklare vardag (Vakin)",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Inledande bestämmelser",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bemyndigande",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "1 § Med stöd av 15 kap. 38, 39 och 41 §§ miljöbalken (1998:808) och 9 kap. 1 och 2 §§ avfallsförordningen (2020:614) meddelar kommunfullmäktige dessa föreskrifter för avfallshantering i Umeå kommun.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Definitioner",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "2 § Följande termer och begrepp används i dessa föreskrifter med de betydelser som anges här:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "1. Med kommunalt avfall avses detsamma som 15 kap. 3 § miljöbalken, det vill säga avfall som kommer från hushåll och sådant avfall från andra källor som till sin art och sammansättning liknar avfall från hushåll, med undantag för vad som anges i 15 kap. 3 § 1–6 punkterna. I begreppet kommunalt avfall ingår returpapper enligt 1 kap. 10 § avfallsförordningen (2020:164).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "a) Med avfall under kommunalt ansvar avses kommunalt avfall och annat avfall som kommunen har ansvar för enligt 15 kap. 20 § miljöbalken samt förpackningsavfall enligt 6 kap. 2 och 6 §§ förordningen (2022:1274) om producentansvar för förpackningar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "b) Med kärl- och säckavfall avses den del av avfall under kommunalt ansvar som får läggas i kärl eller säck.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "c) Med grovavfall avses den del av avfall under kommunalt ansvar som är så tungt eller skrymmande eller har egenskaper som gör att det inte är lämpligt att samla in i säck eller kärl.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "d) Med trädgårdsavfall avses sådant biologiskt nedbrytbart trädgårds- och parkavfall i enlighet med definitionen i 1 kap. 5 § 1 punkten avfallsförordningen (2020:614) som uppstår i trädgård vid bostadshus och sådant avfall från andra källor som är kommunalt avfall i enlighet med 15 kap. 3 § miljöbalken.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "e) Med farligt avfall avses avfall som i bilaga 3 till avfallsförordningen (2020:614) beskrivs med en avfallskod markerad med en asterisk (*).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "f) Med konsumentelavfall avses detsamma som i 13 § förordningen (2014:1075) om producentansvar för elutrustning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "g) Med före detta livsmedel avses butiksavfall av animaliskt ursprung enligt förordningarna 1069/2009/EG och 142/2011/EU.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "h) Med matavfall avses allt biologiskt nedbrytbart kommunalt avfall enligt definitionen i 15 kap. 3 § miljöbalken och 1 kap. 4 § avfallsförordningen (2020:614), det vill säga som består av livsmedel- eller köksavfall som uppkommer i och med livsmedelshanteringen (skal, ben och liknande) i hushåll, restauranger, storkök, butiker, personalmatsalar, catering och liknande. I begreppet ingår matavfall som hälls ut i vasken i de fall detta samlas upp avskilt i sluten tank. Butiksavfall av animaliskt ursprung utgör dock före detta livsmedel i enlighet med punkten (g) ovan.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "i) Med restavfall avses sorterat brännbart kärl- och säckavfall. Med detta avses det avfall som kvarstår när matavfall, farligt avfall, returpapper samt förpackningar, el-avfall och annat avfall som omfattas av producentansvar, har sorterats ut från hushållets kärl- och säckavfallet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "j) Med bygg och rivningsavfall avses i enlighet med 15 kap. 8 § miljöbalken avfall från bygg- och rivningsarbeten.k) Med bygg- och rivningsavfall som inte producerats i en yrkesmässig verksamhet avses detsamma som i 15 kap. 20 § 4 punkten i miljöbalken.2. Med renhållare menas Vatten och Avfallskompetens i Norr AB, (Vakin) eller den som anlitas av Vakin.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "3. Med fastighetsinnehavare avses den som är fastighetsägare eller den som enligt 1 kap. 5 § fastighetstaxeringslagen (1979:1152) ska anses som fastighetsägare.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "4. Med nyttjanderättshavare avses den som, utan att omfattas av begreppet fastighetsinnehavare, har rätt att bruka eller nyttja fastighet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "5. Med permanentbostad avses en fastighet som:\na) används stadigvarande som bostad,\nb) en fastighet med personer folkbokförda på enligt folkbokföringslagen (1991:481).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "6. Med fritidsbostad avses en fastighet som inte utgör permanentbostad enligt 5 a, b och används som bostad under perioden 15 maj -15 oktober.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "7. Med behållare avses kärl, container,bottentömmande behållare, säck, latrinbehållare, fosforfälla, slamavskiljare, fettavskiljare eller annan anordning för uppsamling av avfall under kommunalt ansvar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "8. Med små avloppsanläggningar avses slutna tankar, slamavskiljare, fosforfällor, minireningsverk och andra motsvarande anläggningar som inte är allmänna enligt lag (2006:412) om allmänna vattentjänster, som är dimensionerade för högst 25 personekvivalenter och endast används för hushållsspillvatten som till sin art och sammansättning liknar hushållsspillvatten. Oljeavskiljare- och fettavskiljare innefattas inte av detta begrepp.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "9. Med extrabrunn avses en brunn som hör till samma små avloppsanläggning, exempelvis en fördelningsbrunn eller spolningsbrunn.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "10. Med fettavskiljare avses en behållare avsedd för avskiljning av fett från spillvatten. Fett från avskiljare vid affär, restaurang, bageri, gatukök och liknande verksamhet ingår i begreppet under kommunalt ansvar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "11. Med latrin avses avfall från torrtoaletter och andra jämförliga lösningar, i enlighet med 15 kap. 20 § 3 miljöbalken.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "12. Med gränsgrannar avses två eller fler fastighetsinnehavare eller nyttjanderättshavare som har en gemensam fastighetsgräns.\nFör definitioner av andra termer och begrepp som används i dessa föreskrifter hänvisas till 15 kap. miljöbalken samt till gällande avfallsförordning och andra förordningar utfärdade med stöd av miljöbalken. Definitioner av vissa avfallsslag anges i bilaga 1.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För definitioner av andra termer och begrepp som används i dessa föreskrifter hänvisas till 15 kap. miljöbalken samt till gällande avfallsförordning och andra förordningar utfärdade med stöd av miljöbalken. Definitioner av vissa avfallsslag anges i bilaga 1.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Kommunens ansvar för avfallshantering, tillsyn och information",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "3 § Kommunfullmäktige har via beslut (KF 119, 137 §§, 1999-10-18) överlåtit verksamhetsansvaret, enligt 15 kap. 20 § miljöbalken, till det helägda kommunala bolaget Umeå Vatten och Avfall AB. Vatten- och avfallskompetens i Norr AB, Vakin fortsättningsvis kallat renhållaren, har i uppdrag att utföra all renhållningsansvariges verksamhet, med särskilt ansvar för att avfall under kommunalt ansvar som utgörs av farligt avfall samlas in och transporteras till en behandlings­anläggning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Principiella beslut om taxor, avfallsplan och föreskrifter beslutas av kommunfullmäktige. Smärre ändringar på grund av ändrad lagstiftning eller andra direktiv, som inte påverkar renhållningsordningens principiella utformning, beslutas av Umeå Vatten och Avfall AB:s styrelse.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Hantering av det avfall som omfattas av kommunens ansvar utförs av den eller dem som Vakin anlitar för ändamålet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Principiella beslut om taxor, avfallsplan och föreskrifter beslutas av kommunfullmäktige.\nMindre ändringar på grund av ändrad lagstiftning eller andra direktiv, som inte påverkar renhållningsordningens principiella utformning, beslutas av Umeå Vatten och Avfall AB:s styrelse.\nHantering av det avfall som omfattas av kommunens ansvar utförs av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "4 § Tillsynen över avfallshanteringen enligt 15 kap. miljöbalken och enligt föreskrifter meddelade med stöd av miljöbalken utförs av miljö- och hälsoskyddsnämnden.\na) Renhållaren har rätt att göra stickprovskontroll av avfall under kommunalt ansvar för att kontrollera avfallsbehållarens innehåll och avfallets sortering i syfte att säkerställa att renheten på avfallet upprätthålls. Med stickprovskontroll avses även plockanalyser som utförs på slumpmässigt utvalt kommunalt avfall i syfte att undersöka avfallets sammansättning i stort. Behållare som innehåller felsorterat avfall kan enligt taxa avgiftsbeläggas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "5 § Renhållaren ska särskilt informera hushållen om krav och hantering avseende förpackningar, konsumentelavfall samt information till hushållen om avfallsförebyggande åtgärder.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Betalning och information",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "6 § Avgift ska betalas för",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "1. de åtgärder som kommunen vidtar i syfte att informera hushåll och verksamhetsutövare som producerar avfall som kommunen ansvarar för enligt 15 kap. 20 § miljöbalken om avfallshantering och avfallsförebyggande åtgärder.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "2. de åtgärder som kommunen vidtar för att underlätta insamling och sortering av återanvändbara produkter från hushåll och verksamhetsutövare som producerar avfall som kommunen ansvarar för enligt 15 kap. 20 § miljöbalken.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "3. den insamling, transport, behandling i form av återvinning och bortskaffande av avfall som utgörs genom kommunens försorg och i enlighet med föreskrifter som kommunen har antagit med stöd av 27 kap. 4 § miljöbalken.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "7 § Fastighetsinnehavare och nyttjanderättshavare är skyldiga att i behövlig omfattning informera den eller dem som bor på eller är verksamma inom fastigheten om gällande regler för avfallshantering.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Sortering och överlämning av avfall under kommunalt ansvar",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Sortering av avfall",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "8 § Fastighetsinnehavare, nyttjanderättshavare, hushåll och andra som innehar avfall under kommunalt ansvar ska sortera ut avfallsslag i enlighet med bilaga 1 och hålla det skilt från annat avfall.\na) Förpackningsavfall i form av\n1. Papper och kartong\n2. Plast\n3. Metall,\n4. Färgat glas,\n5. Ofärgat glas\n6. Trä, och\n7. Material som inte avses i 1-6 (övrigt förpackningsmaterial) ska enligt 3 kap. 4 § avfallsförordningen (2020:614) sorteras ut från annat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Hushåll ska lämna utsorterade förpackningar enligt 1-7 till ett insamlingssystem som renhållaren tillhandahåller.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Hushåll ska sortera ut skrymmande förpackningsavfall från annat avfall under kommunalt ansvar och från förpackningsavfall enligt punkterna 1-7 och lämna det till ett insamlingssystem.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Plastflaskor och metallburkar som är avsedda för ett retursystem enligt 4 kap. 3 § förordningen (2022:1274) om producentansvar för förpackningar ska lämnas till retursystemet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Av 3 kap. 4 a § avfallsförordningen (2020:614) framgår att den som har en förpackning som innehåller avfall ska se till att förpackningen skiljs från innehållet. Detta gäller dock inte en förpackning som innehåller farligt avfall eller läkemedelsavfall, om förpackningen underlättar den praktiska hanteringen av avfallet. Förpackning som innehåller farligt avfall eller rester av farligt avfall ska i stället hanteras som farligt avfall enligt 3 kap. 11 a § avfallsförordningen (2020:614).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Hushåll ska lämna förpackning som innehåller läkemedelsavfall som inte är farligt avfall till apotek i enlighet med förordning (2009:1031) om producentansvar för läkemedel.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "b) Returpapper ska enligt 3 kap. 3 § avfallsförordningen (2020:614) sorteras ut separat och lämnas till ett insamlingssystem.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "c) Avfall i form av invasiva växter ska sorteras ut och hållas skilt från annat avfall och sorteras ut från annat biologiskt avfall som hanteras i enlighet med sorteringsanvisningarna till avfallsföreskrifterna.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "d) Sådant bygg- och rivningsavfall i form av schaktmassor som lyder under kommunalt ansvar enligt 15 kap. 20 och 20 a §§ miljöbalken ska sorteras ut samt hanteras i enlighet med bilaga 1.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "e) Ytterligare föreskrifter om sortering återfinns I bilaga 1.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "9 § Fastighetsinnehavare ska säkerställa möjligheter för nyttjanderättshavare, hushåll och andra som nyttjar fastigheten att sortera ut och hålla åtskilda de avfallsfraktionerna.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Skyldighet att överlämna hushållsavfall under kommunalt ansvar",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "10 § Avfall under kommunalt ansvar ska lämnas till och transporteras bort av renhållaren, om inte annat sägs i dessa föreskrifter och dess bilaga 1.\nUtsorterade avfallsslag hämtas vid fastigheten vid överenskommen eller anvisad plats enligt 24 §.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Det utsorterade avfallet ska transporteras bort så ofta att olägenhet för människors hälsa och miljön inte uppstår. Hämtningsintervall och storlek på behållare ska motsvara behovet av borttransport av avfall under kommunalt ansvar från fastigheten.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Fastighetsinnehavare och nyttjanderättshavare ska upplysa renhållaren om ändrade förhållanden av betydelse för avfallshanteringen för fastigheten.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "a) Fastighetsinnehavare, nyttjanderättshavare, hushåll och andra avfallsproducenter får själva genom egen personal, medlem i hushållet, personal beviljad med stöd av socialtjänstlagen eller annan lag om särskilt stöd transportera grovavfall, trädgårds- och parkavfall, farligt avfall, bygg- och rivningsavfall samt annat avfall under kommunalt ansvar som markerats i bilaga 1, till den eller de platser i kommunen där kommunen tar emot sådant avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Emballering av avfall under kommunalt ansvar samt placering av behållare",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "11 § I behållare och utrymme för avfall får endast läggas sådant avfall för vilket behållaren och utrymmet är avsedd. Vid tömningstillfället gäller att behållaren ska vara placerad så nära uppställningsplats för sophämtningsfordon som möjligt.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Avfallet ska, i den mån det är möjligt, vara väl emballerat så att skada, arbetsmiljöproblem eller annan olägenhet inte uppkommer. Närmare krav på emballering med mera framgår av bilaga 1.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Glödande avfall får inte lämnas till kommunens avfallshantering.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Anläggande underhåll och skötsel av behållare och annan utrustning",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Anskaffande och ägande",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "12 § Behållare för uppsamling av avfall under kommunalt ansvar ägs och tillhandahålls av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Undantag: Bottentömmande behållare, små avloppsanläggningar, fettavskiljare, tank för matavfall, komprimatorer, komprimerande container samt tillbehör till dessa anskaffas och installeras, ägs och underhålls av fastighetsinnehavaren eller fastighetsinnehavaren dit anläggningen är ansluten om anläggningen ligger på annans mark.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Matavfallspåsar och latrinbehållare tillhandahålls av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Storlekar på kärl, matavfallspåsar och avgifter finns beskrivna i gällande avfallstaxa.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ägare av behållare ansvarar för märkning, reparation och vid behov, utbyte av behållare. När renhållaren eller dess entreprenör ska utföra sådant underhåll av sina behållare ska behållaren vara tillgänglig. Märkning ska ske enligt anvisningar från renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Fastighetsinnehavaren ansvarar för och bekostar installation och underhåll av övriga inom fastigheten förekommande anordningar och utrymmen för avfallshanteringen. Anvisningar kring detta tillhandahålls av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "13 § Avfallskvarn kan kopplas mot separat sluten tank, avsedd enbart för organiskt avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Annan anslutning av avfallskvarn till Umeå Vatten och Avfall AB:s avloppsanläggning eller till en enskild avloppsanläggning är inte tillåten. För storkök, restauranger och butiker som har större mängder matavfall kan andra lösningar accepteras efter ansökan hos miljö- och hälsoskyddsnämnden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Anläggande",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "14 § För anläggande av avfallsutrymme tillhandahålls anvisningar av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "15 § Vid anläggande av små avloppsanläggningar, fettavskiljare eller tank för matavfall ska avståndet mellan uppställningsplats för hämtningsfordonet och anslutningspunkt för tömning inte överstiga tio (10) meter så långt som det är möjligt. Höjdskillnaden mellan fordonets uppställningsplats och botten på anläggningen ska vara mindre än fem (5) meter, om det inte finns särskilda skäl för annat avstånd.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När anläggningen placeras utanför fastigheten och/eller inte placeras i nära anslutning till bostadshuset eller av annan orsak inte enkelt kan lokaliseras ska anläggningen vara tydligt markerad med skylt som anger till vilken fastighet anläggningen tillhör.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vid installation och anläggande av små avloppsanläggningar, fettavskiljare, tank för matavfall eller anläggning som kräver byte av filtermaterial ska hänsyn tas till vad som utgör en god arbetsmiljö vid hämtning av avfall från anläggningen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vid installation av underjordsbehållare och andra bottentömmande behållare ska behållaren placeras maximalt fem meter från uppställningsplats från kranbilen. Fri höjd ska vara 10 meter. Höjdskillnaden mellan fordonets uppställningsplats och behållare får vara högst +/- 2 meter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tömning av underjordsbehållare och andra bottentömmande behållare kan erhållas inom område markerat i bilaga 2.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Anläggning som kräver byte av filtermaterial ska anläggas så att den är åtkomlig för hämtningsfordon med kran. Anläggningar som ska tömmas med kran får inte installeras så att avståndet mellan fordonets uppställningsplats och filterkassettens eller säckens lyftanordning överstiger fem (5) meter vid en maximal torrvikt på 1 000 kg eller tio (10) meter vid en maximal torrvikt på 500 kg. Den fria höjden ska vara minst tio (10) meter över kranfordonet och mellan kranfordonets angöringsplats och fosforfiltret.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vid installation och anläggande av små avloppsanläggningar, fettavskiljare, tank för matavfall eller anläggning som kräver byte av filtermaterial ska hänsyn tas till vad som utgör en god arbetsmiljö vid hämtning av avfall från anläggningen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "På minireningsverk ska det tydligt framgå var slamtömning ska ske. Det ska även finnas tydliga tömningsinstruktioner tillgängliga i direkt anslutning till anläggningen.\nLock eller manlucka får väga högst 15 kg, om inte särskilda skäl föreligger. Om brunnen öppnas genom att locket kan dras åt sidan får locket väga högst 35 kg och vara försedd med någon form av handtag, om inte särskilda skäl föreligger. Slutna tankar skall ha fungerande klokoppling alternativt tillgänglig manlucka.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vid installation av bottentömmande behållare ska anläggningen utformas så att den är åtkomlig för fordon utrustat med kran. Behållaren ska placeras maximalt fem (5) meter från uppställningsplats från kranbilens uppställningsplats. Fri höjd ska vara minst tio (10) meter. Höjdskillnaden mellan fordonets uppställningsplats och behållare får vara högst +/- två (2) meter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Bottentömmande behållare ska bestå av ett fack. Delade behållare är inte tillåtna.\nTömning av bottentömmande behållare kan erhållas inom område markerat i bilaga 2",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "16 § Efter anslutning till kommunalt avloppsnät eller annan godkänd avloppsanläggning, som innebär att befintlig anläggning tas ur bruk, ska sluttömning ske. Fastighetsinnehavaren ska beställa sluttömning av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Rengöring och tillsyn",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "17 § Fastighetsinnehavaren och vid behov nyttjanderättshavaren har ansvar för rengöring och tillsyn av behållare samt anläggning. Behållare och anläggningar ska ges regelbunden service för att förebygga driftavbrott och olägenhet såsom buller, lukt och dylikt.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Små avloppsanläggningar ska vara funktionsduglig, det vill säga inte ha trasiga insatser, möjliggöra fortsatt rening samt vara försedd med tät botten och täta väggar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Såväl behållare, som inom fastigheten förekommande anläggningar, anordningar och utrymmen för avfallshantering, ska skötas så att kraven på god arbetsmiljö uppfylls och risken för olycksfall minimeras.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Åtgärder inför hämtning av avfall som lämnas i kärl eller säck",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "18 § Behållare får inte fyllas mer än att den kan stängas. Den får inte heller vara så tung att det blir uppenbara svårigheter att flytta den eller att arbetsmiljökrav inte kan tillgodoses. Behållare ska så långt som möjligt vara fri från snö och is vid hämtningstillfället.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Behållare ska vara uppställda så att hantering med den utrustning som används i kommunens insamlingssystem kan ske och att hämtning underlättas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vid tömningstillfället gäller att behållarens placering ska vara placerad så nära uppställningsplats för sophämtningsfordon som möjligt. Behållare ska placeras och vändas så att de kan hämtas med sidlastande bil där sådan används och baklastande bil där sådan används. Ytterligare anvisningar kring detta tillhandahålls av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Renhållare ska ha tillträde till de utrymmen i fastigheten där arbetet ska utföras. Nycklar, portkoder och dylikt ska tillhandahållas till renhållaren. Ändringar ska utan anmaning meddelas renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "19 § Kärl för uppsamling av latrin ska köpas och lämnas till behandling på återvinningscentralerna i Umeå kommun. Latrinkärl kan mot avgift efter beställning hos renhållaren hämtas vid fastigheten. Fastighetsinnehavaren eller nyttjanderättshavaren ska försluta latrinbehållare och rengöra den på utsidan innan hämtning sker.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Latrinkärl ska endast användas till latrin i form av urin, avföring och toapapper och kärlet får inte inneslutas i annat emballage, varken i kärlet eller runt kärlet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Fyllt kärl får väga max 15 kg.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Åtgärder inför hämtning av övrigt avfall under kommunalt ansvar från anläggningar",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "20 § Inför tömning ska fastighetsinnehavaren eller nyttjanderättshavaren förbereda anläggning så att tömning kan ske med det fordon som används.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Fastighetsinnehavaren eller nyttjanderättshavaren är skyldig att vidta erforderliga åtgärder för att skydda sin anläggning från skador vid tömning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Små avloppsanläggningar, fettavskiljare och tankar för matavfall ska vara lättillgängliga för tömning. Lock eller manlucka får inte vara övertäckt eller fastfruset när tömning ska ske. Höjdskillnaden mellan hämtningsfordonets uppställningsplats och botten på anläggningen ska vara mindre än fem (5) meter, om det inte föreligger särskilda skäl.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Lock eller manlucka får väga högst 15 kg, om inte särskilda skäl föreligger. Om brunnen eller tanken öppnas genom att locket kan dras åt sidan får locket väga högst 35 kilogram, och vara försedd med någon form av handtag, om inte särskilda skäl föreligger. Slutna tankar skall ha fungerande klokoppling alternativt tillgänglig manlucka.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Om anläggningen är placerad utanför fastigheten och/eller inte är placerad i nära anslutning till bostadshuset eller av annan orsak inte enkelt kan lokaliseras ska anläggningen vara tydligt markerad med skylt som anger till vilken fastighet anläggningen tillhör.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tydliga instruktioner som behövs i samband med hämtning ska tillhandahållas av fastighetsinnehavaren och nyttjanderättshavaren i god tid innan tömning och ska finnas tillgängliga i direkt anslutning till anläggningen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Anläggningen ska vara tillsluten på ett barnsäkert sätt och försedd med de säkerhetsanordningar som behövs med hänsyn till anläggningens beskaffenhet och belägenhet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tömning av extrabrunn ska ske från samma uppställningsplats, vid samma tillfälle och med samma tömningsteknik som ordinarie tömning av anläggningen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Renhållare ska ha tillträde till de utrymmen i fastigheten där arbetet ska utföras. Nycklar, portkoder och dylikt ska tillhandahållas till renhållaren. Ändringar ska utan anmaning meddelas till renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Det åligger fastighetsinnehavaren eller nyttjanderättshavaren att inför hämtningstillfället placera storsäck, filterkassett eller annan flyttbar behållare som ska tömmas med fordon utrustat med kran, inom längsta tillåtna avstånd enligt 15 §.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Renhållaren har rätt att lämna kvar vattenfasen i slamavskiljare efter verkställd slamtömning. Fastighetsägare/nyttjanderättshavare kan beställa heltömning på grund av tillverkarens anvisningar eller andra särskilda skäl.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Filtermaterial i lösvikt ska vara förpackat. Efter hämtning av uttjänt filtermaterial från fosforfällor ska nytt filtermaterial tillföras anläggningen genom fastighetsinnehavarens eller nyttjanderättshavarens försorg. Anläggningar med sugbart filtermaterial i lösvikt som tillkommit innan den 28 november 2016 är undantagna från kravet att filtermaterial ska vara förpackat.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "21 § Grov- och trädgårdsavfall ska lämnas vid kommunens återvinningscentral. För åtkomst/tillträde till anläggningen gäller en begränsad fordonsvikt på max 3,5 ton, vilket motsvarar en personbil med släp.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Grov- och trädgårdsavfall kan även hämtas vid fastigheten. Avfallet ska vid hämtningstillfället vara placerat vid tomtgräns vid gata eller vid farbar väg med vändmöjligheter för lastbil.\nAvfallet ska buntas eller förpackas i lämpligt emballage samt förses med märkning med fastighetsägarens namn.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "22 § Returpapper ska lämnas i kommunens containrar för returpapper vid återvinningsstationerna.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Returpapper kan även hämtas av kommunen anlitad entreprenör. Avfallet ska vid hämtningstillfället vara placerat vid tomtgräns, vid gata eller vid farbar väg med vändmöjligheter för lastbil.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Avfallet ska buntas eller förpackas i lämpligt emballage, förses med märkning med fastighetsägarens namn.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Hämtnings- och transportvägar",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "23 § Hämtning av avfall under kommunalt ansvar sker normalt vid fastighetsgränsen, vid en överenskommen plats eller vid en av kommunen anvisad plats.\nAnvisning av plats görs av tekniska nämnden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tekniska nämnden ansvarar för att besluta i ärenden som rör vad som är lämplig placering av kärl om det råder oenighet därom samt vid oenighet om vägen är farbar eller ej.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "24 § Fastighetsinnehavaren ska se till att transportväg fram till den uppställningsplats som används vid hämtning, hålls i farbart skick.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Transportvägen ska inför hämtning ha fri sikt, hållas fri från hinder, röjas från snö och hållas halkfri så att kärlet utan svårigheter kan förflyttas och tömmas. Fastighetsinnehavaren ska se till att den väg som kärlet behöver dras av den som utför hämtningen hålls i sådant skick att kärl utan svårighet kan förflyttas. Dragvägen ska inför hämtning hållas fri från hinder, röjas från snö och hållas halkfri.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Enskild väg som nyttjas vid hämtning av avfall under kommunalt ansvar ska vara så dimensionerad och hållas i sådant skick att den är farbar vid varje hämtningstillfälle, för de hämtningsfordon som normalt används i hämtningsområdet. I nära anslutning till fastigheten ska vändmöjlighet eller genomfart finnas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Renhållaren avgör om vägen är farbar. Om farbar väg inte kan upprättas ska fastighetsinnehavaren eller nyttjanderättshavaren avlämna avfallet på plats som överenskommes med renhållaren eller vid plats som anvisats av kommunen enligt 24 §.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Schemalagd hämtning av avfall under kommunalt ansvar sker måndag till fredag klockan 06:00 – 22:00.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Hämtningsområde",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "25 § Umeå kommun är uppdelat i sex hämtningsområden för avfall under kommunalt ansvar. Avvikelser från föreskrifterna gällande hämtningsområden redovisas nedan.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "1.Fastland och öar med fast broförbindelse för tunga fordon\nVid samlad fritidshusbebyggelse på fastlandet finns gemensamma uppställningsplatser för avfallsbehållare. För fritidsbostad som uppförts på öar gäller att avfallet ska lämnas vid närmaste gemensamma uppställningsplats för avfallsbehållare på fastlandet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "2.Öar som saknar bro- eller färjeförbindelse\nVid permanentbostad hänvisas plats för uppställning av sopkärl på fastlandet. För fritidsbostad som uppförts på öar gäller att avfallet ska lämnas vid närmaste gemensamma uppställningsplats för avfallsbehållare på fastlandet. Öar utan bro- eller färjeförbindelse omfattas inte av kommunal slamtömning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "3. Norrbyskär\nAvfall under kommunalt ansvar lämnas i anvisade behållare på fastlandet. Slamtömning kan endast erbjudas inom perioden 1 maj-30 september. Enbart heltömning är möjligt.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "4.Holmön\nAvfall under kommunalt ansvar lämnas i anvisade behållare. Fritidshussäsong avser 15 maj - 15 oktober. Slamtömning sker schemalagt under fritidshussäsong, då färjeförbindelse för tunga fordon finns.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "5. Underjordsbehållare, område enligt bilaga 2.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "6. Veckohämtningsområde, område enligt bilaga 3.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Hämtningsintervall",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "26 § Ordinarie hämtning av avfall under kommunalt ansvar sker med de intervall som framgår nedan:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Kärl- och säckavfall",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "1. Från permanentbostäder sker hämtning av avfallunder kommunalt ansvar en gång varannan vecka.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "2. Från flerbostadshus och verksamheter sker hämtning av avfall under kommunalt ansvar varannan vecka. Veckohämtning erbjuds inom det område som anges enligt bilaga 3 om behov finns av utrymmesskäl vid befintliga avfallsutrymmen, betydande avfallsmängder eller att behov av borttransport finns för att undvika risk för olägenhet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "3. Från fritidsbostad sker hämtning av avfall under kommunalt ansvar en gång varannan vecka under perioden 15 maj till 15 oktober.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "4. Under förutsättning att olägenhet ej uppstår kan hämtningsintervall för underjordsbehållare och andra bottentömmande behållare samt komprimerande behållare för restavfall utsträckas till en gång var fjärde vecka.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Små avloppsanläggningar",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "5. Tömning av små avloppsanläggningar:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "a) Från en- eller tvåbostadshus och flerfamiljshus för permanentbostad med ansluten vattentoalett sker tömning minst en (1) gång per år. Undantag minireningsverk och sluten tank som kräver annat i enlighet med punkt d och e.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "b) Från fritidsbostad med ansluten vattentoalett sker tömning minst en (1) gång vart tredje år. Undantag minireningsverk och sluten tank som kräver annat i enlighet med punkt d och e.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "c) Tömning av brunnar för bad-, disk-, och tvätt-vatten sker minst en (1) gång vartannat år från permanentbostäder och minst vart fjärde år från fritidsbostad.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "d) För minireningsverk ska tömning ske enligt leverantörens anvisningar om inte miljö- och hälsoskyddsnämnden beslutat annat.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "e) Tömning av sluten tank beställs hos renhållaren av fastighetsägare eller nyttjanderättshavare.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "f) Fastighetsinnehavaren ansvarar för att avloppsanläggningen vid behov efter tömning återfylls med vatten.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Filtermaterial",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "6. Hämtning av fosforfiltret görs av renhållaren. Om farbar väg fram till brunn med fosforfilter saknas, ansvarar fastighetsägaren för att fosforfiltret lyfts i och ur brunnen och transporteras fram till farbar väg. Fosforfiltret ska finnas tillgängligt vid väg när hämtningsansvarig aviserat om hämtning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Fett",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "7. Fettavskiljare ska tömmas enligt leverantörens anvisningar, men minst två (2) gånger per år. Fastighetsinnehavaren ansvarar för att fettavskiljare vid behov töms oftare samt att fettavskiljaren efter tömning återfylls med vatten.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Åtgärder om föreskrift inte följs",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "27 § Renhållaren har rätt att inte utföra ordinarie hämtning om föreskrifterna i 8 a-c §§, 18, 19 §, 20 § samt 24 § inte följs.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Avfallet ska efter rättelseåtgärder från fastighetsinnehavaren hämtas antingen vid nästa ordinarie hämtningstillfälle eller efter beställning av extrahämtning mot avgift.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Särskilt om avfall under kommunalt ansvar från verksamheter",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "28 § Utöver vad som föreskrivs i 8–23 §§ ska verksamheter hålla avfall under kommunalt ansvar åtskilt från annat avfall. Konsumentelavfall lämnas vid kommunens insamlingsställe eller efter vad som anges i bilaga 1.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tömning av små avloppsanläggningar, fettavskiljare och latrin från torrtoaletter samt jämförliga lösningar som genererar avfall under kommunalt ansvar utförs minst en (1) gång per år och i övrigt efter behov för att upprätthålla en god funktion i tanken/avskiljaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "29 a § En verksamhet i en fastighet som har eller vill ha fastighetsnära insamling av förpackningsavfall och som avser ha en avfallshantering som är samlokaliserad med hushållens ska anmäla till renhållaren att den vill ha kommunal insamling 6 veckor innan insamlingen ska påbörjas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "29 b § Verksamheter som har avfallshantering som är samlokaliserad med hushåll och som har anmält att verksamheten vill ha kommunal insamling av förpackningsavfall eller skrymmande förpackningsavfall ska sortera ut förpackningsavfallet enligt 8 a § och lämna det till ett insamlingssystem som renhållaren tillhandahåller.\n28 § Hushållsavfall från verksamheter ska hållas skilt från annat avfall än hushållsavfall. För hushållsavfall från verksamheter gäller 8-27 §§ om ej annat anges i dessa föreskrifter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För plastflaskor och metallburkar som är avsedda för ett retursystem gäller i stället att sådana alltid ska lämnas till retursystemet i enlighet med 8 a §.\n21\nBestämmelsen i 8 a § om att utsortera läkemedelsavfall och förpackningar innehållande läkemedelsavfall ska lämnas till apotek, gäller endast hushåll.\nNärmare föreskrifter och sortering återfinns i bilaga 1.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tömning av slam från enskilda tankar och slamavskiljare från verksamheter sker minst en gång per år och i övrigt efter behov för att upprätthålla en god funktion i tanken/avskiljaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "29 § Tömning av fettavskiljare vid affär, restaurang och liknande verksamhet ska ske så ofta att fett inte tillåts följa med avloppsvattnet ut i spillvattennätet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Utformning och skötsel av fettavskiljare ska uppfylla krav enligt svensk standard SS-EN 1825-1 och SS-EN 1825-2 samt medge provtagning. Kompletterande regler framgår av ABVA, Allmänna bestämmelser för brukande av Umeå kommuns vatten- och avloppsanläggning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "30 § Tömning av fettavskiljare vid affär, restaurang och liknande verksamhet ska ske så ofta att fett inte tillåts följa med avloppsvattnet ut i spillvattennätet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Utformning och skötsel av fettavskiljare ska uppfylla krav enligt svensk standard SS-EN 1825–1 och SS-EN 1825–2 samt medge provtagning. Kompletterande regler framgår av ABVA, Allmänna bestämmelser för brukande av Umeå kommuns vatten- och avloppsanläggning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Annat avfall än avfall under kommunalt ansvar från verksamheter",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Uppgiftsskyldighet",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "31 § Den som bedriver en yrkesmässig verksamhet inom kommunen som ger upphov till annat avfall än avfall under kommunalt ansvar ska lämna de uppgifter om arten, sammansättningen, mängden eller hanteringen av avfallet som behövs som underlag för kommunens renhållningsordning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Enligt 4 kap. 9 § avfallsförordningen ska den som är innehavare av en hamn lämna uppgift om behovet av avfallshantering enligt 4 kap. 8 § Avfallsförordningen till renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Undantag",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Handläggning av ärenden",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "32 § Ärenden enligt 13, 35, 36, 37, 38 andra stycket, 39, 40, 41, 42, 43, 44 och 45 §§ handläggs av miljö- och hälsoskyddsnämnden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En avgift för handläggningen av ansökan ska betalas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En ansökan ska vara skriftlig och innehålla de uppgifter om vilka avfallsslag som avses omhändertas, uppgifter om beräknade avfallsmängder samt en redogörelse för på vilket sätt omhändertagande ska ske utan att det innebär en risk för olägenhet för människors hälsa och miljön om det behövs för att kunna hantera ärendet samt den tidsperiod som ansökan avser.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Meddelade undantag är endast giltiga för den som sökt undantaget. Undantag ska omprövas om förutsättningarna ändras. Fastighetsinnehavaren eller nyttjanderättshavaren har skyldighet att meddela sådana förändringar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En ansökan enligt 39, 41 och 42 §§ ska göras senast en (1) månad före den avsedda uppehållsperiodens start.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En ansökan enligt 37 §§ ska göras senast den 31 mars det år det utsträckta intervallet ska börja gälla.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Kompostering, annan återvinning eller bortskaffande av visst avfall under kommunalt ansvar",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "33 § Avfall får endast tas om hand på den egna fastigheten enligt vad som anges i 34–37 §§ dessa föreskrifter och under förutsättning att det kan ske utan risk för olägenhet för människors hälsa och miljön. Anmälan eller tillstånd för yrkesmässig kompostering och annan behandling kan eventuellt krävas enligt miljöprövningsförordningen (2013:251)",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "34 § Trädgårdsavfall från fastigheten får komposteras på fastigheten utan särskild anmälan.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "35 § Fastighetsinnehavare eller nyttjanderättshavare som själv avser att kompostera matavfall och liknande avfall från fastigheten på sin fastighet, ska anmäla detta till miljö- och hälsoskyddsnämnden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Kompostering av matavfall och liknande avfall på fastigheten ska ske i skadedjurssäker behållare och på sådant sätt att olägenhet för människors hälsa eller miljön inte uppstår. Fastigheten ska ge utrymme för användning av den erhållna kompostjorden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "36 § Kompostering av latrin på fastigheten får, efter ansökan, medges i särskild därför avsedd, anläggning på fastigheten, s.k. förmultningsanläggning eller liknande anläggning för omhändertagande av latrin för användning av näringsämnen. Fastigheten ska ge utrymme för användning av den erhållna kompostjorden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Förlängt hämtningsintervall",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "37 § För små avloppsanläggningar kan fastighetsinnehavare eller den nyttjanderättshavare som äger anläggningen, beviljas förlängt hämtningsintervall om anläggningen är tillståndsgiven enligt miljöbalken och att vid en bedömning av anläggningens belastning och beskaffenhet står klart att tömning inte behöver ske enligt ordinarie intervall samt att det kan ske utan risk för olägenhet för människors hälsa och miljön.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Beviljat förlängt hämtningsintervall gäller i högst 10 år. Det är fastighetsinnehavarens ansvar att hämtningen anpassas till anläggningens behov. Medgivande om förlängt hämtningsintervall kan återkallas om det kan konstateras att förutsättningarna för sådant inte är uppfyllda.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "37 a § För fettavskiljare kan fastighetsinnehavare eller den nyttjanderättshavare som äger anläggningen, beviljas förlängt hämtningsintervall om det vid en bedömning av anläggningens belastning och beskaffenhet står klart att tömning inte behöver ske enligt ordinarie intervall samt att det kan ske utan risk för olägenhet för människors hälsa och miljön.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Beviljat förlängt hämtningsintervall gäller i högst 10 år.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Det är fastighetsinnehavarens ansvar att hämtningen anpassas till anläggningens behov.\nMedgivande om förlängt hämtningsintervall kan återkallas om det kan konstateras att förutsättningarna för sådant inte är uppfyllda.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Gemensamma avfallsbehållare",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "38 § Två eller tre fastighetsinnehavare eller nyttjanderättshavare som är gränsgrannar eller grannar med mellanliggande väg och har samma hämtningsintervall kan efter meddelande till renhållaren använda gemensam avfallsbehållare under förutsättning att bestämmelserna i dessa föreskrifter om fyllnadsgrad och vikt beaktas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "En av fastighetsinnehavaren eller nyttjanderättshavaren ska förbinda sig att ansvara för uppställningsplats och kärl.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Det krävs tillstånd för att använda gemensam avfallsbehållare i andra fall än det som anges i första stycket.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tillstånd ska endast meddelas om:\n1. avståndet mellan de som ska använda gemensam avfallsbehållare och avståndet till uppställningsplatsen för behållaren inte är längre än vad som får anses motiverat för att uppnå en god avfallshantering,",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "2. delningen kan ske utan att olägenheter för människors hälsa och miljön uppstår,",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "3. att bestämmelserna i dessa föreskrifter följs,",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "4. de som vill dela har samma hämtningsintervall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Uppehåll i hämtning",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "39 § Uppehåll i hämtning av kärl- och säckavfall kan tillåtas fastighetsinnehavare eller nyttjanderättshavare om fastigheten inte kommer att nyttjas under en sammanhängande tid om minst åtta (8) månader.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Uppehållet gäller som längst ett (1) år om det inte bestämts något annat.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "40 § Uppehåll i hämtning av kärl- och säckavfall vid fritidsbostad kan tillåtas fastighetsinnehavare eller nyttjanderättshavare om fastigheten inte kommer att nyttjas under hela hämtningssäsongen (15 maj – 15 oktober). Begäran om uppehåll måste göras senast den 30 april för att renhållaren ska kunna verkställa uppehållet. Uppehållet gäller högst en hämtningssäsong.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "41 § Fastighetsinnehavare eller nyttjanderättsinnehavare kan beviljas uppehåll i hämtning av avfall från fastighetens avloppsanläggning om fastigheten inte kommer att nyttjas under en sammanhängande tid om minst ett (1) år.\nInnan uppehåll medges ska avloppsanläggning vara tömd. Efter tömningen får anläggningen inte användas.Uppehållet gäller som längst i fem (5) år för fritidsbostad och två (2) år för permanentbostad om det inte bestämts något annat.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "42 § Uppehåll i hämtning av fettavskiljarslam kan beviljas om anläggningen inte kommer att nyttjas under en sammanhängande tid om minst ett (1) år.\nUppehållet gäller som längst i ett (1) år om det inte bestämts något annat.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Eget omhändertagande och befrielse från skyldigheten att överlämna avfall under kommunalt ansvar",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "43§ Fastighetsinnehavare eller nyttjanderättshavare kan beviljas dispens från kommunal avfallshantering om det finns särskilda skäl och den som ska hantera avfallet med stöd av dispensen kan göra det på ett hälso- och miljömässigt godtagbart sätt.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Dispensen gäller som längst i fem (5) år om det inte bestämts något annat.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "44 § Fastighetsinnehavare eller nyttjanderättshavare som själv kan ta hand om avfallet från sin avloppsanläggning på ett sätt som gör att avfallets näringsinnehåll kommer till nytta för odling samt har särskilda skäl kan beviljas dispens från att lämna detta avfall till kommunen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Dispensen gäller som längst i fem (5) år om det inte bestämts något annat.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Eget omhändertagande av matavfall",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "45 § Fastighetsinnehavare eller nyttjanderättshavare kan beviljas befrielse från att lämna matavfall och liknande avfall till kommunen under förutsättning att:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "1. allt avfall kan hanteras under hela året på fastigheten,",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "2. hanteringen sker på ett sådant sätt att djur inte har åtkomst till avfallet,",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "3. det finns utrymme på fastigheten för att använda den erhållna kompostjorden på ett sätt som gör att avfallets näringsinnehåll komma till nytta vid odling, och",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "4. hanteringen i övrigt inte innebär att en olägenhet för människors hälsa eller miljön uppstår.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Särskilda bestämmelser för försöksområden",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "46 § Begränsade områden kan av kommunstyrelsen eller som den utser, utses som försöksområde för ändrade tömningsrutiner under en begränsad tidsperiod. För dessa områden kan särskilda bestämmelser och föreskrifter som avviker från dessa föreskrifter utfärdas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Återkallande av medgivet undantag och dispens",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "47 § Beviljade undantag och dispenser kan efter omprövning återkallas om fastighetsinnehavaren eller nyttjanderättshavaren lämnat felaktiga uppgifter som legat till grund för medgivandet, om hanteringen inte sker efter medgivna villkor eller om hanteringen visar sig orsaka olägenhet för människors hälsa och miljön.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Beviljat undantag är alltid kopplat till sökande och upphör att gälla vid ändrade förhållanden. Sökande är skyldig att anmäla förändrade förhållanden till miljö-och hälsoskyddsnämnden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Övergångsbestämmelser",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "De nya föreskrifterna träder i kraft 2025-07-01 och då upphör föreskrifter för Umeå kommun 2020-03-01 att gälla. Tidigare meddelade dispenser och andra beslut meddelade med stöd av de upphävda föreskrifterna ska anses meddelade med stöd av motsvarande bestämmelser i denna föreskrift.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Undantag som meddelats enligt tidigare föreskrifter i renhållningsförordningen gäller även fortsättningsvis eller tills förändrade förhållanden anges, om inte dessa föreskrifter i sig upphäver tidigare undantag.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Fastighetsinnehavare eller nyttjanderättshavare som på fastigheten komposterar matavfall och som innan den 1 januari 2025 anmält komposteringen till miljö- och hälsoskyddsnämnden ska anses vara befriad från att lämna matavfallet till kommunen i enlighet med 45 §.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bilaga 1 - Sortering och lämning av avfall",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Denna bilaga ger vägledning till hushåll och verksamheter om de olika avfallsslagen och hur dessa ska utsorteras, hanteras och borttransporteras. Mer om avfall under kommunalt ansvar finns att läsa i tabell 1. Tabell 2 redovisar avfall under producentansvar och tabell 3 redovisar exempel på avfall från verksamheter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Blandat avfall och restavfall ska läggas i säck eller paket och lämnas i behållare. Avfallet ska vara väl emballerat så att det inte sprids eller att skada, arbetsmiljöproblem och andra olägenheter uppkommer. Kärl- och säckavfall får inte lämnas på kommunens återvinningscentraler. Glödande avfall får inte lämnas till kommunens avfallshantering. Mer information om sortering av avfall finns på Vakins hemsida www.vakin.se",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Tabell 1. Avfall under kommunalt ansvar",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bygg- och rivningsavfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis kakel, fönster, gipsskivor, oimpregnerat trä, tegel och armeringsjärn.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Avfallet ska sorteras i åtminstone följande fraktioner: trä, mineral (betong, tegel, klinker, keramik och sten), metall, glas, plast och gips.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Fraktionerna ska förvaras och transporteras skilt från varandra och annat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Bygg- och rivningsavfall som inte produceras i en yrkesmässig verksamhet lämnas till kommunens återvinningscentraler. Hämtning kan beställas av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Farligt avfall (exklusive konsumentelavfall)",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis rester av olja, färg, starka rengöringsmedel, produkter innehållande kvicksilver eller andra kemikalier. Asbest.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Sorteras ut och hålls skilt från annat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Emballaget ska vara tydligt märkt med uppgift om innehåll, om möjligt använd originalförpackningen. Olika typer av farligt avfall får inte blandas. Förvaras så att risk för spridning till omgivningen inte sker.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Asbest ska vara tätt förslutet så att det inte dammar och ska dessutom kunna lyftas och läggas i container av en person.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Farligt avfall ska lämnas till kommunens återvinningscentral.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Storleken på förpackningen bör inte vara större än att den lätt kan hanteras av en person.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Grovavfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis trasiga möbler, cyklar, barnvagnar, stora leksaker, julgranar eller större emballage.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Hanteras separat från annat avfall under kommunalt ansvar. Sorteringskrav utifrån hur avfallet lämnas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Grovavfall från hushåll för separat borttransport av renhållaren ska i den mån det är möjligt, buntas eller förpackas i lämpligt emballage. Grovavfallet ska förses med märkning som klargör att det är fråga om grovavfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Enskilda hushåll ska lämna avfallet till kommunens återvinningscentraler, eller beställa hämtning enligt instruktion av renhållaren. Boende i flerbostadshus kan även lämna grovavfall i utrymmen eller behållare som fastighets­innehavaren tillhandahåller. Hämtning utförs av renhållaren efter beställning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Trädgårdsavfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis fallfrukt, löv, gräs, kvistar och grenar som är mindre än 3 centimeter i diameter.\nUndantag: Det krävs speciell hantering av växt-material från invasiva arter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Sorteras ut och hålls skilt från annat avfall. Får komposteras på fastigheten utan anmälan.\nUndantag: Växtmaterial från invasiva arter sorteras ut separat och får ej komposteras.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Emballeras ej.\nUndantag: Växtmaterial från invasiva arter förpackas i helt tätslutande sop- eller storsäckar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till kommunens återvinningscentraler. Hämtning kan beställas av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Förpackat växtmaterial från invasiva arter lämnas som brännbart avfall eller lämnas på återvinningscentral.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Latrin",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Latrinkärl ska endast användas till latrin i form av urin, avföring och toapapper. Kärlet eller dess innehåll får inte inneslutas i annat emballage, Kärlet får inte tillföras ämne eller produkt som försvårar den fortsatta hanteringen, till exempel produkter innehållande formalin, fenol eller liknande som desinfektionsmedel (saneringsvätska eller karbolkalk).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kärl för uppsamling av latrin ska köpas hos Vakin och lämnas till återvinningscentral.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Latrinkärl från hushåll kan lämnas vid återvinningscentral eller kan efter beställning hos renhållaren, mot avgift, hämtas vid fastigheten. Vid hämtning får kärlet väga max 15 kilogram.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Slam och fosforfiltermaterial från enskilda avloppsanläggningar",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Materialet ska vara åtkomligt för tömning i den anläggning där det genereras.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Filtermaterial från fosforfällor och andra jämförbara filter ska vara förpackat eller tillgängligt på ett sådant sätt att hämtning kan utföras av fordon utrustat med kran om så krävs.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Hämtning kan beställas av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Restavfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempel på restavfall är blöjor, hygienartiklar, tops, diskborstar, kuvert, städsopor, snus, tuggummi, kattsand och dammsugarpåsar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ska sorteras ut och hållas skilt från annat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Läggs i säck eller emballeras och lämnas i behållare. Avfallet ska vara väl emballerat så att det inte sprids eller så att skada, arbetsmiljöproblem eller andra olägenheter inte uppkommer. Kärl- och säckavfall får inte lämnas på återvinningscentral eller återvinningsstation.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Restavfall borttransporteras från fastigheten i enlighet med hämtningsintervall som kommunen tillhandahåller.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Extra hämtning kan beställas enligt fastställd taxa.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Matavfall från hushåll",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Matavfall utgörs av biologiskt nedbrytbart avfall som uppkommer i och med livsmedelshanteringen i hushåll, till exempel skal och matrester.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Matavfall ska sorteras ut och hållas skilt från annat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Utsorterat matavfall förpackas i, av Vakin anvisade, påsar och lämnas i avsett kärl eller behållare. Alternativt kan matavfallet komposteras i kompost på den egna fastigheten. Egen matavfallskompostering ska anmälas till miljö- och hälsoskyddsnämnden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Matavfall borttransporteras från fastigheten i enlighet med hämtningsintervall som Vakin tillhandahåller. Extra hämtning kan beställas enligt fastställd taxa.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Matfetter och frityroljor",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ska sorteras ut och hållas väl avskilt.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Matfett och frityrolja ska förvaras i behållare med tätslutande lock.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Större mängd matfetter eller frityroljor lämnas på anvisade platser.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Maximalt 1,5 liter flytande emballerat avfall får läggas i behållare för restavfall, om det kan ske utan att emballaget går sönder. Avfallet kan även lämnas på återvinningscentraler eller återvinningsstation där fettinsamling finns. Hämtning kan beställas av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Förpackningar",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Krav på utsortering och möjlighet till eget omhändertagande i enlighet med definitionen av förpackningar i FPF.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Förpackningar lämnas lösa i de behållare/kärl som tillhandahålls/anvisas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Förpackningar lämnas till någon av kommunens återvinningsstationer eller återvinningscentraler alternativt fastighetsnära insamling.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Returpapper",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Krav på utsortering och möjlighet till eget omhändertagande i enlighet med definitionen av returpapper i avfallsförordningen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Returpapper lämnas löst i de behållare/kärl som tillhandahålls/anvisas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till kommunens insamlingssystem för returpapper.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Glödande avfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis varm aska, frätande ämnen eller ämnen som kan förorsaka självantändning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Får inte lämnas som kärl- och säckavfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Döda sällskapsdjur samt mindre mängder avfall från husbehovsjakt, högst 15 kilogram per hämtningstillfälle",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempel hundar, katter, marsvin och minigris och kaniner. Exempel på mindre mängder avfall från husbehovsjakt är skinn, ben och inälvor.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Mindre sällskapsdjur (maxstorlek hund) kan även grävas ner på den egna fastigheten, förutsatt att graven är så djup att djur hindras från att gräva upp kroppen, att ingen misstanke om smitta föreligger samt att det kan ske utan risk för olägenhet för människors hälsa eller miljö.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ska förpackas väl innan det läggs i behållare för restavfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Större djur eller större mängd sådant avfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Det vill säga andra djur än döda sällskapsdjur samt avfall från husbehovsjakt överstigande 15 kilogram.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakta veterinär. Gällande föreskrifter från Jordbruksverket ska beaktas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Stickande och skärande avfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Bland annat kanyler och sprutor.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ska förpackas i skyddande hölje innan det läggs i behållare för restavfall, så att inte skärskador eller annan olägenhet uppstår.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Väl emballerat avfall läggs i behållare för restavfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Textilavfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Avfall som består av kläder av textil, hemtextil, inredningstextil, väskor av textil och accessoarer av textil.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Textilier ska sorteras ut, till exempel i två fraktioner, helt och rent respektive trasigt. Fraktionerna hålls skilt från annat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Läggs i säck som försluts väl.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Textilier (hela och rena) kan lämnas till återförsäljare av second-hand-produkter eller övriga mottagare. Textilavfall som är trasig lämnas i behållare på återvinningscentral eller andra anvisade behållare.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Användbara saker",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis hela och rena användbara saker.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Frivillig utsortering.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kan lämnas för återbruk vid återvinningscentral. Det kan även lämnas till återförsäljare av second hand-produkter eller övriga mottagare.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Tabell 2. Avfall under producentansvar",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Kasserade bilbatterier",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Krav på utsortering i enlighet med definitionen av batteri i batteriförordningen (2008:834).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ställs upp på ett sätt som förhindrar att batterisyra/innehåll rinner ut.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ska lämnas i de insamlingssystem som tillhandahålls av producent. Sådana platser finns även på återvinnings­centralerna.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Kasserade bärbara batterier",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Om kasserade produkter innehåller lösa bärbara batterier ska dessa plockas ur. Är de bärbara batterierna inbyggda i produkten hanteras den som avfall från elutrustning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Krav på utsortering i enlighet med definitionen av bärbart batteri i Förordning (2008:834) om producentansvar för batterier.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Förvaras så att risk för spridning till omgivningen inte sker.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ska lämnas i de insamlingssystem som tillhandahålls av producent. Sådana platser finns även på återvinnings­centralerna.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Konsumentelavfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis trasig dator, mobiltelefonladdare och kaffebryggare.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Krav på utsortering i enlighet med definition i förordning (2014:1075) om producentansvar för elutrustning, kasserade elektriska och elektroniska produkter, till exempel kyl- och frysskåp, spisar, TV-apparater och batteri­drivna leksaker samt lysrör, lågenergilampor och glödlampor. Skrymmande konsumentelavfall ska sorteras ut och hållas skilt från annat grovavfall. Smått elavfall ska sorteras ut och hållas skilt från kärl- och säckavfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Förvaras så att risk för spridning till omgivningen inte sker.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "På återvinningscentralen ska avfallet lämnas enligt instruktioner på plats.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ska lämnas i de insamlingssystem som tillhandahålls av producent. Sådana platser finns även på återvinnings­centralerna.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Läkemedel",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Krav på utsortering i enlighet med definitionen av läkemedel i förordningen (2009:1031) om producentansvar för läkemedel.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ska lämnas i behållare eller påse som tillhandahålls av apoteket.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till apotek.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Tabell 3. Exempel på avfall från verksamheter",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Restavfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempel på restavfall är hygienartiklar, diskborstar, kuvert, städsopor, snus, tuggummi och dammsugarpåsar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ska sorteras ut och hållas skilt från annat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Läggs i säck eller emballeras och lämnas i behållare. Avfallet ska vara väl emballerat så att det inte sprids eller så att skada, arbetsmiljöproblem eller andra olägenheter inte uppkommer. Kärl- och säckavfall får inte lämnas på återvinningscentral eller återvinningsstation.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Restavfall borttransporteras från fastigheten i enlighet med hämtningsintervall som kommunen tillhandahåller.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Brännbart avfall som inte är avfall under kommunalt ansvar",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis trasiga trämöbler eller kasserade böcker med hårda pärmar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Sorteras ut och hålls skilt från annat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till en godkänd avfallsmottagare som har tillstånd från länsstyrelsen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Icke brännbart avfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis trasiga koppar av porslin och keramik eller trasig köksutrustning av metall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Sorteras ut och hålls skilt från annat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till en godkänd avfallsmottagare som har tillstånd från länsstyrelsen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bygg- och rivningsavfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis kakel, fönster, gipsskivor, oimpregnerat trä, tegel och armeringsjärn.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Avfallet ska sorteras i åtminstone följande fraktioner: trä, mineral (betong, tegel, klinker, keramik och sten), metall, glas, plast och gips.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Fraktionerna ska förvaras skilt från varandra och annat avfall och även transporteras skilt (transporten kan ske i samma fordon).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till en godkänd avfallsmottagare som har tillstånd från länsstyrelsen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Farligt avfall (exklusive elavfall)",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis rester av olja eller färg, starka rengöringsmedel, produkter som innehåller kvicksilver, andra kemikalier och smittförande avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Sorteras ut och hålls skilt från annat avfall enligt 4 kap 10 § avfallsförordningen (2020:614).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Förvaras så att risk för spridning till omgivningen inte sker.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till en godkänd avfallsmottagare för farligt avfall. Observera att farligt avfall inte får lämnas på kommunens återvinningscentraler.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Avfall från oljeavskiljare",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Sorteras ut och hålls skilt från annat avfall enligt 4 kap 10 § avfallsförordningen (2020:614).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Hämtning utförs av en godkänd avfallsmottagare som har tillstånd från länsstyrelsen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Skärande och stickande avfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis trasiga dricksglas och knivar, nålar från sytillbehör, vassa trädgårdsredskap, rakhyvlar och skärblad.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Omsluts av förpackning eller påse för att skydda mot skärskador. Läggs i säck för restavfall eller blandat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till en godkänd avfallsmottagare som har tillstånd från länsstyrelsen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Smittförande avfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis föremål med skärande eller stickande egenskaper som varit i kontakt med kroppsvätskor från människor, eller från djur inom djurens hälso- och sjukvård (kasserade kanyler, skalpeller, piercing- och tatueringsverktyg eller insulinpennor med mera) (SOSFS 2005:26; AFS 2018:4). Även biologiskt avfall som vävnader, organ och identifierbara kroppsdelar räknas hit (SOSFS 2001:8). Se gällande föreskrifter och allmänna råd från Socialstyrelsen och Arbetsmiljö­verket.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Sorteras ut och hålls skilt från annat avfall enligt 4 kap 10 § avfallsförordningen (2020:614).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Samlas upp i typgodkända behållare som skyddar mot skär- och stickskador. Rum där smittförande avfall förvaras ska vara synligtmärkta med varningsskylt med internationella symbolen för biologisk fara. Avfallet får inte vara åtkomligt för obehöriga, och måste förvaras i typgodkända behållare som är korrekt uppmärkta (detta gäller inte om avfallet konverterats till icke-smittförande avfall genom autoklavering eller annan godkänd metod).",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till en godkänd avfallsmottagare för farligt avfall. Observera att farligt avfall inte får lämnas på kommunens återvinningscentraler.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Matavfall från verksamheter",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Matavfall utgörs av biologiskt nedbrytbart avfall som uppkommer i och med livsmedelshanteringen i verksamheten till exempel skal och matrester.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Matavfall ska sorteras ut och hållas skilt från annat avfall.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Utsorterat matavfall förpackas i, av renhållaren anvisade, påsar och lämnas i avsett kärl eller behållare. För storkök, restauranger och butiker som har större mängder matavfall accepteras även matavfallskvarn och tank. Andra lösningar kan accepteras efter ansökan hos miljö- och hälsoskyddsnämnden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Matavfall borttransporteras från fastigheten i enlighet med hämtningsintervall som renhållaren tillhandahåller. Extra hämtning kan beställas enligt fastställd taxa.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Matfetter och frityroljor",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ska sorteras ut och hållas väl avskilt. Materialet ska vara åtkomligt för tömning i den anläggning där det genereras.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Matfett och frityrolja ska förvaras i behållare med tätslutande lock.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Matfett och frityrolja hämtas av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Fett från fettavskiljare",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Materialet ska vara åtkomligt för tömning i den anläggning där det genereras.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Fett från fettavskiljare hämtas av renhållaren.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Slam och fosforfiltermaterial från enskilda avloppsanläggningar",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Materialet ska vara åtkomligt för tömning i den anläggning där det genereras.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Filtermaterial från fosforfällor och andra jämförbara filter ska vara förpackat eller tillgängligt på ett sådant sätt att hämtning kan utföras av fordon utrustat med kran om så krävs.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till en godkänd avfallsmottagare som har tillstånd från länsstyrelsen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Andra animaliska biprodukter (ABP) än döda sällskapsdjur och matavfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Blandas före detta livsmedel med annat avfall utgör den blandade fraktionen före detta livsmedel och är ABP enligt definitionen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Före detta livsmedel från butik ska av avfallslämnaren förpackas i särskild påse, säck, behållare eller lämnas i tank av typ som godkänts av renhållaren. Verksamhetsavfall utanför kommunens ansvarsområde ska hanteras enligt ABP-förordningen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till en godkänd avfallsmottagare som har tillstånd från länsstyrelsen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Elavfall",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Exempelvis kasserad kyl- och frysdisk, skrivare och industritvättmaskin.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Krav på utsortering enligt förordningen (2014:1075) om producentansvar för elutrustning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till producenternas insamlingssystem",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Förpackningar",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Krav på utsortering enligt förordning (2022:1274) om producentansvar för förpackningar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till någon av kommunens återvinningsstationer eller återvinningscentraler alternativt fastighetsnära insamling.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Kasserade bilbatterier",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Krav på utsortering enligt förordning (2008:834) om producentansvar för batterier.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Ställs upp på ett sätt som förhindrar att batterisyra eller innehåll rinner ut.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till producenternas insamlingssystem.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Kasserade bärbara batterier",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Krav på utsortering enligt förordning (2008:834) om producentansvar för batterier.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Förvaras så att risk för spridning till omgivningen inte sker.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Lämnas till producenternas insamlingssystem.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bilaga 2 - Tömningsområde underjordsbehållare",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Klicka på kartan för att visa i större version.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bilaga 3 - Tömningsområde hämtning varje vecka",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Klicka på kartan för att visa en större version.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bilaga 4 - Tömningsområde öar",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Slamtömning Holmön.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Slamtömning Norrbyskär.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Bygga, bo och miljö",
+      "Avfall och återvinning"
+    ],
+    "description": "Föreskrifter om avfallshantering - Ingen beskrivning.",
+    "keywords": [],
+    "visibleDate": "2026-07-13",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.0439,
+      "quality.emptyRoot": 0
+    }
+  }
+}

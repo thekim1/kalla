@@ -1,0 +1,209 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/kommunochpolitik/dataskyddpersonuppgifter/behandlingkultur/behandlingbibliotek.4.27a2de8b172da059ace6a9.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Behandling, bibliotek",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Behandling av personuppgifter, bibliotek",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vi sparar de personuppgifter som behövs för att vi ska kunna administrera lån, reservationer och eventuella skulder och för att du ska kunna använda bibliotekets digitala tjänster eller boka datorer och grupprum. Vi behöver också person­uppgifter för att kunna komma i kontakt med dig.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Uppgifter vi sparar är",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "namn",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "adress",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "personnummer",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "telefonnummer",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "mejladress.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Uppgifterna sparas tills vidare, men du har när som helst rätt att få dem raderade förutsatt att alla lån är återlämnade och eventuella skulder reglerade. Du har även rätt att få information om de uppgifter vi har om dig samt begära rättelse vid felaktigheter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Den lagliga grunden för behandling är avtal, det vill säga att du accepterat lånereglerna i och med att du skaffat ett bibliotekskort.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Dina uppgifter kan komma att delas med underbiträden för systemförvaltning och utveckling. Underbiträden har tecknat personuppgiftsbiträdesavtal, där de förbinder sig att följa gällande lagstiftning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Dina rättigheter",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Personuppgiftsansvarig är Kulturnämnden i Umeå kommun, 901 84 Umeå, umea.kultur@umea.se.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kan kontakta oss om",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "du vill ha ut information om de uppgifter vi har om dig",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "begära rättelse",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "begära överföring",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "begära begränsning av behandlingen",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "begära radering av dina uppgifter",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "göra invändningar på dina uppgifter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Detta gör du genom att använda vår e-tjänst Rättighetsbegäran personuppgifter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Rättighetsbegäran personuppgifter",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kan läsa mer om dina rättigheter och om vad rätten att invända mot behandlingen innebär på www.umea.se/gdpr.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Om du har klagomål på vår behandling av dina person­uppgifter har du rätt att lämna in ett klagomål till Integritets­skydds­myndigheten som är tillsynsmyndighet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Integritetsskyddsmyndighetens webbplats (imy.se)",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Kommun och politik",
+      "Dataskydd, personuppgifter",
+      "Behandling, kultur"
+    ],
+    "description": "Vi sparar de personuppgifter som behövs för att vi ska kunna administrera lån, reservationer och eventuella skulder och för att du ska kunna använda bibliotekets digitala tjänster eller boka datorer och grupprum. Vi behöver också person­uppgifter för att kunna komma i kontakt med dig. Uppgifter vi sparar är namn adress personnummer telefonnummer mejladress. Uppgifterna sparas tills vidare, men du har när som helst rätt att få dem raderade förutsatt att alla lån är återlämnade och eventuella skulder reglerade. Du har även rätt att få information om de uppgifter vi har om dig samt begära rättelse vid felaktigheter. Den lagliga grunden för behandling är avtal, det vill säga att du accepterat lånereglerna i och med att du skaffat ett bibliotekskort. Dina uppgifter kan komma att delas med underbiträden för systemförvaltning och utveckling. Underbiträden har tecknat personuppgiftsbiträdesavtal, där de förbinder sig att följa gällande lagstiftning.",
+    "keywords": [],
+    "visibleDate": "2026-05-22",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.4512,
+      "quality.emptyRoot": 0
+    }
+  }
+}

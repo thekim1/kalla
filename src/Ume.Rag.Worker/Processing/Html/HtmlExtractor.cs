@@ -13,23 +13,23 @@ namespace Ume.Rag.Worker.Processing.Html;
 
 /// <summary>
 /// A built-in preset (processing design §3.7): the site-profile fields used when a host has no profile (and for uploaded
-/// HTML). <see cref="HtmlPresets.Generic"/> is the landmark fallback; the Sitevision preset is P1a item 8 and is added
-/// by registering an <see cref="IHtmlPresetCatalog"/> that recognises it.
+/// HTML). <see cref="HtmlPresets.Generic"/> is the landmark fallback; <see cref="SitevisionPreset"/> is chosen by its
+/// fingerprint.
 /// </summary>
 public sealed record HtmlPreset(string Name, int Version, SiteProfile Profile);
 
-/// <summary>The seam for CMS presets (item 8): picks the preset for a document without a site profile.</summary>
+/// <summary>The seam for CMS presets: picks the preset for a document without a site profile.</summary>
 public interface IHtmlPresetCatalog
 {
     HtmlPreset Select(IHtmlDocument document);
 }
 
-/// <summary>The presets this build knows: the generic landmark preset only (Sitevision comes with item 8).</summary>
+/// <summary>The presets this build knows: Sitevision when its fingerprint matches, else the generic landmark preset.</summary>
 public sealed class HtmlPresets : IHtmlPresetCatalog
 {
     public static HtmlPreset Generic { get; } = new("generic", 1, new SiteProfile { MainRoot = "main, article, [role=main]" });
 
-    public HtmlPreset Select(IHtmlDocument document) => Generic;
+    public HtmlPreset Select(IHtmlDocument document) => SitevisionPreset.Recognises(document) ? SitevisionPreset.Preset : Generic;
 }
 
 /// <summary>The site profile of the document's host, or null (then a preset applies).</summary>
@@ -46,21 +46,29 @@ public sealed record HtmlExtraction(ParsedDocument Document, string Outcome)
 
 /// <summary>
 /// HTML extraction by the host's site profile (processing design §3.7), generic over the <see cref="SiteProfile"/>
-/// contract: (1) the main root by the profile's selector, else the landmarks <c>main</c>, <c>article</c>,
-/// <c>role=main</c>, else <c>body</c>; (2) the profile's boilerplate selectors and phrases stripped inside the root;
-/// (3) link-list blocks dropped (discovery only); (4) blocks <c>h1</c>–<c>h6</c>, <c>p</c>, <c>li</c> with nesting depth,
-/// <c>table</c> (header rows, spans), <c>pre</c>/<c>code</c>, <c>figcaption</c>; (5) facts: breadcrumb (selector, else
-/// <c>aria-label</c> Brödsmulor/breadcrumb, else <c>BreadcrumbList</c>; screen-reader-only text removed; the current page
-/// dropped when it repeats the title), the visible date by the profile's pattern, description, keywords and title.
+/// contract: (1) the main root by the profile's selector (the alternatives of a selector list tried in order), else the
+/// landmarks <c>main</c>, <c>article</c>, <c>role=main</c>, else <c>body</c>; (2) the profile's boilerplate selectors and
+/// phrases stripped inside the root; (3) link-list blocks dropped (discovery only); (4) blocks <c>h1</c>–<c>h6</c>,
+/// <c>p</c>, <c>li</c> with nesting depth, <c>table</c> (header rows, spans), <c>pre</c>/<c>code</c>, <c>figcaption</c>;
+/// (5) facts: breadcrumb (selector, else <c>aria-label</c> Brödsmulor/breadcrumb, else <c>BreadcrumbList</c>;
+/// screen-reader-only text removed; the current page dropped when it repeats the title; a selector matching several
+/// elements gives one crumb each), the visible date by the profile's pattern, description, keywords and title.
 /// SmartReader as the last fallback is not in this build (the root falls back to <c>body</c>).
 /// </summary>
 public sealed partial class HtmlExtractor(IHtmlPresetCatalog presets)
 {
-    public const int Version = 1;
+    public const int Version = 2;
 
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     private static readonly string[] Dropped = ["script", "style", "noscript", "template", "svg", "iframe", "object", "button", "select", "input", "textarea", "nav"];
+
+    /// <summary>Elements that start a new line inside a paragraph-like or list-item block.</summary>
+    private static readonly HashSet<string> LineBlocks = new(StringComparer.Ordinal)
+    {
+        "p", "div", "address", "h1", "h2", "h3", "h4", "h5", "h6", "dt", "dd", "section", "article", "header", "footer", "aside", "figure",
+        "figcaption", "blockquote", "table", "tr", "pre", "li", "ul", "ol",
+    };
 
     private static readonly string[] HiddenSelectors =
     [
@@ -128,16 +136,93 @@ public sealed partial class HtmlExtractor(IHtmlPresetCatalog presets)
         return new HtmlExtraction(parsed, outcome);
     }
 
+    /// <summary>
+    /// The first element matching the selector's alternatives tried in order (<c>main, article</c> prefers a <c>main</c>
+    /// that comes after an <c>article</c>), not the first in document order as one CSS selector list would give.
+    /// </summary>
     private static IElement? Select(IHtmlDocument document, string selector)
     {
         try
         {
-            return document.QuerySelector(selector);
+            return Alternatives(selector).Select(document.QuerySelector).FirstOrDefault(e => e is not null);
         }
         catch (DomException)
         {
             return null; // an invalid selector is a profile fault; the fallback takes over and emptyRoot shows it
         }
+    }
+
+    private static List<IElement> SelectAll(IHtmlDocument document, string selector)
+    {
+        try
+        {
+            return [.. document.QuerySelectorAll(selector)];
+        }
+        catch (DomException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>A selector list split at its top-level commas (not inside brackets, parentheses or quotes).</summary>
+    internal static IEnumerable<string> Alternatives(string selector)
+    {
+        var depth = 0;
+        var quote = '\0';
+        var start = 0;
+        for (var i = 0; i < selector.Length; i++)
+        {
+            var c = selector[i];
+            if (quote != '\0')
+            {
+                if (c == '\\')
+                {
+                    i++;
+                }
+                else if (c == quote)
+                {
+                    quote = '\0';
+                }
+            }
+            else if (c is '"' or '\'')
+            {
+                quote = c;
+            }
+            else if (c is '(' or '[')
+            {
+                depth++;
+            }
+            else if (c is ')' or ']')
+            {
+                depth--;
+            }
+            else if (c == ',' && depth == 0)
+            {
+                if (selector[start..i].Trim() is { Length: > 0 } part)
+                {
+                    yield return part;
+                }
+
+                start = i + 1;
+            }
+        }
+
+        if (selector[start..].Trim() is { Length: > 0 } last)
+        {
+            yield return last;
+        }
+    }
+
+    /// <summary>A copy of <paramref name="element"/> without its screen-reader-only and hidden parts.</summary>
+    private static IElement Visible(IElement element)
+    {
+        var copy = (IElement)element.Clone(deep: true);
+        foreach (var hidden in HiddenSelectors.SelectMany(s => copy.QuerySelectorAll(s)).ToList())
+        {
+            hidden.Remove();
+        }
+
+        return copy;
     }
 
     private static void Strip(IElement root, SiteProfile settings)
@@ -201,25 +286,25 @@ public sealed partial class HtmlExtractor(IHtmlPresetCatalog presets)
 
     private static List<string> Breadcrumb(IHtmlDocument document, SiteProfile settings, string? title)
     {
-        IElement? element = null;
-        if (settings.Breadcrumb is { } selector)
+        // A profile selector matches either the breadcrumb (one element) or its crumbs (each match one crumb).
+        var crumbs = settings.Breadcrumb is { } selector ? SelectAll(document, selector) : [];
+        var element = crumbs.Count == 1 ? crumbs[0] : null;
+        if (crumbs.Count == 0)
         {
-            element = Select(document, selector);
+            element = document.QuerySelectorAll("[aria-label]")
+                .FirstOrDefault(e => e.GetAttribute("aria-label") is { } label
+                    && (label.Equals("Brödsmulor", StringComparison.OrdinalIgnoreCase) || label.Equals("breadcrumb", StringComparison.OrdinalIgnoreCase)
+                        || label.Equals("breadcrumbs", StringComparison.OrdinalIgnoreCase)));
         }
 
-        element ??= document.QuerySelectorAll("[aria-label]")
-            .FirstOrDefault(e => e.GetAttribute("aria-label") is { } label
-                && (label.Equals("Brödsmulor", StringComparison.OrdinalIgnoreCase) || label.Equals("breadcrumb", StringComparison.OrdinalIgnoreCase)
-                    || label.Equals("breadcrumbs", StringComparison.OrdinalIgnoreCase)));
         List<string> items;
-        if (element is not null)
+        if (crumbs.Count > 1)
         {
-            var copy = (IElement)element.Clone(deep: true);
-            foreach (var hidden in HiddenSelectors.SelectMany(s => copy.QuerySelectorAll(s)).ToList())
-            {
-                hidden.Remove();
-            }
-
+            items = [.. crumbs.Select(c => Normalize(Visible(c).TextContent))];
+        }
+        else if (element is not null)
+        {
+            var copy = Visible(element);
             var parts = copy.QuerySelectorAll("li");
             items = parts.Length > 0
                 ? [.. parts.Select(p => Normalize(p.TextContent))]
@@ -416,7 +501,7 @@ public sealed partial class HtmlExtractor(IHtmlPresetCatalog presets)
                 }
                 else
                 {
-                    own.Append(node.TextContent);
+                    AppendText(node, own);
                 }
             }
 
@@ -487,27 +572,47 @@ public sealed partial class HtmlExtractor(IHtmlPresetCatalog presets)
         private static string InlineText(IElement element)
         {
             var text = new StringBuilder();
-            void Visit(INode node)
+            foreach (var child in element.ChildNodes)
             {
-                foreach (var child in node.ChildNodes)
-                {
-                    if (child is IText t)
-                    {
-                        text.Append(t.Data);
-                    }
-                    else if (child is IElement { LocalName: "br" })
+                AppendText(child, text);
+            }
+
+            return text.ToString();
+        }
+
+        /// <summary>
+        /// The text of <paramref name="node"/> with a line break for <c>br</c> and around block elements, so a list item or an
+        /// address made of paragraphs (umea.se's contact cards) keeps its lines whatever the source's whitespace.
+        /// </summary>
+        private static void AppendText(INode node, StringBuilder text)
+        {
+            switch (node)
+            {
+                case IText t:
+                    text.Append(t.Data);
+                    break;
+                case IElement { LocalName: "br" }:
+                    text.Append('\n');
+                    break;
+                case IElement element:
+                    var block = LineBlocks.Contains(element.LocalName);
+                    if (block)
                     {
                         text.Append('\n');
                     }
-                    else
-                    {
-                        Visit(child);
-                    }
-                }
-            }
 
-            Visit(element);
-            return text.ToString();
+                    foreach (var child in element.ChildNodes)
+                    {
+                        AppendText(child, text);
+                    }
+
+                    if (block)
+                    {
+                        text.Append('\n');
+                    }
+
+                    break;
+            }
         }
 
         private void FlushLoose()
