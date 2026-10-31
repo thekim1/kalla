@@ -102,6 +102,10 @@ embedding model, U-b"): a handful of public umea.se pages ingested with `text-em
 then a retrieval query. Every step is marked **now** (works on `main` today) or **after #NNN** (waits for that PR or
 issue). Until the admin's set-up endpoints (J7) exist, the source comes from a dev seed script.
 
+**Passed 2026-11-01** (session 13, on Linux/WSL): 5 pages fetched, 4 added (one hub page `parse.empty`), 17 chunks at
+1024 dimensions, the canary recorded at `Eu`, and `/v1/retrieve` answered in under 1 s with the right chunk first. Until
+#168 is merged, the AppHost needs the three workarounds in §4.3. What the run showed is in §4.7.
+
 ### 4.1 Prerequisites
 
 | | Status |
@@ -159,6 +163,37 @@ user `postgres`, the generated password); keep it out of transcripts. For the AP
 `key-pepper` parameter (the dashboard's Parameters, or `dotnet user-secrets --project src/Ume.Rag.AppHost list`, key
 `Parameters:key-pepper`): rag-api hashes keys with it (`Security:KeyPepper`).
 
+**On Linux or WSL** (no PowerShell needed), use the Aspire CLI with the same switches; `aspire` is the CLI from the
+NuGet cache (`~/.nuget/packages/aspire.cli.linux-x64/<version>/tools/net10.0/linux-x64/aspire`) or `dotnet tool`:
+
+```bash
+export Seed__Enabled=false BlobStore__Root=$HOME/.ume-rag/blobs/rag   # BlobStore: until #168, see below
+mkdir -p "$BlobStore__Root"
+aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive   # prints the dashboard login URL
+aspire describe --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj                    # resource states
+```
+
+With WSL's mirrored networking the Windows browser reaches every `localhost` port. If `https://localhost:5174` shows
+another app, the browser serves a cached one: open it in a private window. The dev certificate is not trusted on the
+Windows side (accept the warning once per port: 5174, 7402, Keycloak's port).
+
+**Until #168 is merged** (AppHost, stream B), a run from an empty volume needs three workarounds:
+
+1. **No `vector` extension:** `migrations` fails with `42704: type "vector" does not exist` and the services stay
+   `FailedToStart`. Create it, then restart the resources:
+   ```bash
+   C=$(docker ps --format '{{.Names}}' | grep -E '^postgres-' | head -1)
+   docker exec "$C" sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U postgres -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector"'
+   for r in migrations worker api adminapi; do aspire resource $r start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj; done
+   ```
+   Run the `CREATE EXTENSION` on its own: `psql -c` runs several statements as one transaction.
+2. **The database does not survive a restart:** the named volume is mounted at `/var/lib/postgresql` but the pgvector
+   image (Postgres 17) keeps its data in `/var/lib/postgresql/data`, an anonymous volume. Every AppHost restart starts
+   from an empty database: redo 1 and the seed (§4.4), and revoke nothing (the old key is gone with the database).
+3. **`BlobStore:Root`** defaults to `/data/blobs/rag`: on Linux every fetch job throws `UnauthorizedAccessException`
+   and retries (on Windows the path quietly becomes `C:\data\blobs\rag`). Set `BlobStore__Root` before `aspire start`
+   as above; the worker, api and admin inherit it.
+
 ### 4.4 Seed a URL-list source (now on FakeGateway; for the pilot profile after 4.3)
 
 `scripts/dev/seed_url_list.py` creates, in the local database only, a department (`Pilot (dev seed)`), a public and
@@ -174,6 +209,13 @@ reads robots.txt first and keeps its per-host budget, so a small list is a few p
 export UME_RAG_DEV_DB='Host=localhost;Port=<port>;Username=postgres;Password=<password>;Database=ragdb'
 python3 -I scripts/dev/seed_url_list.py --profile pilot-embedding \
   https://www.umea.se/<page 1> https://www.umea.se/<page 2> https://www.umea.se/<page 3>
+```
+
+To keep the password out of the shell history and transcripts, build the connection string from the container:
+
+```bash
+C=$(docker ps --format '{{.Names}}' | grep -E '^postgres-' | head -1)
+export UME_RAG_DEV_DB="Host=localhost;Port=$(docker port "$C" 5432/tcp | head -1 | sed 's/.*://');Username=postgres;Password=$(docker exec "$C" printenv POSTGRES_PASSWORD);Database=ragdb"
 ```
 
 Without `psql` on the machine, add `--docker <the postgres container>` (`docker ps --filter name=postgres`); the
@@ -231,7 +273,17 @@ curl -sS https://localhost:7401/v1/retrieve -H "Authorization: Bearer $UME_RAG_K
 
 `401 invalid_key` means the key is mistyped or hashed under another pepper; `403 client_not_allowed` a client of another
 kind; `404 collection_not_found` a slug the client may not see (or no `public` level row); `503 config_unconfirmed`
-right after a start: try again.
+right after a start: try again. On Linux, where curl does not trust the dev certificate, add `-k` (local only).
+
+Retrieval serves only `live` sets. A page whose personal-data check flagged it in a `public` collection is **held**
+(processing design §9.5): `Added` in the run, with reason `pii.flagged` in its run item, but not served until an admin
+clears it. Check with:
+
+```sql
+SELECT d."Url", s."State", s."PiiCounts" FROM content."Documents" d JOIN content."ChunkSets" s ON s."Id" = d."LiveChunkSetId";
+```
+
+The §4.5 chunk query counts only served chunks (`DeletedAt IS NULL`); a held set's chunks keep `DeletedAt`.
 
 ### 4.6 Back to FakeGateway (now)
 
@@ -249,3 +301,15 @@ done
 ```
 
 Keep the `ume-rag-m1-postgres` volume for the next live run, or delete it with `docker volume rm ume-rag-m1-postgres`.
+
+### 4.7 What milestone 1 showed (2026-11-01)
+
+| Finding | Status |
+|---|---|
+| The interim gateway accepts `dimensions` for `text-embedding-3-large`; vectors are 1024 | confirmed |
+| The dashboard parameter is `key-pepper` (user secret `Parameters:key-pepper`); rag-api runs on `https://localhost:7401` | confirmed |
+| The AppHost from an empty volume: `vector` extension, volume path, `BlobStore:Root` | #168 (stream B), workarounds in §4.3 |
+| Two pages held for e-mail addresses only: `Settings.Engine.PiiOwnDomains` is empty, so `@umea.se` counts as external | the user decided `piiMode: report` for the municipality's own site (Decisions table, 2026-11-01); set `PiiOwnDomains` to `umea.se` and the municipal companies' domains |
+| The gateway's PII filter answered a policy block with 503: the worker retried it as an outage until the key policy changed (attempt 5 of 6) | for the gateway session: a policy refusal should be a 4xx with a reason code |
+| A hub page of link cards (`bygganyttandraellerriva`) is `parse.empty` and counted as `Unchanged` in the run | expected for the page; the counter is checked by stream A |
+| The worker's job log names the exception type only (`threw System.UnauthorizedAccessException`); `LastError` is `job.exception` | stream A |
