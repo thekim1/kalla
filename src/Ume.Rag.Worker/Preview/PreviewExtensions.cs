@@ -15,8 +15,9 @@ namespace Ume.Rag.Worker.Preview;
 public static class PreviewExtensions
 {
     /// <summary>
-    /// The <c>preview</c> class (engine design §11): its handler with <c>stage-preview</c> and <c>preflight</c>, and the
-    /// hourly sweep of <c>previews/</c> blobs. Called by <c>AddRagEngine</c>, whose stages, stores and connectors it uses.
+    /// The <c>preview</c> class (engine design §11, §12.2): its handler with <c>stage-preview</c>, <c>preflight</c> and
+    /// <c>publish-plan</c>, and the hourly sweep of <c>previews/</c> blobs. Called by <c>AddRagEngine</c>, whose stages,
+    /// stores and connectors it uses.
     /// </summary>
     public static IHostApplicationBuilder AddRagPreview(this IHostApplicationBuilder builder)
     {
@@ -32,6 +33,7 @@ public static class PreviewExtensions
             sp.GetService<IParserConverter>(), sp.GetService<IParserBuild>()));
         services.TryAddSingleton<StagePreview>();
         services.TryAddSingleton<Preflight>();
+        services.TryAddSingleton<PublishPlan>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, PreviewJobHandler>());
         services.TryAddSingleton<PreviewBlobSweep>();
         services.AddHostedService(sp => sp.GetRequiredService<PreviewBlobSweep>());

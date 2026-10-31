@@ -90,6 +90,7 @@ public static class EngineExtensions
             sp.GetRequiredService<DetectStage>(), sp.GetRequiredService<Processing.Html.HtmlExtractor>(), sp.GetRequiredService<Processing.Chunking.Chunker>(),
             sp.GetRequiredService<PersonalDataStage>(), sp.GetRequiredService<IParsePlanner>(), sp.GetRequiredService<IOptions<ParseOptions>>(),
             sp.GetRequiredService<EngineSettings>(), sp.GetService<IParserConverter>(), sp.GetService<IParserBuild>()));
+        services.TryAddSingleton<ChunkSetSwap>();
         services.TryAddSingleton<DocumentIngest>();
         services.TryAddSingleton<UrlListSource>();
         services.TryAddSingleton<UploadSource>();

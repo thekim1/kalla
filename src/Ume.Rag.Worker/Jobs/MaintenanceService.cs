@@ -72,7 +72,7 @@ public sealed partial class MaintenanceService(
 
         try
         {
-            LogOrphansSwept(logger, await index.SweepOrphansAsync(cancellationToken));
+            LogOrphansSwept(logger, await index.SweepOrphansAsync(time.GetUtcNow(), cancellationToken));
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {

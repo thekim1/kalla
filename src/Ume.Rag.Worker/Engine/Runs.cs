@@ -225,7 +225,8 @@ public sealed class RunStore(JobDatabase database)
 /// <c>superseded</c> items are not counted), jobs that died without an item count as failed, and the state is set:
 /// <c>failed</c> when the sync job failed, every processed item failed or the crawl reached no seed; <c>awaiting-deletion-confirmation</c>
 /// while the guard holds proposals; <c>degraded</c> above <c>Settings.DegradedFailureRatio</c>, on any <c>malware</c>, or
-/// when the crawl hit its page limit or a host was paused (the report's <c>verdict</c>); else <c>succeeded</c>.
+/// when the crawl hit its page limit or a host was paused (the report's <c>verdict</c>); else <c>succeeded</c>. A finished
+/// <c>reprocess</c> run of a publish or rollback enqueues its <c>eval</c> <c>publish-report</c> in the same transaction.
 /// </summary>
 public sealed partial class RunFinalizer(
     JobDatabase database,
@@ -241,7 +242,8 @@ public sealed partial class RunFinalizer(
         SELECT r."Id", r."SourceId", r."Classification", r."Kind", r."Trigger", r."Phase", s."Type", c."DepartmentId",
                EXISTS (SELECT 1 FROM content."CrawlFrontier" f
                         WHERE f."Classification" = r."Classification" AND f."SourceId" = r."SourceId" AND f."RunId" = r."Id" AND f."State" <> 'idle'),
-               r."Report" -> 'verdict' ->> 'runFailure', r."Report" -> 'verdict' ->> 'runDegradation'
+               r."Report" -> 'verdict' ->> 'runFailure', r."Report" -> 'verdict' ->> 'runDegradation',
+               c."Id", c."Classification", r."PipelineVersionId"
         FROM content."Runs" r
         JOIN config."Sources" s ON s."Id" = r."SourceId"
         JOIN config."Collections" c ON c."Id" = s."CollectionId"
@@ -314,7 +316,8 @@ public sealed partial class RunFinalizer(
             while (await reader.ReadAsync(cancellationToken))
             {
                 idle.Add(new IdleRun(reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
-                    Db.String(reader, 5), reader.GetString(6), reader.GetGuid(7), reader.GetBoolean(8), Db.String(reader, 9), Db.String(reader, 10)));
+                    Db.String(reader, 5), reader.GetString(6), reader.GetGuid(7), reader.GetBoolean(8), Db.String(reader, 9), Db.String(reader, 10),
+                    reader.GetGuid(11), reader.GetString(12), Db.Nullable<Guid>(reader, 13)));
             }
         }
 
@@ -367,8 +370,20 @@ public sealed partial class RunFinalizer(
                     Db.P((int)c.Proposed), Db.P(c.Cost), Db.P(state),
                 },
             };
-            finished += await finish.ExecuteNonQueryAsync(cancellationToken);
+            if (await finish.ExecuteNonQueryAsync(cancellationToken) == 0)
+            {
+                continue;
+            }
+
+            finished++;
             LogFinished(logger, run.Id, state, c.Added, c.Updated, c.Unchanged, c.Deleted, c.Failed);
+            if (run is { Kind: RunKinds.Reprocess, Trigger: RunTriggers.Publish or RunTriggers.Rollback, PipelineVersionId: { } versionId })
+            {
+                // The publish report (engine design §10.4, §12.1 step 6), in the transaction that finishes the run.
+                await queue.EnqueueAsync([SyncJobs.PublishReport(run.CollectionId, run.CollectionClassification, run.DepartmentId, run.Id, versionId)],
+                    transaction, cancellationToken);
+                LogPublishReport(logger, run.Id, run.CollectionId);
+            }
         }
 
         await transaction.CommitAsync(cancellationToken);
@@ -396,10 +411,13 @@ public sealed partial class RunFinalizer(
     internal sealed record Counters(long Added, long Updated, long Unchanged, long Deleted, long Failed, long Malware, decimal Cost, bool SyncFailed, long Proposed);
 
     private sealed record IdleRun(Guid Id, Guid SourceId, string Classification, string Kind, string Trigger, string? Phase, string SourceType, Guid DepartmentId,
-        bool OpenFrontier, string? CrawlFailure, string? CrawlDegradation);
+        bool OpenFrontier, string? CrawlFailure, string? CrawlDegradation, Guid CollectionId, string CollectionClassification, Guid? PipelineVersionId);
 
     [LoggerMessage(LogLevel.Information, "Run {RunId} finished {State}: {Added} added, {Updated} updated, {Unchanged} unchanged, {Deleted} deleted, {Failed} failed")]
     private static partial void LogFinished(ILogger logger, Guid runId, string state, long added, long updated, long unchanged, long deleted, long failed);
+
+    [LoggerMessage(LogLevel.Information, "Run {RunId}: publish-report enqueued for collection {CollectionId}")]
+    private static partial void LogPublishReport(ILogger logger, Guid runId, Guid collectionId);
 
     [LoggerMessage(LogLevel.Warning, "The run finalizer pass failed; it runs again at the next tick")]
     private static partial void LogFailed(ILogger logger, Exception exception);

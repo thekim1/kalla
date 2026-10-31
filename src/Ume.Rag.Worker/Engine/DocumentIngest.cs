@@ -6,6 +6,7 @@ using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Jobs;
+using Ume.Rag.Worker.Processing.Persistence;
 using Outcome = Ume.Rag.Pipelines.Jobs.RunItemOutcome;
 
 namespace Ume.Rag.Worker.Engine;
@@ -52,6 +53,8 @@ public sealed partial class DocumentIngest(
     IJobQueue queue,
     DocumentStore documents,
     IndexWriter index,
+    ChunkSetSwap swaps,
+    IChunkSetStore chunkSets,
     ProcessingSegment segment,
     SiteProfiles siteProfiles,
     IQuarantineStore quarantine,
@@ -153,11 +156,12 @@ public sealed partial class DocumentIngest(
     }
 
     /// <summary>
-    /// <c>EnsureCurrent</c> of a <c>reprocess</c> run (engine design §2.3, §9.2, §12.2): one live document against
+    /// <c>EnsureCurrent</c> of a <c>reprocess</c> run (engine design §2.3, §9.2, §12.2, §12.3): one live document against
     /// <paramref name="pipeline"/> and its host's current site-profile version, without a fetch. A current live set is
-    /// left alone; otherwise the segment runs from the first stage without cached output and its continuation (<c>parse</c>
-    /// or <c>embed</c>, where a set differing only by label is re-keyed) commits fenced, but without completing the
-    /// <c>sync</c> job that iterates the documents.
+    /// left alone; a <c>superseded</c> set with the wanted key (kept 14 days: a rollback of the pipeline or of the host's
+    /// site profile) is swapped back here, with no <c>parse</c> or <c>embed</c> job; otherwise the segment runs from the
+    /// first stage without cached output and its continuation (<c>parse</c> or <c>embed</c>, where a set differing only by
+    /// label is re-keyed) commits fenced. Neither completes the <c>sync</c> job that iterates the documents.
     /// </summary>
     public async Task<EnsureOutcome> EnsureCurrentAsync(SourceContext source, Guid runId, PipelineRun pipeline, DocumentRow document, CancellationToken cancellationToken)
     {
@@ -173,6 +177,28 @@ public sealed partial class DocumentIngest(
         }
 
         var executionId = document.CurrentExecutionId ?? throw new InvalidOperationException("A fetched document has an execution id.");
+        var contentHash = document.ContentHash ?? throw new InvalidOperationException("A fetched document has content.");
+        var key = new ChunkSetKey(document.Id, pipeline.VersionId, profile?.Id, source.EmbeddingProfileId, contentHash);
+        if (await index.FindAsync(key, cancellationToken) is { State: ChunkSetStates.Superseded } kept &&
+            await chunkSets.GetAsync(kept.Id, cancellationToken) is { } stored)
+        {
+            var swap = new SwapRequest(source, document, executionId, contentHash, pipeline.VersionId, runId, stored,
+                await index.LiveAsync(document.Id, cancellationToken), SwappedBack: true, Job: null);
+            switch (await swaps.SwapAsync(swap, cancellationToken))
+            {
+                case SwapResult.Fenced:
+                    await TerminalAsync(source, runId, null, document, document.CanonicalIdentity, Outcome.Superseded, "execution.superseded", pipeline.VersionId,
+                        null, cancellationToken);
+                    break;
+                case SwapResult.Republished:
+                    await TerminalAsync(source, runId, null, document, document.CanonicalIdentity, Outcome.Superseded, EmbedJobHandler.Republished,
+                        pipeline.VersionId, null, cancellationToken);
+                    break;
+            }
+
+            return EnsureOutcome.Committed;
+        }
+
         var input = new SegmentInput(document, pipeline, source.CollectionClassification, RawContentKeys.Of(document))
         {
             DeclaredMediaType = document.MediaType,

@@ -190,7 +190,7 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
     }
 
     [Fact]
-    public async Task Six_documents_are_refused_and_publish_plan_is_not_built_yet()
+    public async Task Six_documents_are_refused()
     {
         await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page(name))));
         var seed = await EngineKit.SeedUrlListAsync(database, [site.Url("/p/a")]);
@@ -203,10 +203,8 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
                 CollectionId = seed.CollectionId,
                 DocumentIds = [.. Enumerable.Range(0, 6).Select(_ => Guid.CreateVersion7())],
             });
-            var plan = await EnqueueAsync(seed, new PublishPlanPayload { PipelineId = seed.PipelineId, PipelineVersionId = seed.VersionId });
 
             (await TerminalAsync(six)).ShouldBe(new JobOutcome(JobStates.Failed, StagePreview.LimitDocuments));
-            (await TerminalAsync(plan)).ShouldBe(new JobOutcome(JobStates.Failed, PreviewJobHandler.Unsupported));
         }
         finally
         {
