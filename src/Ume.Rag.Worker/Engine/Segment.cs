@@ -9,6 +9,7 @@ using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.SiteProfiles;
 using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Connectors.Uploads;
+using Ume.Rag.Worker.Connectors.Urls;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Chunking;
 using Ume.Rag.Worker.Processing.Clean;
@@ -383,7 +384,10 @@ public static class RawContentKeys
     }
 }
 
-/// <summary>The applied site profile of a (level, host) (connectors design §5.6; P1: manual and preset versions).</summary>
+/// <summary>
+/// The applied site profile of a (level, host) (connectors design §5.6; P1: manual and preset versions); the host is the
+/// URL's <see cref="SiteProfileHost"/> key, so every port of the host finds the same profile.
+/// </summary>
 public sealed class SiteProfiles(JobDatabase database)
 {
     private const string AppliedSql = """
@@ -394,12 +398,11 @@ public sealed class SiteProfiles(JobDatabase database)
 
     public async Task<(Guid Id, HtmlProfileVersion Profile)?> AppliedAsync(string classification, string? url, CancellationToken cancellationToken)
     {
-        if (url is null || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        if (SiteProfileHost.Of(url) is not { } host)
         {
             return null;
         }
 
-        var host = uri.IsDefaultPort ? uri.IdnHost.ToLowerInvariant() : $"{uri.IdnHost.ToLowerInvariant()}:{uri.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         await using var connection = await database.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(AppliedSql, connection) { Parameters = { Db.P(classification), Db.P(host) } };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

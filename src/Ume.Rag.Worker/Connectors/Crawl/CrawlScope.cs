@@ -21,8 +21,9 @@ public sealed record ScopeDecision(bool Admitted, bool Leaf, string? Reason)
 /// A crawl source's scope (connectors design §5.2): the scope hosts are the start URLs' hosts and <c>extraHosts</c>;
 /// <c>exclude</c> wins over <c>include</c>, an empty <c>include</c> means everything on the scope hosts; a link to another
 /// host is admitted only when an <c>include</c> glob names that host literally, and then as a leaf. URLs whose extension
-/// names a type outside the pipeline's formats, or one of the site profile's <c>excludedTypes</c> (images and video by
-/// default), are not admitted: <c>.zip</c> and <c>.exe</c> are never fetched. <c>demote</c> patterns change no crawling
+/// names a type outside the pipeline's formats, or one of the URL's host's site profile <c>excludedTypes</c> (images and
+/// video by default, also for hosts without a profile), are not admitted: <c>.zip</c> and <c>.exe</c> are never fetched;
+/// a response of such a type is not read past its headers (<see cref="AcceptedMediaTypes"/>). <c>demote</c> patterns change no crawling
 /// (weakness review §3): they are compiled with the scope, so an invalid one fails like an invalid <c>include</c>, and
 /// <see cref="DemoteFactor"/> gives the rank multiplier retrieval applies from <c>Sources.DemoteRules</c>.
 /// </summary>
@@ -69,7 +70,10 @@ public sealed class CrawlScope
     private readonly IReadOnlyList<UrlPattern> _exclude;
     private readonly IReadOnlySet<string> _offSiteHosts;
     private readonly IReadOnlyList<string> _excludedTypes;
+    private readonly IReadOnlyDictionary<string, IReadOnlyList<string>> _excludedTypesByHost;
     private readonly IReadOnlySet<string> _formats;
+    private readonly IReadOnlySet<string> _accepted;
+    private readonly Dictionary<string, IReadOnlySet<string>> _acceptedByHost;
     private readonly IReadOnlyList<(UrlPattern Pattern, double Factor)> _demote;
 
     private CrawlScope(
@@ -79,22 +83,26 @@ public sealed class CrawlScope
         IReadOnlySet<string> offSiteHosts,
         IReadOnlyList<string> excludedTypes,
         IReadOnlySet<string> formats,
-        IReadOnlyList<(UrlPattern Pattern, double Factor)> demote)
+        IReadOnlyList<(UrlPattern Pattern, double Factor)> demote,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> excludedTypesByHost)
     {
         Hosts = hosts;
         _include = include;
         _exclude = exclude;
         _offSiteHosts = offSiteHosts;
         _excludedTypes = excludedTypes;
+        _excludedTypesByHost = excludedTypesByHost;
         _formats = formats;
         _demote = demote;
+        _accepted = Accepted(formats, excludedTypes);
+        _acceptedByHost = excludedTypesByHost.ToDictionary(e => e.Key, e => Accepted(formats, e.Value), StringComparer.Ordinal);
     }
 
     /// <summary>The scope hosts (lower-case A-labels, no port).</summary>
     public IReadOnlySet<string> Hosts { get; }
 
     /// <param name="settings">The source's settings.</param>
-    /// <param name="excludedTypes">The site profile's <c>excludedTypes</c>; null for <see cref="DefaultExcludedTypes"/>.</param>
+    /// <param name="excludedTypes">The <c>excludedTypes</c> of hosts without a site profile; null for <see cref="DefaultExcludedTypes"/>.</param>
     /// <param name="formats">The pipeline's formats; null for <see cref="MediaTypes.DocumentFormats"/>.</param>
     public static CrawlScope Create(CrawlSettings settings, IReadOnlyList<string>? excludedTypes = null, IReadOnlySet<string>? formats = null)
     {
@@ -130,7 +138,28 @@ public sealed class CrawlScope
 
         return new CrawlScope(hosts, include, [.. settings.Exclude.Select(UrlPattern.Parse)], offSite,
             excludedTypes ?? DefaultExcludedTypes, formats ?? MediaTypes.DocumentFormats,
-            [.. settings.Demote.Select(d => (UrlPattern.Parse(d.Pattern), d.Factor))]);
+            [.. settings.Demote.Select(d => (UrlPattern.Parse(d.Pattern), d.Factor))],
+            new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The scope with the site profiles' <c>excludedTypes</c> by host (<see cref="SiteProfileHost"/> keys, §5.6); a
+    /// host without an entry keeps the default.
+    /// </summary>
+    public CrawlScope WithExcludedTypes(IReadOnlyDictionary<string, IReadOnlyList<string>> byHost)
+    {
+        ArgumentNullException.ThrowIfNull(byHost);
+        return new CrawlScope(Hosts, _include, _exclude, _offSiteHosts, _excludedTypes, _formats, _demote, byHost);
+    }
+
+    /// <summary>
+    /// The response media types a fetch of <paramref name="url"/> reads (connectors design §4, §5.2): the pipeline's formats
+    /// less the URL's host's <c>excludedTypes</c>; any other type stops after the headers.
+    /// </summary>
+    public IReadOnlySet<string> AcceptedMediaTypes(Uri url)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        return SiteProfileHost.Of(url) is { } host && _acceptedByHost.TryGetValue(host, out var accepted) ? accepted : _accepted;
     }
 
     /// <summary>The scope decision for a canonical URL (§3.1 form).</summary>
@@ -142,12 +171,12 @@ public sealed class CrawlScope
             return ScopeDecision.Out(Excluded);
         }
 
-        if (TypeOf(canonicalUrl) is { } type && (!_formats.Contains(type) || _excludedTypes.Any(t => TypeMatches(t, type))))
+        var host = new Uri(canonicalUrl).Host;
+        if (TypeOf(canonicalUrl) is { } type && (!_formats.Contains(type) || ExcludedTypesOf(host).Any(t => TypeMatches(t, type))))
         {
             return ScopeDecision.Out(ExcludedType);
         }
 
-        var host = new Uri(canonicalUrl).Host;
         if (!Hosts.Contains(host))
         {
             // Off-site: only through an include that names this host literally, and then as a leaf.
@@ -184,6 +213,11 @@ public sealed class CrawlScope
         var dot = segment.LastIndexOf('.');
         return dot < 0 ? null : TypesByExtension.GetValueOrDefault(segment[(dot + 1)..]);
     }
+
+    private IReadOnlyList<string> ExcludedTypesOf(string host) => _excludedTypesByHost.GetValueOrDefault(host) ?? _excludedTypes;
+
+    private static IReadOnlySet<string> Accepted(IReadOnlySet<string> formats, IReadOnlyList<string> excludedTypes) =>
+        excludedTypes.Count == 0 ? formats : formats.Where(f => !excludedTypes.Any(t => TypeMatches(t, f))).ToHashSet(StringComparer.Ordinal);
 
     private static bool TypeMatches(string pattern, string type) =>
         pattern.EndsWith("/*", StringComparison.Ordinal)

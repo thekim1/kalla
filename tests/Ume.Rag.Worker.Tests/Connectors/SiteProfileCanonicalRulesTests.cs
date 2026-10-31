@@ -69,8 +69,11 @@ public sealed class SiteProfileCanonicalRulesTests
 
         var hosts = await rules.ForHostsAsync("public", ["www.umea.se", "other.se"], Ct);
 
-        hosts.Keys.ShouldBe(["www.umea.se"]);
-        (await rules.ForHostsAsync("internal", ["www.umea.se"], Ct)).ShouldBeEmpty("the profile belongs to its level");
+        hosts.Canonical.Keys.ShouldBe(["www.umea.se"]);
+        hosts.ExcludedTypes.Keys.ShouldBe(["www.umea.se"]);
+        var other = await rules.ForHostsAsync("internal", ["www.umea.se"], Ct);
+        other.Canonical.ShouldBeEmpty("the profile belongs to its level");
+        other.ExcludedTypes.ShouldBeEmpty();
     }
 
     [Fact]
