@@ -12,8 +12,8 @@ name: Perf
 # hand on the host (the stopgap). Weekly (Monday) the schedule runs the dry run and, with the runner, R1; before each
 # release, dispatch mode r1.
 on:
-  schedule:
-    - cron: '23 4 * * 1'
+  # CI runs on request to save Actions minutes (see verify.yml): the schedule ('23 4 * * 1') is off; run it from the Actions
+  # tab (workflow_dispatch).
   workflow_dispatch:
     inputs:
       mode:
