@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/pipeline/v2/template.schema.json",
+  "title": "Pipeline template",
+  "type": "object",
+  "properties": {
+    "template": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,49}$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "sourceType": {
+      "type": "string",
+      "description": "The source type the template serves (admin V24).",
+      "enum": [
+        "url-list",
+        "crawl",
+        "upload"
+      ]
+    },
+    "deprecated": {
+      "type": "boolean",
+      "description": "A deprecated version still runs; saving a definition on it warns (§4 rule 2).",
+      "default": false
+    },
+    "stages": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "description": "Stage name to code version, a subset of the fixed order fetch, scan, detect, parse, clean, chunk, personal-data, embed, index.",
+      "propertyNames": {
+        "enum": [
+          "fetch",
+          "scan",
+          "detect",
+          "parse",
+          "clean",
+          "chunk",
+          "personal-data",
+          "embed",
+          "index"
+        ]
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string",
+            "description": "Effect tag: the first stage a change affects; the parameter is part of that stage's settings hash.",
+            "enum": [
+              "fetch",
+              "scan",
+              "detect",
+              "parse",
+              "clean",
+              "chunk",
+              "personal-data",
+              "embed",
+              "index"
+            ]
+          },
+          "appliesTo": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "pattern": "^(html|parser|text|csv)$"
+            },
+            "description": "Routes inside the stage the parameter applies to (html, parser, text, csv); absent = every route.",
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "schema": {
+            "description": "JSON Schema 2020-12 of the value.",
+            "type": [
+              "object",
+              "boolean"
+            ]
+          },
+          "default": {
+            "description": "The value when the definition does not set it; valid against schema."
+          }
+        },
+        "required": [
+          "stage",
+          "schema",
+          "default"
+        ],
+        "additionalProperties": false
+      },
+      "propertyNames": {
+        "pattern": "^[a-z][A-Za-z0-9]{0,49}$"
+      },
+      "default": {}
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "sv": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "en": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "sv",
+          "en"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Optional display names per parameter (sv, en); the admin UI's labels.ts takes precedence.",
+      "default": {}
+    },
+    "defs": {
+      "type": "object",
+      "description": "Shared subschemas, reachable from parameter schemas as #/$defs/<name>.",
+      "default": {}
+    },
+    "rules": {
+      "type": "array",
+      "description": "Cross-parameter rules (if/then) over the parameters with defaults applied, so the admin can check them (§4 rule 3).",
+      "maxItems": 20,
+      "default": []
+    },
+    "collectionDefaults": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "recency": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "halfLifeDays": {
+              "type": "integer",
+              "minimum": 30,
+              "maximum": 3650
+            },
+            "weight": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.5
+            },
+            "kinds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "halfLifeDays",
+            "weight",
+            "kinds"
+          ],
+          "additionalProperties": false,
+          "description": "RetrievalSettings.recency: age decay after fusion (weakness review §3)."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Defaults the admin sets on the source's collection when they were never set (engine design §13.1)."
+    }
+  },
+  "required": [
+    "template",
+    "version",
+    "sourceType",
+    "stages"
+  ],
+  "additionalProperties": false,
+  "description": "A pipeline template version (engine design §3.2, §13.1): its stages with their code versions and its parameters with their effect tags, schemas and defaults."
+}

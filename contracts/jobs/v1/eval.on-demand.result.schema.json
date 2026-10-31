@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/eval.on-demand.result.schema.json",
+  "title": "eval on-demand job result",
+  "type": "object",
+  "properties": {
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "variant": {
+            "enum": [
+              "hybrid",
+              "vector",
+              "hybrid-no-decompounder"
+            ]
+          },
+          "evaluationRunId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "questionCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "found": {
+            "type": "integer",
+            "description": "Answerable questions with an expected document in the top k.",
+            "minimum": 0,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "variant",
+          "evaluationRunId",
+          "questionCount",
+          "found"
+        ]
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "runs"
+  ],
+  "description": "Result of an eval job of kind on-demand: one EvaluationRuns row per requested variant."
+}

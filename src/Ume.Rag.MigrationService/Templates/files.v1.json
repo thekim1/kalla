@@ -1,0 +1,63 @@
+{
+  "template": "files",
+  "version": 1,
+  "sourceType": "upload",
+  "stages": {
+    "fetch": 1,
+    "scan": 1,
+    "detect": 1,
+    "parse": 1,
+    "clean": 1,
+    "chunk": 1,
+    "personal-data": 1,
+    "embed": 1,
+    "index": 1
+  },
+  "parameters": {
+    "ocr": {
+      "stage": "parse",
+      "appliesTo": [
+        "parser"
+      ],
+      "schema": {
+        "enum": [
+          "auto",
+          "force",
+          "off"
+        ]
+      },
+      "default": "auto"
+    },
+    "tables": {
+      "stage": "parse",
+      "appliesTo": [
+        "parser"
+      ],
+      "schema": {
+        "enum": [
+          "fast",
+          "accurate"
+        ]
+      },
+      "default": "accurate"
+    },
+    "chunkTokens": {
+      "stage": "chunk",
+      "schema": {
+        "type": "integer",
+        "minimum": 200,
+        "maximum": 800
+      },
+      "default": 400
+    },
+    "overlapPercent": {
+      "stage": "chunk",
+      "schema": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 30
+      },
+      "default": 15
+    }
+  }
+}

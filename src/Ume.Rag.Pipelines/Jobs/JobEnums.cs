@@ -1,0 +1,80 @@
+namespace Ume.Rag.Pipelines.Jobs;
+
+/// <summary><c>sync</c> payload <c>kind</c> = <c>Runs.Kind</c> (engine design §9.1, §10.1).</summary>
+public enum SyncKind
+{
+    Sync,
+    RetryFailed,
+    Reprocess,
+}
+
+/// <summary><c>Runs.Trigger</c> (engine design §10.1); <c>notification</c> (SharePoint) is P2.</summary>
+public enum RunTrigger
+{
+    Schedule,
+    Manual,
+    Upload,
+    Publish,
+    Rollback,
+    SiteProfile,
+    Retry,
+    ConfigChange,
+}
+
+/// <summary>The phase a <c>sync</c> job runs (engine design §9.2, connectors design §2.2).</summary>
+public enum SyncPhase
+{
+    List,
+    Fetch,
+    Reconcile,
+}
+
+/// <summary>A document's terminal outcome in a run (engine design §10.2) = <c>RunItems.Outcome</c>.</summary>
+public enum RunItemOutcome
+{
+    Added,
+    Updated,
+    Unchanged,
+    Skipped,
+    Degraded,
+    Deleted,
+    Unsupported,
+    TooLarge,
+    Encrypted,
+    Malware,
+    Blocked,
+    Failed,
+    Superseded,
+}
+
+/// <summary>The class of the continuation a job enqueued in its commit (engine design §7.4).</summary>
+public enum Continuation
+{
+    Parse,
+    Embed,
+}
+
+/// <summary>What the index writer's swap did (engine design §14, metric <c>rag.index.swaps</c>).</summary>
+public enum SwapKind
+{
+    New,
+    SwappedBack,
+    Rekeyed,
+    Held,
+}
+
+/// <summary>Retrieval variant of an evaluation run (<c>EvaluationRuns.Variant</c>; processing design §13.4).</summary>
+public enum EvaluationVariant
+{
+    Hybrid,
+    Vector,
+    HybridNoDecompounder,
+}
+
+/// <summary>What <c>edit-eval-question</c> does to a <c>human</c> question (processing design §13.4).</summary>
+public enum QuestionAction
+{
+    Create,
+    Update,
+    Retire,
+}

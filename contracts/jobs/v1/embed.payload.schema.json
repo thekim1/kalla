@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/embed.payload.schema.json",
+  "title": "embed job payload",
+  "type": "object",
+  "properties": {
+    "documentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "level": {
+      "type": "string",
+      "enum": [
+        "public",
+        "internal",
+        "sensitive"
+      ]
+    },
+    "executionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "pipelineVersionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "runId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "inputKey": {
+      "type": "string",
+      "description": "Cache key (hex) of the embed stage's input (engine design §3.3).",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "documentId",
+    "level",
+    "executionId",
+    "pipelineVersionId",
+    "runId",
+    "inputKey"
+  ],
+  "description": "Payload of an embed job: the embed and index stages of one document (engine design §7.4, §9.1, §14)."
+}
