@@ -30,7 +30,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option: $1" >&2; usage 1;;
   esac
 done
-[ -r "$deploy_env" ] && [ -n "$crawl" ] || usage 1
+if [ ! -r "$deploy_env" ] || [ -z "$crawl" ]; then usage 1; fi
 { [ -z "$upload" ] && [ -z "$batch" ]; } || { [ -n "$upload" ] && [ -n "$batch" ]; } \
   || { echo "error: --upload-source and --upload-batch go together" >&2; exit 1; }
 uuid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
