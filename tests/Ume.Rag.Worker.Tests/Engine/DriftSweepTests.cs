@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Tests.Processing;
 
@@ -9,7 +11,8 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// The nightly drift sweep (engine design §2.3, §16, §19 "worker restart loses no work"): a document whose job was lost
 /// after a crash (no live set, no open job) is re-enqueued and ends live; with everything current the sweep enqueues
 /// nothing and reports drift 0; after a publish it re-enqueues each drifted document once, and a second pair of concurrent
-/// sweeps while those jobs are queued enqueues nothing more (the dedup key holds).
+/// sweeps while those jobs are queued enqueues nothing more (the dedup key holds); a drifted document with a kept set of the
+/// wanted key is swapped back with no job, as a <c>reprocess</c> run does (§12.3, §14 rule 1).
 /// </summary>
 [Collection(RagDatabaseGroup.Name)]
 public sealed class DriftSweepTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -122,7 +125,8 @@ public sealed class DriftSweepTests(RagDatabaseFixture database, FakeGatewayFact
         var url = site.Url("/p/a");
         var seed = await EngineKit.SeedUrlListAsync(database, [url]);
         await EngineKit.PauseOtherSourcesAsync(database, seed);
-        var profile = await ApplySiteProfileAsync(seed.Classification, $"{url.IdnHost}:{url.Port}");
+        // The profile's key is the host without a port (SiteProfileHost), the only form edit-site-profile writes.
+        var profile = await ApplySiteProfileAsync(seed.Classification, url.IdnHost);
         try
         {
             await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
@@ -140,8 +144,98 @@ public sealed class DriftSweepTests(RagDatabaseFixture database, FakeGatewayFact
         finally
         {
             await EngineKit.PauseAsync(database, seed);
+            await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM content."SiteProfiles" WHERE "Classification" = $1 AND "Host" = $2""",
+                seed.Classification, url.IdnHost);
         }
     }
+
+    [Fact]
+    public async Task A_drifted_document_with_a_kept_set_of_the_wanted_key_is_swapped_back_without_a_job_and_one_without_is_re_processed()
+    {
+        // Pages long enough that a smaller chunkTokens gives new sets; unique text, as the embedding cache is shared. Documents
+        // stay across tests and a site's port can come again, so every lookup is by source too.
+        var tag = Guid.NewGuid().ToString("N");
+        var text = string.Concat(Enumerable.Repeat(
+            $"Bygglov {tag} krävs för nya byggnader, tillbyggnader och vissa ändringar av fasaden. Handläggaren granskar ritningar och situationsplan. ", 40));
+        await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page($"bygglov {name} {tag}", text))));
+        var (a, b) = (site.Url("/p/a").AbsoluteUri, site.Url("/p/b").AbsoluteUri);
+        var seed = await EngineKit.SeedUrlListAsync(database, [site.Url("/p/a"), site.Url("/p/b")]);
+        await EngineKit.PauseOtherSourcesAsync(database, seed);
+        try
+        {
+            await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs,
+                settings: new Dictionary<string, string?> { ["Worker:Classes"] = "preview,command,sync,fetch,parse,embed" });
+            (await EngineKit.WaitForRunAsync(database, await EngineKit.SyncNowAsync(database, seed))).Added.ShouldBe(2);
+            var v1 = (A: await LiveSetAsync(seed, a), B: await LiveSetAsync(seed, b));
+            var v2 = await EngineKit.PublishAsync(database, seed, "url-list", """{"chunkTokens":200}""");
+            (await EngineKit.WaitForRunAsync(database, await EngineKit.SyncNowAsync(database, seed, SyncKind.Reprocess, RunTrigger.Publish))).Updated.ShouldBe(2);
+            var v2Sets = (A: await LiveSetAsync(seed, a), B: await LiveSetAsync(seed, b));
+            v2Sets.A.ShouldNotBe(v1.A);
+
+            // b's v1 set is past the 14-day window and purged; a's is kept.
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."ChunkSets" SET "SupersededAt" = now() - interval '15 days' WHERE "Id" = $1""", v1.B);
+            await new IndexWriter(database.Database(RagDatabase.Worker)).SweepOrphansAsync(DateTimeOffset.UtcNow, Ct);
+            (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."ChunkSets" WHERE "Id" = ANY($1)""", new[] { v1.A, v1.B }))
+                .ShouldBe(1, "only a's v1 set is kept");
+
+            // v1 published again without a run (its rollback run was lost): both live sets drifted.
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."PipelineVersions" SET "State" = 'superseded' WHERE "Id" = $1""", v2);
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."PipelineVersions" SET "State" = 'published' WHERE "Id" = $1""", seed.VersionId);
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Pipelines" SET "PublishedVersionId" = $1 WHERE "Id" = $2""", seed.VersionId,
+                seed.PipelineId);
+            var setsOfA = await SetsAsync(seed, a);
+
+            var sweep = worker.Services.GetRequiredService<DriftSweep>();
+            var result = await sweep.RunAsync(Ct);
+            var runId = await SweepRunAsync(seed);
+
+            result.SwappedBack.ShouldBe(1, "a's kept v1 set has the wanted key");
+            result.Enqueued.ShouldBe(1, "b has no kept set of the wanted key");
+            (await LiveSetAsync(seed, a)).ShouldBe(v1.A, "the kept set is live again");
+            (await SetsAsync(seed, a)).ShouldBe(setsOfA, "a swap back writes no chunk set");
+            (await ContentJobsAsync(seed, runId, a)).ShouldBe(0, "a swap back enqueues no parse or embed job");
+            (await ContentJobsAsync(seed, runId, b)).ShouldBeGreaterThan(0);
+            (await Sql.ScalarAsync<long>(database.Connection(null), """
+                SELECT count(*) FROM content."RunItems" WHERE "RunId" = $1 AND "Outcome" = 'updated' AND "Reason" = $2
+                """, runId, ChunkSetSwap.SwappedBackReason)).ShouldBe(1);
+
+            (await EngineKit.WaitForRunAsync(database, runId)).ShouldBe(new RunCounters(RunStates.Succeeded, 0, 2, 0, 0, 0, 0));
+            (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."ChunkSets" WHERE "Id" = $1 AND "State" = 'superseded'""",
+                v2Sets.A)).ShouldBe(1);
+            var b1 = await LiveSetAsync(seed, b);
+            b1.ShouldNotBe(v2Sets.B);
+            (await Sql.ScalarAsync<Guid>(database.Connection(null), """SELECT "PipelineVersionId" FROM content."ChunkSets" WHERE "Id" = $1""", b1))
+                .ShouldBe(seed.VersionId, "b is rebuilt under v1 from the caches");
+            var again = await sweep.RunAsync(Ct);
+            (again.Enqueued, again.SwappedBack).ShouldBe((0L, 0L), "drift 0 once both documents are current");
+            (await EngineKit.DuplicateSetsAsync(database, seed)).ShouldBe(0);
+            (await EngineKit.StrayChunksAsync(database, seed)).ShouldBe(0);
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    private Task<Guid> LiveSetAsync(SourceSeed seed, string identity) =>
+        Sql.ScalarAsync<Guid>(database.Connection(null), """
+            SELECT "LiveChunkSetId" FROM content."Documents" WHERE "SourceId" = $1 AND "CanonicalIdentity" = $2
+            """, seed.SourceId, identity);
+
+    /// <summary>The ids of every chunk set of the document, in id order.</summary>
+    private Task<string> SetsAsync(SourceSeed seed, string identity) =>
+        Sql.ScalarAsync<string>(database.Connection(null), """
+            SELECT string_agg(s."Id"::text, ',' ORDER BY s."Id") FROM content."ChunkSets" s JOIN content."Documents" d ON d."Id" = s."DocumentId"
+            WHERE d."SourceId" = $1 AND d."CanonicalIdentity" = $2
+            """, seed.SourceId, identity);
+
+    /// <summary>The run's <c>parse</c> and <c>embed</c> jobs of one document.</summary>
+    private Task<long> ContentJobsAsync(SourceSeed seed, Guid runId, string identity) =>
+        Sql.ScalarAsync<long>(database.Connection(null), """
+            SELECT count(*) FROM content."Jobs" j
+            WHERE j."RunId" = $2 AND j."Class" IN ('parse', 'embed')
+              AND (j."Payload" ->> 'documentId')::uuid = (SELECT "Id" FROM content."Documents" WHERE "SourceId" = $1 AND "CanonicalIdentity" = $3)
+            """, seed.SourceId, runId, identity);
 
     /// <summary>A manual site profile applied to (level, host).</summary>
     private async Task<Guid> ApplySiteProfileAsync(string level, string host)

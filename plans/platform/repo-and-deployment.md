@@ -674,7 +674,11 @@ Protection certificate, passwords for `bootstrap`, `ume_rag_migrator`, `ume_rag_
 pepper, the download-grant key (`Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes; a new `kid` on rotation) and the query
 cache-key pepper (`Security__CacheKeyPepper`), the conversation-id key (`Security__ConversationIdKeys__<kid>`, ≥ 32 bytes, chat design §11.1), the tool audit HMAC key (`Security__ToolAuditKey`, P2, tools design §9.1), the Open WebUI JWT secret, the crawl key pepper (`Security__CrawlKeyPepper`, worker, from P1a), the renderer WebSocket path secret (if adopted) and, with `--role data` on the first multi-host deployment, the Redis certificate, password and ACL from `users.acl.example` (user `ume-rag`, `~ume-rag:*`) with `ConnectionStrings__redis` for api and worker, and `deploy/.env` (non-secret settings only).
 The Open WebUI admin API key (`OpenWebUi__AdminApiKey`) is not generated: an operator creates the service account and
-its key in Open WebUI and places the file (chat design §14.2).
+its key in Open WebUI and places the file (chat design §14.2). As built in P1b item 17 (PR #135, 2026-10-31):
+`--openwebui-host` generates the service account's credentials once (`WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_NAME`,
+`WEBUI_ADMIN_PASSWORD` in `secrets/openwebui.env`; Open WebUI creates it as its first user on an empty store), and the
+operator then runs `deploy/openwebui-feedback-key.sh` (shipped in the release bundle), which mints the key with
+password sign-in briefly on and writes `secrets/api/OpenWebUi__AdminApiKey` (chat design §4.3, §14.2).
 **Gateway keys per deployable** (plan §6; [`../performance-pass.md`](../performance-pass.md) §3.9): the worker's keys
 are its own and carry the gateway's existing per-key `MaxConcurrentRequests` cap, so a misconfigured worker fleet
 cannot starve chat's query embeddings. A separate BGE-M3 query route/replica follows only when its trigger fires (query

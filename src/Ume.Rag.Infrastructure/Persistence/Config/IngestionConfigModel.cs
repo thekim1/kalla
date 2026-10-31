@@ -128,6 +128,8 @@ internal static class IngestionConfigModel
             // Immutable: chunks copy the collection id (data-model §2.2).
             e.HasOne<Collection>().WithMany().HasForeignKey(x => x.CollectionId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Pipeline>().WithMany().HasForeignKey(x => x.PipelineId).OnDelete(DeleteBehavior.Restrict);
+            // The scheduler's first schedule of a never-run source (engine design §6; #110).
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
             ChangeStamps(e);
         });
 

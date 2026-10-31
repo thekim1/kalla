@@ -49,6 +49,8 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
     {
         await using var site = await SiteAsync();
         var seed = await EngineKit.SeedCrawlAsync(database, Settings(site));
+        // The gauge is the maximum over every active crawl source: another test's incomplete run must not count here.
+        await EngineKit.PauseOtherSourcesAsync(database, seed);
         await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
         using var gauge = new GaugeRecorder(worker.Services.GetRequiredService<IMeterFactory>(), "rag.crawl.incomplete_runs");
         try
@@ -211,6 +213,7 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
         _withText = true;
         await using var site = await SiteAsync();
         var seed = await EngineKit.SeedCrawlAsync(database, Settings(site));
+        await EngineKit.PauseOtherSourcesAsync(database, seed);
         await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
         try
         {
@@ -218,7 +221,7 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
             var before = await LiveSetsAsync(seed);
             var requests = _hits.Values.Sum();
             // What edit-site-profile applies (#115): a manual version of the host's profile that strips the contact line.
-            var host = $"{TestSite.Host}:{site.Port}";
+            const string host = TestSite.Host;
             var version = await ApplySiteProfileAsync(seed, host,
                 new Pipelines.SiteProfiles.SiteProfile { MainRoot = "main", Boilerplate = new() { Selectors = [".kontakt"] } });
 
@@ -257,6 +260,9 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
         finally
         {
             await EngineKit.PauseAsync(database, seed);
+            // The key has no port (SiteProfileHost), so the profile would reach every later test on the test site.
+            await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM content."SiteProfiles" WHERE "Classification" = $1 AND "Host" = $2""",
+                seed.Classification, TestSite.Host);
         }
     }
 

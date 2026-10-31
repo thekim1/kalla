@@ -108,8 +108,8 @@ public sealed class IndexWriter(JobDatabase database)
     private const string SweepSql = """
         DELETE FROM content."ChunkSets" WHERE "Id" IN (
             SELECT s."Id" FROM content."ChunkSets" s
-            WHERE ((s."State" = 'writing' AND s."CreatedAt" < now() - $1::interval)
-                OR (s."State" = 'superseded' AND s."SupersededAt" < now() - $2::interval))
+            WHERE ((s."State" = 'writing' AND s."CreatedAt" < $4 - $1::interval)
+                OR (s."State" = 'superseded' AND s."SupersededAt" < $4 - $2::interval))
               AND NOT EXISTS (SELECT 1 FROM content."Documents" d WHERE d."LiveChunkSetId" = s."Id")
             LIMIT $3
             FOR UPDATE SKIP LOCKED)
@@ -280,10 +280,11 @@ public sealed class IndexWriter(JobDatabase database)
     }
 
     /// <summary>
-    /// Rule 5 (maintenance): sets left <c>writing</c> for 24 hours and <c>superseded</c> sets past the 14-day rollback window are
-    /// deleted with their chunks, 1,000 per transaction. Returns how many sets were removed.
+    /// Rule 5 (maintenance): sets left <c>writing</c> for 24 hours and <c>superseded</c> sets past the 14-day rollback window
+    /// before <paramref name="now"/> are deleted with their chunks, 1,000 per transaction; a younger superseded set is kept for
+    /// a rollback to swap back (§12.3). Returns how many sets were removed.
     /// </summary>
-    public async Task<long> SweepOrphansAsync(CancellationToken cancellationToken)
+    public async Task<long> SweepOrphansAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         long total = 0;
         while (true)
@@ -291,7 +292,7 @@ public sealed class IndexWriter(JobDatabase database)
             await using var connection = await database.OpenAsync(cancellationToken);
             await using var command = new NpgsqlCommand(SweepSql, connection)
             {
-                Parameters = { Db.P(WritingOrphanAge), Db.P(RollbackWindow), Db.P(BatchSize) },
+                Parameters = { Db.P(WritingOrphanAge), Db.P(RollbackWindow), Db.P(BatchSize), Db.P(now.ToUniversalTime()) },
             };
             var removed = await command.ExecuteNonQueryAsync(cancellationToken);
             total += removed;

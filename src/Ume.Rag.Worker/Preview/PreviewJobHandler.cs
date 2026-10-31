@@ -11,16 +11,14 @@ namespace Ume.Rag.Worker.Preview;
 
 /// <summary>
 /// <c>preview</c> jobs (engine design §9.1, §11; data-model §4.2: dispatched first, concurrency 2, lease 2 minutes, one
-/// attempt): <c>stage-preview</c> and <c>preflight</c>. <c>publish-plan</c> is refused with <c>preview.unsupported</c>
-/// until it is built (P1b item 6); an unknown kind or a malformed payload fails at once. A stage's refusal without an
-/// attempt (parser or NER busy) requeues the preview, which then reuses the outputs it already wrote.
+/// attempt): <c>stage-preview</c>, <c>preflight</c> and <c>publish-plan</c>; an unknown kind or a malformed payload fails at
+/// once. A stage's refusal without an attempt (parser or NER busy) requeues the preview, which then reuses the outputs it
+/// already wrote.
 /// </summary>
-public sealed partial class PreviewJobHandler(StagePreview stagePreview, Preflight preflight, ConfigVersionState config, ILogger<PreviewJobHandler> logger)
-    : IJobHandler
+public sealed class PreviewJobHandler(StagePreview stagePreview, Preflight preflight, PublishPlan publishPlan, ConfigVersionState config) : IJobHandler
 {
     public const string InvalidPayload = "preview.invalid_payload";
     public const string UnknownKind = "preview.unknown_kind";
-    public const string Unsupported = "preview.unsupported";
 
     public string JobClass => JobClasses.Preview;
 
@@ -63,15 +61,13 @@ public sealed partial class PreviewJobHandler(StagePreview stagePreview, Preflig
                     ? await preflight.RunAsync(job, check, cancellationToken)
                     : new JobResult.FatalError(InvalidPayload);
             case PreviewKinds.PublishPlan:
-                LogUnsupported(logger, job.Id, kind);
-                return new JobResult.FatalError(Unsupported);
+                return SyncJobs.Read<PublishPlanPayload>(job) is { } plan
+                    ? await publishPlan.RunAsync(job, plan, cancellationToken)
+                    : new JobResult.FatalError(InvalidPayload);
             case null:
                 return new JobResult.FatalError(InvalidPayload);
             default:
                 return new JobResult.FatalError(UnknownKind);
         }
     }
-
-    [LoggerMessage(LogLevel.Warning, "Preview job {JobId}: kind {Kind} is not built yet")]
-    private static partial void LogUnsupported(ILogger logger, Guid jobId, string kind);
 }

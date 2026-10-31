@@ -11,18 +11,23 @@ namespace Ume.Rag.Worker.Engine;
 
 /// <summary>What one drift sweep did.</summary>
 /// <param name="Checked">Documents read.</param>
-/// <param name="Enqueued">Documents re-enqueued (<c>rag.reconcile.drift</c>; 0 when no work was lost).</param>
+/// <param name="Enqueued">Documents re-enqueued.</param>
+/// <param name="SwappedBack">Documents whose kept set with the wanted key was swapped back, with no job.</param>
 /// <param name="PendingSettled">Sets whose names were still unchecked and are now settled.</param>
-public sealed record DriftResult(long Checked, long Enqueued, long PendingSettled);
+/// <remarks><c>rag.reconcile.drift</c> counts <paramref name="Enqueued"/> and <paramref name="SwappedBack"/>; 0 when no work was lost.</remarks>
+public sealed record DriftResult(long Checked, long Enqueued, long SwappedBack, long PendingSettled);
 
 /// <summary>
 /// The nightly drift sweep (engine design §2.3, §9.4, §16): the documents of active sources, in id order, 1,000 per
 /// transaction under an advisory lock, the cursor carried from batch to batch. <c>EnsureCurrent</c>
-/// (<see cref="Reconciler"/>) runs for a document whose live set is not the wanted one (pipeline version, site-profile
-/// version, embedding profile or content hash differ) and for a <b>stalled</b> one: no live set and no queued or running
-/// <c>parse</c> or <c>embed</c> job. The jobs are deduplicated by their <c>DedupKey</c>, so a sweep while jobs are in flight,
-/// or a second sweep, enqueues nothing twice. The jobs of a batch belong to one <c>reprocess</c> run per source
-/// (trigger <c>schedule</c>), opened with its first job in the same transaction. Skipped: documents of a source with a
+/// (<see cref="Reconciler"/>, as a <c>reprocess</c> run decides it) runs for a document whose live set is not the wanted
+/// one (pipeline version, site-profile version, embedding profile or content hash differ) and for a <b>stalled</b> one: no
+/// live set and no queued or running <c>parse</c> or <c>embed</c> job. A kept <c>superseded</c> set with the wanted key is
+/// swapped back directly (<see cref="DocumentIngest.SwapBackAsync"/>, its own short transaction); else a <c>parse</c> job
+/// is enqueued. The jobs are deduplicated by their <c>DedupKey</c>, so a sweep while jobs are in flight, or a second sweep,
+/// enqueues nothing twice. The jobs and swaps of a batch belong to one <c>reprocess</c> run per source (trigger
+/// <c>schedule</c>), opened in the batch's transaction with its first job or before its first swap, whose items carry no
+/// foreign key to the run, so the finalizer sees the run only with its jobs and items. Skipped: documents of a source with a
 /// running <c>sync</c> run (that run reconciles them), and documents whose last processing ended at a stage
 /// (<c>skipped</c>, <c>unsupported</c>, <c>failed</c>, …: settled until their next fetch). Then the sets whose name check is
 /// still <c>pending</c> get <c>personal-data</c> again in place (<see cref="PiiLifecycle.SweepPendingAsync"/>, processing
@@ -33,6 +38,7 @@ public sealed partial class DriftSweep(
     SourceContexts sources,
     DocumentStore documents,
     Reconciler reconciler,
+    DocumentIngest ingest,
     PiiLifecycle pii,
     PersonalDataStage personalData,
     EngineSettings settings,
@@ -70,7 +76,7 @@ public sealed partial class DriftSweep(
     public async Task<DriftResult> RunAsync(CancellationToken cancellationToken)
     {
         var contexts = new Dictionary<Guid, (SourceContext Source, PipelineRun Pipeline)?>();
-        long checkedCount = 0, enqueued = 0;
+        long checkedCount = 0, enqueued = 0, swappedBack = 0;
         var cursor = Guid.Empty;
         var locked = true;
         while (locked)
@@ -84,6 +90,7 @@ public sealed partial class DriftSweep(
 
             checkedCount += done.Read;
             enqueued += done.Enqueued;
+            swappedBack += done.SwappedBack;
             if (done.Read < BatchSize)
             {
                 break;
@@ -93,9 +100,9 @@ public sealed partial class DriftSweep(
         }
 
         var settled = locked ? await SettlePendingAsync(contexts, cancellationToken) : 0;
-        metrics.Drift(enqueued);
-        LogSwept(logger, checkedCount, enqueued, settled);
-        return new DriftResult(checkedCount, enqueued, settled);
+        metrics.Drift(enqueued + swappedBack);
+        LogSwept(logger, checkedCount, enqueued, swappedBack, settled);
+        return new DriftResult(checkedCount, enqueued, swappedBack, settled);
     }
 
     /// <summary>One batch in its own transaction; null when another sweep holds the lock.</summary>
@@ -126,7 +133,7 @@ public sealed partial class DriftSweep(
         }
 
         var runs = new Dictionary<Guid, Guid>();
-        var enqueued = 0;
+        int enqueued = 0, swappedBack = 0;
         foreach (var row in rows)
         {
             if (row.Syncing || !SweptOutcomes.Contains(row.ParseOutcome) ||
@@ -137,36 +144,62 @@ public sealed partial class DriftSweep(
 
             var (source, pipeline) = context;
             var stalled = row.Live is null;
-            if (stalled ? row.OpenJob : (await reconciler.WantedAsync(source, row.Document, pipeline.VersionId, cancellationToken)).IsMetBy(row.Live))
+            if (stalled && row.OpenJob)
+            {
+                continue;
+            }
+
+            var reconciliation = await reconciler.ReconcileAsync(source, row.Document, pipeline.VersionId, row.Live, cancellationToken);
+            if (reconciliation.Action == ReconcileAction.Current)
             {
                 continue;
             }
 
             var runId = runs.TryGetValue(source.SourceId, out var open) ? open : Guid.CreateVersion7();
+            if (reconciliation.Action == ReconcileAction.SwapBack)
+            {
+                await OpenRunAsync(connection, transaction, runs, source, pipeline.VersionId, runId, cancellationToken);
+                if (await ingest.SwapBackAsync(source, runId, pipeline.VersionId, row.Document, reconciliation, cancellationToken) == SwapResult.Swapped)
+                {
+                    swappedBack++;
+                    LogSwappedBack(logger, row.Document.Id, reconciliation.Kept!.Id, runId);
+                }
+
+                continue;
+            }
+
             if (!await reconciler.EnqueueAsync(transaction, source, pipeline, row.Document, runId, cancellationToken))
             {
                 continue;
             }
 
-            if (runs.TryAdd(source.SourceId, runId))
-            {
-                await using var openRun = new NpgsqlCommand(OpenRunSql, connection, transaction)
-                {
-                    Parameters =
-                    {
-                        Db.P(runId), Db.P(source.SourceId), Db.P(source.Classification), Db.P(RunKinds.Reprocess), Db.P(RunTriggers.Schedule),
-                        Db.P(pipeline.VersionId),
-                    },
-                };
-                await openRun.ExecuteNonQueryAsync(cancellationToken);
-            }
-
+            await OpenRunAsync(connection, transaction, runs, source, pipeline.VersionId, runId, cancellationToken);
             enqueued++;
             LogEnqueued(logger, row.Document.Id, stalled ? "stalled" : "drift", runId);
         }
 
         await transaction.CommitAsync(cancellationToken);
-        return new Batch(rows.Count, enqueued, rows.Count > 0 ? rows[^1].Document.Id : cursor);
+        return new Batch(rows.Count, enqueued, swappedBack, rows.Count > 0 ? rows[^1].Document.Id : cursor);
+    }
+
+    /// <summary>Opens the source's <c>reprocess</c> run <paramref name="runId"/> in the batch's transaction, once per batch and source.</summary>
+    private static async Task OpenRunAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Dictionary<Guid, Guid> runs, SourceContext source,
+        Guid pipelineVersionId, Guid runId, CancellationToken cancellationToken)
+    {
+        if (!runs.TryAdd(source.SourceId, runId))
+        {
+            return;
+        }
+
+        await using var openRun = new NpgsqlCommand(OpenRunSql, connection, transaction)
+        {
+            Parameters =
+            {
+                Db.P(runId), Db.P(source.SourceId), Db.P(source.Classification), Db.P(RunKinds.Reprocess), Db.P(RunTriggers.Schedule),
+                Db.P(pipelineVersionId),
+            },
+        };
+        await openRun.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>The <c>pending</c> name checks (processing design §9.6), under the same lock.</summary>
@@ -226,13 +259,17 @@ public sealed partial class DriftSweep(
 
     private sealed record Row(DocumentRow Document, string? ParseOutcome, ChunkSetRow? Live, bool Syncing, bool OpenJob);
 
-    private sealed record Batch(int Read, int Enqueued, Guid Cursor);
+    private sealed record Batch(int Read, int Enqueued, int SwappedBack, Guid Cursor);
 
     [LoggerMessage(LogLevel.Information, "Drift sweep: document {DocumentId} re-enqueued ({Kind}) in run {RunId}")]
     private static partial void LogEnqueued(ILogger logger, Guid documentId, string kind, Guid runId);
 
-    [LoggerMessage(LogLevel.Information, "Drift sweep: {DocumentsChecked} documents checked, {Enqueued} re-enqueued, {Settled} pending name checks settled")]
-    private static partial void LogSwept(ILogger logger, long documentsChecked, long enqueued, long settled);
+    [LoggerMessage(LogLevel.Information, "Drift sweep: document {DocumentId} swapped back to kept set {ChunkSetId} in run {RunId}")]
+    private static partial void LogSwappedBack(ILogger logger, Guid documentId, Guid chunkSetId, Guid runId);
+
+    [LoggerMessage(LogLevel.Information,
+        "Drift sweep: {DocumentsChecked} documents checked, {Enqueued} re-enqueued, {SwappedBack} swapped back, {Settled} pending name checks settled")]
+    private static partial void LogSwept(ILogger logger, long documentsChecked, long enqueued, long swappedBack, long settled);
 
     [LoggerMessage(LogLevel.Information, "Drift sweep: another sweep holds the lock; this one stops")]
     private static partial void LogLocked(ILogger logger);

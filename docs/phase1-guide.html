@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Fas 1 (pilot) guide. Published copy: https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1 (private). Open this file in a browser. -->
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Ume.Rag fas 1</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one readable column (~68ch) with figures breaking out to 1080px; the river-and-birch palette of the Ume.Rag stakeholder report. */
+:root {
+  --bg: #f4f6f6;
+  --surface: #ffffff;
+  --ink: #14232b;
+  --muted: #536570;
+  --line: #d5dee1;
+  --accent: #1d6a85;
+  --accent-soft: #e1eef2;
+  --spruce: #2f5d4a;
+  --spruce-soft: #e2eee8;
+  --amber: #9a5b00;
+  --amber-soft: #f7ecd9;
+  --weak: #8a3b2e;
+  --weak-soft: #f6e3df;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --step--1: 0.875rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.3rem;
+  --step-2: 1.75rem;
+  --step-3: clamp(2.1rem, 4.5vw, 3.1rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f181c; --surface: #16232a; --ink: #e2eaec; --muted: #9db0b8; --line: #2a3b43;
+    --accent: #6cb8d3; --accent-soft: #17323d; --spruce: #7cc3a3; --spruce-soft: #173229;
+    --amber: #e3ad5c; --amber-soft: #352914; --weak: #e59484; --weak-soft: #3a1f1a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f181c; --surface: #16232a; --ink: #e2eaec; --muted: #9db0b8; --line: #2a3b43;
+  --accent: #6cb8d3; --accent-soft: #17323d; --spruce: #7cc3a3; --spruce-soft: #173229;
+  --amber: #e3ad5c; --amber-soft: #352914; --weak: #e59484; --weak-soft: #3a1f1a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: var(--step-0); line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 4rem;
+}
+.wrap { max-width: 1080px; margin: 0 auto; }
+.col { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: var(--step-3); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: var(--step-2); font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: var(--step-1); font-weight: 500; }
+p { margin: 0; }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+code { font-family: var(--font-mono); font-size: 0.88em; overflow-wrap: anywhere; }
+.eyebrow { font-family: var(--font-mono); font-size: var(--step--1); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.lead { font-size: var(--step-1); line-height: 1.45; }
+.note { font-size: var(--step--1); color: var(--muted); }
+section { padding-block: 3.25rem 0; display: grid; gap: 1.25rem; }
+.stack { display: grid; gap: 1rem; }
+
+.topbar { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; align-items: baseline; padding-block: 1.25rem; border-bottom: 1px solid var(--line); }
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; }
+.topbar nav { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: var(--step--1); }
+.topbar nav a { color: var(--muted); text-decoration: none; }
+.topbar nav a:hover { color: var(--accent); }
+
+.hero { padding-block: 3rem 0; display: grid; gap: 1.5rem; }
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.split > div { background: var(--surface); padding: 1.1rem 1.2rem; display: grid; gap: 0.5rem; align-content: start; min-width: 0; }
+.split .code { font-family: var(--font-mono); font-size: var(--step--1); color: var(--accent); }
+.split h3 { font-weight: 700; font-size: 1.2rem; }
+.split p { font-size: 0.98rem; }
+
+/* Diagrams */
+.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; display: grid; gap: 0.6rem; }
+.fig-scroll { overflow-x: auto; }
+.fig svg { display: block; width: 100%; min-width: 720px; height: auto; }
+.fig figcaption { font-size: var(--step--1); color: var(--muted); }
+figure { margin: 0; }
+svg .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+svg .node-core { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+svg .node-warn { fill: var(--amber-soft); stroke: var(--amber); stroke-width: 1.5; }
+svg .num { fill: var(--accent); font-family: var(--font-mono); font-size: 12px; }
+svg .t { fill: var(--ink); font-family: var(--font-display); font-size: 16px; font-weight: 700; }
+svg .s { fill: var(--muted); font-family: var(--font-body); font-size: 12.5px; }
+svg .lbl { fill: var(--accent); font-family: var(--font-mono); font-size: 12px; }
+svg .edge { stroke: var(--accent); stroke-width: 2; fill: none; }
+svg .edge-back { stroke: var(--spruce); stroke-width: 2; fill: none; stroke-dasharray: 6 5; }
+svg .head { fill: var(--accent); }
+svg .head-back { fill: var(--spruce); }
+svg .back-lbl { fill: var(--spruce); font-family: var(--font-mono); font-size: 12px; }
+
+/* Example */
+.example { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.1rem; display: grid; gap: 0.6rem; align-content: start; min-width: 0; }
+.card h3 { font-size: 1.05rem; font-weight: 700; }
+.step-label { font-family: var(--font-mono); font-size: var(--step--1); color: var(--accent); }
+.bar-track { height: 16px; background: var(--weak-soft); border: 1px solid var(--line); border-radius: 4px; position: relative; overflow: hidden; }
+.bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--spruce); }
+.bar-legend { display: flex; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.blocks { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.3rem; font-size: 0.95rem; }
+.blocks li { display: grid; grid-template-columns: 4.6rem minmax(0, 1fr); gap: 0.6rem; }
+.blocks .k { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); padding-top: 0.15rem; }
+.chunk { font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.55; background: var(--bg); border: 1px dashed var(--line); border-radius: 8px; padding: 0.75rem 0.85rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.crumb { color: var(--accent); }
+.q { background: var(--accent-soft); border-radius: 10px; padding: 0.7rem 0.9rem; }
+.a { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 0.7rem 0.9rem; }
+.cite { font-family: var(--font-mono); font-size: 0.78em; color: var(--accent); vertical-align: super; }
+.src { font-size: var(--step--1); border-top: 1px dashed var(--line); padding-top: 0.5rem; display: flex; gap: 0.5rem; }
+.src .n { font-family: var(--font-mono); color: var(--accent); }
+
+/* Status */
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; font-size: var(--step--1); color: var(--muted); }
+.pill { display: inline-block; font-family: var(--font-mono); font-size: 0.76rem; padding: 0.1rem 0.5rem; border-radius: 999px; white-space: nowrap; }
+.p-done { background: var(--spruce-soft); color: var(--spruce); }
+.p-review { background: var(--accent-soft); color: var(--accent); }
+.p-todo { background: var(--amber-soft); color: var(--amber); }
+.p-live { background: var(--weak-soft); color: var(--weak); }
+.status { display: grid; border-top: 1px solid var(--line); }
+.status-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) 11rem; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.status-row b { font-weight: 700; }
+.status-row span.d { color: var(--muted); font-size: 0.95rem; }
+.status-row .pill { justify-self: start; }
+@media (max-width: 720px) { .status-row { grid-template-columns: minmax(0, 1fr); gap: 0.3rem; } }
+.tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; }
+.tally div { border-top: 3px solid var(--line); padding-top: 0.5rem; display: grid; gap: 0.1rem; }
+.tally b { font-family: var(--font-display); font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.tally span { font-size: var(--step--1); color: var(--muted); }
+.tally .t-done { border-color: var(--spruce); }
+.tally .t-review { border-color: var(--accent); }
+.tally .t-todo { border-color: var(--amber); }
+.tally .t-live { border-color: var(--weak); }
+
+/* Try it */
+.tries { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+.try { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.2rem; display: grid; gap: 0.7rem; align-content: start; min-width: 0; }
+.try h3 { font-weight: 700; font-size: 1.15rem; }
+.try ol { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.4rem; font-size: 0.97rem; }
+.try .needs { font-size: var(--step--1); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 0.55rem; }
+.feature-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.75rem; }
+.feature { border-left: 3px solid var(--accent); padding: 0.2rem 0 0.2rem 0.85rem; display: grid; gap: 0.25rem; }
+.feature b { font-family: var(--font-display); font-size: 1.02rem; }
+.feature span { font-size: 0.95rem; color: var(--muted); }
+
+/* Gate */
+.gate { display: grid; gap: 0.9rem; }
+.gate-row { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr) 4.5rem; gap: 1rem; align-items: center; }
+.gate-row span.l { font-size: 0.95rem; }
+.gate-row span.v { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.gate-track { height: 14px; border-radius: 4px; background: var(--weak-soft); position: relative; border: 1px solid var(--line); overflow: hidden; }
+.gate-ok { position: absolute; top: 0; bottom: 0; background: var(--spruce-soft); }
+.gate-mark { position: absolute; top: -2px; bottom: -2px; width: 3px; background: var(--spruce); }
+@media (max-width: 640px) { .gate-row { grid-template-columns: minmax(0, 1fr) 4rem; } .gate-row .gate-track { grid-column: 1 / -1; grid-row: 2; } }
+
+/* Decisions */
+.questions { display: grid; border-top: 1px solid var(--line); }
+.question { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) minmax(0, 12rem); gap: 1rem; padding: 0.85rem 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.question .id { font-family: var(--font-mono); color: var(--amber); }
+.question .who { font-size: var(--step--1); color: var(--muted); }
+@media (max-width: 640px) { .question { grid-template-columns: 3.5rem minmax(0, 1fr); } .question .who { grid-column: 2; } }
+
+/* Technical appendix */
+.tech { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+.tech .card ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.35rem; font-size: 0.95rem; }
+pre.cmd { margin: 0; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.55; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem 0.85rem; overflow-x: auto; }
+
+footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: grid; gap: 0.4rem; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="topbar">
+    <span class="brand">Ume.Rag · fas 1</span>
+    <nav aria-label="Avsnitt">
+      <a href="#vad">Vad fas 1 är</a>
+      <a href="#hur">Så fungerar det</a>
+      <a href="#exempel">Exempel</a>
+      <a href="#lage">Läget</a>
+      <a href="#prova">Prova</a>
+      <a href="#grind">Go-live</a>
+      <a href="#beslut">Beslut</a>
+      <a href="#teknik">Teknik</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <p class="eyebrow">Pilotfasen · Umeå kommun · läget 31 oktober 2026</p>
+    <h1>Från en sida på umea.se till ett svar med källa i chatten</h1>
+    <p class="lead col">Fas 1 är piloten. En avdelning ställer frågor i Open WebUI och får svar som bygger på kommunens
+      egna sidor och dokument, med länk till exakt den sida svaret kommer ifrån. Alla AI-anrop går genom kommunens
+      LLM-gateway, med EU-hostade modeller. Piloten går live först när avdelningens egna granskare har rättat svaren
+      för hand och resultatet når målen.</p>
+    <div class="split">
+      <div>
+        <span class="code">P1a · gående skelett</span>
+        <h3>Ett första svar med källa</h3>
+        <p>Plattformen läser in umea.se, delar upp och indexerar innehållet, och en pilotmedlem får ett svar med
+          källhänvisning i Open WebUI. Allt byggs och testas först mot testmodeller; den riktiga gatewayen, umea.se och
+          pilotmedlemmen kommer i ett samlat live-block på slutet.</p>
+      </div>
+      <div>
+        <span class="code">P1b · pilotförstärkning</span>
+        <h3>Tryggt att använda på riktigt</h3>
+        <p>Förhandsgranskning innan något går live, publicera och rulla tillbaka, färskhetsregler så att gammalt
+          innehåll inte besvaras, återkoppling från användarna, mätning av svarskvalitet varje natt och
+          konsekvensbedömningen för dataskydd.</p>
+      </div>
+    </div>
+  </div>
+
+  <section id="vad" aria-labelledby="vad-h">
+    <p class="eyebrow">Vad fas 1 är</p>
+    <h2 id="vad-h">Fas 1 är klar när tre saker stämmer</h2>
+    <div class="col stack">
+      <p><b>1. Svaren håller måttet.</b> Avdelningens granskare rättar svaren på en uppsättning riktiga frågor (guldfrågorna)
+        för hand, och alla fyra mål nås. Se <a href="#grind">go-live-grinden</a> nedan.</p>
+      <p><b>2. Dataskyddet är bedömt.</b> Konsekvensbedömningen (G1) är klar, inklusive personuppgiftsbiträdesavtalet med
+        EU-leverantören och frågan om Open WebUI:s egna chattkopior (W2).</p>
+      <p><b>3. Piloten är live.</b> En pilotavdelning använder sin assistent i Open WebUI.</p>
+      <p class="note">I piloten sparar plattformen ingen chattext, bara metadata och betyg. Chatthistorik väntar på beslutet
+        om arkivlagen (A1).</p>
+    </div>
+  </section>
+
+  <section id="hur" aria-labelledby="hur-h">
+    <p class="eyebrow">Så fungerar det</p>
+    <h2 id="hur-h">Två flöden: inläsning i bakgrunden, svar när någon frågar</h2>
+    <p class="col">Inläsning och svar körs i separata delar med egna resursgränser. En stor webbplatsinläsning gör därför
+      inte chatten långsam.</p>
+
+    <figure class="fig">
+      <div class="fig-scroll">
+        <svg viewBox="0 0 960 330" role="img" aria-labelledby="svg1-t svg1-d">
+          <title id="svg1-t">Inläsningsflödet i åtta steg</title>
+          <desc id="svg1-d">Källa, hämta och kontrollera, läsa, dela upp, personuppgifter, betydelsevektor via gatewayen, index, publicera.</desc>
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+          </defs>
+          <!-- row 1 -->
+          <rect class="node" x="10" y="20" width="210" height="110" rx="10"/>
+          <text class="num" x="26" y="44">1</text><text class="t" x="26" y="68">Källa</text>
+          <text class="s" x="26" y="92">Webbplats, URL-lista</text><text class="s" x="26" y="110">eller uppladdade filer</text>
+
+          <rect class="node" x="250" y="20" width="210" height="110" rx="10"/>
+          <text class="num" x="266" y="44">2</text><text class="t" x="266" y="68">Hämta och kontrollera</text>
+          <text class="s" x="266" y="92">robots.txt, artig takt,</text><text class="s" x="266" y="110">virusskanning av filer</text>
+
+          <rect class="node" x="490" y="20" width="210" height="110" rx="10"/>
+          <text class="num" x="506" y="44">3</text><text class="t" x="506" y="68">Läsa</text>
+          <text class="s" x="506" y="92">Sidprofil för umea.se;</text><text class="s" x="506" y="110">PDF, Office, skannat (OCR)</text>
+
+          <rect class="node" x="730" y="20" width="220" height="110" rx="10"/>
+          <text class="num" x="746" y="44">4</text><text class="t" x="746" y="68">Dela upp</text>
+          <text class="s" x="746" y="92">Rubriker och brödsmulor kvar,</text><text class="s" x="746" y="110">meny och sidfot bort</text>
+
+          <!-- row 2, right to left -->
+          <rect class="node" x="730" y="200" width="220" height="110" rx="10"/>
+          <text class="num" x="746" y="224">5</text><text class="t" x="746" y="248">Personuppgifter</text>
+          <text class="s" x="746" y="272">Personnummer m.m. flaggas,</text><text class="s" x="746" y="290">hålls borta från svar</text>
+
+          <rect class="node-core" x="490" y="200" width="210" height="110" rx="10"/>
+          <text class="num" x="506" y="224">6</text><text class="t" x="506" y="248">Betydelsevektor</text>
+          <text class="s" x="506" y="272">Via gatewayen, tak Eu,</text><text class="s" x="506" y="290">1 024 dimensioner</text>
+
+          <rect class="node" x="250" y="200" width="210" height="110" rx="10"/>
+          <text class="num" x="266" y="224">7</text><text class="t" x="266" y="248">Index</text>
+          <text class="s" x="266" y="272">Svenska nyckelord och</text><text class="s" x="266" y="290">vektor i PostgreSQL</text>
+
+          <rect class="node" x="10" y="200" width="210" height="110" rx="10"/>
+          <text class="num" x="26" y="224">8</text><text class="t" x="26" y="248">Publicera</text>
+          <text class="s" x="26" y="272">Går live när allt är klart;</text><text class="s" x="26" y="290">14 dagar att rulla tillbaka</text>
+
+          <path class="edge" d="M220 75 H246" marker-end="url(#ah)"/>
+          <path class="edge" d="M460 75 H486" marker-end="url(#ah)"/>
+          <path class="edge" d="M700 75 H726" marker-end="url(#ah)"/>
+          <path class="edge" d="M840 130 V196" marker-end="url(#ah)"/>
+          <path class="edge" d="M730 255 H704" marker-end="url(#ah)"/>
+          <path class="edge" d="M490 255 H464" marker-end="url(#ah)"/>
+          <path class="edge" d="M250 255 H224" marker-end="url(#ah)"/>
+          <text class="lbl" x="854" y="168">bara ändrat</text>
+          <text class="lbl" x="854" y="184">innehåll går vidare</text>
+        </svg>
+      </div>
+      <figcaption>Inläsning. Oförändrade sidor hoppas över; bara text som faktiskt ändrats läses om och skickas till modellen.
+        Steg 6 är det enda steget i inläsningen som anropar en AI-modell.</figcaption>
+    </figure>
+
+    <figure class="fig">
+      <div class="fig-scroll">
+        <svg viewBox="0 0 960 250" role="img" aria-labelledby="svg2-t svg2-d">
+          <title id="svg2-t">Frågeflödet</title>
+          <desc id="svg2-d">Medarbetaren frågar i Open WebUI, chatt-API:t söker i kunskapsbanken med medarbetarens behörighet, gatewayen skickar frågan till en EU-hostad modell under taket Eu, och svaret kommer tillbaka med källor.</desc>
+          <defs>
+            <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+            <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-back"/></marker>
+          </defs>
+          <rect class="node" x="10" y="30" width="165" height="100" rx="10"/>
+          <text class="t" x="26" y="62">Medarbetare</text><text class="s" x="26" y="86">ställer frågan i</text><text class="s" x="26" y="104">Open WebUI</text>
+
+          <rect class="node" x="205" y="30" width="165" height="100" rx="10"/>
+          <text class="t" x="221" y="62">Chatt-API</text><text class="s" x="221" y="86">tolkar följdfrågor,</text><text class="s" x="221" y="104">bygger svaret</text>
+
+          <rect class="node" x="400" y="30" width="170" height="100" rx="10"/>
+          <text class="t" x="416" y="62">Kunskapssökning</text><text class="s" x="416" y="86">nyckelord + betydelse,</text><text class="s" x="416" y="104">bara det du får se</text>
+
+          <rect class="node-core" x="600" y="30" width="165" height="100" rx="10"/>
+          <text class="t" x="616" y="62">LLM-gateway</text><text class="s" x="616" y="86">tak: Eu, nyckel</text><text class="s" x="616" y="104">per tjänst, kostnad</text>
+
+          <rect class="node" x="795" y="30" width="155" height="100" rx="10"/>
+          <text class="t" x="811" y="62">Språkmodell</text><text class="s" x="811" y="86">EU-hostad,</text><text class="s" x="811" y="104">svarar från källorna</text>
+
+          <path class="edge" d="M175 80 H201" marker-end="url(#ah2)"/>
+          <path class="edge" d="M370 80 H396" marker-end="url(#ah2)"/>
+          <path class="edge" d="M570 80 H596" marker-end="url(#ah2)"/>
+          <path class="edge" d="M765 80 H791" marker-end="url(#ah2)"/>
+          <path class="edge-back" d="M872 130 V190 H92 V134" marker-end="url(#ah3)"/>
+          <text class="back-lbl" x="300" y="214">svaret strömmas tillbaka med källhänvisningar [1] [2]</text>
+          <text class="lbl" x="416" y="160">ingen bra källa?</text>
+          <text class="lbl" x="416" y="176">"hittar inget svar" + kontakt</text>
+        </svg>
+      </div>
+      <figcaption>Fråga och svar. Om sökningen inte hittar något relevant svarar assistenten att den inte hittar något och
+        ger kontaktuppgifter, i stället för att gissa. Gatewayen kontrollerar för varje anrop att modellen ligger inom
+        taket Eu; annars stoppas anropet innan något skickas.</figcaption>
+    </figure>
+  </section>
+
+  <section id="exempel" aria-labelledby="ex-h">
+    <p class="eyebrow">Exempel · en riktig sida på umea.se</p>
+    <h2 id="ex-h">Vad plattformen gör med sidan "Avgifter isytor"</h2>
+    <p class="col">Exemplet bygger på en sparad kopia av sidan
+      <a href="https://www.umea.se/upplevaochgora/idrottmotionochfriluftsliv/bokaanlaggninglokal/avgifter/isytor.4.27a2de8b172da059ace2766.html">Avgifter isytor</a>
+      (hämtad 31 oktober 2026), som ingår i plattformens testsamling av umea.se-sidor. Steg 1–3 är plattformens faktiska
+      utdata från den kopian; frågan och svaret i steg 4 visar formatet och är en illustration.</p>
+    <div class="example">
+      <div class="card">
+        <span class="step-label">1 · Läsa</span>
+        <h3>79 % av sidan är sidmall</h3>
+        <div class="bar-track" aria-hidden="true"><div class="bar-fill" style="width: 21%;"></div></div>
+        <div class="bar-legend"><span>21 % innehåll</span><span>79 % meny, sidfot, delningsknappar</span></div>
+        <p class="note">Sitevision-profilen för umea.se hittar huvudinnehållet, brödsmulorna och sidans datum
+          (uppdaterad 24 augusti 2026). Resten tas bort innan något indexeras.</p>
+      </div>
+      <div class="card">
+        <span class="step-label">2 · Dela upp</span>
+        <h3>Strukturen bevaras</h3>
+        <ul class="blocks">
+          <li><span class="k">rubrik 1</span><span>Avgifter isytor</span></li>
+          <li><span class="k">rubrik 2</span><span>Södra Ålidhemsskolans isbana</span></li>
+          <li><span class="k">lista</span><span>Föreningar: 186 kr/timme</span></li>
+          <li><span class="k">lista</span><span>Privatpersoner: 328 kr/timme</span></li>
+          <li><span class="k">lista</span><span>Övriga: 437 kr/timme</span></li>
+          <li><span class="k">rubrik 2</span><span>Mer information</span></li>
+          <li><span class="k">kontakt</span><span>Lokalbokning, Föreningsbyrån</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="step-label">3 · Ett stycke i indexet</span>
+        <h3>Varje stycke vet var det hör hemma</h3>
+        <div class="chunk"><span class="crumb">Uppleva och göra › Idrott, motion och friluftsliv › Boka anläggning, lokal › Avgifter › Avgifter isytor › Södra Ålidhemsskolans isbana</span>
+
+Föreningar: 186 kr/timme
+Privatpersoner: 328 kr/timme
+Övriga: 437 kr/timme</div>
+        <p class="note">Brödsmulan och rubrikerna läggs före texten, så att "isbana", "avgift" och "förening" hittas
+          även om ordet inte står i själva prislistan. Stycket lagras både som svenska nyckelord och som betydelsevektor.</p>
+      </div>
+      <div class="card">
+        <span class="step-label">4 · Fråga och svar (illustration)</span>
+        <div class="q">Vad kostar det för vår förening att hyra isbanan vid Södra Ålidhemsskolan?</div>
+        <div class="a">Föreningar betalar 186 kronor per timme för isbanan vid Södra Ålidhemsskolan.<span class="cite">[1]</span>
+          Bokning görs via Lokalbokning på Föreningsbyrån.<span class="cite">[1]</span></div>
+        <div class="src"><span class="n">[1]</span><span>Avgifter isytor · umea.se · uppdaterad 2026-08-24</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="lage" aria-labelledby="lage-h">
+    <p class="eyebrow">Läget</p>
+    <h2 id="lage-h">Inläsningen är byggd; svarssidan är nästa steg</h2>
+    <p class="col">Arbetet sker i två strömmar. Ström A bygger inläsningen (hämtning, läsning, index, utvärdering,
+      driftmiljö); ström B bygger databasen, sökningen, chatten och administrationen. Allt byggs och testas först mot
+      testmodeller och sparade sidor. De delar som kräver den riktiga gatewayen, umea.se och piloten körs samlat på slutet.</p>
+    <div class="tally" aria-label="Sammanställning">
+      <div class="t-done"><b>9</b><span>delar byggda och testade</span></div>
+      <div class="t-review"><b>3</b><span>granskade, väntar på sammanslagning</span></div>
+      <div class="t-todo"><b>3</b><span>inte påbörjade</span></div>
+      <div class="t-live"><b>1</b><span>live-block i slutet</span></div>
+    </div>
+    <div class="legend">
+      <span><span class="pill p-done">byggt</span> klart och testat mot testmodeller</span>
+      <span><span class="pill p-review">i granskning</span> klart, väntar på sammanslagning</span>
+      <span><span class="pill p-todo">inte påbörjat</span></span>
+      <span><span class="pill p-live">live</span> kräver riktiga system</span>
+    </div>
+    <div class="status">
+      <div class="status-row"><b>Inläsning av webbplatser, URL-listor och filer</b><span class="d">artig crawlning, virusskanning, borttagningsskydd</span><span class="pill p-done">byggt</span></div>
+      <div class="status-row"><b>Dokumentläsare</b><span class="d">PDF, Word, Excel, PowerPoint, bilder och skannat med OCR</span><span class="pill p-done">byggt</span></div>
+      <div class="status-row"><b>Sidprofil för umea.se</b><span class="d">Sitevision, handkontrollerad mot 20 sparade sidor</span><span class="pill p-done">byggt</span></div>
+      <div class="status-row"><b>Uppdelning, personuppgifter, betydelsevektorer, index</b><span class="d">bara ändrat innehåll läses om</span><span class="pill p-done">byggt</span></div>
+      <div class="status-row"><b>Förhandsgranska, publicera, rulla tillbaka</b><span class="d">ingenting går live innan det är klart; 14 dagar att ångra</span><span class="pill p-done">byggt</span></div>
+      <div class="status-row"><b>Färskhet</b><span class="d">sidor som försvunnit kontrolleras och tas bort, gamla arkiv rankas lägre</span><span class="pill p-done">byggt</span></div>
+      <div class="status-row"><b>Ändrade inställningar slår igenom</b><span class="d">smalare omfång tar bort sidor utan att hämta dem</span><span class="pill p-done">byggt</span></div>
+      <div class="status-row"><b>Mätning av sökkvalitet</b><span class="d">testfrågor, jämförelse före och efter, nattlig mätning med larm</span><span class="pill p-done">byggt</span></div>
+      <div class="status-row"><b>Driftmiljö för testservern</b><span class="d">resursgränser, körinstruktioner, tjänstekonto för återkoppling</span><span class="pill p-done">byggt</span></div>
+      <div class="status-row"><b>Sökning med behörighet</b><span class="d">kunskaps-API:t som chatten använder</span><span class="pill p-review">i granskning</span></div>
+      <div class="status-row"><b>Koppling till gatewayen</b><span class="d">modellkatalog, nyckel per tjänst, statussida</span><span class="pill p-review">i granskning</span></div>
+      <div class="status-row"><b>Kryptering av interna filer</b><span class="d">krävs innan interna källor läses in</span><span class="pill p-review">pågår</span></div>
+      <div class="status-row"><b>Administration via API</b><span class="d">skapa samlingar, källor och assistenter</span><span class="pill p-todo">inte påbörjat</span></div>
+      <div class="status-row"><b>Chatt till Open WebUI</b><span class="d">strömmade svar, källhänvisningar, följdfrågor</span><span class="pill p-todo">inte påbörjat</span></div>
+      <div class="status-row"><b>Inloggning för piloten</b><span class="d">Keycloak-realm delad med gatewayen</span><span class="pill p-todo">inte påbörjat</span></div>
+      <div class="status-row"><b>Live-blocket</b><span class="d">riktig gateway, inläsning av umea.se, guldfrågor, testserver, pilotmedlem</span><span class="pill p-live">live</span></div>
+    </div>
+    <p class="note">Kryptering av interna filer räknas som "i granskning" i sammanställningen ovan. Inläsningen har över
+      1 000 automatiska tester som körs före varje sammanslagning.</p>
+  </section>
+
+  <section id="prova" aria-labelledby="prova-h">
+    <p class="eyebrow">Det här kan vi prova</p>
+    <h2 id="prova-h">Två milstolpar och ett antal funktioner att testa</h2>
+    <div class="tries">
+      <div class="try">
+        <span class="pill p-review">snart</span>
+        <h3>Milstolpe 1: inläsning och sökning mot vår gateway</h3>
+        <ol>
+          <li>Starta plattformen lokalt, kopplad till kommunens testgateway.</li>
+          <li>Lägg in en URL-lista med några sidor från umea.se.</li>
+          <li>Se körningen: sidor hämtas, delas upp och får betydelsevektorer från <code>text-embedding-3-large</code> via gatewayen.</li>
+          <li>Ställ en sökfråga och se vilka stycken som hittas, med brödsmula och länk.</li>
+          <li>Se kostnaden per anrop i gatewayen (ett stycke kostar en bråkdel av ett öre).</li>
+        </ol>
+        <p class="needs">Väntar på: ström B:s gatewayklient och sökning (granskade), plus att plattformen skickar önskat
+          antal dimensioner. Testgatewayen och nyckeln finns; ett provanrop gav 1 024 värden från en EU-leverantör.</p>
+      </div>
+      <div class="try">
+        <span class="pill p-todo">efter chatten</span>
+        <h3>Milstolpe 2: ett svar med källa i Open WebUI</h3>
+        <ol>
+          <li>Logga in i Open WebUI med ett pilotkonto.</li>
+          <li>Välj pilotassistenten och ställ en fråga om något på umea.se.</li>
+          <li>Få ett strömmat svar med numrerade källor som länkar till sidorna.</li>
+          <li>Ställ en följdfråga ("vad kostar det?") och se att sammanhanget hänger med.</li>
+          <li>Fråga om något som inte finns och se att assistenten säger det och ger en kontakt.</li>
+        </ol>
+        <p class="needs">Väntar på: chatt-API:t, administrations-API:t och inloggningsdelen (ström B), samt en chattmodell i
+          gatewayen (alla chattmodeller där är EU-hostade).</p>
+      </div>
+    </div>
+    <h3>Funktioner som redan går att visa med testmodeller</h3>
+    <div class="feature-list">
+      <div class="feature"><b>Förhandsgranska en ändring</b><span>Ändra sidprofilen och se före och efter på riktiga sidor, utan att något i indexet ändras.</span></div>
+      <div class="feature"><b>Publicera och ångra</b><span>Publicera nya inställningar; dokumenten byts ett i taget. Rulla tillbaka inom 14 dagar utan att läsa om något.</span></div>
+      <div class="feature"><b>Jämför sökinställningar</b><span>Kör testfrågorna med nuvarande och föreslagna inställningar sida vid sida, med vinster och förluster per fråga.</span></div>
+      <div class="feature"><b>En sida försvinner</b><span>En sida som lämnar sitemapen kontrolleras och tas bort först när webbplatsen svarar att den är borta.</span></div>
+      <div class="feature"><b>Smalna av en källa</b><span>Exkludera en del av webbplatsen; de sidorna tas bort direkt, utan att hämtas igen.</span></div>
+      <div class="feature"><b>Skydd mot massradering</b><span>Om en körning skulle ta bort mer än 20 % av en källa pausar den och frågar en person.</span></div>
+    </div>
+  </section>
+
+  <section id="grind" aria-labelledby="grind-h">
+    <p class="eyebrow">Go-live-grinden</p>
+    <h2 id="grind-h">Fyra mål som rättade svar måste nå</h2>
+    <p class="col">Avdelningens granskare rättar assistentens svar på guldfrågorna för hand. Piloten går live när alla fyra
+      mål nås, och grinden körs om varje månad under piloten. Staplarna visar målen, inte uppmätta resultat; första
+      mätningen görs i live-blocket.</p>
+    <div class="gate" role="list">
+      <div class="gate-row" role="listitem"><span class="l">Korrekta svar</span>
+        <div class="gate-track" aria-hidden="true"><div class="gate-ok" style="left: 80%; right: 0;"></div><div class="gate-mark" style="left: calc(80% - 1px);"></div></div>
+        <span class="v">≥ 80 %</span></div>
+      <div class="gate-row" role="listitem"><span class="l">Källhänvisningar som stämmer</span>
+        <div class="gate-track" aria-hidden="true"><div class="gate-ok" style="left: 90%; right: 0;"></div><div class="gate-mark" style="left: calc(90% - 1px);"></div></div>
+        <span class="v">≥ 90 %</span></div>
+      <div class="gate-row" role="listitem"><span class="l">Felaktigt "hittar inget svar"</span>
+        <div class="gate-track" aria-hidden="true"><div class="gate-ok" style="left: 0; right: 90%;"></div><div class="gate-mark" style="left: calc(10% - 1px);"></div></div>
+        <span class="v">≤ 10 %</span></div>
+      <div class="gate-row" role="listitem"><span class="l">Frågor utanför ämnet som besvaras med "hittar inget svar"</span>
+        <div class="gate-track" aria-hidden="true"><div class="gate-ok" style="left: 80%; right: 0;"></div><div class="gate-mark" style="left: calc(80% - 1px);"></div></div>
+        <span class="v">≥ 80 %</span></div>
+    </div>
+    <p class="note">Grönt fält: godkänt område på en skala 0–100 %. Den rättade filen och summorna bifogas go-live-beslutet.</p>
+  </section>
+
+  <section id="beslut" aria-labelledby="beslut-h">
+    <p class="eyebrow">Väntar på människor</p>
+    <h2 id="beslut-h">Beslut och arbete som behövs för att bli klara</h2>
+    <div class="questions">
+      <div class="question"><span class="id">GW</span><span><b>Gateway-sessionen.</b> Gatewayens release 1 (tak för residens per anrop), den delade Keycloak-realmen <code>ume</code> och en rättning så att stora inbäddningsanrop inte nekas. Behövs före go-live.</span><span class="who">Gatewayteamet</span></div>
+      <div class="question"><span class="id">J13</span><span><b>Guldfrågorna.</b> Pilotavdelningen skriver riktiga frågor med förväntade svar och källor. Behövs för go-live-grinden.</span><span class="who">Pilotavdelningen, namngiven ägare</span></div>
+      <div class="question"><span class="id">G1</span><span><b>Konsekvensbedömning för dataskydd</b>, med EU-leverantörens biträdesavtal och Open WebUI:s chattkopior (W2). Klar före go-live.</span><span class="who">Projektet + dataskyddsombud</span></div>
+      <div class="question"><span class="id">U1</span><span><b>Crawlerns kontaktsida</b> på umea.se: adress, ägare och kontakt före första inläsningen av hela umea.se.</span><span class="who">Webbredaktörerna</span></div>
+      <div class="question"><span class="id">O7</span><span><b>Testserver för piloten</b> bakom kommunens proxy, med backupmål och plats för nyckeldeponering.</span><span class="who">Drift</span></div>
+      <div class="question"><span class="id">A1</span><span><b>Arkivlagen.</b> Är chattloggar allmänna handlingar? Blockerar inte piloten (ingen chattext sparas), men avgör när chatthistorik får sparas.</span><span class="who">Registrator / arkivarie</span></div>
+    </div>
+  </section>
+
+  <section id="teknik" aria-labelledby="teknik-h">
+    <p class="eyebrow">Teknisk bilaga</p>
+    <h2 id="teknik-h">För den som ska köra eller granska</h2>
+    <div class="tech">
+      <div class="card">
+        <h3>Delar i piloten</h3>
+        <ul>
+          <li><code>rag-worker</code>: inläsning, jobbkö i PostgreSQL, utvärdering</li>
+          <li><code>rag-parser</code>: dokumentläsare (Docling, OCR <code>swe</code>)</li>
+          <li><code>rag-api</code>: kunskapssökning och chatt-API för Open WebUI</li>
+          <li><code>rag-admin</code>: administration (svenska sidor) och API</li>
+          <li>PostgreSQL 17 med pgvector och svensk textsökning; ClamAV</li>
+          <li>Alla modellanrop via LLM-gatewayen med uttryckligt residenstak; i tester en falsk gateway</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Inbäddningsmodellen</h3>
+        <ul>
+          <li><code>text-embedding-3-large</code> från en EU-leverantör i testgatewayen</li>
+          <li>1 024 dimensioner via parametern <code>dimensions</code> (en tredjedel av lagringen jämfört med 3 072)</li>
+          <li>Högst 6 000 token per anrop, så att gatewayens kontroll av kontextfönstret inte nekar anropet</li>
+          <li>En kontrollvektor ("kanariefågel") upptäcker om gatewayen tyst byter modell</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Lokalt mot testgatewayen</h3>
+        <pre class="cmd">dotnet user-secrets --project src/Ume.Rag.AppHost \
+  set Gateway:BaseUrl https://&lt;gateway&gt;
+dotnet user-secrets --project src/Ume.Rag.AppHost \
+  set Gateway:Keys:Eu &lt;nyckel&gt;
+dotnet user-secrets --project src/Ume.Rag.AppHost \
+  set FakeGateway:Enabled false</pre>
+        <p class="note">Adresser och nycklar finns bara i användarhemligheter eller hemliga filer, aldrig i koden. Fullständiga
+          steg kommer i <code>docs/p1a-local-run.md</code> när milstolpe 1 är klar att köras.</p>
+      </div>
+      <div class="card">
+        <h3>Säkerhet i korthet</h3>
+        <ul>
+          <li>En gatewaynyckel per tjänst; inläsningen har aldrig nyckel för icke-EU</li>
+          <li>Filer virusskannas innan något öppnar dem; utan svar från skannern väntar de, efter 24 timmar markeras de som misslyckade</li>
+          <li>Interna filer krypteras per fil (AES-256-GCM)</li>
+          <li>Ingen chattext eller dokumenttext i loggar eller mätvärden</li>
+          <li>Open WebUI: ingen lösenordsinloggning, nyckeln för återkoppling når bara återkopplingen</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Ume.Rag, fas 1. Läget 31 oktober 2026: P0 är klar och släppt som v0.1.0; fas 1 byggs med testmodeller först och live-delarna på slutet.</span>
+    <span>Detaljer: <code>plans/p1/README.md</code> (P1a), <code>plans/p1b/README.md</code> (P1b), <code>plans/progress.md</code> och beslutstabellen i <code>01-general-idea.md</code>.</span>
+  </footer>
+</div>
+</body>
+</html>
