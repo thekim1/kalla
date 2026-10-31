@@ -46,6 +46,13 @@ GRANT SELECT ON config."Settings", config."DataProtectionPolicies", config."Embe
 GRANT SELECT ON config."Settings", config."DataProtectionPolicies", config."EmbeddingProfiles", config."Collections" TO ume_rag_api;
 GRANT SELECT ("Id", "CollectionId", "Type", "Classification", "State", "DeletedAt", "ContainsThirdPartyText")
   ON config."Sources" TO ume_rag_api;
+-- Assistants and the gateway model mirror (data-model §1.2): the admin manages them; the api reads assistants,
+-- audiences and models, and versions only through the view of published versions, never AssistantVersions itself, so a
+-- draft cannot reach chat. The worker reads no assistant tables.
+GRANT SELECT, INSERT, UPDATE, DELETE ON config."Assistants", config."AssistantVersions", config."AssistantAudiences",
+  config."GatewayModels" TO ume_rag_admin;
+GRANT SELECT ON config."Assistants", config."AssistantAudiences", config."PublishedAssistantVersions",
+  config."GatewayModels" TO ume_rag_api;
 
 -- content: the worker owns it; the admin reads it and enqueues jobs (decisions are command jobs, data-model §12.2).
 GRANT SELECT, INSERT, UPDATE, DELETE ON content."Jobs", content."WorkerInstances", content."RunItems" TO ume_rag_worker;
@@ -68,6 +75,14 @@ GRANT INSERT ON content."BlobTombstones" TO ume_rag_admin;
 GRANT SELECT ON content."ChunkSets", content."Chunks" TO ume_rag_api;
 GRANT SELECT ("Id", "SourceId", "Classification", "IdentityKind", "IdentityHash", "Title", "Url", "MediaType",
   "DisplayName", "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt") ON content."Documents" TO ume_rag_api;
+-- Evaluation and retrieval counters (data-model §1.2, §12.2, §12.3): the worker writes them; the admin reads them and
+-- writes runs and results itself for the answer-level runs it executes (P2 kinds); the api counts retrievals only
+-- through content.rag_count_retrievals.
+GRANT SELECT, INSERT, UPDATE, DELETE ON content."EvaluationSets", content."EvaluationQuestions", content."EvaluationRuns",
+  content."EvaluationResults", content."RetrievalStats" TO ume_rag_worker;
+GRANT SELECT ON content."EvaluationSets", content."EvaluationQuestions", content."EvaluationRuns", content."EvaluationResults",
+  content."RetrievalStats" TO ume_rag_admin;
+GRANT INSERT, UPDATE ON content."EvaluationRuns", content."EvaluationResults" TO ume_rag_admin;
 
 -- audit: every service appends, only the admin reads; no role deletes (retention runs through step functions).
 GRANT INSERT ON audit."AuditLog" TO ume_rag_api, ume_rag_admin, ume_rag_worker;
@@ -79,4 +94,6 @@ GRANT EXECUTE ON FUNCTION content.rag_or_query(tsvector), content.rag_tsquery_or
   TO ume_rag_api, ume_rag_admin, ume_rag_worker;
 GRANT EXECUTE ON FUNCTION content.rag_partition_maintain(), content.rag_ensure_profile_index(uuid, integer) TO ume_rag_worker;
 GRANT EXECUTE ON FUNCTION config.rag_retention_config_step(integer) TO ume_rag_admin;
+GRANT EXECUTE ON FUNCTION content.rag_count_retrievals(date, uuid[], bytea[], uuid[], character varying[], integer[], integer[])
+  TO ume_rag_api;
 COMMIT;

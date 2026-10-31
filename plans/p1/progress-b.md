@@ -26,8 +26,8 @@ Refs: [data-model](../platform/data-model.md) §1.2, §2.1, §2.2, §3.2, §9, �
 
 ## 2. Schema part 2, serving (#3)
 Refs: [data-model §2.1, §2.2](../platform/data-model.md), [weakness review §2](../weakness-review.md)
-- [ ] `Assistants`, `AssistantVersions`, view `PublishedAssistantVersions`, `AssistantAudiences`, `GatewayModels`
-- [ ] `EvaluationSets`, `EvaluationQuestions`, `EvaluationRuns` (`Variant`, coverage fields), `EvaluationResults`, `RetrievalStats`
+- [x] `Assistants`, `AssistantVersions`, view `PublishedAssistantVersions`, `AssistantAudiences`, `GatewayModels` (this PR)
+- [x] `EvaluationSets`, `EvaluationQuestions`, `EvaluationRuns` (`Variant`, coverage fields), `EvaluationResults`, `RetrievalStats` (this PR)
 
 ## 3. Retrieval core (#11)
 Refs: [knowledge §6–§8, §16.1–§16.2](../knowledge-api/design.md)
