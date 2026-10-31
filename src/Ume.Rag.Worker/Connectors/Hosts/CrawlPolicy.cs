@@ -13,11 +13,14 @@ public sealed record HostOverride(double? RequestsPerSecond = null, int? MaxConn
 /// <summary>
 /// The run-time crawl values the host budget reads from <c>Settings.Crawl</c> (connectors design §5.2, §6.3):
 /// <c>MunicipalHosts</c> (exact names or <c>*.</c> suffixes, e.g. <c>umea.se</c>, <c>*.umea.se</c>) and
-/// <c>HostOverrides</c>. Blocked hosts and ports are the egress policy's (<see cref="Egress.EgressPolicy"/>).
+/// <c>HostOverrides</c>, and <c>IncompleteRunsAlert</c> for the incomplete-traversal alert. Blocked hosts and ports are the egress policy's (<see cref="Egress.EgressPolicy"/>).
 /// </summary>
 public sealed record CrawlPolicy(IReadOnlyList<string> MunicipalHosts, IReadOnlyDictionary<string, HostOverride> HostOverrides)
 {
     public static CrawlPolicy Default { get; } = new([], new Dictionary<string, HostOverride>(StringComparer.OrdinalIgnoreCase));
+
+    /// <summary><c>Settings.Crawl.IncompleteRunsAlert</c>: incomplete traversals in a row that raise the alert (§5.4).</summary>
+    public int IncompleteRunsAlert { get; init; } = Deletion.TraversalCompleteness.DefaultAlertThreshold;
 
     /// <summary>Whether <paramref name="host"/> (lower-case A-label, a <c>:port</c> ignored) is a municipal host.</summary>
     public HostKind KindOf(string host)

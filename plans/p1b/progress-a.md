@@ -33,12 +33,12 @@ Refs: [engine §9.1, §11, §12](../ingestion-worker/design-engine.md), [admin �
 
 ### 4. Freshness in the crawler
 Refs: [weakness review §3](../weakness-review.md), [connectors §5.4–§5.6, §18](../ingestion-worker/design-connectors.md)
-- [ ] Completeness by ratio (≥ 99 % resolved; failed seeds protected; unreachable robots.txt = paused); C7 updated
-- [ ] Removal check (HEAD, then GET; 404/410 → `Gone`; 200 kept; also in full traversals)
-- [ ] `demote` patterns on the source; incomplete-traversal alert; report sections
-- [ ] `lastmod` skip and incremental runs gated on `lastmodReliable`; `revalidateEvery`
-- [ ] `lastmod` sample comparison (≤ 2 % threshold, ≥ 7 days apart) proposing the flag through `edit-site-profile`
-- [ ] **Done:** connectors §18 tests for these parts green; fixture-site removal test
+- [x] Completeness by ratio (≥ 99 % resolved; failed seeds protected; unreachable robots.txt = paused); C7 updated (#?)
+- [x] Removal check (HEAD, then GET; 404/410 → `Gone`; 200 kept; also in full traversals) (#?)
+- [x] `demote` patterns on the source; incomplete-traversal alert; report sections (#?)
+- [x] `lastmod` skip and incremental runs gated on `lastmodReliable`; `revalidateEvery` (#?)
+- [x] `lastmod` sample comparison (≤ 2 % threshold, ≥ 7 days apart) proposing the flag through `edit-site-profile` (#?)
+- [x] **Done:** connectors §18 tests for these parts green; fixture-site removal test (#?)
 
 ### 5. Preview and preflight
 Refs: [engine §11](../ingestion-worker/design-engine.md), [admin §4.7, §6.4](../admin/design.md)

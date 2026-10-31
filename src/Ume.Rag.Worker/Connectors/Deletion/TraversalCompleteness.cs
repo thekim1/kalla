@@ -2,17 +2,36 @@ using Ume.Rag.Worker.Connectors.Crawl;
 
 namespace Ume.Rag.Worker.Connectors.Deletion;
 
+/// <summary>
+/// Which seed rule decides a traversal's completeness (<c>Crawl:CompletenessRule</c>; weakness review §3 "Phasing"):
+/// <see cref="Ratio"/> is P1b's rule and the default; <see cref="Strict"/> is P1a's, kept selectable.
+/// </summary>
+public enum CompletenessRule
+{
+    /// <summary>≥ 99 % of the seeds resolved (connectors design §5.4).</summary>
+    Ratio,
+
+    /// <summary>Every seed resolved: one failed seed makes the traversal incomplete (P1a).</summary>
+    Strict,
+}
+
 /// <param name="Complete">Documents not reached may become <c>not-seen</c> candidates.</param>
-/// <param name="Reasons">Why not: <c>crawl.limit_pages</c>, <c>crawl.host_paused</c>, <c>crawl.seeds_failed</c>, <c>crawl.claims_pending</c>, <c>crawl.cancelled</c>, <c>crawl.seeds_unreachable</c>.</param>
+/// <param name="Reasons">Why not: <c>crawl.incremental</c>, <c>crawl.limit_pages</c>, <c>crawl.host_paused</c>, <c>crawl.seeds_failed</c>, <c>crawl.seeds_unreachable</c>, <c>crawl.claims_pending</c>, <c>crawl.cancelled</c>.</param>
 /// <param name="RunFailure">The run fails (<c>crawl.seeds_unreachable</c>: no seed was resolved, §15).</param>
 /// <param name="RunDegradation">The run is degraded (<c>crawl.limit_pages</c>, then <c>crawl.host_paused</c>, §15).</param>
 public sealed record TraversalVerdict(bool Complete, IReadOnlyList<string> Reasons, string? RunFailure, string? RunDegradation);
 
+/// <summary>A source's earlier crawl run as the incomplete-traversal alert reads it: incremental runs are no traversals.</summary>
+public sealed record TraversalHistoryEntry(bool Complete, bool Incremental);
+
 /// <summary>
-/// Whether a traversal was complete, by <b>P1a's stricter rule</b> (weakness review §3 "Phasing": completeness by ratio is
-/// P1b): every seed resolved (no failed seed at all), no host paused for the run (an unreachable robots.txt counts as
-/// paused), no admitted row left pending or released, the page limit not hit, and the run not cancelled. Only a complete
-/// traversal turns documents not reached into <c>not-seen</c> candidates; explicit <c>Gone</c> counts in any run.
+/// Whether a traversal was complete (connectors design §5.4, weakness review §3): no host paused for the run (an
+/// unreachable robots.txt or an unreadable sitemap counts as paused), no admitted row left pending or released, the page
+/// limit not hit, the run neither cancelled nor incremental, and enough seeds resolved: by
+/// <see cref="CompletenessRule.Ratio"/> at least 99 % of them (P1b), by <see cref="CompletenessRule.Strict"/> all of them
+/// (P1a). A seed is resolved when it was fetched, returned 304, was skipped by <c>lastmod</c> or is <c>Gone</c>; the
+/// others are <c>CrawlRuns.SeedsFailed</c>. Only a complete traversal turns documents not reached into <c>not-seen</c>
+/// candidates; explicit <c>Gone</c> counts in any run.
 /// </summary>
 public static class TraversalCompleteness
 {
@@ -22,14 +41,28 @@ public static class TraversalCompleteness
     public const string ClaimsPending = "crawl.claims_pending";
     public const string Cancelled = "crawl.cancelled";
     public const string SeedsUnreachable = "crawl.seeds_unreachable";
+    public const string Incremental = "crawl.incremental";
+
+    /// <summary>The share of seeds (percent) <see cref="CompletenessRule.Ratio"/> needs resolved.</summary>
+    public const int ResolvedPercent = 99;
+
+    /// <summary><c>Settings.Crawl.IncompleteRunsAlert</c>'s default.</summary>
+    public const int DefaultAlertThreshold = 3;
 
     /// <param name="run">The run's <c>CrawlRuns</c> row.</param>
     /// <param name="openRows">The run's frontier rows still <c>pending</c> or <c>released</c>.</param>
     /// <param name="cancelled">The run was cancelled.</param>
-    public static TraversalVerdict Evaluate(CrawlRunRecord run, int openRows, bool cancelled)
+    /// <param name="rule">The seed rule.</param>
+    /// <param name="incremental">An incremental run (§5.4): never a complete traversal.</param>
+    public static TraversalVerdict Evaluate(CrawlRunRecord run, int openRows, bool cancelled, CompletenessRule rule, bool incremental)
     {
         ArgumentNullException.ThrowIfNull(run);
         var reasons = new List<string>();
+        if (incremental)
+        {
+            reasons.Add(Incremental);
+        }
+
         if (run.LimitHit)
         {
             reasons.Add(LimitPages);
@@ -40,12 +73,13 @@ public static class TraversalCompleteness
             reasons.Add(HostPaused);
         }
 
-        var unreachable = run.Seeds == 0 || run.SeedsFailed >= run.Seeds;
+        // An incremental run admits only changed and new seeds, often none: it fails only when it had seeds and none resolved.
+        var unreachable = incremental ? run.Seeds > 0 && run.SeedsFailed >= run.Seeds : run.Seeds == 0 || run.SeedsFailed >= run.Seeds;
         if (unreachable)
         {
             reasons.Add(SeedsUnreachable);
         }
-        else if (run.SeedsFailed > 0)
+        else if (!EnoughResolved(run, rule))
         {
             reasons.Add(SeedsFailed);
         }
@@ -64,13 +98,33 @@ public static class TraversalCompleteness
         return new TraversalVerdict(reasons.Count == 0, reasons, unreachable && !cancelled ? SeedsUnreachable : null, degradation);
     }
 
-    /// <summary>
-    /// The incomplete-traversal alert (§5.4): the last <paramref name="threshold"/> traversals (newest first) were all
-    /// incomplete (<c>Settings.Crawl.IncompleteRunsAlert</c>, default 3). A URL-list or upload listing that ended partial counts the same.
-    /// </summary>
-    public static bool ShouldAlert(IReadOnlyList<bool> recentCompleteness, int threshold = 3)
+    /// <summary>The seeds resolved: the admitted seeds less the failed ones.</summary>
+    public static int Resolved(CrawlRunRecord run)
     {
-        ArgumentNullException.ThrowIfNull(recentCompleteness);
-        return threshold > 0 && recentCompleteness.Count >= threshold && recentCompleteness.Take(threshold).All(complete => !complete);
+        ArgumentNullException.ThrowIfNull(run);
+        return Math.Max(0, run.Seeds - run.SeedsFailed);
     }
+
+    /// <summary>
+    /// How many traversals in a row, newest first, were incomplete. Incremental runs are skipped (they never complete); a
+    /// URL-list or upload listing that ended partial is passed as an incomplete traversal.
+    /// </summary>
+    public static int ConsecutiveIncomplete(IEnumerable<TraversalHistoryEntry> newestFirst)
+    {
+        ArgumentNullException.ThrowIfNull(newestFirst);
+        return newestFirst.Where(e => !e.Incremental).TakeWhile(e => !e.Complete).Count();
+    }
+
+    /// <summary>
+    /// The incomplete-traversal alert (§5.4): the last <paramref name="threshold"/> traversals were all incomplete
+    /// (<c>Settings.Crawl.IncompleteRunsAlert</c>, default 3), so the source's <c>not-seen</c> deletions never run.
+    /// </summary>
+    public static bool ShouldAlert(int consecutiveIncomplete, int threshold = DefaultAlertThreshold) =>
+        threshold > 0 && consecutiveIncomplete >= threshold;
+
+    private static bool EnoughResolved(CrawlRunRecord run, CompletenessRule rule) => rule switch
+    {
+        CompletenessRule.Strict => run.SeedsFailed == 0,
+        _ => Resolved(run) * 100L >= (long)ResolvedPercent * run.Seeds,
+    };
 }

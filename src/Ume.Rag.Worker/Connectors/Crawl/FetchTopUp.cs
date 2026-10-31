@@ -15,8 +15,16 @@ namespace Ume.Rag.Worker.Connectors.Crawl;
 /// <param name="Kind">The run's kind, carried into continuations.</param>
 /// <param name="Trigger">Manual runs ignore the night window (§6.5).</param>
 /// <param name="Settings">The source's settings.</param>
-/// <param name="Revalidate">Every <c>revalidateEvery</c>-th traversal and forced runs send no validators (§4).</param>
-public sealed record CrawlRunContext(CrawlRunKey Run, Guid DepartmentId, SyncKind Kind, RunTrigger Trigger, JsonElement Settings, bool Revalidate)
+/// <param name="Revalidate">
+/// Every <c>revalidateEvery</c>-th traversal and forced runs send no validators (§4) and make no <c>lastmod</c> skip
+/// (§5.4); see <see cref="CrawlFreshness.Revalidates"/>.
+/// </param>
+/// <param name="Incremental">
+/// An incremental run (<c>sync</c> payload <c>incremental</c>, §5.4): only seeds with a newer sitemap <c>lastmod</c> and new
+/// sitemap URLs are fetched, links are expanded only from changed pages, the traversal is never complete. Kept only when
+/// every scope host's site profile marks <c>lastmod</c> reliable (<see cref="CrawlTraversal.StartAsync"/>).
+/// </param>
+public sealed record CrawlRunContext(CrawlRunKey Run, Guid DepartmentId, SyncKind Kind, RunTrigger Trigger, JsonElement Settings, bool Revalidate, bool Incremental = false)
 {
     public FetchContext FetchContext => new(Run.SourceId, Run.Classification, Run.RunId, Settings, Revalidate);
 }
@@ -102,6 +110,7 @@ public sealed class FetchTopUp(ICrawlFrontierStore frontier, ICrawlRunStore runs
             Kind = context.Kind,
             Trigger = context.Trigger,
             Phase = SyncPhase.Fetch,
+            Incremental = context.Incremental,
         };
         var delay = at - time.GetUtcNow();
         return new JobRequest(JobClasses.Sync, context.DepartmentId, context.Run.Classification, ContractJson.Serialize(payload))

@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Crawl;
@@ -156,6 +157,52 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
 
             _runs[run.RunId] = record with { LimitHit = record.LimitHit || limitHit };
             return Task.FromResult(new AdmitResult(admitted, limitHit));
+        }
+    }
+
+    public Task<IReadOnlySet<string>> MarkListedAsync(CrawlRunKey run, IReadOnlyList<FrontierAdmission> seeds, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var listed = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var seed in seeds)
+            {
+                var key = (run.SourceId, run.Classification, seed.UrlHash);
+                if (_frontier.TryGetValue(key, out var row) && row.State == FrontierState.Idle && row.RunId != run.RunId
+                    && row.LastFetchedAt is { } fetched && (seed.SitemapLastMod is null || seed.SitemapLastMod <= fetched))
+                {
+                    _frontier[key] = row with { RunId = run.RunId, SitemapLastMod = seed.SitemapLastMod ?? row.SitemapLastMod };
+                    listed.Add(seed.UrlHash);
+                }
+            }
+
+            return Task.FromResult<IReadOnlySet<string>>(listed);
+        }
+    }
+
+    public Task<IReadOnlyList<FrontierRow>> LeftSitemapAsync(CrawlRunKey run, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            IReadOnlyList<FrontierRow> rows = [.. _frontier.Values
+                .Where(r => r.SourceId == run.SourceId && r.Classification == run.Classification && r.State == FrontierState.Idle
+                    && r.RunId != run.RunId && r.SitemapLastMod is not null)
+                .OrderBy(r => r.Url, StringComparer.Ordinal)];
+            return Task.FromResult(rows);
+        }
+    }
+
+    public Task ClearSitemapLastModAsync(CrawlRunKey run, IReadOnlyList<string> urlHashes, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            foreach (var hash in urlHashes)
+            {
+                var key = (run.SourceId, run.Classification, hash);
+                _frontier[key] = _frontier[key] with { SitemapLastMod = null };
+            }
+
+            return Task.CompletedTask;
         }
     }
 
@@ -353,6 +400,23 @@ internal sealed class FixedCrawlPolicy(params string[] municipalHosts) : ICrawlP
     public CrawlPolicy Current => new(municipalHosts, Overrides);
 }
 
+/// <summary>Applied site profiles by (level, host), set by the test.</summary>
+internal sealed class InMemorySiteProfiles : ISiteProfileReader
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string, string), AppliedSiteProfile> _profiles = new();
+
+    /// <summary>Applies a profile with <c>lastmodReliable</c> as given to the host at the level.</summary>
+    public AppliedSiteProfile Set(string classification, string host, bool lastmodReliable, int number = 1)
+    {
+        var applied = new AppliedSiteProfile(Guid.NewGuid(), number, "sitevision", new Pipelines.SiteProfiles.SiteProfile { MainRoot = "main", LastmodReliable = lastmodReliable });
+        _profiles[(classification, host)] = applied;
+        return applied;
+    }
+
+    public Task<AppliedSiteProfile?> GetAppliedAsync(string classification, string host, CancellationToken cancellationToken) =>
+        Task.FromResult(_profiles.GetValueOrDefault((classification, host)));
+}
+
 internal sealed class InMemoryUploadSlots : IUploadSlotReader
 {
     public List<UploadSlot> Slots { get; } = [];
@@ -370,8 +434,10 @@ internal sealed class CrawlRig : IAsyncDisposable
     private readonly InMemoryCrawlStore? _memory;
 
     private CrawlRig(FetchPath path, CrawlConnector connector, CrawlTraversal traversal, ICrawlFrontierStore frontier, ICrawlRunStore runs,
-        InMemoryCrawlStore? memory, RecordingJobQueue queue, FetchTopUp topUp)
+        InMemoryCrawlStore? memory, RecordingJobQueue queue, FetchTopUp topUp, InMemorySiteProfiles profiles, FakeTimeProvider profileClock)
     {
+        Profiles = profiles;
+        ProfileClock = profileClock;
         Path = path;
         Connector = connector;
         Traversal = traversal;
@@ -399,15 +465,22 @@ internal sealed class CrawlRig : IAsyncDisposable
 
     public FetchTopUp TopUp { get; }
 
+    /// <summary>The hosts' site profiles (none: no host marks <c>lastmod</c> reliable).</summary>
+    public InMemorySiteProfiles Profiles { get; }
+
+    /// <summary>The clock of the <c>lastmodReliable</c> cache: advance it past <see cref="LastmodReliability.CacheFor"/> after changing a profile.</summary>
+    public FakeTimeProvider ProfileClock { get; }
+
     /// <param name="site">The test site.</param>
     /// <param name="policy">Municipal hosts and overrides; the default makes the test hosts fast (500 req/s, within numeric(5,2); 4 connections).</param>
     /// <param name="batch"><c>Crawl:FetchBatchPerHost</c>.</param>
     /// <param name="dns">Extra host names.</param>
     /// <param name="hosts">The <c>CrawlHosts</c> store; in memory when null.</param>
     /// <param name="store">The frontier and run store; in memory when null.</param>
+    /// <param name="rule"><c>Crawl:CompletenessRule</c>.</param>
     public static CrawlRig Create(
         TestSite site, FixedCrawlPolicy? policy = null, int batch = 10, FakeDnsResolver? dns = null, ICrawlHostStore? hosts = null,
-        (ICrawlFrontierStore Frontier, ICrawlRunStore Runs)? store = null)
+        (ICrawlFrontierStore Frontier, ICrawlRunStore Runs)? store = null, Worker.Connectors.Deletion.CompletenessRule rule = Worker.Connectors.Deletion.CompletenessRule.Ratio)
     {
         var path = site.Fetch(dns: dns);
         if (policy is null)
@@ -424,16 +497,23 @@ internal sealed class CrawlRig : IAsyncDisposable
         var (frontier, runs) = store ?? (memory!, memory!);
         var queue = new RecordingJobQueue();
         var budget = new HostBudget(hosts ?? new InMemoryCrawlHostStore(TimeProvider.System), policy, TimeProvider.System);
-        var topUp = new FetchTopUp(frontier, runs, queue, Options.Create(new CrawlOptions { FetchBatchPerHost = batch }), TimeProvider.System);
-        var traversal = new CrawlTraversal(connector, path.Robots, budget, policy, frontier, runs, topUp, path.Blobs, queue, TimeProvider.System);
-        return new CrawlRig(path, connector, traversal, frontier, runs, memory, queue, topUp);
+        var options = Options.Create(new CrawlOptions { FetchBatchPerHost = batch, CompletenessRule = rule });
+        var topUp = new FetchTopUp(frontier, runs, queue, options, TimeProvider.System);
+        var profiles = new InMemorySiteProfiles();
+        var profileClock = new FakeTimeProvider();
+        var traversal = new CrawlTraversal(connector, path.Robots, budget, policy, frontier, runs, topUp, path.Blobs, queue,
+            new LastmodReliability(profiles, profileClock), options, TimeProvider.System);
+        return new CrawlRig(path, connector, traversal, frontier, runs, memory, queue, topUp, profiles, profileClock);
     }
 
-    /// <summary>Lists and admits the seeds, then runs every released fetch until none is left; returns the fetch results by URL.</summary>
-    public async Task<Dictionary<string, CrawlFetchResult>> CrawlAsync(CrawlRunContext context)
+    /// <summary>
+    /// Opens the run, lists and admits the seeds, reports the listing's end (removal checks), then runs every released
+    /// fetch until none is left; returns the context the run continued with and the fetch results by URL.
+    /// </summary>
+    public async Task<(CrawlRunContext Context, Dictionary<string, CrawlFetchResult> Results)> RunAsync(CrawlRunContext context)
     {
         var ct = TestContext.Current.CancellationToken;
-        await Traversal.StartAsync(context, ct);
+        context = await Traversal.StartAsync(context, ct);
         var batch = new List<ListingEvent<CrawlCheckpoint>>();
         var listing = new ListingContext(context.Run.SourceId, context.Run.Classification, context.Run.RunId, context.Settings);
         await foreach (var e in Connector.ListAsync(listing, new CrawlCheckpoint(), ct))
@@ -444,11 +524,18 @@ internal sealed class CrawlRig : IAsyncDisposable
                 await Traversal.AdmitSeedsAsync(context, batch, ct);
                 batch.Clear();
             }
+            else if (e is ListingEvent<CrawlCheckpoint>.Done done)
+            {
+                await Traversal.ListingDoneAsync(context, done.Completeness, ct);
+            }
         }
 
         await TopUp.TopUpAsync(context, null, null, ct);
-        return await DrainAsync(context);
+        return (context, await DrainAsync(context));
     }
+
+    /// <summary><see cref="RunAsync"/> for a run that stays as given (no incremental downgrade expected).</summary>
+    public async Task<Dictionary<string, CrawlFetchResult>> CrawlAsync(CrawlRunContext context) => (await RunAsync(context)).Results;
 
     public async Task<Dictionary<string, CrawlFetchResult>> DrainAsync(CrawlRunContext context)
     {
