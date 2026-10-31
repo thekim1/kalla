@@ -15,7 +15,7 @@ coordination between stream A and stream B, and the briefs for the gateway sessi
 approves each merge.
 
 **Do the first item that applies:**
-1. **J1 not done:** check that `v0.1.0` is tagged; add the ownership rules of `plans/p1/README.md` §2 to
+1. **J1 not done** (done 2026-10-31, `v0.1.0`): check that `v0.1.0` is tagged; add the ownership rules of `plans/p1/README.md` §2 to
    `.github/stream-ownership.txt`; record the 2026-10-30 user decisions of README §1 in the Decisions table and the
    register (M2, W1, G1); open the J1 issues for both streams.
 2. **The gateway session needs a brief** (README §7 U-d): release 1, the production deploy with EU routes, the shared
@@ -27,8 +27,10 @@ approves each merge.
    - settle each PR's "Design deviations" and README §8's open items in the design documents (ask the user only what
      they must decide);
    - answer the issues labelled `main`.
-4. **P1a done** (README §3 item 22 shown to the user): review deviations and results end to end, tick P1a in
-   `plans/progress.md`, then write the P1b briefs, progress files and prompts in `plans/p1/` from what P1a taught.
+4. **P1b briefs** (changed 2026-10-31, README §1a: code first, live testing last): written now in `plans/p1b/`, not after
+   P1a; the streams go from P1a code into P1b code.
+5. **All code items done:** run the live block with the user (J10–J13, items 19–22, P1b's live items), then tick P1a
+   and P1b in `plans/progress.md`.
 
 Record decisions in the Decisions table (`01-general-idea.md` §10). Update `HANDOVER.md` at the end of the session,
 then commit and push.

@@ -15,7 +15,7 @@ in parallel, in its own worktree, and **waits on your schema**, so item 1 comes 
 
 **Read, in this order, before touching code:**
 1. `AGENTS.md`: the rules. They are binding.
-2. `plans/p1/README.md`: §1 (every model call is EU-hosted in P1a), the checklist §3 (binding done-when), hand-offs
+2. `plans/p1/README.md`: **§1a (changed 2026-10-31: code first, live testing last)**, §1 (every model call is EU-hosted in P1a), the checklist §3 (binding done-when), hand-offs
    §4, rules §6, open items §8.
 3. `plans/p1/stream-b.md`: your brief.
 4. `plans/p1/progress-b.md`: your progress file. It tells you where you are.
@@ -28,8 +28,8 @@ in parallel, in its own worktree, and **waits on your schema**, so item 1 comes 
    "Waiting on" boxes, `git log origin/main` and the GitHub issues labelled `stream-b`. If a step is blocked, move to
    the next item.
 2. Build it on a `b/…` branch, touching only paths `.github/stream-ownership.txt` gives to `b` or `shared`. Start from
-   the gateway's file whenever the design says copy or adapt (`~/git/llmgateway`). Pin package versions under the
-   7-day rule.
+   the gateway's file whenever the design says copy or adapt (`~/git/llmgateway`). Pin exact package versions (the
+   7-day rule is suspended during development, README §1a).
 3. Prove the item's done-when from `plans/p1/README.md` §3 with tests, with a negative proof where you can.
 4. Write each `to-verify` result into `plans/p1/results-b.md`. Tick the matching boxes in `progress-b.md` in the same
    branch.
@@ -48,7 +48,8 @@ moving and record it under "Design deviations". For a change in someone else's p
 - a step needs a decision only the user can make;
 - every remaining step is blocked on a hand-off;
 - an action fails three times with different approaches;
-- or P1a is complete for stream B.
+- or every remaining P1a step is live-only or blocked: then continue with P1b's code items (`plans/p1b/`) if
+  they are merged, else report.
 
 Your report covers: what you merged (PR numbers), the boxes ticked, the open issues you are waiting on, and the
 deviations you recorded.

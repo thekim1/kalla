@@ -4,6 +4,9 @@ You build the ingestion side of the walking skeleton: contracts, parser formats,
 Sitevision preset, the engine and index writer, evaluation runs, the pilot Compose and CI. Stream B builds the
 serving side and owns the schema, the admin API and every admin page. You start at J1 (`README.md` §4).
 
+**Changed 2026-10-31:** read [`README.md`](README.md) §1a first (code first, live testing last; 7-day rule
+suspended; interim gateway). Live-only parts of the items below wait for the end block.
+
 ## Read first
 
 1. [`../../AGENTS.md`](../../AGENTS.md): working rules.
