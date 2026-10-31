@@ -143,6 +143,7 @@ public sealed class PreviewSegment(
     IEmbeddingCache embeddingCache,
     EmbeddingCanary canary,
     EmbeddingConcurrency concurrency,
+    IOptions<EmbedOptions> embedOptions,
     TimeProvider time,
     IParserConverter? converter = null,
     IParserBuild? parserBuild = null,
@@ -151,7 +152,7 @@ public sealed class PreviewSegment(
     /// <summary>The pages a preview parses of a paged document (engine design §11).</summary>
     public const int MaxPages = 50;
 
-    private readonly EmbedStage _embed = new(embeddings, profiles, new ReadOnlyEmbeddingCache(embeddingCache), canary, concurrency, time);
+    private readonly EmbedStage _embed = new(embeddings, profiles, new ReadOnlyEmbeddingCache(embeddingCache), canary, concurrency, embedOptions, time);
 
     /// <summary>Runs the stages after <c>fetch</c>; returns the site profile's before/after of an HTML page with a URL.</summary>
     public async Task<PreviewSiteProfile?> RunAsync(PreviewRun run, PreviewContent content, PreviewStageLog log, CancellationToken cancellationToken)

@@ -176,7 +176,8 @@ public sealed partial class SyncJobHandler(
 
     /// <summary>
     /// Connectors design §13: candidates from this run's explicit answers (<c>http.404</c>, …) and repeated failures, plus
-    /// the identities the complete listing no longer has (<c>removed-from-list</c>, <c>upload.deleted</c>, exempt), or for
+    /// the identities the complete listing no longer has (<c>removed-from-list</c>, after a URL list's identity change
+    /// <c>identity-changed</c> (<see cref="SettingsCandidates.UrlList"/>), <c>upload.deleted</c>, all exempt), or for
     /// a crawl the documents a complete traversal did not reach (<c>not-seen</c>); the guard decides; an older waiting
     /// proposal of the source is superseded; applied deletions are soft deletes with a <c>deleted</c> run item; a crawl's
     /// report sections and the run's phase <c>done</c> commit with the job's completion.
@@ -210,8 +211,11 @@ public sealed partial class SyncJobHandler(
             }
 
             candidates = [.. DeletionCandidates.FromTraversal(run.Id, all, new TraversalVerdict(false, [], null, null), explicitGone, new HashSet<Guid>(), now)];
-            var reason = source.Type == SourceTypes.UrlList ? DeletionReasons.RemovedFromList : DeletionReasons.UploadDeleted;
-            candidates.AddRange(DeletionCandidates.FromListing(all, listed, listingComplete: true, reason).Where(c => candidates.All(x => x.DocumentId != c.DocumentId)));
+            var unlisted = source.Type == SourceTypes.UrlList
+                ? SettingsCandidates.UrlList(all, listed, UrlListConnector.Settings(source.Settings).Canonicalizer(),
+                    (await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken)).Identity)
+                : DeletionCandidates.FromListing(all, listed, listingComplete: true, DeletionReasons.UploadDeleted);
+            candidates.AddRange(unlisted.Where(c => candidates.All(x => x.DocumentId != c.DocumentId)));
             emptyListing = listed.Count == 0;
         }
 

@@ -18,10 +18,32 @@ namespace Ume.Rag.Worker.Connectors.Deletion;
 /// <c>maxDepth</c> is no candidate (a lowered limit never deletes; a lowered <c>maxPages</c> makes the traversal
 /// partial already).</item>
 /// </list>
-/// The rest are <see cref="DeletionCandidates.FromTraversal"/>'s.
+/// The rest are <see cref="DeletionCandidates.FromTraversal"/>'s. A URL list's identity change: <see cref="UrlList"/>.
 /// </summary>
 public static class SettingsCandidates
 {
+    /// <summary>
+    /// A URL list's listing candidates (§12.3, §13.1): a live document whose identity the complete listing no longer has is
+    /// <c>removed-from-list</c>, or <c>identity-changed</c> (both exempt) when the run's identity settings differ from the
+    /// last applied ones or its identity is no longer canonical under the current <c>ignoreQueryParams</c> and
+    /// <c>directoryIndexNames</c>, so the list cannot name it again.
+    /// </summary>
+    /// <param name="documents">The source's documents.</param>
+    /// <param name="listed">The identities of the run's complete listing.</param>
+    /// <param name="canonicalizer">The source's current canonicaliser options.</param>
+    /// <param name="identityChanged">The run's identity settings differ from the last applied ones.</param>
+    public static IReadOnlyList<DeletionCandidate> UrlList(
+        IReadOnlyList<SourceDocument> documents, IReadOnlySet<string> listed, CanonicalizerOptions canonicalizer, bool identityChanged)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+        ArgumentNullException.ThrowIfNull(canonicalizer);
+        var byId = documents.ToDictionary(d => d.Id);
+        return [.. DeletionCandidates.FromListing(documents, listed, listingComplete: true, DeletionReasons.RemovedFromList)
+            .Select(c => identityChanged || !Canonical(byId[c.DocumentId].CanonicalIdentity, canonicalizer)
+                ? c with { Reason = DeletionReasons.IdentityChanged }
+                : c)];
+    }
+
     /// <param name="runId">The reconciling run.</param>
     /// <param name="documents">The source's documents.</param>
     /// <param name="traversal">The run's completeness.</param>
