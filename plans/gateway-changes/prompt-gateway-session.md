@@ -78,6 +78,11 @@ One Keycloak serves both the gateway admin and Ume.Rag (admin UI and Open WebUI)
 Done when: the project starts locally in production mode, both systems' dev apps sign in against it with the merged
 realm, and a database restore of the gateway brings Keycloak back.
 
+**Host (user, 2026-10-31):** the gateway's test/dev instance already runs on a fixed host with HTTPS (public
+certificate), EU embedding and chat models, and Keycloak. That Keycloak holds the shared realm `ume` for the RAG pilot
+(J11), and the instance is Ume.Rag's interim J10: issue Ume.Rag one `Eu` key per deployable (api, admin, worker) and a
+`catalog.read` Data API key, and list the EU embedding model's name and dimensions for Ume.Rag's U-b.
+
 ## 3. Gateway production (prepare now, deploy late)
 
 The user wants testing on the cheapest possible host and production-style deployment postponed as long as possible

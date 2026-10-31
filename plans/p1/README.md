@@ -108,6 +108,7 @@ hand-off (§4). Each item's done-when is binding; the refs say where its detail 
 | J8 | B → user → gateway session | Realm-additions file (item 16) | the AppHost's dev realm (`dev/keycloak/ume-realm.json`) |
 | J9 | B → A | Chat API answers with citations; Open WebUI client and key creatable (item 15) | A's Compose wiring is checked by `docker compose config` only |
 | J10 | gateway session (user) → A, B | The gateway reachable from the developer machine running P1a, with an EU embedding route (U-b), EU condense and answer routes, and the pilot team's per-level keys (at least `Eu`) | FakeGateway (1024 dims) everywhere; items 19–21 wait |
+
 | J11 | gateway session (user) → A, B | Shared Keycloak with realm `ume`, RAG's additions imported, pilot accounts created | the dev Keycloak on the local stack with one pilot account (§7 U-c) |
 | J12 | user → A | U1: crawler about page and umea.se robots.txt check with the web editors | only the sitemap inventory and the saved fixture corpus touch umea.se |
 | J13 | user + pilot department → B | The gold set written (100–150 answerable, 30–50 unanswerable, ≥ 10 temporal) | the smoke set; item 21 waits |
@@ -139,6 +140,15 @@ addition:
   `demote`, generated sets, nightly runs, feedback, conversation writer, assistant restore, learning.
 - **Every model call is EU-hosted** in P1a (§1), still with an explicit ceiling. Tests stay on FakeGateway.
 - **Cheap first.** No test-host deploy, restore drill on the test host or `perf.yml` in P1a.
+
+**Interim J10 and the J11 host (user, 2026-10-31).** A **test/dev instance of the gateway** already runs on a fixed
+host, reachable over **HTTPS with a publicly trusted certificate**, with **EU-hosted embedding and chat models**. It
+serves as J10 for P1a development (production stays with the gateway session, deployed late). Its address and the keys
+live only in AppHost user secrets (`FakeGateway:Enabled=false`, `Gateway:BaseUrl`, `Gateway:Keys:Eu`; repo-and-deployment
+§4.4) or `deploy/.env` and secret files, never in the repository. The gateway team issues one `Eu` key per deployable
+(api, admin, worker) and a `catalog.read` Data API key for the org sync. The same host runs the gateway's Keycloak and
+will hold the shared realm `ume` (J11). **Still open:** U-b names the EU embedding model and its dimensions once its
+catalogue is listed with a key (1024 dimensions keep the schema and FakeGateway unchanged).
 
 ## 7. Owned by the user, outside the streams
 
