@@ -618,8 +618,8 @@ A `BackgroundService` on every instance; the instance holding `pg_try_advisory_x
 - **Due**: `next = cron.Next(lastScheduledFor ?? source.CreatedAt)`; when `next + jitter ≤ now` and no `sync` for the
   source is `queued`/`running`, enqueue one with `ScheduledFor = next`. After an outage the missed occurrences
   collapse into one run. The schedule is computed from `ScheduledFor`, never from an "updated" timestamp that other
-  jobs touch (Onyx's stall, F6). As built (PR #108): `Sources` has no `CreatedAt`, so a never-scheduled source
-  counts from `Sources.UpdatedAt`.
+  jobs touch (Onyx's stall, F6). As built (PR #155, 2026-10-31): a never-scheduled source counts from
+  `Sources.CreatedAt`.
 - **Sync now**: the admin inserts a `sync` job (`Trigger = manual`, `Priority` 10); if one is already queued or
   running the admin answers "already running" with its run id (dedup `sync:{sourceId}`; a run's continuations use
   `sync:{sourceId}:{runId}`, §9.2).
@@ -968,8 +968,10 @@ profiles) are 6b §16; processing metrics (`rag.parse.*`, `rag.pii.*`, `rag.embe
   `JobClass`, `DocumentId`, `SourceId`, `Classification`.
 - **Security events**: 5003, 5004 (worker), 5101–5103 (6b/6c), 5104 (parser limits), and **5105
   `rag.pipeline.refused`** (Warning): the worker refused to run a published version that fails validation (unknown
-  template or stage version, schema failure). Attributes `PipelineId`, `PipelineVersionId`, `Reason`. As built in P1a
-  item 9 (PR #108, 2026-10-31): 5105 is written as a warning log until stream B adds it to `SecurityEvents`.
+  template or stage version, schema failure). Attributes `PipelineId`, `PipelineVersionId`, `Reason`. As built (PR
+  #155, 2026-10-31): written once per refusal through `SecurityEvents.PipelineRefused`; for `version_unknown`
+  `PipelineId` is `Guid.Empty`, since the missing version belongs to no pipeline. A pipeline with no published
+  version (`pipeline.unpublished`) is not a 5105: there is no version to refuse, so the sync stays a `FatalError`.
 
 ## 18. Performance and capacity
 

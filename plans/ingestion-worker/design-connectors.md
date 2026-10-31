@@ -111,8 +111,8 @@ As built in P1a item 6 part 1 (PR #82, 2026-10-31) and P1b item 2 (PR #88, 2026-
   problems are a `fail`.
 - `UrlListConnector` is built but not registered in DI yet: it needs `IBlobStore` in the worker (item 9 wires the
   fetch stage).
-- **Raw blobs of `internal` sources are not envelope-encrypted yet**: the data-model §7 blob layer is missing. It must
-  exist before an `internal` source fetches (tracked for item 6 part 2 / item 9).
+- Raw blobs of `internal` sources are envelope-encrypted (`URB2`, data-model §7) since PR #153 (2026-10-31); `public`
+  blobs stay plaintext.
 
 C# async iterators cannot return a value, so the checkpoint is an event (Onyx returns it from the generator and its
 runner enforces "exactly one, at the end", `onyx/connectors/connector_runner.py:58-95`); our runner enforces "the last
@@ -663,7 +663,7 @@ service can sit behind `IRenderer` (§8.2).
 | Step | Who | What |
 |---|---|---|
 | 1 | admin API | batch create (`POST /api/sources/{id}/upload-batches` → `batchId`), then **one request per file** (raw body, per-file progress and retry; admin design §4.5); each file is an `add` (new slot) or a `replace {uploadId}`, and a batch may carry `delete {uploadId}` entries; streams each file: per file ≤ `maxFileSizeMb` (default 50, platform cap 50; answered 3), ≤ 100 files and ≤ 500 MB per batch; extension pre-check gives an immediate 415 for refused and deferred types (§9.2); SHA-256 while streaming |
-| 2 | admin API | writes each file once to `uploads/{sourceId}/{slot}/{sha256}` (`slot` = the `uploadId`; write-once; `internal`: envelope-encrypted with the data key wrapped by `rag-blob-<level>` in the blob header, data-model §7; `public`: not envelope-encrypted, simplification pass §4); uploads are the only content that cannot be fetched again, so they are **copied to the backup target within 15 minutes** (repo-and-deployment backup); at **commit** (`POST /api/upload-batches/{batchId}/commit`) writes the batch manifest `uploads/{sourceId}/batches/{batchId}.json` (entries, names, declared types, sizes, hashes); inserts one `sync` job, `Trigger = upload`, payload `{sourceId, batchId}`, `DedupKey = sync-upload:{batchId}` (uploads never wait for a running crawl-style sync); uncommitted batches and their blobs are swept after 24 h |
+| 2 | admin API | writes each file once to `uploads/{sourceId}/{slot}/{sha256}` (`slot` = the `uploadId`; write-once; `internal`: envelope-encrypted with the data key wrapped by `rag-blob-<level>` in the blob header, data-model §7; `public`: not envelope-encrypted, simplification pass §4; as built, PR #153, 2026-10-31: the admin still stores uploads as received, and the worker reads them as stored until the admin encrypts `internal` uploads); uploads are the only content that cannot be fetched again, so they are **copied to the backup target within 15 minutes** (repo-and-deployment backup); at **commit** (`POST /api/upload-batches/{batchId}/commit`) writes the batch manifest `uploads/{sourceId}/batches/{batchId}.json` (entries, names, declared types, sizes, hashes); inserts one `sync` job, `Trigger = upload`, payload `{sourceId, batchId}`, `DedupKey = sync-upload:{batchId}` (uploads never wait for a running crawl-style sync); uncommitted batches and their blobs are swept after 24 h |
 | 3 | worker, `sync` | reads the manifest, upserts the `Uploads` slots, opens the run, enqueues one `fetch` job per added or replaced file (`DedupKey = fetch:{sourceId}:upload:{uploadId}`, 6a §9.2; P1a item 4, PR #78) and applies the batch's deletes |
 | 4 | worker, `fetch` (stage `upload`) | ClamAV scan (§11) → sniff → type check → upsert of the source's document `upload:<uploadId>` with the file's content hash → the upload blob is the document's raw content (no copy) → pipeline continues |
 
