@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using AngleSharp.Html.Parser;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.Sources;
@@ -160,7 +161,7 @@ public sealed partial class Preflight(
         }
 
         // The crawl's own listing: start URLs, then every sitemap's URLs in scope (index depth ≤ 2), up to the estimate cap.
-        var connector = new CrawlConnector(fetcher, robots, scanner, new PreviewBlobs(blobs, jobId), time);
+        var connector = new CrawlConnector(fetcher, robots, scanner, new PreviewBlobs(blobs.ForLevel(level), jobId), time);
         var estimate = ContractJson.ToElement(settings with { MaxPages = EstimateCap });
         var listed = 0;
         await foreach (var listing in connector.ListAsync(new ListingContext(jobId, level, jobId, estimate), new CrawlCheckpoint(), cancellationToken))

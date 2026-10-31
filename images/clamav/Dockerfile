@@ -11,13 +11,6 @@
 # 2026-10-31: the 7-day rule does not apply during development (user, Decisions table "7-day rule in development").
 FROM clamav/clamav-debian:1.4.6_base@sha256:06058d49cdd87e394660e7f78e2156236ce74c26133e2b4128c4827c0a4680aa
 
-ARG VERSION=dev
-ARG REVISION=unknown
-LABEL org.opencontainers.image.source="https://github.com/thekim1/ume-rag-platform" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.title="ume-rag/clamav"
-
 COPY --chmod=0644 clamd.conf freshclam.conf /etc/clamav/
 
 # Read by /init-unprivileged: freshclam checks for new signatures 4 times a day (§5.5).
@@ -33,3 +26,12 @@ ENTRYPOINT ["/init-unprivileged"]
 # timeout covers a reload, during which scans wait; the start period covers the first download into an empty volume.
 HEALTHCHECK --interval=30s --timeout=30s --start-period=10m --retries=3 \
     CMD ["clamdscan", "--no-summary", "/etc/clamav/clamd.conf"]
+
+# Last on purpose: every RUN after an ARG sees it as an environment variable, so a new REVISION (each commit) would
+# invalidate the cache of the layers above. Only the labels read these values.
+ARG VERSION=dev
+ARG REVISION=unknown
+LABEL org.opencontainers.image.source="https://github.com/thekim1/ume-rag-platform" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.title="ume-rag/clamav"
