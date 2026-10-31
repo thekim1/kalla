@@ -223,22 +223,8 @@ public sealed class ProcessingSegment(
         }
 
         // parse
-        var route = RouteName(detected.Route);
-        var parseVersion = StageVersion(pipeline, StageNames.Parse);
-        var parseInputs = detected.Route switch
-        {
-            ParseRoute.Html => new Dictionary<string, string>(StringComparer.Ordinal) { ["siteProfileVersion"] = input.SiteProfile?.Id.ToString("D") ?? "preset" },
-            // The planner's thresholds belong to the parse stage's version (processing design §3.1), so it is a parser setting.
-            ParseRoute.Parser => new Dictionary<string, string>(StringComparer.Ordinal) { ["stageVersion"] = parseVersion.ToString(System.Globalization.CultureInfo.InvariantCulture) },
-            _ => null,
-        };
-        var parseSettings = StageKeys.SettingsHash(pipeline, StageNames.Parse, route, parseInputs);
-        // Parser-bound output is keyed by (content hash, parser build, parser settings), so a parser upgrade never reuses a
-        // cached parse (simplification pass §2; parser design §7.6; engine design §3.3).
         var parserBuildHash = detected.Route == ParseRoute.Parser ? await ParserBuildAsync(cancellationToken) : null;
-        var parseKey = parserBuildHash is not null
-            ? StageKeys.ParserKey(contentHash, parserBuildHash, parseSettings)
-            : StageKeys.Key(contentHash, StageNames.Parse, parseVersion, parseSettings);
+        var (parseKey, parseSettings) = ParseKey(pipeline, contentHash, detected.Route, input.SiteProfile?.Id, parserBuildHash);
         ParsedDocument parsed;
         byte[] parsedHash;
         if (await outputs.GetAsync<ParsedDocument>(parseKey, cancellationToken) is { } cachedParse)
@@ -332,6 +318,29 @@ public sealed class ProcessingSegment(
     private static DocumentFacts Facts(DetectResult detected, ParsedDocument? parsed, ParsedDocument? cleaned, byte[]? parseKey, SegmentInput input) =>
         new(detected.MediaType, cleaned?.Language ?? detected.Language, cleaned?.Title, cleaned?.Description, cleaned?.Keywords ?? [], parsed?.Strategy,
             parseKey, detected.PageCount ?? (parsed is { Pages.Count: > 0 } ? parsed.Pages.Count : null), input.SiteProfile?.Id, parsed is null ? "pending" : "success");
+
+    /// <summary>
+    /// The <c>parse</c> stage key and settings hash, shared with the preview so both look up the same cache entries.
+    /// Parser-bound output is keyed by (content hash, parser build, parser settings), so a parser upgrade never reuses a
+    /// cached parse (simplification pass §2; parser design §7.6; engine design §3.3); the planner's thresholds belong to the
+    /// parse stage's version (processing design §3.1), so that version is a parser setting.
+    /// </summary>
+    public static (byte[] Key, byte[] Settings) ParseKey(ResolvedPipeline pipeline, byte[] contentHash, ParseRoute route, Guid? siteProfileVersionId, string? parserBuildHash)
+    {
+        ArgumentNullException.ThrowIfNull(pipeline);
+        var parseVersion = StageVersion(pipeline, StageNames.Parse);
+        var parseInputs = route switch
+        {
+            ParseRoute.Html => new Dictionary<string, string>(StringComparer.Ordinal) { ["siteProfileVersion"] = siteProfileVersionId?.ToString("D") ?? "preset" },
+            ParseRoute.Parser => new Dictionary<string, string>(StringComparer.Ordinal) { ["stageVersion"] = parseVersion.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+            _ => null,
+        };
+        var settings = StageKeys.SettingsHash(pipeline, StageNames.Parse, RouteName(route), parseInputs);
+        var key = route == ParseRoute.Parser
+            ? StageKeys.ParserKey(contentHash, parserBuildHash ?? throw new ArgumentNullException(nameof(parserBuildHash)), settings)
+            : StageKeys.Key(contentHash, StageNames.Parse, parseVersion, settings);
+        return (key, settings);
+    }
 
     private static int StageVersion(ResolvedPipeline pipeline, string stage) =>
         pipeline.Template.Template.Stages.TryGetValue(stage, out var version) ? version : StageManifest.P1Version;

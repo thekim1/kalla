@@ -29,14 +29,16 @@ public sealed class DriftSweepTests(RagDatabaseFixture database, FakeGatewayFact
     [Fact]
     public async Task A_document_whose_job_was_lost_is_re_enqueued_by_the_sweep_and_ends_live()
     {
-        await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page("bygglov " + name))));
+        // Text of its own: a page another test embedded is an embedding-cache hit, and the gate would never see a call.
+        var tag = Guid.NewGuid().ToString("N");
+        await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page($"bygglov {name} {tag}"))));
         var seed = await EngineKit.SeedUrlListAsync(database, [site.Url("/p/a")]);
         await EngineKit.PauseOtherSourcesAsync(database, seed);
         try
         {
             var gate = new EmbeddingGate();
             gate.Arm();
-            var first = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, gate);
+            await using var first = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, gate);
             var runId = await EngineKit.SyncNowAsync(database, seed);
             await gate.Blocked.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);
             await first.KillAsync();

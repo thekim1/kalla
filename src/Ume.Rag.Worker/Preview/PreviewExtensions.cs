@@ -29,7 +29,7 @@ public static class PreviewExtensions
             sp.GetRequiredService<EngineSettings>(), sp.GetRequiredService<SiteProfiles>(), sp.GetRequiredService<IChunkSetStore>(),
             sp.GetRequiredService<EmbeddingClient>(), sp.GetRequiredService<IEmbeddingProfileStore>(), sp.GetRequiredService<IEmbeddingCache>(),
             sp.GetRequiredService<EmbeddingCanary>(), sp.GetRequiredService<EmbeddingConcurrency>(), sp.GetRequiredService<TimeProvider>(),
-            sp.GetService<IParserConverter>()));
+            sp.GetService<IParserConverter>(), sp.GetService<IParserBuild>()));
         services.TryAddSingleton<StagePreview>();
         services.TryAddSingleton<Preflight>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, PreviewJobHandler>());
