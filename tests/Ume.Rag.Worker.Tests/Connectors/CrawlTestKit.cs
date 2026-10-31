@@ -1,0 +1,469 @@
+using System.Data.Common;
+using Microsoft.Extensions.Options;
+using Ume.Rag.Domain.Ports;
+using Ume.Rag.Worker.Connectors;
+using Ume.Rag.Worker.Connectors.Crawl;
+using Ume.Rag.Worker.Connectors.Egress;
+using Ume.Rag.Worker.Connectors.Hosts;
+using Ume.Rag.Worker.Connectors.Robots;
+using Ume.Rag.Worker.Connectors.Uploads;
+
+namespace Ume.Rag.Worker.Tests.Connectors;
+
+/// <summary>
+/// <c>CrawlHosts</c> in memory with the semantics of the Npgsql store: one lock per statement, the arithmetic of
+/// <see cref="HostBudgetPolicy"/>, the clock of <paramref name="time"/> (the database's <c>now()</c>).
+/// </summary>
+internal sealed class InMemoryCrawlHostStore(TimeProvider time) : ICrawlHostStore
+{
+    private readonly Lock _lock = new();
+    private readonly Dictionary<string, CrawlHostState> _rows = new(StringComparer.Ordinal);
+
+    public CrawlHostState this[string host]
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _rows[host];
+            }
+        }
+
+        set
+        {
+            lock (_lock)
+            {
+                _rows[host] = value;
+            }
+        }
+    }
+
+    public Task<CrawlHostState> EnsureAsync(CrawlHostState initial, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var row = _rows.TryGetValue(initial.Host, out var existing)
+                ? existing with { Kind = initial.Kind, RequestsPerSecond = initial.RequestsPerSecond, MaxConnections = initial.MaxConnections }
+                : initial;
+            _rows[initial.Host] = row;
+            return Task.FromResult(row);
+        }
+    }
+
+    public Task<DateTimeOffset?> TryTakeSlotAsync(string host, TimeSpan interval, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            if (!_rows.TryGetValue(host, out var row))
+            {
+                return Task.FromResult<DateTimeOffset?>(null);
+            }
+
+            var (state, slot) = HostBudgetPolicy.TakeSlot(row, interval, time.GetUtcNow());
+            _rows[host] = state;
+            return Task.FromResult(slot);
+        }
+    }
+
+    public Task<CrawlHostState> RecordResponseAsync(string host, HostResponse response, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var state = HostBudgetPolicy.Apply(_rows[host], response, time.GetUtcNow());
+            _rows[host] = state;
+            return Task.FromResult(state);
+        }
+    }
+
+    public Task PauseAsync(string host, DateTimeOffset until, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var row = _rows[host];
+            _rows[host] = row with { PausedUntil = row.PausedUntil > until ? row.PausedUntil : until };
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task RecordRobotsAsync(string host, RobotsStatus status, DateTimeOffset fetchedAt, int? crawlDelaySeconds, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            if (_rows.TryGetValue(host, out var row))
+            {
+                _rows[host] = row with { RobotsStatus = status, RobotsFetchedAt = fetchedAt, CrawlDelaySeconds = crawlDelaySeconds };
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+}
+
+/// <summary><c>CrawlFrontier</c> and <c>CrawlRuns</c> in memory, with the store contracts' semantics (one lock per statement).</summary>
+internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
+{
+    private readonly Lock _lock = new();
+    private readonly Dictionary<(Guid, string, string), FrontierRow> _frontier = [];
+    private readonly Dictionary<Guid, CrawlRunRecord> _runs = [];
+    private long _order;
+    private readonly Dictionary<(Guid, string, string), long> _admittedOrder = [];
+
+    public IReadOnlyList<FrontierRow> Rows(Guid sourceId)
+    {
+        lock (_lock)
+        {
+            return [.. _frontier.Values.Where(r => r.SourceId == sourceId)];
+        }
+    }
+
+    public FrontierRow? Row(Guid sourceId, string url)
+    {
+        lock (_lock)
+        {
+            return _frontier.Values.SingleOrDefault(r => r.SourceId == sourceId && r.Url == url);
+        }
+    }
+
+    public Task<AdmitResult> AdmitAsync(CrawlRunKey run, IReadOnlyList<FrontierAdmission> urls, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var record = _runs[run.RunId];
+            var admitted = new List<FrontierRow>();
+            var limitHit = false;
+            foreach (var url in urls)
+            {
+                var key = (run.SourceId, run.Classification, url.UrlHash);
+                _frontier.TryGetValue(key, out var row);
+                if (row?.RunId == run.RunId)
+                {
+                    continue;
+                }
+
+                if (record.Admitted >= record.MaxPages)
+                {
+                    limitHit = true;
+                    continue;
+                }
+
+                var updated = (row ?? new FrontierRow { Classification = run.Classification, SourceId = run.SourceId, UrlHash = url.UrlHash, Url = url.Url, Host = url.Host })
+                    with { State = FrontierState.Pending, RunId = run.RunId, Depth = url.Depth, Leaf = url.Leaf, SitemapLastMod = url.SitemapLastMod ?? row?.SitemapLastMod };
+                _frontier[key] = updated;
+                _admittedOrder[key] = ++_order;
+                admitted.Add(updated);
+                record = record with { Admitted = record.Admitted + 1, Seeds = record.Seeds + (url.Depth == 0 ? 1 : 0) };
+            }
+
+            _runs[run.RunId] = record with { LimitHit = record.LimitHit || limitHit };
+            return Task.FromResult(new AdmitResult(admitted, limitHit));
+        }
+    }
+
+    public Task<FrontierRow?> GetAsync(Guid sourceId, string classification, string urlHash, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult(_frontier.GetValueOrDefault((sourceId, classification, urlHash)));
+        }
+    }
+
+    public Task<IReadOnlyList<HostLoad>> HostLoadAsync(CrawlRunKey run, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            IReadOnlyList<HostLoad> loads = [.. _frontier.Values
+                .Where(r => r.SourceId == run.SourceId && r.Classification == run.Classification && r.RunId == run.RunId && r.State != FrontierState.Idle)
+                .GroupBy(r => r.Host, StringComparer.Ordinal)
+                .Select(g => new HostLoad(g.Key, g.Count(r => r.State == FrontierState.Pending), g.Count(r => r.State == FrontierState.Released)))];
+            return Task.FromResult(loads);
+        }
+    }
+
+    public Task<IReadOnlyList<FrontierRow>> ReleaseAsync(CrawlRunKey run, string host, int max, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var rows = _frontier
+                .Where(kv => kv.Key.Item1 == run.SourceId && kv.Value.RunId == run.RunId && kv.Value.Host == host && kv.Value.State == FrontierState.Pending)
+                .OrderBy(kv => kv.Value.Depth).ThenBy(kv => _admittedOrder[kv.Key])
+                .Take(max)
+                .ToList();
+            IReadOnlyList<FrontierRow> released = [.. rows.Select(kv => _frontier[kv.Key] = kv.Value with { State = FrontierState.Released })];
+            return Task.FromResult(released);
+        }
+    }
+
+    public Task CompleteAsync(CrawlRunKey run, string urlHash, FrontierFacts? facts, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var key = (run.SourceId, run.Classification, urlHash);
+            var row = _frontier[key] with { State = FrontierState.Idle };
+            _frontier[key] = facts is null ? row : Apply(row, facts);
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task RecordTargetAsync(CrawlRunKey run, FrontierAdmission target, FrontierFacts facts, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var key = (run.SourceId, run.Classification, target.UrlHash);
+            var row = _frontier.GetValueOrDefault(key)
+                ?? new FrontierRow { Classification = run.Classification, SourceId = run.SourceId, UrlHash = target.UrlHash, Url = target.Url, Host = target.Host };
+            _frontier[key] = Apply(row with { State = FrontierState.Idle, RunId = run.RunId, Depth = target.Depth, Leaf = target.Leaf }, facts);
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task StartAsync(CrawlRunRecord run, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            _runs.TryAdd(run.RunId, run);
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task<CrawlRunRecord?> GetAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult(_runs.GetValueOrDefault(runId));
+        }
+    }
+
+    public Task SeedFailedAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            _runs[runId] = _runs[runId] with { SeedsFailed = _runs[runId].SeedsFailed + 1 };
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task<int> PauseHostAsync(Guid runId, string host, string reason, DateTimeOffset? until, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var run = _runs[runId];
+            var count = (run.PausedHosts.GetValueOrDefault(host)?.Count ?? 0) + 1;
+            _runs[runId] = run with { PausedHosts = new Dictionary<string, HostPause>(run.PausedHosts) { [host] = new HostPause(count, reason, until) } };
+            return Task.FromResult(count);
+        }
+    }
+
+    public Task RecordTrapsAsync(Guid runId, IReadOnlyDictionary<string, TrapStat> traps, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var run = _runs[runId];
+            var stats = new Dictionary<string, TrapStat>(run.TrapStats);
+            foreach (var (kind, stat) in traps)
+            {
+                stats[kind] = stats.TryGetValue(kind, out var existing) ? existing with { Count = existing.Count + stat.Count } : stat;
+            }
+
+            _runs[runId] = run with { TrapStats = stats };
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task SetCompleteAsync(Guid runId, bool complete, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            _runs[runId] = _runs[runId] with { Complete = complete };
+            return Task.CompletedTask;
+        }
+    }
+
+    private static FrontierRow Apply(FrontierRow row, FrontierFacts facts) => row with
+    {
+        LastFetchedAt = facts.FetchedAt,
+        LastStatus = facts.LastStatus,
+        ETag = facts.ETag,
+        LastModified = facts.LastModified,
+        ContentHash = facts.ContentHash,
+        RedirectTo = facts.RedirectTo,
+    };
+}
+
+/// <summary>A queue that records what was enqueued (dedup by key among the recorded, open jobs).</summary>
+internal sealed class RecordingJobQueue : IJobQueue
+{
+    private readonly Lock _lock = new();
+    private readonly List<JobRequest> _jobs = [];
+
+    public IReadOnlyList<JobRequest> Jobs
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _jobs];
+            }
+        }
+    }
+
+    public List<JobRequest> Take()
+    {
+        lock (_lock)
+        {
+            var taken = _jobs.ToList();
+            _jobs.Clear();
+            return taken;
+        }
+    }
+
+    public Task<IReadOnlySet<Guid>> EnqueueAsync(IReadOnlyList<JobRequest> jobs, DbTransaction? transaction, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var inserted = new HashSet<Guid>();
+            foreach (var job in jobs.Where(j => j.DedupKey is null || _jobs.All(o => o.DedupKey != j.DedupKey)))
+            {
+                _jobs.Add(job);
+                inserted.Add(job.Id);
+            }
+
+            return Task.FromResult<IReadOnlySet<Guid>>(inserted);
+        }
+    }
+
+    public Task<IReadOnlyList<ReadyDepartment>> ReadyDepartmentsAsync(string jobClass, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<LeasedJob?> DequeueAsync(DequeueRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<IReadOnlySet<Guid>> HeartbeatAsync(Guid owner, IReadOnlyList<JobLease> running, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<bool> CompleteAsync(Guid jobId, Guid owner, string? resultJson, DbTransaction? transaction, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<string?> FailAsync(Guid jobId, Guid owner, string error, bool fatal, TimeSpan? retryAfter, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<bool> ReleaseAsync(Guid jobId, Guid owner, string reason, TimeSpan delay, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<int> CancelRunAsync(Guid runId, string reason, Guid? exceptJobId, CancellationToken cancellationToken) => throw new NotSupportedException();
+}
+
+internal sealed class FixedCrawlPolicy(params string[] municipalHosts) : ICrawlPolicySource
+{
+    public Dictionary<string, HostOverride> Overrides { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public CrawlPolicy Current => new(municipalHosts, Overrides);
+}
+
+internal sealed class InMemoryUploadSlots : IUploadSlotReader
+{
+    public List<UploadSlot> Slots { get; } = [];
+
+    public Task<IReadOnlyList<UploadSlot>> ListAsync(Guid sourceId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<UploadSlot>>([.. Slots.Where(s => s.SourceId == sourceId)]);
+}
+
+/// <summary>A crawl wired to the test site with in-memory stores; <see cref="DrainAsync"/> runs the fetch jobs as the engine would.</summary>
+internal sealed class CrawlRig : IAsyncDisposable
+{
+    private CrawlRig(FetchPath path, CrawlConnector connector, CrawlTraversal traversal, InMemoryCrawlStore store, InMemoryCrawlHostStore hosts, RecordingJobQueue queue, FetchTopUp topUp)
+    {
+        Path = path;
+        Connector = connector;
+        Traversal = traversal;
+        Store = store;
+        Hosts = hosts;
+        Queue = queue;
+        TopUp = topUp;
+    }
+
+    public FetchPath Path { get; }
+
+    public CrawlConnector Connector { get; }
+
+    public CrawlTraversal Traversal { get; }
+
+    public InMemoryCrawlStore Store { get; }
+
+    public InMemoryCrawlHostStore Hosts { get; }
+
+    public RecordingJobQueue Queue { get; }
+
+    public FetchTopUp TopUp { get; }
+
+    /// <param name="site">The test site.</param>
+    /// <param name="policy">Municipal hosts and overrides; the default makes the test hosts fast (1000 req/s, 4 connections).</param>
+    /// <param name="batch"><c>Crawl:FetchBatchPerHost</c>.</param>
+    /// <param name="dns">Extra host names.</param>
+    public static CrawlRig Create(TestSite site, FixedCrawlPolicy? policy = null, int batch = 10, FakeDnsResolver? dns = null)
+    {
+        var path = site.Fetch(dns: dns);
+        if (policy is null)
+        {
+            policy = new FixedCrawlPolicy();
+            foreach (var host in new[] { TestSite.Host, "kommun.test", "other.test" })
+            {
+                policy.Overrides[$"{host}:{site.Port}"] = new HostOverride(1000, 4);
+            }
+        }
+
+        var connector = new CrawlConnector(path.Fetcher, path.Robots, new ScriptedScanner(Worker.Connectors.Malware.ScanResult.Clean), path.Blobs, TimeProvider.System);
+        var store = new InMemoryCrawlStore();
+        var hosts = new InMemoryCrawlHostStore(TimeProvider.System);
+        var queue = new RecordingJobQueue();
+        var budget = new HostBudget(hosts, policy, TimeProvider.System);
+        var topUp = new FetchTopUp(store, store, queue, Options.Create(new CrawlOptions { FetchBatchPerHost = batch }), TimeProvider.System);
+        var traversal = new CrawlTraversal(connector, path.Robots, budget, policy, store, store, topUp, path.Blobs, queue, TimeProvider.System);
+        return new CrawlRig(path, connector, traversal, store, hosts, queue, topUp);
+    }
+
+    /// <summary>Lists and admits the seeds, then runs every released fetch until none is left; returns the fetch results by URL.</summary>
+    public async Task<Dictionary<string, CrawlFetchResult>> CrawlAsync(CrawlRunContext context)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await Traversal.StartAsync(context, ct);
+        var batch = new List<ListingEvent<CrawlCheckpoint>>();
+        var listing = new ListingContext(context.Run.SourceId, context.Run.Classification, context.Run.RunId, context.Settings);
+        await foreach (var e in Connector.ListAsync(listing, new CrawlCheckpoint(), ct))
+        {
+            batch.Add(e);
+            if (e is ListingEvent<CrawlCheckpoint>.Checkpoint)
+            {
+                await Traversal.AdmitSeedsAsync(context, batch, ct);
+                batch.Clear();
+            }
+        }
+
+        await TopUp.TopUpAsync(context, null, null, ct);
+        return await DrainAsync(context);
+    }
+
+    public async Task<Dictionary<string, CrawlFetchResult>> DrainAsync(CrawlRunContext context)
+    {
+        var results = new Dictionary<string, CrawlFetchResult>(StringComparer.Ordinal);
+        for (var round = 0; round < 1000; round++)
+        {
+            var jobs = Queue.Take().Where(j => j.Class == "fetch").ToList();
+            if (jobs.Count == 0)
+            {
+                return results;
+            }
+
+            foreach (var job in jobs)
+            {
+                var hash = System.Text.Json.JsonDocument.Parse(job.Payload).RootElement.GetProperty("urlHash").GetString()!;
+                var url = Store.Rows(context.Run.SourceId).Single(r => r.UrlHash == hash).Url;
+                var result = await Traversal.ProcessAsync(context, hash, TestContext.Current.CancellationToken);
+                if (result is CrawlFetchResult.Requeue)
+                {
+                    // As the queue would: the job comes back without an attempt.
+                    await Queue.EnqueueAsync([job], null, TestContext.Current.CancellationToken);
+                }
+
+                results[url] = result;
+            }
+        }
+
+        throw new InvalidOperationException("The crawl did not finish.");
+    }
+
+    public ValueTask DisposeAsync() => Path.DisposeAsync();
+}

@@ -17,15 +17,23 @@ public sealed class CrawlOptions
     /// </summary>
     public string? AllowedPrivateRanges { get; set; }
 
+    /// <summary>
+    /// <c>fetch</c> jobs a crawl keeps queued or running per host (<c>Crawl:FetchBatchPerHost</c>, connectors design §6.0):
+    /// the source's traversal tops each host up to this many from its <c>pending</c> frontier rows as they finish.
+    /// </summary>
+    public int FetchBatchPerHost { get; set; } = 10;
+
     public IReadOnlyList<IPNetwork> AllowedNetworks() =>
         [.. (AllowedPrivateRanges ?? string.Empty)
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Select(c => IPNetwork.Parse(c))];
 }
 
-/// <summary>Every entry of <see cref="CrawlOptions.AllowedPrivateRanges"/> must be a CIDR; a typo fails at start, not open.</summary>
+/// <summary>Every entry of <see cref="CrawlOptions.AllowedPrivateRanges"/> must be a CIDR, a typo fails at start, not open; the batch is bounded.</summary>
 public sealed class CrawlOptionsValidator : IValidateOptions<CrawlOptions>
 {
+    public const int MaxFetchBatchPerHost = 100;
+
     public ValidateOptionsResult Validate(string? name, CrawlOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -34,6 +42,11 @@ public sealed class CrawlOptionsValidator : IValidateOptions<CrawlOptions>
             .Where(c => !IPNetwork.TryParse(c, out _))
             .Select(c => $"Crawl:AllowedPrivateRanges contains '{c}', which is not a CIDR such as 10.20.0.0/16.")
             .ToList();
+        if (options.FetchBatchPerHost is < 1 or > MaxFetchBatchPerHost)
+        {
+            failures.Add($"Crawl:FetchBatchPerHost must be between 1 and {MaxFetchBatchPerHost}.");
+        }
+
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 }

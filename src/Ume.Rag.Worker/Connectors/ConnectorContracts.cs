@@ -78,10 +78,19 @@ public enum IdentityKind
 public sealed record WorkItem(IdentityKind Kind, string CanonicalIdentity, Uri? Url, short Depth, WorkHints Hints);
 
 /// <param name="Stored">The validators of the last 200 response (frontier row), for a conditional GET (§4).</param>
-public sealed record WorkHints(Validators? Stored = null)
+/// <param name="ContentHash">The content hash of that response (frontier row): a 304 expands the stored outlinks of it (§5.4).</param>
+/// <param name="SitemapLastMod">The URL's sitemap <c>lastmod</c>, stored on the frontier row (§5.1); P1a makes no <c>lastmod</c> skip.</param>
+/// <param name="Upload">The upload slot and the file's manifest entry, for upload items (§9).</param>
+public sealed record WorkHints(Validators? Stored = null, string? ContentHash = null, DateTimeOffset? SitemapLastMod = null, UploadHint? Upload = null)
 {
     public static WorkHints None { get; } = new();
 }
+
+/// <param name="UploadId">The slot (<c>content."Uploads"."Id"</c>).</param>
+/// <param name="Sha256">The current version's SHA-256 (lower-case hex): the blob is <c>uploads/{sourceId}/{slot}/{sha256}</c>.</param>
+/// <param name="FileName">The uploaded file name (the document's <c>DisplayName</c>, never its <c>Title</c>, §9.4).</param>
+/// <param name="DeclaredMediaType">The type the browser declared; compared with the sniffed type (§9.2).</param>
+public sealed record UploadHint(Guid UploadId, string Sha256, string FileName, string? DeclaredMediaType);
 
 /// <summary>HTTP validators exactly as the server sent them (weak ETags kept, <c>Last-Modified</c> never our own clock).</summary>
 public sealed record Validators(string? ETag, string? LastModified)
@@ -92,7 +101,11 @@ public sealed record Validators(string? ETag, string? LastModified)
 }
 
 /// <summary>Where the source and its level are; settings are the source's JSON (<c>Sources.Settings</c>).</summary>
-public sealed record ListingContext(Guid SourceId, string Classification, Guid RunId, JsonElement Settings);
+public sealed record ListingContext(Guid SourceId, string Classification, Guid RunId, JsonElement Settings)
+{
+    /// <summary>An upload commit's batch (<c>sync</c> payload <c>batchId</c>, §9.1); null for every other listing.</summary>
+    public Guid? BatchId { get; init; }
+}
 
 /// <param name="SourceId">The source the item belongs to.</param>
 /// <param name="Classification">The source's level; raw blobs are stored under it.</param>
@@ -119,11 +132,15 @@ public enum RunItemOutcome
 /// <param name="Bytes">Raw length after decompression.</param>
 public sealed record RawContentRef(BlobKey Key, string ContentHash, int ContentHashVersion, string MediaType, long Bytes);
 
-/// <param name="FinalUrl">The URL that answered 200, after redirects.</param>
-/// <param name="CanonicalIdentity">The identity of <paramref name="FinalUrl"/> (§3.2: identity = final URL).</param>
+/// <param name="FinalUrl">The URL that answered 200, after redirects; null for uploads.</param>
+/// <param name="CanonicalIdentity">The identity of <paramref name="FinalUrl"/> (§3.2: identity = final URL), or <c>upload:&lt;uploadId&gt;</c>.</param>
 /// <param name="Redirects">The chain before <paramref name="FinalUrl"/>, in order (recorded on the run item).</param>
 /// <param name="CanonicalHint">The page's declared <c>rel=canonical</c>, stored, never trusted unverified (§3.3).</param>
-public sealed record FetchFacts(Uri FinalUrl, string CanonicalIdentity, IReadOnlyList<Uri> Redirects, string? CanonicalHint);
+public sealed record FetchFacts(Uri? FinalUrl, string CanonicalIdentity, IReadOnlyList<Uri> Redirects, string? CanonicalHint)
+{
+    /// <summary>Run item facts (<c>&lt;area&gt;.&lt;code&gt;</c>), e.g. <c>upload.declared_type_differs</c>.</summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
+}
 
 /// <summary>What one fetch produced (§2.1, outcomes §15). Reasons are <c>&lt;area&gt;.&lt;code&gt;</c>, never library text.</summary>
 public abstract record FetchOutcome
@@ -137,10 +154,10 @@ public abstract record FetchOutcome
     /// <summary>304: validators refreshed, the document is touched and <c>EnsureCurrent</c> runs.</summary>
     public sealed record NotModified(Validators Validators) : FetchOutcome;
 
-    /// <summary><c>http.404</c>, <c>http.410</c>: a deletion candidate for a known document (§13.1).</summary>
+    /// <summary><c>http.404</c>, <c>http.410</c>, <c>http.moved_out_of_scope</c>: a deletion candidate for a known document (§13.1).</summary>
     public sealed record Gone(string Reason) : FetchOutcome;
 
-    /// <summary>Excluded on purpose: <c>robots.disallow</c>.</summary>
+    /// <summary>Excluded on purpose: <c>robots.disallow</c>, <c>robots.noindex</c>, <c>redirect.out_of_scope</c>, <c>upload.duplicate</c>.</summary>
     public sealed record Skipped(string Reason) : FetchOutcome;
 
     /// <summary>Blocked, unsupported or too large.</summary>
