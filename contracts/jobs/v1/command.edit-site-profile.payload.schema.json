@@ -191,6 +191,15 @@
       ],
       "additionalProperties": false
     },
+    "decidedBy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The deciding platform admin's oid, written to SiteProfileVersions.CreatedBy and AppliedBy; absent = system:worker.",
+      "minLength": 1,
+      "maxLength": 200
+    },
     "minBuild": {
       "type": [
         "string",

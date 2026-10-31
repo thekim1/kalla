@@ -1,0 +1,220 @@
+using Microsoft.Extensions.Time.Testing;
+using Ume.Rag.Domain.Retrieval;
+using static Ume.Rag.Retrieval.Tests.Make;
+
+namespace Ume.Rag.Retrieval.Tests;
+
+/// <summary>
+/// The engine over a fake index (knowledge design §5.5, §6, §16.1 <c>IReranker</c>): modes, degrading, the reranker
+/// seam before the cap, slots, the exact/HNSW rule and request validation.
+/// </summary>
+public sealed class RetrievalEngineTests : IDisposable
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private readonly FakeIndex _index = new()
+    {
+        Vector = [Chunk(1, distance: 0.10, document: 7), Chunk(2, distance: 0.20, document: 7), Chunk(3, distance: 0.30, document: 7),
+            Chunk(4, distance: 0.40, document: 7), Chunk(5, distance: 0.60, document: 8)],
+        Keyword = [Chunk(5, keyword: 0.9, document: 8), Chunk(6, keyword: 0.4, document: 9)],
+    };
+
+    private readonly ScopeSizeCache _sizes;
+
+    public RetrievalEngineTests() => _sizes = new ScopeSizeCache(_index, new FakeTimeProvider());
+
+    public void Dispose() => _sizes.Dispose();
+
+    private static Task<ReadOnlyMemory<float>> Embed(string query, CancellationToken ct) => Task.FromResult<ReadOnlyMemory<float>>(new float[] { 1, 0, 0 });
+
+    private static Task<ReadOnlyMemory<float>> Unavailable(string query, CancellationToken ct) =>
+        throw new QueryEmbeddingUnavailableException(RetrievalDegradation.EmbeddingResidency, "x-ume-residency was Eu");
+
+    private RetrievalEngine Engine(IReranker? reranker = null, RetrievalEngineOptions? options = null) =>
+        new(_index, _sizes, options, reranker, new FakeTexts());
+
+    [Fact]
+    public async Task Hybrid_fuses_both_lists_dedups_and_caps_three_per_document()
+    {
+        using var engine = Engine();
+        var result = await engine.SearchAsync(new SearchRequest("Bygglovsansökan  för altan", OneCollection(), Embed: Embed), Ct);
+
+        result.NormalizedQuery.ShouldBe("Bygglovsansökan för altan");
+        _index.KeywordQueries.ShouldBe(["Bygglovsansökan för altan\nbygglov ansökan"]);
+        result.VectorSearch.ShouldBe(VectorSearch.Exact); // nothing counted: the scope is small
+        // 5 is in both lists; 2 and 6 tie on RRF and 2 has a distance; document 7 is capped at three (4 dropped).
+        result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(5), Id(1), Id(2), Id(6), Id(3)]);
+        result.Hits.Select(h => h.Rank).ShouldBe([1, 2, 3, 4, 5]);
+        result.Hits[0].Scores.ShouldBe(new ChunkScores(1.0 / 65 + 1.0 / 61, 0.60, 5, 0.9, 1, null));
+        result.Coverage.Status.ShouldBe(CoverageStatus.Ok);
+        result.Coverage.BestDistance.ShouldBe(0.10);
+        result.Degraded.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Keyword_mode_never_embeds_and_vector_mode_never_runs_K()
+    {
+        using var engine = Engine();
+        var keyword = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct);
+        keyword.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(5), Id(6)]);
+        keyword.Coverage.Status.ShouldBe(CoverageStatus.Unknown);
+        keyword.VectorSearch.ShouldBeNull();
+
+        _index.KeywordQueries.Clear();
+        var vector = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Vector, Embed: Embed), Ct);
+        _index.KeywordQueries.ShouldBeEmpty();
+        vector.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(1), Id(2), Id(3), Id(5)]);
+    }
+
+    [Fact]
+    public async Task A_failed_embedding_degrades_hybrid_to_keyword_only_with_unknown_coverage()
+    {
+        using var engine = Engine();
+        var result = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Unavailable), Ct);
+
+        result.Degraded.ShouldBe(RetrievalDegradation.EmbeddingResidency);
+        result.Coverage.Status.ShouldBe(CoverageStatus.Unknown);
+        result.VectorSearch.ShouldBeNull();
+        _index.VectorSearches.ShouldBeEmpty();
+        result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(5), Id(6)]);
+    }
+
+    [Fact]
+    public async Task Vector_mode_and_the_evaluator_do_not_degrade()
+    {
+        using var engine = Engine();
+        await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() =>
+            engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Vector, Embed: Unavailable), Ct));
+        await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() =>
+            engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Unavailable, AllowDegraded: false), Ct));
+    }
+
+    [Fact]
+    public async Task K_runs_while_the_query_is_embedded()
+    {
+        using var engine = Engine();
+        _index.HoldKeyword = new TaskCompletionSource();
+        var embedded = new TaskCompletionSource();
+        var search = engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: async (q, ct) =>
+        {
+            // K has started before the embedding finishes.
+            _index.KeywordQueries.ShouldNotBeEmpty();
+            embedded.SetResult();
+            return await Embed(q, ct);
+        }), Ct);
+        await embedded.Task.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        _index.HoldKeyword.SetResult();
+        (await search).Hits.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task The_reranker_reorders_before_the_cap()
+    {
+        // Scores favour document 7's chunk 4 (dropped by the cap without reranking) and chunk 6.
+        var reranker = new FakeReranker(new Dictionary<Guid, double> { [Id(4)] = 0.99, [Id(6)] = 0.95, [Id(1)] = 0.5 });
+        using var engine = Engine(reranker);
+        var result = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: true), Ct);
+
+        reranker.Calls.ShouldBe(1);
+        result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(4), Id(6), Id(1), Id(5), Id(2)]);
+        result.Hits[0].Scores.RerankScore.ShouldBe(0.99);
+        result.Degraded.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_failing_reranker_keeps_the_fused_order_and_reports_it()
+    {
+        using var engine = Engine(new FakeReranker(null, fail: true));
+        var result = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: true), Ct);
+
+        result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(5), Id(1), Id(2), Id(6), Id(3)]);
+        result.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);
+        result.Coverage.Status.ShouldBe(CoverageStatus.Ok);
+    }
+
+    [Fact]
+    public async Task The_noop_reranker_and_a_request_without_rerank_leave_the_fused_order()
+    {
+        using var engine = Engine(NoopReranker.Instance);
+        var noop = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: true), Ct);
+        noop.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(5), Id(1), Id(2), Id(6), Id(3)]);
+        noop.Degraded.ShouldBeNull();
+
+        var reranker = new FakeReranker(new Dictionary<Guid, double>());
+        using var off = Engine(reranker);
+        await off.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed), Ct);
+        reranker.Calls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Large_scopes_use_hnsw_unless_too_selective()
+    {
+        var platform = RetrievalPlatformSettings.Default;
+        _index.Counts = [new(Profile, CollectionA, 20_000), new(Profile, CollectionB, 1_000), new(Guid.NewGuid(), CollectionB, 5_000_000)];
+        using var engine = Engine();
+
+        (await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Vector, Embed: Embed), Ct))
+            .VectorSearch.ShouldBe(VectorSearch.Approximate);
+        (await engine.SearchAsync(new SearchRequest("altan", Scope((CollectionB, RetrievalSettings.Default)), Mode: RetrievalMode.Vector, Embed: Embed), Ct))
+            .VectorSearch.ShouldBe(VectorSearch.Exact);
+
+        ScopeSizeCache.Choose(new ScopeSize(10_000, 10_000_000), platform).ShouldBe(new VectorPlan(VectorSearch.Exact, false));
+        ScopeSizeCache.Choose(new ScopeSize(20_000, 10_000_000), platform).ShouldBe(new VectorPlan(VectorSearch.Approximate, false)); // 0.2 %
+        ScopeSizeCache.Choose(new ScopeSize(19_999, 10_000_000), platform).ShouldBe(new VectorPlan(VectorSearch.Exact, true));
+        ScopeSizeCache.Choose(new ScopeSize(10_001, 0), platform).ShouldBe(new VectorPlan(VectorSearch.Approximate, false));
+    }
+
+    [Fact]
+    public async Task No_free_slot_within_the_wait_is_search_unavailable()
+    {
+        using var engine = Engine(options: new RetrievalEngineOptions { MaxConcurrentSearches = 1, SlotWait = TimeSpan.FromMilliseconds(50) });
+        _index.HoldKeyword = new TaskCompletionSource();
+        var first = engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct);
+
+        var refused = await Should.ThrowAsync<SearchUnavailableException>(() =>
+            engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct));
+        refused.Message.ShouldContain("slot");
+
+        _index.HoldKeyword.SetResult();
+        await first;
+        await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Mode: RetrievalMode.Keyword), Ct); // slot released
+    }
+
+    [Fact]
+    public async Task An_empty_scope_searches_nothing_and_is_low()
+    {
+        using var engine = Engine();
+        var result = await engine.SearchAsync(new SearchRequest("altan", Scope(), Embed: Embed), Ct);
+
+        result.Hits.ShouldBeEmpty();
+        result.Coverage.Status.ShouldBe(CoverageStatus.Low);
+        _index.KeywordQueries.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Invalid_requests_are_refused()
+    {
+        using var engine = Engine();
+        await Should.ThrowAsync<ArgumentException>(() => engine.SearchAsync(new SearchRequest("  ", OneCollection(), Embed: Embed), Ct));
+        await Should.ThrowAsync<ArgumentException>(() => engine.SearchAsync(new SearchRequest("altan", OneCollection(), TopK: 0, Embed: Embed), Ct));
+        await Should.ThrowAsync<ArgumentException>(() => engine.SearchAsync(new SearchRequest("altan", OneCollection(), TopK: 51, Embed: Embed), Ct));
+        await Should.ThrowAsync<ArgumentException>(() => engine.SearchAsync(new SearchRequest("altan", OneCollection()), Ct)); // hybrid without embedder
+        await Should.ThrowAsync<ArgumentException>(() => engine.SearchAsync(new SearchRequest("altan", OneCollection(),
+            Embed: (_, _) => Task.FromResult<ReadOnlyMemory<float>>(new float[4])), Ct));                                     // wrong dimensions
+        await Should.ThrowAsync<ArgumentException>(() => engine.SearchAsync(new SearchRequest("altan",
+            Scope((CollectionA, RetrievalSettings.Default), (CollectionA, RetrievalSettings.Default)), Embed: Embed), Ct));
+    }
+
+    [Fact]
+    public async Task Collections_that_disagree_rank_with_the_platform_defaults()
+    {
+        var capOne = RetrievalSettings.Default with { MaxChunksPerDocument = 1 };
+        using var engine = Engine();
+
+        var agreed = await engine.SearchAsync(new SearchRequest("altan", Scope((CollectionA, capOne), (CollectionB, capOne)), Mode: RetrievalMode.Vector, Embed: Embed), Ct);
+        agreed.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(1), Id(5)]);
+
+        var differing = await engine.SearchAsync(new SearchRequest("altan", Scope((CollectionA, capOne), (CollectionB, RetrievalSettings.Default)), Mode: RetrievalMode.Vector, Embed: Embed), Ct);
+        differing.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(1), Id(2), Id(3), Id(5)]);
+    }
+}

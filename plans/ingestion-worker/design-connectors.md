@@ -162,7 +162,7 @@ split components; the rules below are our own, so .NET's escaping quirks never c
 | 4 | Empty path → `/`; dot segments removed (RFC 3986 §5.2.4); duplicate slashes kept (servers differ) | `/a/./b/../c` → `/a/c` |
 | 5 | Percent-encoding: decode unreserved (`A–Z a–z 0–9 - . _ ~`), upper-case remaining hex, encode non-ASCII as UTF-8; reserved escapes (`%2F`, `%3F`) kept | `%7e` → `~`; `ö` → `%C3%B6` |
 | 6 | Fragment removed (also `#!`); SPA hash routing is not supported in P1 | `/a#top` → `/a` |
-| 7 | Query: drop the parameters in the list below, the site profile's `ignoreQueryParams` (§5.6) and the source's `ignoreQueryParams`; sort the rest by name (stable for repeated names); drop an empty `?` | `?b=2&utm_source=x&a=1` → `?a=1&b=2` |
+| 7 | Query: drop the parameters in the list below, the site profile's `ignoreQueryParams` (§5.6) and the source's `ignoreQueryParams`; sort the rest by name (stable for repeated names); drop an empty `?`. An `ignoreQueryParams` entry ending in `*` is a prefix, like `utm_*` in the fixed list (as built in P1a item 8, PR #104, 2026-10-31; the Sitevision preset drops `sv.*` and `open.*`) | `?b=2&utm_source=x&a=1` → `?a=1&b=2` |
 | 8 | Session tokens in the path removed: `;jsessionid=…`, ASP.NET `/(S(…))/` | `/p;jsessionid=AB` → `/p` |
 | 9 | Trailing slash **not** changed; `index.html` **not** removed (both can be different resources); the source setting `directoryIndexNames` opts in | – |
 | 10 | Site-profile **identity rule** (§5.6), only when verified for the host: the URL maps to the rule's form (Sitevision: the node id, `/{path}.4.88db09b1724ee319ca45d.html` → `/4.88db09b1724ee319ca45d.html`), so a page moved in the tree keeps its identity; `Documents.Url` keeps the URL as fetched for citations | – |
@@ -223,7 +223,8 @@ frontier request, the content-addressed raw blob and the parse and embedding cac
 - **Conditional GET**: `If-None-Match` with the stored ETag (weak ETags sent as received) and `If-Modified-Since`
   with the stored `Last-Modified` string (never our own clock). Validators are stored only from 200 responses, on the
   frontier row (one request serves every source, §6.2). A forced run (`force`, or every `revalidateEvery`-th run,
-  default 4) sends no validators, catching servers whose 304s are wrong. Hosts that send neither (umea.se: no `ETag`,
+  default 4) sends no validators, catching servers whose 304s are wrong (the every-`revalidateEvery`-th run is not
+  counted yet: as built in P1a item 9, PR #108, 2026-10-31, every sync runs with `Revalidate` false). Hosts that send neither (umea.se: no `ETag`,
   no `Last-Modified`, `Cache-Control: no-store`) get a plain GET; change detection then rests on sitemap `lastmod`
   (crawl, §5.4) and the content hash (§12).
 - **Cookies are never stored or sent** (`UseCookies = false`, `Set-Cookie` ignored; umea.se sets session cookies).
@@ -232,6 +233,8 @@ frontier request, the content-addressed raw blob and the parse and embedding cac
   `robots.disallow`.
 - **User agent** `UmeaKommunBot/1.0` (as built, PR #82). The about-page URL is not in it yet: it waits for user item
   U1 (§22).
+- **Frontier admission** (as built in P1a item 9, PR #108, 2026-10-31): a URL-list run admits its URLs through a
+  `CrawlRuns` row like a crawl (`MaxPages` 5,000, `MaxDepth` 0), so both use the same frontier code (§6.0).
 
 | Response | Result | Outcome / reason | Deletion |
 |---|---|---|---|
@@ -272,14 +275,17 @@ only the headers are read).
   ≤ 50,000 URLs and ≤ 50 MB uncompressed per file (sitemaps.org limits) and ≤ `maxPages` in total; out-of-scope
   and excluded-type entries dropped and counted. Each URL's `lastmod` is stored on its frontier row
   (`SitemapLastMod`) and used by the `lastmod` skip and incremental runs (§5.4). umea.se: `robots.txt` →
-  `sitemapindex.xml` → one `sitemap1.xml.gz` with 24,184 URLs, all with `lastmod`.
+  `sitemapindex.xml` → one `sitemap1.xml.gz` with 24,184 URLs, all with `lastmod`. As built in P1b item 4 (PR #101,
+  2026-10-31): a sitemap that cannot be read **pauses its host** for the run (once), like an unreachable robots.txt,
+  instead of counting as one failed seed; otherwise one failed sitemap among several would leave the ratio rule
+  (§5.4) satisfied and allow mass `not-seen` proposals for the URLs it lists.
 
 ### 5.2 Scope
 
 | Rule | Definition |
 |---|---|
 | Scope hosts | hosts of the start URLs + `extraHosts` (answered 13) |
-| Patterns | `include` / `exclude` / `demote` lists over the canonical URL without scheme (`host/path?query`). Glob: `*` = any characters except `/`, `**` = any characters, everything else literal (also `?` and `.`); host part case-insensitive, path case-sensitive. Advanced: `re:<regex>` (.NET `RegexOptions.NonBacktracking`, 50 ms timeout). Exclude wins; empty `include` = everything on the scope hosts. **`demote`** ([weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)) entries are `{ "pattern", "factor" }` (factor in (0, 1), default 0.5) for archive sections such as old minutes: they change no crawling, only ranking (knowledge design §6.5, the lowest matching factor applies); set on the source and shown on the source page. Eneo passes the start URL itself as a regex (`LinkExtractor(allow=url)`, `eneo/crawler/spiders/crawl_spider.py:25-34`), so `.` and `?` match anything |
+| Patterns | `include` / `exclude` / `demote` lists over the canonical URL without scheme (`host/path?query`). Glob: `*` = any characters except `/`, `**` = any characters, everything else literal (also `?` and `.`); host part case-insensitive, path case-sensitive. Advanced: `re:<regex>` (.NET `RegexOptions.NonBacktracking`, 50 ms timeout). Exclude wins; empty `include` = everything on the scope hosts. **`demote`** ([weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)) entries are `{ "pattern", "factor" }` (factor in (0, 1), default 0.5) for archive sections such as old minutes: they change no crawling, only ranking (knowledge design §6.5, the lowest matching factor applies); set on the source and shown on the source page; the worker compiles them with the scope (`CrawlScope.DemoteFactor`) but keeps no copy on documents or chunks, and retrieval reads `Sources.DemoteRules` and needs the same glob semantics (`UrlPattern`; as built in P1b item 4, PR #101, 2026-10-31). Eneo passes the start URL itself as a regex (`LinkExtractor(allow=url)`, `eneo/crawler/spiders/crawl_spider.py:25-34`), so `.` and `?` match anything |
 | Off-site | a link to a non-scope host is admitted **only** if an `include` pattern names that host explicitly; it is fetched as a **leaf** (its links are never followed). Otherwise counted in the report, not fetched (answered 13) |
 | Depth | link distance from a seed; default `maxDepth` 10 (answered 12); a redirect does not add depth |
 | Pages | default `maxPages` 10,000 (answered 12), counted as **admitted claims** per run (`CrawlRuns.Admitted`), seeds included. Reaching it: no more admissions, run `degraded` `crawl.limit_pages`, traversal partial → no deletions. umea.se has ≈ 14,100 HTML and PDF sitemap URLs, so its source needs `maxPages` ≥ 20,000 (the preflight warns when the sitemaps alone exceed `maxPages`) |
@@ -317,7 +323,8 @@ with an example pattern in the report.
   document whose URL is a **failed seed** of the run is never a deletion candidate in that run (its failures count
   towards `persistent-failure`, §13.1). The deletion guard (§13.2) stays. Eneo salvages a timed-out crawl and then
   deletes every page it did not reach (`eneo/worker/crawl_tasks.py:1008-1014`, `:1206-1232`); acceptance test C7
-  (§18) covers that case.
+  (§18) covers that case. As built in P1b item 4 (PR #101, 2026-10-31): the rule is chosen by the deployment value
+  `Crawl:CompletenessRule` = `Ratio` (default) or `Strict` (P1a's "no seed failed", weakness review §3 "Phasing").
 - Explicit `Gone` (404/410, permanent redirect out of scope, robots now disallowing) is a candidate in any run,
   complete or not.
 - **Incremental** run (`incrementalSchedule`, e.g. daily; a crawl setting only, a five-field cron that the schema
@@ -327,24 +334,38 @@ with an example pattern in the report.
   traversal complete, so it deletes only on `Gone`. The `website` template sets a daily `incrementalSchedule` **by
   default** when the host's site profile marks `lastmod` reliable; the crawl report measures the share of `lastmod`
   hits that really changed ([`../performance-pass.md`](../performance-pass.md) §2.3), which feeds the profile's
-  reliability flag.
+  reliability flag. An incremental run on a host whose applied profile does not set `lastmodReliable` runs as a full
+  traversal; it is not refused (as built in P1b item 4, PR #101, 2026-10-31).
 - **Removal check** (weakness review §3): a URL that **leaves the sitemap** (the listing clears the frontier row's
   `SitemapLastMod`, which was set before) is re-requested in the next incremental run, by `HEAD`, then `GET` if `HEAD`
   is refused (405/501). A source without incremental runs does the check in its next traversal. 404 or 410 makes it
   `Gone` (a deletion candidate in any run, above); a 200 counts as reached in that run and keeps the document until
-  the next complete traversal that does not reach it (`not-seen`). Other outcomes follow §4.
+  the next complete traversal that does not reach it (`not-seen`). Other outcomes follow §4. As built in P1b item 4
+  (PR #101, 2026-10-31): the check runs in the run whose **complete listing** finds the departure (incremental or
+  full); a sitemap entry that never had a `lastmod` never triggers one. In a full traversal a live answer to the `HEAD`
+  is followed by the normal GET, and `HEAD` and GET share one host slot. Until a column exists, removal-check
+  frontier rows carry `Depth = -1` (schema request to stream B: `CrawlFrontier.RemovalCheck`, with
+  `CrawlRuns.Incremental`).
 - **`lastmod` is measured before it is trusted** (weakness review §3): a host's `lastmodReliable` (§5.6) is set only
   after a sample of **500 random sitemap URLs** has been fetched and their noise-normalised content hashes compared
   with their `lastmod` over time ([`../to-verify.md`](../to-verify.md) #170). Until then the host gets no `lastmod`
   skip and no default incremental runs: the umea.se source runs **full traversals** (every URL fetched; the content
   hash still saves parsing and embedding). umea.se has `lastmod` on every URL and the example page's `lastmod` equals
-  its visible "Sidan uppdaterades" date, but one page is not evidence.
+  its visible "Sidan uppdaterades" date, but one page is not evidence. As built in P1b item 4 (PR #101, 2026-10-31):
+  the sample's comparison (≤ 2 %, ≥ 7 days apart) and its `edit-site-profile` proposal exist; the fetch runner for
+  the live first pass does not (to-verify #170, after U1).
 - `revalidateEvery` (default 4): every 4th traversal sends no validators and makes no `lastmod` skips (§4), catching
-  wrong 304s and stale `lastmod` values.
+  wrong 304s and stale `lastmod` values. As built: the crawler drops the `lastmod` skip for a revalidating run
+  (`CrawlFreshness.Revalidates`, PR #101); the engine does not count runs yet, so `Revalidate` is always false (PR
+  #108, wired with the crawl).
 - **Incomplete-traversal alert**: a source whose last N traversals (`Settings.Crawl.IncompleteRunsAlert`, default 3)
   were all incomplete raises an alert (metric `rag.crawl.incomplete_runs`, the source page and the Overview page),
   because its deletions never run and removed pages stay in the index. A URL-list or upload listing that ends
   `Partial` counts the same way.
+- **Engine wiring** (P1b item 4, PR #101, and P1a item 9, PR #108, 2026-10-31): the freshness parts above are built
+  in the crawler; their wiring into the engine (per-job `incremental` and revalidation, `ListingDoneAsync`, the report
+  sections in `Runs.Report`, the `rag.crawl.incomplete_runs` gauge and the alert's history query) follows in a later
+  item. Until then a crawl source's `sync` is refused with `sync.unsupported`.
 
 ### 5.5 Crawl report
 
@@ -384,13 +405,13 @@ deterministic, previewed and checked, not trial-and-score learning.
 | Field | Derived from the sample | Used by |
 |---|---|---|
 | `cms` | fingerprint (Sitevision: `sv-*` classes, `/sitevision/` resources, `svid…` ids) | selects the built-in **preset** whose values seed every field below |
-| `mainRoot` | landmark (`main`, `article`, `role=main`), else text density | HTML extraction (processing design) |
+| `mainRoot` | landmark (`main`, `article`, `role=main`), else text density | HTML extraction (processing design); the Sitevision preset's root is `main, .pagecontent` (landing pages have no `main`), alternatives tried in order (as built in P1a item 8, PR #104, 2026-10-31) |
 | `boilerplate` | DOM blocks and phrases inside the root repeated on ≥ 60 % of sampled pages (umea.se: share widget, short-URL line) | HTML extraction strips them |
 | `linkBlocks` | repeated child-link lists inside the root (umea.se: "Undersidor") | kept for link discovery, not chunk text |
 | `breadcrumb` | `aria-label` (Brödsmulor/breadcrumb), `BreadcrumbList`, or class name; screen-reader text removed | chunk prefix (processing design) |
 | `datePattern` | visible dates matched against sitemap `lastmod` ("Sidan uppdaterades YYYY-MM-DD") | `SourceModifiedAt`, fallback `lastmod` |
-| `identityRule` | id-only URLs fetched for a few sampled pages; verified when their content hashes equal the full URL's | identity (§3.1 rule 10) |
-| `ignoreQueryParams` | preset list plus parameters whose values differ between fetches of the same page | URL normalisation (§3.1 rule 7) |
+| `identityRule` | id-only URLs fetched for a few sampled pages; verified when their extracted output (`OutputHash`) equals the full URL's (as built for umea.se in P1a item 8, PR #104, 2026-10-31: the raw hashes differ by per-request noise and by the page's own path in a form `action`, so content hashes never match) | identity (§3.1 rule 10) |
+| `ignoreQueryParams` | preset list plus parameters whose values differ between fetches of the same page; a trailing `*` is a prefix (PR #104) | URL normalisation (§3.1 rule 7) |
 | `excludedTypes` | default `image/*`, `video/*` | scope (§5.2) |
 | `lastmodReliable` | `lastmod` against visible dates and content-hash changes across runs; never `true` before the 500-URL sample has passed (§5.4, weakness review §3) | `lastmod` skip and default incremental runs (§5.4) |
 | `javascriptNeeded` | raw text yield of the sampled pages | the P1-start renderer check (§8.1) |
@@ -417,7 +438,12 @@ deterministic, previewed and checked, not trial-and-score learning.
   the host; `excludedTypes` is a scope change.
 - **Acceptance (P1)**: the umea.se example page (simplification pass §13.1) extracts to exactly its main text, without
   share widget, short-URL line and child-link list, with its breadcrumb and the date 2026-01-15; ≈ 20 saved umea.se
-  pages (HTML and PDF) are checked in as a regression corpus (§18).
+  pages (HTML and PDF) are checked in as a regression corpus (§18). As built in P1a item 8 (PR #104, 2026-10-31):
+  20 HTML pages and 1 PDF in `tests/fixtures/umea/` with goldens, byte-identical to what umea.se served (officials'
+  names and contact details as published; one form action keeps the expired anonymous `jsessionid` of the capture
+  request, so the SHA-256s hold); the live breadcrumb's third crumb is "Förvaltningar, verksamheter"; hub pages (the
+  landing page, the news archive) extract to their heading only and end `skipped` `parse.empty`. The SmartReader
+  fallback is not built (to-verify #31).
 
 ## 6. Shared crawl frontier and politeness (R2)
 
@@ -693,6 +719,13 @@ not exist yet. The first stage's input hash is this `ContentHash` (6a §8), so t
 means. Onyx gates the same way but only after parsing (`../../platforms/onyx.md:122-123`); Eneo stores the hash and
 never compares it (`../../platforms/eneo.md:78-82`).
 
+As built with noise rules v2 (PR #107, 2026-10-31): the HTML hash input is `html-noise-v{N}\n` followed by the
+normalised content, because no store keeps the rules version next to a hash and every comparison is hash equality;
+a hash taken under another rules version therefore never matches, and "v1 hashes are recomputed on the next fetch"
+holds everywhere. Non-HTML content keeps raw-byte hashes but is labelled `ContentHashVersion` 2 too. "Changed" is
+the `ContentHash` comparison alone; `ContentHashVersion` is a label the engine never compares (P1a item 9, PR #108).
+A `lastmod` sample pair spanning the upgrade counts as changed (conservative).
+
 ### 12.2 HTML noise normalisation (rules v1)
 
 On the AngleSharp DOM the fetch stage already builds for links: drop comments; drop `<script>` except
@@ -706,9 +739,10 @@ of `script`, `link`, `img` (cache busters); replace text equal to the fetch day'
 **Finding (P1a item 8, PR #104, 2026-10-31):** Sitevision on umea.se serves per-request values that rules v1 keep: random
 `data-cid` UUIDs, `sv_…` element ids and the `aria-labelledby` values that point at them. Under v1 every umea.se fetch
 hashes differently, so every full traversal re-parses every page (the extracted output is unchanged and counted as
-noise). **Rules v2** (P1a follow-up): drop `data-cid`; normalise `id`/`for`/`aria-labelledby`/`aria-describedby`
+noise). **Rules v2** (as built, PR #107, 2026-10-31): drop `data-cid`; normalise `id`/`for`/`aria-labelledby`/`aria-describedby`
 values matching `^sv_` to a stable placeholder by first occurrence; bump `RulesVersion` (hashes taken with v1 are
-recomputed on the next fetch, one extra re-parse). Rules are deliberately conservative: hiding a real change is worse than one extra re-process. Remaining noise is
+recomputed on the next fetch, one extra re-parse; the version is part of the hash input, §12.1). Not in v2: the
+anonymous `jsessionid` in a form action and `sv_` values in other attributes (none in the corpus). Rules are deliberately conservative: hiding a real change is worse than one extra re-process. Remaining noise is
 measured: when a new hash produces a parsed output whose `OutputHash` equals the previous execution's (6a §8), the
 worker counts `rag.connector.change.noise` and lists the page under "Noise" in the crawl report (§5.5) so an admin
 can add a selector. A rules-version bump re-processes HTML documents once (embedding cache keeps it cheap;
@@ -823,7 +857,9 @@ set in the same transaction (6a §14), so they leave retrieval at once. A docume
 **revived** (`DeletedAt = null` on the document and its live set's chunks, no re-processing; chunk sets are kept 14
 days, data-model §2.2). After `PurgeAfter` the worker's content retention purges the document with its chunk sets,
 outputs and own blobs; content-addressed raw and parse blobs are tombstoned when no live document of the level references their
-hash any more, and purged after the delay (write-once blobs, simplification pass §4).
+hash any more, and purged after the delay (write-once blobs, simplification pass §4). As built in P1a item 9 (PR
+#108, 2026-10-31): a document seen again after the grace but before the purge keeps its row (the identity index is
+unique) and is processed as new content.
 
 ### 13.5 What the admin sees
 

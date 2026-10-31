@@ -70,6 +70,11 @@ public sealed record EditSiteProfileCommand : JobPayload
     public string? PresetId { get; init; }
 
     public required SiteProfile Profile { get; init; }
+
+    [Description("The deciding platform admin's oid, written to SiteProfileVersions.CreatedBy and AppliedBy; absent = system:worker.")]
+    [MinLength(1)]
+    [MaxLength(200)]
+    public string? DecidedBy { get; init; }
 }
 
 /// <summary><c>rollback-site-profile</c> (connectors design §5.6): apply an earlier version again, one click.</summary>
@@ -85,6 +90,11 @@ public sealed record RollbackSiteProfileCommand : JobPayload
     [Description("SiteProfileVersions.Number to apply.")]
     [Range(1, int.MaxValue)]
     public required int ToVersion { get; init; }
+
+    [Description("The deciding platform admin's oid, written to SiteProfileVersions.AppliedBy; absent = system:worker.")]
+    [MinLength(1)]
+    [MaxLength(200)]
+    public string? DecidedBy { get; init; }
 }
 
 /// <summary>

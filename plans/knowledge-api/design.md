@@ -689,7 +689,10 @@ order: score desc, distance asc (nulls last), chunk Id asc
   questions of the pilot gold set check it (`to-verify.md` #171).
 - **Demote** (weakness review §3): `demote(c)` = the lowest `factor` of the chunk's source `demote` patterns
   (connectors design §5.2, default 0.5) that match the document's URL, else 1; uploads have no URL and are never
-  demoted. Patterns come from the config snapshot (§12.1) and are compiled once per config version.
+  demoted. Patterns come from the config snapshot (§12.1) and are compiled once per config version. As built in P1b
+  item 4 (PR #101, 2026-10-31): the worker keeps no copy of the factor on documents or chunks, so `Sources.DemoteRules`
+  is the only input, and retrieval must match with the crawler's glob semantics (`UrlPattern`, connectors design
+  §5.2).
 - Both multipliers apply after fusion in every mode and before dedup and the per-document cap; they never change
   coverage (§7 uses distances and keyword scores). A query over several collections uses each chunk's own
   collection `recency`.

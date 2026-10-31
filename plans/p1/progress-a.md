@@ -70,6 +70,7 @@ Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md
 - [x] Runs, run items, finalizer; scheduler (Cronos) (PR: a/9-engine)
 - [x] Index writer: invisible batches, swap, re-key, `held`, orphan sweep (PR: a/9-engine)
 - [x] Blob-tombstone purge sweep (#34); blob root ownership (#41) (PR: a/9-engine)
+- [x] Nightly drift sweep (`EnsureCurrent` outside a fetch, `rag.reconcile.drift`); parse slicing and resume from stored ranges; preview-first parser slot gate; parse cache keyed by parser build (PR: a/9-engine-drift-slicing)
 - [x] **Done:** integration and crash-recovery tests; a URL-list source syncs into live chunks; #21, #119, #141 recorded (PR: a/9-engine; #141 test part only, measurement open); a crawl source syncs into live chunks, crash between fetch and commit loses no work, #10 measured (PR: a/9-engine-crawl)
 - [ ] **Hand-off J4:** issue to stream B
 
@@ -78,7 +79,7 @@ Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md
 
 ## 9. Commands and evaluation runs (#10, after J5)
 Refs: [processing §13.4–§13.6](../ingestion-worker/design-processing.md), [engine §9.1](../ingestion-worker/design-engine.md)
-- [ ] `edit-site-profile`, `rollback-site-profile`, `edit-eval-question`
+- [x] `edit-site-profile`, `rollback-site-profile`, `edit-eval-question` (PR: a/10-commands)
 - [ ] `eval` `on-demand` over the `human` layer: vector, hybrid, hybrid without the decompounder (`reindex-fts` scratch copy)
 - [ ] Per-question coverage and the threshold proposal as numbers
 - [ ] **Done:** reproducibility test; evaluator == `/v1/retrieve` order

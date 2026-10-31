@@ -4,6 +4,10 @@
     <ProjectReference Include="..\Ume.Rag.Infrastructure\Ume.Rag.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Already pinned for P0 #6 (to-verify #13): UseVector() for the query vector parameter (knowledge design §6.6). -->
+    <PackageReference Include="Pgvector" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- The sv_SE Hunspell word list for SwedishDecompounder (Text/sv_SE/README.md: source, version, licence). -->
     <EmbeddedResource Include="Text\sv_SE\sv_SE.aff" LogicalName="Ume.Rag.Retrieval.Text.sv_SE.sv_SE.aff" />
     <EmbeddedResource Include="Text\sv_SE\sv_SE.dic" LogicalName="Ume.Rag.Retrieval.Text.sv_SE.sv_SE.dic" />
