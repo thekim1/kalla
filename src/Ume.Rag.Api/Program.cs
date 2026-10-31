@@ -39,6 +39,7 @@ if (knowledge)
     builder.Services.AddOptions<ApiSecurityOptions>().BindConfiguration("Api").Configure<IConfiguration>((o, c) =>
         o.SourceAddress = c["Api:Security:SourceAddress"] ?? o.SourceAddress);
     builder.Services.AddSingleton<KnowledgeSecurity>();
+    builder.Services.AddHostedService<KnowledgeSecurityFlusher>();
     builder.Services.AddRateLimiter(o =>
     {
         o.AddPolicy(KnowledgeEndpoints.DownloadsPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
