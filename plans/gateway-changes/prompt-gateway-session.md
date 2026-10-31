@@ -89,6 +89,12 @@ about to go live (RAG phase P1b).
   list the processor agreement.
 - A production checklist and the host requirements, kept cheap.
 
+## 4. Licence (decided 2026-10-31)
+
+Ume.Rag is licensed under **EUPL-1.2** (its `LICENSE`, PR #65) and copies gateway files by design. The gateway has no
+`LICENSE` yet: add the same EUPL-1.2 text (unchanged, SPDX `license-list-data/text/EUPL-1.2.txt`) and a README
+**Licence** section, as Ume.Rag's #65 did. Both repositories stay private until the municipality approves publication.
+
 ## Reporting back
 
 The RAG main session tracks this as an external dependency of its P1 plan (`plans/p1/`). When release 1 is tagged,
