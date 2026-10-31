@@ -101,9 +101,13 @@ internal static class EvalKit
         }, engine: true);
 
     /// <summary>Enqueues an <c>eval</c> job as the admin does and waits until it ends; returns its row.</summary>
-    public static async Task<JobRow> RunJobAsync<T>(RagDatabaseFixture database, EvalFixture fixture, T payload, string dedupKey, string state = JobStates.Succeeded)
+    public static Task<JobRow> RunJobAsync<T>(RagDatabaseFixture database, EvalFixture fixture, T payload, string dedupKey, string state = JobStates.Succeeded) =>
+        RunJobAsync(database, fixture.Seed, payload, dedupKey, state);
+
+    /// <summary>Enqueues an <c>eval</c> job for the seed's collection as the admin does and waits until it ends; returns its row.</summary>
+    public static async Task<JobRow> RunJobAsync<T>(RagDatabaseFixture database, SourceSeed seed, T payload, string dedupKey, string state = JobStates.Succeeded)
     {
-        var job = new JobRequest(JobClasses.Eval, fixture.Seed.DepartmentId, fixture.Seed.Classification, ContractJson.Serialize(payload)) { DedupKey = dedupKey };
+        var job = new JobRequest(JobClasses.Eval, seed.DepartmentId, seed.Classification, ContractJson.Serialize(payload)) { DedupKey = dedupKey };
         (await database.Queue(RagDatabase.Admin).EnqueueAsync([job], null, Ct)).ShouldContain(job.Id);
         await Commands.WaitUntilAsync(async () => (await Sql.JobAsync(database.Connection(null), job.Id)).State is JobStates.Succeeded or JobStates.Failed or JobStates.Dead,
             TimeSpan.FromSeconds(60));
@@ -170,8 +174,11 @@ internal static class EvalKit
     }
 
     public static Task PublishAsync(RagDatabaseFixture database, EvalFixture fixture, bool published = true) =>
+        PublishAsync(database, fixture.CollectionId, published);
+
+    public static Task PublishAsync(RagDatabaseFixture database, Guid collectionId, bool published = true) =>
         Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Collections" SET "PublishedAt" = CASE WHEN $2 THEN now() END WHERE "Id" = $1""",
-            fixture.CollectionId, published);
+            collectionId, published);
 }
 
 internal sealed record ResultRow(int? ExpectedRank, bool? Hit, string? Coverage, float? BestDistance, float? BestKeywordScore);

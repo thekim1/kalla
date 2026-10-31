@@ -117,7 +117,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
         var eligible = await store.EligibleAsync(collection.Id, MinBodyTokens, cancellationToken);
         var target = ChunkSampler.Target(settings.MaxQuestions, liveDocuments, eligible.Count);
         var needed = target - remaining.Count;
-        var origin = new RoundOrigin(model, judgeModel, round, Convert.ToHexStringLower(seed));
+        var origin = new RoundOrigin(model, judgeModel, round, Convert.ToHexStringLower(seed), liveDocuments);
         var added = new List<NewQuestion>();
         var generated = 0;
         if (needed > 0)
@@ -273,7 +273,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
     {
         Guid[] expected = [chunk.DocumentId, .. sameText.Where(d => d != chunk.DocumentId).Order().Take(MaxExpectedDocuments - 1)];
         var origin = new QuestionOrigin(round.Model, round.JudgeModel, EvalPrompts.PromptVersion, round.Round, round.Seed, chunk.DocumentId, candidate.Type,
-            scores, new QuestionStrata(chunk.DocumentType));
+            scores, new QuestionStrata(chunk.DocumentType), round.Documents);
         var answer = candidate.Answer.Length > MaxAnswerChars ? candidate.Answer[..MaxAnswerChars] : candidate.Answer;
         return new NewQuestion(Guid.CreateVersion7(), candidate.Question, answer, expected, chunk.ContentHash, JsonSerializer.Serialize(origin, Json), chunk.ChunkId);
     }
@@ -296,11 +296,14 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
         public int Tokens { get; set; }
     }
 
-    private sealed record RoundOrigin(string Model, string JudgeModel, int Round, string Seed);
+    private sealed record RoundOrigin(string Model, string JudgeModel, int Round, string Seed, int Documents);
 
-    /// <summary><c>EvaluationQuestions.Origin</c> of a generated question (processing design §13.1: model, prompt version, seed, judge scores, strata).</summary>
+    /// <summary>
+    /// <c>EvaluationQuestions.Origin</c> of a generated question (processing design §13.1: model, prompt version, seed, judge
+    /// scores, strata), with <c>D</c> at the round (<see cref="EvalSetTriggers"/>: a top-up when <c>D</c> grew by 25 %).
+    /// </summary>
     private sealed record QuestionOrigin(string Model, string JudgeModel, string PromptVersion, int Round, string Seed, Guid SourceDocumentId, string? Type,
-        JudgeScores Judge, QuestionStrata Strata);
+        JudgeScores Judge, QuestionStrata Strata, int Documents);
 
     private sealed record QuestionStrata(string DocumentType);
 }
