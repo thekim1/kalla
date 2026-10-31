@@ -53,6 +53,7 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       rag-migrate: {condition: service_completed_successfully}
+      rag-blobs-init: {condition: service_completed_successfully}
       # Started, not healthy: the parser warms up for minutes and freshclam's first download takes a while; the worker
       # reports them in its own health and retries.
       rag-parser: {condition: service_started}

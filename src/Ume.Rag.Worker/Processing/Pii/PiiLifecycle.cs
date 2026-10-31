@@ -25,8 +25,8 @@ public sealed record PiiSwapContext(string CollectionClassification, Guid Source
 /// <c>held</c> (the old content stops being served, the new is not served); other collections never block. Clearing
 /// releases the held set without re-processing and records the clearance; a later set is covered while no flagging count
 /// rises above it, else it is re-flagged and held. The sweep re-runs <c>personal-data</c> for <c>pending</c> sets once NER
-/// is ready. Event 5103 is raised once per transition to flagged. The index writer (item 9) calls <see cref="SwapAsync"/>
-/// inside its fenced swap.
+/// is ready. Event 5103 is raised once per transition to flagged. The engine's embed job decides the state with
+/// <see cref="StateFor"/> inside its fenced swap and raises the event with <see cref="RaiseIfFlagged"/> after the commit.
 /// </summary>
 public sealed class PiiLifecycle(IChunkSetStore store, ILoggerFactory loggers, TimeProvider clock)
 {
@@ -50,12 +50,22 @@ public sealed class PiiLifecycle(IChunkSetStore store, ILoggerFactory loggers, T
         var clearance = await store.GetClearanceAsync(set.Key.DocumentId, cancellationToken);
         var state = StateFor(set, context.CollectionClassification, clearance, context.Rules);
         await store.SwapAsync(set.Id, state, clock.GetUtcNow(), cancellationToken);
+        RaiseIfFlagged(set, context, clearance);
+        return state;
+    }
+
+    /// <summary>
+    /// Event 5103 for a set that went in flagged and not covered by the clearance; the index writer calls it after its own
+    /// fenced swap committed.
+    /// </summary>
+    public void RaiseIfFlagged(ChunkSetRecord set, PiiSwapContext context, PiiClearance? clearance)
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        ArgumentNullException.ThrowIfNull(context);
         if (set.PiiFlagged && !PiiFlagPolicy.Covered(set.PiiCounts ?? new PiiCounts(), clearance?.Counts, context.Rules))
         {
             Raise(set, context, reflag: clearance is not null);
         }
-
-        return state;
     }
 
     /// <summary>

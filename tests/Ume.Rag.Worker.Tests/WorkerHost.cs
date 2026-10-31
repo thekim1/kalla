@@ -18,13 +18,15 @@ using Ume.Rag.Infrastructure.Persistence;
 using Ume.Rag.ServiceDefaults;
 using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Commands;
+using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Jobs;
 
 namespace Ume.Rag.Worker.Tests;
 
 /// <summary>
 /// A worker as Program.cs builds it, on the test server, as <c>ume_rag_worker</c>, with short timings: heartbeat 1 s,
-/// instance timeout 3 s, reaper 1 s, poll 1 s, stop grace 5 s, no maintenance loop. <see cref="KillAsync"/> tears it down
+/// instance timeout 3 s, reaper 1 s, poll 1 s, stop grace 5 s, no maintenance loop; with <c>engine</c> also the pipeline
+/// engine as Program.cs adds it (<c>AddRagEngine</c>). <see cref="KillAsync"/> tears it down
 /// without a clean stop, as a crash would: no lease is released and the instance row stays.
 /// </summary>
 internal sealed class WorkerHost : IAsyncDisposable
@@ -47,7 +49,7 @@ internal sealed class WorkerHost : IAsyncDisposable
     public IServiceProvider Services => _app.Services;
 
     public static async Task<WorkerHost> StartAsync(RagDatabaseFixture database, Action<IServiceCollection>? services = null,
-        IReadOnlyDictionary<string, string?>? settings = null, CapturingLoggerProvider? logs = null)
+        IReadOnlyDictionary<string, string?>? settings = null, CapturingLoggerProvider? logs = null, bool engine = false)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development, ApplicationName = "worker-test" });
         builder.WebHost.UseTestServer();
@@ -73,6 +75,11 @@ internal sealed class WorkerHost : IAsyncDisposable
         builder.AddRagDatabase();
         builder.AddRagConfigMonitor();
         builder.AddRagWorker();
+        if (engine)
+        {
+            builder.AddRagEngine();
+        }
+
         services?.Invoke(builder.Services);
         var app = builder.Build();
         app.MapDefaultEndpoints();

@@ -174,6 +174,12 @@ public static class JobDedupKeys
 {
     public static string Sync(Guid sourceId) => $"sync:{sourceId}";
 
+    /// <summary>
+    /// A run's own <c>sync</c> continuation (a listing yield, a fetch top-up, the reconcile phase): keyed by the run, so a
+    /// "sync now" waiting under <see cref="Sync"/> never drops it.
+    /// </summary>
+    public static string SyncContinuation(Guid sourceId, Guid runId) => $"sync:{sourceId}:{runId}";
+
     public static string SyncUpload(Guid batchId) => $"sync-upload:{batchId}";
 
     public static string FetchUrl(Guid sourceId, string urlHash) => $"fetch:{sourceId}:{urlHash}";
