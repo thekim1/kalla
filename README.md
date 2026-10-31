@@ -5,18 +5,23 @@ RAG, crawling and chat platform for Umeå kommun: small .NET 10 services on top 
 orchestrated with Aspire 13.6. The design lives beside the code: start at [`AGENTS.md`](AGENTS.md) and
 [`HANDOVER.md`](HANDOVER.md).
 
-**Status: P0 (foundation), in integration.** Built so far:
-- the Postgres image (stock pgvector + pgBackRest) and the schema with its database roles;
-- the Docling parser sidecar (PDF) with its v1 contract;
-- the ClamAV image;
-- the worker's job queue, dispatcher and reaper, and the write-once blob store;
-- keys and clients in gateway style, the FakeGateway with its residency-ceiling handler, and the config-version library;
-- the admin BFF with Keycloak sign-in, its write path and the admin UI skeleton (Swedish);
-- production Compose with host units, backups, point-in-time restore and key escrow;
-- Entra as Bicep (for P2);
-- the on-prem capacity scripts.
+**Status: P1 (pilot), code first.** P0 is done and released as
+[`v0.1.0`](https://github.com/thekim1/ume-rag-platform/releases/tag/v0.1.0) (2026-10-31). P1 is built on FakeGateway,
+fixtures and the dev Keycloak first; the live parts (the real gateway, the shared Keycloak, the umea.se crawl, the gold
+set, the pilot member, the test host) come as one block at the end. Built so far:
+- ingestion end to end: URL lists, crawls (one frontier per source, robots, sitemaps, freshness and removal checks) and
+  uploads (ClamAV, fail closed) through parse, clean, chunk, personal data, embed and the index writer;
+- the parser for PDF, Office/ODF, images and scans (Docling, OCR), the Sitevision preset and the umea.se profile;
+- the engine: runs and finalizer, scheduler, drift sweep, `reprocess`/`retry-failed` with an optional cache bypass,
+  source settings-change effects, preview and preflight, publish with per-document swap and rollback within 14 days;
+- evaluation: on-demand three-way runs, publish reports, nightly runs with the recall@10 alert, generated question sets;
+- retrieval core (hybrid Swedish keyword + vector search) and the start of the knowledge API;
+- the pilot stack: production Compose, test-host run book, Open WebUI with its feedback service account, backups,
+  point-in-time restore and key escrow.
 
-Chat, retrieval and ingestion pipelines come in P1. Progress: [`plans/progress.md`](plans/progress.md).
+Next: the gateway client, the admin set-up endpoints, the chat API for Open WebUI and the Keycloak realm additions.
+Overview for stakeholders (Swedish): [`docs/phase1-guide.html`](docs/phase1-guide.html). Progress:
+[`plans/progress.md`](plans/progress.md).
 
 ## Requirements
 
@@ -32,6 +37,16 @@ dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Cat
 `--filter-not-trait` skips tests marked `[Trait(TestCategory.Name, TestCategory.Flaky)]`, as CI does. The integration
 tests start the pinned pgvector image with Testcontainers, so Docker must be running. `UME_RAG_TEST_POSTGRES_IMAGE`
 runs them against another image (CI: the built `ume-rag/postgres`).
+
+The worker's container tests need locally built ClamAV and parser images (Testcontainers wants a dot in a local
+registry name):
+
+```bash
+docker build -t ume-rag.local/clamav:dev images/clamav
+docker build -t ume-rag.local/parser:ci src/parser
+UME_RAG_TEST_CLAMAV_IMAGE=ume-rag.local/clamav:dev UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci \
+  dotnet test --project tests/Ume.Rag.Worker.Tests -c Release --no-build
+```
 
 The pre-commit hook runs the admin UI lint and the parser's ruff check on staged changes. Enable it once per clone:
 
@@ -55,15 +70,22 @@ and the admin UI (`https://localhost:5174`). The resource graph and its switches
 dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
 ```
 
+To run against the interim gateway instead of FakeGateway, see [`docs/p1a-local-run.md`](docs/p1a-local-run.md).
+Addresses and keys go only in user secrets or secret files, never in the repository.
+
 Container health probe: every .NET service image runs its own probe with `--health-check` (exit 0 healthy, 1 not),
 against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 
 ## Docs
 
 - [`docs/local-development.md`](docs/local-development.md): the dev stack in detail and the start scripts.
+- [`docs/p1a-local-run.md`](docs/p1a-local-run.md): the local P1a run, against FakeGateway now and the interim gateway later.
 - [`docs/production-setup.md`](docs/production-setup.md): host sizing, `init-deployment.sh`, Compose files.
 - [`docs/runbook.md`](docs/runbook.md): backups, restore, key escrow, certificates, operations.
+- [`docs/test-host.md`](docs/test-host.md): the pilot test host, its caps, backups and the restore drill.
+- [`docs/security-events.md`](docs/security-events.md): the security event ids.
 - [`docs/upgrade-guide.md`](docs/upgrade-guide.md): upgrading between releases.
+- [`docs/phase1-guide.html`](docs/phase1-guide.html) (Swedish) and [`docs/stakeholder-report.html`](docs/stakeholder-report.html): overviews for stakeholders.
 
 ## CI
 
@@ -81,14 +103,23 @@ against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 test host). `evaluation.yml` runs the nightly evaluation on the test deployment. `e2e.yml` runs the browser tests
 (nightly, and before a release).
 
-CI runs on request, to save Actions minutes: `verify.yml` and `parser.yml` run on a pull request only while it carries
-the label `ci` (add it when the pull request is ready for review; merge only on a green run), and not on a push to
-`main`. The schedules of `perf.yml`, `evaluation.yml` and `e2e.yml` are off; run them from the Actions tab.
+**GitHub Actions are switched off for now** (Decisions table, "CI on a self-hosted runner, Actions off for now"): the
+hosted minutes are used up, and every workflow targets the self-hosted runner `ume-rag` for when Actions come back
+(#124). Until then every pull request is verified locally before it merges: merge `origin/main` into the branch, then
+the build, `Ume.Rag.Worker.Tests` twice (it surfaces order-dependent failures), `Ume.Rag.Pipelines.Tests`,
+`Ume.Rag.ContractTests` and the ownership check, with the output in the pull request body:
+
+```bash
+git diff --name-only origin/main...HEAD | python3 -I scripts/check-ownership.py <branch>
+```
+
+Don't add the `ci` label or dispatch a workflow while Actions are off.
 
 ## Packages
 
-Every package version is pinned exactly and was released at least 7 days before it was pinned; images are pinned by
-digest (`AGENTS.md`, 7-day package rule).
+Every package version is pinned exactly and images are pinned by digest (`AGENTS.md`). The 7-day rule (a version at
+least 7 days old when pinned) is suspended during development and applies again before the first production
+deployment, when every younger pin is reviewed (Decisions table, "7-day rule in development").
 
 ## Licence
 
