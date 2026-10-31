@@ -1,0 +1,134 @@
+name: Perf
+# The R1 release test and the chat overhead run (plans/platform/repo-and-deployment.md §8.1, §8.3; chat design §16.2
+# items 3 and 4), harness in benchmarks/release-test/ (README.md there).
+#   dry-run    (GitHub-hosted, every Monday and on dispatch): FakeGateway directly with the R1 latency profile; proves
+#              the harness and the report, NOT R1.
+#   r1         (test host): the deployment under test with FakeGateway as its gateway, phase 1 idle, phase 2 during
+#              the full crawl of the page copy plus the OCR batch; the pass rule fails the job.
+#   overhead   (test host): Open WebUI-shaped requests, report only.
+# The test-host jobs run on the self-hosted runner of repo-and-deployment §12 item 4 (P1b hand-off L11), named by the
+# repository variable UME_RAG_TEST_HOST_RUNNER (a JSON list of labels, e.g. ["self-hosted","ume-rag-test-host"]) and
+# protected by the environment test-host. Until it exists they are skipped with a notice, and the same harness runs by
+# hand on the host (the stopgap). Weekly (Monday) the schedule runs the dry run and, with the runner, R1; before each
+# release, dispatch mode r1.
+on:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: dry-run (GitHub-hosted, FakeGateway directly), r1 or overhead (test host)
+        type: choice
+        options: [dry-run, r1, overhead]
+        default: dry-run
+      duration:
+        description: Seconds per phase (R1 is 600)
+        type: number
+        default: 600
+permissions:
+  contents: read
+concurrency:
+  group: perf-${{ inputs.mode || 'dry-run' }}
+  cancel-in-progress: false
+jobs:
+  dry-run:
+    if: github.event_name == 'schedule' || inputs.mode == 'dry-run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.401
+      - name: Lint the harness
+        # shellcheck is on the runner image; ruff 0.17.2 is the parser's pin (src/parser/pyproject.toml).
+        run: |
+          shellcheck benchmarks/release-test/*.sh benchmarks/release-test/site/*.sh scripts/evaluation/*.sh
+          pipx run ruff==0.17.2 check --config benchmarks/release-test/ruff.toml benchmarks/release-test
+          pipx run ruff==0.17.2 format --check --config benchmarks/release-test/ruff.toml benchmarks/release-test
+      - name: Dry run on FakeGateway (not R1)
+        env:
+          DURATION: ${{ github.event_name == 'schedule' && 120 || inputs.duration }}
+        run: |
+          bash benchmarks/release-test/dry-run.sh --duration "$DURATION" --warmup 15 --out "$RUNNER_TEMP/perf"
+      - name: Report to the job summary
+        if: always()
+        run: if [ -f "$RUNNER_TEMP/perf/report.md" ]; then cat "$RUNNER_TEMP/perf/report.md" >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: perf-dry-run
+          path: ${{ runner.temp }}/perf/
+          if-no-files-found: warn
+
+  test-host:
+    if: vars.UME_RAG_TEST_HOST_RUNNER != '' && (github.event_name == 'schedule' || inputs.mode == 'r1' || inputs.mode == 'overhead')
+    runs-on: ${{ fromJSON(vars.UME_RAG_TEST_HOST_RUNNER || '["ubuntu-latest"]') }}
+    environment: test-host
+    timeout-minutes: 180
+    env:
+      MODE: ${{ inputs.mode || 'r1' }}
+      DURATION: ${{ inputs.duration || 600 }}
+      # The deployment under test (deploy/.env of the test host's bundle, gateway = FakeGateway with the R1 profile),
+      # the chat API as the runner reaches it, and the assistant the requests go to.
+      DEPLOY_ENV: ${{ vars.UME_RAG_TEST_HOST_DEPLOY_ENV }}
+      BASE_URL: ${{ vars.UME_RAG_R1_BASE_URL }}
+      MODEL: ${{ vars.UME_RAG_R1_MODEL }}
+      # Phase 2: the crawl source pointing at the page copy, the upload source and its staged OCR batch, the Docker
+      # network the copy is served on, and the real copy's folder on the host (empty: the generated placeholder).
+      CRAWL_SOURCE: ${{ vars.UME_RAG_R1_CRAWL_SOURCE }}
+      UPLOAD_SOURCE: ${{ vars.UME_RAG_R1_UPLOAD_SOURCE }}
+      UPLOAD_BATCH: ${{ vars.UME_RAG_R1_UPLOAD_BATCH }}
+      SITE_NETWORK: ${{ vars.UME_RAG_R1_SITE_NETWORK || 'ume-rag_llm' }}
+      SITE_DIR: ${{ vars.UME_RAG_R1_SITE_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Key file
+        env:
+          API_KEY: ${{ secrets.UME_RAG_R1_API_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$API_KEY" > "$RUNNER_TEMP/r1-key"
+      - name: Serve the page copy
+        if: env.MODE == 'r1'
+        run: |
+          site="$SITE_DIR"
+          if [ -z "$site" ]; then
+            site="$RUNNER_TEMP/site"
+            python3 -I benchmarks/release-test/site/build_site.py generate --out "$site" --base-url http://r1-site:8080
+          fi
+          bash benchmarks/release-test/site/serve.sh start "$site" --network "$SITE_NETWORK"
+      - name: Run
+        run: |
+          certs="$(sed -n 's/^UME_RAG_CERTS_DIR=//p' "$DEPLOY_ENV")"
+          args=(--mode "$MODE" --base-url "$BASE_URL" --model "$MODEL" --key-file "$RUNNER_TEMP/r1-key"
+                --ca-file "$certs/ca.pem" --duration "$DURATION" --deploy-env "$DEPLOY_ENV" --out "$RUNNER_TEMP/perf")
+          if [ "$MODE" = r1 ]; then
+            ingest="bash $GITHUB_WORKSPACE/benchmarks/release-test/ingest.sh --deploy-env $DEPLOY_ENV --crawl-source $CRAWL_SOURCE"
+            [ -z "$UPLOAD_SOURCE" ] || ingest="$ingest --upload-source $UPLOAD_SOURCE --upload-batch $UPLOAD_BATCH"
+            args+=(--ingest-cmd "$ingest")
+          fi
+          bash benchmarks/release-test/run.sh "${args[@]}"
+      - name: Report to the job summary
+        if: always()
+        run: if [ -f "$RUNNER_TEMP/perf/report.md" ]; then cat "$RUNNER_TEMP/perf/report.md" >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Clean up
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/r1-key"
+          bash benchmarks/release-test/site/serve.sh stop
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: perf-${{ env.MODE }}
+          path: ${{ runner.temp }}/perf/
+          if-no-files-found: warn
+
+  test-host-missing:
+    if: vars.UME_RAG_TEST_HOST_RUNNER == '' && (inputs.mode == 'r1' || inputs.mode == 'overhead')
+    runs-on: ubuntu-latest
+    steps:
+      - name: No test-host runner yet
+        run: |
+          echo "::notice::No self-hosted test-host runner is configured (repository variable UME_RAG_TEST_HOST_RUNNER," \
+            "P1b hand-off L11). Run benchmarks/release-test/run.sh on the test host by hand (README there)."
