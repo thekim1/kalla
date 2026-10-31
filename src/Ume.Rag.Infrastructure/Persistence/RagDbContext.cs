@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Infrastructure.Persistence.Config;
+using Ume.Rag.Infrastructure.Persistence.Content;
 
 namespace Ume.Rag.Infrastructure.Persistence;
 
@@ -35,6 +37,35 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<WorkerInstance> WorkerInstances => Set<WorkerInstance>();
     public DbSet<RunItem> RunItems => Set<RunItem>();
     public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
+
+    // Ingestion, P1 (data-model §2.1, §2.2): configured in Config/IngestionConfigModel.cs and Content/IngestionContentModel.cs.
+    public DbSet<PlatformSettings> Settings => Set<PlatformSettings>();
+    public DbSet<DataProtectionPolicy> DataProtectionPolicies => Set<DataProtectionPolicy>();
+    public DbSet<EmbeddingProfile> EmbeddingProfiles => Set<EmbeddingProfile>();
+    public DbSet<Collection> Collections => Set<Collection>();
+    public DbSet<Source> Sources => Set<Source>();
+    public DbSet<Pipeline> Pipelines => Set<Pipeline>();
+    public DbSet<PipelineVersion> PipelineVersions => Set<PipelineVersion>();
+    public DbSet<NodeManifestEntry> NodeManifest => Set<NodeManifestEntry>();
+    public DbSet<WorkerNodeSupport> WorkerNodeSupport => Set<WorkerNodeSupport>();
+    public DbSet<CrawlHost> CrawlHosts => Set<CrawlHost>();
+    public DbSet<SiteProfile> SiteProfiles => Set<SiteProfile>();
+    public DbSet<SiteProfileVersion> SiteProfileVersions => Set<SiteProfileVersion>();
+    public DbSet<CrawlFrontierEntry> CrawlFrontier => Set<CrawlFrontierEntry>();
+    public DbSet<CrawlRun> CrawlRuns => Set<CrawlRun>();
+    public DbSet<ConnectorCheckpoint> ConnectorCheckpoints => Set<ConnectorCheckpoint>();
+    public DbSet<Upload> Uploads => Set<Upload>();
+    public DbSet<DeletionProposal> DeletionProposals => Set<DeletionProposal>();
+    public DbSet<QuarantinedFile> QuarantinedFiles => Set<QuarantinedFile>();
+    public DbSet<Document> Documents => Set<Document>();
+    public DbSet<NodeOutput> NodeOutputs => Set<NodeOutput>();
+    public DbSet<ChunkSet> ChunkSets => Set<ChunkSet>();
+    public DbSet<Chunk> Chunks => Set<Chunk>();
+    public DbSet<EmbeddingCacheEntry> EmbeddingCache => Set<EmbeddingCacheEntry>();
+    public DbSet<Run> Runs => Set<Run>();
+    public DbSet<ParseObservation> ParseObservations => Set<ParseObservation>();
+    public DbSet<ParseProfile> ParseProfiles => Set<ParseProfile>();
+    public DbSet<BlobTombstone> BlobTombstones => Set<BlobTombstone>();
 
     /// <summary>Npgsql options every registration of the context uses (service, design time, tests).</summary>
     public static void ConfigureNpgsql(NpgsqlDbContextOptionsBuilder npgsql)
@@ -240,15 +271,22 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             e.HasIndex(x => x.DepartmentId);
         });
+
+        IngestionConfigModel.Configure(modelBuilder);
+        IngestionContentModel.Configure(modelBuilder);
     }
 
     /// <summary><c>CK_&lt;table&gt;_Classification</c> on a row that carries its level (data-model §2).</summary>
-    private static void ClassificationCheck<T>(TableBuilder<T> table, string tableName) where T : class =>
+    internal static void ClassificationCheck<T>(TableBuilder<T> table, string tableName) where T : class =>
         table.HasCheckConstraint($"CK_{tableName}_Classification", $"\"Classification\" IN ({SqlList(Classification.All)})");
+
+    /// <summary><c>CK_&lt;table&gt;_&lt;column&gt;</c>: the column holds one of <paramref name="values"/>.</summary>
+    internal static void ValuesCheck<T>(TableBuilder<T> table, string tableName, string column, IEnumerable<string> values) where T : class =>
+        table.HasCheckConstraint($"CK_{tableName}_{column}", $"\"{column}\" IN ({SqlList(values)})");
 
     private static readonly JsonSerializerOptions ScopesJson = new(JsonSerializerDefaults.Web);
 
-    private static string SqlList(IEnumerable<string> values) => string.Join(", ", values.Select(v => $"'{v}'"));
+    internal static string SqlList(IEnumerable<string> values) => string.Join(", ", values.Select(v => $"'{v}'"));
 }
 
 public sealed class UtcDateTimeOffsetConverter() : ValueConverter<DateTimeOffset, DateTimeOffset>(

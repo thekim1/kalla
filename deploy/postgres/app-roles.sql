@@ -36,11 +36,38 @@ GRANT SELECT ON config."KeyLastUse" TO ume_rag_admin;
 GRANT SELECT, INSERT, UPDATE ON config."KeyLastUse" TO ume_rag_api;
 -- Admin BFF sessions: only the admin reads and writes them (data-model §2.1).
 GRANT SELECT, INSERT, UPDATE, DELETE ON config."AdminSessions" TO ume_rag_admin;
+-- Ingestion config (data-model §1.2): the admin manages it; the worker reads all of it; the api reads what retrieval
+-- needs. The api reads only the listed columns of Sources (knowledge design §6.3, §6.5), never Settings jsonb or
+-- schedules, and no pipelines.
+GRANT SELECT, INSERT, UPDATE, DELETE ON config."Settings", config."DataProtectionPolicies", config."EmbeddingProfiles",
+  config."Collections", config."Sources", config."Pipelines", config."PipelineVersions" TO ume_rag_admin;
+GRANT SELECT ON config."Settings", config."DataProtectionPolicies", config."EmbeddingProfiles", config."Collections",
+  config."Sources", config."Pipelines", config."PipelineVersions" TO ume_rag_worker;
+GRANT SELECT ON config."Settings", config."DataProtectionPolicies", config."EmbeddingProfiles", config."Collections" TO ume_rag_api;
+GRANT SELECT ("Id", "CollectionId", "Type", "Classification", "State", "DeletedAt", "ContainsThirdPartyText")
+  ON config."Sources" TO ume_rag_api;
 
 -- content: the worker owns it; the admin reads it and enqueues jobs (decisions are command jobs, data-model §12.2).
 GRANT SELECT, INSERT, UPDATE, DELETE ON content."Jobs", content."WorkerInstances", content."RunItems" TO ume_rag_worker;
 GRANT SELECT ON content."Jobs", content."WorkerInstances", content."RunItems" TO ume_rag_admin;
 GRANT INSERT ON content."Jobs" TO ume_rag_admin;
+-- Ingestion content (data-model §1.2, §2.2): the worker writes it all, the admin reads it all (incl. the test panel).
+GRANT SELECT, INSERT, UPDATE, DELETE ON content."NodeManifest", content."WorkerNodeSupport", content."CrawlHosts",
+  content."SiteProfiles", content."SiteProfileVersions", content."CrawlFrontier", content."CrawlRuns",
+  content."ConnectorCheckpoints", content."Uploads", content."DeletionProposals", content."QuarantinedFiles",
+  content."Documents", content."NodeOutputs", content."ChunkSets", content."Chunks", content."EmbeddingCache",
+  content."Runs", content."ParseObservations", content."ParseProfiles", content."BlobTombstones" TO ume_rag_worker;
+GRANT SELECT ON content."NodeManifest", content."WorkerNodeSupport", content."CrawlHosts", content."SiteProfiles",
+  content."SiteProfileVersions", content."CrawlFrontier", content."CrawlRuns", content."ConnectorCheckpoints",
+  content."Uploads", content."DeletionProposals", content."QuarantinedFiles", content."Documents", content."NodeOutputs",
+  content."ChunkSets", content."Chunks", content."EmbeddingCache", content."Runs", content."ParseObservations",
+  content."ParseProfiles", content."BlobTombstones" TO ume_rag_admin;
+-- The admin tombstones the upload blobs it replaces or deletes, in the transaction of its own change (issue #34).
+GRANT INSERT ON content."BlobTombstones" TO ume_rag_admin;
+-- The api searches chunks and reads the documents' citation columns only (knowledge design §3.5).
+GRANT SELECT ON content."ChunkSets", content."Chunks" TO ume_rag_api;
+GRANT SELECT ("Id", "SourceId", "Classification", "IdentityKind", "IdentityHash", "Title", "Url", "MediaType",
+  "DisplayName", "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt") ON content."Documents" TO ume_rag_api;
 
 -- audit: every service appends, only the admin reads; no role deletes (retention runs through step functions).
 GRANT INSERT ON audit."AuditLog" TO ume_rag_api, ume_rag_admin, ume_rag_worker;
@@ -50,6 +77,6 @@ GRANT SELECT ON audit."AuditLog" TO ume_rag_admin;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA config, content, chat, audit FROM ume_rag_api, ume_rag_admin, ume_rag_worker;
 GRANT EXECUTE ON FUNCTION content.rag_or_query(tsvector), content.rag_tsquery_or_agg(tsquery)
   TO ume_rag_api, ume_rag_admin, ume_rag_worker;
-GRANT EXECUTE ON FUNCTION content.rag_partition_maintain() TO ume_rag_worker;
+GRANT EXECUTE ON FUNCTION content.rag_partition_maintain(), content.rag_ensure_profile_index(uuid, integer) TO ume_rag_worker;
 GRANT EXECUTE ON FUNCTION config.rag_retention_config_step(integer) TO ume_rag_admin;
 COMMIT;
