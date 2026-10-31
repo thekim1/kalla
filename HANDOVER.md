@@ -107,6 +107,18 @@ publish/rollback, #133 admin parse rules. Design sync of #89–#108 (`30f629b`).
 (P1b item 3), CI local only + self-hosted runner. Approved B's #112 (merged), #118, #119, #124, #125, #126, #127
 (B merges). Hand-off issues filed: #116, #129 (J6), #132 (L5), #134 (parse-rule schema), #114.
 
+## Session 11 (in progress, checkpoint)
+
+Merged (stream A, verified locally): #135 P1b item 17 part 1 (test-host run book, Open WebUI feedback service account
++ `deploy/openwebui-feedback-key.sh`, public-records routes, `deploy/tests/pilot-stack.sh` in verify.yml), #136
+site-profile host key without port + `excludedTypes` per host + preview parse key with admin rules, #137 eval
+reproducibility test + set triggers (first syncs, weekly Sun 04:30, D +25 %), #138 one `Reconciler.ReconcileAsync`
+decision, drift sweep swaps back. Design sync of #112–#133 on `main` (`d6b4657`). Approved B's #123 (2 minor notes).
+Running: `a/9-reprocess-force` (force/fromStage bypass), `a/9-settings-effects` (source settings-change effects),
+`a/5-6-done-rows` (P1a items 5/6 done rows #26, #43, #111). Watch item: one unexplained failure of
+`EngineCrawlTests.A_crawl_syncs_the_site_into_live_chunks_with_its_report_and_a_second_run_is_unchanged` (1 of ≈ 10
+runs, message not captured). Note: `gh pr merge --delete-branch` also removes the branch's local worktree.
+
 ## Next step (start of session 11)
 
 **First check GitHub** (open PRs, issues, comments from stream B). No worktrees or agents are running.
