@@ -111,7 +111,7 @@ trap cleanup EXIT
 
 echo "== init-deployment.sh ($name)"
 PATH="$init_path" "$deploy/init-deployment.sh" \
-  --oidc-authority https://login.microsoftonline.com/common/v2.0 \
+  --oidc-authority https://keycloak.smoke.test/realms/ume \
   --gateway-url https://llm.smoke.test \
   --api-host rag-api.smoke.test --admin-host rag-admin.smoke.test \
   --api-port "$api_port" --admin-port "$admin_port" \

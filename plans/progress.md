@@ -40,7 +40,7 @@ exists (M2 triggered, user 2026-10-30; `p1/README.md` §1).
 - [ ] Stream B, the serving side: [`p1/progress-b.md`](p1/progress-b.md)
 - [ ] Pilot-start checks: source inventory, JavaScript need (`to-verify.md` #139); W1 answered (Team Turkos's
       `chat.umea.se`; the product owner decides the relation)
-- [ ] Sync point after J2/J3: schema and contracts checked; results folded into [`to-verify.md`](to-verify.md)
+- [x] Sync point after J2/J3: schema and contracts checked; results folded into [`to-verify.md`](to-verify.md) (2026-10-31, `4b0f3a6`; repeated for later results)
 - [ ] Local skeleton: fixture pages answered with a citation in Open WebUI on FakeGateway (`p1/README.md` §5)
 - [ ] Gateway session: gateway reachable with EU routes and the pilot team's keys (J10); shared Keycloak with RAG's
       realm additions (J11)
