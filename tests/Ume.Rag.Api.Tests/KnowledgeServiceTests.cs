@@ -49,6 +49,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
     public Guid SectionCollection { get; } = Guid.CreateVersion7();
     public Guid SectionSource { get; } = Guid.CreateVersion7();
     public FixtureDocument Plank { get; private set; } = null!;
+    public FixtureDocument Sensitive { get; private set; } = null!;
     public Guid UploadSlot { get; } = Guid.CreateVersion7();
     public static readonly byte[] UploadHash = Convert.FromHexString("ab" + new string('0', 62));
     public static readonly byte[] UploadBytes = "%PDF-1.7 taxa"u8.ToArray();
@@ -59,9 +60,15 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
     /// <summary>The plain keys of <c>rag-internal</c> and Open WebUI, stored in <c>config."Keys"</c> (the clients have the snapshot's ids).</summary>
     public string InternalKey { get; private set; } = null!;
     public string OwuiKey { get; private set; } = null!;
+    public string IntegrationKey { get; private set; } = null!;
     public Guid AssistantId { get; } = Guid.CreateVersion7();
     public Guid InternalClient { get; } = Guid.CreateVersion7();
     public Guid OwuiClient { get; } = Guid.CreateVersion7();
+    public Guid IntegrationClient { get; } = Guid.CreateVersion7();
+    public Guid DeptACollection { get; } = Guid.CreateVersion7();
+    public Guid DeptBCollection { get; } = Guid.CreateVersion7();
+    public Guid DeptASource { get; } = Guid.CreateVersion7();
+    public Guid DeptBSource { get; } = Guid.CreateVersion7();
     public FixtureDocument Altan { get; private set; } = null!;
     public FixtureDocument Upload { get; private set; } = null!;
     public FixtureDocument Hidden { get; private set; } = null!;
@@ -87,11 +94,22 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
             TestContext.Current.CancellationToken);
         InternalKey = await AddKeyAsync(InternalClient, "rag-internal", ClientKinds.Internal, Classification.Sensitive);
         OwuiKey = await AddKeyAsync(OwuiClient, "Open WebUI", ClientKinds.OpenWebUi, Classification.Internal);
+        IntegrationKey = await AddKeyAsync(IntegrationClient, "Integration", ClientKinds.Integration, Classification.Internal);
+
+        // §16.6: the same file uploaded by two departments under different names is two documents, each cited by its own name.
+        foreach (var (collection, source, name) in new[] { (DeptACollection, DeptASource, "tomtkarta-bygg.pdf"), (DeptBCollection, DeptBSource, "karta-miljo.pdf") })
+        {
+            await writer.AddDocumentAsync(new FixtureDocumentSpec
+            {
+                CollectionId = collection, EmbeddingProfileId = ProfileId, SourceId = source, IdentityKind = "upload", DisplayName = name,
+                Title = "Tomtkarta", MediaType = "application/pdf",
+            }, [new FixtureChunk("Tomtkartan visar fastighetsgränser och servitut.")]);
+        }
         Hidden = await writer.AddDocumentAsync(new FixtureDocumentSpec
         {
             CollectionId = UnpublishedCollection, EmbeddingProfileId = ProfileId, SourceId = UnpublishedSource, Title = "Utkast",
         }, [new FixtureChunk("Bygglov för altan: utkast som inte är publicerat.")]);
-        await writer.AddDocumentAsync(new FixtureDocumentSpec
+        Sensitive = await writer.AddDocumentAsync(new FixtureDocumentSpec
         {
             CollectionId = SensitiveCollection, EmbeddingProfileId = ProfileId, SourceId = SensitiveSource, Classification = "sensitive", Title = "Känsligt",
         }, [new FixtureChunk("Bygglov för altan hos en enskild person.")]);
@@ -167,11 +185,13 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         {
             new ClientEntry(InternalClient, "rag-internal", ClientKinds.Internal, Classification.Sensitive, false, true),
             new ClientEntry(OwuiClient, "Open WebUI", ClientKinds.OpenWebUi, Classification.Internal, true, true),
+            new ClientEntry(IntegrationClient, "Integration", ClientKinds.Integration, Classification.Internal, false, true),
         }.ToDictionary(c => c.Id);
         var collections = new[]
         {
             Collection(PublicCollection, Classification.Public, true), Collection(UnpublishedCollection, Classification.Public, false),
             Collection(SensitiveCollection, Classification.Sensitive, true), Collection(SectionCollection, Classification.Public, true),
+            Collection(DeptACollection, Classification.Public, true), Collection(DeptBCollection, Classification.Public, true),
         }.ToDictionary(c => c.Id);
         var assistant = new AssistantEntry(AssistantId, "bygg", "Bygg", Classification.Internal, HistoryModes.None, AssistantStates.Active, Guid.Empty, null,
             new PublishedVersionEntry(Guid.NewGuid(), 1, "ume/chat-eu", [PublicCollection, UnpublishedCollection]),
@@ -185,7 +205,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
             SourcesByCollection = new Dictionary<Guid, IReadOnlyList<Guid>>
             {
                 [PublicCollection] = [PublicSource], [UnpublishedCollection] = [UnpublishedSource], [SensitiveCollection] = [SensitiveSource],
-                [SectionCollection] = [SectionSource],
+                [SectionCollection] = [SectionSource], [DeptACollection] = [DeptASource], [DeptBCollection] = [DeptBSource],
             },
             EmbeddingProfiles = new Dictionary<Guid, EmbeddingProfileEntry>
             {
@@ -341,7 +361,8 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         (await Should.ThrowAsync<RetrievalDeniedException>(() => service.GetDocumentAsync(who, db.Hidden.Id, Ct))).Status.ShouldBe(404);
         (await Should.ThrowAsync<RetrievalDeniedException>(() => service.GetDocumentAsync(who, Guid.NewGuid(), Ct))).Status.ShouldBe(404);
 
-        (await service.ListCollectionsAsync(who, Ct)).Select(c => c.Id).ShouldBe([db.PublicCollection, db.SensitiveCollection, db.SectionCollection], ignoreOrder: true);
+        (await service.ListCollectionsAsync(who, Ct)).Select(c => c.Id).ShouldBe([db.PublicCollection, db.SensitiveCollection, db.SectionCollection,
+            db.DeptACollection, db.DeptBCollection], ignoreOrder: true);
     }
 
     private static readonly DownloadGrants Grants = new(new DownloadGrantOptions

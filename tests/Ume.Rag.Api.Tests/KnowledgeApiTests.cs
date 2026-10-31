@@ -154,7 +154,8 @@ public sealed class KnowledgeApiTests(KnowledgeFixture db) : IClassFixture<Knowl
         var json = await client.GetFromJsonAsync<JsonNode>(new Uri("/v1/collections", UriKind.Relative), Ct);
 
         json!["data"]!.AsArray().Select(c => c!["slug"]!.GetValue<string>())
-            .ShouldBe([Slug(db.PublicCollection), Slug(db.SensitiveCollection), Slug(db.SectionCollection)], ignoreOrder: true);
+            .ShouldBe([Slug(db.PublicCollection), Slug(db.SensitiveCollection), Slug(db.SectionCollection), Slug(db.DeptACollection),
+                Slug(db.DeptBCollection)], ignoreOrder: true);
     }
 
     [Fact]

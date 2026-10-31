@@ -7,6 +7,7 @@ using Ume.Rag.Answering;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Retrieval;
 using Ume.Rag.Infrastructure.Access;
+using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Retrieval;
 
 namespace Ume.Rag.Api;
@@ -68,7 +69,10 @@ public static partial class KnowledgeEndpoints
         {
             // Echo the slug the caller sent, never a name it may not see (§4.4).
             throw new RetrievalDeniedException(404, KnowledgeCodes.CollectionNotFound,
-                body.Collections?.FirstOrDefault(s => snapshot.CollectionsBySlug.TryGetValue(s, out var c) && c.Id == id) ?? id.ToString());
+                body.Collections?.FirstOrDefault(s => snapshot.CollectionsBySlug.TryGetValue(s, out var c) && c.Id == id) ?? id.ToString())
+            {
+                Reason = denied.Reason, Step = denied.Step, ResourceType = denied.ResourceType, ResourceId = denied.ResourceId, Action = denied.Action,
+            };
         }
 
         var slugs = snapshot.Collections.ToDictionary(c => c.Key, c => c.Value.Slug);
@@ -112,7 +116,7 @@ public static partial class KnowledgeEndpoints
     }
 
     private static async Task<IResult> ContentAsync(string id, HttpContext http, KnowledgeCallers callers, KnowledgeService knowledge,
-        DownloadGrants grants, IDocumentContentReader reader, ILoggerFactory loggers, CancellationToken ct)
+        DownloadGrants grants, IDocumentContentReader reader, KnowledgeSecurity security, ILoggerFactory loggers, CancellationToken ct)
     {
         var documentId = ParseId(id);
         DocumentContent content;
@@ -131,19 +135,36 @@ public static partial class KnowledgeEndpoints
                 return Results.Content(ContentHeaders.ExpiredPage, "text/html; charset=utf-8", statusCode: 401);
             }
 
-            content = await knowledge.FindContentAsync(grant, documentId, ct);
+            content = await Counted(security, "grant", documentId, grant.ClientId, () => knowledge.FindContentAsync(grant, documentId, ct));
         }
         else
         {
-            content = await knowledge.FindContentAsync(await callers.AuthenticateAsync(http.Request, ct), documentId, ct);
+            var who = await callers.AuthenticateAsync(http.Request, ct);
+            content = await Counted(security, "key", documentId, who.Client.Id, () => knowledge.FindContentAsync(who, documentId, ct));
         }
 
-        var bytes = await reader.OpenAsync(content, ct);
+        var kind = GrantOf(http) is null ? "key" : "grant";
+        var clientId = (http.Items[KnowledgeCallers.PrincipalItem] as Domain.Access.RagPrincipal)?.Client.Id
+            ?? (http.Items[KnowledgeCallers.GrantItem] as DownloadGrant)?.ClientId;
+        DocumentBytes? bytes;
+        try
+        {
+            bytes = await reader.OpenAsync(content, ct);
+        }
+        catch (RetrievalDeniedException)
+        {
+            security.Download("unavailable", kind, documentId, clientId);
+            throw;
+        }
+
         if (bytes is null)
         {
+            security.Download("missing", kind, documentId, clientId);
             LogBlobMissing(loggers.CreateLogger(typeof(KnowledgeEndpoints)), documentId);
             throw new RetrievalDeniedException(404, KnowledgeCodes.NotFound);
         }
+
+        security.Download("ok", kind, documentId, clientId);
 
         foreach (var (name, value) in ContentHeaders.Fixed(content))
         {
@@ -153,6 +174,20 @@ public static partial class KnowledgeEndpoints
         http.Response.Headers.ContentDisposition = ContentHeaders.ContentDisposition(content);
         http.Response.ContentLength = bytes.Length;
         return Results.Stream(bytes.Content, ContentHeaders.ContentType(content.MediaType), enableRangeProcessing: false);
+    }
+
+    /// <summary>A refused download is counted (<c>not_served</c> for a web page, else <c>not_found</c>) before the problem is answered.</summary>
+    private static async Task<DocumentContent> Counted(KnowledgeSecurity security, string kind, Guid documentId, Guid clientId, Func<Task<DocumentContent>> find)
+    {
+        try
+        {
+            return await find();
+        }
+        catch (RetrievalDeniedException denied) when (denied.Status == 404)
+        {
+            security.Download(denied.Code == KnowledgeCodes.ContentNotServed ? "not_served" : "not_found", kind, documentId, clientId);
+            throw;
+        }
     }
 
     /// <summary>§3.1 validation; collections by slug (an unknown slug is 404 <c>collection_not_found</c>, as an invisible one).</summary>
@@ -226,7 +261,10 @@ public static partial class KnowledgeEndpoints
             {
                 ids.Add(snapshot.CollectionsBySlug.TryGetValue(slug, out var collection)
                     ? collection.Id
-                    : throw new RetrievalDeniedException(404, KnowledgeCodes.CollectionNotFound, slug));
+                    : throw new RetrievalDeniedException(404, KnowledgeCodes.CollectionNotFound, slug)
+                    {
+                        Reason = "collection_unknown", ResourceType = "collection", ResourceId = SecurityEvents.Printable(slug), Action = "Search",
+                    });
             }
         }
 
@@ -273,12 +311,21 @@ public static partial class KnowledgeEndpoints
 
     private static string? GrantOf(HttpContext http) => http.Request.Query.TryGetValue("grant", out var value) ? value.ToString() : null;
 
-    private static DownloadGrant ReadGrant(DownloadGrants grants, string token, HttpContext http) => grants.Read(token, out var grant) switch
+    /// <summary>A valid grant, kept for events; an invalid or expired one is 401 and counted as 5001 with credential <c>grant</c> (§4.6).</summary>
+    private static DownloadGrant ReadGrant(DownloadGrants grants, string token, HttpContext http)
     {
-        GrantStatus.Valid => grant!,
-        GrantStatus.Expired => throw new KnowledgeFaultException(401, KnowledgeCodes.GrantExpired, "The download link has expired. Ask again for a new link."),
-        _ => throw new KnowledgeFaultException(401, KnowledgeCodes.GrantInvalid, "The download link is not valid."),
-    };
+        var status = grants.Read(token, out var grant);
+        if (status == GrantStatus.Valid)
+        {
+            http.Items[KnowledgeCallers.GrantItem] = grant;
+            return grant!;
+        }
+
+        var code = status == GrantStatus.Expired ? KnowledgeCodes.GrantExpired : KnowledgeCodes.GrantInvalid;
+        http.RequestServices.GetRequiredService<KnowledgeSecurity>().AuthFailed(http, code, "grant");
+        throw new KnowledgeFaultException(401, code,
+            status == GrantStatus.Expired ? "The download link has expired. Ask again for a new link." : "The download link is not valid.");
+    }
 
     private static bool AcceptsHtml(HttpContext http) =>
         http.Request.Headers.Accept.Any(a => a is not null && a.Contains("text/html", StringComparison.OrdinalIgnoreCase));

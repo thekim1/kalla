@@ -109,4 +109,18 @@ public sealed class RetrievalDeniedException(int status, string code, string? su
 
     /// <summary>The real reason behind a 404 <c>not_found</c>, for event 5002 only; never sent to the caller (§4.4, §4.6).</summary>
     public string? Reason { get; init; }
+
+    /// <summary>For events 5002/5005: the policy step that denied (<c>7</c> = ceiling), when the policy decided.</summary>
+    public string? Step { get; init; }
+
+    /// <summary>For events 5002/5005: <c>collection</c>, <c>assistant</c> or <c>document</c>, and its id.</summary>
+    public string? ResourceType { get; init; }
+
+    public string? ResourceId { get; init; }
+
+    /// <summary>For events 5002/5005: the action asked for (<c>Search</c>, <c>Chat</c>, <c>ReadDocument</c>).</summary>
+    public string? Action { get; init; }
+
+    /// <summary>An explicit denial that events 5002/5005 record (a policy decision, an invisible requested resource, a grant re-check).</summary>
+    public bool IsAccessDenial => Reason is not null && ResourceType is not null;
 }
