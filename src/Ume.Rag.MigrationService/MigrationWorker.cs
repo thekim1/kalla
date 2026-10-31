@@ -7,9 +7,9 @@ namespace Ume.Rag.MigrationService;
 /// <summary>
 /// Applies EF Core migrations (expand/contract, backwards compatible), then <c>app-roles.sql</c>
 /// (<c>Migration:RolesSqlPath</c>, set by production compose; dev runs as the bootstrap superuser without the service
-/// roles) and the run-item partition maintenance, then exits (data-model §10, as the gateway's MigrationWorker). The
-/// services wait for this to complete, so they never run against an older schema. The dev seeder follows with the first
-/// seeded table.
+/// roles) and the run-item partition maintenance, then the <see cref="DevSeeder"/> when <c>Seed:Enabled</c>, and exits
+/// (data-model §10, as the gateway's MigrationWorker). The services wait for this to complete, so they never run against
+/// an older schema.
 /// </summary>
 public sealed partial class MigrationWorker(
     IServiceProvider services,
@@ -27,6 +27,11 @@ public sealed partial class MigrationWorker(
             await using var scope = services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<RagDbContext>();
             await RagDatabaseMigrator.MigrateAsync(db, configuration["Migration:RolesSqlPath"], stoppingToken);
+            if (configuration.GetValue("Seed:Enabled", false))
+            {
+                await DevSeeder.SeedAsync(db, TimeProvider.System, stoppingToken);
+            }
+
             if (logger.IsEnabled(LogLevel.Information))
             {
                 LogMigrated(logger, (await db.Database.GetAppliedMigrationsAsync(stoppingToken)).LastOrDefault());

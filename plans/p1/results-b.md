@@ -1,0 +1,8 @@
+# Stream B results (P1)
+
+Checks from [`../to-verify.md`](../to-verify.md) done by stream B in P1. The main session folds them into the register
+at each sync point.
+
+| Row | Result | Evidence (command, output, PR) | Date |
+|---|---|---|---|
+| 22 | **Confirmed, with one rule for callers.** Npgsql EF Core 10.0.3 maps a `uint` property with `IsRowVersion()` to the `xmin` system column (`xid`) on every editable root of P1 item 2 (`Settings`, `DataProtectionPolicies`, `EmbeddingProfiles`, `Collections`, `Sources`, `Pipelines`) and on `Clients`; no column is created. After `SaveChanges` the new `xmin` is read back into the entity, and a second context holding the old value gets `DbUpdateConcurrencyException`. **`ExecuteUpdate` does not check the token** (it updates whatever the `Where` selects) **but its write changes `xmin`**, so an entity loaded before it can no longer be saved. A bulk update that must honour the DTO's `version` therefore filters on it explicitly (`Where(x => x.Id == id && x.Version == version)` translates to `xmin = @version` and matches no row when stale). | `IngestionSchemaTests.Every_editable_root_maps_xmin_as_its_concurrency_token`, `A_stale_version_is_refused_and_ExecuteUpdate_bypasses_but_moves_it`; `dotnet test --project tests/Ume.Rag.IntegrationTests -c Release` on `pgvector/pgvector:0.8.7-pg17-trixie@sha256:7a7e…8a84` and with `UME_RAG_TEST_POSTGRES_IMAGE=ume-rag.local/postgres:dev` (built from `images/postgres/Dockerfile`): 210 passed; PR for P1 item 2 | 2026-10-31 |
