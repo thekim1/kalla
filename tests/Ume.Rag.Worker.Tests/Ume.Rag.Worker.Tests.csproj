@@ -1,6 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Processing tests (Processing/): goldens over tests/fixtures/processing/, PII targets over tests/fixtures/pii/, the flag
+    lifecycle on in-memory stores, and the embed stage against the FakeGateway in process (referenced under an alias: its
+    top-level Program would clash with the worker's).
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.TestKit\Ume.Rag.TestKit.csproj" />
     <ProjectReference Include="..\..\src\Ume.Rag.Worker\Ume.Rag.Worker.csproj" />
+    <ProjectReference Include="..\..\src\Ume.Rag.FakeGateway\Ume.Rag.FakeGateway.csproj" Aliases="fakegateway" />
   </ItemGroup>
 </Project>

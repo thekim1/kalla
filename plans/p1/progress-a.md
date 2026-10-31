@@ -55,10 +55,10 @@ Refs: [connectors §3–§7, §9, §11–§13, §18](../ingestion-worker/design-
 
 ## 6. Processing stages (#7)
 Refs: [processing §2–§11, §17](../ingestion-worker/design-processing.md), [README §1](README.md)
-- [ ] `detect`, parse routing with built-in rules and fixed ranges, worker-side parsers, `clean`, split
-- [ ] `chunk` with breadcrumb prefix and `SearchText` (`SwedishDecompounder`); metadata; quality facts
-- [ ] `personal-data`: patterns, gated NER, flag rules, `held`
-- [ ] `embed`: cache, canary, fixed concurrency, the profile's model, dimensions and ceiling (`Eu` in P1a)
+- [x] `detect`, parse routing with built-in rules and fixed ranges, worker-side parsers, `clean`, split (PR: a/7-processing; inspect adapter after item 5)
+- [x] `chunk` with breadcrumb prefix and `SearchText` (`SwedishDecompounder`); metadata; quality facts (PR: a/7-processing)
+- [x] `personal-data`: patterns, gated NER, flag rules, `held` (PR: a/7-processing; `/v1/ner` adapter after item 5, database swap with item 9)
+- [x] `embed`: cache, canary, fixed concurrency, the profile's model, dimensions and ceiling (`Eu` in P1a) (PR: a/7-processing; SQL stores with item 9)
 - [ ] **Done:** goldens, PII targets, flag lifecycle green; #26, #43, #111 recorded
 
 ## 7. Engine and index writer (#9, after J2)

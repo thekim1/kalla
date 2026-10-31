@@ -5,6 +5,21 @@
     <UmeServiceContainer>true</UmeServiceContainer>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Processing stages (processing design §2–§11): HTML extraction, Markdown blocks, the BGE-M3 token counter. -->
+    <PackageReference Include="AngleSharp" />
+    <PackageReference Include="Markdig" />
+    <PackageReference Include="Microsoft.ML.Tokenizers" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ume.Rag.Worker.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Detect's stop-word lists (no culture-like '.sv.' in the names: MSBuild would move them to a satellite assembly); BGE-M3's SentencePiece model (Processing/Chunking/bge-m3/README.md: source, revision, licence, SHA-256). -->
+    <EmbeddedResource Include="Processing\Detect\stopwords-sv.txt" LogicalName="Ume.Rag.Worker.Processing.Detect.stopwords-sv.txt" />
+    <EmbeddedResource Include="Processing\Detect\stopwords-en.txt" LogicalName="Ume.Rag.Worker.Processing.Detect.stopwords-en.txt" />
+    <EmbeddedResource Include="Processing\Chunking\bge-m3\sentencepiece.bpe.model" LogicalName="Ume.Rag.Worker.Processing.Chunking.bge-m3.sentencepiece.bpe.model" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.Infrastructure\Ume.Rag.Infrastructure.csproj" />
     <ProjectReference Include="..\Ume.Rag.ServiceDefaults\Ume.Rag.ServiceDefaults.csproj" />
     <ProjectReference Include="..\Ume.Rag.Pipelines\Ume.Rag.Pipelines.csproj" />
