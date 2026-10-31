@@ -8,14 +8,15 @@ listed done-when holds.
 ## P0 Foundation ([`p0/README.md`](p0/README.md))
 
 - [x] Stage 0, main session: [`p0/progress-stage-0.md`](p0/progress-stage-0.md)
-- [ ] Stream A, platform and the ingestion side: [`p0/progress-a.md`](p0/progress-a.md)
+- [x] Stream A, platform and the ingestion side: [`p0/progress-a.md`](p0/progress-a.md) (done 2026-10-31; open
+      boxes moved to P1b by decision: test-host drill and deploy, H8 capacity run)
 - [x] Stream B, application and the serving side: [`p0/progress-b.md`](p0/progress-b.md) (done 2026-10-31; its
       open boxes are P1/P2 work by design: pool waits with R1, #151 with Entra, `cancel-run` with `Runs`)
 - [x] Sync point after H2 (2026-10-30, PRs #5, #7, #8, #9; repeated at integration for later results): schema checked against [`platform/data-model.md`](platform/data-model.md); `results-a.md`
       and `results-b.md` folded into [`to-verify.md`](to-verify.md)
 - [x] Integration review: "Design deviations" from every P0 PR settled in the design documents
       (stream A's merged PRs 2026-10-30, session 8; stream B's 2026-10-31, session 9; Decisions table rows "P0 integration")
-- [ ] `v0.1.0` released (stream A item 11); the test-host deploy (item 12) moved to P1b (Decisions table, "M2 and test hosting")
+- [x] `v0.1.0` released 2026-10-31 (stream A item 11, https://github.com/thekim1/ume-rag-platform/releases/tag/v0.1.0); the test-host deploy (item 12) moved to P1b (Decisions table, "M2 and test hosting")
 
 Owned by the user, outside the streams ([`p0/README.md`](p0/README.md) §5,
 [`postponed-decisions.md`](postponed-decisions.md)):
@@ -34,7 +35,7 @@ exists (M2 triggered, user 2026-10-30; `p1/README.md` §1).
 
 - [x] P1 stream briefs, progress files and prompts written (same A/B seam, [`p0/README.md`](p0/README.md) §6):
       [`p1/stream-a.md`](p1/stream-a.md), [`p1/stream-b.md`](p1/stream-b.md), [`p1/prompts/`](p1/prompts/)
-- [ ] J1: `v0.1.0` tagged; P1 ownership rules (`p1/README.md` §2) merged
+- [x] J1: `v0.1.0` tagged; P1 ownership rules (`p1/README.md` §2) merged (2026-10-31, #57)
 - [ ] Stream A, the worker side: [`p1/progress-a.md`](p1/progress-a.md)
 - [ ] Stream B, the serving side: [`p1/progress-b.md`](p1/progress-b.md)
 - [ ] Pilot-start checks: source inventory, JavaScript need (`to-verify.md` #139); W1 answered (Team Turkos's
