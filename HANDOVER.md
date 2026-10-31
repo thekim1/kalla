@@ -80,7 +80,7 @@ https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM (not updated since session 8; 
 | Pilot stack | `deploy/`, `docs/p1a-local-run.md` | code part done (#94); "stack healthy" needs J8/J9 + fresh images |
 | CI / release | `.github/workflows/{verify,parser,release,perf,evaluation,e2e,entra}.yml`, `benchmarks/release-test/` | release proven (`v0.1.0`); `perf.yml` dry run green on GitHub |
 | Grading (L8) | `scripts/grading/` | done (#99); run in the live block (#100) |
-| Schema (stream B) | `src/Ume.Rag.Infrastructure/Persistence/**` | part 1 (#76) and part 2 (#93, if merged) |
+| Schema (stream B) | `src/Ume.Rag.Infrastructure/Persistence/**` | part 1 (#76), part 2 (#93); pipeline templates seeded (#89) |
 
 ## Next step (start of session 10)
 
