@@ -98,9 +98,11 @@ public sealed class AdminParseRuleEngineTests(RagDatabaseFixture database, FakeG
         await Commands.WaitUntilAsync(() => Task.FromResult(state.Version > before));
     }
 
+    /// <summary>A <c>reprocess-document</c> from <c>embed</c>: no cached stage is bypassed, so the parse cache decides.</summary>
     private async Task ReprocessAsync(SourceSeed seed, Guid document)
     {
-        var request = new JobRequest(JobClasses.Command, seed.DepartmentId, seed.Classification, ContractJson.Serialize(new ReprocessDocumentCommand { DocumentId = document }))
+        var command = new ReprocessDocumentCommand { DocumentId = document, FromStage = "embed" };
+        var request = new JobRequest(JobClasses.Command, seed.DepartmentId, seed.Classification, ContractJson.Serialize(command))
         {
             DedupKey = JobDedupKeys.Reprocess(document),
         };
