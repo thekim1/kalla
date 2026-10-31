@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>https://www.example.se/sitemap1.xml.gz</loc><lastmod>2026-10-31T06:00:00+01:00</lastmod></sitemap>
+  <sitemap><loc>https://www.example.se/sitemap2.xml</loc></sitemap>
+  <sitemap><loc>https://www.example.se/nested-index.xml</loc></sitemap>
+  <sitemap><loc>https://www.example.se/missing.xml</loc></sitemap>
+</sitemapindex>
