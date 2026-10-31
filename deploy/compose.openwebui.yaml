@@ -7,6 +7,7 @@
 #       --openwebui-host chat.intern.umea.se --openwebui-oidc-client-secret-file open-webui.secret \
 #       --openwebui-api-key-file open-webui.key --openwebui-rag-client-id <client id>
 #   docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait
+#   sudo deploy/openwebui-feedback-key.sh     # the feedback service account's API key for rag-api's importer
 #
 # Sign-in (chat design §4.3, identity design §5.3): P1 the Keycloak shared with the gateway, client open-webui in realm
 # ume (the OIDC provider URL defaults to the admin's authority + /.well-known/openid-configuration); P2 Entra, the
@@ -88,7 +89,14 @@ services:
       API_KEYS_ALLOWED_ENDPOINTS: /api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback
       USER_PERMISSIONS_FEATURES_API_KEYS: "false"
       # Sign-in only over OIDC through its own client (identity design §5.3): P1 Keycloak, P2 Entra (header above).
+      # The feedback service account is the store's first user, so its only admin (WEBUI_ADMIN_EMAIL and
+      # WEBUI_ADMIN_PASSWORD in the env file, created on the first start of an empty store). Password sign-in is off
+      # except while deploy/openwebui-feedback-key.sh mints its API key (UME_RAG_OPENWEBUI_PASSWORD_AUTH=true).
       ENABLE_LOGIN_FORM: "false"
+      ENABLE_PASSWORD_AUTH: ${UME_RAG_OPENWEBUI_PASSWORD_AUTH:-false}
+      # No person becomes admin, so nobody could approve a pending account: every OIDC sign-in is a user (who may sign
+      # in is identity design §16 question 5).
+      DEFAULT_USER_ROLE: user
       ENABLE_SIGNUP: "false"
       ENABLE_OAUTH_SIGNUP: "true"
       OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "false"
