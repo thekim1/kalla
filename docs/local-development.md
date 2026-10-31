@@ -80,6 +80,20 @@ dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
 Environment variables (`Section__Key`) override the user secrets: `Start-E2E.ps1` sets `FakeGateway__Enabled=true`
 that way.
 
+**Blob master key.** `internal` blobs are envelope-encrypted (`URB2`, data-model §7) with the master key file
+`rag-blob-internal` in `KeyProvider:Directory` (default `/run/keys`, the Compose mount). Without it, syncs of `internal`
+sources fail with "Master key 'rag-blob-internal' is not available"; `public` sources need no key. Until the AppHost
+creates a development key, make one and point the worker at it through its user secrets:
+
+```bash
+mkdir -p ~/.ume-rag/keys && openssl rand -base64 32 > ~/.ume-rag/keys/rag-blob-internal
+dotnet user-secrets --project src/Ume.Rag.Worker set KeyProvider:Directory "$HOME/.ume-rag/keys"
+```
+
+On Windows any absolute directory works; write the file with
+`[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))`. Keep the file as long as the
+development blobs: without it their `internal` blobs cannot be read.
+
 Service ports (launch profiles): api `https://localhost:7401`, worker `7403`, admin API `7402`, fake gateway `7404`.
 The admin UI will be on `https://localhost:5174`, beside the gateway's 5173, so both stacks can run side by side.
 

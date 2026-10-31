@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.Sources;
@@ -158,7 +159,8 @@ public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, I
                     var quarantine = new BlobKey($"quarantine/{context.SourceId:D}/{body.Sha256}");
                     await using (var stream = body.OpenRead())
                     {
-                        await blobs.PutAsync(quarantine, stream, body.Length, cancellationToken);
+                        // Encrypted by the source's level: the key names none (data-model §7, §9).
+                        await blobs.ForLevel(context.Classification).PutAsync(quarantine, stream, body.Length, cancellationToken);
                     }
 
                     return new FetchOutcome.Quarantined(quarantine, body.Sha256, malware.Signature, malware.Reason);

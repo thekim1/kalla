@@ -10,6 +10,7 @@ using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.TestKit;
@@ -81,7 +82,8 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
             document.Stages.ShouldAllBe(s => s.State == PreviewStageState.Succeeded);
             document.Stages.Where(s => s.Stage is "detect" or "parse" or "clean").ShouldAllBe(s => s.CacheHit, "read from the live cache");
             document.Stages.Single(s => s.Stage == "chunk").CacheHit.ShouldBeFalse("the draft's chunk size gives a new key");
-            var blobs = worker.Services.GetRequiredService<IBlobStore>();
+            // The preview's outputs are encrypted by the source's level (data-model §7); the admin reads them with it.
+            var blobs = worker.Services.GetRequiredService<IBlobStore>().ForLevel(seed.Classification);
             (await TextAsync(blobs, document.Stages.Single(s => s.Stage == "parse").Output!)).ShouldContain("bygglov a");
             (await TextAsync(blobs, document.Stages.Single(s => s.Stage == "chunk").Output!)).ShouldContain("\"chunks\"");
             (await TextAsync(blobs, document.Stages.Single(s => s.Stage == "personal-data").Output!)).ShouldContain("\"spans\"");
