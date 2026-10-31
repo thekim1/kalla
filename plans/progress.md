@@ -55,6 +55,8 @@ Owned by the user, outside the streams ([`p1/README.md`](p1/README.md) §7):
 
 ## P1b Pilot hardening ([`README.md`](README.md) P1b row)
 
+Briefs, checklist (code and live items) and progress files: [`p1b/`](p1b/README.md) (written early, 2026-10-31).
+
 - [ ] Gateway release 1 shipped; pilot-team per-level keys in use ([`gateway-changes/plan.md`](gateway-changes/plan.md))
 - [ ] Preview, advisory evaluation harness, publish with report and keep/roll back
       ([`ingestion-worker/design-engine.md`](ingestion-worker/design-engine.md) §12)
