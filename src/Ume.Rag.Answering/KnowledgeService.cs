@@ -189,7 +189,10 @@ public sealed partial class KnowledgeService(
         var sources = visible.SelectMany(c => snapshot.SourcesByCollection.GetValueOrDefault(c.Id, [])).ToArray();
         if (sources.Length == 0 || await DocumentAsync(documentId, Levels.UpTo(who.Client.Ceiling), sources, ct) is not { Document.Visible: true } row)
         {
-            throw new RetrievalDeniedException(404, KnowledgeCodes.NotFound);
+            throw new RetrievalDeniedException(404, KnowledgeCodes.NotFound)
+            {
+                Reason = DenyReasons.NotFound, ResourceType = "document", ResourceId = documentId.ToString("D"), Action = nameof(RagAction.ReadDocument),
+            };
         }
 
         return (row, visible.First(c => snapshot.SourcesByCollection.GetValueOrDefault(c.Id, []).Contains(row.Document.SourceId)));
@@ -227,7 +230,10 @@ public sealed partial class KnowledgeService(
         if (reason is not null)
         {
             LogGrantRefused(logger, documentId, reason);
-            throw new RetrievalDeniedException(404, KnowledgeCodes.NotFound) { Reason = reason };
+            throw new RetrievalDeniedException(404, KnowledgeCodes.NotFound)
+            {
+                Reason = reason, ResourceType = "document", ResourceId = documentId.ToString("D"), Action = nameof(RagAction.ReadDocument),
+            };
         }
 
         return (row!, collection!);
@@ -344,14 +350,17 @@ public sealed partial class KnowledgeService(
         var decision = policy.Decide(who, ResourceRef.Assistant(assistantId), action, snapshot, confirmed);
         if (!decision.Allowed)
         {
-            throw Denied(decision);
+            throw Denied(decision, "assistant", assistantId, action);
         }
 
         var assistant = snapshot.Assistants[assistantId];
         var linked = assistant.Published!.CollectionIds;
         if (narrow is { Count: > 0 } && narrow.FirstOrDefault(id => !linked.Contains(id)) is var outside && outside != Guid.Empty)
         {
-            throw new RetrievalDeniedException(404, KnowledgeCodes.CollectionNotFound, outside.ToString());
+            throw new RetrievalDeniedException(404, KnowledgeCodes.CollectionNotFound, outside.ToString())
+            {
+                Reason = "collection_not_linked", ResourceType = "collection", ResourceId = outside.ToString("D"), Action = action.ToString(),
+            };
         }
 
         var collections = new List<CollectionEntry>();
@@ -390,12 +399,17 @@ public sealed partial class KnowledgeService(
                 var decision = policy.Decide(who, ResourceRef.Collection(id), RagAction.Search, snapshot, confirmed);
                 if (decision is { Allowed: false, HttpStatus: not 404 })
                 {
-                    throw Denied(decision);
+                    throw Denied(decision, "collection", id, RagAction.Search);
                 }
 
                 if (!decision.Allowed || !snapshot.Collections.TryGetValue(id, out var collection) || !collection.IsLive)
                 {
-                    throw new RetrievalDeniedException(404, KnowledgeCodes.CollectionNotFound, id.ToString());
+                    // One 404 for unknown, unpublished, deleted, outside the audience or above the ceiling (§4.4); the reason is for events only.
+                    throw new RetrievalDeniedException(404, KnowledgeCodes.CollectionNotFound, id.ToString())
+                    {
+                        Reason = decision.Allowed ? "collection_not_live" : decision.Reason, Step = decision.Allowed ? null : decision.Step,
+                        ResourceType = "collection", ResourceId = id.ToString("D"), Action = nameof(RagAction.Search),
+                    };
                 }
 
                 collections.Add(collection);
@@ -494,8 +508,11 @@ public sealed partial class KnowledgeService(
     }
 
     /// <summary>A denial as the route answers it: 404s as <c>not_found</c> (the real reason stays in the decision for events), others by reason.</summary>
-    private static RetrievalDeniedException Denied(AccessDecision decision) =>
-        new(decision.HttpStatus, decision.HttpStatus == 404 ? KnowledgeCodes.NotFound : decision.Reason);
+    private static RetrievalDeniedException Denied(AccessDecision decision, string resourceType, Guid resourceId, RagAction action) =>
+        new(decision.HttpStatus, decision.HttpStatus == 404 ? KnowledgeCodes.NotFound : decision.Reason)
+        {
+            Reason = decision.Reason, Step = decision.Step, ResourceType = resourceType, ResourceId = resourceId.ToString("D"), Action = action.ToString(),
+        };
 
     private static double Ms(long started) => Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 

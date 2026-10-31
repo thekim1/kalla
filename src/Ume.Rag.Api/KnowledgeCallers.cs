@@ -25,20 +25,40 @@ public sealed class KnowledgeFaultException(int status, string code, string deta
 /// <c>Knowledge:OpenToClientKinds</c>. P1 has keys only; tokens and Open WebUI user JWTs come with the chat role (P2 for
 /// knowledge routes). Download grants are read by the content routes themselves.
 /// </summary>
-public sealed class KnowledgeCallers(KeyStore keys, IPolicySnapshotSource snapshots, IOptions<KnowledgeOptions> options, TimeProvider time)
+public sealed class KnowledgeCallers(KeyStore keys, IPolicySnapshotSource snapshots, IOptions<KnowledgeOptions> options, KnowledgeSecurity security,
+    TimeProvider time)
 {
+    /// <summary>The principal of this request, kept for events 5002/5005 (<see cref="KnowledgeProblems"/>).</summary>
+    public const string PrincipalItem = "ume-rag-principal";
+
+    /// <summary>The download grant of this request, kept for events.</summary>
+    public const string GrantItem = "ume-rag-grant";
+
     public async Task<RagPrincipal> AuthenticateAsync(HttpRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var http = request.HttpContext;
         var presented = KeyStore.ExtractKey(request);
         if (presented is null)
         {
+            security.AuthFailed(http, "missing_key", "sk");
             throw new KnowledgeFaultException(401, "missing_key", "An API key is required.");
         }
 
-        var key = await keys.FindAsync(presented, ct) ?? throw new KnowledgeFaultException(401, KeyChecks.InvalidKey, "The API key is not valid.");
+        // Over Api:AuthFailuresPerMinute this address gets only keys already in the cache (identity §6.3 step 1).
+        var throttled = security.IsThrottled(http);
+        var key = throttled ? keys.FindCached(presented) : await keys.FindAsync(presented, ct);
+        if (key is null)
+        {
+            security.AuthFailed(http, KeyChecks.InvalidKey, KeyHasher.KindOf(presented) ?? "sk");
+            throw throttled
+                ? new KnowledgeFaultException(429, "rate_limited", "Too many refused credentials from this address. Wait a minute.")
+                : new KnowledgeFaultException(401, KeyChecks.InvalidKey, "The API key is not valid.");
+        }
+
         if (KeyChecks.Refusal(key, presented, time.GetUtcNow()) is { } refusal)
         {
+            security.AuthFailed(http, refusal, key.Kind, key.Id, key.Prefix, key.ClientId);
             throw refusal == KeyChecks.OwnerInactive
                 ? new KnowledgeFaultException(403, refusal, "The key's client is disabled.")
                 : new KnowledgeFaultException(401, refusal, "The API key cannot be used.");
@@ -63,9 +83,11 @@ public sealed class KnowledgeCallers(KeyStore keys, IPolicySnapshotSource snapsh
         var credential = key.Kind == KeyKinds.Public ? CredentialKind.PublicKey
             : client.Kind == ClientKinds.Internal ? CredentialKind.ServiceKey
             : CredentialKind.SecretKey;
-        return new RagPrincipal(SubjectKind.Application, key.Id.ToString("D"), null, null, client, credential,
+        var who = new RagPrincipal(SubjectKind.Application, key.Id.ToString("D"), null, null, client, credential,
             new KeyEntry(key.Id, key.ClientId, key.Kind, key.TeamId, key.Scopes.AssistantIds, key.Scopes.CollectionIds),
             new HashSet<string>(), MembershipFacts.None, snapshot.Version);
+        http.Items[PrincipalItem] = who;
+        return who;
     }
 }
 
@@ -86,13 +108,32 @@ public sealed class KnowledgeProblems : IEndpointFilter
         }
         catch (KnowledgeFaultException fault)
         {
+            if (fault.Code == DenyReasons.ConfigUnconfirmed)
+            {
+                Security(context).StaleRefused();
+            }
+
             return Problem(context.HttpContext, fault.Status, fault.Code, fault.Message, null, fault.Errors);
         }
         catch (RetrievalDeniedException denied)
         {
-            return Problem(context.HttpContext, denied.Status, denied.Code, Detail(denied.Code), denied.Subject);
+            var http = context.HttpContext;
+            if (denied.Code == DenyReasons.ConfigUnconfirmed)
+            {
+                Security(context).StaleRefused();
+            }
+            else
+            {
+                Security(context).Denied(http, denied, http.Items[KnowledgeCallers.PrincipalItem] as RagPrincipal,
+                    http.Items[KnowledgeCallers.GrantItem] as DownloadGrant, http.RequestServices.GetRequiredService<IPolicySnapshotSource>().Current);
+            }
+
+            return Problem(http, denied.Status, denied.Code, Detail(denied.Code), denied.Subject);
         }
     }
+
+    private static KnowledgeSecurity Security(EndpointFilterInvocationContext context) =>
+        context.HttpContext.RequestServices.GetRequiredService<KnowledgeSecurity>();
 
     public static IResult Problem(HttpContext http, int status, string code, string detail, string? subject, IDictionary<string, string[]>? errors = null)
     {
@@ -105,6 +146,10 @@ public sealed class KnowledgeProblems : IEndpointFilter
         if (code is KnowledgeCodes.SearchUnavailable or KnowledgeCodes.EmbeddingUnavailable)
         {
             http.Response.Headers.RetryAfter = "1";
+        }
+        else if (status == 429)
+        {
+            http.Response.Headers.RetryAfter = "60";
         }
 
         var extensions = new Dictionary<string, object?> { ["code"] = code };

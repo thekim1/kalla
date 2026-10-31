@@ -56,6 +56,18 @@ public sealed class ConfigVersionState(IOptions<ConfigOptions> options, TimeProv
             return;
         }
 
+        RecordStaleRefusal();
+        throw new ApiFaultException(StatusCodes.Status503ServiceUnavailable,
+            "The service cannot confirm its configuration. Try again shortly.",
+            new Dictionary<string, object?> { ["code"] = UnconfirmedCode });
+    }
+
+    /// <summary>
+    /// Counts a <c>config_unconfirmed</c> refusal made elsewhere (the knowledge role's own 503): event 5004 at most once a
+    /// minute with the refusals since the last one, as <see cref="EnsureConfirmed"/> does.
+    /// </summary>
+    public void RecordStaleRefusal()
+    {
         int count;
         DateTimeOffset? lastConfirmedAt;
         var now = time.GetUtcNow();
@@ -79,10 +91,6 @@ public sealed class ConfigVersionState(IOptions<ConfigOptions> options, TimeProv
         {
             SecurityEvents.ConfigStaleRefused(_security, environment.ApplicationName, Version, lastConfirmedAt, count);
         }
-
-        throw new ApiFaultException(StatusCodes.Status503ServiceUnavailable,
-            "The service cannot confirm its configuration. Try again shortly.",
-            new Dictionary<string, object?> { ["code"] = UnconfirmedCode });
     }
 
     /// <summary>The database confirmed <paramref name="version"/> (applied, or unchanged since the last check).</summary>
