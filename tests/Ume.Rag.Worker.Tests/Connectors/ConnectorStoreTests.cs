@@ -277,6 +277,9 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
 
         var retried = (await rig.Traversal.ProcessAsync(context, row.UrlHash, Ct)).ShouldBeOfType<CrawlFetchResult.Done>();
         retried.Outcome.ShouldBeOfType<FetchOutcome.Content>().Raw.Key.ShouldBe(key);
+        // The row stays released until the engine's document commit marks it idle.
+        (await store.GetAsync(context.Run.SourceId, context.Run.Classification, row.UrlHash, Ct))!.State.ShouldBe(FrontierState.Released);
+        await rig.CommitAsync(context, retried);
         var admitted = (await store.GetAsync(context.Run.RunId, Ct))!.Admitted;
         // A duplicate delivery of the same job finds the row done and does nothing.
         (await rig.Traversal.ProcessAsync(context, row.UrlHash, Ct)).ShouldBeOfType<CrawlFetchResult.Stale>();
@@ -505,6 +508,40 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         (await Sql.ScalarAsync<long>(database.Connection(null),
             """SELECT count(*) FROM content."CrawlFrontier" WHERE "SourceId" = $1 AND "Depth" = -1 AND "SitemapLastMod" IS NULL AND "RunId" = $2""", source, second.Run.RunId))
             .ShouldBe(2);
+    }
+
+    /// <summary>
+    /// to-verify #10 in P1 (connectors §6.0): the frontier upsert statement through the Npgsql store, 10,000 URLs of one
+    /// source admitted in listing batches of 1,000, first as new rows and then again by the next run (the update branch).
+    /// The rate goes to the test output; it is a development-machine number, not a capacity figure.
+    /// </summary>
+    [Fact]
+    public async Task Ten_thousand_urls_are_admitted_and_admitted_again_by_the_next_run()
+    {
+        var store = new PostgresCrawlStore(Worker);
+        var first = await StartRunAsync(store, 20_000);
+        var urls = Enumerable.Range(0, 10_000).Select(i => new FrontierAdmission($"https://www.umea.se/sida/{i}.4.{i:x12}.html", "www.umea.se", 0, false)).ToList();
+        async Task<TimeSpan> AdmitAllAsync(CrawlRunKey run)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var admitted = 0;
+            foreach (var batch in urls.Chunk(1000))
+            {
+                admitted += (await store.AdmitAsync(run, batch, Ct)).Admitted.Count;
+            }
+
+            admitted.ShouldBe(urls.Count);
+            return watch.Elapsed;
+        }
+
+        var inserted = await AdmitAllAsync(first);
+        var second = new CrawlRunKey(first.SourceId, first.Classification, Guid.NewGuid());
+        await store.StartAsync(new CrawlRunRecord { RunId = second.RunId, Classification = second.Classification, SourceId = second.SourceId, MaxPages = 20_000, MaxDepth = 10 }, Ct);
+        var updated = await AdmitAllAsync(second);
+
+        (await store.GetAsync(second.RunId, Ct))!.Admitted.ShouldBe(10_000);
+        TestContext.Current.TestOutputHelper?.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"frontier upsert: 10,000 new rows in {inserted.TotalMilliseconds:F0} ms ({10_000 / inserted.TotalSeconds:F0}/s); 10,000 rows of the next run in {updated.TotalMilliseconds:F0} ms ({10_000 / updated.TotalSeconds:F0}/s)"));
     }
 
     private static async Task<CrawlRunKey> StartRunAsync(PostgresCrawlStore store, int maxPages)
