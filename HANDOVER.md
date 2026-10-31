@@ -83,6 +83,25 @@ https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM (not updated since session 8; 
 | Grading (L8) | `scripts/grading/` | done (#99); run in the live block (#100) |
 | Schema (stream B) | `src/Ume.Rag.Infrastructure/Persistence/**` | part 1 (#76), part 2 (#93); pipeline templates seeded (#89) |
 
+## Session 10 in progress (2026-10-31)
+
+- Reviewed and approved B's **#112** (retrieval core, J5; B merges). Follow-ups asked: flaky plan test, `Kind = 'child'`
+  in V, and the **keyword stop list** (to-verify #5: K 375–659 ms p95 at 100k chunks), now a P1b item 3 code item for B
+  (Decisions "Keyword stop list before the pilot crawl", `13aabcf`).
+- CHANGELOG Unreleased since 0.1.0 merged (#113).
+- Design sync of #89–#108 done (`30f629b`). Found: the parse cache key lacked the parser build (against simplification
+  §2) → fix added to `a/9-engine-drift-slicing`. Open for later: #89 seeds a new built-in template version straight as
+  *published* (no publish plan / `reprocess`; check against engine §13.3 when the first v2 template ships); demote URL
+  form (asked on #102); `rag_count_retrievals` level overwrite (#114).
+- Running (worktrees): `../rag-a1` `a/9-engine-crawl` (crawl wiring, profile → canonicaliser, `reprocess`/`retry-failed`,
+  `jfif`); `../rag-a2` `a/9-engine-drift-slicing` (drift sweep, parse slicing/resume, preview-first gate);
+  `../rag-a3` `a/10-commands` (all P1 command kinds); `../rag-a4` `a/p1b-5-preview` (preview + preflight,
+  `robots.disallow` text); `../rag-sync` `sync-session10` (fold deviations of #89–#108 into the design, doc only).
+  Shared brief: session scratchpad `brief-common.md` (gone after the session; the rules are in "How we work").
+- **CI is local only** (user, 2026-10-31: GitHub Actions credits exhausted). Never add the `ci` label, dispatch a
+  workflow or run `release.yml`. Every PR is verified locally (full build + suites under `taskset -c 0,1` after merging
+  `origin/main`, output in the PR body) and merged on that evidence. Anything that would need the runner goes to the user. Actions are switched off on the repo (`thekim1`), so the ownership check runs locally too: `git diff --name-only --no-renames origin/main...HEAD | python3 -I scripts/check-ownership.py <branch>`.
+
 ## Next step (start of session 10)
 
 Start with `plans/p1/prompts/main-session.md`, then this list. **First check GitHub** (open PRs, issues, comments).

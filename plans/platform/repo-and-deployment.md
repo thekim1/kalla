@@ -284,7 +284,7 @@ Admin settings (admin design §2.2–§2.3, §4.10): `Admin:GatewayAdminUrl` (cr
 P2 `OrgSync:MaxAgeHours` 24 with the Graph member-group lookup (identity design §2.1); key `OrgSync__DataApiKey`, §6.3).
 
 Worker settings besides `Worker:*` (connectors design §7, §8): `Crawl:AllowedPrivateRanges` (fed from
-`UME_RAG_CRAWL_ALLOW`, §7.1); P2 with the renderer `Renderer:MaxPages` (2). Platform-wide crawl values live in `config."Settings".Crawl`.
+`UME_RAG_CRAWL_ALLOW`, §7.1); `Crawl:CompletenessRule` (`Ratio` default, `Strict`; connectors design §5.4, PR #101); P2 with the renderer `Renderer:MaxPages` (2). Platform-wide crawl values live in `config."Settings".Crawl`.
 
 Platform settings (data-model §5): `Config:MaxUnconfirmedSeconds` (90 s grace window for security-relevant decisions
 on every service).

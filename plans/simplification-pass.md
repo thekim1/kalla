@@ -367,7 +367,7 @@ is routed dynamically (HTML extraction in the worker; PDF fast path, Docling or 
   decides the PDF path (pypdfium2 text layer, Docling layout, OCR per page). Editors never see a graph.
 - Built-in presets live in code next to `IPipelineNode`; a profile learned for a host overrides the preset.
 - Acceptance test (P1): the umea.se example page extracts to exactly its main text without share widget, short URL
-  line and child-link list, with breadcrumb "Kommun och politik › Kommunens organisation › Förvaltningar och
+  line and child-link list, with breadcrumb "Kommun och politik › Kommunens organisation › Förvaltningar,
   verksamheter › Teknik och fastighet" (path to verify on the live page) and date 2026-01-15; a fixture set of ≈ 20
   saved umea.se pages (HTML and PDF) is checked in as a regression corpus.
 
