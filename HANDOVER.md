@@ -227,8 +227,9 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
   dependencies). It makes #60 red (only `admin-ui`; every other check green) and any PR that runs that job.
 
 **Next:**
-1. Merge #57, #58, #60 (user's go-ahead each). Tick H5 in `progress-a.md` from #60's evidence; remove worktrees
-   `../rag-a14`, `../rag-a15`.
+1. **Done 2026-10-31:** #57, #58, #60 merged (#60 with only `admin-ui` red from #61, the user's call); worktrees gone.
+   Tick H5 in `progress-a.md` from #60's evidence in the #27 PR. `gh pr merge --admin` is refused by the classifier
+   (a branch-protection bypass); a plain merge goes through.
 2. #27 (ClamAV `1.4.6_base`) on or after 2026-11-02 through an implementor.
 3. Before the tag: decide #91 (Syft lists neither pgvector nor ClamAV itself; recommended: accept and say so in the
    release notes); `## 0.1.0` in `CHANGELOG.md`; reword `docs/production-setup.md` ("until v0.1.0 there is no release
