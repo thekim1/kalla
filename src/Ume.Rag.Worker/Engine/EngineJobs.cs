@@ -29,9 +29,9 @@ public static class SyncJobs
     public static TEnum Parse<TEnum>(string text) where TEnum : struct, Enum =>
         JsonSerializer.Deserialize<TEnum>(JsonSerializer.Serialize(text), ContractJson.Options);
 
-    /// <summary>A run's own <c>sync</c> continuation in <paramref name="phase"/>.</summary>
+    /// <summary>A run's own <c>sync</c> continuation in <paramref name="phase"/>; a forced <c>reprocess</c> carries its bypass on (<paramref name="bypassFrom"/>).</summary>
     public static JobRequest Continuation(Guid sourceId, Guid runId, Guid departmentId, string classification, string kind, string trigger, SyncPhase phase,
-        bool resumeFromCheckpoint = false) =>
+        bool resumeFromCheckpoint = false, string? bypassFrom = null) =>
         new(JobClasses.Sync, departmentId, classification, ContractJson.Serialize(new SyncPayload
         {
             SourceId = sourceId,
@@ -40,6 +40,8 @@ public static class SyncJobs
             Trigger = Parse<RunTrigger>(trigger),
             Phase = phase,
             ResumeFromCheckpoint = resumeFromCheckpoint,
+            Force = bypassFrom is not null,
+            FromStage = bypassFrom,
         }))
         {
             DedupKey = JobDedupKeys.SyncContinuation(sourceId, runId),
@@ -92,9 +94,12 @@ public static class SyncJobs
             RunId = runId,
         };
 
-    /// <summary>A <c>parse</c> job; <paramref name="slice"/> above 0 is a yielded job's continuation (engine design §9.5).</summary>
+    /// <summary>
+    /// A <c>parse</c> job; <paramref name="slice"/> above 0 is a yielded job's continuation (engine design §9.5);
+    /// <paramref name="bypassFrom"/> is a forced reprocess's bypass (<see cref="StageBypass"/>).
+    /// </summary>
     public static JobRequest Parse(SourceContext source, DocumentRow document, Guid executionId, Guid pipelineVersionId, Guid runId, byte[] detectKey,
-        int slice = 0) =>
+        int slice = 0, string? bypassFrom = null) =>
         new(JobClasses.Parse, source.DepartmentId, document.Classification, ContractJson.Serialize(new ParsePayload
         {
             DocumentId = document.Id,
@@ -104,6 +109,7 @@ public static class SyncJobs
             Stage = StageNames.Parse,
             InputKey = StageKeys.ToHex(detectKey),
             Slice = slice,
+            BypassFrom = bypassFrom,
         }))
         {
             DedupKey = JobDedupKeys.Parse(document.Id, executionId),
