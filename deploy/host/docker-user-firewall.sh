@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Host firewall for the Compose networks (plans/platform/repo-and-deployment.md §6.1): egress per network in Docker's
-# DOCKER-USER chain, and no new connections from any of them to the host itself. Idempotent: it rebuilds its own two
+# DOCKER-USER chain, and no new connections from any of them to the host itself (except the allow-listed endpoints, when
+# the gateway or Keycloak runs on the same machine). Idempotent: it rebuilds its own two
 # chains in one iptables-restore transaction and jumps to them from DOCKER-USER and INPUT once. rag-firewall.service
 # runs it after Docker starts and every 15 minutes (the allow-lists are host names, resolved when it runs).
 #
@@ -145,6 +146,7 @@ for spec in ${extra[@]+"${extra[@]}"}; do add "${spec%%=*}" "${spec#*=}"; done
 
 # The ruleset, one iptables-restore transaction: DOCKER-USER sees forwarded traffic (a container to anywhere but the
 # host), INPUT traffic to the host's own addresses.
+input_allows=()  # allowed endpoints that may be this host's own addresses (a gateway on the same machine)
 out=("*filter" ":$chain - [0:0]" ":$input_chain - [0:0]" "-A $chain -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN")
 for n in "${names[@]}"; do
   s="${subnet[$n]}"
@@ -157,7 +159,13 @@ for n in "${names[@]}"; do
   while read -r host port; do
     [ -n "$host" ] || continue
     resolve "$host"
-    for ip in "${ips[@]}"; do out+=("-A $chain -s $s -d $ip -p tcp --dport $port -j RETURN"); done
+    for ip in "${ips[@]}"; do
+      out+=("-A $chain -s $s -d $ip -p tcp --dport $port -j RETURN")
+      # The same endpoint published on this host by a container (the gateway or Keycloak next to RAG): Docker's DNAT
+      # has already rewritten the destination, so match the original one.
+      out+=("-A $chain -s $s -p tcp -m conntrack --ctorigdst $ip --ctorigdstport $port -j RETURN")
+      input_allows+=("-A $input_chain -s $s -d $ip -p tcp --dport $port -j RETURN")
+    done
   done <<<"${allows[$n]:-}"
   if [ "$n" = crawl ]; then
     for cidr in $(env_value UME_RAG_CRAWL_ALLOW | tr ',' ' '); do out+=("-A $chain -s $s -d $cidr -j RETURN"); done
@@ -167,7 +175,9 @@ for n in "${names[@]}"; do
     out+=("-A $chain -s $s ${reject[*]}")
   fi
 done
-out+=("# no new connections to the host" "-A $input_chain -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN")
+out+=("# no new connections to the host, except an allowed endpoint the host itself serves (gateway, Keycloak on the same machine)"
+  "-A $input_chain -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN")
+out+=(${input_allows[@]+"${input_allows[@]}"})
 for n in "${names[@]}"; do out+=("-A $input_chain -s ${subnet[$n]} ${reject[*]}"); done
 out+=("COMMIT")
 

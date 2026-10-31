@@ -1,15 +1,15 @@
 name: Parser
 # The parser sidecar and its contract (P0 checklist #13; plans/parser/design.md §15.1, §15.2), out of verify.yml so
 # that only a change to the parser, its contract, the parser contract tests and fixtures, the worker's parser client or
-# this workflow builds the 3 GB parser image. Like verify.yml it runs on request: on a pull request only while it carries
-# the label `ci`, never on a push to main, and from the Actions tab (workflow_dispatch) or release.yml. The jobs skip
+# this workflow builds the 3 GB parser image. Like verify.yml it runs on every pull request that is not a draft,
+# never on a push to main, and from the Actions tab (workflow_dispatch) or release.yml. The jobs skip
 # when nothing of that changed: a skipped job counts as passed for a required check, while a workflow left out by an
 # `on.*.paths` filter never reports and would block a pull request that requires it.
 # Jobs: parser (lock, lint, unit tests, schemas, pip-audit on the runner), parser-image (the image's test target, whose
 # tests run during the build with no network) and contract (Ume.Rag.ContractTests against the runtime image).
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
   workflow_call:
 permissions:
@@ -19,9 +19,9 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   changes:
-    # On a pull request only with the label `ci`; the other jobs need this one, so they skip with it.
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci') && (github.event.action != 'labeled' || github.event.label.name == 'ci')
-    runs-on: ubuntu-latest
+    # On a pull request only when it is not a draft; the other jobs need this one, so they skip with it.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: [self-hosted, linux, x64]
     outputs:
       parser: ${{ steps.filter.outputs.parser }}
     steps:
@@ -49,7 +49,7 @@ jobs:
     # that need the models and Tesseract skip here and run in parser-image.
     needs: changes
     if: needs.changes.outputs.parser == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     defaults:
       run:
         working-directory: src/parser
@@ -88,7 +88,7 @@ jobs:
     # Actions cache, shared with the contract job (the blobs are content-addressed, so the two scopes store them once).
     needs: changes
     if: needs.changes.outputs.parser == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v4
@@ -113,7 +113,7 @@ jobs:
     # the image tests skip and the blob store tests run.
     needs: changes
     if: needs.changes.outputs.parser == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - name: Free runner disk (in the background)

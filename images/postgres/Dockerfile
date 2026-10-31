@@ -7,13 +7,6 @@
 # pgvector 0.8.7 on PostgreSQL 17 (Debian trixie), pushed 2026-10-01; the same pin as the AppHost and TestKit.
 FROM pgvector/pgvector:0.8.7-pg17-trixie@sha256:7a7e9f22015b67edb4bef5c59daeebcd7e74bfa570df6ce60ae01237c8648a84
 
-ARG VERSION=dev
-ARG REVISION=unknown
-LABEL org.opencontainers.image.source="https://github.com/thekim1/ume-rag-platform" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.title="ume-rag/postgres"
-
 # From the PGDG repository the base image already configures. 2.59.3 (upstream 2026-10-04, PGDG trixie build
 # 2026-10-05); 2.60.0 is not yet 7 days old. The package's /etc/pgbackrest.conf is replaced by the file below.
 RUN apt-get update \
@@ -24,3 +17,12 @@ RUN apt-get update \
 COPY --chmod=0644 deploy/pgbackrest/pgbackrest.conf /etc/pgbackrest/pgbackrest.conf
 
 USER 999:999
+
+# Last on purpose: every RUN after an ARG sees it as an environment variable, so a new REVISION (each commit) would
+# invalidate the cache of the layers above. Only the labels read these values.
+ARG VERSION=dev
+ARG REVISION=unknown
+LABEL org.opencontainers.image.source="https://github.com/thekim1/ume-rag-platform" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.title="ume-rag/postgres"

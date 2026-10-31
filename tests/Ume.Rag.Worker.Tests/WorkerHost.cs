@@ -20,12 +20,14 @@ using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Commands;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Jobs;
+using Ume.Rag.Worker.Tests.Blobs;
 
 namespace Ume.Rag.Worker.Tests;
 
 /// <summary>
 /// A worker as Program.cs builds it, on the test server, as <c>ume_rag_worker</c>, with short timings: heartbeat 1 s,
-/// instance timeout 3 s, reaper 1 s, poll 1 s, stop grace 5 s, no maintenance loop; with <c>engine</c> also the pipeline
+/// instance timeout 3 s, reaper 1 s, poll 1 s, stop grace 5 s, no maintenance loop, the test run's blob master keys
+/// (<see cref="TestBlobKeys"/>); with <c>engine</c> also the pipeline
 /// engine as Program.cs adds it (<c>AddRagEngine</c>). <see cref="KillAsync"/> tears it down
 /// without a clean stop, as a crash would: no lease is released and the instance row stays.
 /// </summary>
@@ -62,6 +64,7 @@ internal sealed class WorkerHost : IAsyncDisposable
             ["Worker:PollSeconds"] = Invariant(PollSeconds),
             ["Worker:StopGraceSeconds"] = "5",
             ["Worker:Maintenance"] = "false",
+            ["KeyProvider:Directory"] = TestBlobKeys.Directory,
         };
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
         {

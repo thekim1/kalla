@@ -48,6 +48,10 @@ public sealed class ParseOptions
     [Range(1_000, 120_000)]
     public int DeadlineMs { get; set; } = 110_000;
 
+    /// <summary>A <c>parse</c> job yields at the next range boundary after this long (<c>Worker:Parse:SliceSeconds</c>; engine design §9.5: 10 minutes).</summary>
+    [Range(0, 3_600)]
+    public int SliceSeconds { get; set; } = 600;
+
     public static int DefaultRangePages(string strategy) => strategy switch
     {
         ParseStrategies.TextLayer or ParseStrategies.DoclingText or ParseStrategies.DoclingTables => 20,

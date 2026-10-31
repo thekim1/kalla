@@ -207,6 +207,10 @@ public sealed class Source
     public bool ContainsThirdPartyText { get; set; } = true;
     public string State { get; set; } = SourceStates.Active;
     public DateTimeOffset? DeletedAt { get; set; }
+
+    /// <summary>Set by the database (<c>DEFAULT now()</c>); the scheduler counts a never-run source's first schedule from it.</summary>
+    public DateTimeOffset CreatedAt { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
     public uint Version { get; set; }

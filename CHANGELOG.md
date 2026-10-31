@@ -24,6 +24,22 @@ P1a code on FakeGateway and fixtures (code first, live testing last); nothing de
 - Pilot stack on Keycloak with per-service gateway keys and the P1a local run book (#94).
 - Scripts: gold-set grading (#99), umea.se sitemap inventory (#111); R1 harness with `perf.yml`, `evaluation.yml`,
   `e2e.yml` (#103, #105).
+- Worker commands for every P1 kind: deletion decisions, release hold, PII clearance, `reprocess-document`, site-profile
+  edits and rollback (#115).
+- Preview class: `stage-preview` with isolation, `preflight`, `publish-plan` (#117, #131).
+- Engine: crawl sync through the engine, `reprocess` and `retry-failed`, the nightly drift sweep, parse slicing and
+  resume from stored ranges, parse cache keyed by parser build (#121, #122); publish with per-document swap, previous
+  sets kept 14 days, rollback swap-back, `publish-report` (#131); one `EnsureCurrent` decision with swap-back in the
+  drift sweep (#138); forced `reprocess` and `reprocess-document` bypass the stage caches from `fromStage` (#140).
+- Source settings-change effects: a scope or identity change starts a `config-change` sync; narrowed scope and
+  site-profile `excludedTypes` remove documents without fetching (`scope-narrowed`); identity changes re-sync
+  (`identity-changed`) (#136, #141).
+- Admin-made parse rules matched like the built-in ones, also in the preview's parse key (#133, #136).
+- Evaluation class: on-demand three-way runs, `publish-report`, `nightly` with the recall@10 alert (#128); generated
+  sets with filtering on FakeGateway (#130); set triggers (first syncs, weekly, document count +25 %) and the
+  reproducibility test (#137).
+- Pilot stack: test-host run book, the Open WebUI feedback service account and `deploy/openwebui-feedback-key.sh`,
+  the runbook's public-records routes, `deploy/tests/pilot-stack.sh` (#135).
 
 ### Changed
 
@@ -31,6 +47,12 @@ P1a code on FakeGateway and fixtures (code first, live testing last); nothing de
   upgrade**, because the change-detection hash is version-tagged (#107).
 - CI runs `verify.yml` and `parser.yml` on a pull request only while it carries the label `ci`; the nightly and weekly
   schedules are off (#109).
+- Site profiles are keyed by host without a port (#136).
+- Embedding requests carry at most `Worker:Embed:MaxTokensPerRequest` tokens (default 6000, was 16,384), so a batch
+  stays under the gateway's per-request context-window check; files waiting more than 24 h for a ClamAV verdict end
+  `failed` (`clamav.unavailable`) (#143).
+- Open WebUI: password sign-in off (`ENABLE_PASSWORD_AUTH=false`, on only while the key script runs) and
+  `DEFAULT_USER_ROLE=user` for OIDC sign-ins (#135).
 
 ## 0.1.0 (2026-10-31)
 

@@ -5,40 +5,79 @@ using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
+using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Deletion;
 using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing.Detect;
+using SiteProfile = Ume.Rag.Pipelines.SiteProfiles.SiteProfile;
 
 namespace Ume.Rag.Worker.Commands;
 
 /// <summary>
 /// What a new applied site-profile version of a (level, host) sets off (engine design §2.3, §9.2, §15; connectors design
-/// §5.6): a <c>sync</c> of kind <c>reprocess</c>, trigger <c>site-profile</c>, for each active source with live HTML
+/// §5.6, §12.3): a <c>sync</c> of kind <c>reprocess</c>, trigger <c>site-profile</c>, for each active source with live HTML
 /// documents on the host at that level, enqueued in the command's transaction with the admin's key for a re-process
 /// (<see cref="JobDedupKeys.Sync"/>). The reprocess run iterates the source's live documents and runs <c>EnsureCurrent</c>,
 /// which re-extracts only the HTML documents of the host (their wanted set names the new version) from stored raw content.
+/// When the version changes the host's <c>excludedTypes</c> (scope) or <c>identityRule</c>/<c>ignoreQueryParams</c>
+/// (identity), each crawl source with live documents of any type on the host gets a <c>sync</c> of kind <c>sync</c> instead:
+/// its traversal admits by the new profile, its fetches run <c>EnsureCurrent</c> on what they reach, and its reconcile
+/// removes the documents of a newly excluded type without a request (<c>scope-narrowed</c>) and the identities the new
+/// rules no longer produce (<c>identity-changed</c>), both exempt (<see cref="Connectors.Deletion.SettingsCandidates"/>).
+/// A document is on the host when its URL's host, without a port or a trailing dot, is the profile's key
+/// (<see cref="Connectors.Urls.SiteProfileHost"/>; stored URLs are canonical, so their hosts are lower-case A-labels already).
 /// </summary>
 internal static class SiteProfileFollowUp
 {
     private const string SourcesSql = $"""
-        SELECT DISTINCT d."SourceId", s."Classification", c."DepartmentId"
+        SELECT DISTINCT d."SourceId", s."Classification", c."DepartmentId", s."Type"
         FROM content."Documents" d
         JOIN config."Sources" s ON s."Id" = d."SourceId"
         JOIN config."Collections" c ON c."Id" = s."CollectionId"
         WHERE d."Classification" = $1 AND d."IdentityKind" = '{IdentityKinds.Url}' AND d."DeletedAt" IS NULL
-          AND d."MediaType" IN ('{ProcessingMediaTypes.Html}', '{ProcessingMediaTypes.Xhtml}')
-          AND lower(substring(d."Url" FROM '^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]+)')) = $2
+          AND (d."MediaType" IN ('{ProcessingMediaTypes.Html}', '{ProcessingMediaTypes.Xhtml}') OR ($3 AND s."Type" = '{SourceTypes.Crawl}'))
+          AND regexp_replace(lower(substring(d."Url" FROM '^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]+)')), '\.?(:[0-9]*)?$', '') = $2
           AND s."State" = 'active' AND s."DeletedAt" IS NULL AND c."DeletedAt" IS NULL
         ORDER BY d."SourceId"
         """;
 
-    /// <summary>Enqueues the reprocess syncs in <paramref name="commit"/>.</summary>
-    public static async Task EnqueueAsync(EngineCommit commit, IJobQueue queue, string classification, string host, CancellationToken cancellationToken)
+    private const string ProfileSql = """SELECT "Profile"::text FROM content."SiteProfileVersions" WHERE "Id" = $1""";
+
+    /// <summary>The profile of a version, or null for none.</summary>
+    public static async Task<SiteProfile?> ProfileAsync(EngineCommit commit, Guid? versionId, CancellationToken cancellationToken)
+    {
+        if (versionId is not { } id || await CommandCommit.ScalarAsync(commit, ProfileSql, cancellationToken, Db.P(id)) is not string json)
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(json);
+        return ContractJson.Deserialize<SiteProfile>(document.RootElement);
+    }
+
+    /// <summary>
+    /// Whether the crawl's scope or identity on the host changes from <paramref name="before"/> (null: the host had no
+    /// profile, so the default <c>excludedTypes</c>) to <paramref name="after"/> (connectors design §12.3).
+    /// </summary>
+    public static bool ChangesCrawl(SiteProfile? before, SiteProfile after)
+    {
+        ArgumentNullException.ThrowIfNull(after);
+        return !SameSet(before?.ExcludedTypes ?? CrawlScope.DefaultExcludedTypes, after.ExcludedTypes)
+            || !SameSet(before?.IgnoreQueryParams ?? [], after.IgnoreQueryParams)
+            || before?.IdentityRule != after.IdentityRule;
+    }
+
+    /// <summary>Enqueues the follow-up syncs in <paramref name="commit"/>; <paramref name="crawlSync"/>: <see cref="ChangesCrawl"/>.</summary>
+    public static async Task EnqueueAsync(EngineCommit commit, IJobQueue queue, string classification, string host, bool crawlSync,
+        CancellationToken cancellationToken)
     {
         var jobs = new List<JobRequest>();
-        await using (var command = new NpgsqlCommand(SourcesSql, commit.Connection, commit.Transaction) { Parameters = { Db.P(classification), Db.P(host) } })
+        await using (var command = new NpgsqlCommand(SourcesSql, commit.Connection, commit.Transaction)
+        {
+            Parameters = { Db.P(classification), Db.P(host), Db.P(crawlSync) },
+        })
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             while (await reader.ReadAsync(cancellationToken))
@@ -47,7 +86,7 @@ internal static class SiteProfileFollowUp
                 jobs.Add(new JobRequest(JobClasses.Sync, reader.GetGuid(2), reader.GetString(1), ContractJson.Serialize(new SyncPayload
                 {
                     SourceId = sourceId,
-                    Kind = SyncKind.Reprocess,
+                    Kind = crawlSync && reader.GetString(3) == SourceTypes.Crawl ? SyncKind.Sync : SyncKind.Reprocess,
                     Trigger = RunTrigger.SiteProfile,
                 }))
                 {
@@ -58,6 +97,9 @@ internal static class SiteProfileFollowUp
 
         await commit.EnqueueAsync(queue, jobs, cancellationToken);
     }
+
+    private static bool SameSet(IReadOnlyList<string> a, IReadOnlyList<string> b) =>
+        new HashSet<string>(a, StringComparer.OrdinalIgnoreCase).SetEquals(b);
 }
 
 /// <summary>The rows both site-profile commands lock and write (data-model §2.2; connectors design §5.6).</summary>
@@ -196,11 +238,12 @@ public sealed class EditSiteProfileHandler(JobDatabase database, IJobQueue queue
         }
 
         var actor = edit.DecidedBy ?? DeletionProposalLifecycle.System;
+        var crawlSync = SiteProfileFollowUp.ChangesCrawl(await SiteProfileFollowUp.ProfileAsync(commit, profile.AppliedVersionId, cancellationToken), edit.Profile);
         var versionId = Guid.CreateVersion7();
         var number = (int)(await CommandCommit.ScalarAsync(commit, VersionSql, cancellationToken,
             Db.P(versionId), Db.P(profile.Id), Db.P(ContractJson.Serialize(edit.Profile)), Db.P(actor), Db.P(now.ToUniversalTime())))!;
         await SiteProfileRows.ApplyAsync(commit, profile, versionId, edit.PresetId, now, cancellationToken);
-        await SiteProfileFollowUp.EnqueueAsync(commit, queue, level, edit.Host, cancellationToken);
+        await SiteProfileFollowUp.EnqueueAsync(commit, queue, level, edit.Host, crawlSync, cancellationToken);
         return await CommandCommit.CompleteAsync(commit, queue, context.Job, identity,
             new SiteProfileCommandResult { SiteProfileId = profile.Id, AppliedVersionId = versionId, AppliedVersion = number }, cancellationToken);
     }
@@ -247,10 +290,12 @@ public sealed class RollbackSiteProfileHandler(JobDatabase database, IJobQueue q
 
         if (versionId != profile.AppliedVersionId)
         {
+            var crawlSync = SiteProfileFollowUp.ChangesCrawl(await SiteProfileFollowUp.ProfileAsync(commit, profile.AppliedVersionId, cancellationToken),
+                (await SiteProfileFollowUp.ProfileAsync(commit, versionId, cancellationToken))!);
             await CommandCommit.ExecuteAsync(commit, ApplySql, cancellationToken,
                 Db.P(versionId), Db.P(now.ToUniversalTime()), Db.P(rollback.DecidedBy ?? DeletionProposalLifecycle.System));
             await SiteProfileRows.ApplyAsync(commit, profile, versionId, null, now, cancellationToken);
-            await SiteProfileFollowUp.EnqueueAsync(commit, queue, profile.Classification, profile.Host, cancellationToken);
+            await SiteProfileFollowUp.EnqueueAsync(commit, queue, profile.Classification, profile.Host, crawlSync, cancellationToken);
         }
 
         return await CommandCommit.CompleteAsync(commit, queue, context.Job, identity,

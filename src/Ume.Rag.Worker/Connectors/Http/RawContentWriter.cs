@@ -1,6 +1,7 @@
 using System.Net;
 using AngleSharp.Html.Parser;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Worker.Connectors.Changes;
 using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Malware;
@@ -49,7 +50,8 @@ public sealed class RawContentWriter(IMalwareScanner scanner, IBlobStore blobs, 
                     var quarantine = new BlobKey($"quarantine/{context.SourceId:D}/{body.Sha256}");
                     await using (var stream = body.OpenRead())
                     {
-                        await blobs.PutAsync(quarantine, stream, body.Length, cancellationToken);
+                        // Encrypted by the source's level: the key names none (data-model §7, §9).
+                        await blobs.ForLevel(context.Classification).PutAsync(quarantine, stream, body.Length, cancellationToken);
                     }
 
                     return new(new FetchOutcome.Quarantined(quarantine, body.Sha256, malware.Signature, malware.Reason), null);

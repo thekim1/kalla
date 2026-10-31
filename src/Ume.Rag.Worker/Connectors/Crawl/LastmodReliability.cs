@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Ume.Rag.Pipelines.SiteProfiles;
+using Ume.Rag.Worker.Connectors.Urls;
 
 namespace Ume.Rag.Worker.Connectors.Crawl;
 
@@ -14,7 +15,7 @@ public sealed record AppliedSiteProfile(Guid SiteProfileId, int Number, string? 
 public interface ISiteProfileReader
 {
     /// <param name="classification">The level.</param>
-    /// <param name="host">The lower-case host (A-label) without a port, as <c>SiteProfiles.Host</c>.</param>
+    /// <param name="host">The profile's key (<see cref="SiteProfileHost"/>: the canonical host without a port), as <c>SiteProfiles.Host</c>.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     Task<AppliedSiteProfile?> GetAppliedAsync(string classification, string host, CancellationToken cancellationToken);
 }
@@ -37,7 +38,7 @@ public sealed class LastmodReliability(ISiteProfileReader profiles, TimeProvider
     {
         ArgumentNullException.ThrowIfNull(classification);
         ArgumentNullException.ThrowIfNull(authority);
-        var host = HostOf(authority);
+        var host = SiteProfileHost.OfAuthority(authority);
         var key = (classification, host);
         var now = time.GetUtcNow();
         if (_cache.TryGetValue(key, out var cached) && now - cached.At < CacheFor)
@@ -48,13 +49,5 @@ public sealed class LastmodReliability(ISiteProfileReader profiles, TimeProvider
         var reliable = (await profiles.GetAppliedAsync(classification, host, cancellationToken))?.Profile.LastmodReliable == true;
         _cache[key] = (reliable, now);
         return reliable;
-    }
-
-    /// <summary>The host of an authority: a <c>:port</c> dropped (IPv6 literals keep their brackets).</summary>
-    public static string HostOf(string authority)
-    {
-        ArgumentNullException.ThrowIfNull(authority);
-        var colon = authority.LastIndexOf(':');
-        return colon > 0 && !authority.EndsWith(']') ? authority[..colon] : authority;
     }
 }

@@ -29,6 +29,65 @@ public sealed record CanonicalizerOptions
 
     /// <summary>The host's verified identity rule (rule 10); <see cref="IdentityRule.None"/> unless the profile verified it.</summary>
     public IdentityRule IdentityRule { get; init; }
+
+    /// <summary>
+    /// The site profiles' rules by host (lower-case, without a port, as <c>SiteProfiles.Host</c>; connectors design §5.6):
+    /// a URL on one of these hosts also drops the host's <c>ignoreQueryParams</c> and, when set, maps its path by the host's
+    /// verified identity rule instead of <see cref="IdentityRule"/>.
+    /// </summary>
+    public IReadOnlyDictionary<string, HostCanonicalRules> Hosts { get; init; } = new Dictionary<string, HostCanonicalRules>(StringComparer.Ordinal);
+}
+
+/// <summary>A host's canonicalisation inputs from its applied site profile (§3.1 rules 7 and 10, §5.6).</summary>
+/// <param name="IgnoreQueryParams">The profile's <c>ignoreQueryParams</c> (case-insensitive; a trailing * is a prefix).</param>
+/// <param name="Identity">The profile's identity rule, only when verified; null keeps the path.</param>
+public sealed record HostCanonicalRules(IReadOnlyCollection<string> IgnoreQueryParams, PathIdentityRule? Identity);
+
+/// <summary>
+/// A site profile's identity rule (<c>identityRule</c>): a .NET regular expression over the URL path and its replacement
+/// with <c>${name}</c> groups. A path it does not match, or one whose match times out (50 ms), is kept.
+/// </summary>
+public sealed class PathIdentityRule
+{
+    private static readonly TimeSpan Timeout = TimeSpan.FromMilliseconds(50);
+
+    private readonly Regex _pattern;
+    private readonly string _replacement;
+
+    private PathIdentityRule(Regex pattern, string replacement)
+    {
+        _pattern = pattern;
+        _replacement = replacement;
+    }
+
+    /// <summary>The rule, or null when <paramref name="pattern"/> is not a valid expression.</summary>
+    public static PathIdentityRule? Create(string pattern, string replacement)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+        ArgumentNullException.ThrowIfNull(replacement);
+        try
+        {
+            return new PathIdentityRule(new Regex(pattern, RegexOptions.CultureInvariant, Timeout), replacement);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    public string Apply(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        try
+        {
+            var match = _pattern.Match(path);
+            return match.Success ? match.Result(_replacement) : path;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return path;
+        }
+    }
 }
 
 /// <summary>A canonical URL, or why the input cannot be one (<c>url.*</c>).</summary>
@@ -122,14 +181,16 @@ public static partial class UrlCanonicalizer
         }
 
         // Rules 4, 5, 8, 9, 10: the path.
+        var hostRules = options.Hosts.Count == 0 ? null : options.Hosts.GetValueOrDefault(host);
         var path = NormalizePercentEncoding(match.Groups["path"].Value, isQuery: false);
         path = RemoveSessionSegments(path);
         path = RemoveDotSegments(path.Length == 0 ? "/" : path);
         path = DropDirectoryIndex(path, options.DirectoryIndexNames);
-        path = ApplyIdentityRule(path, options.IdentityRule);
+        path = hostRules?.Identity is { } identity ? identity.Apply(path) : ApplyIdentityRule(path, options.IdentityRule);
 
         // Rule 7: the query; rule 6: the fragment is dropped.
-        var query = match.Groups["query"].Success ? NormalizeQuery(match.Groups["query"].Value, options.IgnoreQueryParams) : string.Empty;
+        IReadOnlyCollection<string> ignored = hostRules is null ? options.IgnoreQueryParams : [.. options.IgnoreQueryParams, .. hostRules.IgnoreQueryParams];
+        var query = match.Groups["query"].Success ? NormalizeQuery(match.Groups["query"].Value, ignored) : string.Empty;
 
         var builder = new StringBuilder(scheme.Length + host.Length + path.Length + query.Length + 8);
         builder.Append(scheme).Append("://").Append(host).Append(port).Append(path);
