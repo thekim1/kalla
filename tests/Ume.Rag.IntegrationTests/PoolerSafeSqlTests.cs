@@ -75,6 +75,10 @@ public sealed partial class PoolerSafeSqlTests
     [InlineData("SET statement_timeout = 0")]
     [InlineData("select 1; set search_path = config")]
     [InlineData("SET SESSION lock_timeout = '1s'")]
+    [InlineData("SET search_path TO config, public")]
+    [InlineData("set role ume_rag_admin")]
+    [InlineData("SET TIME ZONE 'UTC'")]
+    [InlineData("SET \"app.user\" = 'x'")]
     [InlineData("SELECT set_config('app.user', $1, false)")]
     [InlineData("RESET ALL")]
     [InlineData("DISCARD ALL")]
@@ -97,6 +101,9 @@ public sealed partial class PoolerSafeSqlTests
     [InlineData("CREATE TEMP TABLE t (id int) ON COMMIT DROP")]
     [InlineData("""SELECT "Version" FROM config."ConfigVersion" WHERE "Id" = 1 FOR UPDATE""")]
     [InlineData("The value is invalid. Reset the form.")]
+    [InlineData("Set when the host answered with a redirect.")]
+    [InlineData("Set by the worker after the run; null until then.")]
+    [InlineData("Set when the source moves to another collection.")]
     public void The_scan_allows_the_transaction_scoped_forms(string sql) => Violations(sql).ShouldBeEmpty(sql);
 
     [Fact]
@@ -236,8 +243,9 @@ public sealed partial class PoolerSafeSqlTests
         return line.Length > 120 ? line[..120] + "…" : line;
     }
 
-    // SET at the start of a statement (UPDATE … SET is not), unless SET LOCAL.
-    [GeneratedRegex(@"(?:^|;)\s*SET\s+(?!LOCAL\b)", RegexOptions.IgnoreCase)]
+    // SET at the start of a statement (UPDATE … SET is not), unless SET LOCAL, and only in SQL shape: a parameter followed
+    // by = or TO, or ROLE, TIME ZONE, SESSION AUTHORIZATION. Prose such as "Set when the host …" is not SQL (#79).
+    [GeneratedRegex(@"(?:^|;)\s*SET\s+(?!LOCAL\b)(?:SESSION\s+)?(?:ROLE\b|TIME\s+ZONE\b|SESSION\s+AUTHORIZATION\b|[A-Za-z_""][\w.""]*\s*(?:=|\bTO\b))", RegexOptions.IgnoreCase)]
     private static partial Regex SessionSet();
 
     [GeneratedRegex(@"set_config\s*\([^)]*,\s*false\s*\)", RegexOptions.IgnoreCase)]
