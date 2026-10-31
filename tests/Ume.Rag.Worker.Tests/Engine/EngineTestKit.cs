@@ -153,15 +153,19 @@ internal static class EngineKit
     public static Task PauseAsync(RagDatabaseFixture database, SourceSeed seed) =>
         Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Sources" SET "State" = 'paused' WHERE "Id" = $1""", seed.SourceId);
 
-    /// <summary>A worker with the engine, wired to the site, the FakeGateway and a blob root of its own.</summary>
+    /// <summary>
+    /// A worker with the engine, wired to the site, the FakeGateway and a blob root of its own; <paramref name="settings"/> and
+    /// <paramref name="services"/> add to (and override) the defaults.
+    /// </summary>
     public static Task<WorkerHost> StartWorkerAsync(RagDatabaseFixture database, TestSite site, FakeGatewayFactory gateway, DirectoryInfo blobs,
-        EmbeddingGate? gate = null, CapturingLoggerProvider? logs = null) =>
-        StartCoreAsync(database, site, gateway, blobs, gate, logs ?? Logs);
+        EmbeddingGate? gate = null, CapturingLoggerProvider? logs = null, IReadOnlyDictionary<string, string?>? settings = null,
+        Action<IServiceCollection>? services = null) =>
+        StartCoreAsync(database, site, gateway, blobs, gate, logs ?? Logs, settings, services);
 
     public static CapturingLoggerProvider Logs { get; } = new();
 
     private static Task<WorkerHost> StartCoreAsync(RagDatabaseFixture database, TestSite site, FakeGatewayFactory gateway, DirectoryInfo blobs,
-        EmbeddingGate? gate, CapturingLoggerProvider? logs) =>
+        EmbeddingGate? gate, CapturingLoggerProvider? logs, IReadOnlyDictionary<string, string?>? settings, Action<IServiceCollection>? extra) =>
         WorkerHost.StartAsync(database, services =>
         {
             services.AddSingleton<IDnsResolver>(site.Resolver());
@@ -172,7 +176,9 @@ internal static class EngineKit
             {
                 client.AddHttpMessageHandler(() => gate);
             }
-        }, new Dictionary<string, string?>
+
+            extra?.Invoke(services);
+        }, Merge(new Dictionary<string, string?>
         {
             ["Gateway:BaseUrl"] = "http://fake-gateway",
             ["Gateway:Keys:OnPrem"] = FakeGatewayFactory.OnPremKey,
@@ -180,7 +186,22 @@ internal static class EngineKit
             ["BlobStore:Root"] = blobs.FullName,
             ["Crawl:AllowedPrivateRanges"] = "127.0.0.1/32",
             ["Worker:FinalizerSeconds"] = "1",
-        }, logs, engine: true);
+        }, settings), logs, engine: true);
+
+    private static Dictionary<string, string?> Merge(Dictionary<string, string?> defaults, IReadOnlyDictionary<string, string?>? settings)
+    {
+        foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
+        {
+            defaults[key] = value;
+        }
+
+        return defaults;
+    }
+
+    /// <summary>Pauses every source but <paramref name="seeds"/>, so a sweep over all documents sees only this test's.</summary>
+    public static Task PauseOtherSourcesAsync(RagDatabaseFixture database, params SourceSeed[] seeds) =>
+        Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Sources" SET "State" = 'paused' WHERE NOT ("Id" = ANY($1))""",
+            (object)seeds.Select(s => s.SourceId).ToArray());
 
     /// <summary>A "sync now" as the admin enqueues it (dedup <c>sync:{sourceId}</c>); the run's id is the job's.</summary>
     public static async Task<Guid> SyncNowAsync(RagDatabaseFixture database, SourceSeed seed)

@@ -44,7 +44,13 @@ public sealed partial class ParserRoute(IParserConverter converter, IParsePlanne
     private static readonly HashSet<string> RetryOnce = new(StringComparer.Ordinal) { "ocr_failed", "conversion_failed" };
     private static readonly HashSet<string> Requeue = new(StringComparer.Ordinal) { "busy", "not_ready", "duplicate_in_flight" };
 
-    public async Task<ParsedDocument> ParseAsync(ReadOnlyMemory<byte> file, DetectResult detect, ParseParams parameters, string requestId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Parses the document. With <paramref name="progress"/> (a <c>parse</c> job, engine design §9.5) every range's outcome
+    /// is stored as it completes and a stored one is used instead of a request, and the route throws
+    /// <see cref="ParseYieldException"/> at a range boundary once the slice is used up.
+    /// </summary>
+    public async Task<ParsedDocument> ParseAsync(ReadOnlyMemory<byte> file, DetectResult detect, ParseParams parameters, string requestId,
+        CancellationToken cancellationToken, ParseProgress? progress = null)
     {
         ArgumentNullException.ThrowIfNull(detect);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -52,7 +58,7 @@ public sealed partial class ParserRoute(IParserConverter converter, IParsePlanne
         var inspect = detect.Inspect;
         if (inspect is not null && inspect.Rangeable && inspect.Pages.Count > 0)
         {
-            return await PagedAsync(file, detect, inspect, parameters, extension, requestId, cancellationToken);
+            return await PagedAsync(file, detect, inspect, parameters, extension, requestId, progress, cancellationToken);
         }
 
         // Non-rangeable formats (DOCX, PPTX, XLSX, ODF, single images): one request; a timeout cannot be split.
@@ -85,7 +91,7 @@ public sealed partial class ParserRoute(IParserConverter converter, IParsePlanne
     }
 
     private async Task<ParsedDocument> PagedAsync(ReadOnlyMemory<byte> file, DetectResult detect, InspectFacts inspect, ParseParams parameters,
-        string extension, string requestId, CancellationToken cancellationToken)
+        string extension, string requestId, ParseProgress? progress, CancellationToken cancellationToken)
     {
         // Strategy-level matches run before the plan; the built-in rules are text-level only, so the plan uses default.
         var plan = planner.Plan(inspect, ParseRules.Default, parameters);
@@ -105,34 +111,48 @@ public sealed partial class ParserRoute(IParserConverter converter, IParsePlanne
                 var range = node.Value;
                 var convert = RangePlanner.Options(range, plan, string.Create(CultureInfo.InvariantCulture, $"{requestId}-r{sequence++}"),
                     extension, detect.MediaType, options.Value.DeadlineMs);
-                ParserConvertResult result;
-                try
+                var result = progress is null ? null : await progress.Ranges.GetAsync(range, cancellationToken);
+                if (result is null)
                 {
-                    result = await converter.ConvertAsync(file, convert, cancellationToken);
-                }
-                catch (ParserException e) when (e.Error?.Error.Code is { } code && (Halving.Contains(code) || RetryOnce.Contains(code)))
-                {
-                    lastFailure = code;
-                    if (RetryOnce.Contains(code) && retried.Add((range.From, range.To)))
+                    if (progress is { ShouldYield: true })
                     {
-                        queue.AddFirst(range);
-                    }
-                    else if (range.Pages == 1)
-                    {
-                        missing.Add(range.From);
-                    }
-                    else
-                    {
-                        var half = range.From + (range.Pages / 2) - 1;
-                        queue.AddFirst(range with { From = half + 1 });
-                        queue.AddFirst(range with { To = half });
+                        throw new ParseYieldException();
                     }
 
-                    continue;
-                }
-                catch (ParserException e)
-                {
-                    throw Map(e, splittable: true);
+                    try
+                    {
+                        result = await converter.ConvertAsync(file, convert, cancellationToken);
+                    }
+                    catch (ParserException e) when (e.Error?.Error.Code is { } code && (Halving.Contains(code) || RetryOnce.Contains(code)))
+                    {
+                        lastFailure = code;
+                        if (RetryOnce.Contains(code) && retried.Add((range.From, range.To)))
+                        {
+                            queue.AddFirst(range);
+                        }
+                        else if (range.Pages == 1)
+                        {
+                            missing.Add(range.From);
+                        }
+                        else
+                        {
+                            var half = range.From + (range.Pages / 2) - 1;
+                            queue.AddFirst(range with { From = half + 1 });
+                            queue.AddFirst(range with { To = half });
+                        }
+
+                        continue;
+                    }
+                    catch (ParserException e)
+                    {
+                        throw Map(e, splittable: true);
+                    }
+
+                    if (progress is not null)
+                    {
+                        await progress.Ranges.PutAsync(range, result, cancellationToken);
+                        progress.Converted();
+                    }
                 }
 
                 collected.Add(result, range.Strategy);

@@ -102,6 +102,9 @@ public sealed record SegmentInput(DocumentRow Document, PipelineRun Pipeline, st
 
     /// <summary>The applied site profile of the document's host (HTML), with its version id; null applies a preset.</summary>
     public (Guid Id, HtmlProfileVersion Profile)? SiteProfile { get; init; }
+
+    /// <summary>A <c>parse</c> job's slice budget (engine design §9.5); null never yields.</summary>
+    public ParseSliceClock? Slice { get; init; }
 }
 
 /// <summary>Where a segment ended.</summary>
@@ -115,6 +118,9 @@ public abstract record SegmentResult(IReadOnlyList<NodeOutputRecord> Outputs)
 
     /// <summary>A stage ended the document (<c>skipped</c>, <c>unsupported</c>, …; engine design §7.1).</summary>
     public sealed record Ended(Outcome Outcome, string Reason, IReadOnlyList<NodeOutputRecord> Outputs) : SegmentResult(Outputs);
+
+    /// <summary>The <c>parse</c> job's slice is used up at a range boundary: the job continues in its next slice (engine design §9.5).</summary>
+    public sealed record Yielded(IReadOnlyList<NodeOutputRecord> Outputs) : SegmentResult(Outputs);
 }
 
 /// <summary>
@@ -123,8 +129,11 @@ public abstract record SegmentResult(IReadOnlyList<NodeOutputRecord> Outputs)
 /// (<see cref="StageKeys"/>) and stored after a miss. In a <c>fetch</c> job a parser-bound document stops after
 /// <c>detect</c> (its <c>parse</c> job continues); in a <c>parse</c> job the segment starts at <c>parse</c> from the cached
 /// detect output. Keys: <c>detect</c> and <c>parse</c> take the raw content hash as input (the parse key with the route and,
-/// for HTML, the site-profile version as inputs), every later stage its predecessor's output hash; <c>chunk</c> also takes
+/// for HTML, the site-profile version as inputs; a parser-bound parse is keyed by content, parser build and parser
+/// settings, <see cref="StageKeys.ParserKey"/>), every later stage its predecessor's output hash; <c>chunk</c> also takes
 /// the document's metadata inputs (URL, name, dates) and <c>personal-data</c> the collection's level, since both read them.
+/// In a <c>parse</c> job the parser route stores each range under the parse output's prefix (<see cref="BlobParseRanges"/>)
+/// and resumes from them, and yields at a range boundary when the job's slice is used up (§9.5).
 /// </summary>
 public sealed class ProcessingSegment(
     StageOutputs outputs,
@@ -136,7 +145,8 @@ public sealed class ProcessingSegment(
     IParsePlanner planner,
     IOptions<ParseOptions> parseOptions,
     EngineSettings settings,
-    IParserConverter? converter = null)
+    IParserConverter? converter = null,
+    IParserBuild? parserBuild = null)
 {
     public async Task<SegmentResult> RunAsync(SegmentInput input, string jobClass, byte[]? detectKey, CancellationToken cancellationToken)
     {
@@ -150,6 +160,17 @@ public sealed class ProcessingSegment(
         {
             return new SegmentResult.Ended(fatal.Outcome, fatal.Reason, written);
         }
+        catch (ParseYieldException)
+        {
+            return new SegmentResult.Yielded(written);
+        }
+    }
+
+    /// <summary>The <c>detect</c> key of content <paramref name="contentHash"/> under <paramref name="pipeline"/>: the input key of a <c>parse</c> job.</summary>
+    public static byte[] DetectKey(ResolvedPipeline pipeline, byte[] contentHash)
+    {
+        ArgumentNullException.ThrowIfNull(pipeline);
+        return StageKeys.Key(contentHash, StageNames.Detect, StageVersion(pipeline, StageNames.Detect), StageKeys.SettingsHash(pipeline, StageNames.Detect, null));
     }
 
     private async Task<SegmentResult> RunStagesAsync(SegmentInput input, string jobClass, byte[]? detectKey, List<NodeOutputRecord> written,
@@ -184,7 +205,7 @@ public sealed class ProcessingSegment(
 
         // detect
         var detectSettings = StageKeys.SettingsHash(pipeline, StageNames.Detect, null);
-        var dKey = detectKey ?? StageKeys.Key(contentHash, StageNames.Detect, StageVersion(pipeline, StageNames.Detect), detectSettings);
+        var dKey = detectKey ?? DetectKey(pipeline, contentHash);
         DetectResult detected;
         if (await outputs.GetAsync<DetectResult>(dKey, cancellationToken) is { } cachedDetect)
         {
@@ -202,12 +223,8 @@ public sealed class ProcessingSegment(
         }
 
         // parse
-        var route = RouteName(detected.Route);
-        var parseInputs = detected.Route == ParseRoute.Html
-            ? new Dictionary<string, string>(StringComparer.Ordinal) { ["siteProfileVersion"] = input.SiteProfile?.Id.ToString("D") ?? "preset" }
-            : null;
-        var parseSettings = StageKeys.SettingsHash(pipeline, StageNames.Parse, route, parseInputs);
-        var parseKey = StageKeys.Key(contentHash, StageNames.Parse, StageVersion(pipeline, StageNames.Parse), parseSettings);
+        var parserBuildHash = detected.Route == ParseRoute.Parser ? await ParserBuildAsync(cancellationToken) : null;
+        var (parseKey, parseSettings) = ParseKey(pipeline, contentHash, detected.Route, input.SiteProfile?.Id, parserBuildHash);
         ParsedDocument parsed;
         byte[] parsedHash;
         if (await outputs.GetAsync<ParsedDocument>(parseKey, cancellationToken) is { } cachedParse)
@@ -216,7 +233,8 @@ public sealed class ProcessingSegment(
         }
         else
         {
-            parsed = await ParseAsync(await RawAsync(), detected, input, pipeline, cancellationToken);
+            var progress = jobClass == Domain.Entities.JobClasses.Parse ? new ParseProgress(new BlobParseRanges(blobs, level, parseKey), input.Slice) : null;
+            parsed = await ParseAsync(await RawAsync(), detected, input, pipeline, progress, cancellationToken);
             var row = await outputs.PutAsync(level, StageNames.Parse, parseKey, parseSettings, contentHash, parsed, cancellationToken);
             written.Add(row);
             parsedHash = row.OutputHash;
@@ -279,7 +297,7 @@ public sealed class ProcessingSegment(
     }
 
     private async Task<ParsedDocument> ParseAsync(ReadOnlyMemory<byte> bytes, DetectResult detected, SegmentInput input, ResolvedPipeline pipeline,
-        CancellationToken cancellationToken) =>
+        ParseProgress? progress, CancellationToken cancellationToken) =>
         detected.Route switch
         {
             ParseRoute.Html => html.Extract(bytes, input.SiteProfile?.Profile).Document,
@@ -287,14 +305,42 @@ public sealed class ProcessingSegment(
             ParseRoute.Csv => CsvTableParser.Parse(bytes.Span),
             ParseRoute.Parser when converter is not null => await new ParserRoute(converter, planner, parseOptions).ParseAsync(bytes, detected,
                 new ParseParams(Param<string>(pipeline, "ocr") ?? "auto", Param<string>(pipeline, "tables") ?? "accurate"),
-                input.Document.CurrentExecutionId?.ToString("N") ?? Guid.CreateVersion7().ToString("N"), cancellationToken),
+                input.Document.CurrentExecutionId?.ToString("N") ?? Guid.CreateVersion7().ToString("N"), cancellationToken, progress),
             ParseRoute.Parser => throw new StageTransientException("parser.not_configured", TimeSpan.FromMinutes(1), countsAttempt: false),
             _ => throw new StageFatalException(Pipelines.Jobs.RunItemOutcome.Unsupported, "parser.unsupported_format"),
         };
 
+    private async Task<string> ParserBuildAsync(CancellationToken cancellationToken) =>
+        parserBuild is null || converter is null
+            ? throw new StageTransientException("parser.not_configured", TimeSpan.FromMinutes(1), countsAttempt: false)
+            : await parserBuild.GetAsync(cancellationToken);
+
     private static DocumentFacts Facts(DetectResult detected, ParsedDocument? parsed, ParsedDocument? cleaned, byte[]? parseKey, SegmentInput input) =>
         new(detected.MediaType, cleaned?.Language ?? detected.Language, cleaned?.Title, cleaned?.Description, cleaned?.Keywords ?? [], parsed?.Strategy,
             parseKey, detected.PageCount ?? (parsed is { Pages.Count: > 0 } ? parsed.Pages.Count : null), input.SiteProfile?.Id, parsed is null ? "pending" : "success");
+
+    /// <summary>
+    /// The <c>parse</c> stage key and settings hash, shared with the preview so both look up the same cache entries.
+    /// Parser-bound output is keyed by (content hash, parser build, parser settings), so a parser upgrade never reuses a
+    /// cached parse (simplification pass §2; parser design §7.6; engine design §3.3); the planner's thresholds belong to the
+    /// parse stage's version (processing design §3.1), so that version is a parser setting.
+    /// </summary>
+    public static (byte[] Key, byte[] Settings) ParseKey(ResolvedPipeline pipeline, byte[] contentHash, ParseRoute route, Guid? siteProfileVersionId, string? parserBuildHash)
+    {
+        ArgumentNullException.ThrowIfNull(pipeline);
+        var parseVersion = StageVersion(pipeline, StageNames.Parse);
+        var parseInputs = route switch
+        {
+            ParseRoute.Html => new Dictionary<string, string>(StringComparer.Ordinal) { ["siteProfileVersion"] = siteProfileVersionId?.ToString("D") ?? "preset" },
+            ParseRoute.Parser => new Dictionary<string, string>(StringComparer.Ordinal) { ["stageVersion"] = parseVersion.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+            _ => null,
+        };
+        var settings = StageKeys.SettingsHash(pipeline, StageNames.Parse, RouteName(route), parseInputs);
+        var key = route == ParseRoute.Parser
+            ? StageKeys.ParserKey(contentHash, parserBuildHash ?? throw new ArgumentNullException(nameof(parserBuildHash)), settings)
+            : StageKeys.Key(contentHash, StageNames.Parse, parseVersion, settings);
+        return (key, settings);
+    }
 
     private static int StageVersion(ResolvedPipeline pipeline, string stage) =>
         pipeline.Template.Template.Stages.TryGetValue(stage, out var version) ? version : StageManifest.P1Version;

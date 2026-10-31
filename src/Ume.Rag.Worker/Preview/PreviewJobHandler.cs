@@ -5,6 +5,7 @@ using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing;
+using Ume.Rag.Worker.Processing.Parse;
 
 namespace Ume.Rag.Worker.Preview;
 
@@ -27,6 +28,8 @@ public sealed partial class PreviewJobHandler(StagePreview stagePreview, Preflig
     {
         ArgumentNullException.ThrowIfNull(context);
         config.EnsureConfirmed();
+        // Preview first (engine design §9.5): parser calls of this job take the next free parser slot ahead of parse jobs.
+        using var previewFirst = ParserSlots.AsPreview();
         var job = context.Job;
         string? kind;
         try

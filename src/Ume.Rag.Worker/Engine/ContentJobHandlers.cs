@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Npgsql;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
@@ -9,6 +10,7 @@ using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Embedding;
+using Ume.Rag.Worker.Processing.Parse;
 using Ume.Rag.Worker.Processing.Persistence;
 using Ume.Rag.Worker.Processing.Pii;
 using Outcome = Ume.Rag.Pipelines.Jobs.RunItemOutcome;
@@ -69,12 +71,33 @@ public sealed class FetchJobHandler(SourceContexts sources, RunStore runs, UrlLi
 
 /// <summary>
 /// <c>parse</c> jobs (engine design §7.4, §9.5): the parser-bound segment (<c>parse</c> to <c>personal-data</c>) of one
-/// document from its cached <c>detect</c> output, committed with the <c>embed</c> continuation. Range slicing and resumption
-/// are not built yet (a parse runs whole).
+/// document from its cached <c>detect</c> output, committed with the <c>embed</c> continuation. The route stores each
+/// completed range, so a reclaimed job resumes at the next range; after <c>Worker:Parse:SliceSeconds</c> (10 minutes) the
+/// job yields at a range boundary: in one fenced transaction it completes and re-enqueues itself with <c>slice + 1</c> (a
+/// new job, so no attempt is used). A URL document gets its host's applied site profile, as in the fetch path, so the
+/// set's key matches what <c>EnsureCurrent</c> wants.
 /// </summary>
-public sealed class ParseJobHandler(SourceContexts sources, DocumentStore documents, ProcessingSegment segment, DocumentIngest ingest, ConfigVersionState config)
-    : IJobHandler
+public sealed partial class ParseJobHandler(
+    SourceContexts sources,
+    DocumentStore documents,
+    ProcessingSegment segment,
+    DocumentIngest ingest,
+    SiteProfiles siteProfiles,
+    IJobQueue queue,
+    JobDatabase database,
+    WorkerIdentity identity,
+    JobMetrics metrics,
+    IOptions<ParseOptions> parseOptions,
+    ConfigVersionState config,
+    TimeProvider time,
+    ILogger<ParseJobHandler> logger) : IJobHandler
 {
+    /// <summary><c>rag.jobs.requeued</c> reason of a yielded job (engine design §17).</summary>
+    public const string SliceReason = "slice";
+
+    /// <summary>The payload's upper bound for <c>slice</c> (<see cref="ParsePayload.Slice"/>); a job there runs to the end.</summary>
+    public const int MaxSlice = 10_000;
+
     public string JobClass => JobClasses.Parse;
 
     public async Task<JobResult> ExecuteAsync(JobContext context, CancellationToken cancellationToken)
@@ -103,9 +126,20 @@ public sealed class ParseJobHandler(SourceContexts sources, DocumentStore docume
         try
         {
             var pipeline = await sources.VersionAsync(payload.PipelineVersionId, source.Type, cancellationToken);
-            var input = new SegmentInput(document, pipeline, source.CollectionClassification, RawContentKeys.Of(document)) { DeclaredMediaType = document.MediaType };
-            var result = await segment.RunAsync(input, JobClasses.Parse, Convert.FromHexString(payload.InputKey), cancellationToken);
-            return await ingest.CommitSegmentAsync(source, runId, payload.PipelineVersionId, job, document, payload.ExecutionId, result, null, cancellationToken);
+            var profile = document.IdentityKind == IdentityKinds.Url
+                ? await siteProfiles.AppliedAsync(document.Classification, document.Url, cancellationToken)
+                : null;
+            var input = new SegmentInput(document, pipeline, source.CollectionClassification, RawContentKeys.Of(document))
+            {
+                DeclaredMediaType = document.MediaType,
+                SiteProfile = profile,
+                Slice = payload.Slice < MaxSlice ? new ParseSliceClock(time, TimeSpan.FromSeconds(parseOptions.Value.SliceSeconds)) : null,
+            };
+            var inputKey = Convert.FromHexString(payload.InputKey);
+            var result = await segment.RunAsync(input, JobClasses.Parse, inputKey, cancellationToken);
+            return result is SegmentResult.Yielded yielded
+                ? await YieldAsync(source, runId, payload, job, document, inputKey, yielded, cancellationToken)
+                : await ingest.CommitSegmentAsync(source, runId, payload.PipelineVersionId, job, document, payload.ExecutionId, result, null, cancellationToken);
         }
         catch (PipelineRefusedException refused)
         {
@@ -116,6 +150,42 @@ public sealed class ParseJobHandler(SourceContexts sources, DocumentStore docume
             return StageResults.From(transient);
         }
     }
+
+    /// <summary>
+    /// The slice's end (engine design §9.5): the outputs reached, the job's completion and its <c>slice + 1</c> continuation
+    /// in one fenced transaction. The completion goes first, so the continuation can take the same dedup key.
+    /// </summary>
+    private async Task<JobResult> YieldAsync(SourceContext source, Guid runId, ParsePayload payload, LeasedJob job, DocumentRow document, byte[] inputKey,
+        SegmentResult.Yielded yielded, CancellationToken cancellationToken)
+    {
+        await using (var commit = await EngineCommit.BeginAsync(database, cancellationToken))
+        {
+            if (await commit.FenceAsync(document.Id, document.Classification, payload.ExecutionId, document.ContentHash!, cancellationToken))
+            {
+                await commit.AddOutputsAsync(yielded.Outputs, cancellationToken);
+                if (!await commit.CompleteJobAsync(queue, job.Id, identity.InstanceId, null, cancellationToken))
+                {
+                    return new JobResult.Success();
+                }
+
+                var next = SyncJobs.Parse(source, document, payload.ExecutionId, payload.PipelineVersionId, runId, inputKey, payload.Slice + 1) with
+                {
+                    Priority = job.Priority,
+                };
+                await commit.EnqueueAsync(queue, [next], cancellationToken);
+                await commit.CommitAsync(cancellationToken);
+                metrics.Requeued(JobClasses.Parse, SliceReason);
+                LogYielded(logger, document.Id, payload.Slice + 1);
+                return new JobResult.Committed();
+            }
+        }
+
+        return await ingest.TerminalAsync(source, runId, job, document, document.CanonicalIdentity, Outcome.Superseded, "execution.superseded",
+            payload.PipelineVersionId, null, cancellationToken);
+    }
+
+    [LoggerMessage(LogLevel.Information, "Document {DocumentId}: the parse slice is used up; slice {Slice} continues at the next range")]
+    private static partial void LogYielded(ILogger logger, Guid documentId, int slice);
 }
 
 /// <summary>

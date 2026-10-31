@@ -48,11 +48,16 @@ public static class EngineExtensions
                 client.BaseAddress = new Uri(parser.BaseUrl!.AbsoluteUri.TrimEnd('/') + "/");
                 client.Timeout = TimeSpan.FromSeconds(parser.TimeoutSeconds);
             }).RemoveStandardResilienceHandler();
-            services.TryAddSingleton<IParserConverter>(sp => new ParserClientConverter(sp.GetRequiredService<ParserClient>()));
+            services.TryAddSingleton<IParserConverter>(sp => new GatedParserConverter(new ParserClientConverter(sp.GetRequiredService<ParserClient>()),
+                sp.GetRequiredService<IParserSlotGate>()));
+            services.TryAddSingleton<IParserBuild>(sp => new ParserInfoBuild(sp.GetRequiredService<ParserClient>(), sp.GetRequiredService<TimeProvider>()));
             services.TryAddSingleton<IDocumentInspector>(sp => new ParserInspector(sp.GetRequiredService<ParserClient>()));
             services.TryAddSingleton<INerClient>(sp => new ParserNerClient(sp.GetRequiredService<ParserClient>()));
         }
 
+        // Preview first (engine design §9.5): one gate over the parser's conversion slots, the parse class's concurrency in P1.
+        services.TryAddSingleton<IParserSlotGate>(sp =>
+            new ParserSlotGate(sp.GetRequiredService<IOptions<WorkerOptions>>().Value.ConcurrencyOf(Domain.Entities.JobClasses.Parse)));
         services.TryAddSingleton<INodeOutputStore, PostgresNodeOutputStore>();
         services.TryAddSingleton<IEmbeddingProfileStore, PostgresEmbeddingProfileStore>();
         services.TryAddSingleton<IEmbeddingCache, PostgresEmbeddingCache>();
@@ -71,10 +76,12 @@ public static class EngineExtensions
         services.TryAddSingleton(sp => new ProcessingSegment(sp.GetRequiredService<StageOutputs>(), sp.GetRequiredService<Domain.Ports.IBlobStore>(),
             sp.GetRequiredService<DetectStage>(), sp.GetRequiredService<Processing.Html.HtmlExtractor>(), sp.GetRequiredService<Processing.Chunking.Chunker>(),
             sp.GetRequiredService<PersonalDataStage>(), sp.GetRequiredService<IParsePlanner>(), sp.GetRequiredService<IOptions<ParseOptions>>(),
-            sp.GetRequiredService<EngineSettings>(), sp.GetService<IParserConverter>()));
+            sp.GetRequiredService<EngineSettings>(), sp.GetService<IParserConverter>(), sp.GetService<IParserBuild>()));
         services.TryAddSingleton<DocumentIngest>();
         services.TryAddSingleton<UrlListSource>();
         services.TryAddSingleton<UploadSource>();
+        services.TryAddSingleton<Reconciler>();
+        services.TryAddSingleton<DriftSweep>();
 
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, SyncJobHandler>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, FetchJobHandler>());
@@ -84,6 +91,7 @@ public static class EngineExtensions
 
         services.AddHostedService<RunFinalizer>();
         services.AddHostedService<SyncScheduler>();
+        services.AddHostedService<DriftSweepService>();
         return builder;
     }
 }

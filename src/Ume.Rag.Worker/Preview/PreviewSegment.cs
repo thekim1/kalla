@@ -140,7 +140,8 @@ public sealed class PreviewSegment(
     EmbeddingCanary canary,
     EmbeddingConcurrency concurrency,
     TimeProvider time,
-    IParserConverter? converter = null)
+    IParserConverter? converter = null,
+    IParserBuild? parserBuild = null)
 {
     /// <summary>The pages a preview parses of a paged document (engine design §11).</summary>
     public const int MaxPages = 50;
@@ -198,13 +199,17 @@ public sealed class PreviewSegment(
 
         // parse, and for an HTML page the extraction without and with the site profile
         log.Begin(StageNames.Parse);
-        var route = RouteName(detected.Route);
         var profile = detected.Route == ParseRoute.Html ? await siteProfiles.AppliedAsync(level, content.Url, cancellationToken) : null;
-        var parseInputs = detected.Route == ParseRoute.Html
-            ? new Dictionary<string, string>(StringComparer.Ordinal) { ["siteProfileVersion"] = profile?.Id.ToString("D") ?? "preset" }
-            : null;
-        var parseSettings = StageKeys.SettingsHash(pipeline, StageNames.Parse, route, parseInputs);
-        var parseKey = StageKeys.Key(content.ContentHash, StageNames.Parse, StageVersion(pipeline, StageNames.Parse), parseSettings);
+        // The same key as the live segment (incl. the parser build), so a preview reuses live parses read-only.
+        string? parserBuildHash = null;
+        if (detected.Route == ParseRoute.Parser)
+        {
+            parserBuildHash = parserBuild is not null && converter is not null
+                ? await parserBuild.GetAsync(cancellationToken)
+                : throw new StageFatalException(RunItemOutcome.Failed, "parser.not_configured");
+        }
+
+        var (parseKey, _) = ProcessingSegment.ParseKey(pipeline, content.ContentHash, detected.Route, profile?.Id, parserBuildHash);
         var limited = detected.Inspect is { Pages.Count: > MaxPages } inspect
             ? detected with { Inspect = inspect with { Pages = [.. inspect.Pages.OrderBy(p => p.Page).Take(MaxPages)] } }
             : detected;
@@ -400,7 +405,6 @@ public sealed class PreviewSegment(
             ParseRoute.Html => html.Extract(bytes, profile).Document,
             ParseRoute.Text => PlainTextParser.Parse(bytes.Span, markdown: detected.MediaType == ProcessingMediaTypes.Markdown),
             ParseRoute.Csv => CsvTableParser.Parse(bytes.Span),
-            // TODO(P1b item 5): take the preview-first parser slot gate here (engine design §9.5) once it is merged.
             ParseRoute.Parser when converter is not null => await new ParserRoute(converter, planner, parseOptions).ParseAsync(bytes, detected,
                 new ParseParams(Param<string>(pipeline, "ocr") ?? "auto", Param<string>(pipeline, "tables") ?? "accurate"),
                 Guid.CreateVersion7().ToString("N"), cancellationToken),
