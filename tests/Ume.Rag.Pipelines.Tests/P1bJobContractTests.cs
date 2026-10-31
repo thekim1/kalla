@@ -102,7 +102,7 @@ public sealed class P1bJobContractTests
         CommandKinds.All.ShouldBe(
         [
             "cancel-run", "edit-site-profile", "rollback-site-profile", "edit-eval-question",
-            "confirm-deletion", "reject-deletion", "release-hold", "clear-pii-flag", "reprocess-document",
+            "confirm-deletion", "reject-deletion", "release-hold", "clear-pii-flag", "reprocess-document", "edit-parse-rule", "disable-parse-rule",
         ]);
         ContractJson.Serialize(new ReprocessDocumentCommand { DocumentId = Id }).ShouldBe($$"""{"kind":"reprocess-document","documentId":"{{G}}","fromStage":"parse"}""");
         ContractJson.Serialize(new StagePreviewPayload { PipelineVersionId = Id, CollectionId = Id, DocumentIds = [Id] })

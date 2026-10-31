@@ -13,17 +13,18 @@ using Ume.Rag.Worker.Jobs;
 namespace Ume.Rag.Worker.Engine;
 
 /// <summary>A source as the scheduler sees it.</summary>
-public sealed record ScheduledSource(Guid SourceId, string Type, string Classification, Guid DepartmentId, string? Schedule, DateTimeOffset Since,
+public sealed record ScheduledSource(Guid SourceId, string Type, string Classification, Guid DepartmentId, string? Schedule, DateTimeOffset CreatedAt,
     DateTimeOffset? LastScheduledFor, bool Running);
 
 /// <summary>
 /// The scheduler of engine design §9.6: every <c>Worker:SchedulerSeconds</c> (60 s) the instance holding the advisory lock
 /// evaluates each active source's cron (<c>Sources.Schedule</c>, else <c>Settings.DefaultSchedules</c> by type; uploads
-/// never) in Europe/Stockholm with Cronos. The next occurrence after the last scheduled run (else after the source's last
-/// change) plus a deterministic per-source jitter (<c>hash(sourceId) mod Settings.ScheduleJitterMinutes</c>) is due once it
-/// has passed and no run of the source is running; it enqueues one <c>sync</c> with <c>ScheduledFor</c> = the occurrence
+/// never) in Europe/Stockholm with Cronos. The next occurrence after the last scheduled run (else after the source's
+/// <c>CreatedAt</c>, never its <c>UpdatedAt</c>, which every edit moves) plus a deterministic per-source jitter
+/// (<c>hash(sourceId) mod Settings.ScheduleJitterMinutes</c>) is due once it has passed and no run of the source is running; it enqueues one <c>sync</c> with <c>ScheduledFor</c> = the occurrence
 /// (dedup <c>sync:{sourceId}</c>), so missed occurrences after an outage collapse into one run. DST gaps run once at the
-/// next valid time, overlaps once (Cronos).
+/// next valid time, overlaps once (Cronos). In the same pass an idle source whose settings changed in scope or identity
+/// since its newest <c>sync</c> run gets a <c>config-change</c> sync now (connectors design §12.4, <see cref="SettingsEffects"/>).
 /// </summary>
 public sealed partial class SyncScheduler(
     JobDatabase database,
@@ -37,9 +38,8 @@ public sealed partial class SyncScheduler(
 
     private const long LockKey = 0x5241_4731_0002;
 
-    // Sources has no CreatedAt: a never-scheduled source counts from its last change (UpdatedAt).
     private const string SourcesSql = """
-        SELECT s."Id", s."Type", s."Classification", c."DepartmentId", s."Schedule", s."UpdatedAt",
+        SELECT s."Id", s."Type", s."Classification", c."DepartmentId", s."Schedule", s."CreatedAt",
                (SELECT max(r."ScheduledFor") FROM content."Runs" r WHERE r."SourceId" = s."Id" AND r."Trigger" = 'schedule'),
                EXISTS (SELECT 1 FROM content."Runs" r WHERE r."SourceId" = s."Id" AND r."State" = 'running')
         FROM config."Sources" s JOIN config."Collections" c ON c."Id" = s."CollectionId"
@@ -89,6 +89,7 @@ public sealed partial class SyncScheduler(
         }
 
         var jobs = new List<JobRequest>();
+        var scheduled = new HashSet<Guid>();
         foreach (var source in sources)
         {
             if (Due(source, values, now) is not { } due)
@@ -101,9 +102,11 @@ public sealed partial class SyncScheduler(
             {
                 DedupKey = JobDedupKeys.Sync(source.SourceId),
             });
+            scheduled.Add(source.SourceId);
             LogDue(logger, source.SourceId, due.Occurrence, (now - due.At).TotalSeconds);
         }
 
+        jobs.AddRange(await SettingsEffects.ChangedAsync(transaction, scheduled, logger, cancellationToken));
         var enqueued = jobs.Count == 0 ? 0 : (await queue.EnqueueAsync(jobs, transaction, cancellationToken)).Count;
         await transaction.CommitAsync(cancellationToken);
         return enqueued;
@@ -120,7 +123,7 @@ public sealed partial class SyncScheduler(
             return null;
         }
 
-        if (expression.GetNextOccurrence(source.LastScheduledFor ?? source.Since, Stockholm) is not { } next)
+        if (expression.GetNextOccurrence(source.LastScheduledFor ?? source.CreatedAt, Stockholm) is not { } next)
         {
             return null;
         }

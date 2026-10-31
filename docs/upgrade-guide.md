@@ -20,6 +20,18 @@ without downtime. Migrations are expand/contract only, so "no" is the exception 
   signatures in the `clamav-db` volume are reused. Nothing is scanned while clamd restarts.
 - **Check:** `dc ps rag-clamav` is healthy, and `dc logs rag-clamav` no longer warns that the installation is outdated.
 
+### Open WebUI: the feedback service account
+
+- **Rolling update: yes.** Only the optional Open WebUI stack changes; the main stack is untouched.
+- `compose.openwebui.yaml` turns password sign-in off (`ENABLE_PASSWORD_AUTH`, on only while
+  `deploy/openwebui-feedback-key.sh` runs) and gives every OIDC sign-in the role `user` (`DEFAULT_USER_ROLE`; it was
+  `pending`). `init-deployment.sh --openwebui-host` adds the feedback service account to `secrets/openwebui.env`.
+- **Apply** (only where Open WebUI runs): re-run `init-deployment.sh` with your options, then
+  `docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait`, then
+  `sudo deploy/openwebui-feedback-key.sh` and `dc restart rag-api`. On a store that already had users the account is
+  not created: production-setup.md, *Open WebUI*, says how to add it.
+- **Check:** the script ends with `ok: password sign-in refused (403)`.
+
 ## Upgrade procedure (single slot)
 
 1. **Read** this guide's section for every release between yours and the target: *Rolling update*, migrations, new

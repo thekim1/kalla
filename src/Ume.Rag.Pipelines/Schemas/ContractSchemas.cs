@@ -70,6 +70,9 @@ public static class ContractSchemas
         new("jobs/v1/command.clear-pii-flag.result.schema.json", typeof(ClearPiiFlagResult), "clear-pii-flag command result"),
         new("jobs/v1/command.reprocess-document.payload.schema.json", typeof(ReprocessDocumentCommand), "reprocess-document command payload"),
         new("jobs/v1/command.reprocess-document.result.schema.json", typeof(ReprocessDocumentResult), "reprocess-document command result"),
+        new("jobs/v1/command.edit-parse-rule.payload.schema.json", typeof(EditParseRuleCommand), "edit-parse-rule command payload"),
+        new("jobs/v1/command.disable-parse-rule.payload.schema.json", typeof(DisableParseRuleCommand), "disable-parse-rule command payload"),
+        new("jobs/v1/command.parse-rule.result.schema.json", typeof(ParseRuleCommandResult), "edit-parse-rule and disable-parse-rule command result"),
         new("jobs/v1/upload-batch.manifest.schema.json", typeof(UploadBatchManifest), "Upload batch manifest"),
     ];
 

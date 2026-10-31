@@ -138,6 +138,13 @@ public sealed class EmbeddingProfile
     public uint Version { get; set; }
 }
 
+/// <summary>The canary of a profile (processing design §11): a fixed Swedish text whose embedding is recorded once.</summary>
+public static class EmbeddingCanaryText
+{
+    /// <summary>Seeded on every profile; changing it needs a new canary embedding for every profile (P3 profile migration).</summary>
+    public const string Default = "Bygglov för altan och plank i Umeå kommun: vad gäller när du vill bygga nära tomtgränsen?";
+}
+
 /// <summary>
 /// A collection (admin: kunskapsbank): search scope, access and level (<c>config."Collections"</c>, data-model §2.1). Content rows copy its id
 /// without a foreign key.
@@ -207,6 +214,10 @@ public sealed class Source
     public bool ContainsThirdPartyText { get; set; } = true;
     public string State { get; set; } = SourceStates.Active;
     public DateTimeOffset? DeletedAt { get; set; }
+
+    /// <summary>Set by the database (<c>DEFAULT now()</c>); the scheduler counts a never-run source's first schedule from it.</summary>
+    public DateTimeOffset CreatedAt { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
     public uint Version { get; set; }

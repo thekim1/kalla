@@ -86,6 +86,13 @@ services:
       DataProtection__CertificatePath: /run/certs/data-protection.pfx
       Migration__RolesSqlPath: /run/config/app-roles.sql
       Seed__Enabled: "false"
+      # The platform embedding profile (Decisions "Pilot embedding model, U-b"): seeded once, insert-if-absent, when
+      # GatewayModel is set (stream B's EmbeddingProfileSeeder, #123); RequestDimensions sends OpenAI's dimensions (#142).
+      EmbeddingProfile__GatewayModel: ${UME_RAG_EMBEDDING_MODEL:-}
+      EmbeddingProfile__Dimensions: ${UME_RAG_EMBEDDING_DIMENSIONS:-1024}
+      EmbeddingProfile__RequestDimensions: ${UME_RAG_EMBEDDING_REQUEST_DIMENSIONS:-false}
+      EmbeddingProfile__MaxInputTokens: ${UME_RAG_EMBEDDING_MAX_INPUT_TOKENS:-8192}
+      EmbeddingProfile__MaxResidency: ${UME_RAG_EMBEDDING_MAX_RESIDENCY:-Eu}
       SSL_CERT_FILE: /run/certs/ca.pem
     volumes:
       - ${UME_RAG_SECRETS_DIR}/migrations:/run/app-secrets:ro
@@ -141,6 +148,9 @@ services:
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
       # Open WebUI's client in the registry; the user JWT's key is the secret file OpenWebUi__JwtSecret (identity §5.2).
       OpenWebUi__ClientId: ${UME_RAG_OPENWEBUI_CLIENT_ID:-}
+      # Placeholder (P1b item 17, waiting on stream B's L6): the feedback importer's settings (chat design §14.2, Open
+      # WebUI's base URL per instance) go here once its configuration names exist. Its key is already the secret file
+      # OpenWebUi__AdminApiKey, written by deploy/openwebui-feedback-key.sh.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: rag-api
       SSL_CERT_FILE: /run/certs/ca.pem

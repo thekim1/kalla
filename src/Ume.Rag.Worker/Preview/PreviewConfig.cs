@@ -10,8 +10,11 @@ using Ume.Rag.Worker.Engine;
 
 namespace Ume.Rag.Worker.Preview;
 
-/// <summary>The collection a preview shows the personal-data state for (its level) and embeds with (its profile).</summary>
-public sealed record PreviewCollectionRow(Guid Id, string Classification, Guid EmbeddingProfileId);
+/// <summary>
+/// The collection a preview shows the personal-data state for (its level), embeds with (its profile) and, for a URL without
+/// a source, matches department-scoped parse rules with (its department).
+/// </summary>
+public sealed record PreviewCollectionRow(Guid Id, string Classification, Guid EmbeddingProfileId, Guid DepartmentId);
 
 /// <summary>
 /// The config a preview reads (engine design §11): the pipeline version, which unlike a sync's may be a saved <b>draft</b>
@@ -23,7 +26,7 @@ public sealed class PreviewConfig(JobDatabase database)
     private const string VersionSql = """SELECT "Definition"::text FROM config."PipelineVersions" WHERE "Id" = $1""";
 
     private const string CollectionSql = """
-        SELECT "Id", "Classification", "EmbeddingProfileId" FROM config."Collections" WHERE "Id" = $1 AND "DeletedAt" IS NULL
+        SELECT "Id", "Classification", "EmbeddingProfileId", "DepartmentId" FROM config."Collections" WHERE "Id" = $1 AND "DeletedAt" IS NULL
         """;
 
     private const string BaseSql = $"""
@@ -70,7 +73,7 @@ public sealed class PreviewConfig(JobDatabase database)
         await using var connection = await database.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(CollectionSql, connection) { Parameters = { Db.P(collectionId) } };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? new PreviewCollectionRow(reader.GetGuid(0), reader.GetString(1), reader.GetGuid(2)) : null;
+        return await reader.ReadAsync(cancellationToken) ? new PreviewCollectionRow(reader.GetGuid(0), reader.GetString(1), reader.GetGuid(2), reader.GetGuid(3)) : null;
     }
 
     /// <summary>The result of an earlier <c>stage-preview</c>, or null when it is gone or has none.</summary>

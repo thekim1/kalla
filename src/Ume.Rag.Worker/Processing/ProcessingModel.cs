@@ -135,6 +135,9 @@ public sealed record ParsedDocument
     /// <summary>The parse rule that matched, <c>name@version</c> (processing design §3.5).</summary>
     public string? ParseRule { get; init; }
 
+    /// <summary>The matched rule's structure hints when it is admin-made (<see cref="Parse.ParseRules.Of"/>); null for built-in rules.</summary>
+    public Parse.ParseRuleHints? RuleHints { get; init; }
+
     /// <summary>Facts of the stages so far (<c>clean.*</c>, <c>quality.*</c>, <c>html.*</c>), numbers and short codes only.</summary>
     public IReadOnlyDictionary<string, double> Facts { get; init; } = new SortedDictionary<string, double>(StringComparer.Ordinal);
 }

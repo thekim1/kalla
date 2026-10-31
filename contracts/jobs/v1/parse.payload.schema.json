@@ -52,6 +52,25 @@
       "maximum": 10000,
       "default": 0
     },
+    "bypassFrom": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "A forced reprocess (engine design §8): this stage and every later one skip the output cache, their keys salted with the execution id; null: no bypass.",
+      "enum": [
+        "fetch",
+        "scan",
+        "detect",
+        "parse",
+        "clean",
+        "chunk",
+        "personal-data",
+        "embed",
+        "index",
+        null
+      ]
+    },
     "minBuild": {
       "type": [
         "string",
