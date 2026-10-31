@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-10-31, session 11 (late).
+State of the Ume.Rag work for the next session. Rewritten 2026-10-31, end of session 11.
 Repo `~/research/rag`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
 
@@ -12,10 +12,11 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 **Where we are:** the design is complete. **P0 is done and released as `v0.1.0`** (2026-10-31,
 https://github.com/thekim1/ume-rag-platform/releases/tag/v0.1.0). **P1 is coded "code first, live testing last"**
-(user, 2026-10-31). **Stream A's P1a and P1b code items are done except** the parse-rule commands (agent running at
-this checkpoint), the items that wait on stream B (P1a item 17 smoke job, P1b item 15 `e2e`, item 17's importer part)
-and the end-of-P1b pin review. Stream B (remote) is on P1a items 12–14: knowledge API (#125/#127/#146/#152 approved),
-gateway client (#123 approved, merging), then admin endpoints (J7), chat API (J9) and realm additions (J8).
+(user, 2026-10-31). **Stream A's P1a and P1b code items are done** except those waiting on stream B (P1a item 17 smoke
+job, P1b item 15 `e2e`, item 17's importer part, worker upload reads via `ForLevel` once the admin encrypts uploads) and
+the end-of-P1b pin review. Stream B (remote) merged the gateway client (#123), the knowledge service and routes (#125,
+#127, #146, #152); next for B: #142 (`RequestDimensions`), then admin endpoints (J7), chat API (J9), realm (J8) and
+schema part 3 (#134: `TR_ParseProfiles_ConfigChanged`, chunk-set key salt).
 
 **First live step (milestone 1)** is prepared: the user's interim gateway (address only in local user secrets and the
 main session's memory, never in the repo) serves `text-embedding-3-large` from an `Eu` provider; a smoke test got
@@ -54,16 +55,17 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
   scope and the files other running agents own, binding done-when, proofs incl. a **negative proof**, report + PR body. **Implementors never run git writes**: the
   main session commits, merges `origin/main` into the branch, re-runs build + suites, pushes, opens the PR, merges
   when green, then `git worktree prune`. Send heads-ups to running agents when a merge changes an API they call.
-- **CI** (user, 2026-10-31; Decisions "CI on the self-hosted runner for every pull request", #151): `verify.yml`
-  and `parser.yml` run on the self-hosted runner `ume-rag` for every non-draft PR, no label. GitHub-hosted minutes are
-  gone: never dispatch to hosted runners; scheduled workflows stay off. The main session **still verifies every PR
-  locally**: merge `origin/main` into the branch, then `dotnet build UmeRag.slnx -c Release`, `Ume.Rag.Worker.Tests`
-  (with `UME_RAG_TEST_CLAMAV_IMAGE=ume-rag.local/clamav:dev UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci`)
-  **twice**, `Pipelines.Tests`, `ContractTests`, and `git diff --name-only origin/main...HEAD | python3 -I
-  scripts/check-ownership.py <branch>`; evidence in the PR body. **Merge when both the local suites and the runner's
-  run are green** (`gh pr checks <n>`; GitHub can't enforce it on this repo). The scratchpad script `verify.sh
-  <worktree> <cores> <branch>` did all local checks in session 11 (recreate it; it doesn't survive). Main session on
-  cores `2,3`, agents on `0,1`.
+- **CI** (user, 2026-10-31; Decisions "CI on the self-hosted runner for every pull request" and **"Merge on local
+  evidence, then check main"**): `verify.yml`/`parser.yml` run on the single self-hosted runner `ume-rag` for every
+  non-draft PR. **Merge a PR on its local evidence without waiting for the runner**: merge `origin/main` into the
+  branch, then `dotnet build UmeRag.slnx -c Release`, `Ume.Rag.Worker.Tests` (with
+  `UME_RAG_TEST_CLAMAV_IMAGE=ume-rag.local/clamav:dev UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci`) **twice**,
+  `Pipelines.Tests`, `ContractTests`, `git diff --name-only origin/main...HEAD | python3 -I scripts/check-ownership.py
+  <branch>`; evidence in the PR body. **After a batch of merges check `main`**: `gh workflow run verify.yml --ref main`
+  (self-hosted, no GitHub minutes) plus the local suites on `main`; fix a red `main` before merging more. Never dispatch
+  to GitHub-hosted runners; scheduled workflows stay off. A session-11 helper `verify.sh <worktree> <cores> <branch>` in
+  the scratchpad did all local checks (recreate it). Main session on cores `2,3`, agents on `0,1`. Don't `pkill -f` a
+  pattern your own command line contains (it kills the calling shell).
 - **Stream B** is a remote agent (GitHub `thekim1`). Talk **only through GitHub** (issues labelled `stream-b`,
   `stream-a`, `main`; PR comments). Check GitHub before each new piece of work. The main session reviews B's PRs and
   answers its issues; **B merges its own PRs**. Note: everything the main session files appears under the user's
@@ -121,45 +123,53 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
 | Blobs | `src/Ume.Rag.Infrastructure/Blobs/` | URB2 envelope, file key provider, worker encrypts `internal` blobs, `IBlobEnvelope` for rag-api (#153) |
 | Engine extras (session 11) | `src/Ume.Rag.Worker/Engine/` | one `Reconciler.ReconcileAsync` decision + drift-sweep swap-back (#138); forced reprocess with salted keys (#140); settings-change effects via `Runs.SettingsHashes` (#141); 24 h ClamAV cap, embed batch cap 6000 tokens (#143); 5105, `CreatedAt` scheduler (follow-up PR in verification) |
 
-## Session 11 (done so far)
+## Session 11 (done)
 
-Merged (stream A, verified locally): #135 test-host run book + Open WebUI feedback account; #136 site-profile host key
-without port, `excludedTypes` per host, preview parse key with admin rules; #137 eval reproducibility + set triggers;
-#138 one reconcile decision, drift-sweep swap-back; #139 P1a items 5/6 rows (#26, #43, #111, #81); #140 forced
-reprocess; #141 settings-change effects; #143 24 h ClamAV cap, embed batch cap, URL-list `identity-changed`; #144
-CHANGELOG; #148 README; #149 milestone-1 seed script + run steps; #150 gateway-host setup guide + firewall fix;
-#153 blob envelope. Design syncs `d6b4657`, `7487c72`, `884c89d`. Docs: `docs/phase1-guide.html`.
-Reviewed/approved B: #123, #146, #147, #151, #152. Filed: #142 (RequestDimensions; B takes it right after #123),
-comments on #134 (B confirmed the command route; salt column for the chunk-set key), #145 (answered by #153).
-Decisions: "Pilot embedding model, U-b"; "CI on the self-hosted runner for every pull request". Gateway session
-prompt §1 gained the embedding-batch vs `ContextWindow` fix (`a464514`).
+Merged (stream A): #135 test-host run book + Open WebUI feedback account; #136 site-profile host key, `excludedTypes`
+per host, preview parse key with admin rules; #137 eval reproducibility + set triggers; #138 one reconcile decision,
+drift-sweep swap-back; #139 P1a items 5/6 rows; #140 forced reprocess; #141 settings-change effects; #143 24 h ClamAV
+cap, embed batch cap, URL-list `identity-changed`; #144 CHANGELOG; #148, #154 README; #149 milestone-1 seed script +
+run steps; #150 gateway-host setup guide + same-host firewall fix + migrator `EmbeddingProfile__*` env + seed
+`--socket`; #153 blob envelope (URB2, answers #145); #155 5105, scheduler on `CreatedAt`, shared pgvector source,
+per-service key docs; #156 parse-rule commands (+ `ParseRuleCatalog` department fix). Design syncs `d6b4657`,
+`7487c72`, `884c89d`. Docs: `docs/phase1-guide.html` (Swedish), `docs/gateway-host-setup.md`.
+Reviewed/approved B: #123, #146, #147, #151, #152, #157. Filed #142; comments on #134, #145.
+Decisions added: "Pilot embedding model, U-b"; "CI on the self-hosted runner for every pull request"; "Merge on local
+evidence, then check main". Gateway session prompt §1: embedding batches vs `ContextWindow` (`a464514`).
+
+**At the restart:** no stream-A PR open, no agent running. A `main` check was in progress: runner run
+https://github.com/thekim1/ume-rag-platform/actions/runs/41245195778 on `124c66b` (changes, images green; backend
+running) and a local run on `d976001` (worker run 1: 1063/1063 green). B has since merged #146 and #152 on top
+(`26aa576`). **First thing next session: read that run's result, then check `main` @ head again** (dispatch + local).
 
 ## Next step
 
-1. **Finish the running work:** merge `a/9-engine-followups` (5105, `CreatedAt`, shared pgvector source, docs) and
-   `a/p1b-8-parse-rule-commands` (edit/disable-parse-rule, affected-source reprocess) when local + runner are green;
-   merge #154 (README CI) on a green runner run.
-2. **Milestone 1 when B lands #123 and #142** (and #146/#152 for retrieval): worker side of #142 if B leaves it
-   (`dimensions` in the embed stage, canary, evaluation query embedder); then run `docs/p1a-local-run.md` §4 locally
-   against the interim gateway (user secrets are set: `Gateway:BaseUrl`, `Gateway:Keys:Eu`; flip
-   `FakeGateway:Enabled=false`; AppHost must forward `EmbeddingProfile:*` to migrations, asked on #142). Then the user
-   can hand `docs/gateway-host-setup.md` to Hermes.
-3. **Stream-A code left:** P1a item 17 `evaluation-smoke` job (after B's smoke set; the runner now runs CI); P1b item
-   15 `e2e` (after L7); item 17 importer settings (after L6); worker upload reads through `ForLevel` once the admin
-   encrypts uploads (#145 follow-up); the chunk-set key salt with B's schema part 3 (#134); binary `COPY` in
-   `IndexWriter` for to-verify #21/#119 (optional); item 19 pin review before go-live.
-4. **Watch item:** one unexplained failure of `EngineCrawlTests.A_crawl_syncs_the_site_into_live_chunks_with_its_report_and_a_second_run_is_unchanged` (1 of ≈ 12 runs, message not captured). Read the message the next time it fails.
-5. **Design sync** of #143–#153 deviations (each PR body) and to-verify; refresh the old stakeholder report's status
-   or point it to the phase 1 guide.
+1. **Check `main`** (above). Fix it first if red.
+2. **Milestone 1 when B lands #142:** worker side if B leaves it (send `dimensions` in the embed stage, the worker
+   canary and the evaluation query embedder when the profile's `RequestDimensions` is set); AppHost forwarding of
+   `EmbeddingProfile:*` to migrations (asked on #142). Then run `docs/p1a-local-run.md` §4 locally against the interim
+   gateway (AppHost user secrets hold `Gateway:BaseUrl` and `Gateway:Keys:Eu`; flip `FakeGateway:Enabled=false`;
+   seed with `scripts/dev/seed_url_list.py --profile pilot-embedding`). Retrieval: `/v1/retrieve` exists since #152
+   (needs an api client key; check how B's #152 seeds dev keys). Afterwards the user hands `docs/gateway-host-setup.md`
+   to the infra agent Hermes.
+3. **Stream-A code left:** P1a item 17 `evaluation-smoke` (after B's smoke set); P1b item 15 `e2e` (after L7); item 17
+   importer settings (after L6); worker upload reads via `ForLevel` (with the admin's encrypted uploads, #145);
+   chunk-set key salt with B's schema part 3 (#134); optional binary `COPY` in `IndexWriter` (to-verify #21/#119);
+   item 19 pin review before go-live.
+4. **Watch item:** one unexplained failure of `EngineCrawlTests.A_crawl_syncs_the_site_into_live_chunks_with_its_report_and_a_second_run_is_unchanged` (1 of ≈ 14 runs). Read the message next time.
+5. **Design sync** of #143–#156 deviations (PR bodies) and to-verify; point the old stakeholder report to the phase 1
+   guide or refresh its status.
 6. Then the live block with the user (`plans/p1b/README.md` §5 step 4).
+7. **After milestone 1:** the design-document restructure in **`plans/doc-restructure.md`** (fold the passes into the
+   detail docs, as-built notes to present tense, "later" marked, Decisions-table status; § numbers stay stable).
 
 **Open issues to stream B:** #80, #90, #92, #95, #102, #110, #114, #116, #129, #132, #134, #142; also #34, #52, #75.
-Stream A's own: #48, #51, #120 (close once #128 is accepted). For the user: #100 (L8 run steps).
+Stream A's own: #48, #51, #120 (close: #128 accepted). For the user: #100 (L8 run steps).
 
-**Waiting on the user:** keys on the interim gateway restricted to `Eu` and the embedding deployment's `ContextWindow`
-left empty; the **gateway session** (release 1 incl. the embedding-batch fix, shared Keycloak realm `ume`, identity §16
-Q1–Q4/Q6); **O7** (go-live host); identity §16 Q5, Q7–Q9; runbook review by the operations owner; U1 with the web
-editors; names and dates for A1, G1, N1, U1, W2, P2 and the gold-set owner; DPIA G1.
+**Waiting on the user:** interim-gateway keys restricted to `Eu` (one per service) and the embedding deployment's
+`ContextWindow` left empty; the **gateway session** (release 1 incl. the embedding-batch fix, shared Keycloak realm
+`ume`, identity §16 Q1–Q4/Q6); **O7** (go-live host); identity §16 Q5, Q7–Q9; runbook review by the operations owner;
+U1 with the web editors; names and dates for A1, G1, N1, U1, W2, P2 and the gold-set owner; DPIA G1.
 
 ## Open register items (`plans/postponed-decisions.md`)
 
@@ -170,8 +180,8 @@ item needs a named person and a date.
 
 ## Environment notes
 
-- Worktrees: at this checkpoint `../rag-f118` (`a/9-engine-followups`), `../rag-pr` (`a/p1b-8-parse-rule-commands`),
-  `../rag-readme2` (`a/shared-readme-ci`, PR #154); `git worktree list` to check.
+- Worktrees: none for stream work at the end of session 11 (a detached `../rag-main-check` may linger from the local
+  main check: `git worktree remove --force ../rag-main-check`); `git worktree list` to check.
 - `rag_key.txt` in the repo root holds the user's interim-gateway key; it is excluded locally (`.git/info/exclude`),
   mode 600, and already copied into the AppHost user secrets. Never commit, print or move it into the repo.
 - Local images: `ume-rag.local/clamav:dev` (tests use `UME_RAG_TEST_CLAMAV_IMAGE`), `ume-rag.local/parser:ci`

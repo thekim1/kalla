@@ -149,7 +149,9 @@ same records; the knowledge role recomputes the assistant's collections from its
 The P1 gate is `Knowledge:OpenToClientKinds` (default `["internal"]`; P2 adds `integration`, `entra-app`,
 `own-client`); any other client gets `403 client_not_allowed` before resource checks, so it reveals nothing. Every
 route is mapped only when `Rag:Roles` contains `knowledge` (repo-and-deployment §3). MCP (`/mcp`, P2) calls `IRetriever`
-in process (§14).
+in process (§14). As built in P1a item 12 part 4a (PR #152, 2026-10-31): knowledge routes authenticate by key only
+(`Authorization`, `x-api-key` or `api-key`) or by download grant; tokens and Open WebUI user JWTs are not accepted in
+P1, since P1 callers are `internal` clients and grants.
 
 ## 3. API contract
 
@@ -252,6 +254,9 @@ Collections the caller may search (identity `Filter`, silent, no events; memoise
               "published_at": "2026-11-20T09:00:00Z" } ] }
 ```
 
+As built (PR #152, 2026-10-31): `document_types` is left out, since no per-collection aggregate exists yet; it can
+come from the snapshot or a cheap query when a client needs it.
+
 Unpublished collections never appear (§4.5). Document counts are not shown (cheap to compute, but they would turn the
 endpoint into a change monitor for other departments' sources; the admin UI has them).
 
@@ -272,12 +277,12 @@ the page itself; serving crawled HTML from our origin would also be an XSS vecto
 |---|---|
 | Authentication | `?grant=` download grant (§4.6) or a normal credential of an allowed client kind |
 | Blob | uploads: the upload blob `uploads/{sourceId}/{slot}/{ContentHash}`, which is the document's raw content (connectors §9.1, no copy); others: `raw/{level}/{ContentHash}` (data-model §9); write-once keys |
-| Decryption | `public` blobs are not envelope-encrypted (encrypted disk only) and are streamed as stored; `internal` blobs: read the `URB2` header and unwrap its data key with `IKeyProvider` (`rag-blob-<level>`; data-model §7), then decrypt and **verify each 64 KiB segment before writing it**; a failing tag or a missing final segment aborts the response (connection reset, error logged, metric `outcome=integrity`) |
+| Decryption | `public` blobs are not envelope-encrypted (encrypted disk only) and are streamed as stored; `internal` blobs: read the `URB2` header and unwrap its data key with `IKeyProvider` (`rag-blob-<level>`; data-model §7), then decrypt and **verify each 64 KiB segment before writing it**; a failing tag or a missing final segment aborts the response (connection reset, error logged, metric `outcome=integrity`). As built (PR #146, PR #153, 2026-10-31): the reader is `IBlobEnvelope.OpenReadAsync(key, level)` (data-model §7), but rag-api does not use it yet: its `StoredBlobContentReader` streams blobs without the header as stored and answers 503 `content_unavailable` for a `URB2` blob, so `internal` content written by the worker since PR #153 is not served until rag-api registers `AddRagBlobEnvelope` |
 | `Content-Type` | `Documents.MediaType` (sniffed type, connectors §9.2) if on the allow-list of §9.2's types; else `application/octet-stream` |
 | `Content-Disposition` | `inline` for `application/pdf`, `image/png`, `image/jpeg`; `attachment` for everything else (Office, email, HTML, text); `filename*=UTF-8''…` from the visible `DisplayName` (§10.2), else `dokument-{id:N}.{ext}` |
 | Other headers | `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` for non-PDF, `Cache-Control: private, no-store`, `ETag` = hex `ContentHash`, `Content-Length` = plaintext length computed from the blob length and segment count |
 | Ranges | **not supported in P1** (`Accept-Ranges: none`; uploads ≤ 50 MB, connectors §9.1). The segment format allows ranges later (seek to segment ⌊offset / 64 KiB⌋) |
-| Limits | one stream per request, `Knowledge:DownloadsPerMinutePerAddress` 120 through `IRateLimitStore` (in process per instance in P1; from P2 Redis `ume-rag:rl:dl:{ipHash}:{minute}`, data-model §11; not the P2 widget key `rl:ip`) |
+| Limits | one stream per request, `Knowledge:DownloadsPerMinutePerAddress` 120 through `IRateLimitStore` (in process per instance in P1; from P2 Redis `ume-rag:rl:dl:{ipHash}:{minute}`, data-model §11; not the P2 widget key `rl:ip`). As built (PR #152, 2026-10-31): P1 uses ASP.NET Core's in-process fixed-window rate limiter per address instead of `IRateLimitStore`, the same behaviour per instance |
 | Errors | as §3.6; after the first byte only a reset is possible |
 
 ### 3.6 Errors (problem details)
@@ -389,10 +394,10 @@ mac     = base64url(HMAC-SHA256(Security:DownloadGrantKeys[kid], "g1." + kid + "
 
 | Rule | Detail |
 |---|---|
-| Keys | `Security:DownloadGrantKeys` (secret files `Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes, made by `init-deployment.sh`); the newest signs, all verify, so a key can be rotated with a one-lifetime overlap |
+| Keys | `Security:DownloadGrantKeys` (secret files `Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes, made by `init-deployment.sh`); the newest signs, all verify, so a key can be rotated with a one-lifetime overlap. As built (PR #146, 2026-10-31): the newest is the greatest kid in ordinal order (kids are dated, e.g. `2026-10`); `Knowledge:PublicBaseUrl` (rag-api's staff-network address) makes the link absolute, and unset it is relative |
 | Lifetime | `Knowledge:DownloadGrantLifetime` **7 days** for `public`/`internal` (answered 5), **1 hour** for `sensitive` (no `sensitive` client stores history). Links in Open WebUI chats older than 7 days stop working (Open WebUI keeps chats 90 days); asking again issues a new link |
 | Contents | ids and the expiry only; no subject, no name, no title (URLs end up in browser history and proxy logs; ServiceDefaults strips `url.query` from traces, `src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:93-97`) |
-| Check on use | constant-time MAC compare; `e` not passed; then, at the current confirmed version: client `cl` enabled, key `k` (if set) not revoked or expired, assistant `a` (if set) `published` and still linked to `c`, collection `c` live and published, `c`'s level ≤ client ceiling, document visible in `c` (§4.4 with the sources of `c`); any failure → 404 `not_found` (5002 with the real reason) |
+| Check on use | constant-time MAC compare; `e` not passed; then, at the current confirmed version: client `cl` enabled, key `k` (if set) not revoked or expired, assistant `a` (if set) `published` and still linked to `c`, collection `c` live and published, `c`'s level ≤ client ceiling, document visible in `c` (§4.4 with the sources of `c`); any failure → 404 `not_found` (5002 with the real reason; as built, PR #146: reasons without an identity §4.3 code are `grant_scope` (another document) and `key_unusable`) |
 | Failure on the token | 401 `grant_invalid` / `grant_expired`, counted as 5001 with `Credential = grant`; a browser request (`Accept: text/html`) gets a minimal static Swedish page instead ("Länken har gått ut. Ställ frågan igen för att få en ny länk."), same status, CSP `default-src 'none'` |
 | Scope | only `GET /v1/documents/{d}` and `/content` for that one document; never `/v1/retrieve` |
 | Reachability | the reverse proxy exposes `GET /v1/documents/*/content` (and `/v1/documents/*`) to the staff network; all other `rag-api` paths stay restricted to the Open WebUI host (identity §5.3) |
@@ -807,7 +812,8 @@ the cost is only that paragraph breaks between two chunks are unknown (joined wi
   section including its subsections. Packed short sibling sections (processing §6.2 rule 5) carry their common parent
   path, so they expand together, as intended.
 - **Window** fetched: ±`Retrieval:ExpandNeighbourChunks` (**8**) ordinals; a run reaching the window edge sets
-  `truncated: true`.
+  `truncated: true` (as built, PR #146, 2026-10-31: so does a run cut by the token bound below, since the section is
+  incomplete in both cases).
 - **Growth**: start with the hit; add the next chunk after, then the one before, alternating (after first: following
   text usually continues an answer), while `Σ TokenCount ≤ expandMaxTokens` (**1,500**, per collection). `TokenCount`
   includes each chunk's heading-path prefix (processing §6.5), so the sum over-estimates the assembled text and the

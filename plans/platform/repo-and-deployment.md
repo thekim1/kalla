@@ -234,7 +234,7 @@ Every service project starts with `if (await WebDefaults.ExitIfHealthProbeAsync(
 
 | Setting | Values | Default | Effect |
 |---|---|---|---|
-| `Rag:Roles` (env `Rag__Roles`) on `Ume.Rag.Api` | comma list of `knowledge`, `chat`, `mcp` | `knowledge,chat` (P1), `knowledge,chat,mcp` (P2) | maps only those endpoint groups; health reports the active roles; `/version` lists them |
+| `Rag:Roles` (env `Rag__Roles`) on `Ume.Rag.Api` | comma list of `knowledge`, `chat`, `mcp` | `knowledge,chat` (P1), `knowledge,chat,mcp` (P2); as built (PR #152): unset means `knowledge`, and the AppHost sets `knowledge,chat,mcp` | maps only those endpoint groups; health reports the active roles; `/version` lists them |
 | `Retrieval:Mode` | `InProcess`, `Http` | `InProcess` | `chat` without `knowledge` requires `Http` and `Retrieval:BaseUrl`; `IRetriever` is then the HTTP client with a `ume-rag-sk-` service key |
 | `Worker:Classes` on `Ume.Rag.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; per-instance concurrency per class is the deployment setting `Worker:Concurrency:<class>` (defaults = engine design §9.1 table), `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps ([`../performance-pass.md`](../performance-pass.md) §3.4) |
 | `Worker:HeartbeatSeconds`, `Worker:InstanceTimeoutSeconds`, `Worker:ReaperSeconds`, `Worker:PollSeconds`, `Worker:StopGraceSeconds` on `Ume.Rag.Worker` | seconds | 10, 30, 10, 2, 90 | heartbeat and instance timeout, reaper interval, dispatcher poll, grace for running jobs on stop (engine design §9.1, §9.4; as built in P0 #20, PR #20). `Worker:Classes` is a comma list |
@@ -384,6 +384,15 @@ vectors when we run against a real local gateway.
   `tests/evaluation/smoke/documents/*` (no crawl needed offline) and its 30 smoke questions as the evaluation set;
   assistant *Demo-assistent* (`public`); client *Open WebUI (dev)* at ceiling `internal` with key `ume-rag-sk-` from
   `Secret("dev-key", 43)`; a local `IKeyProvider` key file under the AppHost's user-secrets directory.
+- **Dev URL-list seed** (as built in P1a item 18, PRs #149 and #150, 2026-10-31; dev and test hosts only, until the
+  admin's set-up endpoints exist): `scripts/dev/seed_url_list.py` runs `seed-url-list.sql` with psql against a local
+  database only (`--docker` runs psql in the Postgres container, `--socket` over its Unix socket as `postgres`). It
+  finds or creates a hand-made department (unless `--department-id` names a synced one; the org sync then marks it
+  inactive, which the worker ignores), a published `public` collection on the embedding profile named by `--profile`
+  (not by `IsDefault`) and a URL-list source on the migrator's published platform `url-list` pipeline (it creates no
+  pipelines), and enqueues a sync as "sync now" does (priority 10, dedup `sync:{id}`, `MaxAttempts` 3). It takes the
+  version lock as `ConfigWrites` does and leaves the version bump to the config triggers; it writes no audit entry.
+  Steps: `docs/p1a-local-run.md` §4.
 - **Against a real local gateway** (gateway AppHost running): AppHost user secrets `FakeGateway:Enabled=false`,
   `Gateway:BaseUrl=https://localhost:<gateway port>`, `Gateway:Keys:<level>=<gateway dev keys>`. In the gateway's admin,
   add the Ollama provider with model `bge-m3` (the gateway's `Ollama:Enabled` brings `qwen2.5:0.5b` for chat) and an
@@ -492,7 +501,11 @@ rag-api's default route went via `edge`). Each network's allow-list is therefore
 networks with an allow-list may also reach the host's upstream DNS resolvers. New connections from every Compose
 subnet to the host itself are rejected (`INPUT`). `rag-firewall.service` applies the rules after Docker starts and
 `rag-firewall.timer` re-applies them every 15 minutes, because the allow-lists name hosts. (As built in P0 #14, PRs #31
-and #40; settled at the integration sync point.)
+and #40; settled at the integration sync point.) As built in PR #150 (2026-10-31), for the Decisions row "Interim
+gateway for P1a" (gateway and Keycloak on the test host): an allow-listed endpoint (gateway, OIDC authority, Open
+WebUI host, OTLP, the ClamAV mirror) that resolves to this host is an exception to the `INPUT` reject for the subnets
+allowed to reach it, and the egress chain matches such endpoints by their original destination
+(`--ctorigdst`/`--ctorigdstport`), since a proxy container on the host is reached through DNAT.
 
 | Network | Subnet | `internal` | Members | Egress |
 |---|---|---|---|---|
@@ -679,6 +692,9 @@ its key in Open WebUI and places the file (chat design §14.2). As built in P1b 
 `WEBUI_ADMIN_PASSWORD` in `secrets/openwebui.env`; Open WebUI creates it as its first user on an empty store), and the
 operator then runs `deploy/openwebui-feedback-key.sh` (shipped in the release bundle), which mints the key with
 password sign-in briefly on and writes `secrets/api/OpenWebUi__AdminApiKey` (chat design §4.3, §14.2).
+As built in PR #150 (2026-10-31): the migrator's embedding profile knobs (`EmbeddingProfile__*`, data-model §2.1) come
+from `deploy/.env` lines `UME_RAG_EMBEDDING_MODEL`, `_DIMENSIONS`, `_REQUEST_DIMENSIONS`, `_MAX_INPUT_TOKENS` and
+`_MAX_RESIDENCY` that the operator appends (empty model: no profile seeded); the script has no options for them yet.
 **Gateway keys per deployable** (plan §6; [`../performance-pass.md`](../performance-pass.md) §3.9): the worker's keys
 are its own and carry the gateway's existing per-key `MaxConcurrentRequests` cap, so a misconfigured worker fleet
 cannot starve chat's query embeddings. A separate BGE-M3 query route/replica follows only when its trigger fires (query

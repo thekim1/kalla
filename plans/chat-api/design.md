@@ -498,7 +498,9 @@ the pilot team. From release 2 (P2) they are delegating keys:
 `ResidencyCeilingHandler`, a `DelegatingHandler` on every gateway `HttpClient`, refuses (throws before sending) any
 request without an explicit `x-ume-max-residency` or whose key does not belong to that ceiling; unit-tested for every
 call site (answer, condense, judge, evaluation generation; the worker's NER/LLM stages use the same handler). Keys are
-secret files, never logged; the worker never holds the open key.
+secret files, never logged; the worker never holds the open key. As built in P1a item 13 (PR #123, 2026-10-31): the
+handler exempts `GET /v1/models` from the `x-ume-residency` check of §8.2, because the gateway sets that header only
+when a deployment answers; the ceiling and key checks still apply.
 
 ### 8.2 Checks before the first byte (R4)
 

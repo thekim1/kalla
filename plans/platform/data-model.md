@@ -125,7 +125,9 @@ until `DemoteRules` exists; `BlobTombstones` is granted as in the row above (iss
 worker keeps the S I U D it has on every `content` table).
 
 As built in P1a item 11 (PR #112, 2026-10-31): the api's column grant on `Documents` adds `Language` and `FetchedAt`,
-which statement D reads for the citation fields (knowledge design §6.3, §10.1).
+which statement D reads for the citation fields (knowledge design §6.3, §10.1). As built in P1a item 12 part 3 (PR
+#146, 2026-10-31): it also adds `CanonicalIdentity` and `ContentHash`, which `/content` needs for the blob key and the
+`ETag` (knowledge design §3.5).
 
 ## 2. Tables
 
@@ -218,7 +220,10 @@ delivered with gateway release 2 in P2 (weakness review §5); until then `Member
   only (§7); `ChatMasterKeyName` is not created (A1). Its outbox rows have `EntityId` null, because the key is
   `Classification`, not `Id`.
 - **`EmbeddingProfiles`**: the development seeder's profile is `dev-embedding`, model `bge-m3` (FakeGateway), 1024
-  dimensions, `MaxResidency = Eu`; the canary is P1a item 13.
+  dimensions, `MaxResidency = Eu`. As built in P1a item 13 (PR #123, 2026-10-31): the migrator seeds the platform
+  profile from the deployment knobs `EmbeddingProfile:*` (`Name`, `GatewayModel`, `Dimensions`, `MaxInputTokens`,
+  `MaxResidency`) insert-if-absent with `CanaryText` and its HNSW index, and never changes an existing profile; the
+  admin API records `CanaryEmbedding` (processing §11).
 - **`Sources`**: `DemoteRules` is left out until `demote` is built (P1 README §6); `Type` has no `sharepoint` (P2).
 - **`Pipelines`**: U (`DepartmentId`, `Name`) is nulls-not-distinct, so platform defaults are unique too. There is no
   FK on `Pipelines.DepartmentId`, `Collections.DepartmentId` or `Collections.OwnerTeamId` (this section names none).
@@ -244,7 +249,8 @@ delivered with gateway release 2 in P2 (weakness review §5); until then `Member
   index, not a PK; the outbox `EntityId` is the audience id. The CHECK allows `client` only (P1).
 - **`GatewayModels`**: no change stamps or `xmin` (not an editable root) and no "disabled" column (admin design
   §4.10); outbox `EntityId` null (the key is `Name`). The 5-minute sync must write only rows that changed (incl.
-  `SyncedAt`), or every sync bumps the config version.
+  `SyncedAt`), or every sync bumps the config version. As built (PR #123, 2026-10-31): a catalogue row whose
+  deployment is disabled or no longer served is deleted; manual rows are never touched.
 - `AssistantTestQuestions` and `AssistantTemplates` (P2) are not created.
 
 ### 2.2 `content` (owner: worker)
@@ -492,7 +498,7 @@ CREATE INDEX "IX_Jobs_RunId" ON content."Jobs" ("RunId") WHERE "State" IN ('queu
 | Class | Order | Concurrency (per worker) | Lease | Max attempts | Notes |
 |---|---|---|---|---|---|
 | `preview` | 1 | 2 | 2 min | 1 | Never writes `content` except `Result` and `CrawlHosts.NextAllowedAt`; stage outputs to `previews/` blobs |
-| `command` | 2 | 2 | 1 min | 3 | Admin decisions applied by the worker: clear PII flag, confirm/reject deletion, release a held document, approve or disable a parse rule, approve/reject/edit/roll back a site profile (`approve-site-profile`, `reject-site-profile`, `edit-site-profile`, `rollback-site-profile`), edit human evaluation questions, cancel a run, reprocess a document, roll back a publish (§12.2; kinds in engine design §9.1) |
+| `command` | 2 | 2 | 1 min | 3 | Admin decisions applied by the worker: clear PII flag, confirm/reject deletion, release a held document, approve or disable a parse rule (as built, PR #156: `edit-parse-rule`, `disable-parse-rule`), approve/reject/edit/roll back a site profile (`approve-site-profile`, `reject-site-profile`, `edit-site-profile`, `rollback-site-profile`), edit human evaluation questions, cancel a run, reprocess a document, roll back a publish (§12.2; kinds in engine design §9.1) |
 | `sync` | 3 | 2 | 5 min | 3 | Listing, change detection, deletion guard |
 | `fetch` | 4 | 8 (frontier limits per host) | 2 min | 5 | |
 | `parse` | 5 | `min(setting, parser /v1/info convert_slots)` | 15 min | 3 | Heartbeat extends the lease; yields after a 10-min slice; the gated `/v1/ner` call runs inside the processing job (processing design §9.6) |
@@ -648,9 +654,9 @@ reached over the existing HTTP seam (`Retrieval:Mode=Http`; postponed T1/K2), no
 **Chat: built when A1 allows stored content** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)).
 In P1 the pilot assistant runs history mode `none`: no bucket keys, no chat master keys `rag-chat-<level>`, no content
 encryption, no shredding. `DataProtectionPolicies.AllowedHistoryModes` holds only `none` until this is built. The
-design below is kept for that point. Blob encryption (below) is built in P1 unchanged. Status (P1a item 6 part 1,
-PR #82, 2026-10-31): the blob layer is not built yet, so the URL-list fetcher stores raw blobs unencrypted; it must
-exist before an `internal` source fetches (tracked for item 6 part 2 / item 9).
+design below is kept for that point. Blob encryption (below) is built in P1 unchanged. Status (PR #153,
+2026-10-31): built; the worker writes `internal` raw, parse and stage blobs as `URB2`. Uploads stay as the admin
+stored them until the admin encrypts `internal` uploads, and rag-api does not read `URB2` yet (knowledge design §3.5).
 
 **Chat** (all ciphertext columns are `bytea`: `0x01` format byte ‖ 12-byte nonce ‖ AES-256-GCM ciphertext ‖ 16-byte
 tag; AAD = `"<table>:<row id>:<column>:<conversation id>"`, so ciphertext cannot be moved between rows):
@@ -686,6 +692,23 @@ master key name and version ‖ wrapped data key ‖ base nonce, then 64 KiB seg
 construction). Unwrapped by the worker and, for citation downloads (`GET /v1/documents/{id}/content`, raw blob only,
 read-only mount), by the knowledge role (knowledge design §3.5). `sensitive` content is not stored in this deployment
 (§6).
+
+As built in PR #153 (2026-10-31):
+- `IBlobEnvelope` over the plain store and an `EnvelopeBlobStore` that replaces `IBlobStore` (`AddRagBlobEnvelope`),
+  with `IKeyProvider` and the pilot's `FileKeyProvider` in `Infrastructure/Blobs/` (`Infrastructure/Keys/**` is stream
+  B's). `KeyProvider:Directory` names the key directory, default `/run/keys` (the Compose mount). A key file holds the
+  base64 of 32 bytes, as `init-deployment.sh` writes it; file keys have version `1` only.
+- The data key is wrapped with AES-256-GCM, with the master key name and version as associated data. Each segment's
+  associated data is the header; the blob path is not bound, so a blob can be migrated or restored under another key.
+  A failing tag, a changed header, swapped segments or a missing final segment throw `BlobIntegrityException` (an
+  `IOException`) before the segment's bytes are returned.
+- The master key per level comes from `DataProtectionPolicies.BlobMasterKeyName`; without a row a non-`public` level
+  uses `rag-blob-<level>`, and a row cannot switch encryption off for a non-`public` level.
+- Reads of an encrypted level require `URB2`: plaintext `internal` blobs written before PR #153 cannot be read (wipe
+  the dev blob roots and their `NodeOutputs` rows). Quarantine and preview outputs are encrypted by the source's level
+  (`ForLevel`); access without a level throws.
+- Range reads decrypt and verify the earlier segments instead of seeking (the worker uses no ranges, and knowledge
+  §3.5 has none in P1).
 
 ## 8. Retention jobs
 
