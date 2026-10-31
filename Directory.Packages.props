@@ -48,6 +48,8 @@
   </ItemGroup>
   <ItemGroup Label="Worker">
     <PackageVersion Include="Cronos" Version="0.13.0" />
+    <!-- HTML DOM for change detection and link discovery (connectors design §12.2); 1.8.6 (2026-10-25) as repo-and-deployment §2 lists it. -->
+    <PackageVersion Include="AngleSharp" Version="1.8.6" />
   </ItemGroup>
   <ItemGroup Label="Testing">
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
@@ -65,5 +67,9 @@
   </ItemGroup>
   <ItemGroup Label="Benchmarks">
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+  <ItemGroup Label="Pipelines">
+    <!-- JSON Schema 2020-12 validator (to-verify #17): BSD-3-Clause, 2026-10-16. Corvus.Text.Json.Validator was checked first: its analyzers flow into every consuming project and flag System.Text.Json code. -->
+    <PackageVersion Include="LateApexEarlySpeed.Json.Schema" Version="4.2.2" />
   </ItemGroup>
 </Project>
