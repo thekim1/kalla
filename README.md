@@ -81,3 +81,10 @@ against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 
 Every package version is pinned exactly and was released at least 7 days before it was pinned; images are pinned by
 digest (`AGENTS.md`, 7-day package rule).
+
+## Licence
+
+Copyright © 2026 Umeå kommun. Licensed under the European Union Public Licence v. 1.2 (EUPL-1.2), see
+[`LICENSE`](LICENSE). The EUPL is published in every official EU language, Swedish included, and each version is
+equally valid (<https://interoperable-europe.ec.europa.eu/collection/eupl/eupl-text-eupl-12>). Third-party components
+keep their own licences.
