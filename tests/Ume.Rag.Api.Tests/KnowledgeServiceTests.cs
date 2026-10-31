@@ -508,13 +508,13 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         }
     }
 
-    private static (GatewayQueryEmbedder, IHost) Build(HttpMessageHandler handler)
+    private static (GatewayQueryEmbedder, IHost) Build(HttpMessageHandler handler, QueryEmbeddingOptions? options = null)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Keys:Eu", FakeGatewayFactory.EuKey)]);
         builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => handler);
         var host = builder.Build();
-        return (new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), new QueryEmbeddingOptions(), new byte[32], TimeProvider.System,
+        return (new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), options ?? new QueryEmbeddingOptions(), new byte[32], TimeProvider.System,
             NullLogger<GatewayQueryEmbedder>.Instance), host);
     }
 
@@ -533,6 +533,34 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         vectors.ShouldAllBe(v => v.Length == 1024);
         again.ToArray().ShouldBe(vectors[0].ToArray());
         embedder.QueryMac("bygglov altan").ShouldNotContain("bygglov");
+    }
+
+    [Fact]
+    public async Task The_in_process_cache_stays_within_its_cap_and_a_restart_starts_empty()
+    {
+        // To-verify #162 (test part): the one-slot pilot keeps the cache in process; a restart empties it without errors.
+        var counting = new Counting(fake.Server.CreateHandler());
+        var (embedder, host) = Build(counting, new QueryEmbeddingOptions { CacheEntries = 3 });
+        using (host)
+        using (embedder)
+        {
+            foreach (var query in new[] { "bygglov altan", "bygglov plank", "förskoleplats", "simhall", "parkering" })
+            {
+                await embedder.EmbedAsync(Profile, query, null, Ct);
+            }
+
+            embedder.CachedCount.ShouldBeLessThanOrEqualTo(3);
+        }
+
+        var callsBefore = counting.Calls;
+        var (restarted, host2) = Build(counting, new QueryEmbeddingOptions { CacheEntries = 3 });
+        using var _ = host2;
+        using var __ = restarted;
+        restarted.CachedCount.ShouldBe(0);
+        (await restarted.EmbedAsync(Profile, "bygglov altan", null, Ct)).Length.ShouldBe(1024);
+        counting.Calls.ShouldBe(callsBefore + 1); // a gateway call after the restart, then cached
+        await restarted.EmbedAsync(Profile, "bygglov altan", null, Ct);
+        counting.Calls.ShouldBe(callsBefore + 1);
     }
 
     [Fact]
