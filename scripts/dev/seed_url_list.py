@@ -17,7 +17,10 @@ list), on the platform url-list pipeline the migrator publishes, then enqueues a
 does (--no-sync leaves it to the scheduler's url-list schedule). It prints what it found, created and enqueued.
 
 psql comes from PATH, or from the AppHost's Postgres container with --docker CONTAINER (docker exec; the container's own
-port 5432). Exit 0 when seeded, 1 when psql or the SQL failed, 2 on bad arguments or a non-local database.
+port 5432). On the production Compose stack (a pilot or test host, docs/gateway-host-setup.md) the superuser may only
+connect over the Unix socket: --docker ume-rag-postgres-1 --socket runs psql there as the container's postgres user
+(peer authentication, no password, no connection string). Exit 0 when seeded, 1 when psql or the SQL failed, 2 on bad
+arguments or a non-local database.
 """
 
 import argparse
@@ -128,7 +131,26 @@ def script(args: argparse.Namespace, urls: list[str]) -> str:
     return "\n".join(lines) + "\n" + SQL_FILE.read_text(encoding="utf-8")
 
 
-def psql_command(parts: dict[str, str], docker: str | None) -> tuple[list[str], dict[str, str]]:
+def psql_command(parts: dict[str, str], docker: str | None, socket: bool = False) -> tuple[list[str], dict[str, str]]:
+    psql = ["psql", "-X", "-q", "--csv", "-v", "ON_ERROR_STOP=1", "-f", "-"]
+    if socket:
+        # The container's Unix socket as its own postgres user (peer): no password in this process or its environment.
+        if docker is None:
+            raise SeedError("--socket needs --docker CONTAINER")
+        env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
+        return [
+            "docker",
+            "exec",
+            "-i",
+            "-u",
+            "postgres",
+            docker,
+            *psql,
+            "-U",
+            "postgres",
+            "-d",
+            parts.get("database", "ragdb"),
+        ], env
     env = dict(os.environ)
     env.update(
         {
@@ -139,7 +161,6 @@ def psql_command(parts: dict[str, str], docker: str | None) -> tuple[list[str], 
             "PGDATABASE": parts.get("database", "ragdb"),
         }
     )
-    psql = ["psql", "-X", "-q", "--csv", "-v", "ON_ERROR_STOP=1", "-f", "-"]
     if docker is None:
         return psql, env
     passed = [a for name in ("PGUSER", "PGPASSWORD", "PGDATABASE") for a in ("-e", name)]
@@ -171,19 +192,29 @@ def main(argv: list[str] | None = None) -> int:
         "--no-sync", action="store_true", help="enqueue no sync; the scheduler runs the source on its schedule"
     )
     parser.add_argument("--docker", metavar="CONTAINER", help="run psql in this container (the AppHost's Postgres)")
+    parser.add_argument(
+        "--socket",
+        action="store_true",
+        help="with --docker: connect over the container's Unix socket as postgres (peer); no connection string",
+    )
     args = parser.parse_args(argv)
     try:
-        connection = args.connection or os.environ.get(ENV_CONNECTION)
-        if not connection:
-            raise SeedError(f"no connection string: pass --connection or set {ENV_CONNECTION}")
-        parts = parse_connection(connection)
-        require_local(parts)
+        if args.socket:
+            if not args.docker:
+                raise SeedError("--socket needs --docker CONTAINER")
+            parts = {"host": f"{args.docker} (socket)", "database": "ragdb", "user": "postgres"}
+        else:
+            connection = args.connection or os.environ.get(ENV_CONNECTION)
+            if not connection:
+                raise SeedError(f"no connection string: pass --connection or set {ENV_CONNECTION}")
+            parts = parse_connection(connection)
+            require_local(parts)
         urls = read_urls(args)
     except (SeedError, OSError) as error:
         print(f"seed-url-list: {error}", file=sys.stderr)
         return 2
 
-    command, env = psql_command(parts, args.docker)
+    command, env = psql_command(parts, args.docker, args.socket)
     try:
         result = subprocess.run(  # noqa: S603 - fixed argv; the SQL is our file, the values are quoted literals
             command, input=script(args, urls), capture_output=True, text=True, env=env, check=False

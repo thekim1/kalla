@@ -269,7 +269,14 @@ internal static class IngestionContentModel
             e.Property(x => x.Report).HasColumnType("jsonb");
             e.Property(x => x.SettingsHashes).HasColumnType("jsonb");
             e.Property(x => x.State).HasMaxLength(40);
-            e.Property(x => x.CostUsd).HasPrecision(18, 8);
+            // Counters start at 0 in the database too, so a writer may leave them out (#110).
+            foreach (var counter in new[] { nameof(Run.Added), nameof(Run.Updated), nameof(Run.Unchanged), nameof(Run.Deleted),
+                nameof(Run.Failed), nameof(Run.ProposedDeletions) })
+            {
+                e.Property<int>(counter).HasDefaultValue(0);
+            }
+
+            e.Property(x => x.CostUsd).HasPrecision(18, 8).HasDefaultValue(0m);
             e.Property(x => x.StartedAt).HasDefaultValueSql("now()");
             e.HasIndex(x => new { x.SourceId, x.StartedAt }).IsDescending(false, true);
         });
