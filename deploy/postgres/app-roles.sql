@@ -72,10 +72,12 @@ GRANT SELECT ON content."NodeManifest", content."WorkerNodeSupport", content."Cr
 -- The admin tombstones the upload blobs it replaces or deletes, in the transaction of its own change (issue #34).
 GRANT INSERT ON content."BlobTombstones" TO ume_rag_admin;
 -- The api searches chunks and reads the documents' citation columns only (knowledge design §3.5); "Language" and
--- "FetchedAt" for statement D and the citation fields (knowledge design §6.3, §10.1).
+-- "FetchedAt" for statement D and the citation fields (knowledge design §6.3, §10.1); "CanonicalIdentity" (the upload
+-- slot) and "ContentHash" for the blob key and ETag of the document content route (knowledge design §3.5).
 GRANT SELECT ON content."ChunkSets", content."Chunks" TO ume_rag_api;
 GRANT SELECT ("Id", "SourceId", "Classification", "IdentityKind", "IdentityHash", "Title", "Url", "MediaType",
-  "DisplayName", "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt", "Language", "FetchedAt")
+  "DisplayName", "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt", "Language", "FetchedAt",
+  "CanonicalIdentity", "ContentHash")
   ON content."Documents" TO ume_rag_api;
 -- Evaluation and retrieval counters (data-model §1.2, §12.2, §12.3): the worker writes them; the admin reads them and
 -- writes runs and results itself for the answer-level runs it executes (P2 kinds); the api counts retrievals only

@@ -88,6 +88,10 @@ public static class KnowledgeCodes
     public const string NotFound = "not_found";
     public const string EmbeddingUnavailable = "embedding_unavailable";
     public const string SearchUnavailable = "search_unavailable";
+    public const string ContentNotServed = "content_not_served";
+    public const string ContentUnavailable = "content_unavailable";
+    public const string GrantInvalid = "grant_invalid";
+    public const string GrantExpired = "grant_expired";
 }
 
 /// <summary>
@@ -102,4 +106,7 @@ public sealed class RetrievalDeniedException(int status, string code, string? su
 
     /// <summary>What the caller sent and may see echoed (an invisible slug, §4.4); never a hidden name.</summary>
     public string? Subject { get; } = subject;
+
+    /// <summary>The real reason behind a 404 <c>not_found</c>, for event 5002 only; never sent to the caller (§4.4, §4.6).</summary>
+    public string? Reason { get; init; }
 }

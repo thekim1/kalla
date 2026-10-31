@@ -77,7 +77,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
     private static readonly string[] ApiDocumentColumns =
     [
         "Id", "SourceId", "Classification", "IdentityKind", "IdentityHash", "Title", "Url", "MediaType", "DisplayName",
-        "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt", "Language", "FetchedAt",
+        "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt", "Language", "FetchedAt", "CanonicalIdentity", "ContentHash",
     ];
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         await Sql.ShouldBeDeniedAsync(api, """SELECT "Settings" FROM config."Sources" """);
         await Sql.ShouldBeDeniedAsync(api, """SELECT "Schedule" FROM config."Sources" """);
         await Sql.ShouldBeDeniedAsync(api, """SELECT * FROM content."Documents" """);
-        await Sql.ShouldBeDeniedAsync(api, """SELECT "CanonicalIdentity" FROM content."Documents" """);
+        await Sql.ShouldBeDeniedAsync(api, """SELECT "ParseCacheKey" FROM content."Documents" """);
         await Sql.ShouldBeDeniedAsync(api, """SELECT "PiiClearedBy" FROM content."Documents" """);
         await Sql.ShouldBeDeniedAsync(api, """UPDATE content."Documents" SET "Title" = 'x' """);
         // The api never reads pipelines, connector state, uploads or the crawl frontier.

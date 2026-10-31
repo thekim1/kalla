@@ -4,6 +4,7 @@ using Npgsql;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Access;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Domain.Ports;
 using Ume.Rag.Domain.Retrieval;
 using Ume.Rag.Infrastructure.Access;
 using Ume.Rag.Retrieval;
@@ -26,6 +27,12 @@ public sealed class NoDownloadLinks : IDownloadLinks
 }
 
 /// <summary>
+/// The stored original of a visible document without a public URL (knowledge design §3.5): its blob and what the
+/// route's headers need. <see cref="Level"/> decides decryption (<c>public</c> blobs are stored as they are).
+/// </summary>
+public sealed record DocumentContent(Guid DocumentId, BlobKey Key, string Level, string? MediaType, string? DisplayName, byte[] ContentHash);
+
+/// <summary>
 /// The knowledge role's core (knowledge design §2.1, §4, §6, §10), without HTTP: access on one confirmed snapshot,
 /// collection resolution (an assistant's published collections, or requested ones), allowed levels, the search through
 /// <see cref="RetrievalEngine"/> with the profile's query embedding, hydration re-checking every hit, citations, and the
@@ -41,7 +48,8 @@ public sealed partial class KnowledgeService(
     RetrievalCounter counter,
     NpgsqlDataSource dataSource,
     IDownloadLinks links,
-    ILogger<KnowledgeService> logger) : IRetriever
+    ILogger<KnowledgeService> logger,
+    int neighbourRadius = SectionAssembler.DefaultNeighbourRadius) : IRetriever
 {
     /// <summary>At most 20 collections per query (§4.2).</summary>
     public const int MaxCollections = 20;
@@ -113,39 +121,197 @@ public sealed partial class KnowledgeService(
         }
 
         var hydrateStarted = Stopwatch.GetTimestamp();
-        var results = await HydrateAsync(who, request, snapshot, collections, allowedLevels, search.Hits, ct);
+        var (results, sections) = await HydrateAsync(who, request, snapshot, collections, allowedLevels, search.Hits, settings,
+            platform.ExpandTotalMaxTokens, ct);
         counter.Retrieved(results);
         var timings = new RetrievalTimings(policyMs, search.Timings.KeywordMs, search.Timings.EmbeddingMs, search.Timings.VectorMs,
             Ms(hydrateStarted), Ms(started));
-        return new RetrievalResult(results, [], search.Coverage, search.Degraded, snapshot.Version, timings);
+        return new RetrievalResult(results, sections, search.Coverage, search.Degraded, snapshot.Version, timings);
     }
 
     public async Task<DocumentInfo> GetDocumentAsync(RagPrincipal who, Guid documentId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(who);
+        var (row, collection) = await VisibleAsync(who, documentId, ct);
+        return new DocumentInfo(Cite(who, row.Document, null, null, collection, null), row.Document.PageCount, collection.Id, collection.Slug);
+    }
+
+    /// <summary>
+    /// <c>GET /v1/documents/{id}</c> with a download grant (§4.6): only the grant's document, re-checked at the current
+    /// version. The citation carries no new link; the route links the grant it was given.
+    /// </summary>
+    public async Task<DocumentInfo> GetDocumentAsync(DownloadGrant grant, Guid documentId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(grant);
+        var (row, collection) = await GrantedAsync(grant, documentId, ct);
+        return new DocumentInfo(Cite(null, row.Document, null, null, collection, null), row.Document.PageCount, collection.Id, collection.Slug);
+    }
+
+    /// <summary><c>GET /v1/documents/{id}/content</c> with a normal credential (§3.5): visible as for §3.4, then not a <c>url</c> document.</summary>
+    public async Task<DocumentContent> FindContentAsync(RagPrincipal who, Guid documentId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(who);
+        var (row, _) = await VisibleAsync(who, documentId, ct);
+        return Content(row);
+    }
+
+    /// <summary><c>GET /v1/documents/{id}/content?grant=</c> (§3.5, §4.6).</summary>
+    public async Task<DocumentContent> FindContentAsync(DownloadGrant grant, Guid documentId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(grant);
+        var (row, _) = await GrantedAsync(grant, documentId, ct);
+        return Content(row);
+    }
+
+    /// <summary>
+    /// The blob of a visible document; <c>url</c> documents answer 404 <c>content_not_served</c> after the access check
+    /// (their citation links the page; serving crawled HTML from our origin would be an XSS vector).
+    /// </summary>
+    private static DocumentContent Content(DocumentRow row)
+    {
+        var document = row.Document;
+        if (document.IdentityKind != IdentityKinds.Upload || row.ContentHash is not { Length: > 0 } hash ||
+            !row.CanonicalIdentity.StartsWith("upload:", StringComparison.Ordinal) || !Guid.TryParse(row.CanonicalIdentity.AsSpan("upload:".Length), out var slot))
+        {
+            throw new RetrievalDeniedException(404, KnowledgeCodes.ContentNotServed);
+        }
+
+        // The upload blob is the document's raw content (connectors §9.1): uploads/{sourceId}/{slot}/{sha256}.
+        var key = new BlobKey($"uploads/{document.SourceId:D}/{slot:D}/{Convert.ToHexStringLower(hash)}");
+        return new DocumentContent(document.Id, key, row.Level, document.MediaType, document.DisplayName, hash);
+    }
+
+    /// <summary>§3.4: the document has a live chunk set in a collection <paramref name="who"/> may search; else 404.</summary>
+    private async Task<(DocumentRow, CollectionEntry)> VisibleAsync(RagPrincipal who, Guid documentId, CancellationToken ct)
+    {
         var snapshot = snapshots.Current;
-        var confirmed = snapshots.IsConfirmed;
-        var visible = Searchable(who, snapshot, confirmed).ToDictionary(c => c.Id);
-        var sources = visible.Values.SelectMany(c => snapshot.SourcesByCollection.GetValueOrDefault(c.Id, [])).ToArray();
-        if (sources.Length == 0)
+        var visible = Searchable(who, snapshot, snapshots.IsConfirmed).ToList();
+        var sources = visible.SelectMany(c => snapshot.SourcesByCollection.GetValueOrDefault(c.Id, [])).ToArray();
+        if (sources.Length == 0 || await DocumentAsync(documentId, Levels.UpTo(who.Client.Ceiling), sources, ct) is not { Document.Visible: true } row)
         {
             throw new RetrievalDeniedException(404, KnowledgeCodes.NotFound);
         }
 
-        await using var command = dataSource.CreateCommand(RetrievalStatements.Documents);
-        command.Parameters.Add(new NpgsqlParameter { Value = new[] { documentId } });
-        command.Parameters.Add(new NpgsqlParameter { Value = Levels.UpTo(who.Client.Ceiling).ToArray() });
+        return (row, visible.First(c => snapshot.SourcesByCollection.GetValueOrDefault(c.Id, []).Contains(row.Document.SourceId)));
+    }
+
+    /// <summary>
+    /// The check on use of a grant (§4.6) at the current confirmed version: the grant's document; client enabled; key
+    /// usable; assistant active, published and still linked to the collection; collection live, within the client's
+    /// ceiling; the document visible through the collection's sources. Every failure is 404 <c>not_found</c> with the real
+    /// reason in <see cref="RetrievalDeniedException.Reason"/> (event 5002).
+    /// </summary>
+    private async Task<(DocumentRow, CollectionEntry)> GrantedAsync(DownloadGrant grant, Guid documentId, CancellationToken ct)
+    {
+        var snapshot = snapshots.Current;
+        if (!snapshots.IsConfirmed)
+        {
+            throw new RetrievalDeniedException(503, DenyReasons.ConfigUnconfirmed);
+        }
+
+        var reason = GrantRefusal(grant, documentId, snapshot);
+        if (reason is null && grant.KeyId is { } keyId && !await KeyUsableAsync(keyId, grant.ClientId, ct))
+        {
+            reason = "key_unusable";
+        }
+
+        CollectionEntry? collection = null;
+        DocumentRow? row = null;
+        if (reason is null)
+        {
+            collection = snapshot.Collections[grant.CollectionId];
+            row = await DocumentAsync(documentId, Levels.UpTo(collection.Classification), [.. snapshot.SourcesByCollection.GetValueOrDefault(collection.Id, [])], ct);
+            reason = row is { Document.Visible: true } ? null : DenyReasons.NotFound;
+        }
+
+        if (reason is not null)
+        {
+            LogGrantRefused(logger, documentId, reason);
+            throw new RetrievalDeniedException(404, KnowledgeCodes.NotFound) { Reason = reason };
+        }
+
+        return (row!, collection!);
+    }
+
+    /// <summary>The in-memory half of the grant check; null when it passes.</summary>
+    private static string? GrantRefusal(DownloadGrant grant, Guid documentId, PolicySnapshot snapshot)
+    {
+        if (grant.DocumentId != documentId)
+        {
+            return "grant_scope";
+        }
+
+        if (!snapshot.Clients.TryGetValue(grant.ClientId, out var client))
+        {
+            return DenyReasons.ClientUnknown;
+        }
+
+        if (!client.IsEnabled)
+        {
+            return DenyReasons.ClientDisabled;
+        }
+
+        if (!snapshot.Collections.TryGetValue(grant.CollectionId, out var collection) || !collection.IsLive)
+        {
+            return DenyReasons.NotFound;
+        }
+
+        if (!Levels.AtMost(collection.Classification, client.Ceiling))
+        {
+            return DenyReasons.CeilingExceeded;
+        }
+
+        if (grant.AssistantId is { } assistantId && (!snapshot.Assistants.TryGetValue(assistantId, out var assistant) ||
+            assistant.State != AssistantStates.Active || assistant.Published is not { } published || !published.CollectionIds.Contains(collection.Id)))
+        {
+            return DenyReasons.NotFound;
+        }
+
+        return null;
+    }
+
+    private async Task<bool> KeyUsableAsync(Guid keyId, Guid clientId, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand(KeyUsableStatement);
+        command.Parameters.Add(new NpgsqlParameter { Value = keyId });
+        command.Parameters.Add(new NpgsqlParameter { Value = clientId });
+        return (bool)(await command.ExecuteScalarAsync(ct))!;
+    }
+
+    private async Task<DocumentRow?> DocumentAsync(Guid documentId, IReadOnlyList<string> levels, Guid[] sources, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand(DocumentStatement);
+        command.Parameters.Add(new NpgsqlParameter { Value = documentId });
+        command.Parameters.Add(new NpgsqlParameter { Value = levels.ToArray() });
         command.Parameters.Add(new NpgsqlParameter { Value = sources });
         await using var reader = await command.ExecuteReaderAsync(ct);
-        if (!await reader.ReadAsync(ct) || !reader.GetBoolean(11))
-        {
-            throw new RetrievalDeniedException(404, KnowledgeCodes.NotFound);
-        }
-
-        var document = ReadDocument(reader);
-        var collection = visible.Values.First(c => snapshot.SourcesByCollection.GetValueOrDefault(c.Id, []).Contains(document.SourceId));
-        return new DocumentInfo(Cite(who, document, null, null, collection, null), document.PageCount, collection.Id, collection.Slug);
+        return await reader.ReadAsync(ct)
+            ? new DocumentRow(ReadDocument(reader), reader.GetString(12), reader.GetString(13), reader.IsDBNull(14) ? null : reader.GetFieldValue<byte[]>(14))
+            : null;
     }
+
+    /// <summary>Statement D of §6.3 for one document, plus the content facts of §3.5.</summary>
+    private const string DocumentStatement = """
+        SELECT d."Id", d."Title", d."Url", d."IdentityKind", d."MediaType", d."Language", d."SourceModifiedAt",
+               d."FetchedAt", d."PageCount", d."SourceId", d."DisplayName",
+               d."SourceId" = ANY ($3)
+                 AND EXISTS (SELECT 1 FROM content."ChunkSets" cs
+                             WHERE cs."Id" = d."LiveChunkSetId" AND cs."State" = 'live') AS "Visible",
+               d."Classification", d."CanonicalIdentity", d."ContentHash"
+        FROM content."Documents" d
+        WHERE d."Id" = $1 AND d."Classification" = ANY ($2) AND d."DeletedAt" IS NULL
+        """;
+
+    /// <summary>The key of a grant is usable (<c>ApiKey.IsUsable</c>: not revoked, enabled, not expired, within any grace).</summary>
+    private const string KeyUsableStatement = """
+        SELECT EXISTS (SELECT 1 FROM config."Keys" k
+                       WHERE k."Id" = $1 AND k."ClientId" = $2 AND k."IsEnabled"
+                         AND (k."RevokedAt" IS NULL OR k."RevokedAt" > now())
+                         AND (k."ExpiresAt" IS NULL OR k."ExpiresAt" > now())
+                         AND (k."GraceUntil" IS NULL OR k."GraceUntil" > now()))
+        """;
+
+    private sealed record DocumentRow(HydratedDocument Document, string Level, string CanonicalIdentity, byte[]? ContentHash);
 
     public Task<IReadOnlyList<CollectionInfo>> ListCollectionsAsync(RagPrincipal who, CancellationToken ct)
     {
@@ -240,17 +406,24 @@ public sealed partial class KnowledgeService(
         return (collections, level);
     }
 
-    private async Task<List<RetrievedChunk>> HydrateAsync(RagPrincipal who, RetrievalRequest request, PolicySnapshot snapshot,
-        List<CollectionEntry> collections, IReadOnlyList<string> levels, IReadOnlyList<SearchHit> hits, CancellationToken ct)
+    /// <summary>
+    /// Statement H+D, then the results in rank order (stale hits dropped) and, for <see cref="ExpandMode.Section"/>, the
+    /// sections (§9) with each result's <c>SectionRef</c>.
+    /// </summary>
+    private async Task<(List<RetrievedChunk>, IReadOnlyList<SectionText>)> HydrateAsync(RagPrincipal who, RetrievalRequest request, PolicySnapshot snapshot,
+        List<CollectionEntry> collections, IReadOnlyList<string> levels, IReadOnlyList<SearchHit> hits, Dictionary<Guid, RetrievalSettings> settings,
+        int totalMaxTokens, CancellationToken ct)
     {
         if (hits.Count == 0)
         {
-            return [];
+            return ([], []);
         }
 
+        var expand = request.Expand == ExpandMode.Section;
         var hydration = await hydrator.HydrateAsync(new HydrationRequest(
             [.. hits.Select(h => h.Candidate.ChunkId)], [.. hits.Select(h => h.Candidate.DocumentId).Distinct()], levels,
-            [.. collections.Select(c => c.Id)], [.. collections.SelectMany(c => snapshot.SourcesByCollection.GetValueOrDefault(c.Id, []))]), ct);
+            [.. collections.Select(c => c.Id)], [.. collections.SelectMany(c => snapshot.SourcesByCollection.GetValueOrDefault(c.Id, []))],
+            expand ? neighbourRadius : 0), ct);
         var chunks = hydration.Chunks.Where(c => c.ChunkId == c.HitId).ToDictionary(c => c.HitId);
         var documents = hydration.Documents.Where(d => d.Visible).ToDictionary(d => d.Id);
         var byId = collections.ToDictionary(c => c.Id);
@@ -269,17 +442,34 @@ public sealed partial class KnowledgeService(
                 Cite(who, document, chunk.DocumentType, chunk.SourceModifiedAt, collection, request.AssistantId, hit.Candidate.Level)));
         }
 
-        return results;
+        if (!expand || results.Count == 0)
+        {
+            return (results, []);
+        }
+
+        var assembly = SectionAssembler.Assemble(
+            [.. results.Select(r => new SectionHit(r.ChunkId, r.DocumentId, settings.TryGetValue(r.CollectionId, out var s) ? s.ExpandMaxTokens : RetrievalSettings.Default.ExpandMaxTokens))],
+            hydration.Chunks, neighbourRadius, totalMaxTokens);
+        for (var i = 0; i < results.Count; i++)
+        {
+            if (assembly.SectionOf.TryGetValue(results[i].ChunkId, out var section))
+            {
+                results[i] = results[i] with { SectionRef = section };
+            }
+        }
+
+        return (results, [.. assembly.Sections.Select(a => new SectionText(a.Id, a.DocumentId, a.HeadingPath, a.Text, a.TokenEstimate, a.PageStart,
+            a.PageEnd, a.ChunkIds, a.Truncated))]);
     }
 
     /// <summary>§10.1, §10.2: the title rule per identity kind, the modified-date fallbacks, and the download link for uploads.</summary>
-    private Citation Cite(RagPrincipal who, HydratedDocument document, string? documentType, DateTimeOffset? chunkModified, CollectionEntry collection,
+    private Citation Cite(RagPrincipal? who, HydratedDocument document, string? documentType, DateTimeOffset? chunkModified, CollectionEntry collection,
         Guid? assistantId, string? level = null)
     {
         var upload = document.IdentityKind == "upload";
         var title = (upload ? document.DisplayName ?? document.Title : document.Title) is { Length: > 0 } t ? t : "Dokument utan titel";
         var sourceType = document.IdentityKind switch { "url" => "web", "upload" => "file", var other => other };
-        var downloadUrl = document.IdentityKind == "url" ? null : links.For(who, document.Id, collection.Id, assistantId, level ?? collection.Classification);
+        var downloadUrl = document.IdentityKind == "url" || who is null ? null : links.For(who, document.Id, collection.Id, assistantId, level ?? collection.Classification);
         return new Citation(document.Id, title, upload ? document.DisplayName : null, document.IdentityKind == "url" ? document.Url : null, downloadUrl,
             sourceType, documentType, document.MediaType, document.Language, chunkModified ?? document.SourceModifiedAt ?? document.FetchedAt);
     }
@@ -308,6 +498,9 @@ public sealed partial class KnowledgeService(
         new(decision.HttpStatus, decision.HttpStatus == 404 ? KnowledgeCodes.NotFound : decision.Reason);
 
     private static double Ms(long started) => Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+
+    [LoggerMessage(LogLevel.Information, "Download grant for document {DocumentId} refused at use: {Reason}")]
+    private static partial void LogGrantRefused(ILogger logger, Guid documentId, string reason);
 
     [LoggerMessage(LogLevel.Error, "Collection {CollectionId} skipped in a retrieval ({Reason}); it was not searched")]
     private static partial void LogSkipped(ILogger logger, Guid collectionId, string reason);
