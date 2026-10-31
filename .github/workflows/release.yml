@@ -1,0 +1,271 @@
+name: Release
+# Push a tag vX.Y.Z (or vX.Y.Z-pre) to release (plans/platform/repo-and-deployment.md §7.2, §8.1; as the gateway's):
+#   1. verify.yml and parser.yml run in full (called);
+#   2. every image is pushed to ghcr.io/<owner>/ume-rag/<service>:X.Y.Z (and :latest unless X.Y.Z is a pre-release):
+#      api, admin (with the admin UI), worker and migrations by `dotnet publish -t:PublishContainer`, postgres, clamav
+#      and parser from their Dockerfiles; an SPDX SBOM per image (Microsoft.Sbom.DotNetTool for the .NET services, Syft
+#      for the other three);
+#   3. deploy/build-release-bundle.sh pins the bundle's Compose defaults to those digests, and
+#      deploy/tests/release-smoke.sh boots the bundle and runs the smoke test;
+#   4. a GitHub release is created with the bundle, the SBOMs and SHA256SUMS.
+# A manual run (workflow_dispatch) is a dry run of 1-3: the images go to a registry inside the job (localhost:5000), so
+# nothing reaches ghcr.io and no release or tag is created.
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version for the dry run (X.Y.Z or X.Y.Z-pre); nothing is pushed or released
+        type: string
+        default: 0.0.0-dryrun
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  # Syft for the non-.NET images' SBOMs (to-verify #91): v1.55.0 (2026-10-19), sha256 of syft_1.55.0_linux_amd64.tar.gz
+  # from the release's syft_1.55.0_checksums.txt.
+  SYFT_VERSION: 1.55.0
+  SYFT_SHA256: bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d
+  # Microsoft.Sbom.DotNetTool 4.1.13 (NuGet, 2026-09-22), the gateway's.
+  SBOM_TOOL: Microsoft.Sbom.DotNetTool@4.1.13
+  # The dry run's registry: distribution 3.1.1 (Docker Hub image pushed 2026-09-21).
+  DRY_RUN_REGISTRY_IMAGE: registry:3.1.1@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
+  parser:
+    uses: ./.github/workflows/parser.yml
+
+  build:
+    # Images, SBOMs, bundle and smoke test in one job: the dry run's registry lives only as long as the job.
+    needs: [verify, parser]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free runner disk (in the background)
+        # The parser image is about 3 GB: built in the buildx builder, then pulled again for the smoke test.
+        run: |
+          df -h / | tail -1
+          nohup sh -c "sudo rm -rf /usr/local/lib/android; touch '$RUNNER_TEMP/disk-freed'" >/dev/null 2>&1 &
+      - name: Resolve version and registry
+        id: version
+        env:
+          DRY_RUN_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            version="${GITHUB_REF_NAME#v}"
+            registry_host=ghcr.io; repository="${GITHUB_REPOSITORY_OWNER,,}/ume-rag"
+          else
+            version="$DRY_RUN_VERSION"
+            registry_host=localhost:5000; repository=ume-rag
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::'$version' is not X.Y.Z[-pre]"; exit 1; }
+          # :latest follows the newest release, never a pre-release or a dry run.
+          latest=false
+          if [ "$GITHUB_EVENT_NAME" = push ]; then case "$version" in *-*) ;; *) latest=true;; esac; fi
+          { echo "version=$version"; echo "registry_host=$registry_host"; echo "repository=$repository"
+            echo "latest=$latest"; } | tee -a "$GITHUB_OUTPUT"
+      - name: Log in to ghcr.io
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Start the dry run's registry
+        if: github.event_name != 'push'
+        run: docker run -d --name registry -p 127.0.0.1:5000:5000 "$DRY_RUN_REGISTRY_IMAGE"
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.401
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/admin-ui/package-lock.json
+      - uses: docker/setup-buildx-action@v4
+        with:
+          # The builder pushes to localhost:5000 in a dry run.
+          driver-opts: network=host
+      - name: Install Syft
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL -o "$RUNNER_TEMP/syft.tar.gz" \
+            "https://github.com/anchore/syft/releases/download/v$SYFT_VERSION/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          echo "$SYFT_SHA256  $RUNNER_TEMP/syft.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/syft.tar.gz" -C "$RUNNER_TEMP/bin" syft
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Wait for the disk
+        run: |
+          timeout 600 sh -c "until [ -e '$RUNNER_TEMP/disk-freed' ]; do sleep 2; done"
+          df -h / | tail -1
+
+      - name: Build the admin UI into the admin image's wwwroot
+        # Ume.Rag.AdminApi serves wwwroot/ (UseStaticFiles, index.html fallback); the Web SDK publishes it with the
+        # service. Built from the lock only (src/admin-ui/.npmrc), as in verify.yml.
+        working-directory: src/admin-ui
+        run: |
+          npm ci
+          npm run build
+          rm -rf ../Ume.Rag.AdminApi/wwwroot
+          cp -R dist ../Ume.Rag.AdminApi/wwwroot
+      - name: .NET service images and their SBOMs
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          REGISTRY_HOST: ${{ steps.version.outputs.registry_host }}
+          REPOSITORY: ${{ steps.version.outputs.repository }}
+        run: |
+          mkdir -p sbom
+          for entry in api:Api admin:AdminApi worker:Worker migrations:MigrationService; do
+            name="${entry%%:*}"; project="src/Ume.Rag.${entry#*:}"
+            dotnet publish "$project" -c Release -t:PublishContainer --os linux --arch x64 --nologo \
+              -p:Version="$VERSION" -p:ContainerImageTag="$VERSION" \
+              -p:ContainerRegistry="$REGISTRY_HOST" -p:ContainerRepository="$REPOSITORY/$name" -p:PublishRepositoryUrl=true
+            ref="$REGISTRY_HOST/$REPOSITORY/$name:$VERSION"
+            digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest)"
+            echo "${name^^}_IMAGE=$ref@$digest" | tee -a images.env
+            # The SBOM of exactly what the image holds: the files of the publish directory PublishContainer packed, and
+            # the NuGet packages of the project and every project it references. The detector reads each project's own
+            # obj/project.assets.json and does not follow project references, so those files are gathered first (-bc
+            # src would also list the admin UI's and the parser's development packages).
+            publish="$project/bin/Release/net10.0/linux-x64/publish"
+            components="$RUNNER_TEMP/sbom-components/$name"
+            for p in "$project" $(jq -r --arg p "$project" '.libraries[] | select(.type == "project") | "\($p)/\(.path)"' \
+                "$project/obj/project.assets.json" | xargs -n1 dirname); do
+              mkdir -p "$components/$(basename "$p")/obj"
+              cp "$p/obj/project.assets.json" "$components/$(basename "$p")/obj/"
+            done
+            dotnet dnx "$SBOM_TOOL" -y -- generate -b "$publish" -bc "$components" -pn "ume-rag-$name" -pv "$VERSION" \
+              -ps "Umea kommun" -nsb https://www.umea.se/ume-rag -V Warning
+            mv "$publish/_manifest/spdx_2.2/manifest.spdx.json" "sbom/ume-rag-$name-$VERSION.spdx.json"
+            rm -rf "$publish/_manifest"
+          done
+      - name: Build and push ume-rag/postgres
+        id: postgres
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: images/postgres/Dockerfile
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/postgres:${{ steps.version.outputs.version }}
+          push: true
+          provenance: false
+      - name: Build and push ume-rag/clamav
+        id: clamav
+        uses: docker/build-push-action@v7
+        with:
+          context: images/clamav
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/clamav:${{ steps.version.outputs.version }}
+          push: true
+          provenance: false
+      - name: Build and push ume-rag/parser
+        id: parser
+        # The layers parser.yml's contract job built from this commit (same REVISION), from the Actions cache.
+        uses: docker/build-push-action@v7
+        with:
+          context: src/parser
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/parser:${{ steps.version.outputs.version }}
+          push: true
+          provenance: false
+          cache-from: |
+            type=gha,scope=parser-runtime
+            type=gha,scope=parser-test
+      - name: Image pins and SBOMs of the other images
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PREFIX: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}
+          POSTGRES_DIGEST: ${{ steps.postgres.outputs.digest }}
+          CLAMAV_DIGEST: ${{ steps.clamav.outputs.digest }}
+          PARSER_DIGEST: ${{ steps.parser.outputs.digest }}
+          # The dry run's registry speaks plain HTTP.
+          SYFT_REGISTRY_INSECURE_USE_HTTP: ${{ github.event_name != 'push' }}
+        run: |
+          for name in postgres clamav parser; do
+            digest_var="${name^^}_DIGEST"; ref="$PREFIX/$name:$VERSION@${!digest_var}"
+            echo "${name^^}_IMAGE=$ref" | tee -a images.env
+            syft scan "registry:$ref" -o "spdx-json=sbom/ume-rag-$name-$VERSION.spdx.json" -q
+          done
+          ls -l sbom
+      - name: Tag latest
+        if: steps.version.outputs.latest == 'true'
+        run: |
+          while IFS='=' read -r _ ref; do
+            repo="${ref%%@*}"; repo="${repo%:*}"
+            docker buildx imagetools create -t "$repo:latest" "$ref"
+          done < images.env
+      - name: Build the release bundle
+        run: |
+          set -a; . ./images.env; set +a
+          bash deploy/build-release-bundle.sh "${{ steps.version.outputs.version }}" dist
+      - name: Smoke test the bundle
+        run: |
+          bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
+            --work-dir "$RUNNER_TEMP/smoke"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: |
+            dist/
+            sbom/
+            images.env
+          if-no-files-found: error
+
+  publish:
+    # Only for a pushed tag; a dry run ends after the smoke test.
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: release
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cp release/sbom/*.spdx.json release/dist/
+          (cd release/dist && sha256sum -- * > SHA256SUMS)
+          {
+            notes="$(awk -v v="$version" '$0 ~ "^## \\[?" v "\\]?( |$)" {f=1; next} /^## / && f {exit} f' CHANGELOG.md)"
+            if [ -n "$notes" ]; then echo "$notes"; else echo "See CHANGELOG.md."; fi
+            echo
+            echo "## Images"
+            echo
+            echo '```'
+            cat release/images.env
+            echo '```'
+            echo
+            echo "The bundle's Compose files default to these digests. SBOMs: \`ume-rag-<image>-$version.spdx.json\`."
+            echo
+            echo "## Deploy with Docker Compose"
+            echo
+            echo '```bash'
+            echo "curl -fsSLO https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/ume-rag-$version.tar.gz"
+            echo "tar -xzf ume-rag-$version.tar.gz && cd ume-rag-$version"
+            echo "./deploy/init-deployment.sh"
+            echo "docker compose --env-file deploy/.env up -d --wait"
+            echo '```'
+            echo
+            echo "Then docs/production-setup.md in the bundle (stanza, escrow, host units) and docs/upgrade-guide.md."
+          } > notes.md
+          prerelease=""; case "$version" in *-*) prerelease="--prerelease";; esac
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Ume Rag $version" --notes-file notes.md $prerelease \
+            release/dist/*
