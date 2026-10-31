@@ -5,7 +5,7 @@
 # directories. A path that matches no rule fails the check, so add a rule here first (main session). A PR from branch
 # a/* or b/* may touch only its own paths and shared paths (check: scripts/check-ownership.py, job ownership in
 # verify.yml).
-# Rationale and hand-offs: plans/p0/README.md (P0), plans/p1/README.md §2 (P1 additions).
+# Rationale and hand-offs: plans/p0/README.md (P0), plans/p1/README.md §2 (P1 additions), plans/p1b/README.md §2 (P1b).
 
 # Stream results and progress files
 plans/p0/results-a.md                         a
@@ -16,6 +16,10 @@ plans/p1/results-a.md                         a
 plans/p1/results-b.md                         b
 plans/p1/progress-a.md                        a
 plans/p1/progress-b.md                        b
+plans/p1b/results-a.md                        a
+plans/p1b/results-b.md                        b
+plans/p1b/progress-a.md                       a
+plans/p1b/progress-b.md                       b
 
 # Design, coordination and the root build files (Stage 0; later changes through an issue to the main session)
 plans/**                                      main
@@ -69,7 +73,9 @@ tests/Ume.Rag.Worker.Tests/**                 a
 tests/Ume.Rag.Pipelines.Tests/**              a
 tests/Ume.Rag.ContractTests/**                a
 tests/fixtures/**                             a
+benchmarks/**                                 a
 docs/security-events.md                       b
+docs/accessibility-statement.md               b
 docs/**                                       a
 
 # Stream B: application and the serving side
