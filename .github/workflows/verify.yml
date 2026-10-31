@@ -1,5 +1,6 @@
 name: Verify
-# CI runs on request, to save Actions minutes: a pull request is verified on the merge with main (pull_request) only
+# Every job runs on the self-hosted runner (labels self-hosted, linux, x64; GitHub-hosted minutes are used up). CI runs
+# on request: a pull request is verified on the merge with main (pull_request) only
 # while it carries the label `ci`. Adding the label starts a run, and each push to the pull request after that runs
 # again; remove the label to stop. Add it when the pull request is ready for review, and merge only on a green run.
 # Without the label every job is skipped (a skipped job is not billed). Nothing runs on a push to main; main or any
@@ -22,7 +23,7 @@ jobs:
     # Every pull request with the label `ci`, design-only ones included: a stream branch may change only its own and the
     # shared paths.
     if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci') && (github.event.action != 'labeled' || github.event.label.name == 'ci')
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,7 +39,7 @@ jobs:
     # Design documents (plans/**, platforms/**, root *.md) do not build anything (repo-and-deployment §1). On a pull
     # request only with the label `ci` (see the top); the other jobs need this one, so they skip with it.
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci') && (github.event.action != 'labeled' || github.event.label.name == 'ci')
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     outputs:
       code: ${{ steps.filter.outputs.code }}
       deploy: ${{ steps.filter.outputs.deploy }}
@@ -72,7 +73,7 @@ jobs:
   backend:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5
@@ -98,8 +99,8 @@ jobs:
           dotnet build UmeRag.slnx -c Release --nologo
           # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here.
           dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
-          dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > /tmp/ume-package-audit.json
-          python -c "import json; d=json.load(open('/tmp/ume-package-audit.json')); p=[p for x in d.get('projects',[]) for f in x.get('frameworks',[]) for k in ('topLevelPackages','transitivePackages') for p in f.get(k,[]) if p.get('vulnerabilities')]; assert not p, 'Vulnerable .NET dependencies detected'"
+          dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/ume-package-audit.json"
+          python3 -c "import json, os; d=json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'ume-package-audit.json'))); p=[p for x in d.get('projects',[]) for f in x.get('frameworks',[]) for k in ('topLevelPackages','transitivePackages') for p in f.get(k,[]) if p.get('vulnerabilities')]; assert not p, 'Vulnerable .NET dependencies detected'"
 
   images:
     # ume-rag/postgres: the image test of repo-and-deployment §5.2 (pgvector version, HNSW build, pg_stat_statements,
@@ -107,7 +108,7 @@ jobs:
     # image is pushed to ghcr only by release.yml (§8.1).
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - name: Build ume-rag/postgres
@@ -133,7 +134,7 @@ jobs:
     # verify (deploy/host/).
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - name: Local image defaults are untagged dev images
@@ -252,7 +253,7 @@ jobs:
     # report, which only warns. Node 24 as every gateway workflow; package.json engines asks for >= 22.
     needs: changes
     if: needs.changes.outputs.adminui == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     defaults:
       run:
         working-directory: src/admin-ui
