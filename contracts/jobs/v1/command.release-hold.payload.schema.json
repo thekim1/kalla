@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.release-hold.payload.schema.json",
+  "title": "release-hold command payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "release-hold"
+    },
+    "sourceId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "sourceId"
+  ],
+  "description": "Payload of the command release-hold (connectors design §13.3): clears the holds of the source's documents kept by a rejected deletion; they become deletion candidates at the next reconcile. Dedup release-hold:{sourceId}."
+}

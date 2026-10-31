@@ -17,6 +17,10 @@ namespace Ume.Rag.Worker.Connectors.Http;
 /// </param>
 /// <param name="MaxBytes">A cap below the type's body limit; null for the limit of §4.</param>
 /// <param name="Truncate">Keep the first <paramref name="MaxBytes"/> of a longer body instead of refusing it (robots.txt).</param>
+/// <param name="InScope">
+/// Asked for every redirect target (§3.2): false ends the fetch with <see cref="HttpFetchResult.OutOfScope"/>. Null follows
+/// every target the guard and robots.txt allow (URL lists, robots.txt, sitemaps).
+/// </param>
 public sealed record HttpFetchRequest(
     Uri Url,
     EgressPurpose Purpose,
@@ -25,7 +29,8 @@ public sealed record HttpFetchRequest(
     CanonicalizerOptions Canonicalizer,
     Func<Uri, CancellationToken, ValueTask<string?>>? Robots,
     long? MaxBytes = null,
-    bool Truncate = false);
+    bool Truncate = false,
+    Func<Uri, bool>? InScope = null);
 
 /// <summary>The transport-level result of one fetch with its redirects; the connector maps it to a run item outcome.</summary>
 public abstract record HttpFetchResult
@@ -38,7 +43,11 @@ public abstract record HttpFetchResult
     public IReadOnlyList<Uri> Redirects { get; init; } = [];
 
     /// <summary>A 2xx body within the limits; dispose it.</summary>
-    public sealed record Ok(FetchedBody Body, Validators Validators, Uri FinalUrl, string FinalIdentity) : HttpFetchResult;
+    public sealed record Ok(FetchedBody Body, Validators Validators, Uri FinalUrl, string FinalIdentity) : HttpFetchResult
+    {
+        /// <summary>The response's <c>X-Robots-Tag</c> values joined by commas (§5.2); null when absent.</summary>
+        public string? RobotsTag { get; init; }
+    }
 
     public sealed record NotModified(Validators Validators, Uri FinalUrl) : HttpFetchResult;
 
@@ -50,6 +59,12 @@ public abstract record HttpFetchResult
 
     /// <summary>robots.txt disallows the requested URL itself.</summary>
     public sealed record Skipped(string Reason) : HttpFetchResult;
+
+    /// <summary>
+    /// A redirect to <paramref name="Target"/> outside the source scope (§3.2): <paramref name="Permanent"/> (301, 308) on a
+    /// known document is a deletion candidate, a temporary one (302, 303, 307: a sign-in wall) a skip.
+    /// </summary>
+    public sealed record OutOfScope(Uri Target, bool Permanent) : HttpFetchResult;
 
     /// <summary>A network or protocol failure: <c>net.*</c>, <c>tls.*</c>, <c>redirect.*</c>.</summary>
     public sealed record Error(string Reason, bool Transient) : HttpFetchResult;
@@ -93,7 +108,7 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, Time
                     : WithRedirects(new HttpFetchResult.Refused(RunItemOutcome.Blocked, refusal), redirects);
             }
 
-            var (result, location) = await SendAsync(request, url, cancellationToken);
+            var (result, location, permanent) = await SendAsync(request, url, cancellationToken);
             if (result is not null)
             {
                 return WithRedirects(result, redirects);
@@ -112,6 +127,11 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, Time
                 return WithRedirects(new HttpFetchResult.Refused(RunItemOutcome.Blocked, "redirect.downgrade"), redirects);
             }
 
+            if (request.InScope is { } inScope && !inScope(next))
+            {
+                return WithRedirects(new HttpFetchResult.OutOfScope(next, permanent), redirects);
+            }
+
             if (redirects.Count > MaxRedirects || !seen.Add(next.AbsoluteUri))
             {
                 return WithRedirects(new HttpFetchResult.Error("redirect.limit", Transient: false), redirects);
@@ -124,8 +144,8 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, Time
     private static HttpFetchResult WithRedirects(HttpFetchResult result, List<Uri> redirects) =>
         redirects.Count == 0 ? result : result with { Redirects = [.. redirects] };
 
-    /// <summary>One request: a final result, or the <c>Location</c> of a redirect to follow.</summary>
-    private async Task<(HttpFetchResult? Result, string? Location)> SendAsync(HttpFetchRequest request, Uri url, CancellationToken cancellationToken)
+    /// <summary>One request: a final result, or the <c>Location</c> of a redirect to follow and whether it is permanent.</summary>
+    private async Task<(HttpFetchResult? Result, string? Location, bool Permanent)> SendAsync(HttpFetchRequest request, Uri url, CancellationToken cancellationToken)
     {
         using var message = new HttpRequestMessage(HttpMethod.Get, url)
         {
@@ -154,11 +174,11 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, Time
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return (new HttpFetchResult.Error("net.timeout", Transient: true), null);
+            return (new HttpFetchResult.Error("net.timeout", Transient: true), null, false);
         }
         catch (HttpRequestException e)
         {
-            return (MapException(e), null);
+            return (MapException(e), null, false);
         }
 
         using (response)
@@ -167,37 +187,37 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, Time
         }
     }
 
-    private async Task<(HttpFetchResult? Result, string? Location)> ReadAsync(HttpFetchRequest request, Uri url, HttpResponseMessage response, CancellationToken cancellationToken)
+    private async Task<(HttpFetchResult? Result, string? Location, bool Permanent)> ReadAsync(HttpFetchRequest request, Uri url, HttpResponseMessage response, CancellationToken cancellationToken)
     {
         var code = (int)response.StatusCode;
         if (code is 301 or 302 or 303 or 307 or 308)
         {
             return response.Headers.Location is { } location
-                ? (null, location.OriginalString)
-                : (new HttpFetchResult.Error("redirect.invalid", Transient: false), null);
+                ? (null, location.OriginalString, code is 301 or 308)
+                : (new HttpFetchResult.Error("redirect.invalid", Transient: false), null, false);
         }
 
         if (response.StatusCode == HttpStatusCode.NotModified)
         {
-            return (new HttpFetchResult.NotModified(ValidatorsOf(response, request.Validators), url), null);
+            return (new HttpFetchResult.NotModified(ValidatorsOf(response, request.Validators), url), null, false);
         }
 
         if (code is < 200 or > 299)
         {
-            return (new HttpFetchResult.Status(response.StatusCode, RetryAfter(response), url), null);
+            return (new HttpFetchResult.Status(response.StatusCode, RetryAfter(response), url), null, false);
         }
 
         var mediaType = response.Content.Headers.ContentType?.MediaType?.ToLowerInvariant() ?? "application/octet-stream";
         if (request.AcceptedMediaTypes is { } accepted && !accepted.Contains(mediaType))
         {
             return (new HttpFetchResult.Refused(RunItemOutcome.Unsupported,
-                MediaTypes.Deferred.Contains(mediaType) ? "http.format_deferred" : "http.content_type"), null);
+                MediaTypes.Deferred.Contains(mediaType) ? "http.format_deferred" : "http.content_type"), null, false);
         }
 
         var limit = Math.Min(request.MaxBytes ?? long.MaxValue, MediaTypes.BodyLimit(mediaType));
         if (!request.Truncate && response.Content.Headers.ContentLength > limit)
         {
-            return (new HttpFetchResult.Refused(RunItemOutcome.TooLarge, "http.body_limit"), null);
+            return (new HttpFetchResult.Refused(RunItemOutcome.TooLarge, "http.body_limit"), null, false);
         }
 
         using var body = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -208,20 +228,21 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, Time
             var captured = await FetchedBody.CaptureAsync(stream, limit, request.Truncate, mediaType, response.Content.Headers.ContentType?.CharSet, body.Token);
             if (captured is null)
             {
-                return (new HttpFetchResult.Refused(RunItemOutcome.TooLarge, "http.body_limit"), null);
+                return (new HttpFetchResult.Refused(RunItemOutcome.TooLarge, "http.body_limit"), null, false);
             }
 
             var identity = UrlCanonicalizer.Canonicalize(url.AbsoluteUri, request.Canonicalizer).Value ?? url.AbsoluteUri;
-            return (new HttpFetchResult.Ok(captured, ValidatorsOf(response, null), url, identity), null);
+            var robotsTag = response.Headers.TryGetValues("X-Robots-Tag", out var tags) ? string.Join(",", tags) : null;
+            return (new HttpFetchResult.Ok(captured, ValidatorsOf(response, null), url, identity) { RobotsTag = robotsTag }, null, false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return (new HttpFetchResult.Error("net.timeout", Transient: true), null);
+            return (new HttpFetchResult.Error("net.timeout", Transient: true), null, false);
         }
         catch (Exception e) when (e is HttpRequestException or IOException or InvalidDataException)
         {
             // A broken stream, or a body that does not decompress.
-            return (new HttpFetchResult.Error("net.body", Transient: true), null);
+            return (new HttpFetchResult.Error("net.body", Transient: true), null, false);
         }
     }
 

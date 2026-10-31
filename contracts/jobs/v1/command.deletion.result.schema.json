@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.deletion.result.schema.json",
+  "title": "confirm-deletion and reject-deletion command result",
+  "type": "object",
+  "properties": {
+    "deleted": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "dropped": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "held": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    }
+  },
+  "description": "Result of the commands confirm-deletion and reject-deletion: documents soft-deleted, proposals dropped because the document was seen again, and documents held."
+}

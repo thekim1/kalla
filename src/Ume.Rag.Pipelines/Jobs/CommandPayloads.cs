@@ -7,8 +7,9 @@ using Ume.Rag.Pipelines.SiteProfiles;
 namespace Ume.Rag.Pipelines.Jobs;
 
 /// <summary>
-/// The P1a <c>command</c> kinds (engine design §9.1, admin design §4.7): admin decisions the worker applies, because
-/// the admin only reads <c>content</c>. <c>kind</c> selects the handler. The other kinds of admin §4.7 are P1b and later.
+/// The P1 <c>command</c> kinds (engine design §9.1, admin design §4.7): admin decisions the worker applies, because
+/// the admin only reads <c>content</c>. <c>kind</c> selects the handler. <c>approve-site-profile</c>,
+/// <c>reject-site-profile</c>, <c>approve-profile</c> and <c>reject-profile</c> are P2.
 /// </summary>
 public static class CommandKinds
 {
@@ -16,8 +17,17 @@ public static class CommandKinds
     public const string EditSiteProfile = "edit-site-profile";
     public const string RollbackSiteProfile = "rollback-site-profile";
     public const string EditEvalQuestion = "edit-eval-question";
+    public const string ConfirmDeletion = "confirm-deletion";
+    public const string RejectDeletion = "reject-deletion";
+    public const string ReleaseHold = "release-hold";
+    public const string ClearPiiFlag = "clear-pii-flag";
+    public const string ReprocessDocument = "reprocess-document";
 
-    public static IReadOnlyList<string> All { get; } = [CancelRun, EditSiteProfile, RollbackSiteProfile, EditEvalQuestion];
+    public static IReadOnlyList<string> All { get; } =
+    [
+        CancelRun, EditSiteProfile, RollbackSiteProfile, EditEvalQuestion,
+        ConfirmDeletion, RejectDeletion, ReleaseHold, ClearPiiFlag, ReprocessDocument,
+    ];
 }
 
 /// <summary><c>cancel-run</c> (engine design §10.1): dedup <c>cancel:{runId}</c>, <c>Jobs.RunId</c> = the run.</summary>
@@ -113,4 +123,90 @@ public sealed record EditEvalQuestionCommand : JobPayload
     [MaxLength(10)]
     [SchemaKeyword("uniqueItems", "true")]
     public IReadOnlyList<Guid> ExpectedDocumentIds { get; init; } = [];
+}
+
+/// <summary>
+/// <c>confirm-deletion</c> (connectors design §13.3): the waiting proposals of a run in
+/// <c>awaiting-deletion-confirmation</c> are re-validated and the rest soft-deleted. Dedup <see cref="JobDedupKeys.Deletion"/>.
+/// </summary>
+[Description("Payload of the command confirm-deletion (connectors design §13.3): re-validates the run's waiting deletion proposals (a document seen again by a later run is dropped) and soft-deletes the rest. Dedup deletion:{runId}.")]
+public sealed record ConfirmDeletionCommand : JobPayload
+{
+    [JsonRequired]
+    [SchemaKeyword("const", "\"confirm-deletion\"")]
+    public string Kind { get; init; } = CommandKinds.ConfirmDeletion;
+
+    public required Guid RunId { get; init; }
+
+    [Description("The deciding admin's oid, written to DeletionProposals.DecidedBy.")]
+    [MinLength(1)]
+    [MaxLength(200)]
+    public required string DecidedBy { get; init; }
+}
+
+/// <summary>
+/// <c>reject-deletion</c> (connectors design §13.3): nothing is deleted; the proposed documents are held until seen again
+/// or released (<see cref="ReleaseHoldCommand"/>). Dedup <see cref="JobDedupKeys.Deletion"/>.
+/// </summary>
+[Description("Payload of the command reject-deletion (connectors design §13.3): deletes nothing, holds the proposed documents (Documents.HeldAt/HeldBy) and ends the run degraded with deletion.rejected. Dedup deletion:{runId}.")]
+public sealed record RejectDeletionCommand : JobPayload
+{
+    [JsonRequired]
+    [SchemaKeyword("const", "\"reject-deletion\"")]
+    public string Kind { get; init; } = CommandKinds.RejectDeletion;
+
+    public required Guid RunId { get; init; }
+
+    [Description("The deciding admin's oid, written to DeletionProposals.DecidedBy and Documents.HeldBy.")]
+    [MinLength(1)]
+    [MaxLength(200)]
+    public required string DecidedBy { get; init; }
+}
+
+/// <summary><c>release-hold</c> (connectors design §13.3): the source's held documents become candidates at the next reconcile.</summary>
+[Description("Payload of the command release-hold (connectors design §13.3): clears the holds of the source's documents kept by a rejected deletion; they become deletion candidates at the next reconcile. Dedup release-hold:{sourceId}.")]
+public sealed record ReleaseHoldCommand : JobPayload
+{
+    [JsonRequired]
+    [SchemaKeyword("const", "\"release-hold\"")]
+    public string Kind { get; init; } = CommandKinds.ReleaseHold;
+
+    public required Guid SourceId { get; init; }
+}
+
+/// <summary>
+/// <c>clear-pii-flag</c> (processing design §9.5): a person's decision on the document; the admin requires and audits the
+/// reason (6001 <c>pii.clear</c>), so the payload carries only who decided. Dedup <see cref="JobDedupKeys.PiiClear"/>.
+/// </summary>
+[Description("Payload of the command clear-pii-flag (processing design §9.5): records the clearance on the document (Documents.PiiClearedAt, PiiClearedBy, PiiClearedCounts = the held set's PiiCounts) and releases its held set without re-processing. Dedup pii-clear:{documentId}.")]
+public sealed record ClearPiiFlagCommand : JobPayload
+{
+    [JsonRequired]
+    [SchemaKeyword("const", "\"clear-pii-flag\"")]
+    public string Kind { get; init; } = CommandKinds.ClearPiiFlag;
+
+    public required Guid DocumentId { get; init; }
+
+    [Description("The deciding admin's oid, written to Documents.PiiClearedBy.")]
+    [MinLength(1)]
+    [MaxLength(200)]
+    public required string DecidedBy { get; init; }
+}
+
+/// <summary>
+/// <c>reprocess-document</c> (admin design §4.7, <c>POST /api/documents/{id}/reprocess</c>): one document re-run from
+/// <c>fromStage</c> with the stage caches bypassed, in a <c>reprocess</c> run of its source. Dedup
+/// <see cref="JobDedupKeys.Reprocess"/>.
+/// </summary>
+[Description("Payload of the command reprocess-document (admin design §4.7): re-runs one document from fromStage with a new execution id, bypassing the stage caches from there on (engine design §8); fetch re-fetches, later stages start from the stored content. Dedup reprocess:{documentId}.")]
+public sealed record ReprocessDocumentCommand : JobPayload
+{
+    [JsonRequired]
+    [SchemaKeyword("const", "\"reprocess-document\"")]
+    public string Kind { get; init; } = CommandKinds.ReprocessDocument;
+
+    public required Guid DocumentId { get; init; }
+
+    [SchemaKeyword("enum", ContractPatterns.StageEnum)]
+    public string FromStage { get; init; } = "parse";
 }

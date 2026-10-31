@@ -17,7 +17,8 @@ public sealed record ContractSchema(string Path, Type Type, string Title)
 }
 
 /// <summary>
-/// The worker contracts of P1a (README §3 item 4, hand-off J3). The records are the source; each file in
+/// The worker contracts of P1a (P1 README §3 item 4, hand-off J3) and P1b (P1b README §3 item 2, hand-off L1; additive to
+/// J3). The records are the source; each file in
 /// <c>contracts/</c> is the record's export, and <c>WorkerContractTests</c> fails when a file and its record differ
 /// (<c>UME_RAG_UPDATE_CONTRACTS=1</c> rewrites them).
 /// </summary>
@@ -48,6 +49,28 @@ public static class ContractSchemas
         new("jobs/v1/command.edit-eval-question.result.schema.json", typeof(EditEvalQuestionResult), "edit-eval-question command result"),
         new("jobs/v1/eval.on-demand.payload.schema.json", typeof(EvalOnDemandPayload), "eval on-demand job payload"),
         new("jobs/v1/eval.on-demand.result.schema.json", typeof(EvalOnDemandResult), "eval on-demand job result"),
+        new("jobs/v1/preview.stage-preview.payload.schema.json", typeof(StagePreviewPayload), "preview stage-preview job payload"),
+        new("jobs/v1/preview.stage-preview.result.schema.json", typeof(StagePreviewResult), "preview stage-preview job result"),
+        new("jobs/v1/preview.preflight.payload.schema.json", typeof(PreflightPayload), "preview preflight job payload"),
+        new("jobs/v1/preview.preflight.result.schema.json", typeof(PreflightResult), "preview preflight job result"),
+        new("jobs/v1/preview.publish-plan.payload.schema.json", typeof(PublishPlanPayload), "preview publish-plan job payload"),
+        new("jobs/v1/preview.publish-plan.result.schema.json", typeof(PublishPlanResult), "preview publish-plan job result"),
+        new("jobs/v1/eval.publish-report.payload.schema.json", typeof(EvalPublishReportPayload), "eval publish-report job payload"),
+        new("jobs/v1/eval.nightly.payload.schema.json", typeof(EvalNightlyPayload), "eval nightly job payload"),
+        new("jobs/v1/eval.run.result.schema.json", typeof(EvalRunResult), "eval publish-report and nightly job result"),
+        new("jobs/v1/eval.generate-set.payload.schema.json", typeof(EvalGenerateSetPayload), "eval generate-set job payload"),
+        new("jobs/v1/eval.top-up-set.payload.schema.json", typeof(EvalTopUpSetPayload), "eval top-up-set job payload"),
+        new("jobs/v1/eval.set.result.schema.json", typeof(EvalSetResult), "eval generate-set and top-up-set job result"),
+        new("jobs/v1/command.confirm-deletion.payload.schema.json", typeof(ConfirmDeletionCommand), "confirm-deletion command payload"),
+        new("jobs/v1/command.reject-deletion.payload.schema.json", typeof(RejectDeletionCommand), "reject-deletion command payload"),
+        new("jobs/v1/command.deletion.result.schema.json", typeof(DeletionCommandResult), "confirm-deletion and reject-deletion command result"),
+        new("jobs/v1/command.release-hold.payload.schema.json", typeof(ReleaseHoldCommand), "release-hold command payload"),
+        new("jobs/v1/command.release-hold.result.schema.json", typeof(ReleaseHoldResult), "release-hold command result"),
+        new("jobs/v1/command.clear-pii-flag.payload.schema.json", typeof(ClearPiiFlagCommand), "clear-pii-flag command payload"),
+        new("jobs/v1/command.clear-pii-flag.result.schema.json", typeof(ClearPiiFlagResult), "clear-pii-flag command result"),
+        new("jobs/v1/command.reprocess-document.payload.schema.json", typeof(ReprocessDocumentCommand), "reprocess-document command payload"),
+        new("jobs/v1/command.reprocess-document.result.schema.json", typeof(ReprocessDocumentResult), "reprocess-document command result"),
+        new("jobs/v1/upload-batch.manifest.schema.json", typeof(UploadBatchManifest), "Upload batch manifest"),
     ];
 
     public static ContractSchema For(Type type) =>

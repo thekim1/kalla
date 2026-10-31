@@ -50,6 +50,8 @@
     <PackageVersion Include="Cronos" Version="0.13.0" />
     <!-- HTML DOM for change detection and link discovery (connectors design §12.2); 1.8.6 (2026-10-25) as repo-and-deployment §2 lists it. -->
     <PackageVersion Include="AngleSharp" Version="1.8.6" />
+    <!-- Markdown blocks for the plain-text parser (processing design §3.7); BSD-2-Clause, 1.5.1 of 2026-10-28 (7-day rule suspended, P1 README §1a). -->
+    <PackageVersion Include="Markdig" Version="1.5.1" />
   </ItemGroup>
   <ItemGroup Label="Testing">
     <PackageVersion Include="xunit.v3" Version="4.0.2" />

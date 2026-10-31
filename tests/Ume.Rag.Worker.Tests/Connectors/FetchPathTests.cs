@@ -7,7 +7,6 @@ using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Http;
 using Ume.Rag.Worker.Connectors.Malware;
-using Ume.Rag.Worker.Connectors.UrlList;
 using Ume.Rag.Worker.Connectors.Urls;
 
 namespace Ume.Rag.Worker.Tests.Connectors;
@@ -230,7 +229,7 @@ public sealed class FetchPathTests : IAsyncLifetime
 
         var outcome = await path.Connector.FetchAsync(Context(), Item(_site.Url("/file.pdf")), TestContext.Current.CancellationToken);
 
-        outcome.ShouldBe(new FetchOutcome.Transient(reason, UrlListConnector.ScanRetry, countsAttempt));
+        outcome.ShouldBe(new FetchOutcome.Transient(reason, RawContentWriter.ScanRetry, countsAttempt));
         Directory.EnumerateFiles(path.BlobRoot.FullName, "*", SearchOption.AllDirectories).ShouldBeEmpty();
     }
 

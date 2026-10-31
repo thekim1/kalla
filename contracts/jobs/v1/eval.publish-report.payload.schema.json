@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/eval.publish-report.payload.schema.json",
+  "title": "eval publish-report job payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "publish-report"
+    },
+    "collectionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "runId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The finished reprocess run (Runs.Id); the report is shown next to it."
+    },
+    "pipelineVersionId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The version the run published or rolled back to (processing design §14: EvaluationSubject.PipelineVersionId)."
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "collectionId",
+    "runId",
+    "pipelineVersionId"
+  ],
+  "description": "Payload of an eval job of kind publish-report (processing design §14.1): the collection's full set on the full collection after the reprocess run of a publish or rollback, compared with the last run before the publish. Dedup eval-report:{runId}."
+}

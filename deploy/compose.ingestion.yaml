@@ -38,6 +38,8 @@ services:
       Parser__BaseUrl: https://rag-parser:8000
       ClamAv__Host: rag-clamav
       ClamAv__Port: "3310"
+      BlobStore__Root: /data/blobs/rag
+      # Its gateway keys (OnPrem and Eu, never External) and Security__CrawlKeyPepper are secret files.
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
       Crawl__AllowedPrivateRanges: ${UME_RAG_CRAWL_ALLOW:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}

@@ -63,7 +63,7 @@ public sealed class UrlListConnectorTests
     [InlineData(502, "transient", "http.5xx", true)]
     public void Maps_final_statuses(int code, string kind, string reason, bool countsAttempt)
     {
-        var outcome = UrlListConnector.MapStatus(new HttpFetchResult.Status((HttpStatusCode)code, null, new Uri("https://www.umea.se/")));
+        var outcome = FetchOutcomes.FromStatus(new HttpFetchResult.Status((HttpStatusCode)code, null, new Uri("https://www.umea.se/")));
 
         switch (outcome)
         {
@@ -90,9 +90,9 @@ public sealed class UrlListConnectorTests
     {
         var url = new Uri("https://www.umea.se/");
 
-        UrlListConnector.MapStatus(new HttpFetchResult.Status(HttpStatusCode.TooManyRequests, null, url))
+        FetchOutcomes.FromStatus(new HttpFetchResult.Status(HttpStatusCode.TooManyRequests, null, url))
             .ShouldBe(new FetchOutcome.Transient("rate_limited", TimeSpan.FromSeconds(60), CountsAttempt: false));
-        UrlListConnector.MapStatus(new HttpFetchResult.Status(HttpStatusCode.ServiceUnavailable, TimeSpan.FromSeconds(7), url))
+        FetchOutcomes.FromStatus(new HttpFetchResult.Status(HttpStatusCode.ServiceUnavailable, TimeSpan.FromSeconds(7), url))
             .ShouldBe(new FetchOutcome.Transient("rate_limited", TimeSpan.FromSeconds(7), CountsAttempt: false));
     }
 

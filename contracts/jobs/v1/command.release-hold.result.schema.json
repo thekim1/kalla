@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.release-hold.result.schema.json",
+  "title": "release-hold command result",
+  "type": "object",
+  "properties": {
+    "released": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    }
+  },
+  "required": [
+    "released"
+  ],
+  "description": "Result of the command release-hold: holds cleared."
+}

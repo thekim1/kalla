@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/preview.preflight.result.schema.json",
+  "title": "preview preflight job result",
+  "type": "object",
+  "properties": {
+    "state": {
+      "enum": [
+        "pass",
+        "warn",
+        "fail"
+      ],
+      "description": "The worst state of the checks."
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": "string",
+            "description": "The check: reachability, robots, sitemaps, pages, egress or cms (new names may be added).",
+            "pattern": "^[a-z][a-z0-9-]{0,49}$"
+          },
+          "state": {
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "description": "<area>.<code>, e.g. http.404, robots.disallowed, egress.blocked; the admin shows its Swedish text and remediation.",
+            "maxLength": 100,
+            "pattern": "^[a-z0-9_-]+(\\.[a-z0-9_-]+)+$"
+          },
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The URL or host the entry is about.",
+            "maxLength": 2048
+          },
+          "facts": {
+            "description": "Small facts for the text (counts, status codes); never page content.",
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "check",
+          "state",
+          "code"
+        ]
+      },
+      "maxItems": 100
+    },
+    "estimatedPages": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Crawl: in-scope sitemap URLs, compared with maxPages.",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "cms": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The CMS preset recognised on the start host (e.g. sitevision).",
+      "pattern": "^[a-z][a-z0-9-]{0,49}$"
+    }
+  },
+  "required": [
+    "state",
+    "checks"
+  ],
+  "description": "Result of a preview job of kind preflight (connectors design §2.2; admin design §5.4 step 4): the worst state and one entry per check. A fail blocks the save, a warn explains."
+}

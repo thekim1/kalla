@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/preview.stage-preview.result.schema.json",
+  "title": "preview stage-preview job result",
+  "type": "object",
+  "properties": {
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048
+          },
+          "uploadId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "fetch",
+                    "scan",
+                    "detect",
+                    "parse",
+                    "clean",
+                    "chunk",
+                    "personal-data",
+                    "embed",
+                    "index"
+                  ]
+                },
+                "state": {
+                  "enum": [
+                    "succeeded",
+                    "failed",
+                    "skipped"
+                  ]
+                },
+                "durationMs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "default": 0
+                },
+                "cacheHit": {
+                  "type": "boolean",
+                  "description": "Served from the stage cache or from the base preview's outputs.",
+                  "default": false
+                },
+                "facts": {
+                  "description": "The stage's facts (engine design §2.2), e.g. embed's chunk count and tokens, index's \"would write N chunks\".",
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "estimatedCostUsd": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "costUsd": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "<area>.<code> of a failed stage (engine design §10.2).",
+                  "maxLength": 100,
+                  "pattern": "^[a-z0-9_-]+(\\.[a-z0-9_-]+)+$"
+                },
+                "output": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Blob path of the stage's output: extracted text with breadcrumb and page markers, sections, chunks with prefixes and token counts, or PII counts (and spans with piiSpans).",
+                  "maxLength": 500,
+                  "pattern": "^previews/[^\\s]+$"
+                },
+                "truncated": {
+                  "type": "boolean",
+                  "description": "The output exceeded 2 MB and was cut with a marker.",
+                  "default": false
+                }
+              },
+              "required": [
+                "stage",
+                "state"
+              ]
+            },
+            "description": "In stage order, up to untilStage."
+          },
+          "siteProfile": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "host": {
+                "type": "string",
+                "maxLength": 253
+              },
+              "origin": {
+                "enum": [
+                  "manual",
+                  "preset"
+                ]
+              },
+              "siteProfileVersionId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "The applied manual version (SiteProfileVersions.Id), when origin is manual."
+              },
+              "presetId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The built-in preset (e.g. sitevision), when origin is preset.",
+                "pattern": "^[a-z][a-z0-9-]{0,49}$"
+              },
+              "before": {
+                "type": "string",
+                "description": "Blob path of the extraction with the built-in defaults only.",
+                "maxLength": 500,
+                "pattern": "^previews/[^\\s]+$"
+              },
+              "after": {
+                "type": "string",
+                "description": "Blob path of the extraction with the site profile.",
+                "maxLength": 500,
+                "pattern": "^previews/[^\\s]+$"
+              }
+            },
+            "required": [
+              "host",
+              "origin",
+              "before",
+              "after"
+            ],
+            "description": "Crawl sources: the extraction without and with the host's site profile."
+          }
+        },
+        "required": [
+          "stages"
+        ]
+      },
+      "maxItems": 5
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the preview blobs expire (24 h after the job)."
+    }
+  },
+  "required": [
+    "documents",
+    "expiresAt"
+  ],
+  "description": "Result of a preview job of kind stage-preview (engine design §11): per document and stage the state, duration, cache use, facts, cost and error, and the blob paths of the outputs the admin streams on demand."
+}
