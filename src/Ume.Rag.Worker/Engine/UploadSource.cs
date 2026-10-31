@@ -84,6 +84,8 @@ public sealed class UploadSource(
             FetchOutcome.Content => UploadState.Clean,
             FetchOutcome.Quarantined => UploadState.Malware,
             FetchOutcome.Refused or FetchOutcome.Failed or FetchOutcome.Skipped => UploadState.Refused,
+            // Committed only as a failed item: the last attempt or 24 h without a ClamAV verdict.
+            FetchOutcome.Transient => UploadState.Refused,
             _ => (UploadState?)null,
         };
         if (state is { } value && result is JobResult.Committed)
@@ -94,6 +96,7 @@ public sealed class UploadSource(
                 FetchOutcome.Refused r => r.Reason,
                 FetchOutcome.Failed f => f.Reason,
                 FetchOutcome.Skipped s => s.Reason,
+                FetchOutcome.Transient t => t.Reason,
                 _ => null,
             };
             await writer.SetStateAsync(slot.Id, value, null, reason, null, cancellationToken);

@@ -181,6 +181,7 @@ public sealed partial class StagePreview(
                 Url = document.Url,
                 DisplayName = document.DisplayName,
                 DocumentId = document.Id,
+                SourceId = document.SourceId,
             };
             reused = true;
         }
@@ -188,11 +189,11 @@ public sealed partial class StagePreview(
         {
             var copied = await ReuseAsync(store, previous, level, url, index, cancellationToken);
             reused = copied is not null;
-            content = copied ?? await FetchUrlAsync(run, store, source, level, url, index, cancellationToken);
+            content = (copied ?? await FetchUrlAsync(run, store, source, level, url, index, cancellationToken)) with { SourceId = source?.SourceId };
         }
         else
         {
-            content = await FetchUploadAsync(store, source!, payload.UploadIds![index], index, cancellationToken);
+            content = await FetchUploadAsync(store, source!, payload.UploadIds![index], index, cancellationToken) with { SourceId = source!.SourceId };
             reused = false;
         }
 

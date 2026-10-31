@@ -406,9 +406,13 @@ internal sealed class InMemorySiteProfiles : ISiteProfileReader
     private readonly System.Collections.Concurrent.ConcurrentDictionary<(string, string), AppliedSiteProfile> _profiles = new();
 
     /// <summary>Applies a profile with <c>lastmodReliable</c> as given to the host at the level.</summary>
-    public AppliedSiteProfile Set(string classification, string host, bool lastmodReliable, int number = 1)
+    public AppliedSiteProfile Set(string classification, string host, bool lastmodReliable, int number = 1) =>
+        Set(classification, host, new Pipelines.SiteProfiles.SiteProfile { MainRoot = "main", LastmodReliable = lastmodReliable }, number);
+
+    /// <summary>Applies <paramref name="profile"/> to the host at the level.</summary>
+    public AppliedSiteProfile Set(string classification, string host, Pipelines.SiteProfiles.SiteProfile profile, int number = 1)
     {
-        var applied = new AppliedSiteProfile(Guid.NewGuid(), number, "sitevision", new Pipelines.SiteProfiles.SiteProfile { MainRoot = "main", LastmodReliable = lastmodReliable });
+        var applied = new AppliedSiteProfile(Guid.NewGuid(), number, "sitevision", profile);
         _profiles[(classification, host)] = applied;
         return applied;
     }
@@ -465,10 +469,10 @@ internal sealed class CrawlRig : IAsyncDisposable
 
     public FetchTopUp TopUp { get; }
 
-    /// <summary>The hosts' site profiles (none: no host marks <c>lastmod</c> reliable).</summary>
+    /// <summary>The hosts' site profiles, read by the traversal and the connector (none: no host marks <c>lastmod</c> reliable).</summary>
     public InMemorySiteProfiles Profiles { get; }
 
-    /// <summary>The clock of the <c>lastmodReliable</c> cache: advance it past <see cref="LastmodReliability.CacheFor"/> after changing a profile.</summary>
+    /// <summary>The clock of the profile caches: advance it past <see cref="LastmodReliability.CacheFor"/> after changing a profile.</summary>
     public FakeTimeProvider ProfileClock { get; }
 
     /// <param name="site">The test site.</param>
@@ -492,15 +496,16 @@ internal sealed class CrawlRig : IAsyncDisposable
             }
         }
 
-        var connector = new CrawlConnector(path.Fetcher, path.Robots, new ScriptedScanner(Worker.Connectors.Malware.ScanResult.Clean), path.Blobs, TimeProvider.System);
+        var profiles = new InMemorySiteProfiles();
+        var profileClock = new FakeTimeProvider();
+        var connector = new CrawlConnector(path.Fetcher, path.Robots, new ScriptedScanner(Worker.Connectors.Malware.ScanResult.Clean), path.Blobs, TimeProvider.System,
+            new SiteProfileCanonicalRules(profiles, profileClock));
         var memory = store is null ? new InMemoryCrawlStore() : null;
         var (frontier, runs) = store ?? (memory!, memory!);
         var queue = new RecordingJobQueue();
         var budget = new HostBudget(hosts ?? new InMemoryCrawlHostStore(TimeProvider.System), policy, TimeProvider.System);
         var options = Options.Create(new CrawlOptions { FetchBatchPerHost = batch, CompletenessRule = rule });
         var topUp = new FetchTopUp(frontier, runs, queue, options, TimeProvider.System);
-        var profiles = new InMemorySiteProfiles();
-        var profileClock = new FakeTimeProvider();
         var traversal = new CrawlTraversal(connector, path.Robots, budget, policy, frontier, runs, topUp, path.Blobs, queue,
             new LastmodReliability(profiles, profileClock), options, TimeProvider.System);
         return new CrawlRig(path, connector, traversal, frontier, runs, memory, queue, topUp, profiles, profileClock);
@@ -559,12 +564,29 @@ internal sealed class CrawlRig : IAsyncDisposable
                     // As the queue would: the job comes back without an attempt.
                     await Queue.EnqueueAsync([job], null, ct);
                 }
+                else if (result is CrawlFetchResult.Done done)
+                {
+                    await CommitAsync(context, done);
+                }
 
                 results[url] = result;
             }
         }
 
         throw new InvalidOperationException("The crawl did not finish.");
+    }
+
+    /// <summary>What the engine's document commit does with a fetched row (without a document): idle with its facts, a failed seed counted, then the top-up.</summary>
+    public async Task CommitAsync(CrawlRunContext context, CrawlFetchResult.Done done)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await Frontier.CompleteAsync(context.Run, done.Frontier.Row.UrlHash, done.Frontier.Facts, ct);
+        if (done.Frontier.SeedFailed)
+        {
+            await Runs.SeedFailedAsync(context.Run.RunId, ct);
+        }
+
+        await Traversal.CommittedAsync(context, done, ct);
     }
 
     public ValueTask DisposeAsync() => Path.DisposeAsync();

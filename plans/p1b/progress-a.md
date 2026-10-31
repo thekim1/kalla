@@ -29,7 +29,7 @@ Refs: [engine §9.1, §11, §12](../ingestion-worker/design-engine.md), [admin �
 - [x] Commands `confirm-deletion`, `reject-deletion`, `release-hold`, `clear-pii-flag`, `reprocess-document` (those not in J3) (#88)
 - [x] `contracts/sources/v1/`: `demote` patterns, `incrementalSchedule`, `revalidateEvery` with `x-effect`; `website` template's `recency` default (#88)
 - [x] Drift test; `Ume.Rag.Pipelines.Tests` for the new keys (#88)
-- [ ] **Hand-off L1:** issue to stream B
+- [x] **Hand-off L1:** issue to stream B (#90)
 
 ### 4. Freshness in the crawler
 Refs: [weakness review §3](../weakness-review.md), [connectors §5.4–§5.6, §18](../ingestion-worker/design-connectors.md)
@@ -48,22 +48,22 @@ Refs: [engine §11](../ingestion-worker/design-engine.md), [admin §4.7, §6.4](
 
 ### 6. Publish, re-process, rollback
 Refs: [engine §12, §14](../ingestion-worker/design-engine.md)
-- [ ] `publish-plan` (every live document, forecast); `reprocess` with per-document swap
-- [ ] Previous sets kept 14 days; rollback swaps back; site-profile versions via the same logic
-- [ ] **Done:** engine §19 publish and rollback tests green
+- [x] `publish-plan` (every live document, forecast); `reprocess` with per-document swap (PR: a/p1b-6-publish)
+- [x] Previous sets kept 14 days; rollback swaps back; site-profile versions via the same logic (PR: a/p1b-6-publish)
+- [x] **Done:** engine §19 publish and rollback tests green (PR: a/p1b-6-publish)
 
 ### 7. Evaluation harness
 Refs: [processing §13, §14](../ingestion-worker/design-processing.md), [ingestion plan §7](../ingestion-worker/plan.md)
-- [ ] `publish-report`; `nightly` with the recall@10 alert and metric; `on-demand` with `CandidateSettings`
-- [ ] `generate-set`/`top-up-set` with filtering on FakeGateway (model and ceiling per README §7 O1)
-- [ ] Reports lead with the `human` layer
-- [ ] **Done:** reproducibility test green
-- [ ] **Hand-off L5** (with items 5, 6, 8): issue to stream B
+- [x] `publish-report`; `nightly` with the recall@10 alert and metric; `on-demand` with `CandidateSettings` (PR: a/10-eval-on-demand)
+- [x] `generate-set`/`top-up-set` with filtering on FakeGateway (model and ceiling per README §7 O1) (PR: a/p1b-7-eval-sets)
+- [x] Reports lead with the `human` layer (PR: a/10-eval-on-demand)
+- [x] **Done:** reproducibility test green; set triggers (first syncs, weekly top-up, `D` +25 %) in the evaluation scheduler (PR: a/p1b-7-eval-reproducibility)
+- [x] **Hand-off L5** (with items 5, 6, 8): issue to stream B (#132)
 
 ### 8. Remaining commands and admin parse rules
 Refs: [admin §4.7](../admin/design.md), [processing §3.5, §9.5](../ingestion-worker/design-processing.md), [connectors §13](../ingestion-worker/design-connectors.md)
 - [x] Deletion decisions, release hold, PII clearance, reprocess one document (PR: a/10-commands)
-- [ ] Admin-made parse rules matched and re-keying only matching documents
+- [x] Admin-made parse rules matched and re-keying only matching documents (PR: a/p1b-8-parse-rules)
 
 ### 16. Gold-set grading script
 Refs: [weakness review §2](../weakness-review.md), [ingestion plan §7](../ingestion-worker/plan.md)
@@ -81,9 +81,9 @@ Refs: [repo-and-deployment §8.1–§8.3](../platform/repo-and-deployment.md), [
 
 ### 17. Pilot stack for P1b
 Refs: [chat §4.3, §13.3, §14.2](../chat-api/design.md), [repo-and-deployment §6.2, §7](../platform/repo-and-deployment.md)
-- [ ] Open WebUI API keys restricted to the feedback routes; service account; `OpenWebUi__AdminApiKey` secret; importer settings
-- [ ] Test-host Compose with the pilot caps; test-host run book
-- [ ] Runbook public-records section lists the three candidate routes
+- [ ] Open WebUI API keys restricted to the feedback routes; service account; `OpenWebUi__AdminApiKey` secret; importer settings — all but the importer settings done (PR: a/p1b-17-test-host-stack); the importer settings wait for L6
+- [x] Test-host Compose with the pilot caps; test-host run book (PR: a/p1b-17-test-host-stack)
+- [x] Runbook public-records section lists the three candidate routes (PR: a/p1b-17-test-host-stack)
 - [ ] **Done:** `docker compose config` green; local import and pruning work; #49 recorded
 
 ### 19. Code complete (your part)

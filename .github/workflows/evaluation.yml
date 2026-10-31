@@ -24,7 +24,7 @@ concurrency:
 jobs:
   evaluation:
     if: vars.UME_RAG_TEST_HOST_RUNNER != ''
-    runs-on: ${{ fromJSON(vars.UME_RAG_TEST_HOST_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.UME_RAG_TEST_HOST_RUNNER || '["self-hosted","linux","x64"]') }}
     environment: test-host
     timeout-minutes: 90
     steps:
@@ -49,7 +49,7 @@ jobs:
 
   not-configured:
     if: vars.UME_RAG_TEST_HOST_RUNNER == ''
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - name: No test-host runner yet
         run: |

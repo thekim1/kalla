@@ -19,8 +19,10 @@ namespace Ume.Rag.Worker.Engine;
 /// The engine's part of a <c>url-list</c> source (connectors design §4, §6.0; engine design §9.2). Listing: the listed URLs
 /// are admitted to the source's own frontier at depth 0 (a <c>CrawlRuns</c> row holds the run's admission count, capped at
 /// the list's 5,000), committed per checkpoint with the connector checkpoint and the refused URLs' run items; a listing that
-/// runs past 2 minutes yields to a continuation. Release: each host keeps at most <c>Crawl:FetchBatchPerHost</c> fetches
-/// queued or running, topped up after the listing and whenever one of its fetches ends; a released row whose job is gone is
+/// runs past 2 minutes yields to a continuation. A <c>config-change</c> run (the list changed, connectors design §12.3)
+/// claims only the added URLs: a listed URL with a live document is marked listed for the run without a fetch, and the
+/// reconcile removes the URLs no longer listed (<c>removed-from-list</c>, exempt). Release: each host keeps at most
+/// <c>Crawl:FetchBatchPerHost</c> fetches queued or running, topped up after the listing and whenever one of its fetches ends; a released row whose job is gone is
 /// enqueued again (dedup <c>fetch:{sourceId}:{urlHash}</c>). Fetch: the row's host slot (§6.3), the connector's conditional
 /// GET, then <see cref="DocumentIngest"/>, which completes the frontier row in the document's commit.
 /// </summary>
@@ -34,6 +36,7 @@ public sealed class UrlListSource(
     DocumentIngest ingest,
     IJobQueue queue,
     JobDatabase database,
+    WorkerIdentity identity,
     IOptions<CrawlOptions> options,
     TimeProvider time)
 {
@@ -43,12 +46,16 @@ public sealed class UrlListSource(
     /// <summary>The URL list's cap (connectors design §4): the run's admission limit.</summary>
     public const int MaxUrls = 5000;
 
+    private const string LiveUrlsSql = """
+        SELECT "IdentityHash" FROM content."Documents" WHERE "SourceId" = $1 AND "IdentityKind" = 'url' AND "DeletedAt" IS NULL
+        """;
+
     private const string ReleasedSql = """
         SELECT "UrlHash" FROM content."CrawlFrontier"
         WHERE "Classification" = $1 AND "SourceId" = $2 AND "RunId" = $3 AND "State" = 'released'
         """;
 
-    public async Task<JobResult> ListAsync(SourceContext source, RunRow run, SyncPayload payload, CancellationToken cancellationToken)
+    public async Task<JobResult> ListAsync(SourceContext source, RunRow run, SyncPayload payload, LeasedJob job, CancellationToken cancellationToken)
     {
         var key = new CrawlRunKey(source.SourceId, source.Classification, run.Id);
         await crawlRuns.StartAsync(new CrawlRunRecord
@@ -62,6 +69,7 @@ public sealed class UrlListSource(
         var from = payload.ResumeFromCheckpoint
             ? await checkpoints.GetAsync<UrlListCheckpoint>(source.SourceId, CheckpointKind.Run, run.Id, cancellationToken) ?? new UrlListCheckpoint()
             : new UrlListCheckpoint();
+        var live = run.Trigger == RunTriggers.ConfigChange ? await LiveUrlsAsync(source.SourceId, cancellationToken) : null;
         var started = time.GetTimestamp();
         var admissions = new List<FrontierAdmission>();
         var refused = new List<RunItemRow>();
@@ -77,6 +85,12 @@ public sealed class UrlListSource(
                     refused.Add(new RunItemRow(run.Id, source.Classification, null, failure.Identity, Outcome.Failed) { Reason = failure.Reason });
                     break;
                 case ListingEvent<UrlListCheckpoint>.Checkpoint checkpoint:
+                    if (live is not null)
+                    {
+                        var known = await frontier.MarkListedAsync(key, [.. admissions.Where(a => live.Contains(a.UrlHash))], cancellationToken);
+                        admissions.RemoveAll(a => known.Contains(a.UrlHash));
+                    }
+
                     await frontier.AdmitAsync(key, admissions, cancellationToken);
                     await AddItemsAsync(refused, cancellationToken);
                     await checkpoints.SaveAsync(source.SourceId, source.Classification, CheckpointKind.Run, run.Id, checkpoint.State, cancellationToken);
@@ -84,10 +98,10 @@ public sealed class UrlListSource(
                     refused.Clear();
                     if (time.GetElapsedTime(started) > ListingSlice)
                     {
-                        // Yield: the continuation resumes from the checkpoint just saved (no attempt, engine design §9.2).
-                        await queue.EnqueueAsync([SyncJobs.Continuation(source.SourceId, run.Id, source.DepartmentId, source.Classification, run.Kind,
-                            run.Trigger, SyncPhase.List, resumeFromCheckpoint: true)], null, cancellationToken);
-                        return new JobResult.Success();
+                        // Yield: the continuation resumes from the checkpoint just saved (no attempt, engine design §9.2); completed with
+                        // this job, so a continuation that yields again does not lose its successor to its own dedup key.
+                        return await runs.ContinueAsync(queue, job, identity.InstanceId, SyncJobs.Continuation(source.SourceId, run.Id, source.DepartmentId,
+                            source.Classification, run.Kind, run.Trigger, SyncPhase.List, resumeFromCheckpoint: true), run.Id, null, cancellationToken);
                     }
 
                     break;
@@ -173,6 +187,21 @@ public sealed class UrlListSource(
         }
 
         return result;
+    }
+
+    /// <summary>The identity hashes (lower-case hex, as <see cref="FrontierAdmission.UrlHash"/>) of the source's live documents.</summary>
+    private async Task<HashSet<string>> LiveUrlsAsync(Guid sourceId, CancellationToken cancellationToken)
+    {
+        var hashes = new HashSet<string>(StringComparer.Ordinal);
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(LiveUrlsSql, connection) { Parameters = { Db.P(sourceId) } };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            hashes.Add(Db.Hex(reader.GetFieldValue<byte[]>(0)));
+        }
+
+        return hashes;
     }
 
     private async Task AddItemsAsync(List<RunItemRow> items, CancellationToken cancellationToken)
