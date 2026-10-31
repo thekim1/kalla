@@ -107,6 +107,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
                 question.Origin["promptVersion"]!.GetValue<string>().ShouldBe(EvalPrompts.PromptVersion);
                 question.Origin["round"]!.GetValue<int>().ShouldBe(1);
                 question.Origin["seed"]!.GetValue<string>().ShouldBe(seedHex);
+                question.Origin["documents"]!.GetValue<int>().ShouldBe(4, "D at the round, for the 25 % growth trigger");
                 question.Origin["judge"]!["answerable"]!.GetValue<int>().ShouldBe(5);
                 var source = new[] { doc1, doc2, doc3 }.Single(d => d.ChunkIds.Contains(question.SourceChunkId));
                 question.ExpectedDocumentIds[0].ShouldBe(source.DocumentId);

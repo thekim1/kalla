@@ -57,7 +57,7 @@ Refs: [processing §13, §14](../ingestion-worker/design-processing.md), [ingest
 - [x] `publish-report`; `nightly` with the recall@10 alert and metric; `on-demand` with `CandidateSettings` (PR: a/10-eval-on-demand)
 - [x] `generate-set`/`top-up-set` with filtering on FakeGateway (model and ceiling per README §7 O1) (PR: a/p1b-7-eval-sets)
 - [x] Reports lead with the `human` layer (PR: a/10-eval-on-demand)
-- [ ] **Done:** reproducibility test green
+- [x] **Done:** reproducibility test green; set triggers (first syncs, weekly top-up, `D` +25 %) in the evaluation scheduler (PR: a/p1b-7-eval-reproducibility)
 - [ ] **Hand-off L5** (with items 5, 6, 8): issue to stream B
 
 ### 8. Remaining commands and admin parse rules
