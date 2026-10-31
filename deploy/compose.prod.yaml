@@ -116,7 +116,12 @@ services:
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/api.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/api.key
       Rag__Roles: knowledge,chat,mcp
+      # The rag-blobs volume's rag/ container (repo-and-deployment §6.3), as in rag-admin and rag-worker.
+      BlobStore__Root: /data/blobs/rag
+      # Gateway keys per level are secret files (Gateway__Keys__<level>, init-deployment.sh --gateway-key-file).
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
+      # Open WebUI's client in the registry; the user JWT's key is the secret file OpenWebUi__JwtSecret (identity §5.2).
+      OpenWebUi__ClientId: ${UME_RAG_OPENWEBUI_CLIENT_ID:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: rag-api
       SSL_CERT_FILE: /run/certs/ca.pem
@@ -165,6 +170,7 @@ services:
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/admin.key
       Oidc__Authority: ${UME_RAG_OIDC_AUTHORITY:?Set the HTTPS OIDC authority in deploy/.env}
       Oidc__ClientId: ${UME_RAG_OIDC_CLIENT_ID:-ume-rag-admin}
+      BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: rag-admin

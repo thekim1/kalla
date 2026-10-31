@@ -3,10 +3,15 @@
 # has decided register item W2 (how Open WebUI's own chat copies are pruned; until then they stay unpruned, stated in
 # its data-handling profile). On the 24 GB pilot host or its own VM (§6.2: not co-hosted on a 16 GB host).
 #
-#   ./deploy/init-deployment.sh ... --openwebui-host chat.intern.umea.se \
-#       --openwebui-oidc-client-id <id> --openwebui-oidc-provider-url https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration
-#   (fill in OPENAI_API_KEYS and OAUTH_CLIENT_SECRET in ${UME_RAG_SECRETS_DIR}/openwebui.env)
+#   ./deploy/init-deployment.sh --oidc-authority https://<keycloak host>/realms/ume ... \
+#       --openwebui-host chat.intern.umea.se --openwebui-oidc-client-secret-file open-webui.secret \
+#       --openwebui-api-key-file open-webui.key --openwebui-rag-client-id <client id>
 #   docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait
+#
+# Sign-in (chat design §4.3, identity design §5.3): P1 the Keycloak shared with the gateway, client open-webui in realm
+# ume (the OIDC provider URL defaults to the admin's authority + /.well-known/openid-configuration); P2 Entra, the
+# registration ume-rag-open-webui (--openwebui-oidc-client-id ume-rag-open-webui --openwebui-oidc-provider-url
+# https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration).
 #
 # One connection only: our API (no gateway connection), so the signed user JWT goes only to rag-api. Its own task
 # models, RAG, web search, tools, code execution, uploads and admin chat access are off. Settings come from this file
@@ -82,14 +87,16 @@ services:
       ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS: "true"
       API_KEYS_ALLOWED_ENDPOINTS: /api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback
       USER_PERMISSIONS_FEATURES_API_KEYS: "false"
-      # Sign-in only with Entra through its own registration (identity design §5.3).
+      # Sign-in only over OIDC through its own client (identity design §5.3): P1 Keycloak, P2 Entra (header above).
       ENABLE_LOGIN_FORM: "false"
       ENABLE_SIGNUP: "false"
       ENABLE_OAUTH_SIGNUP: "true"
       OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "false"
-      OAUTH_PROVIDER_NAME: Microsoft Entra ID
+      # The sign-in button's label (--openwebui-oidc-provider-name).
+      OAUTH_PROVIDER_NAME: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME:-Umeå kommun}
       OAUTH_CLIENT_ID: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_ID:?Set UME_RAG_OPENWEBUI_OIDC_CLIENT_ID in deploy/.env}
       OPENID_PROVIDER_URL: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL:?Set UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL in deploy/.env}
+      # The legacy callback path, as the realm additions register it (identity design §5.3, to-verify #46).
       OPENID_REDIRECT_URI: https://${UME_RAG_OPENWEBUI_HOST}/oauth/oidc/callback
     volumes:
       # Its own SQLite store, on the host's encrypted disk (§12 #8): never ragdb.
