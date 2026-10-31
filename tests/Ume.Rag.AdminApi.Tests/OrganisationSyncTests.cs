@@ -202,7 +202,16 @@ public sealed class OrganisationSyncTests(OrgSyncFixture database) : IClassFixtu
             (await retention.RunOnceAsync(Ct)).ShouldBe(-1);
         }
 
-        (await retention.RunOnceAsync(Ct)).ShouldBeGreaterThanOrEqualTo(12000); // three batches of 5000
+        // The holder's rollback releases the lock on the server a moment after the call returns; a slow runner can see it
+        // still held, so wait (≤ 5 s) for a run that got the lock instead of failing on the race.
+        long removed;
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while ((removed = await retention.RunOnceAsync(Ct)) < 0 && waited.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            await Task.Delay(50, Ct);
+        }
+
+        removed.ShouldBeGreaterThanOrEqualTo(12000); // three batches of 5000
         await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
         (await db.AdminSessions.CountAsync(s => s.SessionId.StartsWith("expired-"), Ct)).ShouldBe(0);
     }
