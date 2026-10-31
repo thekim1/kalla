@@ -82,26 +82,17 @@ jobs:
 
   parser-image:
     # The image's test target: real Docling, models and Tesseract, test_offline.py included. The Dockerfile runs pytest
-    # in a `RUN --network=none` step, so a failing test fails the build; nothing is loaded into the Docker daemon (no
-    # second 3 GB copy, so no disk cleanup), the result only goes to the cache. No REVISION build argument: the tests do
-    # not read it, and without it an unchanged parser hits the cached test layer. The layers come from the GitHub
-    # Actions cache, shared with the contract job (the blobs are content-addressed, so the two scopes store them once).
+    # in a `RUN --network=none` step, so a failing test fails the build. No REVISION build argument: the tests do not
+    # read it, and without it an unchanged parser hits the cached test layer. Built by the Docker daemon's own BuildKit on
+    # the self-hosted runner, whose layer cache stays on its disk between jobs and is shared with the contract job (no
+    # throwaway buildx builder, no GitHub Actions cache to download).
     needs: changes
     if: needs.changes.outputs.parser == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v4
       - name: Build the image's test target (runs the tests without network)
-        uses: docker/build-push-action@v7
-        with:
-          context: src/parser
-          target: test
-          outputs: type=cacheonly
-          cache-from: |
-            type=gha,scope=parser-test
-            type=gha,scope=parser-runtime
-          cache-to: type=gha,scope=parser-test,mode=max
+        run: docker build --target test -t ume-rag.local/parser-test:ci src/parser
       - name: Disk left
         if: always()
         run: df -h / | tail -1
@@ -116,33 +107,13 @@ jobs:
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
-      - name: Free runner disk (in the background)
-        # Testcontainers needs the image in the Docker daemon, so buildx loads it and holds a second copy meanwhile
-        # (about 3 GB each, plus the compressed cache blobs). The Android SDK, the largest preinstalled toolchain, is
-        # removed while .NET and buildx are set up; the next step waits for it.
-        run: |
-          df -h / | tail -1
-          nohup sh -c "sudo rm -rf /usr/local/lib/android; touch '$RUNNER_TEMP/disk-freed'" >/dev/null 2>&1 &
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.401
-      - uses: docker/setup-buildx-action@v4
-      - name: Wait for the disk
-        run: |
-          timeout 600 sh -c "until [ -e '$RUNNER_TEMP/disk-freed' ]; do sleep 2; done"
-          df -h / | tail -1
       - name: Build the parser image
+        # Straight into the Docker daemon that Testcontainers uses, from the runner's local layer cache (see parser-image).
         # The name has a registry part with a dot, so Testcontainers does not prefix it with the Docker Hub mirror below.
-        uses: docker/build-push-action@v7
-        with:
-          context: src/parser
-          build-args: REVISION=${{ github.sha }}
-          tags: ume-rag.local/parser:ci
-          load: true
-          cache-from: |
-            type=gha,scope=parser-runtime
-            type=gha,scope=parser-test
-          cache-to: type=gha,scope=parser-runtime,mode=max
+        run: docker build -t ume-rag.local/parser:ci --build-arg REVISION=${{ github.sha }} src/parser
       - name: Contract tests
         env:
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
