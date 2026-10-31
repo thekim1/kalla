@@ -77,7 +77,9 @@ public static class SyncJobs
             RunId = runId,
         };
 
-    public static JobRequest Parse(SourceContext source, DocumentRow document, Guid executionId, Guid pipelineVersionId, Guid runId, byte[] detectKey) =>
+    /// <summary>A <c>parse</c> job; <paramref name="slice"/> above 0 is a yielded job's continuation (engine design §9.5).</summary>
+    public static JobRequest Parse(SourceContext source, DocumentRow document, Guid executionId, Guid pipelineVersionId, Guid runId, byte[] detectKey,
+        int slice = 0) =>
         new(JobClasses.Parse, source.DepartmentId, document.Classification, ContractJson.Serialize(new ParsePayload
         {
             DocumentId = document.Id,
@@ -86,6 +88,7 @@ public static class SyncJobs
             PipelineVersionId = pipelineVersionId,
             Stage = StageNames.Parse,
             InputKey = StageKeys.ToHex(detectKey),
+            Slice = slice,
         }))
         {
             DedupKey = JobDedupKeys.Parse(document.Id, executionId),

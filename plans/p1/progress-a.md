@@ -70,6 +70,7 @@ Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md
 - [x] Runs, run items, finalizer; scheduler (Cronos) (PR: a/9-engine)
 - [x] Index writer: invisible batches, swap, re-key, `held`, orphan sweep (PR: a/9-engine)
 - [x] Blob-tombstone purge sweep (#34); blob root ownership (#41) (PR: a/9-engine)
+- [x] Nightly drift sweep (`EnsureCurrent` outside a fetch, `rag.reconcile.drift`); parse slicing and resume from stored ranges; preview-first parser slot gate; parse cache keyed by parser build (PR: a/9-engine-drift-slicing)
 - [x] **Done:** integration and crash-recovery tests; a URL-list source syncs into live chunks; #21, #119, #141 recorded (PR: a/9-engine; #141 test part only, measurement open)
 - [ ] **Hand-off J4:** issue to stream B
 
