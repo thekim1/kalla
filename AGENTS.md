@@ -45,6 +45,8 @@ gateway's conventions for names, config keys, claims, key format and security ev
 - **Settings rule:** deployment knobs are `Section:Key` (configuration, environment). Run-time values are
   `Settings.<Section>.<Key>` (database, changed in the admin UI).
 - **7-day package rule:** pin exact versions released at least 7 days ago (NuGet, npm, PyPI). Pin images by digest.
+  **Suspended during development** (user, 2026-10-31): until the first production deployment, newer releases may be
+  pinned; exact versions and digests are still required, and the rule applies again before go-live.
   Match the gateway's pin when it has one.
 - **Verify before relying:** check a library, API or site claim against the real source. Download packages into a
   scratch directory and read them there without executing them.
