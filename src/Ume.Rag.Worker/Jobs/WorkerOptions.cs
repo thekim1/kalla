@@ -50,6 +50,14 @@ public sealed class WorkerOptions
     [Range(0, 600)]
     public int StopGraceSeconds { get; set; } = 90;
 
+    /// <summary>The run finalizer's interval (30 s, engine design §10.4); one advisory-locked pass per tick across instances.</summary>
+    [Range(1, 600)]
+    public int FinalizerSeconds { get; set; } = 30;
+
+    /// <summary>The scheduler's tick (60 s, engine design §9.6); one advisory-locked pass per tick across instances.</summary>
+    [Range(1, 600)]
+    public int SchedulerSeconds { get; set; } = 60;
+
     /// <summary>The configured classes in dequeue order.</summary>
     public IReadOnlyList<string> ClassList()
     {

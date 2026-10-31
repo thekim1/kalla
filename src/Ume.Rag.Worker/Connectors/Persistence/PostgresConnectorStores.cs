@@ -202,7 +202,10 @@ public sealed class PostgresDeletionProposalStore(JobDatabase database) : IDelet
     }
 }
 
-/// <summary><c>content."QuarantinedFiles"</c> (connectors design §11): metadata of a ClamAV finding.</summary>
+/// <summary>
+/// <c>content."QuarantinedFiles"</c> (connectors design §11): metadata of a ClamAV finding. Event 5102 is the runner's
+/// (<c>Engine.DocumentIngest</c>), which knows the document.
+/// </summary>
 public interface IQuarantineStore
 {
     /// <summary>Inserts the row; the same <see cref="QuarantineRecord.Id"/> again (a retried job) is kept as it is.</summary>
@@ -220,8 +223,6 @@ public sealed class PostgresQuarantineStore(JobDatabase database) : IQuarantineS
     public async Task AddAsync(QuarantineRecord record, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
-        // TODO(#86): emit event 5102 rag.malware.detected (Signature, Sha256, Origin, SourceId, RunId, Classification) once
-        // stream B's SecurityEvents has it; every finding passes here.
         await using var connection = await database.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(InsertSql, connection)
         {

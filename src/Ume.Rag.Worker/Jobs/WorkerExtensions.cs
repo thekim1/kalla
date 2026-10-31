@@ -4,9 +4,11 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using Ume.Rag.Infrastructure;
 using Ume.Rag.Infrastructure.Config;
+using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Worker.Commands;
 using Ume.Rag.Worker.Connectors;
+using Ume.Rag.Worker.Engine;
 
 namespace Ume.Rag.Worker.Jobs;
 
@@ -40,8 +42,8 @@ public static class WorkerExtensions
     }
 
     /// <summary>
-    /// The job machinery (engine design §9): options, the Postgres queue, instance registration and heartbeat, the
-    /// dispatcher, the reaper, the nightly maintenance, the <c>command</c> handler with its kinds, and the connectors'
+    /// The job machinery (engine design §9): options, the Postgres queue, the blob store, instance registration with the stage
+    /// manifest and heartbeat, the dispatcher, the reaper, the nightly maintenance with the engine's sweeps, the <c>command</c> handler with its kinds, and the connectors'
     /// shared fetch path (<see cref="ConnectorExtensions.AddRagConnectors"/>). Hosted services stop
     /// in reverse order: the dispatcher drains before the heartbeat removes the instance. Call after <c>AddRagDatabase</c>
     /// (the queue's pool) and with <c>AddRagConfigMonitor</c>, whose listening connection carries <c>rag_jobs</c> to
@@ -64,6 +66,7 @@ public static class WorkerExtensions
             }
         });
         builder.AddRagJobQueue();
+        builder.AddRagBlobStore();
         builder.AddRagConnectors();
         // The same JobWakeUps the dispatcher waits on. Here, not in AddRagJobQueue: only the worker dispatches, and a service
         // that only enqueues would have its monitor woken by every job notification for semaphores nobody waits on.
@@ -74,6 +77,12 @@ public static class WorkerExtensions
         builder.Services.TryAddSingleton<WorkerIdentity>();
         builder.Services.TryAddSingleton<RunningJobs>();
         builder.Services.TryAddSingleton<JobMetrics>();
+        // What registration, cancel-run and maintenance need from the engine (the rest is AddRagEngine's).
+        builder.Services.TryAddSingleton<StageManifestRegistrar>();
+        builder.Services.TryAddSingleton<EngineSettings>();
+        builder.Services.TryAddSingleton<RunStore>();
+        builder.Services.TryAddSingleton<IndexWriter>();
+        builder.Services.TryAddSingleton<BlobPurgeSweep>();
 
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, CommandJobHandler>());
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, CancelRunCommand>());
