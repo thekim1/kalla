@@ -30,6 +30,9 @@ var devUserPassword = Secret("dev-user-password", 32);
 var apiClientSecret = Secret("api-client-secret", 48);
 var openWebUiClientSecret = Secret("openwebui-client-secret", 48);
 var dataApiKey = Secret("data-api-key", 43);
+// The knowledge role's query-embedding cache key and the download-grant signing key (knowledge design §4.6, §5.4).
+var cacheKeyPepper = Secret("cache-key-pepper", 48);
+var downloadGrantKey = Secret("download-grant-key", 48);
 
 var postgres = builder.AddPostgres("postgres")
     .WithImage(PostgresImage, PostgresTag).WithImageSHA256(PostgresDigest)
@@ -147,6 +150,8 @@ var api = builder.AddProject<Projects.Ume_Rag_Api>("api", o => o.LaunchProfileNa
     .WithReference(database)
     .WithEnvironment("Security__KeyPepper", pepper)
     .WithEnvironment("Rag__Roles", "knowledge,chat,mcp")
+    .WithEnvironment("Security__CacheKeyPepper", cacheKeyPepper)
+    .WithEnvironment("Security__DownloadGrantKeys__dev", downloadGrantKey)
     .WaitFor(database)
     .WaitForCompletion(migrations)
     .WithHttpHealthCheck(HealthEndpoints.ReadyPath, endpointName: "https")
