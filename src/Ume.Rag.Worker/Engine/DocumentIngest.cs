@@ -58,6 +58,7 @@ public sealed partial class DocumentIngest(
     Reconciler reconciler,
     ProcessingSegment segment,
     IQuarantineStore quarantine,
+    ScanWait scanWait,
     WorkerIdentity identity,
     ILoggerFactory loggers,
     TimeProvider time,
@@ -115,8 +116,10 @@ public sealed partial class DocumentIngest(
                     fetch.Source.Classification);
                 return await TerminalAsync(fetch, known, Outcome.Malware, finding.Reason, Frontier(fetch, 200, null, null), cancellationToken);
 
-            case FetchOutcome.Transient transient when transient.CountsAttempt && fetch.Job.Attempts >= fetch.Job.MaxAttempts:
-                // The last attempt: the document fails for the run instead of dying without a run item.
+            case FetchOutcome.Transient transient when (transient.CountsAttempt && fetch.Job.Attempts >= fetch.Job.MaxAttempts) ||
+                                                       scanWait.Expired(transient.Reason, fetch.Job):
+                // The last attempt, or 24 h without a ClamAV verdict: the document fails for the run instead of dying
+                // without a run item or waiting forever.
                 await FailedAsync(known, cancellationToken);
                 return await TerminalAsync(fetch, known, Outcome.Failed, transient.Reason, Frontier(fetch, null, null, null), cancellationToken);
 
