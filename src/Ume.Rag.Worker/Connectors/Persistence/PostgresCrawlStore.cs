@@ -41,6 +41,28 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
         UPDATE content."CrawlRuns" SET "Admitted" = "Admitted" + $2, "Seeds" = "Seeds" + $3, "LimitHit" = "LimitHit" OR $4 WHERE "RunId" = $1
         """;
 
+    // An incremental run's unchanged seeds: listed for the run without a fetch (connectors design §5.4).
+    private const string MarkListedSql = """
+        UPDATE content."CrawlFrontier" f
+           SET "RunId" = $3, "SitemapLastMod" = coalesce(u.lastmod, f."SitemapLastMod")
+        FROM unnest($4::bytea[], $5::timestamptz[]) AS u(h, lastmod)
+        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."UrlHash" = u.h AND f."State" = 'idle'
+          AND f."RunId" IS DISTINCT FROM $3 AND f."LastFetchedAt" IS NOT NULL
+          AND (u.lastmod IS NULL OR u.lastmod <= f."LastFetchedAt")
+        RETURNING f."UrlHash"
+        """;
+
+    private const string LeftSitemapSql = $"""
+        SELECT {FrontierColumns} FROM content."CrawlFrontier"
+        WHERE "Classification" = $1 AND "SourceId" = $2 AND "State" = 'idle' AND "RunId" IS DISTINCT FROM $3 AND "SitemapLastMod" IS NOT NULL
+        ORDER BY "Url"
+        """;
+
+    private const string ClearSitemapSql = """
+        UPDATE content."CrawlFrontier" SET "SitemapLastMod" = NULL
+        WHERE "Classification" = $1 AND "SourceId" = $2 AND "UrlHash" = ANY($3)
+        """;
+
     private const string GetSql = $"""
         SELECT {FrontierColumns} FROM content."CrawlFrontier" WHERE "Classification" = $1 AND "SourceId" = $2 AND "UrlHash" = $3
         """;
@@ -186,6 +208,62 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
 
         await transaction.CommitAsync(cancellationToken);
         return new AdmitResult(rows, limitHit);
+    }
+
+    public async Task<IReadOnlySet<string>> MarkListedAsync(CrawlRunKey run, IReadOnlyList<FrontierAdmission> seeds, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(seeds);
+        var distinct = seeds.DistinctBy(u => u.UrlHash, StringComparer.Ordinal).ToList();
+        var listed = new HashSet<string>(StringComparer.Ordinal);
+        if (distinct.Count == 0)
+        {
+            return listed;
+        }
+
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(MarkListedSql, connection)
+        {
+            Parameters =
+            {
+                Db.P(run.Classification), Db.P(run.SourceId), Db.P(run.RunId),
+                Db.P(distinct.Select(u => Db.Bytes(u.UrlHash)).ToArray()), Db.P(distinct.Select(u => Db.Utc(u.SitemapLastMod)).ToArray()),
+            },
+        };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            listed.Add(Db.Hex(reader.GetFieldValue<byte[]>(0)));
+        }
+
+        return listed;
+    }
+
+    public async Task<IReadOnlyList<FrontierRow>> LeftSitemapAsync(CrawlRunKey run, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(LeftSitemapSql, connection) { Parameters = { Db.P(run.Classification), Db.P(run.SourceId), Db.P(run.RunId) } };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var rows = new List<FrontierRow>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(ReadRow(reader));
+        }
+
+        return rows;
+    }
+
+    public async Task ClearSitemapLastModAsync(CrawlRunKey run, IReadOnlyList<string> urlHashes, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(urlHashes);
+        if (urlHashes.Count == 0)
+        {
+            return;
+        }
+
+        await ExecuteAsync(ClearSitemapSql, cancellationToken, Db.P(run.Classification), Db.P(run.SourceId), Db.P(urlHashes.Select(Db.Bytes).ToArray()));
     }
 
     public async Task<FrontierRow?> GetAsync(Guid sourceId, string classification, string urlHash, CancellationToken cancellationToken)

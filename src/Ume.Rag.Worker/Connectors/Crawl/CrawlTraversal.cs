@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Options;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Worker.Connectors.Deletion;
+using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Urls;
@@ -53,8 +55,12 @@ public abstract record CrawlFetchResult
 /// frontier, each released URL fetched within its host's budget, the outcome written to the frontier row, links
 /// admitted by scope, depth, traps and <c>maxPages</c> (BFS by depth), canonical aliases folded only when verified,
 /// <c>noindex</c>/<c>nofollow</c> honoured on external hosts and recorded on municipal ones, and the host topped up.
-/// Documents and run items stay the engine's (item 9); it calls <see cref="AbandonAsync"/> when a fetch's attempts run
-/// out and <see cref="EvaluateAsync"/> before the reconcile phase.
+/// Freshness (§5.4, weakness review §3): on hosts whose site profile marks <c>lastmod</c> reliable a URL whose sitemap
+/// <c>lastmod</c> is not newer than its last fetch is skipped without a request (not in a revalidating run) and its
+/// stored outlinks expanded; incremental runs fetch only changed and new seeds; after a complete listing the URLs that
+/// left the sitemap get the removal check. Documents and run items stay the engine's (item 9); it calls
+/// <see cref="ListingDoneAsync"/> when the listing ends, <see cref="AbandonAsync"/> when a fetch's attempts run out and
+/// <see cref="EvaluateAsync"/> before the reconcile phase.
 /// </summary>
 public sealed class CrawlTraversal(
     CrawlConnector connector,
@@ -66,6 +72,8 @@ public sealed class CrawlTraversal(
     FetchTopUp topUp,
     IBlobStore blobs,
     IJobQueue queue,
+    LastmodReliability lastmod,
+    IOptions<CrawlOptions> options,
     TimeProvider time)
 {
     public const string NoIndex = "robots.noindex";
@@ -73,26 +81,53 @@ public sealed class CrawlTraversal(
     public const string NoFollowIgnored = "robots.nofollow_ignored";
     public const string Folded = "identity.folded";
 
+    /// <summary>Run item fact: no request, the sitemap <c>lastmod</c> is not newer than the last fetch (§5.4).</summary>
+    public const string LastmodSkip = "crawl.lastmod_skip";
+
+    /// <summary>Run item fact: the URL left the sitemap and was re-requested (§5.4).</summary>
+    public const string RemovalCheck = "crawl.removal_check";
+
     private readonly ConcurrentDictionary<Guid, TrapDetector> _traps = new();
 
-    /// <summary>Opens the run's <c>CrawlRuns</c> row with the source's limits (kept when it exists: a resumed listing).</summary>
-    public Task StartAsync(CrawlRunContext context, CancellationToken cancellationToken)
+    /// <summary>
+    /// Opens the run's <c>CrawlRuns</c> row with the source's limits (kept when it exists: a resumed listing) and returns
+    /// the context the run continues with: an incremental run stays incremental only when every scope host's site profile
+    /// marks <c>lastmod</c> reliable, otherwise it runs as a full traversal (weakness review §3).
+    /// </summary>
+    public async Task<CrawlRunContext> StartAsync(CrawlRunContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var settings = connector.Source(context.Run.SourceId, context.Settings).Settings;
-        return runs.StartAsync(new CrawlRunRecord
+        var source = connector.Source(context.Run.SourceId, context.Settings);
+        await runs.StartAsync(new CrawlRunRecord
         {
             RunId = context.Run.RunId,
             Classification = context.Run.Classification,
             SourceId = context.Run.SourceId,
-            MaxPages = settings.MaxPages,
-            MaxDepth = settings.MaxDepth,
+            MaxPages = source.Settings.MaxPages,
+            MaxDepth = source.Settings.MaxDepth,
         }, cancellationToken);
+        if (!context.Incremental)
+        {
+            return context;
+        }
+
+        foreach (var host in source.Scope.Hosts)
+        {
+            if (!await lastmod.IsReliableAsync(context.Run.Classification, host, cancellationToken))
+            {
+                return context with { Incremental = false };
+            }
+        }
+
+        return context;
     }
 
     /// <summary>
-    /// One committed batch of the listing (the events since the last checkpoint): seeds admitted at depth 0, an unreachable
-    /// robots.txt pauses its host for the run, every other failure is a failed seed. Returns the seeds admitted.
+    /// One committed batch of the listing (the events since the last checkpoint): seeds admitted at depth 0 (in an
+    /// incremental run only the changed and new ones, the rest marked listed); an unreachable robots.txt pauses its host
+    /// for the run; a sitemap that could not be read pauses its host once (its seeds are unknown, so the ratio of resolved
+    /// seeds cannot be trusted and nothing may become <c>not-seen</c>); every other failure (an invalid or out-of-scope
+    /// start URL) is a failed seed. Returns the seeds admitted.
     /// </summary>
     public async Task<int> AdmitSeedsAsync(CrawlRunContext context, IReadOnlyList<ListingEvent<CrawlCheckpoint>> events, CancellationToken cancellationToken)
     {
@@ -109,13 +144,53 @@ public sealed class CrawlTraversal(
                 case ListingEvent<CrawlCheckpoint>.Failure { Reason: CrawlConnector.RobotsUnreachable, Identity: var robotsUrl }:
                     await runs.PauseHostAsync(context.Run.RunId, new Uri(robotsUrl).Authority, CrawlConnector.RobotsUnreachable, null, cancellationToken);
                     break;
+                case ListingEvent<CrawlCheckpoint>.Failure { Reason: var reason, Identity: var identity } when reason.StartsWith(CrawlConnector.SitemapReasonPrefix, StringComparison.Ordinal):
+                    var host = new Uri(identity).Authority;
+                    if ((await runs.GetAsync(context.Run.RunId, cancellationToken))?.PausedHosts.ContainsKey(host) != true)
+                    {
+                        await runs.PauseHostAsync(context.Run.RunId, host, reason, null, cancellationToken);
+                    }
+
+                    break;
                 case ListingEvent<CrawlCheckpoint>.Failure:
                     await runs.SeedFailedAsync(context.Run.RunId, cancellationToken);
                     break;
             }
         }
 
+        if (admissions.Count > 0 && context.Incremental)
+        {
+            var listed = await frontier.MarkListedAsync(context.Run, admissions, cancellationToken);
+            admissions = [.. admissions.Where(a => !listed.Contains(a.UrlHash))];
+        }
+
         return admissions.Count == 0 ? 0 : (await frontier.AdmitAsync(context.Run, admissions, cancellationToken)).Admitted.Count;
+    }
+
+    /// <summary>
+    /// The listing ended with <paramref name="listing"/>. When it saw every sitemap, the URLs that left the sitemap since
+    /// they were listed are admitted for the removal check (in incremental runs and full traversals alike, weakness review
+    /// §3) and their <c>SitemapLastMod</c> cleared. A partial listing checks nothing: a URL missing from it may still be
+    /// listed. Returns the removal checks admitted.
+    /// </summary>
+    public async Task<int> ListingDoneAsync(CrawlRunContext context, Completeness listing, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(listing);
+        if (!listing.Complete)
+        {
+            return 0;
+        }
+
+        var left = await frontier.LeftSitemapAsync(context.Run, cancellationToken);
+        if (left.Count == 0)
+        {
+            return 0;
+        }
+
+        var admitted = await frontier.AdmitAsync(context.Run, [.. left.Select(r => new FrontierAdmission(r.Url, r.Host, FrontierRow.RemovalCheckDepth, r.Leaf))], cancellationToken);
+        await frontier.ClearSitemapLastModAsync(context.Run, [.. admitted.Admitted.Select(r => r.UrlHash)], cancellationToken);
+        return admitted.Admitted.Count;
     }
 
     /// <summary>The <c>fetch</c> job of one released frontier row.</summary>
@@ -137,6 +212,11 @@ public sealed class CrawlTraversal(
             // An unreachable robots.txt pauses the host for the run (weakness review §3): its seeds fail, nothing is not-seen.
             await runs.PauseHostAsync(run.RunId, row.Host, CrawlConnector.RobotsUnreachable, null, cancellationToken);
             return await NotReachedAsync(context, row, CrawlConnector.RobotsUnreachable, cancellationToken);
+        }
+
+        if (await LastmodSkipAsync(context, row, url, cancellationToken) is { } skipped)
+        {
+            return await FinishAsync(context, row, skipped, [LastmodSkip], requested: false, null, cancellationToken);
         }
 
         switch (await budget.AcquireAsync(row.Host, cancellationToken))
@@ -181,18 +261,39 @@ public sealed class CrawlTraversal(
 
     /// <summary>
     /// Before the reconcile phase: decides the traversal's completeness from the run's facts and its open frontier rows
-    /// (P1a's strict rule, <see cref="TraversalCompleteness"/>), stores it on <c>CrawlRuns.Complete</c> and drops the run's
-    /// trap counters.
+    /// by the configured rule (<c>Crawl:CompletenessRule</c>, P1b's ratio by default; an incremental run is never
+    /// complete, <see cref="TraversalCompleteness"/>), stores it on <c>CrawlRuns.Complete</c> and drops the run's trap counters.
     /// </summary>
-    public async Task<TraversalVerdict> EvaluateAsync(CrawlRunKey run, bool cancelled, CancellationToken cancellationToken)
+    public async Task<TraversalVerdict> EvaluateAsync(CrawlRunContext context, bool cancelled, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(context);
+        var run = context.Run;
         var record = await runs.GetAsync(run.RunId, cancellationToken) ?? throw new InvalidOperationException("The crawl run has no CrawlRuns row.");
         var open = (await frontier.HostLoadAsync(run, cancellationToken)).Sum(l => l.Pending + l.Released);
-        var verdict = TraversalCompleteness.Evaluate(record, open, cancelled);
+        var verdict = TraversalCompleteness.Evaluate(record, open, cancelled, options.Value.CompletenessRule, context.Incremental);
         await runs.SetCompleteAsync(run.RunId, verdict.Complete, cancellationToken);
         _traps.TryRemove(run.RunId, out _);
         return verdict;
+    }
+
+    /// <summary>
+    /// The <c>lastmod</c> skip (§5.4): no request when the run does not revalidate, the host's site profile marks
+    /// <c>lastmod</c> reliable, the URL's sitemap <c>lastmod</c> is not newer than its last fetch, robots.txt still allows
+    /// it and the outlinks of its stored content exist (they are expanded as for a 304). Null: fetch it.
+    /// </summary>
+    private async Task<CrawlPage?> LastmodSkipAsync(CrawlRunContext context, FrontierRow row, Uri url, CancellationToken cancellationToken)
+    {
+        if (context.Revalidate || row.IsRemovalCheck || row.SitemapLastMod is not { } sitemapLastMod || row.LastFetchedAt is not { } fetchedAt
+            || sitemapLastMod > fetchedAt || row.ContentHash is not { } hash
+            || !await lastmod.IsReliableAsync(context.Run.Classification, row.Host, cancellationToken)
+            || await robots.CheckAsync(url, cancellationToken) is not null)
+        {
+            return null;
+        }
+
+        return await PageLinks.LoadAsync(blobs, context.Run.Classification, hash, cancellationToken) is { } links
+            ? new CrawlPage(new FetchOutcome.NotModified(new Validators(row.ETag, row.LastModified)), links)
+            : null;
     }
 
     private async Task<CrawlFetchResult> FetchAsync(CrawlRunContext context, FrontierRow row, HostLease lease, CancellationToken cancellationToken)
@@ -205,13 +306,48 @@ public sealed class CrawlTraversal(
             new WorkHints(conditional ? new Validators(row.ETag, row.LastModified) : null, row.ContentHash, row.SitemapLastMod));
 
         var started = time.GetTimestamp();
-        var page = await connector.FetchPageAsync(context.FetchContext, item, cancellationToken);
+        var runFacts = new List<string>();
+        short? status = null;
+        CrawlPage page;
+        if (row.IsRemovalCheck)
+        {
+            // The removal check (§5.4): HEAD, GET when refused. A live URL is kept; a full traversal fetches it as usual
+            // so its content stays current, an incremental run only records it as reached.
+            runFacts.Add(RemovalCheck);
+            var probe = await connector.ProbeAsync(context.FetchContext, item, cancellationToken);
+            if (probe is null && context.Incremental)
+            {
+                page = new CrawlPage(new FetchOutcome.NotModified(new Validators(row.ETag, row.LastModified)), null);
+                status = 200;
+            }
+            else
+            {
+                page = probe ?? await connector.FetchPageAsync(context.FetchContext, item, cancellationToken);
+            }
+        }
+        else
+        {
+            page = await connector.FetchPageAsync(context.FetchContext, item, cancellationToken);
+        }
+
         var verdict = await lease.CompleteAsync(Response(page.Outcome, time.GetElapsedTime(started)), cancellationToken);
         if (verdict.PausedUntil is { } until)
         {
             await runs.PauseHostAsync(run.RunId, row.Host, verdict.Reason!, until, cancellationToken);
         }
 
+        return await FinishAsync(context, row, page, runFacts, requested: true, status, cancellationToken);
+    }
+
+    /// <summary>
+    /// The outcome of one URL for the run: requeued when transient; otherwise the frontier row completed (its facts kept
+    /// when no request was made), a failed seed counted, links admitted (in an incremental run only from a changed page),
+    /// a canonical folded when verified, and the hosts topped up.
+    /// </summary>
+    private async Task<CrawlFetchResult> FinishAsync(
+        CrawlRunContext context, FrontierRow row, CrawlPage page, List<string> runFacts, bool requested, short? status, CancellationToken cancellationToken)
+    {
+        var run = context.Run;
         if (page.Outcome is FetchOutcome.Transient transient)
         {
             return new CrawlFetchResult.Requeue(transient.RetryAfter, transient.Reason, transient.CountsAttempt);
@@ -231,8 +367,9 @@ public sealed class CrawlTraversal(
             _ => new Validators(row.ETag, row.LastModified),
         };
         var redirectTo = page.Outcome is FetchOutcome.Content { Facts.Redirects.Count: > 0 } redirected ? redirected.Facts.CanonicalIdentity : null;
-        var facts = new FrontierFacts(now, StatusOf(page.Outcome), validators.ETag, validators.LastModified, contentHash ?? row.ContentHash, redirectTo);
-        await frontier.CompleteAsync(run, row.UrlHash, facts, cancellationToken);
+        var facts = new FrontierFacts(now, status ?? StatusOf(page.Outcome), validators.ETag, validators.LastModified, contentHash ?? row.ContentHash, redirectTo);
+        // A lastmod skip made no request: LastFetchedAt stays the last real fetch, which later lastmod values are compared with.
+        await frontier.CompleteAsync(run, row.UrlHash, requested ? facts : null, cancellationToken);
         if (redirectTo is not null && page.Outcome is FetchOutcome.Content final)
         {
             await frontier.RecordTargetAsync(run, new FrontierAdmission(redirectTo, final.Facts.FinalUrl!.Authority, row.Depth, row.Leaf), facts with { RedirectTo = null }, cancellationToken);
@@ -244,7 +381,7 @@ public sealed class CrawlTraversal(
         }
 
         var outcome = page.Outcome;
-        var runFacts = new List<string>();
+        var changed = outcome is FetchOutcome.Content changedContent && !string.Equals(changedContent.Raw.ContentHash, row.ContentHash, StringComparison.Ordinal);
         var admitted = 0;
         if (page.Links is { } links && contentHash is not null)
         {
@@ -265,7 +402,8 @@ public sealed class CrawlTraversal(
                 outcome = new FetchOutcome.Skipped(NoIndex);
             }
 
-            if (follow && !row.Leaf)
+            // An incremental run expands links only from changed pages (§5.4).
+            if (follow && !row.Leaf && (!context.Incremental || changed))
             {
                 admitted = await AdmitLinksAsync(context, row, links.Links, contentHash, cancellationToken);
             }
@@ -286,7 +424,9 @@ public sealed class CrawlTraversal(
     {
         var source = connector.Source(context.Run.SourceId, context.Settings);
         var traps = _traps.GetOrAdd(context.Run.RunId, _ => new TrapDetector(time));
-        if (row.Depth >= source.Settings.MaxDepth || !traps.ShouldExpand(contentHash))
+        // A removal check's links count from depth 1: it was not reached from a seed.
+        var depth = Math.Max(row.Depth, (short)0);
+        if (depth >= source.Settings.MaxDepth || !traps.ShouldExpand(contentHash))
         {
             return 0;
         }
@@ -313,7 +453,7 @@ public sealed class CrawlTraversal(
                 continue;
             }
 
-            admissions.Add(new FrontierAdmission(canonical, uri.Authority, (short)(row.Depth + 1), scope.Leaf));
+            admissions.Add(new FrontierAdmission(canonical, uri.Authority, (short)(depth + 1), scope.Leaf));
         }
 
         if (found.Count > 0)

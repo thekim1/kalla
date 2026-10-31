@@ -21,6 +21,10 @@ namespace Ume.Rag.Worker.Connectors.Http;
 /// Asked for every redirect target (§3.2): false ends the fetch with <see cref="HttpFetchResult.OutOfScope"/>. Null follows
 /// every target the guard and robots.txt allow (URL lists, robots.txt, sitemaps).
 /// </param>
+/// <param name="Head">
+/// Send <c>HEAD</c> instead of <c>GET</c> (the removal check, §5.4): no body is read, and a 2xx answer is a
+/// <see cref="HttpFetchResult.Status"/> with that code.
+/// </param>
 public sealed record HttpFetchRequest(
     Uri Url,
     EgressPurpose Purpose,
@@ -30,7 +34,8 @@ public sealed record HttpFetchRequest(
     Func<Uri, CancellationToken, ValueTask<string?>>? Robots,
     long? MaxBytes = null,
     bool Truncate = false,
-    Func<Uri, bool>? InScope = null);
+    Func<Uri, bool>? InScope = null,
+    bool Head = false);
 
 /// <summary>The transport-level result of one fetch with its redirects; the connector maps it to a run item outcome.</summary>
 public abstract record HttpFetchResult
@@ -51,7 +56,7 @@ public abstract record HttpFetchResult
 
     public sealed record NotModified(Validators Validators, Uri FinalUrl) : HttpFetchResult;
 
-    /// <summary>Any other final status (4xx, 5xx, a 3xx without a usable <c>Location</c> is <see cref="Error"/>).</summary>
+    /// <summary>Any other final status (4xx, 5xx, a 3xx without a usable <c>Location</c> is <see cref="Error"/>), and the 2xx of a <c>HEAD</c>.</summary>
     public sealed record Status(HttpStatusCode Code, TimeSpan? RetryAfter, Uri FinalUrl) : HttpFetchResult;
 
     /// <summary>Refused before or during the transfer: egress, downgrade, robots on a redirect target, type, size.</summary>
@@ -71,7 +76,7 @@ public abstract record HttpFetchResult
 }
 
 /// <summary>
-/// One GET with manual redirects (connectors design §3.2, §4, §7): at most 5 hops, each re-checked by the egress guard and
+/// One GET (or HEAD) with manual redirects (connectors design §3.2, §4, §7): at most 5 hops, each re-checked by the egress guard and
 /// robots.txt, https → http refused; the body streamed to a temp file within the type's cap counted after decompression;
 /// response headers within 15 s, the body within 30 s (HTML) or 120 s (files). Cookies are never sent or stored.
 /// </summary>
@@ -147,7 +152,7 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, Time
     /// <summary>One request: a final result, or the <c>Location</c> of a redirect to follow and whether it is permanent.</summary>
     private async Task<(HttpFetchResult? Result, string? Location, bool Permanent)> SendAsync(HttpFetchRequest request, Uri url, CancellationToken cancellationToken)
     {
-        using var message = new HttpRequestMessage(HttpMethod.Get, url)
+        using var message = new HttpRequestMessage(request.Head ? HttpMethod.Head : HttpMethod.Get, url)
         {
             Version = HttpVersion.Version20,
             VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
@@ -202,7 +207,7 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, Time
             return (new HttpFetchResult.NotModified(ValidatorsOf(response, request.Validators), url), null, false);
         }
 
-        if (code is < 200 or > 299)
+        if (code is < 200 or > 299 || request.Head)
         {
             return (new HttpFetchResult.Status(response.StatusCode, RetryAfter(response), url), null, false);
         }

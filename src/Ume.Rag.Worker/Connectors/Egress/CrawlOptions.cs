@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Options;
+using Ume.Rag.Worker.Connectors.Deletion;
 
 namespace Ume.Rag.Worker.Connectors.Egress;
 
@@ -22,6 +23,12 @@ public sealed class CrawlOptions
     /// the source's traversal tops each host up to this many from its <c>pending</c> frontier rows as they finish.
     /// </summary>
     public int FetchBatchPerHost { get; set; } = 10;
+
+    /// <summary>
+    /// The seed rule of traversal completeness (<c>Crawl:CompletenessRule</c>, weakness review §3 "Phasing"):
+    /// <c>Ratio</c> (P1b, ≥ 99 % of seeds resolved) or <c>Strict</c> (P1a, no failed seed).
+    /// </summary>
+    public CompletenessRule CompletenessRule { get; set; } = CompletenessRule.Ratio;
 
     public IReadOnlyList<IPNetwork> AllowedNetworks() =>
         [.. (AllowedPrivateRanges ?? string.Empty)

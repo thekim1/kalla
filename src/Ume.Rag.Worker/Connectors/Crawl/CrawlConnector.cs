@@ -39,7 +39,9 @@ public sealed record CrawlPage(FetchOutcome Outcome, PageLinks? Links);
 /// The <c>crawl</c> source (connectors design §5): listing yields the seeds at depth 0 (start URLs and every sitemap URL
 /// in scope, from the source's <c>sitemaps</c>, each scope origin's robots.txt <c>Sitemap:</c> lines and its
 /// <c>/sitemap.xml</c>; sitemap index depth ≤ 2; at most <c>maxPages</c>), and fetching returns the page with its links.
-/// P1a runs full traversals: no <c>lastmod</c> skip, every URL is requested (conditionally when validators are stored).
+/// Every URL is requested (conditionally when validators are stored) unless the traversal skips it by <c>lastmod</c>
+/// (<see cref="CrawlTraversal"/>, only on hosts whose site profile marks <c>lastmod</c> reliable); a URL that left the
+/// sitemap is probed by <see cref="ProbeAsync"/> (the removal check, §5.4).
 /// A listing that missed seeds (an unreachable robots.txt, a failed or truncated sitemap, the page limit) ends
 /// <c>Partial</c> after a <see cref="ListingEvent{T}.Failure"/> per cause, so the traversal cannot be complete.
 /// Discovery, frontier and host budget are <see cref="CrawlTraversal"/>'s.
@@ -55,6 +57,9 @@ public sealed class CrawlConnector(HttpFetcher fetcher, RobotsCache robots, IMal
     public const int MaxSitemapDepth = 2;
 
     public const string RobotsUnreachable = "robots.unreachable";
+
+    /// <summary>Every listing failure of a sitemap itself (unavailable, truncated, too deep, refused by the parser) starts with this.</summary>
+    public const string SitemapReasonPrefix = "sitemap.";
     public const string SitemapUnavailable = "sitemap.unavailable";
     public const string SitemapTruncated = "sitemap.truncated";
     public const string SitemapTooDeep = "sitemap.depth";
@@ -201,6 +206,30 @@ public sealed class CrawlConnector(HttpFetcher fetcher, RobotsCache robots, IMal
             default:
                 return new CrawlPage(FetchOutcomes.From(result), null);
         }
+    }
+
+    /// <summary>
+    /// The removal check of a URL that left the sitemap (§5.4, weakness review §3): <c>HEAD</c>, and the full
+    /// <see cref="FetchPageAsync"/> when the server refuses <c>HEAD</c> (405, 501). Null when the <c>HEAD</c> answered 2xx
+    /// (the URL is still there); otherwise the page whose outcome follows §4 (404/410 <c>Gone</c>, a permanent redirect out
+    /// of scope <c>http.moved_out_of_scope</c>).
+    /// </summary>
+    public async Task<CrawlPage?> ProbeAsync(FetchContext context, WorkItem item, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(item);
+        var url = item.Url ?? throw new ArgumentException("A crawl item has a URL.", nameof(item));
+        var source = Source(context.SourceId, context.Settings);
+        var request = new HttpFetchRequest(url, EgressPurpose.Fetch, null, null, source.Canonicalizer, robots.CheckAsync,
+            InScope: target => UrlCanonicalizer.Canonicalize(target.AbsoluteUri, source.Canonicalizer).Value is { } canonical && source.Scope.Check(canonical).Admitted,
+            Head: true);
+        var result = await fetcher.FetchAsync(request, cancellationToken);
+        return result switch
+        {
+            HttpFetchResult.Status { Code: HttpStatusCode.MethodNotAllowed or HttpStatusCode.NotImplemented } => await FetchPageAsync(context, item, cancellationToken),
+            HttpFetchResult.Status { Code: var code } when (int)code is >= 200 and <= 299 => null,
+            _ => new CrawlPage(FetchOutcomes.From(result), null),
+        };
     }
 
     private static CrawlCheckpoint Checkpoint(int phase, int root, int skip) =>
