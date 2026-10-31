@@ -57,6 +57,24 @@ public static partial class SecurityEvents
         EventName = "rag.config.stale_refused")]
     public static partial void ConfigStaleRefused(ILogger logger, string service, long cachedVersion, DateTimeOffset? lastConfirmedAt, int count);
 
+    /// <summary>
+    /// A fetch refused by the egress guard (connectors design §7), at most once a minute per (source, reason) with the count.
+    /// <paramref name="hostHash"/> is the hex HMAC of the host name under <c>Security:CrawlKeyPepper</c>; <paramref name="host"/>
+    /// is set only for <c>public</c> sources.
+    /// </summary>
+    [LoggerMessage(5101, LogLevel.Warning,
+        "Egress blocked: {Reason} ({AddressClass}) for {Purpose} of source {SourceId} run {RunId} ({Classification}) host {HostHash} {Host}, x{Count}",
+        EventName = "rag.egress.blocked")]
+    public static partial void EgressBlocked(ILogger logger, string reason, string? addressClass, string purpose, Guid sourceId,
+        Guid? runId, string classification, string hostHash, string? host, int count);
+
+    /// <summary>ClamAV found malware in a fetched or uploaded file; the file is quarantined (connectors design §11).</summary>
+    [LoggerMessage(5102, LogLevel.Warning,
+        "Malware detected: {Signature} in {Sha256} ({Origin}) of source {SourceId} run {RunId} document {DocumentId} ({Classification})",
+        EventName = "rag.malware.detected")]
+    public static partial void MalwareDetected(ILogger logger, string signature, string sha256, string origin, Guid sourceId,
+        Guid? runId, Guid? documentId, string classification);
+
     /// <summary>Every audit entry the admin writes (identity design §10).</summary>
     [LoggerMessage(6001, LogLevel.Information,
         "Admin {Actor}: {Action} {EntityType} {EntityId}", EventName = "rag.admin.change")]
