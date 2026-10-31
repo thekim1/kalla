@@ -261,6 +261,7 @@ public sealed class PublishTests(RagDatabaseFixture database, FakeGatewayFactory
         await using var command = new NpgsqlCommand("""
             SELECT d."CanonicalIdentity", s."Id", s."PipelineVersionId" FROM content."Documents" d JOIN content."ChunkSets" s ON s."Id" = d."LiveChunkSetId"
             WHERE d."SourceId" = $1 AND d."DeletedAt" IS NULL
+            ORDER BY d."CanonicalIdentity"
             """, connection) { Parameters = { new NpgsqlParameter { Value = seed.SourceId } } };
         await using var reader = await command.ExecuteReaderAsync(Ct);
         var sets = new Dictionary<string, LiveSet>(StringComparer.Ordinal);
