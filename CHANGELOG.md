@@ -25,3 +25,9 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 - Entra registrations as Bicep with `entra.yml` (P2) (#36); on-prem capacity scripts (#37).
 - Docs: local development, production setup, runbook, upgrade guide (#42).
 - CI: `admin-ui` job (#49); parser jobs in their own `parser.yml` (#50).
+- Admin: the worker's `command` enqueue path (#46); pooler-safe SQL rules with a scan test over all service SQL (#53);
+  `docs/security-events.md` (#54).
+- Ownership rules for P1 (#57).
+- Runbook: daily checks, restore drill, key escrow, public-records requests (#58).
+- Release: `release.yml` (images to `ghcr.io/<owner>/ume-rag/<service>`, SPDX SBOMs, digest-pinned bundle, smoke test,
+  GitHub release), `deploy/build-release-bundle.sh`, `deploy/tests/release-smoke.sh` (#60).
