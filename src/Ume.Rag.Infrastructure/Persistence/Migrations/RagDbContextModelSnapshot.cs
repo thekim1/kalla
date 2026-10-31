@@ -155,6 +155,226 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Assistant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<string[]>("AllowedOrigins")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("DraftVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("HistoryMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("OwnerTeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PublishedVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RetentionDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("DraftVersionId", "Id");
+
+                    b.HasIndex("PublishedVersionId", "Id");
+
+                    b.ToTable("Assistants", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_Assistants_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Assistants_HistoryMode", "\"HistoryMode\" IN ('none')");
+
+                            t.HasCheckConstraint("CK_Assistants_RetentionDays", "\"RetentionDays\" BETWEEN 1 AND 90");
+
+                            t.HasCheckConstraint("CK_Assistants_State", "\"State\" IN ('active', 'archived')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.AssistantAudience", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssistantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GroupValue")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssistantId");
+
+                    b.ToTable("AssistantAudiences", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_AssistantAudiences_Kind", "\"Kind\" IN ('client')");
+
+                            t.HasCheckConstraint("CK_AssistantAudiences_Subject", "(\"SubjectId\" IS NULL) <> (\"GroupValue\" IS NULL) AND (\"Kind\" = 'group') = (\"GroupValue\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.AssistantVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssistantId")
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<Guid[]>("CollectionIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("GatewayModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("NotFound")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PublishedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("QuerySteps")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("RestoredFromVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SystemPrompt")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssistantId", "Number")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "AssistantId" }, "IX_AssistantVersions_Draft")
+                        .IsUnique()
+                        .HasFilter("\"State\" = 'draft'");
+
+                    b.HasIndex(new[] { "AssistantId" }, "IX_AssistantVersions_Published")
+                        .IsUnique()
+                        .HasFilter("\"State\" = 'published'");
+
+                    b.ToTable("AssistantVersions", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_AssistantVersions_CollectionIds", "cardinality(\"CollectionIds\") <= 20");
+
+                            t.HasCheckConstraint("CK_AssistantVersions_Number", "\"Number\" >= 1");
+
+                            t.HasCheckConstraint("CK_AssistantVersions_Published", "\"State\" = 'draft' OR (\"GatewayModel\" IS NOT NULL AND \"PublishedAt\" IS NOT NULL AND \"PublishedBy\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_AssistantVersions_State", "\"State\" IN ('draft', 'published', 'superseded')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.AuditLogEntry", b =>
                 {
                     b.Property<long>("Id")
@@ -1285,6 +1505,297 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.EvaluationQuestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ExpectedAnswer")
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<Guid[]>("ExpectedDocumentIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<string>("Layer")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Origin")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("RetiredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceChunkId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("SourceContentHash")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "SetId" }, "IX_EvaluationQuestions_SetId_Current")
+                        .HasFilter("\"RetiredAt\" IS NULL");
+
+                    b.ToTable("EvaluationQuestions", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvaluationQuestions_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_EvaluationQuestions_Layer", "\"Layer\" IN ('generated', 'human')");
+
+                            t.HasCheckConstraint("CK_EvaluationQuestions_State", "\"State\" IN ('active', 'stale', 'retired')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.EvaluationResult", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("QuestionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<float?>("BestDistance")
+                        .HasColumnType("real");
+
+                    b.Property<float?>("BestKeywordScore")
+                        .HasColumnType("real");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Coverage")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int?>("ExpectedRank")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("Hit")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("RunId", "QuestionId");
+
+                    b.ToTable("EvaluationResults", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvaluationResults_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_EvaluationResults_Coverage", "\"Coverage\" IS NULL OR \"Coverage\" IN ('ok', 'low')");
+
+                            t.HasCheckConstraint("CK_EvaluationResults_ExpectedRank", "\"ExpectedRank\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.EvaluationRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("ComparedRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Found")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("K")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<int?>("Losses")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("Mrr")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
+                    b.Property<string>("PromptVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int?>("QuestionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("RecallAtK")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
+                    b.Property<bool>("Reranked")
+                        .HasColumnType("boolean");
+
+                    b.Property<byte[]>("Seed")
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid>("SetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("SubjectVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Variant")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("hybrid");
+
+                    b.Property<int?>("Wins")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SetId", "StartedAt")
+                        .IsDescending(false, true);
+
+                    b.ToTable("EvaluationRuns", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvaluationRuns_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_EvaluationRuns_Counts", "\"QuestionCount\" >= 0 AND \"Found\" BETWEEN 0 AND \"QuestionCount\" AND \"Wins\" >= 0 AND \"Losses\" >= 0");
+
+                            t.HasCheckConstraint("CK_EvaluationRuns_K", "\"K\" BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("CK_EvaluationRuns_Kind", "\"Kind\" IN ('publish-report', 'nightly', 'on-demand')");
+
+                            t.HasCheckConstraint("CK_EvaluationRuns_Metrics", "\"RecallAtK\" BETWEEN 0 AND 1 AND \"Mrr\" BETWEEN 0 AND 1");
+
+                            t.HasCheckConstraint("CK_EvaluationRuns_Variant", "\"Variant\" IN ('hybrid', 'vector', 'hybrid-no-decompounder')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.EvaluationSet", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CollectionId")
+                        .IsUnique();
+
+                    b.ToTable("EvaluationSets", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvaluationSets_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.GatewayModel", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal?>("CachedInputPerMillionUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.Property<int?>("ContextWindow")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("InputPerMillionUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<decimal?>("OutputPerMillionUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.PrimitiveCollection<string[]>("Residencies")
+                        .IsRequired()
+                        .HasColumnType("varchar(10)[]");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<bool>("SupportsTools")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SupportsToolsSource")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTimeOffset?>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Name");
+
+                    b.ToTable("GatewayModels", "config", t =>
+                        {
+                            t.HasCheckConstraint("CK_GatewayModels_ContextWindow", "\"ContextWindow\" IS NULL OR \"ContextWindow\" > 0");
+
+                            t.HasCheckConstraint("CK_GatewayModels_Kind", "\"Kind\" IN ('model', 'route')");
+
+                            t.HasCheckConstraint("CK_GatewayModels_Residencies", "cardinality(\"Residencies\") >= 1 AND \"Residencies\" <@ ARRAY['OnPrem', 'Eu', 'External']::varchar(10)[]");
+
+                            t.HasCheckConstraint("CK_GatewayModels_Source", "\"Source\" IN ('catalog', 'manual')");
+
+                            t.HasCheckConstraint("CK_GatewayModels_SupportsToolsSource", "\"SupportsToolsSource\" IN ('catalog', 'manual')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Job", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1869,6 +2380,41 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.RetrievalStat", b =>
+                {
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("TextHash")
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Cited")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Retrieved")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Day", "DocumentId", "TextHash", "CollectionId");
+
+                    b.ToTable("RetrievalStats", "content", t =>
+                        {
+                            t.HasCheckConstraint("CK_RetrievalStats_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_RetrievalStats_Counts", "\"Retrieved\" >= 0 AND \"Cited\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Run", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2361,6 +2907,41 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Navigation("Client");
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Assistant", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.AssistantVersion", null)
+                        .WithMany()
+                        .HasForeignKey("DraftVersionId", "Id")
+                        .HasPrincipalKey("Id", "AssistantId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("FK_Assistants_AssistantVersions_DraftVersionId");
+
+                    b.HasOne("Ume.Rag.Domain.Entities.AssistantVersion", null)
+                        .WithMany()
+                        .HasForeignKey("PublishedVersionId", "Id")
+                        .HasPrincipalKey("Id", "AssistantId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("FK_Assistants_AssistantVersions_PublishedVersionId");
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.AssistantAudience", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.Assistant", null)
+                        .WithMany()
+                        .HasForeignKey("AssistantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.AssistantVersion", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.Assistant", null)
+                        .WithMany()
+                        .HasForeignKey("AssistantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Chunk", b =>
                 {
                     b.HasOne("Ume.Rag.Domain.Entities.ChunkSet", null)
@@ -2391,6 +2972,33 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("EmbeddingProfileId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.EvaluationQuestion", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.EvaluationSet", null)
+                        .WithMany()
+                        .HasForeignKey("SetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.EvaluationResult", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.EvaluationRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.EvaluationRun", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.EvaluationSet", null)
+                        .WithMany()
+                        .HasForeignKey("SetId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

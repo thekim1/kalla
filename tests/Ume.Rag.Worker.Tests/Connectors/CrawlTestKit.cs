@@ -361,16 +361,23 @@ internal sealed class InMemoryUploadSlots : IUploadSlotReader
         Task.FromResult<IReadOnlyList<UploadSlot>>([.. Slots.Where(s => s.SourceId == sourceId)]);
 }
 
-/// <summary>A crawl wired to the test site with in-memory stores; <see cref="DrainAsync"/> runs the fetch jobs as the engine would.</summary>
+/// <summary>
+/// A crawl wired to the test site, on in-memory stores or on the given (Postgres) ones; <see cref="DrainAsync"/> runs the
+/// fetch jobs as the engine would.
+/// </summary>
 internal sealed class CrawlRig : IAsyncDisposable
 {
-    private CrawlRig(FetchPath path, CrawlConnector connector, CrawlTraversal traversal, InMemoryCrawlStore store, InMemoryCrawlHostStore hosts, RecordingJobQueue queue, FetchTopUp topUp)
+    private readonly InMemoryCrawlStore? _memory;
+
+    private CrawlRig(FetchPath path, CrawlConnector connector, CrawlTraversal traversal, ICrawlFrontierStore frontier, ICrawlRunStore runs,
+        InMemoryCrawlStore? memory, RecordingJobQueue queue, FetchTopUp topUp)
     {
         Path = path;
         Connector = connector;
         Traversal = traversal;
-        Store = store;
-        Hosts = hosts;
+        Frontier = frontier;
+        Runs = runs;
+        _memory = memory;
         Queue = queue;
         TopUp = topUp;
     }
@@ -381,19 +388,26 @@ internal sealed class CrawlRig : IAsyncDisposable
 
     public CrawlTraversal Traversal { get; }
 
-    public InMemoryCrawlStore Store { get; }
+    public ICrawlFrontierStore Frontier { get; }
 
-    public InMemoryCrawlHostStore Hosts { get; }
+    public ICrawlRunStore Runs { get; }
+
+    /// <summary>The in-memory store (rigs created without database stores).</summary>
+    public InMemoryCrawlStore Store => _memory ?? throw new InvalidOperationException("This rig runs on database stores.");
 
     public RecordingJobQueue Queue { get; }
 
     public FetchTopUp TopUp { get; }
 
     /// <param name="site">The test site.</param>
-    /// <param name="policy">Municipal hosts and overrides; the default makes the test hosts fast (1000 req/s, 4 connections).</param>
+    /// <param name="policy">Municipal hosts and overrides; the default makes the test hosts fast (500 req/s, within numeric(5,2); 4 connections).</param>
     /// <param name="batch"><c>Crawl:FetchBatchPerHost</c>.</param>
     /// <param name="dns">Extra host names.</param>
-    public static CrawlRig Create(TestSite site, FixedCrawlPolicy? policy = null, int batch = 10, FakeDnsResolver? dns = null)
+    /// <param name="hosts">The <c>CrawlHosts</c> store; in memory when null.</param>
+    /// <param name="store">The frontier and run store; in memory when null.</param>
+    public static CrawlRig Create(
+        TestSite site, FixedCrawlPolicy? policy = null, int batch = 10, FakeDnsResolver? dns = null, ICrawlHostStore? hosts = null,
+        (ICrawlFrontierStore Frontier, ICrawlRunStore Runs)? store = null)
     {
         var path = site.Fetch(dns: dns);
         if (policy is null)
@@ -401,18 +415,18 @@ internal sealed class CrawlRig : IAsyncDisposable
             policy = new FixedCrawlPolicy();
             foreach (var host in new[] { TestSite.Host, "kommun.test", "other.test" })
             {
-                policy.Overrides[$"{host}:{site.Port}"] = new HostOverride(1000, 4);
+                policy.Overrides[$"{host}:{site.Port}"] = new HostOverride(500, 4);
             }
         }
 
         var connector = new CrawlConnector(path.Fetcher, path.Robots, new ScriptedScanner(Worker.Connectors.Malware.ScanResult.Clean), path.Blobs, TimeProvider.System);
-        var store = new InMemoryCrawlStore();
-        var hosts = new InMemoryCrawlHostStore(TimeProvider.System);
+        var memory = store is null ? new InMemoryCrawlStore() : null;
+        var (frontier, runs) = store ?? (memory!, memory!);
         var queue = new RecordingJobQueue();
-        var budget = new HostBudget(hosts, policy, TimeProvider.System);
-        var topUp = new FetchTopUp(store, store, queue, Options.Create(new CrawlOptions { FetchBatchPerHost = batch }), TimeProvider.System);
-        var traversal = new CrawlTraversal(connector, path.Robots, budget, policy, store, store, topUp, path.Blobs, queue, TimeProvider.System);
-        return new CrawlRig(path, connector, traversal, store, hosts, queue, topUp);
+        var budget = new HostBudget(hosts ?? new InMemoryCrawlHostStore(TimeProvider.System), policy, TimeProvider.System);
+        var topUp = new FetchTopUp(frontier, runs, queue, Options.Create(new CrawlOptions { FetchBatchPerHost = batch }), TimeProvider.System);
+        var traversal = new CrawlTraversal(connector, path.Robots, budget, policy, frontier, runs, topUp, path.Blobs, queue, TimeProvider.System);
+        return new CrawlRig(path, connector, traversal, frontier, runs, memory, queue, topUp);
     }
 
     /// <summary>Lists and admits the seeds, then runs every released fetch until none is left; returns the fetch results by URL.</summary>
@@ -438,6 +452,7 @@ internal sealed class CrawlRig : IAsyncDisposable
 
     public async Task<Dictionary<string, CrawlFetchResult>> DrainAsync(CrawlRunContext context)
     {
+        var ct = TestContext.Current.CancellationToken;
         var results = new Dictionary<string, CrawlFetchResult>(StringComparer.Ordinal);
         for (var round = 0; round < 1000; round++)
         {
@@ -450,12 +465,12 @@ internal sealed class CrawlRig : IAsyncDisposable
             foreach (var job in jobs)
             {
                 var hash = System.Text.Json.JsonDocument.Parse(job.Payload).RootElement.GetProperty("urlHash").GetString()!;
-                var url = Store.Rows(context.Run.SourceId).Single(r => r.UrlHash == hash).Url;
-                var result = await Traversal.ProcessAsync(context, hash, TestContext.Current.CancellationToken);
+                var url = (await Frontier.GetAsync(context.Run.SourceId, context.Run.Classification, hash, ct))!.Url;
+                var result = await Traversal.ProcessAsync(context, hash, ct);
                 if (result is CrawlFetchResult.Requeue)
                 {
                     // As the queue would: the job comes back without an attempt.
-                    await Queue.EnqueueAsync([job], null, TestContext.Current.CancellationToken);
+                    await Queue.EnqueueAsync([job], null, ct);
                 }
 
                 results[url] = result;

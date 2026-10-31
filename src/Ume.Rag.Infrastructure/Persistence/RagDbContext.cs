@@ -67,6 +67,17 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<ParseProfile> ParseProfiles => Set<ParseProfile>();
     public DbSet<BlobTombstone> BlobTombstones => Set<BlobTombstone>();
 
+    // Serving, P1 (data-model §2.1, §2.2): configured in Config/ServingConfigModel.cs and Content/ServingContentModel.cs.
+    public DbSet<Assistant> Assistants => Set<Assistant>();
+    public DbSet<AssistantVersion> AssistantVersions => Set<AssistantVersion>();
+    public DbSet<AssistantAudience> AssistantAudiences => Set<AssistantAudience>();
+    public DbSet<GatewayModel> GatewayModels => Set<GatewayModel>();
+    public DbSet<EvaluationSet> EvaluationSets => Set<EvaluationSet>();
+    public DbSet<EvaluationQuestion> EvaluationQuestions => Set<EvaluationQuestion>();
+    public DbSet<EvaluationRun> EvaluationRuns => Set<EvaluationRun>();
+    public DbSet<EvaluationResult> EvaluationResults => Set<EvaluationResult>();
+    public DbSet<RetrievalStat> RetrievalStats => Set<RetrievalStat>();
+
     /// <summary>Npgsql options every registration of the context uses (service, design time, tests).</summary>
     public static void ConfigureNpgsql(NpgsqlDbContextOptionsBuilder npgsql)
     {
@@ -274,6 +285,8 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
 
         IngestionConfigModel.Configure(modelBuilder);
         IngestionContentModel.Configure(modelBuilder);
+        ServingConfigModel.Configure(modelBuilder);
+        ServingContentModel.Configure(modelBuilder);
     }
 
     /// <summary><c>CK_&lt;table&gt;_Classification</c> on a row that carries its level (data-model §2).</summary>
