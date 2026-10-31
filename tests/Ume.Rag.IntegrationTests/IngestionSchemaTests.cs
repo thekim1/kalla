@@ -337,7 +337,10 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
         // P1a item 13: EmbeddingProfile:* names the pilot's EU route (U-b); the admin API records its canary embedding.
         await using var db = TestPostgres.Context(database.Connection(Migrator));
         var name = "pilot-" + Guid.NewGuid().ToString("N");
-        var options = new EmbeddingProfileSeedOptions { Name = name, GatewayModel = "eu-embed-1024", Dimensions = 1024, MaxResidency = Residency.Eu };
+        var options = new EmbeddingProfileSeedOptions
+        {
+            Name = name, GatewayModel = "eu-embed-1024", Dimensions = 1024, MaxResidency = Residency.Eu, RequestDimensions = true,
+        };
         var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
         await EmbeddingProfileSeeder.SeedAsync(db, new EmbeddingProfileSeedOptions(), TimeProvider.System, logger, Ct); // no model: nothing
         (await db.EmbeddingProfiles.AnyAsync(p => p.Name == "pilot-embedding", Ct)).ShouldBeFalse();
@@ -348,6 +351,7 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
 
         var profile = await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Name == name, Ct);
         profile.GatewayModel.ShouldBe("eu-embed-1024");
+        profile.RequestDimensions.ShouldBeTrue(); // #142
         profile.MaxResidency.ShouldBe(Residency.Eu);
         profile.CanaryText.ShouldBe(EmbeddingCanaryText.Default);
         (await Sql.ScalarAsync<string>(database.Connection(null), $"""

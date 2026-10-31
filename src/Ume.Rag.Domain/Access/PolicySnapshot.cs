@@ -23,7 +23,12 @@ public sealed record CollectionEntry(
 }
 
 /// <summary>An embedding profile (data-model §2.1).</summary>
-public sealed record EmbeddingProfileEntry(Guid Id, string Name, string GatewayModel, int Dimensions, Residency MaxResidency, string State, string? CanaryText);
+public sealed record EmbeddingProfileEntry(
+    Guid Id, string Name, string GatewayModel, int Dimensions, Residency MaxResidency, string State, string? CanaryText, bool RequestDimensions = false)
+{
+    /// <summary>The <c>dimensions</c> to send on an embedding call (#142), or null when the profile must not send it.</summary>
+    public int? DimensionsParameter => RequestDimensions ? Dimensions : null;
+}
 
 /// <summary>A level's data-protection policy fields the policy needs (identity §4.3 step 9).</summary>
 public sealed record LevelPolicyEntry(string Classification, IReadOnlyList<string> AllowedHistoryModes, bool ClientsWithoutHistoryOnly);

@@ -134,7 +134,7 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
 
         var profiles = new Dictionary<Guid, EmbeddingProfileEntry>();
         await ReadAsync(connection, transaction, """
-            SELECT "Id", "Name", "GatewayModel", "Dimensions", "MaxResidency", "State", "CanaryText" FROM config."EmbeddingProfiles"
+            SELECT "Id", "Name", "GatewayModel", "Dimensions", "MaxResidency", "State", "CanaryText", "RequestDimensions" FROM config."EmbeddingProfiles"
             """, r =>
         {
             if (!ResidencyCeiling.TryParse(r.GetString(4), out var residency))
@@ -144,7 +144,7 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
             }
 
             profiles[r.GetGuid(0)] = new EmbeddingProfileEntry(r.GetGuid(0), r.GetString(1), r.GetString(2), r.GetInt32(3), residency, r.GetString(5),
-                r.IsDBNull(6) ? null : r.GetString(6));
+                r.IsDBNull(6) ? null : r.GetString(6), r.GetBoolean(7));
         }, cancellationToken);
 
         var levels = new Dictionary<string, LevelPolicyEntry>(StringComparer.Ordinal);
