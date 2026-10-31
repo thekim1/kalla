@@ -227,6 +227,10 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
   dependencies). It makes #60 red (only `admin-ui`; every other check green) and any PR that runs that job.
 
 **Next:**
+0. **The release dry run (run 41182718202) stopped at `verify / admin-ui` (#61)**: every other verify and parser job
+   passed, `build` was skipped. **#64** (dated dev-only audit exceptions until 2026-11-10) unblocks it; then re-run
+   `gh workflow run release.yml --ref main -f version=0.1.0-dryrun.2`. Also open: #62 (docs: install from the bundle;
+   admin UI build step for clone installs) and #63 (CHANGELOG, shared), both green.
 1. **Done 2026-10-31:** #57, #58, #60 merged (#60 with only `admin-ui` red from #61, the user's call); worktrees gone.
    Tick H5 in `progress-a.md` from #60's evidence in the #27 PR. `gh pr merge --admin` is refused by the classifier
    (a branch-protection bypass); a plain merge goes through.
@@ -236,8 +240,8 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
    bundle") and `docs/upgrade-guide.md`; a `workflow_dispatch` dry run of `release.yml` on GitHub (untested there:
    ghcr push with `GITHUB_TOKEN`, gha cache, runner disk, freshclam from a runner). Then the user approves pushing
    tag `v0.1.0` → **J1**; tell stream B (#56) it may merge schema part 1.
-4. Carry identity §14 rows 11–18 into the other documents (one subagent round); take §16's questions 1–4 and 6 to
-   the gateway session prompt and the rest to the user.
+4. **Done:** identity §14 rows 11–17 carried out; §16 Q1–Q4, Q6 are in the gateway session prompt §2; Q5, Q7–Q9 go
+   to the user. Row 18 waits on Q3. Still open: `Conversations.SubjectKind` `entra-user` is a misleading name in P1.
 5. Found by the runbook work: `deploy/compose.openwebui.yaml:85`, `:90` still name Entra (P1a item 18); **no script
    backs up Open WebUI's data directory**, although it is the primary copy (G1/W2); with the pilot settings no admin can
    export another user's chat at v0.12.3 (to-verify #173, runbook "Public-records requests"); the design cites Open WebUI
