@@ -19,6 +19,8 @@ namespace Ume.Rag.Worker.Commands;
 /// documents on the host at that level, enqueued in the command's transaction with the admin's key for a re-process
 /// (<see cref="JobDedupKeys.Sync"/>). The reprocess run iterates the source's live documents and runs <c>EnsureCurrent</c>,
 /// which re-extracts only the HTML documents of the host (their wanted set names the new version) from stored raw content.
+/// A document is on the host when its URL's host, without a port or a trailing dot, is the profile's key
+/// (<see cref="Connectors.Urls.SiteProfileHost"/>; stored URLs are canonical, so their hosts are lower-case A-labels already).
 /// </summary>
 internal static class SiteProfileFollowUp
 {
@@ -29,7 +31,7 @@ internal static class SiteProfileFollowUp
         JOIN config."Collections" c ON c."Id" = s."CollectionId"
         WHERE d."Classification" = $1 AND d."IdentityKind" = '{IdentityKinds.Url}' AND d."DeletedAt" IS NULL
           AND d."MediaType" IN ('{ProcessingMediaTypes.Html}', '{ProcessingMediaTypes.Xhtml}')
-          AND lower(substring(d."Url" FROM '^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]+)')) = $2
+          AND regexp_replace(lower(substring(d."Url" FROM '^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]+)')), '\.?(:[0-9]*)?$', '') = $2
           AND s."State" = 'active' AND s."DeletedAt" IS NULL AND c."DeletedAt" IS NULL
         ORDER BY d."SourceId"
         """;
