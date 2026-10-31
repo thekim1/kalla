@@ -6,6 +6,7 @@ TestPostgres by tests/Ume.Rag.Worker.Tests/Engine/DevSeedScriptTests.cs. Standar
 """
 
 import io
+import os
 import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -105,6 +106,30 @@ class MainTests(unittest.TestCase):
         self.assertTrue(stdin.endswith(seed_url_list.SQL_FILE.read_text(encoding="utf-8")))
         self.assertIn("  source: abc (created)", out.getvalue())
         self.assertNotIn("source_id", out.getvalue())
+
+    def test_socket_mode_runs_psql_in_the_container_as_postgres_without_a_password(self) -> None:
+        completed = mock.Mock(returncode=0, stdout="Key,Value\nsource,abc (created)\n", stderr="")
+        with (
+            mock.patch.dict(os.environ, {"PGPASSWORD": "leftover", "UME_RAG_DEV_DB": ""}),
+            mock.patch("subprocess.run", return_value=completed) as run,
+            redirect_stdout(io.StringIO()),
+        ):
+            code = seed_url_list.main(
+                ["--docker", "ume-rag-postgres-1", "--socket", "--profile", "pilot-embedding", "https://example.org/a"]
+            )
+        self.assertEqual(0, code)
+        command, env = run.call_args.args[0], run.call_args.kwargs["env"]
+        self.assertEqual(["docker", "exec", "-i", "-u", "postgres", "ume-rag-postgres-1", "psql"], command[:7])
+        self.assertEqual(["-U", "postgres", "-d", "ragdb"], command[-4:])
+        self.assertNotIn("-h", command)
+        self.assertNotIn("PGPASSWORD", env)
+
+    def test_socket_mode_needs_docker(self) -> None:
+        with mock.patch("subprocess.run") as run:
+            code, err = run_main(["--socket", "--profile", "p", "https://example.org/a"])
+        self.assertEqual(2, code)
+        self.assertIn("--socket needs --docker", err)
+        run.assert_not_called()
 
     def test_quotes_in_values_are_escaped(self) -> None:
         self.assertEqual("'O''Brien'", seed_url_list.sql_literal("O'Brien"))
