@@ -7,6 +7,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
   </ItemGroup>
+  <ItemGroup Condition="'$(PublishAdminUi)' == 'true'">
+    <Content Include="..\admin-ui\dist\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="RequireAdminUiAssets" BeforeTargets="Publish" Condition="'$(PublishAdminUi)' == 'true'">
+    <Error Condition="!Exists('..\admin-ui\dist\index.html')" Text="Build src\admin-ui before publishing with PublishAdminUi=true." />
+  </Target>
   <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.Infrastructure\Ume.Rag.Infrastructure.csproj" />
     <ProjectReference Include="..\Ume.Rag.ServiceDefaults\Ume.Rag.ServiceDefaults.csproj" />
