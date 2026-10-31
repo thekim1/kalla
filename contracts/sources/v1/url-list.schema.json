@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/sources/v1/url-list.schema.json",
+  "title": "URL-list source settings",
+  "type": "object",
+  "properties": {
+    "urls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^https?://"
+      },
+      "x-effect": "scope",
+      "description": "Exactly the URLs to fetch, never following links; canonicalised by the admin on save.",
+      "minItems": 1,
+      "maxItems": 5000
+    },
+    "ignoreQueryParams": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 100,
+        "pattern": "^[^\\s=&]+$"
+      },
+      "x-effect": "identity",
+      "description": "Query parameters dropped by the canonicaliser in addition to the fixed tracking and session list.",
+      "maxItems": 50,
+      "default": []
+    },
+    "directoryIndexNames": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "x-effect": "identity",
+      "description": "File names treated as the directory index (index.html), so /a/ and /a/index.html are one identity.",
+      "maxItems": 10,
+      "default": []
+    },
+    "noiseSelectors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "x-effect": "behaviour",
+      "description": "CSS selectors removed before the content hash (HTML noise normalisation, connectors design §12.2).",
+      "maxItems": 50,
+      "default": []
+    },
+    "conditionalGet": {
+      "type": "boolean",
+      "x-effect": "behaviour",
+      "description": "Send stored validators (If-None-Match, If-Modified-Since).",
+      "default": true
+    },
+    "revalidateEvery": {
+      "type": "integer",
+      "x-effect": "behaviour",
+      "description": "Every n-th run sends no validators, catching wrong 304s.",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 4
+    },
+    "timeoutSeconds": {
+      "type": "integer",
+      "x-effect": "behaviour",
+      "description": "Whole-request timeout in seconds; the HTML and file body limits of connectors design §4 still apply.",
+      "minimum": 5,
+      "maximum": 120,
+      "default": 30
+    }
+  },
+  "required": [
+    "urls"
+  ],
+  "additionalProperties": false,
+  "description": "Settings of a URL-list source (Sources.Settings; connectors design §4, §12.3). Each member's x-effect says what a change needs."
+}

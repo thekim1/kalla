@@ -5,6 +5,8 @@
     UME_RAG_TEST_PARSER_IMAGE names it; CI's contract job sets it.
     The IBlobStore contract (data-model §9) in Blobs/: an abstract test class the file system store runs here and the S3
     store reuses in P1 (to-verify #114); it needs no container.
+    The worker contracts (P1a item 4, J3) in WorkerContractTests: contracts/{sources,pipeline,jobs,site-profiles}/ are
+    exported from the Ume.Rag.Pipelines records and must match them; no container.
   -->
   <ItemGroup>
     <PackageReference Include="Testcontainers" />
@@ -12,5 +14,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.TestKit\Ume.Rag.TestKit.csproj" />
     <ProjectReference Include="..\..\src\Ume.Rag.Worker\Ume.Rag.Worker.csproj" />
+    <ProjectReference Include="..\..\src\Ume.Rag.Pipelines\Ume.Rag.Pipelines.csproj" />
   </ItemGroup>
 </Project>

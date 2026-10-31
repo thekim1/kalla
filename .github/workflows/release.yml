@@ -105,15 +105,13 @@ jobs:
           timeout 600 sh -c "until [ -e '$RUNNER_TEMP/disk-freed' ]; do sleep 2; done"
           df -h / | tail -1
 
-      - name: Build the admin UI into the admin image's wwwroot
-        # Ume.Rag.AdminApi serves wwwroot/ (UseStaticFiles, index.html fallback); the Web SDK publishes it with the
-        # service. Built from the lock only (src/admin-ui/.npmrc), as in verify.yml.
+      - name: Build the admin UI
+        # Built from the lock only (src/admin-ui/.npmrc), as in verify.yml. The admin publish below adds dist/ as
+        # wwwroot/ with -p:PublishAdminUi=true (the gateway's switch, #66); Ume.Rag.AdminApi serves it.
         working-directory: src/admin-ui
         run: |
           npm ci
           npm run build
-          rm -rf ../Ume.Rag.AdminApi/wwwroot
-          cp -R dist ../Ume.Rag.AdminApi/wwwroot
       - name: .NET service images and their SBOMs
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -123,7 +121,8 @@ jobs:
           mkdir -p sbom
           for entry in api:Api admin:AdminApi worker:Worker migrations:MigrationService; do
             name="${entry%%:*}"; project="src/Ume.Rag.${entry#*:}"
-            dotnet publish "$project" -c Release -t:PublishContainer --os linux --arch x64 --nologo \
+            ui=(); [ "$name" = admin ] && ui=(-p:PublishAdminUi=true)
+            dotnet publish "$project" -c Release -t:PublishContainer --os linux --arch x64 --nologo "${ui[@]}" \
               -p:Version="$VERSION" -p:ContainerImageTag="$VERSION" \
               -p:ContainerRegistry="$REGISTRY_HOST" -p:ContainerRepository="$REPOSITORY/$name" -p:PublishRepositoryUrl=true
             ref="$REGISTRY_HOST/$REPOSITORY/$name:$VERSION"

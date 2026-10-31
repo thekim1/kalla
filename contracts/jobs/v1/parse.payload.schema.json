@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/parse.payload.schema.json",
+  "title": "parse job payload",
+  "type": "object",
+  "properties": {
+    "documentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "level": {
+      "type": "string",
+      "enum": [
+        "public",
+        "internal",
+        "sensitive"
+      ]
+    },
+    "executionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "pipelineVersionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "stage": {
+      "type": "string",
+      "description": "The first stage to run.",
+      "enum": [
+        "fetch",
+        "scan",
+        "detect",
+        "parse",
+        "clean",
+        "chunk",
+        "personal-data",
+        "embed",
+        "index"
+      ],
+      "default": "parse"
+    },
+    "inputKey": {
+      "type": "string",
+      "description": "Cache key (hex) of the stage's input (engine design §3.3).",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "slice": {
+      "type": "integer",
+      "description": "A parse job yields after 10 minutes at a range boundary and re-enqueues itself with slice + 1 (engine design §9.5).",
+      "minimum": 0,
+      "maximum": 10000,
+      "default": 0
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "documentId",
+    "level",
+    "executionId",
+    "pipelineVersionId",
+    "inputKey"
+  ],
+  "description": "Payload of a parse job: the parser-bound segment (parse, clean, chunk, personal-data) of one document (engine design §7.4, §9.1, §9.5)."
+}

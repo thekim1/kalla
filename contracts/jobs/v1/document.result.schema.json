@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/document.result.schema.json",
+  "title": "fetch, parse and embed job result",
+  "type": "object",
+  "properties": {
+    "documentId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "executionId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "outcome": {
+      "enum": [
+        "added",
+        "updated",
+        "unchanged",
+        "skipped",
+        "degraded",
+        "deleted",
+        "unsupported",
+        "too-large",
+        "encrypted",
+        "malware",
+        "blocked",
+        "failed",
+        "superseded",
+        null
+      ],
+      "description": "Present when the document ended in this job (its run item)."
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "<area>.<code> (engine design §10.2), e.g. http.404, parser.timeout.",
+      "maxLength": 100,
+      "pattern": "^[a-z0-9_-]+(\\.[a-z0-9_-]+)+$"
+    },
+    "strategy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "RunItems.Strategy: the route taken (engine design §7.2).",
+      "maxLength": 500
+    },
+    "continuation": {
+      "enum": [
+        "parse",
+        "embed",
+        null
+      ],
+      "description": "Class of the continuation job enqueued; absent when the document ended here."
+    },
+    "slice": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "parse: the slice this job ran (engine design §9.5).",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "chunkSetId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "embed: the chunk set written or swapped back, its size and what the swap did."
+    },
+    "chunks": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "swap": {
+      "enum": [
+        "new",
+        "swapped-back",
+        "rekeyed",
+        "held",
+        null
+      ]
+    }
+  },
+  "description": "Result of a fetch, parse or embed job: the document's outcome if it ended here, or the continuation enqueued in the same commit (engine design §7.4)."
+}

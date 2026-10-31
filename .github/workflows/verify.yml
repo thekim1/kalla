@@ -224,9 +224,8 @@ jobs:
         # exceptions below (dev-only lint toolchain advisories whose fixed versions are not yet 7 days old; issue #61).
         # An exception stops applying on its date, so the job turns red again unless the fix has landed.
         env:
-          AUDIT_EXCEPTIONS: |
-            GHSA-g3hv-75wg-m249 2026-11-10 minimatch <11.0.1 (eslint toolchain, dev); fix 11.0.1 published 2026-10-27
-            GHSA-3g3m-2fjr-6pw4 2026-11-10 glob (eslint toolchain, dev); fix 14.0.x published 2026-10-27
+          # One line per exception: "<GHSA id> <last day, YYYY-MM-DD> <reason>". None today (#61 fixed by #71).
+          AUDIT_EXCEPTIONS: ""
         run: |
           npm audit --omit=dev --audit-level=low
           npm audit --json > "$RUNNER_TEMP/audit.json" || true
