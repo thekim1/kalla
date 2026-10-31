@@ -140,7 +140,7 @@ split components; the rules below are our own, so .NET's escaping quirks never c
 | # | Rule | Example |
 |---|---|---|
 | 1 | Only `http`/`https`; scheme lower-case; http and https stay **different** identities (a redirect unifies them) | `HTTPS://` → `https://` |
-| 2 | Host lower-case, trailing dot removed, IDN → A-label (UTS 46 non-transitional, `IdnMapping`, STD3 rules) | `Umeå.SE.` → `xn--ume-loa.se` |
+| 2 | Host lower-case, trailing dot removed, IDN → A-label (UTS 46 non-transitional, `IdnMapping`, STD3 rules) | `Umeå.SE.` → `xn--ume-wla.se` |
 | 3 | Default port removed (80/443); userinfo refused (`url.userinfo`) | `:443/` → `/` |
 | 4 | Empty path → `/`; dot segments removed (RFC 3986 §5.2.4); duplicate slashes kept (servers differ) | `/a/./b/../c` → `/a/c` |
 | 5 | Percent-encoding: decode unreserved (`A–Z a–z 0–9 - . _ ~`), upper-case remaining hex, encode non-ASCII as UTF-8; reserved escapes (`%2F`, `%3F`) kept | `%7e` → `~`; `ö` → `%C3%B6` |

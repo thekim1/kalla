@@ -81,16 +81,16 @@ The release also carries an SPDX SBOM per image. The bundle holds `deploy/` and 
 runbook, the upgrade guide).
 
 **From a clone (between releases, or to build the images yourself):** check out the commit and build the images on the
-host. The admin UI is copied into the admin API's `wwwroot` before publishing, as `release.yml` does (until the admin
-project has its own switch, issue #59):
+host. The admin UI is built first and published into the admin image with `-p:PublishAdminUi=true`, as `release.yml`
+does:
 
 ```bash
 docker build -f images/postgres/Dockerfile -t ume-rag/postgres:latest .
 docker build -t ume-rag/clamav:latest images/clamav
 docker build -t ume-rag/parser:latest src/parser
-(cd src/admin-ui && npm ci && npm run build) && mkdir -p src/Ume.Rag.AdminApi/wwwroot \
-  && cp -r src/admin-ui/dist/. src/Ume.Rag.AdminApi/wwwroot/
-for p in Api AdminApi Worker MigrationService; do dotnet publish src/Ume.Rag.$p -c Release -t:PublishContainer; done
+(cd src/admin-ui && npm ci && npm run build)
+for p in Api Worker MigrationService; do dotnet publish src/Ume.Rag.$p -c Release -t:PublishContainer; done
+dotnet publish src/Ume.Rag.AdminApi -c Release -t:PublishContainer -p:PublishAdminUi=true
 ```
 
 Images built elsewhere and pushed to a registry are set in `deploy/.env` by digest, for example
