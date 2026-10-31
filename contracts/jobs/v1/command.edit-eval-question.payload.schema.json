@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.edit-eval-question.payload.schema.json",
+  "title": "edit-eval-question command payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "edit-eval-question"
+    },
+    "action": {
+      "enum": [
+        "create",
+        "update",
+        "retire"
+      ]
+    },
+    "collectionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "questionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "question": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Required for create and update. The lengths keep the payload within 4 KB.",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "expectedAnswer": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The facts a correct answer contains.",
+      "maxLength": 1000
+    },
+    "expectedDocumentIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "description": "Documents a correct retrieval returns; empty = the question expects not found.",
+      "maxItems": 10,
+      "uniqueItems": true,
+      "default": []
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "action",
+    "collectionId",
+    "questionId"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "update"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "required": [
+          "question"
+        ]
+      }
+    }
+  ],
+  "description": "Payload of the command edit-eval-question (processing design §13.4): creates, updates or retires a human question of the collection's evaluation set. The admin generates questionId for a create."
+}

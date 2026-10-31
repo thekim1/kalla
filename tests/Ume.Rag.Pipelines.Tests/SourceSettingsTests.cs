@@ -1,0 +1,94 @@
+using System.Text.Json;
+using Ume.Rag.Pipelines.Schemas;
+using Ume.Rag.Pipelines.Sources;
+
+namespace Ume.Rag.Pipelines.Tests;
+
+/// <summary>Connectors design §12.3: settings schemas with <c>x-effect</c> and the per-tag hashes stored in <c>Runs.SettingsHashes</c>.</summary>
+public sealed class SourceSettingsTests
+{
+    private const string Umea = """
+        { "startUrls": ["https://www.umea.se/"], "sitemaps": [], "extraHosts": [],
+          "include": ["www.umea.se/**"], "exclude": ["**/sok?*", "**?*print=*"], "demote": [], "maxDepth": 10, "maxPages": 20000,
+          "ignoreQueryParams": [], "directoryIndexNames": [], "noiseSelectors": [],
+          "conditionalGet": true, "revalidateEvery": 4, "crawlWindow": "22:00-06:00" }
+        """;
+
+    [Fact]
+    public void The_connectors_12_3_example_validates_and_binds()
+    {
+        ContractSchemas.Validator(typeof(CrawlSettings)).Validate(Repository.Json(Umea)).ShouldBeEmpty();
+        var settings = (CrawlSettings)SourceSettings.Bind(SourceTypes.Crawl, Repository.Json(Umea));
+        settings.MaxPages.ShouldBe(20000);
+        settings.TimeoutSeconds.ShouldBe(30);
+    }
+
+    [Theory]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":[]}""")]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["ftp://www.umea.se/"]}""")]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"demote":[{"pattern":"**/protokoll/**","factor":1}]}""")]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"crawlWindow":"22-06"}""")]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"render":true}""")]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"extraHosts":["Umea.SE"]}""")]
+    [InlineData(SourceTypes.UrlList, """{"urls":["https://www.umea.se/"],"revalidateEvery":0}""")]
+    [InlineData(SourceTypes.Upload, """{"maxFileSizeMb":51}""")]
+    public void Invalid_settings_fail_the_schema(string sourceType, string json) =>
+        ContractSchemas.Validator(SourceSettings.SettingsType(sourceType)).Validate(Repository.Json(json)).ShouldNotBeEmpty();
+
+    [Fact]
+    public void An_unknown_member_does_not_bind_either() =>
+        Should.Throw<JsonException>(() => SourceSettings.Bind(SourceTypes.Upload, Repository.Json("""{"maxFileSizeMb":10,"virusScan":false}""")));
+
+    [Theory]
+    [InlineData(SourceTypes.UrlList)]
+    [InlineData(SourceTypes.Crawl)]
+    [InlineData(SourceTypes.Upload)]
+    public void Every_member_has_an_effect_tag_in_the_schema(string sourceType)
+    {
+        var effects = SourceSettings.Effects(sourceType);
+        var schema = ContractSchemas.For(SourceSettings.SettingsType(sourceType)).Export();
+        foreach (var (name, property) in schema["properties"]!.AsObject())
+        {
+            property!["x-effect"]!.GetValue<string>().ShouldBe(effects[name].ToString().ToLowerInvariant(), name);
+        }
+    }
+
+    [Theory]
+    [InlineData("exclude", """["**/sok?*"]""", SettingEffect.Scope)]
+    [InlineData("include", """["www.umea.se/kommun/**"]""", SettingEffect.Scope)]
+    [InlineData("maxPages", "25000", SettingEffect.Scope)]
+    [InlineData("ignoreQueryParams", """["sv.state"]""", SettingEffect.Identity)]
+    [InlineData("directoryIndexNames", """["index.html"]""", SettingEffect.Identity)]
+    [InlineData("noiseSelectors", """["#cookie-banner"]""", SettingEffect.Behaviour)]
+    [InlineData("timeoutSeconds", "60", SettingEffect.Behaviour)]
+    [InlineData("demote", """[{"pattern":"**/protokoll/2019/**"}]""", SettingEffect.Cosmetic)]
+    [InlineData("crawlWindow", "\"23:00-05:00\"", SettingEffect.Cosmetic)]
+    public void A_change_moves_exactly_its_tag(string member, string value, SettingEffect effect)
+    {
+        var before = Repository.Json(Umea);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(Umea)!.AsObject();
+        node[member] = System.Text.Json.Nodes.JsonNode.Parse(value);
+        var after = JsonSerializer.SerializeToElement(node);
+
+        SourceSettings.Changed(SourceTypes.Crawl, before, after).ShouldBe([effect]);
+        var old = SourceSettings.Hashes(SourceTypes.Crawl, before);
+        var current = SourceSettings.Hashes(SourceTypes.Crawl, after);
+        (old.Identity != current.Identity).ShouldBe(effect == SettingEffect.Identity);
+        (old.Scope != current.Scope).ShouldBe(effect == SettingEffect.Scope);
+        (old.Behaviour != current.Behaviour).ShouldBe(effect == SettingEffect.Behaviour);
+    }
+
+    [Fact]
+    public void An_omitted_member_hashes_as_its_default()
+    {
+        SourceSettings.Hashes(SourceTypes.Crawl, Repository.Json("""{"startUrls":["https://www.umea.se/"]}"""))
+            .ShouldBe(SourceSettings.Hashes(SourceTypes.Crawl, Repository.Json("""
+                {"startUrls":["https://www.umea.se/"],"maxDepth":10,"maxPages":10000,"conditionalGet":true,"revalidateEvery":4,
+                 "exclude":["**/sok?*", "**/search?*", "**?*sort=*", "**?*print=*", "**/login*", "**/logout*"]}
+                """)));
+    }
+
+    [Fact]
+    public void Hashes_are_lower_case_sha256_hex() =>
+        SourceSettings.Hashes(SourceTypes.Upload, Repository.Json("{}")).Behaviour.ShouldMatch("^[0-9a-f]{64}$");
+}

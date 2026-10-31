@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/sync.result.schema.json",
+  "title": "sync job result",
+  "type": "object",
+  "properties": {
+    "runId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "phase": {
+      "enum": [
+        "list",
+        "fetch",
+        "reconcile"
+      ]
+    },
+    "listed": {
+      "type": "integer",
+      "description": "Items the listing yielded in this job.",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "enqueued": {
+      "type": "integer",
+      "description": "fetch jobs or frontier entries enqueued.",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "unchanged": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "failed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "deleted": {
+      "type": "integer",
+      "description": "Reconcile: documents soft-deleted, and deletions waiting for a decision (connectors design §13).",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "proposedDeletions": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "continued": {
+      "type": "boolean",
+      "description": "The job yielded and enqueued its continuation (1,000 items or 2 minutes, engine design §9.2).",
+      "default": false
+    }
+  },
+  "required": [
+    "runId",
+    "phase"
+  ],
+  "description": "Result of a sync job: what this job (one listing segment, or the reconcile phase) did. The run's totals are in Runs."
+}

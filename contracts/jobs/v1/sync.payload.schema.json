@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/sync.payload.schema.json",
+  "title": "sync job payload",
+  "type": "object",
+  "properties": {
+    "sourceId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "runId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "The run; absent on the first job of a run (the worker opens it), set on every continuation."
+    },
+    "kind": {
+      "enum": [
+        "sync",
+        "retry-failed",
+        "reprocess"
+      ]
+    },
+    "trigger": {
+      "enum": [
+        "schedule",
+        "manual",
+        "upload",
+        "publish",
+        "rollback",
+        "site-profile",
+        "retry",
+        "config-change"
+      ]
+    },
+    "phase": {
+      "enum": [
+        "list",
+        "fetch",
+        "reconcile"
+      ],
+      "default": "list"
+    },
+    "scheduledFor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "The cron occurrence a scheduled run is for (engine design §9.6)."
+    },
+    "force": {
+      "type": "boolean",
+      "description": "reprocess: bypass the stage caches from fromStage on, with a new execution id (engine design §8).",
+      "default": false
+    },
+    "fromStage": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "fetch",
+        "scan",
+        "detect",
+        "parse",
+        "clean",
+        "chunk",
+        "personal-data",
+        "embed",
+        "index",
+        null
+      ]
+    },
+    "resumeFromCheckpoint": {
+      "type": "boolean",
+      "description": "A continuation resumes listing from the source's run checkpoint in content.ConnectorCheckpoints (connectors design §2.3).",
+      "default": false
+    },
+    "batchId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "Upload commit: the batch whose manifest uploads/{sourceId}/batches/{batchId}.json the sync reads."
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "sourceId",
+    "kind",
+    "trigger"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "trigger": {
+            "const": "upload"
+          }
+        },
+        "required": [
+          "trigger"
+        ]
+      },
+      "then": {
+        "required": [
+          "batchId"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "phase": {
+            "enum": [
+              "fetch",
+              "reconcile"
+            ]
+          }
+        },
+        "required": [
+          "phase"
+        ]
+      },
+      "then": {
+        "required": [
+          "runId"
+        ]
+      }
+    }
+  ],
+  "description": "Payload of a sync job (engine design §9.1, §9.2; connectors design §2.2, §9.1)."
+}

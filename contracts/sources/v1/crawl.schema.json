@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/sources/v1/crawl.schema.json",
+  "title": "Crawl source settings",
+  "type": "object",
+  "properties": {
+    "startUrls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^https?://"
+      },
+      "x-effect": "scope",
+      "description": "Seeds; their hosts are the scope hosts.",
+      "minItems": 1,
+      "maxItems": 100
+    },
+    "sitemaps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^https?://"
+      },
+      "x-effect": "scope",
+      "description": "Sitemaps besides the robots.txt Sitemap: lines and /sitemap.xml.",
+      "maxItems": 20,
+      "default": []
+    },
+    "extraHosts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 253,
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$"
+      },
+      "x-effect": "scope",
+      "description": "Further scope hosts (lower-case, A-labels).",
+      "maxItems": 50,
+      "default": []
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      },
+      "x-effect": "scope",
+      "description": "Globs over host/path?query (* within a segment, ** across), or re:<regex>; empty = everything on the scope hosts.",
+      "maxItems": 200,
+      "default": []
+    },
+    "exclude": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      },
+      "x-effect": "scope",
+      "description": "Globs or re:<regex>; exclude wins over include.",
+      "maxItems": 200,
+      "default": [
+        "**/sok?*",
+        "**/search?*",
+        "**?*sort=*",
+        "**?*print=*",
+        "**/login*",
+        "**/logout*"
+      ]
+    },
+    "demote": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "Glob or re:<regex>, as include and exclude.",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "factor": {
+            "type": "number",
+            "description": "Score multiplier in (0, 1).",
+            "exclusiveMinimum": 0,
+            "exclusiveMaximum": 1,
+            "default": 0.5
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "additionalProperties": false
+      },
+      "x-effect": "cosmetic",
+      "description": "Ranking only (knowledge design §6.5): matching pages are multiplied by the lowest matching factor.",
+      "maxItems": 100,
+      "default": []
+    },
+    "maxDepth": {
+      "type": "integer",
+      "x-effect": "scope",
+      "description": "Link distance from a seed.",
+      "minimum": 0,
+      "maximum": 50,
+      "default": 10
+    },
+    "maxPages": {
+      "type": "integer",
+      "x-effect": "scope",
+      "description": "Admitted claims per run, seeds included; the admin also checks the platform cap (V25).",
+      "minimum": 1,
+      "maximum": 1000000,
+      "default": 10000
+    },
+    "ignoreQueryParams": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 100,
+        "pattern": "^[^\\s=&]+$"
+      },
+      "x-effect": "identity",
+      "description": "Query parameters dropped by the canonicaliser in addition to the fixed list and the site profile's.",
+      "maxItems": 50,
+      "default": []
+    },
+    "directoryIndexNames": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "x-effect": "identity",
+      "description": "File names treated as the directory index (index.html), so /a/ and /a/index.html are one identity.",
+      "maxItems": 10,
+      "default": []
+    },
+    "noiseSelectors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "x-effect": "behaviour",
+      "description": "CSS selectors removed before the content hash (HTML noise normalisation, connectors design §12.2).",
+      "maxItems": 50,
+      "default": []
+    },
+    "conditionalGet": {
+      "type": "boolean",
+      "x-effect": "behaviour",
+      "description": "Send stored validators (If-None-Match, If-Modified-Since).",
+      "default": true
+    },
+    "revalidateEvery": {
+      "type": "integer",
+      "x-effect": "behaviour",
+      "description": "Every n-th traversal sends no validators, catching wrong 304s.",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 4
+    },
+    "timeoutSeconds": {
+      "type": "integer",
+      "x-effect": "behaviour",
+      "description": "Whole-request timeout in seconds; the HTML and file body limits of connectors design §4 still apply.",
+      "minimum": 5,
+      "maximum": 120,
+      "default": 30
+    },
+    "crawlWindow": {
+      "type": "string",
+      "x-effect": "cosmetic",
+      "description": "Night window HH:MM-HH:MM, Europe/Stockholm (connectors design §6.5); manual sync ignores it.",
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$",
+      "default": "22:00-06:00"
+    }
+  },
+  "required": [
+    "startUrls"
+  ],
+  "additionalProperties": false,
+  "description": "Settings of a website crawl source (Sources.Settings; connectors design §5, §12.3). Each member's x-effect says what a change needs."
+}

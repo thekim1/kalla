@@ -25,11 +25,11 @@ Refs: [connectors §5.4, §8.1](../ingestion-worker/design-connectors.md), [weak
 
 ## 2. Worker contracts (#4)
 Refs: [engine §3, §4, §9.1, §13.1](../ingestion-worker/design-engine.md), [connectors §2.1, §12.3](../ingestion-worker/design-connectors.md), [admin §4.7](../admin/design.md)
-- [ ] `contracts/sources/v1/{url-list,crawl,upload}.schema.json` with `x-effect`
-- [ ] `contracts/pipeline/v2/definition.schema.json`; templates `website`, `url-list`, `files` in `src/Ume.Rag.MigrationService/Templates/`
-- [ ] `contracts/jobs/v1/`: payloads and results of `sync`, `fetch`, `parse`, `embed`, `command` (P1a kinds), `eval` `on-demand`
-- [ ] `contracts/site-profiles/v1/` profile schema
-- [ ] JSON Schema 2020-12 validator chosen (to-verify #17); `Ume.Rag.Pipelines` validator and stage keys with tests
+- [x] `contracts/sources/v1/{url-list,crawl,upload}.schema.json` with `x-effect`
+- [x] `contracts/pipeline/v2/definition.schema.json`; templates `website`, `url-list`, `files` in `src/Ume.Rag.MigrationService/Templates/`
+- [x] `contracts/jobs/v1/`: payloads and results of `sync`, `fetch`, `parse`, `embed`, `command` (P1a kinds), `eval` `on-demand`
+- [x] `contracts/site-profiles/v1/` profile schema
+- [x] JSON Schema 2020-12 validator chosen (to-verify #17); `Ume.Rag.Pipelines` validator and stage keys with tests
 - [ ] **Hand-off J3:** issue to stream B
 
 ## 3. Parser P1 formats (#5)

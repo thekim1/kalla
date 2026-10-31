@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/fetch.payload.schema.json",
+  "title": "fetch job payload",
+  "type": "object",
+  "properties": {
+    "sourceId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "runId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "urlHash": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "SHA-256 (hex) of the canonical URL: the key of the source's CrawlFrontier row (connectors design §6.0).",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uploadId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "The upload slot (content.Uploads.Id)."
+    },
+    "executionId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "Set once the document's execution is known (engine design §7.5)."
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "sourceId",
+    "runId"
+  ],
+  "oneOf": [
+    {
+      "required": [
+        "urlHash"
+      ]
+    },
+    {
+      "required": [
+        "uploadId"
+      ]
+    }
+  ],
+  "description": "Payload of a fetch job: one frontier entry (urlHash) or one upload slot (uploadId) of a source (engine design §9.1)."
+}
