@@ -5,6 +5,7 @@ using Ume.Rag.Worker.Connectors.Uploads;
 using Ume.Rag.Worker.Connectors.UrlList;
 using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Parsing;
+using Ume.Rag.Worker.Preview;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Detect;
 using Ume.Rag.Worker.Processing.Parse;
@@ -86,6 +87,7 @@ public static class EngineExtensions
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, FetchJobHandler>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, ParseJobHandler>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, EmbedJobHandler>());
+        builder.AddRagPreview();
 
         services.AddHostedService<RunFinalizer>();
         services.AddHostedService<SyncScheduler>();

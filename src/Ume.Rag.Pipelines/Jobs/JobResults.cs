@@ -250,7 +250,7 @@ public sealed record PreflightCheckResult
 
     public required PreflightState State { get; init; }
 
-    [Description("<area>.<code>, e.g. http.404, robots.disallowed, egress.blocked; the admin shows its Swedish text and remediation.")]
+    [Description("<area>.<code>, e.g. http.404, robots.disallow, egress.blocked; the admin shows its Swedish text and remediation.")]
     [MaxLength(100)]
     [RegularExpression(ContractPatterns.Reason)]
     public required string Code { get; init; }

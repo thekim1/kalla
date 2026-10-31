@@ -207,7 +207,7 @@ trigger (PgBouncer or a higher `max_connections`).
 
 | Hot spot | At 10× | Decision |
 |---|---|---|
-| Chunk insert amplification: heap + TOAST (4 KB vector) + GIN `SearchVector`, `Tags` + B-trees (`CollectionId` scalar, keys) + HNSW | ≈ 10–15 KB WAL per chunk (estimate) | binary `COPY` (engine §14) stays; `wal_compression = lz4` (PG 15+, stock image *to verify*), `max_wal_size` 16 GB, `checkpoint_timeout` 15 min on the 64 GB host |
+| Chunk insert amplification: heap + TOAST (4 KB vector) + GIN `SearchVector`, `Tags` + B-trees (`CollectionId` scalar, keys) + HNSW | ≈ 10–15 KB WAL per chunk (estimate) | one `INSERT … SELECT FROM unnest(…)` per batch of ≤ 1,000 rows with the vector as text (engine §14; as built in PR #108, 2026-10-31, instead of binary `COPY`); `wal_compression = lz4` (PG 15+, stock image *to verify*), `max_wal_size` 16 GB, `checkpoint_timeout` 15 min on the 64 GB host |
 | WAL archiving (pgBackRest, `archive_timeout` 60 s) | ≈ 0.3 MB/s steady, ≈ 3 MB/s bulk (estimate) | archive throughput and backup storage sized from the WAL rate; `pg_stat_archiver` lag watched against RPO ≤ 5 min |
 | Per-source chunk sets (§2) | N departments indexing one site write N chunk sets and N HNSW entries per chunk (embeddings from the cache) | counted in the capacity model; the HNSW size trigger (§3.3) watches it |
 | HNSW vacuum ("can take a while", pgvector `README.md:742-748`) | swapped-out sets hard-deleted after 14 days (rollback window); re-processing leaves dead tuples | hard deletes in weekly batches; `autovacuum_work_mem` 2 GB; per-table `autovacuum_vacuum_scale_factor = 0.05` on `Chunks`; metric: vacuum duration; trigger: > 6 h → monthly `REINDEX INDEX CONCURRENTLY` (needs 2× index space) |
@@ -574,12 +574,12 @@ embedding tokens/s vs cap, HNSW memory, connections vs budget, archive lag).
 | Thread safety | `AesGcm` instances per lane consumer (not shared); `Tokenizer` shared only if verified thread-safe (to-verify #26), else one per consumer; compiled regexes and the decompounder's word list shared (read-only) |
 | Pipelines within a job | fetch → hash → links → store as a streaming pipeline (no full-body buffers beyond 60 MB; `ArrayPool` as the gateway, `src/Ume.LlmGateway.Infrastructure/Providers/ProviderJson.cs:264-286`) |
 | Batching | claims upsert per page (`unnest`), run items in batches, embeddings ≤ 64 (32 at scale) inputs, chunk writes ≤ 1,000 per batch, completions buffered from P2 (§3.4), stats flush 30 s |
-| Npgsql | one `NpgsqlDataSource` with `UseVector()`; `NpgsqlBatch` for multi-statement round trips (to-verify #19, #20); **binary COPY** for chunks (below); `Max Auto Prepare` 64; `Multiplexing` not used (complexity; revisit only with a trigger) |
+| Npgsql | one `NpgsqlDataSource` with `UseVector()`; `NpgsqlBatch` for multi-statement round trips (to-verify #19, #20); chunks by `unnest` batches (engine §14; PR #108 replaced binary COPY, the shared data source maps no `vector` type); `Max Auto Prepare` 64; `Multiplexing` not used (complexity; revisit only with a trigger) |
 | HTTP | `IHttpClientFactory` with one `SocketsHttpHandler` per downstream: gateway (`PooledConnectionLifetime` 5 min as `ProviderHttpClient.cs:50-56`, `MaxConnectionsPerServer` = `Embedding:GlobalMaxInFlight` share + query lane), parser (`MaxConnectionsPerServer` = slots + 2, long timeouts), crawl (egress-guard `ConnectCallback`, `MaxConnectionsPerServer` 4) |
 | GC | Server GC (Web SDK default) with DATAS (default since .NET 9, *to verify* for .NET 10); `DOTNET_GCHeapHardLimitPercent=0x4B` on **every** .NET container (today only api, repo §6.2); the gateway's memory study (`docs/performance-improvement-plan.md:72-81`) decides further knobs for both repos |
 
 ```csharp
-// Index writer: chunks with binary COPY; Pgvector 0.3.2 maps Vector → "vector" and HalfVector → "halfvec" by default
+// Index writer (superseded by PR #108: unnest batches, no COPY); originally: chunks with binary COPY; Pgvector 0.3.2 maps Vector → "vector" and HalfVector → "halfvec" by default
 // (VectorTypeInfoResolverFactory.cs:22-29), so no NpgsqlDbType is needed; pattern as the gateway's
 // UsageRecordCopy.cs:39 and pgvector-dotnet examples/Loading/Program.cs:37-51. SearchText = text + decompounded parts;
 // SearchVector is generated from it (built-in swedish), not copied.

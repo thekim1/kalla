@@ -148,7 +148,7 @@ As built in P1a item 4 (PR #78, 2026-10-31):
   parameter's Swedish label from there by parameter name.
 - `TemplateCatalog.BuiltIn` (`Ume.Rag.Pipelines`) embeds the template files as resources, so the admin and the
   worker validate against the same versions without reading the database. Seeding them into `config` needs
-  migration-service code (stream B, issue after J3).
+  migration-service code (stream B, issue after J3; built in PR #89, §13.1).
 
 - `stage` is the parameter's **effect tag**: the first stage its change affects. `appliesTo` narrows it to a route
   (`html`, `parser`, `text`, `csv`), so a changed OCR mode does not re-process HTML pages. The publish plan is computed
@@ -178,7 +178,9 @@ concatenate alike; `stageVersion` is an int32, big-endian. The canonical setting
 `{"inputs": {…}, "params": {…}}`: `params` holds the resolved parameters whose `stage` tag is `s` and whose
 `appliesTo` (if any) contains the document's route; `inputs` holds the non-parameter inputs (`parseRule` =
 `id@version`, `siteProfileVersion` for HTML). Canonical JSON is the project's own RFC 8785 implementation
-(`CanonicalJson`).
+(`CanonicalJson`). As built in P1a item 9 (PR #108, 2026-10-31), `inputs` also holds `metadata` for `chunk` (the
+`OutputHash` of the metadata input: media type, URL, display name, title, dates), `collectionLevel` for `personal-data`, and for
+HTML `parse` the `siteProfileVersion` (the profile version id, or `preset`).
 
 Keys are per stage only; the chain is linear, so a changed parameter changes the keys of its stage and every stage
 after it, and nothing before it. The live chunk set records the keys and `OutputHash`es of the stage outputs it was
@@ -376,7 +378,7 @@ UPDATE content."Jobs" SET "State" = 'succeeded', "CompletedAt" = now(), "Result"
 | Continuation jobs | same transaction, `DedupKey` (`parse:{doc}:{exec}`, `embed:{doc}:{exec}:{pipelineVersion}`) | `INSERT … ON CONFLICT DO NOTHING` on the partial unique `DedupKey` index (data-model §4.2) |
 | `EmbeddingCache` | own short transaction, `ON CONFLICT DO NOTHING` | cache |
 | Invisible chunk batches | own short transactions (§14) | the chunks carry `DeletedAt` until the swap; a retried execution writes a new set, the orphan sweep removes the old one |
-| Swap, run item, job completion | one short fenced transaction (§14) | unique key on `ChunkSets`; the swap sets the live pointer and set states and flips `DeletedAt` on the two sets' chunks |
+| Swap, run item, job completion | one short fenced transaction (§14); the engine completes the job inside its own transaction and returns `JobResult.Committed`, so the dispatcher does not complete it again (as built in P1a item 9, PR #108, 2026-10-31) | unique key on `ChunkSets`; the swap sets the live pointer and set states and flips `DeletedAt` on the two sets' chunks |
 | Gateway cost | charged by the gateway per call; a retried call is charged again | bounded by caches (parse, embedding) and attempts |
 
 Jobs hold a connection only for these short statements, never across an HTTP call, so the pool (10 + 1 LISTEN,
@@ -488,7 +490,10 @@ deletions run in a **reconcile phase** after all fetches, enqueued by the finali
 
 1. `sync` job: resolve source and pipeline version at the confirmed snapshot; open or reuse the `Runs` row; run the
    connector's listing and change detection (6b), checkpointed, yielding after 1,000 items or 2 minutes (re-enqueued
-   as a continuation, no attempt).
+   as a continuation, no attempt). As built in P1a item 9 (PR #108, 2026-10-31): the run id is the id of the run's
+   first `sync` job, so a retried first job finds its run; a run's continuations use dedup
+   `sync:{sourceId}:{runId}`, because under `sync:{sourceId}` a queued "sync now" would block the run's own reconcile;
+   a new first sync waits while another run of the source is running.
 2. Per changed or new item: a frontier claim or a `fetch` job, `DedupKey = fetch:{sourceId}:{urlHash}` (`urlHash` =
    SHA-256 hex of the canonical URL, the key of the source's frontier row), for an upload slot
    `fetch:{sourceId}:upload:{uploadId}`. The key names the frontier entry, not the document identity, because the
@@ -564,14 +569,18 @@ A `BackgroundService` on every instance; the instance holding `pg_try_advisory_x
 - **Defaults** (answered 7), set by the admin when a source is created: URL list `0 2 * * *` (nightly 02:00), crawl
   `0 1 * * 6` (Saturday 01:00; a host whose site profile marks `lastmod` reliable runs incrementally every night, 6b;
   the flag is set only after a 500-URL sample, so umea.se starts with weekly full traversals, weakness review §3),
-  upload none (the upload itself enqueues a `sync` with `Trigger = upload`). Adjustable per source.
+  upload none (the upload itself enqueues a `sync` with `Trigger = upload`). Adjustable per source. As built in P1a
+  item 9 (PR #108, 2026-10-31): a source whose `Sources.Schedule` is null uses `Settings.DefaultSchedules[type]`, and
+  the defaults above when that is unset too; upload sources are never scheduled.
 - **Jitter**: deterministic per source, `hash(sourceId) mod JitterMinutes` (`Settings`, default 90).
 - **Due**: `next = cron.Next(lastScheduledFor ?? source.CreatedAt)`; when `next + jitter ≤ now` and no `sync` for the
   source is `queued`/`running`, enqueue one with `ScheduledFor = next`. After an outage the missed occurrences
   collapse into one run. The schedule is computed from `ScheduledFor`, never from an "updated" timestamp that other
-  jobs touch (Onyx's stall, F6).
+  jobs touch (Onyx's stall, F6). As built (PR #108): `Sources` has no `CreatedAt`, so a never-scheduled source
+  counts from `Sources.UpdatedAt`.
 - **Sync now**: the admin inserts a `sync` job (`Trigger = manual`, `Priority` 10); if one is already queued or
-  running the admin answers "already running" with its run id (dedup `sync:{sourceId}`).
+  running the admin answers "already running" with its run id (dedup `sync:{sourceId}`; a run's continuations use
+  `sync:{sourceId}:{runId}`, §9.2).
 - Paused or deleted sources are skipped; `rag.scheduler.lag` (now − due) is a metric.
 - The scheduler also enqueues the nightly evaluation runs (6c §14.8) and the nightly drift sweep (§2.3).
 
@@ -629,7 +638,9 @@ fetches are done and it has not reconciled yet, enqueue its `sync` job with `pha
 guard, 6b §13.2) and wait for it; then aggregate `RunItems` into the counters and `CostUsd`, set `State` and
 `FinishedAt`. When a `reprocess` run of a publish or rollback finishes, the finalizer enqueues the `eval` job
 `publish-report` for the source's collection (§12.1). Counters are derived, never incremented by jobs, so retries
-cannot double-count and no hot row is updated per document.
+cannot double-count and no hot row is updated per document. As built in P1a item 9 (PR #108, 2026-10-31): the
+counters come from the latest run item per document or identity, `superseded` excluded; `dead` or `failed` content
+jobs count as Failed; `degraded` counts as Updated.
 
 ### 10.5 What the admin shows (consumed by the admin plan §4)
 
@@ -723,8 +734,16 @@ way for the host's HTML documents.
 Platform templates (`Pipelines.DepartmentId = null`; data-model §2.1 has no `IsTemplate` column and PR #76 built
 none), seeded by the migration service from `src/Ume.Rag.MigrationService/Templates/*.json` (§3.2). As built in P1a
 item 4 (PR #78, 2026-10-31): the three files below exist and are embedded in `Ume.Rag.Pipelines`
-(`TemplateCatalog.BuiltIn`); the seeding code is stream B's (issue after J3). `url-list` and `website` share the
+(`TemplateCatalog.BuiltIn`); the seeding code is stream B's (issue #81, built in PR #89, below). `url-list` and `website` share the
 `pathRules` subschema (≤ 100 rules); `files` has no `pathRules`. Only `website` has `collectionDefaults`.
+
+Seeding as built (PR #89, 2026-10-31): the migration service's `PipelineTemplateSeeder` runs in every environment
+after the migrations. Per template name it inserts one platform `Pipelines` row if absent (`Name` = `TemplateId` =
+the template name) and, per template version not yet seeded (matched by `template` + `templateVersion` in the stored
+definition), a **published** `PipelineVersions` row with empty `params`. The first version is `Number` 1; a later
+template version takes the next number (unique (`PipelineId`, `Number`)), supersedes the previous published version
+and moves `PublishedVersionId`. One transaction per template; re-runs write nothing, so the config version is bumped
+only on first deploy and on a new template version.
 
 | Template | Source type | Stages | Parameters (defaults) |
 |---|---|---|---|
@@ -776,7 +795,7 @@ public interface IIndexWriter
     // One-row updates without new chunks: noise-only content change or a version change that affects no stage.
     Task<IndexWriteResult> ReKeyAsync(Guid chunkSetId, ChunkSetKey newKey, ExecutionFence fence, CancellationToken ct);
     // Soft-deletes documents (6b decides which); their live sets' chunks get DeletedAt. A document seen again within the
-    // 14-day grace is revived (6b §13.4).
+    // 14-day grace is revived (6b §13.4); one seen after the grace, before the purge, is processed as new content.
     Task<int> SoftDeleteDocumentsAsync(IReadOnlyList<Guid> documentIds, Guid runId, CancellationToken ct);
 }
 
@@ -793,7 +812,9 @@ Rules (schema: data-model §2.2). A chunk is searchable iff `Chunks."DeletedAt" 
    `ContentHash`); a `superseded` set with the wanted key (rollback within 14 days) is swapped back directly (step 3).
 2. **Write invisible**: insert `ChunkSets` with `State = writing`, then the chunks with `DeletedAt` set, by binary
    `COPY` in batches of ≤ 1,000 rows, each batch a short transaction of its own (well under the 60 s
-   `statement_timeout`). Each chunk carries the scalar `CollectionId` of its source's collection and the `SearchText`
+   `statement_timeout`). As built in P1a item 9 (PR #108, 2026-10-31): one `INSERT … SELECT FROM unnest(…)` per
+   batch with the vector sent as pgvector text and cast to `vector`, not binary `COPY`, because the shared data source
+   (`AddRagDatabase`) maps no `vector` type (to-verify #21, #119). Each chunk carries the scalar `CollectionId` of its source's collection and the `SearchText`
    computed by the worker (6c §6.5). Keyword and vector candidates never include chunks of a `writing` set.
 3. **Swap** (one short transaction per document): fence (§7.5); confirm at the swap that the source's published
    version (config snapshot within the grace window, §15) is still the write's, else the set stays `writing` for the
@@ -807,6 +828,8 @@ Rules (schema: data-model §2.2). A chunk is searchable iff `Chunks."DeletedAt" 
    the live set's key columns (`ContentHash`, `PipelineVersionId`, `SiteProfileVersionId`) are updated in one row when
    the set's `InputHash` equals the new chunk-stage input hash; no new set, run item `unchanged`, reason
    `change.noise` or `version.unaffected`. If a `superseded` set already holds the new key, it is swapped back instead.
+   As built in P1a item 9 (PR #108, 2026-10-31): `InputHash` is the personal-data stage's input, i.e. the chunk
+   output's `OutputHash`, so re-key compares chunk outputs (6c §12).
 5. **Orphan sweep** (maintenance, nightly): sets in `writing` older than 24 h, or whose execution is superseded, are
    deleted with their chunks in batches; `superseded` sets past 14 days likewise.
 
@@ -884,7 +907,8 @@ profiles) are 6b §16; processing metrics (`rag.parse.*`, `rag.pii.*`, `rag.embe
   `JobClass`, `DocumentId`, `SourceId`, `Classification`.
 - **Security events**: 5003, 5004 (worker), 5101–5103 (6b/6c), 5104 (parser limits), and **5105
   `rag.pipeline.refused`** (Warning): the worker refused to run a published version that fails validation (unknown
-  template or stage version, schema failure). Attributes `PipelineId`, `PipelineVersionId`, `Reason`.
+  template or stage version, schema failure). Attributes `PipelineId`, `PipelineVersionId`, `Reason`. As built in P1a
+  item 9 (PR #108, 2026-10-31): 5105 is written as a warning log until stream B adds it to `SecurityEvents`.
 
 ## 18. Performance and capacity
 
@@ -981,7 +1005,8 @@ the normal egress guard (§11).
   (to-verify #17).
 - `Cronos`: version, 5-field syntax, `TimeZoneInfo` DST behaviour (repo-and-deployment §2.2 marks it *to verify*).
 - Npgsql binary `COPY` of `vector` columns via `Pgvector` in ≤ 1,000-row batches; HNSW insert cost per row on the pilot
-  host.
+  host. Writing path decided in P1a item 9 (PR #108, 2026-10-31): `unnest` with a text-to-`vector` cast, not `COPY`
+  (§14); the HNSW insert cost remains (to-verify #21, #119).
 - `INSERT … ON CONFLICT DO NOTHING` against the partial unique `DedupKey` index (index inference with the `WHERE`
   predicate) under 500-row batch enqueues.
 - Swap duration and WAL for the largest sets (20,000 chunks: `DeletedAt` flipped on both sets' chunks in one
