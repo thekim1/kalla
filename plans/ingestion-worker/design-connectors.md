@@ -73,8 +73,10 @@ public abstract record FetchOutcome
     public sealed record NotModified(Validators Validators) : FetchOutcome;   // 304 or lastmod skip; links from stored outlinks (§5.4)
     public sealed record Gone(string Reason) : FetchOutcome;                  // http.404, http.410, http.moved_out_of_scope
     public sealed record Skipped(string Reason) : FetchOutcome;               // robots.*, trap.*, redirect.out_of_scope
-    public sealed record Refused(RunItemOutcome Outcome, string Reason) : FetchOutcome; // blocked, unsupported, too-large, malware
+    public sealed record Refused(RunItemOutcome Outcome, string Reason) : FetchOutcome; // blocked, unsupported, too-large
+    public sealed record Quarantined(BlobKey Key, string Sha256, string Signature, string Reason) : FetchOutcome; // malware (§11)
     public sealed record Transient(string Reason, TimeSpan? RetryAfter, bool CountsAttempt) : FetchOutcome;
+    public sealed record Failed(string Reason) : FetchOutcome;                // no retry fixes it: 401/403, TLS, too many redirects
 }
 
 public interface IIdListingConnector : IConnector        // cheap "what exists now" for deletion detection
@@ -90,8 +92,23 @@ public interface IPreflightCheck : IConnector            // runs on an unsaved c
 { IAsyncEnumerable<PreflightResult> CheckAsync(PreflightContext context, JsonElement settings, CancellationToken ct); }
 
 public sealed record PreflightResult(string Check, PreflightState State /* pass | warn | fail */, string Code,
-    LocalizedText Remediation, JsonElement? Facts);
+    string? Target, JsonElement? Facts);    // Code = <area>.<code>; the admin maps it to Swedish text and remediation
 ```
+
+As built in P1a item 6 part 1 (PR #82, 2026-10-31) and P1b item 2 (PR #88, 2026-10-31):
+- `FetchOutcome` adds `Quarantined` (a ClamAV finding: the bytes are already in `quarantine/{sourceId}/{sha256}`; the
+  runner writes the `QuarantinedFiles` row and event 5102) and `Failed` (run item `failed`). `Content` has no
+  `Links` yet; link extraction comes with the crawl (item 6 part 2).
+- Preflight results carry codes only, never Swedish text (AGENTS.md: UI text only in `labels.ts`/`messages.ts`).
+  Each check has a `<area>.<code>` code (`http.404`, `robots.disallowed`, `egress.blocked`, …), an optional `Target`
+  (URL or host) and small `Facts`; the admin shows the text and remediation for the code. The job result
+  (`contracts/jobs/v1/preview.preflight.result.schema.json`) adds the worst state, `estimatedPages` (crawl) and the
+  recognised `cms`. The preflight payload carries the unsaved settings as an object, which the admin validates
+  against `contracts/sources/v1/{type}.schema.json` (V25) before it enqueues.
+- `UrlListConnector` is built but not registered in DI yet: it needs `IBlobStore` in the worker (item 9 wires the
+  fetch stage).
+- **Raw blobs of `internal` sources are not envelope-encrypted yet**: the data-model §7 blob layer is missing. It must
+  exist before an `internal` source fetches (tracked for item 6 part 2 / item 9).
 
 C# async iterators cannot return a value, so the checkpoint is an event (Onyx returns it from the generator and its
 runner enforces "exactly one, at the end", `onyx/connectors/connector_runner.py:58-95`); our runner enforces "the last
@@ -140,7 +157,7 @@ split components; the rules below are our own, so .NET's escaping quirks never c
 | # | Rule | Example |
 |---|---|---|
 | 1 | Only `http`/`https`; scheme lower-case; http and https stay **different** identities (a redirect unifies them) | `HTTPS://` → `https://` |
-| 2 | Host lower-case, trailing dot removed, IDN → A-label (UTS 46 non-transitional, `IdnMapping`, STD3 rules) | `Umeå.SE.` → `xn--ume-wla.se` |
+| 2 | Host lower-case, trailing dot removed, IDN → A-label (UTS 46 non-transitional, `IdnMapping`, STD3 rules); a numeric IPv4 host in any spelling → dotted quad (as built, PR #82) | `Umeå.SE.` → `xn--ume-wla.se`; `0x7f.1` → `127.0.0.1` |
 | 3 | Default port removed (80/443); userinfo refused (`url.userinfo`) | `:443/` → `/` |
 | 4 | Empty path → `/`; dot segments removed (RFC 3986 §5.2.4); duplicate slashes kept (servers differ) | `/a/./b/../c` → `/a/c` |
 | 5 | Percent-encoding: decode unreserved (`A–Z a–z 0–9 - . _ ~`), upper-case remaining hex, encode non-ASCII as UTF-8; reserved escapes (`%2F`, `%3F`) kept | `%7e` → `~`; `ö` → `%C3%B6` |
@@ -210,6 +227,11 @@ frontier request, the content-addressed raw blob and the parse and embedding cac
   no `Last-Modified`, `Cache-Control: no-store`) get a plain GET; change detection then rests on sitemap `lastmod`
   (crawl, §5.4) and the content hash (§12).
 - **Cookies are never stored or sent** (`UseCookies = false`, `Set-Cookie` ignored; umea.se sets session cookies).
+- **robots.txt is honoured for URL lists too**, with the same rules as the crawl (§5.1 "always"; this section was
+  silent; as built in P1a item 6 part 1, PR #82, 2026-10-31). A listed URL that robots disallows ends `skipped`
+  `robots.disallow`.
+- **User agent** `UmeaKommunBot/1.0` (as built, PR #82). The about-page URL is not in it yet: it waits for user item
+  U1 (§22).
 
 | Response | Result | Outcome / reason | Deletion |
 |---|---|---|---|
@@ -239,7 +261,11 @@ only the headers are read).
   `CrawlHosts` + blob `crawl/{host}/robots.txt` (data-model §9) for 24 h. Fetch outcomes: 2xx parse; 4xx →
   **allow all** (RFC 9309 "unavailable"); 5xx or unreachable → **disallow all** for the run (`RobotsStatus =
   unreachable`; the run's seeds on that host fail and the host counts as **paused** for the run, so the traversal is
-  incomplete and nothing is `not-seen` however few seeds the host has, §5.4).
+  incomplete and nothing is `not-seen` however few seeds the host has, §5.4). As built in P1a item 6 part 1 (PR #82,
+  2026-10-31): a robots 429 counts as unreachable (disallow all), not as a 4xx; a robots.txt request the egress guard
+  refuses is unreachable too, and the URLs behind it end `blocked` with the guard's `egress.*` reason. The cache
+  is per origin (scheme, host, port) and, until the fetch stage is wired to the database (item 9), in memory per
+  worker instance; an unreachable answer is kept for 10 minutes only, so the next run asks again.
   robots.txt is always honoured (answered 4, 11), also on municipal hosts; it is re-checked per redirect hop.
 - `Crawl-delay` is honoured only when it **lowers** our rate, capped at 60 s.
 - **Sitemaps**: `XmlReader` with `DtdProcessing.Prohibit` and no resolver; gzip allowed; sitemap index depth ≤ 2;
@@ -294,7 +320,9 @@ with an example pattern in the report.
   (§18) covers that case.
 - Explicit `Gone` (404/410, permanent redirect out of scope, robots now disallowing) is a candidate in any run,
   complete or not.
-- **Incremental** run (`incrementalSchedule`, e.g. daily): fetches seeds whose sitemap `lastmod` is newer than the
+- **Incremental** run (`incrementalSchedule`, e.g. daily; a crawl setting only, a five-field cron that the schema
+  checks by field count only, default `null`; as built in P1b item 2, PR #88, 2026-10-31; the `sync` payload marks
+  the run `incremental`): fetches seeds whose sitemap `lastmod` is newer than the
   stored `LastFetchedAt` plus sitemap URLs not yet known, expands links only from changed pages, never marks a
   traversal complete, so it deletes only on `Gone`. The `website` template sets a daily `incrementalSchedule` **by
   default** when the host's site profile marks `lastmod` reliable; the crawl report measures the share of `lastmod`
@@ -432,7 +460,9 @@ RETURNING "UrlHash";
 2. The frontier row (insert if absent) goes to `pending`, unless it was fetched within the **freshness window**
    (`Settings.Crawl.FreshnessHours`, 12 h; 0 for manual and forced runs): then the claim is served at once from the
    frontier's last response (content hash, raw blob, outlinks), without a request.
-3. The **releaser** (§6.3) enqueues one `fetch` job per URL with `DedupKey = fetch:{level}:{identityHash}`.
+3. The **releaser** (§6.3) enqueues one `fetch` job per URL with `DedupKey = fetch:{sourceId}:{urlHash}` (6a §9.2;
+   `urlHash` = SHA-256 hex of the canonical URL. In P1 there is one frontier per source, §6.0. The key names the
+   frontier entry, because the identity is known only after redirects; P1a item 4, PR #78, 2026-10-31).
 4. The `fetch` job writes the raw blob once under its content hash (`raw/{level}/{contentHash}`; write-once, so an
    existing key is not written again), updates the frontier row, then reads all claims of open runs for its URL at
    commit and serves each `(source, run)`: upsert of **that source's** document (`LastSeenAt`, `LastRunId`), run
@@ -522,9 +552,9 @@ public enum EgressPurpose { Fetch, Robots, Sitemap, Preflight, Preview }   // Re
 | DNS pinning | One `SocketsHttpHandler` for all crawling with `ConnectCallback`: resolve via the guard, then connect **only** to the returned addresses (no second lookup, no rebinding window). TLS still uses the URL host for SNI and certificate checks. `PooledConnectionLifetime` 2 min, `UseProxy = false`, `AllowAutoRedirect = false`, `UseCookies = false` (no cookie is ever stored or sent). Same as Open WebUI's pinned connect (`owui/retrieval/web/utils.py:187-215`) and Onyx's pinned request (`onyx/utils/url.py:417-435`) |
 | Any-address rule | if **any** resolved address is blocked, the host is refused (round-robin rebinding cannot win by luck) |
 | Blocked IPv4 | `0.0.0.0/8`, `10/8`, `100.64/10`, `127/8`, `169.254/16`, `172.16/12` (covers our compose subnets), `192.0.0/24`, `192.0.2/24`, `192.88.99/24`, `192.168/16`, `198.18/15`, `198.51.100/24`, `203.0.113/24`, `224/4`, `240/4` |
-| Blocked IPv6 | `::/128`, `::1`, `fc00::/7`, `fe80::/10`, `ff00::/8`, `2001:db8::/32`, `100::/64`; addresses that **embed** IPv4 (`::ffff:0:0/96`, `::/96`, `64:ff9b::/96`, `64:ff9b:1::/48`, 6to4 `2002::/16`, Teredo `2001::/32`) are judged by the embedded address too (Open WebUI `_embedded_ipv4`, `owui/retrieval/web/utils.py:73-93`). IPv4 is tried first; the `crawl` network may have no IPv6 at all (*to verify*) |
+| Blocked IPv6 | `::/128`, `::1`, `fc00::/7`, `fe80::/10`, `ff00::/8`, `2001:db8::/32`, `100::/64`; addresses that **embed** IPv4 (`::ffff:0:0/96`, `::/96`, `64:ff9b::/96`, `64:ff9b:1::/48`, 6to4 `2002::/16`, Teredo `2001::/32`) are judged by the embedded address too (Open WebUI `_embedded_ipv4`, `owui/retrieval/web/utils.py:73-93`). IPv4 is tried first; the `crawl` network may have no IPv6 at all (*to verify*). **As built, stricter** (P1a item 6 part 1, PR #82, 2026-10-31): an IPv6 address outside global unicast `2000::/3` (and outside NAT64 `64:ff9b::/96`) is blocked whole (`reserved`); local-use NAT64 `64:ff9b:1::/48` and IPv4-compatible `::/96` are blocked whole too, because where an IPv4 address would sit in them is not fixed; `::ffff:0:0/96` is judged as its IPv4 address, and NAT64 `64:ff9b::/96`, 6to4 and Teredo by the embedded one |
 | Allowed exceptions | CIDRs in `Crawl:AllowedPrivateRanges`, set from the same `UME_RAG_CRAWL_ALLOW` that feeds the host firewall (`init-deployment.sh --crawl-allow`, repo-and-deployment §7.1); nothing else can lift the block |
-| URL rules | `http`/`https`; ports 80 and 443 (`Settings.Crawl.AllowedPorts` may add e.g. 8443); no userinfo; IP-literal hosts only if global or allow-listed; IDN hosts checked in A-label form after UTS 46 mapping, so homograph spellings resolve to the same rules |
+| URL rules | `http`/`https`; ports 80 and 443 (`Settings.Crawl.AllowedPorts` may add e.g. 8443); no userinfo; IP-literal hosts only if global or allow-listed; IDN hosts checked in A-label form after UTS 46 mapping, so homograph spellings resolve to the same rules. Numeric IPv4 host spellings (decimal `2130706433`, octal `0177.0.0.1`, hex `0x7f.1`, which `IPAddress.TryParse` reads) are canonicalised to dotted quads (§3.1 rule 2) before the guard judges them (as built, PR #82; to-verify #27) |
 | Redirects | manual; ≤ 5 hops; each hop through `CheckUrl` + `ResolveAsync` + scope + robots (§3.2) |
 | Firewall | the `crawl` network drops RFC 1918, link-local, loopback and the host's addresses except the allow-list (repo-and-deployment §6.1); the guard is the first layer and decides the outcome text |
 | Canary | at startup in Production the worker opens a raw socket (bypassing the guard) to `169.254.169.254:80` and to a private address outside the allow-list; a successful connect means the firewall is missing: critical log, health `degraded`, crawling disabled until fixed |
@@ -584,7 +614,7 @@ service can sit behind `IRenderer` (§8.2).
 |---|---|---|
 | 1 | admin API | batch create (`POST /api/sources/{id}/upload-batches` → `batchId`), then **one request per file** (raw body, per-file progress and retry; admin design §4.5); each file is an `add` (new slot) or a `replace {uploadId}`, and a batch may carry `delete {uploadId}` entries; streams each file: per file ≤ `maxFileSizeMb` (default 50, platform cap 50; answered 3), ≤ 100 files and ≤ 500 MB per batch; extension pre-check gives an immediate 415 for refused and deferred types (§9.2); SHA-256 while streaming |
 | 2 | admin API | writes each file once to `uploads/{sourceId}/{slot}/{sha256}` (`slot` = the `uploadId`; write-once; `internal`: envelope-encrypted with the data key wrapped by `rag-blob-<level>` in the blob header, data-model §7; `public`: not envelope-encrypted, simplification pass §4); uploads are the only content that cannot be fetched again, so they are **copied to the backup target within 15 minutes** (repo-and-deployment backup); at **commit** (`POST /api/upload-batches/{batchId}/commit`) writes the batch manifest `uploads/{sourceId}/batches/{batchId}.json` (entries, names, declared types, sizes, hashes); inserts one `sync` job, `Trigger = upload`, payload `{sourceId, batchId}`, `DedupKey = sync-upload:{batchId}` (uploads never wait for a running crawl-style sync); uncommitted batches and their blobs are swept after 24 h |
-| 3 | worker, `sync` | reads the manifest, upserts the `Uploads` slots, opens the run, enqueues one `fetch` job per added or replaced file (`DedupKey = fetch:{level}:{identityHash}`) and applies the batch's deletes |
+| 3 | worker, `sync` | reads the manifest, upserts the `Uploads` slots, opens the run, enqueues one `fetch` job per added or replaced file (`DedupKey = fetch:{sourceId}:upload:{uploadId}`, 6a §9.2; P1a item 4, PR #78) and applies the batch's deletes |
 | 4 | worker, `fetch` (stage `upload`) | ClamAV scan (§11) → sniff → type check → upsert of the source's document `upload:<uploadId>` with the file's content hash → the upload blob is the document's raw content (no copy) → pipeline continues |
 
 `content."Uploads"` (L, written by the worker), one row per **upload slot**: `Id` (the slot, used in the identity),
@@ -640,10 +670,10 @@ item Z1; in P1 email files are refused (§9.2), so no connector creates child do
 | What is scanned | every upload and every crawled or listed non-HTML/non-text file (PDF, Office, images) before it is stored as document content or sent to the parser. Fetched HTML, text and CSV, parsed in-process, are not scanned |
 | Streaming | the body (encrypted for `internal`; `public` blobs are not envelope-encrypted) is written to a **local** temp file (`/tmp` tmpfs or a scratch volume, ≤ 60 MB) while hashing, streamed to clamd, and if clean stored with one `IBlobStore.PutAsync` to its content-addressed key (write-once: an existing key is not written again): no `tmp/` object and no rename, which S3 lacks ([`../performance-pass.md`](../performance-pass.md) §3.13); no 50 MB buffers in memory; the local file is deleted in `finally`. Uploads are already blobs (`uploads/…`) and are scanned by the worker reading them |
 | Limits | `StreamMaxLength 60M`, `MaxFileSize 60M`, `MaxScanSize 200M`, `AlertExceedsMax yes` (repo-and-deployment §5.5, `images/clamav/clamd.conf`); a size-limit reply (`INSTREAM size limit exceeded. ERROR`) and a `Heuristics.Limits.Exceeded.<limit> FOUND` reply → `too-large` `clamav.limit`, never "clean" and never `malware` (as built in P0 #12, PR #26; settled at the integration sync point) |
-| Timeouts | connect 5 s, scan 120 s; on timeout transient with attempt |
-| Signature freshness | `zVERSION` → `ClamAV <engine>/<db version>/<db date>` (the daily database's build date in C `asctime` form without a time zone, e.g. `ClamAV 1.4.5/28169/Fri Oct 30 06:26:48 2026`; just `ClamAV <engine>` when only a custom database is loaded), read every 10 minutes: > 48 h old → health `degraded`, > 7 days → `unhealthy` and **no new files** (repo-and-deployment §5.5); `rag.clamav.signature_age_hours` gauge |
+| Timeouts | connect 5 s, scan 120 s; on timeout transient with attempt, reason `clamav.timeout` (as built, PR #82) |
+| Signature freshness | `zVERSION` → `ClamAV <engine>/<db version>/<db date>` (the daily database's build date in C `asctime` form without a time zone, e.g. `ClamAV 1.4.5/28169/Fri Oct 30 06:26:48 2026`; just `ClamAV <engine>` when only a custom database is loaded), read every 10 minutes: > 48 h old → health `degraded`, > 7 days → `unhealthy` and **no new files** (repo-and-deployment §5.5); `rag.clamav.signature_age_hours` gauge. An undated reply (custom database only) → health `degraded`, scans continue (as built in P1a item 6 part 1, PR #82, 2026-10-31; to-verify #81) |
 | Down or stale (fail closed) | file jobs requeue without attempt (`clamav.unavailable`, 30 s); after 24 h waiting the item ends `failed` `clamav.unavailable` and the run degrades. HTML continues. Nothing unscanned reaches the parser |
-| Malware | outcome `malware`; the content is written to `quarantine/{sourceId}/{sha256}` (data-model §9; self-contained, the wrapped key is in the blob header; an upload blob is copied there and the original tombstoned: blobs are write-once, no move); `content."QuarantinedFiles"` (L: `Id`, `SourceId`, `RunId`, `Classification`, `Sha256`, `Signature`, `Origin` (`upload`/`crawl`), `Name` or `Url`, `DetectedAt`, `PurgeAfter`); event **5102**; run `degraded` (6a §10.3). A crawled page that was clean before keeps its last clean version (not a deletion) |
+| Malware | outcome `malware`, reason `clamav.<platform>.<category>` (the signature's first two dot parts when it has three or more, else the whole name, lower-case, e.g. `clamav.win.trojan`; as built, PR #82); the content is written to `quarantine/{sourceId}/{sha256}` (data-model §9; self-contained, the wrapped key is in the blob header; an upload blob is copied there and the original tombstoned: blobs are write-once, no move); `content."QuarantinedFiles"` (L: `Id`, `SourceId`, `RunId`, `Classification`, `Sha256`, `Signature`, `Origin` (`upload`/`crawl`), `Name` or `Url`, `DetectedAt`, `PurgeAfter`); event **5102**; run `degraded` (6a §10.3). A crawled page that was clean before keeps its last clean version (not a deletion) |
 | Who sees it | department admins: name/URL, signature, time; platform admins also the hash. **No download or release in P1** (§21 Q3); a false positive is resolved by IT security adding an ignore signature and re-uploading. Purged after 30 days (platform plan §8, proposed) |
 | Event 5102 `rag.malware.detected` | Warning; attributes `Signature`, `Sha256`, `Origin`, `SourceId`, `RunId`, `DocumentId` (if any), `Classification`; SIEM alert on any |
 
@@ -697,7 +727,7 @@ with the last completed run's at every sync, so a lost "apply" job cannot leave 
 | Setting | Source types | Tag | Smallest re-sync |
 |---|---|---|---|
 | `name`, `description` | all | cosmetic | none |
-| `schedule`, `incrementalSchedule`, `crawlWindow` | url-list, crawl, sharepoint | cosmetic | none (the scheduler reads them) |
+| `schedule` (the `Sources.Schedule` column), `incrementalSchedule` (crawl only), `crawlWindow` (crawl only in P1) | url-list, crawl, sharepoint | cosmetic | none (the scheduler reads them) |
 | `classification` | all | identity (level) | full re-sync into the new level; old-level documents removed at reconcile (exempt); jobs at the old level fail the commit check (6a §15) |
 | pipeline parameters | all | behaviour | P1: every document of the collection re-processed via `EnsureCurrent`, no fetching, unchanged stages from the caches; P2 (weakness review §1): re-processing plan from the changed parameters (6a §12) |
 | `urls` | url-list | scope | added: claims for the added URLs only; removed: documents soft-deleted at once (`removed-from-list`, exempt) |
@@ -706,13 +736,26 @@ with the last completed run's at every sync, so a lost "apply" job cannot leave 
 | `maxDepth`, `maxPages` | crawl | scope | raise: traversal now; lower: next traversal, never deletes (a limit makes it partial) |
 | `ignoreQueryParams`, `directoryIndexNames` | url-list, crawl | identity | full re-sync: every URL re-canonicalised and fetched; old identities not re-found removed at reconcile (exempt, count shown on save) |
 | `noiseSelectors` | url-list, crawl | behaviour | next sync; pages whose hash changes re-process once |
-| `conditionalGet`, `revalidateEvery`, `timeoutSeconds` | url-list, crawl | behaviour | next sync |
+| `conditionalGet`, `revalidateEvery` (1–100, default 4), `timeoutSeconds` (5–120, default 30) | url-list, crawl | behaviour | next sync |
 | `maxFileSizeMb` | upload | behaviour | new uploads only |
 | site profile version (host, §5.6) | url-list, crawl on the host | behaviour; `identityRule`/`ignoreQueryParams`: identity; `excludedTypes`: scope | extraction fields: the host's HTML documents re-processed from stored raw content; identity fields: identity re-sync of the host's sources (exempt removals); `excludedTypes`: as scope |
 | `sites`, `drives`, `folders`, `includeSitePages`, `excludedPaths` (P2) | sharepoint | scope | widening: enumerate the new scope; narrowing: from stored paths, exempt |
 | `certificate`, `tenantId` (P2) | sharepoint | behaviour | preflight, then next sync |
 
 A source never moves between collections (a new source is created), so `collectionId` is not editable.
+
+As built in P1a item 4 (PR #78) and P1b item 2 (PR #88), 2026-10-31: the schemas in `contracts/sources/v1/` hold
+the settings above per type, each with its `x-effect`.
+- `url-list`: `urls`, `ignoreQueryParams`, `directoryIndexNames`, `noiseSelectors`, `conditionalGet`,
+  `revalidateEvery`, `timeoutSeconds`.
+- `crawl`: the URL-list behaviour and identity settings, plus `startUrls`, `sitemaps`, `extraHosts`, `include`,
+  `exclude`, `demote`, `maxDepth` (0–50, default 10), `maxPages` (1–1,000,000, default 10,000), `crawlWindow`
+  (default `22:00-06:00`) and `incrementalSchedule` (default `null`).
+- `upload`: `maxFileSizeMb` (1–50, default 50).
+
+`name`, `classification` and `schedule` are `Sources` columns, not settings (`Sources` has no description column). `incrementalSchedule` was
+left out of P1a item 4 until the `lastmod` sample, and added for crawl only in P1b item 2 (§5.4). `timeoutSeconds` is
+validated but not applied yet: the fetcher uses the fixed §4 timeouts (PR #82).
 
 ### 12.4 Smallest re-sync per tag
 
@@ -828,7 +871,7 @@ Connector results mapped onto 6a §10.2 (reasons `<area>.<code>`):
 | applied deletion | `deleted` | `http.410`, `not-seen`, `upload.deleted` | – |
 | refused or deferred type | `unsupported` | `http.content_type`, `upload.archive`, `upload.macro_enabled`, `upload.format_deferred`, `http.format_deferred` | – |
 | size cap | `too-large` | `http.body_limit`, `clamav.limit` | – |
-| ClamAV finding | `malware` | `clamav.<signature family>` | – |
+| ClamAV finding | `malware` | `clamav.<platform>.<category>` (§11) | – |
 | egress guard, robots on a redirect target, downgrade | `blocked` | `egress.private_address`, `redirect.downgrade` | – |
 | listed URL 404, 401/403, TLS, 5xx after retries, ClamAV down 24 h | `failed` | `http.404`, `http.403`, `tls.invalid_certificate`, `http.5xx`, `clamav.unavailable` | 5 for transient |
 | 429/503, host slot not yet due, ClamAV down | requeue | `rate_limited`, `politeness`, `clamav.unavailable` | no |
@@ -941,15 +984,18 @@ max 500 (§13.2); holds after rejection (§13.3).
 
 ## 22. To verify
 
-- `System.Uri` escaping and IDN behaviour vs our rules (`IdnHost`, `UriKind`, `%2F` handling); `IdnMapping`
-  UTS 46 flags in .NET 10.
-- `SocketsHttpHandler.ConnectCallback` with HTTP/2 and TLS SNI to the URL host; decompression counting with
-  `AutomaticDecompression`; Brotli support.
+- ~~`System.Uri` escaping and IDN behaviour vs our rules (`IdnHost`, `UriKind`, `%2F` handling); `IdnMapping`
+  UTS 46 flags in .NET 10.~~ Done (PR #82, to-verify #27): non-transitional UTS 46 with STD3; the canonicaliser does
+  not rely on `System.Uri`.
+- ~~`SocketsHttpHandler.ConnectCallback` with HTTP/2 and TLS SNI to the URL host; decompression counting with
+  `AutomaticDecompression`; Brotli support.~~ Done (PR #82, to-verify #28).
 - Docker IPv6 on the `crawl` network and the firewall rules for IPv6.
-- clamd `zVERSION` output format and date parsing on ClamAV 1.4; `INSTREAM` reply on `StreamMaxLength`.
+- ~~clamd `zVERSION` output format and date parsing on ClamAV 1.4; `INSTREAM` reply on `StreamMaxLength`.~~ Done
+  (P0 PR #26, P1a PR #82, to-verify #81).
 - Graph: maximum subscription lifetime for `driveItem` resources; a call that lists items with unique permissions
   under `Sites.Selected`; whether delta repeats children after a folder move.
-- Licence of Google's robotstxt test corpus for reuse as fixtures.
+- ~~Licence of Google's robotstxt test corpus for reuse as fixtures.~~ Apache-2.0 (PR #82, to-verify #112): its
+  cases may be ported with the licence text and attribution; porting stays P2.
 - Planning numbers of §17 (link-extraction CPU, frontier statements per page) in the R1 test.
 - The about-page URL for the user agent (answered 10) and that umea.se's robots.txt does not block the new agent.
 - umea.se: that the id-only Sitevision URL returns the same normalised content hash as the full path on a sample
