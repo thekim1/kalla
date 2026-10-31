@@ -1,17 +1,21 @@
-# Who may change which path during P0. One rule per line: <glob> <owner>. The first matching rule wins.
+# Who may change which path during P0 and P1. One rule per line: <glob> <owner>. The first matching rule wins.
 # Owners: a = stream A (platform and ingestion side), b = stream B (application and serving side),
 #         shared = either stream, append-only, in a PR of its own, main = main session (design and coordination).
 # Globs are anchored at the repository root (*.md is a root file only): * stays inside one directory, ** crosses
 # directories. A path that matches no rule fails the check, so add a rule here first (main session). A PR from branch
 # a/* or b/* may touch only its own paths and shared paths (check: scripts/check-ownership.py, job ownership in
 # verify.yml).
-# Rationale and hand-offs: plans/p0/README.md.
+# Rationale and hand-offs: plans/p0/README.md (P0), plans/p1/README.md §2 (P1 additions).
 
 # Stream results and progress files
 plans/p0/results-a.md                         a
 plans/p0/results-b.md                         b
 plans/p0/progress-a.md                        a
 plans/p0/progress-b.md                        b
+plans/p1/results-a.md                         a
+plans/p1/results-b.md                         b
+plans/p1/progress-a.md                        a
+plans/p1/progress-b.md                        b
 
 # Design, coordination and the root build files (Stage 0; later changes through an issue to the main session)
 plans/**                                      main
@@ -45,10 +49,15 @@ scripts/**                                    a
 deploy/postgres/init.sql                      b
 deploy/postgres/app-roles.sql                 b
 deploy/postgres/pg_hba.conf                   b
+deploy/keycloak/**                            b
 deploy/**                                     a
 src/parser/**                                 a
 contracts/parser/**                           a
 contracts/pipeline/**                         a
+contracts/sources/**                          a
+contracts/jobs/**                             a
+contracts/site-profiles/**                    a
+src/Ume.Rag.MigrationService/Templates/**     a
 src/Ume.Rag.Worker/**                         a
 src/Ume.Rag.Pipelines/**                      a
 src/Ume.Rag.Domain/Ports/IJobQueue.cs         a
