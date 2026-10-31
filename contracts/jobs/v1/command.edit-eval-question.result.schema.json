@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.edit-eval-question.result.schema.json",
+  "title": "edit-eval-question command result",
+  "type": "object",
+  "properties": {
+    "questionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "setId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "EvaluationSets.Id of the collection (created with its first question)."
+    }
+  },
+  "required": [
+    "questionId",
+    "setId"
+  ],
+  "description": "Result of the command edit-eval-question."
+}

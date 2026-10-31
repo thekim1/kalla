@@ -43,6 +43,17 @@ These override the detail documents for P1a. The main session records them in th
 | Switching profiles later | processing §11 "Profile migration (P3 outline)" | Moving to on-prem BGE-M3 means re-embedding every chunk: a P1b/P2 step (§8 O3), not P1a |
 | Capacity measured on the on-prem hardware | repo-and-deployment §11 #22 | Item 19 measures the EU routes instead, to size the umea.se initial load |
 
+## 1a. Changed 2026-10-31 (user; Decisions table rows of that date). Read before §3.
+
+| Decision | What it means for the streams |
+|---|---|
+| **Code first, live testing last** | Build every code item of §3 on FakeGateway, fixtures and the dev Keycloak. Items or parts whose done-when needs a live system wait for **one live block at the end**: J10 (real gateway), J11 (shared Keycloak), J12/J13 and items 19–22 (umea.se crawl, capacity on the EU routes, gold set, the pilot member's answer), the 200 umea.se PDFs of item 5. Mark such a part "live" in your progress file and move on. **Don't stop at P1a**: continue with P1b's code items (`../p1b/`, being written now by the main session). |
+| **7-day package rule suspended during development** | Pin current releases; exact versions and image digests still required; every pin younger than 7 days is reviewed before go-live. |
+| **CPU caps ≤ 2 in the base Compose** (#70) | Parser runs 1 worker × 2 threads; `compose.host-24g.yaml` has the pilot caps. |
+| **Interim gateway** | A test/dev gateway (HTTPS, public certificate, EU embedding and chat models) is the interim J10; its Keycloak will hold realm `ume` (J11). Its address and keys never go in the repo (user secrets, `deploy/.env`). U-b (embedding model, dimensions) is named once its catalogue is listed with a key: until then 1024 dims on FakeGateway. |
+| **Licence EUPL-1.2** (#65) | New source files need no header; third-party notices (#51, #52) before any distribution. |
+| **Identity reworked for the Keycloak pilot** (`../identity/design.md` §11.2, §16) | Item 16 (realm additions) follows §11.2. §16's open questions (realm administrator, import procedure, **whether realm-wide settings such as password policy, brute force and OTP live in RAG's file or the gateway's base realm**) are answered by the gateway session: build the file so those realm-wide parts are a separable section, and say so in the PR. |
+
 ## 2. Ownership
 
 `.github/stream-ownership.txt` stays the authority. P0's seam is unchanged. P1a needs these rules added by the main

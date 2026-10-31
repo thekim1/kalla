@@ -4,6 +4,9 @@ You build the serving side of the walking skeleton: the schema, retrieval and th
 admin API the platform team sets the pilot up with (Scalar), the gateway client side of release 1 and RAG's realm
 additions for the shared Keycloak. Stream A builds the worker side. You start at J1 (`README.md` §4).
 
+**Changed 2026-10-31:** read [`README.md`](README.md) §1a first (code first, live testing last; 7-day rule
+suspended; interim gateway). Live-only parts of the items below wait for the end block.
+
 ## Read first
 
 1. [`../../AGENTS.md`](../../AGENTS.md): working rules.

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/eval.on-demand.payload.schema.json",
+  "title": "eval on-demand job payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "on-demand"
+    },
+    "collectionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "variants": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "hybrid",
+          "vector",
+          "hybrid-no-decompounder"
+        ]
+      },
+      "description": "One EvaluationRuns row per variant, run against the same index; the P1a three-way gold-set run lists all three.",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "default": [
+        "hybrid"
+      ]
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "collectionId"
+  ],
+  "description": "Payload of an eval job of kind on-demand (processing design §13.4-§13.6): the collection's evaluation set, once per variant, over its live sets. Dedup eval:{collectionId}."
+}
