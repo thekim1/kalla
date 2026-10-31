@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Ume.Rag.Domain.Access;
 
 /// <summary>An assistant's published version as the api sees it (<c>config."PublishedAssistantVersions"</c>; never a draft).</summary>
@@ -41,9 +43,15 @@ public sealed record PolicySnapshot(
     IReadOnlyDictionary<Guid, string> DepartmentNames,
     string? RetrievalSettings)
 {
-    /// <summary>Collections by slug (slugs are unique, data-model §2.1).</summary>
-    public IReadOnlyDictionary<string, CollectionEntry> CollectionsBySlug { get; } =
-        Collections.Values.ToDictionary(c => c.Slug, StringComparer.Ordinal);
+    private static readonly ConditionalWeakTable<IReadOnlyDictionary<Guid, CollectionEntry>, IReadOnlyDictionary<string, CollectionEntry>> BySlug = new();
+
+    /// <summary>
+    /// Collections by slug (slugs are unique, data-model §2.1), built once per <see cref="Collections"/> instance: keyed
+    /// on the dictionary rather than stored in the record, so a <c>with</c> copy that replaces the collections never
+    /// carries a stale index.
+    /// </summary>
+    public IReadOnlyDictionary<string, CollectionEntry> CollectionsBySlug =>
+        BySlug.GetValue(Collections, static c => c.Values.ToDictionary(e => e.Slug, StringComparer.Ordinal));
 
     /// <summary>An empty snapshot (before the first load; every decision refuses).</summary>
     public static PolicySnapshot Empty { get; } = new(-1, new Dictionary<Guid, ClientEntry>(), new Dictionary<Guid, AssistantEntry>(),

@@ -26,6 +26,12 @@ public sealed class KnowledgeOptions
 
     /// <summary>The origin citation download links use (the staff-network address of <c>rag-api</c>); unset: relative links.</summary>
     public Uri? PublicBaseUrl { get; set; }
+
+    /// <summary>Content downloads per minute per client address (§3.5); in process per instance in P1.</summary>
+    public int DownloadsPerMinutePerAddress { get; set; } = 120;
+
+    /// <summary>OpenAPI document and Scalar at <c>/scalar</c> (§3.7); off in production until P2.</summary>
+    public bool PublishApiReference { get; set; } = true;
 }
 
 /// <summary>Registration of the knowledge role's core (<see cref="KnowledgeService"/> as <see cref="IRetriever"/>).</summary>
@@ -64,6 +70,7 @@ public static class KnowledgeExtensions
 
         builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName);
         var services = builder.Services;
+        services.AddOptions<KnowledgeOptions>().BindConfiguration(KnowledgeOptions.SectionName);
         services.AddSingleton<PolicySnapshotStore>(sp => new PolicySnapshotStore(sp.GetRequiredService<Npgsql.NpgsqlDataSource>(),
             sp.GetRequiredService<ConfigVersionState>(), sp.GetRequiredService<ILogger<PolicySnapshotStore>>()));
         services.AddSingleton<IConfigChangeHandler>(sp => sp.GetRequiredService<PolicySnapshotStore>());

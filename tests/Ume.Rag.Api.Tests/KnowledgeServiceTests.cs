@@ -1,6 +1,14 @@
 extern alias fakegateway;
 
 using System.Net;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Options;
+using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Blobs;
+using Ume.Rag.Infrastructure.Config;
+using Ume.Rag.Domain.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -43,6 +51,14 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
     public FixtureDocument Plank { get; private set; } = null!;
     public Guid UploadSlot { get; } = Guid.CreateVersion7();
     public static readonly byte[] UploadHash = Convert.FromHexString("ab" + new string('0', 62));
+    public static readonly byte[] UploadBytes = "%PDF-1.7 taxa"u8.ToArray();
+    public const string KeyPepper = "knowledge-api-test-pepper-0123456789abcdef";
+    public const string GrantKey = "knowledge-api-test-grant-key-0123456789abc";
+    public string BlobRoot { get; } = Directory.CreateTempSubdirectory("ume-rag-api-blobs-").FullName;
+
+    /// <summary>The plain keys of <c>rag-internal</c> and Open WebUI, stored in <c>config."Keys"</c> (the clients have the snapshot's ids).</summary>
+    public string InternalKey { get; private set; } = null!;
+    public string OwuiKey { get; private set; } = null!;
     public Guid AssistantId { get; } = Guid.CreateVersion7();
     public Guid InternalClient { get; } = Guid.CreateVersion7();
     public Guid OwuiClient { get; } = Guid.CreateVersion7();
@@ -66,6 +82,11 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
             CanonicalIdentity = "upload:" + UploadSlot, Title = "Taxa 2026", DisplayName = "taxa-bygglov-2026.pdf", MediaType = "application/pdf", PageCount = 4,
         }, [new FixtureChunk("Avgiften för bygglov för en altan beräknas enligt taxan för 2026.")]);
         await writer.ExecuteAsync($"""UPDATE content."Documents" SET "ContentHash" = '\x{Convert.ToHexString(UploadHash)}' WHERE "Id" = '{Upload.Id}'""");
+        var blobs = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = BlobRoot }), TimeProvider.System);
+        await blobs.PutAsync(new BlobKey($"uploads/{PublicSource:D}/{UploadSlot:D}/{Convert.ToHexStringLower(UploadHash)}"), new MemoryStream(UploadBytes), null,
+            TestContext.Current.CancellationToken);
+        InternalKey = await AddKeyAsync(InternalClient, "rag-internal", ClientKinds.Internal, Classification.Sensitive);
+        OwuiKey = await AddKeyAsync(OwuiClient, "Open WebUI", ClientKinds.OpenWebUi, Classification.Internal);
         Hidden = await writer.AddDocumentAsync(new FixtureDocumentSpec
         {
             CollectionId = UnpublishedCollection, EmbeddingProfileId = ProfileId, SourceId = UnpublishedSource, Title = "Utkast",
@@ -90,11 +111,58 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         ]);
     }
 
+    private async Task<string> AddKeyAsync(Guid clientId, string name, string kind, string ceiling)
+    {
+        var generated = new KeyHasher(System.Text.Encoding.UTF8.GetBytes(KeyPepper)).Generate();
+        await using var context = TestPostgres.Context(Connection(Admin));
+        await context.ExecuteConfigWriteAsync(async (_, ct) =>
+        {
+            var client = new Client { Id = clientId, Name = name, Kind = kind, ClassificationCeiling = ceiling, UpdatedAt = DateTimeOffset.UtcNow };
+            context.AddRange(client, new ApiKey
+            {
+                Client = client, Name = name, Prefix = generated.Prefix, KeyHash = generated.Hash, CreatedAt = DateTimeOffset.UtcNow, CreatedBy = "test",
+            });
+            await context.SaveChangesAsync(ct);
+            return 0;
+        }, TestContext.Current.CancellationToken);
+        return generated.PlainText;
+    }
+
+    /// <summary>
+    /// rag-api on this database (api role) with the FakeGateway, the blob root, and <paramref name="snapshot"/> in place of
+    /// the snapshot store (keys still come from <c>config."Keys"</c>).
+    /// </summary>
+    public WebApplicationFactory<Program> ApiHost(PolicySnapshot? snapshot = null, bool confirmed = true) => new WebApplicationFactory<Program>().WithWebHostBuilder(web =>
+    {
+        web.UseEnvironment("Development");
+        foreach (var (key, value) in new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:ragdb"] = Connection(Api), ["Security:KeyPepper"] = KeyPepper, ["Security:CacheKeyPepper"] = new string('c', 32),
+            ["Security:DownloadGrantKeys:k1"] = GrantKey, ["Gateway:BaseUrl"] = "http://fake-gateway", ["Gateway:Keys:Eu"] = FakeGatewayFactory.EuKey,
+            ["BlobStore:Root"] = BlobRoot, ["Rag:Roles"] = "knowledge",
+        })
+        {
+            web.UseSetting(key, value);
+        }
+
+        web.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<IPolicySnapshotSource>(new FixedSnapshot(snapshot ?? Snapshot(), confirmed));
+            services.AddHttpClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Gateway.Server.CreateHandler());
+        });
+    });
+
+    public sealed class FixedSnapshot(PolicySnapshot snapshot, bool confirmed = true) : IPolicySnapshotSource
+    {
+        public PolicySnapshot Current => snapshot;
+        public bool IsConfirmed => confirmed;
+    }
+
     /// <summary>The snapshot, with the profile's model <paramref name="model"/> (FakeGateway behaviour by name).</summary>
     public PolicySnapshot Snapshot(string model = "bge-m3")
     {
         CollectionEntry Collection(Guid id, string level, bool published) =>
-            new(id, "c-" + id.ToString("N")[..8], "Samling", Guid.Empty, level, ProfileId, "{}", published ? DateTimeOffset.UnixEpoch : null, false);
+            new(id, "c-" + id.ToString("N"), "Samling", Guid.Empty, level, ProfileId, "{}", published ? DateTimeOffset.UnixEpoch : null, false);
         var clients = new[]
         {
             new ClientEntry(InternalClient, "rag-internal", ClientKinds.Internal, Classification.Sensitive, false, true),
@@ -136,6 +204,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
     {
         await Gateway.DisposeAsync();
         await DisposeAsync();
+        Directory.Delete(BlobRoot, recursive: true);
     }
 }
 
@@ -143,12 +212,6 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
 public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
-
-    private sealed class FixedSnapshot(PolicySnapshot snapshot, bool confirmed = true) : IPolicySnapshotSource
-    {
-        public PolicySnapshot Current => snapshot;
-        public bool IsConfirmed => confirmed;
-    }
 
     private (KnowledgeService Service, RetrievalCounter Counter, IHost Host) Build(PolicySnapshot snapshot, bool confirmed = true, HttpMessageHandler? gateway = null,
         IDownloadLinks? links = null)
@@ -164,7 +227,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         var counter = new RetrievalCounter(dataSource, TimeProvider.System, NullLogger<RetrievalCounter>.Instance);
         var embedder = new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), new QueryEmbeddingOptions(), new byte[32],
             TimeProvider.System, NullLogger<GatewayQueryEmbedder>.Instance);
-        var service = new KnowledgeService(new FixedSnapshot(snapshot, confirmed), new AccessPolicy(AccessPolicy.DefaultKnowledgeClientKinds),
+        var service = new KnowledgeService(new KnowledgeFixture.FixedSnapshot(snapshot, confirmed), new AccessPolicy(AccessPolicy.DefaultKnowledgeClientKinds),
             new RetrievalEngine(index, new ScopeSizeCache(index, TimeProvider.System)), new PostgresHydrator(dataSource), embedder, counter, dataSource,
             links ?? NoDownloadLinks.Instance, NullLogger<KnowledgeService>.Instance);
         return (service, counter, host);

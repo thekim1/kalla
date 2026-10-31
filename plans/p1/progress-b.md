@@ -45,9 +45,9 @@ Refs: [gateway-changes §13.4](../gateway-changes/design.md), [admin §4.5, §4.
 
 ## 5. Knowledge role (#12)
 Refs: [knowledge §2–§5, §9, §10, §16.3, §16.6](../knowledge-api/design.md)
-- [ ] `KnowledgeService`, in-process `IRetriever`; query embedding at the profile's ceiling, in-process cache, circuit, degrade
-- [ ] Section expansion; citations; download grants and `/content`
-- [ ] `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; Scalar
+- [x] `KnowledgeService`, in-process `IRetriever`; query embedding at the profile's ceiling, in-process cache, circuit, degrade (#127)
+- [x] Section expansion; citations; download grants and `/content` (#146, this PR; `URB2` decryption waits for #145)
+- [x] `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; Scalar (this PR)
 - [ ] **Done:** §16.3, §16.6 tests; #95, #102, #162 recorded
 
 ## 6. Admin API set-up surface (#14)

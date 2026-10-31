@@ -5,6 +5,10 @@
     <UmeServiceContainer>true</UmeServiceContainer>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.Infrastructure\Ume.Rag.Infrastructure.csproj" />
     <ProjectReference Include="..\Ume.Rag.ServiceDefaults\Ume.Rag.ServiceDefaults.csproj" />
     <ProjectReference Include="..\Ume.Rag.Answering\Ume.Rag.Answering.csproj" />
