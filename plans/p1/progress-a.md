@@ -54,6 +54,7 @@ Refs: [connectors §3–§7, §9, §11–§13, §18](../ingestion-worker/design-
 - [x] URL list; crawl with one frontier per source and `CrawlHosts`; full traversals; stricter deletion rule
 - [ ] Uploads by slot; ClamAV `INSTREAM` client, fail closed, quarantine
 - [x] Change detection with noise normalisation; deletion guard
+- [x] Settings-change effects (connectors §12.3–§12.4): `Runs.SettingsHashes`, `config-change` syncs from the scheduler, `scope-narrowed` without a request, `identity-changed`, lowered limits delete nothing, URL-list change claims only added URLs, site-profile `excludedTypes`/identity follow-up (PR: a/9-settings-effects)
 - [ ] **Done:** §18 tests for these parts (incl. C7); #10, #27, #28, #81, #112 recorded
 
 ## 6. Processing stages (#7)

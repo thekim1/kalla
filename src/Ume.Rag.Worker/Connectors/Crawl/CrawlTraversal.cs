@@ -183,8 +183,9 @@ public sealed class CrawlTraversal(
     /// <summary>
     /// The listing ended with <paramref name="listing"/>. When it saw every sitemap, the URLs that left the sitemap since
     /// they were listed are admitted for the removal check (in incremental runs and full traversals alike, weakness review
-    /// §3) and their <c>SitemapLastMod</c> cleared. A partial listing checks nothing: a URL missing from it may still be
-    /// listed. Returns the removal checks admitted.
+    /// §3) and their <c>SitemapLastMod</c> cleared. A URL the scope no longer admits is not checked: the listing dropped it
+    /// for that, and the reconcile removes its document without a request (<c>scope-narrowed</c>, §12.3). A partial listing
+    /// checks nothing: a URL missing from it may still be listed. Returns the removal checks admitted.
     /// </summary>
     public async Task<int> ListingDoneAsync(CrawlRunContext context, Completeness listing, CancellationToken cancellationToken)
     {
@@ -195,7 +196,8 @@ public sealed class CrawlTraversal(
             return 0;
         }
 
-        var left = await frontier.LeftSitemapAsync(context.Run, cancellationToken);
+        var source = await connector.SourceAsync(context.Run.SourceId, context.Run.Classification, context.Settings, cancellationToken);
+        var left = (await frontier.LeftSitemapAsync(context.Run, cancellationToken)).Where(r => source.Scope.Check(r.Url).Admitted).ToList();
         if (left.Count == 0)
         {
             return 0;

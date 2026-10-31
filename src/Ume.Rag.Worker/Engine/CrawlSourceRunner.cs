@@ -76,6 +76,17 @@ public sealed class CrawlSourceRunner(
           AND d."DeletedAt" IS NULL AND d."LastRunId" IS DISTINCT FROM $3
         """;
 
+    private const string MediaTypesSql = """
+        SELECT "Id", "MediaType" FROM content."Documents" WHERE "SourceId" = $1 AND "DeletedAt" IS NULL AND "MediaType" IS NOT NULL
+        """;
+
+    // Live documents last reached deeper than the current maxDepth (a lowered limit, connectors design §12.3).
+    private const string BeyondDepthSql = """
+        SELECT d."Id" FROM content."CrawlFrontier" f
+        JOIN content."Documents" d ON d."SourceId" = f."SourceId" AND d."IdentityKind" = 'url' AND d."IdentityHash" = f."UrlHash"
+        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."Depth" > $3 AND d."DeletedAt" IS NULL
+        """;
+
     // The run's removal checks (frontier rows at depth -1) and the latest item of each.
     private const string RemovalSql = """
         SELECT DISTINCT ON (i."Identity") i."Outcome", i."Reason"
@@ -115,17 +126,25 @@ public sealed class CrawlSourceRunner(
             return Context(source, run, fixedMode);
         }
 
+        // A site profile applied just before this run (a site-profile follow-up) is read now, not from this instance's cache.
+        await connector.SourceAsync(source.SourceId, source.Classification, source.Settings, fresh: true, cancellationToken);
         var started = await traversal.StartAsync(Context(source, run, new CrawlRunMode(incremental && run.Kind == RunKinds.Sync, false)), cancellationToken);
         var revalidate = run.Kind == RunKinds.Sync && CrawlFreshness.Revalidates(await runs.TraversalsBeforeAsync(source.SourceId, run.Id, cancellationToken),
             ContractJson.Deserialize<CrawlSettings>(source.Settings).RevalidateEvery, force, started.Incremental);
         return Context(source, run, await runs.SetCrawlModeAsync(run.Id, new CrawlRunMode(started.Incremental, revalidate), cancellationToken));
     }
 
-    /// <summary>Phase <c>list</c> of a <c>sync</c> run.</summary>
+    /// <summary>
+    /// Phase <c>list</c> of a <c>sync</c> run. When the run's identity settings differ from the last applied ones
+    /// (<see cref="SettingsEffects"/>), it is a full revalidating traversal: every URL re-canonicalised and fetched.
+    /// </summary>
     public async Task<JobResult> ListAsync(SourceContext source, RunRow run, SyncPayload payload, LeasedJob job, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(payload);
-        var context = await StartAsync(source, run, payload.Incremental, payload.Force, cancellationToken);
+        var identityChanged = (await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken)).Identity;
+        var context = await StartAsync(source, run, payload.Incremental && !identityChanged, payload.Force || identityChanged, cancellationToken);
         var from = payload.ResumeFromCheckpoint
             ? await checkpoints.GetAsync<CrawlCheckpoint>(source.SourceId, CheckpointKind.Run, run.Id, cancellationToken) ?? new CrawlCheckpoint()
             : new CrawlCheckpoint();
@@ -256,9 +275,10 @@ public sealed class CrawlSourceRunner(
 
     /// <summary>
     /// Before the reconcile: the traversal's completeness (stored on <c>CrawlRuns</c>), the candidates (explicit answers
-    /// in any run, <c>persistent-failure</c>, <c>not-seen</c> only after a complete traversal and never for a failed seed),
-    /// and the report's sections: completeness with the incomplete-traversal count and alert, the run's verdict, the
-    /// removal checks and the <c>demote</c> patterns with the live documents they match.
+    /// in any run, <c>persistent-failure</c>, <c>not-seen</c> only after a complete traversal and never for a failed seed,
+    /// and the settings-change effects of <see cref="SettingsCandidates"/>: <c>scope-narrowed</c>, <c>identity-changed</c>,
+    /// nothing beyond a lowered <c>maxDepth</c>), and the report's sections: completeness with the incomplete-traversal
+    /// count and alert, the run's verdict, the removal checks and the <c>demote</c> patterns with the live documents they match.
     /// </summary>
     public async Task<CrawlReconcile> PrepareReconcileAsync(SourceContext source, RunRow run, IReadOnlyList<SourceDocument> all,
         IReadOnlyDictionary<Guid, string> explicitGone, CancellationToken cancellationToken)
@@ -269,12 +289,15 @@ public sealed class CrawlSourceRunner(
         var context = await ContextAsync(source, run, cancellationToken);
         var verdict = await traversal.EvaluateAsync(context, cancelled: false, cancellationToken);
         var failedSeeds = await FailedSeedsAsync(source, run.Id, cancellationToken);
-        var candidates = DeletionCandidates.FromTraversal(run.Id, all, verdict, explicitGone, failedSeeds, time.GetUtcNow());
+        var crawl = await connector.SourceAsync(source.SourceId, source.Classification, source.Settings, fresh: true, cancellationToken);
+        var change = await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken);
+        var candidates = SettingsCandidates.Crawl(run.Id, all, verdict, explicitGone, failedSeeds, time.GetUtcNow(), crawl,
+            await MediaTypesAsync(source.SourceId, cancellationToken), await BeyondDepthAsync(source, crawl.Settings.MaxDepth, cancellationToken), change.Identity);
         var record = await crawlRuns.GetAsync(run.Id, cancellationToken) ?? throw new InvalidOperationException("The crawl run has no CrawlRuns row.");
         var history = (await runs.CrawlHistoryAsync(source.SourceId, run.Id, cancellationToken)).Select(h => new TraversalHistoryEntry(h.Complete, h.Incremental));
         var completeness = CrawlReportSections.Completeness(record, verdict, options.Value.CompletenessRule, context.Incremental, failedSeeds.Count, history,
             policy.Current.IncompleteRunsAlert);
-        var settings = ContractJson.Deserialize<CrawlSettings>(source.Settings);
+        var settings = crawl.Settings;
         var live = all.Where(d => d.DeletedAt is null).Select(d => d.CanonicalIdentity).ToList();
         var report = new Dictionary<string, object>
         {
@@ -350,6 +373,37 @@ public sealed class CrawlSourceRunner(
         }
 
         return seeds;
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, string>> MediaTypesAsync(Guid sourceId, CancellationToken cancellationToken)
+    {
+        var types = new Dictionary<Guid, string>();
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(MediaTypesSql, connection) { Parameters = { Db.P(sourceId) } };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            types[reader.GetGuid(0)] = reader.GetString(1);
+        }
+
+        return types;
+    }
+
+    private async Task<IReadOnlySet<Guid>> BeyondDepthAsync(SourceContext source, int maxDepth, CancellationToken cancellationToken)
+    {
+        var documents = new HashSet<Guid>();
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(BeyondDepthSql, connection)
+        {
+            Parameters = { Db.P(source.Classification), Db.P(source.SourceId), Db.P((short)maxDepth) },
+        };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            documents.Add(reader.GetGuid(0));
+        }
+
+        return documents;
     }
 
     /// <summary>The removal checks' items as the outcomes <see cref="RemovalSection"/> tallies: live (kept), gone, or another answer.</summary>
