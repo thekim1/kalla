@@ -54,23 +54,81 @@ public sealed class DocumentContentTests : IDisposable
         ContentHeaders.Fixed(Content("application/pdf", null)).ToDictionary().ContainsKey("Content-Security-Policy").ShouldBeFalse();
     }
 
-    [Fact]
-    public async Task Stored_blobs_stream_as_stored_and_envelope_blobs_are_refused()
+    /// <summary>No policy rows: rag-blob-internal for internal, nothing for public (data-model §7).</summary>
+    private sealed class DefaultPolicy : IBlobKeyPolicy
     {
-        var store = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = _root }), TimeProvider.System);
-        await store.PutAsync(new BlobKey("uploads/plain"), new MemoryStream("%PDF-1.7 hej"u8.ToArray()), null, Ct);
-        await store.PutAsync(new BlobKey("uploads/sealed"), new MemoryStream("URB2\0\0ciphertext"u8.ToArray()), null, Ct);
-        var reader = new StoredBlobContentReader(store, NullLogger<StoredBlobContentReader>.Instance);
+        public Task<string?> MasterKeyNameAsync(string level, CancellationToken cancellationToken) =>
+            Task.FromResult(DataProtectionBlobKeyPolicy.DefaultKeyName(level));
+    }
 
-        var plain = (await reader.OpenAsync(Content("application/pdf", null, "uploads/plain"), Ct)).ShouldNotBeNull();
-        await using (plain.Content)
+    private (FileSystemBlobStore Plain, BlobEnvelope Envelope, EnvelopeContentReader Reader) Envelope()
+    {
+        var keys = Directory.CreateDirectory(Path.Combine(_root, "keys")).FullName;
+        File.WriteAllText(Path.Combine(keys, "rag-blob-internal"), Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)) + "\n");
+        var plain = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = Path.Combine(_root, "blobs") }), TimeProvider.System);
+        var envelope = new BlobEnvelope(plain, new FileKeyProvider(Options.Create(new KeyProviderOptions { Directory = keys })), new DefaultPolicy());
+        return (plain, envelope, new EnvelopeContentReader(envelope, NullLogger<EnvelopeContentReader>.Instance));
+    }
+
+    private DocumentContent At(string level, string key) => new(_document, new BlobKey(key), level, "application/pdf", null, [0xab]);
+
+    [Fact]
+    public async Task Public_blobs_stream_as_stored_and_internal_blobs_are_decrypted()
+    {
+        // #158: citation downloads read through the envelope at the document's level (knowledge §3.5).
+        var (plain, envelope, reader) = Envelope();
+        var pdf = "%PDF-1.7 hej"u8.ToArray();
+        var large = new byte[200_000]; // several 64 KiB segments
+        System.Security.Cryptography.RandomNumberGenerator.Fill(large);
+        await plain.PutAsync(new BlobKey("uploads/public"), new MemoryStream(pdf), null, Ct);
+        await envelope.PutAsync(new BlobKey("uploads/internal"), Classification.Internal, new MemoryStream(large), large.Length, Ct);
+
+        var open = (await reader.OpenAsync(At(Classification.Public, "uploads/public"), Ct)).ShouldNotBeNull();
+        await using (open.Content)
         {
-            plain.Length.ShouldBe(12);
-            (await new StreamReader(plain.Content).ReadToEndAsync(Ct)).ShouldBe("%PDF-1.7 hej");
+            open.Length.ShouldBe(pdf.Length);
+            (await ReadAllAsync(open.Content)).ShouldBe(pdf);
         }
 
-        (await Should.ThrowAsync<RetrievalDeniedException>(() => reader.OpenAsync(Content(null, null, "uploads/sealed"), Ct)))
+        var sealedBlob = (await reader.OpenAsync(At(Classification.Internal, "uploads/internal"), Ct)).ShouldNotBeNull();
+        await using (sealedBlob.Content)
+        {
+            sealedBlob.Length.ShouldBe(large.Length);
+            (await ReadAllAsync(sealedBlob.Content)).ShouldBe(large);
+        }
+
+        (await reader.OpenAsync(At(Classification.Internal, "uploads/missing"), Ct)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_plaintext_internal_blob_is_refused_and_a_damaged_segment_aborts_the_read()
+    {
+        var (plain, envelope, reader) = Envelope();
+        await plain.PutAsync(new BlobKey("uploads/plaintext"), new MemoryStream("%PDF-1.7 klartext"u8.ToArray()), null, Ct);
+        (await Should.ThrowAsync<RetrievalDeniedException>(() => reader.OpenAsync(At(Classification.Internal, "uploads/plaintext"), Ct)))
             .Code.ShouldBe(KnowledgeCodes.ContentUnavailable);
-        (await reader.OpenAsync(Content(null, null, "uploads/missing"), Ct)).ShouldBeNull();
+
+        var data = new byte[200_000];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(data);
+        await envelope.PutAsync(new BlobKey("uploads/damaged"), Classification.Internal, new MemoryStream(data), data.Length, Ct);
+        var path = Path.Combine(_root, "blobs", "uploads", "damaged");
+        File.SetAttributes(path, FileAttributes.Normal);
+        var bytes = await File.ReadAllBytesAsync(path, Ct);
+        bytes[^100] ^= 0xff; // the last segment
+        File.Delete(path);
+        await File.WriteAllBytesAsync(path, bytes, Ct);
+
+        var damaged = (await reader.OpenAsync(At(Classification.Internal, "uploads/damaged"), Ct)).ShouldNotBeNull();
+        await using (damaged.Content)
+        {
+            await Should.ThrowAsync<BlobIntegrityException>(() => ReadAllAsync(damaged.Content));
+        }
+    }
+
+    private static async Task<byte[]> ReadAllAsync(Stream stream)
+    {
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, Ct);
+        return buffer.ToArray();
     }
 }

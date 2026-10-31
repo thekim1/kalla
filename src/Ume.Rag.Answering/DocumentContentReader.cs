@@ -1,7 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
-using Ume.Rag.Domain.Ports;
 using Ume.Rag.Domain.Retrieval;
+using Ume.Rag.Infrastructure.Blobs;
 
 namespace Ume.Rag.Answering;
 
@@ -19,111 +19,30 @@ public interface IDocumentContentReader
 }
 
 /// <summary>
-/// The seam until stream A's blob envelope reader exists (issue #145): blobs are streamed as stored, and a blob that
-/// starts with the <c>URB2</c> envelope header is refused with 503 <c>content_unavailable</c> (logged), so no ciphertext
-/// is ever served as a document. Replaced by the envelope reader, which decrypts and verifies each segment.
+/// Reads the stored original through stream A's blob envelope (data-model §7, knowledge design §3.5, #158) at the
+/// document's level: <c>public</c> blobs as stored, <c>internal</c> blobs decrypted with each 64 KiB segment verified before
+/// its bytes are returned. A blob that is not what its level requires, or a missing or wrong master key, is refused on
+/// open with 503 <c>content_unavailable</c> (logged); damage found later surfaces as <see cref="BlobIntegrityException"/>
+/// from the stream, which aborts the response.
 /// </summary>
-public sealed partial class StoredBlobContentReader(IBlobStore blobs, ILogger<StoredBlobContentReader> logger) : IDocumentContentReader
+public sealed partial class EnvelopeContentReader(IBlobEnvelope envelope, ILogger<EnvelopeContentReader> logger) : IDocumentContentReader
 {
-    private static readonly byte[] EnvelopeHeader = "URB2"u8.ToArray();
-
     public async Task<DocumentBytes?> OpenAsync(DocumentContent content, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(content);
-        var stream = await blobs.OpenReadAsync(content.Key, null, ct);
-        if (stream is null)
+        try
         {
-            return null;
+            return await envelope.OpenReadAsync(content.Key, content.Level, ct) is { } blob ? new DocumentBytes(blob.Content, blob.Length) : null;
         }
-
-        var head = new byte[EnvelopeHeader.Length];
-        var read = await stream.ReadAtLeastAsync(head, head.Length, throwOnEndOfStream: false, ct);
-        if (read == head.Length && head.AsSpan().SequenceEqual(EnvelopeHeader))
+        catch (Exception ex) when (ex is BlobIntegrityException or KeyProviderException)
         {
-            await stream.DisposeAsync();
-            LogEnvelopeUnsupported(logger, content.DocumentId);
+            LogUnreadable(logger, content.DocumentId, ex.GetType().Name);
             throw new RetrievalDeniedException(503, KnowledgeCodes.ContentUnavailable);
         }
-
-        var length = stream.CanSeek ? stream.Length : (long?)null;
-        if (stream.CanSeek)
-        {
-            stream.Position = 0;
-            return new DocumentBytes(stream, length);
-        }
-
-        return new DocumentBytes(new PrefixedStream(head.AsMemory(0, read), stream), null);
     }
 
-    [LoggerMessage(LogLevel.Error, "Document {DocumentId}'s blob is envelope-encrypted and no envelope reader is registered (issue #145)")]
-    private static partial void LogEnvelopeUnsupported(ILogger logger, Guid documentId);
-
-    /// <summary>The bytes already read, then the rest of the stream (read-only, forward-only).</summary>
-    private sealed class PrefixedStream(ReadOnlyMemory<byte> prefix, Stream rest) : Stream
-    {
-        private ReadOnlyMemory<byte> _prefix = prefix;
-
-        public override bool CanRead => true;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => throw new NotSupportedException();
-        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-
-        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
-
-        public override int Read(Span<byte> buffer)
-        {
-            if (_prefix.IsEmpty)
-            {
-                return rest.Read(buffer);
-            }
-
-            var n = Math.Min(buffer.Length, _prefix.Length);
-            _prefix.Span[..n].CopyTo(buffer);
-            _prefix = _prefix[n..];
-            return n;
-        }
-
-        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
-        {
-            if (_prefix.IsEmpty)
-            {
-                return await rest.ReadAsync(buffer, cancellationToken);
-            }
-
-            var n = Math.Min(buffer.Length, _prefix.Length);
-            _prefix[..n].CopyTo(buffer);
-            _prefix = _prefix[n..];
-            return n;
-        }
-
-        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
-
-        public override void Flush()
-        {
-        }
-
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                rest.Dispose();
-            }
-
-            base.Dispose(disposing);
-        }
-
-        public override async ValueTask DisposeAsync()
-        {
-            await rest.DisposeAsync();
-            await base.DisposeAsync();
-        }
-    }
+    [LoggerMessage(LogLevel.Error, "Document {DocumentId}'s blob cannot be read ({Failure}); the download is refused")]
+    private static partial void LogUnreadable(ILogger logger, Guid documentId, string failure);
 }
 
 /// <summary>The response headers of <c>/content</c> (knowledge design §3.5), pure so the rules are unit-tested.</summary>

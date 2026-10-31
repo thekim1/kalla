@@ -87,7 +87,7 @@ public static class KnowledgeExtensions
         services.AddHostedService(sp => sp.GetRequiredService<RetrievalCounter>());
         services.AddSingleton(grants);
         services.AddSingleton<IDownloadLinks>(new GrantDownloadLinks(grants));
-        services.AddSingleton<IDocumentContentReader, StoredBlobContentReader>(); // needs IBlobStore (AddRagBlobStore); #145 replaces it
+        services.AddSingleton<IDocumentContentReader, EnvelopeContentReader>(); // needs IBlobEnvelope (AddRagBlobStore + AddRagBlobEnvelope)
         services.AddSingleton(sp => new KnowledgeService(sp.GetRequiredService<IPolicySnapshotSource>(), sp.GetRequiredService<IAccessPolicy>(),
             sp.GetRequiredService<RetrievalEngine>(), sp.GetRequiredService<PostgresHydrator>(), sp.GetRequiredService<GatewayQueryEmbedder>(),
             sp.GetRequiredService<RetrievalCounter>(), dataSource, sp.GetRequiredService<IDownloadLinks>(), sp.GetRequiredService<ILogger<KnowledgeService>>(),
