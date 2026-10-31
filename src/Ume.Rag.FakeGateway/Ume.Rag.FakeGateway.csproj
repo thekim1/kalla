@@ -2,7 +2,7 @@
   <PropertyGroup>
     <UserSecretsId>ume-rag-fakegateway</UserSecretsId>
     <ContainerRepository>ume-rag/fake-gateway</ContainerRepository>
-    <ContainerFamily>noble-chiseled</ContainerFamily>
+    <UmeServiceContainer>true</UmeServiceContainer>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.Domain\Ume.Rag.Domain.csproj" />
