@@ -632,9 +632,14 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
   any connection added later must be a municipal service, never a third-party endpoint.
 - The feedback import (chat design §14.2) calls Open WebUI's admin API with a service account's API key
   (`OpenWebUi__AdminApiKey`); Open WebUI restricts every API key to `/api/v1/evaluations/feedbacks/list`, and
-  `ENABLE_ADMIN_CHAT_ACCESS=false` keeps its admins out of users' chats (chat design §4.3).
+  `ENABLE_ADMIN_CHAT_ACCESS=false` keeps its admins out of users' chats (chat design §4.3). As built in P1b item 17
+  (PR #135, 2026-10-31): the service account is a local Open WebUI account, the store's first user and only admin
+  (`WEBUI_ADMIN_EMAIL`/`WEBUI_ADMIN_PASSWORD`), not a Keycloak account; its key reaches the feedback list, the per-id
+  feedback routes and feedback creation (prefix match).
 - Open WebUI settings required for user trust: `ENABLE_LOGIN_FORM=false` and `ENABLE_SIGNUP=false` (only OIDC
-  login; `backend/open_webui/config.py:1692-1694`), `ENABLE_OAUTH_SIGNUP=true` (`:2563`),
+  login; `backend/open_webui/config.py:1692-1694`), `ENABLE_PASSWORD_AUTH=false` (the form setting only hides the
+  form and does not block API password sign-in; on only while the service account's key is minted, PR #135),
+  `DEFAULT_USER_ROLE=user` (PR #135: with the default `pending` and no person as admin, no OIDC account could chat), `ENABLE_OAUTH_SIGNUP=true` (`:2563`),
   `OAUTH_MERGE_ACCOUNTS_BY_EMAIL=false` (`:2570`),
   `OPENID_REDIRECT_URI=https://<owui host>/oauth/oidc/callback` (`:2629`; the `oidc` provider registers only
   with `OAUTH_CLIENT_ID`, `OPENID_PROVIDER_URL` and a client secret or PKCE method, `:2792`). At v0.12.3 the callback
@@ -653,7 +658,8 @@ Failures: 401, reasons `user_jwt_missing`, `user_jwt_invalid` (signature, alg, i
   can sign in (plan §5).
 - **Who may sign in to Open WebUI in P1** is not settled. Keycloak has no per-client assignment: every enabled
   account of realm `ume` (the gateway's admins too) can complete Open WebUI's sign-in and gets an Open WebUI account
-  (`ENABLE_OAUTH_SIGNUP=true`). Candidates, not decided: Open WebUI's own role gate (`ENABLE_OAUTH_ROLE_MANAGEMENT`,
+  (`ENABLE_OAUTH_SIGNUP=true`) with the role `user` (`DEFAULT_USER_ROLE=user`, as built in P1b item 17, PR #135,
+  2026-10-31). Candidates, not decided: Open WebUI's own role gate (`ENABLE_OAUTH_ROLE_MANAGEMENT`,
   `OAUTH_ROLES_CLAIM`, `OAUTH_ALLOWED_ROLES`; present in the local checkout at v0.12.5, `config.py:2683`, `:2698`,
   `:2702`, to verify at the pin) with a pilot-user role in the token, or a Keycloak browser-flow condition on the
   `open-webui` client (§16).

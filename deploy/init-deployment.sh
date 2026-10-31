@@ -42,7 +42,8 @@
 #   --crawl-allow CIDR[,CIDR]  private ranges the crawler may fetch (municipal hosts)
 #   --host-memory 16|24 [16]  the host profile of §6.2 (24 adds compose.host-24g.yaml and the ClamAV 24 GB confs)
 #   --freshclam-proxy HOST:PORT  freshclam reaches database.clamav.net through this HTTP proxy
-#   --openwebui-host HOST   the optional Open WebUI stack (compose.openwebui.yaml): its secrets, settings and store
+#   --openwebui-host HOST   the optional Open WebUI stack (compose.openwebui.yaml): its secrets, settings and store, and
+#                           the feedback service account (deploy/openwebui-feedback-key.sh)
 #     --openwebui-oidc-client-id ID [open-webui], --openwebui-oidc-client-secret-file FILE,
 #     --openwebui-oidc-provider-url URL [the OIDC authority's /.well-known/openid-configuration],
 #     --openwebui-oidc-provider-name NAME [Umeå kommun]
@@ -433,6 +434,14 @@ OPENAI_API_KEYS=
 OAUTH_CLIENT_SECRET=
 EOF
   fi
+  # The feedback service account (chat design §14.2): Open WebUI creates it as its first user, and so its only admin,
+  # when it starts on an empty store. Generated once; openwebui-feedback-key.sh signs in with it to mint its API key.
+  if ! grep -q '^WEBUI_ADMIN_EMAIL=' "$secrets/openwebui.env"; then
+    printf '# The feedback service account (deploy/openwebui-feedback-key.sh); never a person.\n' >> "$secrets/openwebui.env"
+    set_env_line "$secrets/openwebui.env" WEBUI_ADMIN_EMAIL feedback-import@localhost
+    set_env_line "$secrets/openwebui.env" WEBUI_ADMIN_NAME "Feedback import"
+    set_env_line "$secrets/openwebui.env" WEBUI_ADMIN_PASSWORD "$(rand)"
+  fi
   if [ -n "$owui_key_file" ]; then
     set_env_line "$secrets/openwebui.env" OPENAI_API_KEYS "$(tr -d '\r\n' < "$owui_key_file")"
   fi
@@ -558,7 +567,8 @@ Still missing (re-run with these options; the key and the secret may also be fil
   owui_note="
 Open WebUI (optional): register the redirect URI https://$owui_host/oauth/oidc/callback (the legacy callback path,
 identity design §5.3) on its OIDC client '$owui_client'.$owui_todo
-Then: docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait"
+Then: docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait
+and, as root, $here/openwebui-feedback-key.sh (the feedback service account's API key for rag-api)."
 fi
 
 cat <<EOF

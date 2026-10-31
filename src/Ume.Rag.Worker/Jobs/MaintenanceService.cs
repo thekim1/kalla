@@ -9,8 +9,9 @@ namespace Ume.Rag.Worker.Jobs;
 /// (repo-and-deployment §3, data-model §4.4, §8): run-item partitions, then terminal jobs older than 7 days in batches of
 /// 1,000. Rows still in <c>RunItems_default</c> afterwards mean maintenance lagged: a warning and the
 /// <c>rag.partitions.default_rows</c> gauge. Then the engine's sweeps: chunk sets never swapped or past the rollback window
-/// (<see cref="IndexWriter.SweepOrphansAsync"/>) and the blob-tombstone purge (<see cref="BlobPurgeSweep"/>). Content
-/// retention of cache rows and the nightly drift sweep are not built yet.
+/// (<see cref="IndexWriter.SweepOrphansAsync"/>) and the blob-tombstone purge (<see cref="BlobPurgeSweep"/>). The nightly
+/// drift sweep runs at 01:30 on the same instance (<see cref="DriftSweepService"/>, registered with the engine). Content
+/// retention of cache rows is not built yet.
 /// </summary>
 public sealed partial class MaintenanceService(
     ContentMaintenance maintenance,
@@ -71,7 +72,7 @@ public sealed partial class MaintenanceService(
 
         try
         {
-            LogOrphansSwept(logger, await index.SweepOrphansAsync(cancellationToken));
+            LogOrphansSwept(logger, await index.SweepOrphansAsync(time.GetUtcNow(), cancellationToken));
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
@@ -93,12 +94,15 @@ public sealed partial class MaintenanceService(
     /// The next 02:00 in Stockholm after <paramref name="now"/>. On the spring DST day 02:00 does not exist and the run is at
     /// 03:00; on the autumn day it exists twice and the run is once, at the standard-time 02:00.
     /// </summary>
-    public static DateTimeOffset NextRunAt(DateTimeOffset now)
+    public static DateTimeOffset NextRunAt(DateTimeOffset now) => NextRunAt(now, RunAt);
+
+    /// <summary>The next <paramref name="time"/> in Stockholm after <paramref name="now"/>, with the DST rules of <see cref="NextRunAt(DateTimeOffset)"/>.</summary>
+    public static DateTimeOffset NextRunAt(DateTimeOffset now, TimeOnly time)
     {
         var local = TimeZoneInfo.ConvertTime(now, Stockholm);
         for (var day = 0; day <= 2; day++)
         {
-            var candidate = DateOnly.FromDateTime(local.DateTime).AddDays(day).ToDateTime(RunAt);
+            var candidate = DateOnly.FromDateTime(local.DateTime).AddDays(day).ToDateTime(time);
             if (Stockholm.IsInvalidTime(candidate))
             {
                 candidate = candidate.AddHours(1);

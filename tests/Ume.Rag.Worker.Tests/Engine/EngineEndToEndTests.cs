@@ -178,7 +178,7 @@ public sealed class EngineEndToEndTests(RagDatabaseFixture database, FakeGateway
         await using var connection = new NpgsqlConnection(database.Connection(null));
         await connection.OpenAsync(Ct);
         await using var transaction = await connection.BeginTransactionAsync(Ct);
-        await using (var off = new NpgsqlCommand("SET LOCAL enable_seqscan = off", connection, transaction))
+        await using (var off = new NpgsqlCommand("SET LOCAL enable_seqscan = off; SET LOCAL enable_sort = off", connection, transaction))
         {
             await off.ExecuteNonQueryAsync(Ct);
         }

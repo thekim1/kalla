@@ -12,6 +12,7 @@ public sealed class JobMetrics
     private readonly Counter<long> _reclaimed;
     private readonly Counter<long> _retentionDeleted;
     private readonly Gauge<long> _defaultRows;
+    private readonly Counter<long> _drift;
 
     public JobMetrics(IMeterFactory meters)
     {
@@ -25,6 +26,7 @@ public sealed class JobMetrics
         _retentionDeleted = meter.CreateCounter<long>("rag.retention.deleted", description: "Rows removed by retention, by table.");
         _defaultRows = meter.CreateGauge<long>("rag.partitions.default_rows",
             description: "Run items left in RunItems_default after partition maintenance; above 0 means maintenance lagged.");
+        _drift = meter.CreateCounter<long>("rag.reconcile.drift", description: "Documents the nightly drift sweep re-enqueued; 0 when no work was lost.");
     }
 
     public void Duration(string jobClass, string outcome, TimeSpan elapsed) =>
@@ -41,4 +43,6 @@ public sealed class JobMetrics
     public void RetentionDeleted(string table, long rows) => _retentionDeleted.Add(rows, new KeyValuePair<string, object?>("table", table));
 
     public void DefaultRows(long rows) => _defaultRows.Record(rows);
+
+    public void Drift(long documents) => _drift.Add(documents);
 }

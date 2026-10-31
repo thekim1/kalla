@@ -9,6 +9,7 @@ using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.SiteProfiles;
 using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Connectors.Uploads;
+using Ume.Rag.Worker.Connectors.Urls;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Chunking;
 using Ume.Rag.Worker.Processing.Clean;
@@ -102,6 +103,37 @@ public sealed record SegmentInput(DocumentRow Document, PipelineRun Pipeline, st
 
     /// <summary>The applied site profile of the document's host (HTML), with its version id; null applies a preset.</summary>
     public (Guid Id, HtmlProfileVersion Profile)? SiteProfile { get; init; }
+
+    /// <summary>A <c>parse</c> job's slice budget (engine design §9.5); null never yields.</summary>
+    public ParseSliceClock? Slice { get; init; }
+
+    /// <summary>A forced reprocess's first bypassed stage (<see cref="StageBypass"/>); null looks every stage up in the cache.</summary>
+    public string? BypassFrom { get; init; }
+}
+
+/// <summary>
+/// The explicit cache bypass of a forced reprocess (engine design §7.5, §8): every cached stage at or after the
+/// <c>fromStage</c> takes the document's execution id as the non-parameter input <c>bypass</c> of its settings (§3.3), so
+/// its key is new and its lookup misses; the stage runs and stores its output under that key, next to the old output,
+/// which stays (write-once). Stages before <c>fromStage</c> keep their keys and are served from the cache. A retry or a
+/// later slice of the same execution finds what the execution already stored.
+/// </summary>
+public static class StageBypass
+{
+    /// <summary>The settings input that carries the execution id.</summary>
+    public const string Input = "bypass";
+
+    /// <summary>A reprocess never fetches: a bypass from <c>fetch</c> is refused.</summary>
+    public const string FetchUnsupported = "reprocess.fetch_unsupported";
+
+    /// <summary>True when <paramref name="stage"/> is a P1 stage name.</summary>
+    public static bool IsStage(string? stage) => stage is not null && StageNames.Order.Contains(stage, StringComparer.Ordinal);
+
+    /// <summary>True when a bypass from <paramref name="fromStage"/> covers <paramref name="stage"/>.</summary>
+    public static bool Covers(string? fromStage, string stage) =>
+        IsStage(fromStage) && Index(stage) >= Index(fromStage!);
+
+    private static int Index(string stage) => StageNames.Order.TakeWhile(s => !string.Equals(s, stage, StringComparison.Ordinal)).Count();
 }
 
 /// <summary>Where a segment ended.</summary>
@@ -111,10 +143,17 @@ public abstract record SegmentResult(IReadOnlyList<NodeOutputRecord> Outputs)
     public sealed record Embed(byte[] PersonalDataKey, DocumentFacts Facts, IReadOnlyList<NodeOutputRecord> Outputs) : SegmentResult(Outputs);
 
     /// <summary>A parser-bound document at the end of the <c>fetch</c> job: the <c>parse</c> job continues from <paramref name="DetectKey"/>.</summary>
-    public sealed record Parse(byte[] DetectKey, DocumentFacts Facts, IReadOnlyList<NodeOutputRecord> Outputs) : SegmentResult(Outputs);
+    public sealed record Parse(byte[] DetectKey, DocumentFacts Facts, IReadOnlyList<NodeOutputRecord> Outputs) : SegmentResult(Outputs)
+    {
+        /// <summary>The segment's bypass (<see cref="SegmentInput.BypassFrom"/>), carried to the <c>parse</c> job.</summary>
+        public string? BypassFrom { get; init; }
+    }
 
     /// <summary>A stage ended the document (<c>skipped</c>, <c>unsupported</c>, …; engine design §7.1).</summary>
     public sealed record Ended(Outcome Outcome, string Reason, IReadOnlyList<NodeOutputRecord> Outputs) : SegmentResult(Outputs);
+
+    /// <summary>The <c>parse</c> job's slice is used up at a range boundary: the job continues in its next slice (engine design §9.5).</summary>
+    public sealed record Yielded(IReadOnlyList<NodeOutputRecord> Outputs) : SegmentResult(Outputs);
 }
 
 /// <summary>
@@ -123,8 +162,13 @@ public abstract record SegmentResult(IReadOnlyList<NodeOutputRecord> Outputs)
 /// (<see cref="StageKeys"/>) and stored after a miss. In a <c>fetch</c> job a parser-bound document stops after
 /// <c>detect</c> (its <c>parse</c> job continues); in a <c>parse</c> job the segment starts at <c>parse</c> from the cached
 /// detect output. Keys: <c>detect</c> and <c>parse</c> take the raw content hash as input (the parse key with the route and,
-/// for HTML, the site-profile version as inputs), every later stage its predecessor's output hash; <c>chunk</c> also takes
+/// for HTML, the site-profile version as inputs; a parser-bound parse is keyed by content, parser build and parser
+/// settings, <see cref="StageKeys.ParserKey"/>, plus the document's admin-made parse-rule candidates when it has any,
+/// <see cref="ParseRuleCatalog"/>), every later stage its predecessor's output hash; <c>chunk</c> also takes
 /// the document's metadata inputs (URL, name, dates) and <c>personal-data</c> the collection's level, since both read them.
+/// In a <c>parse</c> job the parser route stores each range under the parse output's prefix (<see cref="BlobParseRanges"/>)
+/// and resumes from them, and yields at a range boundary when the job's slice is used up (§9.5). A forced reprocess salts
+/// the keys of the stages it bypasses with the execution id (<see cref="StageBypass"/>).
 /// </summary>
 public sealed class ProcessingSegment(
     StageOutputs outputs,
@@ -136,7 +180,9 @@ public sealed class ProcessingSegment(
     IParsePlanner planner,
     IOptions<ParseOptions> parseOptions,
     EngineSettings settings,
-    IParserConverter? converter = null)
+    IParserConverter? converter = null,
+    IParserBuild? parserBuild = null,
+    ParseRuleCatalog? parseRules = null)
 {
     public async Task<SegmentResult> RunAsync(SegmentInput input, string jobClass, byte[]? detectKey, CancellationToken cancellationToken)
     {
@@ -150,6 +196,18 @@ public sealed class ProcessingSegment(
         {
             return new SegmentResult.Ended(fatal.Outcome, fatal.Reason, written);
         }
+        catch (ParseYieldException)
+        {
+            return new SegmentResult.Yielded(written);
+        }
+    }
+
+    /// <summary>The <c>detect</c> key of content <paramref name="contentHash"/> under <paramref name="pipeline"/>: the input key of a <c>parse</c> job.</summary>
+    public static byte[] DetectKey(ResolvedPipeline pipeline, byte[] contentHash, string? bypass = null)
+    {
+        ArgumentNullException.ThrowIfNull(pipeline);
+        return StageKeys.Key(contentHash, StageNames.Detect, StageVersion(pipeline, StageNames.Detect),
+            StageKeys.SettingsHash(pipeline, StageNames.Detect, null, Bypassed(null, bypass)));
     }
 
     private async Task<SegmentResult> RunStagesAsync(SegmentInput input, string jobClass, byte[]? detectKey, List<NodeOutputRecord> written,
@@ -159,6 +217,10 @@ public sealed class ProcessingSegment(
         var level = document.Classification;
         var pipeline = input.Pipeline.Pipeline;
         var contentHash = document.ContentHash ?? throw new InvalidOperationException("The document has no content yet.");
+        var salt = input.BypassFrom is null
+            ? null
+            : (document.CurrentExecutionId ?? throw new InvalidOperationException("A forced reprocess has an execution id.")).ToString("N");
+        string? Salt(string stage) => StageBypass.Covers(input.BypassFrom, stage) ? salt : null;
         ReadOnlyMemory<byte>? raw = null;
         async Task<ReadOnlyMemory<byte>> RawAsync()
         {
@@ -183,8 +245,8 @@ public sealed class ProcessingSegment(
         };
 
         // detect
-        var detectSettings = StageKeys.SettingsHash(pipeline, StageNames.Detect, null);
-        var dKey = detectKey ?? StageKeys.Key(contentHash, StageNames.Detect, StageVersion(pipeline, StageNames.Detect), detectSettings);
+        var detectSettings = StageKeys.SettingsHash(pipeline, StageNames.Detect, null, Bypassed(null, Salt(StageNames.Detect)));
+        var dKey = detectKey ?? DetectKey(pipeline, contentHash, Salt(StageNames.Detect));
         DetectResult detected;
         if (await outputs.GetAsync<DetectResult>(dKey, cancellationToken) is { } cachedDetect)
         {
@@ -198,16 +260,16 @@ public sealed class ProcessingSegment(
 
         if (detected.Route == ParseRoute.Parser && jobClass != Domain.Entities.JobClasses.Parse)
         {
-            return new SegmentResult.Parse(dKey, Facts(detected, null, null, null, input), written);
+            return new SegmentResult.Parse(dKey, Facts(detected, null, null, null, input), written) { BypassFrom = input.BypassFrom };
         }
 
         // parse
-        var route = RouteName(detected.Route);
-        var parseInputs = detected.Route == ParseRoute.Html
-            ? new Dictionary<string, string>(StringComparer.Ordinal) { ["siteProfileVersion"] = input.SiteProfile?.Id.ToString("D") ?? "preset" }
-            : null;
-        var parseSettings = StageKeys.SettingsHash(pipeline, StageNames.Parse, route, parseInputs);
-        var parseKey = StageKeys.Key(contentHash, StageNames.Parse, StageVersion(pipeline, StageNames.Parse), parseSettings);
+        var parserBuildHash = detected.Route == ParseRoute.Parser ? await ParserBuildAsync(cancellationToken) : null;
+        var rules = detected.Route == ParseRoute.Parser && parseRules is not null
+            ? await parseRules.CandidatesAsync(level, document.SourceId, document.Url, detected.MediaType, cancellationToken)
+            : [];
+        var (parseKey, parseSettings) = ParseKey(pipeline, contentHash, detected.Route, input.SiteProfile?.Id, parserBuildHash, AdminParseRuleSet.Key(rules),
+            Salt(StageNames.Parse));
         ParsedDocument parsed;
         byte[] parsedHash;
         if (await outputs.GetAsync<ParsedDocument>(parseKey, cancellationToken) is { } cachedParse)
@@ -216,14 +278,15 @@ public sealed class ProcessingSegment(
         }
         else
         {
-            parsed = await ParseAsync(await RawAsync(), detected, input, pipeline, cancellationToken);
+            var progress = jobClass == Domain.Entities.JobClasses.Parse ? new ParseProgress(new BlobParseRanges(blobs, level, parseKey), input.Slice) : null;
+            parsed = await ParseAsync(await RawAsync(), detected, input, pipeline, progress, rules, cancellationToken);
             var row = await outputs.PutAsync(level, StageNames.Parse, parseKey, parseSettings, contentHash, parsed, cancellationToken);
             written.Add(row);
             parsedHash = row.OutputHash;
         }
 
         // clean
-        var (cleaned, cleanedHash) = await StageAsync(level, pipeline, StageNames.Clean, parsedHash, null, written,
+        var (cleaned, cleanedHash) = await StageAsync(level, pipeline, StageNames.Clean, parsedHash, Bypassed(null, Salt(StageNames.Clean)), written,
             () => Task.FromResult(Cleaner.Clean(parsed)), cancellationToken);
         if (!cleaned.Blocks.Any(b => b.Kind != BlockKinds.Heading))
         {
@@ -240,7 +303,8 @@ public sealed class ProcessingSegment(
             DocumentDate = cleaned.DocumentDate,
             HttpLastModified = input.HttpLastModified,
         };
-        var chunkInputs = new Dictionary<string, string>(StringComparer.Ordinal) { ["metadata"] = StageKeys.ToHex(ProcessingJson.OutputHash(metadataInput)) };
+        var chunkInputs = Bypassed(new Dictionary<string, string>(StringComparer.Ordinal) { ["metadata"] = StageKeys.ToHex(ProcessingJson.OutputHash(metadataInput)) },
+            Salt(StageNames.Chunk));
         var (chunks, chunksHash) = await StageAsync(level, pipeline, StageNames.Chunk, cleanedHash, chunkInputs, written, () =>
         {
             var metadata = Metadata.Apply(Param<IReadOnlyList<PathRule>>(pipeline, "pathRules") ?? [], metadataInput);
@@ -250,7 +314,8 @@ public sealed class ProcessingSegment(
 
         // personal-data
         var values = await settings.GetAsync(cancellationToken);
-        var pdInputs = new Dictionary<string, string>(StringComparer.Ordinal) { ["collectionLevel"] = input.CollectionClassification };
+        var pdInputs = Bypassed(new Dictionary<string, string>(StringComparer.Ordinal) { ["collectionLevel"] = input.CollectionClassification },
+            Salt(StageNames.PersonalData));
         var pdSettings = StageKeys.SettingsHash(pipeline, StageNames.PersonalData, null, pdInputs);
         var pdKey = StageKeys.Key(chunksHash, StageNames.PersonalData, StageVersion(pipeline, StageNames.PersonalData), pdSettings);
         if (await outputs.GetAsync<ChunkSetDraft>(pdKey, cancellationToken) is null)
@@ -279,7 +344,7 @@ public sealed class ProcessingSegment(
     }
 
     private async Task<ParsedDocument> ParseAsync(ReadOnlyMemory<byte> bytes, DetectResult detected, SegmentInput input, ResolvedPipeline pipeline,
-        CancellationToken cancellationToken) =>
+        ParseProgress? progress, IReadOnlyList<ParseRule> rules, CancellationToken cancellationToken) =>
         detected.Route switch
         {
             ParseRoute.Html => html.Extract(bytes, input.SiteProfile?.Profile).Document,
@@ -287,14 +352,63 @@ public sealed class ProcessingSegment(
             ParseRoute.Csv => CsvTableParser.Parse(bytes.Span),
             ParseRoute.Parser when converter is not null => await new ParserRoute(converter, planner, parseOptions).ParseAsync(bytes, detected,
                 new ParseParams(Param<string>(pipeline, "ocr") ?? "auto", Param<string>(pipeline, "tables") ?? "accurate"),
-                input.Document.CurrentExecutionId?.ToString("N") ?? Guid.CreateVersion7().ToString("N"), cancellationToken),
+                input.Document.CurrentExecutionId?.ToString("N") ?? Guid.CreateVersion7().ToString("N"), cancellationToken, progress, rules),
             ParseRoute.Parser => throw new StageTransientException("parser.not_configured", TimeSpan.FromMinutes(1), countsAttempt: false),
             _ => throw new StageFatalException(Pipelines.Jobs.RunItemOutcome.Unsupported, "parser.unsupported_format"),
         };
 
+    private async Task<string> ParserBuildAsync(CancellationToken cancellationToken) =>
+        parserBuild is null || converter is null
+            ? throw new StageTransientException("parser.not_configured", TimeSpan.FromMinutes(1), countsAttempt: false)
+            : await parserBuild.GetAsync(cancellationToken);
+
     private static DocumentFacts Facts(DetectResult detected, ParsedDocument? parsed, ParsedDocument? cleaned, byte[]? parseKey, SegmentInput input) =>
         new(detected.MediaType, cleaned?.Language ?? detected.Language, cleaned?.Title, cleaned?.Description, cleaned?.Keywords ?? [], parsed?.Strategy,
             parseKey, detected.PageCount ?? (parsed is { Pages.Count: > 0 } ? parsed.Pages.Count : null), input.SiteProfile?.Id, parsed is null ? "pending" : "success");
+
+    /// <summary>
+    /// The <c>parse</c> stage key and settings hash, shared with the preview so both look up the same cache entries.
+    /// Parser-bound output is keyed by (content hash, parser build, parser settings), so a parser upgrade never reuses a
+    /// cached parse (simplification pass §2; parser design §7.6; engine design §3.3); the planner's thresholds belong to the
+    /// parse stage's version (processing design §3.1), so that version is a parser setting. <paramref name="parseRule"/> is the
+    /// document's admin-made candidates (<see cref="AdminParseRuleSet.Key"/>), the <c>parseRule</c> input (engine design §3.3):
+    /// a rule change re-keys only the documents in its scope, and without candidates the key is the built-in one.
+    /// </summary>
+    public static (byte[] Key, byte[] Settings) ParseKey(ResolvedPipeline pipeline, byte[] contentHash, ParseRoute route, Guid? siteProfileVersionId, string? parserBuildHash,
+        string? parseRule = null, string? bypass = null)
+    {
+        ArgumentNullException.ThrowIfNull(pipeline);
+        var parseVersion = StageVersion(pipeline, StageNames.Parse);
+        var parseInputs = route switch
+        {
+            ParseRoute.Html => new Dictionary<string, string>(StringComparer.Ordinal) { ["siteProfileVersion"] = siteProfileVersionId?.ToString("D") ?? "preset" },
+            ParseRoute.Parser => new Dictionary<string, string>(StringComparer.Ordinal) { ["stageVersion"] = parseVersion.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+            _ => null,
+        };
+        if (parseInputs is not null && route == ParseRoute.Parser && parseRule is not null)
+        {
+            parseInputs["parseRule"] = parseRule;
+        }
+
+        var settings = StageKeys.SettingsHash(pipeline, StageNames.Parse, RouteName(route), Bypassed(parseInputs, bypass));
+        var key = route == ParseRoute.Parser
+            ? StageKeys.ParserKey(contentHash, parserBuildHash ?? throw new ArgumentNullException(nameof(parserBuildHash)), settings)
+            : StageKeys.Key(contentHash, StageNames.Parse, parseVersion, settings);
+        return (key, settings);
+    }
+
+    /// <summary><paramref name="inputs"/> with the bypass salt (<see cref="StageBypass.Input"/>) when <paramref name="salt"/> is set.</summary>
+    private static Dictionary<string, string>? Bypassed(Dictionary<string, string>? inputs, string? salt)
+    {
+        if (salt is null)
+        {
+            return inputs;
+        }
+
+        inputs ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        inputs[StageBypass.Input] = salt;
+        return inputs;
+    }
 
     private static int StageVersion(ResolvedPipeline pipeline, string stage) =>
         pipeline.Template.Template.Stages.TryGetValue(stage, out var version) ? version : StageManifest.P1Version;
@@ -324,7 +438,10 @@ public static class RawContentKeys
     }
 }
 
-/// <summary>The applied site profile of a (level, host) (connectors design §5.6; P1: manual and preset versions).</summary>
+/// <summary>
+/// The applied site profile of a (level, host) (connectors design §5.6; P1: manual and preset versions); the host is the
+/// URL's <see cref="SiteProfileHost"/> key, so every port of the host finds the same profile.
+/// </summary>
 public sealed class SiteProfiles(JobDatabase database)
 {
     private const string AppliedSql = """
@@ -335,12 +452,11 @@ public sealed class SiteProfiles(JobDatabase database)
 
     public async Task<(Guid Id, HtmlProfileVersion Profile)?> AppliedAsync(string classification, string? url, CancellationToken cancellationToken)
     {
-        if (url is null || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        if (SiteProfileHost.Of(url) is not { } host)
         {
             return null;
         }
 
-        var host = uri.IsDefaultPort ? uri.IdnHost.ToLowerInvariant() : $"{uri.IdnHost.ToLowerInvariant()}:{uri.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         await using var connection = await database.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(AppliedSql, connection) { Parameters = { Db.P(classification), Db.P(host) } };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

@@ -23,7 +23,8 @@ public sealed record ScheduledSource(Guid SourceId, string Type, string Classifi
 /// change) plus a deterministic per-source jitter (<c>hash(sourceId) mod Settings.ScheduleJitterMinutes</c>) is due once it
 /// has passed and no run of the source is running; it enqueues one <c>sync</c> with <c>ScheduledFor</c> = the occurrence
 /// (dedup <c>sync:{sourceId}</c>), so missed occurrences after an outage collapse into one run. DST gaps run once at the
-/// next valid time, overlaps once (Cronos).
+/// next valid time, overlaps once (Cronos). In the same pass an idle source whose settings changed in scope or identity
+/// since its newest <c>sync</c> run gets a <c>config-change</c> sync now (connectors design §12.4, <see cref="SettingsEffects"/>).
 /// </summary>
 public sealed partial class SyncScheduler(
     JobDatabase database,
@@ -89,6 +90,7 @@ public sealed partial class SyncScheduler(
         }
 
         var jobs = new List<JobRequest>();
+        var scheduled = new HashSet<Guid>();
         foreach (var source in sources)
         {
             if (Due(source, values, now) is not { } due)
@@ -101,9 +103,11 @@ public sealed partial class SyncScheduler(
             {
                 DedupKey = JobDedupKeys.Sync(source.SourceId),
             });
+            scheduled.Add(source.SourceId);
             LogDue(logger, source.SourceId, due.Occurrence, (now - due.At).TotalSeconds);
         }
 
+        jobs.AddRange(await SettingsEffects.ChangedAsync(transaction, scheduled, logger, cancellationToken));
         var enqueued = jobs.Count == 0 ? 0 : (await queue.EnqueueAsync(jobs, transaction, cancellationToken)).Count;
         await transaction.CommitAsync(cancellationToken);
         return enqueued;
