@@ -5,6 +5,11 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 
 ## Unreleased
 
+## 0.1.0 (2026-10-31)
+
+P0 foundation: the skeleton builds, deploys from a digest-pinned bundle, is observable and can be restored (drilled locally). No
+retrieval or chat yet (P1a).
+
 ### Added
 
 - Stage 0 skeleton: solution `UmeRag.slnx`, every P0 project, health endpoints and `--health-check` probe in every
@@ -31,3 +36,10 @@ Notable changes per release. Format: [Keep a Changelog](https://keepachangelog.c
 - Runbook: daily checks, restore drill, key escrow, public-records requests (#58).
 - Release: `release.yml` (images to `ghcr.io/<owner>/ume-rag/<service>`, SPDX SBOMs, digest-pinned bundle, smoke test,
   GitHub release), `deploy/build-release-bundle.sh`, `deploy/tests/release-smoke.sh` (#60).
+- Docs: install from the release bundle (#62).
+
+### Security
+
+- ClamAV 1.4.6 (CVE-2026-20339, CVE-2026-20345, CVE-2026-20346) (#67).
+- `admin-ui` audit: production dependencies strict; two dated exceptions for lint-toolchain advisories until
+  2026-11-10 (#64, #61).
