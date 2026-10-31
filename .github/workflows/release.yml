@@ -213,8 +213,7 @@ jobs:
       - name: Smoke test the bundle
         run: |
           bash deploy/tests/release-smoke.sh "dist/ume-rag-${{ steps.version.outputs.version }}.tar.gz" \
-            --work-dir "$RUNNER_TEMP/smoke" \
-            --compose-file deploy/tests/compose.ci-runner.yaml
+            --work-dir "$RUNNER_TEMP/smoke"
       - uses: actions/upload-artifact@v7
         with:
           name: release

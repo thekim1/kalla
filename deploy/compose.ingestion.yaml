@@ -78,15 +78,16 @@ services:
     cgroup_parent: ${UME_RAG_INGESTION_SLICE-rag-ingestion.slice}
     # Job directories live on /tmp; tmpfs counts against mem_limit.
     tmpfs: ["/tmp:size=1g"]
-    cpus: 4.0
+    # Development: 2 cores (pilot: 4.0, compose.host-24g.yaml; repo-and-deployment §6.2).
+    cpus: 2.0
     cpu_shares: 128
     mem_reservation: 2g
     mem_limit: 3.5g
     pids_limit: 256
     environment:
-      # PARSER_WORKERS x PARSER_THREADS = cpus (16 GB host: 1 x 4; 24 GB: 2 x 2, compose.host-24g.yaml).
+      # PARSER_WORKERS x PARSER_THREADS = cpus (development: 1 x 2; 24 GB pilot host: 2 x 2 on 4 cores, compose.host-24g.yaml).
       PARSER_WORKERS: "1"
-      PARSER_THREADS: "4"
+      PARSER_THREADS: "2"
       PARSER_TLS_CERT_FILE: /run/certs/parser.crt
       PARSER_TLS_KEY_FILE: /run/certs/parser.key
     volumes:

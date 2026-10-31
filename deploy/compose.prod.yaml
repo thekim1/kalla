@@ -34,7 +34,9 @@ services:
     # /tmp also holds the pgBackRest lock files.
     tmpfs: [/tmp, "/var/run/postgresql:uid=999,gid=999,mode=0700"]
     shm_size: 1g
-    cpus: 3.0
+    # cpus is a cap; development keeps every cap at 2 or less so a 2-core host starts the stack (pilot: 3.0,
+    # compose.host-24g.yaml; repo-and-deployment §6.2).
+    cpus: 2.0
     cpu_shares: 1024
     mem_reservation: 2g
     mem_limit: 3g
