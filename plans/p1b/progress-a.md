@@ -68,7 +68,9 @@ Refs: [admin §4.7](../admin/design.md), [processing §3.5, §9.5](../ingestion-
 ### 16. Gold-set grading script
 Refs: [weakness review §2](../weakness-review.md), [ingestion plan §7](../ingestion-worker/plan.md)
 - [ ] Script in `scripts/`: questions through the chat API as the pilot assistant → CSV (question, answer, citations, coverage)
-- [ ] Totals for the four gate measures from a graded file
+  (code part done: `scripts/grading/grading.py answer` tested against a fake chat API, streamed and not, #?; the run
+  against the AppHost with FakeGateway on `tests/evaluation/smoke` waits for stream B's chat API (J9) and smoke set)
+- [x] Totals for the four gate measures from a graded file (#?)
 - [ ] **Hand-off L8:** issue to the user with the CSV format
 
 ### 15. CI and harnesses
