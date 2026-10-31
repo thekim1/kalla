@@ -1,0 +1,52 @@
+{
+ "mediaType": "application/pdf",
+ "url": "https://www.exempelstad.se/download/18.3a/ordningsforeskrifter.pdf",
+ "collection": "public",
+ "inspect": {
+  "format": "pdf",
+  "pageCount": 5,
+  "rangeable": true,
+  "pages": [
+   {
+    "page": 1,
+    "textChars": 1500,
+    "badChars": 0,
+    "garbledScore": 0.02,
+    "imageCoverage": 0.0,
+    "pathObjects": 10
+   },
+   {
+    "page": 2,
+    "textChars": 1500,
+    "badChars": 0,
+    "garbledScore": 0.02,
+    "imageCoverage": 0.0,
+    "pathObjects": 10
+   },
+   {
+    "page": 3,
+    "textChars": 1500,
+    "badChars": 0,
+    "garbledScore": 0.02,
+    "imageCoverage": 0.0,
+    "pathObjects": 10
+   },
+   {
+    "page": 4,
+    "textChars": 1500,
+    "badChars": 0,
+    "garbledScore": 0.02,
+    "imageCoverage": 0.0,
+    "pathObjects": 60
+   },
+   {
+    "page": 5,
+    "textChars": 1500,
+    "badChars": 0,
+    "garbledScore": 0.02,
+    "imageCoverage": 0.0,
+    "pathObjects": 10
+   }
+  ]
+ }
+}

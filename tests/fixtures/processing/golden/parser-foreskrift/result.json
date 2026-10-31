@@ -1,0 +1,879 @@
+{
+ "contract": "parser/v1",
+ "request_id": "golden",
+ "status": "success",
+ "input": {
+  "format": "pdf",
+  "media_type_sniffed": "application/pdf",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "bytes": 1000,
+  "page_count": 5,
+  "pages_requested": {
+   "from": 1,
+   "to": 5
+  },
+  "pages_completed": {
+   "from": 1,
+   "to": 5
+  },
+  "pipeline": "text_layer"
+ },
+ "pages": [
+  {
+   "page": 1,
+   "label": null,
+   "width": 595.0,
+   "height": 842.0,
+   "signals": {
+    "chars": 1500,
+    "furniture_chars": 0,
+    "garbled_score": 0.02,
+    "text_layer_chars": 1500,
+    "image_coverage": 0.0,
+    "ocr_applied": "none",
+    "ocr_confidence": null,
+    "table_count": 0,
+    "table_area_ratio": 0.0,
+    "picture_area_ratio": 0.0,
+    "empty": false,
+    "ms": 12
+   }
+  },
+  {
+   "page": 2,
+   "label": null,
+   "width": 595.0,
+   "height": 842.0,
+   "signals": {
+    "chars": 1500,
+    "furniture_chars": 0,
+    "garbled_score": 0.02,
+    "text_layer_chars": 1500,
+    "image_coverage": 0.0,
+    "ocr_applied": "none",
+    "ocr_confidence": null,
+    "table_count": 0,
+    "table_area_ratio": 0.0,
+    "picture_area_ratio": 0.0,
+    "empty": false,
+    "ms": 12
+   }
+  },
+  {
+   "page": 3,
+   "label": null,
+   "width": 595.0,
+   "height": 842.0,
+   "signals": {
+    "chars": 1500,
+    "furniture_chars": 0,
+    "garbled_score": 0.02,
+    "text_layer_chars": 1500,
+    "image_coverage": 0.0,
+    "ocr_applied": "none",
+    "ocr_confidence": null,
+    "table_count": 0,
+    "table_area_ratio": 0.0,
+    "picture_area_ratio": 0.0,
+    "empty": false,
+    "ms": 12
+   }
+  },
+  {
+   "page": 4,
+   "label": null,
+   "width": 595.0,
+   "height": 842.0,
+   "signals": {
+    "chars": 1500,
+    "furniture_chars": 0,
+    "garbled_score": 0.02,
+    "text_layer_chars": 1500,
+    "image_coverage": 0.0,
+    "ocr_applied": "none",
+    "ocr_confidence": null,
+    "table_count": 0,
+    "table_area_ratio": 0.0,
+    "picture_area_ratio": 0.0,
+    "empty": false,
+    "ms": 12
+   }
+  },
+  {
+   "page": 5,
+   "label": null,
+   "width": 595.0,
+   "height": 842.0,
+   "signals": {
+    "chars": 1500,
+    "furniture_chars": 0,
+    "garbled_score": 0.02,
+    "text_layer_chars": 1500,
+    "image_coverage": 0.0,
+    "ocr_applied": "none",
+    "ocr_confidence": null,
+    "table_count": 0,
+    "table_area_ratio": 0.0,
+    "picture_area_ratio": 0.0,
+    "empty": false,
+    "ms": 12
+   }
+  }
+ ],
+ "blocks": [
+  {
+   "id": "b1",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    20,
+    500.0,
+    34
+   ],
+   "layer": "body",
+   "md": "Exempelstads kommuns författningssamling 2026:3",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b2",
+   "kind": "title",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    80,
+    500.0,
+    94
+   ],
+   "layer": "body",
+   "md": "Lokala ordningsföreskrifter för Exempelstads kommun",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b3",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    110,
+    500.0,
+    124
+   ],
+   "layer": "body",
+   "md": "Antagna av kommunfullmäktige den 14 december 2025, § 211.",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b4",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    130,
+    500.0,
+    144
+   ],
+   "layer": "body",
+   "md": "Innehåll",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b5",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    150,
+    500.0,
+    164
+   ],
+   "layer": "body",
+   "md": "1 kap. Inledande bestämmelser ........ 1\n2 kap. Allmän ordning ........ 2\n3 kap. Avgifter ........ 4\nBilaga 1 Karta ........ 5",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b6",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    300,
+    500.0,
+    314
+   ],
+   "layer": "body",
+   "md": "1 kap. Inledande bestämmelser",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b7",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    330,
+    500.0,
+    344
+   ],
+   "layer": "body",
+   "md": "§ 1 Syfte",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b8",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    360,
+    500.0,
+    374
+   ],
+   "layer": "body",
+   "md": "Dessa föreskrifter syftar till att upprätthålla den allmänna ordningen på offentlig plats i kommunen. Föreskrifterna kompletterar 3 kap. ordningslagen (1993:1617) och gäller t.ex. torg, parker och gator.",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b9",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    420,
+    500.0,
+    434
+   ],
+   "layer": "body",
+   "md": "§ 2 Definitioner",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b10",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    450,
+    500.0,
+    464
+   ],
+   "layer": "body",
+   "md": "Med offentlig plats avses de platser som anges i 1 kap. 2 § ordningslagen. Med kommu-\nnens tätort avses de områden som markerats på kartan i bilaga 1.",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b11",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 1,
+   "page_end": 1,
+   "bbox": [
+    56.0,
+    810,
+    500.0,
+    824
+   ],
+   "layer": "body",
+   "md": "Sida 1 av 5",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b12",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 2,
+   "page_end": 2,
+   "bbox": [
+    56.0,
+    20,
+    500.0,
+    34
+   ],
+   "layer": "body",
+   "md": "Exempelstads kommuns författningssamling 2026:3",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b13",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 2,
+   "page_end": 2,
+   "bbox": [
+    56.0,
+    80,
+    500.0,
+    94
+   ],
+   "layer": "body",
+   "md": "2 kap. Allmän ordning",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b14",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 2,
+   "page_end": 2,
+   "bbox": [
+    56.0,
+    110,
+    500.0,
+    124
+   ],
+   "layer": "body",
+   "md": "§ 3 Buller",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b15",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 2,
+   "page_end": 2,
+   "bbox": [
+    56.0,
+    140,
+    500.0,
+    154
+   ],
+   "layer": "body",
+   "md": "Arbete som orsakar störande buller för omkringboende, t.ex. med kompressorer, pålningsmaskiner eller stenkrossar, får inte utföras nattetid mellan klockan 22.00 och 07.00 utan tillstånd av polismyndigheten.",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b16",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 2,
+   "page_end": 2,
+   "bbox": [
+    56.0,
+    220,
+    500.0,
+    234
+   ],
+   "layer": "body",
+   "md": "§ 4 Containrar",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b17",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 2,
+   "page_end": 2,
+   "bbox": [
+    56.0,
+    250,
+    500.0,
+    264
+   ],
+   "layer": "body",
+   "md": "Den som ställer ut en container på offentlig plats ska se till att containern är tydligt märkt med ägarens namn och telefonnummer.",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b18",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 2,
+   "page_end": 2,
+   "bbox": [
+    56.0,
+    810,
+    500.0,
+    824
+   ],
+   "layer": "body",
+   "md": "Sida 2 av 5",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b19",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 3,
+   "page_end": 3,
+   "bbox": [
+    56.0,
+    20,
+    500.0,
+    34
+   ],
+   "layer": "body",
+   "md": "Exempelstads kommuns författningssamling 2026:3",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b20",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 3,
+   "page_end": 3,
+   "bbox": [
+    56.0,
+    80,
+    500.0,
+    94
+   ],
+   "layer": "body",
+   "md": "§ 5 Affischering",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b21",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 3,
+   "page_end": 3,
+   "bbox": [
+    56.0,
+    110,
+    500.0,
+    124
+   ],
+   "layer": "body",
+   "md": "Affischer, annonser eller liknande anslag får inte utan tillstånd sättas upp på husfasader, staket, skåp, belysningsstolpar, träd eller liknande som vetter mot offentlig plats.",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b22",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 3,
+   "page_end": 3,
+   "bbox": [
+    56.0,
+    200,
+    500.0,
+    214
+   ],
+   "layer": "body",
+   "md": "§ 6 Insamling av pengar",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b23",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 3,
+   "page_end": 3,
+   "bbox": [
+    56.0,
+    230,
+    500.0,
+    244
+   ],
+   "layer": "body",
+   "md": "Insamling av pengar i bössor eller andra insamlingskärl får inte ske utan tillstånd från polismyndigheten.",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b24",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 3,
+   "page_end": 3,
+   "bbox": [
+    56.0,
+    810,
+    500.0,
+    824
+   ],
+   "layer": "body",
+   "md": "Sida 3 av 5",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b25",
+   "kind": "page_header",
+   "level": null,
+   "level_source": null,
+   "page": 4,
+   "page_end": 4,
+   "bbox": [
+    56.0,
+    20,
+    500.0,
+    34
+   ],
+   "layer": "furniture",
+   "md": "Exempelstads kommuns författningssamling 2026:3",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b26",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 4,
+   "page_end": 4,
+   "bbox": [
+    56.0,
+    80,
+    500.0,
+    94
+   ],
+   "layer": "body",
+   "md": "3 kap. Avgifter",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b27",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 4,
+   "page_end": 4,
+   "bbox": [
+    56.0,
+    110,
+    500.0,
+    124
+   ],
+   "layer": "body",
+   "md": "3.1 Avgifter för upplåtelse",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b28",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 4,
+   "page_end": 4,
+   "bbox": [
+    56.0,
+    140,
+    500.0,
+    154
+   ],
+   "layer": "body",
+   "md": "För upplåtelse av offentlig plats tas avgift ut enligt tabellen nedan.",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b29",
+   "kind": "table",
+   "level": null,
+   "level_source": null,
+   "page": 4,
+   "page_end": 4,
+   "bbox": [
+    56.0,
+    170,
+    500.0,
+    184
+   ],
+   "layer": "body",
+   "md": "| Upplåtelse | Zon | Avgift |",
+   "ref": null,
+   "table": "t0"
+  },
+  {
+   "id": "b30",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 4,
+   "page_end": 4,
+   "bbox": [
+    56.0,
+    400,
+    500.0,
+    414
+   ],
+   "layer": "body",
+   "md": "3.2 Undantag",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b31",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 4,
+   "page_end": 4,
+   "bbox": [
+    56.0,
+    430,
+    500.0,
+    444
+   ],
+   "layer": "body",
+   "md": "Ideella föreningar är befriade från avgift för upplåtelse som avser högst tre dagar.",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b32",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 4,
+   "page_end": 4,
+   "bbox": [
+    56.0,
+    810,
+    500.0,
+    824
+   ],
+   "layer": "body",
+   "md": "Sida 4 av 5",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b33",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 5,
+   "page_end": 5,
+   "bbox": [
+    56.0,
+    20,
+    500.0,
+    34
+   ],
+   "layer": "body",
+   "md": "Exempelstads kommuns författningssamling 2026:3",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b34",
+   "kind": "heading",
+   "level": 1,
+   "level_source": "font_size",
+   "page": 5,
+   "page_end": 5,
+   "bbox": [
+    56.0,
+    80,
+    500.0,
+    94
+   ],
+   "layer": "body",
+   "md": "Bilaga 1 Karta över tätorten",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b35",
+   "kind": "caption",
+   "level": null,
+   "level_source": null,
+   "page": 5,
+   "page_end": 5,
+   "bbox": [
+    56.0,
+    500,
+    500.0,
+    514
+   ],
+   "layer": "body",
+   "md": "Kartan visar de områden där föreskrifterna om buller gäller.",
+   "ref": null,
+   "table": null
+  },
+  {
+   "id": "b36",
+   "kind": "paragraph",
+   "level": null,
+   "level_source": null,
+   "page": 5,
+   "page_end": 5,
+   "bbox": [
+    56.0,
+    810,
+    500.0,
+    824
+   ],
+   "layer": "body",
+   "md": "Sida 5 av 5",
+   "ref": null,
+   "table": null
+  }
+ ],
+ "tables": [
+  {
+   "id": "t0",
+   "rows": 4,
+   "cols": 3,
+   "header_rows": 1,
+   "caption": "Tabell 1 Avgifter",
+   "cells": [
+    {
+     "r": 0,
+     "c": 0,
+     "rs": 1,
+     "cs": 1,
+     "header": true,
+     "text": "Upplåtelse"
+    },
+    {
+     "r": 0,
+     "c": 1,
+     "rs": 1,
+     "cs": 1,
+     "header": true,
+     "text": "Zon"
+    },
+    {
+     "r": 0,
+     "c": 2,
+     "rs": 1,
+     "cs": 1,
+     "header": true,
+     "text": "Avgift"
+    },
+    {
+     "r": 1,
+     "c": 0,
+     "rs": 2,
+     "cs": 1,
+     "header": false,
+     "text": "Uteservering"
+    },
+    {
+     "r": 1,
+     "c": 1,
+     "rs": 1,
+     "cs": 1,
+     "header": false,
+     "text": "Centrum"
+    },
+    {
+     "r": 1,
+     "c": 2,
+     "rs": 1,
+     "cs": 1,
+     "header": false,
+     "text": "45 kr per kvadratmeter och månad"
+    },
+    {
+     "r": 2,
+     "c": 1,
+     "rs": 1,
+     "cs": 1,
+     "header": false,
+     "text": "Övriga"
+    },
+    {
+     "r": 2,
+     "c": 2,
+     "rs": 1,
+     "cs": 1,
+     "header": false,
+     "text": "30 kr per kvadratmeter och månad"
+    },
+    {
+     "r": 3,
+     "c": 0,
+     "rs": 1,
+     "cs": 1,
+     "header": false,
+     "text": "Byggetablering"
+    },
+    {
+     "r": 3,
+     "c": 1,
+     "rs": 1,
+     "cs": 2,
+     "header": false,
+     "text": "Enligt särskild taxa"
+    }
+   ]
+  }
+ ],
+ "pictures": [],
+ "warnings": [],
+ "timings": {
+  "total_ms": 1,
+  "wait_ms": 0,
+  "docling_ms": 0,
+  "text_layer_ms": 1,
+  "signals_ms": 0
+ },
+ "build": {
+  "parser": "1.0.0",
+  "docling": "2.145.0",
+  "build_hash": "sha256:golden"
+ },
+ "markdown": null
+}

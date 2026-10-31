@@ -1,0 +1,329 @@
+{
+  "versions": {
+    "chunk": 1,
+    "clean": 1,
+    "detect": 1,
+    "parse.csv": 1,
+    "parse.html": 1,
+    "parse.rules": 1,
+    "parse.text": 1,
+    "personal-data": 1
+  },
+  "detect": {
+    "mediaType": "text/html",
+    "route": "html",
+    "mediaTypeDeclared": "text/html",
+    "mediaTypeMismatch": false,
+    "language": "sv",
+    "scanned": false,
+    "bytes": 2308
+  },
+  "parserRequests": [],
+  "cleaned": {
+    "title": "Bygglov för nybyggnad",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Bygglov för nybyggnad",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du behöver bygglov för att bygga ett nytt bostadshus. Ansökan görs via e-tjänsten. Handläggningstiden är normalt tio veckor från det att ansökan är komplett.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Så här ansöker du",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Innan du ansöker bör du läsa detaljplanen för fastigheten. Följande handlingar behövs:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Situationsplan i skala 1:400",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Fasadritningar",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "alla fasader",
+        "layer": "body",
+        "listDepth": 1,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "med färgsättning",
+        "layer": "body",
+        "listDepth": 1,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontrollplan enligt plan- och bygglagen",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Avgifter",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "table",
+        "text": "Åtgärd | Avgift\nEnbostadshus | 24 000 kr\nFritidshus | 18 500 kr\nTillbyggnad | 9 800 kr",
+        "layer": "body",
+        "listDepth": 0,
+        "table": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Kontakt",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Bygglovsavdelningen nås på telefon 090-16 10 00 eller via bygglov@exempelstad.se.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Handläggare: Anna Berg, 070-123 45 67.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [
+      {
+        "rows": 4,
+        "cols": 2,
+        "headerRows": 1,
+        "cells": [
+          {
+            "r": 0,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": true,
+            "text": "Åtgärd"
+          },
+          {
+            "r": 0,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": true,
+            "text": "Avgift"
+          },
+          {
+            "r": 1,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Enbostadshus"
+          },
+          {
+            "r": 1,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "24 000 kr"
+          },
+          {
+            "r": 2,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Fritidshus"
+          },
+          {
+            "r": 2,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "18 500 kr"
+          },
+          {
+            "r": 3,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Tillbyggnad"
+          },
+          {
+            "r": 3,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "9 800 kr"
+          }
+        ],
+        "caption": "Avgifter för bygglov 2026"
+      }
+    ],
+    "pages": [],
+    "breadcrumb": [
+      "Start",
+      "Bygga, bo och miljö",
+      "Bygglov"
+    ],
+    "description": "Så ansöker du om bygglov för ett nytt hus.",
+    "keywords": [
+      "bygglov",
+      "nybyggnad",
+      "ansökan"
+    ],
+    "visibleDate": "2026-01-15",
+    "strategy": "parse=html(profile=www.exempelstad.se@3)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.1995,
+      "quality.chars": 595,
+      "quality.emptyRoot": 0,
+      "quality.garble": 0,
+      "quality.missingPages": 0,
+      "quality.short": 0
+    }
+  },
+  "metadata": {
+    "tags": [
+      "bygglov",
+      "bygga"
+    ],
+    "documentType": "page",
+    "sourceModifiedAt": "2026-01-15"
+  },
+  "chunks": [
+    {
+      "ordinal": 0,
+      "prefix": "Start › Bygga, bo och miljö › Bygglov › Bygglov för nybyggnad",
+      "headingPath": "Bygglov för nybyggnad",
+      "text": "Du behöver bygglov för att bygga ett nytt bostadshus. Ansökan görs via e-tjänsten. Handläggningstiden är normalt tio veckor från det att ansökan är komplett.",
+      "searchText": "Du behöver bygglov för att bygga ett nytt bostadshus. Ansökan görs via e-tjänsten. Handläggningstiden är normalt tio veckor från det att ansökan är komplett.\nbostad hus handläggning tid",
+      "overlapChars": 0,
+      "textHash": "161f172954ddd0962bc629d3b437f4fc3cd2871b2a27505b8a1ac712a2384959",
+      "tokenCount": 54,
+      "tags": [
+        "bygglov",
+        "bygga"
+      ],
+      "documentType": "page",
+      "sourceModifiedAt": "2026-01-15",
+      "isTable": false
+    },
+    {
+      "ordinal": 1,
+      "prefix": "Start › Bygga, bo och miljö › Bygglov › Bygglov för nybyggnad › Så här ansöker du",
+      "headingPath": "Bygglov för nybyggnad › Så här ansöker du",
+      "text": "Innan du ansöker bör du läsa detaljplanen för fastigheten. Följande handlingar behövs:\n- Situationsplan i skala 1:400\n- Fasadritningar\n  - alla fasader\n  - med färgsättning\n- Kontrollplan enligt plan- och bygglagen",
+      "searchText": "Innan du ansöker bör du läsa detaljplanen för fastigheten. Följande handlingar behövs:\n- Situationsplan i skala 1:400\n- Fasadritningar\n  - alla fasader\n  - med färgsättning\n- Kontrollplan enligt plan- och bygglagen\ndetalj plan situation fasad ritning färg sättning kontroll bygg lag",
+      "overlapChars": 0,
+      "textHash": "9a370a00e4b6220204922b971b1350b2f4df7a42149f6d67126e81cc9a3fd901",
+      "tokenCount": 75,
+      "tags": [
+        "bygglov",
+        "bygga"
+      ],
+      "documentType": "page",
+      "sourceModifiedAt": "2026-01-15",
+      "isTable": false
+    },
+    {
+      "ordinal": 2,
+      "prefix": "Start › Bygga, bo och miljö › Bygglov › Bygglov för nybyggnad › Avgifter",
+      "headingPath": "Bygglov för nybyggnad › Avgifter",
+      "text": "Tabell: Avgifter för bygglov 2026\nÅtgärd: Enbostadshus; Avgift: 24 000 kr\nÅtgärd: Fritidshus; Avgift: 18 500 kr\nÅtgärd: Tillbyggnad; Avgift: 9 800 kr",
+      "searchText": "Tabell: Avgifter för bygglov 2026\nÅtgärd: Enbostadshus; Avgift: 24 000 kr\nÅtgärd: Fritidshus; Avgift: 18 500 kr\nÅtgärd: Tillbyggnad; Avgift: 9 800 kr\nfritid hus",
+      "overlapChars": 0,
+      "textHash": "3e8ab5a1655af23b0a535fe94910045ecb5e333a1cea3556befe9e2214be598a",
+      "tokenCount": 81,
+      "tags": [
+        "bygglov",
+        "bygga"
+      ],
+      "documentType": "page",
+      "sourceModifiedAt": "2026-01-15",
+      "isTable": true
+    },
+    {
+      "ordinal": 3,
+      "prefix": "Start › Bygga, bo och miljö › Bygglov › Bygglov för nybyggnad › Kontakt",
+      "headingPath": "Bygglov för nybyggnad › Kontakt",
+      "text": "Bygglovsavdelningen nås på telefon 090-16 10 00 eller via bygglov@exempelstad.se.\n\nHandläggare: Anna Berg, 070-123 45 67.",
+      "searchText": "Bygglovsavdelningen nås på telefon 090-16 10 00 eller via bygglov@exempelstad.se.\n\nHandläggare: Anna Berg, 070-123 45 67.\nbygglov avdelning exempel stad hand läggare",
+      "overlapChars": 0,
+      "textHash": "153c55922cf8d5b56a79ba81d53201eea7a3413d601bfd9f48d4822df678b854",
+      "tokenCount": 57,
+      "tags": [
+        "bygglov",
+        "bygga"
+      ],
+      "documentType": "page",
+      "sourceModifiedAt": "2026-01-15",
+      "isTable": false
+    }
+  ],
+  "chunkFacts": {
+    "quality.chunks": 4,
+    "quality.duplicateChunkRatio": 0,
+    "quality.emptyChunkRatio": 0
+  },
+  "pii": {
+    "counts": {
+      "personnummer": 0,
+      "samordningsnummer": 0,
+      "email": 1,
+      "emailExternal": 0,
+      "phone": 2,
+      "name": 0,
+      "ner": "skipped",
+      "rules": 0
+    },
+    "typesFired": [],
+    "nerUnits": 0
+  }
+}

@@ -1,0 +1,602 @@
+{
+  "versions": {
+    "chunk": 1,
+    "clean": 1,
+    "detect": 1,
+    "parse.csv": 1,
+    "parse.html": 1,
+    "parse.rules": 1,
+    "parse.text": 1,
+    "personal-data": 1
+  },
+  "detect": {
+    "mediaType": "application/pdf",
+    "route": "parser",
+    "mediaTypeDeclared": "application/pdf",
+    "mediaTypeMismatch": false,
+    "scanned": false,
+    "pageCount": 5,
+    "bytes": 63,
+    "fileExtension": ".pdf"
+  },
+  "parserRequests": [
+    "TextLayer:Auto:Accurate:2:1-3",
+    "Docling:Off:Accurate:2:4-4",
+    "TextLayer:Auto:Accurate:2:5-5"
+  ],
+  "cleaned": {
+    "title": "Lokala ordningsföreskrifter för Exempelstads kommun",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "title",
+        "text": "Lokala ordningsföreskrifter för Exempelstads kommun",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 1,
+        "pageEnd": 1,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Antagna av kommunfullmäktige den 14 december 2025, § 211.",
+        "page": 1,
+        "pageEnd": 1,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Innehåll",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 1,
+        "pageEnd": 1,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "1 kap. Inledande bestämmelser",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 1,
+        "pageEnd": 1,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "§ 1 Syfte",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 1,
+        "pageEnd": 1,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Dessa föreskrifter syftar till att upprätthålla den allmänna ordningen på offentlig plats i kommunen. Föreskrifterna kompletterar 3 kap. ordningslagen (1993:1617) och gäller t.ex. torg, parker och gator.",
+        "page": 1,
+        "pageEnd": 1,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "§ 2 Definitioner",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 1,
+        "pageEnd": 1,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Med offentlig plats avses de platser som anges i 1 kap. 2 § ordningslagen. Med kommunens tätort avses de områden som markerats på kartan i bilaga 1.",
+        "page": 1,
+        "pageEnd": 1,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "2 kap. Allmän ordning",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 2,
+        "pageEnd": 2,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "§ 3 Buller",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 2,
+        "pageEnd": 2,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Arbete som orsakar störande buller för omkringboende, t.ex. med kompressorer, pålningsmaskiner eller stenkrossar, får inte utföras nattetid mellan klockan 22.00 och 07.00 utan tillstånd av polismyndigheten.",
+        "page": 2,
+        "pageEnd": 2,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "§ 4 Containrar",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 2,
+        "pageEnd": 2,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Den som ställer ut en container på offentlig plats ska se till att containern är tydligt märkt med ägarens namn och telefonnummer.",
+        "page": 2,
+        "pageEnd": 2,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "§ 5 Affischering",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 3,
+        "pageEnd": 3,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Affischer, annonser eller liknande anslag får inte utan tillstånd sättas upp på husfasader, staket, skåp, belysningsstolpar, träd eller liknande som vetter mot offentlig plats.",
+        "page": 3,
+        "pageEnd": 3,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "§ 6 Insamling av pengar",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 3,
+        "pageEnd": 3,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Insamling av pengar i bössor eller andra insamlingskärl får inte ske utan tillstånd från polismyndigheten.",
+        "page": 3,
+        "pageEnd": 3,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "3 kap. Avgifter",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 4,
+        "pageEnd": 4,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "3.1 Avgifter för upplåtelse",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 4,
+        "pageEnd": 4,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För upplåtelse av offentlig plats tas avgift ut enligt tabellen nedan.",
+        "page": 4,
+        "pageEnd": 4,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "table",
+        "text": "| Upplåtelse | Zon | Avgift |",
+        "page": 4,
+        "pageEnd": 4,
+        "layer": "body",
+        "listDepth": 0,
+        "table": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "3.2 Undantag",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 4,
+        "pageEnd": 4,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ideella föreningar är befriade från avgift för upplåtelse som avser högst tre dagar.",
+        "page": 4,
+        "pageEnd": 4,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bilaga 1 Karta över tätorten",
+        "level": 1,
+        "levelSource": "font_size",
+        "page": 5,
+        "pageEnd": 5,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "caption",
+        "text": "Kartan visar de områden där föreskrifterna om buller gäller.",
+        "page": 5,
+        "pageEnd": 5,
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [
+      {
+        "rows": 4,
+        "cols": 3,
+        "headerRows": 1,
+        "cells": [
+          {
+            "r": 0,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": true,
+            "text": "Upplåtelse"
+          },
+          {
+            "r": 0,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": true,
+            "text": "Zon"
+          },
+          {
+            "r": 0,
+            "c": 2,
+            "rs": 1,
+            "cs": 1,
+            "header": true,
+            "text": "Avgift"
+          },
+          {
+            "r": 1,
+            "c": 0,
+            "rs": 2,
+            "cs": 1,
+            "header": false,
+            "text": "Uteservering"
+          },
+          {
+            "r": 1,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Centrum"
+          },
+          {
+            "r": 1,
+            "c": 2,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "45 kr per kvadratmeter och månad"
+          },
+          {
+            "r": 2,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Övriga"
+          },
+          {
+            "r": 2,
+            "c": 2,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "30 kr per kvadratmeter och månad"
+          },
+          {
+            "r": 3,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Byggetablering"
+          },
+          {
+            "r": 3,
+            "c": 1,
+            "rs": 1,
+            "cs": 2,
+            "header": false,
+            "text": "Enligt särskild taxa"
+          }
+        ],
+        "caption": "Tabell 1 Avgifter"
+      }
+    ],
+    "pages": [
+      {
+        "page": 1,
+        "chars": 1500,
+        "garbledScore": 0.02,
+        "blank": false,
+        "strategy": "text-layer"
+      },
+      {
+        "page": 2,
+        "chars": 1500,
+        "garbledScore": 0.02,
+        "blank": false,
+        "strategy": "text-layer"
+      },
+      {
+        "page": 3,
+        "chars": 1500,
+        "garbledScore": 0.02,
+        "blank": false,
+        "strategy": "text-layer"
+      },
+      {
+        "page": 4,
+        "chars": 1500,
+        "garbledScore": 0.02,
+        "blank": false,
+        "strategy": "docling-tables"
+      },
+      {
+        "page": 5,
+        "chars": 1500,
+        "garbledScore": 0.02,
+        "blank": false,
+        "strategy": "text-layer"
+      }
+    ],
+    "breadcrumb": [],
+    "keywords": [],
+    "strategy": "parse=auto(rule=regulations@1)[text-layer:1-3,docling-tables:4,text-layer:5]",
+    "missingPages": [],
+    "parseRule": "regulations@1",
+    "facts": {
+      "clean.dehyphenated": 1,
+      "clean.furnitureDropped": 9,
+      "clean.minimumDropped": 1,
+      "clean.pageNumbersDropped": 1,
+      "clean.tocDropped": 4,
+      "quality.chars": 1661,
+      "quality.charsPerPage": 332.2,
+      "quality.emptyPageRatio": 0,
+      "quality.garble": 0.02,
+      "quality.missingPages": 0,
+      "quality.short": 0
+    }
+  },
+  "metadata": {
+    "tags": [],
+    "documentType": "pdf",
+    "sourceModifiedAt": "2026-03-01"
+  },
+  "chunks": [
+    {
+      "ordinal": 0,
+      "prefix": "Lokala ordningsföreskrifter för Exempelstads kommun",
+      "headingPath": "Lokala ordningsföreskrifter för Exempelstads kommun",
+      "text": "Antagna av kommunfullmäktige den 14 december 2025, § 211.",
+      "searchText": "Antagna av kommunfullmäktige den 14 december 2025, § 211.\nordning föreskrift exempel stad kommun fullmäktig",
+      "overlapChars": 0,
+      "textHash": "16f19920c7bfff6a8045840b34ab12b65cf4012c18223677585c6cfbefe42fd2",
+      "tokenCount": 26,
+      "page": 1,
+      "pageEnd": 1,
+      "tags": [],
+      "documentType": "pdf",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    },
+    {
+      "ordinal": 1,
+      "prefix": "Lokala ordningsföreskrifter för Exempelstads kommun › 1 kap. Inledande bestämmelser › § 1 Syfte",
+      "headingPath": "Lokala ordningsföreskrifter för Exempelstads kommun › 1 kap. Inledande bestämmelser › § 1 Syfte",
+      "text": "Dessa föreskrifter syftar till att upprätthålla den allmänna ordningen på offentlig plats i kommunen. Föreskrifterna kompletterar 3 kap. ordningslagen (1993:1617) och gäller t.ex. torg, parker och gator.",
+      "searchText": "Dessa föreskrifter syftar till att upprätthålla den allmänna ordningen på offentlig plats i kommunen. Föreskrifterna kompletterar 3 kap. ordningslagen (1993:1617) och gäller t.ex. torg, parker och gator.\nordning föreskrift exempel stad lag",
+      "overlapChars": 0,
+      "textHash": "a78d1d5093b215a01ac880adb538a3b8b2497be820593601158fef3e3e25ddb2",
+      "tokenCount": 80,
+      "page": 1,
+      "pageEnd": 1,
+      "tags": [],
+      "documentType": "pdf",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    },
+    {
+      "ordinal": 2,
+      "prefix": "Lokala ordningsföreskrifter för Exempelstads kommun › 1 kap. Inledande bestämmelser › § 2 Definitioner",
+      "headingPath": "Lokala ordningsföreskrifter för Exempelstads kommun › 1 kap. Inledande bestämmelser › § 2 Definitioner",
+      "text": "Med offentlig plats avses de platser som anges i 1 kap. 2 § ordningslagen. Med kommunens tätort avses de områden som markerats på kartan i bilaga 1.",
+      "searchText": "Med offentlig plats avses de platser som anges i 1 kap. 2 § ordningslagen. Med kommunens tätort avses de områden som markerats på kartan i bilaga 1.\nordning föreskrift exempel stad lag",
+      "overlapChars": 0,
+      "textHash": "e6126b36b4efe327ea6877ff2616a056b172995f1b2077af1cf4d9a6110d5eb6",
+      "tokenCount": 65,
+      "page": 1,
+      "pageEnd": 1,
+      "tags": [],
+      "documentType": "pdf",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    },
+    {
+      "ordinal": 3,
+      "prefix": "Lokala ordningsföreskrifter för Exempelstads kommun › 2 kap. Allmän ordning › § 3 Buller",
+      "headingPath": "Lokala ordningsföreskrifter för Exempelstads kommun › 2 kap. Allmän ordning › § 3 Buller",
+      "text": "Arbete som orsakar störande buller för omkringboende, t.ex. med kompressorer, pålningsmaskiner eller stenkrossar, får inte utföras nattetid mellan klockan 22.00 och 07.00 utan tillstånd av polismyndigheten.",
+      "searchText": "Arbete som orsakar störande buller för omkringboende, t.ex. med kompressorer, pålningsmaskiner eller stenkrossar, får inte utföras nattetid mellan klockan 22.00 och 07.00 utan tillstånd av polismyndigheten.\nordning föreskrift exempel stad pålning maskin sten kross polis myndighet",
+      "overlapChars": 0,
+      "textHash": "9f196c8f92b05e94f4ebcb09c2d6371b25c9cf8b8b04ced06f016d9967d711b0",
+      "tokenCount": 76,
+      "page": 2,
+      "pageEnd": 2,
+      "tags": [],
+      "documentType": "pdf",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    },
+    {
+      "ordinal": 4,
+      "prefix": "Lokala ordningsföreskrifter för Exempelstads kommun › 2 kap. Allmän ordning",
+      "headingPath": "Lokala ordningsföreskrifter för Exempelstads kommun › 2 kap. Allmän ordning",
+      "text": "**§ 4 Containrar**\n\nDen som ställer ut en container på offentlig plats ska se till att containern är tydligt märkt med ägarens namn och telefonnummer.\n\n**§ 5 Affischering**\n\nAffischer, annonser eller liknande anslag får inte utan tillstånd sättas upp på husfasader, staket, skåp, belysningsstolpar, träd eller liknande som vetter mot offentlig plats.\n\n**§ 6 Insamling av pengar**\n\nInsamling av pengar i bössor eller andra insamlingskärl får inte ske utan tillstånd från polismyndigheten.",
+      "searchText": "**§ 4 Containrar**\n\nDen som ställer ut en container på offentlig plats ska se till att containern är tydligt märkt med ägarens namn och telefonnummer.\n\n**§ 5 Affischering**\n\nAffischer, annonser eller liknande anslag får inte utan tillstånd sättas upp på husfasader, staket, skåp, belysningsstolpar, träd eller liknande som vetter mot offentlig plats.\n\n**§ 6 Insamling av pengar**\n\nInsamling av pengar i bössor eller andra insamlingskärl får inte ske utan tillstånd från polismyndigheten.\nordning föreskrift exempel stad telefon nummer hus fasad belysning stolpe insamling kärl polis myndighet",
+      "overlapChars": 0,
+      "textHash": "d3b4d174ecba1f7c141da1bd68aabe11cef005713cc927a1daa38e56a8c80555",
+      "tokenCount": 137,
+      "page": 2,
+      "pageEnd": 3,
+      "tags": [],
+      "documentType": "pdf",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    },
+    {
+      "ordinal": 5,
+      "prefix": "Lokala ordningsföreskrifter för Exempelstads kommun › 3 kap. Avgifter › 3.1 Avgifter för upplåtelse",
+      "headingPath": "Lokala ordningsföreskrifter för Exempelstads kommun › 3 kap. Avgifter › 3.1 Avgifter för upplåtelse",
+      "text": "För upplåtelse av offentlig plats tas avgift ut enligt tabellen nedan.",
+      "searchText": "För upplåtelse av offentlig plats tas avgift ut enligt tabellen nedan.\nordning föreskrift exempel stad",
+      "overlapChars": 0,
+      "textHash": "039e7f9271e516fdadee2b02b5a36f0e13f48c36b11bf7be3ef1d60a275b9a7c",
+      "tokenCount": 45,
+      "page": 4,
+      "pageEnd": 4,
+      "tags": [],
+      "documentType": "pdf",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    },
+    {
+      "ordinal": 6,
+      "prefix": "Lokala ordningsföreskrifter för Exempelstads kommun › 3 kap. Avgifter › 3.1 Avgifter för upplåtelse",
+      "headingPath": "Lokala ordningsföreskrifter för Exempelstads kommun › 3 kap. Avgifter › 3.1 Avgifter för upplåtelse",
+      "text": "Tabell: Tabell 1 Avgifter\nUpplåtelse: Uteservering; Zon: Centrum; Avgift: 45 kr per kvadratmeter och månad\nUpplåtelse: Uteservering; Zon: Övriga; Avgift: 30 kr per kvadratmeter och månad\nUpplåtelse: Byggetablering; Zon: Enligt särskild taxa; Avgift: Enligt särskild taxa",
+      "searchText": "Tabell: Tabell 1 Avgifter\nUpplåtelse: Uteservering; Zon: Centrum; Avgift: 45 kr per kvadratmeter och månad\nUpplåtelse: Uteservering; Zon: Övriga; Avgift: 30 kr per kvadratmeter och månad\nUpplåtelse: Byggetablering; Zon: Enligt särskild taxa; Avgift: Enligt särskild taxa\nordning föreskrift exempel stad kvadrat meter bygg etablering",
+      "overlapChars": 0,
+      "textHash": "90a733366d82a3e4d303a8c1a83cb52419db93106d5dd39151531e211abb801f",
+      "tokenCount": 103,
+      "page": 4,
+      "pageEnd": 4,
+      "tags": [],
+      "documentType": "pdf",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": true
+    },
+    {
+      "ordinal": 7,
+      "prefix": "Lokala ordningsföreskrifter för Exempelstads kommun › 3 kap. Avgifter › 3.2 Undantag",
+      "headingPath": "Lokala ordningsföreskrifter för Exempelstads kommun › 3 kap. Avgifter › 3.2 Undantag",
+      "text": "Ideella föreningar är befriade från avgift för upplåtelse som avser högst tre dagar.",
+      "searchText": "Ideella föreningar är befriade från avgift för upplåtelse som avser högst tre dagar.\nordning föreskrift exempel stad",
+      "overlapChars": 0,
+      "textHash": "585edd28bd831f41b2b89943845c912dc071536b522ce11acd6d5fe253ee103a",
+      "tokenCount": 47,
+      "page": 4,
+      "pageEnd": 4,
+      "tags": [],
+      "documentType": "pdf",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    },
+    {
+      "ordinal": 8,
+      "prefix": "Lokala ordningsföreskrifter för Exempelstads kommun › Bilaga 1 Karta över tätorten",
+      "headingPath": "Lokala ordningsföreskrifter för Exempelstads kommun › Bilaga 1 Karta över tätorten",
+      "text": "Kartan visar de områden där föreskrifterna om buller gäller.",
+      "searchText": "Kartan visar de områden där föreskrifterna om buller gäller.\nordning föreskrift exempel stad",
+      "overlapChars": 0,
+      "textHash": "74f733c13224ba529127d4e622a1209b1db1c240173bd101f04f66f16cd304d3",
+      "tokenCount": 35,
+      "page": 5,
+      "pageEnd": 5,
+      "tags": [],
+      "documentType": "pdf",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    }
+  ],
+  "chunkFacts": {
+    "quality.chunks": 9,
+    "quality.duplicateChunkRatio": 0,
+    "quality.emptyChunkRatio": 0.3333
+  },
+  "pii": {
+    "counts": {
+      "personnummer": 0,
+      "samordningsnummer": 0,
+      "email": 0,
+      "emailExternal": 0,
+      "phone": 0,
+      "name": 0,
+      "ner": "skipped",
+      "rules": 0
+    },
+    "typesFired": [],
+    "nerUnits": 0
+  }
+}

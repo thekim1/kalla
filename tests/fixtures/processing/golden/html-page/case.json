@@ -1,0 +1,18 @@
+{
+  "mediaType": "text/html; charset=utf-8",
+  "url": "https://www.exempelstad.se/bo/bygglov/nybyggnad.html",
+  "collection": "public",
+  "profile": {
+    "host": "www.exempelstad.se",
+    "version": 3,
+    "profile": {
+      "cms": "sitevision",
+      "mainRoot": "main",
+      "boilerplate": { "selectors": [".share", ".short-url", ".updated"], "phrases": ["Skriv ut"] },
+      "linkBlocks": [".subpages"],
+      "breadcrumb": "nav.breadcrumb",
+      "datePattern": "Sidan uppdaterades (?<d>\\d{4}-\\d{2}-\\d{2})"
+    }
+  },
+  "pathRules": [ { "match": "/bo/bygglov/**", "on": "path", "tags": ["bygglov", "Bygga"] } ]
+}

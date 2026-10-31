@@ -1,0 +1,122 @@
+{
+  "versions": {
+    "chunk": 1,
+    "clean": 1,
+    "detect": 1,
+    "parse.csv": 1,
+    "parse.html": 1,
+    "parse.rules": 1,
+    "parse.text": 1,
+    "personal-data": 1
+  },
+  "detect": {
+    "mediaType": "text/plain",
+    "route": "text",
+    "mediaTypeDeclared": "text/plain",
+    "mediaTypeMismatch": false,
+    "language": "sv",
+    "scanned": false,
+    "bytes": 483
+  },
+  "parserRequests": [],
+  "cleaned": {
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "paragraph",
+        "text": "Information om kommun- och regionförbundets satsningar på landsbygden.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Förbundet fördelar EU-medel till lokala projekt. Ansökningar om projektstöd ska vara inlämnade senast den 1 mars.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Enligt § 4 i stadgan gäller särskilda regler. Bidraget kan inte kombineras med andra statliga stöd- eller lånemöjligheter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Den finansiella finansieringen redovisas årligen. Ordbrytning ska inte synas.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Frågor besvaras av förbundets kansli, kansli@forbundet.example.org.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [],
+    "keywords": [],
+    "strategy": "parse=text[plain-text]",
+    "missingPages": [],
+    "facts": {
+      "clean.dehyphenated": 1,
+      "clean.minimumDropped": 1,
+      "quality.chars": 449,
+      "quality.garble": 0,
+      "quality.missingPages": 0,
+      "quality.short": 0
+    }
+  },
+  "metadata": {
+    "tags": [
+      "landsbygd"
+    ],
+    "documentType": "information",
+    "sourceModifiedAt": "2026-03-01"
+  },
+  "chunks": [
+    {
+      "ordinal": 0,
+      "prefix": "",
+      "headingPath": "",
+      "text": "Information om kommun- och regionförbundets satsningar på landsbygden.\n\nFörbundet fördelar EU-medel till lokala projekt. Ansökningar om projektstöd ska vara inlämnade senast den 1 mars.\n\nEnligt § 4 i stadgan gäller särskilda regler. Bidraget kan inte kombineras med andra statliga stöd- eller lånemöjligheter.\n\nDen finansiella finansieringen redovisas årligen. Ordbrytning ska inte synas.\n\nFrågor besvaras av förbundets kansli, kansli@forbundet.example.org.",
+      "searchText": "Information om kommun- och regionförbundets satsningar på landsbygden.\n\nFörbundet fördelar EU-medel till lokala projekt. Ansökningar om projektstöd ska vara inlämnade senast den 1 mars.\n\nEnligt § 4 i stadgan gäller särskilda regler. Bidraget kan inte kombineras med andra statliga stöd- eller lånemöjligheter.\n\nDen finansiella finansieringen redovisas årligen. Ordbrytning ska inte synas.\n\nFrågor besvaras av förbundets kansli, kansli@forbundet.example.org.\nregion förbund land bygd projekt stöd låne möjlighet ord brytning",
+      "overlapChars": 0,
+      "textHash": "c4e620a3cae9914937c8118dbd64ad105c4c81cbb5e5c04cab507fc223211929",
+      "tokenCount": 106,
+      "tags": [
+        "landsbygd"
+      ],
+      "documentType": "information",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    }
+  ],
+  "chunkFacts": {
+    "quality.chunks": 1,
+    "quality.duplicateChunkRatio": 0,
+    "quality.emptyChunkRatio": 0
+  },
+  "pii": {
+    "counts": {
+      "personnummer": 0,
+      "samordningsnummer": 0,
+      "email": 1,
+      "emailExternal": 1,
+      "phone": 0,
+      "name": 0,
+      "ner": "skipped",
+      "rules": 1
+    },
+    "typesFired": [
+      "emailExternal"
+    ],
+    "nerUnits": 0
+  }
+}
