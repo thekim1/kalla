@@ -42,9 +42,9 @@ Refs: [weakness review §3](../weakness-review.md), [connectors §5.4–§5.6, �
 
 ### 5. Preview and preflight
 Refs: [engine §11](../ingestion-worker/design-engine.md), [admin §4.7, §6.4](../admin/design.md)
-- [ ] `preview` class, `stage-preview` with isolation, `untilStage`, `basePreviewJobId`, limits, 24 h blobs; site-profile before/after
-- [ ] `preflight` for URL lists (≤ 20 URLs) and crawls
-- [ ] **Done:** engine §19 preview-isolation test green
+- [x] `preview` class, `stage-preview` with isolation, `untilStage`, `basePreviewJobId`, limits, 24 h blobs; site-profile before/after (PR: a/p1b-5-preview)
+- [x] `preflight` for URL lists (≤ 20 URLs) and crawls (PR: a/p1b-5-preview)
+- [x] **Done:** engine §19 preview-isolation test green (PR: a/p1b-5-preview)
 
 ### 6. Publish, re-process, rollback
 Refs: [engine §12, §14](../ingestion-worker/design-engine.md)
