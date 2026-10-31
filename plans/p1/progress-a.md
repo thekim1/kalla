@@ -55,7 +55,7 @@ Refs: [connectors §3–§7, §9, §11–§13, §18](../ingestion-worker/design-
 - [x] Uploads by slot; ClamAV `INSTREAM` client, fail closed, quarantine (#82 ClamAV client; #91 slots, sniffing, quarantine copy; #97 Postgres stores; #108 engine fan-out, `QuarantinedFiles` row, 5102; end to end through the engine PR: a/5-6-done-rows)
 - [x] Change detection with noise normalisation; deletion guard
 - [x] Settings-change effects (connectors §12.3–§12.4): `Runs.SettingsHashes`, `config-change` syncs from the scheduler, `scope-narrowed` without a request, `identity-changed`, lowered limits delete nothing, URL-list change claims only added URLs, site-profile `excludedTypes`/identity follow-up (PR: a/9-settings-effects)
-- [ ] **Done:** §18 tests for these parts (incl. C7); #10, #27, #28, #81, #112 recorded (PR: a/5-6-done-rows: §18 mapping in the PR, `UploadEngineTests`; waits for: the 24 h `failed` after `clamav.unavailable` is not built (#81), the upload backup copy within 15 minutes is deployment, not worker)
+- [x] **Done:** §18 tests for these parts (incl. C7); #10, #27, #28, #81, #112 recorded (PR: a/5-6-done-rows: §18 mapping in the PR, `UploadEngineTests`; the 24 h `failed` `clamav.unavailable` (#81, `ClamAvWaitEngineTests`) PR: a/9-small-followups; open, deployment, not worker: the upload backup copy within 15 minutes)
 
 ## 6. Processing stages (#7)
 Refs: [processing §2–§11, §17](../ingestion-worker/design-processing.md), [README §1](README.md)

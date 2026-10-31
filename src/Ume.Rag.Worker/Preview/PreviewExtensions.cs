@@ -29,7 +29,8 @@ public static class PreviewExtensions
             sp.GetRequiredService<PiiPatterns>(), sp.GetRequiredService<IParsePlanner>(), sp.GetRequiredService<IOptions<ParseOptions>>(),
             sp.GetRequiredService<EngineSettings>(), sp.GetRequiredService<SiteProfiles>(), sp.GetRequiredService<IChunkSetStore>(),
             sp.GetRequiredService<EmbeddingClient>(), sp.GetRequiredService<IEmbeddingProfileStore>(), sp.GetRequiredService<IEmbeddingCache>(),
-            sp.GetRequiredService<EmbeddingCanary>(), sp.GetRequiredService<EmbeddingConcurrency>(), sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<EmbeddingCanary>(), sp.GetRequiredService<EmbeddingConcurrency>(),
+            sp.GetRequiredService<IOptions<EmbedOptions>>(), sp.GetRequiredService<TimeProvider>(),
             sp.GetService<IParserConverter>(), sp.GetService<IParserBuild>(), sp.GetRequiredService<ParseRuleCatalog>()));
         services.TryAddSingleton<StagePreview>();
         services.TryAddSingleton<Preflight>();

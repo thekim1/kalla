@@ -22,7 +22,8 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// behaviour or cosmetic one. Narrowing a crawl's scope (its <c>exclude</c>, or a site profile's <c>excludedTypes</c>)
 /// removes the out-of-scope documents <c>scope-narrowed</c> without a request and outside the guard's ratio; widening
 /// traverses now; an identity change re-syncs and removes the identities not found again <c>identity-changed</c>; lowered
-/// limits delete nothing; a URL list's change claims only the added URLs.
+/// limits delete nothing; a URL list's change claims only the added URLs, and its identity change removes the old identities
+/// <c>identity-changed</c>.
 /// </summary>
 [Collection(RagDatabaseGroup.Name)]
 public sealed class SettingsEffectsTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -267,6 +268,42 @@ public sealed class SettingsEffectsTests(RagDatabaseFixture database, FakeGatewa
         }
     }
 
+    [Fact]
+    public async Task A_url_lists_identity_change_removes_the_old_identities_as_identity_changed_and_a_removed_url_stays_removed_from_list()
+    {
+        await using var site = await EngineKit.SiteAsync((name, context) =>
+            Task.FromResult(EngineKit.Html(EngineKit.Page($"avfallstaxa {name}{context.Request.QueryString} {_tag}"))));
+        string[] urls = [site.Url("/p/a?visning=1").AbsoluteUri, site.Url("/p/b").AbsoluteUri, site.Url("/p/c").AbsoluteUri];
+        var seed = await EngineKit.SeedUrlListAsync(database, urls.Select(u => new Uri(u)));
+        await EngineKit.PauseOtherSourcesAsync(database, seed);
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, settings: QuietScheduler);
+        try
+        {
+            (await EngineKit.WaitForRunAsync(database, await EngineKit.SyncNowAsync(database, seed))).Added.ShouldBe(3);
+            await SetSettingsAsync(seed, new { urls, ignoreQueryParams = new[] { "visning" } });
+
+            var changed = await ConfigChangeRunAsync(seed);
+            var run = await EngineKit.WaitForRunAsync(database, changed);
+
+            run.State.ShouldBe(RunStates.Succeeded);
+            (run.Added, run.Deleted, run.Failed, run.ProposedDeletions).ShouldBe((1, 1, 0, 0));
+            (await ProposalsAsync(changed)).ShouldBe("identity-changed:True:applied:1");
+            (await DeletedAsync(changed)).ShouldBe(site.Url("/p/a?visning=1").AbsoluteUri + " identity-changed");
+
+            await SetSettingsAsync(seed, new { urls = urls[..2], ignoreQueryParams = new[] { "visning" } });
+            var removed = await ConfigChangeRunAsync(seed);
+
+            (await EngineKit.WaitForRunAsync(database, removed)).Deleted.ShouldBe(1);
+            (await ProposalsAsync(removed)).ShouldBe("removed-from-list:True:applied:1");
+            (await DeletedAsync(removed)).ShouldBe(site.Url("/p/c").AbsoluteUri + " removed-from-list");
+            (await EngineKit.DocumentsAsync(database, seed)).ShouldBe(2);
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
     private static object Crawl(TestSite site, string[] exclude, string[]? ignoreQueryParams = null, int maxDepth = 10, int maxPages = 100) => new
     {
         startUrls = new[] { site.Url("/").AbsoluteUri },
@@ -326,6 +363,13 @@ public sealed class SettingsEffectsTests(RagDatabaseFixture database, FakeGatewa
             SELECT string_agg(g, E'\n' ORDER BY g) FROM (
                 SELECT "Reason" || ':' || CASE WHEN "Exempt" THEN 'True' ELSE 'False' END || ':' || "Decision" || ':' || count(*) AS g
                 FROM content."DeletionProposals" WHERE "RunId" = $1 GROUP BY "Reason", "Exempt", "Decision") x
+            """, runId);
+
+    /// <summary>The run's deleted items as <c>identity reason</c>, one per line.</summary>
+    private Task<string> DeletedAsync(Guid runId) =>
+        Sql.ScalarAsync<string>(database.Connection(null), """
+            SELECT string_agg("Identity" || ' ' || "Reason", E'\n' ORDER BY "Identity")
+            FROM content."RunItems" WHERE "RunId" = $1 AND "Outcome" = 'deleted'
             """, runId);
 
     private async Task<TestSite> SiteAsync() => await TestSite.StartAsync(app =>

@@ -48,6 +48,7 @@ public sealed class CrawlSourceRunner(
     RunStore runs,
     DocumentStore documents,
     DocumentIngest ingest,
+    ScanWait scanWait,
     ConnectorMetrics metrics,
     IJobQueue queue,
     JobDatabase database,
@@ -227,10 +228,10 @@ public sealed class CrawlSourceRunner(
     }
 
     /// <summary>
-    /// A <c>fetch</c> job of a crawl row. Transient outcomes requeue (the last attempt abandons the row with a
-    /// <c>failed</c> item); a host that cannot be reached for the run leaves a <c>skipped</c> item; a fetched URL goes
-    /// through <see cref="DocumentIngest"/> with the row's completion in the document's commit (a verified alias as
-    /// <c>skipped</c> <c>identity.folded</c>), and the hosts are topped up after it.
+    /// A <c>fetch</c> job of a crawl row. Transient outcomes requeue (the last attempt, or 24 h without a ClamAV verdict
+    /// (<see cref="ScanWait"/>), abandons the row with a <c>failed</c> item); a host that cannot be reached for the run
+    /// leaves a <c>skipped</c> item; a fetched URL goes through <see cref="DocumentIngest"/> with the row's completion in the
+    /// document's commit (a verified alias as <c>skipped</c> <c>identity.folded</c>), and the hosts are topped up after it.
     /// </summary>
     public async Task<JobResult> FetchAsync(SourceContext source, RunRow run, PipelineRun pipeline, FetchPayload payload, LeasedJob job, CancellationToken cancellationToken)
     {
@@ -243,7 +244,7 @@ public sealed class CrawlSourceRunner(
         var row = await frontier.GetAsync(source.SourceId, source.Classification, urlHash, cancellationToken);
         switch (await traversal.ProcessAsync(context, urlHash, cancellationToken))
         {
-            case CrawlFetchResult.Requeue { CountsAttempt: true } requeue when job.Attempts >= job.MaxAttempts:
+            case CrawlFetchResult.Requeue requeue when (requeue.CountsAttempt && job.Attempts >= job.MaxAttempts) || scanWait.Expired(requeue.Reason, job):
                 await traversal.AbandonAsync(context, urlHash, cancellationToken);
                 return await ingest.TerminalAsync(source, run.Id, job, await KnownAsync(source, row!.Url, cancellationToken), row.Url, Outcome.Failed,
                     requeue.Reason, run.PipelineVersionId, null, cancellationToken);
