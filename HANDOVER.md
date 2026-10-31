@@ -96,11 +96,22 @@ https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM (not updated since session 8; 
   §2) → fix added to `a/9-engine-drift-slicing`. Open for later: #89 seeds a new built-in template version straight as
   *published* (no publish plan / `reprocess`; check against engine §13.3 when the first v2 template ships); demote URL
   form (asked on #102); `rag_count_retrievals` level overwrite (#114).
-- Running (worktrees): `../rag-a1` `a/9-engine-crawl` (crawl wiring, profile → canonicaliser, `reprocess`/`retry-failed`,
-  `jfif`); `../rag-a2` `a/9-engine-drift-slicing` (drift sweep, parse slicing/resume, preview-first gate);
-  `../rag-a4` `a/p1b-5-preview` (preview + preflight,
-  `robots.disallow` text); `../rag-sync` `sync-session10` (fold deviations of #89–#108 into the design, doc only).
-  Shared brief: session scratchpad `brief-common.md` (gone after the session; the rules are in "How we work").
+- **Merged this session:** #113 (CHANGELOG), #115 (all P1 command kinds), #117 (preview + preflight), #121 (drift
+  sweep, parse slicing/resume, preview-first gate, parser build in the parse key), #122 (crawl through the engine,
+  `reprocess`/`retry-failed`, site profile → canonicaliser, `jfif`). P1a item 9 is code-complete. B merged #112 (J5,
+  issue #120); I approved B's #118 (schema requests from #110, pgvector on the shared data source) and #119 (AppHost keys).
+- **Running (worktrees):** `../rag-e1` `a/10-eval-on-demand` (eval class: on-demand three-way incl. `reindex-fts` scratch,
+  publish-report, nightly + alert); `../rag-e2` `a/p1b-7-eval-sets` (generate-set/top-up-set in
+  `Evaluation/Generation/`, own `IEvalSetHandler`, reconcile names with e1 on merge); `../rag-a5` `a/p1b-6-publish`
+  (publish-plan, per-document swap, 14-day sets, rollback, publish-report enqueue); `../rag-a6` `a/p1b-8-parse-rules`.
+- **Stream-A follow-ups (small PR later):** after #118 merges: 5105 via `SecurityEvents.PipelineRefused`,
+  `SyncScheduler` on `Sources.CreatedAt`; one site-profile host convention (with/without `:port`) across
+  `SiteProfiles.AppliedAsync`, #115's follow-up query and `ISiteProfileReader`; fold `Reconciler.WantedSet` with
+  `DocumentIngest.EnsureCurrentAsync`; profile `excludedTypes` → `CrawlScope`; `reprocess-document` `fromStage` needs a
+  cache-key change (write-once outputs); after #119 merges: drop the "only `Gateway:Keys:Eu`" caveat in
+  `docs/p1a-local-run.md` / `docs/local-development.md`.
+- **Test lesson:** gate tests must use page text unique to the test (shared embedding cache) and `await using` every
+  host; one leaked host failed 40 later tests through `RagDatabaseFixture.ResetAsync`.
 - **CI is local only** (user, 2026-10-31: GitHub Actions credits exhausted). Never add the `ci` label, dispatch a
   workflow or run `release.yml`. Every PR is verified locally (full build + suites under `taskset -c 0,1` after merging
   `origin/main`, output in the PR body) and merged on that evidence. Anything that would need the runner goes to the user. Actions are switched off on the repo (`thekim1`), so the ownership check runs locally too: `git diff --name-only --no-renames origin/main...HEAD | python3 -I scripts/check-ownership.py <branch>`.

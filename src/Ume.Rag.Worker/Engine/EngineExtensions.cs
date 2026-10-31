@@ -7,6 +7,8 @@ using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Uploads;
 using Ume.Rag.Worker.Connectors.UrlList;
+using Ume.Rag.Worker.Evaluation;
+using Ume.Rag.Worker.Evaluation.Generation;
 using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Parsing;
 using Ume.Rag.Worker.Preview;
@@ -34,7 +36,8 @@ public static class EngineExtensions
     /// <summary>
     /// The pipeline engine (engine design §2–§10, §14, §16): the parser client and its adapters (when
     /// <c>Parser:BaseUrl</c> is set), the processing stages with their SQL stores, the connectors the engine runs, the
-    /// <c>sync</c>, <c>fetch</c>, <c>parse</c> and <c>embed</c> handlers, the run finalizer and the scheduler. Call
+    /// <c>sync</c>, <c>fetch</c>, <c>parse</c> and <c>embed</c> handlers, the run finalizer and the scheduler, the
+    /// <c>preview</c> and <c>eval</c> classes. Call
     /// after <c>AddRagWorker</c>, which registers the parts the job machinery itself needs (the blob store, the stage manifest,
     /// runs, the index writer and the maintenance sweeps).
     /// </summary>
@@ -101,6 +104,8 @@ public static class EngineExtensions
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, ParseJobHandler>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, EmbedJobHandler>());
         builder.AddRagPreview();
+        builder.AddRagEvaluation();
+        builder.AddRagEvalSets();
 
         services.AddHostedService<RunFinalizer>();
         services.AddHostedService<SyncScheduler>();

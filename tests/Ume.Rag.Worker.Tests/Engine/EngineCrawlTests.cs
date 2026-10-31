@@ -49,6 +49,8 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
     {
         await using var site = await SiteAsync();
         var seed = await EngineKit.SeedCrawlAsync(database, Settings(site));
+        // The gauge is the maximum over every active crawl source: another test's incomplete run must not count here.
+        await EngineKit.PauseOtherSourcesAsync(database, seed);
         await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
         using var gauge = new GaugeRecorder(worker.Services.GetRequiredService<IMeterFactory>(), "rag.crawl.incomplete_runs");
         try
@@ -211,6 +213,7 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
         _withText = true;
         await using var site = await SiteAsync();
         var seed = await EngineKit.SeedCrawlAsync(database, Settings(site));
+        await EngineKit.PauseOtherSourcesAsync(database, seed);
         await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
         try
         {

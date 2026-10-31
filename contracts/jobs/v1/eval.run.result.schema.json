@@ -18,6 +18,7 @@
     },
     "questionCount": {
       "type": "integer",
+      "description": "Answerable questions (with expected documents): the denominator of recall@k (EvaluationRuns.QuestionCount).",
       "minimum": 0,
       "maximum": 2147483647
     },
@@ -44,6 +45,64 @@
       "type": "boolean",
       "description": "nightly: recall@10 fell 5 points or more below the 4-week median (processing design §14.8).",
       "default": false
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "layer": {
+            "enum": [
+              "human",
+              "generated"
+            ]
+          },
+          "questions": {
+            "type": "integer",
+            "description": "Answerable questions (with expected documents): the denominator of recall@k.",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "found": {
+            "type": "integer",
+            "description": "Answerable questions with an expected document in the top k.",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "unanswerable": {
+            "type": "integer",
+            "description": "Questions without expected documents (expected outcome \"not found\"); not counted in recall@k and MRR@k.",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "default": 0
+          },
+          "recallAtK": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Found / Questions; absent without answerable questions.",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "mrr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "layer",
+          "questions",
+          "found"
+        ]
+      },
+      "description": "The run per question layer, human (the gold set) first (processing design §13.4, weakness review §2).",
+      "maxItems": 2,
+      "default": []
     }
   },
   "required": [
