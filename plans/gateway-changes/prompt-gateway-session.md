@@ -34,6 +34,13 @@ Scope, exactly (`gateway-changes/design.md` §1 table):
   - the key flag **`RequireMaxResidency`** and migration `KeyResidencyCeiling` (§3.5);
   - the tests of §3.6.
 - **FakeLlm embedding `dimensions`** (§6) and the **tool passthrough tests** (§7.2).
+- **Embedding batches vs the context window** (found 2026-10-31, RAG session 11, to-verify #43). The gateway compares
+  the whole request's estimated input tokens (body size / 4) with the deployment's `ContextWindow` for embeddings too
+  (`GatewayRequestHandler.cs:194-196`, `GatewayRequestHandler.Stages.cs:188-204`, 400 `context_length_exceeded`). For
+  embeddings the window applies per input. The RAG worker sends up to 64 inputs and 16k tokens per request, so with
+  BGE-M3 at `ContextWindow` 8192 most full batches would be refused. Fix in release 1: check embeddings per input (the
+  longest input's estimate), or skip the check for the embeddings endpoint. Until then RAG caps its batches below the
+  window (worker setting), and an embedding deployment can be left without a `ContextWindow`.
 - **Not in release 1:** feature C (member groups, tenant/guest refusal), feature A (delegation, run grouping headers),
   the rerank endpoint. Those are release 2, in P2.
 - Docs: the `docs/admin-api.md` rows for the new headers and codes (§ "Changes to other documents"), and an

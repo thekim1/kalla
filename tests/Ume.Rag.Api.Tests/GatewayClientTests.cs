@@ -112,6 +112,19 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
     }
 
     [Fact]
+    public async Task The_model_list_needs_no_residency_header_but_still_its_ceiling_and_key()
+    {
+        // No deployment answers GET /v1/models, so the gateway sends no x-ume-residency (V8's check, item 13).
+        var counting = new CountingHandler { Residency = null };
+        using var host = Build(counting);
+        using var list = await SendAsync(host, new HttpRequestMessage(HttpMethod.Get, "v1/models").WithMaxResidency(Residency.Eu));
+        list.StatusCode.ShouldBe(HttpStatusCode.OK);
+        await Should.ThrowAsync<GatewayCallRefusedException>(() => SendAsync(host, new HttpRequestMessage(HttpMethod.Get, "v1/models")));
+        await Should.ThrowAsync<GatewayResidencyException>(() => SendAsync(host, Post("v1/models").WithMaxResidency(Residency.Eu)));
+        counting.Calls.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task Refusals_from_the_gateway_reach_the_caller_unchanged()
     {
         using var host = Build(fake.Server.CreateHandler());

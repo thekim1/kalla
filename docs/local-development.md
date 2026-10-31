@@ -80,6 +80,20 @@ dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
 Environment variables (`Section__Key`) override the user secrets: `Start-E2E.ps1` sets `FakeGateway__Enabled=true`
 that way.
 
+**Blob master key.** `internal` blobs are envelope-encrypted (`URB2`, data-model §7) with the master key file
+`rag-blob-internal` in `KeyProvider:Directory` (default `/run/keys`, the Compose mount). Without it, syncs of `internal`
+sources fail with "Master key 'rag-blob-internal' is not available"; `public` sources need no key. Until the AppHost
+creates a development key, make one and point the worker at it through its user secrets:
+
+```bash
+mkdir -p ~/.ume-rag/keys && openssl rand -base64 32 > ~/.ume-rag/keys/rag-blob-internal
+dotnet user-secrets --project src/Ume.Rag.Worker set KeyProvider:Directory "$HOME/.ume-rag/keys"
+```
+
+On Windows any absolute directory works; write the file with
+`[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))`. Keep the file as long as the
+development blobs: without it their `internal` blobs cannot be read.
+
 Service ports (launch profiles): api `https://localhost:7401`, worker `7403`, admin API `7402`, fake gateway `7404`.
 The admin UI will be on `https://localhost:5174`, beside the gateway's 5173, so both stacks can run side by side.
 
@@ -123,8 +137,12 @@ By default it answers at once. `FakeGateway:Latency:*` in the AppHost user secre
 `StallProbability`, `StallMs`.
 
 **Against a real local gateway** (its AppHost running): set `FakeGateway:Enabled=false`,
-`Gateway:BaseUrl=https://localhost:<gateway port>` and `Gateway:Keys:<level>` (the gateway's dev keys) in the AppHost
-user secrets; every `Gateway:*` setting is passed to the api, worker and admin API. The gateway's FakeLlm needs gateway
+`Gateway:BaseUrl=https://localhost:<gateway port>` and the gateway's dev keys in the AppHost user secrets.
+`Gateway:Keys:<level>` is shared: it goes to the api and the admin API, and to the worker unless the level is
+`External`. `Gateway:Services:<service>:Keys:<level>` (service `api`, `admin` or `worker`) gives one service its own key
+and wins over the shared one. The levels are `OnPrem`, `Eu` and `External`; the AppHost stops on any other level, an
+unknown service or `Gateway:Services:worker:Keys:External`. Every other `Gateway:*` setting (`BaseUrl`, ...) goes to all
+three, and `OrgSync:BaseUrl` and `OrgSync:DataApiKey` (the organisation sync's Data API key) to the admin API. The gateway's FakeLlm needs gateway
 release 1 for 1024-dimension embeddings (`fake-embed-1024`); with an older one, use its Ollama provider with `bge-m3`.
 The `OnPrem` key used for embeddings must have PII policy `Off` or `Allow`, never `Redact` or `Block`.
 

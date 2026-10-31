@@ -68,6 +68,8 @@ public sealed class OrganisationSyncTests(OrgSyncFixture database) : IClassFixtu
         }
 
         await sync.RunAsync(null, Ct); // after the first run: nothing left to change
+        // The model sync shares the Data API settings: let its first run finish too, so it cannot move the config version later.
+        await admin.Services.GetRequiredService<GatewayModelSync>().RunAsync(null, Ct);
         return sync;
     }
 

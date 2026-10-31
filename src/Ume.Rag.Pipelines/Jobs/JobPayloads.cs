@@ -120,6 +120,10 @@ public sealed record ParsePayload : JobPayload
     [Description("A parse job yields after 10 minutes at a range boundary and re-enqueues itself with slice + 1 (engine design §9.5).")]
     [Range(0, 10_000)]
     public int Slice { get; init; }
+
+    [Description("A forced reprocess (engine design §8): this stage and every later one skip the output cache, their keys salted with the execution id; null: no bypass.")]
+    [SchemaKeyword("enum", ContractPatterns.StageEnum)]
+    public string? BypassFrom { get; init; }
 }
 
 /// <summary><c>embed</c> (engine design §7.4, §9.1, §14): embed and index one document. Dedup <see cref="JobDedupKeys.Embed"/>.</summary>
@@ -221,4 +225,7 @@ public static class JobDedupKeys
     public static string PiiClear(Guid documentId) => $"pii-clear:{documentId}";
 
     public static string Reprocess(Guid documentId) => $"reprocess:{documentId}";
+
+    /// <summary><c>edit-parse-rule</c> and <c>disable-parse-rule</c> of one rule share one key.</summary>
+    public static string ParseRule(Guid profileId) => $"parse-rule:{profileId}";
 }

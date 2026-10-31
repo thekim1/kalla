@@ -3,6 +3,7 @@ using System.Text.Json;
 using Npgsql;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Jobs;
+using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Pipelines.Definitions;
 using Ume.Rag.Worker.Connectors.Persistence;
 
@@ -60,9 +61,9 @@ public sealed class PipelineRefusedException : Exception
 /// <summary>
 /// Reads sources, collections and pipeline versions (engine design §15): each execution resolves the source's published
 /// version at its start and carries the version id through its continuations, which load that version by id. Versions
-/// are immutable once published, so a validated version is cached per id.
+/// are immutable once published, so a validated version is cached per id. Each refusal logs event 5105.
 /// </summary>
-public sealed partial class SourceContexts(JobDatabase database, ILogger<SourceContexts> logger)
+public sealed class SourceContexts(JobDatabase database, ILoggerFactory loggers)
 {
     private const string SourceSql = """
         SELECT s."Id", s."Type", s."Classification", s."Settings"::text, s."State" = 'active' AND s."DeletedAt" IS NULL AND c."DeletedAt" IS NULL,
@@ -73,11 +74,13 @@ public sealed partial class SourceContexts(JobDatabase database, ILogger<SourceC
         WHERE s."Id" = $1
         """;
 
-    private const string VersionSql = """SELECT "Definition"::text, "State" FROM config."PipelineVersions" WHERE "Id" = $1""";
+    private const string VersionSql = """SELECT "Definition"::text, "State", "PipelineId" FROM config."PipelineVersions" WHERE "Id" = $1""";
 
     private static readonly PipelineValidator Validator = new(TemplateCatalog.BuiltIn);
 
     private readonly ConcurrentDictionary<Guid, PipelineRun> _versions = new();
+
+    private readonly ILogger _security = SecurityEvents.CreateLogger(loggers);
 
     public async Task<SourceContext?> GetAsync(Guid sourceId, CancellationToken cancellationToken)
     {
@@ -103,18 +106,21 @@ public sealed partial class SourceContexts(JobDatabase database, ILogger<SourceC
         }
 
         string definition;
+        Guid pipelineId;
         await using (var connection = await database.OpenAsync(cancellationToken))
         await using (var command = new NpgsqlCommand(VersionSql, connection) { Parameters = { Db.P(versionId) } })
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             if (!await reader.ReadAsync(cancellationToken))
             {
-                throw Refuse(versionId, "version_unknown");
+                // An unknown version belongs to no pipeline.
+                throw Refuse(Guid.Empty, versionId, "version_unknown");
             }
 
+            pipelineId = reader.GetGuid(2);
             if (reader.GetString(1) == PipelineVersionStates.Draft)
             {
-                throw Refuse(versionId, "version_unpublished");
+                throw Refuse(pipelineId, versionId, "version_unpublished");
             }
 
             definition = reader.GetString(0);
@@ -124,25 +130,21 @@ public sealed partial class SourceContexts(JobDatabase database, ILogger<SourceC
         var result = Validator.Validate(json.RootElement, sourceType);
         if (!result.IsValid || result.Pipeline is not { } pipeline)
         {
-            throw Refuse(versionId, (result.Errors.Count > 0 ? result.Errors[0].Code : null) ?? "definition_invalid");
+            throw Refuse(pipelineId, versionId, (result.Errors.Count > 0 ? result.Errors[0].Code : null) ?? "definition_invalid");
         }
 
         var unsupported = pipeline.Template.Template.Stages.FirstOrDefault(s => !StageManifest.Supports(s.Key, s.Value));
         if (unsupported.Key is not null)
         {
-            throw Refuse(versionId, PipelineValidationCodes.StageVersionUnsupported);
+            throw Refuse(pipelineId, versionId, PipelineValidationCodes.StageVersionUnsupported);
         }
 
         return _versions[versionId] = new PipelineRun(versionId, pipeline);
     }
 
-    private PipelineRefusedException Refuse(Guid versionId, string reason)
+    private PipelineRefusedException Refuse(Guid pipelineId, Guid versionId, string reason)
     {
-        // Event 5105 rag.pipeline.refused belongs in SecurityEvents (stream B); until then a warning with the same attributes.
-        LogRefused(logger, versionId, reason);
+        SecurityEvents.PipelineRefused(_security, pipelineId, versionId, reason);
         return new PipelineRefusedException(versionId, reason);
     }
-
-    [LoggerMessage(LogLevel.Warning, "The worker refused to run pipeline version {PipelineVersionId}: {Reason}")]
-    private static partial void LogRefused(ILogger logger, Guid pipelineVersionId, string reason);
 }

@@ -325,9 +325,68 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
         profile.Dimensions.ShouldBe(1024);
         profile.MaxResidency.ShouldBe(Residency.Eu);
         profile.State.ShouldBe(EmbeddingProfileStates.Active);
+        profile.CanaryText.ShouldBe(EmbeddingCanaryText.Default);
         (await Sql.ScalarAsync<string>(database.Connection(null), $"""
             SELECT indexdef FROM pg_indexes WHERE indexname = 'IX_Chunks_Embedding_{DevSeeder.EmbeddingProfileId:N}'
             """)).ShouldContain("halfvec(1024)");
+    }
+
+    [Fact]
+    public async Task The_platform_profile_is_seeded_from_deployment_settings_once_and_never_changed()
+    {
+        // P1a item 13: EmbeddingProfile:* names the pilot's EU route (U-b); the admin API records its canary embedding.
+        await using var db = TestPostgres.Context(database.Connection(Migrator));
+        var name = "pilot-" + Guid.NewGuid().ToString("N");
+        var options = new EmbeddingProfileSeedOptions { Name = name, GatewayModel = "eu-embed-1024", Dimensions = 1024, MaxResidency = Residency.Eu };
+        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+        await EmbeddingProfileSeeder.SeedAsync(db, new EmbeddingProfileSeedOptions(), TimeProvider.System, logger, Ct); // no model: nothing
+        (await db.EmbeddingProfiles.AnyAsync(p => p.Name == "pilot-embedding", Ct)).ShouldBeFalse();
+
+        await EmbeddingProfileSeeder.SeedAsync(db, options, TimeProvider.System, logger, Ct);
+        options.GatewayModel = "another-model";
+        await EmbeddingProfileSeeder.SeedAsync(db, options, TimeProvider.System, logger, Ct);
+
+        var profile = await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Name == name, Ct);
+        profile.GatewayModel.ShouldBe("eu-embed-1024");
+        profile.MaxResidency.ShouldBe(Residency.Eu);
+        profile.CanaryText.ShouldBe(EmbeddingCanaryText.Default);
+        (await Sql.ScalarAsync<string>(database.Connection(null), $"""
+            SELECT indexdef FROM pg_indexes WHERE indexname = 'IX_Chunks_Embedding_{profile.Id:N}'
+            """)).ShouldContain("halfvec(1024)");
+        await Should.ThrowAsync<InvalidOperationException>(() => EmbeddingProfileSeeder.SeedAsync(db,
+            new EmbeddingProfileSeedOptions { GatewayModel = "x", Dimensions = 4001 }, TimeProvider.System, logger, Ct));
+    }
+
+    [Fact]
+    public async Task Sources_stamp_their_creation_and_runs_start_their_counters_at_zero()
+    {
+        // #110: the scheduler counts a never-run source's first schedule from CreatedAt; writers may leave the counters out.
+        await using var db = TestPostgres.Context(database.Connection(Admin));
+        var collection = await AddCollectionAsync(db, (await AddProfileAsync(db, 3)).Id);
+        var pipeline = new Pipeline { Name = "test-" + Guid.NewGuid().ToString("N"), TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };
+        db.Pipelines.Add(pipeline);
+        await db.SaveChangesAsync(Ct);
+        var before = await Sql.ScalarAsync<DateTime>(database.Connection(null), "SELECT now()");
+        var source = new Source
+        {
+            CollectionId = collection.Id, Type = SourceTypes.UrlList, Name = "Test", Classification = Classification.Public,
+            PipelineId = pipeline.Id, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Sources.Add(source);
+        await db.SaveChangesAsync(Ct);
+        (await db.Sources.AsNoTracking().Where(x => x.Id == source.Id).Select(x => x.CreatedAt).SingleAsync(Ct)).UtcDateTime
+            .ShouldBeGreaterThanOrEqualTo(before.ToUniversalTime());
+
+        var worker = database.Connection(Worker);
+        var runId = Guid.CreateVersion7();
+        await Sql.ExecuteAsync(worker, $"""
+            INSERT INTO content."Runs" ("Id", "SourceId", "Classification", "Kind", "Trigger", "State")
+            VALUES ('{runId}', '{source.Id}', 'public', '{RunKinds.Sync}', '{RunTriggers.Manual}', '{RunStates.Running}')
+            """);
+        (await Sql.ScalarAsync<string>(worker, $"""
+            SELECT concat_ws(',', "Added", "Updated", "Unchanged", "Deleted", "Failed", "ProposedDeletions", "CostUsd"::int)
+            FROM content."Runs" WHERE "Id" = '{runId}'
+            """)).ShouldBe("0,0,0,0,0,0,0");
     }
 
     private static async Task<EmbeddingProfile> AddProfileAsync(Ume.Rag.Infrastructure.Persistence.RagDbContext db, int dimensions, Residency ceiling = Residency.Eu)

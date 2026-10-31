@@ -45,6 +45,21 @@
       "code": "sync_failed",
       "status": 502,
       "message": "The sync with the AI gateway failed ({error}). The last synced data is kept."
+    },
+    {
+      "code": "model_residency",
+      "status": 409,
+      "message": "The model {model} cannot run at the level\u0027s ceiling {ceiling}."
+    },
+    {
+      "code": "model_not_listed",
+      "status": 409,
+      "message": "The AI gateway does not offer {model} at {ceiling} right now. Try again later."
+    },
+    {
+      "code": "gateway_unavailable",
+      "status": 503,
+      "message": "The AI gateway could not be reached to check the model. Try again."
     }
   ]
 }

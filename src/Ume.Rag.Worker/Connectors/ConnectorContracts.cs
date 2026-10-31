@@ -34,6 +34,32 @@ public interface IIdListingConnector : IConnector
     IAsyncEnumerable<string> ListIdentitiesAsync(ListingContext context, CancellationToken cancellationToken);
 }
 
+/// <summary>The last run item of an identity that failed (<c>RunItems</c>, outcome <c>failed</c>).</summary>
+/// <param name="DocumentId">Its document, when one exists.</param>
+/// <param name="Reason">The item's reason code.</param>
+public sealed record FailedItem(Guid? DocumentId, string? Reason);
+
+/// <summary>
+/// A <c>retry-failed</c> run (§2.2, engine design §9.2): rebuilds the work item of an identity whose last run item failed;
+/// null when the identity names nothing the connector can fetch again (a batch manifest, an invalid URL).
+/// </summary>
+public interface IRetryFailedConnector : IConnector
+{
+    WorkItem? FromIdentity(string canonicalIdentity, FailedItem last);
+}
+
+/// <summary>The work item of a canonical URL identity again (URL lists and crawls), at depth 0 with no hints.</summary>
+public static class RetryWork
+{
+    public static WorkItem? FromUrl(string canonicalIdentity)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalIdentity);
+        return Uri.TryCreate(canonicalIdentity, UriKind.Absolute, out var url) && url.Scheme is "http" or "https"
+            ? new WorkItem(IdentityKind.Url, canonicalIdentity, url, 0, new WorkHints())
+            : null;
+    }
+}
+
 /// <summary>A typed resume point, stored in <c>content."ConnectorCheckpoints"</c> (§2.3).</summary>
 public abstract record ConnectorCheckpoint
 {

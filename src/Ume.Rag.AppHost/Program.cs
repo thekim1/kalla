@@ -205,14 +205,64 @@ if (fakeGateway is not null)
 }
 else
 {
-    foreach (var (key, value) in builder.Configuration.GetSection("Gateway").AsEnumerable(makePathsRelative: true))
+    // A real gateway, keys as init-deployment.sh --gateway-key-file [SERVICE:]LEVEL=FILE (#95):
+    //   Gateway:Keys:<level>                     shared: api and admin, the worker too unless it is External;
+    //   Gateway:Services:<service>:Keys:<level>  one deployable's own key (api, admin, worker), wins over the shared one;
+    //   every other Gateway:* value (BaseUrl, ...) goes to all three. The worker never holds External.
+    var services = new Dictionary<string, IResourceBuilder<ProjectResource>>(StringComparer.Ordinal)
     {
-        if (value is not null)
+        ["api"] = api, ["admin"] = adminApi, ["worker"] = worker,
+    };
+    var gateway = builder.Configuration.GetSection("Gateway");
+    var keys = services.Keys.ToDictionary(s => s, _ => new Dictionary<string, string>(StringComparer.Ordinal), StringComparer.Ordinal);
+    foreach (var shared in gateway.GetSection("Keys").GetChildren())
+    {
+        foreach (var service in services.Keys.Where(s => s != "worker" || shared.Key != "External"))
         {
-            foreach (var service in new[] { api, worker, adminApi })
+            keys[service][GatewayLevel(shared.Key)] = shared.Value ?? "";
+        }
+    }
+
+    foreach (var own in gateway.GetSection("Services").GetChildren())
+    {
+        if (!services.ContainsKey(own.Key))
+        {
+            throw new InvalidOperationException($"Gateway:Services:{own.Key}: the service is api, admin or worker.");
+        }
+
+        foreach (var key in own.GetSection("Keys").GetChildren())
+        {
+            if (own.Key == "worker" && key.Key == "External")
+            {
+                throw new InvalidOperationException("Gateway:Services:worker:Keys:External: the worker never holds the External key.");
+            }
+
+            keys[own.Key][GatewayLevel(key.Key)] = key.Value ?? "";
+        }
+    }
+
+    foreach (var (name, service) in services)
+    {
+        foreach (var (level, key) in keys[name].Where(k => k.Value.Length > 0))
+        {
+            service.WithEnvironment($"Gateway__Keys__{level}", key);
+        }
+
+        foreach (var (key, value) in gateway.AsEnumerable(makePathsRelative: true))
+        {
+            if (value is not null && !key.StartsWith("Keys:", StringComparison.Ordinal) && !key.StartsWith("Services:", StringComparison.Ordinal))
             {
                 service.WithEnvironment("Gateway__" + key.Replace(":", "__", StringComparison.Ordinal), value);
             }
+        }
+    }
+
+    // The admin's organisation sync against the gateway's Data API (admin design §4.10): OrgSync:BaseUrl, OrgSync:DataApiKey.
+    foreach (var (key, value) in builder.Configuration.GetSection("OrgSync").AsEnumerable(makePathsRelative: true))
+    {
+        if (value is not null)
+        {
+            adminApi.WithEnvironment("OrgSync__" + key.Replace(":", "__", StringComparison.Ordinal), value);
         }
     }
 }
@@ -261,3 +311,8 @@ IResourceBuilder<ParameterResource> Secret(string name, int length) =>
     {
         MinLength = length, Lower = true, Upper = true, Numeric = true, Special = false,
     }, secret: true, persist: true);
+
+// A gateway key's level as the services bind it (Gateway:Keys:<level>); anything else is a typo that would be ignored.
+string GatewayLevel(string level) => residencyLevels.Contains(level, StringComparer.Ordinal)
+    ? level
+    : throw new InvalidOperationException($"Gateway key level {level}: the level is OnPrem, Eu or External.");

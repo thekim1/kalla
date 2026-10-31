@@ -83,7 +83,7 @@ public interface IIdListingConnector : IConnector        // cheap "what exists n
 { IAsyncEnumerable<string> ListIdentitiesAsync(ListingContext context, CancellationToken ct); }
 
 public interface IRetryFailedConnector : IConnector      // rebuild a work item from a failed run item
-{ WorkItem FromIdentity(string canonicalIdentity, FailedItem last); }
+{ WorkItem? FromIdentity(string canonicalIdentity, FailedItem last); }   // null: not fetchable (PR #122)
 
 public interface IHierarchyConnector : IConnector        // tree for the admin (P2: SharePoint site → drive → folder)
 { IAsyncEnumerable<HierarchyNode> GetChildrenAsync(HierarchyContext context, string? parentId, CancellationToken ct); }
@@ -100,11 +100,15 @@ As built in P1a item 6 part 1 (PR #82, 2026-10-31) and P1b item 2 (PR #88, 2026-
   runner writes the `QuarantinedFiles` row and event 5102) and `Failed` (run item `failed`). `Content` has no
   `Links` yet; link extraction comes with the crawl (item 6 part 2).
 - Preflight results carry codes only, never Swedish text (AGENTS.md: UI text only in `labels.ts`/`messages.ts`).
-  Each check has a `<area>.<code>` code (`http.404`, `robots.disallowed`, `egress.blocked`, …), an optional `Target`
+  Each check has a `<area>.<code>` code (`http.404`, `robots.disallow`, `egress.blocked`, …), an optional `Target`
   (URL or host) and small `Facts`; the admin shows the text and remediation for the code. The job result
   (`contracts/jobs/v1/preview.preflight.result.schema.json`) adds the worst state, `estimatedPages` (crawl) and the
   recognised `cms`. The preflight payload carries the unsaved settings as an object, which the admin validates
-  against `contracts/sources/v1/{type}.schema.json` (V25) before it enqueues.
+  against `contracts/sources/v1/{type}.schema.json` (V25) before it enqueues. As built in P1b item 5 (PR #117,
+  2026-10-31): further codes `preflight.none_reachable`, `pages.within_limit`, `sitemap.found` / `sitemap.none`,
+  `robots.ok` / `robots.missing` and `cms.unknown`. In a URL-list preflight a problem with one URL is a `warn`, and
+  `fail` only when no sampled URL answers (`preflight.none_reachable`); in a crawl preflight start-URL and robots
+  problems are a `fail`.
 - `UrlListConnector` is built but not registered in DI yet: it needs `IBlobStore` in the worker (item 9 wires the
   fetch stage).
 - **Raw blobs of `internal` sources are not envelope-encrypted yet**: the data-model §7 blob layer is missing. It must
@@ -321,7 +325,8 @@ with an example pattern in the report.
   was not hit (`CrawlRuns.Complete`). A seed is **resolved** when it was fetched, returned 304, was skipped by
   `lastmod`, or is `Gone`. Only then are documents not reached in this run deletion candidates (`not-seen`); a
   document whose URL is a **failed seed** of the run is never a deletion candidate in that run (its failures count
-  towards `persistent-failure`, §13.1). The deletion guard (§13.2) stays. Eneo salvages a timed-out crawl and then
+  towards `persistent-failure`, §13.1; as built in P1a item 9 part 2, PR #122, 2026-10-31: failed seeds are the run's
+  depth-0 frontier rows whose document the run did not see). The deletion guard (§13.2) stays. Eneo salvages a timed-out crawl and then
   deletes every page it did not reach (`eneo/worker/crawl_tasks.py:1008-1014`, `:1206-1232`); acceptance test C7
   (§18) covers that case. As built in P1b item 4 (PR #101, 2026-10-31): the rule is chosen by the deployment value
   `Crawl:CompletenessRule` = `Ratio` (default) or `Strict` (P1a's "no seed failed", weakness review §3 "Phasing").
@@ -356,21 +361,24 @@ with an example pattern in the report.
   the live first pass does not (to-verify #170, after U1).
 - `revalidateEvery` (default 4): every 4th traversal sends no validators and makes no `lastmod` skips (§4), catching
   wrong 304s and stale `lastmod` values. As built: the crawler drops the `lastmod` skip for a revalidating run
-  (`CrawlFreshness.Revalidates`, PR #101); the engine does not count runs yet, so `Revalidate` is always false (PR
-  #108, wired with the crawl).
+  (`CrawlFreshness.Revalidates`, PR #101); the engine counts the source's earlier full traversals and fixes the run's
+  mode (`incremental`, `revalidate`) when its listing starts, in `Runs.Report.mode`, so every job of the run reads the
+  same answer (P1a item 9 part 2, PR #122, 2026-10-31).
 - **Incomplete-traversal alert**: a source whose last N traversals (`Settings.Crawl.IncompleteRunsAlert`, default 3)
   were all incomplete raises an alert (metric `rag.crawl.incomplete_runs`, the source page and the Overview page),
   because its deletions never run and removed pages stay in the index. A URL-list or upload listing that ends
   `Partial` counts the same way.
-- **Engine wiring** (P1b item 4, PR #101, and P1a item 9, PR #108, 2026-10-31): the freshness parts above are built
-  in the crawler; their wiring into the engine (per-job `incremental` and revalidation, `ListingDoneAsync`, the report
-  sections in `Runs.Report`, the `rag.crawl.incomplete_runs` gauge and the alert's history query) follows in a later
-  item. Until then a crawl source's `sync` is refused with `sync.unsupported`.
+- **Engine wiring** (P1b item 4, PR #101, P1a item 9, PR #108, and P1a item 9 part 2, PR #122, 2026-10-31): crawl
+  sources run through the engine (the `fetch` handler dispatches them to `CrawlSourceRunner`; the frontier row
+  completes in the document's commit), with the run's mode, the report sections in `Runs.Report` (§5.5), the
+  `rag.crawl.incomplete_runs` gauge and the alert's history query.
 
 ### 5.5 Crawl report
 
 Built by the finalizer from `RunItems` and `CrawlRuns` into `Runs.Report` (jsonb) and shown on the source page
-(admin plan §4). URLs appear only in the admin, never in telemetry (§16).
+(admin plan §4). URLs appear only in the admin, never in telemetry (§16). As built in P1a item 9 part 2 (PR #122,
+2026-10-31): `Runs.Report` holds `mode` (§5.4) and the sections `completeness`, `verdict`, `removalChecks` and
+`demote` (live documents per pattern); the other rows below are not built yet.
 
 | Section | Contents |
 |---|---|
@@ -398,7 +406,13 @@ A **site profile** belongs to a (level, host), is shared by every source crawlin
 `content."SiteProfiles"` (one row per level and host, `PresetId`, `AppliedVersionId`, `NextLearnAfter`) and immutable
 `content."SiteProfileVersions"` (`Profile jsonb`, `Origin` `learned`/`manual`/`preset`, `State`
 `proposed`/`applied`/`superseded`/`rejected`, `Sample jsonb` with the check result, `CreatedBy` `system:worker` or an
-admin `oid`, `AppliedAt`, `AppliedBy`; data-model §2.2). Platform admins may edit it (a `manual` version).
+admin `oid`, `AppliedAt`, `AppliedBy`; data-model §2.2). Platform admins may edit it (a `manual` version). As built
+in P1a item 10 (PR #115, 2026-10-31): `edit-site-profile` and `rollback-site-profile` carry an optional `decidedBy`
+for `CreatedBy`/`AppliedBy` (absent = `system:worker`). As built in PR #136 (2026-10-31): the host key is the
+canonical host (§3.1 rule 2) **without a port**, so one profile serves its host on every scheme and port; the
+`edit-site-profile` contract, the only writer, allows no port, and the crawler, the follow-up and the applied-profile
+lookup all derive the key the same way (`SiteProfileHost`). A fetch on another worker may use a profile up to 60 s
+old (PR #141).
 It is the one place where learning configures a stage automatically (simplification pass §2 exception, §13.2): it is
 deterministic, previewed and checked, not trial-and-score learning.
 
@@ -412,7 +426,7 @@ deterministic, previewed and checked, not trial-and-score learning.
 | `datePattern` | visible dates matched against sitemap `lastmod` ("Sidan uppdaterades YYYY-MM-DD") | `SourceModifiedAt`, fallback `lastmod` |
 | `identityRule` | id-only URLs fetched for a few sampled pages; verified when their extracted output (`OutputHash`) equals the full URL's (as built for umea.se in P1a item 8, PR #104, 2026-10-31: the raw hashes differ by per-request noise and by the page's own path in a form `action`, so content hashes never match) | identity (§3.1 rule 10) |
 | `ignoreQueryParams` | preset list plus parameters whose values differ between fetches of the same page; a trailing `*` is a prefix (PR #104) | URL normalisation (§3.1 rule 7) |
-| `excludedTypes` | default `image/*`, `video/*` | scope (§5.2) |
+| `excludedTypes` | default `image/*`, `video/*` | scope (§5.2): by extension at admission and by response Content-Type at fetch, so an extensionless file of an excluded type is neither stored nor ingested (as built in PR #136, 2026-10-31) |
 | `lastmodReliable` | `lastmod` against visible dates and content-hash changes across runs; never `true` before the 500-URL sample has passed (§5.4, weakness review §3) | `lastmod` skip and default incremental runs (§5.4) |
 | `javascriptNeeded` | raw text yield of the sampled pages | the P1-start renderer check (§8.1) |
 
@@ -434,8 +448,17 @@ deterministic, previewed and checked, not trial-and-score learning.
   by more than a threshold, e.g. after a CMS redesign; thresholds *to tune* on the fixture corpus) and at most weekly
   per host.
 - **Effects of a new version** (§12.3): extraction fields re-process the host's HTML documents from stored raw
-  content without fetching; `identityRule` and `ignoreQueryParams` changes are an identity re-sync of the sources on
-  the host; `excludedTypes` is a scope change.
+  content without fetching (as built in P1a item 10, PR #115, 2026-10-31: `edit-site-profile` and
+  `rollback-site-profile` enqueue a `sync` `reprocess`, trigger `site-profile`, dedup `sync:{sourceId}`, per source
+  with live HTML documents on the (level, host); there is no per-document entry point, and the drift sweep is the
+  backstop); `identityRule` and `ignoreQueryParams` changes are an identity re-sync of the sources on
+  the host; `excludedTypes` is a scope change. As built in PR #141 (2026-10-31): when a version changes
+  `excludedTypes`, `identityRule` or `ignoreQueryParams`, each crawl source with live documents of any type on the
+  host gets a `sync` of kind `sync` (trigger `site-profile`) instead of the `reprocess`; its traversal admits by the
+  new profile, its fetches run `EnsureCurrent` on what they reach, and its reconcile removes the documents of a newly
+  excluded type without a request (`scope-narrowed`) and the identities the new rules no longer produce
+  (`identity-changed`), both exempt (§12.3). Pages the traversal does not reach are re-extracted by the nightly drift
+  sweep.
 - **Acceptance (P1)**: the umea.se example page (simplification pass §13.1) extracts to exactly its main text, without
   share widget, short-URL line and child-link list, with its breadcrumb and the date 2026-01-15; ≈ 20 saved umea.se
   pages (HTML and PDF) are checked in as a regression corpus (§18). As built in P1a item 8 (PR #104, 2026-10-31):
@@ -558,7 +581,8 @@ Traversals release claims only inside the source's `crawlWindow` (default `22:00
 day; answered 4). A traversal not finished at 06:00 pauses and continues the next night; the run stays `running`
 and shows "waiting for crawl window". At 10 req/s a 10,000-page municipal site takes ~17 minutes (umea.se's ≈ 14,100
 HTML and PDF URLs ~24 minutes); at 1 req/s an external one ~2.8 h, both inside one window. Manual "sync now" and URL
-lists (nightly by default) ignore the window. A daytime trickle outside the window exists only as an off-by-default
+lists (nightly by default) ignore the window. As built in P1a item 9 part 2 (PR #122, 2026-10-31): a `retry-failed`
+crawl run follows the window unless its trigger is `manual`. A daytime trickle outside the window exists only as an off-by-default
 per-host override with the web team's written consent (§6.3).
 
 ## 7. Egress / SSRF guard
@@ -698,7 +722,7 @@ item Z1; in P1 email files are refused (§9.2), so no connector creates child do
 | Limits | `StreamMaxLength 60M`, `MaxFileSize 60M`, `MaxScanSize 200M`, `AlertExceedsMax yes` (repo-and-deployment §5.5, `images/clamav/clamd.conf`); a size-limit reply (`INSTREAM size limit exceeded. ERROR`) and a `Heuristics.Limits.Exceeded.<limit> FOUND` reply → `too-large` `clamav.limit`, never "clean" and never `malware` (as built in P0 #12, PR #26; settled at the integration sync point) |
 | Timeouts | connect 5 s, scan 120 s; on timeout transient with attempt, reason `clamav.timeout` (as built, PR #82) |
 | Signature freshness | `zVERSION` → `ClamAV <engine>/<db version>/<db date>` (the daily database's build date in C `asctime` form without a time zone, e.g. `ClamAV 1.4.5/28169/Fri Oct 30 06:26:48 2026`; just `ClamAV <engine>` when only a custom database is loaded), read every 10 minutes: > 48 h old → health `degraded`, > 7 days → `unhealthy` and **no new files** (repo-and-deployment §5.5); `rag.clamav.signature_age_hours` gauge. An undated reply (custom database only) → health `degraded`, scans continue (as built in P1a item 6 part 1, PR #82, 2026-10-31; to-verify #81) |
-| Down or stale (fail closed) | file jobs requeue without attempt (`clamav.unavailable`, 30 s); after 24 h waiting the item ends `failed` `clamav.unavailable` and the run degrades. HTML continues. Nothing unscanned reaches the parser |
+| Down or stale (fail closed) | file jobs requeue without attempt (`clamav.unavailable`, 30 s); after 24 h waiting the item ends `failed` `clamav.unavailable` and the run degrades. HTML continues. Nothing unscanned reaches the parser. As built (PR #143, 2026-10-31, to-verify #81): the 24 h are counted from the job's `EnqueuedAt` once its previous attempt was also refused `clamav.unavailable` (the job row has no first-refusal time), so a job queued for more than 24 h can fail after one 30 s requeue (`retry-failed` recovers it); an upload slot that ends so is set `refused` |
 | Malware | outcome `malware`, reason `clamav.<platform>.<category>` (the signature's first two dot parts when it has three or more, else the whole name, lower-case, e.g. `clamav.win.trojan`; as built, PR #82); the content is written to `quarantine/{sourceId}/{sha256}` (data-model §9; self-contained, the wrapped key is in the blob header; an upload blob is copied there and the original tombstoned: blobs are write-once, no move); `content."QuarantinedFiles"` (L: `Id`, `SourceId`, `RunId`, `Classification`, `Sha256`, `Signature`, `Origin` (`upload`/`crawl`), `Name` or `Url`, `DetectedAt`, `PurgeAfter`); event **5102**; run `degraded` (6a §10.3). A crawled page that was clean before keeps its last clean version (not a deletion) |
 | Who sees it | department admins: name/URL, signature, time; platform admins also the hash. **No download or release in P1** (§21 Q3); a false positive is resolved by IT security adding an ignore signature and re-uploading. Purged after 30 days (platform plan §8, proposed) |
 | Event 5102 `rag.malware.detected` | Warning; attributes `Signature`, `Sha256`, `Origin`, `SourceId`, `RunId`, `DocumentId` (if any), `Classification`; SIEM alert on any |
@@ -754,7 +778,13 @@ Declared in `contracts/sources/v1/{type}.schema.json` as `"x-effect": "identity"
 "cosmetic"` (Onyx `FieldClass` and scope descriptors, `onyx/connectors/field_policy.py:20-28`, `:40-93`); the shared
 library (`Ume.Rag.Pipelines`, 6a §4) computes per-tag hashes of a settings object. The admin shows the impact on
 save; the run stores `Runs.SettingsHashes` (`{identity, scope, behaviour}`) and the worker compares the current hashes
-with the last completed run's at every sync, so a lost "apply" job cannot leave an edit unapplied.
+with the last completed run's at every sync, so a lost "apply" job cannot leave an edit unapplied. As built in P1a
+item 5/9 (PR #141, 2026-10-31): the **scheduler** compares each idle source's current hashes with its newest `sync`
+run's and enqueues one `sync` with `Trigger = config-change` (dedup `sync:{sourceId}`) when the scope or identity
+hash differs, so a change takes effect within one scheduler tick without an admin "apply" job; behaviour and
+cosmetic changes enqueue nothing. A run compares its own hashes with the last `sync` run that applied its settings
+(finished; for a crawl, a complete traversal), so a lost or cancelled `config-change` run leaves the effect to the
+next sync. The count shown on save is not built (admin).
 
 ```json
 { "startUrls": ["https://www.umea.se/"], "sitemaps": [], "extraHosts": [],
@@ -769,15 +799,15 @@ with the last completed run's at every sync, so a lost "apply" job cannot leave 
 | `schedule` (the `Sources.Schedule` column), `incrementalSchedule` (crawl only), `crawlWindow` (crawl only in P1) | url-list, crawl, sharepoint | cosmetic | none (the scheduler reads them) |
 | `classification` | all | identity (level) | full re-sync into the new level; old-level documents removed at reconcile (exempt); jobs at the old level fail the commit check (6a §15) |
 | pipeline parameters | all | behaviour | P1: every document of the collection re-processed via `EnsureCurrent`, no fetching, unchanged stages from the caches; P2 (weakness review §1): re-processing plan from the changed parameters (6a §12) |
-| `urls` | url-list | scope | added: claims for the added URLs only; removed: documents soft-deleted at once (`removed-from-list`, exempt) |
-| `startUrls`, `sitemaps`, `extraHosts`, `include`, `exclude` | crawl | scope | widening: a traversal now (unchanged pages cost a 304, a `lastmod` skip or a hash compare); narrowing: documents whose stored URL fails the new scope removed without fetching (`scope-narrowed`, exempt, count shown on save) |
+| `urls` | url-list | scope | added: claims for the added URLs only; removed: documents soft-deleted at once (`removed-from-list`, exempt). As built in PR #141 (2026-10-31): a `config-change` run marks a listed URL with a live document as listed without a fetch |
+| `startUrls`, `sitemaps`, `extraHosts`, `include`, `exclude` | crawl | scope | widening: a traversal now (unchanged pages cost a 304, a `lastmod` skip or a hash compare); narrowing: documents whose stored URL fails the new scope removed without fetching (`scope-narrowed`, exempt, count shown on save). As built in PR #141 (2026-10-31): a narrowing also starts a traversal and the removals happen at its reconcile, not on save; the check runs at every crawl reconcile (idempotent, also covers site-profile `excludedTypes`), and no request goes to an out-of-scope URL, removal checks included |
 | `demote` (weakness review §3) | crawl | cosmetic | none: ranking only, read by retrieval from the config snapshot (knowledge design §6.5) |
-| `maxDepth`, `maxPages` | crawl | scope | raise: traversal now; lower: next traversal, never deletes (a limit makes it partial) |
-| `ignoreQueryParams`, `directoryIndexNames` | url-list, crawl | identity | full re-sync: every URL re-canonicalised and fetched; old identities not re-found removed at reconcile (exempt, count shown on save) |
+| `maxDepth`, `maxPages` | crawl | scope | raise: traversal now; lower: next traversal, never deletes (a limit makes it partial). As built in PR #141 (2026-10-31): lowering also starts a traversal (the hashes cannot tell raising from lowering), still never deleting; a lowered `maxDepth` skips the deeper documents instead of marking the traversal partial |
+| `ignoreQueryParams`, `directoryIndexNames` | url-list, crawl | identity | full re-sync: every URL re-canonicalised and fetched; old identities not re-found removed at reconcile (exempt, count shown on save). As built in PR #141 (2026-10-31): a crawl's removals are `identity-changed`, and an identity no longer canonical under the current rules counts as changed too (covering site-profile `identityRule`/`ignoreQueryParams`); a URL list's old identities are removed as `removed-from-list` (exempt, same effect) |
 | `noiseSelectors` | url-list, crawl | behaviour | next sync; pages whose hash changes re-process once |
 | `conditionalGet`, `revalidateEvery` (1–100, default 4), `timeoutSeconds` (5–120, default 30) | url-list, crawl | behaviour | next sync |
 | `maxFileSizeMb` | upload | behaviour | new uploads only |
-| site profile version (host, §5.6) | url-list, crawl on the host | behaviour; `identityRule`/`ignoreQueryParams`: identity; `excludedTypes`: scope | extraction fields: the host's HTML documents re-processed from stored raw content; identity fields: identity re-sync of the host's sources (exempt removals); `excludedTypes`: as scope |
+| site profile version (host, §5.6) | url-list, crawl on the host | behaviour; `identityRule`/`ignoreQueryParams`: identity; `excludedTypes`: scope | extraction fields: the host's HTML documents re-processed from stored raw content; identity fields: identity re-sync of the host's sources (exempt removals); `excludedTypes`: as scope. As built in PR #141 (2026-10-31): for crawl sources a `sync` replaces the reprocess when `excludedTypes` or identity changes (§5.6) |
 | `sites`, `drives`, `folders`, `includeSitePages`, `excludedPaths` (P2) | sharepoint | scope | widening: enumerate the new scope; narrowing: from stored paths, exempt |
 | `certificate`, `tenantId` (P2) | sharepoint | behaviour | preflight, then next sync |
 
@@ -802,8 +832,8 @@ validated but not applied yet: the fetcher uses the fixed §4 timeouts (PR #82).
 |---|---|---|---|
 | cosmetic | none | – | – |
 | behaviour | none (next scheduled) | per normal rules | normal guard |
-| scope | immediate `sync`, `Trigger = config-change` | only newly in-scope items (crawl: traversal with conditional GET or `lastmod` skip) | narrowing removals exempt (admin confirmed the shown count) |
-| identity | immediate full `sync`, `force` | everything | identity removals exempt; unexpected losses still go through the guard |
+| scope | immediate `sync`, `Trigger = config-change` (as built, PR #141: enqueued by the scheduler within one tick, §12.3) | only newly in-scope items (crawl: traversal with conditional GET or `lastmod` skip) | narrowing removals exempt (admin confirmed the shown count; the count on save is not built) |
+| identity | immediate full `sync`, `force` (as built, PR #141: the same `config-change` `sync`, which finds the identity change itself and runs a full revalidating traversal) | everything | identity removals exempt; unexpected losses still go through the guard |
 
 > **Decided in 6c** (`design-processing.md` §12): a noise-only change (new `ContentHash`, same parsed output)
 > creates no new chunk set; the set is re-keyed and the run item is `unchanged`, reason `change.noise`.
@@ -845,8 +875,8 @@ finishes all other work and the finalizer sets **`awaiting-deletion-confirmation
 
 | Event | Effect |
 |---|---|
-| `command` `confirm-deletion {runId}` (`Manage` policy of the source's department: `rag-department-admin` or `rag-platform-admin`, admin design V28) | re-validates each proposal (a document seen again by a later run is dropped), soft-deletes the rest, run items `deleted`; the finalizer recomputes the run state; audit 6001 |
-| `command` `reject-deletion {runId}` | nothing deleted; the documents get `Documents.HeldAt/HeldBy`, excluded from later guards and listed as "kept by decision" on the source page until they are seen again (hold cleared) or an admin releases the hold (`command` `release-hold {sourceId}`, admin design §4.7: holds cleared, documents become candidates at the next reconcile); run → `degraded` `deletion.rejected` |
+| `command` `confirm-deletion {runId}` (`Manage` policy of the source's department: `rag-department-admin` or `rag-platform-admin`, admin design V28) | re-validates each proposal (a document seen again by a later run is dropped), soft-deletes the rest, run items `deleted`; the finalizer recomputes the run state (as built in P1b item 8, PR #115, 2026-10-31: the command sets the run back to `running`, phase `done`); audit 6001 |
+| `command` `reject-deletion {runId}` | nothing deleted; the documents get `Documents.HeldAt/HeldBy`, excluded from later guards and listed as "kept by decision" on the source page until they are seen again (hold cleared) or an admin releases the hold (`command` `release-hold {sourceId}`, admin design §4.7: holds cleared, documents become candidates at the next reconcile); run → `degraded` `deletion.rejected` (as built, PR #115: no reason is stored, since `Runs` has no reason column) |
 | a newer run of the source reaches reconcile while a proposal waits | the newer run computes afresh; the older run → `degraded` `deletion.superseded`; one waiting proposal per source at a time |
 | no decision | waits indefinitely, never auto-confirmed; shown on the Overview page (admin plan §4) and as a daily reminder metric `rag.deletion.awaiting` |
 
@@ -918,7 +948,8 @@ Connector results mapped onto 6a §10.2 (reasons `<area>.<code>`):
 | 429/503, host slot not yet due, ClamAV down | requeue | `rate_limited`, `politeness`, `clamav.unavailable` | no |
 
 Run-level: seeds unreachable → run `failed` `crawl.seeds_unreachable` (no deletions); page limit → `degraded`
-`crawl.limit_pages`; host paused → `degraded` `crawl.host_paused`; malware → `degraded` (6a §10.3).
+`crawl.limit_pages`; host paused → `degraded` `crawl.host_paused`; malware → `degraded` (6a §10.3). As built in P1a
+item 9 part 2 (PR #122, 2026-10-31): the finalizer applies this traversal verdict from `Runs.Report.verdict`.
 
 ## 16. Observability
 
@@ -972,7 +1003,7 @@ external host is capped at 3,600 pages/hour by politeness (answered 4), so the R
 | umea.se corpus (§5.6) | ≈ 20 saved umea.se pages (HTML and PDF) served by the test site: the hand-checked Sitevision preset applied, the example page's main text, breadcrumb and date exact (acceptance), identity rule verified on node-id URLs; P2: profile learned from the corpus, and a "redesigned" variant triggers re-learning and the guardrail turns a lossy profile into a proposal |
 | Deletion guard (integration) | 25 % removed → pause; confirm, reject (hold), supersede; empty listing (S4); 404 storm with the breaker; page-limit run deletes nothing (**C7**, Eneo partial crawl); one failing seed of 200 still completes the traversal and its document is not a candidate, 3 of 200 (< 99 % resolved) make it partial (weakness review §3); revival within 14 days without re-processing; three incomplete traversals raise the alert |
 | ClamAV (integration, real image) | EICAR upload → `malware`, quarantine row and blob, 5102, run degraded; clamd stopped → files requeue, HTML continues, after 24 h `failed`; stale signatures (fake `VERSION` reply) → no new files |
-| Uploads | sniff vs declared (PDF named `.docx`, EXE named `.pdf`, `.docm`, zip, OOXML zip accepted; `.doc`, `.rtf`, `.msg` → `upload.format_deferred`); same bytes in two departments → two documents, second parse a cache hit, title not from the name; replace keeps the document id and swaps the chunk set; delete and restore; duplicate add skipped; upload blob present on the backup target within 15 minutes |
+| Uploads | sniff vs declared (PDF named `.docx`, EXE named `.pdf`, `.docm`, zip, OOXML zip accepted; `.doc`, `.rtf`, `.msg` → `upload.format_deferred`); same bytes in two departments → two documents, second parse a cache hit, title not from the name; replace keeps the document id and swaps the chunk set; delete and restore; duplicate add skipped; upload blob present on the backup target within 15 minutes. As built in P1a items 5/6 (PR #139, 2026-10-31): the engine-level upload tests use the development `EicarOnlyScanner`; the real ClamAV image is tested at the scanner level |
 | Crash/resume | kill the worker during listing (resume from checkpoint, no duplicate claims or run items), during a fetch after the blob write and before commit (orphan swept, retry idempotent), during reconcile (guard decision computed once); leader loss of the releaser (another instance takes over, no double release beyond dedup) |
 | Telemetry | captured spans, metrics and logs of a `internal`-source crawl contain no URL, host or file name |
 | SharePoint (P2) | S1–S10 against a Graph fake (WireMock) plus one run against a test tenant |
@@ -1039,8 +1070,10 @@ max 500 (§13.2); holds after rejection (§13.3).
   cases may be ported with the licence text and attribution; porting stays P2.
 - Planning numbers of §17 (link-extraction CPU, frontier statements per page) in the R1 test.
 - The about-page URL for the user agent (answered 10) and that umea.se's robots.txt does not block the new agent.
-- umea.se: that the id-only Sitevision URL returns the same normalised content hash as the full path on a sample
-  (identity rule), and the breadcrumb path of the example page.
+- ~~umea.se: that the id-only Sitevision URL returns the same normalised content hash as the full path on a sample
+  (identity rule), and the breadcrumb path of the example page.~~ Done (P1a item 8, PR #104, 2026-10-31; to-verify
+  #138, #158): the id-only URL gives the same output hash (`OutputHash`) on three pages, while the raw content hashes
+  differ (§5.6); the breadcrumb is as on the live page.
 - umea.se `lastmod` (weakness review §3, `to-verify.md` #170): 500 random sitemap URLs fetched, their noise-normalised
   content hashes compared with `lastmod` over several weeks; `lastmodReliable` is set by hand only from the recorded
   result, and the umea.se source runs full traversals until then. The pass threshold is set when the result is

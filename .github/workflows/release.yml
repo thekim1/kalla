@@ -47,17 +47,12 @@ jobs:
   build:
     # Images, SBOMs, bundle and smoke test in one job: the dry run's registry lives only as long as the job.
     needs: [verify, parser, e2e]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
-      - name: Free runner disk (in the background)
-        # The parser image is about 3 GB: built in the buildx builder, then pulled again for the smoke test.
-        run: |
-          df -h / | tail -1
-          nohup sh -c "sudo rm -rf /usr/local/lib/android; touch '$RUNNER_TEMP/disk-freed'" >/dev/null 2>&1 &
       - name: Resolve version and registry
         id: version
         env:
@@ -104,10 +99,10 @@ jobs:
           echo "$SYFT_SHA256  $RUNNER_TEMP/syft.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/syft.tar.gz" -C "$RUNNER_TEMP/bin" syft
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Wait for the disk
-        run: |
-          timeout 600 sh -c "until [ -e '$RUNNER_TEMP/disk-freed' ]; do sleep 2; done"
-          df -h / | tail -1
+      - name: Disk left
+        # The self-hosted runner has room for the 3 GB parser image twice (built, then pulled for the smoke test); no
+        # cleanup of GitHub-hosted toolchains (the runner user has no sudo).
+        run: df -h / | tail -1
 
       - name: Build the admin UI
         # Built from the lock only (src/admin-ui/.npmrc), as in verify.yml. The admin publish below adds dist/ as
@@ -230,7 +225,7 @@ jobs:
     # Only for a pushed tag; a dry run ends after the smoke test.
     needs: build
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:

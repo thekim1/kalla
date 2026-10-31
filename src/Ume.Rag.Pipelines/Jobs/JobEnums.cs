@@ -71,12 +71,26 @@ public enum EvaluationVariant
     HybridNoDecompounder,
 }
 
+/// <summary>Question layer of an evaluation set (<c>EvaluationQuestions.Layer</c>; processing design §13.4).</summary>
+public enum EvaluationLayer
+{
+    Human,
+    Generated,
+}
+
 /// <summary>What <c>edit-eval-question</c> does to a <c>human</c> question (processing design §13.4).</summary>
 public enum QuestionAction
 {
     Create,
     Update,
     Retire,
+}
+
+/// <summary><c>ParseProfiles.State</c> of an admin-made parse rule after a parse-rule command (processing design §3.5).</summary>
+public enum ParseRuleState
+{
+    Active,
+    Disabled,
 }
 
 /// <summary>What happened to one stage of a <c>stage-preview</c> document (engine design §11).</summary>

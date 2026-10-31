@@ -1,0 +1,278 @@
+extern alias fakegateway;
+
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Ume.Rag.Domain;
+using Ume.Rag.Domain.Admin;
+using Ume.Rag.Domain.Entities;
+using Ume.Rag.Infrastructure.Gateway;
+using Ume.Rag.ServiceDefaults;
+using Ume.Rag.TestKit;
+using FakeGatewayProgram = fakegateway::Program;
+
+namespace Ume.Rag.AdminApi.Tests;
+
+/// <summary>
+/// Its own ragdb with one embedding profile (FakeGateway's <c>bge-m3</c>, 1024 dimensions, ceiling <c>Eu</c>): the sync
+/// removes every catalogue row the fake does not serve, and the canary is recorded once per database.
+/// </summary>
+public sealed class GatewayClientFixture : RagDatabase, IAsyncLifetime
+{
+    public const string OnPremKey = "fake-onprem-key-gw-0123456789";
+    public const string EuKey = "fake-eu-key-gw-0123456789";
+    public const string ExternalKey = "fake-external-key-gw-0123456789";
+
+    public string DataApiKey { get; } = TestSecrets.RandomHex();
+
+    public Guid ProfileId { get; } = Guid.CreateVersion7();
+
+    async ValueTask IAsyncLifetime.InitializeAsync()
+    {
+        await InitializeAsync();
+        await using var db = TestPostgres.Context(Connection(Admin));
+        db.EmbeddingProfiles.Add(new EmbeddingProfile
+        {
+            Id = ProfileId, Name = "pilot-embedding", GatewayModel = "bge-m3", Dimensions = 1024, MaxInputTokens = 8192, MaxResidency = Residency.Eu,
+            CanaryText = EmbeddingCanaryText.Default, IsDefault = true, UpdatedAt = DateTimeOffset.UtcNow, UpdatedBy = "test",
+        });
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>The FakeGateway with its per-level keys and the Data API catalogue.</summary>
+    public WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
+    {
+        web.UseEnvironment("Development");
+        web.UseSetting("FakeGateway:DataApiKey", DataApiKey);
+        web.UseSetting("FakeGateway:Keys:OnPrem", OnPremKey);
+        web.UseSetting("FakeGateway:Keys:Eu", EuKey);
+        web.UseSetting("FakeGateway:Keys:External", ExternalKey);
+    });
+
+    /// <summary>The admin API holding the gateway keys of <paramref name="levels"/>, syncing from <paramref name="gateway"/>.</summary>
+    public WebApplicationFactory<Program> AdminApi(WebApplicationFactory<FakeGatewayProgram> gateway, params Residency[] levels) =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(web =>
+        {
+            web.UseEnvironment("Development");
+            web.UseSetting("ConnectionStrings:ragdb", Connection(Admin));
+            web.UseSetting("Oidc:Authority", "https://idp.invalid/realms/ume");
+            web.UseSetting("OrgSync:BaseUrl", "http://fake-gateway/");
+            web.UseSetting("OrgSync:DataApiKey", DataApiKey);
+            web.UseSetting("OrgSync:IntervalMinutes", "1440");
+            web.UseSetting("Admin:Retention", "false");
+            web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
+            foreach (var level in levels)
+            {
+                web.UseSetting($"Gateway:Keys:{level}", level switch { Residency.OnPrem => OnPremKey, Residency.Eu => EuKey, _ => ExternalKey });
+            }
+
+            web.ConfigureTestServices(services =>
+            {
+                services.AddHeaderAuthentication();
+                services.AddHttpClient(OrganisationSync.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
+                services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
+            });
+        });
+}
+
+/// <summary>
+/// The gateway client, release-1 side (P1a item 13; gateway-changes §13.4, admin §4.5, §4.6 V8, §4.10, identity §4.7):
+/// the model mirror, the profile canary, V8's <c>/v1/models</c> check and the per-level status, against the FakeGateway.
+/// </summary>
+public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFixture<GatewayClientFixture>
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private async Task<long> ConfigVersionAsync()
+    {
+        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+        return await db.ConfigVersion.Select(v => v.Version).SingleAsync(Ct);
+    }
+
+    /// <summary>The host's first run, then one more: afterwards nothing is left to change.</summary>
+    private static async Task<GatewayModelSync> SyncedAsync(WebApplicationFactory<Program> admin)
+    {
+        var sync = admin.Services.GetRequiredService<GatewayModelSync>();
+        await admin.Services.GetRequiredService<OrganisationSync>().RunAsync(null, Ct);
+        (await sync.RunAsync(null, Ct)).ShouldNotBeNull(sync.Status.LastError);
+        return sync;
+    }
+
+    [Fact]
+    public async Task The_mirror_holds_each_chat_and_embedding_deployment_with_its_residency_and_price_and_a_second_run_writes_nothing()
+    {
+        await using var gateway = database.Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        var sync = await SyncedAsync(admin);
+
+        using var reader = await AdminDatabaseFixture.UserAsync(admin, RagRoles.Reviewer, "1000");
+        var models = (await reader.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.ToDictionary(m => m.Name);
+        models["ume/chat-eu"].Residencies.ShouldBe(["Eu"]);
+        models["ume/chat-eu"].Kind.ShouldBe(GatewayModelKinds.Model);
+        models["ume/chat-eu"].Source.ShouldBe(GatewayModelSources.Catalog);
+        models["ume/chat-eu"].OutputPerMillionUsd.ShouldBe(0.60m);
+        models["ume/chat-advanced"].Residencies.ShouldBe(["External"]);
+        models["bge-m3"].Residencies.ShouldBe(["OnPrem"]);
+        models["bge-m3"].InputPerMillionUsd.ShouldBe(0.02m);
+        // A multi-target name is a route alias (a manual row), and rerank is not a gateway model kind.
+        models.ShouldNotContainKey("ume/chat-standard");
+        models.ShouldNotContainKey("bge-reranker-v2-m3");
+
+        var version = await ConfigVersionAsync();
+        (await sync.RunAsync(null, Ct)).ShouldBe(new GatewayModelSyncResult(0, 0, 0));
+        (await ConfigVersionAsync()).ShouldBe(version);
+    }
+
+    [Fact]
+    public async Task Manual_rows_are_kept_and_a_catalogue_row_the_gateway_no_longer_serves_is_removed_with_one_audit_entry()
+    {
+        await using var gateway = database.Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        await SyncedAsync(admin);
+        var gone = "gone-" + Guid.NewGuid().ToString("N");
+        var alias = "alias-" + Guid.NewGuid().ToString("N");
+        await using (var db = TestPostgres.Context(database.Connection(RagDatabase.Admin)))
+        {
+            db.GatewayModels.Add(new GatewayModel { Name = gone, Residencies = ["Eu"], Source = GatewayModelSources.Catalog });
+            db.GatewayModels.Add(new GatewayModel { Name = alias, Kind = GatewayModelKinds.Route, Residencies = ["OnPrem", "Eu"], Source = GatewayModelSources.Manual });
+            var changed = await db.GatewayModels.SingleAsync(m => m.Name == "ume/chat-eu", Ct);
+            changed.OutputPerMillionUsd = 9m;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+        using var response = await platform.PostAsync("/api/gateway/sync", null, Ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        (await response.Content.ReadFromJsonAsync<GatewayModelSyncResult>(Ct)).ShouldBe(new GatewayModelSyncResult(1, 1, 0));
+        var version = await ConfigVersionAsync();
+        await using (var db = TestPostgres.Context(database.Connection(RagDatabase.Admin)))
+        {
+            (await db.GatewayModels.AnyAsync(m => m.Name == gone, Ct)).ShouldBeFalse();
+            (await db.GatewayModels.SingleAsync(m => m.Name == alias, Ct)).Residencies.ShouldBe(["OnPrem", "Eu"]);
+            (await db.GatewayModels.SingleAsync(m => m.Name == "ume/chat-eu", Ct)).OutputPerMillionUsd.ShouldBe(0.60m);
+            var audit = await db.AuditLog.Where(a => a.EntityType == "gateway-models" && a.ConfigVersion == version).ToListAsync(Ct);
+            audit.ShouldHaveSingleItem().Actor.ShouldBe("test-user");
+            db.GatewayModels.Remove(await db.GatewayModels.SingleAsync(m => m.Name == alias, Ct));
+            await db.SaveChangesAsync(Ct);
+        }
+    }
+
+    [Fact]
+    public async Task The_profile_canary_is_recorded_once_from_the_gateway_at_the_profile_ceiling_and_never_replaced()
+    {
+        await using var gateway = database.Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        await SyncedAsync(admin);
+
+        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+        var stored = await db.Database.SqlQuery<string>($"""
+            SELECT "CanaryEmbedding"::text AS "Value" FROM config."EmbeddingProfiles" WHERE "Id" = {database.ProfileId}
+            """).SingleAsync(Ct);
+        (await db.Database.SqlQuery<int>($"""
+            SELECT vector_dims("CanaryEmbedding") AS "Value" FROM config."EmbeddingProfiles" WHERE "Id" = {database.ProfileId}
+            """).SingleAsync(Ct)).ShouldBe(1024);
+        (await db.AuditLog.CountAsync(a => a.Action == "record-canary" && a.EntityId == database.ProfileId.ToString(), Ct)).ShouldBe(1);
+
+        // Recorded is final: another run (another instance, a restart) leaves the vector as it is.
+        (await admin.Services.GetRequiredService<GatewayModelSync>().RecordCanariesAsync(Ct)).ShouldBe(0);
+        (await db.Database.SqlQuery<string>($"""
+            SELECT "CanaryEmbedding"::text AS "Value" FROM config."EmbeddingProfiles" WHERE "Id" = {database.ProfileId}
+            """).SingleAsync(Ct)).ShouldBe(stored);
+    }
+
+    [Fact]
+    public async Task V8_lists_the_model_at_the_ceiling_or_refuses_with_its_code()
+    {
+        await using var gateway = database.Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu, Residency.OnPrem);
+        await SyncedAsync(admin);
+        var drained = "fake-drained";
+        await using (var db = TestPostgres.Context(database.Connection(RagDatabase.Admin)))
+        {
+            if (!await db.GatewayModels.AnyAsync(m => m.Name == drained, Ct))
+            {
+                db.GatewayModels.Add(new GatewayModel { Name = drained, Kind = GatewayModelKinds.Route, Residencies = ["OnPrem", "External"], Source = GatewayModelSources.Manual });
+                await db.SaveChangesAsync(Ct);
+            }
+        }
+
+        await using var scope = admin.Services.CreateAsyncScope();
+        var check = scope.ServiceProvider.GetRequiredService<GatewayModelCheck>();
+        await check.EnsureServableAsync("ume/chat-eu", Residency.Eu, Ct);
+        await check.EnsureServableAsync("bge-m3", Residency.Eu, Ct); // an OnPrem model is within an Eu ceiling
+
+        (await Code(() => check.EnsureServableAsync("ume/chat-advanced", Residency.Eu, Ct))).ShouldBe(AdminErrorCodes.ModelResidency.Code);
+        (await Code(() => check.EnsureServableAsync("no-such-model", Residency.Eu, Ct))).ShouldBe(AdminErrorCodes.ModelResidency.Code);
+        // The mirror allows it at OnPrem, but its OnPrem target is drained: the gateway does not list it (gateway-changes §3.4).
+        (await Code(() => check.EnsureServableAsync(drained, Residency.OnPrem, Ct))).ShouldBe(AdminErrorCodes.ModelNotListed.Code);
+        // This instance holds no External key: the gateway cannot be asked.
+        (await Code(() => check.EnsureServableAsync("ume/chat-advanced", Residency.External, Ct))).ShouldBe(AdminErrorCodes.GatewayUnavailable.Code);
+    }
+
+    [Fact]
+    public async Task The_status_embeds_once_per_held_key_at_its_ceiling_and_shows_the_canary()
+    {
+        await using var gateway = database.Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu, Residency.OnPrem);
+        await SyncedAsync(admin);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+
+        var status = await platform.GetFromJsonAsync<JsonElement>("/api/gateway/status", Ct);
+
+        status.GetProperty("configured").GetBoolean().ShouldBeTrue();
+        status.GetProperty("model").GetString().ShouldBe("bge-m3");
+        var levels = status.GetProperty("levels").EnumerateArray().ToDictionary(l => l.GetProperty("level").GetString()!, l => l);
+        levels["Eu"].GetProperty("outcome").GetString().ShouldBe("ok");
+        levels["Eu"].GetProperty("residency").GetString().ShouldBe("OnPrem");
+        levels["OnPrem"].GetProperty("outcome").GetString().ShouldBe("ok");
+        levels["External"].GetProperty("outcome").GetString().ShouldBe("not_configured");
+        var profile = status.GetProperty("profiles").EnumerateArray().Single(p => p.GetProperty("id").GetGuid() == database.ProfileId);
+        profile.GetProperty("canaryRecorded").GetBoolean().ShouldBeTrue();
+        profile.GetProperty("maxResidency").GetString().ShouldBe("Eu");
+        status.GetProperty("sync").GetProperty("consecutiveFailures").GetInt32().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task One_level_failing_oddly_is_that_levels_error_and_the_page_still_answers()
+    {
+        await using var gateway = database.Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu, Residency.OnPrem).WithWebHostBuilder(web => web.ConfigureTestServices(services =>
+            services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() =>
+                new MalformedAtOnPrem { InnerHandler = gateway.Server.CreateHandler() })));
+        await SyncedAsync(admin);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+
+        var status = await platform.GetFromJsonAsync<JsonElement>("/api/gateway/status", Ct);
+
+        var levels = status.GetProperty("levels").EnumerateArray().ToDictionary(l => l.GetProperty("level").GetString()!, l => l);
+        levels["Eu"].GetProperty("outcome").GetString().ShouldBe("ok");
+        levels["OnPrem"].GetProperty("outcome").GetString().ShouldBe("error");
+        levels["OnPrem"].GetProperty("code").GetString().ShouldBe(nameof(JsonException));
+    }
+
+    /// <summary>Answers embeddings at ceiling OnPrem with a body that is not JSON; everything else goes to the FakeGateway.</summary>
+    private sealed class MalformedAtOnPrem : DelegatingHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            request.RequestUri!.AbsolutePath.EndsWith("/embeddings", StringComparison.Ordinal) &&
+            request.Headers.TryGetValues("x-ume-max-residency", out var ceiling) && ceiling.Single() == "OnPrem"
+                ? new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("not json", System.Text.Encoding.UTF8, "application/json"),
+                    Headers = { { "x-ume-residency", "OnPrem" } },
+                }
+                : await base.SendAsync(request, cancellationToken);
+    }
+
+    private static async Task<string?> Code(Func<Task> action)
+    {
+        var fault = await Should.ThrowAsync<ApiFaultException>(action);
+        return fault.Extensions!["code"] as string;
+    }
+}

@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.edit-parse-rule.payload.schema.json",
+  "title": "edit-parse-rule command payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "edit-parse-rule"
+    },
+    "profileId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "ParseProfiles.Id; the admin generates it (v7) for a new rule."
+    },
+    "departmentId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "The department scope (ParseProfiles.DepartmentId): the rule applies to the sources of that department's collections only; absent = every department."
+    },
+    "match": {
+      "type": "object",
+      "properties": {
+        "domain": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A lower-case host (A-label), or *. and a host for its subdomains only.",
+          "maxLength": 255,
+          "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$"
+        },
+        "pathGlob": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Glob over the whole unescaped URL path, case-insensitive: * any run of characters (/ included), ? one character, e.g. /kommun/protokoll/*.",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "mediaType": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A media type or type/*, as detected (Documents.MediaType).",
+          "maxLength": 100,
+          "pattern": "^[a-z0-9.+-]+/([a-z0-9.+-]+|\\*)$"
+        },
+        "textPattern": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ".NET regular expression (linear-time subset: no lookarounds or backreferences) matched on the title or the first 2,000 characters of the parsed text, case-insensitive.",
+          "minLength": 1,
+          "maxLength": 500,
+          "format": "regex"
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "strategy": {
+      "type": "object",
+      "properties": {
+        "ocr": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "auto",
+            "force",
+            "off",
+            null
+          ]
+        },
+        "tables": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "fast",
+            "accurate",
+            null
+          ]
+        },
+        "imageScale": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Render scale of OCR pages.",
+          "minimum": 1,
+          "maximum": 4
+        }
+      },
+      "additionalProperties": false,
+      "default": {}
+    },
+    "cleanupRules": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "maxLevel": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Headings deeper than this become bold body text; absent = 4.",
+          "minimum": 1,
+          "maximum": 6
+        },
+        "paragraphItemsAreSections": {
+          "type": "boolean",
+          "description": "Each § N item is a level-1 section (as the built-in protokoll rule).",
+          "default": false
+        },
+        "furniture": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 150
+          },
+          "description": ".NET regular expressions (linear-time subset) of lines that clean drops as furniture, e.g. signature blocks.",
+          "maxItems": 10,
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "description": "Structure hints for clean and split by headings; absent = the defaults."
+    },
+    "decidedBy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The deciding platform admin's oid, written to the audit entry; absent = system:worker.",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "profileId",
+    "match"
+  ],
+  "description": "Payload of the command edit-parse-rule (processing design §3.5): creates or changes the manual parse rule profileId (content.ParseProfiles, Origin manual, State active) at the job's level; a change is a new revision, audited, and re-processes the sources with parser-route documents in the old or the new scope. The lengths keep the payload within 4 KB. Dedup parse-rule:{profileId}."
+}

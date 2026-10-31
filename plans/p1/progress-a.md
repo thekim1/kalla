@@ -52,9 +52,10 @@ Refs: [connectors §5.6](../ingestion-worker/design-connectors.md), [processing 
 Refs: [connectors §3–§7, §9, §11–§13, §18](../ingestion-worker/design-connectors.md)
 - [x] Canonicaliser; egress guard (`ConnectCallback`, redirects re-checked); robots and sitemaps
 - [x] URL list; crawl with one frontier per source and `CrawlHosts`; full traversals; stricter deletion rule
-- [ ] Uploads by slot; ClamAV `INSTREAM` client, fail closed, quarantine
+- [x] Uploads by slot; ClamAV `INSTREAM` client, fail closed, quarantine (#82 ClamAV client; #91 slots, sniffing, quarantine copy; #97 Postgres stores; #108 engine fan-out, `QuarantinedFiles` row, 5102; end to end through the engine PR: a/5-6-done-rows)
 - [x] Change detection with noise normalisation; deletion guard
-- [ ] **Done:** §18 tests for these parts (incl. C7); #10, #27, #28, #81, #112 recorded
+- [x] Settings-change effects (connectors §12.3–§12.4): `Runs.SettingsHashes`, `config-change` syncs from the scheduler, `scope-narrowed` without a request, `identity-changed`, lowered limits delete nothing, URL-list change claims only added URLs, site-profile `excludedTypes`/identity follow-up (PR: a/9-settings-effects)
+- [x] **Done:** §18 tests for these parts (incl. C7); #10, #27, #28, #81, #112 recorded (PR: a/5-6-done-rows: §18 mapping in the PR, `UploadEngineTests`; the 24 h `failed` `clamav.unavailable` (#81, `ClamAvWaitEngineTests`) PR: a/9-small-followups; open, deployment, not worker: the upload backup copy within 15 minutes)
 
 ## 6. Processing stages (#7)
 Refs: [processing §2–§11, §17](../ingestion-worker/design-processing.md), [README §1](README.md)
@@ -62,16 +63,17 @@ Refs: [processing §2–§11, §17](../ingestion-worker/design-processing.md), [
 - [x] `chunk` with breadcrumb prefix and `SearchText` (`SwedishDecompounder`); metadata; quality facts (PR: a/7-processing)
 - [x] `personal-data`: patterns, gated NER, flag rules, `held` (PR: a/7-processing; `/v1/ner` adapter after item 5, database swap with item 9)
 - [x] `embed`: cache, canary, fixed concurrency, the profile's model, dimensions and ceiling (`Eu` in P1a) (PR: a/7-processing; SQL stores with item 9)
-- [ ] **Done:** goldens, PII targets, flag lifecycle green; #26, #43, #111 recorded
+- [x] **Done:** goldens, PII targets, flag lifecycle green; #26, #43, #111 recorded (PR: a/5-6-done-rows; open parts: #43 provider limits (gateway team), SCB gazetteer of #111 (P2))
 
 ## 7. Engine and index writer (#9, after J2)
 Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md), [data-model §9](../platform/data-model.md)
-- [x] Stage manifest and support rows; execution with segments, fence, output cache; sync fan-out (URL list and upload; crawl after #101 merges, PR: a/9-engine)
+- [x] Stage manifest and support rows; execution with segments, fence, output cache; sync fan-out (URL list and upload, PR: a/9-engine; crawl, `reprocess` and `retry-failed`, PR: a/9-engine-crawl)
 - [x] Runs, run items, finalizer; scheduler (Cronos) (PR: a/9-engine)
 - [x] Index writer: invisible batches, swap, re-key, `held`, orphan sweep (PR: a/9-engine)
 - [x] Blob-tombstone purge sweep (#34); blob root ownership (#41) (PR: a/9-engine)
-- [x] **Done:** integration and crash-recovery tests; a URL-list source syncs into live chunks; #21, #119, #141 recorded (PR: a/9-engine; #141 test part only, measurement open)
-- [ ] **Hand-off J4:** issue to stream B
+- [x] Nightly drift sweep (`EnsureCurrent` outside a fetch, `rag.reconcile.drift`); parse slicing and resume from stored ranges; preview-first parser slot gate; parse cache keyed by parser build (PR: a/9-engine-drift-slicing)
+- [x] **Done:** integration and crash-recovery tests; a URL-list source syncs into live chunks; #21, #119, #141 recorded (PR: a/9-engine; #141 test part only, measurement open); a crawl source syncs into live chunks, crash between fetch and commit loses no work, #10 measured (PR: a/9-engine-crawl)
+- [x] **Hand-off J4:** issue to stream B (#110)
 
 ## 8. Evaluation smoke job (#17, your part)
 - [ ] `evaluation-smoke` job in `verify.yml`, green on a PR
@@ -79,9 +81,9 @@ Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md
 ## 9. Commands and evaluation runs (#10, after J5)
 Refs: [processing §13.4–§13.6](../ingestion-worker/design-processing.md), [engine §9.1](../ingestion-worker/design-engine.md)
 - [x] `edit-site-profile`, `rollback-site-profile`, `edit-eval-question` (PR: a/10-commands)
-- [ ] `eval` `on-demand` over the `human` layer: vector, hybrid, hybrid without the decompounder (`reindex-fts` scratch copy)
-- [ ] Per-question coverage and the threshold proposal as numbers
-- [ ] **Done:** reproducibility test; evaluator == `/v1/retrieve` order
+- [x] `eval` `on-demand` over the `human` layer: vector, hybrid, hybrid without the decompounder (`reindex-fts` scratch copy) (PR: a/10-eval-on-demand)
+- [x] Per-question coverage and the threshold proposal as numbers (PR: a/10-eval-on-demand)
+- [x] **Done:** reproducibility test; evaluator == `/v1/retrieve` order (PR: a/10-eval-on-demand)
 - [ ] **Hand-off J6:** issue to stream B
 
 ## 10. Pilot stack (#18, after J8, J9)

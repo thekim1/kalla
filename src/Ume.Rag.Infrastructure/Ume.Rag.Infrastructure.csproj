@@ -4,6 +4,8 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <!-- vector mapped on the shared data source, for binary COPY of embeddings (to-verify #21, #119; #110). -->
+    <PackageReference Include="Pgvector" />
     <!-- Same version as Microsoft.EntityFrameworkCore.Design; Npgsql alone brings an older one (as the gateway). -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />

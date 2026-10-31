@@ -18,14 +18,16 @@ namespace Ume.Rag.Worker.Commands;
 /// <c>reprocess-document</c> (admin design §4.7; engine design §7.5): one document re-run from its stored raw content in a
 /// <c>reprocess</c> run of its source, under a new execution id that supersedes any work in flight for it. The run (keyed by
 /// the job's id, so a retry finds it) and the new execution commit first; then the processing segment runs as a fetch of
-/// stored content does (the host's applied site profile for HTML) and its outputs, the document facts, the continuation
-/// (<c>embed</c>, or <c>parse</c> for parser-bound documents), and the job's completion with its result commit in one
-/// fenced transaction. <c>fromStage</c> <c>fetch</c> is refused: this path never fetches. The engine's parts come from the
-/// job's scope (they are registered by <c>AddRagEngine</c>). Result <see cref="ReprocessDocumentResult"/>.
+/// stored content does (the host's applied site profile for HTML), with the output cache bypassed from <c>fromStage</c> on
+/// (engine design §8, <see cref="StageBypass"/>; the stages before it are served from the cache), and its outputs, the
+/// document facts, the continuation (<c>embed</c>, or <c>parse</c> carrying the bypass for parser-bound documents), and the
+/// job's completion with its result commit in one fenced transaction. <c>fromStage</c> <c>fetch</c> is refused: this path
+/// never fetches. The engine's parts come from the job's scope (they are registered by <c>AddRagEngine</c>). Result
+/// <see cref="ReprocessDocumentResult"/>.
 /// </summary>
 public sealed class ReprocessDocumentHandler(JobDatabase database, IJobQueue queue, WorkerIdentity identity) : ICommandHandler
 {
-    public const string FetchUnsupported = "reprocess.fetch_unsupported";
+    public const string FetchUnsupported = StageBypass.FetchUnsupported;
     public const string DocumentUnknown = "document.unknown";
     public const string DocumentDeleted = "document.deleted";
     public const string NoContent = "document.no_content";
@@ -49,7 +51,7 @@ public sealed class ReprocessDocumentHandler(JobDatabase database, IJobQueue que
     public async Task<JobResult> ExecuteAsync(JobContext context, JsonElement payload, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (CommandPayload.Read<ReprocessDocumentCommand>(payload) is not { } reprocess)
+        if (CommandPayload.Read<ReprocessDocumentCommand>(payload) is not { } reprocess || !StageBypass.IsStage(reprocess.FromStage))
         {
             return new JobResult.FatalError(CommandJobHandler.InvalidPayload);
         }
@@ -103,7 +105,7 @@ public sealed class ReprocessDocumentHandler(JobDatabase database, IJobQueue que
             }
 
             document = await documents.GetAsync(document.Id, cancellationToken) ?? throw new InvalidOperationException("The document vanished.");
-            return await ProcessAsync(context, source, pipeline, document, runId, cancellationToken);
+            return await ProcessAsync(context, source, pipeline, document, runId, reprocess.FromStage, cancellationToken);
         }
         catch (PipelineRefusedException refused)
         {
@@ -135,7 +137,7 @@ public sealed class ReprocessDocumentHandler(JobDatabase database, IJobQueue que
     /// result; a superseded execution ends with a <c>superseded</c> run item.
     /// </summary>
     private async Task<JobResult> ProcessAsync(JobContext context, SourceContext source, PipelineRun pipeline, DocumentRow document, Guid runId,
-        CancellationToken cancellationToken)
+        string fromStage, CancellationToken cancellationToken)
     {
         var segment = context.Services.GetRequiredService<ProcessingSegment>();
         var siteProfiles = context.Services.GetRequiredService<SiteProfiles>();
@@ -145,6 +147,7 @@ public sealed class ReprocessDocumentHandler(JobDatabase database, IJobQueue que
         {
             DeclaredMediaType = document.MediaType,
             SiteProfile = profile,
+            BypassFrom = fromStage,
         };
         var result = await segment.RunAsync(input, JobClasses.Fetch, null, cancellationToken);
         var answer = new ReprocessDocumentResult { RunId = runId, ExecutionId = executionId };
@@ -164,7 +167,8 @@ public sealed class ReprocessDocumentHandler(JobDatabase database, IJobQueue que
                 break;
             case SegmentResult.Parse parse:
                 await commit.SetFactsAsync(document.Id, parse.Facts, cancellationToken);
-                await commit.EnqueueAsync(queue, [SyncJobs.Parse(source, document, executionId, pipeline.VersionId, runId, parse.DetectKey)], cancellationToken);
+                await commit.EnqueueAsync(queue, [SyncJobs.Parse(source, document, executionId, pipeline.VersionId, runId, parse.DetectKey,
+                    bypassFrom: parse.BypassFrom)], cancellationToken);
                 break;
             case SegmentResult.Ended ended:
                 await commit.SetParseOutcomeAsync(document.Id, EngineText.Outcome(ended.Outcome), cancellationToken);
