@@ -77,6 +77,7 @@ https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM (not updated since session 8; 
 | Processing | `src/Ume.Rag.Worker/Processing/` | done (#98) incl. inspect/NER adapters |
 | Sitevision + umea.se | `Processing/Html/SitevisionPreset.cs`, `contracts/site-profiles/v1/www.umea.se.profile.json`, `tests/fixtures/umea/` | done (#104) |
 | **Engine (J4)** | `src/Ume.Rag.Worker/Engine/` | **URL lists and uploads sync into live chunks** (#108); crawl wiring etc. remain (below) |
+| Inventory | `scripts/inventory/` | done (#111) |
 | Pilot stack | `deploy/`, `docs/p1a-local-run.md` | code part done (#94); "stack healthy" needs J8/J9 + fresh images |
 | CI / release | `.github/workflows/{verify,parser,release,perf,evaluation,e2e,entra}.yml`, `benchmarks/release-test/` | release proven (`v0.1.0`); `perf.yml` dry run green on GitHub |
 | Grading (L8) | `scripts/grading/` | done (#99); run in the live block (#100) |
@@ -86,11 +87,9 @@ https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM (not updated since session 8; 
 
 Start with `plans/p1/prompts/main-session.md`, then this list. **First check GitHub** (open PRs, issues, comments).
 
-1. **P1a item 1 (sitemap inventory)** was running at the end of session 9 in **`../rag-a43`** (branch
-   `a/1-sitemap-inventory`, uncommitted). If its files are there, review them (script in `scripts/inventory/`,
-   tests, a block in `plans/p1/results-a.md` for to-verify #139 and the Z1 share), run its tests, commit, PR, merge.
-   If the run against umea.se's sitemap didn't happen, do it (sitemap index + sitemaps only, polite). Decide the
-   renderer question from its JavaScript-need result (or ask the user if pages need JavaScript).
+1. **Done at the end of session 9:** P1a item 1 (#111): umea.se sitemap inventory, 24,187 URLs (HTML 6,157, PDF
+   8,126, legacy Office 0.1 % → Z1 stays P2); **no renderer needed** (all saved pages carry their text without
+   JavaScript). The `lastmod` sample (#170) waits for U1.
 2. **Engine part 2** (item 9 remainder, new agent): crawl wiring against #101 (`CrawlTraversal.StartAsync` returns a
    `CrawlRunContext`, `EvaluateAsync(context)`, `ListingDoneAsync`, `CrawlFreshness.Revalidates`, `Runs.Report`
    sections, gauge `rag.crawl.incomplete_runs`; known gap: `ProcessAsync` completes the frontier row before the engine
@@ -103,7 +102,7 @@ Start with `plans/p1/prompts/main-session.md`, then this list. **First check Git
 4. **Sync point** when stream B's next PRs land: fold their deviations and `results-b.md` rows; also fold #89, #93,
    #101, #104, #107, #108 deviations (engine §3/§9/§10/§13/§16, data-model, connectors §12) into the design.
 5. **Small follow-ups:** CHANGELOG (shared PR) for everything since `0.1.0` (incl. "HTML noise rules v2: HTML
-   documents re-processed once after upgrade"); unify `robots.disallow` vs `robots.disallowed`; refresh the
+   documents re-processed once after upgrade"); unify `robots.disallow` vs `robots.disallowed`; add `jfif` to `CrawlScope.TypesByExtension` (16 on umea.se); refresh the
    stakeholder report.
 
 **Open issues to stream B (waiting on B):** #80 (J3 questions: site-profile create route, template storage, labels),
@@ -130,7 +129,7 @@ item needs a named person and a date.
 
 ## Environment notes
 
-- Worktrees: only `../rag-a43` (item 1) at the end of session 9; `git worktree list` to check.
+- Worktrees: none open at the end of session 9; `git worktree list` to check.
 - Local images: `ume-rag.local/clamav:dev` (tests use `UME_RAG_TEST_CLAMAV_IMAGE`), `ume-rag.local/parser:ci`
   (`UME_RAG_TEST_PARSER_IMAGE`; rebuild from `src/parser` when the parser changes). Testcontainers needs a registry
   part with a dot in local image names. `172.30.0.0/16` is taken on this machine (Compose subnet overrides locally).
