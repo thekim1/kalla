@@ -37,6 +37,12 @@ public sealed record EmbeddingProfileRecord(Guid Id, string Name, string Gateway
     public bool IsDefault { get; init; }
 
     public string State { get; init; } = "active";
+
+    /// <summary>Send <c>"dimensions": Dimensions</c> on every embedding call (U-b, #142); false for BGE-M3 (gateway-changes §6).</summary>
+    public bool RequestDimensions { get; init; }
+
+    /// <summary>The <c>dimensions</c> to send, or null when the profile must not send it.</summary>
+    public int? DimensionsParameter => RequestDimensions ? Dimensions : null;
 }
 
 public interface IEmbeddingProfileStore

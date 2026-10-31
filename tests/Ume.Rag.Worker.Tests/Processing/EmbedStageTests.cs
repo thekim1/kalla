@@ -334,6 +334,54 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         rig.Cache.Rows.ShouldBeEmpty();
     }
 
+    /// <summary>
+    /// U-b (#142): a profile with <c>RequestDimensions</c> sends <c>"dimensions"</c> from the embed stage, the canary and the
+    /// evaluator's query embedder, all through <see cref="EmbeddingClient"/>; the FakeGateway honours it (else 1024).
+    /// </summary>
+    [Fact]
+    public async Task A_profile_that_requests_dimensions_sends_them_on_every_call_and_gets_vectors_of_that_length()
+    {
+        var marker = Guid.NewGuid().ToString("N");
+        var canaryText = $"Umeå kommun ansvarar för förskola och snöröjning {marker}.";
+        var shortened = Pilot with
+        {
+            Id = Guid.Parse("01929b6e-0000-7000-8000-00000000b6e5"), Name = "shortened", Dimensions = 256, RequestDimensions = true,
+            CanaryText = canaryText, CanaryEmbedding = fakegateway::Ume.Rag.FakeGateway.FakeContent.Vector(canaryText, 256),
+        };
+        using var rig = Build(profiles: shortened);
+
+        (await rig.Canary.CheckAsync(shortened, Ct)).State.ShouldBe(EmbeddingCanary.CanaryState.Passed);
+        Dimensions(rig.Recorder.Requests[^1].Body).ShouldBe(256);
+        var draft = new ChunkSetDraft { Chunks = [Swedish(0, $"Bygglov för altan {marker}."), Swedish(1, $"Bygglov för garage {marker}.")] };
+        var result = await rig.Stage.RunAsync(draft, Level, shortened.Id, new EmbeddingCall(null), Ct);
+        result.Vectors.Count.ShouldBe(2);
+        result.Vectors.ShouldAllBe(v => v.Length == 256);
+        rig.Recorder.Requests[^1].Body.ShouldContain("\"dimensions\":256");
+        var query = new Worker.Evaluation.EvaluationQueryEmbedder(rig.Host.Services.GetRequiredService<EmbeddingClient>(), rig.Cache, TimeProvider.System)
+            .For(shortened, Level);
+        (await query($"när töms soptunnan {marker}", Ct)).Length.ShouldBe(256);
+        Dimensions(rig.Recorder.Requests[^1].Body).ShouldBe(256);
+        rig.Recorder.Requests.Count.ShouldBe(3);
+    }
+
+    /// <summary>U-b (#142), the other side: without <c>RequestDimensions</c> no call carries a <c>dimensions</c> member (BGE-M3, gateway-changes §6).</summary>
+    [Fact]
+    public async Task A_profile_that_does_not_request_dimensions_never_sends_them()
+    {
+        var marker = Guid.NewGuid().ToString("N");
+        using var rig = Build();
+
+        (await rig.Canary.CheckAsync(Pilot, Ct)).State.ShouldBe(EmbeddingCanary.CanaryState.Passed);
+        await rig.Stage.RunAsync(new ChunkSetDraft { Chunks = [Swedish(0, $"Bygglov för altan {marker}.")] }, Level, Pilot.Id, new EmbeddingCall(null), Ct);
+        var query = new Worker.Evaluation.EvaluationQueryEmbedder(rig.Host.Services.GetRequiredService<EmbeddingClient>(), rig.Cache, TimeProvider.System)
+            .For(Pilot, Level);
+        (await query($"när töms soptunnan {marker}", Ct)).Length.ShouldBe(1024);
+
+        rig.Recorder.Requests.Count.ShouldBe(3);
+        rig.Recorder.Requests.ShouldAllBe(r => Dimensions(r.Body) == null);
+        rig.Recorder.Requests.ShouldAllBe(r => !r.Body.Contains("dimensions", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.TooManyRequests, false, "gateway.rate_limited")]
     [InlineData(HttpStatusCode.InternalServerError, true, "gateway.http_500")]
@@ -377,6 +425,13 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     {
         using var json = JsonDocument.Parse(body);
         return [.. json.RootElement.GetProperty("input").EnumerateArray().Select(e => e.GetString()!)];
+    }
+
+    /// <summary>The <c>dimensions</c> member of an embedding request body, or null when it has none.</summary>
+    private static int? Dimensions(string body)
+    {
+        using var json = JsonDocument.Parse(body);
+        return json.RootElement.TryGetProperty("dimensions", out var dimensions) ? dimensions.GetInt32() : null;
     }
 
     private static async Task WaitAsync(Func<bool> condition)
