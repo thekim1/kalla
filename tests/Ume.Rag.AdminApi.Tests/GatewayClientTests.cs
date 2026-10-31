@@ -238,6 +238,38 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         status.GetProperty("sync").GetProperty("consecutiveFailures").GetInt32().ShouldBe(0);
     }
 
+    [Fact]
+    public async Task One_level_failing_oddly_is_that_levels_error_and_the_page_still_answers()
+    {
+        await using var gateway = database.Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu, Residency.OnPrem).WithWebHostBuilder(web => web.ConfigureTestServices(services =>
+            services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() =>
+                new MalformedAtOnPrem { InnerHandler = gateway.Server.CreateHandler() })));
+        await SyncedAsync(admin);
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+
+        var status = await platform.GetFromJsonAsync<JsonElement>("/api/gateway/status", Ct);
+
+        var levels = status.GetProperty("levels").EnumerateArray().ToDictionary(l => l.GetProperty("level").GetString()!, l => l);
+        levels["Eu"].GetProperty("outcome").GetString().ShouldBe("ok");
+        levels["OnPrem"].GetProperty("outcome").GetString().ShouldBe("error");
+        levels["OnPrem"].GetProperty("code").GetString().ShouldBe(nameof(JsonException));
+    }
+
+    /// <summary>Answers embeddings at ceiling OnPrem with a body that is not JSON; everything else goes to the FakeGateway.</summary>
+    private sealed class MalformedAtOnPrem : DelegatingHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            request.RequestUri!.AbsolutePath.EndsWith("/embeddings", StringComparison.Ordinal) &&
+            request.Headers.TryGetValues("x-ume-max-residency", out var ceiling) && ceiling.Single() == "OnPrem"
+                ? new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("not json", System.Text.Encoding.UTF8, "application/json"),
+                    Headers = { { "x-ume-residency", "OnPrem" } },
+                }
+                : await base.SendAsync(request, cancellationToken);
+    }
+
     private static async Task<string?> Code(Func<Task> action)
     {
         var fault = await Should.ThrowAsync<ApiFaultException>(action);

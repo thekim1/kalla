@@ -95,7 +95,8 @@ public static class GatewayEndpoints
     /// <summary>
     /// Per level key held by this instance, one embedding of a fixed word with the default profile's model at that ceiling
     /// (the delegation echo is added with gateway release 2, P2). A level whose ceiling is below the model's residency is
-    /// refused by the gateway (403 <c>max_residency_not_met</c>), which the result shows as such.
+    /// refused by the gateway (403 <c>max_residency_not_met</c>), which the result shows as such; any other failure of one
+    /// level is reported as <c>error</c> with <see cref="GatewayModelSync.ErrorText"/>, so the page always answers.
     /// </summary>
     private static async Task<GatewayStatus> StatusAsync(RagDbContext db, GatewayApi gateway, GatewayModelSync sync, IOptions<GatewayOptions> options,
         CancellationToken ct)
@@ -135,6 +136,11 @@ public static class GatewayEndpoints
             catch (GatewayResidencyException residency)
             {
                 levels.Add(new GatewayLevelStatus(name, "residency_refused", residency.Observed, null, null, null));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // Anything else from one level (a malformed answer, a count mismatch) is that level's error, not a failed page.
+                levels.Add(new GatewayLevelStatus(name, "error", null, null, GatewayModelSync.ErrorText(ex), null));
             }
         }
 
