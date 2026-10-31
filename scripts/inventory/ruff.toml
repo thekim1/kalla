@@ -1,0 +1,10 @@
+# Lint for the inventory script, the parser's rules (src/parser/pyproject.toml) and its pinned ruff:
+#   uvx ruff@0.17.2 check scripts/inventory && uvx ruff@0.17.2 format --check scripts/inventory
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E", "W", "F", "I", "B", "UP", "S", "SIM", "RUF"]
+
+[lint.isort]
+known-first-party = ["inventory"]

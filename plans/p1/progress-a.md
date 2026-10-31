@@ -20,7 +20,7 @@ work and put the PR number after it (`[x] … (#12)`). Record every `to-verify` 
 
 ## 1. Pilot-start checks (#1)
 Refs: [connectors §5.4, §8.1](../ingestion-worker/design-connectors.md), [weakness review §3](../weakness-review.md)
-- [ ] Sitemap inventory script in `scripts/`: formats, legacy share (Z1), JavaScript need; to-verify #139 recorded
+- [x] Sitemap inventory script in `scripts/`: formats, legacy share (Z1), JavaScript need; to-verify #139 recorded
 - [ ] 500-URL `lastmod` sample: first pass stored (after J12); re-fetch date noted (#170, result in P1b)
 
 ## 2. Worker contracts (#4)

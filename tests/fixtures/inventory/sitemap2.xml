@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+        xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
+  <url>
+    <loc>https://www.example.se/nyheter/nyhet.html</loc>
+    <lastmod>2026-10-01</lastmod>
+    <image:image><image:loc>https://www.example.se/images/18.20/a.jpg</image:loc></image:image>
+    <image:image><image:loc>https://www.example.se/images/18.21/b.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://www.example.se/uppleva/film.html</loc>
+    <lastmod>2026-10-01</lastmod>
+    <video:video>
+      <video:thumbnail_loc>https://www.example.se/images/18.22/t.jpg</video:thumbnail_loc>
+      <video:title>Film</video:title>
+      <video:content_loc>https://www.example.se/download/18.23/film.mp4</video:content_loc>
+      <video:player_loc>https://www.example.se/spelare/18.23</video:player_loc>
+    </video:video>
+  </url>
+</urlset>
