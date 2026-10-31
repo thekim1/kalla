@@ -1,4 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Connector tests (Connectors/): the in-process Kestrel test site needs no container; the ClamAV client's integration
+    test runs against the image named by UME_RAG_TEST_CLAMAV_IMAGE and skips without it (verify.yml's backend job sets it).
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Testcontainers" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.TestKit\Ume.Rag.TestKit.csproj" />
     <ProjectReference Include="..\..\src\Ume.Rag.Worker\Ume.Rag.Worker.csproj" />
