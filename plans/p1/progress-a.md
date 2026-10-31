@@ -78,7 +78,7 @@ Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md
 
 ## 9. Commands and evaluation runs (#10, after J5)
 Refs: [processing §13.4–§13.6](../ingestion-worker/design-processing.md), [engine §9.1](../ingestion-worker/design-engine.md)
-- [ ] `edit-site-profile`, `rollback-site-profile`, `edit-eval-question`
+- [x] `edit-site-profile`, `rollback-site-profile`, `edit-eval-question` (PR: a/10-commands)
 - [ ] `eval` `on-demand` over the `human` layer: vector, hybrid, hybrid without the decompounder (`reindex-fts` scratch copy)
 - [ ] Per-question coverage and the threshold proposal as numbers
 - [ ] **Done:** reproducibility test; evaluator == `/v1/retrieve` order

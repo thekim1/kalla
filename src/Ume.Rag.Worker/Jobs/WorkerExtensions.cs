@@ -85,7 +85,7 @@ public static class WorkerExtensions
         builder.Services.TryAddSingleton<BlobPurgeSweep>();
 
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, CommandJobHandler>());
-        builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, CancelRunCommand>());
+        builder.Services.AddRagCommands();
 
         builder.Services.AddHostedService<WorkerHeartbeat>();
         builder.Services.AddHostedService<JobDispatcher>();
