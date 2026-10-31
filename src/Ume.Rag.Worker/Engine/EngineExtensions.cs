@@ -1,6 +1,10 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Hosts;
+using Ume.Rag.Worker.Connectors.Http;
+using Ume.Rag.Worker.Connectors.Malware;
+using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Uploads;
 using Ume.Rag.Worker.Connectors.UrlList;
 using Ume.Rag.Worker.Evaluation;
@@ -70,6 +74,12 @@ public static class EngineExtensions
         services.TryAddSingleton<HostBudget>();
         services.TryAddSingleton<UrlListConnector>();
         services.TryAddSingleton<UploadConnector>();
+        services.TryAddSingleton<SiteProfileCanonicalRules>();
+        services.TryAddSingleton(sp => new CrawlConnector(sp.GetRequiredService<HttpFetcher>(), sp.GetRequiredService<RobotsCache>(),
+            sp.GetRequiredService<IMalwareScanner>(), sp.GetRequiredService<Domain.Ports.IBlobStore>(), sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<SiteProfileCanonicalRules>()));
+        services.TryAddSingleton<FetchTopUp>();
+        services.TryAddSingleton<CrawlTraversal>();
 
         services.TryAddSingleton<SourceContexts>();
         services.TryAddSingleton<DocumentStore>();
@@ -82,6 +92,8 @@ public static class EngineExtensions
         services.TryAddSingleton<DocumentIngest>();
         services.TryAddSingleton<UrlListSource>();
         services.TryAddSingleton<UploadSource>();
+        services.TryAddSingleton<CrawlSourceRunner>();
+        services.TryAddSingleton<SourceReruns>();
         services.TryAddSingleton<Reconciler>();
         services.TryAddSingleton<DriftSweep>();
 

@@ -559,12 +559,29 @@ internal sealed class CrawlRig : IAsyncDisposable
                     // As the queue would: the job comes back without an attempt.
                     await Queue.EnqueueAsync([job], null, ct);
                 }
+                else if (result is CrawlFetchResult.Done done)
+                {
+                    await CommitAsync(context, done);
+                }
 
                 results[url] = result;
             }
         }
 
         throw new InvalidOperationException("The crawl did not finish.");
+    }
+
+    /// <summary>What the engine's document commit does with a fetched row (without a document): idle with its facts, a failed seed counted, then the top-up.</summary>
+    public async Task CommitAsync(CrawlRunContext context, CrawlFetchResult.Done done)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await Frontier.CompleteAsync(context.Run, done.Frontier.Row.UrlHash, done.Frontier.Facts, ct);
+        if (done.Frontier.SeedFailed)
+        {
+            await Runs.SeedFailedAsync(context.Run.RunId, ct);
+        }
+
+        await Traversal.CommittedAsync(context, done, ct);
     }
 
     public ValueTask DisposeAsync() => Path.DisposeAsync();

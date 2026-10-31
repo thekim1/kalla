@@ -34,6 +34,7 @@ public sealed class UrlListSource(
     DocumentIngest ingest,
     IJobQueue queue,
     JobDatabase database,
+    WorkerIdentity identity,
     IOptions<CrawlOptions> options,
     TimeProvider time)
 {
@@ -48,7 +49,7 @@ public sealed class UrlListSource(
         WHERE "Classification" = $1 AND "SourceId" = $2 AND "RunId" = $3 AND "State" = 'released'
         """;
 
-    public async Task<JobResult> ListAsync(SourceContext source, RunRow run, SyncPayload payload, CancellationToken cancellationToken)
+    public async Task<JobResult> ListAsync(SourceContext source, RunRow run, SyncPayload payload, LeasedJob job, CancellationToken cancellationToken)
     {
         var key = new CrawlRunKey(source.SourceId, source.Classification, run.Id);
         await crawlRuns.StartAsync(new CrawlRunRecord
@@ -84,10 +85,10 @@ public sealed class UrlListSource(
                     refused.Clear();
                     if (time.GetElapsedTime(started) > ListingSlice)
                     {
-                        // Yield: the continuation resumes from the checkpoint just saved (no attempt, engine design §9.2).
-                        await queue.EnqueueAsync([SyncJobs.Continuation(source.SourceId, run.Id, source.DepartmentId, source.Classification, run.Kind,
-                            run.Trigger, SyncPhase.List, resumeFromCheckpoint: true)], null, cancellationToken);
-                        return new JobResult.Success();
+                        // Yield: the continuation resumes from the checkpoint just saved (no attempt, engine design §9.2); completed with
+                        // this job, so a continuation that yields again does not lose its successor to its own dedup key.
+                        return await runs.ContinueAsync(queue, job, identity.InstanceId, SyncJobs.Continuation(source.SourceId, run.Id, source.DepartmentId,
+                            source.Classification, run.Kind, run.Trigger, SyncPhase.List, resumeFromCheckpoint: true), run.Id, null, cancellationToken);
                     }
 
                     break;
