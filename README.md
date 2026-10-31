@@ -81,6 +81,10 @@ against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 test host). `evaluation.yml` runs the nightly evaluation on the test deployment. `e2e.yml` runs the browser tests
 (nightly, and before a release).
 
+CI runs on request, to save Actions minutes: `verify.yml` and `parser.yml` run on a pull request only while it carries
+the label `ci` (add it when the pull request is ready for review; merge only on a green run), and not on a push to
+`main`. The schedules of `perf.yml`, `evaluation.yml` and `e2e.yml` are off; run them from the Actions tab.
+
 ## Packages
 
 Every package version is pinned exactly and was released at least 7 days before it was pinned; images are pinned by

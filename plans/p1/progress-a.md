@@ -66,11 +66,11 @@ Refs: [processing §2–§11, §17](../ingestion-worker/design-processing.md), [
 
 ## 7. Engine and index writer (#9, after J2)
 Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md), [data-model §9](../platform/data-model.md)
-- [ ] Stage manifest and support rows; execution with segments, fence, output cache; sync fan-out
-- [ ] Runs, run items, finalizer; scheduler (Cronos)
-- [ ] Index writer: invisible batches, swap, re-key, `held`, orphan sweep
-- [ ] Blob-tombstone purge sweep (#34); blob root ownership (#41)
-- [ ] **Done:** integration and crash-recovery tests; a URL-list source syncs into live chunks; #21, #119, #141 recorded
+- [x] Stage manifest and support rows; execution with segments, fence, output cache; sync fan-out (URL list and upload; crawl after #101 merges, PR: a/9-engine)
+- [x] Runs, run items, finalizer; scheduler (Cronos) (PR: a/9-engine)
+- [x] Index writer: invisible batches, swap, re-key, `held`, orphan sweep (PR: a/9-engine)
+- [x] Blob-tombstone purge sweep (#34); blob root ownership (#41) (PR: a/9-engine)
+- [x] **Done:** integration and crash-recovery tests; a URL-list source syncs into live chunks; #21, #119, #141 recorded (PR: a/9-engine; #141 test part only, measurement open)
 - [ ] **Hand-off J4:** issue to stream B
 
 ## 8. Evaluation smoke job (#17, your part)

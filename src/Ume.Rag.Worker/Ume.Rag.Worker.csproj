@@ -7,6 +7,8 @@
   <ItemGroup>
     <!-- Processing stages (processing design §2–§11): HTML extraction, Markdown blocks, the BGE-M3 token counter. -->
     <PackageReference Include="AngleSharp" />
+    <!-- The scheduler's cron (engine design §9.6, Europe/Stockholm). -->
+    <PackageReference Include="Cronos" />
     <PackageReference Include="Markdig" />
     <PackageReference Include="Microsoft.ML.Tokenizers" />
   </ItemGroup>

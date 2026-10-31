@@ -236,6 +236,10 @@ public sealed partial class JobDispatcher(
 
                 return LeaseLost(job);
 
+            case JobResult.Committed:
+                LogSucceeded(logger, job.Id, job.Class);
+                return JobStatesOutcome.Succeeded;
+
             case JobResult.TransientError { CountsAttempt: false } refusal:
                 if (!await queue.ReleaseAsync(job.Id, owner, refusal.Code, refusal.RetryAfter ?? DefaultCapacityDelay, CancellationToken.None))
                 {

@@ -20,6 +20,12 @@ public abstract record JobResult
 
     /// <summary>Terminal (<c>failed</c>) at once.</summary>
     public sealed record FatalError(string Code) : JobResult;
+
+    /// <summary>
+    /// The handler completed the job itself, in the transaction of its own writes (a fenced segment commit or swap, engine
+    /// design §7.4, §14): the dispatcher writes nothing more.
+    /// </summary>
+    public sealed record Committed : JobResult;
 }
 
 /// <summary>A leased job and the services of its own scope.</summary>

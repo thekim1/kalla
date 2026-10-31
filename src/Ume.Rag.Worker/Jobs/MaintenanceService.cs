@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Ume.Rag.Infrastructure.Jobs;
+using Ume.Rag.Worker.Engine;
 
 namespace Ume.Rag.Worker.Jobs;
 
@@ -7,10 +8,14 @@ namespace Ume.Rag.Worker.Jobs;
 /// The nightly content maintenance at 02:00 Europe/Stockholm on the instance with <c>Worker:Maintenance=true</c>
 /// (repo-and-deployment §3, data-model §4.4, §8): run-item partitions, then terminal jobs older than 7 days in batches of
 /// 1,000. Rows still in <c>RunItems_default</c> afterwards mean maintenance lagged: a warning and the
-/// <c>rag.partitions.default_rows</c> gauge. Content retention, blob purge and the drift sweep join with their tables (P1).
+/// <c>rag.partitions.default_rows</c> gauge. Then the engine's sweeps: chunk sets never swapped or past the rollback window
+/// (<see cref="IndexWriter.SweepOrphansAsync"/>) and the blob-tombstone purge (<see cref="BlobPurgeSweep"/>). Content
+/// retention of cache rows and the nightly drift sweep are not built yet.
 /// </summary>
 public sealed partial class MaintenanceService(
     ContentMaintenance maintenance,
+    IndexWriter index,
+    BlobPurgeSweep purge,
     JobMetrics metrics,
     IOptions<WorkerOptions> options,
     TimeProvider time,
@@ -63,6 +68,25 @@ public sealed partial class MaintenanceService(
         {
             LogStepFailed(logger, ex, "terminal jobs");
         }
+
+        try
+        {
+            LogOrphansSwept(logger, await index.SweepOrphansAsync(cancellationToken));
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            LogStepFailed(logger, ex, "orphan chunk sets");
+        }
+
+        try
+        {
+            var result = await purge.RunAsync(cancellationToken);
+            LogPurged(logger, result.Purged, result.Kept);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            LogStepFailed(logger, ex, "blob purge");
+        }
     }
 
     /// <summary>
@@ -98,6 +122,12 @@ public sealed partial class MaintenanceService(
 
     [LoggerMessage(LogLevel.Information, "Deleted {Count} terminal jobs older than 7 days")]
     private static partial void LogJobsDeleted(ILogger logger, long count);
+
+    [LoggerMessage(LogLevel.Information, "Removed {Count} chunk sets never swapped or past the rollback window")]
+    private static partial void LogOrphansSwept(ILogger logger, long count);
+
+    [LoggerMessage(LogLevel.Information, "Blob purge: {Purged} blobs purged, {Kept} tombstones dropped for keys referenced again")]
+    private static partial void LogPurged(ILogger logger, long purged, long kept);
 
     [LoggerMessage(LogLevel.Error, "Maintenance step {Step} failed; it runs again tomorrow")]
     private static partial void LogStepFailed(ILogger logger, Exception exception, string step);

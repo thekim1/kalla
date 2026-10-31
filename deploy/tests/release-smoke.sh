@@ -167,6 +167,11 @@ dc exec -T postgres pgbackrest --stanza=ragdb stanza-create >/dev/null || fail "
 dc exec -T postgres pgbackrest --stanza=ragdb check || fail "pgbackrest check failed"
 ok "pgbackrest stanza-create and check in the postgres container"
 
+echo "== blob container (issue #41)"
+owner="$(dc run --rm --no-deps rag-upload-backup stat -c '%u:%g %a' /data/blobs/rag)" || fail "could not stat /data/blobs/rag"
+[ "$owner" = "1654:1654 750" ] || fail "/data/blobs/rag is $owner, expected 1654:1654 750"
+ok "rag-blobs-init made /data/blobs/rag 1654:1654 0750; rag-upload-backup (uid 1654, read-only) can read it"
+
 echo "== parser from the worker"
 dc exec -T -e UME_HEALTHCHECK_URL=https://rag-parser:8000/v1/info rag-worker dotnet Ume.Rag.Worker.dll --health-check \
   || fail "the worker could not reach the parser's /v1/info"

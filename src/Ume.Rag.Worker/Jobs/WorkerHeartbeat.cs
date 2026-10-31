@@ -1,17 +1,20 @@
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
+using Ume.Rag.Worker.Engine;
 
 namespace Ume.Rag.Worker.Jobs;
 
 /// <summary>
-/// Registers this instance in <c>content."WorkerInstances"</c>, then every <c>Worker:HeartbeatSeconds</c> (10 s) renews its
+/// Registers this instance in <c>content."WorkerInstances"</c> with its stage manifest and support rows
+/// (<see cref="StageManifestRegistrar"/>; a conflicting manifest stops the worker), then every <c>Worker:HeartbeatSeconds</c> (10 s) renews its
 /// heartbeat and, in one statement, the leases of its running jobs (engine design §5.2, §9.4). A job whose lease the
 /// database no longer holds for this instance is cancelled; its commit would fail anyway. A clean stop removes the row
 /// after the dispatcher has drained (hosted services stop in reverse order).
 /// </summary>
 public sealed partial class WorkerHeartbeat(
     WorkerInstanceStore instances,
+    StageManifestRegistrar manifest,
     IJobQueue queue,
     RunningJobs running,
     WorkerIdentity identity,
@@ -76,11 +79,12 @@ public sealed partial class WorkerHeartbeat(
             try
             {
                 await instances.HeartbeatAsync(identity.InstanceId, identity.BuildVersion, classes, stoppingToken);
+                await manifest.RegisterAsync(identity.InstanceId, stoppingToken);
                 identity.MarkRegistered();
                 LogRegistered(logger, identity.InstanceId, identity.BuildVersion, string.Join(',', classes));
                 return;
             }
-            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not StageManifestConflictException && !stoppingToken.IsCancellationRequested)
             {
                 LogRegistrationFailed(logger, ex, delay.TotalSeconds);
                 await Task.Delay(delay, time, stoppingToken);

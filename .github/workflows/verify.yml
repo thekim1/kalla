@@ -1,13 +1,15 @@
 name: Verify
-# A pull request is verified on the merge with main (pull_request); a push only verifies main, so a branch with a pull
-# request is not built twice. A branch without one can be verified from the Actions tab (workflow_dispatch).
+# CI runs on request, to save Actions minutes: a pull request is verified on the merge with main (pull_request) only
+# while it carries the label `ci`. Adding the label starts a run, and each push to the pull request after that runs
+# again; remove the label to stop. Add it when the pull request is ready for review, and merge only on a green run.
+# Without the label every job is skipped (a skipped job is not billed). Nothing runs on a push to main; main or any
+# branch can be verified from the Actions tab (workflow_dispatch), and release.yml calls this workflow in full.
 # Jobs: ownership and backend (Stage 0), images (P0 checklist #5), deploy-checks (P0 checklist #14), admin-ui (P0
 # checklist #3, plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract jobs (P0 checklist #13) are in
 # parser.yml, which runs them only when the parser changed.
 on:
-  push:
-    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
   workflow_call:
 permissions:
@@ -17,8 +19,9 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   ownership:
-    # Every pull request, design-only ones included: a stream branch may change only its own and the shared paths.
-    if: github.event_name == 'pull_request'
+    # Every pull request with the label `ci`, design-only ones included: a stream branch may change only its own and the
+    # shared paths.
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci') && (github.event.action != 'labeled' || github.event.label.name == 'ci')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +35,9 @@ jobs:
         run: git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA" | python3 -I scripts/check-ownership.py "$HEAD_REF"
 
   changes:
-    # Design documents (plans/**, platforms/**, root *.md) do not build anything (repo-and-deployment §1).
+    # Design documents (plans/**, platforms/**, root *.md) do not build anything (repo-and-deployment §1). On a pull
+    # request only with the label `ci` (see the top); the other jobs need this one, so they skip with it.
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci') && (github.event.action != 'labeled' || github.event.label.name == 'ci')
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}

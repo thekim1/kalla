@@ -95,6 +95,25 @@ services:
       postgres: {condition: service_healthy}
     networks: [data]
 
+  # The blob container (issue #41): the rag-blobs volume's root is root:root 0755, so the services (uid 1654) cannot create
+  # BlobStore:Root themselves. This one-shot creates /data/blobs/rag owned by 1654:1654, mode 0750 (rag-api and
+  # rag-upload-backup read it as the same uid), before any service that mounts the volume starts; it is idempotent and
+  # leaves the files below alone. Root with only CAP_CHOWN; the postgres image is used for its coreutils.
+  rag-blobs-init:
+    <<: *hardened
+    image: ${POSTGRES_IMAGE:-ume-rag/postgres:latest}
+    user: "0:0"
+    cap_add: [CHOWN]
+    restart: "no"
+    cpus: 0.1
+    mem_limit: 64m
+    pids_limit: 16
+    entrypoint: [/bin/sh, -c]
+    command: ["mkdir -p -m 0750 /data/blobs/rag && chown 1654:1654 /data/blobs/rag && chmod 0750 /data/blobs/rag"]
+    volumes:
+      - rag-blobs:/data/blobs
+    network_mode: none
+
   rag-api:
     <<: *hardened
     image: ${API_IMAGE:-ume-rag/api:latest}
@@ -135,6 +154,7 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       rag-migrate: {condition: service_completed_successfully}
+      rag-blobs-init: {condition: service_completed_successfully}
     # All egress leaves through the network that holds the default route, so gw_priority pins it to llm (gateway, OIDC
     # authority, Open WebUI host: the host firewall's allow-list); edge only carries the published port.
     networks:
@@ -185,6 +205,7 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       rag-migrate: {condition: service_completed_successfully}
+      rag-blobs-init: {condition: service_completed_successfully}
     # All egress leaves through the network that holds the default route, so gw_priority pins it to llm (gateway, OIDC
     # authority, Open WebUI host: the host firewall's allow-list); edge only carries the published port.
     networks:

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Jobs;
 
 namespace Ume.Rag.Worker.Commands;
@@ -7,10 +8,9 @@ namespace Ume.Rag.Worker.Commands;
 /// <summary>
 /// <c>cancel-run</c> (admin design §4.7, engine design §10.1): <c>{"kind":"cancel-run","runId":"…"}</c>, dedup key
 /// <c>cancel:{runId}</c>. Cancels the run's queued and running jobs; a running one stops at its owner's next heartbeat
-/// without committing. Result: <c>{"cancelledJobs":n}</c>. Setting <c>Runs.State</c> to <c>cancelled</c> joins this
-/// command with the <c>Runs</c> table (P1).
+/// without committing; the run ends <c>cancelled</c>. Result: <c>{"cancelledJobs":n}</c>.
 /// </summary>
-public sealed class CancelRunCommand(IJobQueue queue) : ICommandHandler
+public sealed class CancelRunCommand(IJobQueue queue, RunStore runs) : ICommandHandler
 {
     public const string KindName = "cancel-run";
 
@@ -29,6 +29,7 @@ public sealed class CancelRunCommand(IJobQueue queue) : ICommandHandler
         }
 
         var cancelled = await queue.CancelRunAsync(runId, CancelledReason, context.Job.Id, cancellationToken);
+        await runs.CancelAsync(runId, cancellationToken);
         return new JobResult.Success(JsonSerializer.Serialize(new CancelRunResult(cancelled), CancelRunResult.JsonOptions));
     }
 
