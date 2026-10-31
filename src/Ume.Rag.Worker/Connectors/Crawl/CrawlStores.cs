@@ -55,6 +55,14 @@ public sealed record FrontierRow
     public string? ContentHash { get; init; }
 
     public DateTimeOffset? SitemapLastMod { get; init; }
+
+    /// <summary>
+    /// The depth of a removal check (§5.4): a URL that left the sitemap, admitted for one <c>HEAD</c> (then <c>GET</c> if
+    /// refused) and not counted as a seed. Its links, when a <c>GET</c> follows, are admitted at depth 1.
+    /// </summary>
+    public const short RemovalCheckDepth = -1;
+
+    public bool IsRemovalCheck => Depth == RemovalCheckDepth;
 }
 
 /// <summary>A URL to admit: canonical, in scope, below the depth limit, not a trap.</summary>
@@ -88,6 +96,23 @@ public interface ICrawlFrontierStore
     Task<AdmitResult> AdmitAsync(CrawlRunKey run, IReadOnlyList<FrontierAdmission> urls, CancellationToken cancellationToken);
 
     Task<FrontierRow?> GetAsync(Guid sourceId, string classification, string urlHash, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// An incremental run's listing (§5.4): the seeds that need no fetch are marked listed for the run (<c>RunId</c> set,
+    /// <c>SitemapLastMod</c> updated when given, nothing admitted or counted) and their hashes returned. A seed needs no
+    /// fetch when its row is <c>idle</c>, was fetched, and its sitemap <c>lastmod</c> is absent or not newer than
+    /// <c>LastFetchedAt</c>; every other seed is left for <see cref="AdmitAsync"/>.
+    /// </summary>
+    Task<IReadOnlySet<string>> MarkListedAsync(CrawlRunKey run, IReadOnlyList<FrontierAdmission> seeds, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// After a complete listing: the source's <c>idle</c> rows not listed in this run whose <c>SitemapLastMod</c> is set,
+    /// i.e. the URLs that left the sitemap since they were listed (the removal check, §5.4).
+    /// </summary>
+    Task<IReadOnlyList<FrontierRow>> LeftSitemapAsync(CrawlRunKey run, CancellationToken cancellationToken);
+
+    /// <summary>Clears <c>SitemapLastMod</c> of the rows: they left the sitemap and their removal check is admitted.</summary>
+    Task ClearSitemapLastModAsync(CrawlRunKey run, IReadOnlyList<string> urlHashes, CancellationToken cancellationToken);
 
     /// <summary>Hosts with <c>pending</c> or <c>released</c> rows of the run.</summary>
     Task<IReadOnlyList<HostLoad>> HostLoadAsync(CrawlRunKey run, CancellationToken cancellationToken);

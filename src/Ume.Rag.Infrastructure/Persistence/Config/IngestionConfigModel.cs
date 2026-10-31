@@ -156,7 +156,7 @@ internal static class IngestionConfigModel
     }
 
     /// <summary><c>UpdatedAt</c>, <c>UpdatedBy</c> (the admin's audit actor) and <c>xmin</c> as the row version (data-model §2.1).</summary>
-    private static void ChangeStamps<T>(EntityTypeBuilder<T> e) where T : class
+    internal static void ChangeStamps<T>(EntityTypeBuilder<T> e) where T : class
     {
         e.Property<string?>("UpdatedBy").HasMaxLength(200);
         e.Property<uint>("Version").IsRowVersion();

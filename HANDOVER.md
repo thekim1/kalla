@@ -229,13 +229,19 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
 **Next:**
 0. **`v0.1.0` released 2026-10-31 (J1).** Working order (user): **code first, live testing last** (`plans/p1/README.md`
    §1a; P1b briefs in `plans/p1b/`, O7 go-live host open for the user). The user authorised merging PRs that are
-   obviously ready without asking. **Stream A P1a merged:** #77 (packages), #78 (item 4 contracts, J3; issues #80, #81
-   to B), #82 (item 6 part 1 connectors; issue #83 to B), #84 (item 5 parser; live parts deferred; #65 recycle-vs-LRU
-   open). **Stream B:** #76 schema part 1 (J2) reviewed OK, B merges; #79 scanner false positive. **Running:**
-   `../rag-a29` item 6 part 2 (crawl, frontier, host budget, uploads, deletion guard; branch stacked on #82, push only
-   after merging main), `../rag-a30` item 7 (processing stages), `../rag-a31` P1b item 2 (contracts part 2, L1). Next
-   after them: item 8 (Sitevision preset, after 7), item 9 (engine, after J2), P1b items. At the J2/J3 sync point:
-   fold #76/#78 deviations into data-model and engine (fetch dedup key, sync trigger, HNSW per profile, StageKeys).
+   obviously ready without asking. **Merged today (stream A):** #77, #78 (item 4, J3), #82 + #91 (item 6 parts 1–2),
+   #84 (item 5), #88 (P1b item 2, L1), #94 (item 18 code part; "stack healthy" box open until images are rebuilt and
+   J8/J9 land). **Stream B:** #76 (J2) merged; #86 (events 5101/5102), #87 (scanner fix) reviewed OK; open issues to B:
+   #80 (J3 questions), #81 (seed templates), #90 (L1), #92 (upload manifest, Settings.Crawl keys), #95 (item 18
+   follow-ups). **J2/J3 sync point done** (`4b0f3a6`). Also merged: #96, #97 (item 6 part 3; item 6 code complete), **#98 (item 7 processing incl. inspect/NER adapters;
+   NER P 1.000 / R 0.985 on fixtures; ContractTests now share one parser-image collection and wait for readiness)**,
+   #99 (P1b item 16 grading script; L8 issue #100 to the user). **Running:** `../rag-a38` item 8 (Sitevision preset,
+   umea.se profile, ~20-page corpus), `../rag-a39` item 9 (engine, J4; fixes #41), `../rag-a34` P1b item 15 (CI
+   harnesses), `../rag-a36` P1b item 4 (crawler freshness). The 5-hour usage limit hit once (12:40 reset): resumed
+   agents with SendMessage.
+   **Implementor agents don't run git writes:** the main session commits and merges `main` into their branches. **Next:** item 8
+   (Sitevision preset, after 7), item 9 (engine, after 6 and 7), item 17 (evaluation-smoke job, after B's smoke set),
+   P1b items 4–8. Open: `robots.disallow` vs `robots.disallowed` (fetch reason vs preflight example) to unify.
 1. **Done 2026-10-31:** #57, #58, #60 merged (#60 with only `admin-ui` red from #61, the user's call); worktrees gone.
    Tick H5 in `progress-a.md` from #60's evidence in the #27 PR. `gh pr merge --admin` is refused by the classifier
    (a branch-protection bypass); a plain merge goes through.

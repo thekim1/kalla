@@ -1,0 +1,1 @@
+{ "mediaType": "text/plain", "displayName": "landsbygdsstod.txt", "collection": "public", "pathRules": [ { "match": "landsbygd*", "on": "path", "tags": ["landsbygd"], "documentType": "information" } ] }

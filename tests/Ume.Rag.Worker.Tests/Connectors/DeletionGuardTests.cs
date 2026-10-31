@@ -4,8 +4,9 @@ using Ume.Rag.Worker.Connectors.Deletion;
 namespace Ume.Rag.Worker.Tests.Connectors;
 
 /// <summary>
-/// Traversal completeness by P1a's strict rule, deletion candidates, the guard's arithmetic and the proposal lifecycle
-/// (connectors design §5.4, §13; weakness review §3 "Phasing"), including C7 (a page-limit run deletes nothing).
+/// Traversal completeness by P1b's ratio rule and P1a's strict rule, deletion candidates, the guard's arithmetic, the
+/// proposal lifecycle and the incomplete-traversal alert (connectors design §5.4, §13, §18; weakness review §3), including
+/// C7 (a page-limit run deletes nothing) under the ratio rule.
 /// </summary>
 public sealed class DeletionGuardTests
 {
@@ -28,6 +29,10 @@ public sealed class DeletionGuardTests
             : new Dictionary<string, HostPause>(),
     };
 
+    private static TraversalVerdict Evaluate(
+        CrawlRunRecord run, int openRows, bool cancelled, CompletenessRule rule = CompletenessRule.Ratio, bool incremental = false) =>
+        TraversalCompleteness.Evaluate(run, openRows, cancelled, rule, incremental);
+
     private static List<SourceDocument> Documents(int count, int reached) =>
         [.. Enumerable.Range(0, count).Select(i => new SourceDocument
         {
@@ -40,42 +45,108 @@ public sealed class DeletionGuardTests
     [Fact]
     public void A_traversal_is_complete_only_when_every_seed_resolved_and_nothing_is_open_paused_or_limited()
     {
-        var complete = TraversalCompleteness.Evaluate(Record(), 0, false);
+        var complete = Evaluate(Record(), 0, false);
         complete.Complete.ShouldBeTrue();
         complete.Reasons.ShouldBeEmpty();
         complete.RunFailure.ShouldBeNull();
         complete.RunDegradation.ShouldBeNull();
 
-        TraversalCompleteness.Evaluate(Record(), 3, false).Reasons.ShouldBe([TraversalCompleteness.ClaimsPending]);
-        TraversalCompleteness.Evaluate(Record(paused: true), 0, false).ShouldSatisfyAllConditions(
+        Evaluate(Record(), 3, false).Reasons.ShouldBe([TraversalCompleteness.ClaimsPending]);
+        Evaluate(Record(paused: true), 0, false).ShouldSatisfyAllConditions(
             v => v.Complete.ShouldBeFalse(), v => v.RunDegradation.ShouldBe(TraversalCompleteness.HostPaused));
-        TraversalCompleteness.Evaluate(Record(), 0, cancelled: true).Reasons.ShouldBe([TraversalCompleteness.Cancelled]);
+        Evaluate(Record(), 0, cancelled: true).Reasons.ShouldBe([TraversalCompleteness.Cancelled]);
     }
 
     [Fact]
     public void P1a_is_strict_one_failing_seed_of_200_makes_the_traversal_incomplete()
     {
-        // P1b's ratio rule (≥ 99 % resolved) would call this complete; P1a keeps the stricter rule (weakness review §3 "Phasing").
-        var verdict = TraversalCompleteness.Evaluate(Record(seedsFailed: 1), 0, false);
+        // Kept selectable (Crawl:CompletenessRule = Strict): P1a's rule, one failing seed blocks every not-seen deletion.
+        var verdict = Evaluate(Record(seedsFailed: 1), 0, false, CompletenessRule.Strict);
 
         verdict.Complete.ShouldBeFalse();
         verdict.Reasons.ShouldBe([TraversalCompleteness.SeedsFailed]);
         verdict.RunFailure.ShouldBeNull();
     }
 
+    [Theory]
+    [InlineData(200, 0, true)]
+    [InlineData(200, 1, true)]
+    [InlineData(200, 2, true)]
+    [InlineData(200, 3, false)]
+    [InlineData(100, 1, true)]
+    [InlineData(100, 2, false)]
+    [InlineData(14_100, 141, true)]
+    [InlineData(14_100, 142, false)]
+    public void P1b_ratio_a_traversal_is_complete_with_at_least_99_percent_of_its_seeds_resolved(int seeds, int failed, bool complete)
+    {
+        var verdict = Evaluate(Record(seeds: seeds, seedsFailed: failed), 0, false);
+
+        verdict.Complete.ShouldBe(complete);
+        verdict.Reasons.ShouldBe(complete ? [] : [TraversalCompleteness.SeedsFailed]);
+        // Negative proof: the strict rule refuses every one of these with a failed seed.
+        Evaluate(Record(seeds: seeds, seedsFailed: failed), 0, false, CompletenessRule.Strict).Complete.ShouldBe(failed == 0);
+    }
+
+    [Fact]
+    public void P1b_ratio_still_needs_no_paused_host_no_open_claim_and_no_page_limit()
+    {
+        Evaluate(Record(seedsFailed: 1, paused: true), 0, false).Reasons.ShouldBe([TraversalCompleteness.HostPaused]);
+        Evaluate(Record(seedsFailed: 1), 1, false).Reasons.ShouldBe([TraversalCompleteness.ClaimsPending]);
+        Evaluate(Record(seedsFailed: 1, limitHit: true), 0, false).Reasons.ShouldBe([TraversalCompleteness.LimitPages]);
+    }
+
+    [Fact]
+    public void An_incremental_run_never_marks_a_traversal_complete()
+    {
+        var verdict = Evaluate(Record(), 0, false, incremental: true);
+
+        verdict.Complete.ShouldBeFalse();
+        verdict.Reasons.ShouldBe([TraversalCompleteness.Incremental]);
+        verdict.RunFailure.ShouldBeNull();
+        verdict.RunDegradation.ShouldBeNull();
+        // Negative proof: the same facts as a full traversal are complete.
+        Evaluate(Record(), 0, false).Complete.ShouldBeTrue();
+        // An incremental run with no changed seed admits none and does not fail; a full traversal without seeds does.
+        Evaluate(Record(seeds: 0), 0, false, incremental: true).ShouldSatisfyAllConditions(
+            v => v.RunFailure.ShouldBeNull(), v => v.Reasons.ShouldBe([TraversalCompleteness.Incremental]));
+        Evaluate(Record(seeds: 0), 0, false).RunFailure.ShouldBe(TraversalCompleteness.SeedsUnreachable);
+    }
+
+    [Fact]
+    public void One_failing_seed_of_200_completes_the_traversal_and_its_document_is_not_a_candidate_three_make_it_partial()
+    {
+        // Connectors design §18 "Deletion guard": 200 seed documents, 190 reached, one seed failed, nine not reached.
+        var documents = Documents(200, reached: 190);
+        var failedSeeds = new HashSet<Guid> { documents[190].Id };
+
+        var one = Evaluate(Record(seeds: 200, seedsFailed: 1), 0, false);
+        var candidates = DeletionCandidates.FromTraversal(Run, documents, one, new Dictionary<Guid, string>(), failedSeeds, Now);
+
+        one.Complete.ShouldBeTrue();
+        candidates.Count.ShouldBe(9);
+        candidates.ShouldAllBe(c => c.Reason == DeletionReasons.NotSeen);
+        candidates.ShouldNotContain(c => c.DocumentId == documents[190].Id);
+
+        var three = Evaluate(Record(seeds: 200, seedsFailed: 3), 0, false);
+        three.Complete.ShouldBeFalse();
+        DeletionCandidates.FromTraversal(Run, documents, three, new Dictionary<Guid, string>(), failedSeeds, Now).ShouldBeEmpty();
+    }
+
     [Fact]
     public void No_resolved_seed_fails_the_run_with_seeds_unreachable()
     {
-        TraversalCompleteness.Evaluate(Record(seeds: 5, seedsFailed: 5), 0, false).RunFailure.ShouldBe(TraversalCompleteness.SeedsUnreachable);
-        TraversalCompleteness.Evaluate(Record(seeds: 0), 0, false).RunFailure.ShouldBe(TraversalCompleteness.SeedsUnreachable);
+        Evaluate(Record(seeds: 5, seedsFailed: 5), 0, false).RunFailure.ShouldBe(TraversalCompleteness.SeedsUnreachable);
+        Evaluate(Record(seeds: 0), 0, false).RunFailure.ShouldBe(TraversalCompleteness.SeedsUnreachable);
     }
 
     [Fact]
     public void C7_a_page_limit_run_deletes_nothing_it_did_not_reach()
     {
-        // Eneo's partial crawl: the run hit maxPages after reaching 40 of 100 documents.
+        // Eneo's partial crawl: the run hit maxPages after reaching 40 of 100 documents; every seed resolved, so only the
+        // limit keeps the ratio rule from calling the traversal complete.
         var documents = Documents(100, reached: 40);
-        var verdict = TraversalCompleteness.Evaluate(Record(limitHit: true), 0, false);
+        var verdict = Evaluate(Record(limitHit: true), 0, false);
+        Evaluate(Record(limitHit: false), 0, false).Complete.ShouldBeTrue();
 
         var candidates = DeletionCandidates.FromTraversal(Run, documents, verdict, new Dictionary<Guid, string>(), new HashSet<Guid>(), Now);
         var decision = DeletionGuard.Evaluate(candidates, DeletionCandidates.Live(documents), emptyListing: false, GuardSettings.Default);
@@ -92,7 +163,7 @@ public sealed class DeletionGuardTests
     {
         var documents = Documents(100, reached: 40);
         var gone = new Dictionary<Guid, string> { [documents[0].Id] = DeletionReasons.Http410 };
-        var verdict = TraversalCompleteness.Evaluate(Record(limitHit: true), 0, false);
+        var verdict = Evaluate(Record(limitHit: true), 0, false);
 
         var candidates = DeletionCandidates.FromTraversal(Run, documents, verdict, gone, new HashSet<Guid>(), Now);
 
@@ -108,7 +179,7 @@ public sealed class DeletionGuardTests
         documents[7] = documents[7] with { DeletedAt = Now.AddDays(-2) };
         var failedSeeds = new HashSet<Guid> { documents[8].Id };
 
-        var candidates = DeletionCandidates.FromTraversal(Run, documents, TraversalCompleteness.Evaluate(Record(), 0, false), new Dictionary<Guid, string>(), failedSeeds, Now);
+        var candidates = DeletionCandidates.FromTraversal(Run, documents, Evaluate(Record(), 0, false), new Dictionary<Guid, string>(), failedSeeds, Now);
 
         candidates.ShouldBe([new DeletionCandidate(documents[9].Id, DeletionReasons.NotSeen)]);
         DeletionCandidates.Live(documents).ShouldBe(8);
@@ -121,7 +192,7 @@ public sealed class DeletionGuardTests
         documents[0] = documents[0] with { ConsecutiveFailures = 4, LastSeenAt = Now.AddDays(-14) };
         documents[1] = documents[1] with { ConsecutiveFailures = 4, LastSeenAt = Now.AddDays(-13) };
         documents[2] = documents[2] with { ConsecutiveFailures = 3, LastSeenAt = Now.AddDays(-30) };
-        var incomplete = TraversalCompleteness.Evaluate(Record(seedsFailed: 1), 0, false);
+        var incomplete = Evaluate(Record(seedsFailed: 1), 0, false, CompletenessRule.Strict);
 
         DeletionCandidates.FromTraversal(Run, documents, incomplete, new Dictionary<Guid, string>(), new HashSet<Guid>(), Now)
             .ShouldBe([new DeletionCandidate(documents[0].Id, DeletionReasons.PersistentFailure)]);
@@ -240,10 +311,17 @@ public sealed class DeletionGuardTests
     }
 
     [Fact]
-    public void Three_incomplete_traversals_in_a_row_raise_the_alert()
+    public void Three_incomplete_traversals_in_a_row_raise_the_alert_and_incremental_runs_do_not_count()
     {
-        TraversalCompleteness.ShouldAlert([false, false, false]).ShouldBeTrue();
-        TraversalCompleteness.ShouldAlert([false, false, true, false]).ShouldBeFalse();
-        TraversalCompleteness.ShouldAlert([false, false]).ShouldBeFalse();
+        static TraversalHistoryEntry Full(bool complete) => new(complete, Incremental: false);
+        var incremental = new TraversalHistoryEntry(false, Incremental: true);
+
+        TraversalCompleteness.ShouldAlert(TraversalCompleteness.ConsecutiveIncomplete([Full(false), Full(false), Full(false)])).ShouldBeTrue();
+        TraversalCompleteness.ShouldAlert(TraversalCompleteness.ConsecutiveIncomplete([Full(false), Full(false), Full(true), Full(false)])).ShouldBeFalse();
+        TraversalCompleteness.ShouldAlert(TraversalCompleteness.ConsecutiveIncomplete([Full(false), Full(false)])).ShouldBeFalse();
+        // Daily incremental runs between weekly traversals neither raise nor reset the alert.
+        TraversalCompleteness.ConsecutiveIncomplete([incremental, incremental, Full(true), Full(false)]).ShouldBe(0);
+        TraversalCompleteness.ConsecutiveIncomplete([incremental, Full(false), incremental, incremental, Full(false), Full(false), Full(true)]).ShouldBe(3);
+        TraversalCompleteness.ShouldAlert(2, threshold: 2).ShouldBeTrue();
     }
 }

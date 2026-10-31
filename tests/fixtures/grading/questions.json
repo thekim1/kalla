@@ -1,0 +1,52 @@
+[
+  {
+    "items": [
+      {
+        "id": "0193b0d2-0000-7000-8000-000000000001",
+        "layer": "human",
+        "state": "active",
+        "question": "Behöver jag bygglov för en altan?",
+        "expectedAnswer": "Bygglov krävs om altanen är högre än 1,8 meter eller närmare tomtgränsen än 4,5 meter.",
+        "expectedDocuments": [{ "id": "0193b0d2-0000-7000-8000-0000000000d1", "title": "Altan och uteplats" }]
+      },
+      {
+        "id": "0193b0d2-0000-7000-8000-000000000002",
+        "layer": "human",
+        "state": "active",
+        "question": "Vad kostar ett bygglov för en carport?",
+        "expectedAnswer": "Avgiften följer kommunfullmäktiges taxa.",
+        "expectedDocuments": [{ "id": "0193b0d2-0000-7000-8000-0000000000d2", "title": "Bygglovsavgifter" }]
+      },
+      {
+        "id": "0193b0d2-0000-7000-8000-000000000003",
+        "layer": "generated",
+        "state": "active",
+        "question": "Hur lång är handläggningstiden?",
+        "expectedAnswer": "Upp till tio veckor.",
+        "expectedDocuments": [{ "id": "0193b0d2-0000-7000-8000-0000000000d3", "title": "Handläggningstid" }]
+      }
+    ],
+    "next": "c2"
+  },
+  {
+    "items": [
+      {
+        "id": "0193b0d2-0000-7000-8000-000000000004",
+        "layer": "human",
+        "state": "active",
+        "question": "Vad blir det för väder i morgon?",
+        "expectedAnswer": null,
+        "expectedDocuments": []
+      },
+      {
+        "id": "0193b0d2-0000-7000-8000-000000000005",
+        "layer": "human",
+        "state": "retired",
+        "question": "Hur söker jag tillstånd för en eldstad?",
+        "expectedAnswer": "Anmälan till byggnadsnämnden.",
+        "expectedDocuments": [{ "id": "0193b0d2-0000-7000-8000-0000000000d5", "title": "Eldstäder" }]
+      }
+    ],
+    "next": null
+  }
+]

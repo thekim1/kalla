@@ -1,0 +1,214 @@
+{
+  "versions": {
+    "chunk": 1,
+    "clean": 1,
+    "detect": 1,
+    "parse.csv": 1,
+    "parse.html": 1,
+    "parse.rules": 1,
+    "parse.text": 1,
+    "personal-data": 1
+  },
+  "detect": {
+    "mediaType": "text/csv",
+    "route": "csv",
+    "mediaTypeDeclared": "text/csv",
+    "mediaTypeMismatch": false,
+    "scanned": false,
+    "bytes": 163
+  },
+  "parserRequests": [],
+  "cleaned": {
+    "language": "und",
+    "blocks": [
+      {
+        "kind": "table",
+        "text": "Avgift;Belopp;Enhet\nBarnomsorg 1–3 år;1 688;kr per månad\nBarnomsorg 4–5 år;1 125;kr per månad\nFritidshem;1 125;kr per månad\nKulturskola;800;kr per termin",
+        "layer": "body",
+        "listDepth": 0,
+        "table": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [
+      {
+        "rows": 5,
+        "cols": 3,
+        "headerRows": 1,
+        "cells": [
+          {
+            "r": 0,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": true,
+            "text": "Avgift"
+          },
+          {
+            "r": 0,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": true,
+            "text": "Belopp"
+          },
+          {
+            "r": 0,
+            "c": 2,
+            "rs": 1,
+            "cs": 1,
+            "header": true,
+            "text": "Enhet"
+          },
+          {
+            "r": 1,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Barnomsorg 1–3 år"
+          },
+          {
+            "r": 1,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "1 688"
+          },
+          {
+            "r": 1,
+            "c": 2,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "kr per månad"
+          },
+          {
+            "r": 2,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Barnomsorg 4–5 år"
+          },
+          {
+            "r": 2,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "1 125"
+          },
+          {
+            "r": 2,
+            "c": 2,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "kr per månad"
+          },
+          {
+            "r": 3,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Fritidshem"
+          },
+          {
+            "r": 3,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "1 125"
+          },
+          {
+            "r": 3,
+            "c": 2,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "kr per månad"
+          },
+          {
+            "r": 4,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Kulturskola"
+          },
+          {
+            "r": 4,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "800"
+          },
+          {
+            "r": 4,
+            "c": 2,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "kr per termin"
+          }
+        ]
+      }
+    ],
+    "pages": [],
+    "breadcrumb": [],
+    "keywords": [],
+    "strategy": "parse=csv[csv-table]",
+    "missingPages": [],
+    "facts": {
+      "quality.chars": 139,
+      "quality.garble": 0,
+      "quality.missingPages": 0,
+      "quality.short": 1
+    }
+  },
+  "metadata": {
+    "tags": [],
+    "documentType": "spreadsheet",
+    "sourceModifiedAt": "2026-03-01"
+  },
+  "chunks": [
+    {
+      "ordinal": 0,
+      "prefix": "",
+      "headingPath": "",
+      "text": "Avgift: Barnomsorg 1–3 år; Belopp: 1 688; Enhet: kr per månad\nAvgift: Barnomsorg 4–5 år; Belopp: 1 125; Enhet: kr per månad\nAvgift: Fritidshem; Belopp: 1 125; Enhet: kr per månad\nAvgift: Kulturskola; Belopp: 800; Enhet: kr per termin",
+      "searchText": "Avgift: Barnomsorg 1–3 år; Belopp: 1 688; Enhet: kr per månad\nAvgift: Barnomsorg 4–5 år; Belopp: 1 125; Enhet: kr per månad\nAvgift: Fritidshem; Belopp: 1 125; Enhet: kr per månad\nAvgift: Kulturskola; Belopp: 800; Enhet: kr per termin\nbarn omsorg fritid hem kultur skola",
+      "overlapChars": 0,
+      "textHash": "2d07acffb401519ce59ffd55e479bd35d5f2c2d7c5580279954fdde4df14ed08",
+      "tokenCount": 82,
+      "tags": [],
+      "documentType": "spreadsheet",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": true
+    }
+  ],
+  "chunkFacts": {
+    "quality.chunks": 1,
+    "quality.duplicateChunkRatio": 0,
+    "quality.emptyChunkRatio": 0
+  },
+  "pii": {
+    "counts": {
+      "personnummer": 0,
+      "samordningsnummer": 0,
+      "email": 0,
+      "emailExternal": 0,
+      "phone": 0,
+      "name": 0,
+      "ner": "skipped",
+      "rules": 0
+    },
+    "typesFired": [],
+    "nerUnits": 0
+  }
+}

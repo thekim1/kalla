@@ -204,14 +204,17 @@ public sealed class HostBudgetTests
     {
         var (egress, crawl) = PlatformCrawlSettings.Parse("""
             { "allowedPorts": [8443], "blockedHosts": ["bad.example"], "municipalHosts": ["*.umea.se"],
-              "hostOverrides": { "www.umea.se": { "requestsPerSecond": 2.5, "maxConnections": 2 } }, "freshnessHours": 12 }
+              "hostOverrides": { "www.umea.se": { "requestsPerSecond": 2.5, "maxConnections": 2 } }, "freshnessHours": 12,
+              "incompleteRunsAlert": 5 }
             """);
 
         egress.AllowedPorts.ShouldBe([8443]);
         egress.BlockedHosts.ShouldContain("BAD.example");
         crawl.KindOf("www.umea.se").ShouldBe(HostKind.Municipal);
         crawl.OverrideOf("www.umea.se").ShouldBe(new HostOverride(2.5, 2));
+        crawl.IncompleteRunsAlert.ShouldBe(5);
         PlatformCrawlSettings.Parse("{}").Crawl.KindOf("www.umea.se").ShouldBe(HostKind.External);
+        PlatformCrawlSettings.Parse("{}").Crawl.IncompleteRunsAlert.ShouldBe(3);
     }
 
     private static void InterlockedMax(ref int target, int value)

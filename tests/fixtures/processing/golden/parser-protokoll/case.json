@@ -1,0 +1,71 @@
+{
+ "mediaType": "application/pdf",
+ "url": "https://www.exempelstad.se/download/18.4b/ksau-2026-02-10.pdf",
+ "collection": "public",
+ "inspect": {
+  "format": "pdf",
+  "pageCount": 3,
+  "rangeable": true,
+  "pages": [
+   {
+    "page": 1,
+    "textChars": 30,
+    "badChars": 0,
+    "garbledScore": 0.0,
+    "imageCoverage": 0.9,
+    "pathObjects": 0
+   },
+   {
+    "page": 2,
+    "textChars": 30,
+    "badChars": 0,
+    "garbledScore": 0.0,
+    "imageCoverage": 0.9,
+    "pathObjects": 0
+   },
+   {
+    "page": 3,
+    "textChars": 30,
+    "badChars": 0,
+    "garbledScore": 0.0,
+    "imageCoverage": 0.9,
+    "pathObjects": 0
+   }
+  ]
+ },
+ "ownDomains": [
+  "exempelstad.se"
+ ],
+ "ner": [
+  [
+   "Anna Lindqvist",
+   "person",
+   0.98
+  ],
+  [
+   "Erik Johansson",
+   "person",
+   0.97
+  ],
+  [
+   "Maria Nilsson",
+   "person",
+   0.95
+  ],
+  [
+   "Johan Berglund",
+   "person",
+   0.96
+  ],
+  [
+   "Sara Ek",
+   "person",
+   0.91
+  ],
+  [
+   "Älven",
+   "person_ambiguous",
+   0.9
+  ]
+ ]
+}
