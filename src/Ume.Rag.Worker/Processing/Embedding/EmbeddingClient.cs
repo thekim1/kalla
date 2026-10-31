@@ -14,10 +14,10 @@ public sealed record EmbeddingCall(Guid? RunId, string Step = "embed");
 /// <summary>
 /// <c>POST /v1/embeddings</c> through the worker's gateway client <see cref="HttpClientName"/> (<c>AddGatewayClient</c> with its
 /// <see cref="ResidencyCeilingHandler"/>): the profile's model, the profile's ceiling as <c>x-ume-max-residency</c> (so the
-/// worker's key of that level, <c>Eu</c> for the P1a pilot), <c>x-ume-run-id</c> and <c>x-ume-step</c>. The answer is
-/// checked before anything is stored: one vector per input in input order, each of the profile's dimensions and finite
-/// (else fatal <c>embed.bad_vector</c>); the residency is checked by the handler (above the ceiling: fatal, event 5003).
-/// Status codes map per engine design §7.3.
+/// worker's key of that level, <c>Eu</c> for the P1a pilot), <c>dimensions</c> when the profile requests it,
+/// <c>x-ume-run-id</c> and <c>x-ume-step</c>. The answer is checked before anything is stored: one vector per input in input
+/// order, each of the profile's dimensions and finite (else fatal <c>embed.bad_vector</c>); the residency is checked by the
+/// handler (above the ceiling: fatal, event 5003). Status codes map per engine design §7.3.
 /// </summary>
 public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clock)
 {
@@ -35,7 +35,7 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
         ArgumentNullException.ThrowIfNull(call);
         using var request = new HttpRequestMessage(HttpMethod.Post, EmbeddingsPath)
         {
-            Content = JsonContent.Create(new EmbeddingRequest(profile.GatewayModel, inputs, "float"), options: Json),
+            Content = JsonContent.Create(new EmbeddingRequest(profile.GatewayModel, inputs, "float", profile.DimensionsParameter), options: Json),
         };
         request.WithMaxResidency(profile.MaxResidency);
         if (call.RunId is { } runId)
@@ -150,7 +150,10 @@ public sealed class EmbeddingClient(IHttpClientFactory clients, TimeProvider clo
         return null;
     }
 
-    private sealed record EmbeddingRequest(string Model, IReadOnlyList<string> Input, [property: JsonPropertyName("encoding_format")] string EncodingFormat);
+    /// <summary><c>dimensions</c> only for a profile that requests it (#142); BGE-M3 must never get it.</summary>
+    private sealed record EmbeddingRequest(
+        string Model, IReadOnlyList<string> Input, [property: JsonPropertyName("encoding_format")] string EncodingFormat,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Dimensions = null);
 
     internal sealed record EmbeddingResponse(IReadOnlyList<EmbeddingItem>? Data);
 
