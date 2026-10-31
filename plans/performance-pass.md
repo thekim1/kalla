@@ -234,7 +234,9 @@ Sizes per element (estimate from pgvector's layout: an element tuple holds the v
 | `halfvec(1024)` expression index | ≈ 2.1 KB + 0.2 KB | ≈ 2.7 KB (three per page) | ≈ 14 GB | ≈ 27 GB | **yes** |
 | binary quantization `bit(1024)` + re-rank | ≈ 0.13 KB + 0.2 KB | ≈ 0.35–0.5 KB | ≈ 2.5 GB | ≈ 5 GB | yes, recall needs re-rank (pgvector `README.md:589-606`) |
 
-**Decision (answered 6):** the profile's HNSW index is created on the half-precision expression from the first
+**Decision (answered 6):** the profile's HNSW index is created on the half-precision expression. **As built (P1a item 2,
+PR #76):** there is no fixed `bge_m3` index; `content.rag_ensure_profile_index(profile, dims)` creates one per profile
+(data-model §3.2), so the example below shows its shape only. From the first
 migration (pgvector `README.md:558-571`, "Index vectors at half precision for smaller indexes"):
 
 ```sql

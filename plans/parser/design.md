@@ -142,6 +142,12 @@ never waits behind a conversion. Deadline 10 s, ≤ 2 000 pages.
 | `pages[]` | per page below | per frame: size, DPI | size | – |
 | `refusal` | the error code convert would give, if any | | | |
 
+As built in P1a item 5 (PR #84, 2026-10-31): an input whose format **can be named** but would be refused gets
+`refusal` (200); an input whose format **cannot be named** for inspection (OLE, RTF, e-mail, macro-enabled, archive,
+unknown) answers the error convert would give (415 `format_deferred` / `unsupported_format`), not 200 with `refusal`.
+The request has its own schema (`inspect-request.schema.json`); the result adds `pages[].dpi`, `warnings` and
+`timings`.
+
 Per PDF page (pypdfium2, no rendering, typically < 20 ms/page): `width`, `height`, `rotation`, `text_chars`,
 `bad_chars` (U+FFFD, private-use area, C0 controls, literal `(cid:N)`), `garbled_score`, `image_coverage` (union
 area of image objects ÷ page area, clipped to 1), `path_objects`.
@@ -296,7 +302,7 @@ Error responses are `application/json` (`error.schema.json`): `{ "error": { "cod
 
 | HTTP | `code` | Meaning | `retry` | Worker maps to |
 |---|---|---|---|---|
-| 400 | `invalid_request` | options fail the schema | `none` | Fatal (bug) |
+| 400 | `invalid_request` | options fail the schema, or the page range ends past the document's last page (P0 contract case; kept in P1a item 5, PR #84) | `none` | Fatal (bug) |
 | 409 | `duplicate_in_flight` | same `request_id` already converting | `later` | requeue, no attempt counted |
 | 413 | `too_large` | body > 60 MB | `none` | Fatal, outcome `too-large` |
 | 415 | `format_deferred` | legacy Office, RTF, email: P2 formats | `none` | Fatal, outcome `unsupported`, reason `format_deferred` |
@@ -311,8 +317,14 @@ Error responses are `application/json` (`error.schema.json`): `{ "error": { "cod
 | 200 | `status: partial` | deadline hit after some pages | – | keep completed pages, request the rest |
 | 500 | `worker_crashed` | conversion process died (signal) | `smaller_range` | as `timeout` |
 | 507 | `resource_limit` | RSS watchdog killed the conversion (P1; P0 has no watchdog) | `smaller_range` | as `timeout` |
-| 503 | `busy` / `not_ready` | no warm slot (`Retry-After`) | `later` | requeue after `Retry-After`, no attempt counted |
+| 503 | `busy` / `not_ready` | no warm slot (`Retry-After`); `/v1/ner` with `NER_ENABLED=false` answers `not_ready` (§7.8) | `later` | requeue after `Retry-After`, no attempt counted |
 | 501 | `not_implemented` | endpoint not in this build (`/v1/inspect` in P0) | `none` | Fatal (P0 only; added in P0 #13, PR #16) |
+
+`status: partial` is the deadline case only, never a range past the end (proved in `test_ranges.py`, PR #84). The
+`limit` names of `limit_exceeded` (as built in P1a item 5, PR #84): `zip_entries`, `zip_entry_name`, `zip_nested`,
+`zip_uncompressed_bytes`, `zip_ratio`, `image_pixels`, `tiff_frames`, `index_part_bytes`; convert warnings added:
+`ocr_off_ignored`, `render_scale_reduced`, `truncated_cells`. These are additive contract fields (as are
+`Info.ner` and the extra `Limits` in `/v1/info`), so the contract stays `v1`.
 
 `5104 rag.parser.limit_exceeded` is a security event in the worker's range (identity design §10 numbering), logged
 by the worker with document id and limit name only.
@@ -356,7 +368,10 @@ The worker calls it **only when gated** (the document is in a source of a `publi
 by another rule, and has ≥ 5 contact values) and from its processing job, not from a job class of its own
 (simplification pass §1). Served by one warm process **`ner-0`** (never behind conversions; `NER_THREADS` 2,
 `NER_QUANTIZE`, at most `NER_QUEUE` (4) waiting requests else `503 busy`, recycled after 5 000 requests); `/v1/info`
-adds `ner_ready` and the model block inside `build_hash`; readiness does not depend on NER.
+adds `ner_ready` and the model block inside `build_hash`; readiness does not depend on NER. `NER_ENABLED=false`
+starts no `ner-0`: `/v1/ner` answers 503 `not_ready` and `/v1/info` has `ner: null` and `ner_ready: false`, so the worker's gated call fails
+closed (processing design §9.6; as built in P1a item 5, PR #84, 2026-10-31). The fixture check of the labels,
+tokenizer loading and fp32 vs int8 is to-verify #79.
 
 ## 8. Page ranges and joining
 
@@ -466,14 +481,17 @@ Docling's `DocumentConverter` caches one pipeline per options hash and never evi
 converter and the per-request document timeout is set on the pipeline's own copy of its options. Each cached set
 costs about 0.5 GiB (an LRU of three peaked at 2.30 GiB per slot), so three sets do not fit under
 `PARSER_SLOT_MAX_RSS_MB` 2 800 next to `ner-0`: the cache size is set with the P1 RSS watchdog; three until then
-(P0 #13, PR #16; decided by the user 2026-10-30, to-verify #65).
+(P0 #13, PR #16; decided by the user 2026-10-30, to-verify #65). **Open (P1a item 5, PR #84, 2026-10-31):** the RSS
+growth recycle (§10.3, idle RSS > warm × 1.4) recycles a slot about 8 s after a second option set is built (+0.5 GB),
+so the LRU of three holds one or two sets in practice. The design values are kept until the P1 watchdog sizing
+measurement decides both (to-verify #65).
 
 ### 10.3 Limits per conversion, recycling, cleanup
 
 | Mechanism | Value (16 GB host, 1 × 4) | Effect |
 |---|---|---|
 | Deadline | `min(deadline_ms, 120 s)`; Docling's own `document_timeout` set to max(deadline − 10 s, deadline ÷ 2) for a graceful `partial` (P0 #13, PR #16) | then `SIGKILL` at deadline + 10 s → `timeout` |
-| RSS watchdog | supervisor samples each slot every 500 ms (`psutil`); kill above `PARSER_SLOT_MAX_RSS_MB` (2 800; 2 × 2: 2 600) | `resource_limit`, respawn |
+| RSS watchdog | supervisor samples each slot with its children (Tesseract included) every 500 ms (`psutil`); kill above `PARSER_SLOT_MAX_RSS_MB` (2 800; 2 × 2: 2 600). As built in P1a item 5 (PR #84, 2026-10-31): only children that have exec'd count, because a forked child that has not exec'd yet shares the slot's pages and would report its RSS twice. The development Compose sets 2 200 (1 × 2 threads in a 3.5g container next to `ner-0` ≈ 1 GB, so the watchdog fires before the container limit), `compose.host-24g.yaml` 2 600 | `resource_limit`, respawn |
 | `RLIMIT_AS` | not used for slots (torch and ONNX reserve large virtual ranges); used for inspect | – |
 | OOM | slots `oom_score_adj=1000`, so the kernel picks them before the supervisor | supervisor survives, respawns |
 | Recycle | after 50 conversions, or when idle RSS exceeds warm RSS + 40 % | respawn between jobs; reason in metrics |
@@ -502,7 +520,7 @@ Inputs arrive after ClamAV but are untrusted. The container is the outer sandbox
 | Threat | Control |
 |---|---|
 | Decompression bomb, OOXML/ODF zip | pre-check before any library opens it: entries ≤ 10 000, total uncompressed ≤ 512 MB, per-entry ratio ≤ 200, no absolute or `..` entry names, no nested zip except known embeddings (`embeddings/*.xlsx` etc., not opened in P1) → `limit_exceeded` |
-| Decompression bomb, images | Pillow `Image.MAX_IMAGE_PIXELS` = 100 MP as a hard error (`DecompressionBombError`, not a warning); TIFF ≤ 2 000 frames; render size per PDF page ≤ 60 MP (scale reduced, warning) |
+| Decompression bomb, images | Pillow `Image.MAX_IMAGE_PIXELS` = 100 MP as a hard error (`DecompressionBombError`, not a warning); TIFF ≤ 2 000 frames (more → 422 `limit_exceeded`, `limit` `tiff_frames`; PR #84); render size per PDF page ≤ 60 MP (scale reduced, warning) |
 | PDF JavaScript, XFA, launch actions | never executed: pdfium in pypdfium2 is built without V8/XFA (*to verify*); reported by inspect only |
 | PDF embedded files | not extracted in P1, reported (`has_embedded_files`) |
 | Pathological PDF (deep object trees, huge content streams, endless xref loops) | deadline + kill, RSS watchdog, page cap 2 000; inspect lane has `RLIMIT_AS` and its own 10 s deadline; the fast path runs in a killable slot like Docling |
@@ -535,7 +553,7 @@ Inputs arrive after ClamAV but are untrusted. The container is the outer sandbox
 | Python | uv lock with hashes, `no-build = true`, `exclude-newer` 7 days before lock (repo-and-deployment §2.4). `docling-slim` with only the extras needed (standard formats, Tesseract CLI), not the `docling` meta package's full set; **no EasyOCR, no `python-oxmsg`**. Adds: `pypdfium2` (also a Docling dependency), `defusedxml`, `psutil`, `pillow`. CPU wheels for `torch` and `torchvision` from the PyTorch CPU index |
 | Docling extras | layout and TableFormer models only; picture classification, code/formula enrichment and picture description **off and not baked** |
 | Entry | `ENTRYPOINT ["tini","--"]`, `CMD ["python","-m","ume_parser"]` (supervisor starts uvicorn programmatically on **8000**, TLS when `PARSER_TLS_CERT_FILE`/`PARSER_TLS_KEY_FILE` are set: off in dev, on in production Compose; decided 2026-10-30, PR #9) |
-| Env | `PARSER_WORKERS`, `PARSER_THREADS`, `OMP_NUM_THREADS`, `PARSER_SLOT_MAX_RSS_MB`, `NER_THREADS` (2), `NER_QUANTIZE` (1), `NER_QUEUE` (4), `NER_PERSON_LABELS` (`PER,PRS`), offline variables (§11) |
+| Env | `PARSER_WORKERS`, `PARSER_THREADS`, `OMP_NUM_THREADS`, `PARSER_SLOT_MAX_RSS_MB` (2 200 dev, 2 600 24 GB host, §10.3), `NER_ENABLED` (true; §7.8), `NER_THREADS` (2), `NER_QUANTIZE` (1), `NER_QUEUE` (4), `NER_PERSON_LABELS` (`PER,PRS`), offline variables (§11) |
 | Size target | ≤ 3.5 GB: base ≈ 150 MB, torch CPU + torchvision ≈ 800 MB, other Python ≈ 500 MB, Docling models ≈ 400 MB, NER model ≈ 500 MB, Tesseract ≈ 50 MB. Measured in P0 |
 
 Models baked (sizes approximate, *to verify* at P0):

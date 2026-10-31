@@ -395,7 +395,7 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 |---|---|---|
 | `GET /api/templates`, `GET /api/templates/{id}/versions/{v}` | Read | parameter schema (`paramsSchema` with `x-labels`, `x-help`, `x-unit`), defaults, effect tags per parameter, worker support |
 | `GET /api/pipelines/{id}`, `GET /api/pipelines/{id}/versions` | Read | a source's pipeline: template version + parameters per version |
-| `POST /api/pipelines/{id}/preview` `{ templateVersionId, parameters, documentIds \| urls }` | EditPipelines, Edit | `preview` `node-preview` on unsaved parameters (§6.4) |
+| `POST /api/pipelines/{id}/preview` `{ templateVersionId, parameters, documentIds \| urls }` | EditPipelines, Edit | `preview` `stage-preview` on unsaved parameters (§6.4) |
 | `POST /api/pipelines/{id}/publications` `{ templateVersionId, parameters, version }` | EditPipelines | V24; enqueues `publish-plan`; returns `publicationId` |
 | `GET /api/publications/{id}`, `POST /api/publications/{id}/confirm` `{ version }`, `/cancel` | Read / EditPipelines | §6.6; confirm refused (409) if the pipeline changed since the plan |
 | `POST /api/pipelines/{id}/rollback` `{ versionId }` | EditPipelines | one click; within 14 days the previous chunk sets are swapped back without re-parsing (§6.7) |
@@ -518,23 +518,33 @@ pass §9) and `pg_notify('rag_jobs', class)` in the same transaction as any conf
 
 | Admin action | Class / kind | Dedup key | Priority | Result read from |
 |---|---|---|---|---|
-| Preview (sample pages) | `preview` `node-preview`; for a crawl host without a profile first `preview` `site-profile` (learns it; before/after; **P2**, weakness review §1: in P1 the host's manual profile or the Sitevision preset is applied) | – | – | `Jobs.Result` + preview blobs |
-| Preflight (unsaved source) | `preview` `preflight` (URL lists: first 20 URLs) | – | – | `Jobs.Result` |
-| PII highlights | `preview` `node-preview` until the personal-data stage, spans on | `pii-preview:{documentId}` | – | preview blobs (24 h) |
+| Preview (sample pages) | `preview` `stage-preview` (≤ 5 `documentIds`, `urls` or `uploadIds`; `collectionId`; optional `embed`); for a crawl host without a profile first `preview` `site-profile` (learns it; before/after; **P2**, weakness review §1: in P1 the host's manual profile or the Sitevision preset is applied) | – | – | `Jobs.Result` + preview blobs |
+| Preflight (unsaved source) | `preview` `preflight` (URL lists: first 20 URLs; the unsaved settings as an object, checked first against the sources schema, V25) | – | – | `Jobs.Result`: worst state, one `<area>.<code>` code per check (no Swedish text; the UI maps codes to text in `messages.ts`), `estimatedPages`, `cms` |
+| PII highlights | `preview` `stage-preview` until the personal-data stage, `piiSpans: true` | `pii-preview:{documentId}` | – | preview blobs (24 h) |
 | Publish plan | `preview` `publish-plan` (P1: every document of the collection; from effect tags in P2, weakness review §1) | `plan:{pipelineId}` | – | `Jobs.Result` |
-| Evaluation run (retrieval settings saved, **Kör utvärdering**) | `eval` `on-demand` | `eval:{collectionId}` | – | `EvaluationRuns` |
+| Evaluation run (retrieval settings saved, **Kör utvärdering**) | `eval` `on-demand` (`variants` in one job; optional `candidateSettings`, runs marked `candidate`) | `eval:{collectionId}` | – | `EvaluationRuns` |
 | Generate / top up test questions | `eval` `generate-set` / `top-up-set` | `eval-generate:{collectionId}` | – | `EvaluationSets`, questions |
 | Sync now / retry failed | `sync` (`Trigger = manual`, `kind` `sync`/`retry-failed`) | `sync:{sourceId}` | 10 | `Runs` |
 | Upload commit | `sync` (`Trigger = upload`) | `sync-upload:{batchId}` | – | `Runs`, `Uploads` |
-| Publish confirm / rollback | `sync` `reprocess` per source (`Trigger = publish`/`rollback`) | `sync:{sourceId}` (a running sync gets a follow-up) | – | `Runs`; the post-publish evaluation run is enqueued by the worker when re-processing completes (§6.6) |
-| Deletion decision | `command` `confirm-deletion` / `reject-deletion` | `deletion:{runId}` | – | `Runs.State`, `DeletionProposals` |
+| Publish confirm / rollback | `sync` `reprocess` per source (`Trigger = publish`/`rollback`) | `sync:{sourceId}` (a running sync gets a follow-up) | – | `Runs`; the post-publish evaluation run (`eval` `publish-report`, dedup `eval-report:{runId}`) is enqueued by the worker when re-processing completes (§6.6) |
+| Deletion decision | `command` `confirm-deletion` / `reject-deletion` (with `decidedBy`) | `deletion:{runId}` | – | `Runs.State`, `DeletionProposals` |
 | Release held references | `command` `release-hold` | `release-hold:{sourceId}` | – | `Documents.HeldAt` |
-| PII clearance (a decision on the document) | `command` `clear-pii-flag` | `pii-clear:{documentId}` | – | `Documents.PiiClearedAt`/`PiiClearedCounts`; the document's `held` set released (processing §9.5) |
+| PII clearance (a decision on the document) | `command` `clear-pii-flag` (with `decidedBy`; the reason stays in the audit event) | `pii-clear:{documentId}` | – | `Documents.PiiClearedAt`/`PiiClearedCounts`; the document's `held` set released (processing §9.5) |
 | Human question edit | `command` `edit-eval-question` | – | – | `EvaluationQuestions` |
-| Reprocess one document | `command` `reprocess-document` | `reprocess:{documentId}` | – | run items |
+| Reprocess one document | `command` `reprocess-document` (`fromStage` default `parse`) | `reprocess:{documentId}` | – | run items |
 | Cancel a run | `command` `cancel-run` | `cancel:{runId}` | – | `Runs.State` |
-| Site profile approve / reject (P2) / roll back / edit | `command` `approve-site-profile` / `reject-site-profile` / `rollback-site-profile` / `edit-site-profile` | `site-profile:{siteProfileId}` | – | `SiteProfileVersions`, `SiteProfiles.AppliedVersionId` |
+| Site profile approve / reject (P2) / roll back / edit | `command` `approve-site-profile` / `reject-site-profile` / `rollback-site-profile` / `edit-site-profile` | `site-profile:{siteProfileId}`; an `edit-site-profile` that creates a host's first profile: `site-profile:{level}:{host}` | – | `SiteProfileVersions`, `SiteProfiles.AppliedVersionId` |
 | Approve / reject a parse-profile proposal (P2) | `command` `approve-profile` / `reject-profile` | `profile:{id}` | – | `ParseProfiles` |
+
+As built in P1a item 4 (PR #78) and P1b item 2 (PR #88), 2026-10-31 (payload schemas in `contracts/jobs/v1/`,
+engine design §9.1):
+- The preview kind is `stage-preview`, not `node-preview` (P1b README §7 O9).
+- The worker enqueues two kinds the table does not show: `eval` `nightly` (dedup `eval-nightly:{collectionId}`) and
+  `publish-report`. `eval-nightly:` is kept apart from `eval:{collectionId}`, so a queued on-demand run and the
+  nightly run never drop each other.
+- Commands carry `decidedBy` (the admin's `oid`), because `Jobs` has no actor column.
+- `edit-site-profile` carries `baseVersion` (`site_profile.version_conflict` on mismatch).
+- Only P1 kinds exist; the P2 rows above have no schema yet.
 
 Assistant publish, restore and copy enqueue nothing: they are config changes only. Assistant test runs (§7.4) are not
 worker jobs either: like answer-level evaluation and the skill gate they run in `rag-admin` (`AssistantTestRunner`,

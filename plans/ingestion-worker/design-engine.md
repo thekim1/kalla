@@ -118,20 +118,37 @@ hashing and validation. A pipeline version is immutable once published.
 
 ### 3.2 Templates and the stage manifest
 
-A **template** (`src/Ume.Rag.MigrationService/Templates/{name}.v{n}.json`, seeded insert-if-absent; a changed
-template is a new version) names its stages with their code versions and declares its parameters:
+A **template** (`src/Ume.Rag.MigrationService/Templates/{name}.v{n}.json`, schema
+`contracts/pipeline/v2/template.schema.json`, seeded insert-if-absent; a changed template is a new version) names its
+source type and its stages with their code versions and declares its parameters:
 
 ```json
-{ "template": "website", "version": 1,
+{ "template": "website", "version": 1, "sourceType": "crawl",
   "stages": { "fetch": 1, "detect": 1, "parse": 1, "clean": 1, "chunk": 1, "personal-data": 1, "embed": 1, "index": 1 },
   "parameters": {
     "ocr":            { "stage": "parse", "appliesTo": ["parser"], "schema": { "enum": ["auto", "force", "off"] }, "default": "auto" },
     "tables":         { "stage": "parse", "appliesTo": ["parser"], "schema": { "enum": ["fast", "accurate"] }, "default": "accurate" },
     "chunkTokens":    { "stage": "chunk", "schema": { "type": "integer", "minimum": 200, "maximum": 800 }, "default": 400 },
     "overlapPercent": { "stage": "chunk", "schema": { "type": "integer", "minimum": 0, "maximum": 30 }, "default": 15 },
-    "pathRules":      { "stage": "chunk", "schema": { "$ref": "#/defs/pathRules" }, "default": [] } },
-  "labels": { "ocr": { "sv": "Textigenkänning (OCR)", "en": "OCR" } } }
+    "pathRules":      { "stage": "chunk", "schema": { "$ref": "#/$defs/pathRules" }, "default": [] } },
+  "defs": { "pathRule": { … }, "pathRules": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/pathRule" } } },
+  "rules": [],
+  "collectionDefaults": { "recency": { "halfLifeDays": 730, "weight": 0.15, "kinds": ["pdf"] } } }
 ```
+
+As built in P1a item 4 (PR #78, 2026-10-31):
+- `sourceType` is the `Sources.Type` the template serves; a definition saved for another source type fails with
+  `template_source_type_mismatch` (admin V24).
+- `defs` holds shared subschemas. The validator copies them into each parameter schema as `$defs`, so a parameter
+  refers to them as `#/$defs/<name>` (the earlier example's `#/defs/…` is not a valid pointer into `$defs`).
+- `rules` holds the cross-parameter rules (§4 rule 3) as JSON Schema `if`/`then` over the parameters with defaults
+  applied.
+- `collectionDefaults` holds the collection defaults of §13.1 (`recency` only).
+- **Templates carry no labels.** Admin UI text lives only in `labels.ts` (AGENTS.md), so the form takes each
+  parameter's Swedish label from there by parameter name.
+- `TemplateCatalog.BuiltIn` (`Ume.Rag.Pipelines`) embeds the template files as resources, so the admin and the
+  worker validate against the same versions without reading the database. Seeding them into `config` needs
+  migration-service code (stream B, issue after J3).
 
 - `stage` is the parameter's **effect tag**: the first stage its change affects. `appliesTo` narrows it to a route
   (`html`, `parser`, `text`, `csv`), so a changed OCR mode does not re-process HTML pages. The publish plan is computed
@@ -155,9 +172,17 @@ inputHash       = OutputHash of the previous stage's output; for detect and pars
 key(parse)      = SHA-256(contentHash ‖ "parser" ‖ parserBuild ‖ parserSettingsHash)     parser-bound documents
 ```
 
+Byte encoding (as built in P1a item 4, `StageKeys`, PR #78, 2026-10-31): every hash is 32 bytes of SHA-256; each
+variable-length text part (`s`, `"parser"`, `parserBuild`) is followed by a `0x00` byte, so no two inputs
+concatenate alike; `stageVersion` is an int32, big-endian. The canonical settings object is
+`{"inputs": {…}, "params": {…}}`: `params` holds the resolved parameters whose `stage` tag is `s` and whose
+`appliesTo` (if any) contains the document's route; `inputs` holds the non-parameter inputs (`parseRule` =
+`id@version`, `siteProfileVersion` for HTML). Canonical JSON is the project's own RFC 8785 implementation
+(`CanonicalJson`).
+
 Keys are per stage only; the chain is linear, so a changed parameter changes the keys of its stage and every stage
 after it, and nothing before it. The live chunk set records the keys and `OutputHash`es of the stage outputs it was
-built from, so re-processing from a later stage reads exactly those outputs: a parser upgrade (new build in the key)
+built from (`ChunkSets.StageKeys jsonb`, data-model §2.2), so re-processing from a later stage reads exactly those outputs: a parser upgrade (new build in the key)
 does not force a re-parse when only chunking changes.
 
 ## 4. Validation
@@ -169,12 +194,16 @@ loads a published version (fail closed: an invalid published version is not run;
 |---|---|---|
 | 1 | Definition matches `definition.schema.json`; params ≤ 16 KB | save |
 | 2 | (`template`, `templateVersion`) exists; `deprecated` template versions warn | save |
-| 3 | Every param is declared by the template and validates against its schema (JSON Schema 2020-12; library *to verify*, §23); cross-parameter rules live in the schema (`if`/`then`), never in worker-only code, so the admin can check them (R7) | save |
-| 4 | Every stage version of the template version is supported by a live worker instance (`WorkerNodeSupport` row, heartbeat < 60 s) that also runs the stage's job class (`WorkerInstances.Classes`) | publish |
+| 3 | Every param is declared by the template and validates against its schema (JSON Schema 2020-12, `LateApexEarlySpeed.Json.Schema`, to-verify #17); cross-parameter rules live in the template's `rules` (`if`/`then`, §3.2), never in worker-only code, so the admin can check them (R7) | save |
+| 4 | Every stage version of the template version is supported by a live worker instance (`WorkerNodeSupport` row, heartbeat < 60 s) that also runs the stage's job class (`WorkerInstances.Classes`), **checked per job class**: a stage that runs inline in several classes needs a live instance for each (a web page runs `parse` to `personal-data` inside its `fetch` job, a PDF inside its `parse` job, so those stages need both a `fetch` and a `parse` instance) | publish |
 | 5 | LLM-calling stages (P2) on a source above `public`: model allowed at the level's residency (platform plan §6) | publish |
 
-Errors carry the param name and a code (`param_invalid`, `template_unknown`, `stage_version_unsupported`, …) so the
-form can point at the fault.
+Errors carry the param name (or the stage) and a code so the form can point at the fault. As built in P1a item 4 (PR
+#78, 2026-10-31) the codes are `definition_invalid`, `params_too_large`, `template_unknown`,
+`template_source_type_mismatch`, `param_unknown`, `param_invalid`, `stage_version_unsupported` and the warning
+`template_deprecated`; the message beside the code is English for logs and Scalar, never UI text. The admin runs rules
+1–3 on save and 1–4 on publish; the worker runs 1–3 when it loads a published version. Rule 5 waits for the P2
+stages.
 
 ## 5. Stage interface and manifest
 
@@ -411,8 +440,8 @@ the deployment value `Worker:Concurrency:<class>` (repo-and-deployment §3 setti
 |---|---|---|---|
 | `preview` | 2 | `kind` (`stage-preview`/`publish-plan`; 6b: `preflight`/`site-profile`), `pipelineVersionId`, `documentIds` or `urls` (a `preflight` of a URL list samples ≤ 20 URLs, admin design §4.7), `untilStage`, `basePreviewJobId` | §11, §12 |
 | `command` | 2 | `kind` + ids: `clear-pii-flag`, `confirm-deletion`, `reject-deletion`, `edit-eval-question`, `reprocess-document`, `cancel-run`, `release-hold`, `approve-site-profile`, `reject-site-profile`, `edit-site-profile`, `rollback-site-profile` (admin design §4.7) | 6a/6b/6c each own their kinds |
-| `sync` | 2 | `sourceId`, `runId`, `kind` (`sync`/`retry-failed`/`reprocess`), `phase` (`list`/`fetch`/`reconcile`), `scheduledFor`, `force`, `fromStage`, checkpoint reference (`ConnectorCheckpoints`, 6b §2.3); uploads `batchId` | 6b (listing, reconcile), §9.2 |
-| `fetch` | 8 (frontier limits per host) | `sourceId`, `runId`, identity or frontier entry; `executionId` once known | 6b, then §7 |
+| `sync` | 2 | `sourceId`, `runId` (absent on a run's first job), `kind` (`sync`/`retry-failed`/`reprocess`), `trigger` (`Runs.Trigger`, §10.1), `phase` (`list`/`fetch`/`reconcile`), `scheduledFor`, `force`, `fromStage`, `resumeFromCheckpoint` (bool: resume from the source's `run` row in `ConnectorCheckpoints`, 6b §2.3), `incremental` (crawl, 6b §5.4); uploads `batchId` | 6b (listing, reconcile), §9.2 |
+| `fetch` | 8 (frontier limits per host) | `sourceId`, `runId`, `urlHash` (the source's `CrawlFrontier` row) or `uploadId` (the upload slot); `executionId` once known | 6b, then §7 |
 | `parse` | `min(Worker:Concurrency:parse, /v1/info capacity.convert_slots)` | `documentId`, `level`, `executionId`, `pipelineVersionId`, `stage`, `inputKey`, `slice` | §7, §9.5 |
 | `embed` | 4, adaptive (§18) | `documentId`, `level`, `executionId`, `pipelineVersionId`, `runId`, `inputKey` | §7, §14 |
 | `eval` | 1 | `kind`: `generate-set`, `top-up-set`, `publish-report`, `nightly`, `on-demand` (retrieval evaluation only; the answer-level `answers` run and the P2 skill gate run in `rag-admin`, 6c §14.8) | 6c §13–§14 |
@@ -423,6 +452,29 @@ class fails at start; `crawl` is not a class: discovery is part of `sync`/`fetch
 deployment values too: `Worker:HeartbeatSeconds` (10), `Worker:InstanceTimeoutSeconds` (30), `Worker:ReaperSeconds`
 (10), `Worker:PollSeconds` (2) and `Worker:StopGraceSeconds` (90) (§9.3, §9.4; as built in P0 #20, PR #20; settled at
 the integration sync point).
+
+**Payload contracts** (as built in P1a item 4, PR #78, and P1b item 2, PR #88, 2026-10-31): one schema per class and
+kind in `contracts/jobs/v1/` (`{class}.{kind}.payload.schema.json`, with results beside them), generated from the
+records in `Ume.Rag.Pipelines/Jobs`. Only P1 kinds exist (no `site-profile` preview, no `approve-site-profile` or
+`reject-site-profile` command: P2).
+- The `sync` payload carries `trigger` because `Jobs` has no column for it. It refers to the checkpoint by
+  `resumeFromCheckpoint`, because `ConnectorCheckpoints` rows have no id (PK `SourceId`, `Kind`).
+- `stage-preview` carries `collectionId` (its publicity decides the personal-data state shown), `documentIds`, `urls`
+  or `uploadIds` (≤ 5 each; `uploadIds` with `sourceId`), `embed` and `piiSpans`.
+- `eval` `on-demand` carries `variants` (1–3, default hybrid) in **one** job, because three jobs would collide on
+  dedup `eval:{collectionId}`. It may also carry `candidateSettings`, an opaque unsaved `RetrievalSettings` object
+  (≤ 30 properties) that the admin checks against V16 (stream B owns `RetrievalSettings`); those runs are marked
+  `candidate`.
+- The deletion and PII-clear commands carry `decidedBy` (the admin's `oid`), because `Jobs` has no actor column; the
+  clearance reason stays in the admin's audit event (6001 `pii.clear`).
+- `edit-site-profile` can create a host's first profile and carries `baseVersion` (an optimistic check: a mismatch
+  fails with `site_profile.version_conflict`).
+- `edit-eval-question` limits `question` to 500 characters, `expectedAnswer` to 1,000 and `expectedDocumentIds` to
+  10, to keep the payload within 4 KB.
+- `reprocess-document` `fromStage` defaults to `parse`.
+- Serialised payloads always write `"incremental": false` (sync) and `"candidate": false` (eval run reference).
+- The 4 KB cap holds for typical payloads only: five 2,048-character preview URLs, or twenty in a preflight, can
+  exceed it.
 
 **Mixed versions during a rolling update**: payloads are additive (tolerant reader); a job that needs a newer build
 carries `MinBuild` in its payload, and an older instance requeues it without an attempt
@@ -437,7 +489,10 @@ deletions run in a **reconcile phase** after all fetches, enqueued by the finali
 1. `sync` job: resolve source and pipeline version at the confirmed snapshot; open or reuse the `Runs` row; run the
    connector's listing and change detection (6b), checkpointed, yielding after 1,000 items or 2 minutes (re-enqueued
    as a continuation, no attempt).
-2. Per changed or new item: a frontier claim or a `fetch` job, `DedupKey = fetch:{sourceId}:{identityHash}`.
+2. Per changed or new item: a frontier claim or a `fetch` job, `DedupKey = fetch:{sourceId}:{urlHash}` (`urlHash` =
+   SHA-256 hex of the canonical URL, the key of the source's frontier row), for an upload slot
+   `fetch:{sourceId}:upload:{uploadId}`. The key names the frontier entry, not the document identity, because the
+   identity is known only after redirects (6b §3.2; as built in P1a item 4, PR #78, 2026-10-31).
 3. Per unchanged item: `EnsureCurrent` (reads; enqueues only if the live set is not current) and a run item
    `unchanged`, written in batches.
 4. The sync job ends when listing is done; the run stays `running` until the finalizer sees no open jobs (§10.4).
@@ -589,7 +644,7 @@ cannot double-count and no hot row is updated per document.
 - **Class** `preview`, highest priority, `MaxAttempts` 1, lease 2 minutes. Started by the admin for a saved draft
   version (template parameters) or a new source's form.
 - **Inputs**: up to 5 existing documents of the source (raw blob and cached outputs are read), or up to 5 URLs/upload
-  ids for a source that has none yet (fetched live through the same egress guard and host politeness; the one
+  ids (`uploadIds`, with the `sourceId`) for a source that has none yet (fetched live through the same egress guard and host politeness; the one
   `content` write a preview makes is `CrawlHosts.NextAllowedAt`, which is bookkeeping, not content).
 - **Isolation**: `ExecutionMode.Preview` gives stages a blob store limited to `previews/{jobId}/` (`internal`: each
   blob's data key wrapped by `rag-blob-<level>` in its header, data-model §7; `public` previews unencrypted, as
@@ -614,12 +669,12 @@ cannot double-count and no hot row is updated per document.
 
 | Step | Who | What |
 |---|---|---|
-| 1 | admin | validate the draft (§4 incl. live support); enqueue the plan (`preview`, `kind = publish-plan`), storing `PlanJobId` and the definition's hash |
+| 1 | admin | validate the draft (§4 incl. live support); enqueue the plan (`preview`, `kind = publish-plan`, dedup `plan:{pipelineId}`), storing `PlanJobId` and the definition's hash |
 | 2 | worker | the **re-processing plan** (§12.2) and cost/time forecast into `Jobs.Result`; in P1 the plan is every live document of the affected sources (§12.2) |
 | 3 | user | sees plan and forecast; confirms or cancels. Confirm is refused if the draft changed since the plan |
 | 4 | admin | one config transaction: version → `published` (`PublishedAt`), previous → `superseded`, `Pipelines.PublishedVersionId`; audit 6001; enqueues a `reprocess` `sync` per source using the pipeline |
 | 5 | worker | `EnsureCurrent` per live document: new sets are written not live next to the live ones and **swapped per document** (§14); unaffected documents are re-keyed (`unchanged`) |
-| 6 | worker | when the `reprocess` run finishes, the `publish-report` evaluation runs on the full collection (6c §14.1) |
+| 6 | worker | when the `reprocess` run finishes, the `publish-report` evaluation runs on the full collection (6c §14.1; `eval` `publish-report`, dedup `eval-report:{runId}`, one per finished run, P1b item 2, PR #88) |
 | 7 | user | sees the report (recall@10 and MRR with counts, compared with the previous run) next to the run; keeps the version or **rolls back** in one click (§12.3) |
 
 The admin owns `config` and the worker only reads it, so publish states stay in `PipelineVersions.State` (`draft`,
@@ -665,8 +720,11 @@ way for the host's HTML documents.
 
 ### 13.1 P1 templates
 
-Platform templates (`Pipelines.DepartmentId = null`, `IsTemplate`), seeded by the migration service from
-`src/Ume.Rag.MigrationService/Templates/*.json` (§3.2).
+Platform templates (`Pipelines.DepartmentId = null`; data-model §2.1 has no `IsTemplate` column and PR #76 built
+none), seeded by the migration service from `src/Ume.Rag.MigrationService/Templates/*.json` (§3.2). As built in P1a
+item 4 (PR #78, 2026-10-31): the three files below exist and are embedded in `Ume.Rag.Pipelines`
+(`TemplateCatalog.BuiltIn`); the seeding code is stream B's (issue after J3). `url-list` and `website` share the
+`pathRules` subschema (≤ 100 rules); `files` has no `pathRules`. Only `website` has `collectionDefaults`.
 
 | Template | Source type | Stages | Parameters (defaults) |
 |---|---|---|---|
@@ -916,8 +974,11 @@ the normal egress guard (§11).
 
 - **Embedding throughput** of the gateway's on-prem BGE-M3 provider (tokens/s, batch size, effect on chat query
   embeddings): decides whether 10,000 pages/hour is reachable (§18).
-- A JSON Schema 2020-12 validator for .NET used by admin and worker (not the `JsonSchema.Net` binaries, which ship under an Open Source Maintenance Fee Agreement, to-verify #17; maintenance,
-  `if`/`then` support, performance); and RFC 8785 canonicalisation (same package family or ~100 lines of our own).
+- ~~A JSON Schema 2020-12 validator for .NET used by admin and worker (not the `JsonSchema.Net` binaries, which ship under an Open Source Maintenance Fee Agreement, to-verify #17; maintenance,
+  `if`/`then` support, performance); and RFC 8785 canonicalisation (same package family or ~100 lines of our own).~~
+  Done (P1a item 4, PR #78, 2026-10-31): `LateApexEarlySpeed.Json.Schema` 4.2.2 (BSD-3-Clause; no remote `$ref`, .NET
+  `Regex` with a 200 ms match timeout); RFC 8785 is our own `CanonicalJson`. Corvus was checked first and not taken
+  (to-verify #17).
 - `Cronos`: version, 5-field syntax, `TimeZoneInfo` DST behaviour (repo-and-deployment §2.2 marks it *to verify*).
 - Npgsql binary `COPY` of `vector` columns via `Pgvector` in ≤ 1,000-row batches; HNSW insert cost per row on the pilot
   host.
