@@ -15,7 +15,7 @@ public static class CommandExtensions
     /// <summary>
     /// Every P1 command kind. The handlers depend only on what <c>AddRagWorker</c> registers, because
     /// <see cref="CommandJobHandler"/> resolves all of them for each job; <see cref="ReprocessDocumentHandler"/> takes the
-    /// engine's parts from the job's scope.
+    /// engine's parts from the job's scope, and the parse-rule handlers drop the engine's rule cache when it is there.
     /// </summary>
     public static IServiceCollection AddRagCommands(this IServiceCollection services)
     {
@@ -29,6 +29,8 @@ public static class CommandExtensions
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, ReleaseHoldHandler>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, ClearPiiFlagHandler>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, ReprocessDocumentHandler>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, EditParseRuleHandler>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<ICommandHandler, DisableParseRuleHandler>());
         return services;
     }
 }

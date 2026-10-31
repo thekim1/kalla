@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.disable-parse-rule.payload.schema.json",
+  "title": "disable-parse-rule command payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "disable-parse-rule"
+    },
+    "profileId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "decidedBy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The deciding platform admin's oid, written to the audit entry; absent = system:worker.",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "profileId"
+  ],
+  "description": "Payload of the command disable-parse-rule (processing design §3.5): sets the manual parse rule's ParseProfiles.State to disabled, audited, and re-processes the sources with parser-route documents in its scope. An edit-parse-rule enables it again. Dedup parse-rule:{profileId}."
+}

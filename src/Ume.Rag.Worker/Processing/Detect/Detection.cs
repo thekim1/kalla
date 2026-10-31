@@ -129,6 +129,9 @@ public static class ProcessingMediaTypes
         "application/vnd.ms-outlook",
     };
 
+    /// <summary>The parser-bound types: those <see cref="Route"/> sends to <see cref="ParseRoute.Parser"/>.</summary>
+    public static IReadOnlyCollection<string> ParserTypes => Extensions.Keys;
+
     /// <summary>The parser's <c>file_ext</c> for a parser-bound type, else null.</summary>
     public static string? FileExtension(string mediaType) => Extensions.GetValueOrDefault(mediaType);
 

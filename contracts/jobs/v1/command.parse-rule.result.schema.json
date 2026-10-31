@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.parse-rule.result.schema.json",
+  "title": "edit-parse-rule and disable-parse-rule command result",
+  "type": "object",
+  "properties": {
+    "profileId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "state": {
+      "enum": [
+        "active",
+        "disabled"
+      ],
+      "description": "ParseProfiles.State after the command."
+    },
+    "revision": {
+      "type": "string",
+      "description": "The rule's version: the first 16 hex characters of SHA-256 over its Match, Strategy and CleanupRules as stored (processing design §3.5).",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "changed": {
+      "type": "boolean",
+      "description": "False when the rule already had this content and state: nothing was written, audited or enqueued."
+    },
+    "reprocessSyncs": {
+      "type": "integer",
+      "description": "sync reprocess jobs requested, one per active source with parser-route documents in the old or the new scope; one already queued under sync:{sourceId} absorbs its request.",
+      "minimum": 0,
+      "maximum": 2147483647
+    }
+  },
+  "required": [
+    "profileId",
+    "state",
+    "revision",
+    "changed",
+    "reprocessSyncs"
+  ],
+  "description": "Result of the commands edit-parse-rule and disable-parse-rule: the rule as it is now (its parse-stage id is profileId@revision) and the number of reprocess syncs enqueued for the sources it re-keys."
+}

@@ -465,3 +465,24 @@ public sealed record ReprocessDocumentResult
 
     public required Guid ExecutionId { get; init; }
 }
+
+/// <summary>Result of <c>edit-parse-rule</c> and <c>disable-parse-rule</c>: the rule as it is after the command.</summary>
+[Description("Result of the commands edit-parse-rule and disable-parse-rule: the rule as it is now (its parse-stage id is profileId@revision) and the number of reprocess syncs enqueued for the sources it re-keys.")]
+public sealed record ParseRuleCommandResult
+{
+    public required Guid ProfileId { get; init; }
+
+    [Description("ParseProfiles.State after the command.")]
+    public required ParseRuleState State { get; init; }
+
+    [Description("The rule's version: the first 16 hex characters of SHA-256 over its Match, Strategy and CleanupRules as stored (processing design §3.5).")]
+    [RegularExpression("^[0-9a-f]{16}$")]
+    public required string Revision { get; init; }
+
+    [Description("False when the rule already had this content and state: nothing was written, audited or enqueued.")]
+    public required bool Changed { get; init; }
+
+    [Description("sync reprocess jobs requested, one per active source with parser-route documents in the old or the new scope; one already queued under sync:{sourceId} absorbs its request.")]
+    [Range(0, int.MaxValue)]
+    public required int ReprocessSyncs { get; init; }
+}

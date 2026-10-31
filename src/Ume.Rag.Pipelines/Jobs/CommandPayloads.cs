@@ -22,11 +22,13 @@ public static class CommandKinds
     public const string ReleaseHold = "release-hold";
     public const string ClearPiiFlag = "clear-pii-flag";
     public const string ReprocessDocument = "reprocess-document";
+    public const string EditParseRule = "edit-parse-rule";
+    public const string DisableParseRule = "disable-parse-rule";
 
     public static IReadOnlyList<string> All { get; } =
     [
         CancelRun, EditSiteProfile, RollbackSiteProfile, EditEvalQuestion,
-        ConfirmDeletion, RejectDeletion, ReleaseHold, ClearPiiFlag, ReprocessDocument,
+        ConfirmDeletion, RejectDeletion, ReleaseHold, ClearPiiFlag, ReprocessDocument, EditParseRule, DisableParseRule,
     ];
 }
 
@@ -219,4 +221,122 @@ public sealed record ReprocessDocumentCommand : JobPayload
 
     [SchemaKeyword("enum", ContractPatterns.StageEnum)]
     public string FromStage { get; init; } = "parse";
+}
+
+/// <summary>
+/// <c>edit-parse-rule</c> (processing design §3.5, admin design §4.7): a platform admin's parse rule becomes the content of
+/// the <c>manual</c> <c>ParseProfiles</c> row <c>profileId</c> at the job's level, active. The admin generates
+/// <c>profileId</c> (v7) for a new rule, so a retried create is idempotent. A save that changes the rule is a new revision
+/// (its id <c>profileId@revision</c> is a content hash), audited, and enqueues a <c>sync</c> <c>reprocess</c> for each
+/// active source with parser-route documents in the old or the new scope. Dedup <see cref="JobDedupKeys.ParseRule"/>.
+/// </summary>
+[Description("Payload of the command edit-parse-rule (processing design §3.5): creates or changes the manual parse rule profileId (content.ParseProfiles, Origin manual, State active) at the job's level; a change is a new revision, audited, and re-processes the sources with parser-route documents in the old or the new scope. The lengths keep the payload within 4 KB. Dedup parse-rule:{profileId}.")]
+public sealed record EditParseRuleCommand : JobPayload
+{
+    [JsonRequired]
+    [SchemaKeyword("const", "\"edit-parse-rule\"")]
+    public string Kind { get; init; } = CommandKinds.EditParseRule;
+
+    [Description("ParseProfiles.Id; the admin generates it (v7) for a new rule.")]
+    public required Guid ProfileId { get; init; }
+
+    [Description("The department scope (ParseProfiles.DepartmentId): the rule applies to the sources of that department's collections only; absent = every department.")]
+    public Guid? DepartmentId { get; init; }
+
+    public required ParseRuleMatch Match { get; init; }
+
+    public ParseRuleStrategy Strategy { get; init; } = new();
+
+    [Description("Structure hints for clean and split by headings; absent = the defaults.")]
+    public ParseRuleCleanup? CleanupRules { get; init; }
+
+    [Description("The deciding platform admin's oid, written to the audit entry; absent = system:worker.")]
+    [MinLength(1)]
+    [MaxLength(200)]
+    public string? DecidedBy { get; init; }
+}
+
+/// <summary>
+/// Where a parse rule applies (<c>ParseProfiles.Match</c>; processing design §3.5), read by the worker's
+/// <c>AdminParseRuleReader</c>: at least one member. Domain, path glob and media type select the documents whose parse key
+/// the rule enters; a text pattern then decides on the parsed text whether the rule is the one applied.
+/// </summary>
+[Description("Where the rule applies (ParseProfiles.Match): at least one member. An unset member matches everything; documents without a URL (uploads) match no domain or path.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+[SchemaKeyword("minProperties", "1")]
+public sealed record ParseRuleMatch
+{
+    [Description("A lower-case host (A-label), or *. and a host for its subdomains only.")]
+    [MaxLength(255)]
+    [RegularExpression("^(\\*\\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$")]
+    public string? Domain { get; init; }
+
+    [Description("Glob over the whole unescaped URL path, case-insensitive: * any run of characters (/ included), ? one character, e.g. /kommun/protokoll/*.")]
+    [MinLength(1)]
+    [MaxLength(300)]
+    public string? PathGlob { get; init; }
+
+    [Description("A media type or type/*, as detected (Documents.MediaType).")]
+    [MaxLength(100)]
+    [RegularExpression("^[a-z0-9.+-]+/([a-z0-9.+-]+|\\*)$")]
+    public string? MediaType { get; init; }
+
+    [Description(".NET regular expression (linear-time subset: no lookarounds or backreferences) matched on the title or the first 2,000 characters of the parsed text, case-insensitive.")]
+    [MinLength(1)]
+    [MaxLength(500)]
+    [SchemaKeyword("format", "\"regex\"")]
+    public string? TextPattern { get; init; }
+}
+
+/// <summary>Strategy overrides of a parse rule (<c>ParseProfiles.Strategy</c>; processing design §3.1, §3.5); unset = the template's.</summary>
+[Description("Strategy overrides (ParseProfiles.Strategy); an unset member keeps the pipeline template's value.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ParseRuleStrategy
+{
+    [SchemaKeyword("enum", """["auto", "force", "off"]""")]
+    public string? Ocr { get; init; }
+
+    [SchemaKeyword("enum", """["fast", "accurate"]""")]
+    public string? Tables { get; init; }
+
+    [Description("Render scale of OCR pages.")]
+    [Range(1.0, 4.0)]
+    public double? ImageScale { get; init; }
+}
+
+/// <summary>Structure hints of a parse rule (<c>ParseProfiles.CleanupRules</c>; processing design §4.2, §5.2).</summary>
+[Description("Structure hints (ParseProfiles.CleanupRules) consumed by clean and split by headings.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ParseRuleCleanup
+{
+    [Description("Headings deeper than this become bold body text; absent = 4.")]
+    [Range(1, 6)]
+    public int? MaxLevel { get; init; }
+
+    [Description("Each § N item is a level-1 section (as the built-in protokoll rule).")]
+    public bool ParagraphItemsAreSections { get; init; }
+
+    [Description(".NET regular expressions (linear-time subset) of lines that clean drops as furniture, e.g. signature blocks.")]
+    [MaxLength(10)]
+    [SchemaItems(MinLength = 1, MaxLength = 150)]
+    public IReadOnlyList<string> Furniture { get; init; } = [];
+}
+
+/// <summary>
+/// <c>disable-parse-rule</c> (processing design §3.5, admin design §4.7): the <c>manual</c> rule stops applying; audited, and
+/// the sources with parser-route documents in its scope are re-processed. Dedup <see cref="JobDedupKeys.ParseRule"/>.
+/// </summary>
+[Description("Payload of the command disable-parse-rule (processing design §3.5): sets the manual parse rule's ParseProfiles.State to disabled, audited, and re-processes the sources with parser-route documents in its scope. An edit-parse-rule enables it again. Dedup parse-rule:{profileId}.")]
+public sealed record DisableParseRuleCommand : JobPayload
+{
+    [JsonRequired]
+    [SchemaKeyword("const", "\"disable-parse-rule\"")]
+    public string Kind { get; init; } = CommandKinds.DisableParseRule;
+
+    public required Guid ProfileId { get; init; }
+
+    [Description("The deciding platform admin's oid, written to the audit entry; absent = system:worker.")]
+    [MinLength(1)]
+    [MaxLength(200)]
+    public string? DecidedBy { get; init; }
 }
