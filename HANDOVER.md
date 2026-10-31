@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-10-31, end of session 11.
+State of the Ume.Rag work for the next session. Rewritten 2026-11-01, end of session 12.
 Repo `~/research/rag`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
 
@@ -15,13 +15,15 @@ https://github.com/thekim1/ume-rag-platform/releases/tag/v0.1.0). **P1 is coded 
 (user, 2026-10-31). **Stream A's P1a and P1b code items are done** except those waiting on stream B (P1a item 17 smoke
 job, P1b item 15 `e2e`, item 17's importer part, worker upload reads via `ForLevel` once the admin encrypts uploads) and
 the end-of-P1b pin review. Stream B (remote) merged the gateway client (#123), the knowledge service and routes (#125,
-#127, #146, #152); next for B: #142 (`RequestDimensions`), then admin endpoints (J7), chat API (J9), realm (J8) and
-schema part 3 (#134: `TR_ParseProfiles_ConfigChanged`, chunk-set key salt).
+#127, #146, #152), `RequestDimensions` (#159) and the knowledge security events (#163); next for B: #158 (rag-api reads
+URB2), #164 (key endpoints J7, `DataProtectionPolicies` rows), chat API (J9), realm (J8), schema part 3 (#134).
 
-**First live step (milestone 1)** is prepared: the user's interim gateway (address only in local user secrets and the
-main session's memory, never in the repo) serves `text-embedding-3-large` from an `Eu` provider; a smoke test got
-1024 values via `dimensions`. Steps: `docs/p1a-local-run.md` §4 (developer machine) and **`docs/gateway-host-setup.md`**
-(on the gateway's host, written for a person or the user's infra agent "Hermes"). It waits for B's #123 and #142.
+**Milestone 1 (first live run) is unblocked in code**: `dimensions` is sent on both the worker path (#162) and the
+rag-api path (#159), the AppHost forwards `EmbeddingProfile:*` to the migrator (#159), and the dev seed script makes an
+API key for `/v1/retrieve` (#166). The user's interim gateway (address only in local user secrets and the main
+session's memory, never in the repo) serves `text-embedding-3-large` from an `Eu` provider. Steps:
+`docs/p1a-local-run.md` §4 (developer machine) and **`docs/gateway-host-setup.md`** (on the gateway's host, for a
+person or the user's infra agent "Hermes").
 
 Overviews: **`docs/phase1-guide.html`** (Swedish, stakeholders; private artifact
 https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/stakeholder-report.html`
@@ -101,8 +103,15 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
     `seed_url_list.py --docker ume-rag-postgres-1 --socket`.
   - (Session 11) The host firewall rejected new connections from RAG networks to the host itself, which blocks a
     gateway/Keycloak on the same machine; #150 adds `INPUT` and `--ctorigdst` exceptions for allow-listed endpoints.
+  - (Session 12) The watcher must not fire on the main session's own activity: a review or comment by `Crotalus`
+    updates an issue's `updated_at`. Watch non-`Crotalus` comments, new PRs by `thekim1`, and a PR's state instead.
+  - (Session 12) `TokenizerThroughputTests` timed tier-0 JIT code; timing tests take the fastest of several rounds (#161).
+  - (Session 12) The verify helper's grep must keep failing tests' names (`grep -A8 'failed [A-Z]'`); one ContractTests
+    failure on `main` (1 of 3 local runs, while another suite ran on other cores) was lost that way. Watch item.
+  - (Session 12) Closing issues needs the user's go-ahead in this environment (the auto-mode classifier refused it once);
+    the user approved closing issues the main session recommends (2026-11-01).
 
-## Code map (what exists, on `main` late in session 11)
+## Code map (what exists, on `main` at the end of session 12)
 
 | Area | Where | State |
 |---|---|---|
@@ -123,53 +132,68 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
 | Blobs | `src/Ume.Rag.Infrastructure/Blobs/` | URB2 envelope, file key provider, worker encrypts `internal` blobs, `IBlobEnvelope` for rag-api (#153) |
 | Engine extras (session 11) | `src/Ume.Rag.Worker/Engine/` | one `Reconciler.ReconcileAsync` decision + drift-sweep swap-back (#138); forced reprocess with salted keys (#140); settings-change effects via `Runs.SettingsHashes` (#141); 24 h ClamAV cap, embed batch cap 6000 tokens (#143); 5105, `CreatedAt` scheduler (follow-up PR in verification) |
 
-## Session 11 (done)
+## Session 12 (done)
 
-Merged (stream A): #135 test-host run book + Open WebUI feedback account; #136 site-profile host key, `excludedTypes`
-per host, preview parse key with admin rules; #137 eval reproducibility + set triggers; #138 one reconcile decision,
-drift-sweep swap-back; #139 P1a items 5/6 rows; #140 forced reprocess; #141 settings-change effects; #143 24 h ClamAV
-cap, embed batch cap, URL-list `identity-changed`; #144 CHANGELOG; #148, #154 README; #149 milestone-1 seed script +
-run steps; #150 gateway-host setup guide + same-host firewall fix + migrator `EmbeddingProfile__*` env + seed
-`--socket`; #153 blob envelope (URB2, answers #145); #155 5105, scheduler on `CreatedAt`, shared pgvector source,
-per-service key docs; #156 parse-rule commands (+ `ParseRuleCatalog` department fix). Design syncs `d6b4657`,
-`7487c72`, `884c89d`. Docs: `docs/phase1-guide.html` (Swedish), `docs/gateway-host-setup.md`.
-Reviewed/approved B: #123, #146, #147, #151, #152, #157. Filed #142; comments on #134, #145.
-Decisions added: "Pilot embedding model, U-b"; "CI on the self-hosted runner for every pull request"; "Merge on local
-evidence, then check main". Gateway session prompt §1: embedding batches vs `ContextWindow` (`a464514`).
+- **`main` checked** at the start: session 11's runner run on `124c66b` green; runner and local (all suites) green on
+  `26aa576`; after the batch #159/#161/#162 green on the runner (`0f4aa9c`) and locally except one ContractTests
+  failure that passed on two re-runs (watch item, name lost).
+- **Merged (stream A):** #161 throughput-test flake (fastest of 7 rounds; closes B's #160); #162 worker sends
+  `dimensions` (#142 worker side); #166 dev API key for `/v1/retrieve` in `scripts/dev/seed_url_list.py --api-key`
+  (+ `public` `DataProtectionPolicies` row, run steps §4.1–§4.5 marked **now**).
+- **Reviewed/approved B:** #159 (`RequestDimensions`, merged; notes: seeder never updates an existing profile, nit on a
+  test), #163 (security events, merged; notes: 5001 counts lost after the last emit without a flush, no
+  `ForwardedHeaders` behind a proxy, one dedup pool).
+- **Filed:** #158 (rag-api must read URB2 via `IBlobEnvelope`; internal downloads answer 503 today), #164 (no key
+  endpoints J7, `Seed__DevKey` unused, no `DataProtectionPolicies` rows). **Closed:** #34, #120, #145, #160; #142 by #159.
+- **Design:** session-12 sync of #123–#156 deviations (`5ebc1e8`); **`plans/doc-restructure.md`** (restructure plan,
+  after milestone 1, `f5f658f`); stakeholder report points to the phase-1 guide.
+- **CI speed analysis** (user asked; user approved the recommendation 2026-11-01): a Verify run takes ≈ 7 min;
+  Worker.Tests is 3 min 50 s and runs almost fully serially (37 of 80 classes in the one `ragdb` collection; 54 tests
+  ≥ 1 s are 205 of 235 s, engine tests waiting on 1 s poll/finalizer/heartbeat timers and a 5 s stop grace); the four
+  small jobs run one after another on the single runner (≈ 2 min). Not started yet: see Next step 1.
 
-**At the restart:** no stream-A PR open, no agent running. A `main` check was in progress: runner run
-https://github.com/thekim1/ume-rag-platform/actions/runs/41245195778 on `124c66b` (changes, images green; backend
-running) and a local run on `d976001` (worker run 1: 1063/1063 green). B has since merged #146 and #152 on top
-(`26aa576`). **First thing next session: read that run's result, then check `main` @ head again** (dispatch + local).
+**At the restart:** no PR open from stream A, no agent running, no stream worktree. `main` = `afeb0fb` (#166) is not
+checked yet after #163 and #166.
 
 ## Next step
 
-1. **Check `main`** (above). Fix it first if red.
-2. **Milestone 1 when B lands #142:** worker side if B leaves it (send `dimensions` in the embed stage, the worker
-   canary and the evaluation query embedder when the profile's `RequestDimensions` is set); AppHost forwarding of
-   `EmbeddingProfile:*` to migrations (asked on #142). Then run `docs/p1a-local-run.md` §4 locally against the interim
-   gateway (AppHost user secrets hold `Gateway:BaseUrl` and `Gateway:Keys:Eu`; flip `FakeGateway:Enabled=false`;
-   seed with `scripts/dev/seed_url_list.py --profile pilot-embedding`). Retrieval: `/v1/retrieve` exists since #152
-   (needs an api client key; check how B's #152 seeds dev keys). Afterwards the user hands `docs/gateway-host-setup.md`
-   to the infra agent Hermes.
-3. **Stream-A code left:** P1a item 17 `evaluation-smoke` (after B's smoke set); P1b item 15 `e2e` (after L7); item 17
-   importer settings (after L6); worker upload reads via `ForLevel` (with the admin's encrypted uploads, #145);
-   chunk-set key salt with B's schema part 3 (#134); optional binary `COPY` in `IndexWriter` (to-verify #21/#119);
-   item 19 pin review before go-live.
-4. **Watch item:** one unexplained failure of `EngineCrawlTests.A_crawl_syncs_the_site_into_live_chunks_with_its_report_and_a_second_run_is_unchanged` (1 of ≈ 14 runs). Read the message next time.
-5. **Design sync** of #143–#156 deviations (PR bodies) and to-verify; point the old stakeholder report to the phase 1
-   guide or refresh its status.
-6. Then the live block with the user (`plans/p1b/README.md` §5 step 4).
-7. **After milestone 1:** the design-document restructure in **`plans/doc-restructure.md`** (fold the passes into the
-   detail docs, as-built notes to present tense, "later" marked, Decisions-table status; § numbers stay stable).
+1. **Check `main`** @ head (dispatch `verify.yml` + local suites; recreate the scratchpad `verify.sh` helper and keep
+   failure names). Fix first if red.
+2. **CI / test speed (user-approved, 2026-11-01)**, one implementor in its own worktree, stream A's test code:
+   (a) run the worker DB tests in 3–4 parallel xUnit collections, each on its own database in the same Postgres
+   container; `ResetAsync` and the connection-budget test filter `pg_stat_activity` by `datname` as well as the role;
+   (b) trace one 6–8 s engine test (e.g. `UploadEngineTests.A_replace_keeps_the_document…`) to see where it waits
+   (finalizer tick, poll, missed wake-up, stop grace) and lower test-only timers where safe. Target Worker.Tests
+   3 min 50 s → ≈ 1.5 min; done-when: two full worker runs green, the suite's wall time reported before/after, no
+   order-dependent failure in 3 runs. Also small: package audit (`dotnet list package --vulnerable`, ≈ 20 s) to a
+   weekly/release workflow; optionally fold `changes`/`deploy-checks`/`admin-ui` into fewer jobs. **A second runner
+   instance on the runner's host** (≈ 1.5–2 min per run) is the user's call (R1 / L11; the runner is on the user's
+   other machine, `/home/kim/actions-runner`) — ask.
+3. **Milestone 1 (live):** follow `docs/p1a-local-run.md` §4 against the interim gateway: AppHost user secrets
+   (`Gateway:*`, `EmbeddingProfile:*` incl. `RequestDimensions=true`, `FakeGateway:Enabled=false`, own Postgres volume),
+   `Start-Dev.ps1 -Empty`, seed with `seed_url_list.py --profile pilot-embedding --api-key` (pepper from the dashboard
+   into `UME_RAG_DEV_KEY_PEPPER`; the key is printed once — never into a log or chat), check run, 1024-dim chunks,
+   canary, `/v1/retrieve`. Still unverified: the dashboard's `key-pepper` parameter name, rag-api's port under Aspire,
+   curl trusting the dev certificate, and whether the provider accepts `dimensions` for `text-embedding-3-large`.
+   Afterwards the user hands `docs/gateway-host-setup.md` to Hermes.
+4. **Stream-A code left:** P1a item 17 `evaluation-smoke` (after B's smoke set); P1b item 15 `e2e` (after L7); item 17
+   importer settings (after L6); worker upload reads via `ForLevel` (with the admin's encrypted uploads); chunk-set key
+   salt with B's schema part 3 (#134); optional binary `COPY` in `IndexWriter`; item 19 pin review before go-live;
+   `docs/p1a-local-run.md`: drop the "set only `Gateway:Keys:Eu`" caveat (#119 merged; #95 part 2).
+5. **Watch items:** `EngineCrawlTests.A_crawl_syncs_the_site…` (1 of ≈ 14 runs, session 11); the lost-name ContractTests
+   failure (session 12).
+6. **Design sync** of #159–#166 deviations; data-model §2.1 gets `EmbeddingProfiles.RequestDimensions`. Then the
+   restructure (`plans/doc-restructure.md`) after milestone 1.
+7. Then the live block with the user (`plans/p1b/README.md` §5 step 4).
 
-**Open issues to stream B:** #80, #90, #92, #95, #102, #110, #114, #116, #129, #132, #134, #142; also #34, #52, #75.
-Stream A's own: #48, #51, #120 (close: #128 accepted). For the user: #100 (L8 run steps).
+**Open issues to stream B:** #80, #90, #92, #95, #102, #114, #116, #129, #132, #134, #158, #164; also #52, #75.
+Stream A's own: #48, #51. For the user: #100 (L8 run steps).
 
-**Waiting on the user:** interim-gateway keys restricted to `Eu` (one per service) and the embedding deployment's
-`ContextWindow` left empty; the **gateway session** (release 1 incl. the embedding-batch fix, shared Keycloak realm
-`ume`, identity §16 Q1–Q4/Q6); **O7** (go-live host); identity §16 Q5, Q7–Q9; runbook review by the operations owner;
-U1 with the web editors; names and dates for A1, G1, N1, U1, W2, P2 and the gold-set owner; DPIA G1.
+**Waiting on the user:** the second-runner question (above); interim-gateway keys restricted to `Eu` (one per service)
+and the embedding deployment's `ContextWindow` left empty; the **gateway session** (release 1 incl. the embedding-batch
+fix, shared Keycloak realm `ume`, identity §16 Q1–Q4/Q6); **O7** (go-live host); identity §16 Q5, Q7–Q9; runbook
+review by the operations owner; U1 with the web editors; names and dates for A1, G1, N1, U1, W2, P2 and the gold-set
+owner; DPIA G1.
 
 ## Open register items (`plans/postponed-decisions.md`)
 
@@ -180,8 +204,7 @@ item needs a named person and a date.
 
 ## Environment notes
 
-- Worktrees: none for stream work at the end of session 11 (a detached `../rag-main-check` may linger from the local
-  main check: `git worktree remove --force ../rag-main-check`); `git worktree list` to check.
+- Worktrees: none at the end of session 12; `git worktree list` to check.
 - `rag_key.txt` in the repo root holds the user's interim-gateway key; it is excluded locally (`.git/info/exclude`),
   mode 600, and already copied into the AppHost user secrets. Never commit, print or move it into the repo.
 - Local images: `ume-rag.local/clamav:dev` (tests use `UME_RAG_TEST_CLAMAV_IMAGE`), `ume-rag.local/parser:ci`
