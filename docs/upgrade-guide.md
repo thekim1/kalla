@@ -60,9 +60,9 @@ without downtime. Migrations are expand/contract only, so "no" is the exception 
 
 ## Image pins
 
-Production runs images pinned by digest. The release bundle (from `v0.1.0`) is to write each digest into the Compose
-files' `${X_IMAGE:-…}` defaults; until then the defaults are the local `ume-rag/<service>:latest` images built on the
-host. To run images from a registry, or to override one, set the variable in `deploy/.env` to `<image>@sha256:…`:
+Production runs images pinned by digest. A release bundle (from `v0.1.0`) has each digest written into the Compose
+files' `${X_IMAGE:-…}` defaults by `deploy/build-release-bundle.sh`, which refuses an unpinned image; in a clone the
+defaults are the local `ume-rag/<service>:latest` images built on the host. To run images from a registry, or to override one, set the variable in `deploy/.env` to `<image>@sha256:…`:
 
 | Variable | Image |
 |---|---|
