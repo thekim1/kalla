@@ -20,7 +20,7 @@ public static partial class Cleaner
     public static ParsedDocument Clean(ParsedDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        var rule = document.ParseRule is { } id ? ParseRules.Find(id) ?? ParseRules.Default : ParseRules.Default;
+        var rule = ParseRules.Of(document);
         var facts = new SortedDictionary<string, double>(document.Facts.ToDictionary(), StringComparer.Ordinal);
         void Count(string fact, int n)
         {

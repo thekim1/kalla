@@ -83,10 +83,12 @@ public static class EngineExtensions
         services.TryAddSingleton<DocumentStore>();
         services.TryAddSingleton<StageOutputs>();
         services.TryAddSingleton<SiteProfiles>();
+        services.TryAddSingleton<ParseRuleCatalog>();
         services.TryAddSingleton(sp => new ProcessingSegment(sp.GetRequiredService<StageOutputs>(), sp.GetRequiredService<Domain.Ports.IBlobStore>(),
             sp.GetRequiredService<DetectStage>(), sp.GetRequiredService<Processing.Html.HtmlExtractor>(), sp.GetRequiredService<Processing.Chunking.Chunker>(),
             sp.GetRequiredService<PersonalDataStage>(), sp.GetRequiredService<IParsePlanner>(), sp.GetRequiredService<IOptions<ParseOptions>>(),
-            sp.GetRequiredService<EngineSettings>(), sp.GetService<IParserConverter>(), sp.GetService<IParserBuild>()));
+            sp.GetRequiredService<EngineSettings>(), sp.GetService<IParserConverter>(), sp.GetService<IParserBuild>(),
+            sp.GetRequiredService<ParseRuleCatalog>()));
         services.TryAddSingleton<DocumentIngest>();
         services.TryAddSingleton<UrlListSource>();
         services.TryAddSingleton<UploadSource>();
