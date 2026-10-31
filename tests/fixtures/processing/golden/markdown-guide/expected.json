@@ -1,0 +1,368 @@
+{
+  "versions": {
+    "chunk": 1,
+    "clean": 1,
+    "detect": 1,
+    "parse.csv": 1,
+    "parse.html": 1,
+    "parse.rules": 1,
+    "parse.text": 1,
+    "personal-data": 1
+  },
+  "detect": {
+    "mediaType": "text/markdown",
+    "route": "text",
+    "mediaTypeDeclared": "text/markdown",
+    "mediaTypeMismatch": false,
+    "language": "sv",
+    "scanned": false,
+    "bytes": 840
+  },
+  "parserRequests": [],
+  "cleaned": {
+    "title": "Guide till e-tjänsten för ekonomiskt bistånd",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Guide till e-tjänsten för ekonomiskt bistånd",
+        "level": 1,
+        "levelSource": "markdown",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Den här guiden beskriver hur du ansöker om ekonomiskt bistånd. Läs igenom den innan du börjar.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Innan du börjar",
+        "level": 2,
+        "levelSource": "markdown",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du behöver ha följande till hands:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Bank-id eller annan e-legitimation",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Underlag för inkomster",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "lönespecifikationer",
+        "layer": "body",
+        "listDepth": 1,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "beslut om bostadsbidrag",
+        "layer": "body",
+        "listDepth": 1,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Hyresavi",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Steg för steg",
+        "level": 2,
+        "levelSource": "markdown",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Logga in i e-tjänsten.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Fyll i uppgifter om hushållet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Bifoga underlag och skicka in.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ansökan handläggs inom tio arbetsdagar. Du får besked via Mina sidor.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Tekniska krav",
+        "level": 3,
+        "levelSource": "markdown",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tjänsten fungerar i moderna webbläsare. Exempel på adress:",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "code",
+        "text": "https://e-tjanst.exempelstad.se/bistand",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Normer",
+        "level": 2,
+        "levelSource": "markdown",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "table",
+        "text": "Hushåll | Belopp per månad\nEnsamstående | 3 410 kr\nSammanboende | 6 150 kr",
+        "layer": "body",
+        "listDepth": 0,
+        "table": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Kontakt",
+        "level": 3,
+        "levelSource": "markdown",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ring kontaktcenter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Öppettider",
+        "level": 3,
+        "levelSource": "markdown",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vardagar 8–16.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [
+      {
+        "rows": 3,
+        "cols": 2,
+        "headerRows": 1,
+        "cells": [
+          {
+            "r": 0,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": true,
+            "text": "Hushåll"
+          },
+          {
+            "r": 0,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": true,
+            "text": "Belopp per månad"
+          },
+          {
+            "r": 1,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Ensamstående"
+          },
+          {
+            "r": 1,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "3 410 kr"
+          },
+          {
+            "r": 2,
+            "c": 0,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "Sammanboende"
+          },
+          {
+            "r": 2,
+            "c": 1,
+            "rs": 1,
+            "cs": 1,
+            "header": false,
+            "text": "6 150 kr"
+          }
+        ]
+      }
+    ],
+    "pages": [],
+    "breadcrumb": [],
+    "keywords": [],
+    "strategy": "parse=text[markdown]",
+    "missingPages": [],
+    "facts": {
+      "quality.chars": 686,
+      "quality.garble": 0,
+      "quality.missingPages": 0,
+      "quality.short": 0
+    }
+  },
+  "metadata": {
+    "tags": [],
+    "documentType": "text",
+    "sourceModifiedAt": "2026-03-01"
+  },
+  "chunks": [
+    {
+      "ordinal": 0,
+      "prefix": "Guide till e-tjänsten för ekonomiskt bistånd",
+      "headingPath": "Guide till e-tjänsten för ekonomiskt bistånd",
+      "text": "Den här guiden beskriver hur du ansöker om ekonomiskt bistånd. Läs igenom den innan du börjar.",
+      "searchText": "Den här guiden beskriver hur du ansöker om ekonomiskt bistånd. Läs igenom den innan du börjar.",
+      "overlapChars": 0,
+      "textHash": "e053699f8cd0f7e6233724793fc7fdae272a8f84f894ef08f039c3aa3b89340a",
+      "tokenCount": 34,
+      "tags": [],
+      "documentType": "text",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    },
+    {
+      "ordinal": 1,
+      "prefix": "Guide till e-tjänsten för ekonomiskt bistånd",
+      "headingPath": "Guide till e-tjänsten för ekonomiskt bistånd",
+      "text": "**Innan du börjar**\n\nDu behöver ha följande till hands:\n- Bank-id eller annan e-legitimation\n- Underlag för inkomster\n  - lönespecifikationer\n  - beslut om bostadsbidrag\n- Hyresavi\n\n**Steg för steg**\n- Logga in i e-tjänsten.\n- Fyll i uppgifter om hushållet.\n- Bifoga underlag och skicka in.\n\nAnsökan handläggs inom tio arbetsdagar. Du får besked via Mina sidor.",
+      "searchText": "**Innan du börjar**\n\nDu behöver ha följande till hands:\n- Bank-id eller annan e-legitimation\n- Underlag för inkomster\n  - lönespecifikationer\n  - beslut om bostadsbidrag\n- Hyresavi\n\n**Steg för steg**\n- Logga in i e-tjänsten.\n- Fyll i uppgifter om hushållet.\n- Bifoga underlag och skicka in.\n\nAnsökan handläggs inom tio arbetsdagar. Du får besked via Mina sidor.\nunder lag löna specifikation bostad bidrag hus håll arbets dag",
+      "overlapChars": 0,
+      "textHash": "a61b3cee0cb6f0fd0196e78594af0beb1c16b11274080ca5a341535d2028a6c7",
+      "tokenCount": 105,
+      "tags": [],
+      "documentType": "text",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    },
+    {
+      "ordinal": 2,
+      "prefix": "Guide till e-tjänsten för ekonomiskt bistånd › Steg för steg › Tekniska krav",
+      "headingPath": "Guide till e-tjänsten för ekonomiskt bistånd › Steg för steg › Tekniska krav",
+      "text": "Tjänsten fungerar i moderna webbläsare. Exempel på adress:\n\n```\nhttps://e-tjanst.exempelstad.se/bistand\n```",
+      "searchText": "Tjänsten fungerar i moderna webbläsare. Exempel på adress:\n\n```\nhttps://e-tjanst.exempelstad.se/bistand\n```\nwebb läsare exempel stad",
+      "overlapChars": 0,
+      "textHash": "664cf8de9bc933e369ec0b731592430c65736bf7ed23138eb71ac12ede2932d8",
+      "tokenCount": 52,
+      "tags": [],
+      "documentType": "text",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    },
+    {
+      "ordinal": 3,
+      "prefix": "Guide till e-tjänsten för ekonomiskt bistånd › Normer",
+      "headingPath": "Guide till e-tjänsten för ekonomiskt bistånd › Normer",
+      "text": "Hushåll: Ensamstående; Belopp per månad: 3 410 kr\nHushåll: Sammanboende; Belopp per månad: 6 150 kr",
+      "searchText": "Hushåll: Ensamstående; Belopp per månad: 3 410 kr\nHushåll: Sammanboende; Belopp per månad: 6 150 kr\nhus håll ensam stående",
+      "overlapChars": 0,
+      "textHash": "940e228a980e5368db66f1188cdadfb837ada21acbee6b5b17ad8eed2fe02300",
+      "tokenCount": 44,
+      "tags": [],
+      "documentType": "text",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": true
+    },
+    {
+      "ordinal": 4,
+      "prefix": "Guide till e-tjänsten för ekonomiskt bistånd › Normer",
+      "headingPath": "Guide till e-tjänsten för ekonomiskt bistånd › Normer",
+      "text": "**Kontakt**\n\nRing kontaktcenter.\n\n**Öppettider**\n\nVardagar 8–16.",
+      "searchText": "**Kontakt**\n\nRing kontaktcenter.\n\n**Öppettider**\n\nVardagar 8–16.\nkontakt center",
+      "overlapChars": 0,
+      "textHash": "2a499ac816e30968565e8ce47765a53b279187db07df38af9f42dd2c16c59ff8",
+      "tokenCount": 32,
+      "tags": [],
+      "documentType": "text",
+      "sourceModifiedAt": "2026-03-01",
+      "isTable": false
+    }
+  ],
+  "chunkFacts": {
+    "quality.chunks": 5,
+    "quality.duplicateChunkRatio": 0,
+    "quality.emptyChunkRatio": 0.2
+  },
+  "pii": {
+    "counts": {
+      "personnummer": 0,
+      "samordningsnummer": 0,
+      "email": 0,
+      "emailExternal": 0,
+      "phone": 0,
+      "name": 0,
+      "ner": "skipped",
+      "rules": 0
+    },
+    "typesFired": [],
+    "nerUnits": 0
+  }
+}
