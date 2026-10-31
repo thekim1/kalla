@@ -29,7 +29,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option: $1" >&2; usage 1;;
   esac
 done
-[ -r "$deploy_env" ] && [ -n "$out" ] || usage 1
+if [ ! -r "$deploy_env" ] || [ -z "$out" ]; then usage 1; fi
 mkdir -p "$out"
 
 sql() { docker compose --env-file "$deploy_env" exec -T postgres psql -X -q -A -t -v ON_ERROR_STOP=1 -U postgres -d ragdb "$@"; }

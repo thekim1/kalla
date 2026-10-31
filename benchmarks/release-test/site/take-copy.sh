@@ -18,7 +18,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option: $1" >&2; exit 1;;
   esac
 done
-[ -r "$urls" ] && [ -n "$out" ] || { sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
+if [ ! -r "$urls" ] || [ -z "$out" ]; then sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; fi
 command -v wget >/dev/null || { echo "error: wget is required" >&2; exit 1; }
 mkdir -p "$out"
 # --no-host-directories keeps the URL path as the file path; --adjust-extension gives HTML pages a .html name;

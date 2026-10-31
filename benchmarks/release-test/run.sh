@@ -75,7 +75,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option: $1" >&2; usage 1;;
   esac
 done
-[ -n "$base_url" ] && [ -n "$model" ] || usage 1
+if [ -z "$base_url" ] || [ -z "$model" ]; then usage 1; fi
 [ -n "$k6_base_url" ] || k6_base_url="$base_url"
 case "$mode" in r1|overhead) ;; *) echo "error: --mode is r1 or overhead" >&2; exit 1;; esac
 for tool in docker python3 curl; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 1; }; done
