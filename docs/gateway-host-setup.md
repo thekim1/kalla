@@ -53,7 +53,7 @@ The platform is built "code first", so a few pieces this guide relies on are sti
 before you start; with `gh` installed:
 
 ```bash
-for n in 119 123 127; do gh pr view "$n" --repo thekim1/ume-rag-platform --json number,state,title --jq '"#\(.number) \(.state) \(.title)"'; done
+for n in 123 127; do gh pr view "$n" --repo thekim1/ume-rag-platform --json number,state,title --jq '"#\(.number) \(.state) \(.title)"'; done
 gh issue view 142 --repo thekim1/ume-rag-platform --json state,title --jq '"#142 \(.state) \(.title)"'
 ```
 
@@ -61,7 +61,7 @@ gh issue view 142 --repo thekim1/ume-rag-platform --json state,title --jq '"#142
 |---|---|---|
 | #123 merged (gateway client, `EmbeddingProfile:*` seeder, canary) | the `pilot-embedding` profile is seeded at start | §9 refuses: "no active embedding profile pilot-embedding" |
 | #142 closed (the profile's `RequestDimensions`, `dimensions` sent on every embedding call) | the model returns 1024 values, not its native 3072 | embedding fails the profile's dimension check; nothing goes live |
-| #119 merged (real-gateway mode, organisation sync) | the admin's model catalogue sync and the canary record | ingestion still works; the gateway status page stays empty |
+| #119 (real-gateway mode, organisation sync): merged | the admin's model catalogue sync and the canary record | nothing to wait for |
 | #127 merged (knowledge service) | a retrieval query in §10 | check the chunks with SQL only |
 
 You can do §3 to §8 before the gates open (the stack runs, nothing is embedded). Do §9 only when #123 and #142 are
@@ -383,7 +383,7 @@ docker compose --env-file deploy/.env exec -u postgres postgres psql -U postgres
 | The run finished | `SELECT "State", "Added", "Updated", "Unchanged", "Failed" FROM content."Runs" WHERE "Id" = '<sync job id>';` | `succeeded`, `Added` = the number of URLs (a few minutes; first parses are slower) |
 | Live chunks with 1024-dimension vectors | `SELECT count(*), min(vector_dims(c."Embedding")) FROM content."Chunks" c JOIN content."Documents" d ON d."LiveChunkSetId" = c."ChunkSetId" WHERE d."SourceId" = '<source id>' AND c."DeletedAt" IS NULL;` | at least one chunk per page, `1024` |
 | Per-page outcome | `SELECT "Identity", "Outcome", "Reason" FROM content."RunItems" WHERE "RunId" = '<sync job id>' ORDER BY "Id";` | `added` for each page |
-| The canary | `SELECT "Name", "GatewayModel", "Dimensions", "CanaryEmbedding" IS NOT NULL AS recorded FROM config."EmbeddingProfiles";` | `pilot-embedding`, `text-embedding-3-large`, `1024`, `t` (after #119; the admin records it after its first catalogue sync) |
+| The canary | `SELECT "Name", "GatewayModel", "Dimensions", "CanaryEmbedding" IS NOT NULL AS recorded FROM config."EmbeddingProfiles";` | `pilot-embedding`, `text-embedding-3-large`, `1024`, `t` (the admin records it after its first catalogue sync) |
 
 On the gateway side, its admin UI shows the embedding calls under the worker's key with their cost (a few hundredths of
 a cent for a handful of pages).
@@ -454,7 +454,7 @@ When you are done (or stopped), report in this shape:
 ```
 Ume.Rag phase 1 setup on <host>, <date>
 Commit: <hash>
-Gates: #119 <state>, #123 <state>, #127 <state>, #142 <state>
+Gates: #123 <state>, #127 <state>, #142 <state>
 Preflight: Docker <version>, Compose <version>, cgroup <driver> <version>, <cores> cores, <GB> GB available, 172.30/16 <free|used by …>
 Gateway smoke test (§4.4): api <result>, admin <result>, worker <result>; gateway address <public|this host|proxy container>
 HUMAN steps done: <list, with who approved>

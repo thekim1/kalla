@@ -20,9 +20,8 @@ public sealed record ChunkSetRow(Guid Id, ChunkSetKey Key, string State, byte[] 
 /// (chunks stay deleted), the previous set becomes <c>superseded</c> with its chunks deleted. A set with the wanted key that
 /// is <c>superseded</c> (rollback within 14 days) is swapped back without a write; a noise-only change re-keys the live set
 /// in one row. Sets never swapped (a crash between the batches and the swap) stay invisible until the orphan sweep removes
-/// them. Vectors are written as pgvector text through <c>unnest</c> (the <c>vector</c> column is not in the EF model and
-/// the shared data source has no pgvector type mapping); each profile's partial HNSW index is created before its first
-/// chunk (<c>content.rag_ensure_profile_index</c>).
+/// them. Vectors are written as pgvector text through <c>unnest</c> (the <c>vector</c> column is not in the EF model);
+/// each profile's partial HNSW index is created before its first chunk (<c>content.rag_ensure_profile_index</c>).
 /// </summary>
 public sealed class IndexWriter(JobDatabase database)
 {
