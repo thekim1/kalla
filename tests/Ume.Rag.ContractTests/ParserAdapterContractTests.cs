@@ -13,7 +13,8 @@ namespace Ume.Rag.ContractTests;
 /// (recall ≥ 0.85, precision ≥ 0.80 at <c>Settings.NerMinScore</c> 0.80) on <c>tests/fixtures/pii/ner-names.jsonl</c>.
 /// Skips unless <c>UME_RAG_TEST_PARSER_IMAGE</c> is set.
 /// </summary>
-public sealed class ParserAdapterContractTests(ParserContainer parser) : IClassFixture<ParserContainer>
+[Collection(ParserImageTests.Name)]
+public sealed class ParserAdapterContractTests(ParserContainer parser)
 {
     public const double MinScore = 0.80;
 
@@ -22,7 +23,7 @@ public sealed class ParserAdapterContractTests(ParserContainer parser) : IClassF
     [Fact]
     public async Task The_inspector_gives_detect_a_page_plan_for_a_real_pdf()
     {
-        parser.RequireImage();
+        await parser.RequireReadyAsync();
         var detect = new DetectStage(new ParserInspector(parser.Client(strict: false)));
 
         var result = await detect.RunAsync(new RawContent(await File.ReadAllBytesAsync(ContractFiles.Fixture("text-layer.pdf"), Ct), "application/pdf"), Ct);
@@ -37,7 +38,7 @@ public sealed class ParserAdapterContractTests(ParserContainer parser) : IClassF
     [Fact]
     public async Task The_parser_route_converts_a_real_pdf_through_the_adapters()
     {
-        parser.RequireImage();
+        await parser.RequireReadyAsync();
         var client = parser.Client(strict: false);
         var bytes = await File.ReadAllBytesAsync(ContractFiles.Fixture("text-layer.pdf"), Ct);
         var detected = await new DetectStage(new ParserInspector(client)).RunAsync(new RawContent(bytes, "application/pdf"), Ct);
@@ -53,7 +54,7 @@ public sealed class ParserAdapterContractTests(ParserContainer parser) : IClassF
     [Fact]
     public async Task The_ner_client_meets_the_name_targets_on_the_labelled_fixtures()
     {
-        parser.RequireImage();
+        await parser.RequireReadyAsync();
         var ner = new ParserNerClient(parser.Client(strict: false));
         for (var i = 0; i < 120 && !await ner.IsReadyAsync(Ct); i++)
         {

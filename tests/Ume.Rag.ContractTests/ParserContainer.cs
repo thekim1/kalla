@@ -8,7 +8,8 @@ namespace Ume.Rag.ContractTests;
 /// The parser image named by <c>UME_RAG_TEST_PARSER_IMAGE</c>, started once per test class with the production
 /// hardening (read-only root, <c>/tmp</c> as tmpfs, no capabilities, no new privileges). Without the variable nothing
 /// starts and the tests that need it skip. Use an image name with a registry part that has a dot (for example
-/// <c>ume-rag.local/parser:ci</c>): Testcontainers prefixes other names with the Docker Hub mirror CI sets.
+/// <c>ume-rag.local/parser:ci</c>): Testcontainers prefixes other names with the Docker Hub mirror CI sets. Shared by every
+/// test class of <see cref="ParserImageTests"/>, so no two tests use the one conversion slot at the same time.
 /// </summary>
 public sealed class ParserContainer : IAsyncLifetime
 {
@@ -25,8 +26,44 @@ public sealed class ParserContainer : IAsyncLifetime
 
     public ParserClient Client(bool strict = true) => new(Http, ParserJson.Create(strict));
 
+    /// <summary>How long a test waits for the convert lane (a recycled slot respawns and warms up again).</summary>
+    public static readonly TimeSpan ReadyTimeout = TimeSpan.FromMinutes(3);
+
     /// <summary>Skips the calling test when no image is configured.</summary>
     public void RequireImage() => Assert.SkipWhen(Image is null, $"{ImageVariable} is not set (CI's contract job sets it).");
+
+    /// <summary>
+    /// Skips without an image, else waits (bounded by <see cref="ReadyTimeout"/>) until <c>/v1/info</c> reports every
+    /// conversion slot warm. The one slot recycles on RSS growth (to-verify #65); a request during the respawn answers
+    /// <c>not_ready</c>, which the worker requeues, but a contract test must start on a ready parser.
+    /// </summary>
+    public async Task RequireReadyAsync()
+    {
+        RequireImage();
+        var ct = TestContext.Current.CancellationToken;
+        var client = Client(strict: false);
+        var deadline = DateTimeOffset.UtcNow + ReadyTimeout;
+        ParserCapacity? capacity = null;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            try
+            {
+                capacity = (await client.GetInfoAsync(ct)).Capacity;
+                if (capacity.ConvertSlots > 0 && capacity.SlotsReady >= capacity.ConvertSlots)
+                {
+                    return;
+                }
+            }
+            catch (HttpRequestException)
+            {
+                // the parser is restarting its listener: keep waiting within the bound
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), ct);
+        }
+
+        Assert.Fail($"The parser's convert lane was not ready within {ReadyTimeout} (last capacity: {capacity}).");
+    }
 
     public async ValueTask InitializeAsync()
     {
@@ -65,4 +102,11 @@ public sealed class ParserContainer : IAsyncLifetime
             await _container.DisposeAsync();
         }
     }
+}
+
+/// <summary>The test classes that use the parser image: one container, run one test at a time.</summary>
+[CollectionDefinition(Name)]
+public sealed class ParserImageTests : ICollectionFixture<ParserContainer>
+{
+    public const string Name = "parser-image";
 }

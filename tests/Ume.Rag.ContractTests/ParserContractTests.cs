@@ -13,7 +13,8 @@ namespace Ume.Rag.ContractTests;
 /// deserialised strictly (unknown members fail, so drift in either direction shows) and compared with the goldens. Tests
 /// that need the image skip unless UME_RAG_TEST_PARSER_IMAGE is set.
 /// </summary>
-public sealed class ParserContractTests(ParserContainer parser) : IClassFixture<ParserContainer>
+[Collection(ParserImageTests.Name)]
+public sealed class ParserContractTests(ParserContainer parser)
 {
     private static readonly string[] SchemaNames =
         ["convert-request", "convert-result", "inspect-request", "inspect-result", "ner-request", "ner-result", "info", "error"];
@@ -105,7 +106,7 @@ public sealed class ParserContractTests(ParserContainer parser) : IClassFixture<
     [Fact]
     public async Task Info_matches_the_schema_and_the_client()
     {
-        parser.RequireImage();
+        await parser.RequireReadyAsync();
         var ct = TestContext.Current.CancellationToken;
 
         var json = await parser.Http.GetStringAsync(new Uri("v1/info", UriKind.Relative), ct);
@@ -126,7 +127,7 @@ public sealed class ParserContractTests(ParserContainer parser) : IClassFixture<
     [MemberData(nameof(Conversions))]
     public async Task Conversion_matches_the_schema_and_the_golden(string name)
     {
-        parser.RequireImage();
+        await parser.RequireReadyAsync();
         var ct = TestContext.Current.CancellationToken;
         var testCase = ContractFiles.Case("conversions", name);
         var optionsJson = testCase["options"]!.DeepClone().AsObject();
@@ -160,7 +161,7 @@ public sealed class ParserContractTests(ParserContainer parser) : IClassFixture<
     [MemberData(nameof(Errors))]
     public async Task Error_case_answers_the_contract_error(string name)
     {
-        parser.RequireImage();
+        await parser.RequireReadyAsync();
         var ct = TestContext.Current.CancellationToken;
         var testCase = ContractFiles.Case("errors", name);
         var options = testCase["options"]!.DeepClone().AsObject();
@@ -189,7 +190,7 @@ public sealed class ParserContractTests(ParserContainer parser) : IClassFixture<
     [Fact]
     public async Task Client_throws_the_contract_error()
     {
-        parser.RequireImage();
+        await parser.RequireReadyAsync();
         var ct = TestContext.Current.CancellationToken;
         await using var file = File.OpenRead(ContractFiles.Fixture("corrupt.pdf"));
 
@@ -204,7 +205,7 @@ public sealed class ParserContractTests(ParserContainer parser) : IClassFixture<
     [MemberData(nameof(Inspections))]
     public async Task Inspection_matches_the_schema_and_the_case(string name)
     {
-        parser.RequireImage();
+        await parser.RequireReadyAsync();
         var ct = TestContext.Current.CancellationToken;
         var testCase = ContractFiles.Case("inspections", name);
 
@@ -233,7 +234,7 @@ public sealed class ParserContractTests(ParserContainer parser) : IClassFixture<
     [Fact]
     public async Task Ner_finds_persons_with_code_point_spans()
     {
-        parser.RequireImage();
+        await parser.RequireReadyAsync();
         var ct = TestContext.Current.CancellationToken;
         const string text = "😀 Protokollet justerades av Anna Lindqvist och Per Östberg.";
         var request = new ParserNerRequest("contract-ner", [new ParserNerText("c1:0", text), new ParserNerText("c1:1", "")])
