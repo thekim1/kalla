@@ -27,12 +27,22 @@ internal sealed class FastCrawlPolicy : ICrawlPolicySource
         new Dictionary<string, HostOverride>(StringComparer.OrdinalIgnoreCase));
 }
 
-/// <summary>Blocks embedding requests while armed; counts the requests that reached it.</summary>
+/// <summary>
+/// Blocks embedding requests while armed (only those whose body contains <see cref="Only"/>, when set); counts the
+/// requests that reached it.
+/// </summary>
 internal sealed class EmbeddingGate : DelegatingHandler
 {
     private volatile TaskCompletionSource _open = Opened();
+    private int _requests;
 
     public TaskCompletionSource Blocked { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>When set, an armed gate blocks only the requests whose body contains this text.</summary>
+    public string? Only { get; set; }
+
+    /// <summary>Embedding requests sent through the gate (every gateway call of the worker).</summary>
+    public int Requests => Volatile.Read(ref _requests);
 
     public void Arm() => _open = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -40,13 +50,15 @@ internal sealed class EmbeddingGate : DelegatingHandler
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _requests);
         var gate = _open;
-        if (!gate.Task.IsCompleted)
+        if (!gate.Task.IsCompleted && (Only is not { } only ||
+            (request.Content is not null && (await request.Content.ReadAsStringAsync(cancellationToken)).Contains(only, StringComparison.Ordinal))))
         {
             Blocked.TrySetResult();
+            await gate.Task.WaitAsync(cancellationToken);
         }
 
-        await gate.Task.WaitAsync(cancellationToken);
         return await base.SendAsync(request, cancellationToken);
     }
 

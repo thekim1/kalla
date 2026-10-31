@@ -48,15 +48,15 @@ Refs: [engine §11](../ingestion-worker/design-engine.md), [admin §4.7, §6.4](
 
 ### 6. Publish, re-process, rollback
 Refs: [engine §12, §14](../ingestion-worker/design-engine.md)
-- [ ] `publish-plan` (every live document, forecast); `reprocess` with per-document swap
-- [ ] Previous sets kept 14 days; rollback swaps back; site-profile versions via the same logic
-- [ ] **Done:** engine §19 publish and rollback tests green
+- [x] `publish-plan` (every live document, forecast); `reprocess` with per-document swap (PR: a/p1b-6-publish)
+- [x] Previous sets kept 14 days; rollback swaps back; site-profile versions via the same logic (PR: a/p1b-6-publish)
+- [x] **Done:** engine §19 publish and rollback tests green (PR: a/p1b-6-publish)
 
 ### 7. Evaluation harness
 Refs: [processing §13, §14](../ingestion-worker/design-processing.md), [ingestion plan §7](../ingestion-worker/plan.md)
-- [ ] `publish-report`; `nightly` with the recall@10 alert and metric; `on-demand` with `CandidateSettings`
-- [ ] `generate-set`/`top-up-set` with filtering on FakeGateway (model and ceiling per README §7 O1)
-- [ ] Reports lead with the `human` layer
+- [x] `publish-report`; `nightly` with the recall@10 alert and metric; `on-demand` with `CandidateSettings` (PR: a/10-eval-on-demand)
+- [x] `generate-set`/`top-up-set` with filtering on FakeGateway (model and ceiling per README §7 O1) (PR: a/p1b-7-eval-sets)
+- [x] Reports lead with the `human` layer (PR: a/10-eval-on-demand)
 - [ ] **Done:** reproducibility test green
 - [ ] **Hand-off L5** (with items 5, 6, 8): issue to stream B
 

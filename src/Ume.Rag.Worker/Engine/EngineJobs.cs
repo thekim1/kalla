@@ -46,6 +46,21 @@ public static class SyncJobs
             RunId = runId,
         };
 
+    /// <summary>
+    /// The <c>eval</c> <c>publish-report</c> of a finished <c>reprocess</c> run of a publish or rollback (engine design §10.4,
+    /// §12.1 step 6), on the source's collection at its level; one per run (dedup <c>eval-report:{runId}</c>).
+    /// </summary>
+    public static JobRequest PublishReport(Guid collectionId, string collectionClassification, Guid departmentId, Guid runId, Guid pipelineVersionId) =>
+        new(JobClasses.Eval, departmentId, collectionClassification, ContractJson.Serialize(new EvalPublishReportPayload
+        {
+            CollectionId = collectionId,
+            RunId = runId,
+            PipelineVersionId = pipelineVersionId,
+        }))
+        {
+            DedupKey = JobDedupKeys.EvalReport(runId),
+        };
+
     public static JobRequest FetchUrl(SourceContext source, Guid runId, string urlHash, Guid? executionId = null) =>
         new(JobClasses.Fetch, source.DepartmentId, source.Classification,
             ContractJson.Serialize(new FetchPayload { SourceId = source.SourceId, RunId = runId, UrlHash = urlHash, ExecutionId = executionId }))
