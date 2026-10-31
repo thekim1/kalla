@@ -47,7 +47,7 @@ jobs:
   build:
     # Images, SBOMs, bundle and smoke test in one job: the dry run's registry lives only as long as the job.
     needs: [verify, parser, e2e]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     permissions:
       contents: read
       packages: write
@@ -230,7 +230,7 @@ jobs:
     # Only for a pushed tag; a dry run ends after the smoke test.
     needs: build
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     permissions:
       contents: write
     steps:

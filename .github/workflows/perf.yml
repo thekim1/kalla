@@ -33,7 +33,7 @@ concurrency:
 jobs:
   dry-run:
     if: github.event_name == 'schedule' || inputs.mode == 'dry-run'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +63,7 @@ jobs:
 
   test-host:
     if: vars.UME_RAG_TEST_HOST_RUNNER != '' && (github.event_name == 'schedule' || inputs.mode == 'r1' || inputs.mode == 'overhead')
-    runs-on: ${{ fromJSON(vars.UME_RAG_TEST_HOST_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.UME_RAG_TEST_HOST_RUNNER || '["self-hosted","Linux","X64"]') }}
     environment: test-host
     timeout-minutes: 180
     env:
@@ -126,7 +126,7 @@ jobs:
 
   test-host-missing:
     if: vars.UME_RAG_TEST_HOST_RUNNER == '' && (inputs.mode == 'r1' || inputs.mode == 'overhead')
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - name: No test-host runner yet
         run: |
