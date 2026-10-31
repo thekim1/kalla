@@ -33,12 +33,12 @@ Refs: [engine §9.1, §11, §12](../ingestion-worker/design-engine.md), [admin �
 
 ### 4. Freshness in the crawler
 Refs: [weakness review §3](../weakness-review.md), [connectors §5.4–§5.6, §18](../ingestion-worker/design-connectors.md)
-- [ ] Completeness by ratio (≥ 99 % resolved; failed seeds protected; unreachable robots.txt = paused); C7 updated
-- [ ] Removal check (HEAD, then GET; 404/410 → `Gone`; 200 kept; also in full traversals)
-- [ ] `demote` patterns on the source; incomplete-traversal alert; report sections
-- [ ] `lastmod` skip and incremental runs gated on `lastmodReliable`; `revalidateEvery`
-- [ ] `lastmod` sample comparison (≤ 2 % threshold, ≥ 7 days apart) proposing the flag through `edit-site-profile`
-- [ ] **Done:** connectors §18 tests for these parts green; fixture-site removal test
+- [x] Completeness by ratio (≥ 99 % resolved; failed seeds protected; unreachable robots.txt = paused); C7 updated (#101)
+- [x] Removal check (HEAD, then GET; 404/410 → `Gone`; 200 kept; also in full traversals) (#101)
+- [x] `demote` patterns on the source; incomplete-traversal alert; report sections (#101)
+- [x] `lastmod` skip and incremental runs gated on `lastmodReliable`; `revalidateEvery` (#101)
+- [x] `lastmod` sample comparison (≤ 2 % threshold, ≥ 7 days apart) proposing the flag through `edit-site-profile` (#101)
+- [x] **Done:** connectors §18 tests for these parts green; fixture-site removal test (#101)
 
 ### 5. Preview and preflight
 Refs: [engine §11](../ingestion-worker/design-engine.md), [admin §4.7, §6.4](../admin/design.md)
@@ -70,14 +70,14 @@ Refs: [weakness review §2](../weakness-review.md), [ingestion plan §7](../inge
 - [ ] Script in `scripts/`: questions through the chat API as the pilot assistant → CSV (question, answer, citations, coverage)
   (code part done: `scripts/grading/grading.py answer` tested against a fake chat API, streamed and not, #?; the run
   against the AppHost with FakeGateway on `tests/evaluation/smoke` waits for stream B's chat API (J9) and smoke set)
-- [x] Totals for the four gate measures from a graded file (#?)
+- [x] Totals for the four gate measures from a graded file (#101)
 - [ ] **Hand-off L8:** issue to the user with the CSV format
 
 ### 15. CI and harnesses
 Refs: [repo-and-deployment §8.1–§8.3](../platform/repo-and-deployment.md), [chat §16.2](../chat-api/design.md)
-- [ ] `benchmarks/release-test/` (k6 idle and during crawl + OCR; overhead run) and `perf.yml`; local dry run writes the report
-- [ ] `evaluation.yml` (nightly, dispatch)
-- [ ] `e2e` job, nightly + release (after L7)
+- [x] `benchmarks/release-test/` (k6 idle and during crawl + OCR; overhead run) and `perf.yml`; local dry run writes the report (#?)
+- [x] `evaluation.yml` (nightly, dispatch) (#?)
+- [ ] `e2e` job, nightly + release (after L7) — `e2e.yml` wired (nightly, dispatch, called by `release.yml`); skips with a notice until `tests/e2e` exists (#?)
 
 ### 17. Pilot stack for P1b
 Refs: [chat §4.3, §13.3, §14.2](../chat-api/design.md), [repo-and-deployment §6.2, §7](../platform/repo-and-deployment.md)

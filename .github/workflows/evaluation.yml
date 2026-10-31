@@ -1,0 +1,57 @@
+name: Evaluation
+# Nightly retrieval evaluation on the test deployment (plans/platform/repo-and-deployment.md §8.1; processing design
+# §14.8; knowledge design §16.4): scripts/evaluation/nightly.sh enqueues an eval job of kind nightly for every
+# published collection, waits for the worker to run them and reports recall per collection with its spread over the
+# kept runs. Against the deployment's own embedding profile (the EU model under M2, P1b Open O4), not BGE-M3; at most
+# 100 queries per collection. Advisory: the job fails only when a run did not happen or did not succeed.
+# Runs on the self-hosted test-host runner (repository variable UME_RAG_TEST_HOST_RUNNER, a JSON list of labels;
+# environment test-host; P1b hand-off L11). Without it the job is skipped with a notice and the script runs by hand on
+# the host. The runner's user needs Docker access to the deployment (deploy/.env at UME_RAG_TEST_HOST_DEPLOY_ENV).
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      enqueue:
+        description: Enqueue the runs (off = only wait for and report the last 24 hours)
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: evaluation
+  cancel-in-progress: false
+jobs:
+  evaluation:
+    if: vars.UME_RAG_TEST_HOST_RUNNER != ''
+    runs-on: ${{ fromJSON(vars.UME_RAG_TEST_HOST_RUNNER || '["ubuntu-latest"]') }}
+    environment: test-host
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nightly evaluation
+        env:
+          DEPLOY_ENV: ${{ vars.UME_RAG_TEST_HOST_DEPLOY_ENV }}
+          ENQUEUE: ${{ github.event_name == 'schedule' || inputs.enqueue }}
+        run: |
+          args=(--deploy-env "$DEPLOY_ENV" --out "$RUNNER_TEMP/evaluation")
+          [ "$ENQUEUE" = true ] || args+=(--no-enqueue)
+          bash scripts/evaluation/nightly.sh "${args[@]}"
+      - name: Report to the job summary
+        if: always()
+        run: if [ -f "$RUNNER_TEMP/evaluation/report.md" ]; then cat "$RUNNER_TEMP/evaluation/report.md" >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: evaluation
+          path: ${{ runner.temp }}/evaluation/
+          if-no-files-found: warn
+
+  not-configured:
+    if: vars.UME_RAG_TEST_HOST_RUNNER == ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: No test-host runner yet
+        run: |
+          echo "::notice::No self-hosted test-host runner is configured (repository variable UME_RAG_TEST_HOST_RUNNER," \
+            "P1b hand-off L11). Run scripts/evaluation/nightly.sh on the test host by hand."

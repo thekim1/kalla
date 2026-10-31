@@ -36,6 +36,8 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
 {
     private static readonly byte[] Eicar = Encoding.ASCII.GetBytes(@"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*");
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _fresh = new(StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _freshStatus = new(StringComparer.Ordinal);
     private TestSite _site = null!;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -162,7 +164,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         record.PausedHosts["www.umea.se"].Count.ShouldBe(2);
         record.TrapStats[TrapDetector.Calendar].ShouldBe(new TrapStat(5, "https://www.umea.se/k/2010"));
         record.SeedsFailed.ShouldBe(1);
-        TraversalCompleteness.Evaluate(record, 2, false).Complete.ShouldBeFalse();
+        TraversalCompleteness.Evaluate(record, 2, false, CompletenessRule.Ratio, incremental: false).Complete.ShouldBeFalse();
     }
 
     [Fact]
@@ -173,7 +175,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         var context = Context(Settings(maxPages: 3));
 
         await rig.CrawlAsync(context);
-        var verdict = await rig.Traversal.EvaluateAsync(context.Run, cancelled: false, Ct);
+        var verdict = await rig.Traversal.EvaluateAsync(context, cancelled: false, Ct);
 
         var record = (await store.GetAsync(context.Run.RunId, Ct))!;
         (record.Admitted, record.LimitHit, record.Complete).ShouldBe((3, true, false));
@@ -206,7 +208,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
 
         foreach (var context in new[] { a, b })
         {
-            (await first.Traversal.EvaluateAsync(context.Run, false, Ct)).Complete.ShouldBeTrue();
+            (await first.Traversal.EvaluateAsync(context, false, Ct)).Complete.ShouldBeTrue();
             (await store.GetAsync(context.Run.RunId, Ct))!.Admitted.ShouldBe(5);
         }
 
@@ -413,6 +415,98 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         ((IEgressPolicySource)unreachable).Current.ShouldBe(EgressPolicy.Default);
     }
 
+    [Fact]
+    public async Task Incremental_listing_marks_unchanged_seeds_and_the_urls_that_left_the_sitemap_are_found_and_cleared()
+    {
+        var store = new PostgresCrawlStore(Worker);
+        var first = await StartRunAsync(store, maxPages: 100);
+        var old = new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero);
+        string[] urls = ["https://www.umea.se/same", "https://www.umea.se/changed", "https://www.umea.se/left", "https://www.umea.se/linked"];
+        await store.AdmitAsync(first, [.. urls.Take(3).Select(u => Admission(u, 0, old)), Admission(urls[3], 1)], Ct);
+        foreach (var row in await store.ReleaseAsync(first, "www.umea.se", 10, Ct))
+        {
+            await store.CompleteAsync(first, row.UrlHash, new FrontierFacts(DateTimeOffset.UtcNow, 200, null, null, new string('b', 64), null), Ct);
+        }
+
+        var second = first with { RunId = Guid.NewGuid() };
+        await store.StartAsync(new CrawlRunRecord { RunId = second.RunId, Classification = "public", SourceId = second.SourceId, MaxPages = 100, MaxDepth = 10 }, Ct);
+        var listing = new[]
+        {
+            Admission(urls[0], 0, old), Admission(urls[1], 0, DateTimeOffset.UtcNow.AddDays(1)), Admission("https://www.umea.se/new", 0, old),
+        };
+        var listed = await store.MarkListedAsync(second, listing, Ct);
+
+        listed.ShouldBe([listing[0].UrlHash]);
+        (await store.GetAsync(second.SourceId, "public", listing[0].UrlHash, Ct))!.ShouldSatisfyAllConditions(
+            r => r.RunId.ShouldBe(second.RunId), r => r.State.ShouldBe(FrontierState.Idle));
+        (await store.GetAsync(second.RunId, Ct))!.Admitted.ShouldBe(0);
+        await store.AdmitAsync(second, [.. listing.Where(a => !listed.Contains(a.UrlHash))], Ct);
+
+        // Only the URL listed before and missing now has left the sitemap; the linked page never was in it.
+        var left = await store.LeftSitemapAsync(second, Ct);
+        left.Select(r => r.Url).ShouldBe([urls[2]]);
+        var checks = await store.AdmitAsync(second, [.. left.Select(r => new FrontierAdmission(r.Url, r.Host, FrontierRow.RemovalCheckDepth, false))], Ct);
+        await store.ClearSitemapLastModAsync(second, [.. checks.Admitted.Select(r => r.UrlHash)], Ct);
+
+        var check = (await store.GetAsync(second.SourceId, "public", checks.Admitted.Single().UrlHash, Ct))!;
+        (check.Depth, check.State, check.SitemapLastMod, check.IsRemovalCheck).ShouldBe((FrontierRow.RemovalCheckDepth, FrontierState.Pending, (DateTimeOffset?)null, true));
+        (await store.GetAsync(second.RunId, Ct))!.ShouldSatisfyAllConditions(r => r.Seeds.ShouldBe(2), r => r.Admitted.ShouldBe(3));
+        (await store.LeftSitemapAsync(second, Ct)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task The_site_profile_reader_returns_the_applied_version_and_lastmod_reliable()
+    {
+        var reader = new PostgresSiteProfileReader(Worker);
+        var profileId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var host = $"{Guid.NewGuid():N}.example";
+        var profile = ContractJson.Serialize(new Pipelines.SiteProfiles.SiteProfile { MainRoot = "main", LastmodReliable = true });
+        await Sql.ExecuteAsync(database.Connection(null), """
+            INSERT INTO content."SiteProfiles" ("Id", "Classification", "Host", "PresetId", "UpdatedAt") VALUES ($1, 'public', $2, 'sitevision', now());
+            """, profileId, host);
+        await Sql.ExecuteAsync(database.Connection(null), """
+            INSERT INTO content."SiteProfileVersions" ("Id", "SiteProfileId", "Number", "Profile", "Origin", "State", "CreatedBy")
+            VALUES ($1, $2, 2, $3::jsonb, 'manual', 'applied', 'system:worker');
+            """, versionId, profileId, profile);
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."SiteProfiles" SET "AppliedVersionId" = $1 WHERE "Id" = $2""", versionId, profileId);
+
+        var applied = (await reader.GetAppliedAsync("public", host, Ct))!;
+        (applied.SiteProfileId, applied.Number, applied.PresetId, applied.Profile.LastmodReliable).ShouldBe((profileId, 2, "sitevision", true));
+        (await reader.GetAppliedAsync("internal", host, Ct)).ShouldBeNull();
+        (await new LastmodReliability(reader, TimeProvider.System).IsReliableAsync("public", host + ":443", Ct)).ShouldBeTrue();
+        (await new LastmodReliability(reader, TimeProvider.System).IsReliableAsync("public", "other.example", Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Against_the_database_a_404_after_leaving_the_sitemap_is_gone_and_a_200_is_kept()
+    {
+        var store = new PostgresCrawlStore(Worker);
+        await using var rig = CrawlRig.Create(_site, hosts: new PostgresCrawlHostStore(Worker), store: (store, store));
+        var source = Guid.NewGuid();
+        var settings = ContractJson.ToElement(new CrawlSettings { StartUrls = [_site.Url("/").AbsoluteUri], Sitemaps = [_site.Url("/fresh.xml").AbsoluteUri] });
+        CrawlRunContext Run() => new(new CrawlRunKey(source, "public", Guid.NewGuid()), Guid.NewGuid(), SyncKind.Sync, RunTrigger.Manual, settings, Revalidate: false);
+        _fresh["/f/keep"] = "2026-01-15";
+        _fresh["/f/gone"] = "2026-01-15";
+        var first = Run();
+        await rig.CrawlAsync(first);
+        (await rig.Traversal.EvaluateAsync(first, false, Ct)).Complete.ShouldBeTrue();
+
+        _fresh.Clear();
+        _freshStatus["/f/gone"] = 404;
+        var second = Run();
+        var results = await rig.CrawlAsync(second);
+        var verdict = await rig.Traversal.EvaluateAsync(second, false, Ct);
+
+        verdict.Complete.ShouldBeTrue();
+        results[_site.Url("/f/gone").AbsoluteUri].ShouldBeOfType<CrawlFetchResult.Done>().Outcome.ShouldBe(new FetchOutcome.Gone("http.404"));
+        results[_site.Url("/f/keep").AbsoluteUri].ShouldBeOfType<CrawlFetchResult.Done>().ShouldSatisfyAllConditions(
+            d => d.Outcome.ShouldBeOfType<FetchOutcome.Content>(), d => d.Facts.ShouldContain(CrawlTraversal.RemovalCheck));
+        (await Sql.ScalarAsync<long>(database.Connection(null),
+            """SELECT count(*) FROM content."CrawlFrontier" WHERE "SourceId" = $1 AND "Depth" = -1 AND "SitemapLastMod" IS NULL AND "RunId" = $2""", source, second.Run.RunId))
+            .ShouldBe(2);
+    }
+
     private static async Task<CrawlRunKey> StartRunAsync(PostgresCrawlStore store, int maxPages)
     {
         var run = new CrawlRunKey(Guid.NewGuid(), "public", Guid.NewGuid());
@@ -458,9 +552,16 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         return plan;
     }
 
-    private static void Map(WebApplication app)
+    private void Map(WebApplication app)
     {
         static IResult Html(string body) => Results.Content($"<html><body><main>{body}</main></body></html>", "text/html");
+
+        app.MapGet("/fresh.xml", (HttpContext http) => Results.Content(
+            "<?xml version=\"1.0\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">"
+            + string.Concat(_fresh.Select(e => $"<url><loc>http://{http.Request.Host}{e.Key}</loc><lastmod>{e.Value}</lastmod></url>")) + "</urlset>",
+            "application/xml"));
+        app.MapMethods("/f/{name}", ["GET", "HEAD"], (string name) =>
+            _freshStatus.TryGetValue($"/f/{name}", out var status) ? Results.StatusCode(status) : Html($"<p>{name}</p>"));
 
         app.MapGet("/robots.txt", (HttpContext http) => Results.Text($"User-agent: *\nSitemap: http://{http.Request.Host}/sitemap1.xml.gz\n"));
         app.MapGet("/sitemap1.xml.gz", (HttpContext http) =>

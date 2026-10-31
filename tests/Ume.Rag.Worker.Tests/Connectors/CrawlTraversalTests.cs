@@ -60,7 +60,7 @@ public sealed class CrawlTraversalTests : IAsyncLifetime
         urls.ShouldContain(Url("/from-noindex"));
         urls.ShouldNotContain(Url("/hidden"));
 
-        var verdict = await rig.Traversal.EvaluateAsync(context.Run, cancelled: false, Ct);
+        var verdict = await rig.Traversal.EvaluateAsync(context, cancelled: false, Ct);
         verdict.Reasons.ShouldBeEmpty();
         verdict.Complete.ShouldBeTrue();
         rig.Store.Rows(context.Run.SourceId).ShouldAllBe(r => r.State == FrontierState.Idle);
@@ -91,7 +91,7 @@ public sealed class CrawlTraversalTests : IAsyncLifetime
 
         await rig.CrawlAsync(context);
         var record = (await rig.Store.GetAsync(context.Run.RunId, Ct))!;
-        var verdict = await rig.Traversal.EvaluateAsync(context.Run, cancelled: false, Ct);
+        var verdict = await rig.Traversal.EvaluateAsync(context, cancelled: false, Ct);
 
         record.Admitted.ShouldBe(4);
         record.LimitHit.ShouldBeTrue();
@@ -143,7 +143,7 @@ public sealed class CrawlTraversalTests : IAsyncLifetime
 
         // Draining tops up as fetches finish, never holding more than the batch released at once.
         await rig.DrainAsync(context);
-        (await rig.Traversal.EvaluateAsync(context.Run, false, Ct)).Complete.ShouldBeTrue();
+        (await rig.Traversal.EvaluateAsync(context, false, Ct)).Complete.ShouldBeTrue();
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public sealed class CrawlTraversalTests : IAsyncLifetime
         var results = await rig.DrainAsync(context);
 
         results[Url("/")].ShouldBe(new CrawlFetchResult.NotReached(CrawlConnector.RobotsUnreachable));
-        var verdict = await rig.Traversal.EvaluateAsync(context.Run, false, Ct);
+        var verdict = await rig.Traversal.EvaluateAsync(context, false, Ct);
         verdict.Complete.ShouldBeFalse();
         verdict.Reasons.ShouldContain(TraversalCompleteness.HostPaused);
         verdict.RunFailure.ShouldBe(TraversalCompleteness.SeedsUnreachable);

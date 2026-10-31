@@ -22,7 +22,9 @@ public sealed record ScopeDecision(bool Admitted, bool Leaf, string? Reason)
 /// <c>exclude</c> wins over <c>include</c>, an empty <c>include</c> means everything on the scope hosts; a link to another
 /// host is admitted only when an <c>include</c> glob names that host literally, and then as a leaf. URLs whose extension
 /// names a type outside the pipeline's formats, or one of the site profile's <c>excludedTypes</c> (images and video by
-/// default), are not admitted: <c>.zip</c> and <c>.exe</c> are never fetched.
+/// default), are not admitted: <c>.zip</c> and <c>.exe</c> are never fetched. <c>demote</c> patterns change no crawling
+/// (weakness review §3): they are compiled with the scope, so an invalid one fails like an invalid <c>include</c>, and
+/// <see cref="DemoteFactor"/> gives the rank multiplier retrieval applies from <c>Sources.DemoteRules</c>.
 /// </summary>
 public sealed class CrawlScope
 {
@@ -68,6 +70,7 @@ public sealed class CrawlScope
     private readonly IReadOnlySet<string> _offSiteHosts;
     private readonly IReadOnlyList<string> _excludedTypes;
     private readonly IReadOnlySet<string> _formats;
+    private readonly IReadOnlyList<(UrlPattern Pattern, double Factor)> _demote;
 
     private CrawlScope(
         IReadOnlySet<string> hosts,
@@ -75,7 +78,8 @@ public sealed class CrawlScope
         IReadOnlyList<UrlPattern> exclude,
         IReadOnlySet<string> offSiteHosts,
         IReadOnlyList<string> excludedTypes,
-        IReadOnlySet<string> formats)
+        IReadOnlySet<string> formats,
+        IReadOnlyList<(UrlPattern Pattern, double Factor)> demote)
     {
         Hosts = hosts;
         _include = include;
@@ -83,6 +87,7 @@ public sealed class CrawlScope
         _offSiteHosts = offSiteHosts;
         _excludedTypes = excludedTypes;
         _formats = formats;
+        _demote = demote;
     }
 
     /// <summary>The scope hosts (lower-case A-labels, no port).</summary>
@@ -124,7 +129,8 @@ public sealed class CrawlScope
         }
 
         return new CrawlScope(hosts, include, [.. settings.Exclude.Select(UrlPattern.Parse)], offSite,
-            excludedTypes ?? DefaultExcludedTypes, formats ?? MediaTypes.DocumentFormats);
+            excludedTypes ?? DefaultExcludedTypes, formats ?? MediaTypes.DocumentFormats,
+            [.. settings.Demote.Select(d => (UrlPattern.Parse(d.Pattern), d.Factor))]);
     }
 
     /// <summary>The scope decision for a canonical URL (§3.1 form).</summary>
@@ -149,6 +155,25 @@ public sealed class CrawlScope
         }
 
         return _include.Count == 0 || _include.Any(p => p.Matches(canonicalUrl)) ? ScopeDecision.In : ScopeDecision.Out(NotIncluded);
+    }
+
+    /// <summary>
+    /// The rank multiplier of a canonical URL (knowledge design §6.5): the lowest factor of the matching <c>demote</c>
+    /// patterns, 1 when none matches.
+    /// </summary>
+    public double DemoteFactor(string canonicalUrl)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalUrl);
+        var factor = 1.0;
+        foreach (var (pattern, value) in _demote)
+        {
+            if (value < factor && pattern.Matches(canonicalUrl))
+            {
+                factor = value;
+            }
+        }
+
+        return factor;
     }
 
     /// <summary>The media type the URL's last path segment's extension names, or null when it names none we know.</summary>

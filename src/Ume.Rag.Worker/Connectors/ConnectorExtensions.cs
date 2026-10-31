@@ -44,6 +44,8 @@ public static class ConnectorExtensions
         builder.Services.TryAddSingleton<IDeletionProposalStore, PostgresDeletionProposalStore>();
         builder.Services.TryAddSingleton<IQuarantineStore, PostgresQuarantineStore>();
         builder.Services.TryAddSingleton<IConnectorCheckpointStore, PostgresConnectorCheckpointStore>();
+        builder.Services.TryAddSingleton<ISiteProfileReader, PostgresSiteProfileReader>();
+        builder.Services.TryAddSingleton<LastmodReliability>();
         builder.Services.TryAddSingleton<IEgressGuard, EgressGuard>();
         builder.Services.TryAddSingleton(sp => new CrawlHttpClient(sp.GetRequiredService<IEgressGuard>()));
         builder.Services.TryAddSingleton<HttpFetcher>();

@@ -79,7 +79,7 @@ public sealed record WorkItem(IdentityKind Kind, string CanonicalIdentity, Uri? 
 
 /// <param name="Stored">The validators of the last 200 response (frontier row), for a conditional GET (§4).</param>
 /// <param name="ContentHash">The content hash of that response (frontier row): a 304 expands the stored outlinks of it (§5.4).</param>
-/// <param name="SitemapLastMod">The URL's sitemap <c>lastmod</c>, stored on the frontier row (§5.1); P1a makes no <c>lastmod</c> skip.</param>
+/// <param name="SitemapLastMod">The URL's sitemap <c>lastmod</c>, stored on the frontier row (§5.1) for the <c>lastmod</c> skip and incremental runs (§5.4).</param>
 /// <param name="Upload">The upload slot and the file's manifest entry, for upload items (§9).</param>
 public sealed record WorkHints(Validators? Stored = null, string? ContentHash = null, DateTimeOffset? SitemapLastMod = null, UploadHint? Upload = null)
 {
