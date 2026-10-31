@@ -8,7 +8,7 @@ so every command below is `docker compose --env-file deploy/.env ...` without `-
 that holds `deploy/`.
 
 Day-to-day operation (backups, restore, key escrow, the firewall, troubleshooting) is in the [runbook](runbook.md);
-upgrades in the [upgrade guide](upgrade-guide.md). The design behind this page is
+upgrades in the [upgrade guide](upgrade-guide.md); the test host's choices and checks in [test-host.md](test-host.md). The design behind this page is
 [`plans/platform/repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §6 and §7.
 
 ## Host prerequisites
@@ -55,6 +55,11 @@ picks the profile; 16 is the default.
 | `rag-clamav` | ingestion | 1.0 | 1.2g | 1.5g | 3g |
 | `rag-ingestion.slice` (zone cap) | ingestion | `CPUQuota=500%` | – | `MemoryMax=7G` | `MemoryMax=11G` |
 | `open-webui` (optional) | – | 1.0 | 512m | not on a 16 GB host | 1.5g |
+
+During development the base Compose files cap every container at 2 CPUs or less (decisions table, "Low CPU during
+development"): `postgres` at 2.0 and `rag-parser` at 2.0 with 1 slot × 2 threads. Only `--host-memory 24`
+(`compose.host-24g.yaml`) restores the CPUs of the table; the pilot's CPU sizing is set again before go-live with the
+R1 release test.
 
 The limits add up to about 12 GB on a 16 GB host and 18.75 GB on a 24 GB host (20.25 GB with Open WebUI); the OS and
 Docker keep about 2 GB, and the limits are not all reached at once. Under CPU contention the data plane (weight 1024)
@@ -310,6 +315,28 @@ Open WebUI's client in rag-api, and so its key and id, exist only once the main 
 admin API (kind `open-webui`, `AllowedIpRanges` the Open WebUI host), then re-run `init-deployment.sh` with the same
 options plus `--openwebui-api-key-file` and `--openwebui-rag-client-id`, and recreate `rag-api` and Open WebUI. The run
 book for a local P1a run is [p1a-local-run.md](p1a-local-run.md).
+
+**The feedback service account** (chat design §14.2). rag-api's feedback importer reads Open WebUI's feedback list
+and deletes feedback past retention with the API key of an Open WebUI admin account that is never a person.
+`init-deployment.sh --openwebui-host` writes its credentials once into `secrets/openwebui.env` (`WEBUI_ADMIN_EMAIL`
+`feedback-import@localhost`, a generated `WEBUI_ADMIN_PASSWORD`), and Open WebUI creates it as its first user, so as
+its only admin, when it starts on an empty store. Everyone signing in through OIDC gets the role `user`
+(`DEFAULT_USER_ROLE`), so no person becomes admin. Password sign-in is off (`ENABLE_PASSWORD_AUTH`), so once Open
+WebUI runs, mint the key with the script (it needs `curl` and `jq`):
+
+```bash
+sudo deploy/openwebui-feedback-key.sh
+docker compose --env-file deploy/.env restart rag-api
+```
+
+It recreates Open WebUI with password sign-in on (`UME_RAG_OPENWEBUI_PASSWORD_AUTH=true`), signs in as the account,
+mints its key, checks that the key reads the feedback list and is refused on any other route (only
+`API_KEYS_ALLOWED_ENDPOINTS` is open to API keys), writes it to `secrets/api/OpenWebUi__AdminApiKey`, and always
+recreates Open WebUI with password sign-in off again and checks that a sign-in is refused. A re-run rotates the key.
+If the store had users before the account was created (Open WebUI started before this release's `init-deployment.sh`),
+the script stops because the account is not admin: create it as an existing admin with `POST /api/v1/auths/add`
+(name, the email and password from `secrets/openwebui.env`, role `admin`), then run the script. The importer's own
+settings in `compose.prod.yaml` are added with the importer (P1b item 17, after stream B's L6).
 
 It has one connection only, to `rag-api` (`OPENAI_API_KEYS` is the `ume-rag-sk-` key of its client, issued in the admin
 UI; its JWT secret is generated once and shared with rag-api's `OpenWebUi__JwtSecret`), signs in only through its own
