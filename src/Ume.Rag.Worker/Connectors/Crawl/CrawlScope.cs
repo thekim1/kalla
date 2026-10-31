@@ -1,0 +1,167 @@
+using Ume.Rag.Pipelines.Sources;
+using Ume.Rag.Worker.Connectors.Http;
+using Ume.Rag.Worker.Connectors.Urls;
+
+namespace Ume.Rag.Worker.Connectors.Crawl;
+
+/// <summary>Whether a canonical URL may become a frontier row of the source (connectors design §5.2).</summary>
+/// <param name="Admitted">In scope.</param>
+/// <param name="Leaf">An off-site URL admitted by an explicit <c>include</c>: fetched, its links never followed.</param>
+/// <param name="Reason">Why not: <c>scope.excluded</c>, <c>scope.not_included</c>, <c>scope.off_site</c>, <c>scope.type</c>.</param>
+public sealed record ScopeDecision(bool Admitted, bool Leaf, string? Reason)
+{
+    public static ScopeDecision In { get; } = new(true, false, null);
+
+    public static ScopeDecision OffSiteLeaf { get; } = new(true, true, null);
+
+    public static ScopeDecision Out(string reason) => new(false, false, reason);
+}
+
+/// <summary>
+/// A crawl source's scope (connectors design §5.2): the scope hosts are the start URLs' hosts and <c>extraHosts</c>;
+/// <c>exclude</c> wins over <c>include</c>, an empty <c>include</c> means everything on the scope hosts; a link to another
+/// host is admitted only when an <c>include</c> glob names that host literally, and then as a leaf. URLs whose extension
+/// names a type outside the pipeline's formats, or one of the site profile's <c>excludedTypes</c> (images and video by
+/// default), are not admitted: <c>.zip</c> and <c>.exe</c> are never fetched.
+/// </summary>
+public sealed class CrawlScope
+{
+    public const string Excluded = "scope.excluded";
+    public const string NotIncluded = "scope.not_included";
+    public const string OffSite = "scope.off_site";
+    public const string ExcludedType = "scope.type";
+
+    /// <summary>The site profile's default <c>excludedTypes</c> (<c>contracts/site-profiles/v1</c>).</summary>
+    public static IReadOnlyList<string> DefaultExcludedTypes { get; } = ["image/*", "video/*"];
+
+    private static readonly Dictionary<string, string> TypesByExtension = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["html"] = "text/html", ["htm"] = "text/html", ["xhtml"] = "application/xhtml+xml", ["php"] = "text/html",
+        ["asp"] = "text/html", ["aspx"] = "text/html", ["jsp"] = "text/html",
+        ["pdf"] = "application/pdf", ["txt"] = "text/plain", ["md"] = "text/markdown", ["csv"] = "text/csv",
+        ["docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ["pptx"] = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ["xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ["odt"] = "application/vnd.oasis.opendocument.text", ["ods"] = "application/vnd.oasis.opendocument.spreadsheet",
+        ["odp"] = "application/vnd.oasis.opendocument.presentation",
+        ["doc"] = "application/msword", ["xls"] = "application/vnd.ms-excel", ["ppt"] = "application/vnd.ms-powerpoint",
+        ["rtf"] = "application/rtf", ["eml"] = "message/rfc822", ["msg"] = "application/vnd.ms-outlook",
+        ["docm"] = "application/vnd.ms-word.document.macroenabled.12", ["xlsm"] = "application/vnd.ms-excel.sheet.macroenabled.12",
+        ["pptm"] = "application/vnd.ms-powerpoint.presentation.macroenabled.12",
+        ["jpg"] = "image/jpeg", ["jpeg"] = "image/jpeg", ["png"] = "image/png", ["gif"] = "image/gif", ["webp"] = "image/webp",
+        ["svg"] = "image/svg+xml", ["bmp"] = "image/bmp", ["tif"] = "image/tiff", ["tiff"] = "image/tiff", ["ico"] = "image/x-icon",
+        ["avif"] = "image/avif", ["heic"] = "image/heic",
+        ["mp4"] = "video/mp4", ["webm"] = "video/webm", ["mov"] = "video/quicktime", ["avi"] = "video/x-msvideo",
+        ["mkv"] = "video/x-matroska", ["m4v"] = "video/x-m4v", ["mpg"] = "video/mpeg", ["mpeg"] = "video/mpeg", ["wmv"] = "video/x-ms-wmv",
+        ["mp3"] = "audio/mpeg", ["wav"] = "audio/wav", ["ogg"] = "audio/ogg", ["m4a"] = "audio/mp4", ["flac"] = "audio/flac",
+        ["zip"] = "application/zip", ["7z"] = "application/x-7z-compressed", ["rar"] = "application/vnd.rar",
+        ["tar"] = "application/x-tar", ["gz"] = "application/gzip", ["tgz"] = "application/gzip", ["bz2"] = "application/x-bzip2",
+        ["xz"] = "application/x-xz",
+        ["exe"] = "application/vnd.microsoft.portable-executable", ["msi"] = "application/x-msi", ["dmg"] = "application/x-apple-diskimage",
+        ["iso"] = "application/x-iso9660-image", ["apk"] = "application/vnd.android.package-archive", ["jar"] = "application/java-archive",
+        ["css"] = "text/css", ["js"] = "text/javascript", ["json"] = "application/json", ["xml"] = "application/xml",
+        ["rss"] = "application/rss+xml", ["ics"] = "text/calendar", ["woff"] = "font/woff", ["woff2"] = "font/woff2", ["ttf"] = "font/ttf",
+    };
+
+    private readonly IReadOnlyList<UrlPattern> _include;
+    private readonly IReadOnlyList<UrlPattern> _exclude;
+    private readonly IReadOnlySet<string> _offSiteHosts;
+    private readonly IReadOnlyList<string> _excludedTypes;
+    private readonly IReadOnlySet<string> _formats;
+
+    private CrawlScope(
+        IReadOnlySet<string> hosts,
+        IReadOnlyList<UrlPattern> include,
+        IReadOnlyList<UrlPattern> exclude,
+        IReadOnlySet<string> offSiteHosts,
+        IReadOnlyList<string> excludedTypes,
+        IReadOnlySet<string> formats)
+    {
+        Hosts = hosts;
+        _include = include;
+        _exclude = exclude;
+        _offSiteHosts = offSiteHosts;
+        _excludedTypes = excludedTypes;
+        _formats = formats;
+    }
+
+    /// <summary>The scope hosts (lower-case A-labels, no port).</summary>
+    public IReadOnlySet<string> Hosts { get; }
+
+    /// <param name="settings">The source's settings.</param>
+    /// <param name="excludedTypes">The site profile's <c>excludedTypes</c>; null for <see cref="DefaultExcludedTypes"/>.</param>
+    /// <param name="formats">The pipeline's formats; null for <see cref="MediaTypes.DocumentFormats"/>.</param>
+    public static CrawlScope Create(CrawlSettings settings, IReadOnlyList<string>? excludedTypes = null, IReadOnlySet<string>? formats = null)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        var hosts = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var start in settings.StartUrls)
+        {
+            if (UrlCanonicalizer.Canonicalize(start).Value is { } canonical)
+            {
+                hosts.Add(new Uri(canonical).Host);
+            }
+        }
+
+        foreach (var extra in settings.ExtraHosts)
+        {
+            if (UrlCanonicalizer.CanonicalHost(extra) is { } host)
+            {
+                hosts.Add(host);
+            }
+        }
+
+        var include = settings.Include.Select(UrlPattern.Parse).ToList();
+        var offSite = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var pattern in settings.Include.Where(p => !p.StartsWith(UrlPattern.RegexPrefix, StringComparison.Ordinal)))
+        {
+            var slash = pattern.IndexOf('/', StringComparison.Ordinal);
+            var host = slash < 0 ? pattern : pattern[..slash];
+            if (!host.Contains('*', StringComparison.Ordinal) && UrlCanonicalizer.CanonicalHost(host.Split(':')[0]) is { } literal)
+            {
+                offSite.Add(literal);
+            }
+        }
+
+        return new CrawlScope(hosts, include, [.. settings.Exclude.Select(UrlPattern.Parse)], offSite,
+            excludedTypes ?? DefaultExcludedTypes, formats ?? MediaTypes.DocumentFormats);
+    }
+
+    /// <summary>The scope decision for a canonical URL (§3.1 form).</summary>
+    public ScopeDecision Check(string canonicalUrl)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalUrl);
+        if (_exclude.Any(p => p.Matches(canonicalUrl)))
+        {
+            return ScopeDecision.Out(Excluded);
+        }
+
+        if (TypeOf(canonicalUrl) is { } type && (!_formats.Contains(type) || _excludedTypes.Any(t => TypeMatches(t, type))))
+        {
+            return ScopeDecision.Out(ExcludedType);
+        }
+
+        var host = new Uri(canonicalUrl).Host;
+        if (!Hosts.Contains(host))
+        {
+            // Off-site: only through an include that names this host literally, and then as a leaf.
+            return _offSiteHosts.Contains(host) && _include.Any(p => p.Matches(canonicalUrl)) ? ScopeDecision.OffSiteLeaf : ScopeDecision.Out(OffSite);
+        }
+
+        return _include.Count == 0 || _include.Any(p => p.Matches(canonicalUrl)) ? ScopeDecision.In : ScopeDecision.Out(NotIncluded);
+    }
+
+    /// <summary>The media type the URL's last path segment's extension names, or null when it names none we know.</summary>
+    internal static string? TypeOf(string canonicalUrl)
+    {
+        var path = new Uri(canonicalUrl).AbsolutePath;
+        var segment = path[(path.LastIndexOf('/') + 1)..];
+        var dot = segment.LastIndexOf('.');
+        return dot < 0 ? null : TypesByExtension.GetValueOrDefault(segment[(dot + 1)..]);
+    }
+
+    private static bool TypeMatches(string pattern, string type) =>
+        pattern.EndsWith("/*", StringComparison.Ordinal)
+            ? type.StartsWith(pattern[..^1], StringComparison.OrdinalIgnoreCase)
+            : string.Equals(pattern, type, StringComparison.OrdinalIgnoreCase);
+}

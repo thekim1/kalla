@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/upload-batch.manifest.schema.json",
+  "title": "Upload batch manifest",
+  "type": "object",
+  "properties": {
+    "batchId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sourceId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "enum": [
+              "add",
+              "replace",
+              "delete"
+            ]
+          },
+          "uploadId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The upload slot (content.Uploads.Id): the document identity is upload:<uploadId>."
+          },
+          "fileName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The file name as uploaded: the document's DisplayName, never its Title.",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "declaredMediaType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The Content-Type the browser declared; the worker's sniffed type wins (connectors design §9.2).",
+            "maxLength": 200
+          },
+          "bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 52428800
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA-256 (hex) computed while streaming; the blob key's last segment.",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "operation",
+          "uploadId"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "operation": {
+                  "enum": [
+                    "add",
+                    "replace"
+                  ]
+                }
+              },
+              "required": [
+                "operation"
+              ]
+            },
+            "then": {
+              "required": [
+                "fileName",
+                "bytes",
+                "sha256"
+              ]
+            }
+          }
+        ]
+      },
+      "description": "At most 100 files per batch (admin design §4.5); deletes count too.",
+      "minItems": 1,
+      "maxItems": 100
+    },
+    "committedBy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The admin's audit actor who committed the batch (Uploads.UploadedBy).",
+      "maxLength": 200
+    },
+    "committedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "batchId",
+    "sourceId",
+    "entries"
+  ],
+  "description": "Upload batch manifest uploads/{sourceId}/batches/{batchId}.json (connectors design §9.1), written by the admin at commit and read by the worker's sync."
+}

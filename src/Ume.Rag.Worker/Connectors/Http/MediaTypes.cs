@@ -30,6 +30,9 @@ public static class MediaTypes
         "application/vnd.oasis.opendocument.presentation",
     };
 
+    /// <summary>The P1 upload types (§9.2): the document formats plus JPG, PNG and TIFF (OCR).</summary>
+    public static IReadOnlySet<string> UploadFormats { get; } = new HashSet<string>(DocumentFormats.Concat(["image/jpeg", "image/png", "image/tiff"]), StringComparer.Ordinal);
+
     public static bool IsHtml(string mediaType) => Html.Contains(mediaType);
 
     /// <summary>Files are scanned before they are stored or parsed; HTML and text are not (§11).</summary>
