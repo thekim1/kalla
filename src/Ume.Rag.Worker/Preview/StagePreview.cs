@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Pipelines.Definitions;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
@@ -96,14 +97,15 @@ public sealed partial class StagePreview(
             return new JobResult.FatalError(refused.Reason);
         }
 
-        var store = new PreviewStore(new PreviewBlobs(blobs, job.Id), nodeOutputs, payload.BasePreviewJobId);
+        var level = source?.Classification ?? collection.Classification;
+        // The preview's own outputs name no level in their keys; they are encrypted by this one (data-model §7, §9).
+        var store = new PreviewStore(new PreviewBlobs(blobs.ForLevel(level), job.Id), nodeOutputs, payload.BasePreviewJobId);
         var run = new PreviewRun(job.Id, pipeline, collection, Stages(pipeline.Pipeline, payload.UntilStage), store)
         {
             Embed = payload.Embed,
             PiiSpans = payload.PiiSpans,
         };
         var previous = payload.BasePreviewJobId is { } baseId ? await config.BaseAsync(baseId, cancellationToken) : null;
-        var level = source?.Classification ?? collection.Classification;
 
         using var deadline = new CancellationTokenSource(Deadline, time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);

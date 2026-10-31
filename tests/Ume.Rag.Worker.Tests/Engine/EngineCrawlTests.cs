@@ -134,8 +134,8 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
         try
         {
             var first = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, services: services =>
-                services.AddSingleton<IBlobStore>(sp => new GatedBlobStore(
-                    new FileSystemBlobStore(sp.GetRequiredService<IOptions<BlobStoreOptions>>(), sp.GetRequiredService<TimeProvider>()), gate)));
+                services.AddSingleton<IBlobStore>(sp => new GatedBlobStore(new EnvelopeBlobStore(sp.GetRequiredService<BlobEnvelope>(),
+                    new FileSystemBlobStore(sp.GetRequiredService<IOptions<BlobStoreOptions>>(), sp.GetRequiredService<TimeProvider>())), gate)));
             var runId = await EngineKit.SyncNowAsync(database, seed);
             // A fetch job has fetched its page and stands in its segment, before the document's commit.
             await gate.Blocked.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);

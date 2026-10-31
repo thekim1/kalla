@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Blobs;
 
 namespace Ume.Rag.Worker.Preview;
 
@@ -9,7 +10,7 @@ namespace Ume.Rag.Worker.Preview;
 /// reads see this job's blobs first and then the live store read-only (the raw blobs and cached outputs a preview reuses),
 /// and deletes and listings outside the prefix are refused. Another job's preview prefix is never written.
 /// </summary>
-public sealed class PreviewBlobs(IBlobStore inner, Guid jobId) : IBlobStore
+public sealed class PreviewBlobs(IBlobStore inner, Guid jobId) : IBlobStore, IBlobLevelScope
 {
     public const string Area = "previews";
 
@@ -40,6 +41,9 @@ public sealed class PreviewBlobs(IBlobStore inner, Guid jobId) : IBlobStore
         ArgumentNullException.ThrowIfNull(key);
         return key.Value.StartsWith(Prefix.Value + "/", StringComparison.Ordinal);
     }
+
+    /// <summary>This preview's store over the live store's view of <paramref name="level"/> (envelope encryption, data-model §7).</summary>
+    public IBlobStore ForLevel(string level) => new PreviewBlobs(inner.ForLevel(level), jobId);
 
     public Task<BlobWriteResult> PutAsync(BlobKey key, Stream content, long? length, CancellationToken cancellationToken) =>
         inner.PutAsync(Own(key), content, length, cancellationToken);
