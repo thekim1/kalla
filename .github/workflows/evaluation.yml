@@ -8,8 +8,8 @@ name: Evaluation
 # environment test-host; P1b hand-off L11). Without it the job is skipped with a notice and the script runs by hand on
 # the host. The runner's user needs Docker access to the deployment (deploy/.env at UME_RAG_TEST_HOST_DEPLOY_ENV).
 on:
-  schedule:
-    - cron: '17 3 * * *'
+  # CI runs on request to save Actions minutes (see verify.yml): the schedule ('17 3 * * *') is off; run it from the Actions
+  # tab (workflow_dispatch).
   workflow_dispatch:
     inputs:
       enqueue:

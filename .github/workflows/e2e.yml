@@ -5,8 +5,8 @@ name: E2E
 # every pull request (as the gateway). The specs are stream B's (tests/e2e, P1b hand-off L7): until
 # tests/e2e/package.json exists the job reports that and passes without running anything.
 on:
-  schedule:
-    - cron: '41 2 * * *'
+  # CI runs on request to save Actions minutes (see verify.yml): the schedule ('41 2 * * *') is off; run it from the Actions
+  # tab (workflow_dispatch).
   workflow_dispatch:
   workflow_call:
 permissions:
