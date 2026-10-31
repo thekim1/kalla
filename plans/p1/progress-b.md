@@ -52,7 +52,7 @@ Refs: [knowledge §2–§5, §9, §10, §16.3, §16.6](../knowledge-api/design.m
 
 ## 6. Admin API set-up surface (#14)
 Refs: [admin §4.1–§4.7, §12](../admin/design.md), [weakness review §1](../weakness-review.md)
-- [ ] OpenAPI and Scalar on `rag-admin`; `AdminClientAddresses` with `Settings.TrustedProxies` (#32, #38)
+- [x] OpenAPI and Scalar on `rag-admin`; `AdminClientAddresses` with `Settings.TrustedProxies` (#32, #38) (item 14a; settings, data protection and templates (read) of the third box are in it too)
 - [ ] Collections (publish, retrieval settings), sources (sync now, upload batches), runs and crawl report, `cancel-run` (#46)
 - [ ] Site profiles (edit, roll back), templates (read), clients and keys, settings, data protection (history `none` only)
 - [ ] Assistants: create, draft, publish, audience = client; evaluation questions and runs; member groups by hand

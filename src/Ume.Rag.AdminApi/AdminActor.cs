@@ -1,7 +1,13 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using System.Net;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Domain.Services;
+using Ume.Rag.Infrastructure.Persistence;
 using Ume.Rag.Infrastructure.Security;
 
 namespace Ume.Rag.AdminApi;
@@ -57,7 +63,8 @@ public sealed record AdminActor(
     /// The connection's address. Behind the reverse proxy this is the proxy until the gateway's trusted-proxy resolution
     /// (<c>AdminClientAddresses</c>) is copied; it reads trusted proxies from <c>Settings</c>, which arrives in P1.
     /// </summary>
-    public static string? AddressOf(HttpContext http) => http?.Connection.RemoteIpAddress?.ToString();
+    /// <summary>The client address resolved by <see cref="AdminClientAddresses"/> for this request (null with <c>AuditSourceAddress</c> <c>None</c>).</summary>
+    public static string? AddressOf(HttpContext http) => http?.Items[AdminClientAddresses.ItemKey] as string;
 
     /// <summary>A new session id: 16 random bytes, hex.</summary>
     public static string NewSessionId() => Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
@@ -68,11 +75,72 @@ public sealed record AdminActor(
 }
 
 /// <summary>
-/// Copied from the gateway (without the trusted-proxy address resolution, see <see cref="AdminActor.AddressOf"/>): reports
+/// The admin user's address behind the reverse proxy (copied from the gateway's <c>AdminActivity.cs</c> at e25b491,
+/// adapted to <see cref="RagDbContext"/>; identity design §1.2). The connection comes from the proxy, so
+/// <c>Settings.TrustedProxies</c> decides whether <c>X-Forwarded-For</c> is believed; read at most every 30 seconds per
+/// instance and at once after this instance saved them. <c>Admin:AuditSourceAddress</c> decides how much of it is kept.
+/// </summary>
+public sealed partial class AdminClientAddresses(IServiceScopeFactory scopes, TimeProvider time, IOptions<AdminOptions> options,
+    ILogger<AdminClientAddresses> logger)
+{
+    public const string ItemKey = "ume.clientAddress";
+    private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(30);
+    private ImmutableArray<IPNetwork> _trusted = [];
+    private DateTimeOffset _readAt = DateTimeOffset.MinValue;
+
+    /// <summary>Puts the formatted client address of <paramref name="http"/> in <c>Items[ItemKey]</c>.</summary>
+    public async Task ResolveAsync(HttpContext http)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        var mode = options.Value.AuditSourceAddress;
+        if (mode == SourceAddressMode.None)
+        {
+            return;
+        }
+
+        var client = ClientAddresses.Resolve(http.Connection.RemoteIpAddress, http.Request.Headers[ClientAddresses.ForwardedForHeader],
+            (await TrustedAsync(http.RequestAborted)).AsSpan());
+        http.Items[ItemKey] = ClientAddresses.Format(client, mode);
+    }
+
+    /// <summary>Forgets the cached list, after this instance saved new trusted proxies.</summary>
+    public void Invalidate() => _readAt = DateTimeOffset.MinValue;
+
+    private async ValueTask<ImmutableArray<IPNetwork>> TrustedAsync(CancellationToken ct)
+    {
+        var now = time.GetUtcNow();
+        if (now - _readAt < CacheFor)
+        {
+            return _trusted;
+        }
+
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<RagDbContext>();
+            var settings = await db.Settings.AsNoTracking().Select(s => s.TrustedProxies).SingleOrDefaultAsync(ct);
+            _trusted = [.. NetworkRanges.ParseValid(settings ?? [])];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Keep the last list; the connection address is used until the database answers.
+            LogTrustedProxiesUnavailable(logger, ex.GetType().Name);
+        }
+
+        _readAt = now;
+        return _trusted;
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Trusted proxies could not be read ({ExceptionType}); the last list read is used for admin client addresses")]
+    private static partial void LogTrustedProxiesUnavailable(ILogger logger, string exceptionType);
+}
+
+/// <summary>
+/// Copied from the gateway: resolves the client address for every request, and reports
 /// what security teams need to see that the audit log does not hold: refused requests (6006, at most one event per user
 /// and minute with the count since the last) and reads of sensitive lists (6007).
 /// </summary>
-public sealed class AdminActivityMiddleware(RequestDelegate next, AccessDeniedThrottle denied, ILoggerFactory loggers)
+public sealed class AdminActivityMiddleware(RequestDelegate next, AdminClientAddresses addresses, AccessDeniedThrottle denied, ILoggerFactory loggers)
 {
     /// <summary>The audit log; keys, feedback, the access log and conversation views join as they arrive (identity design §10).</summary>
     private static readonly PathString[] SensitiveReads = ["/api/audit"];
@@ -83,6 +151,7 @@ public sealed class AdminActivityMiddleware(RequestDelegate next, AccessDeniedTh
     public async Task InvokeAsync(HttpContext http)
     {
         ArgumentNullException.ThrowIfNull(http);
+        await addresses.ResolveAsync(http);
         await next(http);
 
         if (http.User.Identity?.IsAuthenticated != true)
