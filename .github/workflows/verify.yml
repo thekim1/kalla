@@ -139,12 +139,12 @@ jobs:
         env:
           UME_RAG_CERTS_DIR: /certs
           UME_RAG_SECRETS_DIR: ${{ runner.temp }}/secrets
-          UME_RAG_OIDC_AUTHORITY: https://idp.example.se
+          UME_RAG_OIDC_AUTHORITY: https://keycloak.example.se/realms/ume
           UME_RAG_GATEWAY_URL: https://llm.example.se
           UME_RAG_API_PUBLIC_URL: https://rag-api.example.se
           UME_RAG_OPENWEBUI_HOST: chat.example.se
           UME_RAG_OPENWEBUI_OIDC_CLIENT_ID: open-webui
-          UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL: https://idp.example.se/.well-known/openid-configuration
+          UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL: https://keycloak.example.se/realms/ume/.well-known/openid-configuration
           UME_RAG_OPENWEBUI_DATA_DIR: /openwebui-data
         run: |
           # compose.openwebui.yaml reads its env_file while rendering.
@@ -171,7 +171,7 @@ jobs:
         env:
           UME_RAG_CERTS_DIR: /certs
           UME_RAG_SECRETS_DIR: /secrets
-          UME_RAG_OIDC_AUTHORITY: https://idp.example.se
+          UME_RAG_OIDC_AUTHORITY: https://keycloak.example.se/realms/ume
           UME_RAG_GATEWAY_URL: https://llm.example.se
         run: |
           digest="sha256:$(printf '0%.0s' $(seq 64))"
@@ -191,6 +191,44 @@ jobs:
           images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" --profile backup config --images)"
           echo "$images"
           if echo "$images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned images in the bundle"; exit 1; fi
+      - name: init-deployment.sh keeps its secrets on a re-run
+        # Two non-interactive runs into a copy of deploy/ (it writes next to itself): every generated secret, the worker's
+        # crawl key pepper among them, is unchanged by the second run; the per-deployable gateway keys land where they
+        # belong (never External in the worker); the Open WebUI files render with the generated deploy/.env.
+        run: |
+          d="$RUNNER_TEMP/init"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"
+          for k in eu worker-eu external owui-key owui-secret; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
+          init() {
+            bash "$d/deploy/init-deployment.sh" --oidc-authority https://keycloak.example.se/realms/ume \
+              --gateway-url https://llm.example.se --api-host rag-api.example.se --admin-host rag-admin.example.se \
+              --gateway-key-file Eu="$d/keys/eu" --gateway-key-file worker:Eu="$d/keys/worker-eu" \
+              --gateway-key-file External="$d/keys/external" --openwebui-host chat.example.se \
+              --openwebui-api-key-file "$d/keys/owui-key" --openwebui-oidc-client-secret-file "$d/keys/owui-secret" \
+              --backup-target local --allow-file-keys --no-chown --yes "$@"
+          }
+          generated() {
+            s="$d/deploy/secrets"
+            sha256sum "$s"/.pepper "$s"/.openwebui-jwt-secret "$s"/postgres/*_password "$s"/api/Security__* \
+              "$s"/worker/Security__CrawlKeyPepper "$s"/keys/rag-blob-internal "$s"/pgbackrest/cipher-pass \
+              "$s"/openwebui/webui_secret_key "$d"/deploy/certs/data-protection.pfx
+          }
+          init > "$d/init.log"; generated > "$d/first"
+          init > "$d/init.log"; generated > "$d/second"
+          diff -u "$d/first" "$d/second"
+          s="$d/deploy/secrets"
+          [ "$(wc -c < "$s/worker/Security__CrawlKeyPepper")" = 64 ]
+          [ "$(cat "$s/worker/Gateway__Keys__Eu")" = worker-eu-placeholder ]
+          [ "$(cat "$s/api/Gateway__Keys__Eu")" = eu-placeholder ] && [ -e "$s/admin/Gateway__Keys__External" ]
+          [ ! -e "$s/worker/Gateway__Keys__External" ]
+          grep -qx "OPENAI_API_KEYS='owui-key-placeholder'" "$s/openwebui.env"
+          grep -qx 'UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL=https://keycloak.example.se/realms/ume/.well-known/openid-configuration' \
+            "$d/deploy/.env"
+          if out="$(init --gateway-key-file worker:External="$d/keys/external" 2>&1)"; then
+            echo "worker:External was accepted"; exit 1
+          fi
+          grep -q 'never holds the External key' <<< "$out"
+          docker compose -f "$d/deploy/compose.openwebui.yaml" --env-file "$d/deploy/.env" config --quiet
+          docker compose --env-file "$d/deploy/.env" config --quiet
       - name: Deployment scripts pass shellcheck
         run: shellcheck deploy/*.sh deploy/postgres/*.sh deploy/host/*.sh deploy/tests/*.sh
       - name: Host units pass systemd-analyze verify
