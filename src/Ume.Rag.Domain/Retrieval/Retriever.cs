@@ -1,0 +1,105 @@
+using Ume.Rag.Domain.Access;
+
+namespace Ume.Rag.Domain.Retrieval;
+
+/// <summary>
+/// The knowledge role in process (knowledge design §2.2): the chat role and the HTTP routes call it with the caller's
+/// principal; the role resolves collections, checks access, searches, hydrates and builds citations.
+/// </summary>
+public interface IRetriever
+{
+    Task<RetrievalResult> RetrieveAsync(RagPrincipal who, RetrievalRequest request, CancellationToken ct);
+
+    /// <summary>A document visible to <paramref name="who"/>; <see cref="RetrievalDeniedException"/> 404 otherwise.</summary>
+    Task<DocumentInfo> GetDocumentAsync(RagPrincipal who, Guid documentId, CancellationToken ct);
+
+    Task<IReadOnlyList<CollectionInfo>> ListCollectionsAsync(RagPrincipal who, CancellationToken ct);
+
+    /// <summary>Counts the ranks actually cited (knowledge §4.7); every returned result is counted as retrieved.</summary>
+    void MarkCited(RetrievalResult result, IReadOnlyCollection<int> citedRanks);
+}
+
+/// <summary>Section expansion (knowledge design §9).</summary>
+public enum ExpandMode { None, Section }
+
+/// <summary>Who asks, for the action checked and for metrics.</summary>
+public enum RetrievalPurpose { Chat, Http, Mcp, TestPanel }
+
+/// <summary>
+/// A retrieval (knowledge design §2.2, §3.1). <c>AssistantId</c> (chat, <c>rag-internal</c>) searches the published
+/// version's collections (§4.2); <c>CollectionIds</c> narrows, each must be visible (404 otherwise); <c>RunId</c> is sent
+/// to the gateway as <c>x-ume-run-id</c> (chat: the message id).
+/// </summary>
+public sealed record RetrievalRequest(
+    string Query,
+    Guid? AssistantId,
+    IReadOnlyList<Guid>? CollectionIds,
+    int TopK = 10,
+    RetrievalMode Mode = RetrievalMode.Hybrid,
+    RetrievalFilters? Filters = null,
+    ExpandMode Expand = ExpandMode.None,
+    RetrievalPurpose Purpose = RetrievalPurpose.Chat,
+    bool AllowDegraded = true,
+    Guid? RunId = null);
+
+/// <summary>Stage milliseconds, for metrics and the test panel (never in production response headers, §3.2).</summary>
+public sealed record RetrievalTimings(double PolicyMs, double KeywordMs, double EmbeddingMs, double VectorMs, double HydrateMs, double TotalMs);
+
+/// <summary>
+/// A citation (knowledge design §10.1, JSON <c>document</c>). <c>SourceType</c>: <c>web</c> (<c>url</c>), <c>file</c>
+/// (<c>upload</c>), <c>sharepoint</c> (P2). <c>DownloadUrl</c>: the grant link of a document without a public URL (§4.6),
+/// null for <c>url</c> documents. <c>Modified</c>: the chunk's <c>SourceModifiedAt</c>, else the document's, else
+/// <c>FetchedAt</c>.
+/// </summary>
+public sealed record Citation(
+    Guid Id, string Title, string? DisplayName, string? Url, string? DownloadUrl, string SourceType, string? DocumentType, string? MediaType,
+    string? Language, DateTimeOffset? Modified);
+
+/// <summary>One result (knowledge design §2.2): the chunk text without its heading prefix, scores and citation.</summary>
+public sealed record RetrievedChunk(
+    int Rank, Guid ChunkId, Guid DocumentId, byte[] TextHash, string Text, string HeadingPath, int? Page, int? PageEnd, double Score,
+    ChunkScores Scores, int? SectionRef, Guid CollectionId, string CollectionSlug, string Level, Citation Citation);
+
+/// <summary>An expanded section (knowledge design §9); empty unless <see cref="ExpandMode.Section"/>.</summary>
+public sealed record SectionText(
+    int Id, Guid DocumentId, string HeadingPath, string Text, int TokenEstimate, int? PageStart, int? PageEnd, IReadOnlyList<Guid> ChunkIds, bool Truncated);
+
+/// <summary>The outcome of a retrieval (knowledge design §2.2).</summary>
+public sealed record RetrievalResult(
+    IReadOnlyList<RetrievedChunk> Results,
+    IReadOnlyList<SectionText> Sections,
+    Coverage Coverage,
+    string? Degraded,
+    long ConfigVersion,
+    RetrievalTimings Timings);
+
+/// <summary>A document's citation plus its page count (<c>GET /v1/documents/{id}</c>, §3.4).</summary>
+public sealed record DocumentInfo(Citation Citation, int? PageCount, Guid CollectionId, string CollectionSlug);
+
+/// <summary>A collection the caller may search (<c>GET /v1/collections</c>, §3.3).</summary>
+public sealed record CollectionInfo(Guid Id, string Slug, string Name, string Classification, string? Department, DateTimeOffset? PublishedAt);
+
+/// <summary>Stable problem codes of the knowledge routes (knowledge design §3.6).</summary>
+public static class KnowledgeCodes
+{
+    public const string InvalidRequest = "invalid_request";
+    public const string AssistantIdNotAllowed = "assistant_id_not_allowed";
+    public const string CollectionNotFound = "collection_not_found";
+    public const string NotFound = "not_found";
+    public const string EmbeddingUnavailable = "embedding_unavailable";
+    public const string SearchUnavailable = "search_unavailable";
+}
+
+/// <summary>
+/// A refused retrieval (knowledge design §2.2): the HTTP routes answer it as a problem with <see cref="Code"/>; the chat
+/// role translates it (404 → <c>model_not_found</c>).
+/// </summary>
+public sealed class RetrievalDeniedException(int status, string code, string? subject = null)
+    : Exception($"Retrieval refused: {status} {code}.")
+{
+    public int Status { get; } = status;
+    public string Code { get; } = code;
+
+    /// <summary>What the caller sent and may see echoed (an invisible slug, §4.4); never a hidden name.</summary>
+    public string? Subject { get; } = subject;
+}
