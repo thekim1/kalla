@@ -191,6 +191,57 @@ public sealed class SiteProfileCommandTests(RagDatabaseFixture database) : IAsyn
         }
     }
 
+    [Fact]
+    public async Task An_edit_that_changes_excluded_types_syncs_the_hosts_crawl_sources_and_reprocesses_the_rest()
+    {
+        // A: a crawl source with only a PDF on the host; B: a URL list with HTML on the host.
+        var a = await EngineKit.SeedCrawlAsync(database, new { startUrls = new[] { "https://www.example.org/" } });
+        var b = await EngineKit.SeedUrlListAsync(database, []);
+        try
+        {
+            var host = Host();
+            await CommandSeeds.DocumentAsync(database, a, $"https://{host}/{Guid.NewGuid():N}.pdf", "application/pdf");
+            await CommandSeeds.DocumentAsync(database, b, $"https://{host}/{Guid.NewGuid():N}");
+            var created = await _runner.RunAsync(Edit(host, null, null), a.DepartmentId);
+            var profileId = (await CommandSeeds.ResultAsync(database, created.Job.Id)).GetProperty("siteProfileId").GetGuid();
+            await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM content."Jobs" WHERE "Class" = 'sync'""");
+            var excluding = SitevisionPreset.Profile with { ExcludedTypes = [.. SitevisionPreset.Profile.ExcludedTypes, "application/pdf"] };
+
+            (await _runner.RunAsync(Edit(host, profileId, 1) with { Profile = excluding }, a.DepartmentId)).Result.ShouldBeOfType<JobResult.Committed>();
+
+            (await SyncKindsAsync()).ShouldBe([$"{a.SourceId}:{SyncKind.Sync}", $"{b.SourceId}:{SyncKind.Reprocess}"], ignoreOrder: true);
+
+            await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM content."Jobs" WHERE "Class" = 'sync'""");
+            (await _runner.RunAsync(Edit(host, profileId, 2) with { Profile = excluding with { LastmodReliable = true } }, a.DepartmentId)).Result
+                .ShouldBeOfType<JobResult.Committed>();
+
+            (await SyncKindsAsync()).ShouldBe([$"{b.SourceId}:{SyncKind.Reprocess}"], "no scope change: only HTML is re-processed");
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, a);
+            await EngineKit.PauseAsync(database, b);
+        }
+    }
+
+    /// <summary>The queued syncs as <c>sourceId:kind</c>.</summary>
+    private async Task<List<string>> SyncKindsAsync()
+    {
+        var kinds = new List<string>();
+        await using var connection = new Npgsql.NpgsqlConnection(database.Connection(null));
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var command = new Npgsql.NpgsqlCommand("""SELECT "Payload"::text FROM content."Jobs" WHERE "Class" = 'sync' ORDER BY "Id" """, connection);
+        await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+        {
+            var sync = SyncJobsRead(reader.GetString(0));
+            sync.Trigger.ShouldBe(RunTrigger.SiteProfile);
+            kinds.Add($"{sync.SourceId}:{sync.Kind}");
+        }
+
+        return kinds;
+    }
+
     private static EditSiteProfileCommand Edit(string host, Guid? siteProfileId, int? baseVersion) => new()
     {
         SiteProfileId = siteProfileId,

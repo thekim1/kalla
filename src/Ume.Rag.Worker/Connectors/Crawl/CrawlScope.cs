@@ -187,6 +187,18 @@ public sealed class CrawlScope
     }
 
     /// <summary>
+    /// Whether a stored document's media type (parameters ignored) is one of its URL's host's <c>excludedTypes</c>: a type
+    /// the scope no longer admits, also where the URL names no extension (connectors design §12.3).
+    /// </summary>
+    public bool ExcludesType(string canonicalUrl, string mediaType)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalUrl);
+        ArgumentNullException.ThrowIfNull(mediaType);
+        var type = mediaType.Split(';')[0].Trim();
+        return type.Length > 0 && ExcludedTypesOf(new Uri(canonicalUrl).Host).Any(t => TypeMatches(t, type));
+    }
+
+    /// <summary>
     /// The rank multiplier of a canonical URL (knowledge design §6.5): the lowest factor of the matching <c>demote</c>
     /// patterns, 1 when none matches.
     /// </summary>

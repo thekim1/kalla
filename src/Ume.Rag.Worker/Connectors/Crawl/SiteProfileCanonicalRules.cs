@@ -33,7 +33,11 @@ public sealed class SiteProfileCanonicalRules(ISiteProfileReader profiles, TimeP
     /// <param name="hosts">Lower-case hosts without a port (<see cref="CrawlScope.Hosts"/>, the profiles' keys).</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
     /// <returns>The hosts' canonicaliser rules and excluded types, by host.</returns>
-    public async ValueTask<HostCrawlRules> ForHostsAsync(string classification, IEnumerable<string> hosts, CancellationToken cancellationToken)
+    public ValueTask<HostCrawlRules> ForHostsAsync(string classification, IEnumerable<string> hosts, CancellationToken cancellationToken) =>
+        ForHostsAsync(classification, hosts, fresh: false, cancellationToken);
+
+    /// <summary>As <see cref="ForHostsAsync(string, IEnumerable{string}, CancellationToken)"/>; <paramref name="fresh"/> reads every host's profile again and caches it.</summary>
+    public async ValueTask<HostCrawlRules> ForHostsAsync(string classification, IEnumerable<string> hosts, bool fresh, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(classification);
         ArgumentNullException.ThrowIfNull(hosts);
@@ -43,7 +47,7 @@ public sealed class SiteProfileCanonicalRules(ISiteProfileReader profiles, TimeP
         foreach (var host in hosts)
         {
             var key = (classification, host);
-            if (!_cache.TryGetValue(key, out var cached) || now - cached.At >= CacheFor)
+            if (fresh || !_cache.TryGetValue(key, out var cached) || now - cached.At >= CacheFor)
             {
                 cached = ((await profiles.GetAppliedAsync(classification, host, cancellationToken))?.Profile, now);
                 _cache[key] = cached;

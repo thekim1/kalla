@@ -81,7 +81,15 @@ public sealed class CrawlConnector(
     /// The source's settings and scope, with the canonicaliser of the source's settings and of the scope hosts' applied
     /// site profiles at <paramref name="classification"/>, and the scope with those profiles' <c>excludedTypes</c>.
     /// </summary>
-    public async ValueTask<CrawlSource> SourceAsync(Guid sourceId, string classification, JsonElement settings, CancellationToken cancellationToken)
+    public ValueTask<CrawlSource> SourceAsync(Guid sourceId, string classification, JsonElement settings, CancellationToken cancellationToken) =>
+        SourceAsync(sourceId, classification, settings, fresh: false, cancellationToken);
+
+    /// <summary>
+    /// As <see cref="SourceAsync(Guid, string, JsonElement, CancellationToken)"/>; <paramref name="fresh"/> reads the scope
+    /// hosts' applied site profiles again instead of from the cache (a run's start and its reconcile, so a profile applied
+    /// just before is seen by this instance at once).
+    /// </summary>
+    public async ValueTask<CrawlSource> SourceAsync(Guid sourceId, string classification, JsonElement settings, bool fresh, CancellationToken cancellationToken)
     {
         var source = Source(sourceId, settings);
         if (hostRules is null)
@@ -89,7 +97,7 @@ public sealed class CrawlConnector(
             return source;
         }
 
-        var rules = await hostRules.ForHostsAsync(classification, source.Scope.Hosts, cancellationToken);
+        var rules = await hostRules.ForHostsAsync(classification, source.Scope.Hosts, fresh, cancellationToken);
         if (rules.Canonical.Count > 0)
         {
             source = source with { Canonicalizer = source.Canonicalizer with { Hosts = rules.Canonical } };

@@ -27,15 +27,16 @@ public sealed record CrawlRunHistory(bool Complete, bool Incremental);
 
 /// <summary>
 /// <c>content."Runs"</c> (engine design §10): a run is opened by the first <c>sync</c> job of a source with the job's own id,
-/// so a retried first job finds its run instead of opening a second one. Counters are never incremented by jobs: the
+/// so a retried first job finds its run instead of opening a second one, with the per-tag hashes of the settings it opened
+/// with (<c>SettingsHashes</c>, <see cref="SettingsEffects"/>). Counters are never incremented by jobs: the
 /// <see cref="RunFinalizer"/> derives them from the run items.
 /// </summary>
 public sealed class RunStore(JobDatabase database)
 {
     private const string OpenSql = """
-        INSERT INTO content."Runs" ("Id", "SourceId", "Classification", "Kind", "Trigger", "PipelineVersionId", "ScheduledFor", "Phase", "State",
+        INSERT INTO content."Runs" ("Id", "SourceId", "Classification", "Kind", "Trigger", "PipelineVersionId", "ScheduledFor", "SettingsHashes", "Phase", "State",
                                    "Added", "Updated", "Unchanged", "Deleted", "Failed", "ProposedDeletions", "CostUsd")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'list', 'running', 0, 0, 0, 0, 0, 0, 0)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'list', 'running', 0, 0, 0, 0, 0, 0, 0)
         ON CONFLICT ("Id") DO NOTHING
         """;
 
@@ -84,7 +85,7 @@ public sealed class RunStore(JobDatabase database)
             Parameters =
             {
                 Db.P(runId), Db.P(source.SourceId), Db.P(source.Classification), Db.P(Text(payload.Kind)), Db.P(Text(payload.Trigger)),
-                Db.P(pipelineVersionId), Db.P(Db.Utc(payload.ScheduledFor)),
+                Db.P(pipelineVersionId), Db.P(Db.Utc(payload.ScheduledFor)), Db.P(SettingsEffects.HashesJson(source.Type, source.Settings)),
             },
         })
         {
