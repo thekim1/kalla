@@ -68,13 +68,28 @@ these numbers. On-prem model capacity is the gateway's, measured with `scripts/c
 
 ### 1. Files and images
 
-Until the first release (`v0.1.0`) there is no release bundle: use a clone of the repository at the release commit and
-build the images on the host:
+**From a release (`v0.1.0` on):** download `ume-rag-X.Y.Z.tar.gz` and `SHA256SUMS` from the GitHub release, check and
+unpack it. Its Compose files already pin every image by digest (`ghcr.io/<owner>/ume-rag/<service>`), so `deploy/.env`
+needs no image variables:
+
+```bash
+sha256sum -c --ignore-missing SHA256SUMS
+tar -xzf ume-rag-X.Y.Z.tar.gz && cd ume-rag-X.Y.Z
+```
+
+The release also carries an SPDX SBOM per image. The bundle holds `deploy/` and the operator docs (this guide, the
+runbook, the upgrade guide).
+
+**From a clone (between releases, or to build the images yourself):** check out the commit and build the images on the
+host. The admin UI is copied into the admin API's `wwwroot` before publishing, as `release.yml` does (until the admin
+project has its own switch, issue #59):
 
 ```bash
 docker build -f images/postgres/Dockerfile -t ume-rag/postgres:latest .
 docker build -t ume-rag/clamav:latest images/clamav
 docker build -t ume-rag/parser:latest src/parser
+(cd src/admin-ui && npm ci && npm run build) && mkdir -p src/Ume.Rag.AdminApi/wwwroot \
+  && cp -r src/admin-ui/dist/. src/Ume.Rag.AdminApi/wwwroot/
 for p in Api AdminApi Worker MigrationService; do dotnet publish src/Ume.Rag.$p -c Release -t:PublishContainer; done
 ```
 
