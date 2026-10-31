@@ -1,8 +1,9 @@
 # Identity, authentication and authorisation: plan
 
 How people, applications, chat clients, MCP clients and downstream systems are identified and authorised across the
-platform. The municipality uses **Entra ID**; Keycloak is used for local development and CI, as in the gateway.
-Cross-cutting: used by every service. **Detailed design: [`design.md`](design.md)** (step 3); where they differ,
+platform. The pilot (P1) signs in with a **Keycloak shared with the LLM gateway**; the municipality's **Entra ID**
+follows in P2; each system's own Keycloak serves local development and CI, as in the gateway (§1; Decisions table
+"P1 pilot sign-in"; identity design §11.2, 2026-10-31). Cross-cutting: used by every service. **Detailed design: [`design.md`](design.md)** (step 3); where they differ,
 the design wins.
 
 **Guiding rule (2026-10-29): be as compatible as possible with the LLM gateway.** Same identity model, same claim
@@ -37,8 +38,8 @@ invented on one side.
 | Open WebUI → Chat API | Yes: gateway-style key (`ume-rag-sk-…`) for the connection + Open WebUI's signed user JWT | never |
 | Integrations → our APIs | Yes: keys | only if an app prefers OAuth tokens |
 | URL lists, crawling, uploads | Yes | never |
-| **Staff sign-in to the admin UI** | Only with Keycloak/local accounts | **pilot** |
-| **Pilot users' sign-in to Open WebUI** | Only with local Open WebUI accounts | **pilot** (if municipal accounts are wanted) |
+| **Staff sign-in to the admin UI** | Yes: the shared Keycloak (client `ume-rag-admin`, local accounts, admins with OTP; design §11.2) | P2 (Entra replaces Keycloak) |
+| **Pilot users' sign-in to Open WebUI** | Yes: the shared Keycloak (client `open-webui`; design §11.2) | P2 (Entra replaces Keycloak) |
 | Group- or department-based assistant audiences for chat users | No | P2 (pilot audience = "users of this client") |
 | Graph lookup of member groups the claim does not show | No | P2 (package 2) |
 | `rag-api` scopes (own chat client, MCP server, OBO) | No | P2–P3 |
@@ -46,7 +47,8 @@ invented on one side.
 
 **Approval packages** (created by the deployment pipelines as infrastructure as code, approved by a person):
 
-- **Package 1, submitted during P0, approved before the pilot**: RAG's **own** registrations, created and owned by
+- **Package 1, for P2** (kept but not submitted; H7 deferred; the pilot signs in with the shared Keycloak, Decisions
+  table "P1 pilot sign-in", 2026-10-31): RAG's **own** registrations, created and owned by
   RAG's Bicep (`infra/entra/`), which never touches the gateway's registrations (decided 2026-10-30,
   `../simplification-pass.md` §7):
   - *Admin sign-in*: an `ume-rag-admin` registration configured like the gateway's (`identity-and-roles.md`, *Entra
@@ -63,7 +65,8 @@ invented on one side.
 
 On Azure, daemons use managed identities or workload identity federation; on-prem, certificates rather than secrets.
 Only tokens from the municipality's own tenant are accepted (`tid` check); guest accounts are refused, with one rule
-in both systems (design §1.7).
+in both systems (design §1.7). The rule takes effect with Entra (P2); against the pilot's Keycloak the tenant and guest
+checks are no-ops (design §1.7, §11.2).
 
 ## 3. People in the admin UI (same model as the gateway)
 
@@ -102,7 +105,11 @@ Department and platform admins still see and edit everything. It is an admin rul
 (`roles`), `_DEPARTMENT_CLAIM` (`departmentCodes`), `_TEAM_CLAIM` (`teamCodes`), `_GROUP_CLAIM` (`groups`),
 `_GROUPS_<ROLE>` (groups that grant a role, `;`-separated), `_EXTRA_SCOPE`.
 
-**Roles from Entra**: as the gateway recommends, **app roles assigned to groups** (`roles` claim), so no token group
+**Roles in P1**: realm roles `rag-*` in the shared Keycloak realm `ume`, granted per account and emitted in `roles` by
+the `ume-rag-admin` client's role mapper (full scope allowed off, role scope mappings to the `rag-*` roles; design
+§11.2, 2026-10-31).
+
+**Roles from Entra (P2)**: as the gateway recommends, **app roles assigned to groups** (`roles` claim), so no token group
 lists and no 200-group overage. Group mapping through `UME_RAG_OIDC_GROUPS_<ROLE>` (object ids) works as an
 alternative, exactly as in the gateway.
 
@@ -120,7 +127,7 @@ gateway's catalogue. The resolver itself is built and tested in P0 against the F
 - When IT later adds a department attribute, the claim takes over without any code change.
 - **Until release 2** (P1), department scope comes from the `departmentCodes` claim, plus **member groups entered by
   hand on our own department record** (settled, weakness review §5): a platform admin enters the pilot department's
-  Entra group object ids in the department form, and our resolver matches them against the `groups` claim exactly as
+  group claim values in the department form (P1: Keycloak group names, design §2.2, §11.2; Entra object ids from P2), and our resolver matches them against the `groups` claim exactly as
   it will later with synced data. With release 2 the org sync from the gateway catalogue fills the same field and the
   hand-entered values are replaced. The gateway itself is unchanged; platform admins need no department scope.
 
@@ -155,8 +162,9 @@ secret, short expiry, only from the Open WebUI instance's network.
 
 **Assistant audience** (who may use it):
 
-- **P1**: `clients` only: e.g. "everyone who can sign in to the pilot's Open WebUI". Open WebUI's own Entra login
-  (with *assignment required* on its enterprise app) decides who that is. No Graph lookup needed.
+- **P1**: `clients` only: e.g. "everyone who can sign in to the pilot's Open WebUI". Open WebUI's own login against the
+  shared Keycloak decides who that is (who may sign in is open, identity design §16 question 5); from P2 Entra with
+  *assignment required* on its enterprise app. No Graph lookup needed.
 - **P2**: also `departments` (department scope as in §3) and `groups` (group claim values), for callers with real
   tokens. For Open WebUI users they wait for E1 (a real Entra token through Open WebUI, §7) and W3 (Open WebUI's
   process-wide model list); Open WebUI's e-mail is never the basis of a grant.
@@ -216,8 +224,8 @@ systems to the SIEM. Every denial is a security event.
 
 | Phase | Deliverable |
 |---|---|
-| P0 | Keycloak realm with the gateway's claims for dev and CI; OIDC and claim mapping copied from the gateway (`UME_RAG_OIDC_*`); keys in gateway style; package 1 submitted |
-| P1 | Admin sign-in on the municipal IdP (`ume-rag-admin`); `rag-reviewer` role; department scope from the `departmentCodes` claim; Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; explain access; security events; package 2 submitted; P1b: spikes on E1 and the W3 workaround (weakness review §5) |
+| P0 | Keycloak realm with the gateway's claims for dev and CI; OIDC and claim mapping copied from the gateway (`UME_RAG_OIDC_*`); keys in gateway style; package 1 built as Bicep (#36), kept for P2, not submitted |
+| P1 | Admin sign-in on the shared Keycloak (`ume-rag-admin`, realm `ume`; Entra in P2); `rag-reviewer` role; department scope from the `departmentCodes` claim; Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; explain access; security events; package 2 submitted; P1b: spikes on E1 and the W3 workaround (weakness review §5) |
 | P2 | Department scope from groups in the claim with gateway release 2 (feature C, both systems; weakness review §5), `rag-api` tokens and OAuth machine clients, department/group audiences (one Open WebUI instance per department until W3 and E1 are solved), Graph member-group lookup, owner-team scoping of admin writes, MCP server authorisation, `rag-ingestion`, tool identity `ume-rag-tools` (in-process hub), `ume-rag-pk-` widget keys |
 | P3 | OBO for user-delegated tools (with the `rag-tools` service), Teams client, claims-challenge handling |
 
@@ -230,7 +238,8 @@ systems to the SIEM. Every denial is a security event.
 5. **Group naming**: no convention; groups are picked by search once the Graph lookup arrives (P2); in P1 they are
    entered as object ids.
 6. **Approval timing**: no registration is needed for P0 or development; package 1 (admin and Open WebUI sign-in)
-   only has to be approved before the pilot.
+   only has to be approved before the pilot. **Revised 2026-10-30:** the pilot signs in with the shared Keycloak, so
+   package 1 is needed only for P2 (Decisions table "P1 pilot sign-in").
 
 7. **Admin registration** (revised 2026-10-30, simplification pass): RAG gets its own `ume-rag-admin` registration
    (same code as the gateway's), with its own credential.

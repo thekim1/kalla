@@ -57,7 +57,7 @@ gateway counterpart.
 | 1 | Placement | `Ume.Rag.AdminApi` (`rag-admin`; `rag-admin-b` with the a/b slots of P2) is the BFF, the only writer of `config`, the job producer for the worker, the reader of `content`/`chat`/`audit` and the host of the built UI (`src/admin-ui/dist` as `wwwroot`); copied gateway BFF, CSP, rate limit, validation filter and problem details (§2) |
 | 2 | Answer code in the admin | Library **`Ume.Rag.Answering`** holds the knowledge-role core and the chat answer core, so the **test panel** runs the exact chat path in process, including collections that are not yet published, without an API route that could include them; `rag-admin` and `rag-api` are deployed from the **same release**, so the panel always runs the code chat runs (§2.1, §4.9) |
 | 3 | Language | **Swedish only** for the journey pages (answered 1): `lang="sv"`, texts in components and `ui/utils/labels.ts`, no i18n; API, logs, OpenAPI and docs in English. Server errors carry a stable **`code`**; the UI renders Swedish texts from a code table (§4.2) |
-| 4 | Roles | **`rag-reviewer`** (answered 3): policies `Review`, `FeedbackComments`, `Read`. Feedback **comments**: `rag-reviewer` and `rag-department-admin`. **Full conversations: `rag-reviewer` only.** No administrative role implies conversation content (§3). Roles come from RAG's own Entra registration `ume-rag-admin`; the audit actor is `oid` (fallback `sub`) |
+| 4 | Roles | **`rag-reviewer`** (answered 3): policies `Review`, `FeedbackComments`, `Read`. Feedback **comments**: `rag-reviewer` and `rag-department-admin`. **Full conversations: `rag-reviewer` only.** No administrative role implies conversation content (§3). Roles: **P1** realm roles `rag-*` on the shared Keycloak's client `ume-rag-admin`, audit actor `sub`; **P2** app roles on RAG's own Entra registration `ume-rag-admin`, actor `oid` (fallback `sub`) (identity §1.1, §1.6, 2026-10-31) |
 | 5 | Concurrency | Every editable aggregate carries `version` (Postgres `xmin`); a mismatch is 409 `concurrent_change` (§4.3) |
 | 6 | Write path | One transaction: **`SELECT … FOR UPDATE` on `config."ConfigVersion"` first** (serialises admin config writes) → cross-rules → entity change → outbox trigger (version bump) → audit row with that `ConfigVersion` → optional job rows; `pg_notify` at commit (§4.4) |
 | 7 | Validation | Field rules on request records; **cross-rules** in one `ConfigRules` service: **V1–V34 with V20 and V27 retired (32 rules)** (§4.6), run on save, on dependent changes and again before publish, under the version lock; CHECK violations (23514) answer 400 |
@@ -170,8 +170,10 @@ roles add up.
 | no `rag-*` role | – | none: every `/api` call 403, UI shows the no-access page | – |
 
 `Review` and `FeedbackComments` are **not** part of `Admin`. A platform admin who must review is also given
-`rag-reviewer` (visible in the audit actor roles). `rag-reviewer` is granted per department by assigning a group per
-department (Entra app role assignment on `ume-rag-admin` or `UME_RAG_OIDC_GROUPS_REVIEWER`). The UI mirrors the policies
+`rag-reviewer` (visible in the audit actor roles). `rag-reviewer` is granted per department: in P1 as the realm role `rag-reviewer`
+in the shared Keycloak, given to the account or a Keycloak group per department (identity §1.6, §11.2, 2026-10-31);
+from P2 by assigning a group per department (Entra app role assignment on `ume-rag-admin` or
+`UME_RAG_OIDC_GROUPS_REVIEWER`). The UI mirrors the policies
 with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-69`), but the API decides.
 
 ### 3.2 Department scoping and sharing

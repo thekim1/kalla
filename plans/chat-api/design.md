@@ -17,7 +17,9 @@ questions: §21; unverified facts: §22; removed or deferred: §23.
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); "Pipeline" means
 `src/Ume.LlmGateway.Gateway/Pipeline/`. Open WebUI citations are `path:line` in `~/git/rag-platforms/open-webui` at
-`f7ac7ee` (**v0.12.5**, 2026-10-29); `ow/` means `backend/open_webui/`, `src/` the Svelte front end. No new NuGet package
+`f7ac7ee` (**v0.12.5**, 2026-10-29); `ow/` means `backend/open_webui/`, `src/` the Svelte front end. The deployed pin
+is **v0.12.3** (`deploy/compose.openwebui.yaml`, §4.3): v0.12.5 citations outside §4.3 are not all re-checked at the pin
+and are re-checked at the next pin bump (2026-10-31). No new NuGet package
 is proposed: language guessing, token estimates and SSE handling are small in-house code (gateway practice), so no
 package source had to be checked for this step.
 
@@ -286,6 +288,13 @@ integration sync point). Elsewhere this document still cites v0.12.5 source.
 | `WEBUI_BANNERS` | `[{"id":"ume-rag-input","type":"warning","content":"Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.","dismissible":false,"timestamp":<release time>}]` | fixed input warning (weakness review §4; residual risk recorded in the DPIA, G1). JSON list of `BannerModel` (`id`, `type`, `title?`, `content`, `dismissible`, `timestamp`, `i18n?`; `ow/config.py:2195-2212`); with `ENABLE_PERSISTENT_CONFIG=false` the env value is used and an admin edit lasts only until restart (`ow/models/config.py`; tested in P0); shown on the new-chat screen only (`src/lib/components/chat/Navbar.svelte:283`). **`dismissible: false` is not "cannot be closed"**: the banner always draws its close button (`common/Banner.svelte:142-149`), and × hides it until the page reloads; only `dismissible: true` is remembered in `localStorage` (`Navbar.svelte:311-327`). Whether hidden-until-reload is enough is for the DPIA (G1) (P0, PR #31, to-verify #172) |
 | `ENABLE_API_KEYS=true`, `ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS=true`, `API_KEYS_ALLOWED_ENDPOINTS=/api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback`, `USER_PERMISSIONS_FEATURES_API_KEYS=false` | as listed | only the feedback service account has a key and it reaches the feedback list and per-id feedback routes (prefix match, `ow/utils/auth.py:539-542`; admin delete, `ow/routers/evaluations.py:488-497`; `ow/config.py:1956`, `:2530-2544`) |
 | `BYPASS_MODEL_ACCESS_CONTROL=true`, `ENABLE_PERSISTENT_CONFIG=false`, Open WebUI RAG/web/code/tools off | as chat plan §6 | – |
+
+**Sign-in (P1, identity §5.3, §11.2, 2026-10-31).** Open WebUI signs in over OIDC against the **shared Keycloak**
+(Decisions table "P1 pilot sign-in"): `OAUTH_CLIENT_ID=open-webui` (realm `ume`), that client's secret in
+`OAUTH_CLIENT_SECRET`, `OPENID_PROVIDER_URL=https://<keycloak host>/realms/ume/.well-known/openid-configuration`, and an
+`OAUTH_PROVIDER_NAME` that names the Keycloak sign-in instead of the P0 compose's `Microsoft Entra ID` (P1 item 18,
+stream A); callback and trust settings as identity §5.3. Entra (`ume-rag-open-webui`) replaces it in P2. **Who may sign
+in is open** (identity §16 question 5): every enabled account of realm `ume` can today.
 
 Per-model `stream_response` stays default (streaming); the `usage` capability is not set, so Open WebUI does not
 request `include_usage` (`ow/main.py:1243-1244`, capabilities from model info `:1206`); we capture usage ourselves.
@@ -805,7 +814,7 @@ our `source` snippets inside them, and feedback with a **full chat snapshot** (`
   its HTTP API (list, then `DELETE /api/v1/evaluations/feedback/{id}`, admin, `ow/routers/evaluations.py:488-497`),
   in the importer's run (§14.2).
 - **Chats**: v0.12.5 has no age-based retention setting, and its API lists and deletes other users' chats only with
-  `ENABLE_ADMIN_CHAT_ACCESS=true` (`ow/routers/chats.py:763`, `:1684-1688`), which §4.3 turns off. How Open WebUI's
+  `ENABLE_ADMIN_CHAT_ACCESS=true` (`ow/routers/chats.py:763`, `:1684-1688`) (pin v0.12.3; same behaviour confirmed for `ENABLE_ADMIN_CHAT_ACCESS`/`ENABLE_ADMIN_EXPORT`, to-verify #173), which §4.3 turns off. How Open WebUI's
   90 days are enforced is open register item **W2** (§21.2).
 - A user deleting a chat in Open WebUI does **not** reach us (no callback); our copy follows our retention. The privacy
   notice of the pilot says so.
@@ -1140,7 +1149,7 @@ waits for or depends on it.
 ### 21.2 Open (user)
 
 1. **Open WebUI's own chat copies after 90 days** (§13.3): v0.12.5 has no retention setting, its API reaches other
-   users' chats only with `ENABLE_ADMIN_CHAT_ACCESS=true`, and direct SQL is ruled out. Options: (a) turn admin chat
+   users' chats only with `ENABLE_ADMIN_CHAT_ACCESS=true` (pin v0.12.3; same behaviour confirmed for `ENABLE_ADMIN_CHAT_ACCESS`/`ENABLE_ADMIN_EXPORT`, to-verify #173), and direct SQL is ruled out. Options: (a) turn admin chat
    access on for the service account's API use (the flag is global, so Open WebUI admins could then read chats in its
    UI, acceptable only if no person holds that role), (b) contribute or wait for native retention upstream and accept
    unpruned Open WebUI copies in the pilot, stated in the privacy notice. Recommendation: (b) for the pilot together
@@ -1165,8 +1174,9 @@ waits for or depends on it.
   change (weakness review §4). **Partly refuted in P0** (PR #31, to-verify #172): it can be closed until the page
   reloads (§4.3); whether that is enough is for the DPIA (G1). Served from the environment and back after a restart
   (tested).
-- Open WebUI: creating the admin service account when `ENABLE_LOGIN_FORM=false` (Entra-only login): an Entra service
-  user, or a one-time local account before the form is disabled.
+- Open WebUI: creating the admin service account when `ENABLE_LOGIN_FORM=false` (OIDC-only login): in P1 a Keycloak
+  account in the shared realm `ume` (Entra service user from P2), or a one-time local account before the form is
+  disabled (identity §5.3, §11.2, 2026-10-31).
 - Open WebUI: headers template `{{MESSAGE_ID}}` is non-empty for every chat completion (multi-model and legacy paths,
   `ow/main.py:1842-1847`, `:1921`) and for regenerations.
 - Character estimate ÷ 3 against the real tokenizers of the pilot's answer models (Swedish and English), via

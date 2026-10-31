@@ -345,6 +345,12 @@ Realm `ume` (same name as the gateway's, so issuer paths look the same), adapted
 | Passwords / secrets | from `UME_RAG_DEV_USER_PASSWORD`, `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_API_CLIENT_SECRET`, `UME_RAG_OWUI_CLIENT_SECRET` (realm import placeholders, as the gateway; the AppHost generates them) |
 | Keycloak image | `quay.io/keycloak/keycloak:26.6.4@sha256:0aae0de7…` (the version `Aspire.Hosting.Keycloak` runs, tag 26.6); the AppHost and `KeycloakFixture` share the pin and are updated together (PR #35) |
 
+**P1: realm additions for the shared Keycloak** (identity design §11.2, 2026-10-31). The pilot signs in with the
+Keycloak shared with the gateway (Decisions table "P1 pilot sign-in"), defined and run from the gateway repo. Next to the
+dev realm, RAG keeps a **realm-additions file** in `deploy/keycloak/` (stream B, P1 item 16): RAG's clients
+`ume-rag-admin`, `open-webui` and `ume-rag-api`, the `rag-*` realm roles, full scope allowed off on every RAG client,
+pilot hosts, no test users. How it is imported into realm `ume` is open (identity §16, P1 question 2).
+
 ### 4.3 FakeGateway (not the gateway's FakeLlm)
 
 The gateway's FakeLlm cannot be reused: its `/v1/embeddings` returns **8-dimensional** vectors (`Vector()` takes 8
@@ -628,6 +634,13 @@ Redis and one object store (single node on its own encrypted disk) on the data h
 
 ### 7.1 `init-deployment.sh` (adapted; same idempotency: never overwrites secrets)
 
+**P1 sign-in is the shared Keycloak** (identity §11.2, 2026-10-31): `--oidc-authority` and
+`--openwebui-oidc-provider-url` point at realm `ume` (`https://<keycloak host>/realms/ume`), and the redirect URIs are
+registered on the Keycloak clients `ume-rag-admin` and `open-webui` (realm additions, §4.2). The script's Entra example
+text (the `login.microsoftonline.com` authority in its usage, "own Entra registration" comments and the next step
+"Register these redirect URIs … in Entra") is changed to Keycloak in **P1a item 18** (stream A); Entra examples return
+with P2.
+
 Re-running it rewrites `deploy/.env` and keeps the previous file as `.env.bak`. `deploy/.env` holds `COMPOSE_FILE`
 (§6.4), `UME_RAG_HOST_MEMORY`, `UME_RAG_BACKUP_DIR`, `UME_RAG_BACKUP_ENDPOINT`, `UME_RAG_UPLOAD_BACKUP_DIR` and
 `UME_RAG_FRESHCLAM_PROXY` besides the keys below (as built in P0 #14, PRs #31 and #40; settled at the integration sync
@@ -636,7 +649,7 @@ point).
 | Option | Default | Writes |
 |---|---|---|
 | `--oidc-authority URL` | prompted | `UME_RAG_OIDC_AUTHORITY` |
-| `--oidc-client-id ID` | `ume-rag-admin` (RAG's own registration, identity §2) | `UME_RAG_OIDC_CLIENT_ID` |
+| `--oidc-client-id ID` | `ume-rag-admin` (RAG's own client: in P1 the shared Keycloak's, from P2 the Entra registration; identity §1.6) | `UME_RAG_OIDC_CLIENT_ID` |
 | `--oidc-client-secret-file FILE` | – | `secrets/admin/Oidc__ClientSecret` (own credential, never the gateway's) |
 | `--api-host`, `--admin-host` | prompted (examples: `rag-api.intern.umea.se`, `rag-admin.intern.umea.se`) | certificates, `UME_RAG_API_PUBLIC_URL`, `UME_RAG_ADMIN_PUBLIC_HOST` |
 | `--gateway-url URL` | prompted | `UME_RAG_GATEWAY_URL` (HTTPS; its CA appended with `--ca-file`) |
@@ -697,6 +710,7 @@ Targets for the pilot: **RPO ≤ 5 min, RTO ≤ 4 h** (simplification pass §4).
 | What | Tool | Notes |
 |---|---|---|
 | Postgres | **pgBackRest** inside the `postgres` container (`ume-rag/postgres`, §5.2): continuous WAL archiving by `archive_command` (`archive-push`, synchronous, so no spool volume; `archive_timeout` 60 s), weekly full, daily differential, 35-day retention (proposed); repository `repo1` on the backup target, encrypted (`repo1-cipher-type=aes-256-cbc`, passphrase escrowed). Scheduled backups: one host timer `rag-backup.timer` (daily 01:30) runs `backup-postgres.sh --type auto`, i.e. `docker compose exec -T postgres pgbackrest --stanza=ragdb --type=full\|diff backup`, full on Sundays or when the newest full is 7 days old or more, differential otherwise (expiry follows each backup); `rag-backup-status.timer` refreshes the health metrics every 2 minutes (rule 5); no long-running sidecar. The stanza is created once per database or repository after the first `up` (WAL archiving fails until it exists). `postgres` is on the `backup` network (§6.1) | **point-in-time restore** with `restore-pitr.sh --target-time … --confirm`: a WAL switch first (so the newest changes are archived), stops api, admin, worker and postgres; `pgbackrest restore --type=time --delta --target-action=pause` in place, in a one-off container of the `postgres` service on `postgres-data` (`docker compose run --rm`); starts Postgres, which recovers to the target and pauses; `pg_promote()` (a new timeline), `pgbackrest check`, then the services (as built in P0 #14, PR #40; settled at the integration sync point) |
+| Open WebUI data (`openwebui-data`, `--openwebui-data-dir`) | **not built; decide with W2/G1** (2026-10-31) | in the pilot (history mode `none`) Open WebUI's store is the primary copy of chats and feedback comments (chat design §13.3), but no script backs it up; whether it is backed up, how and for how long is open with W2 and the DPIA (G1), postponed decisions |
 | Uploads | `backup-uploads.sh`, run by `rag-upload-backup.timer` every 10 minutes: copies new `uploads/` objects to the backup target **within 15 minutes** (the only content that cannot be fetched again); write-once keys make the copy incremental, and it never overwrites. It runs the profiled Compose service `rag-upload-backup` (postgres image for its shell, uid 1654, `rag-blobs` read-only, `network_mode: none`: a posix target needs no network), not a member of `backup` | `rclone`/bucket replication beyond one host (§6.4); the S3 upload copy is not built in P0 |
 | Derived blobs | raw fetches, parse and stage outputs | re-creatable: backed up nightly or not at all (a restore re-fetches and re-parses) |
 | Secrets | pepper, `data-protection.pfx`, `secrets/` | separately, through the secret manager (gateway runbook) |
@@ -893,7 +907,7 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (simpli
 | 14 | Single-host `compose.prod.yaml` + `compose.ingestion.yaml` with networks, zones and limits (§6; one slot), `init-deployment.sh`, `rag-ingestion.slice`, firewall script; **pgBackRest** inside the postgres image with WAL archiving, `rag-backup.timer` + `backup-postgres.sh`, `restore-pitr.sh`, `backup-uploads.sh`, `escrow-keys.sh` (§7.4) | `docker compose config` passes in CI; **point-in-time restore drill** on the test host documented with achieved RPO/RTO; escrowed keys read back | plan §11.5 |
 | 15 | `release.yml` + `build-release-bundle.sh`; tag `v0.1.0` | release with digest-pinned bundle and SBOM; smoke test green | plan §10 Releases |
 | 16 | Deploy `v0.1.0` to the test host (8 vCPU / 16 GB) behind the municipal proxy | health green through the proxy | plan §11.5 |
-| 17 | `infra/entra/` + `entra.yml` (plan only on PR); approval package 1 (RAG's own registrations: `ume-rag-admin` with redirect URIs and `rag-*` roles incl. `rag-reviewer`, its own credential, the `open-webui` registration, pilot groups) **submitted** | workflow run awaiting the environment approval; ticket id recorded | plan §11.7, identity §2/§8 |
+| 17 | `infra/entra/` + `entra.yml` (plan only on PR); approval package 1 (RAG's own registrations: `ume-rag-admin` with redirect URIs and `rag-*` roles incl. `rag-reviewer`, its own credential, the `open-webui` registration, pilot groups) **submitted**. *Changed 2026-10-31* (Decisions table "P1 pilot sign-in", identity §11.2): package 1 is **kept, not submitted**; it is submitted for P2 (H7 deferred); the pilot signs in with the shared Keycloak | workflow run awaiting the environment approval; ticket id recorded | plan §11.7, identity §2/§8 |
 | 18 | Gateway **release 1** agreed with the gateway team (weakness review §5): feature B (residency ceiling, key flag `RequireMaxResidency`, the 503/403 split, `/v1/models` filtered by the ceiling) with ADR draft 018 (`../gateway-changes/adr-drafts.md`), and FakeLlm `dimensions` (§12.2); release 2 (features C and A, ADRs 019–020) planned for P2; the pilot team's per-level keys for pilot attribution agreed | design and ADR 018 accepted by the gateway team; release 1 scheduled before the pilot | README P0, gateway-changes plan §4, design §13 |
 | 19 | Docs: `local-development.md`, `production-setup.md` (sizing from §6.2), `runbook.md` (incl. restore and escrow; before go-live also a section on finding and exporting one Open WebUI conversation for the registrar on a public-records request, weakness review §4, plan §8), `upgrade-guide.md`, `security-events.md` | reviewed by the operations owner | plan §10 |
 | 20 | Worker dispatcher skeleton (after #6): `WorkerInstances` heartbeat, leases, reaper (reclaim ≠ attempt; poison suspect after 3 reclaims), `LISTEN rag_jobs`; one `command` kind end to end (admin enqueues, worker applies) | integration test: the command is applied; a killed worker's job is reclaimed within 45 s without using an attempt | engine design §20 (P0) |
@@ -904,7 +918,7 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (simpli
 
 **Who does what (decided 2026-10-30):** the main session runs Stage 0 (#1, #2 and the shared files), then two
 streams build the rest in parallel; the split, file ownership and hand-offs are in [`../p0/`](../p0/). The parts that
-need other people are owned by the user, outside both streams: submitting Entra package 1 (#17), agreeing gateway
+need other people are owned by the user, outside both streams: Entra package 1 (#17; moved to P2, kept but not submitted), agreeing gateway
 release 1 with the gateway team (#18; it is built in P1, before the pilot; release 2 follows in P2, weakness review
 §5), the backup target and key escrow with IT (`to-verify.md` #145), access to the test host (#16) and to the gateway
 hardware for #22, the DPIA started with the data protection officer (register G1) and a named person and date for
@@ -925,7 +939,7 @@ decided form of the simplification pass (2026-10-30).
 | 4 | Self-hosted runner | BGE-M3 and the test gateway are on-prem; GitHub-hosted runners cannot reach them | **Open: IT security must approve** one ephemeral, environment-protected runner on the test host for `perf.yml`/`evaluation.yml`. Fallback: run both manually on the test host with a script |
 | 5 | Entra IaC tool | Bicep vs Terraform | **Decided: Bicep** with the Microsoft Graph extension in `infra/entra/` |
 | 6 | Hunspell memory per backend | Ispell dictionaries load per backend; with many backends this can be GBs inside a 3 GB Postgres limit | **Closed** (simplification pass §3, postponed H1): no dictionary in Postgres; decompounding in .NET (data-model §3.1) |
-| 7 | P0 Entra registrations | Identity §2/§9.6 say none is needed for P0 and package 1 is only *submitted* in P0 | P0 = package 1 (RAG's own registrations) submitted (checklist #17) |
+| 7 | P0 Entra registrations | Identity §2/§9.6 say none is needed for P0 and package 1 is only *submitted* in P0 | P0 = package 1 (RAG's own registrations) built (checklist #17, PR #36); submitting it moved to P2 (Decisions table "P1 pilot sign-in") |
 | 8 | Open WebUI hosting | Chat-api §6 configures it but no plan says where it runs or what database it uses | Separate Compose project `compose.openwebui.yaml` on the pilot host (24 GB) or its own VM, own SQLite on an encrypted volume (never in `ragdb`), no pruning sidecar; ceiling `internal`. As built (P0 #14, PR #31): v0.12.3 by digest (§4.1), uid 1000 with `DATA_DIR=/data` on a host directory, secrets from an `env_file`, plain HTTP on loopback behind the proxy, its own `openwebui` network (§6.1). Env per chat design §4.3: **one connection** (ours, no gateway connection), title, tag and follow-up generation off, `X-Rag-Owui-*` headers, uploads, admin chat access and export off, API keys restricted to the feedback endpoints, a fixed non-dismissible banner `WEBUI_BANNERS` ("Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.", weakness review §4); feedback older than `ClientRetentionDays` pruned through Open WebUI's HTTP API, never SQL against its database (chat design §13.3). Chat copies of other users cannot be pruned at v0.12.5 without `ENABLE_ADMIN_CHAT_ACCESS=true`: they stay unpruned in the pilot (stated in Open WebUI's data-handling profile) until register item **W2** is decided within the DPIA (**G1**, weakness review §4), which covers this store as the primary copy |
 | 9 | Portainer | The gateway ships `compose.portainer.yaml`; operations may expect it | Skip in P0/P1 (init-deployment covers the pilot host); add if operations ask |
 | 10 | Supply chain in both repos | Gateway pins actions by tag and signs nothing | Propose for both repos together (compatibility): actions pinned by SHA, `attest-build-provenance` on images |

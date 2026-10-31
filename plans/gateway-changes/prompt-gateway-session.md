@@ -61,6 +61,19 @@ One Keycloak serves both the gateway admin and Ume.Rag (admin UI and Open WebUI)
 - **Accounts:** local Keycloak accounts for the pilot, with OTP required for admin roles. LDAP federation to the
   municipal AD comes later, with no app change.
 - Docs: a runbook section for account administration (create, disable, reset, OTP) and backups.
+- **Answer these before J11** (Ume.Rag `plans/identity/design.md` §16 "Open for P1", questions 1–4 and 6, numbered as
+  there, full text there; added 2026-10-31):
+  - Q1: Who administers realm `ume` in production (accounts, role grants, `departmentCodes`, OTP resets, the realm's
+    own admin users and their OTP), and who holds which Keycloak admin role.
+  - Q2: How Ume.Rag's realm additions are imported and kept in step with the base realm, how a later change to
+    Ume.Rag's `deploy/keycloak/**` reaches production and who applies it, and how a mistake in one system's part is
+    kept from breaking the other's sign-in.
+  - Q3: Whether the realm-level settings (password policy, brute-force protection, the user profile with
+    `departmentCodes`/`teamCodes`, the OTP flow) live in this repo's base realm or in Ume.Rag's additions file.
+  - Q4: Which accounts count as admins for OTP (every `rag-*` role, or only `rag-platform-admin`/`rag-department-admin`,
+    plus `gateway-admin`) and how OTP is enforced (per-account required action or a conditional flow on role).
+  - Q6: Account lifecycle: who creates, disables and removes pilot accounts, how initial credentials and OTP enrolment
+    reach people, and who keeps `departmentCodes` and group membership current.
 
 Done when: the project starts locally in production mode, both systems' dev apps sign in against it with the merged
 realm, and a database restore of the gateway brings Keycloak back.
