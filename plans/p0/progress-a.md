@@ -10,7 +10,7 @@ Record every `to-verify` row in [`results-a.md`](results-a.md) before ticking it
 ## Waiting on (tick when it lands)
 - [x] **H1** Stage 0 merged ([`progress-stage-0.md`](progress-stage-0.md)) (#1, `84dedbe`)
 - [x] **H2** B's migrations of #6 merged (needed for item 6) (#7, `8583b1b`; issue #11)
-- [ ] **H5** service images build and every probe answers (needed for item 5)
+- [x] **H5** service images build and every probe answers (needed for item 5) (#60: all release images build; every health probe answers on the release smoke stack)
 - [ ] **H6** user: test-host access, backup target, key escrow location (`to-verify` #145)
 - [ ] **H8** user: access to the real gateway hardware (needed for item 9)
 

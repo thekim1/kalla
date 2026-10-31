@@ -13,8 +13,9 @@ without downtime. Migrations are expand/contract only, so "no" is the exception 
 
 - **Rolling update: yes.** No migration and no configuration change.
 - `images/clamav/Dockerfile` moves from `clamav/clamav-debian:1.4.5_base` to `1.4.6_base`, which fixes
-  CVE-2026-20339, CVE-2026-20345 and CVE-2026-20346. Its only image was pushed on 2026-10-26, so it is pinned from
-  2026-11-02 under the 7-day rule, before `v0.1.0`. Until then freshclam logs "Your ClamAV installation is OUTDATED".
+  CVE-2026-20339, CVE-2026-20345 and CVE-2026-20346. Its only image was pushed on 2026-10-26; it is pinned for
+  `v0.1.0` (2026-10-31, #27; the 7-day rule does not apply during development). With 1.4.5 freshclam logged "Your ClamAV
+  installation is OUTDATED".
 - **Apply:** a new `CLAMAV_IMAGE` (or a rebuilt `ume-rag/clamav:latest`), then `dc up -d --wait rag-clamav`. The
   signatures in the `clamav-db` volume are reused. Nothing is scanned while clamd restarts.
 - **Check:** `dc ps rag-clamav` is healthy, and `dc logs rag-clamav` no longer warns that the installation is outdated.
