@@ -6,6 +6,14 @@ using Ume.Rag.Infrastructure.Config;
 
 namespace Ume.Rag.Infrastructure.Access;
 
+/// <summary>The snapshot decisions use and whether it is confirmed (identity §4.3 step 0).</summary>
+public interface IPolicySnapshotSource
+{
+    PolicySnapshot Current { get; }
+
+    bool IsConfirmed { get; }
+}
+
 /// <summary>
 /// The api's <see cref="PolicySnapshot"/> (identity design §4.2, knowledge §12.1, data-model §5): loaded with the api
 /// role's grants only (assistants through <c>config."PublishedAssistantVersions"</c>, the granted columns of
@@ -14,7 +22,7 @@ namespace Ume.Rag.Infrastructure.Access;
 /// identity §4.5 rule 3). The monitor confirms the new version only after this handler succeeded.
 /// </summary>
 public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, ConfigVersionState state, ILogger<PolicySnapshotStore> logger)
-    : IConfigChangeHandler
+    : IConfigChangeHandler, IPolicySnapshotSource
 {
     /// <summary>The outbox entity types (table names) the snapshot is built from.</summary>
     public static IReadOnlySet<string> EntityTypes { get; } = new HashSet<string>(StringComparer.Ordinal)
