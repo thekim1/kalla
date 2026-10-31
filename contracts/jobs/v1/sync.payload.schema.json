@@ -87,6 +87,11 @@
       "format": "uuid",
       "description": "Upload commit: the batch whose manifest uploads/{sourceId}/batches/{batchId}.json the sync reads."
     },
+    "incremental": {
+      "type": "boolean",
+      "description": "Crawl: an incremental run (incrementalSchedule, connectors design §5.4) fetches only seeds with a newer sitemap lastmod and new sitemap URLs, and never marks a traversal complete.",
+      "default": false
+    },
     "minBuild": {
       "type": [
         "string",
@@ -145,6 +150,47 @@
         "required": [
           "runId"
         ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "trigger": {
+            "enum": [
+              "publish",
+              "rollback"
+            ]
+          }
+        },
+        "required": [
+          "trigger"
+        ]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "const": "reprocess"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "incremental": {
+            "const": true
+          }
+        },
+        "required": [
+          "incremental"
+        ]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "const": "sync"
+          }
+        }
       }
     }
   ],

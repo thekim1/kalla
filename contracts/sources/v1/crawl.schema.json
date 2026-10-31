@@ -180,6 +180,16 @@
       "description": "Night window HH:MM-HH:MM, Europe/Stockholm (connectors design §6.5); manual sync ignores it.",
       "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$",
       "default": "22:00-06:00"
+    },
+    "incrementalSchedule": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-effect": "cosmetic",
+      "description": "Cron (5 fields, Europe/Stockholm) of incremental runs besides Sources.Schedule (connectors design §5.4); null = full traversals only. The scheduler runs them only while the host's site profile has lastmodReliable.",
+      "maxLength": 100,
+      "pattern": "^\\S+( \\S+){4}$"
     }
   },
   "required": [

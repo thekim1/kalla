@@ -78,3 +78,26 @@ public enum QuestionAction
     Update,
     Retire,
 }
+
+/// <summary>What happened to one stage of a <c>stage-preview</c> document (engine design §11).</summary>
+public enum PreviewStageState
+{
+    Succeeded,
+    Failed,
+    Skipped,
+}
+
+/// <summary>The outcome of one preflight check (connectors design §2.2 <c>PreflightState</c>): fail blocks the save, warn explains.</summary>
+public enum PreflightState
+{
+    Pass,
+    Warn,
+    Fail,
+}
+
+/// <summary>Where the site profile of a preview's before/after comes from (P1: a manual profile or a built-in preset; learned is P2).</summary>
+public enum SiteProfileOrigin
+{
+    Manual,
+    Preset,
+}

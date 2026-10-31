@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/eval.run.result.schema.json",
+  "title": "eval publish-report and nightly job result",
+  "type": "object",
+  "properties": {
+    "evaluationRunId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "comparedRunId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "The run compared with (EvaluationRuns.ComparedRunId); absent for a collection's first run."
+    },
+    "questionCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "found": {
+      "type": "integer",
+      "description": "Answerable questions with an expected document in the top k.",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "wins": {
+      "type": "integer",
+      "description": "Questions found now and not in the compared run, and the reverse.",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "losses": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "recallAlert": {
+      "type": "boolean",
+      "description": "nightly: recall@10 fell 5 points or more below the 4-week median (processing design §14.8).",
+      "default": false
+    }
+  },
+  "required": [
+    "evaluationRunId",
+    "questionCount",
+    "found"
+  ],
+  "description": "Result of an eval job of kind publish-report or nightly: the EvaluationRuns row written and its comparison with the previous run; per-question results are in the row's results."
+}

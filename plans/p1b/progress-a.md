@@ -25,10 +25,10 @@ before ticking it here.
 
 ### 2. Contracts part 2 (first)
 Refs: [engine §9.1, §11, §12](../ingestion-worker/design-engine.md), [admin §4.7](../admin/design.md), [connectors §5.4](../ingestion-worker/design-connectors.md), [processing §13, §14](../ingestion-worker/design-processing.md)
-- [ ] `contracts/jobs/v1/`: `preview` (`stage-preview`, `preflight`, `publish-plan`), `sync` `reprocess`/`retry-failed`, `eval` `publish-report`/`nightly`/`generate-set`/`top-up-set`, `on-demand` with `CandidateSettings`
-- [ ] Commands `confirm-deletion`, `reject-deletion`, `release-hold`, `clear-pii-flag`, `reprocess-document` (those not in J3)
-- [ ] `contracts/sources/v1/`: `demote` patterns, `incrementalSchedule`, `revalidateEvery` with `x-effect`; `website` template's `recency` default
-- [ ] Drift test; `Ume.Rag.Pipelines.Tests` for the new keys
+- [x] `contracts/jobs/v1/`: `preview` (`stage-preview`, `preflight`, `publish-plan`), `sync` `reprocess`/`retry-failed`, `eval` `publish-report`/`nightly`/`generate-set`/`top-up-set`, `on-demand` with `CandidateSettings` (#?)
+- [x] Commands `confirm-deletion`, `reject-deletion`, `release-hold`, `clear-pii-flag`, `reprocess-document` (those not in J3) (#?)
+- [x] `contracts/sources/v1/`: `demote` patterns, `incrementalSchedule`, `revalidateEvery` with `x-effect`; `website` template's `recency` default (#?)
+- [x] Drift test; `Ume.Rag.Pipelines.Tests` for the new keys (#?)
 - [ ] **Hand-off L1:** issue to stream B
 
 ### 4. Freshness in the crawler

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.clear-pii-flag.result.schema.json",
+  "title": "clear-pii-flag command result",
+  "type": "object",
+  "properties": {
+    "releasedChunkSetId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "The held set released to live; absent when the document had none (the clearance still covers later sets)."
+    }
+  },
+  "description": "Result of the command clear-pii-flag."
+}

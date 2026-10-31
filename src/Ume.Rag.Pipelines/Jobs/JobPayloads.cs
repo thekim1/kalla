@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Ume.Rag.Pipelines.Schemas;
 
@@ -22,15 +23,19 @@ public abstract record JobPayload
 
 /// <summary>
 /// <c>sync</c> (engine design §9.1, §9.2; connectors design §2.2, §9.1): listing, then reconcile, of one source. The admin
-/// enqueues the first job of a run (sync now: dedup <c>sync:{sourceId}</c>, priority 10; upload commit: dedup
-/// <c>sync-upload:{batchId}</c>, <c>trigger</c> <c>upload</c> with <c>batchId</c>); the worker opens the run and carries
-/// <c>runId</c> into its continuations.
+/// enqueues the first job of a run (sync now and retry failed: dedup <c>sync:{sourceId}</c>, priority 10; upload commit:
+/// dedup <c>sync-upload:{batchId}</c>, <c>trigger</c> <c>upload</c> with <c>batchId</c>; publish confirm and rollback: a
+/// <c>reprocess</c> per source, dedup <c>sync:{sourceId}</c>, <c>trigger</c> <c>publish</c>/<c>rollback</c>); the worker
+/// opens the run and carries <c>runId</c> into its continuations. <c>retry-failed</c> lists only the documents whose last
+/// run item failed; <c>reprocess</c> iterates the live documents and never fetches (engine design §9.2, §12).
 /// </summary>
 [Description("Payload of a sync job (engine design §9.1, §9.2; connectors design §2.2, §9.1).")]
 [SchemaKeyword("allOf", """
     [
       { "if": { "properties": { "trigger": { "const": "upload" } }, "required": ["trigger"] }, "then": { "required": ["batchId"] } },
-      { "if": { "properties": { "phase": { "enum": ["fetch", "reconcile"] } }, "required": ["phase"] }, "then": { "required": ["runId"] } }
+      { "if": { "properties": { "phase": { "enum": ["fetch", "reconcile"] } }, "required": ["phase"] }, "then": { "required": ["runId"] } },
+      { "if": { "properties": { "trigger": { "enum": ["publish", "rollback"] } }, "required": ["trigger"] }, "then": { "properties": { "kind": { "const": "reprocess" } } } },
+      { "if": { "properties": { "incremental": { "const": true } }, "required": ["incremental"] }, "then": { "properties": { "kind": { "const": "sync" } } } }
     ]
     """)]
 public sealed record SyncPayload : JobPayload
@@ -60,6 +65,9 @@ public sealed record SyncPayload : JobPayload
 
     [Description("Upload commit: the batch whose manifest uploads/{sourceId}/batches/{batchId}.json the sync reads.")]
     public Guid? BatchId { get; init; }
+
+    [Description("Crawl: an incremental run (incrementalSchedule, connectors design §5.4) fetches only seeds with a newer sitemap lastmod and new sitemap URLs, and never marks a traversal complete.")]
+    public bool Incremental { get; init; }
 }
 
 /// <summary>
@@ -134,8 +142,11 @@ public sealed record EmbedPayload : JobPayload
     public required string InputKey { get; init; }
 }
 
-/// <summary><c>eval</c> <c>on-demand</c> (engine design §9.1; processing design §13.4–§13.6, §14.5): retrieval evaluation of one collection.</summary>
-[Description("Payload of an eval job of kind on-demand (processing design §13.4-§13.6): the collection's evaluation set, once per variant, over its live sets. Dedup eval:{collectionId}.")]
+/// <summary>
+/// <c>eval</c> <c>on-demand</c> (engine design §9.1; processing design §13.4–§13.6, §14.5): retrieval evaluation of one
+/// collection, optionally comparing unsaved retrieval settings (<c>CandidateSettings</c>) with the current ones.
+/// </summary>
+[Description("Payload of an eval job of kind on-demand (processing design §13.4-§13.6, §14.5): the collection's evaluation set, once per variant, over its live sets; with candidateSettings once more per variant under those settings. Dedup eval:{collectionId}.")]
 public sealed record EvalOnDemandPayload : JobPayload
 {
     public const string KindName = "on-demand";
@@ -151,9 +162,14 @@ public sealed record EvalOnDemandPayload : JobPayload
     [MaxLength(3)]
     [SchemaKeyword("uniqueItems", "true")]
     public IReadOnlyList<EvaluationVariant> Variants { get; init; } = [EvaluationVariant.Hybrid];
+
+    [Description("Unsaved Collections.RetrievalSettings (knowledge design §12.1, checked by the admin against V16): each variant runs with the current and with these settings, current vs candidate (processing design §14.5).")]
+    [SchemaKeyword("type", "[\"object\", \"null\"]")]
+    [SchemaKeyword("maxProperties", "30")]
+    public JsonElement? CandidateSettings { get; init; }
 }
 
-/// <summary>The dedup keys of the P1a job kinds (admin design §4.7, engine design §7.6, §9.2).</summary>
+/// <summary>The dedup keys of the job kinds (admin design §4.7, engine design §7.6, §9.2).</summary>
 public static class JobDedupKeys
 {
     public static string Sync(Guid sourceId) => $"sync:{sourceId}";
@@ -176,4 +192,27 @@ public static class JobDedupKeys
 
     /// <summary>An <c>edit-site-profile</c> for a host that has no profile yet has no id to key on.</summary>
     public static string SiteProfileHost(string level, string host) => $"site-profile:{level}:{host}";
+
+    /// <summary>A <c>stage-preview</c> with <c>piiSpans</c> for one document's PII highlights; other previews have no key.</summary>
+    public static string PiiPreview(Guid documentId) => $"pii-preview:{documentId}";
+
+    public static string Plan(Guid pipelineId) => $"plan:{pipelineId}";
+
+    /// <summary><c>generate-set</c> and <c>top-up-set</c> share one key: a top-up never runs during a generation.</summary>
+    public static string EvalGenerate(Guid collectionId) => $"eval-generate:{collectionId}";
+
+    /// <summary>One <c>publish-report</c> per finished <c>reprocess</c> run (admin §4.7 names none).</summary>
+    public static string EvalReport(Guid runId) => $"eval-report:{runId}";
+
+    /// <summary>Kept apart from <see cref="Eval"/>, so a queued on-demand run and the nightly run never drop each other (admin §4.7 names none).</summary>
+    public static string EvalNightly(Guid collectionId) => $"eval-nightly:{collectionId}";
+
+    /// <summary><c>confirm-deletion</c> and <c>reject-deletion</c> of one run share one key.</summary>
+    public static string Deletion(Guid runId) => $"deletion:{runId}";
+
+    public static string ReleaseHold(Guid sourceId) => $"release-hold:{sourceId}";
+
+    public static string PiiClear(Guid documentId) => $"pii-clear:{documentId}";
+
+    public static string Reprocess(Guid documentId) => $"reprocess:{documentId}";
 }

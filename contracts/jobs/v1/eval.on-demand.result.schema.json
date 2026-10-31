@@ -30,6 +30,11 @@
             "description": "Answerable questions with an expected document in the top k.",
             "minimum": 0,
             "maximum": 2147483647
+          },
+          "candidate": {
+            "type": "boolean",
+            "description": "on-demand with candidateSettings: the run used the candidate settings, not the current ones.",
+            "default": false
           }
         },
         "required": [
