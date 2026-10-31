@@ -75,9 +75,9 @@ Refs: [weakness review §2](../weakness-review.md), [ingestion plan §7](../inge
 
 ### 15. CI and harnesses
 Refs: [repo-and-deployment §8.1–§8.3](../platform/repo-and-deployment.md), [chat §16.2](../chat-api/design.md)
-- [ ] `benchmarks/release-test/` (k6 idle and during crawl + OCR; overhead run) and `perf.yml`; local dry run writes the report
-- [ ] `evaluation.yml` (nightly, dispatch)
-- [ ] `e2e` job, nightly + release (after L7)
+- [x] `benchmarks/release-test/` (k6 idle and during crawl + OCR; overhead run) and `perf.yml`; local dry run writes the report (#?)
+- [x] `evaluation.yml` (nightly, dispatch) (#?)
+- [ ] `e2e` job, nightly + release (after L7) — `e2e.yml` wired (nightly, dispatch, called by `release.yml`); skips with a notice until `tests/e2e` exists (#?)
 
 ### 17. Pilot stack for P1b
 Refs: [chat §4.3, §13.3, §14.2](../chat-api/design.md), [repo-and-deployment §6.2, §7](../platform/repo-and-deployment.md)

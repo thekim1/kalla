@@ -1,0 +1,27 @@
+{
+  "description": "Open WebUI-shaped streamed request for the chat overhead run (chat design §3.2, §16.2 item 3): the whole branch resent with a system message, the chat and message id headers of §4.3. X-OpenWebUI-User-Jwt needs the deployment's signing secret, so it is passed with --header when the target checks it. {model}, {question} and {uuid} are filled in per request.",
+  "questions": [
+    "Och hur lång är handläggningstiden om ansökan är komplett?",
+    "Kan jag överklaga beslutet, och i så fall hur?",
+    "Vilka avgifter tillkommer för en sådan ansökan?",
+    "Finns det någon blankett jag kan fylla i digitalt?"
+  ],
+  "headers": {
+    "X-OpenWebUI-Chat-Id": "{uuid}",
+    "X-Rag-Owui-Message-Id": "{uuid}",
+    "X-Rag-Owui-User-Message-Id": "{uuid}"
+  },
+  "body": {
+    "model": "{model}",
+    "messages": [
+      {"role": "system", "content": "Du är en hjälpsam assistent."},
+      {"role": "user", "content": "Behöver jag bygglov för ett uterum?"},
+      {"role": "assistant", "content": "Ja, ett inglasat uterum kräver i regel bygglov [1]. Kontakta bygglovshandläggarna om du är osäker."},
+      {"role": "user", "content": "Vilka handlingar ska jag skicka in?"},
+      {"role": "assistant", "content": "Du behöver en ansökan, situationsplan, planritning, fasadritning och sektionsritning [1][2]."},
+      {"role": "user", "content": "{question}"}
+    ],
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  }
+}

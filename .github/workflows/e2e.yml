@@ -1,0 +1,61 @@
+name: E2E
+# Browser tests (plans/platform/repo-and-deployment.md §8.2 e2e; gateway tests/e2e setup): the admin pilot journey with
+# mouse and keyboard only against a static fixture site, the accessibility spec and the role journeys, on the local
+# stack with its own test database and the FakeGateway (scripts/Start-E2E.ps1). Nightly and from release.yml, not on
+# every pull request (as the gateway). The specs are stream B's (tests/e2e, P1b hand-off L7): until
+# tests/e2e/package.json exists the job reports that and passes without running anything.
+on:
+  schedule:
+    - cron: '41 2 * * *'
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Specs present
+        id: specs
+        run: |
+          if [ -f tests/e2e/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::tests/e2e does not exist yet (stream B's pilot-journey specs, P1b hand-off L7): nothing to run."
+          fi
+      - uses: actions/setup-dotnet@v5
+        if: steps.specs.outputs.present == 'true'
+        with:
+          dotnet-version: 10.0.401
+      - uses: actions/setup-node@v6
+        if: steps.specs.outputs.present == 'true'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
+      - name: Aspire CLI, development certificate, admin UI packages
+        if: steps.specs.outputs.present == 'true'
+        # Aspire CLI 13.6.1 as docs/local-development.md; npm ci from the locks only (.npmrc), never npm install.
+        run: |
+          dotnet tool install --global Aspire.Cli --version 13.6.1
+          dotnet dev-certs https
+          if [ -f src/admin-ui/package-lock.json ]; then (cd src/admin-ui && npm ci); fi
+      - name: Start the test stack
+        if: steps.specs.outputs.present == 'true'
+        run: pwsh scripts/Start-E2E.ps1
+      - name: Browser tests
+        if: steps.specs.outputs.present == 'true'
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - name: Stop the test stack
+        if: always() && steps.specs.outputs.present == 'true'
+        run: pwsh scripts/Start-E2E.ps1 -Stop
