@@ -8,6 +8,7 @@ using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Uploads;
 using Ume.Rag.Worker.Connectors.UrlList;
 using Ume.Rag.Worker.Evaluation;
+using Ume.Rag.Worker.Evaluation.Generation;
 using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Parsing;
 using Ume.Rag.Worker.Preview;
@@ -103,6 +104,7 @@ public static class EngineExtensions
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, EmbedJobHandler>());
         builder.AddRagPreview();
         builder.AddRagEvaluation();
+        builder.AddRagEvalSets();
 
         services.AddHostedService<RunFinalizer>();
         services.AddHostedService<SyncScheduler>();

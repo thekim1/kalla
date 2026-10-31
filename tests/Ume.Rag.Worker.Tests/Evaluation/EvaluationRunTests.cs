@@ -266,14 +266,15 @@ public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayF
     }
 
     [Fact]
-    public async Task Set_kinds_go_to_the_set_handler_and_are_refused_without_one()
+    public async Task Set_kinds_go_to_the_set_handler_which_refuses_without_a_model()
     {
         var fixture = await EvalKit.SeedAsync(database);
         await using (var worker = await EvalKit.StartWorkerAsync(database, gateway, _blobs))
         {
+            // The engine registers the generator (Evaluation/Generation); with no Settings.EvaluationModel it refuses.
             var failed = await EvalKit.RunJobAsync(database, fixture, new EvalGenerateSetPayload { CollectionId = fixture.CollectionId },
                 JobDedupKeys.EvalGenerate(fixture.CollectionId), JobStates.Failed);
-            failed.LastError.ShouldBe(EvalJobHandler.Unsupported);
+            failed.LastError.ShouldBe("eval.model_unset");
         }
 
         var sets = new RecordingSetHandler();
