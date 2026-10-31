@@ -504,7 +504,7 @@ Swedish pitfalls (fixtures in §17):
 | Profile | the collection's `EmbeddingProfileId`, normally the `EmbeddingProfiles` row with `IsDefault` (`bge-m3`, 1024, cosine, `MaxInputTokens` 8192; data-model §2.1); other profiles only by platform admins (R3, `../../02-architecture-review.md:45-59`) |
 | Input | the embedded string of §6.5 (prefix + body); no instruction prefix (BGE-M3 dense retrieval uses none, *to verify*); queries are embedded raw by the Knowledge API with the same NFC normalisation |
 | Cache | per document: one `SELECT … WHERE "Classification" = @l AND "EmbeddingProfileId" = @p AND "TextHash" = ANY(@h)`; misses deduplicated, embedded, inserted `ON CONFLICT DO NOTHING` in their own short transaction (6a §7.6); `LastUsedAt` touched at most once a day per row; unused 30 days → deleted (platform plan §8). Dify's cached embedding is the precedent (`../../platforms/dify.md:218`) |
-| Batching | ≤ 64 inputs and ≤ 16,384 tokens per request (`TokenCount` sum; gateway limit *to verify*), all misses of one document |
+| Batching | ≤ 64 inputs and ≤ 16,384 tokens per request (`TokenCount` sum; gateway limit *to verify*), all misses of one document. Found in P1a items 5/6 (PR #139, 2026-10-31, to-verify #43): the gateway checks the whole request's estimated tokens (body bytes / 4, ≈ 4.5 bytes per token with escaped å/ä/ö) against the model's `ContextWindow`, so with BGE-M3 at 8192 a full batch is refused (`embed.input_rejected`); until the gateway checks per input (gateway session prompt), a worker cap on batch tokens below the window follows (not built yet), or the embedding deployment is left without a `ContextWindow` |
 | Request | `POST /v1/embeddings` `{model: "bge-m3", input: [...], encoding_format: "float"}`; headers by the engine (6a §7.7): `x-ume-on-behalf-of` = owner team of the collection (from gateway release 2, P2; weakness review §5), `x-ume-max-residency: OnPrem` always (the worker's `OnPrem` key), `x-ume-run-id`, `x-ume-step: embed` |
 | Response checks | count equals inputs; each vector 1024 finite floats (else fatal `embed.bad_vector`); `x-ume-residency` ≤ `OnPrem` (else fatal, 5003); stored as returned (cosine is scale-invariant) |
 | Canary | at startup and hourly the worker embeds a fixed Swedish canary text and compares it with `EmbeddingProfiles.CanaryEmbedding`: cosine < 0.999 → the `embed` class stops on this instance, health `unhealthy`, alert: the gateway alias now serves another model, which would silently mix vector spaces. As built in P1a item 9 (PR #108, 2026-10-31): the embed handler runs the canary itself before embedding with a profile not yet checked on this instance |
@@ -548,7 +548,7 @@ output's `OutputHash`, not the *Clean* output's; re-key compares chunk outputs, 
 
 | Step | Rule |
 |---|---|
-| When | after a collection's first sync runs finish; weekly top-up check (scheduler, 6a §9.6); on demand from the admin |
+| When | after a collection's first sync runs finish; weekly top-up check (scheduler, 6a §9.6); on demand from the admin. As built in P1b item 7 (PR #137, 2026-10-31; `EvalSetTriggers`, dedup `eval-generate:{collectionId}`): `generate-set` when the collection has no generated question and its first syncs finished (every active source has a `succeeded`, `degraded` or `awaiting-deletion-confirmation` run, none is running, and D > 0; publishing is not required), never repeated while any `eval-generate` job row of the collection exists; the weekly check runs Sunday 04:30 Europe/Stockholm; no trigger fires without `Settings.EvaluationModel` |
 | Size (answered 20) | target `N = min(100, 3 × D, eligible chunks)` for `D` live documents; over-generate 1.6 × N to survive filtering |
 | Eligible chunks | live sets of the collection; body ≥ 50 tokens; not from PII-flagged sets (keeps personal data out of stored questions); not `quality.largeTable` rows beyond the first group (not applied as built in P1b item 7, PR #130, 2026-10-31: the fact is not stored per chunk) |
 | Stratification | by document: round-robin over documents in seeded random order, ≤ `⌈N/D⌉ + 1` per document; by document type: proportional to chunk share, each type with ≥ 5 % of chunks gets ≥ 2; by kind: table row groups and lists at least their share, min(5, available) (kind not applied as built, PR #130: not stored per chunk) |
@@ -602,8 +602,10 @@ charged to the collection's owner team; shown before generation.
   lexically; a re-checked question that stays answerable takes the new `SourceContentHash`.
 - Weekly top-up: retire stale questions (`RetiredAt`), regenerate to the target size with a new round seed; also when
   `D` grew by ≥ 25 % since the last round. Retired questions keep their results for history. As built (PR #130): a
-  stale question gets `State = stale` and `RetiredAt`; `top-up-set` runs on demand only, since the weekly schedule and
-  the ≥ 25 % trigger are not built (scheduler work).
+  stale question gets `State = stale` and `RetiredAt`. As built in P1b item 7 (PR #137, 2026-10-31): the weekly
+  `top-up-set` runs once per week; D at a round is stored in the generated questions' `Origin.documents` (no schema
+  change), so rows without it never get a growth top-up (the weekly one still covers them); the growth top-up also
+  needs the layer below `min(max, 3·D)` and the last set job at least 1 day old.
 - An evaluation run uses the set as it was when the run started; a top-up never runs during a run of the collection.
 
 ### 13.4 Human and other layers
@@ -790,9 +792,9 @@ pages, so the parser path dominates its first full crawl. Evaluation uses the in
 | Planner | `Ume.Rag.Worker.Tests` | every §3.1 rule at and around its thresholds; range sizing with fake timings; halving and missing-page outcomes; `Strategy` string grammar and truncation |
 | PII precision/recall | `tests/fixtures/pii/` (synthetic only) | generated Swedish texts with Skatteverket test personnummer and samordningsnummer, organisationsnummer, OCR references, bankgiro, case numbers, phone numbers in every §9.1 format, obfuscated emails, names from SCB statistics in running text, tables, all caps, genitive and hyphenated forms; **targets**: personnummer/samordningsnummer precision and recall ≥ 0.99, email ≥ 0.99, phone ≥ 0.95, names (NER) recall ≥ 0.85 and precision ≥ 0.80; the NER model is accepted for P1 only if it reaches them (answered 18) |
 | NER gating and client | `Ume.Rag.Worker.Tests`, `Ume.Rag.ContractTests` | NER called only for `public` + not flagged + ≥ 5 contact values; offsets with emoji and combining characters (code points vs UTF-16); label mapping |
-| Flag lifecycle | `Ume.Rag.IntegrationTests` | flagged set in a `public` collection swaps in `held` and the old content stops being served; clear → `live` without re-processing; clearance carried to the next set at equal counts, re-flag on a higher count; NER down → `pending`, `held`, sweep completes it; non-`public` collections never wait; 5103 emitted once per transition |
+| Flag lifecycle | `Ume.Rag.IntegrationTests` (as built in P1a items 5/6, PR #139, 2026-10-31: `Ume.Rag.Worker.Tests`, `PiiLifecycleTests`, per P1 README §2) | flagged set in a `public` collection swaps in `held` and the old content stops being served; clear → `live` without re-processing; clearance carried to the next set at equal counts, re-flag on a higher count; NER down → `pending`, `held`, sweep completes it; non-`public` collections never wait; 5103 emitted once per transition |
 | Noise | `Ume.Rag.IntegrationTests` | noise-only HTML change → set re-keyed, zero chunk inserts, `EnsureCurrent` satisfied; real change → new set |
-| Evaluation reproducibility | `Ume.Rag.IntegrationTests` with FakeGateway (deterministic embeddings and LLM answers) | same seed → same sample, questions and metrics; a re-run gives identical results; evaluator vs `/v1/retrieve` identical order; win/loss counts against a previous run |
+| Evaluation reproducibility | `Ume.Rag.IntegrationTests` with FakeGateway (deterministic embeddings and LLM answers); as built in P1b item 7 (PR #137, 2026-10-31): `tests/Ume.Rag.Worker.Tests/Evaluation/` (`EvaluationReproducibilityTests`), every job run by a worker from its row, "/v1/retrieve" being the direct `RetrievalEngine` on the api role (as in #128) | same seed → same sample, questions and metrics; a re-run gives identical results; evaluator vs `/v1/retrieve` identical order; win/loss counts against a previous run |
 
 ## 18. Milestones
 
@@ -838,17 +840,20 @@ applied then and are not repeated.
 
 - `Microsoft.ML.Tokenizers` 2.0.1: count parity with Hugging Face for BGE-M3 (Unigram with `nmt_nfkc` precompiled
   charsmap), whitespace and dummy-prefix options to match XLM-R, thread safety of one shared instance, speed on
-  5,000-character pages.
+  5,000-character pages. Done (PRs #98, #139, 2026-10-31, to-verify #26): count parity on 1,000 passages, one
+  trailing-`▁` difference handled in code, thread-safe, ≈ 2 ms per page.
 - KB NER: actual labels returned for persons with the pinned revision (`PER` in `config.json`, `PRS` in the card);
   quality on our fixtures; SUC 3.0 terms for derived weights.
 - Gateway embeddings: maximum inputs and tokens per request for the on-prem BGE-M3 provider; whether BGE-M3 is served
-  without instruction prefixes; throughput (6a §23).
+  without instruction prefixes; throughput (6a §23). Gateway side answered (PR #139, 2026-10-31, to-verify #43): no
+  input or token limit per request, but the whole request is checked against `ContextWindow` (§11 Batching).
 - The parser's `text-layer` fast path output: block shape, heading levels and whether it labels furniture (§4.2).
 - SmartReader as fallback for hosts without a profile; the Sitevision preset against the ≈ 20 saved umea.se pages;
   the example page's breadcrumb path on the live page. Preset and breadcrumb done (P1a item 8, PR #104, 2026-10-31,
   to-verify #31, #138); SmartReader not built.
 - Skatteverket's published test personnummer and samordningsnummer (format, open-data licence) and SCB name
-  statistics (licence) for fixtures and the gazetteer.
+  statistics (licence) for fixtures and the gazetteer. Test numbers done (PR #139, 2026-10-31, to-verify #111: CC0,
+  tests only); SCB with the P2 gazetteer.
 - Docling `timings` granularity for per-page milliseconds (range sizing falls back to `docling_ms / pages`).
 - `SwedishDecompounder` output for `SearchText` vs the query side (same parts for the same word), and the P0
   comparison with Postgres `ispell` (simplification pass §3).

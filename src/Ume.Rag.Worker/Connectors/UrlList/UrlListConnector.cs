@@ -143,6 +143,6 @@ public sealed class UrlListConnector(
     private static UrlListCheckpoint Checkpoint(int position) =>
         new() { SchemaVersion = UrlListCheckpoint.CurrentSchemaVersion, Position = position };
 
-    private static UrlListSettings Settings(JsonElement settings) =>
+    internal static UrlListSettings Settings(JsonElement settings) =>
         settings.Deserialize<UrlListSettings>(JsonSerializerOptions.Web) ?? new UrlListSettings();
 }

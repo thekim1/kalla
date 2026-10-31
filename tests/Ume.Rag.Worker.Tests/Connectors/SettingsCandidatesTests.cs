@@ -11,8 +11,8 @@ namespace Ume.Rag.Worker.Tests.Connectors;
 
 /// <summary>
 /// The settings-change effects without a database (connectors design §12.3, §12.4): the tag comparison, the crawl's
-/// <c>scope-narrowed</c> and <c>identity-changed</c> candidates and the lowered depth, and which site-profile changes a
-/// crawl must re-sync for.
+/// <c>scope-narrowed</c> and <c>identity-changed</c> candidates and the lowered depth, a URL list's <c>identity-changed</c>
+/// and <c>removed-from-list</c>, and which site-profile changes a crawl must re-sync for.
 /// </summary>
 public sealed class SettingsCandidatesTests
 {
@@ -89,6 +89,24 @@ public sealed class SettingsCandidatesTests
         Candidates([stale, gone, seen], Complete, source, identityChanged: true).Select(c => c.Reason).Distinct()
             .ShouldBe([DeletionReasons.IdentityChanged]);
         Candidates([stale, gone, seen], Partial, source).ShouldBeEmpty("only a complete traversal knows what it did not find");
+    }
+
+    [Fact]
+    public void A_url_list_identity_the_rules_no_longer_produce_or_an_identity_change_is_identity_changed_else_removed_from_list()
+    {
+        var options = new CanonicalizerOptions { IgnoreQueryParams = ["lang"] };
+        var stale = Doc("https://www.umea.se/sida?lang=sv", reached: false);
+        var dropped = Doc("https://www.umea.se/borta", reached: false);
+        var listed = Doc("https://www.umea.se/sida", reached: true);
+        var held = Doc("https://www.umea.se/spärrad", reached: false) with { HeldAt = Now, HeldBy = "admin" };
+        var identities = new HashSet<string>(StringComparer.Ordinal) { listed.CanonicalIdentity };
+
+        SettingsCandidates.UrlList([stale, dropped, listed, held], identities, options, identityChanged: false).ShouldBe(
+            [new DeletionCandidate(stale.Id, DeletionReasons.IdentityChanged), new DeletionCandidate(dropped.Id, DeletionReasons.RemovedFromList)],
+            ignoreOrder: true);
+        SettingsCandidates.UrlList([stale, dropped, listed, held], identities, options, identityChanged: true).ShouldBe(
+            [new DeletionCandidate(stale.Id, DeletionReasons.IdentityChanged), new DeletionCandidate(dropped.Id, DeletionReasons.IdentityChanged)],
+            ignoreOrder: true);
     }
 
     [Fact]

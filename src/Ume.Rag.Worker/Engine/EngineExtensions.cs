@@ -93,6 +93,7 @@ public static class EngineExtensions
             sp.GetRequiredService<EngineSettings>(), sp.GetService<IParserConverter>(), sp.GetService<IParserBuild>(),
             sp.GetRequiredService<ParseRuleCatalog>()));
         services.TryAddSingleton<ChunkSetSwap>();
+        services.TryAddSingleton<ScanWait>();
         services.TryAddSingleton<DocumentIngest>();
         services.TryAddSingleton<UrlListSource>();
         services.TryAddSingleton<UploadSource>();

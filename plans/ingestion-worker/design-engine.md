@@ -94,7 +94,12 @@ deduplicated by `DedupKey`: as built in P1a item 9 (PR #121, 2026-10-31) always 
 serves each stage that already has an output under its key from the cache (§8), so the work starts in effect at the
 first stage without one. If a set with the wanted key
 already exists (kept 14 days for rollback, §12.3) it is only swapped back; if the current set differs only by label
-(the plan found no stage affected, or a noise-only change), it is **re-keyed** in one row (§14).
+(the plan found no stage affected, or a noise-only change), it is **re-keyed** in one row (§14). As built in P1a
+item 9 (PR #138, 2026-10-31): one decision (`Reconciler.ReconcileAsync`) computes the wanted key from the published
+version, the host's applied site-profile version, the embedding profile and the content hash, and answers `Current`,
+`SwapBack` (a kept `superseded` set has the key) or `Reprocess`; the fetch path, the `reprocess` run and the drift sweep
+all use it. The fetch path leaves a swap-back to its `embed` continuation, because the fetch job and its frontier row
+complete in one commit.
 
 Callers: the fetch path after new content (6b), a published pipeline version (`reprocess` run), a new site-profile
 version for a host (6b), a cleared PII flag, a collection made `public` (§15), and the **nightly drift sweep** (01:30,
@@ -106,8 +111,10 @@ documents stuck "Queuing", `../../platforms/dify.md:265`).
 As built in P1a item 9 (PR #121, 2026-10-31) and P1b item 6 (PR #131): the sweep's work runs as `reprocess` runs with
 `Trigger = schedule`, one per source per batch, because every job needs a run id. It skips sources with a running
 `sync` run and documents whose `ParseOutcome` is terminal. Pending name checks are settled in place
-(`SweepPendingAsync`) and not counted in `rag.reconcile.drift`. The sweep swaps a kept set back through a `parse` job
-served from the caches; only a `reprocess` run swaps back directly (§12.3).
+(`SweepPendingAsync`) and not counted in `rag.reconcile.drift`. As built in PR #138 (2026-10-31), the sweep swaps a
+kept set with the wanted key back directly, each swap-back in its own short transaction (`DocumentIngest.SwapBackAsync`),
+with the source's run opened in the batch transaction (`RunItems` has no FK to `Runs`, so the finalizer sees the run
+only together with its items); `rag.reconcile.drift` counts enqueued plus swapped-back documents.
 
 ## 3. Definition format
 
@@ -174,7 +181,8 @@ As built in P1a item 4 (PR #78, 2026-10-31):
 ```
 settingsHash(s) = SHA-256(canonical(settings of stage s))         RFC 8785 canonical JSON of the template parameters
                                                                    tagged for s, plus inputs the stage reads (parse
-                                                                   rule id@version, site-profile version for HTML)
+                                                                   rule id@version, site-profile version for HTML,
+                                                                   a forced reprocess's bypass salt, §8)
 key(s)          = SHA-256(inputHash ‖ s ‖ stageVersion(s) ‖ settingsHash(s))
 inputHash       = OutputHash of the previous stage's output; for detect and parse the raw content hash
 key(parse)      = SHA-256(contentHash ‖ "parser" ‖ parserBuild ‖ parserSettingsHash)     parser-bound documents
@@ -188,8 +196,9 @@ concatenate alike; `stageVersion` is an int32, big-endian. The canonical setting
 `id@version`, `siteProfileVersion` for HTML). Canonical JSON is the project's own RFC 8785 implementation
 (`CanonicalJson`). As built in P1a item 9 (PR #108, 2026-10-31), `inputs` also holds `metadata` for `chunk` (the
 `OutputHash` of the metadata input: media type, URL, display name, title, dates), `collectionLevel` for `personal-data`, and for
-HTML `parse` the `siteProfileVersion` (the profile version id, or `preset`). For parser-bound documents the `parse`
-stage version is one of the parser-key settings (in `parserSettingsHash`), because `ParserKey` has no version field
+HTML `parse` the `siteProfileVersion` (the profile version id, or `preset`). As built in PR #140 (2026-10-31), a forced
+reprocess adds `bypass` = the execution id to every cached stage at or after its `fromStage`, parser-bound `parse`
+included (§8). For parser-bound documents the `parse` stage version is one of the parser-key settings (in `parserSettingsHash`), because `ParserKey` has no version field
 (P1a item 9, PR #121, 2026-10-31).
 
 Keys are per stage only; the chain is linear, so a changed parameter changes the keys of its stage and every stage
@@ -357,8 +366,10 @@ output.
 ### 7.5 Execution id, supersession, cancellation
 
 - `Documents.CurrentExecutionId` is set when the document's content changes, or by a `reprocess` with `force` (cache
-  bypass from a stage; not built in P1a, §8), or by `reprocess-document` (§9.1). It is **not** changed by a new pipeline version or site-profile version: those only add work
-  through `EnsureCurrent`.
+  bypass from a stage, §8), or by `reprocess-document` (§9.1). It is **not** changed by a new pipeline version or site-profile version: those only add work
+  through `EnsureCurrent`. As built in PR #140 (2026-10-31): a forced source reprocess derives each execution id
+  from (run, document), a UUID v8 of SHA-256, so a retried iteration does not supersede itself; a forced run ignores
+  the reconciliation decision (current or swap-back) and re-processes.
 - Every job of an execution carries its id. **Fence** in each committing transaction:
 
 ```sql
@@ -437,9 +448,15 @@ The response is checked before anything is stored: `x-ume-residency` within the 
   bytes and parser settings share one parse; different levels never share (blobs are encrypted per level). Worker
   stages after `parse` are cheap and run per document.
 - **Invalidation is by key**: a new stage version, changed settings or changed upstream output gives a new key; nothing
-  is deleted eagerly. Explicit bypass: a `reprocess` with `force` and `fromStage` skips lookups from that stage on (new
-  execution id). Not built in P1a (PRs #115, #121, #122, 2026-10-31): stage outputs are write-once by key, so a
-  `reprocess` with `force` is refused (`sync.unsupported`) and `reprocess-document` re-runs through the caches.
+  is deleted eagerly. Explicit bypass: a `reprocess` with `force` and `fromStage` misses the cache from that stage on
+  (new execution id). As built in P1a item 9 follow-up (PR #140, 2026-10-31) the bypass **salts keys** instead of
+  skipping lookups: every cached stage at or after `fromStage` gets the settings input `bypass` = the execution id
+  (§3.3), so its key is new and its output is stored beside the old one (write-once holds, nothing is overwritten);
+  earlier stages keep their keys, and retries and slices of the same execution reuse what it stored. A forced sync
+  `reprocess` defaults `fromStage` to `parse`; `fetch` is refused (`reprocess.fetch_unsupported`); `embed` and `index`
+  bypass no output-cache stage (the EmbeddingCache is never bypassed). Open (#134): a forced run whose chunks differ
+  keeps the unchanged chunk-set key (`IX_ChunkSets_Key` is unique), so the embed job records `unchanged` and the new
+  output is not swapped in.
 - **Retention**: the worker's content retention deletes expired rows in batches of 1,000 and then their blob
   prefixes; orphan blobs older than 24 h without a row are removed by the same job.
 
@@ -487,8 +504,11 @@ records in `Ume.Rag.Pipelines/Jobs`. Only P1 kinds exist (no `site-profile` prev
 - `edit-eval-question` limits `question` to 500 characters, `expectedAnswer` to 1,000 and `expectedDocumentIds` to
   10, to keep the payload within 4 KB.
 - `reprocess-document` `fromStage` defaults to `parse`. As built in P1b item 8 (PR #115, 2026-10-31): it re-runs the
-  document from stored content under a new execution id in a `reprocess` run (run id = job id) without bypassing the
-  stage caches (§8); `fromStage: fetch` is refused (`reprocess.fetch_unsupported`).
+  document from stored content under a new execution id in a `reprocess` run (run id = job id); `fromStage: fetch` is
+  refused (`reprocess.fetch_unsupported`). Since PR #140 (2026-10-31) it always bypasses the caches from `fromStage`
+  (§8); `fromStage: embed` re-runs through the caches.
+- The `parse` payload carries `bypassFrom` (a forced reprocess's first bypassed stage), and a forced run's `sync`
+  continuations carry `force` and `fromStage` (PR #140).
 - `release-hold` clears deletion holds (`Documents.HeldAt`, 6b §13.3); releasing a PII-held set is `clear-pii-flag`
   (6c §9.5), which releases it without re-processing (PR #115).
 - `edit-site-profile` and `rollback-site-profile` carry an optional `decidedBy` (for `SiteProfileVersions.CreatedBy` /
@@ -603,6 +623,9 @@ A `BackgroundService` on every instance; the instance holding `pg_try_advisory_x
 - **Sync now**: the admin inserts a `sync` job (`Trigger = manual`, `Priority` 10); if one is already queued or
   running the admin answers "already running" with its run id (dedup `sync:{sourceId}`; a run's continuations use
   `sync:{sourceId}:{runId}`, §9.2).
+- **Settings changes** (as built in PR #141, 2026-10-31): in the same tick the scheduler enqueues a `sync` with
+  `Trigger = config-change` (dedup `sync:{sourceId}`) for each idle source whose scope or identity settings hash
+  differs from its newest `sync` run's `Runs.SettingsHashes` (6b §12.3), unless a scheduled sync was just enqueued.
 - Paused or deleted sources are skipped; `rag.scheduler.lag` (now − due) is a metric.
 - The scheduler also enqueues the nightly evaluation runs (6c §14.8) and the nightly drift sweep (§2.3).
 
@@ -762,7 +785,7 @@ superseded (§14), so the `reprocess` run finds them by key and **swaps them bac
 embedding. Older rollbacks re-run from the cached stage outputs. A site-profile rollback (one click, 6b) works the same
 way for the host's HTML documents. As built in P1b item 6 (PR #131, 2026-10-31): a swap-back without a new segment
 keeps the document's other facts from the newer version and resets only `SiteProfileVersionId` and
-`PipelineVersionId`; only a `reprocess` run swaps back directly, the drift sweep through a cached `parse` job (§2.3).
+`PipelineVersionId`. A `reprocess` run and the drift sweep swap back directly (PR #138, §2.3).
 
 ## 13. Templates
 
