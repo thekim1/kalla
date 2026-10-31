@@ -46,7 +46,7 @@ while [ $# -gt 0 ]; do
     *) [ -z "$bundle" ] || usage 1; bundle="$1"; shift;;
   esac
 done
-[ -n "$bundle" ] && [ -r "$bundle" ] || usage 1
+if [ -z "$bundle" ] || [ ! -r "$bundle" ]; then usage 1; fi
 for tool in docker curl jq openssl tar; do command -v "$tool" >/dev/null || { echo "error: $tool is required" >&2; exit 1; }; done
 
 # The bundle's pins are under test: an inherited *_IMAGE variable would override them.
