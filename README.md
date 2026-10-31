@@ -76,6 +76,10 @@ against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 
 `parser.yml` runs the `parser`, `parser-image` and `contract` jobs only when the parser or its contract changed.
 `entra.yml` plans the Entra registrations.
+`release.yml` builds, pins and publishes a release on a `v*.*.*` tag (dispatch: a dry run that pushes nothing).
+`perf.yml` runs the R1 release test (weekly, dispatch; a dry run on FakeGateway on GitHub's runner, the real run on the
+test host). `evaluation.yml` runs the nightly evaluation on the test deployment. `e2e.yml` runs the browser tests
+(nightly, and before a release).
 
 ## Packages
 
