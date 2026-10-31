@@ -1,12 +1,10 @@
 using Microsoft.Extensions.Options;
-using Npgsql;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Processing;
-using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Embedding;
@@ -210,7 +208,7 @@ public sealed partial class EmbedJobHandler(
     EmbeddingCanary canary,
     IEmbeddingProfileStore profiles,
     IChunkSetStore chunkSets,
-    PiiLifecycle pii,
+    ChunkSetSwap swaps,
     EngineSettings settings,
     DocumentIngest ingest,
     IJobQueue queue,
@@ -221,8 +219,6 @@ public sealed partial class EmbedJobHandler(
     ILogger<EmbedJobHandler> logger) : IJobHandler
 {
     public const string Republished = "pipeline.republished";
-
-    private const string PublishedSql = """SELECT "PublishedVersionId" FROM config."Pipelines" WHERE "Id" = $1""";
 
     public string JobClass => JobClasses.Embed;
 
@@ -290,7 +286,7 @@ public sealed partial class EmbedJobHandler(
         {
             // Rollback within 14 days (engine design §12.3, §14 rule 1): swapped back, nothing written.
             var stored = await chunkSets.GetAsync(existing.Id, cancellationToken) ?? throw new InvalidOperationException("The set vanished.");
-            return await SwapAsync(source, payload, job, document, contentHash, stored, live, "swapped-back", cancellationToken);
+            return await SwapAsync(source, payload, job, document, contentHash, stored, live, swappedBack: true, cancellationToken);
         }
 
         if (existing is { State: ChunkSetStates.Writing })
@@ -329,55 +325,19 @@ public sealed partial class EmbedJobHandler(
         var rows = draft.Chunks.Select((c, i) => new ChunkRecord(Guid.CreateVersion7(), set.Id, document.Id, source.CollectionId, document.Classification, c.Ordinal, c,
             profile.Id, embedded.Vectors[i]) { DeletedAt = now }).ToList();
         await index.WriteInvisibleAsync(set, rows, cancellationToken);
-        return await SwapAsync(source, payload, job, document, contentHash, set, live, "new", cancellationToken);
+        return await SwapAsync(source, payload, job, document, contentHash, set, live, swappedBack: false, cancellationToken);
     }
 
     private async Task<JobResult> SwapAsync(SourceContext source, EmbedPayload payload, LeasedJob job, DocumentRow document, byte[] contentHash,
-        ChunkSetRecord set, ChunkSetRow? live, string kind, CancellationToken cancellationToken)
-    {
-        config.EnsureConfirmed();
-        var values = await settings.GetAsync(cancellationToken);
-        var clearance = await chunkSets.GetClearanceAsync(document.Id, cancellationToken);
-        var state = PiiLifecycle.StateFor(set, source.CollectionClassification, clearance, values.PiiFlagRules);
-        var refusal = Republished;
-        await using (var commit = await EngineCommit.BeginAsync(database, cancellationToken))
+        ChunkSetRecord set, ChunkSetRow? live, bool swappedBack, CancellationToken cancellationToken) =>
+        await swaps.SwapAsync(new SwapRequest(source, document, payload.ExecutionId, contentHash, payload.PipelineVersionId, payload.RunId, set, live,
+            swappedBack, job), cancellationToken) switch
         {
-            if (!await commit.FenceAsync(document.Id, document.Classification, payload.ExecutionId, contentHash, cancellationToken))
-            {
-                LogFenced(logger, document.Id, set.Id);
-                refusal = "execution.superseded";
-            }
-            else if (!await IsPublishedAsync(commit, source.PipelineId, payload.PipelineVersionId, cancellationToken))
-            {
-                // The set stays writing for the orphan sweep; the publish's reprocess brings the document up to date.
-                LogRepublished(logger, document.Id, payload.PipelineVersionId);
-            }
-            else
-            {
-                await IndexWriter.SwapInAsync(commit.Connection, commit.Transaction, document.Id, set.Id, state, payload.PipelineVersionId, time.GetUtcNow(),
-                    cancellationToken);
-                var outcome = live is null ? Outcome.Added : Outcome.Updated;
-                await commit.AddRunItemAsync(new RunItemRow(payload.RunId, document.Classification, document.Id, document.CanonicalIdentity, outcome)
-                {
-                    Reason = state == ChunkSetStates.Held ? (set.PiiFlagged ? "pii.flagged" : "pii.ner_pending") : null,
-                    Strategy = document.ParseStrategy,
-                    PipelineVersionId = payload.PipelineVersionId,
-                    ExecutionId = payload.ExecutionId,
-                }, cancellationToken);
-                if (!await commit.CompleteJobAsync(queue, job.Id, identity.InstanceId, null, cancellationToken))
-                {
-                    return new JobResult.Success();
-                }
-
-                await commit.CommitAsync(cancellationToken);
-                LogSwapped(logger, document.Id, set.Id, kind, state);
-                pii.RaiseIfFlagged(set, new PiiSwapContext(source.CollectionClassification, source.SourceId, payload.RunId, values.PiiFlagRules), clearance);
-                return new JobResult.Committed();
-            }
-        }
-
-        return await Terminal(source, payload, job, document, Outcome.Superseded, refusal, cancellationToken);
-    }
+            SwapResult.Swapped => new JobResult.Committed(),
+            SwapResult.LeaseLost => new JobResult.Success(),
+            SwapResult.Fenced => await Terminal(source, payload, job, document, Outcome.Superseded, "execution.superseded", cancellationToken),
+            _ => await Terminal(source, payload, job, document, Outcome.Superseded, Republished, cancellationToken),
+        };
 
     private async Task<JobResult> ReKeyAsync(SourceContext source, EmbedPayload payload, LeasedJob job, DocumentRow document, byte[] contentHash, ChunkSetRow live,
         ChunkSetKey key, CancellationToken cancellationToken)
@@ -385,7 +345,7 @@ public sealed partial class EmbedJobHandler(
         await using (var commit = await EngineCommit.BeginAsync(database, cancellationToken))
         {
             if (await commit.FenceAsync(document.Id, document.Classification, payload.ExecutionId, contentHash, cancellationToken) &&
-                await IsPublishedAsync(commit, source.PipelineId, payload.PipelineVersionId, cancellationToken))
+                await ChunkSetSwap.IsPublishedAsync(commit, source.PipelineId, payload.PipelineVersionId, cancellationToken))
             {
                 await IndexWriter.ReKeyAsync(commit.Connection, commit.Transaction, live.Id, key, cancellationToken);
                 await commit.AddRunItemAsync(new RunItemRow(payload.RunId, document.Classification, document.Id, document.CanonicalIdentity, Outcome.Unchanged)
@@ -409,22 +369,10 @@ public sealed partial class EmbedJobHandler(
         return await Terminal(source, payload, job, document, Outcome.Superseded, Republished, cancellationToken);
     }
 
-    private static async Task<bool> IsPublishedAsync(EngineCommit commit, Guid pipelineId, Guid versionId, CancellationToken cancellationToken)
-    {
-        await using var command = new NpgsqlCommand(PublishedSql, commit.Connection, commit.Transaction) { Parameters = { Db.P(pipelineId) } };
-        return await command.ExecuteScalarAsync(cancellationToken) is Guid published && published == versionId;
-    }
-
     private Task<JobResult> Terminal(SourceContext source, EmbedPayload payload, LeasedJob job, DocumentRow document, Outcome outcome, string? reason,
         CancellationToken cancellationToken) =>
         ingest.TerminalAsync(source, payload.RunId, job, document, document.CanonicalIdentity, outcome, reason, payload.PipelineVersionId, null, cancellationToken);
 
     [LoggerMessage(LogLevel.Information, "Document {DocumentId}: set {ChunkSetId} {Kind}, now {State}")]
     private static partial void LogSwapped(ILogger logger, Guid documentId, Guid chunkSetId, string kind, string state);
-
-    [LoggerMessage(LogLevel.Information, "Document {DocumentId}: the fence refused set {ChunkSetId}; it stays invisible for the orphan sweep")]
-    private static partial void LogFenced(ILogger logger, Guid documentId, Guid chunkSetId);
-
-    [LoggerMessage(LogLevel.Information, "Document {DocumentId}: pipeline version {PipelineVersionId} is no longer published; the set is not swapped")]
-    private static partial void LogRepublished(ILogger logger, Guid documentId, Guid pipelineVersionId);
 }

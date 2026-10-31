@@ -48,9 +48,9 @@ Refs: [engine §11](../ingestion-worker/design-engine.md), [admin §4.7, §6.4](
 
 ### 6. Publish, re-process, rollback
 Refs: [engine §12, §14](../ingestion-worker/design-engine.md)
-- [ ] `publish-plan` (every live document, forecast); `reprocess` with per-document swap
-- [ ] Previous sets kept 14 days; rollback swaps back; site-profile versions via the same logic
-- [ ] **Done:** engine §19 publish and rollback tests green
+- [x] `publish-plan` (every live document, forecast); `reprocess` with per-document swap (PR: a/p1b-6-publish)
+- [x] Previous sets kept 14 days; rollback swaps back; site-profile versions via the same logic (PR: a/p1b-6-publish)
+- [x] **Done:** engine §19 publish and rollback tests green (PR: a/p1b-6-publish)
 
 ### 7. Evaluation harness
 Refs: [processing §13, §14](../ingestion-worker/design-processing.md), [ingestion plan §7](../ingestion-worker/plan.md)
