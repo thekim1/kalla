@@ -8,7 +8,7 @@ step whose hand-off has landed; if blocked, take the next item and come back. Ti
 work and put the PR number after it (`[x] … (#12)`). Record every `to-verify` row in `results-a.md` before ticking it here.
 
 ## Waiting on (tick when it lands)
-- [ ] **J1** `v0.1.0` tagged, P1 ownership rules and these briefs merged
+- [x] **J1** `v0.1.0` tagged, P1 ownership rules and these briefs merged (2026-10-31, `v0.1.0`)
 - [ ] **J2** B's schema part 1 merged (needed for item 7)
 - [ ] **J5** B's `RetrievalEngine` merged (needed for item 9)
 - [ ] **J7** B's admin set-up endpoints in Scalar (needed for item 12)
@@ -25,11 +25,11 @@ Refs: [connectors §5.4, §8.1](../ingestion-worker/design-connectors.md), [weak
 
 ## 2. Worker contracts (#4)
 Refs: [engine §3, §4, §9.1, §13.1](../ingestion-worker/design-engine.md), [connectors §2.1, §12.3](../ingestion-worker/design-connectors.md), [admin §4.7](../admin/design.md)
-- [x] `contracts/sources/v1/{url-list,crawl,upload}.schema.json` with `x-effect`
-- [x] `contracts/pipeline/v2/definition.schema.json`; templates `website`, `url-list`, `files` in `src/Ume.Rag.MigrationService/Templates/`
-- [x] `contracts/jobs/v1/`: payloads and results of `sync`, `fetch`, `parse`, `embed`, `command` (P1a kinds), `eval` `on-demand`
-- [x] `contracts/site-profiles/v1/` profile schema
-- [x] JSON Schema 2020-12 validator chosen (to-verify #17); `Ume.Rag.Pipelines` validator and stage keys with tests
+- [x] `contracts/sources/v1/{url-list,crawl,upload}.schema.json` with `x-effect` (#78)
+- [x] `contracts/pipeline/v2/definition.schema.json`; templates `website`, `url-list`, `files` in `src/Ume.Rag.MigrationService/Templates/` (#78)
+- [x] `contracts/jobs/v1/`: payloads and results of `sync`, `fetch`, `parse`, `embed`, `command` (P1a kinds), `eval` `on-demand` (#78)
+- [x] `contracts/site-profiles/v1/` profile schema (#78)
+- [x] JSON Schema 2020-12 validator chosen (to-verify #17); `Ume.Rag.Pipelines` validator and stage keys with tests (#78)
 - [ ] **Hand-off J3:** issue to stream B
 
 ## 3. Parser P1 formats (#5)
