@@ -125,7 +125,8 @@ public sealed class DriftSweepTests(RagDatabaseFixture database, FakeGatewayFact
         var url = site.Url("/p/a");
         var seed = await EngineKit.SeedUrlListAsync(database, [url]);
         await EngineKit.PauseOtherSourcesAsync(database, seed);
-        var profile = await ApplySiteProfileAsync(seed.Classification, $"{url.IdnHost}:{url.Port}");
+        // The profile's key is the host without a port (SiteProfileHost), the only form edit-site-profile writes.
+        var profile = await ApplySiteProfileAsync(seed.Classification, url.IdnHost);
         try
         {
             await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
@@ -143,6 +144,8 @@ public sealed class DriftSweepTests(RagDatabaseFixture database, FakeGatewayFact
         finally
         {
             await EngineKit.PauseAsync(database, seed);
+            await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM content."SiteProfiles" WHERE "Classification" = $1 AND "Host" = $2""",
+                seed.Classification, url.IdnHost);
         }
     }
 

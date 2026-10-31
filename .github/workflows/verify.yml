@@ -234,6 +234,9 @@ jobs:
           grep -q 'never holds the External key' <<< "$out"
           docker compose -f "$d/deploy/compose.openwebui.yaml" --env-file "$d/deploy/.env" config --quiet
           docker compose --env-file "$d/deploy/.env" config --quiet
+      - name: Pilot caps, Open WebUI key restriction and the feedback service account
+        # Offline: docker compose config over the base files, the 24 GB overlay and the Open WebUI file (P1b item 17).
+        run: bash deploy/tests/pilot-stack.sh
       - name: Deployment scripts pass shellcheck
         run: shellcheck deploy/*.sh deploy/postgres/*.sh deploy/host/*.sh deploy/tests/*.sh
       - name: Host units pass systemd-analyze verify

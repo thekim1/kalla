@@ -6,6 +6,7 @@ using Ume.Rag.Pipelines.Definitions;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.Processing;
+using Ume.Rag.Worker.Connectors.Urls;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Chunking;
@@ -39,6 +40,9 @@ public sealed record PreviewContent(int Index, string Level, byte[] ContentHash,
 
     /// <summary>An existing document (its PII clearance applies to the state shown).</summary>
     public Guid? DocumentId { get; init; }
+
+    /// <summary>The document's source, or the preview's; null for a URL previewed against the collection alone.</summary>
+    public Guid? SourceId { get; init; }
 }
 
 /// <summary>The personal-data output of a preview: the counts, the rules that fired, the state the set would get and, with <c>piiSpans</c>, where each match is.</summary>
@@ -141,7 +145,8 @@ public sealed class PreviewSegment(
     EmbeddingConcurrency concurrency,
     TimeProvider time,
     IParserConverter? converter = null,
-    IParserBuild? parserBuild = null)
+    IParserBuild? parserBuild = null,
+    ParseRuleCatalog? parseRules = null)
 {
     /// <summary>The pages a preview parses of a paged document (engine design §11).</summary>
     public const int MaxPages = 50;
@@ -209,7 +214,10 @@ public sealed class PreviewSegment(
                 : throw new StageFatalException(RunItemOutcome.Failed, "parser.not_configured");
         }
 
-        var (parseKey, _) = ProcessingSegment.ParseKey(pipeline, content.ContentHash, detected.Route, profile?.Id, parserBuildHash);
+        var rules = detected.Route == ParseRoute.Parser && parseRules is not null
+            ? await ParseRuleCandidatesAsync(parseRules, run, content, detected.MediaType, cancellationToken)
+            : [];
+        var (parseKey, _) = ProcessingSegment.ParseKey(pipeline, content.ContentHash, detected.Route, profile?.Id, parserBuildHash, AdminParseRuleSet.Key(rules));
         var limited = detected.Inspect is { Pages.Count: > MaxPages } inspect
             ? detected with { Inspect = inspect with { Pages = [.. inspect.Pages.OrderBy(p => p.Page).Take(MaxPages)] } }
             : detected;
@@ -222,7 +230,7 @@ public sealed class PreviewSegment(
         }
         else
         {
-            parsed = await ParseAsync(await RawAsync(), limited, profile?.Profile, pipeline, cancellationToken);
+            parsed = await ParseAsync(await RawAsync(), limited, profile?.Profile, pipeline, rules, cancellationToken);
             parsedHash = await store.PutAsync(StageNames.Parse, parseKey, parsed, cancellationToken);
         }
 
@@ -359,7 +367,7 @@ public sealed class PreviewSegment(
     private async Task<PreviewSiteProfile> BeforeAfterAsync(PreviewRun run, PreviewContent content, Uri url, ReadOnlyMemory<byte> bytes,
         (Guid Id, HtmlProfileVersion Profile)? profile, string after, CancellationToken cancellationToken)
     {
-        var host = profile?.Profile.Host ?? url.IdnHost.ToLowerInvariant();
+        var host = profile?.Profile.Host ?? SiteProfileHost.Of(url) ?? url.IdnHost;
         var defaults = html.Extract(bytes, new HtmlProfileVersion(host, 0, HtmlPresets.Generic.Profile)).Document;
         var before = await run.Store.ShowAsync(content.Index, "site-profile-before", StageNames.Parse, defaults, defaults.Blocks.Count, CutBlocks, cancellationToken);
         string? preset = null;
@@ -398,8 +406,18 @@ public sealed class PreviewSegment(
         return (value, await store.PutAsync(stage, key, value, cancellationToken), false);
     }
 
-    private async Task<ParsedDocument> ParseAsync(ReadOnlyMemory<byte> bytes, DetectResult detected, HtmlProfileVersion? profile, ResolvedPipeline pipeline,
+    /// <summary>
+    /// The document's admin-made parse-rule candidates, matched as the live segment matches them (the source's department,
+    /// or the collection's for a URL without a source), so the preview's parse key is the live one.
+    /// </summary>
+    private static Task<IReadOnlyList<ParseRule>> ParseRuleCandidatesAsync(ParseRuleCatalog catalog, PreviewRun run, PreviewContent content, string mediaType,
         CancellationToken cancellationToken) =>
+        content.SourceId is { } sourceId
+            ? catalog.CandidatesAsync(content.Level, sourceId, content.Url, mediaType, cancellationToken)
+            : catalog.CandidatesForDepartmentAsync(content.Level, run.Collection.DepartmentId, content.Url, mediaType, cancellationToken);
+
+    private async Task<ParsedDocument> ParseAsync(ReadOnlyMemory<byte> bytes, DetectResult detected, HtmlProfileVersion? profile, ResolvedPipeline pipeline,
+        IReadOnlyList<ParseRule> rules, CancellationToken cancellationToken) =>
         detected.Route switch
         {
             ParseRoute.Html => html.Extract(bytes, profile).Document,
@@ -407,7 +425,7 @@ public sealed class PreviewSegment(
             ParseRoute.Csv => CsvTableParser.Parse(bytes.Span),
             ParseRoute.Parser when converter is not null => await new ParserRoute(converter, planner, parseOptions).ParseAsync(bytes, detected,
                 new ParseParams(Param<string>(pipeline, "ocr") ?? "auto", Param<string>(pipeline, "tables") ?? "accurate"),
-                Guid.CreateVersion7().ToString("N"), cancellationToken),
+                Guid.CreateVersion7().ToString("N"), cancellationToken, rules: rules),
             ParseRoute.Parser => throw new StageFatalException(RunItemOutcome.Failed, "parser.not_configured"),
             _ => throw new StageFatalException(RunItemOutcome.Unsupported, "parser.unsupported_format"),
         };

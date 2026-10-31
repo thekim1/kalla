@@ -46,8 +46,24 @@ public sealed partial class ParseRuleCatalog(JobDatabase database, ConfigVersion
         }
 
         var department = snapshot.Rules.NeedsDepartment ? await DepartmentAsync(snapshot, sourceId, cancellationToken) : null;
+        return Candidates(snapshot, classification, department, url, mediaType);
+    }
+
+    /// <summary>
+    /// The candidates of a document that belongs to no source yet (a preview of a URL against a collection), with
+    /// <paramref name="departmentId"/> for department-scoped rules; otherwise as the overload for a source's document.
+    /// </summary>
+    public async Task<IReadOnlyList<ParseRule>> CandidatesForDepartmentAsync(string classification, Guid departmentId, string? url, string mediaType,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await SnapshotAsync(cancellationToken);
+        return snapshot.Rules.Count == 0 ? [] : Candidates(snapshot, classification, departmentId, url, mediaType);
+    }
+
+    private static IReadOnlyList<ParseRule> Candidates(Snapshot snapshot, string classification, Guid? departmentId, string? url, string mediaType)
+    {
         var uri = url is not null && Uri.TryCreate(url, UriKind.Absolute, out var parsed) ? parsed : null;
-        return snapshot.Rules.Candidates(classification, department, uri, mediaType);
+        return snapshot.Rules.Candidates(classification, departmentId, uri, mediaType);
     }
 
     private async Task<Snapshot> SnapshotAsync(CancellationToken cancellationToken)
