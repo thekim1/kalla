@@ -23,6 +23,7 @@ platforms/**                                  main
 docs/stakeholder-report.html                  main
 README.md                                     shared
 CHANGELOG.md                                  shared
+LICENSE                                       main
 *.md                                          main
 global.json                                   main
 Directory.Build.*                             main
