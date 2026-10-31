@@ -1,0 +1,109 @@
+{
+  "contract": "parser/v1",
+  "request_id": "case-frames-tiff-range",
+  "status": "success",
+  "input": {
+    "format": "tiff",
+    "media_type_sniffed": "image/tiff",
+    "sha256": "1ad38774f15fbeb04fdda5a4004f1d9447e1b781e37477385aeaa011f3f8fb4c",
+    "bytes": 12160,
+    "page_count": 3,
+    "pages_requested": {
+      "from": 2,
+      "to": 3
+    },
+    "pages_completed": {
+      "from": 2,
+      "to": 3
+    },
+    "pipeline": "docling"
+  },
+  "pages": [
+    {
+      "page": 2,
+      "label": null,
+      "width": 420.48,
+      "height": 90.24,
+      "signals": {
+        "chars": 42,
+        "furniture_chars": 0,
+        "garbled_score": 0.0,
+        "text_layer_chars": null,
+        "image_coverage": 1.0,
+        "ocr_applied": "full-page",
+        "ocr_confidence": {
+          "mean": 0.951,
+          "p10": 0.855
+        },
+        "table_count": 0,
+        "table_area_ratio": 0.0,
+        "picture_area_ratio": 0.0,
+        "empty": false
+      }
+    },
+    {
+      "page": 3,
+      "label": null,
+      "width": 420.48,
+      "height": 90.24,
+      "signals": {
+        "chars": 52,
+        "furniture_chars": 0,
+        "garbled_score": 0.0,
+        "text_layer_chars": null,
+        "image_coverage": 1.0,
+        "ocr_applied": "full-page",
+        "ocr_confidence": {
+          "mean": 0.899,
+          "p10": 0.527
+        },
+        "table_count": 0,
+        "table_area_ratio": 0.0,
+        "picture_area_ratio": 0.0,
+        "empty": false
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": "b0",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 2,
+      "page_end": 2,
+      "bbox": [
+        36.7,
+        37.0,
+        267.0,
+        52.3
+      ],
+      "layer": "body",
+      "md": "Sida två: Sökanden har yttrat sig över förslaget.",
+      "ref": "#/texts/0",
+      "table": null
+    },
+    {
+      "id": "b1",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 3,
+      "page_end": 3,
+      "bbox": [
+        32.7,
+        37.3,
+        324.0,
+        54.3
+      ],
+      "layer": "body",
+      "md": "\"Sida tre: Nämnden beslutar att ge positivt förhandsbesked.",
+      "ref": "#/texts/1",
+      "table": null
+    }
+  ],
+  "tables": [],
+  "pictures": [],
+  "warnings": [],
+  "markdown": null
+}

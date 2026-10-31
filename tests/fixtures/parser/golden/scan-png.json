@@ -1,0 +1,87 @@
+{
+  "contract": "parser/v1",
+  "request_id": "case-scan-png",
+  "status": "success",
+  "input": {
+    "format": "png",
+    "media_type_sniffed": "image/png",
+    "sha256": "da8f9fc19169a86c684d43e4b2920d8130e793b5e70825a6dfb8962767163fb1",
+    "bytes": 15917,
+    "page_count": 1,
+    "pages_requested": {
+      "from": 1,
+      "to": 1
+    },
+    "pages_completed": {
+      "from": 1,
+      "to": 1
+    },
+    "pipeline": "docling"
+  },
+  "pages": [
+    {
+      "page": 1,
+      "label": null,
+      "width": 420.45,
+      "height": 200.14,
+      "signals": {
+        "chars": 169,
+        "furniture_chars": 0,
+        "garbled_score": 0.0,
+        "text_layer_chars": null,
+        "image_coverage": 1.0,
+        "ocr_applied": "full-page",
+        "ocr_confidence": {
+          "mean": 0.946,
+          "p10": 0.893
+        },
+        "table_count": 0,
+        "table_area_ratio": 0.0,
+        "picture_area_ratio": 0.0,
+        "empty": false
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": "b0",
+      "kind": "heading",
+      "level": 1,
+      "level_source": "layout",
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        37.0,
+        35.0,
+        225.7,
+        53.3
+      ],
+      "layer": "body",
+      "md": "# Kungörelse om granskning",
+      "ref": "#/texts/0",
+      "table": null
+    },
+    {
+      "id": "b1",
+      "kind": "paragraph",
+      "level": null,
+      "level_source": null,
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        36.3,
+        70.3,
+        318.3,
+        123.3
+      ],
+      "layer": "body",
+      "md": "Byggnadsnämnden i Umeå kommun ställer ut förslaget till detaljplan för kvarteret Björken på Ålidhem för granskning: Synpunkter lämnas skriftligen senast den 3 mars 2027. .",
+      "ref": "#/texts/1",
+      "table": null
+    }
+  ],
+  "tables": [],
+  "pictures": [],
+  "warnings": [],
+  "markdown": null
+}

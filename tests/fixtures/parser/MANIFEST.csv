@@ -1,7 +1,29 @@
 path,origin,licence,personal_data
-text-layer.pdf,"synthetic: src/parser/scripts/make_fixtures.py (invented Swedish text, Helvetica, two pages)",CC0-1.0,no
+text-layer.pdf,"synthetic: src/parser/scripts/make_fixtures.py (invented Swedish text, Helvetica, three pages)",CC0-1.0,no
 scanned.pdf,"synthetic: src/parser/scripts/make_fixtures.py (invented Swedish text rendered to a 200 dpi JPEG, no text layer)",CC0-1.0,no
 corrupt.pdf,"synthetic: src/parser/scripts/make_fixtures.py (PDF header + seeded random bytes)",CC0-1.0,no
 legacy.doc,"synthetic: src/parser/scripts/make_fixtures.py (OLE signature + zero header)",CC0-1.0,no
 cases.json,"hand-written: the requests of Ume.Rag.ContractTests and scripts/update_goldens.py",CC0-1.0,no
 golden/*.json,"generated: src/parser/scripts/update_goldens.py against the parser image",CC0-1.0,no
+legacy.rtf,"synthetic: src/parser/scripts/make_fixtures.py (a two-line RTF document; P2, refused as format_deferred)",CC0-1.0,no
+legacy.msg,"synthetic: src/parser/scripts/make_fixtures.py (OLE header and the stream names of an Outlook message; refused as format_deferred)",CC0-1.0,no
+message.eml,"synthetic: src/parser/scripts/make_fixtures.py (an RFC 5322 message with example.org addresses; refused as format_deferred)",CC0-1.0,no
+encrypted.docx,"synthetic: src/parser/scripts/make_fixtures.py (OLE header with EncryptionInfo and EncryptedPackage stream names: a password-protected OOXML package)",CC0-1.0,no
+text.docx,"synthetic: src/parser/scripts/make_fixtures.py (python-docx: title, heading styles, paragraphs, bullet list, table; re-zipped with fixed dates)",CC0-1.0,no
+slides.pptx,"synthetic: src/parser/scripts/make_fixtures.py (python-pptx: two slides, speaker notes on the second; re-zipped with fixed dates)",CC0-1.0,no
+sheets.xlsx,"synthetic: src/parser/scripts/make_fixtures.py (openpyxl: a fee sheet with a cached formula total and a hidden sheet; re-zipped with fixed dates)",CC0-1.0,no
+text.odt,"synthetic: src/parser/scripts/make_fixtures.py (odfdo: the DOCX content as OpenDocument text)",CC0-1.0,no
+sheets.ods,"synthetic: src/parser/scripts/make_fixtures.py (odfdo: the fee sheet as OpenDocument spreadsheet)",CC0-1.0,no
+slides.odp,"synthetic: src/parser/scripts/make_fixtures.py (odfdo: the two slides as OpenDocument presentation)",CC0-1.0,no
+scan.png,"synthetic: src/parser/scripts/make_fixtures.py (invented Swedish notice rendered to a grey 150 dpi PNG with seeded noise)",CC0-1.0,no
+scan.jpg,"synthetic: src/parser/scripts/make_fixtures.py (the same notice as a JPEG without resolution)",CC0-1.0,no
+frames.tiff,"synthetic: src/parser/scripts/make_fixtures.py (three 150 dpi frames, one sentence each)",CC0-1.0,no
+macro.docm,"synthetic: src/parser/scripts/make_fixtures.py (text.docx with a vbaProject.bin part; refused as macro_enabled)",CC0-1.0,no
+bomb.docx,"synthetic: src/parser/scripts/make_fixtures.py (text.docx with a 4 MB part of zeros, ratio over 1000:1; refused by the bomb pre-check)",CC0-1.0,no
+xxe.docx,"synthetic: src/parser/scripts/make_fixtures.py (text.docx whose document part declares an external entity to /etc/passwd)",CC0-1.0,no
+xxe.odt,"synthetic: src/parser/scripts/make_fixtures.py (text.odt whose content part declares an external entity to /etc/passwd)",CC0-1.0,no
+archive.zip,"synthetic: src/parser/scripts/make_fixtures.py (a plain zip of one rendered JPEG; refused as archive)",CC0-1.0,no
+huge.png,"synthetic: src/parser/scripts/make_fixtures.py (a PNG header claiming 60000 x 60000 pixels; refused by the pixel limit)",CC0-1.0,no
+javascript.pdf,"synthetic: src/parser/scripts/make_fixtures.py (hand-written PDF: one text page and a JavaScript /OpenAction)",CC0-1.0,no
+attachment.pdf,"synthetic: src/parser/scripts/make_fixtures.py (hand-written PDF: one text page and an embedded text file)",CC0-1.0,no
+garbled/vectors.json,"hand-written: garble detector test vectors (invented text, mojibake and shifted-encoding samples)",CC0-1.0,no

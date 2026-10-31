@@ -5,10 +5,13 @@ an error over its pipe as `ParserError.to_wire()`; the API process turns it back
 with `ErrorResponse`.
 """
 
-from dataclasses import dataclass
-from typing import Any
+from __future__ import annotations
 
-from ume_parser.models import ErrorCode, Retry, UnsupportedReason
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # models imports limits, which raises ParserError
+    from ume_parser.models import ErrorCode, Retry, UnsupportedReason
 
 
 @dataclass(frozen=True)
@@ -34,7 +37,7 @@ SPECS: dict[ErrorCode, Spec] = {
     "worker_crashed": Spec(500, "smaller_range", "The conversion process stopped unexpectedly."),
     "resource_limit": Spec(507, "smaller_range", "The conversion used more memory than allowed."),
     "busy": Spec(503, "later", "Every conversion slot is busy."),
-    "not_ready": Spec(503, "later", "The parser is starting and has no warm conversion slot."),
+    "not_ready": Spec(503, "later", "The parser has no warm process for this request yet."),
     "not_implemented": Spec(501, "none", "This endpoint is not available in this build."),
 }
 
@@ -61,5 +64,5 @@ class ParserError(Exception):
         return {"code": self.code, "retry": self.retry, "limit": self.limit, "reason": self.reason}
 
     @classmethod
-    def from_wire(cls, wire: dict[str, Any]) -> "ParserError":
+    def from_wire(cls, wire: dict[str, Any]) -> ParserError:
         return cls(wire["code"], retry=wire["retry"], limit=wire["limit"], reason=wire["reason"])

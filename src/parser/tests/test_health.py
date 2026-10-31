@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from ume_parser import info
 from ume_parser.app import create_app
+from ume_parser.settings import NerSettings
 
 
 class FakeSupervisor:
@@ -15,6 +16,8 @@ class FakeSupervisor:
         self.ready = False
         self.convert_slots = 1
         self.slots_ready = 0
+        self.inspect_slots = 1
+        self.ner_ready = False
 
     async def start(self) -> None:
         self.live = True
@@ -53,7 +56,7 @@ def test_info_hashes_everything_but_capacity(settings):
         after = client.get("/v1/info").json()
 
     assert before["build_hash"] == after["build_hash"]
-    assert after["capacity"] == {"convert_slots": 1, "slots_ready": 1, "inspect_slots": 0, "ner_ready": False}
+    assert after["capacity"] == {"convert_slots": 1, "slots_ready": 1, "inspect_slots": 1, "ner_ready": False}
 
     static = {k: v for k, v in after.items() if k not in ("build_hash", "capacity")}
     canonical = json.dumps(static, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -61,6 +64,18 @@ def test_info_hashes_everything_but_capacity(settings):
     assert after["parser"]["revision"] == settings.revision
     assert {m["name"] for m in after["models"]} == {"layout", "tableformer", "ner"}
     assert after["pdfium"]["flags"] == []
+    assert after["formats"]["supported"] == ["pdf", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jpeg", "png", "tiff"]
+    assert after["formats"]["deferred"] == ["doc", "xls", "ppt", "rtf", "eml", "msg"]
+    assert after["ner"]["repository"] == "KBLab/bert-base-swedish-cased-ner"
+    assert (after["ner"]["person_labels"], after["ner"]["quantised"]) == (["PER", "PRS"], True)
+    assert after["limits"]["max_zip_ratio"] == 200
+
+
+def test_build_hash_covers_the_ner_settings(settings):
+    assert info.build_hash(info.collect(settings, NerSettings())) != info.build_hash(
+        info.collect(settings, NerSettings(quantize=False))
+    )
+    assert info.collect(settings, NerSettings(enabled=False)).ner is None
 
 
 def test_build_hash_changes_with_the_revision(settings):

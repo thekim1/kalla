@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/parser/v1/ner-request.schema.json",
+  "$defs": {
+    "NerText": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "description": "NFC; offsets in the result are code points",
+          "maxLength": 4000,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "NerText",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`POST /v1/ner`: text units of one chunk set. `person_ambiguous` (mixed labels such as `ORG/PRS`) is returned only\nwhen asked for.",
+  "properties": {
+    "request_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "texts": {
+      "items": {
+        "$ref": "#/$defs/NerText"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Texts",
+      "type": "array"
+    },
+    "labels": {
+      "default": [
+        "person"
+      ],
+      "items": {
+        "enum": [
+          "person",
+          "person_ambiguous"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Labels",
+      "type": "array"
+    },
+    "min_score": {
+      "default": 0.0,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Min Score",
+      "type": "number"
+    },
+    "deadline_ms": {
+      "default": 15000,
+      "maximum": 15000,
+      "minimum": 1000,
+      "title": "Deadline Ms",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "request_id",
+    "texts"
+  ],
+  "title": "NerRequest",
+  "type": "object"
+}

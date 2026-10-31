@@ -1,0 +1,172 @@
+{
+  "contract": "parser/v1",
+  "request_id": "case-sheets-ods",
+  "status": "success",
+  "input": {
+    "format": "ods",
+    "media_type_sniffed": "application/vnd.oasis.opendocument.spreadsheet",
+    "sha256": "166c559ac53c8b99ac08f158456226b031631dd4847773188e760ff2d3541445",
+    "bytes": 8403,
+    "page_count": 1,
+    "pages_requested": {
+      "from": 1,
+      "to": 1
+    },
+    "pages_completed": {
+      "from": 1,
+      "to": 1
+    },
+    "pipeline": "docling"
+  },
+  "pages": [
+    {
+      "page": 1,
+      "label": "Avgifter",
+      "width": 3.0,
+      "height": 4.0,
+      "signals": {
+        "chars": 58,
+        "furniture_chars": 0,
+        "garbled_score": 0.0,
+        "text_layer_chars": null,
+        "image_coverage": null,
+        "ocr_applied": "none",
+        "ocr_confidence": null,
+        "table_count": 1,
+        "table_area_ratio": 1.0,
+        "picture_area_ratio": 0.0,
+        "empty": false
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": "b0",
+      "kind": "table",
+      "level": null,
+      "level_source": null,
+      "page": 1,
+      "page_end": 1,
+      "bbox": [
+        0.0,
+        0.0,
+        3.0,
+        4.0
+      ],
+      "layer": "body",
+      "md": "| Åtgärd      |   Antal |   Avgift |\n|-------------|---------|----------|\n| Bygglov     |       3 |    25000 |\n| Marklov     |       2 |     8000 |\n| Rivningslov |       1 |     4500 |",
+      "ref": "#/tables/0",
+      "table": "t0"
+    }
+  ],
+  "tables": [
+    {
+      "id": "t0",
+      "rows": 4,
+      "cols": 3,
+      "header_rows": 1,
+      "caption": null,
+      "cells": [
+        {
+          "r": 0,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": true,
+          "text": "Åtgärd"
+        },
+        {
+          "r": 0,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": true,
+          "text": "Antal"
+        },
+        {
+          "r": 0,
+          "c": 2,
+          "rs": 1,
+          "cs": 1,
+          "header": true,
+          "text": "Avgift"
+        },
+        {
+          "r": 1,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "Bygglov"
+        },
+        {
+          "r": 1,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "3"
+        },
+        {
+          "r": 1,
+          "c": 2,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "25000"
+        },
+        {
+          "r": 2,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "Marklov"
+        },
+        {
+          "r": 2,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "2"
+        },
+        {
+          "r": 2,
+          "c": 2,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "8000"
+        },
+        {
+          "r": 3,
+          "c": 0,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "Rivningslov"
+        },
+        {
+          "r": 3,
+          "c": 1,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "1"
+        },
+        {
+          "r": 3,
+          "c": 2,
+          "rs": 1,
+          "cs": 1,
+          "header": false,
+          "text": "4500"
+        }
+      ]
+    }
+  ],
+  "pictures": [],
+  "warnings": [],
+  "markdown": null
+}

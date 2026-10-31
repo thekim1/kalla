@@ -2,7 +2,8 @@
 
 Needs the baked models and Tesseract, so it runs in the image (`docker build --target test`) and is skipped
 elsewhere. Covers to-verify #58 (absolute page numbers under a range), #61 (OCR confidence after conversion), #62
-(content layers, heading levels, JSON pointers) and #150 (fast path against Docling on clean pages).
+(content layers, heading levels, JSON pointers) and #150 (fast path against Docling on clean pages), and the image
+inputs: PNG, JPEG and TIFF frames through Docling's OCR.
 """
 
 import difflib
@@ -18,6 +19,7 @@ from ume_parser import convert, slot
 from ume_parser.errors import ParserError
 from ume_parser.models import ConvertRequest
 from ume_parser.settings import Settings
+from ume_parser.sniff import sniff
 
 pytestmark = pytest.mark.skipif(
     not (Settings().models_dir / "docling-project--docling-layout-heron").is_dir() or shutil.which("tesseract") is None,
@@ -34,9 +36,16 @@ def pipelines():
 
 def _job(tmp_path, name: str, **options) -> dict:
     path = tmp_path / "input"
-    path.write_bytes(fixture_bytes(name))
-    request = ConvertRequest.model_validate({"request_id": "t-1", "file_ext": ".pdf", **options})
-    return {"input": str(path), "dir": str(tmp_path), "options": request.model_dump(mode="json", by_alias=True)}
+    data = fixture_bytes(name)
+    path.write_bytes(data)
+    request = ConvertRequest.model_validate({"request_id": "t-1", "file_ext": "." + name.rsplit(".", 1)[1], **options})
+    return {
+        "request_id": "t-1",
+        "input": str(path),
+        "dir": str(tmp_path),
+        "format": sniff(data[:1024]).format,
+        "options": request.model_dump(mode="json", by_alias=True),
+    }
 
 
 def _body_text(out: dict, page: int) -> str:
@@ -133,3 +142,30 @@ def test_docling_stops_at_the_request_deadline(tmp_path, pipelines):
     pipeline = pipelines.get(convert.OptionSet("force", "accurate", 2.0))
     assert pipeline.run_options.document_timeout == 0.5
     assert len(pipeline.converter.initialized_pipelines) == 1
+
+
+@pytest.mark.parametrize("name", ["scan.png", "scan.jpg"])
+def test_images_are_ocrd(tmp_path, pipelines, name):
+    out = convert.run_job(_job(tmp_path, name, outputs={"markdown": True}), pipelines)
+    assert (out["format"], out["pipeline"], out["page_count"], out["status"]) == (
+        name.rsplit(".", 1)[1].replace("jpg", "jpeg"),
+        "docling",
+        1,
+        "success",
+    )
+    (page,) = out["pages"]
+    assert page["signals"]["ocr_applied"] == "full-page"
+    assert page["signals"]["ocr_confidence"]["mean"] > 0.5
+    text = _body_text(out, 1)
+    for expected in ("Kungörelse", "granskning", "Byggnadsnämnden", "Björken", "Ålidhem"):
+        assert expected in text
+
+
+def test_a_tiff_range_reads_only_its_frames_with_original_numbers(tmp_path, pipelines):
+    out = convert.run_job(_job(tmp_path, "frames.tiff", pages={"from": 2, "to": 3}), pipelines)
+    assert (out["page_count"], out["pages_completed"]) == (3, {"from": 2, "to": 3})
+    assert [p["page"] for p in out["pages"]] == [2, 3]
+    assert "Sökanden" in _body_text(out, 2) and "förslaget" in _body_text(out, 2)
+    assert "förhandsbesked" in _body_text(out, 3)
+    document = json.loads(gzip.decompress((tmp_path / convert.DOCLING_JSON).read_bytes()))
+    assert sorted(int(n) for n in document["pages"]) == [2, 3]
