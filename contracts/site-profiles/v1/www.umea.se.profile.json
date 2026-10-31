@@ -1,0 +1,20 @@
+{
+  "cms": "sitevision",
+  "mainRoot": "main, .pagecontent",
+  "boilerplate": {
+    "selectors": [".sol-toolbar", "form"],
+    "phrases": []
+  },
+  "linkBlocks": [".sv-jcrmenu-portlet", ".sv-archive-portlet", ".sv-file-portlet", ".sol-page-listing", ".sol-related-news", ".sol-article-wrapper > .sol-left"],
+  "breadcrumb": "nav[aria-label=\"Brödsmulor\"] li:not(:first-child)",
+  "datePattern": "Sidan uppdaterades (?<d>\\d{4}-\\d{2}-\\d{2})",
+  "identityRule": {
+    "pattern": "^/(?:.*/)?(?:[^/]+\\.)?(?<id>[0-9]+\\.[0-9a-f]{10,})\\.html$",
+    "replacement": "/${id}.html",
+    "verified": true
+  },
+  "ignoreQueryParams": ["sv.*", "open.*", "state", "profiling", "contactPage", "contactUserId", "addToCart"],
+  "excludedTypes": ["image/*", "video/*"],
+  "lastmodReliable": false,
+  "javascriptNeeded": false
+}

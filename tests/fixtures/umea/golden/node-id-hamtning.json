@@ -1,0 +1,136 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/4.27a2de8b172da059ace15f4.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Hämtning",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Hämtning",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Information om sophämtning finns på Vakins webbplats – där kan du se när soporna töms hos dig och få tips om vad du kan göra för att hämtningen ska fungera smidigt.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Tillfälligt uppehåll i hämtning av hushållsavfall",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kan ansöka om uppehåll i hämtning av avfall, både i permanentbostad och fritidshus.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Miljö- och hälsoskyddsnämnden debiterar en timavgift för att handlägga ansökan om uppehåll, enligt gällande taxa. Det gäller också om du tidigare haft uppehåll för hämtningen i din permanentbostad och ansöker om att förlänga uppehållet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Mer information om taxan",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Fritidshus: ansök senast 15 april",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För fritidshus kan du bara ansöka om uppehåll för hela perioden 15 maj–15 oktober. Ansökan ska komma in senast 15 april. För att få dispens för renhållningsavgiften för fritidshus ska huset ska stå tomt och öde under hela säsongen. Används fritidshuset delar av säsongen måste du betala renhållningsavgift.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Permanentbostad: ansök en månad i förväg",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För permanentbostad krävs att bostaden inte kommer att nyttjas under en sammanhängande tid på minst åtta månader. Ansökan ska vara komma in senast en månad före önskat uppehåll. Uppehållet kan gälla i max ett år från beslutsdatum.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ansök om tillfälligt uppehåll av hämtning av hushållsavfall",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Grundavgift för alla",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Vakin debiterar en grundavgift för alla villaägare och fritidshusägare. Det innebär att du fortfarande betalar grundavgift till Vakin, även om du beviljas uppehåll i hämtningen. I grundavgiften ingår möjligheten att nyttja återvinningscentralen, med dess möjligheter att lämna den del av hushållsavfallet som är grovavfall och farligt avfall och som uppkommer vid normalt boende.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Bygga, bo och miljö",
+      "Avfall och återvinning"
+    ],
+    "description": "Grundavgift för alla Vakin debiterar en grundavgift för alla villaägare och fritidshusägare. Det innebär att du fortfarande betalar grundavgift till Vakin, även om du beviljas uppehåll i hämtningen. I grundavgiften ingår möjligheten att nyttja återvinningscentralen, med dess möjligheter att lämna den del av hushållsavfallet som är grovavfall och farligt avfall och som uppkommer vid normalt boende.",
+    "keywords": [
+      "sophämtning",
+      "när hamtas sopor",
+      "sopor",
+      "hämtning",
+      "soptömning"
+    ],
+    "visibleDate": "2026-07-01",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.4831,
+      "quality.emptyRoot": 0
+    }
+  }
+}

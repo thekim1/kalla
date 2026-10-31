@@ -1,0 +1,80 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/4.88db09b1724ee319ca45d.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Digital omställning och IT",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Digital omställning och IT",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Digital omställning och IT har i uppdrag att stärka Umeå kommuns förmåga till en digital omställning som är hållbar, säker och skapar nytta för medborgare och verksamheter. Genom att tillhandahålla, driva och samordna strategier, IT-tjänster och digitala lösningar möjliggör vi utveckling och effektivitet i hela kommunen.\nVerksamheten arbetar nära kommunens olika delar för att förstå behov, stödja förändring och omsätta teknik till praktisk nytta. Vi stöttar verksamheterna i att tillsammans utföra och utveckla kärnuppdragen, och lyckas då vi arbetar med verksamheters mål på ett sätt som skapar nytta för hela kommunen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Digital omställning och IT är en strategisk möjliggörare för innovation, samverkan och långsiktig hållbarhet i Umeå kommun.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kan läsa mer om Umeå kommuns arbete med digital omställning på umea.se/digitalomstallning.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakt\nDigital omställning och IT\n090-16 11 34 (support)\nBesöksadress\nSkolgatan 31\nStadshuset, norra flygeln\nPostadress\nUmeå kommun Digital omställning och IT\n901 84 Umeå\nTelefonsupport är öppet vardagar klockan 8–17, bokade besök 8.00–16.30, lunchstängt klockan 12–13.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakt\nMattias Wallmark\nverksamhetschef, Digital omställning och IT\n090-16 11 52\nmattias.wallmark@umea.se",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Kommun och politik",
+      "Kommunens organisation",
+      "Förvaltningar, verksamheter",
+      "Teknik och fastighet"
+    ],
+    "description": "Digital omställning och IT har i uppdrag att stärka Umeå kommuns förmåga till en digital omställning som är hållbar, säker och skapar nytta för medborgare och verksamheter. Genom att tillhandahålla, driva och samordna strategier, IT-tjänster och digitala lösningar möjliggör vi utveckling och effektivitet i hela kommunen. Verksamheten arbetar nära kommunens olika delar för att förstå behov, stödja förändring och omsätta teknik till praktisk nytta. Vi stöttar verksamheterna i att tillsammans utföra och utveckla kärnuppdragen, och lyckas då vi arbetar med verksamheters mål på ett sätt som skapar nytta för hela kommunen. Digital omställning och IT är en strategisk möjliggörare för innovation, samverkan och långsiktig hållbarhet i Umeå kommun. Du kan läsa mer om Umeå kommuns arbete med digital omställning på umea.se/digitalomstallning.",
+    "keywords": [
+      "it",
+      "ansvarig",
+      "it-ansvarig",
+      "digitalisering"
+    ],
+    "visibleDate": "2026-01-15",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.3518,
+      "quality.emptyRoot": 0
+    }
+  }
+}

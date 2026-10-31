@@ -18,6 +18,20 @@ public sealed class SiteProfileTests
         profile.IdentityRule.ShouldBeNull();
     }
 
+    [Fact]
+    public void The_hand_checked_umea_profile_is_valid_and_round_trips()
+    {
+        var json = File.ReadAllText(Path.Combine(Repository.Root, "contracts", "site-profiles", "v1", "www.umea.se.profile.json"));
+        var element = Repository.Json(json);
+        Schema.Validate(element).ShouldBeEmpty();
+
+        var profile = Ume.Rag.Pipelines.Json.ContractJson.Deserialize<SiteProfile>(element);
+        profile.Cms.ShouldBe("sitevision");
+        profile.IdentityRule.ShouldNotBeNull().Verified.ShouldBeTrue();
+        profile.LastmodReliable.ShouldBeFalse();
+        Schema.Validate(Ume.Rag.Pipelines.Json.ContractJson.ToElement(profile)).ShouldBeEmpty();
+    }
+
     [Theory]
     [InlineData("""{}""")]
     [InlineData("""{"mainRoot":""}""")]

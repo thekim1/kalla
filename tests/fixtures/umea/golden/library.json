@@ -1,0 +1,225 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/upplevaochgora/bibliotek.4.27a2de8b172da059ace1ba1.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Bibliotek",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Bibliotek",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Studenter i stadsbiblioteket i Väven.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Det finns elva folkbibliotek i Umeå kommun: www.minabibliotek.se/biblioteken",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Stadsbiblioteket ligger i kulturhuset Väven i centrum, och övriga tio biblioteken i de olika stads- och kommun­delarna. Förutom dessa finns det både ett rullande och ett digitalt bibliotek.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "På folkbiblioteken kan du låna böcker, musik, filmer, ljud­böcker och andra media. Exempel på annan service är dags­tidningar, tidskrifter, uppslagsböcker, samhälls­information, datorer med databaser och tillgång till internet. Biblioteken ger även service till personer med särskilda behov. Det finns bland annat talböcker, lättlästa böcker och böcker med stor stil. För personer som inte kan komma till biblioteket erbjuds uppsökande tjänster.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Utställningar och arrangemang",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "På de flesta bibliotek ordnas utställningar och arrangemang, ofta i samarbete med olika föreningar och organisationer. Tillsammans skapar de ett brett programutbud. Allt från föreställningar riktade till små barn till författarbesök, bokcirklar och utställningar för unga och vuxna.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Aktuella aktiviteter och arrangemang på biblioteken",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Samarbete med hela Umeåregionen",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Umeå kommuns folkbibliotek samarbetar med andra bibliotek i Umeåregionen. Umeåregionen utgörs av kommunerna Umeå, Bjurholm, Nordmaling, Roberts­fors, Vindeln och Vännäs. Du kan låna, återlämna och nyttja bibliotekstjänster i alla bibliotek i hela Umeåregionen.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Det digitala biblioteket",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Minabibliotek.se är det digitala biblioteket gemensamt för hela Umeåregionen. På webbplatsen kan du söka i våra databaser, läsa inspirerande artiklar och boktips, låna e-böcker samt låna om och reservera bibliotekens böcker.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Biblioteksbussen",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Det rullande biblioteket Biblioteksbussen besöker de områden i kommunen som har långt till ett vanligt bibliotek. I biblioteksbussen kan du bland annat låna böcker och tidskrifter. Alla är välkomna att låna på alla hållplatser. På förmiddagarna besöker bussen främst skolor, förskolor och fritidshem utanför tätorten. Under eftermiddagar och kvällar kör bussen till orter och bostadsområden enligt fastställd turlista.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Biblioteksbussen, hållplatser och turlista",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Sveriges depåbibliotek",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Sveriges depåbibliotek fungerar som ett centralt, gemensamt uppbyggt bokmagasin för äldre litteratur. Det innebär att böckerna är tillgängliga för låntagare i hela landet genom fjärrlån. Ditt bibliotek hjälper dig att förmedla lånet. Samlingarna omfattar gamla och nya böcker på svenska och har byggts upp genom donationer från folk- och skol­bibliotek runt om i landet. Böckerna är sökbara i den nationella biblioteksdatabasen Libris.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Sveriges depåbibliotek och lånecentral",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Mer information",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakt\nBibliotek\n090-16 10 00 (växel)\numea.kultur@umea.se\nPostadress\nUmeå kommun\nKulturförvaltningen\n901 78 Umeå\nInformation, öppettider och kontaktuppgifter till biblioteken:\nwww.minabibliotek.se",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Uppleva och göra"
+    ],
+    "description": "Biblioteken finns i de flesta stads- och kommundelar och ger tillsammans med bokbussen möjlighet att ta del av litteratur och aktiviteter.",
+    "keywords": [
+      "lånekort",
+      "bibliotekskort",
+      "teg",
+      "tegs bibliotek",
+      "grubbe bibliotek",
+      "öppettider",
+      "statistik",
+      "bibliotek",
+      "biblioteket",
+      "depåbiblioteket",
+      "mina bibliotek",
+      "biblioteken",
+      "minabibliotek",
+      "Umeå stadsbibliotek",
+      "stadsbiblioteket",
+      "biblioteksbussen",
+      "bokbussen",
+      "ersbodabiblioteket",
+      "ersboda",
+      "grubbe",
+      "grubbebiblioteket",
+      "holmsunds bibliotek",
+      "holmsundsbiblioteket",
+      "hörneforsbiblioteket",
+      "hörnefors bibliotek",
+      "mariehemsbiblioteket",
+      "mariehem",
+      "obbola bibliotek",
+      "obbolabiblioteket",
+      "sävarbiblioteket",
+      "sävar bibliotek",
+      "tegsbiblioteket",
+      "umedalens bibliotek",
+      "umedalen",
+      "ålidhemsbiblioteket",
+      "ålidhem",
+      "depå",
+      "biblio",
+      "biblioktek",
+      "umeå",
+      "bibliotekarie",
+      "biblotek"
+    ],
+    "visibleDate": "2026-04-16",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.2916,
+      "quality.emptyRoot": 0
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/byggaboochmiljo.4.1c16b00a1742340e02ea2a.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Bygga, bo och miljö",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Bygga, bo och miljö",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [],
+    "description": "Bygga, bo och miljö - Ingen beskrivning.",
+    "keywords": [],
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0,
+      "quality.emptyRoot": 0
+    }
+  }
+}

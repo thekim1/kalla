@@ -1,0 +1,36 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/kommunochpolitik/nyhetsarkiv.4.5d9221f0174f99211461174.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Nyhetsarkiv",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Nyhetsarkiv",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Kommun och politik"
+    ],
+    "description": "Nyhetsarkiv - Ingen beskrivning.",
+    "keywords": [],
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.9951,
+      "quality.emptyRoot": 0
+    }
+  }
+}

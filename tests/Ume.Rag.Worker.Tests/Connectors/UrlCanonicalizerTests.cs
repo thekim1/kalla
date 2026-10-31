@@ -100,6 +100,15 @@ public sealed class UrlCanonicalizerTests
     }
 
     [Fact]
+    public void A_trailing_star_in_the_ignore_parameters_is_a_prefix()
+    {
+        var options = new CanonicalizerOptions { IgnoreQueryParams = ["sv.*", "open.*"] };
+
+        UrlCanonicalizer.Canonicalize("https://www.umea.se/a?sv.target=12&SV.12.abc.route=%2Fx&open.12.abc=true&svar=ja&page=2", options).Value
+            .ShouldBe("https://www.umea.se/a?page=2&svar=ja");
+    }
+
+    [Fact]
     public void Drops_directory_index_names_only_when_the_source_opts_in()
     {
         var options = new CanonicalizerOptions { DirectoryIndexNames = ["index.html", "default.aspx"] };

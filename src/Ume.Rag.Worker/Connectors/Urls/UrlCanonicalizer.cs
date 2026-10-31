@@ -21,7 +21,7 @@ public sealed record CanonicalizerOptions
 {
     public static CanonicalizerOptions Default { get; } = new();
 
-    /// <summary>The source's and the site profile's <c>ignoreQueryParams</c> (rule 7), compared case-insensitively.</summary>
+    /// <summary>The source's and the site profile's <c>ignoreQueryParams</c> (rule 7), compared case-insensitively; a trailing * is a prefix.</summary>
     public IReadOnlyCollection<string> IgnoreQueryParams { get; init; } = [];
 
     /// <summary>The source setting <c>directoryIndexNames</c> (rule 9): a last segment with one of these names is dropped.</summary>
@@ -416,20 +416,14 @@ public static partial class UrlCanonicalizer
         return string.Join('&', kept.OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => p.Pair));
     }
 
-    private static bool IsDropped(string name, IReadOnlyCollection<string> ignored)
-    {
-        foreach (var dropped in DroppedParameters)
-        {
-            if (dropped.EndsWith('*')
-                    ? name.StartsWith(dropped[..^1], StringComparison.OrdinalIgnoreCase)
-                    : string.Equals(name, dropped, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
+    private static bool IsDropped(string name, IReadOnlyCollection<string> ignored) =>
+        DroppedParameters.Any(dropped => Matches(name, dropped)) || ignored.Any(dropped => Matches(name, dropped));
 
-        return ignored.Contains(name, StringComparer.OrdinalIgnoreCase);
-    }
+    /// <summary>A parameter name against a list entry: case-insensitive, a trailing <c>*</c> is a prefix (<c>sv.*</c>).</summary>
+    private static bool Matches(string name, string entry) =>
+        entry.EndsWith('*')
+            ? name.StartsWith(entry[..^1], StringComparison.OrdinalIgnoreCase)
+            : string.Equals(name, entry, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsUnreserved(char c) => char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_' or '~';
 

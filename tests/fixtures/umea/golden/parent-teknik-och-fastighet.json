@@ -1,0 +1,167 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/kommunochpolitik/kommunensorganisation/forvaltningarverksamheter/teknikochfastighet.4.533ba3d3171b940e900535.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Teknik och fastighet",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Teknik och fastighet",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Teknik- och fastighetsförvaltningen levererar väl fungerande vardag för kommunens invånare, brukare, medarbetare och verksamheter.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tekniska nämndens verksamheter förvaltar och utvecklar Umeå till ett säkert, hållbart och attraktivt samhälle. Verksamheterna ska ge största möjliga värde för invånare och näringsliv.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Verksamheterna arbetar med",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "kommunal väghållning och förvaltning av mark som är offentlig plats",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "kommunal lokalförsörjning",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "teknisk försörjning",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "kommunens fastighetsförvaltning och lokalförsörjning",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "samordning och utveckling för driften av kommunens IT- och telefonisystem och PA-system",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "att fullgöra kommunens uppgifter enligt lag om färdtjänst och lag om riksfärdtjänst.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Organisation",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Teknik och fastighet har verksamheterna",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Fastighet",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Gator och parker",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Digital omställning och IT",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Måltidsservice",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Städ- och verksamhets­service.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakt\nTeknik och fastighet\nÖvergripande frågor för områden Fastighet, Gator och parker, Digital omställning och IT, Måltidsservice och Städ- och verksamhetsservice\n090-16 10 00 (växel)\nteknikochfastighet@umea.se\nBesöksadress\nStadshuset\nSkolgatan 31A\nPostadress\nUmeå kommun\n901 84 Umeå",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Kontakt\nKarin Isaksson\nteknisk direktör\n090-16 14 39\nkarin.isaksson@umea.se",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Kommun och politik",
+      "Kommunens organisation",
+      "Förvaltningar, verksamheter"
+    ],
+    "description": "Teknik- och fastighetsförvaltningen levererar väl fungerande vardag för kommunens invånare, brukare, medarbetare och verksamheter.",
+    "keywords": [],
+    "visibleDate": "2026-01-14",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.3859,
+      "quality.emptyRoot": 0
+    }
+  }
+}

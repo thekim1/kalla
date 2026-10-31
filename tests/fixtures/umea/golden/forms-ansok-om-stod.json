@@ -1,0 +1,689 @@
+{
+  "versions": {
+    "parse.html": 2,
+    "preset.sitevision": 1
+  },
+  "url": "https://www.umea.se/omsorgochstod/kontaktasocialtjansten/ansokomstod/ansokomstodblanketter.4.1f75676f19a238051989a8.html",
+  "outcome": "profile",
+  "document": {
+    "title": "Ansök om stöd – blanketter",
+    "language": "sv",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "Ansök om stöd – blanketter",
+        "level": 1,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Här finns blanketter för att ansöka om stöd. Du skriver ut blanketten och skickar in den per post.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du som har en e-legitimation kan i stället välja att skicka in din ansökan via en e-tjänst.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Familjer med barn upp till 18 år, ansökan om stöd och hjälp (pdf för utskrift)",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Mer information om att ansöka",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Med den här blanketten kan barn eller vårdnadshavare ansöka om stöd och hjälp från socialtjänsten.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tjänsten riktar sig till familjer med barn upp till 18 år. En ansökan kan endast göras av barnet själv eller barnets vårdnadshavare.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Om du vill uppmärksamma socialtjänsten på att någon annan är i behov av stöd och hjälp ska du använda blanketten Oro för person som far illa, anmälan från privatperson. Professionella som gör anmälan i tjänsten kan inte vara anonyma och ska använda Oro för person som far illa, anmälan från yrkesverksam. Anmälan görs till den kommun där berörd person bor.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Om du vill ansöka om ekonomiskt bistånd, kontakta socialtjänstens mottagningsenhet på telefonnummer 090-16 10 02. Vill du veta mer finns information på sidan Försörjningsstöd, ekonomiskt bistånd.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vad händer efter att jag skickat in min ansökan?",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Från det att vi tagit emot din ansökan till att du får ett beslut kan det ta från 1 vecka upp till flera månader, beroende på vad ansökan gäller och hur länge det tar för oss att få in de uppgifter vi behöver.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Utredning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När vi tagit emot din ansökan kommer en handläggare att påbörja en utredning. Utredningen gör handläggaren genom lämnade uppgifter samt vid behov inhämta ytterligare uppgifter. Dessa inhämtas per telefon, personligt möte och/eller per mejl med dig och/eller de myndigheter/personer som du lämnat samtycke till att vi får kontakta.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bedömning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När handläggaren har fått in uppgifterna görs en samlad bedömning om du har rätt eller inte rätt enligt social­tjänstlagen till det stöd som du ansökt om.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Beslut",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kommer att få ett skriftligt beslut som visar på om du blir beviljad det du ansökt om eller om du får avslag. Om du får avslag kan du överklaga det beslutet, hur du då går tillväga får du veta i samband med att du får beslutet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ansökan om insatser för vuxna enligt socialtjänstlagen (pdf för utskrift)",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vad händer efter att jag har skickat in min ansökan?",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Från det att vi har tagit emot din ansökan till att du får ett beslut tar olika lång tid beroende på vad ansökan gäller och hur länge det tar för oss att få in de uppgifter vi behöver. Vår förhoppning är att kunna kontakta dig inom två veckor efter att du skickat in din ansökan.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Utredning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När vi tagit emot din ansökan kommer en handläggare att påbörja en utredning. Utredningen gör handläggaren genom lämnade uppgifter samt vid behov inhämta ytterligare uppgifter. Dessa inhämtas per telefon, personligt möte och/eller per mejl med dig och/eller de myndigheter/personer som du lämnat samtycke till att vi får kontakta.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bedömning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När handläggaren har fått in uppgifterna görs en samlad bedömning om du har rätt eller inte rätt enligt socialtjänstlagen till det stöd som du ansökt om.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Beslut",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kommer att få ett skriftligt beslut som visar på om du blir beviljas det du ansökt om eller om du får avslag. Om du får avslag kan du överklaga det beslutet, hur du då går tillväga får du veta i samband med att du får beslutet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ansökan om insatser för vuxna med funktionsnedsättning enligt socialtjänstlagen",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vad händer efter att jag skickat in min ansökan?",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Från det att vi tagit emot din ansökan till att du får ett beslut kan det ta från 1 vecka upp till flera månader, beroende på vad ansökan gäller och hur länge det tar för oss att få in de uppgifter vi behöver.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Utredning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När vi tagit emot din ansökan kommer en handläggare att påbörja en utredning. Utredningen gör handläggaren genom lämnade uppgifter samt vid behov inhämta ytterligare uppgifter. Dessa inhämtas per telefon, personligt möte och/eller per mejl med dig och/eller de myndigheter/personer som du lämnat samtycke till att vi får kontakta.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bedömning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När handläggaren har fått in uppgifterna görs en samlad bedömning om du har rätt eller inte rätt enligt socialtjänstlagen till det stöd som du ansökt om.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Beslut",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kommer att få ett skriftligt beslut som visar på om du blir beviljad det du ansökt om eller om du får avslag. Om du får avslag kan du överklaga det beslutet, hur du då går tillväga får du veta i samband med att du får beslutet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ansökan om försörjningsstöd",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Dödsboanmälan och bistånd till begravningskostnader",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Ansök om stöd enligt LSS",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "LSS-insatser för barn och skolungdom, ansökan åt annan",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "LSS-insatser för barn och skolungdom, begäran",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vem kan få LSS-insats?",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För att få LSS-insats ska den behövande vara svensk medborgare eller ha upphållstillstånd som gäller minst ett år framåt från dagen då begäran skickas in.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Läs mer på umea.se om LSS, stöd och service.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vem kan begära LSS-insats genom den här blanketten?",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Barn eller skolungdom som är under 18 år, som begäran gäller",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Vårdnadshavare för barn eller skolungdom under 18 år som begäran gäller",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Närstående till barn eller skolungdom som begäran gäller, men som inte är vårdnadshavare. Till exempel släkting, förälder till myndig skolungdom eller vän",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Tjänsteperson som hjälper antingen den begäran gäller eller vårdnadshavare till barn eller skolungdom som är under 18 år.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vad händer efter att jag skickat in min ansökan?",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Från det att vi tagit emot din ansökan till att du får ett beslut kan det ta från 1 vecka upp till flera månader, beroende på vad ansökan gäller och hur länge det tar för oss att få in de uppgifter vi behöver.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Utredning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När vi tagit emot din ansökan kommer en handläggare att påbörja en utredning. Utredningen gör handläggaren genom lämnade uppgifter samt vid behov inhämta ytterligare uppgifter. Dessa inhämtas per telefon, personligt möte och/eller per mejl med dig och/eller de myndigheter/personer som du lämnat samtycke till att vi får kontakta.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bedömning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När handläggaren har fått in uppgifterna görs en samlad bedömning om du har rätt eller inte rätt enligt LSS till det stöd som du ansökt om.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Beslut",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kommer att få ett skriftligt beslut som visar på om du blir beviljad det du ansökt om eller om du får avslag. Om du får avslag kan du överklaga det beslutet, hur du då går tillväga får du veta i samband med att du får beslutet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "LSS-insatser för vuxna, ansökan åt annan",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "LSS-insatser för vuxna, begäran",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vem kan få LSS-insats?",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "För att få LSS-insats ska den behövande vara svensk medborgare eller ha upphållstillstånd som gäller minst ett år framåt från dagen då begäran skickas in.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Läs mer på umea.se om LSS, stöd och service.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vem kan begära LSS-insats genom den här blanketten?",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Vuxen person som begäran gäller.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Närstående till den begäran gäller.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Juridiskt ombud för den begäran gäller.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "list_item",
+        "text": "Tjänsteperson som hjälper den begäran gäller.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vad händer efter att jag sänt in min ansökan?",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Från det att vi tagit emot din ansökan till att du får ett beslut kan det ta från 1 vecka upp till flera månader, beroende på vad ansökan gäller och hur länge det tar för oss att få in de uppgifter vi behöver.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Utredning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När vi tagit emot din ansökan kommer en handläggare att påbörja en utredning. Utredningen gör handläggaren genom lämnade uppgifter samt vid behov inhämta ytterligare uppgifter. Dessa inhämtas per telefon, personligt möte och/eller per mejl med dig och/eller de myndigheter/personer som du lämnat samtycke till att vi får kontakta.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bedömning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När handläggaren har fått in uppgifterna görs en samlad bedömning om du har rätt eller inte rätt enligt LSS till det stöd som du ansökt om.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Beslut",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kommer att få ett skriftligt beslut som visar på om du blir beviljad det du ansökt om eller om du får avslag. Om du får avslag kan du överklaga det beslutet, hur du då går tillväga får du veta i samband med att du får beslutet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Äldreomsorg",
+        "level": 2,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Ansök om äldreomsorg, för vuxna över 65 år (PDF)",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Här kan du som är 65 år eller äldre ansöka om insatser enligt socialtjänstlagen. Från det att vi tagit emot din ansökan till att du får ett beslut kan det ta från en vecka upp till flera månader, beroende på vad ansökan gäller och hur länge det tar för oss att få in de uppgifter vi behöver.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kan även lämna in en ansökan åt en annan person, men då krävs det att du har en fullmakt. Har du inte en fullmakt kan du istället göra en anmälan genom att fylla i det här formuläret.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Vad händer efter att jag sänt in min ansökan?",
+        "level": 3,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Utredning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När vi tagit emot din ansökan kommer en socialsekreterare att påbörja en utredning. Utredningen gör socialsekreteraren genom lämnade uppgifter samt vid behov inhämta ytterligare uppgifter. Dessa inhämtas per telefon, personligt möte och/eller per mejl med dig och/eller de myndigheter/personer som du lämnat samtycke till att vi får kontakta.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Bedömning",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "När socialsekreteraren har fått in uppgifterna görs en samlad bedömning om du har rätt eller inte rätt enligt socialtjänstlagen till det stöd som du ansökt om.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "heading",
+        "text": "Beslut",
+        "level": 4,
+        "levelSource": "html",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      },
+      {
+        "kind": "paragraph",
+        "text": "Du kommer att få ett skriftligt beslut som visar på om du blir beviljad det du ansökt om eller om du får avslag. Om du får avslag kan du överklaga det beslutet, hur du då går tillväga får du veta i samband med att du får beslutet.",
+        "layer": "body",
+        "listDepth": 0,
+        "pageEdge": false
+      }
+    ],
+    "tables": [],
+    "pages": [],
+    "breadcrumb": [
+      "Omsorg och stöd",
+      "Kontakta socialtjänsten",
+      "Ansök om stöd"
+    ],
+    "description": "Här finns blanketter för att ansöka om stöd. Du skriver ut blanketten och skickar in den per post. Du som har en e-legitimation kan i stället välja att skicka in din ansökan via en e-tjänst .",
+    "keywords": [],
+    "visibleDate": "2026-01-13",
+    "strategy": "parse=html(profile=www.umea.se@1)",
+    "missingPages": [],
+    "facts": {
+      "quality.boilerplateShare": 0.354,
+      "quality.emptyRoot": 0
+    }
+  }
+}

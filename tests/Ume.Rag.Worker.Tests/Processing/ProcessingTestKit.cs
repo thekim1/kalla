@@ -30,6 +30,8 @@ public static class Fixtures
 
     public static string Pii => Path.Combine(Root, "tests", "fixtures", "pii");
 
+    public static string Umea => Path.Combine(Root, "tests", "fixtures", "umea");
+
     /// <summary>The goldens are rewritten instead of compared when this variable is 1 (then review the diff).</summary>
     public static bool Update => Environment.GetEnvironmentVariable("UME_RAG_UPDATE_GOLDENS") == "1";
 
