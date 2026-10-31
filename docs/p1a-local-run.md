@@ -106,11 +106,12 @@ issue). Until the admin's set-up endpoints (J7) exist, the source comes from a d
 
 | | Status |
 |---|---|
-| Stream B's gateway client, `EmbeddingProfile:*` seeder and canary recording (`GET /api/gateway/status`) | after #123 |
+| Stream B's gateway client, `EmbeddingProfile:*` seeder and canary recording (`GET /api/gateway/status`) | now (#123) |
 | The AppHost's real-gateway mode: `Gateway:Services:<service>:Keys:<level>` per service, `OrgSync:*` passed to the admin API | now (#119) |
-| `EmbeddingProfiles.RequestDimensions` and `dimensions` sent on every embedding call (without it the model answers 3072 dimensions and the profile's 1024 refuses them) | after #142 |
-| The AppHost passes `EmbeddingProfile:*` to the `migrations` resource (neither #119 nor #123 does yet; without it the pilot profile is not seeded) | after stream B adds it |
-| `KnowledgeService`, query embedding and `/v1/retrieve` | after #127 |
+| `EmbeddingProfiles.RequestDimensions` and `dimensions` sent on every embedding call (without it the model answers 3072 dimensions and the profile's 1024 refuses them) | now (#159: column, seeder, admin calls, query embedding; #162: the worker's embed, canary and evaluation calls) |
+| The AppHost passes `EmbeddingProfile:*` to the `migrations` resource (without it the pilot profile is not seeded) | now (#159) |
+| `KnowledgeService`, query embedding and `/v1/retrieve` | now (#127) |
+| An API key for `/v1/retrieve`: the dev seed's `--api-key` (§4.4) until the admin's key endpoints (J7) exist | now |
 | On the gateway: a key restricted to residency `Eu`; the `text-embedding-3-large` deployment's `ContextWindow` empty; a Data API key with `catalog.read` for the org and model syncs | now (the gateway session) |
 | `psql` on your machine, or the AppHost's Postgres container (`--docker` below); Python 3.12 | now |
 
@@ -129,22 +130,23 @@ dotnet user-secrets --project $p set Gateway:Services:admin:Keys:Eu <the admin's
 dotnet user-secrets --project $p set Gateway:Services:worker:Keys:Eu <the worker's Eu key>  # now
 dotnet user-secrets --project $p set OrgSync:BaseUrl https://<gateway host>              # now
 dotnet user-secrets --project $p set OrgSync:DataApiKey <the catalog.read key>           # now
-dotnet user-secrets --project $p set EmbeddingProfile:GatewayModel text-embedding-3-large  # after #123 + forwarding
-dotnet user-secrets --project $p set EmbeddingProfile:Dimensions 1024                    # after #123 + forwarding
-dotnet user-secrets --project $p set EmbeddingProfile:RequestDimensions true             # after #142
-dotnet user-secrets --project $p set EmbeddingProfile:MaxInputTokens 8191                # after #123 + forwarding
-dotnet user-secrets --project $p set EmbeddingProfile:MaxResidency Eu                    # after #123 + forwarding
+dotnet user-secrets --project $p set EmbeddingProfile:GatewayModel text-embedding-3-large  # now
+dotnet user-secrets --project $p set EmbeddingProfile:Dimensions 1024                    # now
+dotnet user-secrets --project $p set EmbeddingProfile:RequestDimensions true             # now
+dotnet user-secrets --project $p set EmbeddingProfile:MaxInputTokens 8191                # now
+dotnet user-secrets --project $p set EmbeddingProfile:MaxResidency Eu                    # now
 ```
 
 Set no `External` and no `OnPrem` key: the worker never holds `External` (the AppHost refuses
 `Gateway:Services:worker:Keys:External` and keeps a shared `Gateway:Keys:External` from the worker), and the pilot runs
 at `Eu`. With one key for all three, `Gateway:Keys:Eu` alone works too. The
 migrator seeds the profile as `pilot-embedding` (#123's default `EmbeddingProfile:Name`) and never changes it once it
-exists: a different model or dimension count needs a new volume.
+exists: a different model, dimension count or `RequestDimensions` needs a new volume (the migrator only logs that the
+profile differs from `EmbeddingProfile:*`).
 
 ### 4.3 Start
 
-**After #123, #142 and the forwarding.** Start without the demo data, so the FakeGateway's `dev-embedding`
+**Now** (#123, #159, #162). Start without the demo data, so the FakeGateway's `dev-embedding`
 profile is not seeded next to the pilot profile:
 
 ```powershell
@@ -153,7 +155,9 @@ profile is not seeded next to the pilot profile:
 
 In the Aspire dashboard (`https://localhost:17470`), check that `migrations` completed and that no `fake-gateway`
 resource runs. Copy the `ragdb` connection string from the `postgres` resource (Host `localhost`, the mapped port,
-user `postgres`, the generated password); keep it out of transcripts.
+user `postgres`, the generated password); keep it out of transcripts. For the API key (§4.4) also copy the
+`key-pepper` parameter (the dashboard's Parameters, or `dotnet user-secrets --project src/Ume.Rag.AppHost list`, key
+`Parameters:key-pepper`): rag-api hashes keys with it (`Security:KeyPepper`).
 
 ### 4.4 Seed a URL-list source (now on FakeGateway; for the pilot profile after 4.3)
 
@@ -181,18 +185,53 @@ start seeds that profile).
 The department is not in the gateway catalogue, so the org sync marks it inactive on its next run; the worker does not
 read that flag, so ingestion is not affected. Pass `--department-id <id>` to use a synced department instead.
 
+**An API key for `/v1/retrieve` (now).** rag-api's knowledge routes take an `internal` client's key only, and the
+admin's key endpoints (J7) do not exist yet. `--api-key` also creates, insert-if-absent like the rest: an `internal`
+client `Pilot retrieval (dev seed)` (`--client-name`) with ceiling `public` and no history store; a secret key of that
+client scoped to the collection, expiring after 30 days; and the `public` level's data-protection row (history mode
+`none`, 90/90 days), without which rag-api refuses every public collection. The pepper comes only from the environment:
+
+```bash
+read -rs UME_RAG_DEV_KEY_PEPPER && export UME_RAG_DEV_KEY_PEPPER   # paste the key-pepper parameter (§4.3)
+python3 -I scripts/dev/seed_url_list.py --profile pilot-embedding --api-key \
+  https://www.umea.se/<page 1> https://www.umea.se/<page 2> https://www.umea.se/<page 3>
+```
+
+The script generates the key (`ume-rag-sk-` and 43 base62 characters), sends only its HMAC to the database and prints
+the key once, at the end of the output, when it creates it. Copy it from the terminal; it is not stored or logged
+anywhere. A re-run with `--api-key` finds the usable key and prints nothing secret. A key whose plaintext is lost, or
+one hashed under an earlier pepper (a new AppHost secrets store), is replaced by revoking it and running again:
+
+```sql
+UPDATE config."Keys" SET "RevokedAt" = now() WHERE "Name" = 'dev seed: pilot-public' AND "RevokedAt" IS NULL;
+```
+
 ### 4.5 What to check
 
 | Check | How | When |
 |---|---|---|
-| The run finished | `SELECT "State", "Added", "Updated", "Unchanged", "Failed" FROM content."Runs" WHERE "Id" = '<sync job id>';` → `succeeded`, `Added` = the number of URLs | after #142 |
-| Live chunks with 1024-dimension vectors | `SELECT count(*), min(vector_dims(c."Embedding")) FROM content."Chunks" c JOIN content."Documents" d ON d."LiveChunkSetId" = c."ChunkSetId" WHERE d."SourceId" = '<source id>' AND c."DeletedAt" IS NULL;` → at least one chunk per page, 1024 | after #142 |
-| Failures, if any | `SELECT "Identity", "Outcome", "Reason" FROM content."RunItems" WHERE "RunId" = '<sync job id>' ORDER BY "Id";` and the worker's log in the dashboard | after #142 |
-| The canary is recorded | `GET /api/gateway/status` in the admin API's Scalar (signed in as a dev Keycloak admin): every `levels[]` entry you hold a key for is `ok` with residency `Eu`, `profiles[]` lists `pilot-embedding` with `canaryRecorded: true`; `POST /api/gateway/sync` records it at once instead of waiting for the next sync | after #123 |
-| Retrieval | a `/v1/retrieve` query on the api about one of the seeded pages, with a key of the api: the hits are chunks of the seeded pages | after #127 |
+| The run finished | `SELECT "State", "Added", "Updated", "Unchanged", "Failed" FROM content."Runs" WHERE "Id" = '<sync job id>';` → `succeeded`, `Added` = the number of URLs | now (#162) |
+| Live chunks with 1024-dimension vectors | `SELECT count(*), min(vector_dims(c."Embedding")) FROM content."Chunks" c JOIN content."Documents" d ON d."LiveChunkSetId" = c."ChunkSetId" WHERE d."SourceId" = '<source id>' AND c."DeletedAt" IS NULL;` → at least one chunk per page, 1024 | now (#162) |
+| Failures, if any | `SELECT "Identity", "Outcome", "Reason" FROM content."RunItems" WHERE "RunId" = '<sync job id>' ORDER BY "Id";` and the worker's log in the dashboard | now (#162) |
+| The canary is recorded | `GET /api/gateway/status` in the admin API's Scalar (signed in as a dev Keycloak admin): every `levels[]` entry you hold a key for is `ok` with residency `Eu`, `profiles[]` lists `pilot-embedding` with `canaryRecorded: true`; `POST /api/gateway/sync` records it at once instead of waiting for the next sync | now (#123) |
+| Retrieval | a `/v1/retrieve` query on the api about one of the seeded pages with the dev seed's key (below): the hits are chunks of the seeded pages, every `collection` is `pilot-public` | now (#127, the key from §4.4) |
 
 Run the queries with `psql -h localhost -p <port> -U postgres -d ragdb` (the password from the dashboard) or in the
 container (`docker exec -it <postgres container> psql -U postgres -d ragdb`).
+
+The retrieval query, on the api's https endpoint from the dashboard (`https://localhost:7401` by its launch profile).
+The key goes in `Authorization: Bearer`, `x-api-key` or `api-key`; read it into a variable so it stays out of the
+shell history:
+
+```bash
+read -rs UME_RAG_KEY   # paste the ume-rag-sk-… key the seed printed
+curl -sS https://localhost:7401/v1/retrieve -H "Authorization: Bearer $UME_RAG_KEY" -H 'Content-Type: application/json' \
+  -d '{"query": "Hur ansöker jag om bygglov?", "collections": ["pilot-public"], "top_k": 5}'
+```
+
+`401 invalid_key` means the key is mistyped or hashed under another pepper; `403 client_not_allowed` a client of another
+kind; `404 collection_not_found` a slug the client may not see (or no `public` level row); `503 config_unconfirmed`
+right after a start: try again.
 
 ### 4.6 Back to FakeGateway (now)
 

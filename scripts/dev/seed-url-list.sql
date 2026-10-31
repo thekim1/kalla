@@ -11,11 +11,23 @@
 --   ume_seed.collection_name  the new collection's name
 --   ume_seed.source_name      URL-list source found by name in the collection: created, or its URL list replaced
 --   ume_seed.enqueue          true: enqueue a manual sync as the admin's "sync now" does; false: leave it to the scheduler
+--   ume_seed.key_hash         with a key (--api-key): hex HMAC-SHA256 of the new key under Security:KeyPepper (KeyHasher.Hash);
+--                             empty: no client and no key
+--   ume_seed.key_prefix       the new key's display prefix (its first 15 characters, KeyHasher.Generate)
+--   ume_seed.client_name      the internal client found by name, created when missing (ceiling public)
 --
 -- Rows as the engine reads them (EngineTestKit.SeedUrlListAsync, SourceContexts): the source and its collection at level
 -- public, the collection on the profile, the source on the platform url-list pipeline that the migrator seeds and
 -- publishes (PipelineTemplateSeeder). The config triggers bump config."ConfigVersion" and write the outbox for every
 -- row; the version row is locked first, as an admin config write does (ConfigWrites), so the change is one version.
+--
+-- With a key, what rag-api's knowledge routes check (KnowledgeCallers, AccessPolicy steps 1-9, KeyChecks): an internal client
+-- (Knowledge:OpenToClientKinds; the internal kind reaches any live collection directly, there is no link row in P1), ceiling
+-- public, no history store; a secret key of it scoped to the collection (Keys.Scopes), enabled, expiring after 30 days; and
+-- the public level's DataProtectionPolicies row, without which every public collection is refused (fail closed). The row
+-- holds the plan §8a values for public with history mode none (P1a item 14's admin endpoint owns them later). A usable key of
+-- the client named for the collection is kept: no second key. The Keys and Clients triggers bump the config version, so the
+-- api's key store and snapshot pick the change up.
 
 BEGIN;
 
@@ -38,6 +50,9 @@ DECLARE
     collection_name text := coalesce(nullif(current_setting('ume_seed.collection_name', true), ''), 'Pilot: umea.se (public)');
     source_name text := coalesce(nullif(current_setting('ume_seed.source_name', true), ''), 'Pilot URL list');
     enqueue boolean := coalesce(nullif(current_setting('ume_seed.enqueue', true), '')::boolean, true);
+    key_hash text := nullif(current_setting('ume_seed.key_hash', true), '');
+    key_prefix text := nullif(current_setting('ume_seed.key_prefix', true), '');
+    client_name text := coalesce(nullif(current_setting('ume_seed.client_name', true), ''), 'Pilot retrieval (dev seed)');
     settings jsonb;
     profile_id uuid;
     department_id uuid;
@@ -51,6 +66,14 @@ DECLARE
     source_id uuid;
     source_state text;
     job_id uuid;
+    policy_state text;
+    client record;
+    client_id uuid;
+    client_state text;
+    key_name text;
+    key_id uuid;
+    key_state text;
+    key_expires timestamptz;
     config_version bigint;
 BEGIN
     IF urls IS NULL OR jsonb_typeof(urls) <> 'array' OR jsonb_array_length(urls) = 0 THEN
@@ -60,6 +83,10 @@ BEGIN
 
     IF profile_name IS NULL THEN
         RAISE EXCEPTION 'seed-url-list: ume_seed.profile (the embedding profile name) is required';
+    END IF;
+
+    IF key_hash IS NOT NULL AND (key_hash !~ '^[0-9a-f]{64}$' OR key_prefix IS NULL OR key_prefix !~ '^ume-rag-sk-[0-9A-Za-z]{4}$') THEN
+        RAISE EXCEPTION 'seed-url-list: ume_seed.key_hash must be 64 lower-case hex digits and ume_seed.key_prefix a secret key''s 15-character prefix';
     END IF;
 
     -- The admin's config write: the version lock first.
@@ -144,6 +171,52 @@ BEGIN
         END IF;
     END IF;
 
+    IF key_hash IS NOT NULL THEN
+        INSERT INTO config."DataProtectionPolicies" ("Classification", "AllowedHistoryModes", "DefaultHistoryMode", "RetentionDefaultDays",
+                                                     "RetentionMaxDays", "EncryptionRequired", "ReviewSecondApprover", "ClientsWithoutHistoryOnly",
+                                                     "BlobMasterKeyName", "UpdatedAt", "UpdatedBy")
+        VALUES ('public', ARRAY['none']::varchar(20)[], 'none', 90, 90, false, false, false, NULL, now(), actor)
+        ON CONFLICT ("Classification") DO NOTHING;
+        policy_state := CASE WHEN FOUND THEN 'created' ELSE 'existing' END;
+
+        SELECT c."Id", c."Kind", c."ClassificationCeiling", c."StoresHistory", c."IsEnabled" INTO client
+        FROM config."Clients" c WHERE c."Name" = client_name ORDER BY c."Id" LIMIT 1;
+        IF NOT FOUND THEN
+            client_id := gen_random_uuid();
+            INSERT INTO config."Clients" ("Id", "Name", "Kind", "ClassificationCeiling", "StoresHistory", "AllowedOrigins", "ToolPolicy", "IsEnabled",
+                                          "UpdatedAt", "UpdatedBy")
+            VALUES (client_id, client_name, 'internal', 'public', false, '{}', 'none', true, now(), actor);
+            client_state := 'created';
+        ELSIF client."Kind" <> 'internal' OR client."ClassificationCeiling" <> 'public' OR client."StoresHistory" OR NOT client."IsEnabled" THEN
+            RAISE EXCEPTION 'seed-url-list: client % exists but is not an enabled internal client with ceiling public and no history; use another --client-name',
+                client_name;
+        ELSE
+            client_id := client."Id";
+            client_state := 'existing';
+        END IF;
+
+        -- A usable key (ApiKey.GetStatus active: not revoked, enabled, not expired, not rotated) of the client for this collection.
+        key_name := 'dev seed: ' || collection_slug;
+        SELECT k."Id", k."ExpiresAt" INTO key_id, key_expires
+        FROM config."Keys" k
+        WHERE k."ClientId" = client_id AND k."Name" = key_name AND k."Kind" = 'sk' AND k."IsEnabled" AND k."RevokedAt" IS NULL
+              AND k."GraceUntil" IS NULL AND (k."ExpiresAt" IS NULL OR k."ExpiresAt" > now())
+              AND k."Scopes" = jsonb_build_object('assistantIds', '[]'::jsonb, 'collectionIds', jsonb_build_array(collection_id))
+        ORDER BY k."CreatedAt" DESC, k."Id" LIMIT 1;
+        IF key_id IS NULL THEN
+            key_id := gen_random_uuid();
+            key_expires := now() + interval '30 days';
+            INSERT INTO config."Keys" ("Id", "ClientId", "Kind", "Name", "Description", "Prefix", "KeyHash", "Scopes", "AllowedOrigins", "AllowedIpRanges",
+                                       "IsEnabled", "CreatedAt", "CreatedBy", "ExpiresAt")
+            VALUES (key_id, client_id, 'sk', key_name, 'Dev seed key for /v1/retrieve on ' || collection_slug, key_prefix, key_hash,
+                    jsonb_build_object('assistantIds', '[]'::jsonb, 'collectionIds', jsonb_build_array(collection_id)), '{}', '{}',
+                    true, now(), actor, key_expires);
+            key_state := 'created';
+        ELSE
+            key_state := 'existing';
+        END IF;
+    END IF;
+
     SELECT "Version" INTO config_version FROM config."ConfigVersion" WHERE "Id" = 1;
 
     INSERT INTO seed_result ("Key", "Value", "Ordinal") VALUES
@@ -160,6 +233,17 @@ BEGIN
         ('collection_id', collection_id::text, 9),
         ('department_id', department_id::text, 10),
         ('sync_job_id', job_id::text, 11);
+    IF key_hash IS NOT NULL THEN
+        INSERT INTO seed_result ("Key", "Value", "Ordinal") VALUES
+            ('level_policy', 'public (' || policy_state || ', history mode none)', 12),
+            ('client', client_id::text || ' ' || client_name || ' (' || client_state || ', internal, ceiling public)', 13),
+            ('api_key', key_id::text || ' ' || key_name || ' (' || key_state || ', scoped to ' || collection_slug || ', expires '
+                        || to_char(key_expires AT TIME ZONE 'UTC', 'YYYY-MM-DD') || CASE WHEN key_state = 'existing'
+                        THEN '; its plaintext was shown when it was created and is not printed again)' ELSE ')' END, 14),
+            ('client_id', client_id::text, 15),
+            ('api_key_id', key_id::text, 16),
+            ('api_key_state', key_state, 17);
+    END IF;
 END
 $seed$;
 
