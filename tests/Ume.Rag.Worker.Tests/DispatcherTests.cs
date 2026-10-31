@@ -111,11 +111,19 @@ public sealed class DispatcherTests(RagDatabaseFixture database) : IAsyncLifetim
         done.Attempts.ShouldBe((short)1);
         done.Reclaims.ShouldBe((short)1);
         done.LeaseOwner.ShouldBe(b.InstanceId);
-        // Reclaimed once the instance had been silent for its timeout (its last heartbeat is at most one interval old at
-        // the kill), at the next reaper pass, then dequeued at once (the reaper wakes the dispatcher) or within a poll.
+        // Reclaimed only once the instance had been silent for its timeout, measured on the database clock from its last
+        // heartbeat (frozen at the kill) to the reclaim (the reaper sets AvailableAt). Not from the kill: under CPU load
+        // (2-vCPU runners, B starting up) A's last heartbeat can lag its 1 s interval, and the reclaim then comes sooner
+        // after the kill while the rule still holds.
+        var silence = await Sql.ScalarAsync<double>(database.Connection(null), """
+            SELECT extract(epoch FROM j."AvailableAt" - w."LastHeartbeatAt")::float8
+            FROM content."Jobs" j, content."WorkerInstances" w WHERE j."Id" = $1 AND w."InstanceId" = $2
+            """, job, a.InstanceId);
+        // Then at the next reaper pass, and dequeued at once (the reaper wakes the dispatcher) or within a poll.
         var downtime = restartedAt - killedAt;
-        TestContext.Current.TestOutputHelper?.WriteLine(string.Create(CultureInfo.InvariantCulture, $"killed worker's job restarted after {downtime.TotalSeconds:F2} s"));
-        downtime.ShouldBeGreaterThan(TimeSpan.FromSeconds(WorkerHost.InstanceTimeoutSeconds - WorkerHost.HeartbeatSeconds - 0.5));
+        TestContext.Current.TestOutputHelper?.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"killed worker's job restarted after {downtime.TotalSeconds:F2} s; silent {silence:F2} s at the reclaim"));
+        silence.ShouldBeGreaterThanOrEqualTo(WorkerHost.InstanceTimeoutSeconds);
         downtime.ShouldBeLessThan(TimeSpan.FromSeconds(WorkerHost.InstanceTimeoutSeconds + WorkerHost.ReaperSeconds + WorkerHost.PollSeconds + 5));
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."WorkerInstances" WHERE "InstanceId" = $1""", a.InstanceId))
             .ShouldBe(1, "a killed instance leaves its row for the 5-minute sweep");
