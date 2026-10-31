@@ -223,6 +223,8 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
   bundle, smoke test, SBOMs; item 11 minus the tag; H5 evidence in its body). #58 and #60 both append to
   `results-a.md`/`progress-a.md`: merge `origin/main` into the second one (keep both blocks).
 - #59 to stream B: copy the gateway's `PublishAdminUi` (release.yml copies `dist` into `wwwroot` meanwhile).
+- #61 to stream B: `admin-ui`'s `npm audit` is red from new advisories (`minimatch`/`glob`, moderate, lint dev
+  dependencies). It makes #60 red (only `admin-ui`; every other check green) and any PR that runs that job.
 
 **Next:**
 1. Merge #57, #58, #60 (user's go-ahead each). Tick H5 in `progress-a.md` from #60's evidence; remove worktrees
@@ -250,7 +252,7 @@ session; the platform's licence (EUPL-1.2 suggested); names and dates for A1, G1
 a browser check of the admin UI.
 
 **Open issues:** #27 (ClamAV 1.4.6, stream A), #34 (`BlobTombstones`, B, P1), #41 (`rag-blobs` root-owned, A, P1), #47
-(Keycloak pilot, B), #48 (H8), #51/#52 (licence notices), #56 (stream B's J1 question; answered), #59 (`PublishAdminUi`, B).
+(Keycloak pilot, B), #48 (H8), #51/#52 (licence notices), #56 (stream B's J1 question; answered), #59 (`PublishAdminUi`, B), #61 (`admin-ui` audit red, B).
 
 **Worktrees:** `../rag-a14` (#60), `../rag-a15` (#58); remove each with `git worktree remove` once merged. The Aspire CLI
 is at `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
