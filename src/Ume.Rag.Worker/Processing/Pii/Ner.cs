@@ -1,4 +1,3 @@
-using System.Text;
 using Ume.Rag.Worker.Parsing;
 
 namespace Ume.Rag.Worker.Processing.Pii;
@@ -14,9 +13,8 @@ public sealed record NerAnswer(IReadOnlyList<NerEntity> Entities, string Model);
 
 /// <summary>
 /// The parser's <c>POST /v1/ner</c> (processing design §10; parser design §7.8). <c>busy</c> and <c>not_ready</c> are thrown
-/// as <see cref="ParserException"/> with 503. The production implementation is a thin adapter over <c>ParserClient</c>'s NER
-/// call, which P1a item 5 adds to the parser client; until it is merged the worker has no NER and every gated set waits
-/// as <c>pending</c> (fail closed, §9.6).
+/// as <see cref="ParserException"/> with 503. <see cref="Parse.ParserNerClient"/> is the implementation over
+/// <see cref="ParserClient"/>; without a client registered, every gated set waits as <c>pending</c> (fail closed, §9.6).
 /// </summary>
 public interface INerClient
 {
@@ -36,42 +34,4 @@ public interface IFirstNameGazetteer
 public sealed class EmptyGazetteer : IFirstNameGazetteer
 {
     public bool Contains(string word) => false;
-}
-
-/// <summary>Code points (the NER offsets) to UTF-16 indexes, by <see cref="Rune"/> enumeration (surrogate pairs).</summary>
-public static class CodePoints
-{
-    /// <summary>The UTF-16 range of the code points <c>[start, end)</c> of <paramref name="text"/>, or null when out of range.</summary>
-    public static (int Start, int Length)? ToUtf16(string text, int start, int end)
-    {
-        ArgumentNullException.ThrowIfNull(text);
-        if (start < 0 || end < start)
-        {
-            return null;
-        }
-
-        int index = 0, point = 0, from = -1;
-        foreach (var rune in text.EnumerateRunes())
-        {
-            if (point == start)
-            {
-                from = index;
-            }
-
-            if (point == end)
-            {
-                return from < 0 ? null : (from, index - from);
-            }
-
-            index += rune.Utf16SequenceLength;
-            point++;
-        }
-
-        if (point == start)
-        {
-            from = index;
-        }
-
-        return point == end && from >= 0 ? (from, index - from) : null;
-    }
 }

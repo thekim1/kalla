@@ -136,15 +136,6 @@ public sealed class PersonalDataTests
     }
 
     [Fact]
-    public void Code_points_map_to_utf16_ranges()
-    {
-        const string text = "😀 Åsa"; // U+1F600 is two UTF-16 units
-        CodePoints.ToUtf16(text, 2, 5).ShouldBe((3, 3));
-        CodePoints.ToUtf16(text, 0, 1).ShouldBe((0, 2));
-        CodePoints.ToUtf16(text, 4, 9).ShouldBeNull();
-    }
-
-    [Fact]
     public async Task Busy_requeues_without_an_attempt()
     {
         var (stage, ner, _) = Stage();

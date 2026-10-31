@@ -119,9 +119,9 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
             var texts = batch.ToDictionary(t => t.Id, t => t.Text, StringComparer.Ordinal);
             foreach (var entity in answer.Entities.Where(e => e.Label == "person" && e.Score >= context.NerMinScore))
             {
-                if (texts.TryGetValue(entity.TextId, out var text) && CodePoints.ToUtf16(text, entity.Start, entity.End) is { } span)
+                if (texts.TryGetValue(entity.TextId, out var text) && Span(text, entity) is { Length: > 0 } name)
                 {
-                    names.Add(NameKey(text.Substring(span.Start, span.Length)));
+                    names.Add(NameKey(name));
                 }
             }
         }
@@ -236,6 +236,19 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
 
     private static bool IsOwn(string domain, IReadOnlyList<string> own) =>
         own.Any(d => domain.Equals(d, StringComparison.OrdinalIgnoreCase) || domain.EndsWith("." + d, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The entity's text by its code-point offsets (<see cref="ParserText"/>), or null when they are outside the text.</summary>
+    private static string? Span(string text, NerEntity entity)
+    {
+        try
+        {
+            return entity.End < entity.Start ? null : text[ParserText.Utf16Index(text, entity.Start)..ParserText.Utf16Index(text, entity.End)];
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>NFC, case-folded, hyphenated parts joined ("Anna-Karin" = "Anna Karin" = "annakarin").</summary>
     private static string NameKey(string name) =>

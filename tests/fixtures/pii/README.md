@@ -10,3 +10,9 @@ Used by `tests/Ume.Rag.Worker.Tests/Processing/PiiTargetTests.cs` (processing de
 Test numbers may only be used in test environments (Skatteverket); they are not real people. Every other value in the
 PII tests (organisationsnummer, OCR references, phone numbers, e-mail addresses, names) is generated in the test from a
 fixed seed. SCB name statistics for the NER prefilter's gazetteer are not used yet (licence not checked, to-verify #111).
+
+`ner-names.jsonl`: 70 synthetic Swedish sentences, 55 with their gold person names (66 names: running text, hyphenated,
+`von`/`af` particles, genitive, ALL CAPS, table rows) and 15 sentences without persons (places and streets named after
+people, surnames that are nouns). Written for this repository; the names are common Swedish names, not real people in
+these roles. Used by `tests/Ume.Rag.ContractTests/NerTargetTests.cs` against the parser image (processing design §17
+NER targets).
