@@ -54,7 +54,7 @@ Refs: [identity/design.md](../identity/design.md) §1–§3, §10, §11; [identi
 - [x] Postgres admin session store; `AdminSessionTests` copied (to-verify #163)
 - [x] `OidcClaimMappingTests` copied; member-group resolver tested against FakeGateway data (#32)
 - [ ] to-verify #83, #151 recorded
-- [ ] **Done:** sign-in to the empty admin UI as each test user shows the right roles and departments (incl. one from a group claim)
+- [x] **Done:** sign-in to the empty admin UI as each test user shows the right roles and departments (incl. one from a group claim) (user test round 2026-10-31, `rag-group-member` via Byggnadsnämnden)
 - [x] **Hand-off H7:** realm and claim mapping ready for the user's package 1 (#35)
 
 ## 7. Admin skeleton and write path (#11)
@@ -64,7 +64,7 @@ Refs: [admin/design.md](../admin/design.md) §2–§4, §11, §12
 - [x] `PermissionMatrix` role tests (#38)
 - [x] Org sync against the FakeGateway catalogue (#39)
 - [x] `contracts/admin/v1/error-codes.json` export (#38)
-- [ ] **Done:** lint/typecheck/test/build green; a saved change bumps the config version with one audit entry; synced departments visible
+- [x] **Done:** lint/typecheck/test/build green; a saved change bumps the config version with one audit entry; synced departments visible (`verify.yml` admin-ui job, `WritePathTests`; user test round 2026-10-31)
 - [ ] `command` enqueue from the admin (after H4)
 
 ## 8. Scale seams, your part (#21)
