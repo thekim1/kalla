@@ -227,10 +227,14 @@ Start with `plans/p0/prompts/main-session.md` and this section. First check GitH
   dependencies). It makes #60 red (only `admin-ui`; every other check green) and any PR that runs that job.
 
 **Next:**
-0. **The release dry run (run 41182718202) stopped at `verify / admin-ui` (#61)**: every other verify and parser job
-   passed, `build` was skipped. **#64** (dated dev-only audit exceptions until 2026-11-10) unblocks it; then re-run
-   `gh workflow run release.yml --ref main -f version=0.1.0-dryrun.2`. Also open: #62 (docs: install from the bundle;
-   admin UI build step for clone installs) and #63 (CHANGELOG, shared), both green.
+0. **Release status (2026-10-31, later in session 9):** #62, #63, #64 merged. Dry run 2 (run 41183596129) passed
+   verify, parser, every image build and push, SBOMs and the bundle; the smoke test failed on the 2-vCPU runner
+   (parser `cpus: 4.0`) → **#69** (CI-only CPU overlay). **Waiting on "merge #67" (ClamAV 1.4.6), "merge #68"
+   (CHANGELOG 0.1.0), "merge #69"**; then dry run `0.1.0-dryrun.3`; then push tag `v0.1.0` (user said: after the
+   ClamAV bump). Stream B: #65 (EUPL-1.2, user confirmed; told to merge), #66 (`PublishAdminUi`, reviewed OK; then
+   switch `release.yml` to `-p:PublishAdminUi=true`). User decisions recorded: 7-day rule suspended in development;
+   EUPL-1.2 (gateway too); interim J10 = the gateway's test/dev instance (HTTPS, public cert, EU models), its Keycloak
+   holds realm `ume` (J11); U-b named once the catalogue is listed with a key.
 1. **Done 2026-10-31:** #57, #58, #60 merged (#60 with only `admin-ui` red from #61, the user's call); worktrees gone.
    Tick H5 in `progress-a.md` from #60's evidence in the #27 PR. `gh pr merge --admin` is refused by the classifier
    (a branch-protection bypass); a plain merge goes through.
