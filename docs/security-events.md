@@ -30,7 +30,7 @@ a structured field.
 
 ## Events
 
-Status: **P0** emitted today; otherwise the phase it comes with.
+Status: **P0** emitted today; **P1** defined in `SecurityEvents.cs` and emitted by the P1 code that raises it (the worker's egress guard and scanner); otherwise the phase it comes with.
 
 | Id | Name | Level | Emitted by | When | Attributes | Status |
 |---|---|---|---|---|---|---|
@@ -49,8 +49,8 @@ Status: **P0** emitted today; otherwise the phase it comes with.
 | 5013 | `rag.tool.upstream_refused` | Warning | api, admin | A tool server refused our credential; once a minute per server and reason | `ToolServerId`, `Reason`, `Status`, `Count` | P2 |
 | 5014 | `rag.content.tag_neutralised` | Information | api, admin | Reserved tags neutralised in untrusted text | `SourceKind`, `ResourceId`, `Count` | P2 |
 | 5015 | `rag.tool.result_refused` | Warning | api, admin | A tool result refused (`too_large`, `level_refused`, `protocol_error`) | `ToolServerId`, `ToolId`, `Reason`, `ResultBytes`, `ResultLevel`, `EffectiveLevel` | P2 |
-| 5101 | `rag.egress.blocked` | Warning | worker | A fetch to a blocked or private address was refused | (connectors design §7) | P1 |
-| 5102 | `rag.malware.detected` | Warning | worker | ClamAV found malware in a fetched or uploaded file | (connectors design §11) | P1 |
+| 5101 | `rag.egress.blocked` | Warning | worker | A fetch to a blocked or private address was refused; at most once a minute per (source, reason) | `Reason` (`private_address`, `embedded_address`, `scheme`, `port`, `userinfo`, `blocked_host`, `redirect_downgrade`), `AddressClass` (`loopback`, `rfc1918`, `link_local`, `cgnat`, `ula`, `multicast`, `reserved`), `Purpose`, `SourceId`, `RunId`, `Classification`, `HostHash` (HMAC of the host under `Security:CrawlKeyPepper`), `Host` (`public` sources only), `Count` | P1 |
+| 5102 | `rag.malware.detected` | Warning | worker | ClamAV found malware in a fetched or uploaded file; the file is quarantined | `Signature`, `Sha256`, `Origin` (`upload`/`crawl`), `SourceId`, `RunId`, `DocumentId` (if any), `Classification` | P1 |
 | 5103 | `rag.pii.flagged` | Warning | worker | A document became flagged for personal data | `DocumentId`, `ChunkSetId`, `Classification`, `Types`, `Counts` (numbers only), `SourceId`, `RunId`, `Reflag` | P1 |
 | 5104 | `rag.parser.limit_exceeded` | Warning | worker | The parser refused a file for a size or bomb limit | `DocumentId`, `Limit` | P1 |
 | 5105 | `rag.pipeline.refused` | Warning | worker | A published pipeline version failed validation and was not run | `PipelineId`, `PipelineVersionId`, `Reason` | P1 |

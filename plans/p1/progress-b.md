@@ -18,11 +18,11 @@ the PR number after it (`[x] … (#12)`). Record every `to-verify` row in `resul
 
 ## 1. Schema part 1, ingestion (#2, first)
 Refs: [data-model](../platform/data-model.md) §1.2, §2.1, §2.2, §3.2, §9, §10; [connectors §6.0](../ingestion-worker/design-connectors.md)
-- [x] `config`: `Settings`, `DataProtectionPolicies`, `EmbeddingProfiles` (ceiling per README §8 O1), `Collections`, `Sources`, `Pipelines`, `PipelineVersions` (this PR)
-- [x] `content`: `NodeManifest`, `WorkerNodeSupport`, `CrawlHosts`, `SiteProfiles`, `SiteProfileVersions`, `CrawlFrontier` (per source), `CrawlRuns`, `ConnectorCheckpoints`, `Uploads`, `DeletionProposals`, `QuarantinedFiles` (this PR)
-- [x] `Documents`, `NodeOutputs`, `ChunkSets`, `Chunks` (partial GIN, per-profile halfvec HNSW), `EmbeddingCache`, `Runs`, `ParseObservations`, `ParseProfiles`, `BlobTombstones` (#34) (this PR)
-- [x] Grants; `DatabaseRoleTests` extended; #22 recorded (this PR)
-- [ ] **Hand-off J2:** migrations merged; issue to stream A
+- [x] `config`: `Settings`, `DataProtectionPolicies`, `EmbeddingProfiles` (ceiling per README §8 O1), `Collections`, `Sources`, `Pipelines`, `PipelineVersions` (#76)
+- [x] `content`: `NodeManifest`, `WorkerNodeSupport`, `CrawlHosts`, `SiteProfiles`, `SiteProfileVersions`, `CrawlFrontier` (per source), `CrawlRuns`, `ConnectorCheckpoints`, `Uploads`, `DeletionProposals`, `QuarantinedFiles` (#76)
+- [x] `Documents`, `NodeOutputs`, `ChunkSets`, `Chunks` (partial GIN, per-profile halfvec HNSW), `EmbeddingCache`, `Runs`, `ParseObservations`, `ParseProfiles`, `BlobTombstones` (#34) (#76)
+- [x] Grants; `DatabaseRoleTests` extended; #22 recorded (#76)
+- [x] **Hand-off J2:** migrations merged; issue to stream A (#76, #85)
 
 ## 2. Schema part 2, serving (#3)
 Refs: [data-model §2.1, §2.2](../platform/data-model.md), [weakness review §2](../weakness-review.md)
