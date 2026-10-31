@@ -255,19 +255,38 @@ class ConvertResult(_Result):
     markdown: str | None = Field(description="the document Markdown with page markers, when outputs.markdown is set")
 
 
-# --- Inspect result (P1 endpoint; the schema is part of P0) ---------------------------------------------------------
+# --- Inspect --------------------------------------------------------------------------------------------------------
+
+
+class InspectRequest(_Request):
+    """The optional `options` part of `POST /v1/inspect` (§6.2): what the worker declares, for the mismatch warning."""
+
+    model_config = ConfigDict(title="InspectRequest")
+
+    request_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    file_ext: str | None = Field(default=None, pattern=r"^\.[a-z0-9]{1,10}$")
+    media_type: str | None = Field(default=None, max_length=255)
 
 
 class InspectPage(_Result):
+    """A PDF page (text-layer facts, no rendering) or an image frame (size and resolution only)."""
+
     page: int
-    width: float
-    height: float
+    width: float = Field(description="points")
+    height: float = Field(description="points")
     rotation: int | None
     text_chars: int | None
     bad_chars: int | None
     garbled_score: float | None
     image_coverage: float | None
     path_objects: int | None
+    dpi: float | None = Field(description="image frames: the resolution the size in points is computed from")
+
+
+class InspectTimings(_Result):
+    total_ms: int
+    wait_ms: int
+    inspect_ms: int
 
 
 class InspectResult(_Result):
@@ -287,6 +306,75 @@ class InspectResult(_Result):
     has_xfa: bool | None
     pages: list[InspectPage]
     refusal: ErrorCode | None = Field(description="the error code convert would give, if any")
+    warnings: list[ConvertWarning]
+    timings: InspectTimings
+    build: Build
+
+
+# --- NER (§7.8; processing design §10) --------------------------------------------------------------------------------
+
+NerLabel = Literal["person", "person_ambiguous"]
+
+
+class NerText(_Request):
+    id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
+    text: str = Field(max_length=limits.NER_MAX_TEXT_CHARS, description="NFC; offsets in the result are code points")
+
+
+class NerRequest(_Request):
+    """`POST /v1/ner`: text units of one chunk set. `person_ambiguous` (mixed labels such as `ORG/PRS`) is returned only
+    when asked for."""
+
+    model_config = ConfigDict(title="NerRequest")
+
+    request_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    texts: list[NerText] = Field(min_length=1, max_length=limits.NER_MAX_TEXTS)
+    labels: list[NerLabel] = Field(default=["person"], min_length=1)
+    min_score: float = Field(default=0.0, ge=0, le=1)
+    deadline_ms: int = Field(default=limits.NER_DEADLINE_MS, ge=1_000, le=limits.NER_DEADLINE_MS)
+
+    @model_validator(mode="after")
+    def _bounded(self) -> "NerRequest":
+        if sum(len(t.text) for t in self.texts) > limits.NER_MAX_REQUEST_CHARS:
+            raise ValueError("texts exceed the characters per request")
+        if len({t.id for t in self.texts}) != len(self.texts):
+            raise ValueError("text ids are not unique")
+        return self
+
+
+class NerEntity(_Result):
+    text_id: str
+    start: int = Field(ge=0, description="code point offset into the text as sent")
+    end: int = Field(ge=0, description="exclusive")
+    label: NerLabel
+    score: float = Field(ge=0, le=1)
+
+
+class NerModel(_Result):
+    repository: str
+    revision: str
+    sha256: str = Field(description="of the weights file")
+    labels: list[str] = Field(description="the model's own labels")
+    person_labels: list[str] = Field(description="model labels mapped to `person`")
+    quantised: bool
+
+
+class NerTimings(_Result):
+    total_ms: int
+    wait_ms: int
+    ner_ms: int
+
+
+class NerResult(_Result):
+    """The answer of `POST /v1/ner`. Entity text is never echoed back."""
+
+    model_config = ConfigDict(title="NerResult")
+
+    contract: Literal["parser/v1"]
+    request_id: str
+    entities: list[NerEntity]
+    model: NerModel
+    timings: NerTimings
     build: Build
 
 
@@ -323,6 +411,17 @@ class Limits(_Result):
     max_pages_per_document: int
     max_deadline_ms: int
     inspect_deadline_ms: int
+    max_zip_entries: int
+    max_zip_uncompressed_bytes: int
+    max_zip_ratio: int
+    max_image_pixels: int
+    max_tiff_frames: int
+    max_render_pixels: int
+    max_spreadsheet_cells: int
+    ner_max_texts: int
+    ner_max_text_chars: int
+    ner_max_request_chars: int
+    ner_deadline_ms: int
 
 
 class Formats(_Result):
@@ -339,6 +438,7 @@ class StaticInfo(_Result):
     pdfium: Pdfium
     tesseract: Tesseract | None
     models: list[Model]
+    ner: NerModel | None = Field(description="the NER model as `ner-0` loads it; null when NER is off")
     limits: Limits
     formats: Formats
 
@@ -372,7 +472,7 @@ class ErrorBody(_Result):
 
 
 class ErrorResponse(_Result):
-    """Every non-200 response of `/v1/convert` and `/v1/inspect` (§7.5)."""
+    """Every non-200 response of `/v1/convert`, `/v1/inspect` and `/v1/ner` (§7.5)."""
 
     model_config = ConfigDict(title="ErrorResponse")
 

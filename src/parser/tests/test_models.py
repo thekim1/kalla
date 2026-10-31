@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from helpers import REPO_ROOT
 from scripts import export_schema
-from ume_parser.models import ConvertRequest
+from ume_parser.models import ConvertRequest, InspectRequest, NerRequest
 
 CONTRACTS = REPO_ROOT / "contracts" / "parser" / "v1"
 
@@ -43,6 +43,17 @@ def test_page_range_uses_the_from_alias():
     request = ConvertRequest.model_validate({"request_id": "r", "file_ext": ".pdf", "pages": {"from": 41, "to": 60}})
     assert request.pages.count == 20
     assert request.model_dump(by_alias=True)["pages"] == {"from": 41, "to": 60}
+
+
+def test_inspect_options_are_all_optional():
+    assert InspectRequest.model_validate({}).request_id is None
+    with pytest.raises(ValidationError):
+        InspectRequest.model_validate({"pipeline": "docling"})
+
+
+def test_ner_request_defaults_to_persons_only():
+    request = NerRequest.model_validate({"request_id": "set-1", "texts": [{"id": "c1:0", "text": "Anna"}]})
+    assert (request.labels, request.min_score, request.deadline_ms) == (["person"], 0.0, 15_000)
 
 
 @pytest.mark.skipif(not CONTRACTS.is_dir(), reason="needs the repository's contracts/ (not in the image)")

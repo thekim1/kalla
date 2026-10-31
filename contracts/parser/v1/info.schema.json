@@ -75,6 +75,50 @@
         "inspect_deadline_ms": {
           "title": "Inspect Deadline Ms",
           "type": "integer"
+        },
+        "max_zip_entries": {
+          "title": "Max Zip Entries",
+          "type": "integer"
+        },
+        "max_zip_uncompressed_bytes": {
+          "title": "Max Zip Uncompressed Bytes",
+          "type": "integer"
+        },
+        "max_zip_ratio": {
+          "title": "Max Zip Ratio",
+          "type": "integer"
+        },
+        "max_image_pixels": {
+          "title": "Max Image Pixels",
+          "type": "integer"
+        },
+        "max_tiff_frames": {
+          "title": "Max Tiff Frames",
+          "type": "integer"
+        },
+        "max_render_pixels": {
+          "title": "Max Render Pixels",
+          "type": "integer"
+        },
+        "max_spreadsheet_cells": {
+          "title": "Max Spreadsheet Cells",
+          "type": "integer"
+        },
+        "ner_max_texts": {
+          "title": "Ner Max Texts",
+          "type": "integer"
+        },
+        "ner_max_text_chars": {
+          "title": "Ner Max Text Chars",
+          "type": "integer"
+        },
+        "ner_max_request_chars": {
+          "title": "Ner Max Request Chars",
+          "type": "integer"
+        },
+        "ner_deadline_ms": {
+          "title": "Ner Deadline Ms",
+          "type": "integer"
         }
       },
       "required": [
@@ -82,7 +126,18 @@
         "max_pages_per_request",
         "max_pages_per_document",
         "max_deadline_ms",
-        "inspect_deadline_ms"
+        "inspect_deadline_ms",
+        "max_zip_entries",
+        "max_zip_uncompressed_bytes",
+        "max_zip_ratio",
+        "max_image_pixels",
+        "max_tiff_frames",
+        "max_render_pixels",
+        "max_spreadsheet_cells",
+        "ner_max_texts",
+        "ner_max_text_chars",
+        "ner_max_request_chars",
+        "ner_deadline_ms"
       ],
       "title": "Limits",
       "type": "object"
@@ -122,6 +177,53 @@
         "files"
       ],
       "title": "Model",
+      "type": "object"
+    },
+    "NerModel": {
+      "properties": {
+        "repository": {
+          "title": "Repository",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "of the weights file",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "labels": {
+          "description": "the model's own labels",
+          "items": {
+            "type": "string"
+          },
+          "title": "Labels",
+          "type": "array"
+        },
+        "person_labels": {
+          "description": "model labels mapped to `person`",
+          "items": {
+            "type": "string"
+          },
+          "title": "Person Labels",
+          "type": "array"
+        },
+        "quantised": {
+          "title": "Quantised",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "repository",
+        "revision",
+        "sha256",
+        "labels",
+        "person_labels",
+        "quantised"
+      ],
+      "title": "NerModel",
       "type": "object"
     },
     "ParserVersion": {
@@ -226,6 +328,17 @@
       "title": "Models",
       "type": "array"
     },
+    "ner": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NerModel"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "the NER model as `ner-0` loads it; null when NER is off"
+    },
     "limits": {
       "$ref": "#/$defs/Limits"
     },
@@ -249,6 +362,7 @@
     "pdfium",
     "tesseract",
     "models",
+    "ner",
     "limits",
     "formats",
     "build_hash",

@@ -152,8 +152,119 @@ public sealed record ParserErrorBody(
     string? Reason,
     ParserPageSpan? PagesCompleted);
 
-/// <summary>Every non-200 answer of <c>/v1/convert</c> and <c>/v1/inspect</c> (error.schema.json).</summary>
+/// <summary>Every non-200 answer of <c>/v1/convert</c>, <c>/v1/inspect</c> and <c>/v1/ner</c> (error.schema.json).</summary>
 public sealed record ParserErrorResponse(ParserErrorBody Error, string? RequestId, ParserBuild Build);
+
+/// <summary>The optional <c>options</c> part of <c>POST /v1/inspect</c> (inspect-request.schema.json).</summary>
+public sealed record ParserInspectOptions
+{
+    public string? RequestId { get; init; }
+    public string? FileExt { get; init; }
+    public string? MediaType { get; init; }
+}
+
+/// <summary>A PDF page (text-layer facts) or an image frame (size and resolution) of <c>/v1/inspect</c>.</summary>
+public sealed record ParserInspectPage(
+    int Page,
+    double Width,
+    double Height,
+    int? Rotation,
+    int? TextChars,
+    int? BadChars,
+    double? GarbledScore,
+    double? ImageCoverage,
+    int? PathObjects,
+    double? Dpi);
+
+public sealed record ParserInspectTimings(int TotalMs, int WaitMs, int InspectMs);
+
+/// <summary>
+/// <c>POST /v1/inspect</c> (inspect-result.schema.json): page count and per-page signals for the worker's parse plan;
+/// <see cref="Refusal"/> is the error code a conversion would give.
+/// </summary>
+public sealed record ParserInspectResult(
+    string Contract,
+    string? RequestId,
+    string Format,
+    string MediaTypeSniffed,
+    int? PageCount,
+    bool Rangeable,
+    string? Encrypted,
+    bool? HasJavascript,
+    bool? HasEmbeddedFiles,
+    bool? HasXfa,
+    IReadOnlyList<ParserInspectPage> Pages,
+    string? Refusal,
+    IReadOnlyList<ParserWarning> Warnings,
+    ParserInspectTimings Timings,
+    ParserBuild Build);
+
+/// <summary>One text unit of a <c>/v1/ner</c> request, NFC, at most 4 000 characters.</summary>
+public sealed record ParserNerText(string Id, string Text);
+
+/// <summary>
+/// <c>POST /v1/ner</c> (ner-request.schema.json). <c>person_ambiguous</c> (mixed model labels such as <c>ORG/PRS</c>)
+/// comes back only when <see cref="Labels"/> asks for it.
+/// </summary>
+public sealed record ParserNerRequest(string RequestId, IReadOnlyList<ParserNerText> Texts)
+{
+    public IReadOnlyList<string> Labels { get; init; } = ["person"];
+    public double MinScore { get; init; }
+    public int DeadlineMs { get; init; } = 15_000;
+}
+
+/// <summary>A name's span in the text it was found in, as Unicode code points (see <see cref="ParserText"/>).</summary>
+public sealed record ParserNerEntity(string TextId, int Start, int End, string Label, double Score);
+
+public sealed record ParserNerModel(
+    string Repository,
+    string Revision,
+    string Sha256,
+    IReadOnlyList<string> Labels,
+    IReadOnlyList<string> PersonLabels,
+    bool Quantised);
+
+public sealed record ParserNerTimings(int TotalMs, int WaitMs, int NerMs);
+
+/// <summary><c>POST /v1/ner</c>'s answer (ner-result.schema.json); entity text is never echoed back.</summary>
+public sealed record ParserNerResult(
+    string Contract,
+    string RequestId,
+    IReadOnlyList<ParserNerEntity> Entities,
+    ParserNerModel Model,
+    ParserNerTimings Timings,
+    ParserBuild Build);
+
+/// <summary>Code-point offsets of the parser contract as UTF-16 offsets of a .NET string (processing design §10).</summary>
+public static class ParserText
+{
+    /// <summary>The UTF-16 index of code point <paramref name="codePoint"/> in <paramref name="text"/>.</summary>
+    public static int Utf16Index(string text, int codePoint)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentOutOfRangeException.ThrowIfNegative(codePoint);
+        var index = 0;
+        for (var seen = 0; seen < codePoint; seen++)
+        {
+            if (index >= text.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(codePoint), "The offset is past the end of the text.");
+            }
+
+            index += char.IsHighSurrogate(text[index]) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1]) ? 2 : 1;
+        }
+
+        return index;
+    }
+
+    /// <summary>The substring an entity spans.</summary>
+    public static string Span(string text, ParserNerEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        var start = Utf16Index(text, entity.Start);
+        return text[start..Utf16Index(text, entity.End)];
+    }
+}
 
 public sealed record ParserVersion(string Version, string Revision);
 
@@ -173,7 +284,18 @@ public sealed record ParserLimits(
     int MaxPagesPerRequest,
     int MaxPagesPerDocument,
     int MaxDeadlineMs,
-    int InspectDeadlineMs);
+    int InspectDeadlineMs,
+    int MaxZipEntries,
+    long MaxZipUncompressedBytes,
+    int MaxZipRatio,
+    long MaxImagePixels,
+    int MaxTiffFrames,
+    long MaxRenderPixels,
+    int MaxSpreadsheetCells,
+    int NerMaxTexts,
+    int NerMaxTextChars,
+    int NerMaxRequestChars,
+    int NerDeadlineMs);
 
 public sealed record ParserFormats(IReadOnlyList<string> Supported, IReadOnlyList<string> Deferred);
 
@@ -187,6 +309,7 @@ public sealed record ParserInfo(
     ParserPdfium Pdfium,
     ParserTesseract? Tesseract,
     IReadOnlyList<ParserModel> Models,
+    ParserNerModel? Ner,
     ParserLimits Limits,
     ParserFormats Formats,
     string BuildHash,

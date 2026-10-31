@@ -1,0 +1,21 @@
+{
+  "comment": "Garble detector test vectors (plans/parser/design.md §6.3): text and the expected garbled_score range, inclusive.",
+  "vectors": [
+    { "name": "empty", "text": "", "low": 0.0, "high": 0.0 },
+    { "name": "swedish", "text": "Kommunfullmäktige beslutade att anta budgeten för år 2027.", "low": 0.0, "high": 0.0 },
+    { "name": "swedish-paragraph", "text": "Kommunfullmäktige i Umeå kommun beslutade om nya riktlinjer för bygglov och marklov. Länsstyrelsen i Västerbotten prövar överklagandet inom tre veckor.", "low": 0.0, "high": 0.1 },
+    { "name": "english", "text": "The parser checks the clean-page rule again before it takes the fast path.", "low": 0.0, "high": 0.1 },
+    { "name": "fee-table", "text": "Avgift 1 200 kr, marklov 800 kr, rivningslov 2 400 kr.", "low": 0.0, "high": 0.0 },
+    { "name": "contact-block", "text": "Kontakta servicecenter på 090-16 10 00 eller kommun@umea.se, www.umea.se/bygglov.", "low": 0.0, "high": 0.1 },
+    { "name": "names", "text": "Anna-Karin Lindqvist, Göran Andersson, Per Östberg och Maria Nilsson.", "low": 0.0, "high": 0.1 },
+    { "name": "mojibake", "text": "KommunfullmÃ¤ktige beslutade Ã¶ver bÃ¥tplatserna i hamnen", "low": 0.6, "high": 1.0 },
+    { "name": "cid", "text": "(cid:12)(cid:15)(cid:20)(cid:3) Umeå", "low": 0.6, "high": 1.0 },
+    { "name": "replacement-chars", "text": "���� abc", "low": 0.5, "high": 1.0 },
+    { "name": "private-use", "text": "\ue000\ue001\ue002 kommun", "low": 0.25, "high": 1.0 },
+    { "name": "punctuation", "text": ". , ; : - . , ; : - ! ? abc", "low": 0.4, "high": 1.0 },
+    { "name": "scan-noise", "text": "a b c d e f g h i j k l m n o p q r s t u v w", "low": 0.9, "high": 1.0 },
+    { "name": "font-encoding-shift", "text": "Nrppxqixoopçnwljh l Xphç nrppxq ehvoxwdgh rp qbd ulnwolqmhu iùu ebjjory rfk pdunory.", "low": 0.6, "high": 1.0 },
+    { "name": "font-encoding-rot13", "text": "Xbzzhashyyzägvtr v Hzrå xbzzha orfyhgnqr bz aln evxgyvawre söe olttybi bpu znexybi.", "low": 0.4, "high": 1.0 },
+    { "name": "symbol-font", "text": "Ĳ ĳĶķ ĸĹ ĺĻļ Ľľ ŀŁł Ńń Ņņ Ňň ŉŊŋ ĳĶķ ĺĻļ", "low": 0.6, "high": 1.0 }
+  ]
+}

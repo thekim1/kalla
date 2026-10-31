@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/parser/v1/ner-result.schema.json",
+  "$defs": {
+    "Build": {
+      "properties": {
+        "parser": {
+          "title": "Parser",
+          "type": "string"
+        },
+        "docling": {
+          "title": "Docling",
+          "type": "string"
+        },
+        "build_hash": {
+          "title": "Build Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "parser",
+        "docling",
+        "build_hash"
+      ],
+      "title": "Build",
+      "type": "object"
+    },
+    "NerEntity": {
+      "properties": {
+        "text_id": {
+          "title": "Text Id",
+          "type": "string"
+        },
+        "start": {
+          "description": "code point offset into the text as sent",
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "end": {
+          "description": "exclusive",
+          "minimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "label": {
+          "enum": [
+            "person",
+            "person_ambiguous"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "text_id",
+        "start",
+        "end",
+        "label",
+        "score"
+      ],
+      "title": "NerEntity",
+      "type": "object"
+    },
+    "NerModel": {
+      "properties": {
+        "repository": {
+          "title": "Repository",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "of the weights file",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "labels": {
+          "description": "the model's own labels",
+          "items": {
+            "type": "string"
+          },
+          "title": "Labels",
+          "type": "array"
+        },
+        "person_labels": {
+          "description": "model labels mapped to `person`",
+          "items": {
+            "type": "string"
+          },
+          "title": "Person Labels",
+          "type": "array"
+        },
+        "quantised": {
+          "title": "Quantised",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "repository",
+        "revision",
+        "sha256",
+        "labels",
+        "person_labels",
+        "quantised"
+      ],
+      "title": "NerModel",
+      "type": "object"
+    },
+    "NerTimings": {
+      "properties": {
+        "total_ms": {
+          "title": "Total Ms",
+          "type": "integer"
+        },
+        "wait_ms": {
+          "title": "Wait Ms",
+          "type": "integer"
+        },
+        "ner_ms": {
+          "title": "Ner Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_ms",
+        "wait_ms",
+        "ner_ms"
+      ],
+      "title": "NerTimings",
+      "type": "object"
+    }
+  },
+  "description": "The answer of `POST /v1/ner`. Entity text is never echoed back.",
+  "properties": {
+    "contract": {
+      "const": "parser/v1",
+      "title": "Contract",
+      "type": "string"
+    },
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "entities": {
+      "items": {
+        "$ref": "#/$defs/NerEntity"
+      },
+      "title": "Entities",
+      "type": "array"
+    },
+    "model": {
+      "$ref": "#/$defs/NerModel"
+    },
+    "timings": {
+      "$ref": "#/$defs/NerTimings"
+    },
+    "build": {
+      "$ref": "#/$defs/Build"
+    }
+  },
+  "required": [
+    "contract",
+    "request_id",
+    "entities",
+    "model",
+    "timings",
+    "build"
+  ],
+  "title": "NerResult",
+  "type": "object"
+}

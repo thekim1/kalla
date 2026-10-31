@@ -1,26 +1,35 @@
+import json
+
 import pypdfium2 as pdfium
 import pytest
 
-from helpers import fixture_bytes
+from helpers import REPO_FIXTURES, fixture_bytes
 from ume_parser import signals
 
+_VECTORS = REPO_FIXTURES / "garbled" / "vectors.json"
 
-@pytest.mark.parametrize(
-    ("text", "low", "high"),
-    [
-        ("", 0.0, 0.0),
-        ("Kommunfullmäktige beslutade att anta budgeten för år 2027.", 0.0, 0.0),
-        ("Avgift 1 200 kr, marklov 800 kr, rivningslov 2 400 kr.", 0.0, 0.0),
-        ("KommunfullmÃ¤ktige beslutade Ã¶ver bÃ¥tplatserna i hamnen", 0.6, 1.0),
-        ("(cid:12)(cid:15)(cid:20)(cid:3) Umeå", 0.6, 1.0),
-        ("���� abc", 0.5, 1.0),
-        (" kommun", 0.25, 1.0),
-        (". , ; : - . , ; : - ! ? abc", 0.4, 1.0),
-        (" ".join("abcdefghijklmnopqrstuvw"), 0.9, 1.0),  # one letter per token: scan noise
-    ],
-)
-def test_garbled_score(text, low, high):
-    assert low <= signals.garbled_score(text) <= high
+
+def _vectors() -> list:
+    if not _VECTORS.is_file():
+        return []  # the image has no repository; the runner's job runs these
+    return [pytest.param(v, id=v["name"]) for v in json.loads(_VECTORS.read_text(encoding="utf-8"))["vectors"]]
+
+
+@pytest.mark.skipif(not _VECTORS.is_file(), reason="needs tests/fixtures/parser/garbled/ (not in the image)")
+@pytest.mark.parametrize("vector", _vectors())
+def test_garbled_score_vectors(vector):
+    assert vector["low"] <= signals.garbled_score(vector["text"]) <= vector["high"]
+
+
+def test_bigram_model_separates_words_from_garble():
+    assert signals.word_log_prob("kommunfullmäktige") > signals.IMPLAUSIBLE_LOG_PROB
+    assert signals.word_log_prob("throughput") > signals.IMPLAUSIBLE_LOG_PROB
+    assert signals.word_log_prob("nrppxqixoopçnwljh") < signals.IMPLAUSIBLE_LOG_PROB
+
+
+def test_mojibake_counts_double():
+    one_in_four = "kommunen beslutade UmeÃ¥ budgeten"
+    assert signals.garbled_score(one_in_four) == 0.5
 
 
 def test_union_area_counts_overlaps_once():

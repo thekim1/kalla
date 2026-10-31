@@ -25,17 +25,45 @@
       "title": "Build",
       "type": "object"
     },
+    "ConvertWarning": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Page"
+        }
+      },
+      "required": [
+        "code",
+        "page"
+      ],
+      "title": "ConvertWarning",
+      "type": "object"
+    },
     "InspectPage": {
+      "description": "A PDF page (text-layer facts, no rendering) or an image frame (size and resolution only).",
       "properties": {
         "page": {
           "title": "Page",
           "type": "integer"
         },
         "width": {
+          "description": "points",
           "title": "Width",
           "type": "number"
         },
         "height": {
+          "description": "points",
           "title": "Height",
           "type": "number"
         },
@@ -104,6 +132,18 @@
             }
           ],
           "title": "Path Objects"
+        },
+        "dpi": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "image frames: the resolution the size in points is computed from",
+          "title": "Dpi"
         }
       },
       "required": [
@@ -115,9 +155,33 @@
         "bad_chars",
         "garbled_score",
         "image_coverage",
-        "path_objects"
+        "path_objects",
+        "dpi"
       ],
       "title": "InspectPage",
+      "type": "object"
+    },
+    "InspectTimings": {
+      "properties": {
+        "total_ms": {
+          "title": "Total Ms",
+          "type": "integer"
+        },
+        "wait_ms": {
+          "title": "Wait Ms",
+          "type": "integer"
+        },
+        "inspect_ms": {
+          "title": "Inspect Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_ms",
+        "wait_ms",
+        "inspect_ms"
+      ],
+      "title": "InspectTimings",
       "type": "object"
     }
   },
@@ -261,6 +325,16 @@
       "description": "the error code convert would give, if any",
       "title": "Refusal"
     },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/ConvertWarning"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "timings": {
+      "$ref": "#/$defs/InspectTimings"
+    },
     "build": {
       "$ref": "#/$defs/Build"
     }
@@ -278,6 +352,8 @@
     "has_xfa",
     "pages",
     "refusal",
+    "warnings",
+    "timings",
     "build"
   ],
   "title": "InspectResult",

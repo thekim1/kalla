@@ -36,6 +36,8 @@ services:
     environment:
       PARSER_WORKERS: "2"
       PARSER_THREADS: "2"
+      # RSS watchdog per slot at 2 x 2 (parser design §10.3; 2 800 MB at 1 x 4).
+      PARSER_SLOT_MAX_RSS_MB: "2600"
 
   rag-clamav:
     mem_limit: 3g
