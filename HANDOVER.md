@@ -160,6 +160,8 @@ running) and a local run on `d976001` (worker run 1: 1063/1063 green). B has sin
 5. **Design sync** of #143–#156 deviations (PR bodies) and to-verify; point the old stakeholder report to the phase 1
    guide or refresh its status.
 6. Then the live block with the user (`plans/p1b/README.md` §5 step 4).
+7. **After milestone 1:** the design-document restructure in **`plans/doc-restructure.md`** (fold the passes into the
+   detail docs, as-built notes to present tense, "later" marked, Decisions-table status; § numbers stay stable).
 
 **Open issues to stream B:** #80, #90, #92, #95, #102, #110, #114, #116, #129, #132, #134, #142; also #34, #52, #75.
 Stream A's own: #48, #51, #120 (close: #128 accepted). For the user: #100 (L8 run steps).
