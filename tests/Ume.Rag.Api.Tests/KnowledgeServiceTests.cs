@@ -515,6 +515,22 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
     }
 
     [Fact]
+    public async Task A_profile_that_requests_dimensions_sends_them_and_others_do_not()
+    {
+        // #142: text-embedding-3-large at 1024 needs "dimensions"; BGE-M3 must never get it. The FakeGateway answers
+        // with the parameter's length, else 1024, and the embedder refuses a vector of another length than the profile's.
+        var (embedder, host) = Build(fake.Server.CreateHandler());
+        using var _ = host;
+        using var __ = embedder;
+        var requesting = Profile with { Id = Guid.NewGuid(), Dimensions = 256, RequestDimensions = true };
+
+        (await embedder.EmbedAsync(requesting, "bygglov altan", null, Ct)).Length.ShouldBe(256);
+        await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() =>
+            embedder.EmbedAsync(requesting with { Id = Guid.NewGuid(), RequestDimensions = false }, "bygglov plank", null, Ct));
+        (await embedder.EmbedAsync(Profile, "bygglov plank", null, Ct)).Length.ShouldBe(1024);
+    }
+
+    [Fact]
     public async Task Five_failures_open_the_circuit_and_skip_the_gateway()
     {
         var counting = new Counting(fake.Server.CreateHandler(), HttpStatusCode.InternalServerError);
