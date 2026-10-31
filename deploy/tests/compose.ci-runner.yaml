@@ -1,0 +1,8 @@
+# Smoke test only (release.yml): GitHub's hosted runner for a private repository has 2 vCPUs, and Docker refuses a
+# container limit above the host's CPU count. The pilot limits (repo-and-deployment §6.2: postgres 3, parser 4) stay
+# as they are in the bundle; this overlay caps them for the runner. Never used on a real host.
+services:
+  postgres:
+    cpus: 2.0
+  rag-parser:
+    cpus: 2.0
