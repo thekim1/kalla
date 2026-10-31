@@ -52,9 +52,9 @@ Refs: [connectors §5.6](../ingestion-worker/design-connectors.md), [processing 
 Refs: [connectors §3–§7, §9, §11–§13, §18](../ingestion-worker/design-connectors.md)
 - [x] Canonicaliser; egress guard (`ConnectCallback`, redirects re-checked); robots and sitemaps
 - [x] URL list; crawl with one frontier per source and `CrawlHosts`; full traversals; stricter deletion rule
-- [ ] Uploads by slot; ClamAV `INSTREAM` client, fail closed, quarantine
+- [x] Uploads by slot; ClamAV `INSTREAM` client, fail closed, quarantine (#82 ClamAV client; #91 slots, sniffing, quarantine copy; #97 Postgres stores; #108 engine fan-out, `QuarantinedFiles` row, 5102; end to end through the engine PR: a/5-6-done-rows)
 - [x] Change detection with noise normalisation; deletion guard
-- [ ] **Done:** §18 tests for these parts (incl. C7); #10, #27, #28, #81, #112 recorded
+- [ ] **Done:** §18 tests for these parts (incl. C7); #10, #27, #28, #81, #112 recorded (PR: a/5-6-done-rows: §18 mapping in the PR, `UploadEngineTests`; waits for: the 24 h `failed` after `clamav.unavailable` is not built (#81), the upload backup copy within 15 minutes is deployment, not worker)
 
 ## 6. Processing stages (#7)
 Refs: [processing §2–§11, §17](../ingestion-worker/design-processing.md), [README §1](README.md)
@@ -62,7 +62,7 @@ Refs: [processing §2–§11, §17](../ingestion-worker/design-processing.md), [
 - [x] `chunk` with breadcrumb prefix and `SearchText` (`SwedishDecompounder`); metadata; quality facts (PR: a/7-processing)
 - [x] `personal-data`: patterns, gated NER, flag rules, `held` (PR: a/7-processing; `/v1/ner` adapter after item 5, database swap with item 9)
 - [x] `embed`: cache, canary, fixed concurrency, the profile's model, dimensions and ceiling (`Eu` in P1a) (PR: a/7-processing; SQL stores with item 9)
-- [ ] **Done:** goldens, PII targets, flag lifecycle green; #26, #43, #111 recorded
+- [x] **Done:** goldens, PII targets, flag lifecycle green; #26, #43, #111 recorded (PR: a/5-6-done-rows; open parts: #43 provider limits (gateway team), SCB gazetteer of #111 (P2))
 
 ## 7. Engine and index writer (#9, after J2)
 Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md), [data-model §9](../platform/data-model.md)
@@ -72,7 +72,7 @@ Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md
 - [x] Blob-tombstone purge sweep (#34); blob root ownership (#41) (PR: a/9-engine)
 - [x] Nightly drift sweep (`EnsureCurrent` outside a fetch, `rag.reconcile.drift`); parse slicing and resume from stored ranges; preview-first parser slot gate; parse cache keyed by parser build (PR: a/9-engine-drift-slicing)
 - [x] **Done:** integration and crash-recovery tests; a URL-list source syncs into live chunks; #21, #119, #141 recorded (PR: a/9-engine; #141 test part only, measurement open); a crawl source syncs into live chunks, crash between fetch and commit loses no work, #10 measured (PR: a/9-engine-crawl)
-- [ ] **Hand-off J4:** issue to stream B
+- [x] **Hand-off J4:** issue to stream B (#110)
 
 ## 8. Evaluation smoke job (#17, your part)
 - [ ] `evaluation-smoke` job in `verify.yml`, green on a PR
