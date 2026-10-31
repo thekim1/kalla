@@ -89,6 +89,10 @@ https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM (not updated since session 8; 
   in V, and the **keyword stop list** (to-verify #5: K 375–659 ms p95 at 100k chunks), now a P1b item 3 code item for B
   (Decisions "Keyword stop list before the pilot crawl", `13aabcf`).
 - CHANGELOG Unreleased since 0.1.0 merged (#113).
+- Design sync of #89–#108 done (`30f629b`). Found: the parse cache key lacked the parser build (against simplification
+  §2) → fix added to `a/9-engine-drift-slicing`. Open for later: #89 seeds a new built-in template version straight as
+  *published* (no publish plan / `reprocess`; check against engine §13.3 when the first v2 template ships); demote URL
+  form (asked on #102); `rag_count_retrievals` level overwrite (#114).
 - Running (worktrees): `../rag-a1` `a/9-engine-crawl` (crawl wiring, profile → canonicaliser, `reprocess`/`retry-failed`,
   `jfif`); `../rag-a2` `a/9-engine-drift-slicing` (drift sweep, parse slicing/resume, preview-first gate);
   `../rag-a3` `a/10-commands` (all P1 command kinds); `../rag-a4` `a/p1b-5-preview` (preview + preflight,
