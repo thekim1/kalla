@@ -703,7 +703,12 @@ of `script`, `link`, `img` (cache busters); replace text equal to the fetch day'
 2026`, `idag`) outside `<main>`/`<article>` with a placeholder; remove elements matching the source's
 `noiseSelectors` (e.g. `#cookie-banner`, `.senast-uppdaterad`); collapse whitespace; serialise.
 
-Rules are deliberately conservative: hiding a real change is worse than one extra re-process. Remaining noise is
+**Finding (P1a item 8, PR #104, 2026-10-31):** Sitevision on umea.se serves per-request values that rules v1 keep: random
+`data-cid` UUIDs, `sv_…` element ids and the `aria-labelledby` values that point at them. Under v1 every umea.se fetch
+hashes differently, so every full traversal re-parses every page (the extracted output is unchanged and counted as
+noise). **Rules v2** (P1a follow-up): drop `data-cid`; normalise `id`/`for`/`aria-labelledby`/`aria-describedby`
+values matching `^sv_` to a stable placeholder by first occurrence; bump `RulesVersion` (hashes taken with v1 are
+recomputed on the next fetch, one extra re-parse). Rules are deliberately conservative: hiding a real change is worse than one extra re-process. Remaining noise is
 measured: when a new hash produces a parsed output whose `OutputHash` equals the previous execution's (6a §8), the
 worker counts `rag.connector.change.noise` and lists the page under "Noise" in the crawl report (§5.5) so an admin
 can add a selector. A rules-version bump re-processes HTML documents once (embedding cache keeps it cheap;
