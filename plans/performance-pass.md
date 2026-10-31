@@ -174,7 +174,9 @@ trigger (PgBouncer or a higher `max_connections`).
 - **Pooler-safe from P0** (cheap, code rules + one test): no session-level `SET` (role defaults and `SET LOCAL` only,
   as today), no session advisory locks (only `pg_try_advisory_xact_lock`), no `WITH HOLD` cursors, no non-`ON COMMIT
   DROP` temp tables, no SQL-level `PREPARE`; LISTEN uses its own connection string `ConnectionStrings__ragdb-listen`
-  (same server today). A unit test scans SQL constants for the forbidden forms.
+  (same server today). A unit test scans SQL constants for the forbidden forms: built in P0 (PR #53) as a hand-written
+  C# literal scanner (no Roslyn pin) over all service SQL; migrations, `Ume.Rag.MigrationService` and
+  `deploy/postgres/*.sql` are not scanned, because they connect directly and never through a pooler.
 - **PgBouncer, when the trigger fires** (§6): ≥ 1.21 (Debian trixie ships 1.24.1, PGDG 1.26.0) in **transaction
   mode** for `ume_rag_api` and `ume_rag_worker`, with `max_prepared_statements` > 0 (default 200 on master,
   `doc/config.md`), because Npgsql's auto-prepare uses protocol-level prepared statements, which transaction pooling

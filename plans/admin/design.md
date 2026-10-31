@@ -106,9 +106,9 @@ gateway counterpart.
 
 | Service | Interval | Leader | Writes |
 |---|---|---|---|
-| `OrganisationSync` | 5 min + on demand | `pg_try_advisory_xact_lock` per run, as `AdminApi/ModelListSync.cs:148-153` | `Departments`, `Teams` (changed rows only) |
+| `OrganisationSync` | 5 min + on demand | a config write (version lock, data-model §5, since the mirror tables carry outbox triggers), then `pg_try_advisory_xact_lock` per run, as `AdminApi/ModelListSync.cs:148-153`; an unchanged run writes nothing and doesn't bump the version (P0, PR #39) | `Departments`, `Teams` (changed rows only) |
 | `GatewayModelSync` | 5 min + on demand | same pattern | `GatewayModels` (changed rows only) |
-| `RetentionService` | nightly | each step batch idempotent under `pg_try_advisory_xact_lock(<step>)` ([`../performance-pass.md`](../performance-pass.md) §3.5); `Admin:Retention` (default `true`) as an off switch | chat/audit/config deletions, expired admin sessions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
+| `RetentionService` | nightly, 03:00 Europe/Stockholm (batches of 5,000 rows; both constants, only `Admin:Retention` is a knob; P0, PR #39) | each step batch idempotent under `pg_try_advisory_xact_lock(<step>)` ([`../performance-pass.md`](../performance-pass.md) §3.5); `Admin:Retention` (default `true`) as an off switch | chat/audit/config deletions, expired admin sessions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
 | `DefinitionDriftMonitor` (P2) | 15 min | advisory lock (the one drift leader) | `Tools.State`, repins from pre-registrations (tools §4.4) |
 | `ConfigVersionMonitor` | `rag_config` + 2 s poll | every instance | none (keeps the admin's own snapshot for validators and the test panel) |
 | `AnswerEvaluationService` (P2, weakness review §1) | nightly | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Ume.Rag.Answering` and the on-prem judge (processing §14.8) |
@@ -130,7 +130,9 @@ gateway counterpart.
   object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`, `:68-73`), `no-store` on `/api` and
   `/bff`, Scalar with nonce for platform admins (`:74`, `:94-95`), `AdminActivityMiddleware`, authn/z, per-user rate
   limit (`Admin:RequestsPerMinute` 120), antiforgery, `/api` group with `AdminValidationFilter` (`:84-85`),
-  `UseDefaultFiles`/`UseStaticFiles`/`MapFallbackToFile("index.html")` (`:96-98`).
+  `UseDefaultFiles`/`UseStaticFiles`/`MapFallbackToFile("index.html")` (`:96-98`). Authorization runs before the
+  antiforgery check, as in the gateway, so an anonymous unsafe call is challenged before the CSRF check (P0, PR #38).
+  OpenAPI and Scalar arrive with P1a, where Scalar is the set-up surface (§12); P0 has neither.
 - CSP holds for everything new: fonts self-hosted (fontsource), no inline script. Preview outputs, CSV exports and
   conversation views are fetched from `/api` (never blob URLs from another origin).
 - Cross-links to the gateway admin (separate app, plan answered 1): `Admin:GatewayAdminUrl`; member groups →
@@ -578,7 +580,7 @@ panel ships in the same P1 release as the chat role, so it never runs a differen
 
 | Sync | Source (gateway Data API, `catalog.read` key `OrgSync__DataApiKey`) | Rule |
 |---|---|---|
-| Departments | `GET /v1/catalog/departments` (`DataEndpoints.cs:140-142`; `memberGroups` from gateway release 2, P2, weakness review §5) | upsert by id; only changed rows written; a department missing from the gateway → `IsActive = false`; member groups replace the stored array |
+| Departments | `GET /v1/catalog/departments` (`DataEndpoints.cs:140-142`; `memberGroups` from gateway release 2, P2, weakness review §5) | upsert by id; only changed rows written; a department missing from the gateway → `IsActive = false`; member groups replace the stored array **only when the catalogue carries the field** (gateway release 2); until then they are entered by hand (P1) and the sync leaves them alone (P0, PR #39) |
 | Teams | `GET /v1/catalog/teams` (`:143-145`; `code` from gateway release 2) | as departments |
 | Models | `GET /v1/catalog/models`, `/providers`, `/prices` (`:149-157`) | `GatewayModels` row per chat/embedding deployment: `Kind = model`, `Residencies = [provider residency]`, latest price; `SupportsTools`/`ContextWindow` manual until the catalogue carries them (gateway-changes §7.3); disabled models removed from pickers, kept for existing assistants with a warning |
 | Route aliases | none today (`DataEndpoints.cs:139-160`) | manual rows `Kind = route`, `Residencies` = its targets' residencies, `Source = manual`; servable at a ceiling when any target is within it; replaced by a synced `/v1/catalog/routes` when the gateway adds it |
@@ -586,14 +588,22 @@ panel ships in the same P1 release as the chat role, so it never runs a differen
 The mirror feeds pickers and V8's first check; V8's `/v1/models` call at save is the authoritative check, because it
 asks the gateway what it will serve at that ceiling. Failures keep the last mirror; after 3 failed runs the Overview
 shows "Synkningen mot AI-gatewayen fungerar inte sedan {tid}" to platform admins, metric `rag.admin.sync{kind,outcome}`.
-A stale mirror narrows or keeps sign-in scope, never widens it (identity §2.6).
+A stale mirror narrows or keeps sign-in scope, never widens it (identity §2.6). The sync status is held in memory per
+instance (`GET /api/organisation/sync`); the run history and the 3-failures banner come with `Settings` and the
+Overview page (P1).
 
 ## 5. UI information architecture
 
 ### 5.1 Stack and what is copied
 
 - Copied unchanged: toolchain and scripts, `.npmrc`, lint (incl. `eslint-plugin-vuejs-accessibility`), design system
-  (`styles/*`, `components/ui/*`, `components/layout/*`, icons subset), `design-system.lock` drift report;
+  (`styles/*`, `components/ui/*`, `components/layout/*`, icons subset), `design-system.lock` drift report. Shared
+  components with built-in English text (`AsyncState`, `DataTable`, `ConfirmDialog`, `Pagination`, `UiDrawer`, the
+  layout components) are **adapted** to take their text from `labels.ts` and marked `adapted` in the lock;
+  gateway-only components (`KeyStatusBadge`, `ResidencyLabel`, `AddressListField`, `SecretDialog`) arrive with keys in
+  P1. `package.json` pins the gateway's resolved versions exactly and the lock file is the gateway's, so CI and
+  developers use `npm ci` only (npm's `allow-remote=none` refuses to re-resolve); `vite.config.ts` allows
+  `contracts/admin` for the error-code spec (P0, PR #45);
   `api/client.ts` (constant `RAG-XSRF-TOKEN`), `composables/useFormErrors.ts:8-44`, `useTableView.ts:9-54`,
   `stores/loadable.ts`, `test/*` helpers; charts `components/usage/TimeSeriesChart.vue` for evaluation trends.
 - Adapted: `utils/problem.ts` (§4.2), `utils/format.ts` (dates `sv-SE`), `stores/auth.ts` (RAG roles), `router/nav.ts`
@@ -1252,7 +1262,7 @@ component axe checks.
 
 | Phase | Deliverable |
 |---|---|
-| P0 | BFF against `ume-rag-admin` + roles (incl. `rag-reviewer` in the realm and Bicep), design system and shell in Swedish, `labels.ts`/`messages.ts` skeleton, `AdminContext` write path (version lock + rules + audit + outbox + version), `PermissionMatrix` with generated role tests, org sync, error-code export |
+| P0 | BFF against `ume-rag-admin` + roles (incl. `rag-reviewer` in the realm and Bicep), design system and shell in Swedish, `labels.ts`/`messages.ts` skeleton, `AdminContext` write path (version lock + rules + audit + outbox + version), `PermissionMatrix` with generated role tests, org sync, error-code export. **Built** (PRs #32, #35, #38, #39, #45, #46): pages Översikt (your roles and departments with their source) and Organisation (synced departments and teams; **Hämta nu** for platform admins); `/api/clients` is the first resource on the write path (its generic form is P1, §5.8); the `cancel-run` enqueue waits for `Runs` (P1a item 14), the enqueue path is in place |
 | P1a (walking skeleton, weakness review §1) | none of the journey pages: the pilot's collection, sources and one assistant are created through the write path with Scalar and generic forms; the umea.se site profile as a manual profile JSON; `GatewayModels` sync; clients; the pilot gold set entered as `human` questions through Scalar (weakness review §2) |
 | P1b (1) | collections (incl. documents tab, PII view/clear), sources (URL list, crawl, upload batches), preflight, preview with site-profile before/after, impact, runs and crawl report, deletion decisions, template parameters, publish (plan of every document → re-process → report → keep or roll back), rollback |
 | P1b (2) | evaluation set and reports (led by the gold set; coverage-threshold proposal as numbers, weakness review §2), retrieval settings, collection publish, share lists, assistants (draft → publish, versions with restore, archive, description and contact), test panel on the draft (`Ume.Rag.Answering`, same release as `rag-api`), impact lines, V8 `/v1/models` check, audiences (clients), retention, generic forms (settings, data protection, clients, keys, templates, site profiles, embedding profiles, gateway models, organisation), audit list, explain access |

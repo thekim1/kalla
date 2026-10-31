@@ -68,9 +68,9 @@ copied and changed as stated; "new" means there is no gateway counterpart.
 | `AdminAntiforgeryMiddleware` (`:281-305`) | same | copy |
 | `OidcOptions` (`AdminOptions.cs:107-131`) | same | adapt: default `ClientId` `ume-rag-admin`; new `TenantId`, `RefuseGuests` (§1.4) |
 | `AdminOptions` (`AdminOptions.cs:7-51`) | same | adapt: keep `RequestsPerMinute`, `MaxSessionHours`, `AuditSourceAddress`; drop price/release settings |
-| `AdminTicketStore`, `AdminSessionLimit` (`AdminSessions.cs`) | same | copy; protector purpose `Ume.Rag.AdminApi.Session.v1` |
+| `AdminTicketStore`, `AdminSessionLimit` (`AdminSessions.cs`) | same | copy; protector purpose `Ume.Rag.AdminApi.Session.v1`; sign-in-time item `.ume-rag.signedIn` (the gateway's is `.ume.signedIn`), so a ticket from one system never reads as the other's (P0, PR #23) |
 | `IAdminSessionStore` (`Infrastructure/Stores/Stores.cs:147-154`), `RedisAdminSessionStore`, `InMemoryAdminSessionStore` | `IAdminSessionStore`, `PostgresAdminSessionStore` | adapt: Postgres implementation over `config."AdminSessions"` (§1.1); the Redis one is not copied |
-| `AdminActor`, `AdminActivityMiddleware`, `AccessDeniedThrottle`, `AdminClientAddresses` (`AdminActivity.cs`) | same | copy |
+| `AdminActor`, `AdminActivityMiddleware`, `AccessDeniedThrottle`, `AdminClientAddresses` (`AdminActivity.cs`) | same | copy; `AdminClientAddresses` reads `Settings.TrustedProxies`, so it arrives with `Settings` in P1a (stream B item 14). Until then `SourceAddress` is the connection address, which behind the proxy is the proxy's (P0, PRs #32, #38; `docs/security-events.md`) |
 | `AdminContext` scope methods (`AdminContext.cs:69-130`) | `AdminContext` | adapt: `IsAdmin` = `rag-platform-admin`; `Departments()` unchanged; teams/keys per RAG roles; actor `oid` (§1.1) |
 | – | `DepartmentMembershipResolver` | new (§2) |
 
@@ -159,8 +159,9 @@ application in Entra, the audit actor is `oid` (§1.1). Development and CI use t
 
 ### 1.7 Tenant and guests (new, both systems)
 
-Run in `OnTokenValidated` before claim mapping; a refusal ends the OIDC callback with a redirect to an explanatory
-page (no session; same in both systems, gateway design §4.6) and event 5001 (`Reason`
+Run in `OnTokenValidated` before claim mapping; a refusal ends the OIDC callback with a redirect to
+`/?signin=refused&reason=<reason>`, where the admin UI explains it (no session; same in both systems, gateway design
+§4.6; built in P0, PR #32) and event 5001 (`Reason`
 `wrong_tenant` / `guest_refused`). **One rule in both systems:**
 
 - `Oidc:TenantId` set ⇒ `tid` must equal it (a missing `tid` is refused too). (The v2 issuer already contains the
@@ -892,7 +893,8 @@ changed without a pre-registration), 5013 bursts, any 5015 `level_refused`, 5014
 
 ## 11. Keycloak realm (dev and CI)
 
-`dev/keycloak/ume-rag-realm.json`, realm `ume` (same issuer path shape as the gateway's, `ume-realm.json:2`), adapted
+`dev/keycloak/ume-realm.json` (the gateway's file name: Keycloak 26's directory import refuses a file whose name is not
+`<realm>-realm.json`, PR #35), realm `ume` (same issuer path shape as the gateway's, `ume-realm.json:2`), adapted
 from the gateway's file; passwords and secrets are import placeholders like `${UME_DEV_USER_PASSWORD}`
 (`ume-realm.json:27`, `:119`). Extends repo-and-deployment §4.2:
 
@@ -900,13 +902,13 @@ from the gateway's file; passwords and secrets are import placeholders like `${U
 |---|---|
 | User profile | declares `departmentCodes`, `teamCodes` (Keycloak ≥ 24 drops undeclared attributes, `docs/identity-and-roles.md:148-149`) |
 | Realm roles | `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-reviewer`, `rag-skill-editor` (P2), `rag-editor`, `rag-viewer`; app permissions `Knowledge.Read.All`, `Chat.Invoke.All` |
-| Client scopes | `Chat.Use`, `Knowledge.Read`, `Mcp.Use` (optional client scopes, each with an audience mapper `ume-rag-api`, `include.in.token.scope` on, so they appear in `scope`) |
+| Client scopes | Keycloak's built-in scopes as 26.6.4 creates them for a new realm (`basic`, `profile`, `email`, `roles`, `service_account`, …: an import that lists any `clientScopes` gets none of the built-in ones, PR #35), then `Chat.Use`, `Knowledge.Read`, `Mcp.Use` (optional client scopes, each with an audience mapper `ume-rag-api`, `include.in.token.scope` on, so they appear in `scope`) |
 | Client `ume-rag-admin` | confidential, standard flow only, PKCE S256, redirect and post-logout URIs for `https://localhost:5174` and the adminapi https port (as `ume-realm.json:28-37`); mappers copied: `roles` realm-role mapper (`:41-52`), `departmentCodes` and `teamCodes` attribute mappers (`:54-79`), all to the ID token; **`groups`** group-membership mapper (full path off, ID token on) |
-| Client `ume-rag-api-dev` | client credentials only (as `ume-data-dev`, `:84-107`); audience mapper `ume-rag-api`; realm-role mapper to `roles` (access token); service account roles `Knowledge.Read.All`, `Chat.Invoke.All` |
+| Client `ume-rag-api-dev` | client credentials only (as `ume-data-dev`, `:84-107`); audience mapper `ume-rag-api`; realm-role mapper to `roles` (access token); service account roles `Knowledge.Read.All`, `Chat.Invoke.All`; `service_account` in its default client scopes (without it a token has no `client_id` claim, to-verify #83) |
 | Client `ume-rag-chat-dev` | **new**: public client, code + PKCE, redirect `http://localhost:*` style loopback for test tools; default scope `Chat.Use`, optional `Knowledge.Read`, `Mcp.Use`; for delegated-token and MCP tests |
-| Client `open-webui-dev` | confidential, code flow, redirect `http://localhost:<owui port>/oauth/oidc/callback` (§5.3); `email` in ID token; used when `OpenWebUi:Enabled` |
+| Client `open-webui-dev` | confidential, code flow, secret from the placeholder `UME_RAG_OWUI_CLIENT_SECRET` (generated by the AppHost), redirect `http://localhost:8080/oauth/oidc/callback` (Open WebUI's default port; §5.3); `email` in ID token; used when `OpenWebUi:Enabled` |
 | Groups | `Byggnadsnämnden` (member: `rag-group-member`), `rag-pilot-users` (members: all test users) |
-| Users | `rag-platform-admin` (1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), **`rag-reviewer`** (1000), **`rag-skill-editor`** (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute; via `Byggnadsnämnden` → department 3000), **`rag-no-role`** (1000, no role: every `/api` call 403), **`rag-chat-user`** (no admin role; for delegated chat tokens) |
+| Users | `rag-platform-admin` (1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), **`rag-reviewer`** (1000), **`rag-skill-editor`** (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute, role `rag-viewer`, since membership never grants a role; via `Byggnadsnämnden` → department 3000), **`rag-no-role`** (1000, no role: every `/api` call 403), **`rag-chat-user`** (no admin role; for delegated chat tokens) |
 | Seed | the FakeGateway catalogue (repo-and-deployment §4.3) returns department 3000 with `memberGroups: ["Byggnadsnämnden"]`, so the org sync fills the mirror in dev |
 
 ## 12. Approval package 1 as Bicep (Microsoft Graph extension)

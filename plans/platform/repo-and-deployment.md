@@ -88,7 +88,7 @@ deploy/
   host/                              install.sh, rag-ingestion.slice, docker-user-firewall.sh + rag-firewall.service/.timer (egress per network, no connections to the host, §6.1), rag-backup, rag-backup-status and rag-upload-backup services and timers (§7.4), restart-unhealthy.sh + rag-restart-unhealthy.service/.timer (§5.5)
   kubernetes/                        later (§10)
   tests/                             compose-rolling-e2e.sh, verify-data.sh, spa-smoke.mjs (copy + adapt)
-dev/keycloak/ume-rag-realm.json      realm with the gateway's claims + rag-* roles
+dev/keycloak/ume-realm.json          realm `ume` with the gateway's claims + rag-* roles
 docs/                                local-development, production-setup, runbook, upgrade-guide, zero-downtime-updates,
                                      kubernetes, security-and-compliance, security-events, architecture, adr
 scripts/Start-Dev.ps1  scripts/Start-E2E.ps1
@@ -111,7 +111,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | `src/*.MigrationService/*` | `Ume.Rag.MigrationService` | adapt | `RunItems` partition maintenance (data-model §10) |
 | `src/*.AppHost/Program.cs` | `Ume.Rag.AppHost` | adapt | §4.1 |
 | `scripts/Start-Dev.ps1`, `Start-E2E.ps1` | same | adapt | wait for `admin-ui`; volume `ume-rag-e2e-postgres` |
-| `dev/keycloak/ume-realm.json` | `ume-rag-realm.json` | adapt | §4.2 |
+| `dev/keycloak/ume-realm.json` | same name (Keycloak's directory import needs `<realm>-realm.json`, PR #35) | adapt | §4.2 |
 | `deploy/*` | `deploy/*` | adapt | §6, §7 |
 | `.github/workflows/*` | same names | adapt | §8; `pages.yml` not copied |
 | `.githooks/pre-commit` | same | adapt | adds parser lint |
@@ -214,7 +214,7 @@ src/parser/
 | Project | SDK | References | Image | Runs as |
 |---|---|---|---|---|
 | `Ume.Rag.Domain` | `Microsoft.NET.Sdk` | – (no packages except `Microsoft.Extensions.AI.Abstractions` types if needed) | – | – |
-| `Ume.Rag.Infrastructure` | `Microsoft.NET.Sdk` + `Microsoft.AspNetCore.App` | Domain; Npgsql EF, Pgvector, Aspire Npgsql/Redis, DataProtection EF, M.E.AI.OpenAI (not on the chat path: `IGatewayClient` uses a raw `HttpClient`, chat design §2.1) | – | – |
+| `Ume.Rag.Infrastructure` | `Microsoft.NET.Sdk` + `Microsoft.AspNetCore.App` | Domain; Npgsql EF, Pgvector, Aspire Npgsql EF/Redis (no `Aspire.Npgsql`: the plain data sources, e.g. for LISTEN, come from Npgsql's `NpgsqlDataSourceBuilder`, P0 PR #25), DataProtection EF, M.E.AI.OpenAI (not on the chat path: `IGatewayClient` uses a raw `HttpClient`, chat design §2.1) | – | – |
 | `Ume.Rag.ServiceDefaults` | `Microsoft.NET.Sdk`, `IsAspireSharedProject` | OTel, resilience, service discovery | – | – |
 | `Ume.Rag.Retrieval` | `Microsoft.NET.Sdk` | Domain, Infrastructure; Pgvector (knowledge design §2.1) | – | – |
 | `Ume.Rag.Pipelines` | `Microsoft.NET.Sdk` | Domain; JSON Schema validator (§2.2) (engine design §4) | – | – |
@@ -327,7 +327,7 @@ persistent secrets through the same `Secret(name, length)` helper, `WaitFor`/`Wa
 Ports in `launchSettings.json` and the AppHost's dashboard port are chosen outside the gateway's (gateway admin
 7212, Vite 5173), so a developer can run the gateway's AppHost and ours at once (§4.4).
 
-### 4.2 Keycloak realm (`dev/keycloak/ume-rag-realm.json`)
+### 4.2 Keycloak realm (`dev/keycloak/ume-realm.json`)
 
 Realm `ume` (same name as the gateway's, so issuer paths look the same), adapted from `dev/keycloak/ume-realm.json`:
 
@@ -341,8 +341,9 @@ Realm `ume` (same name as the gateway's, so issuer paths look the same), adapted
 | Client scopes | `Chat.Use`, `Knowledge.Read`, `Mcp.Use` (optional, audience mapper `ume-rag-api`, in `scope`) |
 | Realm roles | `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-reviewer`, `rag-skill-editor` (P2), `rag-editor`, `rag-viewer` (identity design §1.3), plus app permissions `Knowledge.Read.All`, `Chat.Invoke.All` |
 | Groups | `Byggnadsnämnden`, `rag-pilot-users` (all test users) |
-| Users | `rag-platform-admin` (`departmentCodes` 1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), `rag-reviewer` (1000), `rag-skill-editor` (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute; member of group `Byggnadsnämnden`, a member group of department 3000, tests department scope from groups), `rag-no-role` (1000, no role: every `/api` call 403), `rag-chat-user` (no admin role; delegated chat tokens) — codes as the gateway's demo data. Full realm: identity design §11 |
-| Passwords / secrets | from `UME_RAG_DEV_USER_PASSWORD`, `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_API_CLIENT_SECRET` (realm import placeholders, as the gateway) |
+| Users | `rag-platform-admin` (`departmentCodes` 1000, 3000, 5000), `rag-department-admin` (1000), `rag-pipeline-editor` (1000), `rag-reviewer` (1000), `rag-skill-editor` (1000, P2), `rag-viewer` (1000), `rag-group-member` (no attribute, role `rag-viewer`; member of group `Byggnadsnämnden`, a member group of department 3000, tests department scope from groups), `rag-no-role` (1000, no role: every `/api` call 403), `rag-chat-user` (no admin role; delegated chat tokens) — codes as the gateway's demo data. Full realm: identity design §11 |
+| Passwords / secrets | from `UME_RAG_DEV_USER_PASSWORD`, `UME_RAG_OIDC_CLIENT_SECRET`, `UME_RAG_API_CLIENT_SECRET`, `UME_RAG_OWUI_CLIENT_SECRET` (realm import placeholders, as the gateway; the AppHost generates them) |
+| Keycloak image | `quay.io/keycloak/keycloak:26.6.4@sha256:0aae0de7…` (the version `Aspire.Hosting.Keycloak` runs, tag 26.6); the AppHost and `KeycloakFixture` share the pin and are updated together (PR #35) |
 
 ### 4.3 FakeGateway (not the gateway's FakeLlm)
 
@@ -884,7 +885,7 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (simpli
 | 6 | `deploy/postgres/init.sql`, `pg_hba.conf`, `app-roles.sql` from data-model §1; `Ume.Rag.MigrationService` with schemas, config outbox, unpartitioned `Jobs` with the partial unique `DedupKey` index, day-partitioned `RunItems`, `rag_partition_maintain()`; role defaults `hnsw.ef_search`/`hnsw.iterative_scan`/`hnsw.max_scan_tuples`; `content.rag_or_query`; `DatabaseRoleTests`, connection caps and `statement_timeout` asserted; `SwedishTextSearchTests` (a part matches through Postgres); pool sizes measured | integration tests green against the pinned image; pool measurement recorded | plan §11.3, knowledge design §17 |
 | 7 | Config-version library (`ConfigVersionMonitor`: LISTEN `rag_config` + 2 s poll, grace window `Config:MaxUnconfirmedSeconds`) and log scope; serialised config writes (`FOR UPDATE` on the version row) | tests: a revoked key is refused as soon as the notification arrives; keyed requests get 503 after the window without confirmation; readiness stays green within it; two concurrent saves cannot both pass a cross-rule | plan §4, §11.2 |
 | 8 | `Ume.Rag.FakeGateway` (1024-dim embeddings, residency headers, per-level dev keys, `400` without a ceiling for `RequireMaxResidency` keys, `403 max_residency_not_met` and 503 `Retry-After` modes, `/v1/models` filtered by the ceiling, rerank fake, catalog); gateway client `DelegatingHandler` that refuses a call without an explicit ceiling or with a key of another level | API tests use it; a wrong-residency answer is aborted; the handler test covers every call site that exists | README P0 (fake gateway), plan §6 |
-| 9 | `dev/keycloak/ume-rag-realm.json` (incl. `rag-reviewer`, admin design §12); OIDC/BFF and claim mapping copied from the gateway admin API (`UME_RAG_OIDC_*`); `OidcClaimMappingTests` copied; audit actor `oid` | sign-in to the empty admin UI as each test user shows the right roles and departments (incl. a department from a group claim) | identity §8 P0 |
+| 9 | `dev/keycloak/ume-realm.json` (incl. `rag-reviewer`, admin design §12); OIDC/BFF and claim mapping copied from the gateway admin API (`UME_RAG_OIDC_*`); `OidcClaimMappingTests` copied; audit actor `oid` | sign-in to the empty admin UI as each test user shows the right roles and departments (incl. a department from a group claim) | identity §8 P0 |
 | 10 | Keys in gateway style (`ume-rag-sk-`, HMAC + pepper, prefix, rotation grace) in `config."Keys"` | key auth tests copied from the gateway's `KeyTests` pass | README P0 (keys) |
 | 11 | Admin UI skeleton with the copied design system in Swedish (`labels.ts`/`messages.ts` skeleton), Vite on 5174, `design-system.lock`; admin API write path (`AdminContext`: change + outbox + audit in one transaction), `PermissionMatrix` role tests, org sync against the FakeGateway catalogue, `contracts/admin/v1/error-codes.json` export | lint/typecheck/test/build green; shell looks like the gateway's; a saved change bumps the config version with one audit entry; synced departments visible | admin P0 (admin design §12) |
 | 12 | AppHost (§4.1) with postgres (pinned pgvector image), keycloak, fake-gateway, parser (P0 image with Docling, Tesseract `swe` and models baked, size measured; supervisor with one slot; health + `/v1/info` with `build_hash`; parser design §16), clamav, migrations, api, worker, adminapi, admin-ui; `Start-Dev.ps1`, `Start-E2E.ps1`; seeder | `.\scripts\Start-Dev.ps1` brings every resource to healthy on a clean machine | plan §11.4, parser P0 |
