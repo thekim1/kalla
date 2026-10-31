@@ -159,7 +159,7 @@ public static class AdminAuthentication
                 {
                     // No session; the admin UI explains the refusal (identity design §1.7).
                     SecurityEvents.AuthFailed(SecurityEvents.CreateLogger(services.GetRequiredService<ILoggerFactory>()), refusal, "oidc-signin",
-                        "/signin-oidc", AdminActor.AddressOf(ctx.HttpContext));
+                        "/signin-oidc", AdminActor.AddressOf(ctx.HttpContext), null, null, null, 1, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
                     ctx.HandleResponse();
                     ctx.Response.Redirect("/?signin=refused&reason=" + refusal);
                 }

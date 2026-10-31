@@ -283,6 +283,9 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
         }
     }
 
+    /// <summary>Cached query vectors now (at most <see cref="QueryEmbeddingOptions.CacheEntries"/>; to-verify #162).</summary>
+    public int CachedCount => _cache.Count;
+
     public void Dispose() => _cache.Dispose();
 
     private sealed record EmbeddingRequest(

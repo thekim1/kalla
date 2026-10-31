@@ -34,6 +34,9 @@ if (knowledge)
     builder.AddRagBlobStore();
     builder.AddRagKnowledge();
     builder.Services.AddSingleton<KnowledgeCallers>();
+    builder.Services.AddOptions<ApiSecurityOptions>().BindConfiguration("Api").Configure<IConfiguration>((o, c) =>
+        o.SourceAddress = c["Api:Security:SourceAddress"] ?? o.SourceAddress);
+    builder.Services.AddSingleton<KnowledgeSecurity>();
     builder.Services.AddRateLimiter(o =>
     {
         o.AddPolicy(KnowledgeEndpoints.DownloadsPolicy, http => RateLimitPartition.GetFixedWindowLimiter(

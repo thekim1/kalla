@@ -43,9 +43,63 @@ public static partial class SecurityEvents
     }
 
     /// <summary>A refused credential; for the admin, one per refused sign-in (credential <c>oidc-signin</c>).</summary>
+    /// The api aggregates: one event per bucket (reason, credential, endpoint, key, address) per minute with the refusals it
+    /// stands for (identity design §6.3); the presented value is never logged.
     [LoggerMessage(5001, LogLevel.Warning,
-        "Authentication failed: {Reason} ({Credential}) on {Endpoint} from {SourceAddress}", EventName = "rag.auth.failed")]
-    public static partial void AuthFailed(ILogger logger, string reason, string credential, string endpoint, string? sourceAddress);
+        "Authentication failed: {Reason} ({Credential}) on {Endpoint} from {SourceAddress}, key {KeyId} {KeyPrefix} of client {ClientId}, x{Count} from {FirstSeen} to {LastSeen}",
+        EventName = "rag.auth.failed")]
+    public static partial void AuthFailed(ILogger logger, string reason, string credential, string endpoint, string? sourceAddress, Guid? keyId,
+        string? keyPrefix, Guid? clientId, int count, DateTimeOffset firstSeen, DateTimeOffset lastSeen);
+
+    /// <summary>5002: an access-policy denial on an explicit request, at most once a minute per subject, reason and resource.</summary>
+    [LoggerMessage(5002, LogLevel.Warning,
+        "Access denied: {Reason} for {Action} on {ResourceType} {ResourceId} by {SubjectKind} {SubjectId} (client {ClientId}, key {KeyId}, config {ConfigVersion}) from {SourceAddress}, x{Count}",
+        EventName = "rag.access.denied")]
+    public static partial void AccessDenied(ILogger logger, string reason, string action, string resourceType, string resourceId, string subjectKind,
+        string subjectId, Guid? clientId, Guid? keyId, long configVersion, string? sourceAddress, int count);
+
+    /// <summary>5005: a ceiling denial (identity §4.3 step 7), instead of 5002, with the levels.</summary>
+    [LoggerMessage(5005, LogLevel.Warning,
+        "Ceiling refused: {ResourceType} {ResourceId} at {ResourceLevel} above client ceiling {ClientCeiling} for {Action} by {SubjectKind} {SubjectId} (client {ClientId}, key {KeyId}, config {ConfigVersion}) from {SourceAddress}, reason {Reason}, x{Count}",
+        EventName = "rag.ceiling.refused")]
+    public static partial void CeilingRefused(ILogger logger, string resourceType, string resourceId, string resourceLevel, string clientCeiling, string action,
+        string subjectKind, string subjectId, Guid? clientId, Guid? keyId, long configVersion, string? sourceAddress, string reason, int count);
+
+    /// <summary>5006: an address crossed <c>Api:AuthFailuresPerMinute</c>, once per address per window.</summary>
+    [LoggerMessage(5006, LogLevel.Warning, "Address {SourceAddress} throttled on {Endpoint} after {Count} refused credentials in a minute",
+        EventName = "rag.auth.throttled")]
+    public static partial void AuthThrottled(ILogger logger, string? sourceAddress, string endpoint, int count);
+
+    /// <summary>
+    /// The source address as events record it (<c>Api:Security:SourceAddress</c>): <c>Full</c>, or <c>Truncated</c> (default)
+    /// to the IPv4 /24 or IPv6 /64 network, so events identify a network, not a person's device.
+    /// </summary>
+    public static string? SourceAddress(System.Net.IPAddress? address, bool truncated = true)
+    {
+        if (address is null)
+        {
+            return null;
+        }
+
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (!truncated)
+        {
+            return address.ToString();
+        }
+
+        var bytes = address.GetAddressBytes();
+        var keep = bytes.Length == 4 ? 3 : 8;
+        for (var i = keep; i < bytes.Length; i++)
+        {
+            bytes[i] = 0;
+        }
+
+        return new System.Net.IPAddress(bytes) + (bytes.Length == 4 ? "/24" : "/64");
+    }
 
     [LoggerMessage(5003, LogLevel.Warning,
         "Gateway answer discarded: residency {Observed} above the ceiling {Ceiling} on {Endpoint} (gateway request {GatewayRequestId})",
