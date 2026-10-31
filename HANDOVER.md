@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Updated 2026-10-30, session 8.
+State of the Ume.Rag work for the next session. Updated 2026-10-31, session 9.
 Repo `~/research/rag`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
 
@@ -143,6 +143,14 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
   - The permission classifier reads a merge go-ahead per PR: "merge #49" did not cover retargeting and merging #50.
   - Don't `git stash` in the main clone while agents edit files in it.
 
+- **Learned in session 9:**
+  - Branch names can't start with `main/` (a ref `refs/heads/main` exists); the main session's PR branches use a
+    plain name (`p1-ownership`).
+  - `Agent` with `isolation: "worktree"` makes its own worktree; when the brief names a prepared worktree, leave
+    `isolation` unset.
+  - The classifier refused merging #57 even though the user had said "do 3" (merge the ownership rules): it needs
+    "merge #N" literally.
+
 ## Progress
 
 | Step | Document | Commit |
@@ -164,7 +172,8 @@ Background: `02-architecture-review.md` (R1–R7; R2 "shared document store" is 
 | P0 session 7: worker follow-up (#30, fixes #29), ClamAV (#26), dispatcher (#20), Compose part 1 (#31), blob store (#33); design fixes (GC `0x4B`, `query-embed`, audit `Service`) | `plans/p0/progress-a.md`, `results-a.md`, `repo-and-deployment.md`, `performance-pass.md`, `admin/design.md` | `d59f435`, `7155d09`, `0ae6a4c`, `adbf1a9`, `61c08f1`, `4656dc4`, `53370e2`, `bce6817` |
 | P0 session 7: Entra Bicep (#36), capacity scripts (#37), Compose part 2 + backups (#40), docs (#42); P1a plan | `plans/p1/`, Decisions table | `a9590dd` … `4ace26b` |
 | P0 session 8: #49, #50 merged; integration sync point for stream A (register, deviations in the design, README/CHANGELOG, stakeholder report) | `to-verify.md`, detail documents, Decisions table "P0 integration, stream A" | (this session) |
-| **P0 continues**: stream B's last PRs and their deviations; #27; `v0.1.0` | below | **next** |
+| P0 session 9: #56 answered; stream B's deviations settled (P0 integration review done); identity design reworked for the Keycloak pilot; PRs #57 (P1 ownership), #58 (runbook), #60 (release) | Decisions table "P0 integration, stream B", `identity/design.md`, `progress.md` | `edc85b6`, `cd5c3e5` |
+| **P0 ends**: merge #57, #58, #60; #27; dry run; `v0.1.0` (= J1) | below | **next** |
 
 ## Open items
 
@@ -195,72 +204,59 @@ against Postgres `ispell`, the stock pgvector image tag, pgBackRest with that im
 acceptance page, the cost of the per-document swap, pool 12 / 4 searches, the Postgres admin session store, and the
 assistant test-run cost.
 
-## Next step: P0, integration (start of session 9)
+## Next step: P0 ends (start of session 10)
 
 Start with `plans/p0/prompts/main-session.md` and this section. First check GitHub (open PRs, issues, comments).
 
-**Done in session 8:**
-- #49 (`admin-ui` CI job, `19e8c41`) and #50 (parser CI in its own `parser.yml`, `6566996`) merged; worktrees
-  `../rag-a12`, `../rag-a13` removed; #44 closed. The token now has the `workflow` scope.
-- **Integration sync point, stream A part:** 22 rows folded into `to-verify.md`; every merged stream A PR's "Design
-  deviations" settled in the detail documents (Decisions table row "P0 integration, stream A" lists the choices made);
-  `README.md` (status, docs, CI), `plans/README.md`, `CHANGELOG.md` (Unreleased: all of P0), `AGENTS.md`, and
-  `docs/stakeholder-report.html` brought up to date (the artifact link above was republished).
-- Stream B's #46 reviewed OK and merged by stream B (`5920efd`); its red `ownership` check came from a push before the
-  retarget to `main` (see "Learned in session 8").
+**Done in session 9:**
+- #56 answered: H6 and H8 don't block J1 (test-host deploy and drill are P1b since 2026-10-30); stream B may start
+  P1a item 2 (schema part 1) as a **draft PR merged only after `v0.1.0`**.
+- Stream B's design deviations (#23–#25, #32, #35, #38, #39, #45, #46, #53–#55) settled in the design (`edc85b6`);
+  no new `results-b.md` rows. Integration review and stream B ticked in `plans/progress.md`.
+- `identity/design.md` reworked for the shared-Keycloak pilot, Entra labelled P2 (`cd5c3e5`). It added **nine open
+  questions** (§16 "Open for P1": realm administrator, how RAG's additions are imported, realm-wide settings in whose
+  file, OTP scope, Open WebUI sign-in gate, account lifecycle, identity continuity on LDAP/Entra, token-caller parts,
+  E1 provider) and §14 rows 11–18 (changes other documents need: plan, admin, chat-api §4.3, repo-and-deployment §4.2/§7.1,
+  data-model §2.3, to-verify, gateway session prompt §2).
+- PRs open, all green or running, **waiting on the user's "merge #N"**: #57 (P1 ownership rules, part of J1), #58
+  (`docs/runbook.md`, item 10; the done-when "reviewed by the operations owner" is the user's), #60 (`release.yml`,
+  bundle, smoke test, SBOMs; item 11 minus the tag; H5 evidence in its body). #58 and #60 both append to
+  `results-a.md`/`progress-a.md`: merge `origin/main` into the second one (keep both blocks).
+- #59 to stream B: copy the gateway's `PublishAdminUi` (release.yml copies `dist` into `wwwroot` meanwhile).
+- #61 to stream B: `admin-ui`'s `npm audit` is red from new advisories (`minimatch`/`glob`, moderate, lint dev
+  dependencies). It makes #60 red (only `admin-ui`; every other check green) and any PR that runs that job.
 
 **Next:**
-1. Stream B: `docs/security-events.md`, the pooler-safe SQL scan test and item #11's
-   sign-in check. Review each PR when it appears.
-2. When stream B's last P0 PR is merged: fold `results-b.md` rows added after 163/83/151, and settle the "Design
-   deviations" of #32, #35, #38, #39, #45, #46 and the later ones in the design (stream A's are done).
-3. #27 (ClamAV `1.4.6_base`) on or after 2026-11-02: delegate to an implementor, then stream A cuts `v0.1.0`
-   (item 11: `release.yml` calling `verify.yml` and `parser.yml`, `build-release-bundle.sh`, SBOM, to-verify #91).
-4. Identity design pass for the Keycloak pilot: `identity/design.md` still reads Entra-first (§5.3 "only Entra
-   login", §11 Keycloak as dev only); do it before the P1 briefs need it. Also `chat-api/design.md` citations outside
-   §4.3 still point at Open WebUI v0.12.5 source.
-5. Follow-ups for the P1 briefs (unchanged): RAG's realm additions file for the shared Keycloak (stream B),
-   `--oidc-authority` and Open WebUI's OIDC settings pointed at it (stream A, `deploy/`; `init-deployment.sh`'s usage
-   example still shows Entra), account administration in the runbook. The `BlobTombstones` table (#34) and the P1
-   callers' blob key formats (data-model §9).
+1. Merge #57, #58, #60 (user's go-ahead each). Tick H5 in `progress-a.md` from #60's evidence; remove worktrees
+   `../rag-a14`, `../rag-a15`.
+2. #27 (ClamAV `1.4.6_base`) on or after 2026-11-02 through an implementor.
+3. Before the tag: decide #91 (Syft lists neither pgvector nor ClamAV itself; recommended: accept and say so in the
+   release notes); `## 0.1.0` in `CHANGELOG.md`; reword `docs/production-setup.md` ("until v0.1.0 there is no release
+   bundle") and `docs/upgrade-guide.md`; a `workflow_dispatch` dry run of `release.yml` on GitHub (untested there:
+   ghcr push with `GITHUB_TOKEN`, gha cache, runner disk, freshclam from a runner). Then the user approves pushing
+   tag `v0.1.0` → **J1**; tell stream B (#56) it may merge schema part 1.
+4. Carry identity §14 rows 11–18 into the other documents (one subagent round); take §16's questions 1–4 and 6 to
+   the gateway session prompt and the rest to the user.
+5. Found by the runbook work: `deploy/compose.openwebui.yaml:85`, `:90` still name Entra (P1a item 18); **no script
+   backs up Open WebUI's data directory**, although it is the primary copy (G1/W2); with the pilot settings no admin can
+   export another user's chat at v0.12.3 (to-verify #173, runbook "Public-records requests"); the design cites Open WebUI
+   v0.12.5 but the pin is v0.12.3. Also `chat-api/design.md` citations outside §4.3 still point at v0.12.5.
+6. Unchanged from session 8: RAG's realm additions (stream B P1 item 16), `--oidc-authority`/Open WebUI OIDC pointed
+   at the shared Keycloak (`init-deployment.sh` still shows Entra), `BlobTombstones` (#34).
 
 **Gateway work** runs in a separate session in `~/git/llmgateway`, started from
-`plans/gateway-changes/prompt-gateway-session.md` (release 1 = feature B; shared Keycloak project; production
-prepared, deployed late). It reports back with an issue labelled `main`. Not started yet.
+`plans/gateway-changes/prompt-gateway-session.md`. It reports back with an issue labelled `main`. Not started yet.
 
-**Still needed from the user:** start the gateway session; the platform's own licence (EUPL-1.2 suggested, only
-before distribution); names and dates for A1, N1, U1 (page URL/owner from the web editors) and the gold-set owner
-in the pilot department; a browser check of the admin UI now that #45 is merged.
+**Still needed from the user:** "merge #57/#58/#60"; the operations-owner review of the runbook; start the gateway
+session; the platform's licence (EUPL-1.2 suggested); names and dates for A1, G1, N1, U1, W2, P2 and the gold-set owner;
+a browser check of the admin UI.
 
-The pilot's Keycloak is **shared with the gateway** (user, 2026-10-30; Decisions table "P1 pilot sign-in"; identity
-plan §1): its own Compose project on the gateway's production host, defined in the gateway repo, database `keycloak`
-in the gateway's Postgres, realm `ume`. Local accounts for the pilot (admins with OTP), LDAP federation to AD later.
+**Open issues:** #27 (ClamAV 1.4.6, stream A), #34 (`BlobTombstones`, B, P1), #41 (`rag-blobs` root-owned, A, P1), #47
+(Keycloak pilot, B), #48 (H8), #51/#52 (licence notices), #56 (stream B's J1 question; answered), #59 (`PublishAdminUi`, B), #61 (`admin-ui` audit red, B).
 
-The H7 issue (Entra, now P2) is written with the P2 briefs, from PR #36's body and `infra/entra/README.md`. H8 is #48.
+**Worktrees:** `../rag-a14` (#60), `../rag-a15` (#58); remove each with `git worktree remove` once merged. The Aspire CLI
+is at `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
 
-**Open issues:** #27 (ClamAV 1.4.6, stream A, before `v0.1.0`), #28 (H4, stream B), #34 (`BlobTombstones`, stream B,
-P1), #41 (`rag-blobs` volume root owned by root, stream A, P1), #47 (Keycloak pilot decision, stream B), #51/#52
-(licence notices before distribution), #48 (H8).
-
-**Waiting on the user** (unchanged): H6 (test host, backup target, escrow, `to-verify.md` #145), H7/#17 Entra
-submission, #18 gateway release 1 agreement, H8 gateway hardware access (#22), DPIA G1, owners and dates for A1, G1,
-W1, W2, N1, U1, P2. Decided in session 6 and recorded: NER model baked in the parser image; parser port 8000 with TLS in
-production; Postgres image built in CI (not published before release); no `JsonSchema.Net` binaries (validator picked in
-P1, `to-verify.md` #17); parser option-set cache sized with the P1 watchdog (#65); reaper and heartbeat timings; ClamAV
-1.4.5 until #27. Decided in session 7 (main session, recorded in the design and the Decisions table):
-`DOTNET_GCHeapHardLimitPercent=0x4B` (GC environment values are hex); the query-embedding step is `query-embed`;
-audit `Service` is the container/OTEL name (`rag-admin`); Open WebUI pinned to v0.12.3 (7-day rule).
-
-**CI facts learned:** since #50 the parser jobs (own `parser.yml`) take about 4.2 min when the parser changed and
-are skipped in seconds otherwise. Before that, the two parser jobs took about 14 min (3 GB image; restoring the build cache is about as slow as
-a fresh build), and they run only when parser paths change. A single combined job was measured at 17 min and rejected
-(PR #19, closed). The hosted runner needs the "Free runner disk" step for that image. Testcontainers needs locally
-built images to carry a registry part with a dot (`ume-rag.local/...`), or the Docker Hub mirror prefix rewrites them.
-
-**Worktrees:** none open. Give each implementor its own (`../rag-aN`) and remove it with `git worktree remove` once
-its PR has merged. The Aspire CLI is at `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on
-PATH; `start`, `describe`, `otel traces <resource>`, `stop`). On WSL its first run asks to trust the dev certificate in
-the Windows store (done once by the user with `dotnet dev-certs https --trust`).
-
-Not yet done: `.claude/settings.json` with a build/test command allowlist was refused by the permission classifier
-(self-modification); the user decides whether to add it.
+**CI facts:** parser jobs (own `parser.yml`) take about 4.2 min when the parser changed and are skipped otherwise. The
+hosted runner needs the "Free runner disk" step for the parser image. Testcontainers needs locally built images to carry
+a registry part with a dot (`ume-rag.local/...`).

@@ -3,13 +3,24 @@
 For the pilot host set up as in [production-setup.md](production-setup.md). Commands run from the directory that holds
 `deploy/`, as root or a member of the `docker` group; `dc` below stands for `docker compose --env-file deploy/.env`.
 The design behind this page is [`plans/platform/repo-and-deployment.md`](../plans/platform/repo-and-deployment.md)
-§6 and §7.4.
+§6 and §7.4. Upgrades are in the [upgrade guide](upgrade-guide.md), security events in
+[security-events.md](security-events.md).
 
 ## Ownership and targets
 
-Name a service owner, an on-call function, the data protection officer and the records owner (registrar) before real
-data arrives. Pilot targets: **RPO ≤ 5 minutes, RTO ≤ 4 hours** for the database; uploads copied off the host within
-15 minutes. Retention of the backups is 35 days (proposed).
+Name these before real data arrives (placeholders until then):
+
+| Role | Who |
+|---|---|
+| Service owner | `<owner>` |
+| On-call function | `<owner>` |
+| Operations owner (reviews this runbook) | `<owner>` |
+| Data protection officer (dataskyddsombud) | `<owner>` |
+| Records owner (registrar) | `<owner>` |
+| Gateway team (the gateway and the shared Keycloak) | `<owner>` |
+
+Pilot targets: **RPO ≤ 5 minutes, RTO ≤ 4 hours** for the database; uploads copied off the host within 15 minutes.
+Retention of the backups is 35 days (proposed).
 
 ## Everyday commands
 
@@ -26,6 +37,27 @@ Never run `dc down --volumes` on a deployment: it deletes `postgres-data`, `rag-
 `/health/live`, `/health/ready` and `/version`; the published ones are on `https://localhost:8543` (api) and `:9543`
 (admin), with the internal CA in `deploy/certs/ca.pem`.
 
+## Daily checks
+
+Until the metrics reach the municipal monitoring (how is still to be settled, *Metrics and alerts*), check by hand
+each working day:
+
+```bash
+systemctl list-timers 'rag-*'                   # every timer has a next run; the backup ran last night
+systemctl list-units --failed 'rag-*'           # no failed unit
+cat /var/lib/ume-rag/backup.prom /var/lib/ume-rag/upload-backup.prom
+dc ps                                           # every service healthy (rag-migrate exited 0)
+sudo curl --cacert deploy/certs/ca.pem https://localhost:8543/health/ready
+sudo curl --cacert deploy/certs/ca.pem https://localhost:9543/health/ready
+dc exec -T postgres pgbackrest --stanza=ragdb info
+```
+
+In `backup.prom`: `rag_backup_age_seconds` under 93600 (26 h), `rag_backup_repo_status 0`,
+`rag_backup_wal_archive_age_seconds` under 300, `rag_backup_last_run_success 1`, and
+`rag_backup_status_timestamp_seconds` within the last 10 minutes. In `upload-backup.prom`:
+`rag_upload_backup_last_success_timestamp_seconds` within the last 30 minutes (not with an S3 target). These are the
+thresholds of the proposed alerts below; anything else: *Where to look first*.
+
 ## Backups
 
 ### What runs
@@ -40,7 +72,8 @@ Never run `dc down --volumes` on a deployment: it deletes `postgres-data`, `rag-
 Derived blobs (fetched pages, parse outputs) are not backed up: a restore fetches and parses them again. The pepper
 (`deploy/secrets/.pepper`), `deploy/certs/data-protection.pfx` and the rest of `deploy/secrets/` are backed up
 separately, through the municipality's secret store; the blob master key and the pgBackRest passphrase are also
-escrowed (*Key escrow*).
+escrowed (*Key escrow*). Open WebUI's data directory (`UME_RAG_OPENWEBUI_DATA_DIR`) is **not backed up by any script
+in P0** (*Public-records requests*).
 
 ```bash
 systemctl list-timers 'rag-*'
@@ -54,6 +87,7 @@ dc exec -T postgres pgbackrest --stanza=ragdb info      # backup sets and the ar
 sudo deploy/backup-postgres.sh --type full               # by hand: full, diff or auto
 sudo deploy/backup-postgres.sh --type full --start-fast  # an immediate checkpoint instead of a spread one (drills)
 sudo deploy/backup-postgres.sh --status-only             # refresh the metrics only
+sudo systemctl start rag-backup.service                  # the scheduled run (--type auto), now
 ```
 
 `--env-file FILE` (default `deploy/.env`) picks the deployment, and `--state-dir DIR` (default `$STATE_DIRECTORY`, else
@@ -62,10 +96,10 @@ recorded (`rag_backup_last_run_success 0`) and the metrics are refreshed if the 
 
 ### Metrics and alerts
 
-The scripts write Prometheus text files to `/var/lib/ume-rag/` (`backup.prom`, `upload-backup.prom`), atomically.
-Point node_exporter's textfile collector, or the collector that reads them, at that directory (how they reach the
-municipal monitoring is still to be settled). Every value is read from the repository and `pg_stat_archiver` at run
-time, so a backup taken by any means is reported.
+The scripts write Prometheus text files to `/var/lib/ume-rag/` (`backup.prom`, `upload-backup.prom`), atomically and
+world-readable. Point node_exporter's textfile collector, or the collector that reads them, at that directory (how they
+reach the municipal monitoring is still to be settled). Every value is read from the repository and `pg_stat_archiver`
+at run time, so a backup taken by any means is reported.
 
 | Metric | Meaning |
 |---|---|
@@ -134,14 +168,101 @@ everything archived before it starts stays restorable, nothing written after its
 5. **Blobs.** Blobs are write-once and purged only after the backup retention, so the restored database finds every
    blob it references. The worker's orphan audit (§7.4 rule 2) then reports blobs without a referencing row (left to
    the purge) and documents whose derived blob is missing (fetched or parsed again on the next sync). The audit comes
-   with the ingestion pipeline (P1). A missing **upload** is restored from the upload copy (below).
+   with the ingestion pipeline (P1; not built in P0). A missing **upload** is restored from the upload copy
+   (*Upload copy*).
 
-**Timings.** The local drill (a 30 MB database, local repository) took **23.0 s** end to end: archive and stop 2.1 s,
-restore 0.9 s, recovery to the target 2.9 s, promote 1.6 s, check 0.3 s, services healthy 15.2 s. A second restore on
-the new timeline took 22.7 s. Restore and recovery grow with the database size and the WAL since the chosen backup, and
-a share or S3 target is slower than a local volume: the test-host drill measures realistic numbers.
+**Timings.** The local drill (PR #40; a 30 MB database, local repository) took **23.0 s** end to end: archive and stop
+2.1 s, restore 0.9 s, recovery to the target 2.9 s, promote 1.6 s, check 0.3 s, services healthy 15.2 s. A second
+restore on the new timeline took 22.7 s. Restore and recovery grow with the database size and the WAL since the chosen
+backup, and a share or S3 target is slower than a local volume: the test-host drill measures realistic numbers.
 
-### Restoring uploads from the upload copy
+### Restoring onto another host
+
+Not drilled yet; the test-host drill confirms it. The order matters, because `init-deployment.sh` never overwrites
+existing files:
+
+1. Before running `init-deployment.sh` on the new host, put back from the escrow and the secret store:
+   `secrets/pgbackrest/cipher-pass` (owner 999, mode 0600), `secrets/keys/rag-blob-internal` (owner 1654, mode 0400),
+   `secrets/.pepper` and `certs/data-protection.pfx`. The escrow set's `MANIFEST` says where each key goes.
+2. Run `init-deployment.sh` with the same `--backup-target`, then the install steps of production-setup.md up to
+   `up --wait` (no `stanza-create`: the stanza exists).
+3. Run `restore-pitr.sh --target-time … --confirm`, then take a full backup.
+
+For a drill (not a real loss of the production host), give the drill host a **copy** of the repository, not the
+production repository itself: after the restore it archives WAL and its backup timer takes backups, which must not
+land in production's repository.
+
+## Restore drill
+
+§7.4 rule 3: a drill after the first deployment, then **every quarter**. The P0 drill was run locally (PR #40, timings
+above). The **first drill on the test host is scheduled before go-live (P1b)**, together with the test-host deployment
+(decisions table, "M2 and test hosting"); it is still open. Record the date, the achieved RPO and RTO, and anything
+that went wrong.
+
+1. **Isolated host** with its own **copy** of the pgBackRest repository (never production's) and of the blob volume
+   (or the upload copy), set up as in *Restoring onto another host*, from the **escrowed** keys: this is the check
+   that the escrow can be read back. Once the keys are in place, run `escrow-keys.sh --verify` against the escrow set:
+   it must print `PASS`.
+2. **Choose a target time** that tests the RPO: a moment a few minutes before the drill, and note the newest change
+   you expect to survive.
+3. **Restore** with `restore-pitr.sh --target-time … --confirm`; keep its timing output (the RTO).
+4. **Check:**
+   - the newest expected change is there and nothing after the target is;
+   - `pgbackrest check` passed (the script runs it) and every service is healthy;
+   - a search query returns results with citations;
+   - a document preview opens (an `internal` document: this reads a blob with the escrowed key);
+   - a chat history read: metadata only while the pilot runs history mode `none`.
+   The search, preview and history checks apply once those features exist (P1).
+5. **Take a full backup** on the restored host if it stays in use; otherwise remove it and its copy.
+6. **Record** the RPO (target time minus the newest change that survived, against 5 minutes) and the RTO (against 4
+   hours) in the operations log.
+
+## Key escrow
+
+`deploy/escrow-keys.sh` exports the keys no backup can replace to escrow media and reads them back. Escrowed in P0
+and P1:
+
+- `secrets/keys/rag-blob-*`: the blob master keys of the file key provider (`rag-blob-internal`). Without them the
+  `internal` blobs cannot be decrypted.
+- `secrets/pgbackrest/cipher-pass`: the repository passphrase. Without it no backup can be read.
+
+Chat master keys (`rag-chat-<level>`) join only once stored chat content is allowed (register A1); there are none in
+P0 and P1. The pepper and `data-protection.pfx` go to the secret store, not to this escrow.
+
+```bash
+sudo deploy/escrow-keys.sh /media/escrow-a              # writes /media/escrow-a/ume-rag-keys-<project>-<UTC time>/
+sudo deploy/escrow-keys.sh --verify /media/escrow-a     # the newest set there, or name one set
+```
+
+The export writes the keys with `SHA256SUMS` and a `MANIFEST` (what each key is and where it goes back), read-only for
+the owner. `--verify` checks the checksums and the key formats, and that every key equals this deployment's current
+one (and the passphrase equals `repo1-cipher-pass` in `repo.conf`); it prints `PASS` and exits 0, or names each
+`FAIL`. `--env-file FILE` or `--secrets-dir DIR` points it at another deployment.
+
+- **Run it** after the first deployment (production-setup.md) and **after every rotation**, then verify: `--verify`
+  fails with "differs from the deployment's key" until the new key is escrowed. The upgrade guide verifies the escrow
+  before each upgrade.
+- **Seal the media in two places** (or use the key service's own backup). The files are in the clear: whoever holds
+  the media can read every `internal` blob and every backup. Where the escrow lives is agreed with IT (to-verify #145).
+- **Keep each set as long as the data and backups it protects.**
+- **A restore reads them back**: copy the keys to the places the `MANIFEST` names (*Restoring onto another host*),
+  then `--verify` against the set; every drill does this.
+
+## Upload copy
+
+`rag-upload-backup.timer` runs `deploy/backup-uploads.sh` every 10 minutes, so an upload is off the host within 15. It
+runs the profiled Compose service `rag-upload-backup` (the postgres image's shell as uid 1654, the blob volume
+read-only, no network) with `UME_RAG_UPLOAD_BACKUP_DIR` mounted as the target. Each new file is written under a
+temporary name and renamed; a file already in the copy is skipped. Deletions are not propagated: prune the copy with
+the backup retention (35 days). With an S3 target there is no upload copy yet (not built in P0).
+
+```bash
+sudo deploy/backup-uploads.sh          # by hand; --env-file FILE, --state-dir DIR
+sudo systemctl start rag-upload-backup.service
+journalctl -u rag-upload-backup.service --since today
+```
+
+### Restoring a missing upload
 
 The upload copy holds every file below `uploads/` of the blob store, under the same key (`<backup target>/uploads/`,
 or `deploy/upload-backup/uploads/` with a `local` target). Keys are write-once, so copying back only what is missing is
@@ -161,62 +282,26 @@ docker run --rm --network none --user 1654:1654 --read-only \
 Use the deployment's `POSTGRES_IMAGE` if it is pinned (any image with a POSIX shell works). This step has not been
 drilled yet: uploads arrive with the admin UI (P1).
 
-### Restoring onto another host
+## Updates and restarts
 
-Not drilled yet; the test-host drill confirms it. The order matters, because `init-deployment.sh` never overwrites
-existing files:
+Upgrades follow the [upgrade guide](upgrade-guide.md): announce the window, take a full backup and verify the escrow,
+replace `deploy/`, run the superuser steps if the release lists them, then `dc up -d --wait`, which runs `rag-migrate`
+first. In the pilot `rag-api` and `rag-admin` are replaced together in one announced window; rolling updates come in
+P2 (not built).
 
-1. Before running `init-deployment.sh` on the new host, put back from the escrow and the secret store:
-   `secrets/pgbackrest/cipher-pass` (owner 999, mode 0600), `secrets/keys/rag-blob-internal` (owner 1654, mode 0400),
-   `secrets/.pepper` and `certs/data-protection.pfx`. The escrow set's `MANIFEST` says where each key goes.
-2. Run `init-deployment.sh` with the same `--backup-target`, then the install steps of production-setup.md up to
-   `up --wait` (no `stanza-create`: the stanza exists).
-3. Run `restore-pitr.sh --target-time … --confirm`, then take a full backup.
-
-For a drill (not a real loss of the production host), give the drill host a **copy** of the repository, not the
-production repository itself: after the restore it archives WAL and its backup timer takes backups, which must not
-land in production's repository.
-
-## Key escrow
-
-`deploy/escrow-keys.sh` exports the keys no backup can replace to escrow media and reads them back:
-
-- `secrets/keys/rag-blob-*`: the blob master keys of the file key provider (`rag-blob-internal`). Without them the
-  `internal` blobs cannot be decrypted. Chat master keys (`rag-chat-<level>`) join once stored chat content is
-  allowed (A1); there are none in P0 and P1.
-- `secrets/pgbackrest/cipher-pass`: the repository passphrase. Without it no backup can be read.
+**The worker is stop-then-start, never overlapping.** Two `rag-worker` processes at once would exceed its role's
+connection limit; its job leases make a short pause harmless. Never scale it (`--scale rag-worker=2`) or start a
+second worker against the same database. To restart it by hand:
 
 ```bash
-sudo deploy/escrow-keys.sh /media/escrow-a              # writes /media/escrow-a/ume-rag-keys-<project>-<UTC time>/
-sudo deploy/escrow-keys.sh --verify /media/escrow-a     # the newest set there, or name one set
+dc stop rag-worker              # it gets its stop grace period (120 s) before it is killed
+dc up -d --wait rag-worker
 ```
 
-The export writes the keys with `SHA256SUMS` and a `MANIFEST` (what each key is and where it goes back), read-only for
-the owner. `--verify` checks the checksums and the key formats, and that every key equals this deployment's current
-one (and the passphrase equals `repo1-cipher-pass` in `repo.conf`); it prints `PASS` and exits 0, or names each
-`FAIL`. `--env-file FILE` or `--secrets-dir DIR` points it at another deployment.
+`dc restart rag-worker` also stops it before it starts. The parser and ClamAV can be restarted on their own: the
+worker reports them in its own health and retries.
 
-- **Seal the media in two places** (or use the key service's own backup). The files are in the clear: whoever holds
-  the media can read every `internal` blob and every backup.
-- **Keep each set as long as the data and backups it protects.**
-- **Re-run after every rotation**, and verify: `--verify` fails with "differs from the deployment's key" until the new
-  key is escrowed.
-- **The restore drill reads them back** (below).
-
-## Upload copy
-
-`rag-upload-backup.timer` runs `deploy/backup-uploads.sh` every 10 minutes, so an upload is off the host within 15. It
-runs the profiled Compose service `rag-upload-backup` (the postgres image's shell as uid 1654, the blob volume
-read-only, no network) with `UME_RAG_UPLOAD_BACKUP_DIR` mounted as the target. Each new file is written under a
-temporary name and renamed; a file already in the copy is skipped. Deletions are not propagated: prune the copy with
-the backup retention (35 days). With an S3 target there is no upload copy yet.
-
-```bash
-sudo deploy/backup-uploads.sh          # by hand; --env-file FILE, --state-dir DIR
-journalctl -u rag-upload-backup.service --since today
-```
-
-## Restarting unhealthy containers
+### Restarting unhealthy containers
 
 Docker restarts a container only when its main process exits. ClamAV's does not, so a hung clamd would stay
 unhealthy. `rag-restart-unhealthy.timer` runs `deploy/host/restart-unhealthy.sh` every minute: it restarts every
@@ -268,29 +353,64 @@ ExecStart=/opt/ume-rag/deploy/host/docker-user-firewall.sh --env-file /opt/ume-r
 
 (with your deployment's path). `install.sh` leaves that override in place.
 
-## Restore drill
+## Public-records requests (allmän handling)
 
-After the first deployment (P0) and then **every quarter** (§7.4 rule 3). Record the date, the achieved RPO and RTO,
-and anything that went wrong.
+**Status: open; there is no admin procedure yet.** In the pilot our database holds no chat content (history mode
+`none`), so a request for a conversation is answered from Open WebUI's own copy, the primary copy (weakness review §4,
+plan §8). With the pilot settings in `deploy/compose.openwebui.yaml` (`ENABLE_ADMIN_CHAT_ACCESS=false`,
+`ENABLE_ADMIN_EXPORT=false`) **no Open WebUI admin can find, open or export another user's conversation**. The only
+route that works today is the user's own export. Which route the registrar uses is decided in the DPIA (register G1,
+with W2; to-verify #173) before go-live; direct SQL against Open WebUI's database is ruled out. This section gets the
+procedure once G1 has decided it.
 
-1. **Isolated host** with its own copy of the repository and of the blob volume (or the upload copy), set up as in
-   *Restoring onto another host*, from the **escrowed** keys: this is the check that the escrow can be read back.
-   Run `escrow-keys.sh --verify` against the escrow set first.
-2. **Choose a target time** that tests the RPO: a moment a few minutes before the drill, and note the newest change
-   you expect to survive.
-3. **Restore** with `restore-pitr.sh --target-time … --confirm`; keep its timing output (the RTO).
-4. **Check:**
-   - the newest expected change is there and nothing after the target is;
-   - `pgbackrest check` passed (the script runs it) and every service is healthy;
-   - a search query returns results with citations;
-   - a document preview opens (an `internal` document: this reads a blob with the escrowed key);
-   - a chat history read: metadata only while the pilot runs history mode `none`.
-   The search, preview and history checks apply once those features exist (P1).
-5. **Take a full backup** on the restored host if it stays in use; otherwise remove it and its copy.
-6. **Record** the RPO (target time minus the newest change that survived, against 5 minutes) and the RTO (against 4
-   hours) in the operations log.
+What the pinned Open WebUI (v0.12.3) does, read from its source at tag `v0.12.3` (paths below `backend/open_webui/`
+unless they start with `src/`):
 
-## Where to look first
+| Setting or route | Effect at v0.12.3 | Source |
+|---|---|---|
+| `ENABLE_ADMIN_CHAT_ACCESS` | read once from the environment at start (default `True`; we set `false`), not a persistent setting: changing it means recreating the container | `env.py:371` |
+| An admin lists a user's chats: `GET /api/v1/chats/list/user/{user_id}`, the *Chats* button in *Admin > Users* | refused (401) with the flag off; the button is hidden (and never shown for admin-role users) | `routers/chats.py:783-796`; `src/lib/components/admin/Users/UserList.svelte:429` |
+| An admin opens a chat by id: `GET /api/v1/chats/{id}`, and the admin fallback of `GET /api/v1/chats/share/{id}` | only the owner can read it with the flag off | `routers/chats.py:1412-1422`, `:1308-1310`; `models/chats.py:1924-1929` |
+| `ENABLE_ADMIN_EXPORT` | read once from the environment (default `True`; we set `false`) | `config.py:2127` |
+| All chats of all users `GET /api/v1/chats/all/db`, the raw database `GET /api/v1/utils/db/download`, the export section of *Admin > Settings > Database* | refused (401) with the flag off; the section is hidden | `routers/chats.py:1113-1117`; `routers/utils.py:74-78`; `src/lib/components/admin/Settings/Database.svelte:123` |
+| The user's own export: `GET /api/v1/chats/all` (only the caller's chats), the chat export under *Data Controls* in the user's settings, and *Download > Export chat (.json)* in a chat's menu | works; the menu entry needs `permissions.chat.export`, default `True` (`USER_PERMISSIONS_CHAT_EXPORT`, which we do not set) | `routers/chats.py:1072-1077`; `src/lib/components/chat/Settings/DataControls.svelte:93-97`, `:182-192`; `src/lib/components/layout/Navbar/Menu.svelte:424-443`; `config.py:1913`, `:2024` |
+| Feedback snapshots: an admin reads any feedback with its `snapshot.chat` (`GET /api/v1/evaluations/feedback/{id}`, `GET /api/v1/evaluations/feedbacks/all/export`) | works, but only for rated messages, and only the chat as it was when rated | `routers/evaluations.py:449-459`, `:354-364`; `models/feedbacks.py:92-93` |
+| The feedback service account's API key | reaches only the allow-listed paths (prefix match), so it cannot read chats | `utils/auth.py:538-546` |
+| A chat the user deletes | is removed from the database (rows deleted, not flagged) | `models/chats.py:2736-2744` |
+
+**Until G1 decides, a request is handled like this** (it depends on the user):
+
+1. The registrar (`<owner>`) records the request and identifies the user and the conversation (date, title).
+2. The user opens the conversation in Open WebUI, chooses *Download > Export chat (.json)* (or exports all chats
+   under *Data Controls* in the settings), and hands the file to the registrar through the records channel.
+3. If the user cannot or will not export it, or has deleted it, there is no admin route with the pilot settings:
+   escalate to the records owner and the data protection officer (open points below).
+
+**Open points for G1 and W2** (none of these is a procedure until G1 has decided):
+
+- *A temporary, logged admin-access window*: `ENABLE_ADMIN_CHAT_ACCESS=true` on the Open WebUI service, recreate it,
+  an admin signs in and uses *Admin > Users > Chats*, then the flag goes back and the container is recreated again.
+  While it is on, **every** Open WebUI admin can read **every** chat. It needs a person who holds the Open WebUI admin
+  role and signs in through OIDC (W2 prefers that no person holds it), and how the window is logged is not settled.
+  Not tested.
+- *Feedback snapshots* cover only rated conversations, as of the rating.
+- *Backups of Open WebUI's data directory*: none in P0, so a deleted conversation cannot be recovered.
+- The Open WebUI stack is off by default and not deployed in P0 (production-setup.md, *Open WebUI*).
+
+## Incidents
+
+- **Security events** go to the SIEM under `Ume.Rag.Security`; what each one means and which alerts to set up is in
+  [security-events.md](security-events.md).
+- **Who to tell:** the service owner `<owner>` and on-call `<owner>` first; the data protection officer `<owner>` for
+  any suspected personal-data breach (the GDPR breach assessment: a notifiable breach is reported within 72 hours of
+  discovery); the municipality's IT security `<owner>` per its reporting routine; the gateway team `<owner>` when the
+  gateway or sign-in is involved (the pilot signs in through the Keycloak shared with the gateway, on the gateway's
+  host); the records owner `<owner>` before anything that may be an allmän handling is deleted.
+- **Preserve evidence**: logs, the audit log and the security events. Do not capture conversations to investigate.
+- **Safe shutdown**: `dc stop` (keeps the volumes). For a bad data change: a point-in-time restore to just before it
+  (*Restore*).
+
+### Where to look first
 
 | Symptom | Where to look and what to do |
 |---|---|
@@ -308,14 +428,6 @@ and anything that went wrong.
 | `install.sh` warns "Docker does not use the systemd cgroup driver" | The ingestion slice caps nothing: set `native.cgroupdriver=systemd` (production-setup.md), restart Docker, then `dc up -d --force-recreate` |
 | `escrow-keys.sh --verify`: "differs from the deployment's key" | A key was rotated after that escrow: escrow again and verify |
 | The parser stays unhealthy for minutes after a start | It warms its slots and runs a self-test first; the worker reports it in its own health and retries |
-
-## Public-records requests
-
-In the pilot our database holds no chat content (history mode `none`), so a request for a conversation is answered
-from Open WebUI's own copy, the primary copy. How one user's conversation is found and exported for the registrar is
-decided in the DPIA (register G1, to-verify #173), before go-live: the user's own export, a temporary, logged
-admin-access window, or another route. Direct SQL against Open WebUI's database is ruled out. This section gets the
-procedure once G1 has decided it.
 
 ## Secrets and certificates
 

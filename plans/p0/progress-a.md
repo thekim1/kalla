@@ -85,7 +85,7 @@ Refs: [weakness-review §5](../weakness-review.md), [performance-pass §3.9](../
 Refs: [platform/plan.md §10](../platform/plan.md), [repo-and-deployment §6.2, §7.4](../platform/repo-and-deployment.md)
 - [x] `docs/local-development.md` (#42)
 - [x] `docs/production-setup.md` (sizing from §6.2) (#42)
-- [ ] `docs/runbook.md` (restore, escrow, public-records export section per register G1)
+- [x] `docs/runbook.md` (restore, escrow, public-records export section per register G1) (#58)
 - [x] `docs/upgrade-guide.md` (#42)
 
 ## 11. Release (#15, integration sync point only)
