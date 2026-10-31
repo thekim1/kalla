@@ -147,7 +147,7 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
             attemptLimit.CancelAfter(_options.AttemptTimeout);
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("v1/embeddings", UriKind.Relative))
             {
-                Content = JsonContent.Create(new EmbeddingRequest(profile.GatewayModel, query, "float"), options: Json),
+                Content = JsonContent.Create(new EmbeddingRequest(profile.GatewayModel, query, "float", profile.DimensionsParameter), options: Json),
             }.WithMaxResidency(profile.MaxResidency);
             request.Headers.Add(StepHeader, "query-embed");
             if (runId is { } id)
@@ -288,7 +288,9 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
 
     public void Dispose() => _cache.Dispose();
 
-    private sealed record EmbeddingRequest(string Model, string Input, [property: JsonPropertyName("encoding_format")] string EncodingFormat);
+    private sealed record EmbeddingRequest(
+        string Model, string Input, [property: JsonPropertyName("encoding_format")] string EncodingFormat,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Dimensions = null);
 
     private sealed record EmbeddingResponse(IReadOnlyList<EmbeddingItem>? Data);
 

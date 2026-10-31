@@ -140,6 +140,16 @@ if (builder.ExecutionContext.IsRunMode)
     migrations.WithEnvironment("Seed__DevKey", devKey);
 }
 
+// EmbeddingProfile:* (AppHost configuration or user secrets) seeds the platform profile in the migrator (P1a item 13,
+// #142): e.g. GatewayModel=text-embedding-3-large, Dimensions=1024, RequestDimensions=true, MaxResidency=Eu.
+foreach (var (key, value) in builder.Configuration.GetSection("EmbeddingProfile").AsEnumerable(makePathsRelative: true))
+{
+    if (value is not null)
+    {
+        migrations.WithEnvironment("EmbeddingProfile__" + key.Replace(":", "__", StringComparison.Ordinal), value);
+    }
+}
+
 if (fakeGateway is not null)
 {
     migrations.WithEnvironment("Seed__FakeGatewayUrl", ReferenceExpression.Create($"{fakeGateway.GetEndpoint("https")}/v1"))

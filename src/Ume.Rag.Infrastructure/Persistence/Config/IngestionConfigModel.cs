@@ -86,6 +86,7 @@ internal static class IngestionConfigModel
             e.Property(x => x.Name).HasMaxLength(100);
             e.Property(x => x.GatewayModel).HasMaxLength(200);
             e.Property(x => x.Distance).HasMaxLength(20);
+            e.Property(x => x.RequestDimensions).HasDefaultValue(false);
             e.Property(x => x.State).HasMaxLength(20);
             // The header values OnPrem, Eu, External (P1 README §8 O1).
             e.Property(x => x.MaxResidency).HasMaxLength(10).HasConversion<string>();
