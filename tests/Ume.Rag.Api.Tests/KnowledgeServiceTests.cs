@@ -38,6 +38,11 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
     public Guid PublicSource { get; } = Guid.CreateVersion7();
     public Guid UnpublishedSource { get; } = Guid.CreateVersion7();
     public Guid SensitiveSource { get; } = Guid.CreateVersion7();
+    public Guid SectionCollection { get; } = Guid.CreateVersion7();
+    public Guid SectionSource { get; } = Guid.CreateVersion7();
+    public FixtureDocument Plank { get; private set; } = null!;
+    public Guid UploadSlot { get; } = Guid.CreateVersion7();
+    public static readonly byte[] UploadHash = Convert.FromHexString("ab" + new string('0', 62));
     public Guid AssistantId { get; } = Guid.CreateVersion7();
     public Guid InternalClient { get; } = Guid.CreateVersion7();
     public Guid OwuiClient { get; } = Guid.CreateVersion7();
@@ -58,8 +63,9 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         Upload = await writer.AddDocumentAsync(new FixtureDocumentSpec
         {
             CollectionId = PublicCollection, EmbeddingProfileId = ProfileId, SourceId = PublicSource, IdentityKind = "upload",
-            Title = "Taxa 2026", DisplayName = "taxa-bygglov-2026.pdf", MediaType = "application/pdf", PageCount = 4,
+            CanonicalIdentity = "upload:" + UploadSlot, Title = "Taxa 2026", DisplayName = "taxa-bygglov-2026.pdf", MediaType = "application/pdf", PageCount = 4,
         }, [new FixtureChunk("Avgiften för bygglov för en altan beräknas enligt taxan för 2026.")]);
+        await writer.ExecuteAsync($"""UPDATE content."Documents" SET "ContentHash" = '\x{Convert.ToHexString(UploadHash)}' WHERE "Id" = '{Upload.Id}'""");
         Hidden = await writer.AddDocumentAsync(new FixtureDocumentSpec
         {
             CollectionId = UnpublishedCollection, EmbeddingProfileId = ProfileId, SourceId = UnpublishedSource, Title = "Utkast",
@@ -68,6 +74,20 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         {
             CollectionId = SensitiveCollection, EmbeddingProfileId = ProfileId, SourceId = SensitiveSource, Classification = "sensitive", Title = "Känsligt",
         }, [new FixtureChunk("Bygglov för altan hos en enskild person.")]);
+
+        // One section of four chunks (the third a subsection, the fourth repeating 16 characters of the third), then another section.
+        const string PlankPath = "Plank och mur";
+        Plank = await writer.AddDocumentAsync(new FixtureDocumentSpec
+        {
+            CollectionId = SectionCollection, EmbeddingProfileId = ProfileId, SourceId = SectionSource, Title = "Plank",
+        },
+        [
+            new FixtureChunk("Ett plank är en tät skärm.") { HeadingPath = PlankPath, Ordinal = 0, TokenCount = 100 },
+            new FixtureChunk("Plank högre än 110 centimeter kräver bygglov.") { HeadingPath = PlankPath, Ordinal = 1, TokenCount = 100 },
+            new FixtureChunk("Mät från marken. Höjden räknas från den lägsta sidan.") { HeadingPath = PlankPath + " › Höjd", Ordinal = 2, TokenCount = 100 },
+            new FixtureChunk("Höjden räknas från den lägsta sidan. Fråga oss vid tvekan.") { HeadingPath = PlankPath + " › Höjd", Ordinal = 3, TokenCount = 100, OverlapChars = 37 },
+            new FixtureChunk("Murar och stödmurar beskrivs på en egen sida.") { HeadingPath = "Mur", Ordinal = 4, TokenCount = 100 },
+        ]);
     }
 
     /// <summary>The snapshot, with the profile's model <paramref name="model"/> (FakeGateway behaviour by name).</summary>
@@ -83,7 +103,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         var collections = new[]
         {
             Collection(PublicCollection, Classification.Public, true), Collection(UnpublishedCollection, Classification.Public, false),
-            Collection(SensitiveCollection, Classification.Sensitive, true),
+            Collection(SensitiveCollection, Classification.Sensitive, true), Collection(SectionCollection, Classification.Public, true),
         }.ToDictionary(c => c.Id);
         var assistant = new AssistantEntry(AssistantId, "bygg", "Bygg", Classification.Internal, HistoryModes.None, AssistantStates.Active, Guid.Empty, null,
             new PublishedVersionEntry(Guid.NewGuid(), 1, "ume/chat-eu", [PublicCollection, UnpublishedCollection]),
@@ -97,6 +117,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
             SourcesByCollection = new Dictionary<Guid, IReadOnlyList<Guid>>
             {
                 [PublicCollection] = [PublicSource], [UnpublishedCollection] = [UnpublishedSource], [SensitiveCollection] = [SensitiveSource],
+                [SectionCollection] = [SectionSource],
             },
             EmbeddingProfiles = new Dictionary<Guid, EmbeddingProfileEntry>
             {
@@ -129,7 +150,8 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         public bool IsConfirmed => confirmed;
     }
 
-    private (KnowledgeService Service, RetrievalCounter Counter, IHost Host) Build(PolicySnapshot snapshot, bool confirmed = true, HttpMessageHandler? gateway = null)
+    private (KnowledgeService Service, RetrievalCounter Counter, IHost Host) Build(PolicySnapshot snapshot, bool confirmed = true, HttpMessageHandler? gateway = null,
+        IDownloadLinks? links = null)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([
@@ -144,7 +166,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
             TimeProvider.System, NullLogger<GatewayQueryEmbedder>.Instance);
         var service = new KnowledgeService(new FixedSnapshot(snapshot, confirmed), new AccessPolicy(AccessPolicy.DefaultKnowledgeClientKinds),
             new RetrievalEngine(index, new ScopeSizeCache(index, TimeProvider.System)), new PostgresHydrator(dataSource), embedder, counter, dataSource,
-            NoDownloadLinks.Instance, NullLogger<KnowledgeService>.Instance);
+            links ?? NoDownloadLinks.Instance, NullLogger<KnowledgeService>.Instance);
         return (service, counter, host);
     }
 
@@ -256,7 +278,125 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         (await Should.ThrowAsync<RetrievalDeniedException>(() => service.GetDocumentAsync(who, db.Hidden.Id, Ct))).Status.ShouldBe(404);
         (await Should.ThrowAsync<RetrievalDeniedException>(() => service.GetDocumentAsync(who, Guid.NewGuid(), Ct))).Status.ShouldBe(404);
 
-        (await service.ListCollectionsAsync(who, Ct)).Select(c => c.Id).ShouldBe([db.PublicCollection, db.SensitiveCollection], ignoreOrder: true);
+        (await service.ListCollectionsAsync(who, Ct)).Select(c => c.Id).ShouldBe([db.PublicCollection, db.SensitiveCollection, db.SectionCollection], ignoreOrder: true);
+    }
+
+    private static readonly DownloadGrants Grants = new(new DownloadGrantOptions
+    {
+        Keys = new Dictionary<string, byte[]> { ["k1"] = System.Text.Encoding.UTF8.GetBytes(new string('k', 32)) },
+    }, TimeProvider.System);
+
+    private static DownloadGrant GrantOf(string link)
+    {
+        Grants.Read(link[(link.IndexOf("grant=", StringComparison.Ordinal) + 6)..], out var grant).ShouldBe(GrantStatus.Valid);
+        return grant!;
+    }
+
+    [Fact]
+    public async Task An_uploads_citation_carries_a_grant_that_opens_its_content()
+    {
+        var snapshot = db.Snapshot();
+        var (service, _, host) = Build(snapshot, links: new GrantDownloadLinks(Grants));
+        using var _ = host;
+        var who = db.Who(db.InternalClient, snapshot);
+
+        var result = await service.RetrieveAsync(who, Search(db.PublicCollection), Ct);
+
+        result.Results.Single(r => r.DocumentId == db.Altan.Id).Citation.DownloadUrl.ShouldBeNull();
+        var link = result.Results.Single(r => r.DocumentId == db.Upload.Id).Citation.DownloadUrl.ShouldNotBeNull();
+        link.ShouldStartWith($"/v1/documents/{db.Upload.Id}/content?grant=g1.k1.");
+        var grant = GrantOf(link);
+        (grant.DocumentId, grant.CollectionId, grant.ClientId, grant.Level).ShouldBe((db.Upload.Id, db.PublicCollection, db.InternalClient, Classification.Public));
+
+        var content = await service.FindContentAsync(grant, db.Upload.Id, Ct);
+        content.ShouldBe(new DocumentContent(db.Upload.Id, new($"uploads/{db.PublicSource:D}/{db.UploadSlot:D}/ab{new string('0', 62)}"), Classification.Public,
+            "application/pdf", "taxa-bygglov-2026.pdf", KnowledgeFixture.UploadHash), new ContentComparer());
+        (await service.GetDocumentAsync(grant, db.Upload.Id, Ct)).Citation.Title.ShouldBe("taxa-bygglov-2026.pdf");
+        (await service.FindContentAsync(who, db.Upload.Id, Ct)).Key.ShouldBe(content.Key);
+    }
+
+    [Fact]
+    public async Task A_grant_is_rechecked_at_the_current_version_and_every_failure_is_not_found()
+    {
+        var snapshot = db.Snapshot();
+        var grant = new DownloadGrant(db.Upload.Id, db.PublicCollection, null, db.InternalClient, null, Classification.Public, DateTimeOffset.UtcNow.AddDays(1));
+
+        async Task<string?> Refusal(PolicySnapshot at, DownloadGrant g, Guid? document = null)
+        {
+            var (service, _, host) = Build(at);
+            using var _ = host;
+            var denied = await Should.ThrowAsync<RetrievalDeniedException>(() => service.FindContentAsync(g, document ?? g.DocumentId, Ct));
+            (denied.Status, denied.Code).ShouldBe((404, KnowledgeCodes.NotFound));
+            return denied.Reason;
+        }
+
+        (await Refusal(snapshot, grant, db.Altan.Id)).ShouldBe("grant_scope");
+        (await Refusal(snapshot, grant with { DocumentId = db.Hidden.Id })).ShouldBe(DenyReasons.NotFound); // not in the grant's collection
+        (await Refusal(snapshot with { Clients = snapshot.Clients.ToDictionary(e => e.Key, e => e.Value with { IsEnabled = false }) }, grant))
+            .ShouldBe(DenyReasons.ClientDisabled);
+        (await Refusal(snapshot with { Collections = snapshot.Collections.ToDictionary(e => e.Key, e => e.Value with { PublishedAt = null }) }, grant))
+            .ShouldBe(DenyReasons.NotFound);
+        (await Refusal(snapshot, grant with { ClientId = db.OwuiClient, CollectionId = db.SensitiveCollection })).ShouldBe(DenyReasons.CeilingExceeded);
+        (await Refusal(snapshot, grant with { AssistantId = db.AssistantId, CollectionId = db.SensitiveCollection, ClientId = db.InternalClient }))
+            .ShouldBe(DenyReasons.NotFound); // the assistant is not linked to it
+        (await Refusal(snapshot, grant with { KeyId = Guid.NewGuid() })).ShouldBe("key_unusable");
+
+        var (unconfirmed, _, host) = Build(snapshot, confirmed: false);
+        using (host)
+        {
+            (await Should.ThrowAsync<RetrievalDeniedException>(() => unconfirmed.FindContentAsync(grant, db.Upload.Id, Ct))).Status.ShouldBe(503);
+        }
+    }
+
+    [Fact]
+    public async Task A_web_page_is_not_served_as_content_after_the_access_check()
+    {
+        var snapshot = db.Snapshot();
+        var (service, _, host) = Build(snapshot);
+        using var _ = host;
+        var who = db.Who(db.InternalClient, snapshot);
+
+        (await Should.ThrowAsync<RetrievalDeniedException>(() => service.FindContentAsync(who, db.Altan.Id, Ct))).Code.ShouldBe(KnowledgeCodes.ContentNotServed);
+        (await Should.ThrowAsync<RetrievalDeniedException>(() => service.FindContentAsync(who, db.Hidden.Id, Ct))).Code.ShouldBe(KnowledgeCodes.NotFound);
+    }
+
+    private sealed class ContentComparer : IEqualityComparer<DocumentContent>
+    {
+        public bool Equals(DocumentContent? x, DocumentContent? y) =>
+            x is not null && y is not null && x with { ContentHash = [] } == y with { ContentHash = [] } && x.ContentHash.SequenceEqual(y.ContentHash);
+
+        public int GetHashCode(DocumentContent obj) => obj.DocumentId.GetHashCode();
+    }
+
+    [Fact]
+    public async Task Section_expansion_rebuilds_the_hits_section_from_its_neighbours()
+    {
+        var snapshot = db.Snapshot();
+        var (service, _, host) = Build(snapshot);
+        using var _ = host;
+
+        var result = await service.RetrieveAsync(db.Who(db.InternalClient, snapshot),
+            new RetrievalRequest("plank bygglov 110 centimeter", null, [db.SectionCollection], TopK: 1, Mode: RetrievalMode.Keyword,
+                Expand: ExpandMode.Section, Purpose: RetrievalPurpose.Http), Ct);
+
+        var hit = result.Results.ShouldHaveSingleItem();
+        hit.Text.ShouldBe("Plank högre än 110 centimeter kräver bygglov.");
+        hit.SectionRef.ShouldBe(0);
+        var section = result.Sections.ShouldHaveSingleItem();
+        (section.Id, section.DocumentId, section.HeadingPath, section.TokenEstimate, section.Truncated).ShouldBe((0, db.Plank.Id, "Plank och mur", 400, false));
+        section.Text.ShouldBe("""
+            Plank och mur
+            Ett plank är en tät skärm.
+            Plank högre än 110 centimeter kräver bygglov.
+            ### Höjd
+            Mät från marken. Höjden räknas från den lägsta sidan.
+            Fråga oss vid tvekan.
+            """.ReplaceLineEndings("\n"));
+
+        var flat = await service.RetrieveAsync(db.Who(db.InternalClient, snapshot),
+            new RetrievalRequest("plank bygglov 110 centimeter", null, [db.SectionCollection], TopK: 1, Mode: RetrievalMode.Keyword, Purpose: RetrievalPurpose.Http), Ct);
+        flat.Sections.ShouldBeEmpty();
+        flat.Results.ShouldHaveSingleItem().SectionRef.ShouldBeNull();
     }
 }
 

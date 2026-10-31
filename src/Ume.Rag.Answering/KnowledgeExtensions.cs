@@ -20,6 +20,12 @@ public sealed class KnowledgeOptions
 
     /// <summary>Client kinds the knowledge routes are open to (step 1a); P1 <c>internal</c>.</summary>
     public string[] OpenToClientKinds { get; set; } = ["internal"];
+
+    /// <summary>Lifetime of a download grant for <c>public</c> and <c>internal</c> (§4.6); <c>sensitive</c> is 1 hour.</summary>
+    public TimeSpan DownloadGrantLifetime { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>The origin citation download links use (the staff-network address of <c>rag-api</c>); unset: relative links.</summary>
+    public Uri? PublicBaseUrl { get; set; }
 }
 
 /// <summary>Registration of the knowledge role's core (<see cref="KnowledgeService"/> as <see cref="IRetriever"/>).</summary>
@@ -28,7 +34,9 @@ public static class KnowledgeExtensions
     /// <summary>
     /// The snapshot (a config change handler), the policy, the retrieval data source (<see cref="RetrievalDataSource"/>:
     /// pgvector types and auto-prepare, §6.6), engine, hydrator, the query embedder on gateway client
-    /// <see cref="GatewayQueryEmbedder.HttpClientName"/> with <c>Security:CacheKeyPepper</c> (≥ 32 bytes), the retrieval counter
+    /// <see cref="GatewayQueryEmbedder.HttpClientName"/> with <c>Security:CacheKeyPepper</c> (≥ 32 bytes), the retrieval counter,
+    /// the section window <c>Retrieval:ExpandNeighbourChunks</c> (8), the download grants (<c>Security:DownloadGrantKeys:&lt;kid&gt;</c>,
+    /// at least one of ≥ 32 bytes; <c>Knowledge:DownloadGrantLifetime</c>, <c>Knowledge:PublicBaseUrl</c>)
     /// and <see cref="KnowledgeService"/>. Needs <c>AddRagDatabase</c> and <c>AddRagConfigMonitor</c>.
     /// </summary>
     public static IHostApplicationBuilder AddRagKnowledge(this IHostApplicationBuilder builder)
@@ -42,6 +50,17 @@ public static class KnowledgeExtensions
             : throw new InvalidOperationException("Security:CacheKeyPepper must be set (at least 32 characters).");
         var knowledge = configuration.GetSection(KnowledgeOptions.SectionName).Get<KnowledgeOptions>() ?? new KnowledgeOptions();
         var embedding = configuration.GetSection("Retrieval").Get<QueryEmbeddingOptions>() ?? new QueryEmbeddingOptions();
+        var grantKeys = configuration.GetSection("Security:DownloadGrantKeys").GetChildren()
+            .Where(k => !string.IsNullOrEmpty(k.Value)).ToDictionary(k => k.Key, k => Encoding.UTF8.GetBytes(k.Value!), StringComparer.Ordinal);
+        var grants = new DownloadGrants(new DownloadGrantOptions
+        {
+            Keys = grantKeys, Lifetime = knowledge.DownloadGrantLifetime, PublicBaseUrl = knowledge.PublicBaseUrl,
+        }, TimeProvider.System);
+        var neighbourRadius = configuration.GetValue("Retrieval:ExpandNeighbourChunks", SectionAssembler.DefaultNeighbourRadius);
+        if (neighbourRadius is < 0 or > 32)
+        {
+            throw new InvalidOperationException("Retrieval:ExpandNeighbourChunks must be between 0 and 32.");
+        }
 
         builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName);
         var services = builder.Services;
@@ -59,10 +78,13 @@ public static class KnowledgeExtensions
             sp.GetRequiredService<ILogger<GatewayQueryEmbedder>>()));
         services.AddSingleton(sp => new RetrievalCounter(dataSource, TimeProvider.System, sp.GetRequiredService<ILogger<RetrievalCounter>>()));
         services.AddHostedService(sp => sp.GetRequiredService<RetrievalCounter>());
-        services.AddSingleton<IDownloadLinks>(NoDownloadLinks.Instance);
+        services.AddSingleton(grants);
+        services.AddSingleton<IDownloadLinks>(new GrantDownloadLinks(grants));
+        services.AddSingleton<IDocumentContentReader, StoredBlobContentReader>(); // needs IBlobStore (AddRagBlobStore); #145 replaces it
         services.AddSingleton(sp => new KnowledgeService(sp.GetRequiredService<IPolicySnapshotSource>(), sp.GetRequiredService<IAccessPolicy>(),
             sp.GetRequiredService<RetrievalEngine>(), sp.GetRequiredService<PostgresHydrator>(), sp.GetRequiredService<GatewayQueryEmbedder>(),
-            sp.GetRequiredService<RetrievalCounter>(), dataSource, sp.GetRequiredService<IDownloadLinks>(), sp.GetRequiredService<ILogger<KnowledgeService>>()));
+            sp.GetRequiredService<RetrievalCounter>(), dataSource, sp.GetRequiredService<IDownloadLinks>(), sp.GetRequiredService<ILogger<KnowledgeService>>(),
+            neighbourRadius));
         services.AddSingleton<IRetriever>(sp => sp.GetRequiredService<KnowledgeService>());
         return builder;
     }
