@@ -58,7 +58,7 @@ public sealed class JobContractTests
     public void Names_and_enums_are_the_documented_strings()
     {
         var json = ContractJson.Serialize(new SyncPayload { SourceId = Id, RunId = Id, Kind = SyncKind.RetryFailed, Trigger = RunTrigger.ConfigChange, Phase = SyncPhase.Fetch });
-        json.ShouldBe($$"""{"sourceId":"{{Id}}","runId":"{{Id}}","kind":"retry-failed","trigger":"config-change","phase":"fetch","force":false,"resumeFromCheckpoint":false}""");
+        json.ShouldBe($$"""{"sourceId":"{{Id}}","runId":"{{Id}}","kind":"retry-failed","trigger":"config-change","phase":"fetch","force":false,"resumeFromCheckpoint":false,"incremental":false}""");
         ContractJson.Serialize(new EvalOnDemandPayload { CollectionId = Id, Variants = [EvaluationVariant.HybridNoDecompounder] })
             .ShouldBe($$"""{"kind":"on-demand","collectionId":"{{Id}}","variants":["hybrid-no-decompounder"]}""");
     }

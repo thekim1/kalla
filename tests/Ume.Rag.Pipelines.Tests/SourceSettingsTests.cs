@@ -11,7 +11,7 @@ public sealed class SourceSettingsTests
         { "startUrls": ["https://www.umea.se/"], "sitemaps": [], "extraHosts": [],
           "include": ["www.umea.se/**"], "exclude": ["**/sok?*", "**?*print=*"], "demote": [], "maxDepth": 10, "maxPages": 20000,
           "ignoreQueryParams": [], "directoryIndexNames": [], "noiseSelectors": [],
-          "conditionalGet": true, "revalidateEvery": 4, "crawlWindow": "22:00-06:00" }
+          "conditionalGet": true, "revalidateEvery": 4, "crawlWindow": "22:00-06:00", "incrementalSchedule": null }
         """;
 
     [Fact]
@@ -30,6 +30,9 @@ public sealed class SourceSettingsTests
     [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"crawlWindow":"22-06"}""")]
     [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"render":true}""")]
     [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"extraHosts":["Umea.SE"]}""")]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"incrementalSchedule":"daily"}""")]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"incrementalSchedule":"0 3 * *"}""")]
+    [InlineData(SourceTypes.UrlList, """{"urls":["https://www.umea.se/"],"incrementalSchedule":"0 3 * * *"}""")]
     [InlineData(SourceTypes.UrlList, """{"urls":["https://www.umea.se/"],"revalidateEvery":0}""")]
     [InlineData(SourceTypes.Upload, """{"maxFileSizeMb":51}""")]
     public void Invalid_settings_fail_the_schema(string sourceType, string json) =>
@@ -63,6 +66,8 @@ public sealed class SourceSettingsTests
     [InlineData("timeoutSeconds", "60", SettingEffect.Behaviour)]
     [InlineData("demote", """[{"pattern":"**/protokoll/2019/**"}]""", SettingEffect.Cosmetic)]
     [InlineData("crawlWindow", "\"23:00-05:00\"", SettingEffect.Cosmetic)]
+    [InlineData("incrementalSchedule", "\"0 3 * * *\"", SettingEffect.Cosmetic)]
+    [InlineData("revalidateEvery", "8", SettingEffect.Behaviour)]
     public void A_change_moves_exactly_its_tag(string member, string value, SettingEffect effect)
     {
         var before = Repository.Json(Umea);
@@ -76,6 +81,16 @@ public sealed class SourceSettingsTests
         (old.Identity != current.Identity).ShouldBe(effect == SettingEffect.Identity);
         (old.Scope != current.Scope).ShouldBe(effect == SettingEffect.Scope);
         (old.Behaviour != current.Behaviour).ShouldBe(effect == SettingEffect.Behaviour);
+    }
+
+    [Fact]
+    public void Settings_without_the_p1b_members_still_validate_and_hash_alike()
+    {
+        const string p1a = """{"startUrls":["https://www.umea.se/"],"demote":[{"pattern":"**/protokoll/**","factor":0.3}],"revalidateEvery":4}""";
+        ContractSchemas.Validator(typeof(CrawlSettings)).Validate(Repository.Json(p1a)).ShouldBeEmpty();
+        var withSchedule = p1a[..^1] + ""","incrementalSchedule":"0 3 * * *"}""";
+        ((CrawlSettings)SourceSettings.Bind(SourceTypes.Crawl, Repository.Json(withSchedule))).IncrementalSchedule.ShouldBe("0 3 * * *");
+        SourceSettings.Hashes(SourceTypes.Crawl, Repository.Json(withSchedule)).ShouldBe(SourceSettings.Hashes(SourceTypes.Crawl, Repository.Json(p1a)));
     }
 
     [Fact]

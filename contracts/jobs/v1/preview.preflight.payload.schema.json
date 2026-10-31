@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/preview.preflight.payload.schema.json",
+  "title": "preview preflight job payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "preflight"
+    },
+    "collectionId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The collection the source would be in."
+    },
+    "sourceType": {
+      "type": "string",
+      "enum": [
+        "url-list",
+        "crawl"
+      ]
+    },
+    "settings": {
+      "description": "The unsaved Sources.Settings, valid against contracts/sources/v1/{sourceType}.schema.json (the admin checks it, V25); a URL list sends its first 20 URLs only.",
+      "type": "object"
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "collectionId",
+    "sourceType",
+    "settings"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "sourceType": {
+            "const": "url-list"
+          }
+        },
+        "required": [
+          "sourceType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "settings": {
+            "properties": {
+              "urls": {
+                "maxItems": 20
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "description": "Payload of a preview job of kind preflight (connectors design §2.2; admin design §4.7, §5.4 step 4): reachability, robots, sitemaps, estimated pages against maxPages, egress and CMS of an unsaved URL-list or crawl configuration. No dedup."
+}

@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/preview.stage-preview.payload.schema.json",
+  "title": "preview stage-preview job payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "stage-preview"
+    },
+    "pipelineVersionId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The saved draft version (template parameters) or the version a new source's form would use."
+    },
+    "collectionId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The collection the source is in or would be in: its publicity decides the personal-data state shown (processing design §9.5)."
+    },
+    "sourceId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "Absent for a new source's form; required with uploadIds."
+    },
+    "documentIds": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "description": "Existing documents of the source.",
+      "minItems": 1,
+      "maxItems": 5,
+      "uniqueItems": true
+    },
+    "urls": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^https?://"
+      },
+      "description": "URLs fetched live through the egress guard and host politeness, for a source without documents.",
+      "minItems": 1,
+      "maxItems": 5,
+      "uniqueItems": true
+    },
+    "uploadIds": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "description": "Upload slots (content.Uploads.Id) of the source.",
+      "minItems": 1,
+      "maxItems": 5,
+      "uniqueItems": true
+    },
+    "untilStage": {
+      "type": "string",
+      "description": "The last stage to run; index never runs.",
+      "enum": [
+        "fetch",
+        "scan",
+        "detect",
+        "parse",
+        "clean",
+        "chunk",
+        "personal-data",
+        "embed",
+        "index"
+      ],
+      "default": "personal-data"
+    },
+    "basePreviewJobId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "A preview of the same documents whose outputs (previews/{basePreviewJobId}/) are reused up to the first stage whose settings changed."
+    },
+    "embed": {
+      "type": "boolean",
+      "description": "Embed through the gateway; without it the embed stage reports chunk count and tokens only.",
+      "default": false
+    },
+    "piiSpans": {
+      "type": "boolean",
+      "description": "Write the personal-data spans, for the PII highlights (admin design §4.7).",
+      "default": false
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "pipelineVersionId",
+    "collectionId"
+  ],
+  "oneOf": [
+    {
+      "required": [
+        "documentIds"
+      ]
+    },
+    {
+      "required": [
+        "urls"
+      ]
+    },
+    {
+      "required": [
+        "uploadIds"
+      ]
+    }
+  ],
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "uploadIds"
+        ]
+      },
+      "then": {
+        "required": [
+          "sourceId"
+        ]
+      }
+    }
+  ],
+  "description": "Payload of a preview job of kind stage-preview (engine design §11): up to five documents (documentIds, urls or uploadIds) through the pipeline version up to untilStage, writing only previews/{jobId}/. No dedup, except pii-preview:{documentId} for the PII highlights of one document."
+}

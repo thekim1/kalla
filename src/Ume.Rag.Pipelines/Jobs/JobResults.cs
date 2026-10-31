@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
+using Ume.Rag.Pipelines.Schemas;
 
 namespace Ume.Rag.Pipelines.Jobs;
 
@@ -125,4 +127,266 @@ public sealed record EvaluationRunRef
     [Description("Answerable questions with an expected document in the top k.")]
     [Range(0, int.MaxValue)]
     public required int Found { get; init; }
+
+    [Description("on-demand with candidateSettings: the run used the candidate settings, not the current ones.")]
+    public bool Candidate { get; init; }
+}
+
+/// <summary>Result of <c>stage-preview</c> (engine design §11): per document and stage; the outputs are blobs under <c>previews/{jobId}/</c>.</summary>
+[Description("Result of a preview job of kind stage-preview (engine design §11): per document and stage the state, duration, cache use, facts, cost and error, and the blob paths of the outputs the admin streams on demand.")]
+public sealed record StagePreviewResult
+{
+    [MaxLength(5)]
+    public required IReadOnlyList<PreviewDocumentResult> Documents { get; init; }
+
+    [Description("When the preview blobs expire (24 h after the job).")]
+    public required DateTimeOffset ExpiresAt { get; init; }
+}
+
+/// <summary>One document of a preview: as named in the payload (document, URL or upload slot).</summary>
+public sealed record PreviewDocumentResult
+{
+    public Guid? DocumentId { get; init; }
+
+    [MaxLength(2048)]
+    public string? Url { get; init; }
+
+    public Guid? UploadId { get; init; }
+
+    [Description("In stage order, up to untilStage.")]
+    public required IReadOnlyList<PreviewStageResult> Stages { get; init; }
+
+    [Description("Crawl sources: the extraction without and with the host's site profile.")]
+    public PreviewSiteProfile? SiteProfile { get; init; }
+}
+
+public sealed record PreviewStageResult
+{
+    [SchemaKeyword("enum", ContractPatterns.StageEnum)]
+    public required string Stage { get; init; }
+
+    public required PreviewStageState State { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public int DurationMs { get; init; }
+
+    [Description("Served from the stage cache or from the base preview's outputs.")]
+    public bool CacheHit { get; init; }
+
+    [Description("The stage's facts (engine design §2.2), e.g. embed's chunk count and tokens, index's \"would write N chunks\".")]
+    [SchemaKeyword("type", "[\"object\", \"null\"]")]
+    public JsonElement? Facts { get; init; }
+
+    [Range(0.0, 1_000_000.0)]
+    public decimal? EstimatedCostUsd { get; init; }
+
+    [Range(0.0, 1_000_000.0)]
+    public decimal? CostUsd { get; init; }
+
+    [Description("<area>.<code> of a failed stage (engine design §10.2).")]
+    [MaxLength(100)]
+    [RegularExpression(ContractPatterns.Reason)]
+    public string? Error { get; init; }
+
+    [Description("Blob path of the stage's output: extracted text with breadcrumb and page markers, sections, chunks with prefixes and token counts, or PII counts (and spans with piiSpans).")]
+    [MaxLength(500)]
+    [RegularExpression(ContractPatterns.PreviewBlob)]
+    public string? Output { get; init; }
+
+    [Description("The output exceeded 2 MB and was cut with a marker.")]
+    public bool Truncated { get; init; }
+}
+
+/// <summary>The site profile's before/after of a crawl preview (admin design §5.4 step 5; P1: a manual profile or the preset).</summary>
+public sealed record PreviewSiteProfile
+{
+    [MaxLength(253)]
+    public required string Host { get; init; }
+
+    public required SiteProfileOrigin Origin { get; init; }
+
+    [Description("The applied manual version (SiteProfileVersions.Id), when origin is manual.")]
+    public Guid? SiteProfileVersionId { get; init; }
+
+    [Description("The built-in preset (e.g. sitevision), when origin is preset.")]
+    [RegularExpression("^[a-z][a-z0-9-]{0,49}$")]
+    public string? PresetId { get; init; }
+
+    [Description("Blob path of the extraction with the built-in defaults only.")]
+    [MaxLength(500)]
+    [RegularExpression(ContractPatterns.PreviewBlob)]
+    public required string Before { get; init; }
+
+    [Description("Blob path of the extraction with the site profile.")]
+    [MaxLength(500)]
+    [RegularExpression(ContractPatterns.PreviewBlob)]
+    public required string After { get; init; }
+}
+
+/// <summary>Result of <c>preflight</c>: one entry per check; the admin maps each code to its Swedish text (labels.ts, messages.ts).</summary>
+[Description("Result of a preview job of kind preflight (connectors design §2.2; admin design §5.4 step 4): the worst state and one entry per check. A fail blocks the save, a warn explains.")]
+public sealed record PreflightResult
+{
+    [Description("The worst state of the checks.")]
+    public required PreflightState State { get; init; }
+
+    [MaxLength(100)]
+    public required IReadOnlyList<PreflightCheckResult> Checks { get; init; }
+
+    [Description("Crawl: in-scope sitemap URLs, compared with maxPages.")]
+    [Range(0, int.MaxValue)]
+    public int? EstimatedPages { get; init; }
+
+    [Description("The CMS preset recognised on the start host (e.g. sitevision).")]
+    [RegularExpression("^[a-z][a-z0-9-]{0,49}$")]
+    public string? Cms { get; init; }
+}
+
+public sealed record PreflightCheckResult
+{
+    [Description("The check: reachability, robots, sitemaps, pages, egress or cms (new names may be added).")]
+    [RegularExpression("^[a-z][a-z0-9-]{0,49}$")]
+    public required string Check { get; init; }
+
+    public required PreflightState State { get; init; }
+
+    [Description("<area>.<code>, e.g. http.404, robots.disallowed, egress.blocked; the admin shows its Swedish text and remediation.")]
+    [MaxLength(100)]
+    [RegularExpression(ContractPatterns.Reason)]
+    public required string Code { get; init; }
+
+    [Description("The URL or host the entry is about.")]
+    [MaxLength(2048)]
+    public string? Target { get; init; }
+
+    [Description("Small facts for the text (counts, status codes); never page content.")]
+    [SchemaKeyword("type", "[\"object\", \"null\"]")]
+    public JsonElement? Facts { get; init; }
+}
+
+/// <summary>Result of <c>publish-plan</c> (engine design §12.2): in P1 every live document of the affected sources, re-processed from <c>parse</c>.</summary>
+[Description("Result of a preview job of kind publish-plan (engine design §12.2): the documents to re-process and the forecast. P1: every live document of the affected sources from parse; unchanged stages are then served from the caches.")]
+public sealed record PublishPlanResult
+{
+    public required Guid PipelineVersionId { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public required int Documents { get; init; }
+
+    public required IReadOnlyList<PublishPlanSource> Sources { get; init; }
+
+    [Description("The first stage the forecast counts from (P1: parse; per-stage groups are P2).")]
+    [SchemaKeyword("enum", ContractPatterns.StageEnum)]
+    public string FromStage { get; init; } = "parse";
+
+    [Range(0, int.MaxValue)]
+    public int ParserPages { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public int EmbeddingTokens { get; init; }
+
+    [Description("Conservative time estimate in minutes.")]
+    [Range(0, int.MaxValue)]
+    public int EstimatedMinutes { get; init; }
+
+    [Range(0.0, 1_000_000.0)]
+    public decimal EstimatedCostUsd { get; init; }
+}
+
+public sealed record PublishPlanSource
+{
+    public required Guid SourceId { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public required int Documents { get; init; }
+}
+
+/// <summary>Result of <c>eval</c> <c>publish-report</c> and <c>nightly</c>: the <c>EvaluationRuns</c> row and its comparison.</summary>
+[Description("Result of an eval job of kind publish-report or nightly: the EvaluationRuns row written and its comparison with the previous run; per-question results are in the row's results.")]
+public sealed record EvalRunResult
+{
+    public required Guid EvaluationRunId { get; init; }
+
+    [Description("The run compared with (EvaluationRuns.ComparedRunId); absent for a collection's first run.")]
+    public Guid? ComparedRunId { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public required int QuestionCount { get; init; }
+
+    [Description("Answerable questions with an expected document in the top k.")]
+    [Range(0, int.MaxValue)]
+    public required int Found { get; init; }
+
+    [Description("Questions found now and not in the compared run, and the reverse.")]
+    [Range(0, int.MaxValue)]
+    public int Wins { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public int Losses { get; init; }
+
+    [Description("nightly: recall@10 fell 5 points or more below the 4-week median (processing design §14.8).")]
+    public bool RecallAlert { get; init; }
+}
+
+/// <summary>Result of <c>generate-set</c> and <c>top-up-set</c> (processing design §13.1, §13.3).</summary>
+[Description("Result of an eval job of kind generate-set or top-up-set: the round written to the collection's evaluation set.")]
+public sealed record EvalSetResult
+{
+    public required Guid SetId { get; init; }
+
+    [Description("The generation round; its seed is SHA-256(setId || round).")]
+    [Range(1, int.MaxValue)]
+    public required int Round { get; init; }
+
+    [Description("Candidate questions generated before filtering.")]
+    [Range(0, int.MaxValue)]
+    public int Generated { get; init; }
+
+    [Description("Questions kept after filtering and added to the generated layer.")]
+    [Range(0, int.MaxValue)]
+    public int Kept { get; init; }
+
+    [Description("top-up-set: stale questions retired.")]
+    [Range(0, int.MaxValue)]
+    public int Retired { get; init; }
+
+    [Description("Model tokens used (generation and judge).")]
+    [Range(0, int.MaxValue)]
+    public int Tokens { get; init; }
+}
+
+/// <summary>Result of <c>confirm-deletion</c> and <c>reject-deletion</c> (connectors design §13.3).</summary>
+[Description("Result of the commands confirm-deletion and reject-deletion: documents soft-deleted, proposals dropped because the document was seen again, and documents held.")]
+public sealed record DeletionCommandResult
+{
+    [Range(0, int.MaxValue)]
+    public int Deleted { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public int Dropped { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public int Held { get; init; }
+}
+
+[Description("Result of the command release-hold: holds cleared.")]
+public sealed record ReleaseHoldResult
+{
+    [Range(0, int.MaxValue)]
+    public required int Released { get; init; }
+}
+
+[Description("Result of the command clear-pii-flag.")]
+public sealed record ClearPiiFlagResult
+{
+    [Description("The held set released to live; absent when the document had none (the clearance still covers later sets).")]
+    public Guid? ReleasedChunkSetId { get; init; }
+}
+
+[Description("Result of the command reprocess-document: the run its run item is in and the new execution.")]
+public sealed record ReprocessDocumentResult
+{
+    public required Guid RunId { get; init; }
+
+    public required Guid ExecutionId { get; init; }
 }

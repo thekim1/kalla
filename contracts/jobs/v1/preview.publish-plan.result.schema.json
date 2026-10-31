@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/preview.publish-plan.result.schema.json",
+  "title": "preview publish-plan job result",
+  "type": "object",
+  "properties": {
+    "pipelineVersionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "documents": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "sourceId",
+          "documents"
+        ]
+      }
+    },
+    "fromStage": {
+      "type": "string",
+      "description": "The first stage the forecast counts from (P1: parse; per-stage groups are P2).",
+      "enum": [
+        "fetch",
+        "scan",
+        "detect",
+        "parse",
+        "clean",
+        "chunk",
+        "personal-data",
+        "embed",
+        "index"
+      ],
+      "default": "parse"
+    },
+    "parserPages": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "embeddingTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "estimatedMinutes": {
+      "type": "integer",
+      "description": "Conservative time estimate in minutes.",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "estimatedCostUsd": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1000000,
+      "default": 0
+    }
+  },
+  "required": [
+    "pipelineVersionId",
+    "documents",
+    "sources"
+  ],
+  "description": "Result of a preview job of kind publish-plan (engine design §12.2): the documents to re-process and the forecast. P1: every live document of the affected sources from parse; unchanged stages are then served from the caches."
+}

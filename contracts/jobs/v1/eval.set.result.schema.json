@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/eval.set.result.schema.json",
+  "title": "eval generate-set and top-up-set job result",
+  "type": "object",
+  "properties": {
+    "setId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "round": {
+      "type": "integer",
+      "description": "The generation round; its seed is SHA-256(setId || round).",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "generated": {
+      "type": "integer",
+      "description": "Candidate questions generated before filtering.",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "kept": {
+      "type": "integer",
+      "description": "Questions kept after filtering and added to the generated layer.",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "retired": {
+      "type": "integer",
+      "description": "top-up-set: stale questions retired.",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "tokens": {
+      "type": "integer",
+      "description": "Model tokens used (generation and judge).",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    }
+  },
+  "required": [
+    "setId",
+    "round"
+  ],
+  "description": "Result of an eval job of kind generate-set or top-up-set: the round written to the collection's evaluation set."
+}
