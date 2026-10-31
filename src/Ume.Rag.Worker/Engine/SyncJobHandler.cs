@@ -3,6 +3,7 @@ using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Jobs;
+using Ume.Rag.Pipelines.Definitions;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Deletion;
@@ -23,7 +24,8 @@ namespace Ume.Rag.Worker.Engine;
 /// (<c>reprocess</c>, <see cref="SourceReruns"/>); <c>fetch</c> tops the run's fetches up again; <c>reconcile</c> (enqueued
 /// by the <see cref="RunFinalizer"/> or a crawl's last top-up) applies deletions through the guard, for a crawl after its
 /// completeness and with its report. A paused or deleted source cancels the run. A <c>reprocess</c> with <c>force</c>
-/// (the cache bypass) is refused with <c>sync.unsupported</c>: it is not built.
+/// bypasses the output cache from <c>fromStage</c> on (default <c>parse</c>; engine design §8, <see cref="StageBypass"/>);
+/// <c>fromStage</c> <c>fetch</c> is refused, since a reprocess never fetches.
 /// </summary>
 public sealed partial class SyncJobHandler(
     SourceContexts sources,
@@ -89,7 +91,18 @@ public sealed partial class SyncJobHandler(
             return new JobResult.Success("""{"cancelled":"source.paused"}""");
         }
 
-        if ((payload.Kind == SyncKind.Reprocess && payload.Force) || source.Type is not (SourceTypes.UrlList or SourceTypes.Upload or SourceTypes.Crawl))
+        var bypassFrom = payload.Kind == SyncKind.Reprocess && payload.Force ? payload.FromStage ?? StageNames.Parse : null;
+        if (bypassFrom is not null && !StageBypass.IsStage(bypassFrom))
+        {
+            return new JobResult.FatalError(InvalidPayload);
+        }
+
+        if (bypassFrom == StageNames.Fetch)
+        {
+            return new JobResult.FatalError(StageBypass.FetchUnsupported);
+        }
+
+        if (source.Type is not (SourceTypes.UrlList or SourceTypes.Upload or SourceTypes.Crawl))
         {
             LogUnsupported(logger, source.SourceId, source.Type, RunStore.Text(payload.Kind));
             return new JobResult.FatalError(Unsupported);
@@ -133,7 +146,7 @@ public sealed partial class SyncJobHandler(
         {
             return (payload.Kind, payload.Phase) switch
             {
-                (SyncKind.Reprocess, _) => await reruns.ReprocessAsync(source, run, job, cancellationToken),
+                (SyncKind.Reprocess, _) => await reruns.ReprocessAsync(source, run, job, bypassFrom, cancellationToken),
                 (SyncKind.RetryFailed, SyncPhase.List) => await reruns.RetryFailedAsync(source, run, cancellationToken),
                 (_, SyncPhase.List) when source.Type == SourceTypes.UrlList => await urlLists.ListAsync(source, run, payload, job, cancellationToken),
                 (_, SyncPhase.List) when source.Type == SourceTypes.Crawl => await crawls.ListAsync(source, run, payload, job, cancellationToken),

@@ -27,8 +27,10 @@ public sealed record ReprocessCheckpoint : Connectors.ConnectorCheckpoint
 /// <c>EnsureCurrent</c> against the run's pinned version (<see cref="DocumentIngest.EnsureCurrentAsync"/>): never a fetch,
 /// the stages from the first one without cached output, a set differing only by label re-keyed by its <c>embed</c> job;
 /// current documents get an <c>unchanged</c> item; the iteration resumes from the run's checkpoint and yields after 1,000
-/// documents or 2 minutes. <c>retry-failed</c> takes the identities whose latest item of an earlier run of the source
-/// failed, rebuilds their work through the connector (<see cref="IRetryFailedConnector"/>) and fetches only those: URL-list
+/// documents or 2 minutes. A forced <c>reprocess</c> (<c>force</c> with <c>fromStage</c>, engine design §8) re-processes
+/// every live document instead, under a new execution id each, with the output cache bypassed from that stage on
+/// (<see cref="DocumentIngest.ForceAsync"/>); its continuations carry the bypass. <c>retry-failed</c> takes the
+/// identities whose latest item of an earlier run of the source failed, rebuilds their work through the connector (<see cref="IRetryFailedConnector"/>) and fetches only those: URL-list
 /// and crawl rows are admitted to the source's frontier for this run (a crawl's as leaves, so a retried page adds no
 /// links), uploads get their slot's <c>fetch</c> job. Neither kind reconciles deletions; both end through the finalizer.
 /// </summary>
@@ -67,8 +69,8 @@ public sealed class SourceReruns(
         ORDER BY last."Identity"
         """;
 
-    /// <summary>Phase <c>list</c> of a <c>reprocess</c> run.</summary>
-    public async Task<JobResult> ReprocessAsync(SourceContext source, RunRow run, LeasedJob job, CancellationToken cancellationToken)
+    /// <summary>Phase <c>list</c> of a <c>reprocess</c> run; <paramref name="bypassFrom"/> is a forced run's first bypassed stage.</summary>
+    public async Task<JobResult> ReprocessAsync(SourceContext source, RunRow run, LeasedJob job, string? bypassFrom, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(run);
@@ -85,7 +87,11 @@ public sealed class SourceReruns(
             var unchanged = new List<RunItemRow>();
             foreach (var document in page)
             {
-                if (document.ContentHash is not null && await ingest.EnsureCurrentAsync(source, run.Id, pipeline, document, cancellationToken) == EnsureOutcome.Current)
+                if (document.ContentHash is not null && bypassFrom is not null)
+                {
+                    await ingest.ForceAsync(source, run.Id, pipeline, document, bypassFrom, cancellationToken);
+                }
+                else if (document.ContentHash is not null && await ingest.EnsureCurrentAsync(source, run.Id, pipeline, document, cancellationToken) == EnsureOutcome.Current)
                 {
                     unchanged.Add(new RunItemRow(run.Id, document.Classification, document.Id, document.CanonicalIdentity, Outcome.Unchanged)
                     {
@@ -111,7 +117,7 @@ public sealed class SourceReruns(
             if (handled >= ReprocessItems || time.GetElapsedTime(started) > UrlListSource.ListingSlice)
             {
                 return await runs.ContinueAsync(queue, job, identity.InstanceId, SyncJobs.Continuation(source.SourceId, run.Id, source.DepartmentId,
-                    source.Classification, run.Kind, run.Trigger, SyncPhase.List, resumeFromCheckpoint: true), run.Id, null, cancellationToken);
+                    source.Classification, run.Kind, run.Trigger, SyncPhase.List, resumeFromCheckpoint: true, bypassFrom), run.Id, null, cancellationToken);
             }
         }
     }

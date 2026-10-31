@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using Npgsql;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
@@ -61,6 +63,10 @@ public sealed partial class DocumentIngest(
     TimeProvider time,
     ILogger<DocumentIngest> logger)
 {
+    private const string ForceExecutionSql = """
+        UPDATE content."Documents" SET "CurrentExecutionId" = $2 WHERE "Id" = $1 AND "ContentHash" = $3 AND "DeletedAt" IS NULL
+        """;
+
     private readonly ILogger _security = SecurityEvents.CreateLogger(loggers);
 
     public async Task<JobResult> HandleAsync(FetchCase fetch, FetchOutcome outcome, CancellationToken cancellationToken)
@@ -187,6 +193,60 @@ public sealed partial class DocumentIngest(
     }
 
     /// <summary>
+    /// A forced <c>reprocess</c> of one live document (engine design §7.5, §8): a new execution id supersedes any work in
+    /// flight for it, and the segment runs with the output cache bypassed from <paramref name="bypassFrom"/> on
+    /// (<see cref="StageBypass"/>), the stages before it served from the cache, and commits fenced with its continuation
+    /// (<c>parse</c> carrying the bypass, or <c>embed</c>). The wanted set is not consulted: a current document is
+    /// re-processed too. The execution id is derived from the run and the document (<see cref="ForcedExecutionId"/>), so a
+    /// retried iteration keeps it and finds what it already stored. A document whose content changed or that was deleted
+    /// since it was listed is left to its own execution. Never completes the <c>sync</c> job.
+    /// </summary>
+    public async Task ForceAsync(SourceContext source, Guid runId, PipelineRun pipeline, DocumentRow document, string bypassFrom, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(pipeline);
+        ArgumentNullException.ThrowIfNull(document);
+        var contentHash = document.ContentHash ?? throw new InvalidOperationException("The document has no content yet.");
+        var executionId = ForcedExecutionId(runId, document.Id);
+        if (document.CurrentExecutionId != executionId)
+        {
+            await using var connection = await database.OpenAsync(cancellationToken);
+            await using var command = new NpgsqlCommand(ForceExecutionSql, connection)
+            {
+                Parameters = { Db.P(document.Id), Db.P(executionId), Db.P(contentHash) },
+            };
+            if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
+            {
+                return;
+            }
+        }
+
+        var forced = document with { CurrentExecutionId = executionId };
+        var reconciliation = await reconciler.ReconcileAsync(source, forced, pipeline.VersionId, cancellationToken);
+        var input = new SegmentInput(forced, pipeline, source.CollectionClassification, RawContentKeys.Of(forced))
+        {
+            DeclaredMediaType = forced.MediaType,
+            SiteProfile = reconciliation.SiteProfile,
+            BypassFrom = bypassFrom,
+        };
+        var result = await segment.RunAsync(input, JobClasses.Fetch, null, cancellationToken);
+        await CommitSegmentAsync(source, runId, pipeline.VersionId, null, forced, executionId, result, null, cancellationToken);
+    }
+
+    /// <summary>The execution id of a forced reprocess of <paramref name="documentId"/> in run <paramref name="runId"/>: a version-8 UUID from SHA-256 of both ids.</summary>
+    public static Guid ForcedExecutionId(Guid runId, Guid documentId)
+    {
+        Span<byte> ids = stackalloc byte[32];
+        runId.TryWriteBytes(ids, bigEndian: true, out _);
+        documentId.TryWriteBytes(ids[16..], bigEndian: true, out _);
+        Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+        SHA256.HashData(ids, hash);
+        hash[6] = (byte)((hash[6] & 0x0F) | 0x80);
+        hash[8] = (byte)((hash[8] & 0x3F) | 0x80);
+        return new Guid(hash[..16], bigEndian: true);
+    }
+
+    /// <summary>
     /// Swaps <paramref name="reconciliation"/>'s kept set back (engine design §2.3, §12.3, §14 rule 1) in run
     /// <paramref name="runId"/>, with no <c>parse</c> or <c>embed</c> job and no job to complete: an <c>updated</c> item
     /// (<see cref="ChunkSetSwap.SwappedBackReason"/>) on success, a <c>superseded</c> one when the execution or the published
@@ -241,7 +301,8 @@ public sealed partial class DocumentIngest(
                         break;
                     case SegmentResult.Parse parse:
                         await commit.SetFactsAsync(document.Id, parse.Facts, cancellationToken);
-                        await commit.EnqueueAsync(queue, [SyncJobs.Parse(source, document, executionId, pipelineVersionId, runId, parse.DetectKey)], cancellationToken);
+                        await commit.EnqueueAsync(queue, [SyncJobs.Parse(source, document, executionId, pipelineVersionId, runId, parse.DetectKey,
+                            bypassFrom: parse.BypassFrom)], cancellationToken);
                         break;
                     case SegmentResult.Ended ended:
                         await commit.SetParseOutcomeAsync(document.Id, EngineText.Outcome(ended.Outcome), cancellationToken);

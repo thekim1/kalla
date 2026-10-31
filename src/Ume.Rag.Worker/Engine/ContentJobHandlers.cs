@@ -75,7 +75,8 @@ public sealed class FetchJobHandler(SourceContexts sources, RunStore runs, UrlLi
 /// completed range, so a reclaimed job resumes at the next range; after <c>Worker:Parse:SliceSeconds</c> (10 minutes) the
 /// job yields at a range boundary: in one fenced transaction it completes and re-enqueues itself with <c>slice + 1</c> (a
 /// new job, so no attempt is used). A URL document gets its host's applied site profile, as in the fetch path, so the
-/// set's key matches what <c>EnsureCurrent</c> wants.
+/// set's key matches what <c>EnsureCurrent</c> wants. A forced reprocess's bypass (<see cref="ParsePayload.BypassFrom"/>)
+/// goes to the segment and to a yielded job's continuation.
 /// </summary>
 public sealed partial class ParseJobHandler(
     SourceContexts sources,
@@ -134,6 +135,7 @@ public sealed partial class ParseJobHandler(
                 DeclaredMediaType = document.MediaType,
                 SiteProfile = profile,
                 Slice = payload.Slice < MaxSlice ? new ParseSliceClock(time, TimeSpan.FromSeconds(parseOptions.Value.SliceSeconds)) : null,
+                BypassFrom = payload.BypassFrom,
             };
             var inputKey = Convert.FromHexString(payload.InputKey);
             var result = await segment.RunAsync(input, JobClasses.Parse, inputKey, cancellationToken);
@@ -168,7 +170,7 @@ public sealed partial class ParseJobHandler(
                     return new JobResult.Success();
                 }
 
-                var next = SyncJobs.Parse(source, document, payload.ExecutionId, payload.PipelineVersionId, runId, inputKey, payload.Slice + 1) with
+                var next = SyncJobs.Parse(source, document, payload.ExecutionId, payload.PipelineVersionId, runId, inputKey, payload.Slice + 1, payload.BypassFrom) with
                 {
                     Priority = job.Priority,
                 };
