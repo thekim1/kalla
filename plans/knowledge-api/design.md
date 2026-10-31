@@ -541,11 +541,14 @@ allowed levels, then only the filters present: `$4 text[]` tags, `$5 text[]` doc
 after. Filter predicates are **appended only when the filter is present**, so the planner never sees `($x IS NULL OR
 …)`; the profile id is an inlined literal from config (data-model §3.3), so a generic plan still matches the partial
 indexes. Each distinct text is one auto-prepared statement (variants: K/V × approximate/exact × 2³ filter
-combinations).
+combinations). As built in P1a item 11 (PR #112, 2026-10-31): the dimensions and the candidate depth (`LIMIT`) are
+inlined too (checked ints, never user input), so variants also differ per profile and depth; the vector and every
+filter stay parameters. K's query CTE `q` is `MATERIALIZED` as well: inlined, a generic plan evaluated
+`rag_or_query(to_tsvector($1))` once per candidate row, which more than doubled K at 100k chunks (to-verify #5).
 
 ```sql
 -- K: keyword candidates (data-model §3.2 partial GIN index: "Kind" = 'child' AND "DeletedAt" IS NULL)
-WITH q AS (   -- OR over the lexemes of the query search text; never by rewriting plainto_tsquery text
+WITH q AS MATERIALIZED (   -- OR over the lexemes of the query search text; never by rewriting plainto_tsquery text
     SELECT content.rag_or_query(to_tsvector('swedish', $1)) AS tsq
 ), kw AS MATERIALIZED (
     SELECT c."Id", c."DocumentId", c."ChunkSetId", c."Ordinal", c."TextHash", c."CollectionId", c."Classification",
@@ -625,7 +628,8 @@ JOIN LATERAL (
     WHERE n."ChunkSetId" = hit."ChunkSetId"
       AND n."Ordinal" BETWEEN hit."Ordinal" - $3 AND hit."Ordinal" + $3
       AND n."DeletedAt" IS NULL
-      AND (n."HeadingPath" = hit."HeadingPath" OR starts_with(n."HeadingPath", hit."HeadingPath" || ' › '))
+      AND (n."HeadingPath" IS NOT DISTINCT FROM hit."HeadingPath"     -- a null path (no heading) matches null
+           OR starts_with(n."HeadingPath", hit."HeadingPath" || ' › '))
 ) n ON true;
 
 -- D: documents of the hits, upload names, visibility
@@ -640,7 +644,9 @@ WHERE d."Id" = ANY ($1) AND d."Classification" = ANY ($2) AND d."DeletedAt" IS N
 
 H's `$1` are the final hits (≤ 50), `$4` the scope; D's `$1` the hits' documents, `$3` the ids of
 **sources the caller may see** = sources (from the config snapshot) whose `CollectionId` is in the scope. The neighbour
-lookup needs a new unique index `(ChunkSetId, Ordinal)` on `Chunks` (§18); ≤ 17 rows per hit.
+lookup needs a new unique index `(ChunkSetId, Ordinal)` on `Chunks` (§18); ≤ 17 rows per hit. As built in P1a item 11
+(PR #112, 2026-10-31): the heading-path match uses `IS NOT DISTINCT FROM`, so a hit without a heading path still
+expands over its neighbours without one.
 
 ### 6.4 Exact versus approximate vector search (decision)
 
@@ -648,9 +654,10 @@ HNSW applies the `CollectionId` filter **after** the graph walk; with `relaxed_o
 walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Iterative Index Scans",
 `src/hnsw.c:102-104`). For a small collection inside a large shared index that means poor recall or a long walk. So:
 
-- `ScopeSizeCache` (in `Ume.Rag.Retrieval`) holds chunk counts per collection, from
-  `SELECT "CollectionId", count(*) FROM content."Chunks" WHERE "DeletedAt" IS NULL GROUP BY 1` (B-tree index-only
-  scan) every 10 minutes.
+- `ScopeSizeCache` (in `Ume.Rag.Retrieval`) holds chunk counts per (embedding profile, collection), from
+  `SELECT "EmbeddingProfileId", "CollectionId", count(*) FROM content."Chunks" WHERE "DeletedAt" IS NULL AND "Kind" =
+  'child' GROUP BY 1, 2` every 10 minutes, so a scope's share *s* of its profile's index is known (as built in P1a
+  item 11, PR #112, 2026-10-31; grouped by collection only before).
 - Scope ≤ `Settings.Retrieval.exactScanMaxChunks` (**10,000**, tuned by the §11 benchmark; §12.1) → exact variant: a
   B-tree scan on `CollectionId` and a top-100 sort over at most 10,000 distances. Every pilot collection (a few
   thousand chunks) takes this path, so P1 runs exact recall in production. Larger → HNSW when the scope's share *s* of
@@ -693,6 +700,8 @@ order: score desc, distance asc (nulls last), chunk Id asc
   item 4 (PR #101, 2026-10-31): the worker keeps no copy of the factor on documents or chunks, so `Sources.DemoteRules`
   is the only input, and retrieval must match with the crawler's glob semantics (`UrlPattern`, connectors design
   §5.2).
+- As built in P1a item 11 (PR #112, 2026-10-31): age decay and demote are a seam only (`IScoreAdjuster`, both
+  factors 1); they are applied in P1b.
 - Both multipliers apply after fusion in every mode and before dedup and the per-document cap; they never change
   coverage (§7 uses distances and keyword scores). A query over several collections uses each chunk's own
   collection `recency`.
@@ -710,6 +719,10 @@ order: score desc, distance asc (nulls last), chunk Id asc
 | Read replica | optional `ConnectionStrings__ragdb-read` (only when the [`../performance-pass.md`](../performance-pass.md) §6 trigger fires): K, V, H+D and the evaluator read from it; writes (stats flush, writer) stay on the primary | spreads retrieval load off the primary |
 | Timeout | `CommandTimeout` 2 s per statement (client cancel); role `statement_timeout` 5 s backstop (data-model §1.1) | a slow plan fails fast instead of queueing |
 | Transactions | none (autocommit, read-only role grants) | fewer round trips |
+
+As built in P1a item 11 (PR #112, 2026-10-31): the slot count, the slot wait (200 ms), the statement timeout (2 s) and
+the rerank timeout (500 ms) are configuration knobs (`RetrievalEngineOptions`, `PostgresSearchOptions`), with the
+values above as defaults.
 
 ### 6.7 Rerank seam (`IReranker`)
 

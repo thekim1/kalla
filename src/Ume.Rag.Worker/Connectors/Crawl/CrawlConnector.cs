@@ -45,8 +45,8 @@ public sealed record CrawlPage(FetchOutcome Outcome, PageLinks? Links);
 /// A listing that missed seeds (an unreachable robots.txt, a failed or truncated sitemap, the page limit) ends
 /// <c>Partial</c> after a <see cref="ListingEvent{T}.Failure"/> per cause, so the traversal cannot be complete.
 /// Discovery, frontier and host budget are <see cref="CrawlTraversal"/>'s. The canonicaliser takes the source's settings
-/// and, per scope host, its applied site profile's rules (<see cref="SiteProfileCanonicalRules"/>; none without
-/// <paramref name="hostRules"/>).
+/// and, per scope host, its applied site profile's rules, and the scope takes the profile's <c>excludedTypes</c>
+/// (<see cref="SiteProfileCanonicalRules"/>; none without <paramref name="hostRules"/>, so every host keeps the default).
 /// </summary>
 public sealed class CrawlConnector(
     HttpFetcher fetcher, RobotsCache robots, IMalwareScanner scanner, IBlobStore blobs, TimeProvider time, SiteProfileCanonicalRules? hostRules = null)
@@ -79,7 +79,7 @@ public sealed class CrawlConnector(
 
     /// <summary>
     /// The source's settings and scope, with the canonicaliser of the source's settings and of the scope hosts' applied
-    /// site profiles at <paramref name="classification"/>.
+    /// site profiles at <paramref name="classification"/>, and the scope with those profiles' <c>excludedTypes</c>.
     /// </summary>
     public async ValueTask<CrawlSource> SourceAsync(Guid sourceId, string classification, JsonElement settings, CancellationToken cancellationToken)
     {
@@ -90,7 +90,12 @@ public sealed class CrawlConnector(
         }
 
         var rules = await hostRules.ForHostsAsync(classification, source.Scope.Hosts, cancellationToken);
-        return rules.Count == 0 ? source : source with { Canonicalizer = source.Canonicalizer with { Hosts = rules } };
+        if (rules.Canonical.Count > 0)
+        {
+            source = source with { Canonicalizer = source.Canonicalizer with { Hosts = rules.Canonical } };
+        }
+
+        return rules.ExcludedTypes.Count == 0 ? source : source with { Scope = source.Scope.WithExcludedTypes(rules.ExcludedTypes) };
     }
 
     /// <summary>The source's settings and scope, parsed once per settings version.</summary>
@@ -209,7 +214,7 @@ public sealed class CrawlConnector(
         var url = item.Url ?? throw new ArgumentException("A crawl item has a URL.", nameof(item));
         var source = await SourceAsync(context.SourceId, context.Classification, context.Settings, cancellationToken);
         var validators = source.Settings.ConditionalGet && !context.Revalidate ? item.Hints.Stored : null;
-        var request = new HttpFetchRequest(url, EgressPurpose.Fetch, validators, MediaTypes.DocumentFormats, source.Canonicalizer, robots.CheckAsync,
+        var request = new HttpFetchRequest(url, EgressPurpose.Fetch, validators, source.Scope.AcceptedMediaTypes(url), source.Canonicalizer, robots.CheckAsync,
             InScope: target => UrlCanonicalizer.Canonicalize(target.AbsoluteUri, source.Canonicalizer).Value is { } canonical && source.Scope.Check(canonical).Admitted);
         var result = await fetcher.FetchAsync(request, cancellationToken);
         switch (result)
