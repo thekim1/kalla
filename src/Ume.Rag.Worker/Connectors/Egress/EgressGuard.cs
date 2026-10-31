@@ -69,16 +69,10 @@ public sealed record EgressPolicy(IReadOnlySet<int> AllowedPorts, IReadOnlySet<s
     public static EgressPolicy Default { get; } = new(new HashSet<int>(), new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 }
 
-/// <summary>Where the guard reads <see cref="EgressPolicy"/>; the <c>Settings.Crawl</c> reader replaces the default.</summary>
+/// <summary>Where the guard reads <see cref="EgressPolicy"/> (<c>Settings.Crawl</c>, <c>PlatformCrawlSettingsSource</c>).</summary>
 public interface IEgressPolicySource
 {
     EgressPolicy Current { get; }
-}
-
-/// <summary>No extra ports, no blocked hosts: the platform defaults until <c>Settings.Crawl</c> is read (schema part 1).</summary>
-public sealed class DefaultEgressPolicySource : IEgressPolicySource
-{
-    public EgressPolicy Current => EgressPolicy.Default;
 }
 
 public sealed class EgressGuard : IEgressGuard

@@ -46,14 +46,8 @@ public sealed record CrawlPolicy(IReadOnlyList<string> MunicipalHosts, IReadOnly
     public HostOverride? OverrideOf(string host) => HostOverrides.TryGetValue(host, out var value) ? value : null;
 }
 
-/// <summary>Where the crawl reads <see cref="CrawlPolicy"/>; the <c>Settings.Crawl</c> reader replaces the default.</summary>
+/// <summary>Where the crawl reads <see cref="CrawlPolicy"/> (<c>Settings.Crawl</c>, <c>PlatformCrawlSettingsSource</c>).</summary>
 public interface ICrawlPolicySource
 {
     CrawlPolicy Current { get; }
-}
-
-/// <summary>No municipal hosts and no overrides (every host external, 1 req/s) until <c>Settings.Crawl</c> is read (J2).</summary>
-public sealed class DefaultCrawlPolicySource : ICrawlPolicySource
-{
-    public CrawlPolicy Current => CrawlPolicy.Default;
 }
