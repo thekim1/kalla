@@ -98,8 +98,9 @@ https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM (not updated since session 8; 
   `../rag-a3` `a/10-commands` (all P1 command kinds); `../rag-a4` `a/p1b-5-preview` (preview + preflight,
   `robots.disallow` text); `../rag-sync` `sync-session10` (fold deviations of #89–#108 into the design, doc only).
   Shared brief: session scratchpad `brief-common.md` (gone after the session; the rules are in "How we work").
-- CI: Actions minutes are low; verify/parser run only on PRs labelled `ci` (#109). Merge on local evidence (full build
-  + suites under `taskset -c 0,1`) unless a change needs the runner.
+- **CI is local only** (user, 2026-10-31: GitHub Actions credits exhausted). Never add the `ci` label, dispatch a
+  workflow or run `release.yml`. Every PR is verified locally (full build + suites under `taskset -c 0,1` after merging
+  `origin/main`, output in the PR body) and merged on that evidence. Anything that would need the runner goes to the user.
 
 ## Next step (start of session 10)
 
