@@ -123,8 +123,12 @@ By default it answers at once. `FakeGateway:Latency:*` in the AppHost user secre
 `StallProbability`, `StallMs`.
 
 **Against a real local gateway** (its AppHost running): set `FakeGateway:Enabled=false`,
-`Gateway:BaseUrl=https://localhost:<gateway port>` and `Gateway:Keys:<level>` (the gateway's dev keys) in the AppHost
-user secrets; every `Gateway:*` setting is passed to the api, worker and admin API. The gateway's FakeLlm needs gateway
+`Gateway:BaseUrl=https://localhost:<gateway port>` and the gateway's dev keys in the AppHost user secrets.
+`Gateway:Keys:<level>` is shared: it goes to the api and the admin API, and to the worker unless the level is
+`External`. `Gateway:Services:<service>:Keys:<level>` (service `api`, `admin` or `worker`) gives one service its own key
+and wins over the shared one. The levels are `OnPrem`, `Eu` and `External`; the AppHost stops on any other level, an
+unknown service or `Gateway:Services:worker:Keys:External`. Every other `Gateway:*` setting (`BaseUrl`, ...) goes to all
+three, and `OrgSync:BaseUrl` and `OrgSync:DataApiKey` (the organisation sync's Data API key) to the admin API. The gateway's FakeLlm needs gateway
 release 1 for 1024-dimension embeddings (`fake-embed-1024`); with an older one, use its Ollama provider with `bge-m3`.
 The `OnPrem` key used for embeddings must have PII policy `Off` or `Allow`, never `Redact` or `Block`.
 
