@@ -77,7 +77,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
     private static readonly string[] ApiDocumentColumns =
     [
         "Id", "SourceId", "Classification", "IdentityKind", "IdentityHash", "Title", "Url", "MediaType", "DisplayName",
-        "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt",
+        "SourceModifiedAt", "PageCount", "LiveChunkSetId", "DeletedAt", "Language", "FetchedAt",
     ];
 
     [Fact]

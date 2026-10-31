@@ -9,5 +9,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ume.Rag.Infrastructure\Ume.Rag.Infrastructure.csproj" />
+    <!-- ContentFixtureWriter: the worker's SearchText rule and the pgvector data source settings. -->
+    <ProjectReference Include="..\..\src\Ume.Rag.Retrieval\Ume.Rag.Retrieval.csproj" />
   </ItemGroup>
 </Project>
