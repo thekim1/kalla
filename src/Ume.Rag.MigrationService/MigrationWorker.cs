@@ -8,7 +8,8 @@ namespace Ume.Rag.MigrationService;
 /// <summary>
 /// Applies EF Core migrations (expand/contract, backwards compatible), then <c>app-roles.sql</c>
 /// (<c>Migration:RolesSqlPath</c>, set by production compose; dev runs as the bootstrap superuser without the service
-/// roles) and the run-item partition maintenance, then the platform pipelines (<see cref="PipelineTemplateSeeder"/>) and the <see cref="DevSeeder"/> when <c>Seed:Enabled</c>, and exits
+/// roles) and the run-item partition maintenance, then the platform pipelines (<see cref="PipelineTemplateSeeder"/>), the platform embedding profile
+/// (<see cref="EmbeddingProfileSeeder"/>) and the <see cref="DevSeeder"/> when <c>Seed:Enabled</c>, and exits
 /// (data-model §10, as the gateway's MigrationWorker). The services wait for this to complete, so they never run against
 /// an older schema.
 /// </summary>
@@ -30,6 +31,9 @@ public sealed partial class MigrationWorker(
             await RagDatabaseMigrator.MigrateAsync(db, configuration["Migration:RolesSqlPath"], stoppingToken);
             await PipelineTemplateSeeder.SeedAsync(db, [.. TemplateCatalog.BuiltIn.All.Select(t => t.Template)], TimeProvider.System,
                 stoppingToken);
+            await EmbeddingProfileSeeder.SeedAsync(db,
+                configuration.GetSection(EmbeddingProfileSeedOptions.SectionName).Get<EmbeddingProfileSeedOptions>() ?? new EmbeddingProfileSeedOptions(),
+                TimeProvider.System, logger, stoppingToken);
             if (configuration.GetValue("Seed:Enabled", false))
             {
                 await DevSeeder.SeedAsync(db, TimeProvider.System, stoppingToken);

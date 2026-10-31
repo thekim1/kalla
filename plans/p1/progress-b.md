@@ -34,14 +34,14 @@ Refs: [knowledge §6–§8, §16.1–§16.2](../knowledge-api/design.md)
 - [x] Statements K, V, H+D; exact/HNSW rule; RRF; dedup and cap (this PR)
 - [x] Coverage (vector side alone until the keyword floor is calibrated); `IReranker` no-op seam; query normaliser (this PR)
 - [x] **Done:** §16.1, §16.2 tests; #4, #5, #6, #7, #19 recorded (this PR; the knowledge role's parts of §16.1 — section assembly, download grants, cache keys, request table — are item 12, age decay and `demote` P1b, Keycloak P2)
-- [ ] **Hand-off J5:** issue to stream A
+- [x] **Hand-off J5:** issue to stream A (#120)
 
 ## 4. Gateway client, release-1 side (#13)
 Refs: [gateway-changes §13.4](../gateway-changes/design.md), [admin §4.5, §4.10](../admin/design.md), [identity §4.7](../identity/design.md)
-- [ ] Per-level keys (`Eu` for every P1a call); `GatewayModels` sync with residencies
-- [ ] V8 `/v1/models` check on assistant publish
-- [ ] Pilot embedding profile seeded with its canary; `GET /api/gateway/status`
-- [ ] Status green against the real gateway (after J10)
+- [x] Per-level keys (`Eu` for every P1a call); `GatewayModels` sync with residencies (this PR)
+- [x] V8 `/v1/models` check on assistant publish (this PR: `GatewayModelCheck`; called from publish and level/audience saves in item 14)
+- [x] Pilot embedding profile seeded with its canary; `GET /api/gateway/status` (this PR: `EmbeddingProfile:*` seeded by the migrator, canary recorded by the admin)
+- [ ] Status green against the real gateway (after J10) — **live**
 
 ## 5. Knowledge role (#12)
 Refs: [knowledge §2–§5, §9, §10, §16.3, §16.6](../knowledge-api/design.md)

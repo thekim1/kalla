@@ -12,7 +12,8 @@ namespace Ume.Rag.Infrastructure.Gateway;
 /// process's key of that level, and adds the level's key when the caller set none (a process without the key of a level,
 /// such as the worker for <c>External</c>, cannot call at it). On a successful answer it checks
 /// <c>x-ume-residency</c> against the ceiling before the caller reads a byte: a missing header or a residency above the
-/// ceiling disposes the response (which cancels a stream at the gateway), raises event 5003 and throws.
+/// ceiling disposes the response (which cancels a stream at the gateway), raises event 5003 and throws. <c>GET /v1/models</c>
+/// is the exception: no model answers it, so it carries no residency (the gateway's <c>GatewayRequestHandler</c>).
 /// </summary>
 public sealed class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptions> options, ILoggerFactory loggers) : DelegatingHandler
 {
@@ -46,6 +47,11 @@ public sealed class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptions> opti
             return response; // 403 max_residency_not_met, 503 + Retry-After …: the caller maps them (identity design §4.7)
         }
 
+        if (IsModelList(request))
+        {
+            return response; // a model list carries no model output; the gateway sets x-ume-residency only when a deployment answers
+        }
+
         var observed = response.Headers.TryGetValues(GatewayHeaders.Residency, out var values) ? string.Join(",", values) : null;
         if (observed is not null && ResidencyCeiling.TryParse(observed, out var residency) && residency <= ceiling)
         {
@@ -58,6 +64,11 @@ public sealed class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptions> opti
             request.RequestUri?.AbsolutePath ?? "", requestId is null ? null : SecurityEvents.Printable(requestId));
         throw new GatewayResidencyException(ceiling, observed);
     }
+
+    /// <summary><c>GET /v1/models</c> (V8's check, gateway-changes §3.4): filtered by the ceiling, answered by no model.</summary>
+    private static bool IsModelList(HttpRequestMessage request) =>
+        request.Method == HttpMethod.Get && request.RequestUri is { } uri &&
+        (uri.IsAbsoluteUri ? uri.AbsolutePath : "/" + uri.OriginalString.TrimStart('/')).EndsWith("/v1/models", StringComparison.Ordinal);
 
     private static Residency Ceiling(HttpRequestMessage request)
     {
