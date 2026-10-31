@@ -49,10 +49,10 @@ Refs: [connectors §5.6](../ingestion-worker/design-connectors.md), [processing 
 
 ## 5. Connectors (#6)
 Refs: [connectors §3–§7, §9, §11–§13, §18](../ingestion-worker/design-connectors.md)
-- [ ] Canonicaliser; egress guard (`ConnectCallback`, redirects re-checked); robots and sitemaps
-- [ ] URL list; crawl with one frontier per source and `CrawlHosts`; full traversals; stricter deletion rule
+- [x] Canonicaliser; egress guard (`ConnectCallback`, redirects re-checked); robots and sitemaps
+- [x] URL list; crawl with one frontier per source and `CrawlHosts`; full traversals; stricter deletion rule
 - [ ] Uploads by slot; ClamAV `INSTREAM` client, fail closed, quarantine
-- [ ] Change detection with noise normalisation; deletion guard
+- [x] Change detection with noise normalisation; deletion guard
 - [ ] **Done:** §18 tests for these parts (incl. C7); #10, #27, #28, #81, #112 recorded
 
 ## 6. Processing stages (#7)
