@@ -29,7 +29,7 @@ env:
 jobs:
   build:
     # No Azure credentials: build, lint and format check of every template and parameter file.
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, linux, x64]
     outputs:
       plan: ${{ steps.gate.outputs.plan }}
     defaults:
@@ -84,7 +84,7 @@ jobs:
     # the live objects, read with Application.Read.All only (infra/entra/entra.py).
     needs: build
     if: needs.build.outputs.plan == 'true'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, linux, x64]
     environment: entra-plan
     permissions:
       contents: read
@@ -129,7 +129,7 @@ jobs:
     if: >-
       always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
       && needs.build.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.plan.result)
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, linux, x64]
     environment: ${{ inputs.environment }}
     permissions:
       contents: read

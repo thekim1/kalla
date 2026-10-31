@@ -1,5 +1,5 @@
 name: Verify
-# Every job runs on the self-hosted runner (labels self-hosted, Linux, X64; GitHub-hosted minutes are used up). CI runs
+# Every job runs on the self-hosted runner (labels self-hosted, linux, x64; GitHub-hosted minutes are used up). CI runs
 # on request: a pull request is verified on the merge with main (pull_request) only
 # while it carries the label `ci`. Adding the label starts a run, and each push to the pull request after that runs
 # again; remove the label to stop. Add it when the pull request is ready for review, and merge only on a green run.
@@ -23,7 +23,7 @@ jobs:
     # Every pull request with the label `ci`, design-only ones included: a stream branch may change only its own and the
     # shared paths.
     if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci') && (github.event.action != 'labeled' || github.event.label.name == 'ci')
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +39,7 @@ jobs:
     # Design documents (plans/**, platforms/**, root *.md) do not build anything (repo-and-deployment §1). On a pull
     # request only with the label `ci` (see the top); the other jobs need this one, so they skip with it.
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci') && (github.event.action != 'labeled' || github.event.label.name == 'ci')
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, linux, x64]
     outputs:
       code: ${{ steps.filter.outputs.code }}
       deploy: ${{ steps.filter.outputs.deploy }}
@@ -73,7 +73,7 @@ jobs:
   backend:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5
@@ -108,7 +108,7 @@ jobs:
     # image is pushed to ghcr only by release.yml (§8.1).
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - name: Build ume-rag/postgres
@@ -134,7 +134,7 @@ jobs:
     # verify (deploy/host/).
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - name: Local image defaults are untagged dev images
@@ -250,7 +250,7 @@ jobs:
     # report, which only warns. Node 24 as every gateway workflow; package.json engines asks for >= 22.
     needs: changes
     if: needs.changes.outputs.adminui == 'true'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, linux, x64]
     defaults:
       run:
         working-directory: src/admin-ui
