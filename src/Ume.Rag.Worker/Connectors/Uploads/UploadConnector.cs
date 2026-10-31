@@ -25,7 +25,7 @@ public sealed record UploadCheckpoint : ConnectorCheckpoint
 /// file's SHA-256, so identical bytes in a replace are <c>unchanged</c>.
 /// </summary>
 public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, IUploadSlotReader slots, TimeProvider time)
-    : IFetchConnector<UploadCheckpoint>, IIdListingConnector
+    : IFetchConnector<UploadCheckpoint>, IIdListingConnector, IRetryFailedConnector
 {
     public const string Type = SourceTypes.Upload;
 
@@ -41,6 +41,18 @@ public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, I
     public Type SettingsType => typeof(UploadSettings);
 
     public static string IdentityOf(Guid uploadId) => "upload:" + uploadId.ToString("D");
+
+    /// <summary>
+    /// The slot of an <c>upload:&lt;slot&gt;</c> identity; the hint carries only the slot id, since the fetch reads the slot's
+    /// file name, hash and type again.
+    /// </summary>
+    public WorkItem? FromIdentity(string canonicalIdentity, FailedItem last)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalIdentity);
+        return canonicalIdentity.StartsWith("upload:", StringComparison.Ordinal) && Guid.TryParse(canonicalIdentity.AsSpan("upload:".Length), out var slot)
+            ? new WorkItem(IdentityKind.Upload, canonicalIdentity, null, 0, new WorkHints(Upload: new UploadHint(slot, string.Empty, string.Empty, null)))
+            : null;
+    }
 
     public static BlobKey ManifestKey(Guid sourceId, Guid batchId) => new($"uploads/{sourceId:D}/batches/{batchId:D}.json");
 

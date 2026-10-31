@@ -27,12 +27,22 @@ internal sealed class FastCrawlPolicy : ICrawlPolicySource
         new Dictionary<string, HostOverride>(StringComparer.OrdinalIgnoreCase));
 }
 
-/// <summary>Blocks embedding requests while armed; counts the requests that reached it.</summary>
+/// <summary>
+/// Blocks embedding requests while armed (only those whose body contains <see cref="Only"/>, when set); counts the
+/// requests that reached it.
+/// </summary>
 internal sealed class EmbeddingGate : DelegatingHandler
 {
     private volatile TaskCompletionSource _open = Opened();
+    private int _requests;
 
     public TaskCompletionSource Blocked { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>When set, an armed gate blocks only the requests whose body contains this text.</summary>
+    public string? Only { get; set; }
+
+    /// <summary>Embedding requests sent through the gate (every gateway call of the worker).</summary>
+    public int Requests => Volatile.Read(ref _requests);
 
     public void Arm() => _open = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -40,13 +50,15 @@ internal sealed class EmbeddingGate : DelegatingHandler
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _requests);
         var gate = _open;
-        if (!gate.Task.IsCompleted)
+        if (!gate.Task.IsCompleted && (Only is not { } only ||
+            (request.Content is not null && (await request.Content.ReadAsStringAsync(cancellationToken)).Contains(only, StringComparison.Ordinal))))
         {
             Blocked.TrySetResult();
+            await gate.Task.WaitAsync(cancellationToken);
         }
 
-        await gate.Task.WaitAsync(cancellationToken);
         return await base.SendAsync(request, cancellationToken);
     }
 
@@ -85,7 +97,32 @@ internal static class EngineKit
 
     public static IResult Html(string body) => Results.Content(body, "text/html; charset=utf-8");
 
-    public static async Task<SourceSeed> SeedUrlListAsync(RagDatabaseFixture database, IEnumerable<Uri> urls, string collectionClassification = Classification.Internal)
+    public static Task<SourceSeed> SeedUrlListAsync(RagDatabaseFixture database, IEnumerable<Uri> urls, string collectionClassification = Classification.Internal) =>
+        SeedAsync(database, SourceTypes.UrlList, "url-list", JsonSerializer.Serialize(new { urls = urls.Select(u => u.AbsoluteUri).ToArray() }), collectionClassification);
+
+    /// <summary>A crawl source on the <c>website</c> template; <paramref name="settings"/> is its <c>Sources.Settings</c> object.</summary>
+    public static Task<SourceSeed> SeedCrawlAsync(RagDatabaseFixture database, object settings, string collectionClassification = Classification.Internal) =>
+        SeedAsync(database, SourceTypes.Crawl, "website", JsonSerializer.Serialize(settings), collectionClassification);
+
+    /// <summary>A new published version of the seed's pipeline (number 2 or later) with <paramref name="parameters"/>; the old one is superseded.</summary>
+    public static async Task<Guid> PublishAsync(RagDatabaseFixture database, SourceSeed seed, string template, string parameters)
+    {
+        var version = Guid.CreateVersion7();
+        await Sql.ExecuteAsync(database.Connection(null), """
+            INSERT INTO config."PipelineVersions" ("Id", "PipelineId", "Number", "State", "Definition", "PublishedAt")
+            SELECT $1, $2, max("Number") + 1, 'published', $3::jsonb, now() FROM config."PipelineVersions" WHERE "PipelineId" = $2
+            """, version, seed.PipelineId, Definition(template, parameters));
+        await Sql.ExecuteAsync(database.Connection(null), """
+            UPDATE config."PipelineVersions" SET "State" = 'superseded' WHERE "PipelineId" = $1 AND "Id" <> $2 AND "State" = 'published'
+            """, seed.PipelineId, version);
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Pipelines" SET "PublishedVersionId" = $1 WHERE "Id" = $2""", version, seed.PipelineId);
+        return version;
+    }
+
+    private static string Definition(string template, string parameters) =>
+        "{\"schema\":\"pipeline/v2\",\"template\":\"" + template + "\",\"templateVersion\":1,\"params\":" + parameters + "}";
+
+    private static async Task<SourceSeed> SeedAsync(RagDatabaseFixture database, string type, string template, string settings, string collectionClassification)
     {
         var suffix = Guid.CreateVersion7().ToString("N")[..12];
         await using var db = TestPostgres.Context(database.Connection(null));
@@ -113,7 +150,7 @@ internal static class EngineKit
             EmbeddingProfileId = ProfileId,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
-        var pipeline = new Pipeline { DepartmentId = department.Id, Name = "url-list " + suffix, TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };
+        var pipeline = new Pipeline { DepartmentId = department.Id, Name = template + " " + suffix, TemplateId = template, UpdatedAt = DateTimeOffset.UtcNow };
         db.Add(department);
         db.Add(collection);
         db.Add(pipeline);
@@ -123,7 +160,7 @@ internal static class EngineKit
             PipelineId = pipeline.Id,
             Number = 1,
             State = PipelineVersionStates.Published,
-            Definition = """{"schema":"pipeline/v2","template":"url-list","templateVersion":1,"params":{}}""",
+            Definition = Definition(template, "{}"),
             PublishedAt = DateTimeOffset.UtcNow,
         };
         db.Add(version);
@@ -132,10 +169,10 @@ internal static class EngineKit
         var source = new Source
         {
             CollectionId = collection.Id,
-            Type = SourceTypes.UrlList,
-            Name = "Lista " + suffix,
+            Type = type,
+            Name = "Källa " + suffix,
             Classification = collectionClassification,
-            Settings = JsonSerializer.Serialize(new { urls = urls.Select(u => u.AbsoluteUri).ToArray() }),
+            Settings = settings,
             PipelineId = pipeline.Id,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
@@ -153,15 +190,19 @@ internal static class EngineKit
     public static Task PauseAsync(RagDatabaseFixture database, SourceSeed seed) =>
         Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Sources" SET "State" = 'paused' WHERE "Id" = $1""", seed.SourceId);
 
-    /// <summary>A worker with the engine, wired to the site, the FakeGateway and a blob root of its own.</summary>
+    /// <summary>
+    /// A worker with the engine, wired to the site, the FakeGateway and a blob root of its own; <paramref name="settings"/> and
+    /// <paramref name="services"/> add to (and override) the defaults.
+    /// </summary>
     public static Task<WorkerHost> StartWorkerAsync(RagDatabaseFixture database, TestSite site, FakeGatewayFactory gateway, DirectoryInfo blobs,
-        EmbeddingGate? gate = null, CapturingLoggerProvider? logs = null) =>
-        StartCoreAsync(database, site, gateway, blobs, gate, logs ?? Logs);
+        EmbeddingGate? gate = null, CapturingLoggerProvider? logs = null, IReadOnlyDictionary<string, string?>? settings = null,
+        Action<IServiceCollection>? services = null) =>
+        StartCoreAsync(database, site, gateway, blobs, gate, logs ?? Logs, settings, services);
 
     public static CapturingLoggerProvider Logs { get; } = new();
 
     private static Task<WorkerHost> StartCoreAsync(RagDatabaseFixture database, TestSite site, FakeGatewayFactory gateway, DirectoryInfo blobs,
-        EmbeddingGate? gate, CapturingLoggerProvider? logs) =>
+        EmbeddingGate? gate, CapturingLoggerProvider? logs, IReadOnlyDictionary<string, string?>? settings, Action<IServiceCollection>? extra) =>
         WorkerHost.StartAsync(database, services =>
         {
             services.AddSingleton<IDnsResolver>(site.Resolver());
@@ -172,7 +213,9 @@ internal static class EngineKit
             {
                 client.AddHttpMessageHandler(() => gate);
             }
-        }, new Dictionary<string, string?>
+
+            extra?.Invoke(services);
+        }, Merge(new Dictionary<string, string?>
         {
             ["Gateway:BaseUrl"] = "http://fake-gateway",
             ["Gateway:Keys:OnPrem"] = FakeGatewayFactory.OnPremKey,
@@ -180,12 +223,27 @@ internal static class EngineKit
             ["BlobStore:Root"] = blobs.FullName,
             ["Crawl:AllowedPrivateRanges"] = "127.0.0.1/32",
             ["Worker:FinalizerSeconds"] = "1",
-        }, logs, engine: true);
+        }, settings), logs, engine: true);
 
-    /// <summary>A "sync now" as the admin enqueues it (dedup <c>sync:{sourceId}</c>); the run's id is the job's.</summary>
-    public static async Task<Guid> SyncNowAsync(RagDatabaseFixture database, SourceSeed seed)
+    private static Dictionary<string, string?> Merge(Dictionary<string, string?> defaults, IReadOnlyDictionary<string, string?>? settings)
     {
-        var payload = new SyncPayload { SourceId = seed.SourceId, Kind = SyncKind.Sync, Trigger = RunTrigger.Manual };
+        foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
+        {
+            defaults[key] = value;
+        }
+
+        return defaults;
+    }
+
+    /// <summary>Pauses every source but <paramref name="seeds"/>, so a sweep over all documents sees only this test's.</summary>
+    public static Task PauseOtherSourcesAsync(RagDatabaseFixture database, params SourceSeed[] seeds) =>
+        Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Sources" SET "State" = 'paused' WHERE NOT ("Id" = ANY($1))""",
+            (object)seeds.Select(s => s.SourceId).ToArray());
+
+    /// <summary>A "sync now" (or retry failed, or a publish's reprocess) as the admin enqueues it (dedup <c>sync:{sourceId}</c>); the run's id is the job's.</summary>
+    public static async Task<Guid> SyncNowAsync(RagDatabaseFixture database, SourceSeed seed, SyncKind kind = SyncKind.Sync, RunTrigger trigger = RunTrigger.Manual)
+    {
+        var payload = new SyncPayload { SourceId = seed.SourceId, Kind = kind, Trigger = trigger };
         var job = new Domain.Ports.JobRequest(JobClasses.Sync, seed.DepartmentId, seed.Classification, ContractJson.Serialize(payload))
         {
             DedupKey = JobDedupKeys.Sync(seed.SourceId),

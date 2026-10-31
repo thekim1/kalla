@@ -89,10 +89,17 @@ want = ChunkSet(D, v, p, profile(S.Collection), D.ContentHash)
 D.LiveChunkSetId == want.Id   (state live or held, §14)
 ```
 
-`EnsureCurrent(D)` compares this with the database and, if the live set is not current, enqueues the missing work
-from the first stage whose cache key has no output (§8), deduplicated by `DedupKey`. If a set with the wanted key
+`EnsureCurrent(D)` compares this with the database and, if the live set is not current, enqueues the missing work,
+deduplicated by `DedupKey`: as built in P1a item 9 (PR #121, 2026-10-31) always a `parse` job, for every route, which
+serves each stage that already has an output under its key from the cache (§8), so the work starts in effect at the
+first stage without one. If a set with the wanted key
 already exists (kept 14 days for rollback, §12.3) it is only swapped back; if the current set differs only by label
-(the plan found no stage affected, or a noise-only change), it is **re-keyed** in one row (§14).
+(the plan found no stage affected, or a noise-only change), it is **re-keyed** in one row (§14). As built in P1a
+item 9 (PR #138, 2026-10-31): one decision (`Reconciler.ReconcileAsync`) computes the wanted key from the published
+version, the host's applied site-profile version, the embedding profile and the content hash, and answers `Current`,
+`SwapBack` (a kept `superseded` set has the key) or `Reprocess`; the fetch path, the `reprocess` run and the drift sweep
+all use it. The fetch path leaves a swap-back to its `embed` continuation, because the fetch job and its frontier row
+complete in one commit.
 
 Callers: the fetch path after new content (6b), a published pipeline version (`reprocess` run), a new site-profile
 version for a host (6b), a cleared PII flag, a collection made `public` (§15), and the **nightly drift sweep** (01:30,
@@ -100,6 +107,14 @@ run by the maintenance instance, §9.4): documents whose live set's `PipelineVer
 `ContentHash` differs from the wanted one, or whose personal-data state is `pending` (6c §9.6). The sweep is what makes
 "no lost work" independent of any single job surviving (Onyx F6 silent stalls, `../../platforms/onyx.md:267`; Dify
 documents stuck "Queuing", `../../platforms/dify.md:265`).
+
+As built in P1a item 9 (PR #121, 2026-10-31) and P1b item 6 (PR #131): the sweep's work runs as `reprocess` runs with
+`Trigger = schedule`, one per source per batch, because every job needs a run id. It skips sources with a running
+`sync` run and documents whose `ParseOutcome` is terminal. Pending name checks are settled in place
+(`SweepPendingAsync`) and not counted in `rag.reconcile.drift`. As built in PR #138 (2026-10-31), the sweep swaps a
+kept set with the wanted key back directly, each swap-back in its own short transaction (`DocumentIngest.SwapBackAsync`),
+with the source's run opened in the batch transaction (`RunItems` has no FK to `Runs`, so the finalizer sees the run
+only together with its items); `rag.reconcile.drift` counts enqueued plus swapped-back documents.
 
 ## 3. Definition format
 
@@ -166,7 +181,8 @@ As built in P1a item 4 (PR #78, 2026-10-31):
 ```
 settingsHash(s) = SHA-256(canonical(settings of stage s))         RFC 8785 canonical JSON of the template parameters
                                                                    tagged for s, plus inputs the stage reads (parse
-                                                                   rule id@version, site-profile version for HTML)
+                                                                   rule id@version, site-profile version for HTML,
+                                                                   a forced reprocess's bypass salt, §8)
 key(s)          = SHA-256(inputHash ‖ s ‖ stageVersion(s) ‖ settingsHash(s))
 inputHash       = OutputHash of the previous stage's output; for detect and parse the raw content hash
 key(parse)      = SHA-256(contentHash ‖ "parser" ‖ parserBuild ‖ parserSettingsHash)     parser-bound documents
@@ -180,7 +196,10 @@ concatenate alike; `stageVersion` is an int32, big-endian. The canonical setting
 `id@version`, `siteProfileVersion` for HTML). Canonical JSON is the project's own RFC 8785 implementation
 (`CanonicalJson`). As built in P1a item 9 (PR #108, 2026-10-31), `inputs` also holds `metadata` for `chunk` (the
 `OutputHash` of the metadata input: media type, URL, display name, title, dates), `collectionLevel` for `personal-data`, and for
-HTML `parse` the `siteProfileVersion` (the profile version id, or `preset`).
+HTML `parse` the `siteProfileVersion` (the profile version id, or `preset`). As built in PR #140 (2026-10-31), a forced
+reprocess adds `bypass` = the execution id to every cached stage at or after its `fromStage`, parser-bound `parse`
+included (§8). For parser-bound documents the `parse` stage version is one of the parser-key settings (in `parserSettingsHash`), because `ParserKey` has no version field
+(P1a item 9, PR #121, 2026-10-31).
 
 Keys are per stage only; the chain is linear, so a changed parameter changes the keys of its stage and every stage
 after it, and nothing before it. The live chunk set records the keys and `OutputHash`es of the stage outputs it was
@@ -347,8 +366,10 @@ output.
 ### 7.5 Execution id, supersession, cancellation
 
 - `Documents.CurrentExecutionId` is set when the document's content changes, or by a `reprocess` with `force` (cache
-  bypass from a stage). It is **not** changed by a new pipeline version or site-profile version: those only add work
-  through `EnsureCurrent`.
+  bypass from a stage, §8), or by `reprocess-document` (§9.1). It is **not** changed by a new pipeline version or site-profile version: those only add work
+  through `EnsureCurrent`. As built in PR #140 (2026-10-31): a forced source reprocess derives each execution id
+  from (run, document), a UUID v8 of SHA-256, so a retried iteration does not supersede itself; a forced run ignores
+  the reconciliation decision (current or swap-back) and re-processes.
 - Every job of an execution carries its id. **Fence** in each committing transaction:
 
 ```sql
@@ -418,15 +439,24 @@ The response is checked before anything is stored: `x-ume-residency` within the 
 | `none` | `fetch`, `scan` (raw blob is the document), `embed` (own `EmbeddingCache`), `index` | – |
 
 - The parse output is multi-blob (parser §7.6): `NodeOutputs.BlobPath` is a per-level prefix keyed by the cache key,
-  not the document id (layout in data-model §9), holding `result.json`, `docling/{from}-{to}.json.gz` and `ranges/{from}-{to}.result.json`
-  (intermediate, 30 days, written per completed range so a crashed or yielded parse job resumes at the next range).
+  not the document id (layout in data-model §9), holding `result.json`, `docling/{from}-{to}.json.gz` and `ranges/{from}-{to}.{strategy}.result.json`
+  (intermediate, 30 days, written per completed range so a crashed or yielded parse job resumes at the next range; the
+  strategy is in the name because a post-conversion check asks for the same pages with another strategy, and a failed
+  range is not stored; as built in P1a item 9, PR #121, 2026-10-31).
   Other stages use one blob `…/{cacheKey}.json.gz`.
 - **Sharing by content**: the parse key has no document id, so two sources (any department, same level) with the same
   bytes and parser settings share one parse; different levels never share (blobs are encrypted per level). Worker
   stages after `parse` are cheap and run per document.
 - **Invalidation is by key**: a new stage version, changed settings or changed upstream output gives a new key; nothing
-  is deleted eagerly. Explicit bypass: a `reprocess` with `force` and `fromStage` skips lookups from that stage on (new
-  execution id).
+  is deleted eagerly. Explicit bypass: a `reprocess` with `force` and `fromStage` misses the cache from that stage on
+  (new execution id). As built in P1a item 9 follow-up (PR #140, 2026-10-31) the bypass **salts keys** instead of
+  skipping lookups: every cached stage at or after `fromStage` gets the settings input `bypass` = the execution id
+  (§3.3), so its key is new and its output is stored beside the old one (write-once holds, nothing is overwritten);
+  earlier stages keep their keys, and retries and slices of the same execution reuse what it stored. A forced sync
+  `reprocess` defaults `fromStage` to `parse`; `fetch` is refused (`reprocess.fetch_unsupported`); `embed` and `index`
+  bypass no output-cache stage (the EmbeddingCache is never bypassed). Open (#134): a forced run whose chunks differ
+  keeps the unchanged chunk-set key (`IX_ChunkSets_Key` is unique), so the embed job records `unchanged` and the new
+  output is not swapped in.
 - **Retention**: the worker's content retention deletes expired rows in batches of 1,000 and then their blob
   prefixes; orphan blobs older than 24 h without a row are removed by the same job.
 
@@ -473,7 +503,16 @@ records in `Ume.Rag.Pipelines/Jobs`. Only P1 kinds exist (no `site-profile` prev
   fails with `site_profile.version_conflict`).
 - `edit-eval-question` limits `question` to 500 characters, `expectedAnswer` to 1,000 and `expectedDocumentIds` to
   10, to keep the payload within 4 KB.
-- `reprocess-document` `fromStage` defaults to `parse`.
+- `reprocess-document` `fromStage` defaults to `parse`. As built in P1b item 8 (PR #115, 2026-10-31): it re-runs the
+  document from stored content under a new execution id in a `reprocess` run (run id = job id); `fromStage: fetch` is
+  refused (`reprocess.fetch_unsupported`). Since PR #140 (2026-10-31) it always bypasses the caches from `fromStage`
+  (§8); `fromStage: embed` re-runs through the caches.
+- The `parse` payload carries `bypassFrom` (a forced reprocess's first bypassed stage), and a forced run's `sync`
+  continuations carry `force` and `fromStage` (PR #140).
+- `release-hold` clears deletion holds (`Documents.HeldAt`, 6b §13.3); releasing a PII-held set is `clear-pii-flag`
+  (6c §9.5), which releases it without re-processing (PR #115).
+- `edit-site-profile` and `rollback-site-profile` carry an optional `decidedBy` (for `SiteProfileVersions.CreatedBy` /
+  `AppliedBy`; absent = `system:worker`) and enqueue the site-profile `reprocess` of 6b §5.6 (PR #115).
 - Serialised payloads always write `"incremental": false` (sync) and `"candidate": false` (eval run reference).
 - The 4 KB cap holds for typical payloads only: five 2,048-character preview URLs, or twenty in a preflight, can
   exceed it.
@@ -543,7 +582,10 @@ an ordinary deploy or host restart costs no attempts. Early reclaim keeps a kill
 
 **Maintenance** (drift sweep, content retention, nightly deletion of terminal jobs older than 7 days in batches, orphan
 sweep of never-swapped sets, §14) runs on the instance with `Worker:Maintenance=true` (exactly one in P1), each task
-under `pg_try_advisory_xact_lock` per batch and resuming from its batch checkpoint. Lease leaders in
+under `pg_try_advisory_xact_lock` per batch and resuming from its batch checkpoint (as built in P1a item 9, PR #121,
+2026-10-31: the drift sweep keeps its checkpoint in memory only; batches are idempotent, and a crashed sweep starts
+again the next night). As built in P1b item 6 (PR #131): the retention sweep measures superseded and writing-orphan
+ages with the application clock. Lease leaders in
 `content."LeaderLeases"` come with the first multi-host deployment (P2, §24).
 
 ### 9.5 Parse concurrency and slicing
@@ -581,6 +623,9 @@ A `BackgroundService` on every instance; the instance holding `pg_try_advisory_x
 - **Sync now**: the admin inserts a `sync` job (`Trigger = manual`, `Priority` 10); if one is already queued or
   running the admin answers "already running" with its run id (dedup `sync:{sourceId}`; a run's continuations use
   `sync:{sourceId}:{runId}`, §9.2).
+- **Settings changes** (as built in PR #141, 2026-10-31): in the same tick the scheduler enqueues a `sync` with
+  `Trigger = config-change` (dedup `sync:{sourceId}`) for each idle source whose scope or identity settings hash
+  differs from its newest `sync` run's `Runs.SettingsHashes` (6b §12.3), unless a scheduled sync was just enqueued.
 - Paused or deleted sources are skipped; `rag.scheduler.lag` (now − due) is a metric.
 - The scheduler also enqueues the nightly evaluation runs (6c §14.8) and the nightly drift sweep (§2.3).
 
@@ -590,7 +635,8 @@ A `BackgroundService` on every instance; the instance holding `pg_try_advisory_x
 
 `running` → `succeeded` | `degraded` | `failed` | `awaiting-deletion-confirmation` (6b §13.2, set by the finalizer
 when the guard left `DeletionProposals` waiting) | `cancelled` (source paused or deleted, or `cancel-run` command).
-Kinds `sync`, `retry-failed`, `reprocess` (publish, rollback, site-profile change); `Trigger`: `schedule`, `manual`,
+Kinds `sync`, `retry-failed`, `reprocess` (publish, rollback, site-profile change, drift sweep with `schedule`, §2.3;
+`reprocess-document`); `Trigger`: `schedule`, `manual`,
 `upload`, `publish`, `rollback`, `site-profile`, `retry`, `config-change` (scope or identity edits, 6b §12.4), P2
 `notification` (SharePoint). The `cancel-run` command (`{"kind":"cancel-run","runId":…}`, dedup `cancel:{runId}`)
 cancels the run's queued and running jobs in one statement (`IJobQueue.CancelRunAsync`; a running job loses its lease
@@ -637,7 +683,8 @@ serves (jobs carry one `RunId`; partial index on `RunId` for open jobs, data-mod
 fetches are done and it has not reconciled yet, enqueue its `sync` job with `phase = reconcile` (deletions and the
 guard, 6b §13.2) and wait for it; then aggregate `RunItems` into the counters and `CostUsd`, set `State` and
 `FinishedAt`. When a `reprocess` run of a publish or rollback finishes, the finalizer enqueues the `eval` job
-`publish-report` for the source's collection (§12.1). Counters are derived, never incremented by jobs, so retries
+`publish-report` for the source's collection (§12.1); as built in P1b item 6 (PR #131, 2026-10-31) for the triggers
+`publish` and `rollback` only (not `site-profile`), whatever state the run finished in. Counters are derived, never incremented by jobs, so retries
 cannot double-count and no hot row is updated per document. As built in P1a item 9 (PR #108, 2026-10-31): the
 counters come from the latest run item per document or identity, `superseded` excluded; `dead` or `failed` content
 jobs count as Failed; `degraded` counts as Updated.
@@ -659,19 +706,29 @@ jobs count as Failed; `degraded` counts as Updated.
   `content` write a preview makes is `CrawlHosts.NextAllowedAt`, which is bookkeeping, not content).
 - **Isolation**: `ExecutionMode.Preview` gives stages a blob store limited to `previews/{jobId}/` (`internal`: each
   blob's data key wrapped by `rag-blob-<level>` in its header, data-model §7; `public` previews unencrypted, as
-  `public` blobs, simplification pass §4), no cache writes, a `NullIndexWriter` that throws if called, and no
+  `public` blobs, simplification pass §4), no cache writes, no index writer (as built in P1b item 5, PR #117,
+  2026-10-31: the preview has no `IndexWriter` dependency at all, so the compiler enforces it), and no
   `Documents` updates; stages have no database access anyway (§5.1). An integration test asserts that no `content`
   row except `Jobs.Result`/`CrawlHosts` changes (§19).
 - **Execution**: up to `untilStage` (default `personal-data`), so the preview shows the personal-data state the set
   would get (6c §9). *Embed* reports chunk count and tokens and does not call the gateway unless `embed: true`;
   *Index* never runs ("would write N chunks"). LLM stages (P2) run for real within `Settings.PreviewMaxUsd` (0.50)
-  computed from `EstimateCost` before start; above it the admin must confirm.
+  computed from `EstimateCost` before start; above it the admin must confirm. As built in P1b item 5 (PR #117,
+  2026-10-31): `scan` is reported as part of the connectors' fetch; `parser.not_configured` is a stage failure, not a
+  requeue; the site-profile before/after is shown for every HTML page with a URL, and a host with a profile row is
+  reported as `Manual`.
 - **Re-run from a stage**: `basePreviewJobId` reuses that preview's outputs from `previews/{baseJobId}/` and runs only
   from the first stage whose settings changed.
 - **Limits**: 5 documents, 50 pages per document (first pages, through the normal range planning), 2 MB of output per
-  stage shown (truncated with a marker), 2-minute deadline; blobs expire after 24 h (data-model §9).
+  stage shown (truncated with a marker), 2-minute deadline; blobs expire after 24 h (data-model §9). As built in P1b
+  item 5 (PR #117, 2026-10-31): a sixth document is refused with `preview.limit_documents`; preview URLs are fetched
+  with the URL-list connector (the exact URL, purpose `Fetch` in event 5101), also for crawl sources, so a redirect is
+  not checked against the crawl scope; host politeness waits inside the job instead of requeueing (`MaxAttempts` 1).
+  Blobs are laid out as `previews/{jobId}/{n}/{stage}.json` plus `keys/` and the redirected connector paths, not yet
+  envelope-encrypted (the data-model §7 layer does not exist yet).
 - **Result** (`Jobs.Result`, small): per document and stage: state, duration, cache hit, facts, estimated and actual
-  cost, error code; blob paths for the outputs the admin streams on demand (extracted text with breadcrumb and page
+  cost (as built in P1b item 5, PR #117: no cost figures, since there is no price source and the LLM stages are P2),
+  error code; blob paths for the outputs the admin streams on demand (extracted text with breadcrumb and page
   markers, sections, chunks with prefixes and token counts, PII counts).
 
 ## 12. Publish and rollback
@@ -681,7 +738,7 @@ jobs count as Failed; `degraded` counts as Updated.
 | Step | Who | What |
 |---|---|---|
 | 1 | admin | validate the draft (§4 incl. live support); enqueue the plan (`preview`, `kind = publish-plan`, dedup `plan:{pipelineId}`), storing `PlanJobId` and the definition's hash |
-| 2 | worker | the **re-processing plan** (§12.2) and cost/time forecast into `Jobs.Result`; in P1 the plan is every live document of the affected sources (§12.2) |
+| 2 | worker | the **re-processing plan** (§12.2) and cost/time forecast into `Jobs.Result`; in P1 the plan is every live document of the affected sources (§12.2); as built in P1b item 6 (PR #131, 2026-10-31) the cost is 0, because the worker has no `SELECT` on `config."GatewayModels"`, and the time comes from fixed, conservative rates (§18), with parser documents recognised by the `ParseStrategy` prefix `parse=auto` |
 | 3 | user | sees plan and forecast; confirms or cancels. Confirm is refused if the draft changed since the plan |
 | 4 | admin | one config transaction: version → `published` (`PublishedAt`), previous → `superseded`, `Pipelines.PublishedVersionId`; audit 6001; enqueues a `reprocess` `sync` per source using the pipeline |
 | 5 | worker | `EnsureCurrent` per live document: new sets are written not live next to the live ones and **swapped per document** (§14); unaffected documents are re-keyed (`unchanged`) |
@@ -717,7 +774,8 @@ Example result: "1,240 documents; 1,180 from *Chunk* (re-chunk + re-embed, ~0 pa
 
 A new site-profile version for a host (6b) uses the same plan logic for that host's HTML documents, with `parse` as
 the affected stage (in P1 every HTML document of the host, from `parse`); its auto-apply check and proposal flow are
-6b's (P2).
+6b's (P2). As built in P1a item 10 (PR #115, 2026-10-31): a `sync` `reprocess` with `Trigger = site-profile` per
+source with live HTML documents on the (level, host), dedup `sync:{sourceId}` (6b §5.6).
 
 ### 12.3 Rollback
 
@@ -725,7 +783,9 @@ Rollback re-publishes the previous version of the same pipeline (no new number; 
 same plan and report; it is never blocked. Chunk sets of the previous version are kept **14 days** after they were
 superseded (§14), so the `reprocess` run finds them by key and **swaps them back** per document without parsing or
 embedding. Older rollbacks re-run from the cached stage outputs. A site-profile rollback (one click, 6b) works the same
-way for the host's HTML documents.
+way for the host's HTML documents. As built in P1b item 6 (PR #131, 2026-10-31): a swap-back without a new segment
+keeps the document's other facts from the newer version and resets only `SiteProfileVersionId` and
+`PipelineVersionId`. A `reprocess` run and the drift sweep swap back directly (PR #138, §2.3).
 
 ## 13. Templates
 
@@ -823,7 +883,8 @@ Rules (schema: data-model §2.2). A chunk is searchable iff `Chunks."DeletedAt" 
    (chunks stay deleted) when it is PII-flagged or NER-pending, not covered by the document's clearance, and its
    collection is `public` (6c §9.5); the previous set → `superseded` (`SupersededAt`, kept 14 days for rollback) with
    `DeletedAt` set on its chunks (tens to hundreds of rows); run item; job completion; commit. Rollback is the same
-   swap back.
+   swap back. As built in P1b item 6 (PR #131, 2026-10-31): the swap transaction is one component (`ChunkSetSwap`),
+   shared by the embed job and `EnsureCurrent`'s swap-back.
 4. **Re-key** (noise-only change, 6c §12; or a publish with no affected stage, §12.2): in the fenced segment commit,
    the live set's key columns (`ContentHash`, `PipelineVersionId`, `SiteProfileVersionId`) are updated in one row when
    the set's `InputHash` equals the new chunk-stage input hash; no new set, run item `unchanged`, reason

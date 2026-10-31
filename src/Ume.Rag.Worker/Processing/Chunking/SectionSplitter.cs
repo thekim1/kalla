@@ -19,7 +19,7 @@ public static partial class SectionSplitter
     public static IReadOnlyList<Section> Split(ParsedDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        var rule = document.ParseRule is { } id ? ParseRules.Find(id) ?? ParseRules.Default : ParseRules.Default;
+        var rule = ParseRules.Of(document);
         var title = document.Title ?? document.Blocks.FirstOrDefault(b => b.Kind == BlockKinds.Title)?.Text;
         var blocks = Relevel(document.Blocks.Where(b => b.Kind != BlockKinds.Title).ToList(), rule);
 
