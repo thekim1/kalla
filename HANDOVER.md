@@ -100,7 +100,7 @@ https://claude.ai/artifact/GzKzra4RwKdf7xEWFc4EAM (not updated since session 8; 
   Shared brief: session scratchpad `brief-common.md` (gone after the session; the rules are in "How we work").
 - **CI is local only** (user, 2026-10-31: GitHub Actions credits exhausted). Never add the `ci` label, dispatch a
   workflow or run `release.yml`. Every PR is verified locally (full build + suites under `taskset -c 0,1` after merging
-  `origin/main`, output in the PR body) and merged on that evidence. Anything that would need the runner goes to the user.
+  `origin/main`, output in the PR body) and merged on that evidence. Anything that would need the runner goes to the user. Actions are switched off on the repo (`thekim1`), so the ownership check runs locally too: `git diff --name-only --no-renames origin/main...HEAD | python3 -I scripts/check-ownership.py <branch>`.
 
 ## Next step (start of session 10)
 
