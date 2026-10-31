@@ -89,7 +89,7 @@ public sealed class CrawlSourceRunner(
         SELECT coalesce(max(c), 0)::int FROM (
             SELECT DISTINCT ON (r."SourceId") (r."Report" -> 'completeness' ->> 'consecutiveIncomplete')::int AS c
             FROM content."Runs" r JOIN config."Sources" s ON s."Id" = r."SourceId"
-            WHERE s."Type" = 'crawl' AND s."DeletedAt" IS NULL AND (r."Report" -> 'completeness') IS NOT NULL
+            WHERE s."Type" = 'crawl' AND s."State" = 'active' AND s."DeletedAt" IS NULL AND (r."Report" -> 'completeness') IS NOT NULL
             ORDER BY r."SourceId", r."StartedAt" DESC) latest
         """;
 
