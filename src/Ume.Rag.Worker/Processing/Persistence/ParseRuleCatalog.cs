@@ -12,9 +12,10 @@ namespace Ume.Rag.Worker.Processing.Persistence;
 /// The active admin-made parse rules (<c>content."ParseProfiles"</c>, <c>Origin = manual</c>, <c>State = active</c>;
 /// processing design §3.5), cached per config version: read again when the applied config version moves, and at the
 /// latest after <see cref="MaxAge"/>, because <c>ParseProfiles</c> lives in <c>content</c> and has no outbox trigger, so
-/// a rule change alone does not move the version. The sources' departments (for department-scoped rules) are cached in
-/// the same snapshot. A row that does not read is skipped with a warning; a failed read throws, so the stage retries
-/// rather than keying documents without their rules.
+/// a rule change alone does not move the version (the parse-rule commands <see cref="Invalidate"/> it in their own process).
+/// The sources' departments (their collections', for department-scoped rules) are cached in the same snapshot. A row that
+/// does not read is skipped with a warning; a failed read throws, so the stage retries rather than keying documents without
+/// their rules.
 /// </summary>
 public sealed partial class ParseRuleCatalog(JobDatabase database, ConfigVersionState config, TimeProvider time, ILogger<ParseRuleCatalog> logger)
 {
@@ -25,9 +26,17 @@ public sealed partial class ParseRuleCatalog(JobDatabase database, ConfigVersion
         FROM content."ParseProfiles" WHERE "Origin" = $1 AND "State" = $2
         """;
 
-    private const string DepartmentSql = """SELECT "DepartmentId" FROM config."Sources" WHERE "Id" = $1""";
+    private const string DepartmentSql = """
+        SELECT c."DepartmentId" FROM config."Sources" s JOIN config."Collections" c ON c."Id" = s."CollectionId" WHERE s."Id" = $1
+        """;
 
     private volatile Snapshot? _snapshot;
+
+    /// <summary>
+    /// Drops the snapshot, so the next parse in this process reads the rules again: called by the parse-rule commands after
+    /// their commit. Other instances see the change at their next config version or after <see cref="MaxAge"/>.
+    /// </summary>
+    public void Invalidate() => _snapshot = null;
 
     /// <summary>The rules of the current snapshot; two callers that find it stale at once may both read, which is harmless.</summary>
     public async Task<AdminParseRuleSet> GetAsync(CancellationToken cancellationToken) => (await SnapshotAsync(cancellationToken)).Rules;

@@ -225,4 +225,7 @@ public static class JobDedupKeys
     public static string PiiClear(Guid documentId) => $"pii-clear:{documentId}";
 
     public static string Reprocess(Guid documentId) => $"reprocess:{documentId}";
+
+    /// <summary><c>edit-parse-rule</c> and <c>disable-parse-rule</c> of one rule share one key.</summary>
+    public static string ParseRule(Guid profileId) => $"parse-rule:{profileId}";
 }

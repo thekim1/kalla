@@ -86,6 +86,13 @@ public enum QuestionAction
     Retire,
 }
 
+/// <summary><c>ParseProfiles.State</c> of an admin-made parse rule after a parse-rule command (processing design §3.5).</summary>
+public enum ParseRuleState
+{
+    Active,
+    Disabled,
+}
+
 /// <summary>What happened to one stage of a <c>stage-preview</c> document (engine design §11).</summary>
 public enum PreviewStageState
 {
