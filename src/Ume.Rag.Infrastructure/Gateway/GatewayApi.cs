@@ -34,13 +34,14 @@ public sealed class GatewayApi(IHttpClientFactory clients)
     }
 
     /// <summary><c>POST /v1/embeddings</c> of <paramref name="inputs"/> with <paramref name="model"/> at <paramref name="ceiling"/>.</summary>
-    public async Task<GatewayEmbedding> EmbedAsync(string model, IReadOnlyList<string> inputs, Residency ceiling, CancellationToken cancellationToken)
+    public async Task<GatewayEmbedding> EmbedAsync(string model, IReadOnlyList<string> inputs, Residency ceiling, CancellationToken cancellationToken,
+        int? dimensions = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(model);
         ArgumentNullException.ThrowIfNull(inputs);
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("v1/embeddings", UriKind.Relative))
         {
-            Content = JsonContent.Create(new EmbeddingRequest(model, inputs, "float"), options: Json),
+            Content = JsonContent.Create(new EmbeddingRequest(model, inputs, "float", dimensions), options: Json),
         }.WithMaxResidency(ceiling);
         var started = Stopwatch.GetTimestamp();
         using var response = await SendAsync(request, cancellationToken);
@@ -111,7 +112,10 @@ public sealed class GatewayApi(IHttpClientFactory clients)
 
     private sealed record ModelItem(string? Id);
 
-    private sealed record EmbeddingRequest(string Model, IReadOnlyList<string> Input, [property: JsonPropertyName("encoding_format")] string EncodingFormat);
+    /// <summary><c>dimensions</c> only for a profile that requests it (#142); BGE-M3 must never get it.</summary>
+    private sealed record EmbeddingRequest(
+        string Model, IReadOnlyList<string> Input, [property: JsonPropertyName("encoding_format")] string EncodingFormat,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Dimensions = null);
 
     private sealed record EmbeddingResponse(IReadOnlyList<EmbeddingItem>? Data);
 

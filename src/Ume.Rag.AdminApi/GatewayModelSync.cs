@@ -252,7 +252,8 @@ public sealed partial class GatewayModelSync(
             foreach (var id in missing)
             {
                 var profile = await db.EmbeddingProfiles.AsNoTracking().SingleAsync(p => p.Id == id, cancellationToken);
-                var embedding = await gateway.EmbedAsync(profile.GatewayModel, [profile.CanaryText!], profile.MaxResidency, cancellationToken);
+                var embedding = await gateway.EmbedAsync(profile.GatewayModel, [profile.CanaryText!], profile.MaxResidency, cancellationToken,
+                    profile.RequestDimensions ? profile.Dimensions : null);
                 var vector = embedding.Vectors[0];
                 if (vector.Length != profile.Dimensions)
                 {

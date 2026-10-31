@@ -110,6 +110,7 @@ public static class GatewayEndpoints
             ResidencyCeiling.ToHeader(p.MaxResidency), recorded.Contains(p.Id))).ToList();
         var configured = !string.IsNullOrEmpty(options.Value.BaseUrl);
         var model = profiles.FirstOrDefault()?.GatewayModel;
+        var dimensions = profiles.FirstOrDefault() is { RequestDimensions: true } first ? first.Dimensions : (int?)null;
         var levels = new List<GatewayLevelStatus>();
         foreach (var level in Enum.GetValues<Residency>())
         {
@@ -122,7 +123,7 @@ public static class GatewayEndpoints
 
             try
             {
-                var answer = await gateway.EmbedAsync(model, [StatusProbeText], level, ct);
+                var answer = await gateway.EmbedAsync(model, [StatusProbeText], level, ct, dimensions);
                 levels.Add(new GatewayLevelStatus(name, "ok", ResidencyCeiling.ToHeader(answer.Residency), 200, null, answer.Duration.TotalMilliseconds));
             }
             catch (GatewayRefusedException refused)

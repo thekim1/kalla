@@ -1464,6 +1464,11 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<bool>("RequestDimensions")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(20)

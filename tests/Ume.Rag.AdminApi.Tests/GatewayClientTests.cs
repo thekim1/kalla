@@ -239,6 +239,18 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     }
 
     [Fact]
+    public async Task Dimensions_are_sent_only_when_asked()
+    {
+        // #142: the canary and the status probe pass the profile's Dimensions when it sets RequestDimensions.
+        await using var gateway = database.Gateway();
+        await using var admin = database.AdminApi(gateway, Residency.Eu);
+        var api = admin.Services.GetRequiredService<GatewayApi>();
+
+        (await api.EmbedAsync("bge-m3", ["bygglov"], Residency.Eu, Ct, dimensions: 256)).Vectors[0].Length.ShouldBe(256);
+        (await api.EmbedAsync("bge-m3", ["bygglov"], Residency.Eu, Ct)).Vectors[0].Length.ShouldBe(1024);
+    }
+
+    [Fact]
     public async Task One_level_failing_oddly_is_that_levels_error_and_the_page_still_answers()
     {
         await using var gateway = database.Gateway();

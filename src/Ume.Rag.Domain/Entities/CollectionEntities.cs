@@ -125,6 +125,13 @@ public sealed class EmbeddingProfile
 
     public int Dimensions { get; set; }
 
+    /// <summary>
+    /// Send <c>"dimensions": Dimensions</c> on every embedding call with this profile (OpenAI's parameter, for a model that
+    /// shortens its vectors, e.g. text-embedding-3-large at 1024; U-b, #142). False for models that must never get it
+    /// (BGE-M3, gateway-changes §6).
+    /// </summary>
+    public bool RequestDimensions { get; set; }
+
     /// <summary><c>cosine</c>, the only distance the per-profile index supports.</summary>
     public string Distance { get; set; } = "cosine";
 

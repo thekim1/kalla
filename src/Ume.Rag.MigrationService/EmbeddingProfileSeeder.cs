@@ -19,6 +19,9 @@ public sealed class EmbeddingProfileSeedOptions
     public string? GatewayModel { get; set; }
 
     public int Dimensions { get; set; } = 1024;
+
+    /// <summary>Send <c>dimensions</c> on every embedding call (text-embedding-3-large at 1024 for the pilot, #142); never for BGE-M3.</summary>
+    public bool RequestDimensions { get; set; }
     public int MaxInputTokens { get; set; } = 8192;
 
     /// <summary>The ceiling of embed and query-embed calls (P1 README §8 O1): <c>Eu</c> for the pilot.</summary>
@@ -59,6 +62,7 @@ public static partial class EmbeddingProfileSeeder
                 Name = options.Name,
                 GatewayModel = options.GatewayModel,
                 Dimensions = options.Dimensions,
+                RequestDimensions = options.RequestDimensions,
                 MaxInputTokens = options.MaxInputTokens,
                 MaxResidency = options.MaxResidency,
                 CanaryText = EmbeddingCanaryText.Default,
@@ -69,7 +73,8 @@ public static partial class EmbeddingProfileSeeder
             db.EmbeddingProfiles.Add(profile);
             await db.SaveChangesAsync(cancellationToken);
         }
-        else if (profile.GatewayModel != options.GatewayModel || profile.Dimensions != options.Dimensions || profile.MaxResidency != options.MaxResidency)
+        else if (profile.GatewayModel != options.GatewayModel || profile.Dimensions != options.Dimensions || profile.MaxResidency != options.MaxResidency ||
+            profile.RequestDimensions != options.RequestDimensions)
         {
             LogProfileDiffers(logger, profile.Name);
         }
