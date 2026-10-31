@@ -257,6 +257,13 @@ catalog.AddEndpointFilter(async (context, next) =>
 });
 catalog.MapGet("/departments", () => Results.Json(new { items = FakeCatalog.Departments }, FakeCatalog.Json));
 catalog.MapGet("/teams", () => Results.Json(new { items = FakeCatalog.Teams }, FakeCatalog.Json));
+// The model catalogue as the gateway's DataEndpoints.cs serves it: one provider per residency, one deployment per
+// single-target chat or embedding model (a multi-target name is a route alias, not in the catalogue), and its price.
+catalog.MapGet("/providers", () => Results.Json(new { items = FakeCatalog.Providers }, FakeCatalog.Json));
+catalog.MapGet("/models", (IOptionsSnapshot<FakeGatewayOptions> options) =>
+    Results.Json(new { items = FakeCatalog.Models(options.Value.Models) }, FakeCatalog.Json));
+catalog.MapGet("/prices", (IOptionsSnapshot<FakeGatewayOptions> options) =>
+    Results.Json(new { items = FakeCatalog.Prices(options.Value.Models) }, FakeCatalog.Json));
 
 app.Run();
 

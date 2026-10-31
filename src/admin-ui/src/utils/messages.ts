@@ -12,6 +12,9 @@ export const ERROR_MESSAGES: Record<string, string> = {
   config_busy: 'En annan ändring sparas just nu. Försök igen om en stund.',
   sync_off: 'Synkningen mot AI-gatewayen är inte inställd. Kontakta plattformsteamet.',
   sync_failed: 'Synkningen mot AI-gatewayen misslyckades ({error}). Den senast hämtade organisationen finns kvar.',
+  model_residency: 'Modellen {model} kan inte användas på nivåns tak {ceiling}.',
+  model_not_listed: 'AI-gatewayen erbjuder inte {model} på {ceiling} just nu. Försök igen senare.',
+  gateway_unavailable: 'AI-gatewayen gick inte att nå för att kontrollera modellen. Försök igen.',
 }
 
 /** When the problem has no code we know: by status. */

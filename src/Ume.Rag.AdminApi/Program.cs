@@ -6,6 +6,7 @@ using Ume.Rag.AdminApi;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Infrastructure;
 using Ume.Rag.Infrastructure.Config;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Infrastructure.Stores;
 
@@ -38,6 +39,12 @@ builder.Services.AddOptions<OrgSyncOptions>().BindConfiguration(OrgSyncOptions.S
 builder.Services.AddHttpClient(OrganisationSync.HttpClientName);
 builder.Services.AddSingleton<OrganisationSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<OrganisationSync>());
+// The gateway client of item 13: the model mirror, canary embeddings, V8's /v1/models check and the key status.
+builder.AddGatewayClient(GatewayApi.HttpClientName);
+builder.Services.AddSingleton<GatewayApi>();
+builder.Services.AddSingleton<GatewayModelSync>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayModelSync>());
+builder.Services.AddScoped<GatewayModelCheck>();
 builder.Services.AddHostedService<RetentionService>();
 builder.Services.AddRateLimiter(o =>
 {
@@ -78,6 +85,7 @@ var api = app.MapGroup("/api").RequireAuthorization(AdminPolicies.Read).RequireR
 api.MapGet("/ping", () => Results.Ok(new { ok = true })).RequireAuthorization(AdminPolicies.Read);
 api.MapClients();
 api.MapOrganisation();
+api.MapGateway();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
