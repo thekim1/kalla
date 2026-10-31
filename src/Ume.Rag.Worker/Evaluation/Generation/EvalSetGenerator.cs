@@ -43,7 +43,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
     private const int EmbedBatch = 32;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public async Task<JobResult> ExecuteAsync(JobContext context, string kind, CancellationToken ct)
+    public async Task<JobResult> ExecuteAsync(JobContext context, string kind, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         var job = context.Job;
@@ -60,7 +60,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
 
         try
         {
-            return await RoundAsync(job, payload.CollectionId, kind, ct);
+            return await RoundAsync(job, payload.CollectionId, kind, cancellationToken);
         }
         catch (EvalStopException stop)
         {

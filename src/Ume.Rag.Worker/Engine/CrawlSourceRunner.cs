@@ -1,0 +1,392 @@
+using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Npgsql;
+using Ume.Rag.Domain.Entities;
+using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Jobs;
+using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.Pipelines.Json;
+using Ume.Rag.Pipelines.Sources;
+using Ume.Rag.Worker.Connectors;
+using Ume.Rag.Worker.Connectors.Crawl;
+using Ume.Rag.Worker.Connectors.Deletion;
+using Ume.Rag.Worker.Connectors.Egress;
+using Ume.Rag.Worker.Connectors.Hosts;
+using Ume.Rag.Worker.Connectors.Persistence;
+using Ume.Rag.Worker.Connectors.Urls;
+using Ume.Rag.Worker.Jobs;
+using Outcome = Ume.Rag.Pipelines.Jobs.RunItemOutcome;
+
+namespace Ume.Rag.Worker.Engine;
+
+/// <summary>What a crawl run's reconcile phase decides on (connectors design §5.4, §5.5, §13).</summary>
+/// <param name="Verdict">The traversal's completeness.</param>
+/// <param name="Candidates">The deletion candidates.</param>
+/// <param name="EmptyListing">The traversal was complete and reached no document.</param>
+/// <param name="Report">The crawl report's sections, a JSON object merged into <c>Runs.Report</c> in the reconcile commit.</param>
+public sealed record CrawlReconcile(TraversalVerdict Verdict, IReadOnlyList<DeletionCandidate> Candidates, bool EmptyListing, string Report);
+
+/// <summary>
+/// The engine's part of a <c>crawl</c> source (connectors design §5, §6.0; engine design §9.2). Listing: the run's mode
+/// (incremental only on hosts whose profile marks <c>lastmod</c> reliable, <c>revalidateEvery</c>) is fixed in
+/// <c>Runs.Report</c>; seeds from start URLs and sitemaps are admitted per checkpoint and the listing yields after 1,000
+/// items or 2 minutes; at its end the removal checks are admitted and every host topped up. Fetch: the traversal fetches
+/// one released row and admits its links; the document, its run item and the row's completion commit together
+/// (<see cref="DocumentIngest"/>), then the hosts are topped up, so a worker that dies between the fetch and the commit
+/// leaves the row released for the reclaimed job. A <c>fetch</c>-phase continuation (the finalizer's, or the night
+/// window's) releases again what lost its job; when nothing can move any more (the rows of hosts the run ended, §6.4) the
+/// run goes on to its reconcile. Reconcile: completeness, deletion candidates and the crawl report's sections.
+/// </summary>
+public sealed class CrawlSourceRunner(
+    CrawlConnector connector,
+    CrawlTraversal traversal,
+    FetchTopUp topUp,
+    ICrawlFrontierStore frontier,
+    ICrawlRunStore crawlRuns,
+    IConnectorCheckpointStore checkpoints,
+    ICrawlPolicySource policy,
+    RunStore runs,
+    DocumentStore documents,
+    DocumentIngest ingest,
+    ConnectorMetrics metrics,
+    IJobQueue queue,
+    JobDatabase database,
+    WorkerIdentity identity,
+    IOptions<CrawlOptions> options,
+    TimeProvider time)
+{
+    /// <summary>A listing yields at the next checkpoint after this many items (engine design §9.2).</summary>
+    public const int ListingItems = 1000;
+
+    private static readonly HashSet<string> GoneReasons = new(StringComparer.Ordinal)
+    {
+        DeletionReasons.Http404, DeletionReasons.Http410, DeletionReasons.MovedOutOfScope,
+    };
+
+    private const string ReleasedSql = """
+        SELECT "UrlHash" FROM content."CrawlFrontier"
+        WHERE "Classification" = $1 AND "SourceId" = $2 AND "RunId" = $3 AND "State" = 'released'
+        """;
+
+    // Seeds of the run whose document the run did not see: they failed, so they are never not-seen candidates (§5.4).
+    private const string FailedSeedsSql = """
+        SELECT d."Id" FROM content."CrawlFrontier" f
+        JOIN content."Documents" d ON d."SourceId" = f."SourceId" AND d."IdentityKind" = 'url' AND d."IdentityHash" = f."UrlHash"
+        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3 AND f."Depth" = 0
+          AND d."DeletedAt" IS NULL AND d."LastRunId" IS DISTINCT FROM $3
+        """;
+
+    // The run's removal checks (frontier rows at depth -1) and the latest item of each.
+    private const string RemovalSql = """
+        SELECT DISTINCT ON (i."Identity") i."Outcome", i."Reason"
+        FROM content."CrawlFrontier" f JOIN content."RunItems" i ON i."RunId" = f."RunId" AND i."Identity" = f."Url"
+        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3 AND f."Depth" = -1 AND i."Outcome" <> 'superseded'
+        ORDER BY i."Identity", i."CreatedAt" DESC, i."Id" DESC
+        """;
+
+    // rag.crawl.incomplete_runs: the most consecutive incomplete traversals of any active crawl source (its latest report).
+    private const string IncompleteRunsSql = """
+        SELECT coalesce(max(c), 0)::int FROM (
+            SELECT DISTINCT ON (r."SourceId") (r."Report" -> 'completeness' ->> 'consecutiveIncomplete')::int AS c
+            FROM content."Runs" r JOIN config."Sources" s ON s."Id" = r."SourceId"
+            WHERE s."Type" = 'crawl' AND s."State" = 'active' AND s."DeletedAt" IS NULL AND (r."Report" -> 'completeness') IS NOT NULL
+            ORDER BY r."SourceId", r."StartedAt" DESC) latest
+        """;
+
+    /// <summary>The context the run's jobs share, from the mode its listing fixed.</summary>
+    public async Task<CrawlRunContext> ContextAsync(SourceContext source, RunRow run, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(run);
+        return Context(source, run, await runs.CrawlModeAsync(run.Id, cancellationToken) ?? new CrawlRunMode(false, false));
+    }
+
+    /// <summary>
+    /// Opens the run's <c>CrawlRuns</c> row and fixes its mode once: an incremental run stays incremental only when every
+    /// scope host's profile marks <c>lastmod</c> reliable; every <c>revalidateEvery</c>-th full traversal and a forced run
+    /// revalidate. A <c>retry-failed</c> run is a full, non-revalidating fetch of its rows.
+    /// </summary>
+    public async Task<CrawlRunContext> StartAsync(SourceContext source, RunRow run, bool incremental, bool force, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(run);
+        if (await runs.CrawlModeAsync(run.Id, cancellationToken) is { } fixedMode)
+        {
+            return Context(source, run, fixedMode);
+        }
+
+        var started = await traversal.StartAsync(Context(source, run, new CrawlRunMode(incremental && run.Kind == RunKinds.Sync, false)), cancellationToken);
+        var revalidate = run.Kind == RunKinds.Sync && CrawlFreshness.Revalidates(await runs.TraversalsBeforeAsync(source.SourceId, run.Id, cancellationToken),
+            ContractJson.Deserialize<CrawlSettings>(source.Settings).RevalidateEvery, force, started.Incremental);
+        return Context(source, run, await runs.SetCrawlModeAsync(run.Id, new CrawlRunMode(started.Incremental, revalidate), cancellationToken));
+    }
+
+    /// <summary>Phase <c>list</c> of a <c>sync</c> run.</summary>
+    public async Task<JobResult> ListAsync(SourceContext source, RunRow run, SyncPayload payload, LeasedJob job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        var context = await StartAsync(source, run, payload.Incremental, payload.Force, cancellationToken);
+        var from = payload.ResumeFromCheckpoint
+            ? await checkpoints.GetAsync<CrawlCheckpoint>(source.SourceId, CheckpointKind.Run, run.Id, cancellationToken) ?? new CrawlCheckpoint()
+            : new CrawlCheckpoint();
+        var started = time.GetTimestamp();
+        var items = 0;
+        var batch = new List<ListingEvent<CrawlCheckpoint>>();
+        var refused = new List<RunItemRow>();
+        var listing = new ListingContext(source.SourceId, source.Classification, run.Id, source.Settings);
+        await foreach (var listed in connector.ListAsync(listing, from, cancellationToken))
+        {
+            switch (listed)
+            {
+                case ListingEvent<CrawlCheckpoint>.Checkpoint checkpoint:
+                    await traversal.AdmitSeedsAsync(context, batch, cancellationToken);
+                    await AddItemsAsync(refused, cancellationToken);
+                    await checkpoints.SaveAsync(source.SourceId, source.Classification, CheckpointKind.Run, run.Id, checkpoint.State, cancellationToken);
+                    batch.Clear();
+                    refused.Clear();
+                    if (items >= ListingItems || time.GetElapsedTime(started) > UrlListSource.ListingSlice)
+                    {
+                        // Yield: the continuation resumes from the checkpoint just saved (no attempt, engine design §9.2).
+                        return await runs.ContinueAsync(queue, job, identity.InstanceId, SyncJobs.Continuation(source.SourceId, run.Id, source.DepartmentId,
+                            source.Classification, run.Kind, run.Trigger, SyncPhase.List, resumeFromCheckpoint: true), run.Id, null, cancellationToken);
+                    }
+
+                    break;
+                case ListingEvent<CrawlCheckpoint>.Done done:
+                    await traversal.AdmitSeedsAsync(context, batch, cancellationToken);
+                    await traversal.ListingDoneAsync(context, done.Completeness, cancellationToken);
+                    await runs.SetPhaseAsync(run.Id, RunPhases.Fetch, null, cancellationToken);
+                    await TopUpAsync(context, cancellationToken);
+                    return new JobResult.Success();
+                case ListingEvent<CrawlCheckpoint>.Item:
+                    items++;
+                    batch.Add(listed);
+                    break;
+                case ListingEvent<CrawlCheckpoint>.Failure failure:
+                    batch.Add(listed);
+                    if (failure.Reason != CrawlConnector.RobotsUnreachable && !failure.Reason.StartsWith(CrawlConnector.SitemapReasonPrefix, StringComparison.Ordinal))
+                    {
+                        // An invalid or out-of-scope start URL: a failed seed with its item (sitemap and robots failures pause their host).
+                        refused.Add(new RunItemRow(run.Id, source.Classification, null, failure.Identity, Outcome.Failed) { Reason = failure.Reason });
+                    }
+
+                    break;
+            }
+        }
+
+        return new JobResult.Success();
+    }
+
+    /// <summary>
+    /// Phase <c>fetch</c> (the night window opened, or the finalizer found open rows with no job): releases and enqueues
+    /// again; when nothing can move, a <c>sync</c> run goes on to its reconcile and a <c>retry-failed</c> run ends.
+    /// </summary>
+    public async Task<JobResult> FetchPhaseAsync(SourceContext source, RunRow run, LeasedJob job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(run);
+        var context = await ContextAsync(source, run, cancellationToken);
+        var result = await topUp.TopUpAsync(context, null, null, cancellationToken);
+        if (result.WindowOpensAt is { } opens)
+        {
+            return await runs.ContinueAsync(queue, job, identity.InstanceId, topUp.Continuation(context, opens), run.Id, null, cancellationToken);
+        }
+
+        if (result.Enqueued + await RequeueReleasedAsync(source, run.Id, cancellationToken) > 0)
+        {
+            return new JobResult.Success();
+        }
+
+        if (run.Kind != RunKinds.Sync)
+        {
+            await runs.SetPhaseAsync(run.Id, RunPhases.Done, null, cancellationToken);
+            return new JobResult.Success();
+        }
+
+        return await runs.ContinueAsync(queue, job, identity.InstanceId, SyncJobs.Continuation(source.SourceId, run.Id, source.DepartmentId,
+            source.Classification, run.Kind, run.Trigger, SyncPhase.Reconcile), run.Id, RunPhases.Reconcile, cancellationToken);
+    }
+
+    /// <summary>
+    /// A <c>fetch</c> job of a crawl row. Transient outcomes requeue (the last attempt abandons the row with a
+    /// <c>failed</c> item); a host that cannot be reached for the run leaves a <c>skipped</c> item; a fetched URL goes
+    /// through <see cref="DocumentIngest"/> with the row's completion in the document's commit (a verified alias as
+    /// <c>skipped</c> <c>identity.folded</c>), and the hosts are topped up after it.
+    /// </summary>
+    public async Task<JobResult> FetchAsync(SourceContext source, RunRow run, PipelineRun pipeline, FetchPayload payload, LeasedJob job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(payload);
+        ArgumentNullException.ThrowIfNull(job);
+        var urlHash = payload.UrlHash ?? throw new ArgumentException("A crawl fetch has a frontier row.", nameof(payload));
+        var context = await ContextAsync(source, run, cancellationToken);
+        var row = await frontier.GetAsync(source.SourceId, source.Classification, urlHash, cancellationToken);
+        switch (await traversal.ProcessAsync(context, urlHash, cancellationToken))
+        {
+            case CrawlFetchResult.Requeue { CountsAttempt: true } requeue when job.Attempts >= job.MaxAttempts:
+                await traversal.AbandonAsync(context, urlHash, cancellationToken);
+                return await ingest.TerminalAsync(source, run.Id, job, await KnownAsync(source, row!.Url, cancellationToken), row.Url, Outcome.Failed,
+                    requeue.Reason, run.PipelineVersionId, null, cancellationToken);
+            case CrawlFetchResult.Requeue requeue:
+                return new JobResult.TransientError(requeue.Reason, requeue.Delay, requeue.CountsAttempt);
+            case CrawlFetchResult.NotReached notReached:
+                return await ingest.TerminalAsync(source, run.Id, job, await KnownAsync(source, row!.Url, cancellationToken), row.Url, Outcome.Skipped,
+                    notReached.Reason, run.PipelineVersionId, null, cancellationToken);
+            case CrawlFetchResult.Done done:
+                var outcome = done.Fold.Kind == CanonicalFoldKind.Folded ? new FetchOutcome.Skipped(CrawlTraversal.Folded) : done.Outcome;
+                var fetched = done.Frontier.Row;
+                var fetch = new FetchCase(source, run, pipeline, job, IdentityKinds.Url,
+                    outcome is FetchOutcome.NotModified ? fetched.RedirectTo ?? fetched.Url : fetched.Url, Db.Bytes(fetched.UrlHash))
+                {
+                    Frontier = Completion(source, run, done.Frontier),
+                    UnchangedReason = done.Facts.Contains(CrawlTraversal.LastmodSkip) ? CrawlTraversal.LastmodSkip : null,
+                };
+                var result = await ingest.HandleAsync(fetch, outcome, cancellationToken);
+                if (result is JobResult.Committed)
+                {
+                    await traversal.CommittedAsync(context, done, cancellationToken);
+                }
+
+                return result;
+            default:
+                return new JobResult.Success();
+        }
+    }
+
+    /// <summary>
+    /// Before the reconcile: the traversal's completeness (stored on <c>CrawlRuns</c>), the candidates (explicit answers
+    /// in any run, <c>persistent-failure</c>, <c>not-seen</c> only after a complete traversal and never for a failed seed),
+    /// and the report's sections: completeness with the incomplete-traversal count and alert, the run's verdict, the
+    /// removal checks and the <c>demote</c> patterns with the live documents they match.
+    /// </summary>
+    public async Task<CrawlReconcile> PrepareReconcileAsync(SourceContext source, RunRow run, IReadOnlyList<SourceDocument> all,
+        IReadOnlyDictionary<Guid, string> explicitGone, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(all);
+        var context = await ContextAsync(source, run, cancellationToken);
+        var verdict = await traversal.EvaluateAsync(context, cancelled: false, cancellationToken);
+        var failedSeeds = await FailedSeedsAsync(source, run.Id, cancellationToken);
+        var candidates = DeletionCandidates.FromTraversal(run.Id, all, verdict, explicitGone, failedSeeds, time.GetUtcNow());
+        var record = await crawlRuns.GetAsync(run.Id, cancellationToken) ?? throw new InvalidOperationException("The crawl run has no CrawlRuns row.");
+        var history = (await runs.CrawlHistoryAsync(source.SourceId, run.Id, cancellationToken)).Select(h => new TraversalHistoryEntry(h.Complete, h.Incremental));
+        var completeness = CrawlReportSections.Completeness(record, verdict, options.Value.CompletenessRule, context.Incremental, failedSeeds.Count, history,
+            policy.Current.IncompleteRunsAlert);
+        var settings = ContractJson.Deserialize<CrawlSettings>(source.Settings);
+        var live = all.Where(d => d.DeletedAt is null).Select(d => d.CanonicalIdentity).ToList();
+        var report = new Dictionary<string, object>
+        {
+            ["completeness"] = completeness,
+            ["verdict"] = new { verdict.RunFailure, verdict.RunDegradation },
+            ["removalChecks"] = RemovalSection.From(await RemovalOutcomesAsync(source, run.Id, cancellationToken)),
+            ["demote"] = settings.Demote.Select(d => new { d.Pattern, d.Factor, Documents = live.Count(UrlPattern.Parse(d.Pattern).Matches) }).ToList(),
+        };
+        var empty = verdict.Complete && !all.Any(d => d.DeletedAt is null && d.LastRunId == run.Id);
+        return new CrawlReconcile(verdict, candidates, empty, JsonSerializer.Serialize(report, JsonSerializerOptions.Web));
+    }
+
+    /// <summary>Records <c>rag.crawl.incomplete_runs</c> after a crawl report was written.</summary>
+    public async Task RecordIncompleteRunsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(IncompleteRunsSql, connection);
+        metrics.IncompleteRuns(await command.ExecuteScalarAsync(cancellationToken) is int count ? count : 0);
+    }
+
+    /// <summary>Tops every host of the run up; a closed night window enqueues the run's continuation for its opening.</summary>
+    public async Task TopUpAsync(CrawlRunContext context, CancellationToken cancellationToken)
+    {
+        var result = await topUp.TopUpAsync(context, null, null, cancellationToken);
+        if (result.WindowOpensAt is { } opens)
+        {
+            await queue.EnqueueAsync([topUp.Continuation(context, opens)], null, cancellationToken);
+        }
+    }
+
+    private static CrawlRunContext Context(SourceContext source, RunRow run, CrawlRunMode mode) =>
+        new(new CrawlRunKey(source.SourceId, source.Classification, run.Id), source.DepartmentId, SyncJobs.Parse<SyncKind>(run.Kind),
+            SyncJobs.Parse<RunTrigger>(run.Trigger), source.Settings, mode.Revalidate, mode.Incremental);
+
+    private FrontierCompletion Completion(SourceContext source, RunRow run, FrontierDone done) =>
+        new(source.SourceId, source.Classification, Db.Bytes(done.Row.UrlHash), run.Id, done.Facts?.FetchedAt ?? time.GetUtcNow(), done.Facts?.LastStatus,
+            done.Facts?.ETag, done.Facts?.LastModified, done.Facts?.ContentHash is { } hash ? Db.Bytes(hash) : null)
+        {
+            RedirectTo = done.Facts?.RedirectTo,
+            KeepFacts = done.Facts is null,
+            SeedFailed = done.SeedFailed,
+        };
+
+    private Task<DocumentRow?> KnownAsync(SourceContext source, string url, CancellationToken cancellationToken) =>
+        documents.FindAsync(source.SourceId, IdentityKinds.Url, url, cancellationToken);
+
+    /// <summary>Released rows of the run enqueued again; a row whose job is still open is dropped by its dedup key. Returns the jobs enqueued.</summary>
+    private async Task<int> RequeueReleasedAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)
+    {
+        var released = new List<string>();
+        await using (var connection = await database.OpenAsync(cancellationToken))
+        await using (var command = new NpgsqlCommand(ReleasedSql, connection) { Parameters = { Db.P(source.Classification), Db.P(source.SourceId), Db.P(runId) } })
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                released.Add(Db.Hex(reader.GetFieldValue<byte[]>(0)));
+            }
+        }
+
+        return released.Count == 0 ? 0 : (await queue.EnqueueAsync([.. released.Select(h => SyncJobs.FetchUrl(source, runId, h))], null, cancellationToken)).Count;
+    }
+
+    private async Task<IReadOnlySet<Guid>> FailedSeedsAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)
+    {
+        var seeds = new HashSet<Guid>();
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(FailedSeedsSql, connection) { Parameters = { Db.P(source.Classification), Db.P(source.SourceId), Db.P(runId) } };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            seeds.Add(reader.GetGuid(0));
+        }
+
+        return seeds;
+    }
+
+    /// <summary>The removal checks' items as the outcomes <see cref="RemovalSection"/> tallies: live (kept), gone, or another answer.</summary>
+    private async Task<IReadOnlyList<FetchOutcome>> RemovalOutcomesAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)
+    {
+        var outcomes = new List<FetchOutcome>();
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(RemovalSql, connection) { Parameters = { Db.P(source.Classification), Db.P(source.SourceId), Db.P(runId) } };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var outcome = reader.GetString(0);
+            var reason = Db.String(reader, 1);
+            outcomes.Add(outcome switch
+            {
+                "added" or "updated" or "unchanged" or "degraded" => new FetchOutcome.NotModified(new Validators(null, null)),
+                _ when reason is not null && GoneReasons.Contains(reason) => new FetchOutcome.Gone(reason),
+                _ => new FetchOutcome.Failed(reason ?? outcome),
+            });
+        }
+
+        return outcomes;
+    }
+
+    private async Task AddItemsAsync(List<RunItemRow> items, CancellationToken cancellationToken)
+    {
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        await using var commit = await EngineCommit.BeginAsync(database, cancellationToken);
+        foreach (var item in items)
+        {
+            await commit.AddRunItemAsync(item, cancellationToken);
+        }
+
+        await commit.CommitAsync(cancellationToken);
+    }
+}

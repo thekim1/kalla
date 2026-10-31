@@ -22,6 +22,7 @@
           },
           "questionCount": {
             "type": "integer",
+            "description": "Answerable questions (with expected documents): the denominator of recall@k (EvaluationRuns.QuestionCount).",
             "minimum": 0,
             "maximum": 2147483647
           },
@@ -35,6 +36,147 @@
             "type": "boolean",
             "description": "on-demand with candidateSettings: the run used the candidate settings, not the current ones.",
             "default": false
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "layer": {
+                  "enum": [
+                    "human",
+                    "generated"
+                  ]
+                },
+                "questions": {
+                  "type": "integer",
+                  "description": "Answerable questions (with expected documents): the denominator of recall@k.",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "found": {
+                  "type": "integer",
+                  "description": "Answerable questions with an expected document in the top k.",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "unanswerable": {
+                  "type": "integer",
+                  "description": "Questions without expected documents (expected outcome \"not found\"); not counted in recall@k and MRR@k.",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "default": 0
+                },
+                "recallAtK": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Found / Questions; absent without answerable questions.",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "mrr": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "layer",
+                "questions",
+                "found"
+              ]
+            },
+            "description": "The run per question layer, human (the gold set) first (processing design §13.4, weakness review §2).",
+            "maxItems": 2,
+            "default": []
+          },
+          "coverage": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "answerable": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "unanswerable": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "falseNotFound": {
+                "type": "integer",
+                "description": "Answerable human questions whose coverage was low (false not-found).",
+                "minimum": 0,
+                "maximum": 2147483647,
+                "default": 0
+              },
+              "unanswerableNotFound": {
+                "type": "integer",
+                "description": "Unanswerable human questions whose coverage was low (correct not-found).",
+                "minimum": 0,
+                "maximum": 2147483647,
+                "default": 0
+              },
+              "coverageMaxDistance": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "misclassified": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "value",
+                  "misclassified"
+                ],
+                "description": "Proposed coverageMaxDistance; absent until the layer has answerable and unanswerable questions."
+              },
+              "coverageMinKeywordScore": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "misclassified": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "value",
+                  "misclassified"
+                ],
+                "description": "Proposed coverageMinKeywordScore; absent in vector runs and until both groups have a keyword score."
+              }
+            },
+            "required": [
+              "answerable",
+              "unanswerable"
+            ],
+            "description": "The coverage-threshold proposal from the human layer's answerable and unanswerable questions (processing design §13.6); absent without human questions."
           }
         },
         "required": [

@@ -85,7 +85,32 @@ internal static class EngineKit
 
     public static IResult Html(string body) => Results.Content(body, "text/html; charset=utf-8");
 
-    public static async Task<SourceSeed> SeedUrlListAsync(RagDatabaseFixture database, IEnumerable<Uri> urls, string collectionClassification = Classification.Internal)
+    public static Task<SourceSeed> SeedUrlListAsync(RagDatabaseFixture database, IEnumerable<Uri> urls, string collectionClassification = Classification.Internal) =>
+        SeedAsync(database, SourceTypes.UrlList, "url-list", JsonSerializer.Serialize(new { urls = urls.Select(u => u.AbsoluteUri).ToArray() }), collectionClassification);
+
+    /// <summary>A crawl source on the <c>website</c> template; <paramref name="settings"/> is its <c>Sources.Settings</c> object.</summary>
+    public static Task<SourceSeed> SeedCrawlAsync(RagDatabaseFixture database, object settings, string collectionClassification = Classification.Internal) =>
+        SeedAsync(database, SourceTypes.Crawl, "website", JsonSerializer.Serialize(settings), collectionClassification);
+
+    /// <summary>A new published version of the seed's pipeline (number 2 or later) with <paramref name="parameters"/>; the old one is superseded.</summary>
+    public static async Task<Guid> PublishAsync(RagDatabaseFixture database, SourceSeed seed, string template, string parameters)
+    {
+        var version = Guid.CreateVersion7();
+        await Sql.ExecuteAsync(database.Connection(null), """
+            INSERT INTO config."PipelineVersions" ("Id", "PipelineId", "Number", "State", "Definition", "PublishedAt")
+            SELECT $1, $2, max("Number") + 1, 'published', $3::jsonb, now() FROM config."PipelineVersions" WHERE "PipelineId" = $2
+            """, version, seed.PipelineId, Definition(template, parameters));
+        await Sql.ExecuteAsync(database.Connection(null), """
+            UPDATE config."PipelineVersions" SET "State" = 'superseded' WHERE "PipelineId" = $1 AND "Id" <> $2 AND "State" = 'published'
+            """, seed.PipelineId, version);
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Pipelines" SET "PublishedVersionId" = $1 WHERE "Id" = $2""", version, seed.PipelineId);
+        return version;
+    }
+
+    private static string Definition(string template, string parameters) =>
+        "{\"schema\":\"pipeline/v2\",\"template\":\"" + template + "\",\"templateVersion\":1,\"params\":" + parameters + "}";
+
+    private static async Task<SourceSeed> SeedAsync(RagDatabaseFixture database, string type, string template, string settings, string collectionClassification)
     {
         var suffix = Guid.CreateVersion7().ToString("N")[..12];
         await using var db = TestPostgres.Context(database.Connection(null));
@@ -113,7 +138,7 @@ internal static class EngineKit
             EmbeddingProfileId = ProfileId,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
-        var pipeline = new Pipeline { DepartmentId = department.Id, Name = "url-list " + suffix, TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };
+        var pipeline = new Pipeline { DepartmentId = department.Id, Name = template + " " + suffix, TemplateId = template, UpdatedAt = DateTimeOffset.UtcNow };
         db.Add(department);
         db.Add(collection);
         db.Add(pipeline);
@@ -123,7 +148,7 @@ internal static class EngineKit
             PipelineId = pipeline.Id,
             Number = 1,
             State = PipelineVersionStates.Published,
-            Definition = """{"schema":"pipeline/v2","template":"url-list","templateVersion":1,"params":{}}""",
+            Definition = Definition(template, "{}"),
             PublishedAt = DateTimeOffset.UtcNow,
         };
         db.Add(version);
@@ -132,10 +157,10 @@ internal static class EngineKit
         var source = new Source
         {
             CollectionId = collection.Id,
-            Type = SourceTypes.UrlList,
-            Name = "Lista " + suffix,
+            Type = type,
+            Name = "Källa " + suffix,
             Classification = collectionClassification,
-            Settings = JsonSerializer.Serialize(new { urls = urls.Select(u => u.AbsoluteUri).ToArray() }),
+            Settings = settings,
             PipelineId = pipeline.Id,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
@@ -203,10 +228,10 @@ internal static class EngineKit
         Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Sources" SET "State" = 'paused' WHERE NOT ("Id" = ANY($1))""",
             (object)seeds.Select(s => s.SourceId).ToArray());
 
-    /// <summary>A "sync now" as the admin enqueues it (dedup <c>sync:{sourceId}</c>); the run's id is the job's.</summary>
-    public static async Task<Guid> SyncNowAsync(RagDatabaseFixture database, SourceSeed seed)
+    /// <summary>A "sync now" (or retry failed, or a publish's reprocess) as the admin enqueues it (dedup <c>sync:{sourceId}</c>); the run's id is the job's.</summary>
+    public static async Task<Guid> SyncNowAsync(RagDatabaseFixture database, SourceSeed seed, SyncKind kind = SyncKind.Sync, RunTrigger trigger = RunTrigger.Manual)
     {
-        var payload = new SyncPayload { SourceId = seed.SourceId, Kind = SyncKind.Sync, Trigger = RunTrigger.Manual };
+        var payload = new SyncPayload { SourceId = seed.SourceId, Kind = kind, Trigger = trigger };
         var job = new Domain.Ports.JobRequest(JobClasses.Sync, seed.DepartmentId, seed.Classification, ContractJson.Serialize(payload))
         {
             DedupKey = JobDedupKeys.Sync(seed.SourceId),

@@ -44,10 +44,13 @@ public sealed record CrawlPage(FetchOutcome Outcome, PageLinks? Links);
 /// sitemap is probed by <see cref="ProbeAsync"/> (the removal check, §5.4).
 /// A listing that missed seeds (an unreachable robots.txt, a failed or truncated sitemap, the page limit) ends
 /// <c>Partial</c> after a <see cref="ListingEvent{T}.Failure"/> per cause, so the traversal cannot be complete.
-/// Discovery, frontier and host budget are <see cref="CrawlTraversal"/>'s.
+/// Discovery, frontier and host budget are <see cref="CrawlTraversal"/>'s. The canonicaliser takes the source's settings
+/// and, per scope host, its applied site profile's rules (<see cref="SiteProfileCanonicalRules"/>; none without
+/// <paramref name="hostRules"/>).
 /// </summary>
-public sealed class CrawlConnector(HttpFetcher fetcher, RobotsCache robots, IMalwareScanner scanner, IBlobStore blobs, TimeProvider time)
-    : IFetchConnector<CrawlCheckpoint>
+public sealed class CrawlConnector(
+    HttpFetcher fetcher, RobotsCache robots, IMalwareScanner scanner, IBlobStore blobs, TimeProvider time, SiteProfileCanonicalRules? hostRules = null)
+    : IFetchConnector<CrawlCheckpoint>, IRetryFailedConnector
 {
     public const string Type = SourceTypes.Crawl;
 
@@ -72,8 +75,26 @@ public sealed class CrawlConnector(HttpFetcher fetcher, RobotsCache robots, IMal
 
     public Type SettingsType => typeof(CrawlSettings);
 
+    public WorkItem? FromIdentity(string canonicalIdentity, FailedItem last) => RetryWork.FromUrl(canonicalIdentity);
+
+    /// <summary>
+    /// The source's settings and scope, with the canonicaliser of the source's settings and of the scope hosts' applied
+    /// site profiles at <paramref name="classification"/>.
+    /// </summary>
+    public async ValueTask<CrawlSource> SourceAsync(Guid sourceId, string classification, JsonElement settings, CancellationToken cancellationToken)
+    {
+        var source = Source(sourceId, settings);
+        if (hostRules is null)
+        {
+            return source;
+        }
+
+        var rules = await hostRules.ForHostsAsync(classification, source.Scope.Hosts, cancellationToken);
+        return rules.Count == 0 ? source : source with { Canonicalizer = source.Canonicalizer with { Hosts = rules } };
+    }
+
     /// <summary>The source's settings and scope, parsed once per settings version.</summary>
-    public CrawlSource Source(Guid sourceId, JsonElement settings)
+    private CrawlSource Source(Guid sourceId, JsonElement settings)
     {
         var raw = settings.GetRawText();
         if (_sources.TryGetValue(sourceId, out var cached) && string.Equals(cached.Raw, raw, StringComparison.Ordinal))
@@ -93,7 +114,7 @@ public sealed class CrawlConnector(HttpFetcher fetcher, RobotsCache robots, IMal
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(from);
-        var source = Source(context.SourceId, context.Settings);
+        var source = await SourceAsync(context.SourceId, context.Classification, context.Settings, cancellationToken);
         var settings = source.Settings;
         // An unknown schema version (a rolled-back worker) restarts the listing, which is always safe (§2.3).
         var start = from.SchemaVersion == CrawlCheckpoint.CurrentSchemaVersion ? from : new CrawlCheckpoint { SchemaVersion = CrawlCheckpoint.CurrentSchemaVersion };
@@ -186,7 +207,7 @@ public sealed class CrawlConnector(HttpFetcher fetcher, RobotsCache robots, IMal
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(item);
         var url = item.Url ?? throw new ArgumentException("A crawl item has a URL.", nameof(item));
-        var source = Source(context.SourceId, context.Settings);
+        var source = await SourceAsync(context.SourceId, context.Classification, context.Settings, cancellationToken);
         var validators = source.Settings.ConditionalGet && !context.Revalidate ? item.Hints.Stored : null;
         var request = new HttpFetchRequest(url, EgressPurpose.Fetch, validators, MediaTypes.DocumentFormats, source.Canonicalizer, robots.CheckAsync,
             InScope: target => UrlCanonicalizer.Canonicalize(target.AbsoluteUri, source.Canonicalizer).Value is { } canonical && source.Scope.Check(canonical).Admitted);
@@ -219,7 +240,7 @@ public sealed class CrawlConnector(HttpFetcher fetcher, RobotsCache robots, IMal
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(item);
         var url = item.Url ?? throw new ArgumentException("A crawl item has a URL.", nameof(item));
-        var source = Source(context.SourceId, context.Settings);
+        var source = await SourceAsync(context.SourceId, context.Classification, context.Settings, cancellationToken);
         var request = new HttpFetchRequest(url, EgressPurpose.Fetch, null, null, source.Canonicalizer, robots.CheckAsync,
             InScope: target => UrlCanonicalizer.Canonicalize(target.AbsoluteUri, source.Canonicalizer).Value is { } canonical && source.Scope.Check(canonical).Admitted,
             Head: true);

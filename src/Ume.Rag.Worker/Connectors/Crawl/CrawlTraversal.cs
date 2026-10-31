@@ -36,9 +36,10 @@ public abstract record CrawlFetchResult
 
     /// <summary>
     /// The URL is done for the run: the runner writes the document and run item from <paramref name="Outcome"/> (skipped
-    /// when <paramref name="Fold"/> folded it). <paramref name="Facts"/> are run item facts such as <c>robots.noindex_ignored</c>.
+    /// when <paramref name="Fold"/> folded it) and, in the same commit, <paramref name="Frontier"/>; then it calls
+    /// <see cref="CrawlTraversal.CommittedAsync"/>. <paramref name="Facts"/> are run item facts such as <c>robots.noindex_ignored</c>.
     /// </summary>
-    public sealed record Done(FetchOutcome Outcome, CanonicalFold Fold, int Admitted, IReadOnlyList<string> Facts) : CrawlFetchResult;
+    public sealed record Done(FetchOutcome Outcome, CanonicalFold Fold, int Admitted, IReadOnlyList<string> Facts, FrontierDone Frontier) : CrawlFetchResult;
 
     /// <summary>Requeue the job after <paramref name="Delay"/> (null: the queue's back-off); the frontier row stays <c>released</c>.</summary>
     public sealed record Requeue(TimeSpan? Delay, string Reason, bool CountsAttempt) : CrawlFetchResult;
@@ -51,6 +52,17 @@ public abstract record CrawlFetchResult
 }
 
 /// <summary>
+/// The frontier row of a <see cref="CrawlFetchResult.Done"/>, still <c>released</c>: the engine marks it <c>idle</c> in the
+/// commit of the URL's document (engine design §7.6), so a worker that dies between the fetch and that commit leaves the
+/// row to the reclaimed job, which fetches it again.
+/// </summary>
+/// <param name="Row">The row as the fetch found it.</param>
+/// <param name="Facts">The response's facts; null when no request was made (a <c>lastmod</c> skip keeps the last fetch's).</param>
+/// <param name="SeedFailed">A seed that failed: <c>CrawlRuns.SeedsFailed</c> counts it in the same commit.</param>
+/// <param name="AllHosts">The page admitted links: every host is topped up after the commit, not only the row's.</param>
+public sealed record FrontierDone(FrontierRow Row, FrontierFacts? Facts, bool SeedFailed, bool AllHosts);
+
+/// <summary>
 /// The crawl's part of the <c>sync</c> and <c>fetch</c> jobs (connectors design §5, §6.0): seeds admitted to the source's
 /// frontier, each released URL fetched within its host's budget, the outcome written to the frontier row, links
 /// admitted by scope, depth, traps and <c>maxPages</c> (BFS by depth), canonical aliases folded only when verified,
@@ -58,9 +70,10 @@ public abstract record CrawlFetchResult
 /// Freshness (§5.4, weakness review §3): on hosts whose site profile marks <c>lastmod</c> reliable a URL whose sitemap
 /// <c>lastmod</c> is not newer than its last fetch is skipped without a request (not in a revalidating run) and its
 /// stored outlinks expanded; incremental runs fetch only changed and new seeds; after a complete listing the URLs that
-/// left the sitemap get the removal check. Documents and run items stay the engine's (item 9); it calls
-/// <see cref="ListingDoneAsync"/> when the listing ends, <see cref="AbandonAsync"/> when a fetch's attempts run out and
-/// <see cref="EvaluateAsync"/> before the reconcile phase.
+/// left the sitemap get the removal check. Documents, run items and the completion of a fetched row are the engine's: it
+/// calls <see cref="ListingDoneAsync"/> when the listing ends, commits a <see cref="CrawlFetchResult.Done"/>'s row with its
+/// document and then calls <see cref="CommittedAsync"/>, calls <see cref="AbandonAsync"/> when a fetch's attempts run out
+/// and <see cref="EvaluateAsync"/> before the reconcile phase.
 /// </summary>
 public sealed class CrawlTraversal(
     CrawlConnector connector,
@@ -97,7 +110,7 @@ public sealed class CrawlTraversal(
     public async Task<CrawlRunContext> StartAsync(CrawlRunContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var source = connector.Source(context.Run.SourceId, context.Settings);
+        var source = await connector.SourceAsync(context.Run.SourceId, context.Run.Classification, context.Settings, cancellationToken);
         await runs.StartAsync(new CrawlRunRecord
         {
             RunId = context.Run.RunId,
@@ -246,6 +259,15 @@ public sealed class CrawlTraversal(
         }
     }
 
+    /// <summary>After the engine committed a <see cref="CrawlFetchResult.Done"/>'s row with its document: the hosts are topped up.</summary>
+    public Task CommittedAsync(CrawlRunContext context, CrawlFetchResult.Done done, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(done);
+        // Every host, not only this one: the page may have admitted links to other hosts (extra hosts, off-site leaves).
+        return TopUpAsync(context, done.Frontier.AllHosts ? null : done.Frontier.Row.Host, cancellationToken);
+    }
+
     /// <summary>The fetch's attempts ran out (5xx, timeouts): the row is done for the run, a seed counts as failed.</summary>
     public async Task AbandonAsync(CrawlRunContext context, string urlHash, CancellationToken cancellationToken)
     {
@@ -340,9 +362,9 @@ public sealed class CrawlTraversal(
     }
 
     /// <summary>
-    /// The outcome of one URL for the run: requeued when transient; otherwise the frontier row completed (its facts kept
-    /// when no request was made), a failed seed counted, links admitted (in an incremental run only from a changed page),
-    /// a canonical folded when verified, and the hosts topped up.
+    /// The outcome of one URL for the run: requeued when transient; otherwise the frontier row's completion for the engine's
+    /// commit (its facts kept when no request was made, a failed seed counted there), links admitted (in an incremental run
+    /// only from a changed page; a repeated admission is a no-op) and a canonical folded when verified.
     /// </summary>
     private async Task<CrawlFetchResult> FinishAsync(
         CrawlRunContext context, FrontierRow row, CrawlPage page, List<string> runFacts, bool requested, short? status, CancellationToken cancellationToken)
@@ -368,18 +390,12 @@ public sealed class CrawlTraversal(
         };
         var redirectTo = page.Outcome is FetchOutcome.Content { Facts.Redirects.Count: > 0 } redirected ? redirected.Facts.CanonicalIdentity : null;
         var facts = new FrontierFacts(now, status ?? StatusOf(page.Outcome), validators.ETag, validators.LastModified, contentHash ?? row.ContentHash, redirectTo);
-        // A lastmod skip made no request: LastFetchedAt stays the last real fetch, which later lastmod values are compared with.
-        await frontier.CompleteAsync(run, row.UrlHash, requested ? facts : null, cancellationToken);
         if (redirectTo is not null && page.Outcome is FetchOutcome.Content final)
         {
             await frontier.RecordTargetAsync(run, new FrontierAdmission(redirectTo, final.Facts.FinalUrl!.Authority, row.Depth, row.Leaf), facts with { RedirectTo = null }, cancellationToken);
         }
 
-        if (row.Depth == 0 && page.Outcome is FetchOutcome.Failed or FetchOutcome.Refused { Outcome: RunItemOutcome.Blocked })
-        {
-            await runs.SeedFailedAsync(run.RunId, cancellationToken);
-        }
-
+        var seedFailed = row.Depth == 0 && page.Outcome is FetchOutcome.Failed or FetchOutcome.Refused { Outcome: RunItemOutcome.Blocked };
         var outcome = page.Outcome;
         var changed = outcome is FetchOutcome.Content changedContent && !string.Equals(changedContent.Raw.ContentHash, row.ContentHash, StringComparison.Ordinal);
         var admitted = 0;
@@ -415,14 +431,13 @@ public sealed class CrawlTraversal(
             runFacts.Add(Folded);
         }
 
-        // Every host, not only this one: the page may have admitted links to other hosts (extra hosts, off-site leaves).
-        await TopUpAsync(context, admitted > 0 ? null : row.Host, cancellationToken);
-        return new CrawlFetchResult.Done(outcome, fold, admitted, runFacts);
+        // A lastmod skip made no request: LastFetchedAt stays the last real fetch, which later lastmod values are compared with.
+        return new CrawlFetchResult.Done(outcome, fold, admitted, runFacts, new FrontierDone(row, requested ? facts : null, seedFailed, admitted > 0));
     }
 
     private async Task<int> AdmitLinksAsync(CrawlRunContext context, FrontierRow row, IReadOnlyList<string> links, string contentHash, CancellationToken cancellationToken)
     {
-        var source = connector.Source(context.Run.SourceId, context.Settings);
+        var source = await connector.SourceAsync(context.Run.SourceId, context.Run.Classification, context.Settings, cancellationToken);
         var traps = _traps.GetOrAdd(context.Run.RunId, _ => new TrapDetector(time));
         // A removal check's links count from depth 1: it was not reached from a seed.
         var depth = Math.Max(row.Depth, (short)0);
@@ -483,7 +498,7 @@ public sealed class CrawlTraversal(
             return CanonicalFold.None;
         }
 
-        var source = connector.Source(context.Run.SourceId, context.Settings);
+        var source = await connector.SourceAsync(context.Run.SourceId, context.Run.Classification, context.Settings, cancellationToken);
         var sameHost = string.Equals(new Uri(hint).Authority, content.Facts.FinalUrl!.Authority, StringComparison.OrdinalIgnoreCase);
         if (sameHost && source.Scope.Check(hint).Admitted)
         {

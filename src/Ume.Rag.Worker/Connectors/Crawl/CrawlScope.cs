@@ -50,7 +50,7 @@ public sealed class CrawlScope
         ["rtf"] = "application/rtf", ["eml"] = "message/rfc822", ["msg"] = "application/vnd.ms-outlook",
         ["docm"] = "application/vnd.ms-word.document.macroenabled.12", ["xlsm"] = "application/vnd.ms-excel.sheet.macroenabled.12",
         ["pptm"] = "application/vnd.ms-powerpoint.presentation.macroenabled.12",
-        ["jpg"] = "image/jpeg", ["jpeg"] = "image/jpeg", ["png"] = "image/png", ["gif"] = "image/gif", ["webp"] = "image/webp",
+        ["jpg"] = "image/jpeg", ["jpeg"] = "image/jpeg", ["jfif"] = "image/jpeg", ["png"] = "image/png", ["gif"] = "image/gif", ["webp"] = "image/webp",
         ["svg"] = "image/svg+xml", ["bmp"] = "image/bmp", ["tif"] = "image/tiff", ["tiff"] = "image/tiff", ["ico"] = "image/x-icon",
         ["avif"] = "image/avif", ["heic"] = "image/heic",
         ["mp4"] = "video/mp4", ["webm"] = "video/webm", ["mov"] = "video/quicktime", ["avi"] = "video/x-msvideo",
