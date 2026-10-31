@@ -71,6 +71,13 @@ public enum EvaluationVariant
     HybridNoDecompounder,
 }
 
+/// <summary>Question layer of an evaluation set (<c>EvaluationQuestions.Layer</c>; processing design §13.4).</summary>
+public enum EvaluationLayer
+{
+    Human,
+    Generated,
+}
+
 /// <summary>What <c>edit-eval-question</c> does to a <c>human</c> question (processing design §13.4).</summary>
 public enum QuestionAction
 {
