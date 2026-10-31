@@ -81,7 +81,7 @@ public sealed record FetchPayload : JobPayload
     [Description("The upload slot (content.Uploads.Id).")]
     public Guid? UploadId { get; init; }
 
-    [Description("Set once the document's execution is known (engine design §7.5).")]
+    [Description("Present once the document's execution is known (engine design §7.5).")]
     public Guid? ExecutionId { get; init; }
 }
 

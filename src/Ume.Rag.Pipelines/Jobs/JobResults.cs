@@ -47,7 +47,7 @@ public sealed record DocumentJobResult
 
     public Guid? ExecutionId { get; init; }
 
-    [Description("Set when the document ended in this job (its run item).")]
+    [Description("Present when the document ended in this job (its run item).")]
     public RunItemOutcome? Outcome { get; init; }
 
     [Description("<area>.<code> (engine design §10.2), e.g. http.404, parser.timeout.")]

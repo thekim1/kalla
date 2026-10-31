@@ -14,7 +14,7 @@
         "null"
       ],
       "format": "uuid",
-      "description": "Set when the host already has a profile; must match the host."
+      "description": "Present when the host already has a profile; must match the host."
     },
     "host": {
       "type": "string",
@@ -177,7 +177,7 @@
         },
         "lastmodReliable": {
           "type": "boolean",
-          "description": "Set by hand only from the recorded 500-URL lastmod sample (to-verify #170); until then false and the host gets full traversals.",
+          "description": "Changed by hand only from the recorded 500-URL lastmod sample (to-verify #170); until then false and the host gets full traversals.",
           "default": false
         },
         "javascriptNeeded": {

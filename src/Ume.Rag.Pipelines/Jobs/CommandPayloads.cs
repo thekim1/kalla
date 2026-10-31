@@ -43,7 +43,7 @@ public sealed record EditSiteProfileCommand : JobPayload
     [SchemaKeyword("const", "\"edit-site-profile\"")]
     public string Kind { get; init; } = CommandKinds.EditSiteProfile;
 
-    [Description("Set when the host already has a profile; must match the host.")]
+    [Description("Present when the host already has a profile; must match the host.")]
     public Guid? SiteProfileId { get; init; }
 
     [Description("Lower-case host (A-label), as in content.SiteProfiles.Host.")]

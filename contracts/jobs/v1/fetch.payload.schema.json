@@ -34,7 +34,7 @@
         "null"
       ],
       "format": "uuid",
-      "description": "Set once the document's execution is known (engine design §7.5)."
+      "description": "Present once the document's execution is known (engine design §7.5)."
     },
     "minBuild": {
       "type": [
