@@ -67,6 +67,7 @@ public static class WorkerExtensions
         });
         builder.AddRagJobQueue();
         builder.AddRagBlobStore();
+        builder.AddRagBlobEnvelope();
         builder.AddRagConnectors();
         // The same JobWakeUps the dispatcher waits on. Here, not in AddRagJobQueue: only the worker dispatches, and a service
         // that only enqueues would have its monitor woken by every job notification for semaphores nobody waits on.

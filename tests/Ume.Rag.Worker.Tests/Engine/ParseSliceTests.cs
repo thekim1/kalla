@@ -2,11 +2,10 @@ using System.Collections.Concurrent;
 using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
-using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Worker.Parsing;
+using Ume.Rag.Worker.Tests.Blobs;
 using Ume.Rag.Worker.Tests.Connectors;
 using Ume.Rag.Worker.Processing.Detect;
 using Ume.Rag.Worker.Processing.Parse;
@@ -182,7 +181,8 @@ public sealed class ParseSliceTests(RagDatabaseFixture database, FakeGatewayFact
         var path = await Sql.ScalarAsync<string>(database.Connection(null), """
             SELECT o."BlobPath" FROM content."NodeOutputs" o JOIN content."Documents" d ON d."ParseCacheKey" = o."CacheKey" WHERE d."SourceId" = $1
             """, seed.SourceId);
-        var blobs = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = _blobs.FullName }), TimeProvider.System);
+        // Parse outputs of an internal source are envelope-encrypted (data-model §7): read through the envelope.
+        var blobs = TestBlobKeys.Store(_blobs);
         await using var stream = await blobs.OpenReadAsync(new BlobKey(path + "/result.json"), null, Ct) ?? throw new InvalidOperationException("No parse output.");
         using var reader = new StreamReader(stream);
         return await reader.ReadToEndAsync(Ct);
