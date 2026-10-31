@@ -5,6 +5,7 @@
     top-level Program would clash with the worker's).
     Connector tests (Connectors/): the in-process Kestrel test site needs no container; the ClamAV client's integration
     test runs against the image named by UME_RAG_TEST_CLAMAV_IMAGE and skips without it (verify.yml's backend job sets it).
+    The dev seed's key test (Engine/DevSeedScriptTests) calls rag-api in process, referenced under an alias for the same reason.
   -->
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
@@ -15,5 +16,6 @@
     <ProjectReference Include="..\Ume.Rag.TestKit\Ume.Rag.TestKit.csproj" />
     <ProjectReference Include="..\..\src\Ume.Rag.Worker\Ume.Rag.Worker.csproj" />
     <ProjectReference Include="..\..\src\Ume.Rag.FakeGateway\Ume.Rag.FakeGateway.csproj" Aliases="fakegateway" />
+    <ProjectReference Include="..\..\src\Ume.Rag.Api\Ume.Rag.Api.csproj" Aliases="api" />
   </ItemGroup>
 </Project>

@@ -1,12 +1,14 @@
 """Tests for seed_url_list.py that need no database: the connection-string parsing, the localhost-only guard (a
-non-local database is refused before psql runs), the URL checks and the psql input. The SQL itself is tested against
-TestPostgres by tests/Ume.Rag.Worker.Tests/Engine/DevSeedScriptTests.cs. Standard library only:
+non-local database is refused before psql runs), the URL checks, the psql input and the --api-key handling (key format,
+hash, pepper from the environment only, the key printed once). The SQL itself, and rag-api accepting the key, are tested
+against TestPostgres by tests/Ume.Rag.Worker.Tests/Engine/DevSeedScriptTests.cs. Standard library only:
 
     python3 -I -m unittest discover -s scripts/dev -v
 """
 
 import io
 import os
+import re
 import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -18,6 +20,7 @@ import seed_url_list
 
 PASSWORD = "dev-only-pw"  # noqa: S105 - a test value
 LOCAL = f"Host=localhost;Port=54321;Username=postgres;Password={PASSWORD};Database=ragdb"
+PEPPER = "dev-only-pepper-0123456789abcdef-xyz"  # a test value
 
 
 def run_main(argv: list[str]) -> tuple[int, str]:
@@ -133,6 +136,76 @@ class MainTests(unittest.TestCase):
 
     def test_quotes_in_values_are_escaped(self) -> None:
         self.assertEqual("'O''Brien'", seed_url_list.sql_literal("O'Brien"))
+
+
+class ApiKeyTests(unittest.TestCase):
+    ARGS = ("--connection", LOCAL, "--profile", "pilot-embedding", "--api-key", "https://example.org/a")
+
+    def run_seed(self, sql_output: str, env: dict[str, str]) -> tuple[int, str, str, mock.Mock]:
+        completed = mock.Mock(returncode=0, stdout=sql_output, stderr="")
+        out, err = io.StringIO(), io.StringIO()
+        with (
+            mock.patch.dict(os.environ, env),
+            mock.patch("subprocess.run", return_value=completed) as run,
+            redirect_stdout(out),
+            redirect_stderr(err),
+        ):
+            code = seed_url_list.main(list(self.ARGS))
+        return code, out.getvalue(), err.getvalue(), run
+
+    def test_the_key_has_the_key_hashers_format(self) -> None:
+        key = seed_url_list.generate_key()
+        self.assertRegex(key, r"^ume-rag-sk-[0-9A-Za-z]{43}$")
+        self.assertNotEqual(key, seed_url_list.generate_key())
+
+    def test_the_hash_matches_the_key_hashers_test_vector(self) -> None:
+        # The same vector is asserted against KeyHasher.Hash in DevSeedScriptTests.
+        key = "ume-rag-sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+        self.assertEqual(
+            "f2edf7e535b369dedbb773f85b74b5f2b2ef36cf126281929f0c75d2ca0624bf",
+            seed_url_list.key_hash("dev-seed-vector-pepper-0123456789abcdef", key),
+        )
+
+    def test_a_new_key_is_printed_once_and_only_its_hash_reaches_psql(self) -> None:
+        output = "Key,Value\nclient,c1 (created)\napi_key,k1 dev seed: pilot-public (created)\napi_key_state,created\n"
+        code, out, _, run = self.run_seed(output, {"UME_RAG_DEV_KEY_PEPPER": PEPPER})
+        self.assertEqual(0, code)
+        keys = re.findall(r"ume-rag-sk-[0-9A-Za-z]{43}", out)
+        self.assertEqual(1, len(keys))
+        key = keys[0]
+        stdin, env, command = run.call_args.kwargs["input"], run.call_args.kwargs["env"], run.call_args.args[0]
+        self.assertNotIn(key, stdin)
+        self.assertNotIn(PEPPER, stdin)
+        self.assertIn(f"SELECT set_config('ume_seed.key_hash', '{seed_url_list.key_hash(PEPPER, key)}', false);", stdin)
+        self.assertIn(f"SELECT set_config('ume_seed.key_prefix', '{key[:15]}', false);", stdin)
+        self.assertNotIn("UME_RAG_DEV_KEY_PEPPER", env)
+        self.assertNotIn(PEPPER, " ".join(command))
+        self.assertNotIn("api_key_state", out)
+
+    def test_an_existing_key_prints_nothing_secret(self) -> None:
+        output = "Key,Value\napi_key,k1 dev seed: pilot-public (existing; not printed again)\napi_key_state,existing\n"
+        code, out, _, _ = self.run_seed(output, {"UME_RAG_DEV_KEY_PEPPER": PEPPER})
+        self.assertEqual(0, code)
+        self.assertNotRegex(out, r"ume-rag-sk-[0-9A-Za-z]{43}")
+        self.assertIn("(existing; not printed again)", out)
+
+    def test_the_pepper_must_be_set_and_long_enough(self) -> None:
+        for pepper, message in (("", "needs the AppHost's key pepper"), ("short", "shorter than 32 bytes")):
+            with self.subTest(pepper=pepper):
+                code, out, err, run = self.run_seed("", {"UME_RAG_DEV_KEY_PEPPER": pepper})
+                self.assertEqual(2, code)
+                self.assertIn(message, err)
+                self.assertEqual("", out)
+                run.assert_not_called()
+
+    def test_without_the_option_no_key_is_made(self) -> None:
+        completed = mock.Mock(returncode=0, stdout="Key,Value\nsource,abc (created)\n", stderr="")
+        out = io.StringIO()
+        with mock.patch("subprocess.run", return_value=completed) as run, redirect_stdout(out):
+            code = seed_url_list.main(["--connection", LOCAL, "--profile", "p", "https://example.org/a"])
+        self.assertEqual(0, code)
+        self.assertIn("SELECT set_config('ume_seed.key_hash', '', false);", run.call_args.kwargs["input"])
+        self.assertNotIn("ume-rag-sk-", out.getvalue())
 
 
 if __name__ == "__main__":
