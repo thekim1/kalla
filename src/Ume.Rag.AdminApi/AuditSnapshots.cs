@@ -8,6 +8,8 @@ namespace Ume.Rag.AdminApi;
 public static class AuditEntityTypes
 {
     public const string Client = "client";
+    public const string Settings = "settings";
+    public const string DataProtection = "dataprotection";
 }
 
 /// <summary>The <c>Details</c> of an audit entry. Copied.</summary>
@@ -17,6 +19,18 @@ internal static class AuditJson
 {
     /// <summary>camelCase and enum names, like the API's own responses.</summary>
     public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
+
+    /// <summary>A DTO as an audit snapshot: its fields without <c>version</c>, which before the save still holds the old token.</summary>
+    public static System.Text.Json.Nodes.JsonObject? WithoutVersion(object? dto)
+    {
+        if (dto is null || JsonSerializer.SerializeToNode(dto, Options) is not System.Text.Json.Nodes.JsonObject json)
+        {
+            return null;
+        }
+
+        json.Remove("version");
+        return json;
+    }
 }
 
 /// <summary>
@@ -27,7 +41,11 @@ internal static class AuditJson
 public static class AuditSnapshots
 {
     /// <summary>The snapshot record types; the test that no secret column reaches the audit log reflects over them.</summary>
-    public static IReadOnlyList<Type> All { get; } = [typeof(ClientAudit)];
+    public static IReadOnlyList<Type> All { get; } =
+    [
+        typeof(ClientAudit), typeof(NetworkSettings), typeof(RetentionSettings), typeof(DeletionGuardSettings), typeof(EvaluationSettings),
+        typeof(JsonSectionSettings), typeof(PiiSettings), typeof(WorkerSettings), typeof(DataProtectionDto),
+    ];
 }
 
 public sealed record ClientAudit(

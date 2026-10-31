@@ -15,6 +15,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   model_residency: 'Modellen {model} kan inte användas på nivåns tak {ceiling}.',
   model_not_listed: 'AI-gatewayen erbjuder inte {model} på {ceiling} just nu. Försök igen senare.',
   gateway_unavailable: 'AI-gatewayen gick inte att nå för att kontrollera modellen. Försök igen.',
+  policy_rule: 'Dataskyddsinställningen bryter mot en regel: {rule}',
 }
 
 /** When the problem has no code we know: by status. */
@@ -61,6 +62,17 @@ export const JOB_MESSAGES: Record<string, string> = {
   'robots.missing': 'Webbplatsen har ingen robots.txt; allt får hämtas.',
   'cms.sitevision': 'Webbplatsen är byggd i Sitevision; den färdiga profilen används.',
   'cms.unknown': 'Publiceringssystemet känns inte igen; en profil behöver göras för hand.',
+  'eval.unsupported': 'Den här sortens utvärdering finns inte ännu.',
+  'eval.invalid_payload': 'Utvärderingen var felaktigt beställd och kördes inte. Kontakta plattformsteamet.',
+  'eval.no_questions': 'Kunskapsbanken har inga aktiva testfrågor att utvärdera med.',
+  'eval.invalid_candidate_settings': 'De föreslagna sökinställningarna är ogiltiga. Kontrollera värdena och försök igen.',
+  'eval.invalid_settings': 'Kunskapsbankens sökinställningar är ogiltiga. Kontrollera dem och försök igen.',
+  'eval.embedding_residency': 'Inbäddningsmodellen kan inte användas på kunskapsbankens nivå.',
+  'eval.search_unavailable': 'Sökningen var inte tillgänglig under utvärderingen. Försök igen om en stund.',
+  'eval.model_unset': 'Ingen modell för att skapa testfrågor är vald. Välj en under inställningarna för utvärdering.',
+  'eval.model_not_onprem': 'Modellen för testfrågor måste köras inom kommunen (lokalt i AI-gatewayen).',
+  'eval.no_onprem_key': 'Det finns ingen nyckel för lokala modeller i AI-gatewayen. Kontakta plattformsteamet.',
+  'eval.unknown_kind': 'Den här sortens testfrågejobb finns inte.',
 }
 
 /** The Swedish text of a worker code, or a generic text that still names the code for support. */

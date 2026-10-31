@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Scalar.AspNetCore;
 using Ume.Rag.AdminApi;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Infrastructure;
@@ -33,6 +34,9 @@ builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.Section
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IAdminSessionStore, PostgresAdminSessionStore>();
 builder.Services.AddSingleton<AccessDeniedThrottle>();
+builder.Services.AddSingleton<AdminClientAddresses>();
+// The OpenAPI document and Scalar (admin design §4.1, copied): in P1 also the action UI for platform objects without a page.
+builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<AdminContext>();
 builder.Services.AddOptions<OrgSyncOptions>().BindConfiguration(OrgSyncOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
@@ -69,6 +73,7 @@ app.UseUmeSecurityHeaders(o =>
     o.NoStorePrefixes.Add("/api");
     o.NoStorePrefixes.Add("/bff");
 });
+app.UseApiReferencePolicy("/scalar", ScalarOptions.NonceHttpContextItemKey);
 app.UseProblemDetailsForEmptyErrors("The action could not be completed");
 // Outside authentication and authorization, so it sees their 403s and the signed-in user afterwards.
 app.UseMiddleware<AdminActivityMiddleware>();
@@ -85,6 +90,11 @@ var api = app.MapGroup("/api").RequireAuthorization(AdminPolicies.Read).RequireR
 api.MapGet("/ping", () => Results.Ok(new { ok = true })).RequireAuthorization(AdminPolicies.Read);
 api.MapClients();
 api.MapOrganisation();
+api.MapSettings();
+api.MapDataProtection();
+api.MapTemplates();
+app.MapOpenApi().RequireAuthorization(AdminPolicies.Admin);
+app.MapScalarApiReference(o => o.WithTitle("Ume.Rag Admin API").WithNonce().DisableDefaultFonts()).RequireAuthorization(AdminPolicies.Admin);
 api.MapGateway();
 
 app.UseDefaultFiles();

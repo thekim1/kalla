@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Ume.Rag.Infrastructure.Security;
 
 namespace Ume.Rag.AdminApi;
 
@@ -23,6 +24,9 @@ public sealed class AdminOptions
     /// several instances share or skip the work; <c>false</c> is an off switch.
     /// </summary>
     public bool Retention { get; set; } = true;
+
+    /// <summary>How much of an admin's address the audit log and events keep (copied, identity design §1.4): <c>Full</c> by default.</summary>
+    public SourceAddressMode AuditSourceAddress { get; set; } = SourceAddressMode.Full;
 }
 
 /// <summary>

@@ -60,6 +60,11 @@
       "code": "gateway_unavailable",
       "status": 503,
       "message": "The AI gateway could not be reached to check the model. Try again."
+    },
+    {
+      "code": "policy_rule",
+      "status": 400,
+      "message": "The data protection policy breaks a rule: {rule}"
     }
   ]
 }
