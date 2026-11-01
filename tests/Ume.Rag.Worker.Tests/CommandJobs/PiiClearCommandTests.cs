@@ -14,7 +14,7 @@ namespace Ume.Rag.Worker.Tests.CommandJobs;
 /// else changes; without a held set only the clearance is recorded; unknown and deleted documents are refused; a job that
 /// lost its lease releases nothing.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup4.Name)]
 public sealed class PiiClearCommandTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private const string Admin = "admin-oid";

@@ -18,7 +18,7 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 /// each filtered-out case is dropped; a top-up retires the questions of a changed and a deleted document and regenerates
 /// to size with the next round's seed; a model the gateway does not serve <c>OnPrem</c> refuses the job (O1).
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup3.Name)]
 public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatewayFactory gateway) : IClassFixture<EvalGatewayFactory>, IAsyncLifetime
 {
     private const string Model = "ume/chat-onprem";

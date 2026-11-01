@@ -11,7 +11,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// The blob-tombstone purge (data-model §8, §9; issue #34): a tombstone past <c>Settings.BlobPurgeDelayDays</c> purges its
 /// blob, and the negative proof: a tombstoned key that a row references again is never purged. A younger tombstone waits.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup1.Name)]
 public sealed class MaintenanceSweepTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

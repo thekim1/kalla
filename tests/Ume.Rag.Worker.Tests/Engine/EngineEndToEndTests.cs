@@ -14,7 +14,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// <c>unchanged</c>; and the negative proofs: a set held for personal data never goes live, and the deletion guard trips
 /// with nothing deleted.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup3.Name)]
 public sealed class EngineEndToEndTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

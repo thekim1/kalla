@@ -29,7 +29,7 @@ namespace Ume.Rag.Worker.Tests.Preview;
 /// after 24 h; a second preview with <c>basePreviewJobId</c> reuses the first one's fetch and unchanged stages; six
 /// documents are refused; a URL-list preflight reports a robots-disallowed and an egress-blocked URL with their reasons.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup2.Name)]
 public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

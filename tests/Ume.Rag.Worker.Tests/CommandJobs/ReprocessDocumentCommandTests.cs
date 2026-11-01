@@ -15,7 +15,7 @@ namespace Ume.Rag.Worker.Tests.CommandJobs;
 /// the run finishes from the run items; a retried job keeps its run and execution; <c>fetch</c> and unknown documents are
 /// refused.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup1.Name)]
 public sealed class ReprocessDocumentCommandTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

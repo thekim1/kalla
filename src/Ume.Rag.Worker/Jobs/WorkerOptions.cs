@@ -50,9 +50,12 @@ public sealed class WorkerOptions
     [Range(0, 600)]
     public int StopGraceSeconds { get; set; } = 90;
 
-    /// <summary>The run finalizer's interval (30 s, engine design §10.4); one advisory-locked pass per tick across instances.</summary>
-    [Range(1, 600)]
-    public int FinalizerSeconds { get; set; } = 30;
+    /// <summary>
+    /// The run finalizer's interval (30 s, engine design §10.4); one advisory-locked pass per tick across instances.
+    /// Fractions are allowed so tests can finish runs without waiting whole seconds.
+    /// </summary>
+    [Range(0.1, 600.0)]
+    public double FinalizerSeconds { get; set; } = 30;
 
     /// <summary>The scheduler's tick (60 s, engine design §9.6); one advisory-locked pass per tick across instances.</summary>
     [Range(1, 600)]
