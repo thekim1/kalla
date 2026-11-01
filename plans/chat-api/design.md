@@ -475,7 +475,7 @@ x-ume-session: <conversation id>                         (session affinity for o
 traceparent: …
 
 { "model": "<Assistants.GatewayModel>", "messages": [ … ], "stream": true,
-  "stream_options": { "include_usage": true }, "max_tokens": 1024, "temperature": 0.2 }
+  "stream_options": { "include_usage": true }, "max_tokens": 1024 }
 ```
 
 - `x-ume-session` makes the gateway send every turn of a conversation to the same target so vLLM/Ollama prefix caches
@@ -484,7 +484,8 @@ traceparent: …
   `src/Ume.LlmGateway.Domain/Services/RequestRewriter.cs:35-42`, but strips the usage-only chunk unless the client asked,
   `Pipeline/GatewayRequestHandler.cs:256`,
   `src/Ume.LlmGateway.Infrastructure/Providers/OpenAICompatibleAdapter.cs:225-260`).
-- `temperature` from `QuerySteps.answer.temperature` (default 0.2); no other sampling parameter.
+- `temperature` only when `QuerySteps.answer.temperature` is set (default unset: the model's own default; some models,
+  e.g. the Claude models on the gateway, refuse it); no other sampling parameter.
 
 **Keys and ceiling** (gateway design §13). **Until gateway release 2** (P1; reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)) the
 three keys are the pilot department's team's own keys per level (`AllowedIpRanges`, `RequireMaxResidency`, no
@@ -988,7 +989,8 @@ totals).
   (knowledge §15), `rag.chat.prompt`, `rag.chat.answer` (HTTP span); attributes: assistant id, level, client kind,
   history mode, coverage, degraded, outcome, token counts, cited count, condense outcome, config version. **Never**
   message text, condensed queries, titles, comments, snippets or URLs of non-`public` documents.
-- **Logs**: `[LoggerMessage]` as the gateway; events: gateway error (status, code), residency/echo refusal, condense
+- **Logs**: `[LoggerMessage]` as the gateway; events: gateway error (a refused chat call: one Warning with status, the
+  gateway's error code and `x-request-id`), residency/echo refusal, condense
   failure (reason), stream interrupted, writer batch failure, dropped turn (message id), import run summary. Scopes: `ConfigVersion`, `AssistantId`, `ClientId`, `Classification`, `ConversationId` hash
   (repo-and-deployment §9), `MessageId`.
 - **Telemetry scan test**: a marker question, marker answer (FakeGateway) and marker comment never appear in logs,
@@ -1110,7 +1112,7 @@ waits for or depends on it.
 
 | Document | Change |
 |---|---|
-| `platform/data-model.md` §2.1 `Assistants` | `NotFoundText` → `NotFound jsonb` (`sv`, `en`, `links[]{title,url}`, §10.1); `QuerySteps jsonb` schema: `{ condense: { enabled: true, model?: null }, retrieval: { topK: 10, filters, rerank: false (P2) }, history: { maxMessages: 10, maxTokens: 4000 }, answer: { contextTokens: 16384, maxOutputTokens: 1024, temperature: 0.2, language: "auto" }, attachments: { enabled: false } (P2) }` |
+| `platform/data-model.md` §2.1 `Assistants` | `NotFoundText` → `NotFound jsonb` (`sv`, `en`, `links[]{title,url}`, §10.1); `QuerySteps jsonb` schema: `{ condense: { enabled: true, model?: null }, retrieval: { topK: 10, filters, rerank: false (P2) }, history: { maxMessages: 10, maxTokens: 4000 }, answer: { contextTokens: 16384, maxOutputTokens: 1024, temperature?: null, language: "auto" }, attachments: { enabled: false } (P2) }` |
 | `platform/data-model.md` §2.1 `Settings` | `Chat jsonb`: `CondenseModel` (on-prem alias, the only task model), `MaxContextTokens`, default not-found texts sv/en, `AllowedLinkHosts`, `MessagesPerMinutePerUser` 20 |
 | `platform/data-model.md` §2.1 `Clients` | remove `TaskModel`, `TaskModelResidency` and `CK_Clients_TaskModel` (§4.2) |
 | `platform/data-model.md` §2.3 `Conversations` | unique index (`ClientId`, `SubjectId`, `ExternalChatId`, `AssistantId`) (§11.1); no tombstone (`DeletedByUserAt` removed; user delete deletes the row, §13.2); plain `Classification`, no composite keys; title from the first question |

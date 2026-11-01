@@ -157,7 +157,9 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - **Design sync done** (`d0f246b`): the deviations of #248–#274 folded into the designs. Main-session decisions: the
   "either-of" policies stay (B: #283), the admin reads `PublishedAssistantVersions`, `Gateway:MaxResidency` implements M2,
   the 5002 `conversation_not_owned` event stays (B: #284), Open WebUI's `DEFAULT_MODEL_METADATA` in chat §4.3. #281's forms (UI registry + OpenAPI schemas, no `/api/forms`) folded into admin
-  §4.8/§5.1/§5.8/§6.3. Still to fold: `temperature` (after #275).
+  §4.8/§5.1/§5.8/§6.3. `temperature` folded (#282: sent only when set, condense none; chat §8, data-model
+  `QuerySteps`). **Stream A follow-up:** the worker's evaluation client still sends fixed temperatures (0.3 generation,
+  0 judge), which a Claude evaluation model would refuse.
 - **Admin UI:** B merged #279 (Kunskapsbanker); A's #281 merged (Plattformsobjekt: generic forms for clients, keys,
   settings, data protection, site profiles, gateway models; `src/admin-ui/src/platform/**` is stream A's).
 - **Crawl:** a full-site attempt found ≈ 15,400 URLs (≈ 8,100 PDFs); cancelled on the user's call ("too excessive at this
