@@ -13,6 +13,7 @@ public static class AuditEntityTypes
     public const string Collection = "collection";
     public const string Source = "source";
     public const string Run = "run";
+    public const string Key = "key";
 }
 
 /// <summary>The <c>Details</c> of an audit entry. Copied.</summary>
@@ -48,7 +49,7 @@ public static class AuditSnapshots
     [
         typeof(ClientAudit), typeof(NetworkSettings), typeof(RetentionSettings), typeof(DeletionGuardSettings), typeof(EvaluationSettings),
         typeof(JsonSectionSettings), typeof(PiiSettings), typeof(WorkerSettings), typeof(DataProtectionDto),
-        typeof(CollectionAudit), typeof(SourceAudit),
+        typeof(CollectionAudit), typeof(SourceAudit), typeof(KeyAudit),
     ];
 }
 

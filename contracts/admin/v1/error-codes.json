@@ -175,6 +175,36 @@
       "code": "upload_batch_committed",
       "status": 409,
       "message": "The batch has already been committed with other files."
+    },
+    {
+      "code": "key_not_rotatable",
+      "status": 409,
+      "message": "Only an active key that has not been rotated can be rotated."
+    },
+    {
+      "code": "key_revoked",
+      "status": 409,
+      "message": "The key is revoked."
+    },
+    {
+      "code": "key_secret_unavailable",
+      "status": 409,
+      "message": "The key\u0027s secret cannot be shown. Rotate the key to get one that can."
+    },
+    {
+      "code": "key_scope_invalid",
+      "status": 400,
+      "message": "A key can only be limited to assistants and knowledge banks of its team\u0027s department."
+    },
+    {
+      "code": "key_scope_required",
+      "status": 400,
+      "message": "Limit the key to at least one assistant or knowledge bank of your department."
+    },
+    {
+      "code": "keys_unavailable",
+      "status": 503,
+      "message": "Keys cannot be created right now. Ask the platform team."
     }
   ]
 }
