@@ -237,7 +237,7 @@ Every service project starts with `if (await WebDefaults.ExitIfHealthProbeAsync(
 | `Rag:Roles` (env `Rag__Roles`) on `Ume.Rag.Api` | comma list of `knowledge`, `chat`, `mcp` | `knowledge,chat` (P1), `knowledge,chat,mcp` (P2); as built (PR #152): unset means `knowledge`, and the AppHost sets `knowledge,chat,mcp` | maps only those endpoint groups; health reports the active roles; `/version` lists them |
 | `Retrieval:Mode` | `InProcess`, `Http` | `InProcess` | `chat` without `knowledge` requires `Http` and `Retrieval:BaseUrl`; `IRetriever` is then the HTTP client with a `ume-rag-sk-` service key |
 | `Worker:Classes` on `Ume.Rag.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; per-instance concurrency per class is the deployment setting `Worker:Concurrency:<class>` (defaults = engine design §9.1 table), `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps ([`../performance-pass.md`](../performance-pass.md) §3.4) |
-| `Worker:HeartbeatSeconds`, `Worker:InstanceTimeoutSeconds`, `Worker:ReaperSeconds`, `Worker:PollSeconds`, `Worker:StopGraceSeconds` on `Ume.Rag.Worker` | seconds | 10, 30, 10, 2, 90 | heartbeat and instance timeout, reaper interval, dispatcher poll, grace for running jobs on stop (engine design §9.1, §9.4; as built in P0 #20, PR #20). `Worker:Classes` is a comma list |
+| `Worker:HeartbeatSeconds`, `Worker:InstanceTimeoutSeconds`, `Worker:ReaperSeconds`, `Worker:PollSeconds`, `Worker:StopGraceSeconds` on `Ume.Rag.Worker` | seconds | 10, 30, 10, 2, 90 | heartbeat and instance timeout, reaper interval, dispatcher poll, grace for running jobs on stop (engine design §9.1, §9.4; as built in P0 #20, PR #20). `Worker:Classes` is a comma list. `Worker:FinalizerSeconds` (run finalizer interval, engine design §10.4, default 30) is a `double` in 0.1–600 (as built in PR #174, 2026-11-01, so tests can go below 1 s) |
 | `Worker:Maintenance` | `true`/`false` | `true` | partition maintenance, content retention, blob purge and the drift sweep; `true` on exactly one instance until P2, where several instances may run it, each task as a lease leader (`content."LeaderLeases"`, failover ≤ 30 s, [`../performance-pass.md`](../performance-pass.md) §3.5) |
 | `Admin:Retention` on `Ume.Rag.AdminApi` | `true`/`false` | `true` | runs the config/chat/audit retention steps; each batch is idempotent under `pg_try_advisory_xact_lock(<step>)`, so the P2 a/b slots share or skip work; `false` is an off switch ([`../performance-pass.md`](../performance-pass.md) §3.5) |
 
@@ -268,7 +268,9 @@ Chat-role settings (chat design §3.7, §8, §12, §14.2): `Chat:PublishApiRefer
 until P2), `Chat:CondenseTimeout` (600 ms, hard; falls back to the raw question), `Chat:GatewayHeadersTimeout` (15 s, proposed), `Chat:StreamIdleTimeout` (60 s),
 `Chat:MaxAnswerDuration` (240 s), `Chat:WriterEnqueueTimeout` (2 s), `Chat:CharsPerToken` (3); `Gateway:RequireDelegationEcho` (default `true`; decides when a missing delegation echo fails
 closed; used from gateway release 2 in P2, when delegation starts, weakness review §5; the ceiling header is always sent, plan §6); `OpenWebUi:BaseUrl`, `OpenWebUi:AdminApiKey` (feedback import), `OpenWebUi:ClientId`, `OpenWebUi:JwtSecret`,
-`OpenWebUi:MaxLifetimeSeconds` (600) (user JWT, identity design §5.2); per instance `OpenWebUi:Instances:<name>:*`.
+`OpenWebUi:MaxLifetimeSeconds` (600) (user JWT, identity design §5.2); per instance `OpenWebUi:Instances:<name>:*` (as
+built in PR #205, 2026-11-01: only the single instance's `OpenWebUi:ClientId`/`JwtSecret`; the per-instance keys come
+with a second department's instance).
 Platform-wide chat values (condense model, link allow-list, per-user rate) live in `config."Settings".Chat`
 (data-model §2.1).
 
@@ -322,7 +324,7 @@ persistent secrets through the same `Secret(name, length)` helper, `WaitFor`/`Wa
 | `mcp-kommun` | `AddProject<Ume.Mcp.Kommun>` (from `templates/mcp-server/`) | P2 | `ume-mcp-kommun`, first tool the mock fee calculator (tools design §8.5), reached by the api's in-process tool hub only |
 | `adminapi` | `AddProject<…AdminApi>("adminapi", "https")` | – | `Oidc__ClientId=ume-rag-admin`; `Oidc:*` passed through when external |
 | `admin-ui` | `AddViteApp("admin-ui", "../admin-ui")`, port **5174** (gateway: 5173), `PublishWithContainerFiles(adminUi, "wwwroot")` | – | both stacks can run side by side |
-| `open-webui` | `AddContainer("open-webui", "ghcr.io/open-webui/open-webui", <pinned tag>)` | `OpenWebUi:Enabled` (default false) | env of chat design §4.3 (one connection = our api endpoint with the seeded dev key, `X-Rag-Owui-*` headers, title, tag and follow-up generation off); tag **v0.12.3** by digest (designed against v0.12.5, which with v0.12.4 was under 7 days old; the forwarded user JWT is the same at v0.12.3; P0 #14, PR #31, settled at the integration sync point) |
+| `open-webui` | `AddContainer("open-webui", "ghcr.io/open-webui/open-webui", <pinned tag>)` | `OpenWebUi:Enabled` (default false) | env of chat design §4.3 (one connection = our api endpoint with the seeded dev key, `X-Rag-Owui-*` headers, title, tag and follow-up generation off); tag **v0.12.3** by digest (designed against v0.12.5, which with v0.12.4 was under 7 days old; the forwarded user JWT is the same at v0.12.3; P0 #14, PR #31, settled at the integration sync point). As built in PR #206 (2026-11-01): `OpenWebUi:Enabled` defaults to true in run mode and the resource also needs `Seed:Enabled` (its key is the seeded client's); local sign-in (`ENABLE_SIGNUP`/`ENABLE_LOGIN_FORM` true, the first account is Open WebUI's admin), not OIDC, because routing OIDC between the container and the browser through the dev Keycloak is not worth it for a dev stack; the pilot signs in over OIDC (`deploy/compose.openwebui.yaml`) |
 
 Ports in `launchSettings.json` and the AppHost's dashboard port are chosen outside the gateway's (gateway admin
 7212, Vite 5173), so a developer can run the gateway's AppHost and ours at once (§4.4).
@@ -392,7 +394,11 @@ vectors when we run against a real local gateway.
   (not by `IsDefault`) and a URL-list source on the migrator's published platform `url-list` pipeline (it creates no
   pipelines), and enqueues a sync as "sync now" does (priority 10, dedup `sync:{id}`, `MaxAttempts` 3). It takes the
   version lock as `ConfigWrites` does and leaves the version bump to the config triggers; it writes no audit entry.
-  Steps: `docs/p1a-local-run.md` §4.
+  Steps: `docs/p1a-local-run.md` §4. As built in PR #166 (2026-11-01): `--api-key` also creates, insert-if-absent, an
+  `internal` client at ceiling `public`, an `sk` key scoped to the seeded collection and valid for 30 days (hashed in
+  Python as HMAC-SHA256 under `UME_RAG_DEV_KEY_PEPPER`, tied to `KeyHasher` by a shared test vector, so the plaintext
+  never reaches psql; printed once when created) and the `public` `DataProtectionPolicies` row if absent. Since PR #185
+  a key can come from `POST /api/keys` instead (PR #192).
 - **Against a real local gateway** (gateway AppHost running): AppHost user secrets `FakeGateway:Enabled=false`,
   `Gateway:BaseUrl=https://localhost:<gateway port>`, `Gateway:Keys:<level>=<gateway dev keys>`. In the gateway's admin,
   add the Ollama provider with model `bge-m3` (the gateway's `Ollama:Enabled` brings `qwen2.5:0.5b` for chat) and an
@@ -809,7 +815,7 @@ then the gateway's six-step *Upgrade procedure* and *Certificate and secret rota
 | parser (`parser.yml`) | `uv lock --check`, `ruff check`, `pytest` (incl. supervisor tests with a fake converter and `test_offline.py` with network disabled), `export_schema.py` + `git diff --exit-code contracts/` , `pip-audit` | new |
 | parser-image (`parser.yml`) | builds the parser image's `test` target, whose tests run during the build with no network; built without `REVISION`, so an unchanged parser reuses the cached test result (re-running the job does not re-run the tests) | new |
 | contract (`parser.yml`) | `Ume.Rag.ContractTests` start the parser image (built with `REVISION`) (Testcontainers) and convert `tests/fixtures/parser/*` with the worker's client; compare structure to golden JSON (tolerant to timings and versions); responses and error fixtures validated against `contracts/parser/v1/` | new |
-| evaluation-smoke | AppHost-free: migration service + api + worker + FakeGateway + parser against Testcontainers; ingest `tests/evaluation/smoke`, run 30 questions; recall@10 ≥ 0.8 and every answer has a citation | new |
+| evaluation-smoke | AppHost-free: migration service + api + worker + FakeGateway + parser against Testcontainers; ingest `tests/evaluation/smoke`, run 30 questions; recall@10 ≥ 0.8 and every answer has a citation. As built in PRs #208 and #220 (2026-11-01): the trait `Category=EvaluationSmoke` in `Ume.Rag.Worker.Tests` (it hosts the worker and rag-api), which `backend` leaves out; the 13 pages go in through the worker as one `public` upload batch (no parser or ClamAV image), the questions through rag-api in process; the smoke collection uses `{"coverageMaxDistance":0.85}` (`SmokeSet.RetrievalSettings`), because the FakeGateway's feature-hashing embeddings put the best chunk at cosine distance 0.33–0.78; with it the job also checks that the worker's evaluator and `POST /v1/retrieve` return the same chunks in the same order | new |
 | e2e | browser tests (gateway `tests/e2e` setup): the admin **pilot journey** (admin design §5.4, §11.4) run with mouse and keyboard only, against a static fixture site container (nginx, Swedish pages and PDFs); the extended accessibility spec (axe, target size, reflow; zero CSP violations); role journeys | gateway (nightly + release, not every PR: same as the gateway only checks types on PR) |
 | sbom | `dotnet publish` + `Microsoft.Sbom.DotNetTool@4.1.13`, artifact `ume-rag-spdx`; Syft SBOMs for the non-.NET images (*to verify* tool choice) | gateway (extended) |
 

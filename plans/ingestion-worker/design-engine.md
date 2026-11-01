@@ -99,7 +99,10 @@ item 9 (PR #138, 2026-10-31): one decision (`Reconciler.ReconcileAsync`) compute
 version, the host's applied site-profile version, the embedding profile and the content hash, and answers `Current`,
 `SwapBack` (a kept `superseded` set has the key) or `Reprocess`; the fetch path, the `reprocess` run and the drift sweep
 all use it. The fetch path leaves a swap-back to its `embed` continuation, because the fetch job and its frontier row
-complete in one commit.
+complete in one commit. As built in PR #225 (2026-11-01): the wanted key also carries the rule part of
+`ChunkSets.ParseRuleKey` (§14), from the admin parse rules the parse stage takes as candidates for the document
+(processing §3.5), so a parse-rule change is drift on all three paths. A wanted key that is not forced compares only
+the rule part of the live set's salt, so later normal runs keep a forced set (§8).
 
 Callers: the fetch path after new content (6b), a published pipeline version (`reprocess` run), a new site-profile
 version for a host (6b), a cleared PII flag, a collection made `public` (§15), and the **nightly drift sweep** (01:30,
@@ -454,9 +457,10 @@ The response is checked before anything is stored: `x-ume-residency` within the 
   (§3.3), so its key is new and its output is stored beside the old one (write-once holds, nothing is overwritten);
   earlier stages keep their keys, and retries and slices of the same execution reuse what it stored. A forced sync
   `reprocess` defaults `fromStage` to `parse`; `fetch` is refused (`reprocess.fetch_unsupported`); `embed` and `index`
-  bypass no output-cache stage (the EmbeddingCache is never bypassed). Open (#134): a forced run whose chunks differ
-  keeps the unchanged chunk-set key (`IX_ChunkSets_Key` is unique), so the embed job records `unchanged` and the new
-  output is not swapped in.
+  bypass no output-cache stage (the EmbeddingCache is never bypassed). As built in PR #225 (2026-11-01), closing
+  #134: a forced run salts its chunk set too (`ChunkSets.ParseRuleKey` = `force:{executionId}`, before the rule part,
+  §14), so it always writes and swaps its own set (outcome `updated`) and never re-keys; only a retry of the same
+  execution finds that set again.
 - **Retention**: the worker's content retention deletes expired rows in batches of 1,000 and then their blob
   prefixes; orphan blobs older than 24 h without a row are removed by the same job.
 
@@ -678,7 +682,7 @@ runs in a row without a complete traversal raise an alert (6b).
 
 ### 10.4 Finalizer and cost
 
-Every 30 s (advisory-lock leader): for `running` runs whose `sync` job is terminal and that no `queued`/`running` job
+Every 30 s (`Worker:FinalizerSeconds`, a `double` in 0.1–600 as built in PR #174, 2026-11-01; advisory-lock leader): for `running` runs whose `sync` job is terminal and that no `queued`/`running` job
 serves (jobs carry one `RunId`; partial index on `RunId` for open jobs, data-model §4.1): if a `sync`-kind run's
 fetches are done and it has not reconciled yet, enqueue its `sync` job with `phase = reconcile` (deletions and the
 guard, 6b §13.2) and wait for it; then aggregate `RunItems` into the counters and `CostUsd`, set `State` and
@@ -860,7 +864,7 @@ public interface IIndexWriter
 }
 
 public sealed record ChunkSetKey(Guid DocumentId, Guid PipelineVersionId, Guid? SiteProfileVersionId,
-    Guid EmbeddingProfileId, byte[] ContentHash);
+    Guid EmbeddingProfileId, byte[] ContentHash, string? ParseRuleKey);   // ParseRuleKey: as built in PR #225
 public sealed record ChunkSetWrite(ChunkSetKey Key, Guid CollectionId, Classification Level, byte[] InputHash,
     PiiState Pii, IAsyncEnumerable<ChunkRow> Chunks, int ChunkCount);
 ```
@@ -870,6 +874,11 @@ Rules (schema: data-model §2.2). A chunk is searchable iff `Chunks."DeletedAt" 
 
 1. **Lookup**: by the unique key (`DocumentId`, `PipelineVersionId`, `SiteProfileVersionId`, `EmbeddingProfileId`,
    `ContentHash`); a `superseded` set with the wanted key (rollback within 14 days) is swapped back directly (step 3).
+   As built in PR #225 (2026-11-01): the key has one salt, `ParseRuleKey` (data-model §2.2): NULL, `rule:{candidates}`
+   (the admin parse rules the parse took as candidates, `{profileId}@{revision},…`, a SHA-256 when too long),
+   `force:{executionId}` or `force:{executionId};rule:{candidates}` (a forced reprocess, §8). It reaches the embed job
+   in `EmbedPayload.ParseRuleKey`, so the set is keyed by what the parse used. A wanted key that is not forced is met
+   by a set with the same rule part; a forced one only by its own set.
 2. **Write invisible**: insert `ChunkSets` with `State = writing`, then the chunks with `DeletedAt` set, by binary
    `COPY` in batches of ≤ 1,000 rows, each batch a short transaction of its own (well under the 60 s
    `statement_timeout`). As built in P1a item 9 (PR #108, 2026-10-31): one `INSERT … SELECT FROM unnest(…)` per
@@ -881,7 +890,8 @@ Rules (schema: data-model §2.2). A chunk is searchable iff `Chunks."DeletedAt" 
    orphan sweep and `EnsureCurrent` runs, so a slow write of an old version never overtakes a newer one;
    `Documents.LiveChunkSetId` → new set; the new set → `live` with `DeletedAt` cleared on its chunks, or **`held`**
    (chunks stay deleted) when it is PII-flagged or NER-pending, not covered by the document's clearance, and its
-   collection is `public` (6c §9.5); the previous set → `superseded` (`SupersededAt`, kept 14 days for rollback) with
+   collection is `public` (6c §9.5; as built in PR #173, 2026-11-01: for a source with `piiMode: report` only when the
+   personnummer or samordningsnummer rule fires above the cleared count, and a NER-pending set goes in `live`); the previous set → `superseded` (`SupersededAt`, kept 14 days for rollback) with
    `DeletedAt` set on its chunks (tens to hundreds of rows); run item; job completion; commit. Rollback is the same
    swap back. As built in P1b item 6 (PR #131, 2026-10-31): the swap transaction is one component (`ChunkSetSwap`),
    shared by the embed job and `EnsureCurrent`'s swap-back.
@@ -889,6 +899,8 @@ Rules (schema: data-model §2.2). A chunk is searchable iff `Chunks."DeletedAt" 
    the live set's key columns (`ContentHash`, `PipelineVersionId`, `SiteProfileVersionId`) are updated in one row when
    the set's `InputHash` equals the new chunk-stage input hash; no new set, run item `unchanged`, reason
    `change.noise` or `version.unaffected`. If a `superseded` set already holds the new key, it is swapped back instead.
+   As built in PR #225 (2026-11-01): a rule change with identical chunks re-keys the live set with reason
+   `rule.unaffected` (the salt is the only key part that changed); a forced run never re-keys.
    As built in P1a item 9 (PR #108, 2026-10-31): `InputHash` is the personal-data stage's input, i.e. the chunk
    output's `OutputHash`, so re-key compares chunk outputs (6c §12).
 5. **Orphan sweep** (maintenance, nightly): sets in `writing` older than 24 h, or whose execution is superseded, are

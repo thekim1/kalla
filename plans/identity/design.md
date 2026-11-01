@@ -456,10 +456,10 @@ itself never waits.
 | 3 | Subject kind allowed for the client kind (`widget` ⇒ `Anonymous` only; `Anonymous` only via `widget`) | `subject_not_allowed` | 403 |
 | 4 | Permission for the action: delegated `scp` (`Chat.Use` for `ListModels`/`Chat`/`Feedback`, `Knowledge.Read` for `Search`/`ReadDocument`, `Mcp.Use` for `McpCall`), app `roles` (`Chat.Invoke.All`, `Knowledge.Read.All`), keys: key kind (`pk` ⇒ `ListModels`/`Chat`/`Feedback` only) | `permission_missing` | 403 |
 | 5 | Resource exists and is live (assistant `State = active` with a published version, collection not deleted) | `not_found` | 404 |
-| 6 | Key scope: if `Keys.Scopes` lists assistants/collections, the resource is in it | `key_scope` | 404 |
+| 6 | Key scope: if `Keys.Scopes` lists assistants/collections, the resource is in it (as built in PR #198, 2026-11-01: for an assistant, collection scopes must reach at least one of its published version's collections, and the search is then narrowed to them, knowledge design §4.2) | `key_scope` | 404 |
 | 7 | **Classification ceiling**: resource level ≤ client ceiling | `ceiling_exceeded` (event 5005) | 404 |
 | 8 | **Anonymous**: resource level = `public` | `anonymous_not_allowed` | 404 |
-| 9 | **Data handling**: level policy `ClientsWithoutHistoryOnly` ⇒ `!client.StoresHistory`; `AllowedHistoryModes` contains the assistant's mode | `client_stores_history` | 404 |
+| 9 | **Data handling**: level policy `ClientsWithoutHistoryOnly` ⇒ `!client.StoresHistory`; `AllowedHistoryModes` contains the assistant's mode (as built in PR #209, 2026-11-01: a level whose `DataProtectionPolicies` row was never saved gets the code defaults, `DataProtectionPolicy.DefaultFor(level)`, the same as the admin's; a level missing from the snapshot still fails closed) | `client_stores_history` | 404 |
 | 10 | **Audience** (assistants; collections via the assistant, or via `CollectionAudiences` for token callers in P2, knowledge design §4.2): any `AssistantAudiences` row matches: `client` = this client; `department` ∈ `Membership.Departments`; `group` ∈ `Membership.Groups`. Application subjects match only `client` rows | `audience_mismatch` | 404 |
 | 11 | Step 10 needs a department/group row and `Membership.Known = false` | `membership_unavailable` | 503 |
 | 12 | Tools (P2): tool policy = tools design §5.1 (server → skill → assistant → client, `ToolPolicy.Visible`/`Authorize`); inside an agent loop a denial is a `denied` tool message + 5002, not an HTTP 403; on `/mcp` the SDK's unknown-tool error (tools design §5.2) | `tool_not_allowed` | 403 / tool message |
@@ -732,7 +732,10 @@ Same order as `GatewayRequestHandler.Stages.cs:21-77`:
 
 1. Address over `AuthFailuresPerMinute` ⇒ only cached keys, else 429 `rate_limited` with `Retry-After`
    (`AuthFailureThrottle`, copied as is: one-minute windows, IPv6 per /64, ≤ 100 000 tracked addresses,
-   `AuthFailureThrottle.cs:7-106`).
+   `AuthFailureThrottle.cs:7-106`; as built in PR #163, 2026-11-01: keyed by the full IPv4 address or the IPv6 /64,
+   independent of the truncated address the events record). Every key or client change empties the key cache (a
+   cached key may just have been revoked), so for the rest of the minute a throttled address gets 429 for a valid key
+   too (PR #200, 2026-11-01).
 2. Unknown or missing key ⇒ throttle count + failure bucket (`missing_key` / `invalid_key`), 401.
 3. Status: `key_revoked`, `key_disabled`, `key_expired`, `owner_inactive` (team inactive in the mirror, or client
    disabled) ⇒ failure bucket with key id, 401/403.
@@ -745,6 +748,10 @@ Failures are aggregated exactly as the gateway's `AuthFailureRecorder` (bucket =
 flushed every 10 s, capped buckets with one overflow row, `AuthFailureRecorder.cs:23-48`,
 `docs/data-access.md:85-105`) into a new `audit."AuthFailures"` table (§14) and one `rag.auth.failed` event per bucket.
 Our bucket adds `Credential` and `ClientId`. The presented value is never stored or logged (`docs/data-access.md:103-105`).
+As built in PRs #163 and #169 (2026-11-01): there is no `audit."AuthFailures"` table yet; the knowledge role
+aggregates in memory and emits 5001 once a minute per bucket with the count since the last emit, and a flush every
+10 s reports failures held back after the last emit once their minute has passed (idle buckets are dropped). The
+table comes with a schema PR.
 
 ### 6.4 Admin side
 
@@ -1021,6 +1028,15 @@ follows:
 | OTP | **required for admins** (Decisions table: "admins with OTP") | dev has none |
 | Users, groups | **no test users**; pilot accounts are local Keycloak accounts created by hand (J11, user item U-c); member groups for the pilot department are Keycloak groups whose names a platform admin enters on our department record (§2) | §11.1's users and groups stay dev-only |
 | Seed | none: the mirror is filled from the gateway (org sync) and by hand (§2) | – |
+
+As built in P1 item 16 (PRs #207 and #211, 2026-11-01), provisionally and easy to change until the gateway session
+decides §16 questions 2–4 and 8: Keycloak 26.6.4's partial import holds only users, clients, groups, roles and identity
+providers (to-verify #177), so the clients and roles are one partial-import file and `apply-additions.py` sets the
+rest (role scope mappings, realm-wide settings) through the admin REST API. Q3: the realm-wide settings sit in RAG's
+file, separable. Q4: "admins" are `rag-platform-admin` and `rag-department-admin`, enforced by a conditional browser
+flow on role. Q8: `ume-rag-api` is the audience client only (no flow, no app permissions, no scopes). The password
+policy values and brute-force numbers are the stream's choice. Local AppHost redirect URIs are added only with
+`--include-local-redirects`.
 
 **What P1 relies on in the code** (no change needed, issue #47): the BFF and claim mapping are OIDC-generic
 (`src/Ume.Rag.AdminApi/AdminAuthentication.cs:24-56`, `:203-213`), the audit actor falls back to `sub` (§1.1), the tenant and guest checks

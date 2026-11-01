@@ -58,7 +58,10 @@ package source had to be checked for this step.
 | `Ume.Rag.Api` role `knowledge` | hosts `KnowledgeService : IRetriever` (code in `Ume.Rag.Answering`) | called in process (knowledge §2.1–§2.2) |
 
 The chat role maps its routes only when `Rag:Roles` contains `chat` (repo-and-deployment §3). With the roles split,
-`IRetriever` is `HttpRetriever` (knowledge §2.2); nothing in the chat code changes.
+`IRetriever` is `HttpRetriever` (knowledge §2.2); nothing in the chat code changes. As built in PR #198 (2026-11-01):
+`HttpRetriever` does not exist yet, so startup refuses `chat` without `knowledge` in the same process; and the
+`Knowledge:OpenToClientKinds` gate (identity §4.3 step 1a) applies to the knowledge routes only, while for chat the
+access policy decides per assistant.
 
 ### 2.2 The answer seam (P1 RAG, P2 agent)
 
@@ -140,7 +143,7 @@ whole chat), else 413.
 |---|---|
 | `model` | assistant slug; unknown, unpublished or denied → **404 `model_not_found`** (identity §4.3 steps 5–10) |
 | `messages` | 1–1,000 items (Open WebUI resends the whole branch, so long chats must not fail; only the window of §6.3 is used); roles `system`, `developer`, `user`, `assistant`, `tool`; the **last must be `user`** (Open WebUI "continue" sends a final `assistant` prefill: 400 `continue_not_supported`); `system`/`developer` messages are **ignored** (the assistant's prompt is authoritative; Open WebUI user system prompts are also switched off, §4.3); `tool` messages ignored in P1 |
-| `content` | string, or parts: `text` parts concatenated with `\n`; `image_url`, `input_audio`, `file`, `input_file` → **400 `attachments_not_supported`** (answered 6); per message ≤ 32,000 characters; last user message (the question) 1–8,000 characters after NFC and whitespace normalisation (knowledge §5.1 `QueryNormalizer`) |
+| `content` | string, or parts: `text` parts concatenated with `\n`; `image_url`, `input_audio`, `file`, `input_file` → **400 `attachments_not_supported`** (answered 6); per message ≤ 32,000 characters; last user message (the question) 1–8,000 characters after NFC and whitespace normalisation (knowledge §5.1 `QueryNormalizer`); as built in PR #198 (2026-11-01) 1–2,000 characters, `QueryNormalizer.MaxLength`, since the question is also the retrieval query (longer: 400 `question_too_long`) |
 | `stream` | default `false`; `true` → SSE (§9) |
 | `stream_options.include_usage` | honoured: one final usage chunk with the **answer call's** usage (condense not included) |
 | `max_tokens`, `max_completion_tokens` | min(value, assistant `MaxOutputTokens`); never raises it |
@@ -242,7 +245,7 @@ As knowledge §3.7: `AddOpenApi("chat", …)` with typed results, `WithTags("Cha
 | 1 | Authenticate | identity §6.2–§6.3 (key cache, throttle), Open WebUI JWT (§5.2 there), token (§7 there) → `RagPrincipal` | 401/429 |
 | 2 | Parse body | §3.2; content-part refusal before anything else is done | 400/413 |
 | 3 | Message kind | `MessageKind`: conversational (no content words, §6.2) → steps 9–11 skipped | – |
-| 4 | Rate limit | `IRateLimitStore`, per user (`subjectHash`) and minute, `RateWindowSeconds` 120 (gateway pattern); `Settings.Chat.MessagesPerMinutePerUser` **20**. P1: in process per instance (exact with one slot). From the first multi-host deployment (P2, `ConnectionStrings:redis` set): `ume-rag:rl:user:{subjectHash}:{minute}` via one Lua `INCR`+`EXPIRE` script (data-model §11); Redis down → the per-instance limit, logged once a minute (simplification pass §9) | 429 |
+| 4 | Rate limit | `IRateLimitStore`, per user (`subjectHash`) and minute, `RateWindowSeconds` 120 (gateway pattern); `Settings.Chat.MessagesPerMinutePerUser` **20**. P1: in process per instance (exact with one slot). As built in PRs #203 and #204 (2026-11-01): keyed per (client, subject), the subject being the key id for key callers and the user with the Open WebUI JWT; `Settings.Chat.messagesPerMinutePerUser` and `allowedLinkHosts` fall back to the deployment knobs `Chat:MessagesPerMinutePerUser` and `Chat:AllowedLinkHosts` when unsaved. From the first multi-host deployment (P2, `ConnectionStrings:redis` set): `ume-rag:rl:user:{subjectHash}:{minute}` via one Lua `INCR`+`EXPIRE` script (data-model §11); Redis down → the per-instance limit, logged once a minute (simplification pass §9) | 429 |
 | 5 | Policy | `IAccessPolicy.Decide(who, assistant, Chat)` at the current snapshot, within the config grace window (identity §4.3 steps 0–11) | 404 `model_not_found` (+5002/5005), 503 |
 | 6 | Conversation key | §11.1: Open WebUI chat id or verified issued id or new id; **no SQL** | 404 |
 | 7 | Effective level | history-keeping client (`Clients.StoresHistory`): max(assistant level, client ceiling) on **every** turn; else the assistant's level (§8.2); ceiling header and key from it | – |
@@ -310,7 +313,7 @@ request `include_usage` (`ow/main.py:1243-1244`, capabilities from model info `:
 | When | `QuerySteps.condense.enabled` (default **true**) **and** the request has at least one earlier `user` message **and** the question is not self-contained; skipped on the first message |
 | Self-contained (skip) | heuristic: ≥ 6 words (proposed) and no word from a short anaphora list (sv `det`, `den`, `dem`, `detta`, `denna`, `dessa`, `där`, `dit`, `då`, `samma`, `hen`, `han`, `hon`, `sådan`, `också`; en `it`, `this`, `that`, `these`, `those`, `there`, `they`, `same`, `also`); errs towards condensing; counted `skipped_self_contained` |
 | Input | the last ≤ 6 messages before the question, user messages ≤ 500 characters each, assistant messages ≤ 600 characters with `[n]` markers and links removed; plus the question; total ≤ 4,000 characters |
-| Model | `Settings.Chat.CondenseModel` = the gateway's **on-prem small instruct model** alias (one platform-wide value; an assistant may override with another on-prem alias) |
+| Model | `Settings.Chat.CondenseModel` = the gateway's **on-prem small instruct model** alias (one platform-wide value; an assistant may override with another on-prem alias). As built in PR #204 (2026-11-01): platform-wide only (the per-assistant override comes with the assistant forms), and called at ceiling `Eu`, never above the turn's own ceiling, while P1a has no on-prem models (register M2); a turn with ceiling `OnPrem` gets no condense and uses the raw question (the fallback below). It moves to `OnPrem` when the hardware exists |
 | Why this model | `OnPrem` satisfies every level, so one model serves all assistants and no residency branch exists; rewriting a question is a small-model task (short output, no knowledge needed); on-prem GPUs avoid an extra internet round trip; the cost is negligible next to the answer |
 | Call | non-streaming `/v1/chat/completions`, `temperature: 0`, `max_tokens: 96`, headers as §8.1 with `x-ume-max-residency: OnPrem` always and `x-ume-step: condense` |
 | Budget | `Chat:CondenseTimeout` **600 ms** hard timeout (no retry) |
@@ -597,7 +600,7 @@ both would duplicate sources: the client kind decides, never both.
 | `metadata[i].name` | label: title, heading-path tail, "s. 12–13", modified date (knowledge §10.4) | shown as the citation name |
 | `metadata[i].external` | `true` | without it an `http(s)` source is renamed to its URL (`Citations.svelte:127`) |
 | `metadata[i].page` | 0-based page of that chunk (Open WebUI shows `page + 1`) | – |
-| `document[i]` | the cited chunk text, ≤ 1,000 characters | the snippet panel; it is stored in Open WebUI's database, governed by the client's data-handling profile |
+| `document[i]` | the cited chunk text, ≤ 1,000 characters (as built in PR #203, 2026-11-01: the text of the document's first chunk in the sources block, §7.2; several cited chunks of one document share one entry, since Open WebUI dedups by `metadata.source`) | the snippet panel; it is stored in Open WebUI's database, governed by the client's data-handling profile |
 | `distances` | omitted | our scores are rank-based; no relevance bar |
 
 Annotation `title` for OpenAI clients = the same label; `url` = the same link.

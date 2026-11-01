@@ -152,9 +152,10 @@ patterns, furniture patterns) consumed by *Clean* and *Split by headings* throug
   As built in P1b item 8 part 2 (PR #133, 2026-10-31): admin rules are matched like the built-in ones, admin rules
   first, on the parser route only, and cached per config version. A rule's version is a content hash of the rule
   (rule ids `{profileId}@{revision}`). A rule with a text pattern is a candidate before the text is known, so it
-  re-keys every document in its scope, not only those it matches. Not built yet: a parse-rule part in the chunk-set
-  key (`ChunkSets.ParseRuleKey`, so a re-parse of unchanged content can still end `unchanged` at the embed step), and
-  rule candidates in the preview's parse key.
+  re-keys every document in its scope, not only those it matches. The preview's parse key takes the rule candidates
+  too (PR #136). As built in PR #225 (2026-11-01): the candidates are also the rule part of the chunk-set key
+  (`ChunkSets.ParseRuleKey` = `rule:{candidates}`, engine §14), so a rule change writes a new set, disabling the rule
+  swaps the kept set back, and a re-parse whose chunks come out as before re-keys the live set (`rule.unaffected`).
   As built in P1b item 8 part 3 (PR #156, 2026-10-31): the admin writes through the `command` jobs `edit-parse-rule`
   (the first edit creates a `manual` rule, a changing edit a new revision, an unchanged edit writes nothing) and
   `disable-parse-rule`. Payload limits are tighter than the reader's (furniture ≤ 10 × 150 characters, `pathGlob`
@@ -162,8 +163,10 @@ patterns, furniture patterns) consumed by *Clean* and *Split by headings* throug
   `parserule`, before and after), since `ParseProfiles` keeps only the current content. A change enqueues a `sync`
   `reprocess` with `Trigger = manual` for each active source with parser-route documents in the old or new scope (a
   new trigger value would need a change to the `Runs.Trigger` CHECK, and `config-change` would interfere with the
-  settings-change effects). There is no config-version bump yet: the command drops its own worker's rule cache, and
-  the reprocess syncs wait `ParseRuleCatalog.MaxAge` (60 s) so other instances' caches have expired. A
+  settings-change effects). As built in PR #225 (2026-11-01), on the trigger `TR_ParseProfiles_ConfigChanged` of PR
+  #219: a rule change moves the config version, the catalog is read again when the applied version moves (no
+  `MaxAge`), and the reprocess syncs wait 10 s (5 × `ConfigVersionMonitor.PollInterval`) so every instance has applied
+  that version. A
   department-scoped rule matches by the department of the source's collection (`Sources` has no `DepartmentId`).
 - **Observations**: one `ParseObservations` row per non-preview parse: `Domain`, `PathPattern` (path with digits and
   the last segment replaced by `*`), `DocumentType`, `Strategy` (share of pages per strategy), `Score` (§8),
@@ -421,7 +424,8 @@ Names are checked **only when they can change the flag** (simplification pass §
 2. no other rule already flags the set (§9.4);
 3. the set has ≥ 5 contact values (phone and own-domain email, distinct), so the list-like rule could fire.
 
-Otherwise `ner` is `skipped` and names count 0. Text units sent: sentences of chunk bodies and table rows (context for
+Otherwise `ner` is `skipped` and names count 0. As built in PR #173 (2026-11-01): a source with `piiMode: report`
+(§9.5) runs the same gate, so its names count in the counts and the report but cannot hold the set. Text units sent: sentences of chunk bodies and table rows (context for
 names in lists). **Prefilter**: a unit is sent only if it contains a capitalised word that is not its first word, or a
 first word found in a first-name gazetteer (SCB name statistics, names with ≥ 50 bearers, *to verify* licence); ALL-CAPS
 units are sent as they are. Entities with label `person` and `score ≥ Settings.NerMinScore` (0.80) count; distinct
@@ -452,8 +456,23 @@ collection (§9.6). The umea.se example page's contact block (3 contact values) 
   document's old content stops being served at once and the new content (its chunks keep `DeletedAt`) is not served
   until the document is cleared. In other collections the flag is shown but nothing is blocked. Clearing releases the
   held set (state `live`, `DeletedAt` cleared on its chunks, 6a §14), never re-processing.
-- **New flag**: `PiiFlaggedAt = now()` on the set; run items get reason `pii.flagged` (outcome stays
-  `added`/`updated`).
+- **`piiMode`** (source setting, `hold` default or `report`; Decisions table "Personal data on the municipality's own
+  published site", 2026-11-01; as built in PR #173, 2026-11-01): `hold` is the rule above. With `report` a set in a
+  `public` collection is held only when the personnummer or samordningsnummer rule fires with a count above the
+  document's cleared count (never stricter than `hold`); every other flag, and a NER-pending set, is swapped in `live`,
+  keeps `PiiFlagged` and its counts, gets reason `pii.flagged` and raises 5103. A clearance of a `report` source compares
+  only personnummer and samordningsnummer; rising contact or name counts go live with 5103 `Reflag`. The mode is read
+  at each swap (`x-effect: cosmetic`, connectors §12.3): a change applies at each document's next swap, with no run or
+  reprocess, and sets already `held` stay held until cleared or re-processed. The web editors' report (as built in PR
+  #217, 2026-11-01): `GET /api/sources/{id}/pii-report` (admin read policy, source-scoped) applies only to a `report`
+  source in a `public` collection and lists, numbers only, first the documents with a held flagged set, then those
+  whose live set is flagged (≤ 500), with the non-zero counts per type, the fired-rule count (`PiiCounts.rules`, not the
+  list of fired types), `LiveAt` and the last `pii.flagged` run item. `Settings.PiiOwnDomains` is seeded with
+  `SettingsSeed:PiiOwnDomains` (default `["umea.se"]`) when no `Settings` row exists; an existing row is never changed.
+  Own domains match subdomains in any case; `@umea.se`, `*.umea.se` and a trailing dot are normalised (PR #173).
+- **New flag**: `PiiFlaggedAt = now()` on the set (as built in PR #226, 2026-11-01: the time of the first transition to
+  flagged, kept when the set already has one, e.g. a re-flag by the drift sweep; NULL on a set never flagged); run items
+  get reason `pii.flagged` (outcome stays `added`/`updated`), as built in PR #173 only in `public` collections.
 - **`clear-pii-flag` command** (6a §9.1): a person's decision on the **document**, issued by `rag-department-admin`
   of the source's department, or `rag-platform-admin`; reason required (≥ 10 characters); admin audit 6001
   `pii.clear`. The worker sets `Documents.PiiClearedAt`, `PiiClearedBy` and `PiiClearedCounts` (= the held set's
@@ -472,7 +491,9 @@ collection (§9.6). The umea.se example page's contact block (3 contact values) 
   lane sizing. NER `busy`/`not_ready` requeue that job without an attempt; it resumes from the cached chunk output.
 - If NER is not ready for more than 5 minutes (`/v1/info`), the stage completes with patterns only and `ner: pending`:
   the set is swapped in `held` (it can only be pending in a `public` collection, §9.3); the nightly drift sweep (6a
-  §2.3) re-runs `personal-data` for `pending` sets once NER is ready. Sets in other collections never wait for NER.
+  §2.3) re-runs `personal-data` for `pending` sets once NER is ready. Sets in other collections never wait for NER. As
+  built in PR #173 (2026-11-01): a `pending` set of a `piiMode: report` source goes in `live`, and the sweep settles its
+  counts and flag without holding it (unless the personnummer rule fires, §9.5).
 
 ### 9.7 Masking (P2)
 
@@ -560,9 +581,9 @@ output's `OutputHash`, not the *Clean* output's; re-key compares chunk outputs, 
 |---|---|
 | When | after a collection's first sync runs finish; weekly top-up check (scheduler, 6a §9.6); on demand from the admin. As built in P1b item 7 (PR #137, 2026-10-31; `EvalSetTriggers`, dedup `eval-generate:{collectionId}`): `generate-set` when the collection has no generated question and its first syncs finished (every active source has a `succeeded`, `degraded` or `awaiting-deletion-confirmation` run, none is running, and D > 0; publishing is not required), never repeated while any `eval-generate` job row of the collection exists; the weekly check runs Sunday 04:30 Europe/Stockholm; no trigger fires without `Settings.EvaluationModel` |
 | Size (answered 20) | target `N = min(100, 3 × D, eligible chunks)` for `D` live documents; over-generate 1.6 × N to survive filtering |
-| Eligible chunks | live sets of the collection; body ≥ 50 tokens; not from PII-flagged sets (keeps personal data out of stored questions); not `quality.largeTable` rows beyond the first group (not applied as built in P1b item 7, PR #130, 2026-10-31: the fact is not stored per chunk) |
-| Stratification | by document: round-robin over documents in seeded random order, ≤ `⌈N/D⌉ + 1` per document; by document type: proportional to chunk share, each type with ≥ 5 % of chunks gets ≥ 2; by kind: table row groups and lists at least their share, min(5, available) (kind not applied as built, PR #130: not stored per chunk) |
-| Seed | `SHA-256(setId ‖ round)`; the sample is reproducible; the round is the set's highest `Origin.round` (no column; PR #130) |
+| Eligible chunks | live sets of the collection; body ≥ 50 tokens; not from PII-flagged sets (keeps personal data out of stored questions); not `quality.largeTable` rows beyond the first group (as built in PR #226, 2026-11-01: `Chunks.LargeTable`, true on the second and later row groups of a table over 2,000 rows, is excluded) |
+| Stratification | by document: round-robin over documents in seeded random order, ≤ `⌈N/D⌉ + 1` per document; by document type: proportional to chunk share, each type with ≥ 5 % of chunks gets ≥ 2; by kind: table row groups and lists at least their share, min(5, available) (as built in PR #226, 2026-11-01: by `Chunks.ContentKind` `table`/`list`, a minimum of max(⌈share × candidates⌉, min(5, available)) per kind, taken first and inside the per-document cap; `list` = list items are at least half of the body tokens) |
+| Seed | `SHA-256(setId ‖ round)`; the sample is reproducible; as built in PR #226 (2026-11-01) the round is `EvaluationSets.Round`, the round the next generation uses: every round that generated writes round + 1, also one that kept nothing (a question with a later `Origin.round`, written before the column, wins) |
 | Model | `Settings.EvaluationModel` (on-prem chat model in the gateway catalogue; must be a `GatewayModels` row servable `OnPrem`, admin design §4.10) with ceiling `OnPrem`; `x-ume-step: eval-generate`; temperature 0.3; JSON output. As built in P1b item 7 (PR #130, 2026-10-31): unset refuses with `eval.model_unset` (no implicit default); the job refuses unless `/v1/models` at ceiling `OnPrem` lists the model, read through its own client (`gateway-eval-models`) with no answer check, because `ResidencyCeilingHandler` dropped a model list without `x-ume-residency` (it exempts `GET /v1/models` since PR #123, chat §8.1); it still sends `x-ume-max-residency: OnPrem` and the `OnPrem` key |
 
 Prompt outline (Swedish, versioned as `PromptVersion`):
@@ -675,8 +696,9 @@ and not-found on unanswerable questions, and proposes `coverageMaxDistance` and 
 values that separate answerable from unanswerable questions best. These are retrieval-level numbers; the go-live gate
 (`../README.md`) is graded by people on the answers. As built in P1a item 10 (PR #128, 2026-10-31): recall@10 and MRR
 count answerable questions only (`EvaluationRuns.QuestionCount`, `EvaluationResults.Hit` null for unanswerable ones);
-the threshold proposal and the `candidate` flag are kept in `Jobs.Result` only, since `EvaluationRuns` has no columns
-for them, so an `on-demand` run is never a comparison baseline.
+the threshold proposal and the `candidate` flag are kept in `Jobs.Result`; as built in PR #226 (2026-11-01) also in
+`EvaluationRuns.Candidate` and `EvaluationRuns.ThresholdProposal` (`on-demand` runs). An `on-demand` run is still never a
+comparison baseline.
 
 ## 14. Evaluation runs (advisory)
 

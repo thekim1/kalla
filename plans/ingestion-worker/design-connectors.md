@@ -289,7 +289,7 @@ only the headers are read).
 | Rule | Definition |
 |---|---|
 | Scope hosts | hosts of the start URLs + `extraHosts` (answered 13) |
-| Patterns | `include` / `exclude` / `demote` lists over the canonical URL without scheme (`host/path?query`). Glob: `*` = any characters except `/`, `**` = any characters, everything else literal (also `?` and `.`); host part case-insensitive, path case-sensitive. Advanced: `re:<regex>` (.NET `RegexOptions.NonBacktracking`, 50 ms timeout). Exclude wins; empty `include` = everything on the scope hosts. **`demote`** ([weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)) entries are `{ "pattern", "factor" }` (factor in (0, 1), default 0.5) for archive sections such as old minutes: they change no crawling, only ranking (knowledge design §6.5, the lowest matching factor applies); set on the source and shown on the source page; the worker compiles them with the scope (`CrawlScope.DemoteFactor`) but keeps no copy on documents or chunks, and retrieval reads `Sources.DemoteRules` and needs the same glob semantics (`UrlPattern`; as built in P1b item 4, PR #101, 2026-10-31). Eneo passes the start URL itself as a regex (`LinkExtractor(allow=url)`, `eneo/crawler/spiders/crawl_spider.py:25-34`), so `.` and `?` match anything |
+| Patterns | `include` / `exclude` / `demote` lists over the canonical URL without scheme (`host/path?query`). Glob: `*` = any characters except `/`, `**` = any characters, everything else literal (also `?` and `.`); host part case-insensitive, path case-sensitive. Advanced: `re:<regex>` (.NET `RegexOptions.NonBacktracking`; as built in PR #197, 2026-11-01, with no match timeout: linear-time matching is the bound, and a timeout under load let an exclude pattern miss). Exclude wins; empty `include` = everything on the scope hosts. **`demote`** ([weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)) entries are `{ "pattern", "factor" }` (factor in (0, 1), default 0.5) for archive sections such as old minutes: they change no crawling, only ranking (knowledge design §6.5, the lowest matching factor applies); set on the source and shown on the source page; the worker compiles them with the scope (`CrawlScope.DemoteFactor`) but keeps no copy on documents or chunks, and retrieval reads `Sources.DemoteRules` and needs the same glob semantics (`UrlPattern`; as built in P1b item 4, PR #101, 2026-10-31; in `Ume.Rag.Pipelines.Sources` since PR #224, 2026-11-01, so retrieval's demote can use the same matcher). Eneo passes the start URL itself as a regex (`LinkExtractor(allow=url)`, `eneo/crawler/spiders/crawl_spider.py:25-34`), so `.` and `?` match anything |
 | Off-site | a link to a non-scope host is admitted **only** if an `include` pattern names that host explicitly; it is fetched as a **leaf** (its links are never followed). Otherwise counted in the report, not fetched (answered 13) |
 | Depth | link distance from a seed; default `maxDepth` 10 (answered 12); a redirect does not add depth |
 | Pages | default `maxPages` 10,000 (answered 12), counted as **admitted claims** per run (`CrawlRuns.Admitted`), seeds included. Reaching it: no more admissions, run `degraded` `crawl.limit_pages`, traversal partial → no deletions. umea.se has ≈ 14,100 HTML and PDF sitemap URLs, so its source needs `maxPages` ≥ 20,000 (the preflight warns when the sitemaps alone exceed `maxPages`) |
@@ -348,9 +348,12 @@ with an example pattern in the report.
   the next complete traversal that does not reach it (`not-seen`). Other outcomes follow §4. As built in P1b item 4
   (PR #101, 2026-10-31): the check runs in the run whose **complete listing** finds the departure (incremental or
   full); a sitemap entry that never had a `lastmod` never triggers one. In a full traversal a live answer to the `HEAD`
-  is followed by the normal GET, and `HEAD` and GET share one host slot. Until a column exists, removal-check
-  frontier rows carry `Depth = -1` (schema request to stream B: `CrawlFrontier.RemovalCheck`, with
-  `CrawlRuns.Incremental`).
+  is followed by the normal GET, and `HEAD` and GET share one host slot. As built in PR #224 (2026-11-01): a removal
+  check is a frontier row at depth 0 with `CrawlFrontier.RemovalCheck` (it was `Depth = -1`); seed counts, failed
+  seeds and `SeedsFailed` leave it out, and removal checks are still released first. Older `-1` rows are read as
+  removal checks, not migrated. A redirect target recorded from a removal check carries the flag at depth ≥ 0, and
+  `MarkListed` clears the flag when the URL returns to the sitemap. The run's mode is also stored in
+  `CrawlRuns.Incremental`; the history reads `CrawlRuns.Incremental OR Report.mode.incremental` (older runs).
 - **`lastmod` is measured before it is trusted** (weakness review §3): a host's `lastmodReliable` (§5.6) is set only
   after a sample of **500 random sitemap URLs** has been fetched and their noise-normalised content hashes compared
   with their `lastmod` over time ([`../to-verify.md`](../to-verify.md) #170). Until then the host gets no `lastmod`
@@ -474,7 +477,7 @@ deterministic, previewed and checked, not trial-and-score learning.
 
 The shared frontier with claims and the releaser (§6.1–§6.3) is **P2** ([weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)). In P1 each source has
 **its own frontier**: `CrawlFrontier` rows are keyed by (`Classification`, `SourceId`, `UrlHash`) and carry the source's
-`RunId`, `Depth` and `Leaf`, so admission is one upsert per URL and no `CrawlClaims` table, freshness-window reuse
+`RunId`, `Depth` and `Leaf` (and `RemovalCheck`, §5.4, as built in PR #224, 2026-11-01), so admission is one upsert per URL and no `CrawlClaims` table, freshness-window reuse
 across sources or `fetch.shared` fact exists. The source's own `sync` traversal enqueues its `fetch` jobs from its
 `pending` rows in small batches per host (`Crawl:FetchBatchPerHost` in configuration), topping up as they finish. The
 host budget does not change: every `fetch` takes its slot in `CrawlHosts` as in §6.3, so rates, connection caps,
@@ -663,7 +666,7 @@ service can sit behind `IRenderer` (§8.2).
 | Step | Who | What |
 |---|---|---|
 | 1 | admin API | batch create (`POST /api/sources/{id}/upload-batches` → `batchId`), then **one request per file** (raw body, per-file progress and retry; admin design §4.5); each file is an `add` (new slot) or a `replace {uploadId}`, and a batch may carry `delete {uploadId}` entries; streams each file: per file ≤ `maxFileSizeMb` (default 50, platform cap 50; answered 3), ≤ 100 files and ≤ 500 MB per batch; extension pre-check gives an immediate 415 for refused and deferred types (§9.2); SHA-256 while streaming |
-| 2 | admin API | writes each file once to `uploads/{sourceId}/{slot}/{sha256}` (`slot` = the `uploadId`; write-once; `internal`: envelope-encrypted with the data key wrapped by `rag-blob-<level>` in the blob header, data-model §7; `public`: not envelope-encrypted, simplification pass §4; as built, PR #153, 2026-10-31: the admin still stores uploads as received, and the worker reads them as stored until the admin encrypts `internal` uploads); uploads are the only content that cannot be fetched again, so they are **copied to the backup target within 15 minutes** (repo-and-deployment backup); at **commit** (`POST /api/upload-batches/{batchId}/commit`) writes the batch manifest `uploads/{sourceId}/batches/{batchId}.json` (entries, names, declared types, sizes, hashes); inserts one `sync` job, `Trigger = upload`, payload `{sourceId, batchId}`, `DedupKey = sync-upload:{batchId}` (uploads never wait for a running crawl-style sync); uncommitted batches and their blobs are swept after 24 h |
+| 2 | admin API | writes each file once to `uploads/{sourceId}/{slot}/{sha256}` (`slot` = the `uploadId`; write-once; `internal`: envelope-encrypted with the data key wrapped by `rag-blob-<level>` in the blob header, data-model §7; `public`: not envelope-encrypted, simplification pass §4; as built in PRs #180 and #186, 2026-11-01: the admin envelope-encrypts `internal` uploads (`IBlobEnvelope.PutAsync` at the source's level, SHA-256 over the received plaintext), and the worker reads them through `EnvelopeBlobStore.ForLevel(level)` and requires `URB2` for `internal` uploads, with no fallback; each file is staged under `tmp/upload-batches/{batchId}/` and promoted at commit, a promote being a link, so an uncommitted batch leaves nothing outside `tmp/`; the batch's state is the batch record and one record per file in that folder, not a table); uploads are the only content that cannot be fetched again, so they are **copied to the backup target within 15 minutes** (repo-and-deployment backup); at **commit** (`POST /api/upload-batches/{batchId}/commit`) writes the batch manifest `uploads/{sourceId}/batches/{batchId}.json` (entries, names, declared types, sizes, hashes); inserts one `sync` job, `Trigger = upload`, payload `{sourceId, batchId}`, `DedupKey = sync-upload:{batchId}` (uploads never wait for a running crawl-style sync); uncommitted batches and their blobs are swept after 24 h |
 | 3 | worker, `sync` | reads the manifest, upserts the `Uploads` slots, opens the run, enqueues one `fetch` job per added or replaced file (`DedupKey = fetch:{sourceId}:upload:{uploadId}`, 6a §9.2; P1a item 4, PR #78) and applies the batch's deletes |
 | 4 | worker, `fetch` (stage `upload`) | ClamAV scan (§11) → sniff → type check → upsert of the source's document `upload:<uploadId>` with the file's content hash → the upload blob is the document's raw content (no copy) → pipeline continues |
 
@@ -807,6 +810,7 @@ next sync. The count shown on save is not built (admin).
 | `noiseSelectors` | url-list, crawl | behaviour | next sync; pages whose hash changes re-process once |
 | `conditionalGet`, `revalidateEvery` (1–100, default 4), `timeoutSeconds` (5–120, default 30) | url-list, crawl | behaviour | next sync |
 | `maxFileSizeMb` | upload | behaviour | new uploads only |
+| `piiMode` (`hold` default, `report`; Decisions table, 2026-11-01; as built in PR #173, 2026-11-01) | url-list, crawl, upload | cosmetic | none: read at each document's next swap (processing design §9.5); sets already `held` stay held until cleared or re-processed |
 | site profile version (host, §5.6) | url-list, crawl on the host | behaviour; `identityRule`/`ignoreQueryParams`: identity; `excludedTypes`: scope | extraction fields: the host's HTML documents re-processed from stored raw content; identity fields: identity re-sync of the host's sources (exempt removals); `excludedTypes`: as scope. As built in PR #141 (2026-10-31): for crawl sources a `sync` replaces the reprocess when `excludedTypes` or identity changes (§5.6) |
 | `sites`, `drives`, `folders`, `includeSitePages`, `excludedPaths` (P2) | sharepoint | scope | widening: enumerate the new scope; narrowing: from stored paths, exempt |
 | `certificate`, `tenantId` (P2) | sharepoint | behaviour | preflight, then next sync |
@@ -821,6 +825,8 @@ the settings above per type, each with its `x-effect`.
   `exclude`, `demote`, `maxDepth` (0–50, default 10), `maxPages` (1–1,000,000, default 10,000), `crawlWindow`
   (default `22:00-06:00`) and `incrementalSchedule` (default `null`).
 - `upload`: `maxFileSizeMb` (1–50, default 50).
+- As built in PR #173 (2026-11-01): all three types add `piiMode` (`hold`/`report`, default `hold`); settings that do
+  not bind, or an unknown type, read as `hold`.
 
 `name`, `classification` and `schedule` are `Sources` columns, not settings (`Sources` has no description column). `incrementalSchedule` was
 left out of P1a item 4 until the `lastmod` sample, and added for crawl only in P1b item 2 (§5.4). `timeoutSeconds` is
