@@ -104,7 +104,7 @@ issue). Until the admin's set-up endpoints (J7) exist, the source comes from a d
 
 **Passed 2026-11-01** (session 13, on Linux/WSL): 5 pages fetched, 4 added (one hub page `parse.empty`), 17 chunks at
 1024 dimensions, the canary recorded at `Eu`, and `/v1/retrieve` answered in under 1 s with the right chunk first. Until
-#168 is merged, the AppHost needs the three workarounds in §4.3. What the run showed is in §4.7.
+#168 was fixed (#172), the AppHost needed three manual workarounds; they are no longer needed. What the run showed is in §4.7.
 
 ### 4.1 Prerequisites
 
@@ -167,8 +167,7 @@ user `postgres`, the generated password); keep it out of transcripts. For the AP
 NuGet cache (`~/.nuget/packages/aspire.cli.linux-x64/<version>/tools/net10.0/linux-x64/aspire`) or `dotnet tool`:
 
 ```bash
-export Seed__Enabled=false BlobStore__Root=$HOME/.ume-rag/blobs/rag   # BlobStore: until #168, see below
-mkdir -p "$BlobStore__Root"
+export Seed__Enabled=false
 aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive   # prints the dashboard login URL
 aspire describe --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj                    # resource states
 ```
@@ -177,22 +176,11 @@ With WSL's mirrored networking the Windows browser reaches every `localhost` por
 another app, the browser serves a cached one: open it in a private window. The dev certificate is not trusted on the
 Windows side (accept the warning once per port: 5174, 7402, Keycloak's port).
 
-**Until #168 is merged** (AppHost, stream B), a run from an empty volume needs three workarounds:
-
-1. **No `vector` extension:** `migrations` fails with `42704: type "vector" does not exist` and the services stay
-   `FailedToStart`. Create it, then restart the resources:
-   ```bash
-   C=$(docker ps --format '{{.Names}}' | grep -E '^postgres-' | head -1)
-   docker exec "$C" sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U postgres -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector"'
-   for r in migrations worker api adminapi; do aspire resource $r start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj; done
-   ```
-   Run the `CREATE EXTENSION` on its own: `psql -c` runs several statements as one transaction.
-2. **The database does not survive a restart:** the named volume is mounted at `/var/lib/postgresql` but the pgvector
-   image (Postgres 17) keeps its data in `/var/lib/postgresql/data`, an anonymous volume. Every AppHost restart starts
-   from an empty database: redo 1 and the seed (§4.4), and revoke nothing (the old key is gone with the database).
-3. **`BlobStore:Root`** defaults to `/data/blobs/rag`: on Linux every fetch job throws `UnauthorizedAccessException`
-   and retries (on Windows the path quietly becomes `C:\data\blobs\rag`). Set `BlobStore__Root` before `aspire start`
-   as above; the worker, api and admin inherit it.
+**Since #172** (2026-11-01) the AppHost creates the `vector` extension (the migrator, dev superuser path), keeps the
+database across restarts (the volume at `/var/lib/postgresql/data`, the cluster in `pgdata/` below it) and passes
+`BlobStore__Root` = `~/.ume-rag/blobs/rag` (mode 0700) to the services; `BlobStore:Root` in the AppHost configuration
+wins. A dev volume created before #172 never held the database (it lived in an anonymous volume), so the first start
+after #172 begins with an empty database: run the seed (§4.4) again.
 
 ### 4.4 Seed a URL-list source (now on FakeGateway; for the pilot profile after 4.3)
 
@@ -308,8 +296,8 @@ Keep the `ume-rag-m1-postgres` volume for the next live run, or delete it with `
 |---|---|
 | The interim gateway accepts `dimensions` for `text-embedding-3-large`; vectors are 1024 | confirmed |
 | The dashboard parameter is `key-pepper` (user secret `Parameters:key-pepper`); rag-api runs on `https://localhost:7401` | confirmed |
-| The AppHost from an empty volume: `vector` extension, volume path, `BlobStore:Root` | #168 (stream B), workarounds in §4.3 |
+| The AppHost from an empty volume: `vector` extension, volume path, `BlobStore:Root` | fixed by #172 (closes #168) |
 | Two pages held for e-mail addresses only: `Settings.Engine.PiiOwnDomains` is empty, so `@umea.se` counts as external | the user decided `piiMode: report` for the municipality's own site (Decisions table, 2026-11-01); set `PiiOwnDomains` to `umea.se` and the municipal companies' domains |
 | The gateway's PII filter answered a policy block with 503: the worker retried it as an outage until the key policy changed (attempt 5 of 6) | for the gateway session: a policy refusal should be a 4xx with a reason code |
 | A hub page of link cards (`bygganyttandraellerriva`) is `parse.empty` and counted as `Unchanged` in the run | expected for the page; the counter is checked by stream A |
-| The worker's job log names the exception type only (`threw System.UnauthorizedAccessException`); `LastError` is `job.exception` | stream A |
+| The worker's job log names the exception type only (`threw System.UnauthorizedAccessException`); `LastError` is `job.exception` | #179: the log names the type chain and the throw site (never the message) |
