@@ -20,6 +20,7 @@ builder.AddServiceDefaults();
 builder.Services.AddOptions<FakeGatewayOptions>().BindConfiguration(FakeGatewayOptions.SectionName);
 var latency = builder.Configuration.GetSection(FakeLatency.SectionName).Get<FakeLatency>() ?? new FakeLatency();
 builder.Services.AddHttpClient("upstream").RemoveStandardResilienceHandler();
+builder.Services.AddSingleton<FakeChatScripts>();
 
 var app = builder.Build();
 app.MapDefaultEndpoints();
@@ -50,7 +51,7 @@ app.MapGet("/v1/models", (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> 
     });
 });
 
-app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options) =>
+app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options, FakeChatScripts scripts) =>
 {
     var o = options.Value;
     if (FakeAccess.Authorize(ctx, o, out var error) is not { } call)
@@ -71,7 +72,9 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
     }
 
     var question = FakeContent.LastUserText(body["messages"]);
-    var answer = latency.Pad(FakeContent.Answer(question, FakeContent.AllText(body["messages"])));
+    // The worker's evaluation steps get scripted JSON answers (#129); every other call the echo.
+    var answer = scripts.Answer(ctx.Request.Headers[FakeChatScripts.StepHeader].ToString(), question)
+                 ?? latency.Pad(FakeContent.Answer(question, FakeContent.AllText(body["messages"])));
     var promptTokens = FakeContent.Tokens(FakeContent.AllText(body["messages"]));
     var completionTokens = FakeContent.Tokens(answer);
     var id = "chatcmpl-" + Guid.NewGuid().ToString("N")[..12];
