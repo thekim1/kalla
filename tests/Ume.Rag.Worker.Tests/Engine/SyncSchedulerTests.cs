@@ -13,7 +13,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// from <c>Sources.CreatedAt</c>, so an edit after that occurrence (which moves <c>UpdatedAt</c>) does not push the first
 /// scheduled run to the next night.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup3.Name)]
 public sealed class SyncSchedulerTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

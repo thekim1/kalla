@@ -22,7 +22,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// published version re-processes every live document without a request (and only re-keys when no stage changed);
 /// <c>retry-failed</c> fetches only what failed, for a crawl and a URL list.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup1.Name)]
 public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static readonly string LongText = string.Concat(Enumerable.Repeat(

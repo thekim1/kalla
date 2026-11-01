@@ -24,7 +24,7 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 /// <see cref="RetrievalEngine.SearchAsync"/> (the <c>/v1/retrieve</c> path); win and loss counts against the previous run.
 /// The design places it in <c>Ume.Rag.IntegrationTests</c> (stream B's); it lives here with the other evaluation tests.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup4.Name)]
 public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, EvalGatewayFactory gateway) : IClassFixture<EvalGatewayFactory>, IAsyncLifetime
 {
     private const string Model = "ume/chat-onprem";

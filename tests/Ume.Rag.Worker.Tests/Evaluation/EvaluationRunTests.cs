@@ -22,7 +22,7 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 /// candidate settings, <c>publish-report</c> against the last run before the publish, <c>nightly</c> with the recall
 /// alert on fake history, the nightly schedule and the kinds left to the set handler.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup1.Name)]
 public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static readonly EvaluationVariant[] ThreeWay = [EvaluationVariant.Vector, EvaluationVariant.Hybrid, EvaluationVariant.HybridNoDecompounder];

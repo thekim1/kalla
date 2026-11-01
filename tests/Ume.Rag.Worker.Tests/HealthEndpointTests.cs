@@ -6,7 +6,7 @@ using Ume.Rag.TestKit;
 namespace Ume.Rag.Worker.Tests;
 
 /// <summary>Every service answers the probes and /version (P0 checklist #4); the worker's readiness needs its database.</summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup3.Name)]
 public sealed class HealthEndpointTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private WebApplicationFactory<Program> _factory = null!;

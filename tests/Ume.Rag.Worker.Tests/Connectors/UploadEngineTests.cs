@@ -20,7 +20,7 @@ namespace Ume.Rag.Worker.Tests.Connectors;
 /// second department are a second document whose embeddings come from the cache; a replace keeps the document and swaps
 /// its set; a delete removes the document and an add on the deleted slot revives it.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup3.Name)]
 public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static readonly byte[] Eicar = Encoding.ASCII.GetBytes(@"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*");

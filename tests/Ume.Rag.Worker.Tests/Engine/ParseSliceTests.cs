@@ -20,7 +20,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// range 3 is reclaimed and resumes at range 3. The parse cache is keyed by the parser build: another build misses, the
 /// same build hits (simplification pass §2, parser design §7.6).
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup4.Name)]
 public sealed class ParseSliceTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private const int Pages = 4;

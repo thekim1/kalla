@@ -25,7 +25,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// limits delete nothing; a URL list's change claims only the added URLs, and its identity change removes the old identities
 /// <c>identity-changed</c>.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup2.Name)]
 public sealed class SettingsEffectsTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-settings-blobs-");

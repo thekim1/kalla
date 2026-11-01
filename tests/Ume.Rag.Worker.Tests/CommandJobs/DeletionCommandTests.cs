@@ -12,7 +12,7 @@ namespace Ume.Rag.Worker.Tests.CommandJobs;
 /// a release clears the source's holds. Unknown ids and runs not waiting are refused, a repeated decision changes nothing,
 /// and a job that lost its lease writes nothing.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup2.Name)]
 public sealed class DeletionCommandTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private const string Admin = "admin-oid";

@@ -14,7 +14,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// <c>writing</c> by a crash between its batches and its swap is replaced by the retry and never searchable; and a failed
 /// fence keeps the old set live.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup3.Name)]
 public sealed class EngineRecoveryTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -50,7 +50,7 @@ public sealed class EngineRecoveryTests(RagDatabaseFixture database, FakeGateway
             var first = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
             var runId = await EngineKit.SyncNowAsync(database, seed);
             await reached.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);
-            var slowJob = await RunningFetchAsync(runId);
+            var slowJob = await HeldFetchAsync(runId);
             await first.KillAsync();
             release.TrySetResult();
 
@@ -182,10 +182,19 @@ public sealed class EngineRecoveryTests(RagDatabaseFixture database, FakeGateway
         (await EngineKit.LiveChunksAsync(database, seed)).ShouldBeGreaterThanOrEqualTo(documents);
     }
 
-    private Task<Guid> RunningFetchAsync(Guid runId) =>
-        Sql.ScalarAsync<Guid>(database.Connection(null), """
-            SELECT "Id" FROM content."Jobs" WHERE "RunId" = $1 AND "Class" = 'fetch' AND "State" = 'running' LIMIT 1
+    /// <summary>
+    /// The fetch job held at the site: the one still running once the run's two other fetches have succeeded (until then a
+    /// running fetch may be one of those, finishing).
+    /// </summary>
+    private async Task<Guid> HeldFetchAsync(Guid runId)
+    {
+        await Commands.WaitUntilAsync(async () => await Sql.ScalarAsync<long>(database.Connection(null), """
+            SELECT count(*) FROM content."Jobs" WHERE "RunId" = $1 AND "Class" = 'fetch' AND "State" = 'succeeded'
+            """, runId) == 2);
+        return await Sql.ScalarAsync<Guid>(database.Connection(null), """
+            SELECT "Id" FROM content."Jobs" WHERE "RunId" = $1 AND "Class" = 'fetch' AND "State" = 'running'
             """, runId);
+    }
 
     private async Task<Guid> PublishNewVersionAsync(SourceSeed seed)
     {

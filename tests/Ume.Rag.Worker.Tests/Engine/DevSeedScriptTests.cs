@@ -31,7 +31,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// collection. The localhost-only guard, the key generation and the pepper handling are the Python script's
 /// (<c>scripts/dev/test_seed_url_list.py</c>).
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup1.Name)]
 public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private const string ProfileName = "engine-test-embedding";

@@ -17,7 +17,7 @@ namespace Ume.Rag.Worker.Tests.Connectors;
 /// file's <c>fetch</c> job requeues without an attempt while it has waited less than 24 h (<see cref="ScanWait"/> on a fake
 /// clock), and after 24 h it ends <c>failed</c> <c>clamav.unavailable</c>, counted in the run, which ends degraded.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup2.Name)]
 public sealed class ClamAvWaitEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

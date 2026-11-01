@@ -80,6 +80,9 @@ internal static class EngineKit
     public static readonly Guid ProfileId = Guid.Parse("01929b6e-0000-7000-8000-0000000e1e01");
     public const int Dimensions = 1024;
 
+    /// <summary>The finalizer's interval in the engine tests: a run takes two passes (reconcile, then finish), so it sets the pace of every run.</summary>
+    public const double FinalizerSeconds = 0.2;
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>A web page with enough text to chunk; <paramref name="extra"/> is added to the body.</summary>
@@ -222,7 +225,7 @@ internal static class EngineKit
             ["Gateway:Keys:Eu"] = FakeGatewayFactory.EuKey,
             ["BlobStore:Root"] = blobs.FullName,
             ["Crawl:AllowedPrivateRanges"] = "127.0.0.1/32",
-            ["Worker:FinalizerSeconds"] = "1",
+            ["Worker:FinalizerSeconds"] = FinalizerSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),
         }, settings), logs, engine: true);
 
     private static Dictionary<string, string?> Merge(Dictionary<string, string?> defaults, IReadOnlyDictionary<string, string?>? settings)

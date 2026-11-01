@@ -21,7 +21,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// <c>parse</c> or <c>embed</c> job and no gateway call; a set past 14 days is purged (and that document re-runs from the
 /// caches); each finished publish or rollback run enqueues one <c>eval</c> <c>publish-report</c>.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup2.Name)]
 public sealed class PublishTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     // The eval class stays off, so the publish reports stay queued where the tests can count them.
@@ -106,19 +106,19 @@ public sealed class PublishTests(RagDatabaseFixture database, FakeGatewayFactory
             var mid = await LiveSetsAsync(seed);
             (await EngineKit.RunAsync(database, runId)).ShouldNotBeNull().State.ShouldBe(RunStates.Running);
             mid[a].Set.ShouldNotBe(before[a].Set);
-            (await SearchableSetsAsync(a)).ShouldBe([mid[a].Set]);
+            (await SearchableSetsAsync(seed, a)).ShouldBe([mid[a].Set]);
             mid[b].ShouldBe(before[b]);
-            (await SearchableSetsAsync(b)).ShouldBe([before[b].Set], "the old set answers until the document's own swap");
+            (await SearchableSetsAsync(seed, b)).ShouldBe([before[b].Set], "the old set answers until the document's own swap");
             (await EngineKit.StrayChunksAsync(database, seed)).ShouldBe(0);
 
             gate.Open();
             (await EngineKit.WaitForRunAsync(database, runId)).ShouldBe(new RunCounters(RunStates.Succeeded, 0, 2, 0, 0, 0, 0));
             var after = await LiveSetsAsync(seed);
             after.Values.Select(s => s.Version).Distinct().ShouldBe([v2]);
-            (await SearchableSetsAsync(b)).ShouldBe([after[b].Set]);
+            (await SearchableSetsAsync(seed, b)).ShouldBe([after[b].Set]);
             (await StateAsync(before[a].Set)).ShouldBe(ChunkSetStates.Superseded);
             (await StateAsync(before[b].Set)).ShouldBe(ChunkSetStates.Superseded);
-            await Task.Delay(TimeSpan.FromSeconds(2.5), Ct); // two more finalizer passes
+            await Task.Delay(TimeSpan.FromSeconds(EngineKit.FinalizerSeconds * 2.5), Ct); // two more finalizer passes
             (await PublishReportsAsync(runId)).ShouldBe([new ReportJob(JobStates.Queued, seed.CollectionId, v2)]);
         }
         finally
@@ -157,7 +157,7 @@ public sealed class PublishTests(RagDatabaseFixture database, FakeGatewayFactory
             (await LiveSetsAsync(seed)).ShouldBe(v1Sets, "the kept sets are live again");
             foreach (var (url, set) in v1Sets)
             {
-                (await SearchableSetsAsync(url)).ShouldBe([set.Set]);
+                (await SearchableSetsAsync(seed, url)).ShouldBe([set.Set]);
                 (await StateAsync(v2Sets[url].Set)).ShouldBe(ChunkSetStates.Superseded);
             }
 
@@ -210,8 +210,8 @@ public sealed class PublishTests(RagDatabaseFixture database, FakeGatewayFactory
             live[b].ShouldBe(v1Sets[b], "the kept set is swapped back");
             live[a].Version.ShouldBe(seed.VersionId);
             live[a].Set.ShouldNotBe(v1Sets[a].Set, "the purged set is rebuilt from the cached stage outputs");
-            (await ContentJobsAsync(rollbackId, b)).ShouldBe(0);
-            (await ContentJobsAsync(rollbackId, a)).ShouldBeGreaterThan(0);
+            (await ContentJobsAsync(rollbackId, seed, b)).ShouldBe(0);
+            (await ContentJobsAsync(rollbackId, seed, a)).ShouldBeGreaterThan(0);
         }
         finally
         {
@@ -273,15 +273,18 @@ public sealed class PublishTests(RagDatabaseFixture database, FakeGatewayFactory
         return sets;
     }
 
-    /// <summary>The sets whose chunks a search of the document can return (<c>DeletedAt</c> null).</summary>
-    private async Task<List<Guid>> SearchableSetsAsync(string identity)
+    /// <summary>
+    /// The sets whose chunks a search of the seed's document can return (<c>DeletedAt</c> null). Scoped to the source: a
+    /// test site of an earlier test may have had the same port, so the identity alone is not unique.
+    /// </summary>
+    private async Task<List<Guid>> SearchableSetsAsync(SourceSeed seed, string identity)
     {
         await using var connection = new NpgsqlConnection(database.Connection(null));
         await connection.OpenAsync(Ct);
         await using var command = new NpgsqlCommand("""
             SELECT DISTINCT c."ChunkSetId" FROM content."Chunks" c JOIN content."Documents" d ON d."Id" = c."DocumentId"
-            WHERE d."CanonicalIdentity" = $1 AND c."DeletedAt" IS NULL
-            """, connection) { Parameters = { new NpgsqlParameter { Value = identity } } };
+            WHERE d."SourceId" = $1 AND d."CanonicalIdentity" = $2 AND c."DeletedAt" IS NULL
+            """, connection) { Parameters = { new NpgsqlParameter { Value = seed.SourceId }, new NpgsqlParameter { Value = identity } } };
         await using var reader = await command.ExecuteReaderAsync(Ct);
         var sets = new List<Guid>();
         while (await reader.ReadAsync(Ct))
@@ -303,13 +306,19 @@ public sealed class PublishTests(RagDatabaseFixture database, FakeGatewayFactory
         return await command.ExecuteScalarAsync(Ct) as string;
     }
 
-    /// <summary>The run's <c>parse</c> and <c>embed</c> jobs, of one document when <paramref name="identity"/> is given.</summary>
-    private Task<long> ContentJobsAsync(Guid runId, string? identity = null) =>
+    /// <summary>The run's <c>parse</c> and <c>embed</c> jobs.</summary>
+    private Task<long> ContentJobsAsync(Guid runId) =>
+        Sql.ScalarAsync<long>(database.Connection(null), """
+            SELECT count(*) FROM content."Jobs" j WHERE j."RunId" = $1 AND j."Class" IN ('parse', 'embed')
+            """, runId);
+
+    /// <summary>The run's <c>parse</c> and <c>embed</c> jobs of the seed's document <paramref name="identity"/>.</summary>
+    private Task<long> ContentJobsAsync(Guid runId, SourceSeed seed, string identity) =>
         Sql.ScalarAsync<long>(database.Connection(null), """
             SELECT count(*) FROM content."Jobs" j
             WHERE j."RunId" = $1 AND j."Class" IN ('parse', 'embed')
-              AND ($2::text IS NULL OR (j."Payload" ->> 'documentId')::uuid = (SELECT "Id" FROM content."Documents" WHERE "CanonicalIdentity" = $2))
-            """, runId, (object?)identity ?? DBNull.Value);
+              AND (j."Payload" ->> 'documentId')::uuid = (SELECT "Id" FROM content."Documents" WHERE "SourceId" = $2 AND "CanonicalIdentity" = $3)
+            """, runId, seed.SourceId, identity);
 
     private async Task<List<ReportJob>> PublishReportsAsync(Guid runId)
     {

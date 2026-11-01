@@ -8,7 +8,7 @@ using Ume.Rag.TestKit;
 namespace Ume.Rag.Worker.Tests;
 
 /// <summary>The Postgres <see cref="IJobQueue"/> against the real schema and roles (data-model §4.2, §4.3).</summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup3.Name)]
 public sealed class JobQueueTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private static readonly TimeSpan Lease = TimeSpan.FromMinutes(1);
