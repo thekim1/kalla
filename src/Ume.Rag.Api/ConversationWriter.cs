@@ -12,10 +12,10 @@ public sealed record TurnSource(int Rank, Guid DocumentId, Guid ChunkId, Guid Co
 
 /// <summary>
 /// A finished turn (chat design §12.1) in history mode <c>none</c> (all of P1, weakness review §4): metadata only, no text.
-/// The conversation is the issued id (<see cref="IssuedId"/>) or Open WebUI's chat (<see cref="ExternalChatId"/>).
+/// <see cref="MessageId"/> is the answer's <c>chatcmpl-</c> id. The conversation is the issued id (<see cref="IssuedId"/>) or Open WebUI's chat (<see cref="ExternalChatId"/>).
 /// </summary>
 public sealed record ChatTurn(
-    Guid? IssuedId, string? ExternalChatId, Guid AssistantId, Guid? AssistantVersionId, Guid DepartmentId, Guid ClientId, string SubjectKind, string SubjectId,
+    Guid MessageId, Guid? IssuedId, string? ExternalChatId, Guid AssistantId, Guid? AssistantVersionId, Guid DepartmentId, Guid ClientId, string SubjectKind, string SubjectId,
     string Classification, string HistoryMode, int RetentionDays, string Outcome, string? Coverage, string? Degraded, string? Language, bool CondenseUsed,
     string? GatewayModel, string? Residency, int? InputTokens, int? OutputTokens, int? LatencyMs, int? TimeToFirstTokenMs, IReadOnlyList<TurnSource> Sources,
     DateTimeOffset At)
@@ -265,7 +265,8 @@ public sealed partial class ConversationWriter : BackgroundService
             await ExecuteAsync(connection, transaction, message, ct, Guid.CreateVersion7(), conversationId, turn.Classification, seq + 1, "user", expires,
                 DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, false,
                 turn.Outcome, turn.At);
-            var answerId = Guid.CreateVersion7();
+            // The assistant message keeps the turn's id (chatcmpl-<N>), so /v1/feedback finds it (§3.5).
+            var answerId = turn.MessageId;
             await ExecuteAsync(connection, transaction, message, ct, answerId, conversationId, turn.Classification, seq + 2, "assistant", expires,
                 Db(turn.AssistantVersionId), Db(turn.GatewayModel), Db(turn.Residency), Db(turn.InputTokens), Db(turn.OutputTokens), Db(turn.LatencyMs),
                 Db(turn.TimeToFirstTokenMs), Db(turn.Coverage), Db(turn.Degraded), Db(turn.Language), turn.CondenseUsed, turn.Outcome, turn.At);

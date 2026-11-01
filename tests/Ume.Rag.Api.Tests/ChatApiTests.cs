@@ -163,7 +163,39 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         messages[1].GetProperty("sources")[0].GetProperty("number").GetInt32().ShouldBe(1);
         (await client.GetFromJsonAsync<JsonElement>($"/v1/conversations/{conversationId}", Ct)).GetProperty("messages").GetArrayLength().ShouldBe(4);
 
+        // §3.5, §14.1: a rating of the first answer (chatcmpl- id), changed once; the thumbs move by the delta; a comment is
+        // refused in mode none; a bad rating is 400; another client's or an unknown message is 404.
+        var answerId = body.GetProperty("id").GetString()!;
+        async Task<HttpResponseMessage> Rate(HttpClient who, object payload) => await who.PostAsJsonAsync("/v1/feedback", payload, Ct);
+        (await Rate(client, new { message_id = answerId, rating = 1, reason = "other" })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await Rate(client, new { message_id = answerId, rating = -1, reason = "incorrect" })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        using (var withComment = await Rate(client, new { message_id = answerId, rating = -1, comment = "Fel höjd." }))
+        {
+            withComment.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            (await withComment.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error").GetProperty("code").GetString().ShouldBe("comment_not_stored");
+        }
+
+        (await Rate(client, new { message_id = answerId, rating = 3 })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await Rate(client, new { message_id = "chatcmpl-" + Guid.CreateVersion7().ToString("N"), rating = 1 })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        await using (var feedback = new Npgsql.NpgsqlCommand("""
+            SELECT f."Rating", f."ReasonCategory", f."CommentCiphertext" IS NULL, t."ThumbsUp", t."ThumbsDown"
+            FROM chat."Feedback" f JOIN chat."Messages" m ON m."Id" = f."MessageId" JOIN chat."Conversations" c ON c."Id" = m."ConversationId"
+            JOIN chat."AssistantDailyTotals" t ON t."AssistantId" = c."AssistantId" AND t."ClientId" = c."ClientId" AND t."Classification" = c."Classification"
+                AND t."Day" = (m."CreatedAt" AT TIME ZONE 'Europe/Stockholm')::date
+            WHERE f."MessageId" = $1 AND f."Source" = 'api'
+            """, connection) { Parameters = { new() { Value = Guid.ParseExact(answerId["chatcmpl-".Length..], "N") } } })
+        await using (var reader = await feedback.ExecuteReaderAsync(Ct))
+        {
+            (await reader.ReadAsync(Ct)).ShouldBeTrue();
+            // "incorrect" is not one of Open WebUI's fixed keys: category other. The day's totals may include other tests' turns.
+            (reader.GetInt16(0), reader.GetString(1), reader.GetBoolean(2)).ShouldBe(((short)-1, "other", true));
+            reader.GetInt32(4).ShouldBeGreaterThanOrEqualTo(1);
+        }
+
+        (await client.GetFromJsonAsync<JsonElement>($"/v1/conversations/{issued}", Ct)).GetProperty("messages")[1].GetProperty("rating").GetInt32().ShouldBe(-1);
+
         using var otherClient = Client(api, db.InternalKey);
+        (await Rate(otherClient, new { message_id = answerId, rating = 1 })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await otherClient.GetAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await otherClient.DeleteAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 

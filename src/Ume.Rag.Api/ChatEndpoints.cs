@@ -131,7 +131,7 @@ public static class ChatEndpoints
         var mode = conversation.External is { } external && NonSavedPrefixes.Any(p => external.StartsWith(p, StringComparison.Ordinal))
             ? Domain.Entities.HistoryModes.None
             : plan.Assistant.HistoryMode;
-        return new ChatTurn(conversation.Issued, conversation.External, plan.Assistant.Id, plan.Assistant.Published?.Id, plan.Assistant.DepartmentId, who.Client.Id,
+        return new ChatTurn(plan.MessageId, conversation.Issued, conversation.External, plan.Assistant.Id, plan.Assistant.Published?.Id, plan.Assistant.DepartmentId, who.Client.Id,
             ChatTurn.SubjectKindOf(who.Kind), who.SubjectId, plan.Assistant.Classification, mode, plan.Assistant.RetentionDays, ChatTurn.OutcomeOf(plan.Outcome),
             ChatTurn.CoverageOf(plan.Retrieval), plan.Retrieval?.Degraded, plan.Language, plan.Condense is CondenseOutcome.Rewritten,
             answered ? plan.Assistant.Published?.GatewayModel : null, answered ? Domain.ResidencyCeiling.ToHeader(plan.Ceiling) : null,
