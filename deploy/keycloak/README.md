@@ -8,7 +8,8 @@ clients and settings to that realm. Hand-off J8 takes them to the gateway sessio
 |---|---|---|
 | `rag-additions.json` | The `rag-*` realm roles; the clients `ume-rag-admin`, `open-webui` and `ume-rag-api`, all with *full scope allowed* off; the role scope mappings of `ume-rag-admin` (so its `roles` claim carries the `rag-*` roles and no gateway role) | One partial import with `ifResourceExists=FAIL`, then the scope mappings |
 | `rag-realm-settings.json` | **Realm-wide, separable:** the user-profile attributes `departmentCodes` and `teamCodes` (shared with the gateway), password policy, brute-force protection, the OTP policy and the browser flow `rag-browser` (OTP required for `rag-platform-admin` and `rag-department-admin`) | Added to the realm; a value that changes is printed |
-| `apply-additions.py` | Applies either part or both through the admin REST API (Python standard library only) | `--part additions\|settings\|all` |
+| `rag-additions.local.json` | **Test or dev realms only:** the local AppHost redirect URIs, web origins and post-logout URIs of `ume-rag-admin` and `open-webui` (issue #95 part 3) | Merged into the clients with `--include-local-redirects` |
+| `apply-additions.py` | Applies either part or both through the admin REST API (Python standard library only) | `--part additions\|settings\|all`, `--include-local-redirects` |
 
 The realm-wide part is a file of its own, so the gateway session can choose whether those settings live here or in
 the gateway's base realm (identity design §16, open questions 2–4). If they move to the base realm, apply only
@@ -37,14 +38,17 @@ and stops before any call if one has no value.
   - Every realm value it changes is printed with its old value (for example `failureFactor: 30 -> 10`).
   - A failure part-way can leave a half-built `rag-browser` flow. Delete the flow and run `--part settings` again.
 
-Each client has two kinds of redirect URI:
-- **The pilot host**, from the environment.
-- **The local AppHost:**
-  - `ume-rag-admin`: `https://localhost:5174` (admin UI) and `https://localhost:7402` (admin API).
-  - `open-webui`: `http://localhost:8080`.
+**Redirect URIs.** `rag-additions.json` holds only the pilot hosts, from the environment. The local AppHost's URIs are
+in `rag-additions.local.json`:
+- `ume-rag-admin`: `https://localhost:5174` (admin UI) and `https://localhost:7402` (admin API).
+- `open-webui`: `http://localhost:8080`.
 
-  A developer machine can sign in against the shared realm with these (issue #95, part 3). Remove them from a
-  production realm if they are not wanted there.
+`--include-local-redirects` adds them, so a developer can point an AppHost at a **test or dev** realm. Never use it on
+the production realm: there, a redirect to whatever runs on a user's localhost must not be accepted.
+
+**PKCE on `open-webui`** is not required yet. Requiring it in Keycloak (`pkce.code.challenge.method` `S256`) only works
+once Open WebUI sends a challenge (`OAUTH_CODE_CHALLENGE_METHOD=S256`), so the two are set together and checked in
+item 18's run. `ume-rag-admin` already requires S256.
 
 ## OTP for admins
 

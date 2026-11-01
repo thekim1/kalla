@@ -30,7 +30,7 @@
     {
       "clientId": "ume-rag-admin",
       "name": "Ume.Rag admin (rag-admin BFF)",
-      "description": "The admin UI and admin API (identity design 11.2). Redirect URIs: the pilot host, then the local AppHost (admin UI 5174, admin API 7402).",
+      "description": "The admin UI and admin API (identity design 11.2). Redirect URIs: the pilot host (the local AppHost ones are in rag-additions.local.json).",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
@@ -40,18 +40,14 @@
       "directAccessGrantsEnabled": false,
       "fullScopeAllowed": false,
       "redirectUris": [
-        "https://${UME_RAG_ADMIN_PUBLIC_HOST}/signin-oidc",
-        "https://localhost:5174/signin-oidc",
-        "https://localhost:7402/signin-oidc"
+        "https://${UME_RAG_ADMIN_PUBLIC_HOST}/signin-oidc"
       ],
       "webOrigins": [
-        "https://${UME_RAG_ADMIN_PUBLIC_HOST}",
-        "https://localhost:5174",
-        "https://localhost:7402"
+        "https://${UME_RAG_ADMIN_PUBLIC_HOST}"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "https://${UME_RAG_ADMIN_PUBLIC_HOST}/signout-callback-oidc##https://localhost:5174/##https://localhost:5174/signout-callback-oidc##https://localhost:7402/##https://localhost:7402/signout-callback-oidc"
+        "post.logout.redirect.uris": "https://${UME_RAG_ADMIN_PUBLIC_HOST}/signout-callback-oidc"
       },
       "protocolMappers": [
         {
@@ -112,7 +108,7 @@
     {
       "clientId": "open-webui",
       "name": "Open WebUI (OIDC sign-in)",
-      "description": "Open WebUI's own sign-in (identity design 5.3, 11.2): the legacy callback path. Redirect URIs: the pilot host, then the local AppHost (port 8080).",
+      "description": "Open WebUI's own sign-in (identity design 5.3, 11.2): the legacy callback path. Redirect URIs: the pilot host (the local AppHost ones are in rag-additions.local.json).",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
@@ -123,12 +119,10 @@
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
       "redirectUris": [
-        "https://${UME_RAG_OPENWEBUI_HOST}/oauth/oidc/callback",
-        "http://localhost:8080/oauth/oidc/callback"
+        "https://${UME_RAG_OPENWEBUI_HOST}/oauth/oidc/callback"
       ],
       "webOrigins": [
-        "https://${UME_RAG_OPENWEBUI_HOST}",
-        "http://localhost:8080"
+        "https://${UME_RAG_OPENWEBUI_HOST}"
       ]
     },
     {
@@ -142,7 +136,9 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "fullScopeAllowed": false
+      "fullScopeAllowed": false,
+      "redirectUris": [],
+      "webOrigins": []
     }
   ],
   "scopeMappings": [
