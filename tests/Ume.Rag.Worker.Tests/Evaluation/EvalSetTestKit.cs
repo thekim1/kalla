@@ -4,17 +4,13 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Npgsql;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
@@ -34,111 +30,96 @@ using Ume.Rag.Worker.Tests.CommandJobs;
 using Ume.Rag.Worker.Tests.Engine;
 using Ume.Rag.Worker.Tests.Processing;
 using FakeAccess = fakegateway::Ume.Rag.FakeGateway.FakeAccess;
+using FakeChatScripts = fakegateway::Ume.Rag.FakeGateway.FakeChatScripts;
 using FakeContent = fakegateway::Ume.Rag.FakeGateway.FakeContent;
-using FakeGatewayOptions = fakegateway::Ume.Rag.FakeGateway.FakeGatewayOptions;
 
 namespace Ume.Rag.Worker.Tests.Evaluation;
 
-/// <summary>One chat call the eval models received: its step, model, temperature, output format and ceiling.</summary>
+/// <summary>One chat call the worker sent to the eval models: its step, model, temperature, output format and ceiling.</summary>
 internal sealed record EvalCall(string Step, string Model, double Temperature, string? ResponseFormat, string Ceiling, string User);
 
 /// <summary>
-/// The FakeGateway in process with scripted answers for the eval steps. Its echo answer is not the JSON the prompts ask
-/// for, so a chat call with <c>x-ume-step: eval-*</c> is answered here, after the fake's own key, ceiling and target
-/// checks (<c>FakeAccess.Authorize</c>, <c>FakeAccess.Route</c>: 403 <c>max_residency_not_met</c>, <c>x-ume-residency</c>
-/// of the answering target), with the content <see cref="Generate"/> or <see cref="Judge"/> give. Everything else
-/// (<c>/v1/models</c>, embeddings) is the fake unchanged.
+/// The FakeGateway in process, one per test (its chat scripts cycle per step and process, so every test starts at the
+/// first answer). <see cref="Script"/> sets the fake's own <c>FakeGateway:ChatScripts:&lt;step&gt;</c> (#221): the fake
+/// answers <c>eval-generate</c> and <c>eval-judge</c> from it, or from its built-in defaults without a script.
+/// <see cref="RecordingHandler"/> records the chat calls the worker sends (<see cref="Calls"/>) and never answers them.
 /// </summary>
-public sealed partial class EvalGatewayFactory : WebApplicationFactory<fakegateway::Program>
+public sealed class EvalGatewayFactory : WebApplicationFactory<fakegateway::Program>
 {
-    /// <summary>The generation reply per chunk text: the first entry whose text the prompt contains.</summary>
-    public ConcurrentDictionary<string, string> Generate { get; } = new(StringComparer.Ordinal);
-
-    /// <summary>The judge's ratings per question; a question not listed gets 5, 5, 5.</summary>
-    public ConcurrentDictionary<string, (int Answerable, int Understandable, int Specific)> Judge { get; } = new(StringComparer.Ordinal);
+    private readonly ScriptSource _scripts = new();
 
     internal ConcurrentQueue<EvalCall> Calls { get; } = new();
 
-    public void Reset()
-    {
-        Generate.Clear();
-        Judge.Clear();
-        Calls.Clear();
-    }
+    /// <summary>
+    /// Replaces the step's script: one answer is the answer to every call, several are played in call order and cycle (the
+    /// cycle goes on across scripts of one test); none removes the script.
+    /// </summary>
+    public void Script(string step, params string[] answers) => _scripts.Set(step, answers);
+
+    /// <summary>A handler into the fake that records each chat completion call on its way.</summary>
+    public HttpMessageHandler RecordingHandler() => new CallRecorder(Calls) { InnerHandler = Server.CreateHandler() };
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.ConfigureAppConfiguration(config => config.AddInMemoryCollection(new Dictionary<string, string?>
+        builder.ConfigureAppConfiguration(config =>
         {
-            ["FakeGateway:Keys:OnPrem"] = FakeGatewayFactory.OnPremKey,
-            ["FakeGateway:Keys:Eu"] = FakeGatewayFactory.EuKey,
-            ["FakeGateway:Keys:External"] = "fake-external-key-0123456789",
-        }));
-        builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new ScriptFilter(this)));
-    }
-
-    private async Task<bool> AnswerAsync(HttpContext context)
-    {
-        var step = context.Request.Headers["x-ume-step"].ToString();
-        if (!HttpMethods.IsPost(context.Request.Method) || context.Request.Path != "/v1/chat/completions" || !step.StartsWith("eval-", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var options = context.RequestServices.GetRequiredService<IOptionsSnapshot<FakeGatewayOptions>>().Value;
-        if (FakeAccess.Authorize(context, options, out var error) is not { } call)
-        {
-            await error!.ExecuteAsync(context);
-            return true;
-        }
-
-        var body = await JsonNode.ParseAsync(context.Request.Body) as JsonObject ?? [];
-        var model = body["model"]?.GetValue<string>();
-        if (FakeAccess.Route(context, options, call, model, "chat", out error) is null)
-        {
-            await error!.ExecuteAsync(context);
-            return true;
-        }
-
-        var user = FakeContent.LastUserText(body["messages"]);
-        Calls.Enqueue(new EvalCall(step, model!, body["temperature"]?.GetValue<double>() ?? -1, body["response_format"]?["type"]?.GetValue<string>(),
-            context.Request.Headers[FakeAccess.MaxResidencyHeader].ToString(), user));
-        var content = step == EvalModelClient.JudgeStep ? JudgeReply(user) : Generate.FirstOrDefault(g => user.Contains(g.Key, StringComparison.Ordinal)).Value ?? "{}";
-        await Results.Json(new
-        {
-            id = "chatcmpl-eval",
-            @object = "chat.completion",
-            model,
-            choices = new[] { new { index = 0, message = new { role = "assistant", content }, finish_reason = "stop" } },
-            usage = new { prompt_tokens = FakeContent.Tokens(user), completion_tokens = FakeContent.Tokens(content), total_tokens = FakeContent.Tokens(user) + FakeContent.Tokens(content) },
-        }).ExecuteAsync(context);
-        return true;
-    }
-
-    private string JudgeReply(string user)
-    {
-        var question = QuestionLine().Match(user).Groups[1].Value.Trim();
-        var (answerable, understandable, specific) = Judge.TryGetValue(question, out var scores) ? scores : (5, 5, 5);
-        return $$"""{"besvarbar": {{answerable}}, "begriplig": {{understandable}}, "specifik": {{specific}}}""";
-    }
-
-    [GeneratedRegex(@"^Fråga: (.*)$", RegexOptions.Multiline)]
-    private static partial Regex QuestionLine();
-
-    private sealed class ScriptFilter(EvalGatewayFactory factory) : IStartupFilter
-    {
-        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
-        {
-            app.Use(async (context, inner) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                if (!await factory.AnswerAsync(context))
-                {
-                    await inner(context);
-                }
+                ["FakeGateway:Keys:OnPrem"] = FakeGatewayFactory.OnPremKey,
+                ["FakeGateway:Keys:Eu"] = FakeGatewayFactory.EuKey,
+                ["FakeGateway:Keys:External"] = "fake-external-key-0123456789",
             });
-            next(app);
-        };
+            config.Add(_scripts);
+        });
+    }
+
+    /// <summary>The scripts as a configuration source of the fake, changeable while it runs.</summary>
+    private sealed class ScriptSource : ConfigurationProvider, IConfigurationSource
+    {
+        public IConfigurationProvider Build(IConfigurationBuilder builder) => this;
+
+        public void Set(string step, string[] answers)
+        {
+            var key = $"{FakeChatScripts.SectionName}:{step}";
+            foreach (var old in Data.Keys.Where(k => k.Equals(key, StringComparison.OrdinalIgnoreCase) || k.StartsWith(key + ":", StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                Data.Remove(old);
+            }
+
+            if (answers.Length == 1)
+            {
+                Data[key] = answers[0];
+            }
+            else
+            {
+                for (var i = 0; i < answers.Length; i++)
+                {
+                    Data[$"{key}:{i}"] = answers[i];
+                }
+            }
+
+            OnReload();
+        }
+    }
+
+    private sealed class CallRecorder(ConcurrentQueue<EvalCall> calls) : DelegatingHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/chat/completions" && request.Content is not null)
+            {
+                var body = JsonNode.Parse(await request.Content.ReadAsStringAsync(cancellationToken)) as JsonObject ?? [];
+                calls.Enqueue(new EvalCall(Header(request, EmbeddingClient.StepHeader), body["model"]?.GetValue<string>() ?? string.Empty,
+                    body["temperature"]?.GetValue<double>() ?? -1, body["response_format"]?["type"]?.GetValue<string>(), Header(request, FakeAccess.MaxResidencyHeader),
+                    FakeContent.LastUserText(body["messages"])));
+            }
+
+            return await base.SendAsync(request, cancellationToken);
+        }
+
+        private static string Header(HttpRequestMessage request, string name) =>
+            request.Headers.TryGetValues(name, out var values) ? string.Join(",", values) : string.Empty;
     }
 }
 
@@ -182,11 +163,11 @@ internal sealed class EvalRig : IAsyncDisposable
         builder.Services.AddSingleton<IJobQueue>(database.Queue(RagDatabase.Worker));
         builder.Services.AddSingleton<WorkerIdentity>();
         builder.Services.AddSingleton<IEmbeddingProfileStore, PostgresEmbeddingProfileStore>();
-        builder.AddGatewayClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
+        builder.AddGatewayClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.RecordingHandler());
         builder.Services.AddSingleton<EmbeddingClient>();
         builder.AddRagEvalSets();
-        builder.Services.AddHttpClient(EvalModelClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
-        builder.Services.AddHttpClient(EvalModelClient.CatalogueClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
+        builder.Services.AddHttpClient(EvalModelClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.RecordingHandler());
+        builder.Services.AddHttpClient(EvalModelClient.CatalogueClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.RecordingHandler());
         return new EvalRig(builder.Build(), logs);
     }
 

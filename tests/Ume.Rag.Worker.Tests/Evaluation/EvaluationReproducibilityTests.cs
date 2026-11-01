@@ -25,7 +25,7 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 /// The design places it in <c>Ume.Rag.IntegrationTests</c> (stream B's); it lives here with the other evaluation tests.
 /// </summary>
 [Collection(RagDatabaseGroup4.Name)]
-public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, EvalGatewayFactory gateway) : IClassFixture<EvalGatewayFactory>, IAsyncLifetime
+public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private const string Model = "ume/chat-onprem";
     private const int Documents = 3;
@@ -33,7 +33,7 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, 
 
     private static readonly EvaluationVariant[] ThreeWay = [EvaluationVariant.Vector, EvaluationVariant.Hybrid, EvaluationVariant.HybridNoDecompounder];
 
-    /// <summary>Twelve Swedish questions that pass the filters and are not near-duplicates; {0} is the topic, {1} the test's tag.</summary>
+    /// <summary>Nine Swedish questions (one per sampled chunk) that pass the filters and are not near-duplicates; {0} is the topic, {1} the test's tag.</summary>
     private static readonly string[] Questions =
     [
         "Vilken nämnd beslutar om {0} och hur lång väntan blir det för {1}?",
@@ -45,14 +45,12 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, 
         "Går det att söka {0} digitalt med mobilt bankid hos {1}?",
         "Vilka papper behöver jag lämna när jag söker {0} hos {1}?",
         "Hur ansöker man om {0} och vilka avgifter gäller för {1} i år?",
-        "När på året kan man få hjälp med {0} från kommunen och {1}?",
-        "Finns det något stöd för {0} till pensionärer som bor hos {1}?",
-        "Vad händer om jag missar sista dagen för {0} hos {1}?",
     ];
 
     private static readonly string[] Topics =
         ["förskola", "bygglov", "snöröjning", "bibliotek", "parkering", "avfall", "färdtjänst", "simhall", "hemtjänst", "vattenmätare", "skolskjuts", "fritidsgård"];
 
+    private readonly EvalGatewayFactory _gateway = new();
     private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-eval-repro-");
     private PlatformSettings? _previous;
 
@@ -61,7 +59,6 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, 
     public async ValueTask InitializeAsync()
     {
         await database.ResetAsync();
-        gateway.Reset();
         _previous = await EvalSeeds.SetModelsAsync(database, Model);
     }
 
@@ -69,6 +66,7 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, 
     {
         await EvalSeeds.RestoreModelsAsync(database, _previous is not null, _previous);
         _blobs.Delete(recursive: true);
+        await _gateway.DisposeAsync();
     }
 
     [Fact]
@@ -205,7 +203,7 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, 
         }
     }
 
-    /// <summary>Three documents of four ~90-token chunks with real (fake-hashed) vectors, each chunk scripted to one good question.</summary>
+    /// <summary>Three documents of four ~90-token chunks with real (fake-hashed) vectors, and nine good questions scripted for generation.</summary>
     private async Task<Corpus> SeedAsync()
     {
         var seed = await EngineKit.SeedUrlListAsync(database, []);
@@ -222,8 +220,6 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, 
                 var i = (d * ChunksPerDocument) + c;
                 var text = EvalSeeds.Body(Topics[i], Guid.NewGuid().ToString());
                 chunks.Add(new FixtureChunk(text) { HeadingPath = "Avsnitt " + Topics[i] });
-                var question = string.Format(CultureInfo.InvariantCulture, Questions[i], Topics[i], tag);
-                gateway.Generate[text] = JsonSerializer.Serialize(new Dictionary<string, string> { ["fraga"] = question, ["svar"] = $"Svar nummer {i} {tag}.", ["typ"] = "fakta" });
             }
 
             documents.Add((await writer.AddDocumentAsync(new FixtureDocumentSpec
@@ -237,6 +233,12 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, 
             }, chunks, Ct)).Id);
         }
 
+        // A generation asks about the sample's nine chunks in order and keeps every answer, so each one plays this array from
+        // its start: the same sample gets the same questions.
+        _gateway.Script(EvalModelClient.GenerateStep, [.. Questions.Select((q, i) => JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["fraga"] = string.Format(CultureInfo.InvariantCulture, q, Topics[i], tag), ["svar"] = $"Svar nummer {i} {tag}.", ["typ"] = "fakta",
+        }))]);
         return new Corpus(seed, documents, tag);
     }
 
@@ -244,9 +246,9 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, 
     private Task<WorkerHost> StartWorkerAsync() =>
         WorkerHost.StartAsync(database, s =>
         {
-            s.AddHttpClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
-            s.AddHttpClient(EvalModelClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
-            s.AddHttpClient(EvalModelClient.CatalogueClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
+            s.AddHttpClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _gateway.Server.CreateHandler());
+            s.AddHttpClient(EvalModelClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _gateway.Server.CreateHandler());
+            s.AddHttpClient(EvalModelClient.CatalogueClientName).ConfigurePrimaryHttpMessageHandler(() => _gateway.Server.CreateHandler());
         }, new Dictionary<string, string?>
         {
             ["Gateway:BaseUrl"] = "http://fake-gateway",
