@@ -30,10 +30,11 @@ describe('search', () => {
   it('finds pages by words people use that are not in the label', () => {
     expect(filterEntries(entries, 'kostnadsställe').map((e) => e.id)).toEqual(['organisation'])
     expect(filterEntries(entries, 'behörighet').map((e) => e.id)).toEqual(['overview'])
+    expect(filterEntries(entries, 'personuppgifter').map((e) => e.id)).toEqual(['collections'])
   })
 
   it('lists only pages without a query', () => {
-    expect(filterEntries(entries, '').map((e) => e.id)).toEqual(['overview', 'organisation'])
+    expect(filterEntries(entries, '').map((e) => e.id)).toEqual(['overview', 'collections', 'organisation'])
   })
 })
 
