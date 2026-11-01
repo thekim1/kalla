@@ -106,6 +106,7 @@ api.MapSources();
 api.MapRuns();
 api.MapPiiReport();
 api.MapDocuments();
+api.MapPreviews();
 api.MapUploads();
 api.MapKeys();
 api.MapOrganisation();
