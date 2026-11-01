@@ -41,6 +41,12 @@ answered with `[1]` markers and `url_citation` annotations to the crawled Kommun
 400 `provider_rejected` "`temperature` is deprecated for this model", and `ChatService` always sends `temperature`;
 rag-api maps that 400 to a bare 502 `upstream_error`. `mistral-large-4` and `glm-5.3` answered 502 at the gateway.
 
+**Draft gold set (2026-11-01):** 40 questions over the demo slice (33 answerable with one expected page each, 7
+off-topic), asked through `scripts/grading/grading.py` with an `integration` client in `turkos`'s audience: all 33
+answerable answered citing their expected page; 6 of 7 off-topic not-found; the seventh (library opening hours) was
+answered with "the sources don't contain it" instead of the not-found text (coverage passed on a weak hit). A draft for
+the department to check and extend, not the gold set; it lives outside the repo until the department owns it.
+
 ## Next focus: the admin UI (user, 2026-11-01)
 
 **Direction (user, after the demo):** "We need more focus on the admin UI." The admin API is far along (the whole demo
