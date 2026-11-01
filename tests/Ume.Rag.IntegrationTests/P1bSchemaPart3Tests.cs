@@ -5,7 +5,7 @@ namespace Ume.Rag.IntegrationTests;
 /// <summary>
 /// P1b schema part 3 (P1b item 1): crawl freshness columns (#102), the parse-rule key and its outbox trigger (#134),
 /// evaluation columns and the worker's read of the model mirror (#129, #130), <c>PiiFlaggedAt</c> (#175) and the
-/// generated <c>DemoteRules</c> the api reads without <c>Settings</c>. #114 is in <see cref="ServingSchemaTests"/>.
+/// generated <c>DemoteRules</c> the api reads without <c>Settings</c>, and the chunks' content kind and large-table flag (#129). #114 is in <see cref="ServingSchemaTests"/>.
 /// </summary>
 [Collection(RagDatabaseGroup.Name)]
 public sealed class P1bSchemaPart3Tests(RagDatabaseFixture database)
@@ -18,17 +18,23 @@ public sealed class P1bSchemaPart3Tests(RagDatabaseFixture database)
             SELECT table_schema || '.' || table_name || '.' || column_name || ':' || data_type || ':' || is_nullable || ':' || coalesce(column_default, '-')
             FROM information_schema.columns
             WHERE (table_name, column_name) IN (('CrawlRuns', 'Incremental'), ('CrawlFrontier', 'RemovalCheck'), ('ChunkSets', 'ParseRuleKey'),
-                  ('ChunkSets', 'PiiFlaggedAt'), ('EvaluationRuns', 'Candidate'), ('EvaluationRuns', 'ThresholdProposal'), ('EvaluationSets', 'Round'))
+                  ('ChunkSets', 'PiiFlaggedAt'), ('EvaluationRuns', 'Candidate'), ('EvaluationRuns', 'ThresholdProposal'), ('EvaluationSets', 'Round'),
+                  ('Chunks', 'ContentKind'), ('Chunks', 'LargeTable'))
             ORDER BY 1
             """)).ShouldBe([
             "content.ChunkSets.ParseRuleKey:character varying:YES:-",
             "content.ChunkSets.PiiFlaggedAt:timestamp with time zone:YES:-",
+            "content.Chunks.ContentKind:character varying:NO:'text'::character varying",
+            "content.Chunks.LargeTable:boolean:NO:false",
             "content.CrawlFrontier.RemovalCheck:boolean:NO:false",
             "content.CrawlRuns.Incremental:boolean:NO:false",
             "content.EvaluationRuns.Candidate:boolean:NO:false",
             "content.EvaluationRuns.ThresholdProposal:jsonb:YES:-",
             "content.EvaluationSets.Round:integer:NO:1",
         ]);
+        (await Sql.ScalarAsync<string>(superuser, """
+            SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'CK_Chunks_ContentKind'
+            """)).ShouldContain("'text'::character varying, 'table'::character varying, 'list'::character varying");
     }
 
     [Fact]

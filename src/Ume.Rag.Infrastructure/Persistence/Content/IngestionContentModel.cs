@@ -228,10 +228,12 @@ internal static class IngestionContentModel
             {
                 ClassificationCheck(t, "Chunks");
                 ValuesCheck(t, "Chunks", "Kind", ChunkKinds.All);
+                ValuesCheck(t, "Chunks", "ContentKind", ChunkContentKinds.All);
             });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Classification).HasMaxLength(20);
             e.Property(x => x.Kind).HasMaxLength(10).HasDefaultValue(ChunkKinds.Child);
+            e.Property(x => x.ContentKind).HasMaxLength(16).HasDefaultValue(ChunkContentKinds.Text);
             e.Property(x => x.OverlapChars).HasDefaultValue((short)0);
             e.Property(x => x.Tags).HasColumnType("text[]");
             e.Property(x => x.DocumentType).HasMaxLength(30);

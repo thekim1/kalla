@@ -511,6 +511,13 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CollectionId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ContentKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("text");
+
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -533,6 +540,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
                         .HasDefaultValue("child");
+
+                    b.Property<bool>("LargeTable")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("Ordinal")
                         .HasColumnType("integer");
@@ -593,6 +603,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("Chunks", "content", t =>
                         {
                             t.HasCheckConstraint("CK_Chunks_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Chunks_ContentKind", "\"ContentKind\" IN ('text', 'table', 'list')");
 
                             t.HasCheckConstraint("CK_Chunks_Kind", "\"Kind\" IN ('parent', 'child')");
                         });
