@@ -11,6 +11,8 @@ public static class AuditEntityTypes
     public const string Settings = "settings";
     public const string DataProtection = "dataprotection";
     public const string Collection = "collection";
+    public const string Department = "department";
+    public const string EvaluationQuestion = "evaluationquestion";
     public const string Source = "source";
     public const string Run = "run";
 }

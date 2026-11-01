@@ -125,6 +125,16 @@
       "code": "run_not_active",
       "status": 409,
       "message": "The run has already ended ({state})."
+    },
+    {
+      "code": "no_evaluation_set",
+      "status": 409,
+      "message": "The knowledge bank has no test questions yet."
+    },
+    {
+      "code": "question_not_human",
+      "status": 409,
+      "message": "Only questions written by people can be changed here."
     }
   ]
 }

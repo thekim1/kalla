@@ -89,8 +89,14 @@ public static class AdminErrorCodes
     /// <summary>The run is not running (<c>{state}</c>), so it cannot be cancelled.</summary>
     public static AdminErrorCode RunNotActive { get; } = new("run_not_active", 409, "The run has already ended ({state}).");
 
+    /// <summary>The collection has no evaluation set yet (generate one or add human questions first).</summary>
+    public static AdminErrorCode NoEvaluationSet { get; } = new("no_evaluation_set", 409, "The knowledge bank has no test questions yet.");
+
+    /// <summary>Only questions of the human layer are edited by hand; generated ones are replaced by the generator.</summary>
+    public static AdminErrorCode QuestionNotHuman { get; } = new("question_not_human", 409, "Only questions written by people can be changed here.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
-            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive];
+            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive, NoEvaluationSet, QuestionNotHuman];
 }

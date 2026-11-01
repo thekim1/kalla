@@ -28,6 +28,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   template_unsupported: 'Det finns ingen pipeline för källtypen {type}.',
   admin_only: 'Bara en plattformsadministratör kan ändra detta.',
   run_not_active: 'Körningen har redan avslutats ({state}).',
+  no_evaluation_set: 'Kunskapsbanken har inga testfrågor ännu.',
+  question_not_human: 'Bara frågor som människor har skrivit kan ändras här.',
 }
 
 /** When the problem has no code we know: by status. */
