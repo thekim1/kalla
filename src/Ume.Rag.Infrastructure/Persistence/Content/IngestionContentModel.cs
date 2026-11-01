@@ -89,6 +89,7 @@ internal static class IngestionContentModel
             e.Property(x => x.Classification).HasMaxLength(20);
             e.Property(x => x.Host).HasMaxLength(253);
             e.Property(x => x.State).HasMaxLength(20);
+            e.Property(x => x.FetchUrl).HasMaxLength(2048);
             e.Property(x => x.ETag).HasMaxLength(500);
             e.Property(x => x.LastModified).HasMaxLength(100);
             e.HasIndex(x => new { x.Host, x.NextFetchAt }).HasFilter("\"State\" = 'pending'");

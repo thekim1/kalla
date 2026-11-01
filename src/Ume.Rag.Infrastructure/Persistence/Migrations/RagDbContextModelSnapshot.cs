@@ -1092,6 +1092,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_Conversations_HistoryMode", "\"HistoryMode\" IN ('none')");
 
+                            t.HasCheckConstraint("CK_Conversations_NoTitleCiphertext", "\"TitleCiphertext\" IS NULL");
+
                             t.HasCheckConstraint("CK_Conversations_RetentionDays", "\"RetentionDays\" >= 0");
 
                             t.HasCheckConstraint("CK_Conversations_SubjectKind", "\"SubjectKind\" IN ('entra-user', 'owui-user', 'anonymous', 'application')");
@@ -1119,6 +1121,10 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<string>("ETag")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<string>("FetchUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<string>("Host")
                         .IsRequired()
@@ -2055,6 +2061,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_Feedback_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
 
+                            t.HasCheckConstraint("CK_Feedback_NoCommentCiphertext", "\"CommentCiphertext\" IS NULL");
+
                             t.HasCheckConstraint("CK_Feedback_Rating", "\"Rating\" IN (-1, 1)");
 
                             t.HasCheckConstraint("CK_Feedback_ReviewState", "\"ReviewState\" IN ('open', 'reviewed', 'dismissed')");
@@ -2390,6 +2398,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_Messages_Coverage", "\"Coverage\" IN ('ok', 'low', 'unknown', 'skipped')");
 
+                            t.HasCheckConstraint("CK_Messages_NoContentCiphertext", "\"ContentCiphertext\" IS NULL");
+
                             t.HasCheckConstraint("CK_Messages_Outcome", "\"Outcome\" IN ('answered', 'not-found', 'unavailable', 'refused', 'error', 'cancelled')");
 
                             t.HasCheckConstraint("CK_Messages_Role", "\"Role\" IN ('user', 'assistant')");
@@ -2443,6 +2453,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("MessageSources", "chat", t =>
                         {
                             t.HasCheckConstraint("CK_MessageSources_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_MessageSources_NoSnippetCiphertext", "\"SnippetCiphertext\" IS NULL");
                         });
                 });
 
@@ -3394,6 +3406,10 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("ToolCalls", "chat", t =>
                         {
                             t.HasCheckConstraint("CK_ToolCalls_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_ToolCalls_NoArgumentsCiphertext", "\"ArgumentsCiphertext\" IS NULL");
+
+                            t.HasCheckConstraint("CK_ToolCalls_NoResultCiphertext", "\"ResultCiphertext\" IS NULL");
                         });
                 });
 

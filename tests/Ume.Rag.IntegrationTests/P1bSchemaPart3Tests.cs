@@ -19,13 +19,14 @@ public sealed class P1bSchemaPart3Tests(RagDatabaseFixture database)
             FROM information_schema.columns
             WHERE (table_name, column_name) IN (('CrawlRuns', 'Incremental'), ('CrawlFrontier', 'RemovalCheck'), ('ChunkSets', 'ParseRuleKey'),
                   ('ChunkSets', 'PiiFlaggedAt'), ('EvaluationRuns', 'Candidate'), ('EvaluationRuns', 'ThresholdProposal'), ('EvaluationSets', 'Round'),
-                  ('Chunks', 'ContentKind'), ('Chunks', 'LargeTable'))
+                  ('Chunks', 'ContentKind'), ('Chunks', 'LargeTable'), ('CrawlFrontier', 'FetchUrl'))
             ORDER BY 1
             """)).ShouldBe([
             "content.ChunkSets.ParseRuleKey:character varying:YES:-",
             "content.ChunkSets.PiiFlaggedAt:timestamp with time zone:YES:-",
             "content.Chunks.ContentKind:character varying:NO:'text'::character varying",
             "content.Chunks.LargeTable:boolean:NO:false",
+            "content.CrawlFrontier.FetchUrl:character varying:YES:-",
             "content.CrawlFrontier.RemovalCheck:boolean:NO:false",
             "content.CrawlRuns.Incremental:boolean:NO:false",
             "content.EvaluationRuns.Candidate:boolean:NO:false",
