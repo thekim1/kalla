@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Access;
+using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Config;
 
 namespace Ume.Rag.Infrastructure.Access;
@@ -155,6 +156,7 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
         await ReadAsync(connection, transaction, """
             SELECT "Classification", "AllowedHistoryModes", "ClientsWithoutHistoryOnly" FROM config."DataProtectionPolicies"
             """, r => levels[r.GetString(0)] = new LevelPolicyEntry(r.GetString(0), r.GetFieldValue<string[]>(1), r.GetBoolean(2)), cancellationToken);
+        WithDefaults(levels);
 
         var departments = new Dictionary<Guid, string>();
         await ReadAsync(connection, transaction, """SELECT "Id", "Name" FROM config."Departments" """,
@@ -183,4 +185,18 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
 
     [LoggerMessage(LogLevel.Error, "A {Table} row ({Id}) does not parse and is left out of the access snapshot (treated as disabled)")]
     private static partial void LogUnparsable(ILogger logger, string table, Guid id);
+
+    /// <summary>
+    /// A level without a saved row gets <see cref="DataProtectionPolicy.DefaultFor"/>, as the admin shows it and the blob key
+    /// policy applies it (data-model §2.1 seeds no rows), so the policy's step 9 decides on the same values everywhere.
+    /// </summary>
+    public static void WithDefaults(IDictionary<string, LevelPolicyEntry> levels)
+    {
+        ArgumentNullException.ThrowIfNull(levels);
+        foreach (var level in Classification.All.Where(l => !levels.ContainsKey(l)))
+        {
+            var policy = DataProtectionPolicy.DefaultFor(level);
+            levels[level] = new LevelPolicyEntry(level, policy.AllowedHistoryModes, policy.ClientsWithoutHistoryOnly);
+        }
+    }
 }

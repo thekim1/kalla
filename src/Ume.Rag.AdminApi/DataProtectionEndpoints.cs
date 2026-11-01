@@ -81,22 +81,7 @@ public static partial class DataProtectionEndpoints
     /// above <c>public</c>, <c>rag-blob-&lt;level&gt;</c> blob keys above <c>public</c>, a second approver and history-free clients
     /// only for <c>sensitive</c>.
     /// </summary>
-    public static DataProtectionPolicy Defaults(string level)
-    {
-        var sensitive = level == Classification.Sensitive;
-        return new DataProtectionPolicy
-        {
-            Classification = level,
-            AllowedHistoryModes = [HistoryModes.None],
-            DefaultHistoryMode = HistoryModes.None,
-            RetentionDefaultDays = sensitive ? 30 : 90,
-            RetentionMaxDays = sensitive ? 30 : 90,
-            EncryptionRequired = level != Classification.Public,
-            ReviewSecondApprover = sensitive,
-            ClientsWithoutHistoryOnly = sensitive,
-            BlobMasterKeyName = level == Classification.Public ? null : $"rag-blob-{level}",
-        };
-    }
+    public static DataProtectionPolicy Defaults(string level) => DataProtectionPolicy.DefaultFor(level);
 
     private static string Known(string level) =>
         Classification.All.Contains(level) ? level : throw AdminFaults.Of(AdminErrorCodes.NotFound);

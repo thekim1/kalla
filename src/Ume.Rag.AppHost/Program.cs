@@ -173,6 +173,9 @@ var api = builder.AddProject<Projects.Ume_Rag_Api>("api", o => o.LaunchProfileNa
     .WaitForCompletion(migrations)
     .WithHttpHealthCheck(HealthEndpoints.ReadyPath, endpointName: "https")
     .WithExternalHttpEndpoints();
+// Citation download links are absolute (knowledge design §4.6): Open WebUI shows them on its own origin, where a relative
+// /v1/documents/... link would point at Open WebUI instead of rag-api.
+api.WithEnvironment("Knowledge__PublicBaseUrl", api.GetEndpoint("https"));
 
 var worker = builder.AddProject<Projects.Ume_Rag_Worker>("worker", o => o.LaunchProfileName = "https")
     .WithReference(database)

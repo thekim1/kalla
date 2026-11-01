@@ -57,6 +57,27 @@ public sealed class PolicySnapshotTests(RagDatabaseFixture database)
     }
 
     [Fact]
+    public void A_level_without_a_saved_row_gets_the_admins_defaults()
+    {
+        // data-model §2.1 seeds no DataProtectionPolicies rows; the admin shows the code defaults until a row is saved, so
+        // the snapshot applies the same ones instead of refusing every assistant at step 9 (found in the item 15 live check).
+        var levels = new Dictionary<string, LevelPolicyEntry>(StringComparer.Ordinal)
+        {
+            [Classification.Public] = new(Classification.Public, [HistoryModes.None], false),
+        };
+
+        PolicySnapshotStore.WithDefaults(levels);
+
+        levels.Keys.ShouldBe(Classification.All, ignoreOrder: true);
+        levels[Classification.Internal].ShouldBe(new LevelPolicyEntry(Classification.Internal, levels[Classification.Internal].AllowedHistoryModes, false));
+        levels[Classification.Internal].AllowedHistoryModes.ShouldBe([HistoryModes.None]);
+        levels[Classification.Sensitive].ClientsWithoutHistoryOnly.ShouldBeTrue(); // still refuses Open WebUI (it stores history)
+        var admin = DataProtectionPolicy.DefaultFor(Classification.Sensitive);
+        (admin.RetentionMaxDays, admin.EncryptionRequired, admin.BlobMasterKeyName).ShouldBe((30, true, "rag-blob-sensitive"));
+        DataProtectionPolicy.DefaultFor(Classification.Public).BlobMasterKeyName.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task A_change_to_a_table_it_does_not_hold_only_moves_the_version()
     {
         await SeedAsync();

@@ -61,11 +61,11 @@ Refs: [admin §4.1–§4.7, §12](../admin/design.md), [weakness review §1](../
 
 ## 7. Chat API (#15)
 Refs: [chat §3–§10, §15.1, §18](../chat-api/design.md), [identity §5](../identity/design.md)
-- [ ] `/v1/models`; `/v1/chat/completions` stream and JSON; conversational check; condense (600 ms)
-- [ ] Coverage handling and not-found texts; token budget; prompt frame; residency check before the first byte
-- [ ] Marker renumbering; Open WebUI `source` events and `url_citation`; output filter; attachments refused
-- [ ] Open WebUI user-JWT trust; `open-webui` resource in the AppHost
-- [ ] **Done:** a FakeGateway answer cites a fixture document in Open WebUI; #42, #47, #48, #50, #103, #105, #136, #154, #164, #165 recorded
+- [x] `/v1/models`; `/v1/chat/completions` stream and JSON; conversational check; condense (600 ms) (#198, #203, #204)
+- [x] Coverage handling and not-found texts; token budget; prompt frame; residency check before the first byte (#198, #203, #204)
+- [x] Marker renumbering; Open WebUI `source` events and `url_citation`; output filter; attachments refused (#198, #203)
+- [x] Open WebUI user-JWT trust; `open-webui` resource in the AppHost (#205, #206)
+- [x] **Done:** a FakeGateway answer cites a fixture document in Open WebUI; #42, #47, #48, #50, #103, #105, #136, #154, #164, #165 recorded (this PR: through Open WebUI's API on the AppHost, smoke pages ingested by the pipeline; the browser checks of #47, #50 and #165 and the pilot-data rows stay open, see results)
 - [ ] **Hand-off J9:** issue to stream A
 
 ## 8. Realm additions (#16)
