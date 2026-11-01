@@ -31,8 +31,8 @@ public static class CollectionEndpoints
                 var query = Scoped(admin);
                 if (!string.IsNullOrWhiteSpace(page.Q))
                 {
-                    var q = $"%{page.Q.Trim()}%";
-                    query = query.Where(c => EF.Functions.ILike(c.Name, q) || EF.Functions.ILike(c.Slug, q));
+                    var q = $"%{Like.Escape(page.Q.Trim())}%";
+                    query = query.Where(c => EF.Functions.ILike(c.Name, q, Like.EscapeCharacter) || EF.Functions.ILike(c.Slug, q, Like.EscapeCharacter));
                 }
 
                 var total = await query.CountAsync(ct);
@@ -56,9 +56,19 @@ public static class CollectionEndpoints
                     await CheckDepartmentAsync(admin, request.DepartmentId, request.OwnerTeamId, attempt);
                     var profile = await admin.Db.EmbeddingProfiles.AsNoTracking().Where(p => p.IsDefault && p.State == EmbeddingProfileStates.Active)
                         .Select(p => (Guid?)p.Id).FirstOrDefaultAsync(attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NoEmbeddingProfile);
+                    var slug = string.IsNullOrWhiteSpace(request.Slug) ? Slugs.From(request.Name) : request.Slug;
+                    // Slugs are never reused, also after a delete: API clients may still send an old one (admin design §4.5).
+                    if (await admin.Db.Collections.AsNoTracking().AnyAsync(c => c.Slug == slug, attempt))
+                    {
+                        throw AdminFaults.Field("slug", AdminErrorCodes.SlugTaken, new Dictionary<string, string>
+                        {
+                            ["slug"] = slug, ["suggestion"] = await Slugs.FreeAsync(admin.Db.Collections.AsNoTracking().Select(c => c.Slug), slug, attempt),
+                        });
+                    }
+
                     var collection = new Collection
                     {
-                        Slug = string.IsNullOrWhiteSpace(request.Slug) ? Slugs.From(request.Name) : request.Slug,
+                        Slug = slug,
                         Name = request.Name.Trim(),
                         DepartmentId = request.DepartmentId,
                         OwnerTeamId = request.OwnerTeamId,
@@ -397,6 +407,33 @@ public static class Slugs
     }
 
     public const string Pattern = "^[a-z0-9]+(-[a-z0-9]+)*$";
+
+    /// <summary>The first of <c>slug-2</c>, <c>slug-3</c>, … not in <paramref name="taken"/>.</summary>
+    public static async Task<string> FreeAsync(IQueryable<string> taken, string slug, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(slug);
+        var prefix = (slug.Length > 95 ? slug[..95] : slug) + "-";
+        var used = (await taken.Where(s => s.StartsWith(prefix)).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
+        var n = 2;
+        while (used.Contains(prefix + n.ToString(CultureInfo.InvariantCulture)))
+        {
+            n++;
+        }
+
+        return prefix + n.ToString(CultureInfo.InvariantCulture);
+    }
+}
+
+/// <summary><c>ILIKE</c> patterns from user text: <c>%</c>, <c>_</c> and the escape character match themselves.</summary>
+public static class Like
+{
+    public const string EscapeCharacter = "\\";
+
+    public static string Escape(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
+    }
 }
 
 /// <summary><c>page</c> (from 1) and <c>pageSize</c> (≤ 200, default 50), and <c>q</c> (admin design §4.1).</summary>

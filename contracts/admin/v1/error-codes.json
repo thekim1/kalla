@@ -127,6 +127,56 @@
       "message": "The run has already ended ({state})."
     },
     {
+      "code": "not_an_upload_source",
+      "status": 409,
+      "message": "Files can only be uploaded to an upload source."
+    },
+    {
+      "code": "upload_format_deferred",
+      "status": 415,
+      "message": "Files of type {extension} cannot be uploaded yet. Save the file as PDF or a newer Office format."
+    },
+    {
+      "code": "upload_type_refused",
+      "status": 415,
+      "message": "Files of type {extension} cannot be uploaded."
+    },
+    {
+      "code": "upload_too_large",
+      "status": 413,
+      "message": "The file is larger than {mb} MB."
+    },
+    {
+      "code": "upload_file_exists",
+      "status": 409,
+      "message": "File {n} of the batch has already been sent."
+    },
+    {
+      "code": "upload_file_missing",
+      "status": 400,
+      "message": "File {n} has not been uploaded to the batch."
+    },
+    {
+      "code": "upload_batch_too_large",
+      "status": 400,
+      "message": "A batch holds 1 to 100 files and at most 500 MB."
+    },
+    {
+      "code": "source_paused",
+      "status": 409,
+      "message": "The source is paused. Resume it first."
+    },
+    {
+      "code": "slug_taken",
+      "status": 400,
+      "message": "The short name {slug} is already used. Try {suggestion}."
+    },
+    {
+      "code": "upload_batch_committed",
+      "status": 409,
+      "message": "The batch has already been committed with other files."
+    },
+    {
       "code": "site_profile_invalid",
       "status": 400,
       "message": "The site profile field {field} is invalid: {problem}"

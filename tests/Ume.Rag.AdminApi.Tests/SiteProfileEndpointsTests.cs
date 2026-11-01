@@ -54,6 +54,11 @@ public sealed class SiteProfileEndpointsTests(AdminDatabaseFixture database)
         using var created = await admin.PostAsJsonAsync("/api/site-profiles", new { host, level = "public", presetId = "sitevision", profile = UmeaProfile() }, Ct);
         created.StatusCode.ShouldBe(HttpStatusCode.Accepted, await created.Content.ReadAsStringAsync(Ct));
         var jobId = (await Json(created)).GetProperty("jobId").GetGuid();
+        using (var again = await admin.PostAsJsonAsync("/api/site-profiles", new { host, level = "public", profile = UmeaProfile() }, Ct))
+        {
+            again.StatusCode.ShouldBe(HttpStatusCode.Accepted); // the profile isn't written yet: the queued command answers
+            (await Json(again)).GetProperty("jobId").GetGuid().ShouldBe(jobId);
+        }
 
         await using var db = TestPostgres.Context(database.Connection(null));
         var job = await db.Jobs.AsNoTracking().SingleAsync(j => j.Id == jobId, Ct);
@@ -64,7 +69,7 @@ public sealed class SiteProfileEndpointsTests(AdminDatabaseFixture database)
         payload.RootElement.GetProperty("decidedBy").GetString().ShouldBe("test-user");
         payload.RootElement.GetProperty("profile").GetProperty("cms").GetString().ShouldBe("sitevision");
         Ume.Rag.Pipelines.Schemas.ContractSchemas.Validator(typeof(Ume.Rag.Pipelines.Jobs.EditSiteProfileCommand)).Validate(payload.RootElement).ShouldBeEmpty();
-        (await db.AuditLog.AsNoTracking().CountAsync(a => a.EntityType == "siteprofile" && a.EntityId == $"public:{host}" && a.Action == "site-profile.create", Ct)).ShouldBe(1);
+        (await db.AuditLog.AsNoTracking().CountAsync(a => a.EntityType == "siteprofile" && a.EntityId == $"public:{host}" && a.Action == "site-profile.create", Ct)).ShouldBe(2); // both requests audited
     }
 
     [Fact]

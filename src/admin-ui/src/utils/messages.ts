@@ -31,6 +31,16 @@ export const ERROR_MESSAGES: Record<string, string> = {
   template_unsupported: 'Det finns ingen pipeline för källtypen {type}.',
   admin_only: 'Bara en plattformsadministratör kan ändra detta.',
   run_not_active: 'Körningen har redan avslutats ({state}).',
+  not_an_upload_source: 'Filer kan bara laddas upp till en källa av typen uppladdning.',
+  upload_format_deferred: 'Filer av typen {extension} kan inte laddas upp ännu. Spara filen som PDF eller i ett nyare Office-format.',
+  upload_type_refused: 'Filer av typen {extension} kan inte laddas upp.',
+  upload_too_large: 'Filen är större än {mb} MB.',
+  upload_file_exists: 'Fil {n} i omgången har redan skickats.',
+  upload_file_missing: 'Fil {n} har inte laddats upp till omgången.',
+  upload_batch_too_large: 'En omgång rymmer 1 till 100 filer och högst 500 MB.',
+  source_paused: 'Källan är pausad. Återuppta den först.',
+  slug_taken: 'Kortnamnet {slug} används redan. Prova {suggestion}.',
+  upload_batch_committed: 'Omgången är redan sparad med andra filer.',
 }
 
 /** When the problem has no code we know: by status. */

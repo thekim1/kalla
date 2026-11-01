@@ -82,12 +82,16 @@ public static class SiteProfileEndpoints
                     }
 
                     var command = new EditSiteProfileCommand { Host = host, PresetId = request.PresetId, Profile = profile, DecidedBy = admin.Actor };
+                    var dedup = JobDedupKeys.SiteProfileHost(request.Level, host);
+                    // A second create before the first command ran is deduplicated: answer the queued job, not one never written.
+                    var queued = await admin.Db.Jobs.AsNoTracking().Where(j => j.DedupKey == dedup && (j.State == JobStates.Queued || j.State == JobStates.Running))
+                        .Select(j => (Guid?)j.Id).FirstOrDefaultAsync(attempt);
                     var job = new JobRequest(JobClasses.Command, await DepartmentForAsync(admin, host, attempt), request.Level, ContractJson.Serialize(command))
                     {
-                        DedupKey = JobDedupKeys.SiteProfileHost(request.Level, host),
+                        DedupKey = dedup,
                     };
-                    return new AdminChange<SiteProfileJob>(new SiteProfileJob(job.Id, null), "site-profile.create", AuditEntityTypes.SiteProfile, $"{request.Level}:{host}",
-                        null, new { request.Level, host, request.PresetId, profile }) { Classification = request.Level, Jobs = [job] };
+                    return new AdminChange<SiteProfileJob>(new SiteProfileJob(queued ?? job.Id, null), "site-profile.create", AuditEntityTypes.SiteProfile, $"{request.Level}:{host}",
+                        null, new { request.Level, host, request.PresetId, profile }) { Classification = request.Level, Jobs = queued is null ? [job] : [] };
                 }, ct));
             })
             .RequireAuthorization(AdminPolicies.Admin).WithName("CreateSiteProfile").WithSummary("A host's first profile (command edit-site-profile)");
