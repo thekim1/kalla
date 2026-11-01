@@ -66,6 +66,20 @@ if (knowledge)
     }
 }
 
+// The chat role (chat design §2.1; P1a item 15): in P1a it runs with the knowledge role in process (IRetriever = KnowledgeService).
+var chat = roles.Contains("chat", StringComparer.Ordinal);
+if (chat)
+{
+    if (!knowledge)
+    {
+        throw new InvalidOperationException("Rag:Roles: the chat role needs the knowledge role in the same process until HttpRetriever exists (knowledge §2.2).");
+    }
+
+    builder.AddGatewayClient(Ume.Rag.Answering.Chat.GatewayChatClient.HttpClientName);
+    builder.Services.AddSingleton<Ume.Rag.Answering.Chat.GatewayChatClient>();
+    builder.Services.AddSingleton<Ume.Rag.Answering.Chat.ChatService>();
+}
+
 var app = builder.Build();
 app.UseUmeWebDefaults();
 app.UseUmeSecurityHeaders(o => o.NoStorePrefixes.Add("/v1"));
@@ -75,6 +89,11 @@ if (knowledge)
 {
     app.UseRateLimiter();
     app.MapKnowledge();
+    if (chat)
+    {
+        app.MapChat();
+    }
+
     if (publishReference)
     {
         // A fresh nonce per request (Scalar keeps it under NonceHttpContextItemKey); the policy middleware sends the matching CSP.

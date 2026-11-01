@@ -34,7 +34,11 @@ public sealed class KnowledgeCallers(KeyStore keys, IPolicySnapshotSource snapsh
     /// <summary>The download grant of this request, kept for events.</summary>
     public const string GrantItem = "ume-rag-grant";
 
-    public async Task<RagPrincipal> AuthenticateAsync(HttpRequest request, CancellationToken ct)
+    /// <summary>
+    /// The key's principal (identity §6.2–§6.3). <paramref name="knowledgeRoute"/>: the knowledge routes are open only to
+    /// <c>Knowledge:OpenToClientKinds</c>; the chat routes pass false, and the access policy decides per assistant.
+    /// </summary>
+    public async Task<RagPrincipal> AuthenticateAsync(HttpRequest request, CancellationToken ct, bool knowledgeRoute = true)
     {
         ArgumentNullException.ThrowIfNull(request);
         var http = request.HttpContext;
@@ -75,7 +79,7 @@ public sealed class KnowledgeCallers(KeyStore keys, IPolicySnapshotSource snapsh
             throw new KnowledgeFaultException(403, DenyReasons.ClientUnknown, "The key's client is not registered.");
         }
 
-        if (!options.Value.OpenToClientKinds.Contains(client.Kind, StringComparer.Ordinal))
+        if (knowledgeRoute && !options.Value.OpenToClientKinds.Contains(client.Kind, StringComparer.Ordinal))
         {
             throw new KnowledgeFaultException(403, DenyReasons.ClientNotAllowed, "This client may not use the knowledge routes.");
         }

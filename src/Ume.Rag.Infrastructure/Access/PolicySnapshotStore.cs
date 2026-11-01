@@ -84,18 +84,22 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
 
         var published = new Dictionary<Guid, PublishedVersionEntry>();
         await ReadAsync(connection, transaction, """
-            SELECT "AssistantId", "Id", "Number", "GatewayModel", "CollectionIds" FROM config."PublishedAssistantVersions"
-            """, r => published[r.GetGuid(0)] = new PublishedVersionEntry(r.GetGuid(1), r.GetInt32(2), r.GetString(3), r.GetFieldValue<Guid[]>(4)),
+            SELECT "AssistantId", "Id", "Number", "GatewayModel", "CollectionIds", "SystemPrompt", "QuerySteps"::text, "NotFound"::text, "PublishedAt"
+            FROM config."PublishedAssistantVersions"
+            """, r => published[r.GetGuid(0)] = new PublishedVersionEntry(r.GetGuid(1), r.GetInt32(2), r.GetString(3), r.GetFieldValue<Guid[]>(4),
+                r.GetString(5), r.GetString(6), r.GetString(7), r.IsDBNull(8) ? null : r.GetFieldValue<DateTimeOffset>(8)),
             cancellationToken);
 
         var assistants = new Dictionary<Guid, AssistantEntry>();
         await ReadAsync(connection, transaction, """
-            SELECT "Id", "Slug", "Name", "Classification", "HistoryMode", "State", "DepartmentId", "OwnerTeamId" FROM config."Assistants"
+            SELECT "Id", "Slug", "Name", "Classification", "HistoryMode", "State", "DepartmentId", "OwnerTeamId", "Description", "ContactName", "ContactEmail"
+            FROM config."Assistants"
             """, r =>
         {
             var id = r.GetGuid(0);
             var entry = new AssistantEntry(id, r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetGuid(6),
-                r.IsDBNull(7) ? null : r.GetGuid(7), published.GetValueOrDefault(id), audiences.TryGetValue(id, out var list) ? list : []);
+                r.IsDBNull(7) ? null : r.GetGuid(7), published.GetValueOrDefault(id), audiences.TryGetValue(id, out var list) ? list : [],
+                r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9), r.IsDBNull(10) ? null : r.GetString(10));
             if (Levels.Rank(entry.Classification) is null)
             {
                 LogUnparsable(logger, "Assistants", id);
