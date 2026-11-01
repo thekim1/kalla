@@ -24,14 +24,15 @@ Refs: [data-model §2.3, §8](../platform/data-model.md), [weakness review §3, 
 - [x] `chat`: `Conversations`, `Messages`, `MessageSources`, `Feedback`, `FeedbackImportState`, `AssistantDailyTotals`; `DataKeys`, `ToolCalls` created, unused (this PR)
 - [x] Freshness columns P1a's item 2 did not create (`Sources.DemoteRules`, `CrawlRuns.SeedsFailed`/`Complete`) (`DemoteRules`, `Incremental`, `RemovalCheck` in #219; `SeedsFailed`/`Complete` were already in P1a's schema; plus #219's parse-rule key, evaluation and chunk columns)
 - [x] Grants; `DatabaseRoleTests` extended (#219, this PR)
-- [ ] **Hand-off L2:** issue to stream A
+- [x] **Hand-off L2:** issue to stream A (#234)
 
 ### 3. Age decay and `demote`
 Refs: [knowledge §6.5, §16.1](../knowledge-api/design.md), [weakness review §3](../weakness-review.md)
 - [x] `recency` multiplier after fusion; `demote` lowest factor; uploads never demoted (#235, this PR)
 - [x] `website` template default set on a collection's first `website` source (#235)
+- [x] Keyword stop list: lexemes in > 30 % of the scope's chunks dropped from K's query (this PR); K ≤ 30 ms p95 met for frequent terms, not for terms in 10–30 % of the 100k scope (`results-b.md` row 5, flagged to the main session)
 - [ ] **Done:** §16.1 tests green; evaluator order == `/v1/retrieve` order
-- [ ] **Hand-off L3:** issue to stream A
+- [x] **Hand-off L3:** issue to stream A (#249)
 
 ### 9. Admin API for P1b
 Refs: [admin §4, §6.6, §6.7, §12](../admin/design.md), [identity §4.9](../identity/design.md)

@@ -19,8 +19,8 @@ public enum FilterFragments
 /// <summary>
 /// The texts of statements K and V (knowledge design §6.2; data-model §3.3), one per variant: K or V × exact or
 /// approximate × 2³ filter combinations, per profile and candidate depth. Parameters: <c>$1</c> the query search text (K) or the query
-/// vector (V), <c>$2 uuid[]</c> the scope, <c>$3 text[]</c> the allowed levels, then only the filters present (from <c>$4</c>) in the
-/// order tags, document types, modified after. The profile id, the dimensions and the candidate depth (<c>LIMIT</c>) are inlined literals from config (a
+/// vector (V), <c>$2 uuid[]</c> the scope, <c>$3 text[]</c> the allowed levels, for K <c>$4 text[]</c> the stop lexemes, then
+/// only the filters present (from <c>$4</c> in V, <c>$5</c> in K) in the order tags, document types, modified after. The profile id, the dimensions and the candidate depth (<c>LIMIT</c>) are inlined literals from config (a
 /// <see cref="Guid"/> and an <see cref="int"/>, never user input), so a generic plan still matches the per-profile
 /// partial indexes; the vector is always a parameter. Texts are cached per variant, so each distinct text is one
 /// auto-prepared statement per connection.
@@ -40,11 +40,14 @@ public static class RetrievalStatements
     /// <c>MATERIALIZED</c>: inlined, a generic plan (auto-prepared statements) evaluates
     /// <c>rag_or_query(to_tsvector($1))</c> once per candidate row in the filter and in <c>ts_rank_cd</c>, which more
     /// than doubled K at 100k chunks (to-verify #5); materialised it runs once and feeds the GIN index scan.
+    /// <c>$4</c> is the scope's keyword stop list (<see cref="SearchScope.KeywordStopLexemes"/>, empty for none): its
+    /// lexemes are removed from the query vector before the OR, so a term in most chunks neither matches nor is ranked
+    /// (knowledge design §6.2, §20). A query of stop lexemes only gives no query and no candidates, like stop words.
     /// </summary>
     public static string Keyword(Guid profileId, int limit, FilterFragments filters) =>
         Cache.GetOrAdd(('K', profileId, 0, limit, filters), static key => $"""
             WITH q AS MATERIALIZED (
-                SELECT content.rag_or_query(to_tsvector('swedish', $1)) AS tsq
+                SELECT content.rag_or_query(ts_delete(to_tsvector('swedish', $1), $4::text[])) AS tsq
             ), kw AS MATERIALIZED (
                 SELECT c."Id", c."DocumentId", c."ChunkSetId", c."Ordinal", c."TextHash", c."CollectionId", c."Classification",
                        c."DocumentType", c."SourceModifiedAt",
@@ -54,7 +57,7 @@ public static class RetrievalStatements
                   AND c."Kind" = 'child' AND c."DeletedAt" IS NULL
                   AND c."EmbeddingProfileId" = {ProfileLiteral(key.Profile)}
                   AND c."CollectionId" = ANY ($2)
-                  AND c."Classification" = ANY ($3){Filters(key.Filters)}
+                  AND c."Classification" = ANY ($3){Filters(key.Filters, first: 5)}
                 ORDER BY score DESC, c."Id"
                 LIMIT {Limit(key.Limit)}
             )
@@ -92,6 +95,27 @@ public static class RetrievalStatements
         FROM content."Chunks"
         WHERE "DeletedAt" IS NULL AND "Kind" = 'child' AND "EmbeddingProfileId" IS NOT NULL
         GROUP BY 1, 2
+        """;
+
+    /// <summary>
+    /// The keyword stop list's statistics (knowledge design §6.2, §20): per (profile, collection) of at least <c>$1</c>
+    /// searchable child chunks, the lexemes of <c>SearchVector</c> in at least <c>$2</c> of them. <c>ts_stat</c> takes its
+    /// rows as statement text, so the ids are quoted into it with <c>format('%L')</c> from the grouped rows (uuids, never
+    /// user input). It reads every search vector of those collections: run it in the background, not per search.
+    /// </summary>
+    public const string FrequentLexemes = """
+        WITH counts AS (
+            SELECT "EmbeddingProfileId" AS profile, "CollectionId" AS collection, count(*) AS chunks
+            FROM content."Chunks"
+            WHERE "DeletedAt" IS NULL AND "Kind" = 'child' AND "EmbeddingProfileId" IS NOT NULL
+            GROUP BY 1, 2
+            HAVING count(*) >= $1
+        )
+        SELECT counts.profile, counts.collection, s.word, s.ndoc::bigint
+        FROM counts, LATERAL ts_stat(format(
+            'SELECT "SearchVector" FROM content."Chunks" WHERE "Kind" = ''child'' AND "DeletedAt" IS NULL AND "EmbeddingProfileId" = %L AND "CollectionId" = %L',
+            counts.profile, counts.collection)) s
+        WHERE s.ndoc >= counts.chunks * $2
         """;
 
     /// <summary>
@@ -155,7 +179,7 @@ public static class RetrievalStatements
             WHERE c."EmbeddingProfileId" = {ProfileLiteral(profile)}
               AND c."DeletedAt" IS NULL
               AND c."CollectionId" = ANY ($2)
-              AND c."Classification" = ANY ($3){Filters(filters)}
+              AND c."Classification" = ANY ($3){Filters(filters, first: 4)}
             ORDER BY {orderBy}
             LIMIT {Limit(limit)}
         )
@@ -164,11 +188,11 @@ public static class RetrievalStatements
         FROM vec JOIN content."Documents" d ON d."Id" = vec."DocumentId"
         """;
 
-    /// <summary>The optional predicates, numbered from <c>$4</c> in the order tags, document types, modified after.</summary>
-    private static string Filters(FilterFragments filters)
+    /// <summary>The optional predicates, numbered from <paramref name="first"/> in the order tags, document types, modified after.</summary>
+    private static string Filters(FilterFragments filters, int first)
     {
         var sql = new StringBuilder();
-        var next = 4;
+        var next = first;
         if (filters.HasFlag(FilterFragments.Tags))
         {
             sql.Append(CultureInfo.InvariantCulture, $"\n      AND c.\"Tags\" && ${next++}");

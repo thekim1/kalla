@@ -33,8 +33,9 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
         ArgumentNullException.ThrowIfNull(querySearchText);
         var fragments = RetrievalStatements.FragmentsOf(filters);
         var sql = RetrievalStatements.Keyword(scope.EmbeddingProfileId, limit, fragments);
+        var stop = new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text, Value = scope.KeywordStopLexemes.ToArray() };
         return ReadCandidatesAsync(sql, new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = querySearchText }, scope, filters,
-            fragments, keyword: true, cancellationToken);
+            fragments, keyword: true, cancellationToken, stop);
     }
 
     public Task<IReadOnlyList<Candidate>> VectorAsync(
@@ -68,8 +69,30 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
         return counts;
     }
 
-    /// <summary>The parameters <c>$2</c>, <c>$3</c> and the present filters, after <paramref name="first"/>.</summary>
-    internal static List<NpgsqlParameter> Parameters(NpgsqlParameter first, SearchScope scope, RetrievalFilters? filters, FilterFragments fragments)
+    public async Task<IReadOnlyList<FrequentLexeme>> FrequentLexemesAsync(long minChunks, double minShare, CancellationToken cancellationToken)
+    {
+        var lexemes = new List<FrequentLexeme>();
+        await RunAsync(RetrievalStatements.FrequentLexemes,
+            [
+                new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Bigint, Value = minChunks },
+                new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Double, Value = minShare },
+            ],
+            async (reader, ct) =>
+            {
+                while (await reader.ReadAsync(ct))
+                {
+                    lexemes.Add(new FrequentLexeme(reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetInt64(3)));
+                }
+            }, TimeSpan.FromSeconds(60), cancellationToken);
+        return lexemes;
+    }
+
+    /// <summary>
+    /// The parameters <c>$2</c>, <c>$3</c>, then <paramref name="afterLevels"/> (K's stop list) and the present filters,
+    /// after <paramref name="first"/>.
+    /// </summary>
+    internal static List<NpgsqlParameter> Parameters(
+        NpgsqlParameter first, SearchScope scope, RetrievalFilters? filters, FilterFragments fragments, NpgsqlParameter? afterLevels = null)
     {
         var parameters = new List<NpgsqlParameter>
         {
@@ -77,6 +100,11 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
             new() { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Uuid, Value = scope.CollectionIds.ToArray() },
             new() { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text, Value = scope.AllowedLevels.ToArray() },
         };
+        if (afterLevels is not null)
+        {
+            parameters.Add(afterLevels);
+        }
+
         if (fragments.HasFlag(FilterFragments.Tags))
         {
             parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text, Value = filters!.Tags!.ToArray() });
@@ -97,10 +125,10 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
 
     private async Task<IReadOnlyList<Candidate>> ReadCandidatesAsync(
         string sql, NpgsqlParameter first, SearchScope scope, RetrievalFilters? filters, FilterFragments fragments, bool keyword,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, NpgsqlParameter? afterLevels = null)
     {
         var candidates = new List<Candidate>();
-        await RunAsync(sql, Parameters(first, scope, filters, fragments), async (reader, ct) =>
+        await RunAsync(sql, Parameters(first, scope, filters, fragments, afterLevels), async (reader, ct) =>
         {
             while (await reader.ReadAsync(ct))
             {
