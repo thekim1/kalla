@@ -95,6 +95,15 @@ public static class AdminErrorCodes
     /// <summary>The run is not running (<c>{state}</c>), so it cannot be cancelled.</summary>
     public static AdminErrorCode RunNotActive { get; } = new("run_not_active", 409, "The run has already ended ({state}).");
 
+    /// <summary>V26: a free-text reason shorter than <c>{min}</c> characters (field error).</summary>
+    public static AdminErrorCode ReasonTooShort { get; } = new("reason_too_short", 400, "The reason must be at least {min} characters.");
+
+    /// <summary>V28: the run is no longer waiting for a decision, or its proposal is not the one the user saw (connectors §13.3).</summary>
+    public static AdminErrorCode DeletionSuperseded { get; } = new("deletion_superseded", 409, "This deletion proposal is no longer current. Open the source's latest run.");
+
+    /// <summary>PII clear on a document with no flagged chunk set (nothing to release).</summary>
+    public static AdminErrorCode PiiNotFlagged { get; } = new("pii_not_flagged", 409, "The document is not flagged for personal data.");
+
     /// <summary>Upload batches belong to upload sources only.</summary>
     public static AdminErrorCode NotAnUploadSource { get; } = new("not_an_upload_source", 409, "Files can only be uploaded to an upload source.");
 
@@ -193,7 +202,7 @@ public static class AdminErrorCodes
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
-            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
+            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive, ReasonTooShort, DeletionSuperseded, PiiNotFlagged,
             NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
