@@ -5,8 +5,8 @@ namespace Ume.Rag.Retrieval;
 
 /// <summary>
 /// A collection's resolved <c>RetrievalSettings</c> (knowledge design §12.1): the collection's values over the
-/// platform defaults in <c>Settings.Retrieval</c>. <see cref="Recency"/> is carried for the age-decay seam
-/// (<see cref="IScoreAdjuster"/>); P1a applies no decay (README §6).
+/// platform defaults in <c>Settings.Retrieval</c>. <see cref="Recency"/> is the collection's age decay, applied after
+/// fusion by <see cref="RecencyAdjuster"/> (P1b item 3).
 /// </summary>
 public sealed record RetrievalSettings
 {

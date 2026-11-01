@@ -90,6 +90,7 @@ public sealed class RetrievalEngine : IDisposable
     private readonly RetrievalMetrics? _metrics;
     private readonly RetrievalEngineOptions _options;
     private readonly SemaphoreSlim _slots;
+    private readonly TimeProvider _time;
 
     public RetrievalEngine(
         ISearchIndex index,
@@ -99,7 +100,8 @@ public sealed class RetrievalEngine : IDisposable
         IPassageTextReader? texts = null,
         IScoreAdjuster? adjuster = null,
         SwedishDecompounder? decompounder = null,
-        RetrievalMetrics? metrics = null)
+        RetrievalMetrics? metrics = null,
+        TimeProvider? time = null)
     {
         ArgumentNullException.ThrowIfNull(index);
         ArgumentNullException.ThrowIfNull(sizes);
@@ -113,6 +115,7 @@ public sealed class RetrievalEngine : IDisposable
         _decompounder = decompounder ?? SwedishDecompounder.Default;
         _metrics = metrics;
         _slots = new SemaphoreSlim(_options.MaxConcurrentSearches, _options.MaxConcurrentSearches);
+        _time = time ?? TimeProvider.System;
     }
 
     public void Dispose() => _slots.Dispose();
@@ -232,7 +235,9 @@ public sealed class RetrievalEngine : IDisposable
                 lists.Add(new CandidateList(CandidateListKind.Keyword, ranking.KeywordWeight, keywordCandidates));
             }
 
-            var deduped = ResultDiversifier.Dedup(RrfFusion.Fuse(lists, _adjuster));
+            // §6.5: each chunk's own collection recency, times the injected adjuster (demote).
+            var adjuster = CombinedAdjuster.Of(RecencyAdjuster.For(scope, _time.GetUtcNow()), _adjuster);
+            var deduped = ResultDiversifier.Dedup(RrfFusion.Fuse(lists, adjuster));
 
             var rerankTime = 0.0;
             IReadOnlyDictionary<Guid, double>? rerankScores = null;

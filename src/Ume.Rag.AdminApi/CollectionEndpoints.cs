@@ -276,6 +276,25 @@ public static class RetrievalSettingsRules
         "vectorWeight", "keywordWeight", "candidates", "maxChunksPerDocument", "recency", "coverageMaxDistance", "coverageMinKeywordScore", "expandMaxTokens",
     };
 
+    /// <summary>The <c>website</c> template's age decay (weakness review §3): PDFs, half-life 730 days, weight 0.15.</summary>
+    public static readonly JsonObject WebsiteRecency = new() { ["halfLifeDays"] = 730, ["weight"] = 0.15, ["kinds"] = new JsonArray("pdf") };
+
+    /// <summary>
+    /// <paramref name="retrievalSettings"/> with <see cref="WebsiteRecency"/>, or null when it already has a <c>recency</c> key
+    /// (an explicit <c>null</c> keeps decay off: an editor's choice).
+    /// </summary>
+    public static string? WithWebsiteRecency(string retrievalSettings)
+    {
+        var json = JsonNode.Parse(string.IsNullOrWhiteSpace(retrievalSettings) ? "{}" : retrievalSettings) as JsonObject ?? [];
+        if (json.ContainsKey("recency"))
+        {
+            return null;
+        }
+
+        json["recency"] = WebsiteRecency.DeepClone();
+        return json.ToJsonString();
+    }
+
     /// <summary>A <c>Chunks.DocumentType</c> value (processing design §6.5: <c>page</c>, <c>pdf</c>, … or a metadata rule's own).</summary>
     private static readonly System.Text.RegularExpressions.Regex DocumentType = new("^[a-z][a-z0-9-]{0,29}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 

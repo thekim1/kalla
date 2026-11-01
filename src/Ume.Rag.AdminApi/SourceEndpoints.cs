@@ -56,10 +56,24 @@ public static class SourceEndpoints
                         UpdatedAt = admin.Now,
                         UpdatedBy = admin.Actor,
                     };
+                    // The first website (crawl) source turns on age decay for PDFs unless the collection already sets recency
+                    // (weakness review §3; admin design §5.4 step 3; knowledge design §6.5).
+                    var also = new List<AuditAlso>();
+                    if (source.Type == Ume.Rag.Domain.Entities.SourceTypes.Crawl &&
+                        !await admin.Db.Sources.AnyAsync(s => s.CollectionId == collection.Id && s.Type == Ume.Rag.Domain.Entities.SourceTypes.Crawl && s.DeletedAt == null, attempt) &&
+                        RetrievalSettingsRules.WithWebsiteRecency(collection.RetrievalSettings) is { } turnedOn)
+                    {
+                        also.Add(new AuditAlso("retrieval-settings", AuditEntityTypes.Collection, collection.Id,
+                            new { retrievalSettings = System.Text.Json.Nodes.JsonNode.Parse(collection.RetrievalSettings) }, new { retrievalSettings = System.Text.Json.Nodes.JsonNode.Parse(turnedOn), reason = "first-website-source" }));
+                        collection.RetrievalSettings = turnedOn;
+                        collection.UpdatedAt = admin.Now;
+                        collection.UpdatedBy = admin.Actor;
+                    }
+
                     admin.Db.Sources.Add(source);
                     return new AdminChange<Source>(source, "create", AuditEntityTypes.Source, source.Id, null, SourceAudit.Of(source))
                     {
-                        DepartmentId = collection.DepartmentId, Classification = source.Classification,
+                        DepartmentId = collection.DepartmentId, Classification = source.Classification, Also = also,
                     };
                 }, ct);
                 return Results.Created($"/api/sources/{created.Id}", SourceDto.Of(created));

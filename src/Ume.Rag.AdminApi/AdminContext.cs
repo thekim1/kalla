@@ -27,7 +27,13 @@ public sealed record AdminChange<T>(T Result, string Action, string EntityType, 
 
     /// <summary>Worker jobs the change starts (admin design §4.7), enqueued in the same transaction.</summary>
     public IReadOnlyList<JobRequest> Jobs { get; init; } = [];
+
+    /// <summary>Changes to other entities made by the same write, each with its own audit entry in the same transaction.</summary>
+    public IReadOnlyList<AuditAlso> Also { get; init; } = [];
 }
+
+/// <summary>A related change audited with an <see cref="AdminChange{T}"/> (same actor, version, department and level).</summary>
+public sealed record AuditAlso(string Action, string EntityType, object? EntityId, object? Before, object? After);
 
 /// <summary>
 /// The signed-in user's view of the configuration and the admin write path (admin design §3.2, §4.4), adapted from the
@@ -91,6 +97,11 @@ public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider t
                 var version = await Db.ConfigVersion.AsNoTracking().Select(v => v.Version).SingleAsync(attempt);
                 audit = Audit(actor, change, version);
                 Db.AuditLog.Add(audit);
+                foreach (var also in change.Also)
+                {
+                    Db.AuditLog.Add(Audit(actor, change with { Action = also.Action, EntityType = also.EntityType, EntityId = also.EntityId, Before = also.Before, After = also.After }, version));
+                }
+
                 await Db.SaveChangesAsync(attempt);
                 if (change.Jobs.Count > 0)
                 {
