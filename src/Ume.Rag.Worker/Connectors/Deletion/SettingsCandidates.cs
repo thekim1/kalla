@@ -9,7 +9,8 @@ namespace Ume.Rag.Worker.Connectors.Deletion;
 /// <item>scope narrowing: a live document whose stored URL the current scope no longer admits (<c>startUrls</c>,
 /// <c>extraHosts</c>, <c>include</c>, <c>exclude</c>, or a type in its host's site profile <c>excludedTypes</c>, by
 /// extension or by its stored media type) is <c>scope-narrowed</c> (exempt), in any run, complete or not, and without a
-/// request: the traversal never admits such a URL;</item>
+/// request: the traversal never admits such a URL (<c>include</c> and <c>exclude</c> only where the identity still has
+/// its path, <see cref="CrawlScope.CheckIdentity"/>);</item>
 /// <item>identity: a document a complete traversal did not reach is <c>identity-changed</c> (exempt) instead of
 /// <c>not-seen</c> when the run's identity settings differ from the last applied ones, or when its identity is no longer
 /// canonical under the current rules (source or site profile <c>ignoreQueryParams</c>, <c>directoryIndexNames</c>, a
@@ -71,7 +72,7 @@ public static class SettingsCandidates
         ArgumentNullException.ThrowIfNull(mediaTypes);
         ArgumentNullException.ThrowIfNull(beyondDepth);
         var narrowed = documents
-            .Where(d => d.DeletedAt is null && d.HeldAt is null && OutOfScope(source.Scope, d, mediaTypes))
+            .Where(d => d.DeletedAt is null && d.HeldAt is null && OutOfScope(source, d, mediaTypes))
             .Select(d => new DeletionCandidate(d.Id, DeletionReasons.ScopeNarrowed))
             .ToList();
         var removed = narrowed.Select(c => c.DocumentId).ToHashSet();
@@ -94,15 +95,19 @@ public static class SettingsCandidates
         return narrowed;
     }
 
-    private static bool OutOfScope(CrawlScope scope, SourceDocument document, IReadOnlyDictionary<Guid, string> mediaTypes)
+    /// <summary>
+    /// Over the stored identity: where the host's identity rule mapped the path, <c>include</c> and <c>exclude</c> cannot
+    /// narrow it (<see cref="CrawlScope.CheckIdentity"/>); such a document goes only when a complete traversal misses it.
+    /// </summary>
+    private static bool OutOfScope(CrawlSource source, SourceDocument document, IReadOnlyDictionary<Guid, string> mediaTypes)
     {
         if (!Uri.TryCreate(document.CanonicalIdentity, UriKind.Absolute, out _))
         {
             return false;
         }
 
-        return !scope.Check(document.CanonicalIdentity).Admitted
-            || (mediaTypes.TryGetValue(document.Id, out var type) && scope.ExcludesType(document.CanonicalIdentity, type));
+        return !source.Scope.CheckIdentity(document.CanonicalIdentity, source.Canonicalizer).Admitted
+            || (mediaTypes.TryGetValue(document.Id, out var type) && source.Scope.ExcludesType(document.CanonicalIdentity, type));
     }
 
     private static bool Canonical(string identity, CanonicalizerOptions options) =>

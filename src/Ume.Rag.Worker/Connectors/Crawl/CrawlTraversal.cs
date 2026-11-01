@@ -197,7 +197,8 @@ public sealed class CrawlTraversal(
         }
 
         var source = await connector.SourceAsync(context.Run.SourceId, context.Run.Classification, context.Settings, cancellationToken);
-        var left = (await frontier.LeftSitemapAsync(context.Run, cancellationToken)).Where(r => source.Scope.Check(r.Url).Admitted).ToList();
+        var left = (await frontier.LeftSitemapAsync(context.Run, cancellationToken))
+            .Where(r => source.Scope.CheckIdentity(r.Url, source.Canonicalizer).Admitted).ToList();
         if (left.Count == 0)
         {
             return 0;
@@ -458,7 +459,8 @@ public sealed class CrawlTraversal(
                 continue;
             }
 
-            var scope = source.Scope.Check(canonical);
+            // The patterns match the path the link names, the frontier keeps its identity (§3.1 rule 10).
+            var scope = source.Scope.Check(UrlCanonicalizer.PathForm(link, source.Canonicalizer).Value!);
             if (!scope.Admitted)
             {
                 continue;
@@ -503,7 +505,7 @@ public sealed class CrawlTraversal(
 
         var source = await connector.SourceAsync(context.Run.SourceId, context.Run.Classification, context.Settings, cancellationToken);
         var sameHost = string.Equals(new Uri(hint).Authority, content.Facts.FinalUrl!.Authority, StringComparison.OrdinalIgnoreCase);
-        if (sameHost && source.Scope.Check(hint).Admitted)
+        if (sameHost && source.Scope.CheckIdentity(hint, source.Canonicalizer).Admitted)
         {
             var hash = Convert.ToHexStringLower(UrlCanonicalizer.IdentityHash(hint));
             var target = await frontier.GetAsync(context.Run.SourceId, context.Run.Classification, hash, cancellationToken);

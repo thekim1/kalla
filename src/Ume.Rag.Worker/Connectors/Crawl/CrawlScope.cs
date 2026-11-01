@@ -4,7 +4,7 @@ using Ume.Rag.Worker.Connectors.Urls;
 
 namespace Ume.Rag.Worker.Connectors.Crawl;
 
-/// <summary>Whether a canonical URL may become a frontier row of the source (connectors design §5.2).</summary>
+/// <summary>Whether a URL may become a frontier row of the source (connectors design §5.2).</summary>
 /// <param name="Admitted">In scope.</param>
 /// <param name="Leaf">An off-site URL admitted by an explicit <c>include</c>: fetched, its links never followed.</param>
 /// <param name="Reason">Why not: <c>scope.excluded</c>, <c>scope.not_included</c>, <c>scope.off_site</c>, <c>scope.type</c>.</param>
@@ -20,7 +20,9 @@ public sealed record ScopeDecision(bool Admitted, bool Leaf, string? Reason)
 /// <summary>
 /// A crawl source's scope (connectors design §5.2): the scope hosts are the start URLs' hosts and <c>extraHosts</c>;
 /// <c>exclude</c> wins over <c>include</c>, an empty <c>include</c> means everything on the scope hosts; a link to another
-/// host is admitted only when an <c>include</c> glob names that host literally, and then as a leaf. URLs whose extension
+/// host is admitted only when an <c>include</c> glob names that host literally, and then as a leaf. The patterns match the
+/// URL's path form, without the site profile's identity rule (an editor's glob over a section of a Sitevision host
+/// matches its pages, which the identity rule maps to bare node ids; pilot set-up, 2026-11-01). URLs whose extension
 /// names a type outside the pipeline's formats, or one of the URL's host's site profile <c>excludedTypes</c> (images and
 /// video by default, also for hosts without a profile), are not admitted: <c>.zip</c> and <c>.exe</c> are never fetched;
 /// a response of such a type is not read past its headers (<see cref="AcceptedMediaTypes"/>). <c>demote</c> patterns change no crawling
@@ -162,11 +164,30 @@ public sealed class CrawlScope
         return SiteProfileHost.Of(url) is { } host && _acceptedByHost.TryGetValue(host, out var accepted) ? accepted : _accepted;
     }
 
-    /// <summary>The scope decision for a canonical URL (§3.1 form).</summary>
-    public ScopeDecision Check(string canonicalUrl)
+    /// <summary>
+    /// The scope decision for a URL in its path form (<see cref="UrlCanonicalizer.PathForm"/>: canonical but for the
+    /// identity rule), the form an editor writes the patterns for; the host and type rules read the same host and extension
+    /// in either form.
+    /// </summary>
+    public ScopeDecision Check(string pathUrl) => Decide(pathUrl, patterns: true);
+
+    /// <summary>
+    /// The scope decision for a URL known only by its canonical identity (a frontier row, a document, a canonical hint).
+    /// When its host's verified identity rule mapped the path (§3.1 rule 10), the path the patterns were written for is
+    /// not known: <c>include</c> and <c>exclude</c> decide nothing and only the host and type rules apply, so an unknown
+    /// path never narrows the scope. Any other identity is its own path form.
+    /// </summary>
+    public ScopeDecision CheckIdentity(string canonicalIdentity, CanonicalizerOptions canonicalizer)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalIdentity);
+        ArgumentNullException.ThrowIfNull(canonicalizer);
+        return Decide(canonicalIdentity, patterns: !UrlCanonicalizer.IsIdentityRuleForm(canonicalIdentity, canonicalizer));
+    }
+
+    private ScopeDecision Decide(string canonicalUrl, bool patterns)
     {
         ArgumentNullException.ThrowIfNull(canonicalUrl);
-        if (_exclude.Any(p => p.Matches(canonicalUrl)))
+        if (patterns && _exclude.Any(p => p.Matches(canonicalUrl)))
         {
             return ScopeDecision.Out(Excluded);
         }
@@ -180,10 +201,10 @@ public sealed class CrawlScope
         if (!Hosts.Contains(host))
         {
             // Off-site: only through an include that names this host literally, and then as a leaf.
-            return _offSiteHosts.Contains(host) && _include.Any(p => p.Matches(canonicalUrl)) ? ScopeDecision.OffSiteLeaf : ScopeDecision.Out(OffSite);
+            return _offSiteHosts.Contains(host) && (!patterns || _include.Any(p => p.Matches(canonicalUrl))) ? ScopeDecision.OffSiteLeaf : ScopeDecision.Out(OffSite);
         }
 
-        return _include.Count == 0 || _include.Any(p => p.Matches(canonicalUrl)) ? ScopeDecision.In : ScopeDecision.Out(NotIncluded);
+        return !patterns || _include.Count == 0 || _include.Any(p => p.Matches(canonicalUrl)) ? ScopeDecision.In : ScopeDecision.Out(NotIncluded);
     }
 
     /// <summary>
@@ -199,16 +220,16 @@ public sealed class CrawlScope
     }
 
     /// <summary>
-    /// The rank multiplier of a canonical URL (knowledge design §6.5): the lowest factor of the matching <c>demote</c>
-    /// patterns, 1 when none matches.
+    /// The rank multiplier of a URL in its path form, as <see cref="Check"/> (knowledge design §6.5): the lowest factor of
+    /// the matching <c>demote</c> patterns, 1 when none matches.
     /// </summary>
-    public double DemoteFactor(string canonicalUrl)
+    public double DemoteFactor(string pathUrl)
     {
-        ArgumentNullException.ThrowIfNull(canonicalUrl);
+        ArgumentNullException.ThrowIfNull(pathUrl);
         var factor = 1.0;
         foreach (var (pattern, value) in _demote)
         {
-            if (value < factor && pattern.Matches(canonicalUrl))
+            if (value < factor && pattern.Matches(pathUrl))
             {
                 factor = value;
             }

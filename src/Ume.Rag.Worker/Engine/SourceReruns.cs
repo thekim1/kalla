@@ -194,7 +194,7 @@ public sealed class SourceReruns(
     {
         var context = await crawls.StartAsync(source, run, incremental: false, force: false, cancellationToken);
         var crawl = await crawlConnector.SourceAsync(source.SourceId, source.Classification, source.Settings, cancellationToken);
-        await frontier.AdmitAsync(context.Run, [.. work.Where(w => crawl.Scope.Check(w.CanonicalIdentity).Admitted)
+        await frontier.AdmitAsync(context.Run, [.. work.Where(w => crawl.Scope.CheckIdentity(w.CanonicalIdentity, crawl.Canonicalizer).Admitted)
             .Select(w => new FrontierAdmission(w.CanonicalIdentity, w.Url!.Authority, 0, Leaf: true))], cancellationToken);
         await runs.SetPhaseAsync(run.Id, RunPhases.Fetch, null, cancellationToken);
         await crawls.TopUpAsync(context, cancellationToken);

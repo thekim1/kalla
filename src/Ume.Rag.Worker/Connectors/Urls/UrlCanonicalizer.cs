@@ -88,6 +88,20 @@ public sealed class PathIdentityRule
             return path;
         }
     }
+
+    /// <summary>Whether the rule maps <paramref name="path"/>; false when the match times out, as <see cref="Apply"/> keeps it then.</summary>
+    public bool Matches(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        try
+        {
+            return _pattern.IsMatch(path);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return false;
+        }
+    }
 }
 
 /// <summary>A canonical URL, or why the input cannot be one (<c>url.*</c>).</summary>
@@ -125,7 +139,15 @@ public static partial class UrlCanonicalizer
 
     private static readonly IdnMapping Idn = new() { UseStd3AsciiRules = true, AllowUnassigned = false };
 
-    public static CanonicalUrl Canonicalize(string url, CanonicalizerOptions? options = null)
+    public static CanonicalUrl Canonicalize(string url, CanonicalizerOptions? options = null) => Canonicalize(url, options, identityRule: true);
+
+    /// <summary>
+    /// The path form of <paramref name="url"/>: every rule but the identity rule (rule 10), so the URL keeps the path an
+    /// editor sees. The source's <c>include</c>, <c>exclude</c> and <c>demote</c> patterns match this form (§5.2).
+    /// </summary>
+    public static CanonicalUrl PathForm(string url, CanonicalizerOptions? options = null) => Canonicalize(url, options, identityRule: false);
+
+    private static CanonicalUrl Canonicalize(string url, CanonicalizerOptions? options, bool identityRule)
     {
         ArgumentNullException.ThrowIfNull(url);
         options ??= CanonicalizerOptions.Default;
@@ -186,7 +208,10 @@ public static partial class UrlCanonicalizer
         path = RemoveSessionSegments(path);
         path = RemoveDotSegments(path.Length == 0 ? "/" : path);
         path = DropDirectoryIndex(path, options.DirectoryIndexNames);
-        path = hostRules?.Identity is { } identity ? identity.Apply(path) : ApplyIdentityRule(path, options.IdentityRule);
+        if (identityRule)
+        {
+            path = hostRules?.Identity is { } identity ? identity.Apply(path) : ApplyIdentityRule(path, options.IdentityRule);
+        }
 
         // Rule 7: the query; rule 6: the fragment is dropped.
         IReadOnlyCollection<string> ignored = hostRules is null ? options.IgnoreQueryParams : [.. options.IgnoreQueryParams, .. hostRules.IgnoreQueryParams];
@@ -206,7 +231,37 @@ public static partial class UrlCanonicalizer
     /// Resolves <paramref name="reference"/> (a link or a <c>Location</c> header) against <paramref name="baseUrl"/> and
     /// canonicalises the result.
     /// </summary>
-    public static CanonicalUrl Resolve(Uri baseUrl, string reference, CanonicalizerOptions? options = null)
+    public static CanonicalUrl Resolve(Uri baseUrl, string reference, CanonicalizerOptions? options = null) =>
+        Resolve(baseUrl, reference, options, identityRule: true);
+
+    /// <summary>As <see cref="Resolve(Uri, string, CanonicalizerOptions?)"/>, to the <see cref="PathForm"/>.</summary>
+    public static CanonicalUrl ResolvePathForm(Uri baseUrl, string reference, CanonicalizerOptions? options = null) =>
+        Resolve(baseUrl, reference, options, identityRule: false);
+
+    /// <summary>
+    /// Whether <paramref name="canonicalUrl"/>'s host has a verified identity rule (rule 10) that maps its path: such an
+    /// identity no longer tells the path it was found under.
+    /// </summary>
+    public static bool IsIdentityRuleForm(string canonicalUrl, CanonicalizerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalUrl);
+        ArgumentNullException.ThrowIfNull(options);
+        var match = Rfc3986().Match(canonicalUrl);
+        if (!match.Success || !match.Groups["authority"].Success || !SplitAuthority(match.Groups["authority"].Value, out var host, out _))
+        {
+            return false;
+        }
+
+        var path = match.Groups["path"].Value;
+        if (options.Hosts.Count > 0 && options.Hosts.GetValueOrDefault(host)?.Identity is { } identity)
+        {
+            return identity.Matches(path);
+        }
+
+        return options.IdentityRule == IdentityRule.SitevisionNodeId && SitevisionNodeId().IsMatch(path[(path.LastIndexOf('/') + 1)..]);
+    }
+
+    private static CanonicalUrl Resolve(Uri baseUrl, string reference, CanonicalizerOptions? options, bool identityRule)
     {
         ArgumentNullException.ThrowIfNull(baseUrl);
         ArgumentNullException.ThrowIfNull(reference);
@@ -214,10 +269,10 @@ public static partial class UrlCanonicalizer
         if (Rfc3986().Match(trimmed) is { Success: true } match && match.Groups["scheme"].Success)
         {
             // Absolute: our rules alone, so Uri's escaping never touches it.
-            return Canonicalize(trimmed, options);
+            return Canonicalize(trimmed, options, identityRule);
         }
 
-        return Uri.TryCreate(baseUrl, trimmed, out var absolute) ? Canonicalize(absolute.AbsoluteUri, options) : new(null, RefusedSyntax);
+        return Uri.TryCreate(baseUrl, trimmed, out var absolute) ? Canonicalize(absolute.AbsoluteUri, options, identityRule) : new(null, RefusedSyntax);
     }
 
     /// <summary><c>IdentityHash</c> / <c>UrlHash</c>: SHA-256 of the canonical identity (data-model §2.2).</summary>

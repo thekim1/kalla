@@ -223,7 +223,7 @@ public sealed class CrawlConnector(
         var source = await SourceAsync(context.SourceId, context.Classification, context.Settings, cancellationToken);
         var validators = source.Settings.ConditionalGet && !context.Revalidate ? item.Hints.Stored : null;
         var request = new HttpFetchRequest(url, EgressPurpose.Fetch, validators, source.Scope.AcceptedMediaTypes(url), source.Canonicalizer, robots.CheckAsync,
-            InScope: target => UrlCanonicalizer.Canonicalize(target.AbsoluteUri, source.Canonicalizer).Value is { } canonical && source.Scope.Check(canonical).Admitted);
+            InScope: target => InScope(source, target));
         var result = await fetcher.FetchAsync(request, cancellationToken);
         switch (result)
         {
@@ -255,7 +255,7 @@ public sealed class CrawlConnector(
         var url = item.Url ?? throw new ArgumentException("A crawl item has a URL.", nameof(item));
         var source = await SourceAsync(context.SourceId, context.Classification, context.Settings, cancellationToken);
         var request = new HttpFetchRequest(url, EgressPurpose.Fetch, null, null, source.Canonicalizer, robots.CheckAsync,
-            InScope: target => UrlCanonicalizer.Canonicalize(target.AbsoluteUri, source.Canonicalizer).Value is { } canonical && source.Scope.Check(canonical).Admitted,
+            InScope: target => InScope(source, target),
             Head: true);
         var result = await fetcher.FetchAsync(request, cancellationToken);
         return result switch
@@ -265,6 +265,10 @@ public sealed class CrawlConnector(
             _ => new CrawlPage(FetchOutcomes.From(result), null),
         };
     }
+
+    /// <summary>A redirect target, in its path form (<see cref="HttpFetchRequest.InScope"/>), against the source scope (§3.2).</summary>
+    private static bool InScope(CrawlSource source, Uri target) =>
+        UrlCanonicalizer.PathForm(target.AbsoluteUri, source.Canonicalizer).Value is { } path && source.Scope.Check(path).Admitted;
 
     private static CrawlCheckpoint Checkpoint(int phase, int root, int skip) =>
         new() { SchemaVersion = CrawlCheckpoint.CurrentSchemaVersion, Phase = phase, Root = root, Skip = skip };
@@ -278,7 +282,9 @@ public sealed class CrawlConnector(
             return sitemap is null ? new ListingEvent<CrawlCheckpoint>.Failure(url, canonical.Refusal!) : null;
         }
 
-        var scope = source.Scope.Check(canonical.Value!);
+        // The patterns match the path the sitemap or the start URL names, the seed keeps its identity (§3.1 rule 10).
+        var path = sitemap is null ? UrlCanonicalizer.PathForm(url, source.Canonicalizer) : UrlCanonicalizer.ResolvePathForm(sitemap, url, source.Canonicalizer);
+        var scope = source.Scope.Check(path.Value!);
         if (!scope.Admitted)
         {
             // Sitemap entries out of scope or of an excluded type are dropped (and counted by the report from the run items).
