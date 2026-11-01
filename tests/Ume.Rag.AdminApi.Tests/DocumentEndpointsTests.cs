@@ -170,7 +170,7 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
     }
 
     [Fact]
-    public async Task A_document_shows_its_sets_pii_counts_and_run_items_and_its_chunks_need_edit_pipelines()
+    public async Task A_document_shows_its_sets_pii_counts_and_run_items_and_its_chunks_need_edit_or_edit_pipelines()
     {
         var seed = await SeedAsync();
         await using var factory = database.HeaderFactory();
@@ -189,7 +189,8 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
             .ShouldBe([(seed.Finished, "updated")]);
         (await viewer.GetAsync($"/api/documents/{seed.Deleted}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
-        (await editor.GetAsync($"/api/documents/{seed.Clean}/chunks", Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // #283: Edit or EditPipelines; an editor reads chunk text too, a viewer does not.
+        (await editor.GetAsync($"/api/documents/{seed.Clean}/chunks", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
         var chunks = await pipelines.GetFromJsonAsync<JsonElement>($"/api/documents/{seed.Clean}/chunks", Ct);
         chunks.GetProperty("chunks").EnumerateArray().Select(c => c.GetProperty("id").GetGuid()).ShouldBe(seed.CleanChunks); // ordinal order
         chunks.GetProperty("chunks")[0].GetProperty("headingPath").GetString().ShouldBe("Taxor › Avfall");

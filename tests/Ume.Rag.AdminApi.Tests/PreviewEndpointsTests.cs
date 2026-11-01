@@ -178,6 +178,7 @@ public sealed class PreviewEndpointsTests(AdminDatabaseFixture database)
             web.UseSetting("KeyProvider:Directory", keys);
         });
         using var pipelines = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PipelineEditor, seed.Code);
+        using var outputEditor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
         var jobId = Guid.CreateVersion7();
         var other = Guid.CreateVersion7();
@@ -215,6 +216,7 @@ public sealed class PreviewEndpointsTests(AdminDatabaseFixture database)
 
         var path = $"/api/previews/{jobId}/documents/{seed.Document}/stages";
         (await viewer.GetAsync($"{path}/parse/output", Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await outputEditor.GetAsync($"{path}/parse/output", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK); // #283: Edit or EditPipelines
         using var parse = await pipelines.GetAsync($"{path}/parse/output", Ct);
         parse.StatusCode.ShouldBe(HttpStatusCode.OK);
         parse.Content.Headers.ContentType!.MediaType.ShouldBe("text/markdown");

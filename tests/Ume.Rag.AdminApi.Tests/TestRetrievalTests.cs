@@ -90,6 +90,11 @@ public sealed class TestRetrievalTests(AdminDatabaseFixture database)
         // The editor's department only; a viewer may not run it; an empty question is a field error.
         (await stranger.PostAsJsonAsync(path, new { question = word }, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await viewer.PostAsJsonAsync(path, new { question = word }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // #283: Edit or EditPipelines; a pipeline editor runs the retrieval test too.
+        using (var pipelines = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PipelineEditor, code))
+        {
+            (await pipelines.PostAsJsonAsync(path, new { question = word, mode = "Keyword" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        }
         (await editor.PostAsJsonAsync(path, new { question = "" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await db.AuditLog.AsNoTracking().CountAsync(Ct)).ShouldBe(auditBefore);
     }

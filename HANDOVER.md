@@ -75,6 +75,9 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 ## How we work (user preferences, binding)
 
+- **No tests that depend on timing or machine speed (user, 2026-11-02):** assert behaviour, not durations,
+  throughput or the planner's choice; "wait until X, fail after 60 s" is fine. Stream A's removed or relaxed in #296;
+  B's in #297.
 - **Demo first, details after; admin UI focus now.** No extra negative proofs, probes or flake hunts unless a change
   needs one; merge on green CI. Keep adversarial review of stream B's security-relevant parts, proportionate.
 - **Approve and merge without asking (user, 2026-11-02):** approve PRs judged ready for merge (reviewed, checked against

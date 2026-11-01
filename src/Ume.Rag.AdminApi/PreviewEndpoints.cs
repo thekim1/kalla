@@ -88,7 +88,7 @@ public static class PreviewEndpoints
                     var bytes = await ReadAtMostAsync(stream, MaxOutputBytes, ct);
                     return Results.Bytes(bytes, output.EndsWith(".json", StringComparison.Ordinal) ? "application/json" : "text/markdown; charset=utf-8");
                 })
-            .RequireAuthorization(AdminPolicies.EditPipelines).WithTags("Jobs").WithName("GetPreviewOutput")
+            .RequireAuthorization(AdminPolicies.EditOrEditPipelines).WithTags("Jobs").WithName("GetPreviewOutput")
             .WithSummary("A preview stage's output (decrypted, ≤ 2 MB)");
 
         return api;
