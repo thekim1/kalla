@@ -76,7 +76,8 @@ Refs: [engine §2–§10, §14, §16, §19](../ingestion-worker/design-engine.md
 - [x] **Hand-off J4:** issue to stream B (#110)
 
 ## 8. Evaluation smoke job (#17, your part)
-- [ ] `evaluation-smoke` job in `verify.yml`, green on a PR
+- [x] `evaluation-smoke` job in `verify.yml`, green on a PR (PR: a/17-evaluation-smoke; green on the PR confirmed by the main session
+  after CI; evaluator == API contract test over the smoke set in the same PR)
 
 ## 9. Commands and evaluation runs (#10, after J5)
 Refs: [processing §13.4–§13.6](../ingestion-worker/design-processing.md), [engine §9.1](../ingestion-worker/design-engine.md)
