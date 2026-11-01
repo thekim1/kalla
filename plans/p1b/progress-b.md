@@ -82,6 +82,7 @@ Refs: [admin §10.1, §11.4](../admin/design.md)
 
 ### 19. Code complete (your part)
 - [ ] Pin review: NuGet and npm pins under 7 days old reviewed; #113 recorded; realm callback for the Open WebUI pin (README §7 O8)
+- [ ] Condense residency: the chat condense step runs at `Eu` until on-prem hardware exists (#204 design deviation 1, M2); switch it to `OnPrem` before go-live once that route exists
 
 ## Live block
 
