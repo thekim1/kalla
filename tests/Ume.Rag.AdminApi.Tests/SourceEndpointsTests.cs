@@ -63,6 +63,77 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
     private static object UrlList(params string[] urls) => new { urls };
 
     [Fact]
+    public async Task The_first_website_source_turns_on_age_decay_for_pdfs_unless_recency_is_set()
+    {
+        // weakness review §3, admin design §5.4 step 3: half-life 730 days, weight 0.15, PDFs; audited on the collection.
+        var (collection, code) = await CollectionAsync();
+        var (keptOff, _) = await CollectionAsync();
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            if (!await db.Pipelines.AnyAsync(p => p.DepartmentId == null && p.TemplateId == "website" && p.PublishedVersionId != null, Ct))
+            {
+                var pipeline = new Pipeline { Name = "website", TemplateId = "website", UpdatedAt = DateTimeOffset.UtcNow };
+                var version = new PipelineVersion { PipelineId = pipeline.Id, Number = 1, State = PipelineVersionStates.Published, Definition = "{}", PublishedAt = DateTimeOffset.UtcNow };
+                db.Pipelines.Add(pipeline);
+                db.PipelineVersions.Add(version);
+                await db.SaveChangesAsync(Ct);
+                pipeline.PublishedVersionId = version.Id;
+                await db.SaveChangesAsync(Ct);
+            }
+
+            await db.Collections.Where(c => c.Id == keptOff).ExecuteUpdateAsync(c => c.SetProperty(x => x.RetrievalSettings, """{"recency": null}"""), Ct);
+            await db.Departments.Where(d => d.Id == db.Collections.Where(c => c.Id == keptOff).Select(c => c.DepartmentId).Single())
+                .ExecuteUpdateAsync(d => d.SetProperty(x => x.CostCenterCode, code + "B"), Ct);
+        }
+
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin, code);
+        object Crawl(string host) => new { type = "crawl", name = host, classification = "internal", settings = new { startUrls = new[] { $"https://{host}/" } } };
+        async Task<string> SettingsAsync(Guid id)
+        {
+            await using var db = TestPostgres.Context(database.Connection(null));
+            return await db.Collections.AsNoTracking().Where(c => c.Id == id).Select(c => c.RetrievalSettings).SingleAsync(Ct);
+        }
+
+        using (var first = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources", Crawl("www.a.se"), Ct))
+        {
+            first.StatusCode.ShouldBe(HttpStatusCode.Created, await first.Content.ReadAsStringAsync(Ct));
+        }
+
+        using (var settings = JsonDocument.Parse(await SettingsAsync(collection)))
+        {
+            var recency = settings.RootElement.GetProperty("recency");
+            (recency.GetProperty("halfLifeDays").GetInt32(), recency.GetProperty("weight").GetDouble(), recency.GetProperty("kinds")[0].GetString())
+                .ShouldBe((730, 0.15, "pdf"));
+        }
+
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            var audit = await db.AuditLog.AsNoTracking().Where(a => a.EntityId == collection.ToString() && a.Action == "retrieval-settings").ToListAsync(Ct);
+            audit.ShouldHaveSingleItem().Details!.ShouldContain("first-website-source");
+        }
+
+        // An editor's change survives a second website source; an explicit null stays off.
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Collections.Where(c => c.Id == collection).ExecuteUpdateAsync(c => c.SetProperty(x => x.RetrievalSettings, """{"recency": {"halfLifeDays": 365, "weight": 0.3, "kinds": ["pdf"]}}"""), Ct);
+        }
+
+        using (var second = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources", Crawl("www.b.se"), Ct))
+        {
+            second.StatusCode.ShouldBe(HttpStatusCode.Created);
+        }
+
+        (await SettingsAsync(collection)).ShouldContain("365");
+        using (var off = await admin.PostAsJsonAsync($"/api/collections/{keptOff}/sources", Crawl("www.c.se"), Ct))
+        {
+            off.StatusCode.ShouldBe(HttpStatusCode.Created, await off.Content.ReadAsStringAsync(Ct));
+        }
+
+        (await SettingsAsync(keptOff)).ShouldNotContain("730");
+    }
+
+    [Fact]
     public async Task A_source_is_validated_against_the_contract_and_a_scope_change_needs_the_impact_token()
     {
         var (collection, code) = await CollectionAsync();

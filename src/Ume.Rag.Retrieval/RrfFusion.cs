@@ -24,8 +24,8 @@ public sealed record FusedCandidate(
 
 /// <summary>
 /// The seam for the score multipliers applied after fusion (knowledge design §6.5): per-collection age decay
-/// (<c>RetrievalSettings.recency</c>) and source <c>demote</c> patterns (weakness review §3). Not in P1a (README §6):
-/// without an adjuster every factor is 1.
+/// (<c>RetrievalSettings.recency</c>, <see cref="RecencyAdjuster"/>) and source <c>demote</c> patterns (weakness review §3).
+/// Without an adjuster every factor is 1.
 /// </summary>
 public interface IScoreAdjuster
 {
