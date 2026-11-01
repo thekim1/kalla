@@ -116,6 +116,7 @@ api.MapPiiReport();
 api.MapDocuments();
 api.MapAudit();
 api.MapExplainAccess();
+api.MapPreviews();
 api.MapUploads();
 api.MapKeys();
 api.MapOrganisation();
