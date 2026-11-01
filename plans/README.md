@@ -19,8 +19,9 @@ P1b pilot hardening; site-profile learning, shared frontier, answer judge, effec
 embedding and the assistant extras move to P2; §5: two gateway releases, on-prem capacity measured in P0, one Open
 WebUI instance per department until W3 and E1 are solved, owners and dates before each phase).
 
-Implementation: [`p0/`](p0/README.md) (P0 checklist, stream briefs, progress and results files) and
-[`p1/`](p1/README.md) (P1a plan); overall progress in [`progress.md`](progress.md).
+Implementation: [`p1/`](p1/README.md) (P1a plan) and [`p1b/`](p1b/README.md) (P1b plan); overall progress in
+[`progress.md`](progress.md). Finished, kept for the record: [`p0/`](p0/README.md) (P0 checklist, stream briefs,
+progress and results files; released as `v0.1.0`).
 
 Decisions put off on purpose, with their stopgaps and deadlines: [`postponed-decisions.md`](postponed-decisions.md)
 (reviewed at the start of every phase). Package, behaviour and estimate checks from every document's "To verify"

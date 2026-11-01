@@ -1,5 +1,7 @@
 # P0 work split
 
+**Finished** (released as `v0.1.0`, 2026-10-31). Kept for the record; P1 work is in [`../p1/`](../p1/README.md) and [`../p1b/`](../p1b/README.md).
+
 P0 is a skeleton that builds, deploys, is observable and can be restored. The ordered checklist with every item's
 done-when criterion is [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §11 (single source;
 the briefs here only assign and order it). Decided 2026-10-30 (Decisions table, "P0 set-up").

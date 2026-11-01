@@ -67,7 +67,7 @@ It runs before and after every restructure commit (no new misses), and stays in 
 3. **Mark what is later.** Whole documents that are P2/P3 (`tools/`, `workspaces/`) get one line at the top. In mixed
    documents a P2+ subsection starts with "**Later (P2):**". Alternatives and comparisons with other platforms move to
    the end of their section or become a link to `platforms/`.
-4. **Decisions table status column**: `current`, or `superseded by row N` / `partly superseded by row N`. Rows keep
+4. **Decisions table status column**: `current`, or `superseded by "<Topic>"` / `partly superseded by "<Topic>": <what holds>` (rows are named by Topic). Rows keep
    their place. "Later rows win" becomes "rows marked current bind".
 5. **Retire finished phase material in place.** `plans/p0/README.md` gets a "Finished (v0.1.0, 2026-10-31); kept for
    the record" header; `plans/README.md` lists it under "Finished". `to-verify.md` gets a status column (rows keep
