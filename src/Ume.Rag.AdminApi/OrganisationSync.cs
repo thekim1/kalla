@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Ume.Rag.ServiceDefaults;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Persistence;
@@ -161,7 +162,7 @@ public sealed partial class OrganisationSync(
             };
             var failures = Interlocked.Increment(ref _failures);
             _runs.Add(1, new("kind", "organisation"), new("outcome", "failed"));
-            LogRunFailed(logger, ex, failures);
+            LogRunFailed(logger, GatewayModelSync.ErrorText(ex), ExceptionText.Types(ex), failures); // never the messages (#232)
             return null;
         }
         finally
@@ -274,6 +275,6 @@ public sealed partial class OrganisationSync(
     [LoggerMessage(Level = LogLevel.Information, Message = "Organisation sync wrote {Departments} departments and {Teams} teams")]
     private static partial void LogRun(ILogger logger, int departments, int teams);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Organisation sync failed ({Failures} in a row); the mirror is kept")]
-    private static partial void LogRunFailed(ILogger logger, Exception ex, int failures);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Organisation sync failed: {Error} ({Types}; {Failures} in a row); the mirror is kept")]
+    private static partial void LogRunFailed(ILogger logger, string error, string types, int failures);
 }

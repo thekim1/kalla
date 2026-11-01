@@ -279,7 +279,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
     /// <summary>The script's parameters with names unique to the test.</summary>
     private static Dictionary<string, string> Settings(IEnumerable<Uri> urls)
     {
-        var suffix = Guid.CreateVersion7().ToString("N")[..12];
+        var suffix = Guid.NewGuid().ToString("N")[..12];
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["ume_seed.urls"] = System.Text.Json.JsonSerializer.Serialize(urls.Select(u => u.AbsoluteUri)),

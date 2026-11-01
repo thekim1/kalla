@@ -2,7 +2,7 @@
 
 Data-plane service that turns assistants into OpenAI-compatible "models": a client sends a chat completion with
 `model = <assistant>`, and the service retrieves knowledge (and, for assistants with tool-bearing skills, calls tools
-through the tool hub), builds the prompt, streams the answer from the gateway with citations, and stores the conversation's metadata for 90 days (its content only once A1 allows, weakness review §4).
+through the tool hub), builds the prompt, streams the answer from the gateway with citations, and stores the conversation's metadata for 90 days (its content only once A1 allows).
 Review items applied: R1, R4, R5, R7, plus the smaller conversation-id finding. Detailed in [`design.md`](design.md)
 (detail step 8).
 
@@ -32,7 +32,7 @@ Every request resolves to a **client** from the client registry, which sets a cl
 
 ## 3. Assistant modes
 
-One assistant type (simplification pass §15): instructions, the collections it links directly (its only knowledge)
+One assistant type: instructions, the collections it links directly (its only knowledge)
 and, from P2, skills (know-how and tools, never collections). Chat serves the assistant's **published version**; edits
 are drafts tested in the admin test panel until published (data-model §2.1). The mode is derived, not chosen:
 
@@ -55,7 +55,7 @@ are drafts tested in the admin test panel until published (data-model §2.1). Th
    greetings, thanks) skips steps 1–4 and goes to the model with a "no sources" frame (design §6.2).
    1. *Condense*: rewrite the latest question into a standalone query, **follow-ups only** and only when the question
       is not self-contained (heuristic: length and no anaphora), on by default, one short call to
-      `Settings.Chat.CondenseModel` (**on-prem**) with a hard 600 ms timeout, falling back to the raw question; used
+      `Settings.Chat.CondenseModel` (a small instruct model: `Eu` until register M2, then **on-prem**) with a hard 600 ms timeout, falling back to the raw question; used
       for retrieval only (design §5). This is the only query rewriting: the Knowledge API uses the query as given
       (knowledge design §5.1).
    2. *Retrieve*: Knowledge API (in-process `IRetriever`) with `AssistantId` (it resolves the published version's
@@ -63,8 +63,7 @@ are drafts tested in the admin test panel until published (data-model §2.1). Th
    3. *Rerank*: `IReranker` seam in P1 (off); gateway-served rerank per assistant in P2 when the evaluation shows a
       gain (knowledge design §6.7).
    4. *Coverage check*: coverage is `Low` only when the vector **and** the keyword side are both weak (knowledge
-      design §7; until the keyword floor is calibrated from the pilot gold set, the vector side alone, weakness review
-      §2); then answer with the configured "not found" text and contact links, without calling the model. A
+      design §7; until the keyword floor is calibrated from the pilot gold set, the vector side alone); then answer with the configured "not found" text and contact links, without calling the model. A
       condense failure or timeout never produces the not-found text: retrieval runs on the raw question and the model
       answers. If coverage is `Unknown` (degraded to keyword-only because the query embedding failed, knowledge design
       §5.5), answer from the keyword results with a caveat and **never** with the not-found text; `Unknown` with zero
@@ -81,7 +80,7 @@ are drafts tested in the admin test panel until published (data-model §2.1). Th
    `Retry-After` (in-ceiling targets drained) is passed on as retryable; `403 max_residency_not_met` is a
    configuration fault (design §3.6). **Until gateway release 2 (P1)** the keys are the pilot department's team's own
    keys per level and no `x-ume-on-behalf-of` is sent; delegation and its echo check arrive with release 2 in P2
-   (weakness review §5, gateway design §13.4).
+   (gateway design §13.4).
 5. **Residency check before the first byte (R4)**: read the gateway's `x-ume-residency` response header, compared
    case-insensitively by order `OnPrem < Eu < External` (the gateway writes `Eu`); anything above the call's ceiling,
    or (from release 2) a missing `x-ume-on-behalf-of` echo when `Gateway:RequireDelegationEcho` is set, aborts the request with an
@@ -116,20 +115,20 @@ against a fake gateway, idle and during the R1 ingestion load test.
   data key of its (level, expiry month) **bucket**. Retention and a user's delete remove rows; destroying bucket keys
   (crypto-shredding, which reaches backups) stays switched off until the registrar answers A1. Copies in clients are
   governed by the client's data-handling profile (R5).
-- **Pilot: history mode `none` until A1 is answered** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant stores
+- **Pilot: history mode `none` until A1 is answered** (reasoning: [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant stores
   metadata and ratings only, no message content. The bucket keys, content encryption and crypto-shredding above are
   **not built in P1**; the data model keeps their columns and they are built when A1 allows stored content. Feedback
   comments are refused (`comment_not_stored`) or dropped on import, so they stay only in Open WebUI.
 - Public widget conversations (P2) are stored for quality review without user identity once A1 allows stored content; the widget tells visitors not to
   enter personal data.
 - Reading other people's conversations happens only in the admin UI, by `rag-reviewer`, with a stated reason, audited
-  (admin design §8); built when A1 allows stored content (weakness review §4).
+  (admin design §8); built when A1 allows stored content.
 
 ## 6. Open WebUI pilot setup (R5)
 
 Registered as a client with ceiling **`internal`**; `sensitive` assistants never appear in its model list. The ceiling
 stays `internal` only for EU providers covered by a processor agreement (PUB-avtal) listed in the DPIA (register G1);
-if the DPIA requires more, the client is limited to on-prem models (weakness review §4).
+if the DPIA requires more, the client is limited to on-prem models.
 
 Full settings: design §4.3 (Open WebUI v0.12.5).
 
@@ -142,26 +141,26 @@ Full settings: design §4.3 (Open WebUI v0.12.5).
   tag and follow-up generation off** (no task model); user system prompts and parameters off; **file and web uploads
   off** (P1).
 - `ENABLE_ADMIN_CHAT_ACCESS=false`, `ENABLE_ADMIN_EXPORT=false`: review happens only in our admin UI with a reason
-  (none in P1, weakness review §4).
+  (none in P1).
 - A fixed, non-dismissible banner (`WEBUI_BANNERS`): "Skriv inte in sekretessbelagda uppgifter eller känsliga
-  personuppgifter." (weakness review §4; design §4.3).
+  personuppgifter." (design §4.3).
 - API keys restricted to the feedback endpoints for the service account of our **feedback import** (every 15
   minutes, design §14.2) and feedback pruning; users get no API keys. No direct SQL against Open WebUI's database.
 - Its own chat copies: v0.12.5 has no age-based retention setting, and its API deletes other users' chats only with
   admin chat access on; how the 90 days are enforced is open register item **W2**, decided within the DPIA (**G1**)
   before go-live (stopgap: unpruned copies, stated in Open WebUI's data-handling profile; design §13.3, §21.2). In the
   pilot this store is the **primary copy** of every conversation and feedback comment; a public-records request for a
-  conversation is answered from it (runbook section, weakness review §4).
+  conversation is answered from it (runbook section).
 - Login to Open WebUI itself with Entra (its own app registration). Branding stays (licence clause).
 
 ## 7. Milestones
 
 | Phase | Deliverable |
 |---|---|
-| P1a (weakness review §1) | `/v1/models` filtered by caller and client, streaming RAG completions, citations (both formats), not-found answers, residency check; one assistant in Open WebUI for the pilot department |
-| P1b | issued conversation ids, metadata history (mode `none`, weakness review §4) + retention, Open WebUI pilot with its data-handling profile and input banner; `/v1/feedback`, **Open WebUI feedback import** and the **Feedback page** in the admin UI (design §14; admin design §8) |
-| When A1 allows stored content (weakness review §4) | history modes `stored`/`session`, chat bucket keys and content encryption in the writer, feedback comments, conversation review in the admin (design §11.2, §12.3, §14) |
-| P2 (moved from late P1, weakness review §1) | Nightly answer-level evaluation in `rag-admin`: an on-prem judge over the evaluation sets through `Ume.Rag.Answering` (faithfulness, citation precision); `uncited_answer` rate per assistant (design §18.8) |
+| P1a | `/v1/models` filtered by caller and client, streaming RAG completions, citations (both formats), not-found answers, residency check; one assistant in Open WebUI for the pilot department |
+| P1b | issued conversation ids, metadata history (mode `none`) + retention, Open WebUI pilot with its data-handling profile and input banner; `/v1/feedback`, **Open WebUI feedback import** and the **Feedback page** in the admin UI (design §14; admin design §8) |
+| When A1 allows stored content | history modes `stored`/`session`, chat bucket keys and content encryption in the writer, feedback comments, conversation review in the admin (design §11.2, §12.3, §14) |
+| P2 (moved from late P1) | Nightly answer-level evaluation in `rag-admin`: an on-prem judge over the evaluation sets through `Ume.Rag.Answering` (faithfulness, citation precision); `uncited_answer` rate per assistant (design §18.8) |
 | P2 | Skills with read-only tools via the tool hub (an assistant linking one runs the agent loop), public widget (`ume-rag-pk-` keys, origins, rate limits), chat attachments (design §15.2), gateway-served rerank per assistant, feedback review beyond P1, condense tuning with the advisory evaluation |
 | P3 | Teams client, user-delegated tools (OBO), write tools with confirmation |
 
@@ -180,27 +179,27 @@ Full settings: design §4.3 (Open WebUI v0.12.5).
 Answered (user, 2026-10-30; details in [`design.md`](design.md) §21.1):
 
 4. ~~Condense?~~ **Answered**: on by default, follow-ups only (skipped when self-contained), one short call on an
-   on-prem model with a 600 ms timeout; per assistant it can be turned off.
+   small model (`Eu` until M2, then on-prem) with a 600 ms timeout; per assistant it can be turned off.
 5. ~~History window?~~ **Answered**: last 10 messages, ≤ 4,000 tokens, oldest dropped first; earlier sources not
    resent; per assistant.
 6. ~~Not found?~~ **Answered**: coverage `Low` (vector and keyword both weak) → the assistant's fixed sv/en text +
    contact links, no model call; `Unknown` answers from keyword results with a caveat, never the not-found text.
 7. ~~Feedback in P1?~~ **Answered**: yes: `/v1/feedback` plus a scheduled import of Open WebUI ratings, comments
-   encrypted under the chat bucket keys; editors see ratings in P1. *Later change (weakness review §4):* the P1 pilot
-   runs history mode `none`, so only ratings are stored; comments stay in Open WebUI.
+   encrypted under the chat bucket keys; editors see ratings in P1. In the P1 pilot (history mode `none`)
+   only ratings are stored; comments stay in Open WebUI.
 8. ~~C1 chat attachments (P2)?~~ **Answered**: chat-scoped storage with conversation retention, parsed by the worker,
-   encrypted under the chat bucket keys, searched only within the conversation. *Later change (weakness review §4):*
-   needs the bucket keys, so it waits for A1 to allow stored content too.
+   encrypted under the chat bucket keys, searched only within the conversation. It needs the bucket keys, so it waits for A1 to allow stored content.
+
 9. ~~P1 uploads in Open WebUI?~~ **Answered**: disabled in Open WebUI's permissions; file and image content parts
    refused with `attachments_not_supported`.
 10. ~~Feedback comments for editors?~~ **Answered**: `public`/`internal`: shown after a one-click, pre-filled reason,
     audited as a conversation access, only the comment; `sensitive`: the full review flow with a second approver.
     Readers settled in step 10: `rag-reviewer` and `rag-department-admin`, not platform admins (admin answered 6).
-    *Later change (weakness review §4):* built when A1 allows stored content, not in P1.
+    Built when A1 allows stored content, not in P1.
 
 ## 9. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8, §9, §15:
+Removed or deferred, with where each went:
 
 | Item | Where it went |
 |---|---|
@@ -218,14 +217,14 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8,
 
 ## 10. Deferred or removed (weakness review)
 
-Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+Reasoning: [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
 
 | Item | Where it went |
 |---|---|
 | Nightly answer-level judge (`answers` runs) in `rag-admin` | P2 (§7; design §18.8) |
 | Per-assistant test questions (`assistant-tests` runs) | P2 (design §18.8) |
 
-Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
+Reasoning: [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
 
 | Item | Where it went |
 |---|---|
@@ -233,7 +232,7 @@ Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-sec
 | Feedback comments in our store, comment reveal, conversation review by `rag-reviewer` | Same; comments stay in Open WebUI (§5, answered 7, 10) |
 | P2 features that store chat content (chat attachments, widget conversations for review, server-side history) | Need A1 to allow stored content as well |
 
-Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+Reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
 
 | Item | Where it went |
 |---|---|

@@ -58,11 +58,23 @@ public sealed record Candidate(
     public string TextKey { get; } = DocumentId.ToString("N") + ":" + Convert.ToHexString(TextHash);
 }
 
-/// <summary>Chunk counts per collection of a profile (for the exact/HNSW rule, knowledge design §6.4).</summary>
+/// <summary>
+/// Chunk counts per collection of a profile (for the exact/HNSW rule, knowledge design §6.4) and the frequent lexemes
+/// behind the keyword stop list (§6.2, §20).
+/// </summary>
 public interface IScopeSizeSource
 {
     /// <summary>Searchable child chunks per (profile, collection).</summary>
     Task<IReadOnlyList<CollectionChunkCount>> CountChunksAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The lexemes of the searchable child chunks' <c>SearchVector</c> that occur in at least <paramref name="minShare"/>
+    /// of their (profile, collection), for each (profile, collection) of at least <paramref name="minChunks"/> chunks.
+    /// </summary>
+    Task<IReadOnlyList<FrequentLexeme>> FrequentLexemesAsync(long minChunks, double minShare, CancellationToken cancellationToken);
 }
 
 public sealed record CollectionChunkCount(Guid EmbeddingProfileId, Guid CollectionId, long Chunks);
+
+/// <summary>A lexeme and the number of chunks of one (profile, collection) it occurs in.</summary>
+public sealed record FrequentLexeme(Guid EmbeddingProfileId, Guid CollectionId, string Lexeme, long Chunks);

@@ -73,7 +73,8 @@ public sealed class RetrievalSettingsTests
         all.ShouldContain("""c."Tags" && $4""");
         all.ShouldContain("""c."DocumentType" = ANY ($5)""");
         all.ShouldContain("""c."SourceModifiedAt" >= $6""");
-        RetrievalStatements.Keyword(Profile, 100, FilterFragments.ModifiedAfter).ShouldContain("""c."SourceModifiedAt" >= $4""");
+        RetrievalStatements.Keyword(Profile, 100, FilterFragments.ModifiedAfter).ShouldContain("""c."SourceModifiedAt" >= $5"""); // $4: the stop list
+        RetrievalStatements.Keyword(Profile, 100, FilterFragments.None).ShouldContain("ts_delete(to_tsvector('swedish', $1), $4::text[])");
         RetrievalStatements.Keyword(Profile, 100, FilterFragments.None).ShouldNotContain("IS NULL OR");
         all.ShouldContain($"""c."EmbeddingProfileId" = '{Profile}'::uuid""");
         RetrievalStatements.FragmentsOf(new RetrievalFilters(Tags: [], DocumentTypes: ["pdf"])).ShouldBe(FilterFragments.DocumentTypes);

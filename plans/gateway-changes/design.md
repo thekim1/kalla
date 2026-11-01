@@ -3,20 +3,20 @@
 Detail step 4 of the Ume.Rag design. Details [`plan.md`](plan.md) (binding, incl. its answered questions) and the
 gateway side of [`../identity/design.md`](../identity/design.md) §1.4, §1.5, §1.7, §2 and §10 (feature C and the
 tenant/guest refusal are designed there for both systems; this document only turns them into gateway work). The ADR
-rows are in [`adr-drafts.md`](adr-drafts.md). Rewritten for [`../simplification-pass.md`](../simplification-pass.md)
-§6–§7 (2026-10-30). Nothing here is implemented; nothing in `~/git/llmgateway` was changed.
+rows are in [`adr-drafts.md`](adr-drafts.md). Nothing here is implemented in the gateway yet (`~/git/llmgateway` is at
+v0.8.5); Ume.Rag's side of feature B is built and runs against v0.8.5 until release 1 (§13.4).
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5). "Pipeline" means
 `src/Ume.LlmGateway.Gateway/Pipeline/`; "Entities.cs" means `src/Ume.LlmGateway.Domain/Entities/Entities.cs`.
 
 ## 1. Overview
 
-**Two releases**
-([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control),
-replacing the one combined release of plan answered question 5), each rolling-update safe; the gateway's own release
-practice decides the numbers. **Release 1, before the Ume.Rag pilot**: feature B and
-the FakeLlm `dimensions` addition (with the tool passthrough tests). **Release 2, in P2**, before the first
-second-department or group audience: features C and A (with the run grouping headers). The letters name features:
+**Two releases**, each rolling-update safe; the gateway's own release practice decides the numbers (reasoning:
+[weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)).
+**Release 1, in P1b before the Ume.Rag pilot goes live**: feature B and the FakeLlm `dimensions` addition (with the
+tool passthrough tests). **Later (P2): release 2**, before the first second-department or group audience: features C
+and A (with the run grouping headers). Until release 1, P1a runs against the gateway as it is (v0.8.5) on an interim
+test/dev instance (§13.4). The letters name features:
 
 | Feature | Content | Migration | RAG platform afterwards |
 |---|---|---|---|
@@ -153,7 +153,7 @@ answer: during the rolling update an older instance ignores the request header.
 | Endpoint | Applies | Note |
 |---|---|---|
 | `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/messages/count_tokens` | yes | translated paths (Anthropic, Responses bridge) are chosen per target after selection |
-| `/v1/embeddings` | yes | RAG embeddings are always on-prem anyway |
+| `/v1/embeddings` | yes | Ume.Rag sends its embedding profile's ceiling: `Eu` for the pilot's EU-hosted profile until on-prem hardware exists (register M2), `OnPrem` for an on-prem profile |
 | `/v1/audio/transcriptions`, `/v1/audio/translations`, `/v1/images/generations`, `/v1/images/edits` | yes | same `SelectRouteAsync` path |
 | `/v1/realtime`, `/v1/realtime/translations` | yes | read from the WebSocket upgrade request; passed at `GatewayRequestHandler.Realtime.cs:82`; the client-chosen input transcription model is checked with the same set (`:215`) |
 | `GET /v1/models` | yes | **Today** it lists the routes and deployments allowed for the key (`IsModelAllowed`, `IsAllowedFor`) that have a target eligible under the key's own `AllowedResidencies` and `AllowedProviders` (`EffectiveResidencies(key.AllowedResidencies, null)`, `GatewayRequestHandler.Models.cs:22`) on an enabled deployment of an enabled, not drained provider (`RouteSelector.cs:186-200`, `Entities.cs:276`); `ume.residencies` lists those targets' residencies (`:44`); there is no request-side filter. **The release adds** the request's ceiling to that intersection (the `ceiling` overload at `:22`) for every key, delegating keys included, so a caller can ask "what may I use at `OnPrem`" and `ume.residencies` shows only residencies within the ceiling; `RequireMaxResidency` applies here too; `x-ume-on-behalf-of` is validated but does not change the list (§5.11). A model whose in-ceiling targets are all drained is not listed (as today), whereas a chat call to it answers 503. Ume.Rag validates an assistant's model this way on save (identity design §4.7, admin design §4.6 V8) |
@@ -194,8 +194,9 @@ answer: during the rolling update an older instance ignores the request header.
 
 ## 4. Feature C: department scope from member groups, and tenant/guest refusal
 
-Designed in `../identity/design.md` §2 (both systems) and §1.7; this section is the gateway's file-level plan for the
-work items of §2.7 there, in **claims-only** mode: only the token's group claim is read. Alignment notes are in §4.10.
+**Later (P2):** release 2. Designed in `../identity/design.md` §2 (both systems) and §1.7; this section is the
+gateway's file-level plan for the work items of §2.7 there, in **claims-only** mode: only the token's group claim is
+read. Alignment notes are in §4.10.
 
 ### 4.1 Data model
 
@@ -238,7 +239,8 @@ New in `src/Ume.LlmGateway.AdminApi/Identity/` (same shape as the RAG copy, iden
 
 ### 4.4 Graph lookup (Entra only)
 
-Removed (simplification pass): the Graph `checkMemberGroups` lookup moves to P2 (§17).
+**Later (P2):** the Graph `checkMemberGroups` lookup, after release 2 with data-plane audiences (§17). Until then
+member groups come only from the token's group claim (§4.3).
 
 ### 4.5 `/bff/user` and events
 
@@ -273,7 +275,7 @@ affected.
 - `GET /v1/catalog/departments` (`src/Ume.LlmGateway.DataApi/DataEndpoints.cs:140-142`) adds `memberGroups`.
 - `GET /v1/catalog/teams` (`:143-145`) adds `code`. **Gap found**: Ume.Rag's `Teams` mirror has a `Code` column
   (data-model §2.1) that the catalog does not deliver today. Not needed for delegation (§5.2), but cheap and useful
-  for display; Ume.Rag's `OrgSync` reads it from release 2 on (weakness review §5).
+  for display; Ume.Rag's `OrgSync` reads it from release 2 on.
 - `docs/data-access.md:162` (catalog row) updated.
 
 ### 4.8 Settings
@@ -316,11 +318,14 @@ Added to `deploy/compose.prod.yaml` (admin API block `:136-146`, Data API block 
 
 ### 5.1 Model
 
+**Later (P2):** release 2. Until then Ume.Rag uses the pilot team's per-level keys and sends no `x-ume-on-behalf-of`
+(§13.4).
+
 - `VirtualKey` (`Entities.cs:46-116`) gains `public List<Guid> DelegatedTeamIds { get; set; } = [];` (empty = not
   delegating). An array, like `AllowedModels`/`AllowedResidencies` (`:76-82`) and `RoutingRule.ScopeIds`: no join
   table, so the key loads, rotates and audits as one row.
 - `VirtualKey` also gains `public bool ApplyTeamPolicy { get; set; }` (default `false`), read only on delegated
-  requests (§5.3); `RequireMaxResidency` (§3.1) comes earlier, with release 1 (weakness review §5).
+  requests (§5.3); `RequireMaxResidency` (§3.1) comes earlier, with release 1.
 - Migration `KeyDelegation` (release 2): `ALTER TABLE "VirtualKeys" ADD "DelegatedTeamIds" uuid[] NOT NULL DEFAULT
   '{}'`, `ADD "ApplyTeamPolicy" boolean NOT NULL DEFAULT false`. No index (the only query by team is the rare delete guard, §5.8, over a small table).
 - **Delegated views.** Following the existing pattern of read-only indexes on cached keys (`IndexAllowLists`,
@@ -522,7 +527,8 @@ validates it (a misconfigured client learns at start-up) but lists the same mode
 - **Dimensions** from, in order: the OpenAI `dimensions` parameter (1–4 096; outside → 400 like OpenAI); else a model
   name ending in `-<n>` (e.g. `fake-embed-1024`); else 8 with **exactly today's `Vector()`**, so existing tests and
   benchmarks see identical output. The suffix lets a local alias `bge-m3` point at FakeLlm without the caller sending
-  `dimensions` (Ume.Rag never sends it to the real BGE-M3).
+  `dimensions` (Ume.Rag never sends it to an on-prem BGE-M3 profile; it does send `dimensions: 1024` for the pilot's
+  EU `text-embedding-3-large` profile, which the gateway passes through unchanged).
 - **Similar texts get similar vectors**: feature hashing of lower-cased word unigrams and character trigrams with
   FNV-1a 64 (the same function as `RouteSelector.AffinityHash`, `RouteSelector.cs:100-110`), bucket = hash mod n, sign
   from one hash bit, then L2-normalised. Deterministic across processes and platforms.
@@ -532,12 +538,14 @@ validates it (a misconfigured client learns at start-up) but lists the same mode
 - Tests: a FakeLlm unit test (new `tests/Ume.LlmGateway.Gateway.Tests/FakeLlmEmbeddingTests.cs` via
   `WebApplicationFactory` of FakeLlm, or a small `FakeLlm.Tests`): default unchanged, dimensions honoured, suffix,
   cosine(similar) > cosine(unrelated), base64 round trip.
-- Ships in release 1 (weakness review §5): no schema, development only; it lets Ume.Rag developers run against a real local
+- Ships in release 1: no schema, development only; it lets Ume.Rag developers run against a real local
   gateway (`../platform/repo-and-deployment.md` §4.4), next to the default FakeGateway.
 
 ## 7. Small additions (plan §3a)
 
 ### 7.1 Run grouping headers (feature A, release 2)
+
+**Later (P2):** stored from release 2 on; Ume.Rag already sends them and a release-1 gateway ignores them.
 
 - `x-ume-run-id` and `x-ume-step`: any key may send them. Trimmed; at most 100 characters kept (longer values are
   truncated, never refused: metadata must not fail a model call); control characters replaced
@@ -583,7 +591,7 @@ so the RAG admin syncs route aliases and their targets' residencies instead of p
 
 ### 7.4 Rerank endpoint (P2, a separate release)
 
-Not in release 1 or 2 (§13.1). The gateway has no rerank endpoint today. Ume.Rag's `IReranker`
+**Later (P2):** not in release 1 or 2 (§13.1). The gateway has no rerank endpoint today. Ume.Rag's `IReranker`
 (`../knowledge-api/design.md` §6.7) needs one in P2 serving `bge-reranker-v2-m3` on-prem: query plus passages in, one
 score per passage out. It goes through the same authentication, step 1b, ceiling, budget and usage path as the other
 endpoints (presumably a new `GatewayEndpoint` value and model kind); `x-ume-max-residency` and
@@ -695,17 +703,16 @@ effective team is known right after authentication, before the rate-limit call.
 
 ### 13.1 Contents
 
-Two releases ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)),
-so the pilot waits only for the smallest change a production gateway that other teams use must take:
+Two releases, so the pilot waits only for the smallest change a production gateway that other teams use must take
+(reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)):
 
-- **Release 1, before the pilot**: §3 (feature B), §6 (FakeLlm `dimensions`), §7.2 (tool passthrough tests), ADR 018,
+- **Release 1, in P1b before go-live** (built in a separate session in the gateway repo): §3 (feature B), §6 (FakeLlm `dimensions`), §7.2 (tool passthrough tests), ADR 018,
   the docs of §12 for B, and the upgrade-guide entry (§13.3).
-- **Release 2, in P2**, before the first second-department or group audience: §4 (feature C with the tenant/guest
+- **Later (P2): release 2**, before the first second-department or group audience: §4 (feature C with the tenant/guest
   refusal), §5 (feature A), §7.1 (run grouping headers), ADRs 019–020, the remaining docs of §12, settings in compose,
   Portainer and Kubernetes examples, and the Keycloak realm.
 
-The rerank endpoint (§7.4) is in neither: it is a separate P2 release. (Until the weakness review this was one
-combined release, `../simplification-pass.md` §7.)
+The rerank endpoint (§7.4) is in neither: it is a separate P2 release.
 
 ### 13.2 Migrations and rolling update
 
@@ -741,25 +748,36 @@ headers (opaque ids only). Nothing changes for clients that send none of the new
 
 ### 13.4 Ume.Rag afterwards
 
-Until release 1, Ume.Rag development and test run on the FakeGateway (`../platform/repo-and-deployment.md` §4.3),
-which implements the same contract.
+CI and tests run on the FakeGateway (`../platform/repo-and-deployment.md` §4.3), which implements the release-1
+contract (and the release-2 echo).
 
-**With release 1, before the pilot** (weakness review §5):
+**P1a, before release 1** (Decisions "P1a plan answers", "Interim gateway for P1a"): Ume.Rag calls the gateway as it
+is (v0.8.5), on an interim **test/dev gateway instance** on a fixed host (HTTPS, public certificate) with EU-hosted
+embedding and chat models; it is the interim J10, and the same host's Keycloak holds the shared realm `ume` (J11).
+Address and keys live only in user secrets or `deploy/.env` and secret files, never in the repository. Everything is
+EU-hosted until on-prem hardware exists (register M2): the pilot embedding profile is `text-embedding-3-large` at 1024
+dimensions, requested with `dimensions`. Ume.Rag already behaves as for release 1: every call carries
+`x-ume-max-residency` with the level's key and the answer's `x-ume-residency` is checked before a byte is used
+(`ResidencyCeilingHandler`); v0.8.5 ignores the request header, so until release 1 the ceiling rests on the keys'
+`AllowedResidencies` and that check. `GET /v1/models` is not yet filtered by the ceiling.
 
-- **Keys per level of the pilot department's team** (`../simplification-pass.md` §6, with the per-team exception of
-  plan §4): ordinary team keys `OnPrem`-only (`AllowedResidencies = [OnPrem]`), `Eu`-max (`[OnPrem, Eu]`) and open
+**With release 1, in P1b before go-live:**
+
+- **Keys per level of the pilot department's team** (plan §4): ordinary team keys `OnPrem`-only (`AllowedResidencies = [OnPrem]`), `Eu`-max (`[OnPrem, Eu]`) and open
   (all), each issued per deployable that needs it with `AllowedIpRanges` of that deployable's hosts (`Entities.cs:89`)
   and `RequireMaxResidency = true`. The worker never holds the open key. Which deployable holds which level is the
   platform plan's (§6). Every Ume.Rag call is charged to the pilot team. The team's admins can edit these keys (no
   delegation, so not gateway-admin only); the explicit ceiling and the `x-ume-residency` check still hold whatever
   they change. The gateway applies the team's request policy to non-delegated requests, so the pilot team keeps none.
+  The worker's keys also carry the gateway's existing `MaxConcurrentRequests` cap (429 + `Retry-After`), so a
+  misconfigured worker cannot starve chat (processing design §11).
 - Every call carries `x-ume-max-residency` (`OnPrem`, `Eu` or `External` for `public`) and the run headers (stored
   from release 2 on; release 1 ignores them); no `x-ume-on-behalf-of`. The answer's `x-ume-residency` is verified.
 - `OrgSync` with a `catalog.read` Data API key reads departments and teams (no `memberGroups` or team `code` yet).
 - Saving an assistant calls `GET /v1/models` with the level's key and `x-ume-max-residency` = the level's ceiling,
   and refuses a model that is not listed (§3.4, admin design §4.6 V8).
 
-**With release 2, in P2:**
+**Later (P2), with release 2:**
 
 - **Delegating keys per level** replace the pilot team's keys: same levels, deployables and `AllowedIpRanges`,
   `RequireMaxResidency = true`, `ApplyTeamPolicy = false`, owned by the platform team, list = teams with assistants;
@@ -771,30 +789,25 @@ which implements the same contract.
 
 ## 14. Changes to other documents in this repo
 
-The step 4 changes were applied in the step 4 review commit (2026-10-29). Needed for the simplification pass
-(2026-10-30), applied by the owners of those documents:
+What this design needs from the other documents of this repo, and they state:
 
-1. **`../identity/*`**: done in this pass (one release, claims-only feature C, keys per level, explicit ceiling incl.
-   `External`, `Gateway:RequireDelegationEcho`).
-2. **`../chat-api/plan.md`, `../chat-api/design.md`**: no interim/B/A modes (`Gateway:AttributionMode`,
-   `Gateway:SendResidencyCeiling` and linked keys removed); `External` for `public`; a `503` with `Retry-After` from
-   the gateway is retryable, `403 max_residency_not_met` is not.
-3. **`../platform/plan.md`** §6–§7: keys per level and deployable; no linked keys; one gateway release.
-4. **`../platform/data-model.md`** §2.1: `GatewayKeyLinks` removed; no GIN index on `Departments.MemberGroups`;
-   `Teams.Code` from `/v1/catalog/teams` `code`.
+1. **`../identity/*`**: two releases, claims-only feature C, keys per level, explicit ceiling incl. `External`,
+   `Gateway:RequireDelegationEcho` (from release 2).
+2. **`../chat-api/plan.md`, `../chat-api/design.md`**: no attribution modes or linked keys; `External` for `public`;
+   a `503` with `Retry-After` from the gateway is retryable, `403 max_residency_not_met` is not.
+3. **`../platform/plan.md`** §6–§7: keys per level and deployable (the pilot team's until release 2, delegating
+   after); no linked keys; two gateway releases.
+4. **`../platform/data-model.md`** §2.1: no `GatewayKeyLinks`; no GIN index on `Departments.MemberGroups`;
+   `Teams.Code` from `/v1/catalog/teams` `code` (release 2).
 5. **`../platform/repo-and-deployment.md`** §4.3 FakeGateway: `RequireMaxResidency` behaviour (400 without the
-   header), the 403/503 rule with `Retry-After`; §4.4 FakeLlm in the combined release.
-6. **`../knowledge-api/design.md`**, **`../ingestion-worker/design-engine.md`**: "after release A" → after the
-   gateway release; worker keys never include the open key.
-7. **`../../01-general-idea.md`** §10 Decisions row "Gateway changes": one combined release; key flags; 503 rule.
-8. **`../to-verify.md`**: release column "B"/"C"/"A" → the combined release; rows 82 and 86 (Graph) move to P2; new
-   rows of §16.
+   header), the 403/503 rule with `Retry-After`; §4.4 FakeLlm `dimensions` with release 1.
+6. **`../knowledge-api/design.md`**, **`../ingestion-worker/design-engine.md`**: delegation after release 2; worker
+   keys never include the open key.
+7. **`../../01-general-idea.md`** §10 Decisions rows "Gateway changes" and "Weakness review 5": features, release
+   split, key flags, 503 rule.
+8. **`../to-verify.md`**: rows 82 and 86 (Graph) in P2; the rows of §16.
 9. **`../platform/repo-and-deployment.md`** §4.3 FakeGateway: `/v1/models` filtered by `x-ume-max-residency`; a rerank
-   fake on the path agreed for §7.4.
-
-The two releases of the weakness review §5 (2026-10-30) were carried into the plans in the same pass: plan, ADR
-drafts, identity, chat, knowledge, ingestion, admin, platform, P0 split, `../README.md`, `../to-verify.md`,
-`../postponed-decisions.md`.
+   fake on the path agreed for §7.4 (the FakeGateway serves `/v1/rerank` until then).
 
 ## 15. Answered questions (2026-10-29)
 
@@ -819,11 +832,11 @@ drafts, identity, chat, knowledge, ingestion, admin, platform, P0 split, `../REA
   (grep at implementation time; `AuthFailureRecorder.cs:57` runs before step 1b and keeps the owner).
 - Realtime: whether WebSocket clients used by adopters can set custom headers on the upgrade request (server SDKs can;
   browsers cannot, which only matters for features B and A, not for Ume.Rag).
-- **New**: the attempt loop can tell that every attempted candidate was circuit-open or cooling down at selection
+- The attempt loop can tell that every attempted candidate was circuit-open or cooling down at selection
   (the selection's `CircuitStatus`, `Stores.cs:175`, is available after `SelectCandidatesAsync`), for the 503 of §3.3.
-- **New**: Entra emits member groups in the admin registration's group claim with the chosen `groupMembershipClaims`
+- Entra emits member groups in the admin registration's group claim with the chosen `groupMembershipClaims`
   setting (identity design §2.5), and how often pilot admins hit the overage limit.
-- **New** (P1, before the FakeGateway fake is fixed): the P2 rerank endpoint's path and request shape, and which
+- (P1, before the FakeGateway fake is fixed): the P2 rerank endpoint's path and request shape, and which
   on-prem runtime serves `bge-reranker-v2-m3` behind it (§7.4).
 
 ## 17. Deferred or removed (simplification pass)
@@ -832,11 +845,11 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §6–§7:
 
 | Removed or deferred | Where it went |
 |---|---|
-| Releases B → C → A (three upgrade windows, per-release upgrade guides, ADR rows per release) | one combined release (§13); ADRs 018–020 accepted together |
+| Releases B → C → A (three upgrade windows, per-release upgrade guides, ADR rows per release) | two releases: B in release 1, C and A in release 2 (§13, §18) |
 | Graph `checkMemberGroups` lookup (`Oidc:GroupLookup`, `GraphTokenClient`, `IGroupMembershipSource`), `GroupMember.Read.All`, Redis `ume:groups:{oid}`, circuit, event 2007, `departmentLookup` on `/bff/user`, attribute `DepartmentLookup` on 2002, the "failed" banner, directory group search endpoints | P2, with data-plane audiences and approval package 2 (identity plan §2); P1 member groups are entered as group claim values |
 | Effective team's request policy on delegated requests | removed; key's policy only, opt-in `ApplyTeamPolicy` (§5.3) |
 | `403 max_residency_not_met` while in-ceiling targets are only drained | `503 no_eligible_provider` + `Retry-After` (§3.3) |
-| Ume.Rag interim: per-team linked keys `GatewayKeyLinks`, `onprem` keys, the "platform service key" (one key) | removed; FakeGateway until the release, then keys per level and deployable (§13.4) |
+| Ume.Rag interim: per-team linked keys `GatewayKeyLinks`, `onprem` keys, the "platform service key" (one key) | removed; FakeGateway in CI and tests, the interim test/dev gateway in P1a, the pilot team's keys per level and deployable until release 2, then delegating keys (§13.4) |
 
 ## 18. Deferred or removed (weakness review)
 

@@ -47,8 +47,14 @@ public static class AdminErrorCodes
     /// <summary>V8: the gateway's <c>/v1/models</c> at <c>{ceiling}</c> does not list <c>{model}</c> (also while its targets are drained).</summary>
     public static AdminErrorCode ModelNotListed { get; } = new("model_not_listed", 409, "The AI gateway does not offer {model} at {ceiling} right now. Try again later.");
 
-    /// <summary>V8: the gateway could not be asked (unreachable, 5xx, or this service holds no key for <c>{ceiling}</c>); retry.</summary>
+    /// <summary>V8: the gateway could not be asked (unreachable, 5xx, a refused key); retry.</summary>
     public static AdminErrorCode GatewayUnavailable { get; } = new("gateway_unavailable", 503, "The AI gateway could not be reached to check the model. Try again.");
+
+    /// <summary>
+    /// V8: this service holds no gateway key for <c>{ceiling}</c>, so the model cannot be checked or called there (#237): a
+    /// deployment setting (<c>Gateway:Keys:{ceiling}</c>, or <c>Gateway:MaxResidency</c> under M2), not a retry.
+    /// </summary>
+    public static AdminErrorCode GatewayKeyMissing { get; } = new("gateway_key_missing", 503, "No AI gateway key is configured for {ceiling}, so {model} cannot be checked there.");
 
     /// <summary>V29: a data-protection policy breaks a rule (history modes, encryption, retention, blob key).</summary>
     public static AdminErrorCode PolicyRule { get; } = new("policy_rule", 400, "The data protection policy breaks a rule: {rule}");
@@ -88,6 +94,15 @@ public static class AdminErrorCodes
 
     /// <summary>The run is not running (<c>{state}</c>), so it cannot be cancelled.</summary>
     public static AdminErrorCode RunNotActive { get; } = new("run_not_active", 409, "The run has already ended ({state}).");
+
+    /// <summary>V26: a free-text reason shorter than <c>{min}</c> characters (field error).</summary>
+    public static AdminErrorCode ReasonTooShort { get; } = new("reason_too_short", 400, "The reason must be at least {min} characters.");
+
+    /// <summary>V28: the run is no longer waiting for a decision, or its proposal is not the one the user saw (connectors §13.3).</summary>
+    public static AdminErrorCode DeletionSuperseded { get; } = new("deletion_superseded", 409, "This deletion proposal is no longer current. Open the source's latest run.");
+
+    /// <summary>PII clear on a document with no flagged chunk set (nothing to release).</summary>
+    public static AdminErrorCode PiiNotFlagged { get; } = new("pii_not_flagged", 409, "The document is not flagged for personal data.");
 
     /// <summary>Upload batches belong to upload sources only.</summary>
     public static AdminErrorCode NotAnUploadSource { get; } = new("not_an_upload_source", 409, "Files can only be uploaded to an upload source.");
@@ -184,13 +199,27 @@ public static class AdminErrorCodes
     /// <summary>V15: a not-found link is not https on an allowed host, or there are more than 5.</summary>
     public static AdminErrorCode LinkHostNotAllowed { get; } = new("link_host_not_allowed", 409, "A link must be https on an allowed site, at most 5 links.");
 
+    /// <summary>Generating test questions needs <c>Settings.EvaluationModel</c> (processing design §13.1: no implicit default).</summary>
+    public static AdminErrorCode EvaluationModelUnset { get; } = new("evaluation_model_unset", 409, "No model is chosen for generating test questions.");
+
+    /// <summary>Restore takes an earlier published version: not the draft and not the version that is live.</summary>
+    public static AdminErrorCode VersionNotRestorable { get; } = new("version_not_restorable", 409, "Version {number} is the draft or the published version and cannot be restored.");
+
+    /// <summary>V10: the history mode or the retention days are outside the level's data-protection policy.</summary>
+    public static AdminErrorCode RetentionOutsidePolicy { get; } = new("retention_outside_policy", 409, "The level {level} allows history {modes} and at most {maxDays} days.");
+    /// <summary>The retrieval test could not search: the database or the query embedding is unavailable (knowledge design §5.5).</summary>
+    public static AdminErrorCode SearchUnavailable { get; } = new("search_unavailable", 503, "The search could not run right now. Try again.");
+
+    /// <summary>The test panel's answer failed at the model (chat design §3.6: <c>{reason}</c>).</summary>
+    public static AdminErrorCode TestAnswerFailed { get; } = new("test_answer_failed", 502, "The model could not answer the test question ({reason}). Try again.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
-            GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
-            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
+            GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
+            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive, ReasonTooShort, DeletionSuperseded, PiiNotFlagged,
             NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed];
 }

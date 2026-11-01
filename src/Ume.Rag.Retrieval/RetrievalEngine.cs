@@ -174,8 +174,14 @@ public sealed class RetrievalEngine : IDisposable
         if (request.Mode != RetrievalMode.Vector)
         {
             var searchText = QueryNormalizer.SearchText(normalized, request.Decompound ? _decompounder : null);
+            // The stop list (§6.2, §20) comes from memory once the statistics are read; only a cold cache reads them here.
             keywordTask = TimedAsync(
-                () => _index.KeywordAsync(scope, searchText, request.Filters, ranking.Candidates, linked.Token),
+                async () =>
+                {
+                    var stop = await _sizes.StopLexemesAsync(scope, linked.Token);
+                    var keywordScope = stop.Count == 0 ? scope : scope with { KeywordStopLexemes = stop };
+                    return await _index.KeywordAsync(keywordScope, searchText, request.Filters, ranking.Candidates, linked.Token);
+                },
                 ms => keywordTime = ms);
         }
 
@@ -235,8 +241,8 @@ public sealed class RetrievalEngine : IDisposable
                 lists.Add(new CandidateList(CandidateListKind.Keyword, ranking.KeywordWeight, keywordCandidates));
             }
 
-            // §6.5: each chunk's own collection recency, times the injected adjuster (demote).
-            var adjuster = CombinedAdjuster.Of(RecencyAdjuster.For(scope, _time.GetUtcNow()), _adjuster);
+            // §6.5: decay (each chunk's own collection recency) · demote (its source's patterns) · an injected adjuster.
+            var adjuster = CombinedAdjuster.Of(RecencyAdjuster.For(scope, _time.GetUtcNow()), DemoteAdjuster.For(scope), _adjuster);
             var deduped = ResultDiversifier.Dedup(RrfFusion.Fuse(lists, adjuster));
 
             var rerankTime = 0.0;

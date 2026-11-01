@@ -9,7 +9,7 @@ your own git worktree (given in your task). The main repo is `/home/crotalus/res
 1. `AGENTS.md` (working rules, conventions), `README.md` (build/test commands).
 2. `01-general-idea.md` §10 Decisions table — skim the 2026-10-31 rows ("Code first, live testing last", "7-day rule in development", "Low CPU during development").
 3. `plans/p1/README.md` §1a, §2 (ownership), §3 (binding done-when); `plans/p1b/README.md` §1–§3 if your item is P1b.
-4. The design sections named in your task. Precedence: Decisions table > `plans/weakness-review.md` > `plans/simplification-pass.md` > detail design.
+4. The design sections named in your task. Precedence: Decisions table (rows with status `current`) > detail design. The passes are folded into the detail designs and don't bind.
 5. The existing code you build on (named in your task). Match its style, naming, logging/event conventions and test patterns.
 
 ## Hard rules
@@ -20,6 +20,7 @@ your own git worktree (given in your task). The main repo is `/home/crotalus/res
 - Code, comments, docs in English. Keep comments short and factual.
 - Respect the "Deferred or removed" sections of each design: don't build P2 items.
 - Package pins: avoid new packages; if unavoidable, exact version via `Directory.Packages.props` (shared — tell me instead of editing).
+- **No backward compatibility before production** (Decisions table, 2026-11-01): change schemas, contracts, payloads and APIs in one step; don't add fallbacks for old rows/payloads or compatibility shims (remove existing ones you touch). Development data is rebuilt or re-crawled.
 - If an approach fails 3 times, stop and switch strategy; if blocked, stop and report rather than inventing scope.
 
 ## Proofs you must deliver

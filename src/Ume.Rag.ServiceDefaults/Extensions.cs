@@ -98,7 +98,9 @@ public static class Extensions
                     // Never record query strings; they could contain identifiers.
                     o.EnrichWithHttpRequest = (activity, request) => activity.SetTag("url.query", null);
                 })
-                .AddHttpClientInstrumentation(o => o.EnrichWithHttpRequestMessage = RedactOutgoing));
+                .AddHttpClientInstrumentation(o => o.EnrichWithHttpRequestMessage = RedactOutgoing)
+                .AddProcessor(new OutgoingHttpRedaction.StatusScrubber()));
+        OutgoingHttpRedaction.Register(); // the failure path: exception events without host or port (#232)
 
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
         {

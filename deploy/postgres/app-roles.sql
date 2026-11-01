@@ -52,6 +52,8 @@ GRANT SELECT ("Id", "CollectionId", "Type", "Classification", "State", "DeletedA
 -- checks, #130).
 GRANT SELECT, INSERT, UPDATE, DELETE ON config."Assistants", config."AssistantVersions", config."AssistantAudiences",
   config."GatewayModels" TO ume_rag_admin;
+-- Explain access (identity design 4.9) builds the api's policy snapshot in rag-admin, which reads the published view too.
+GRANT SELECT ON config."PublishedAssistantVersions" TO ume_rag_admin;
 GRANT SELECT ON config."Assistants", config."AssistantAudiences", config."PublishedAssistantVersions",
   config."GatewayModels" TO ume_rag_api;
 GRANT SELECT ON config."GatewayModels" TO ume_rag_worker;
@@ -108,6 +110,7 @@ GRANT EXECUTE ON FUNCTION content.rag_or_query(tsvector), content.rag_tsquery_or
   TO ume_rag_api, ume_rag_admin, ume_rag_worker;
 GRANT EXECUTE ON FUNCTION content.rag_partition_maintain(), content.rag_ensure_profile_index(uuid, integer) TO ume_rag_worker;
 GRANT EXECUTE ON FUNCTION config.rag_retention_config_step(integer) TO ume_rag_admin;
+GRANT EXECUTE ON FUNCTION chat.rag_retention_chat_step(integer) TO ume_rag_admin;
 GRANT EXECUTE ON FUNCTION content.rag_count_retrievals(date, uuid[], bytea[], uuid[], character varying[], integer[], integer[])
   TO ume_rag_api;
 COMMIT;

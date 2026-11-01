@@ -283,7 +283,150 @@ public static class AssistantEndpoints
             })
             .RequireAuthorization(AdminPolicies.Manage).WithName("SetAssistantAudiences").WithSummary("The clients that offer the assistant (V7, V8, V9)");
 
+        assistants.MapGet("/{id:guid}/versions", async (Guid id, AdminContext admin, CancellationToken ct) =>
+            {
+                _ = await LoadAsync(admin, id, ct, tracked: false);
+                var versions = await admin.Db.AssistantVersions.AsNoTracking().Where(v => v.AssistantId == id).OrderByDescending(v => v.Number).ToListAsync(ct);
+                var numbers = versions.ToDictionary(v => v.Id, v => v.Number);
+                return versions.Select(v => VersionSummary.Of(v, numbers)).ToList();
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("ListAssistantVersions").WithSummary("Every version, newest first: state, who and when, restored-from");
+
+        assistants.MapGet("/{id:guid}/versions/{number}", async (Guid id, string number, AdminContext admin, CancellationToken ct) =>
+            {
+                _ = await LoadAsync(admin, id, ct, tracked: false);
+                var version = await VersionAsync(admin, id, number, ct);
+                var restoredFrom = version.RestoredFromVersionId is { } from
+                    ? await admin.Db.AssistantVersions.AsNoTracking().Where(v => v.Id == from).Select(v => (int?)v.Number).SingleOrDefaultAsync(ct)
+                    : null;
+                return VersionDto.Of(version, restoredFrom);
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("GetAssistantVersion").WithSummary("One version's settings");
+
+        assistants.MapPost("/{id:guid}/versions/{number}/restore", async (Guid id, string number, VersionRequest request, AdminContext admin, GatewayModelCheck models,
+                CancellationToken ct) =>
+            {
+                var saved = await admin.WriteAsync(async attempt =>
+                {
+                    var assistant = await LoadAsync(admin, id, attempt);
+                    admin.ExpectVersion(assistant, request.Version);
+                    var source = await VersionAsync(admin, id, number, attempt);
+                    if (source.State == AssistantVersionStates.Draft || source.Id == assistant.PublishedVersionId)
+                    {
+                        // Only an earlier published version is restored; the draft is published, the current one is live already.
+                        throw AdminFaults.Of(AdminErrorCodes.VersionNotRestorable, new Dictionary<string, string> { ["number"] = source.Number.ToString(CultureInfo.InvariantCulture) });
+                    }
+
+                    var next = await admin.Db.AssistantVersions.Where(v => v.AssistantId == id).MaxAsync(v => v.Number, attempt) + 1;
+                    var restored = new AssistantVersion
+                    {
+                        AssistantId = id, Number = next, State = AssistantVersionStates.Published, GatewayModel = source.GatewayModel, SystemPrompt = source.SystemPrompt,
+                        QuerySteps = source.QuerySteps, NotFound = source.NotFound, CollectionIds = source.CollectionIds, RestoredFromVersionId = source.Id,
+                        CreatedAt = admin.Now, CreatedBy = admin.Actor, UpdatedAt = admin.Now, UpdatedBy = admin.Actor, PublishedAt = admin.Now, PublishedBy = admin.Actor,
+                    };
+
+                    // Exactly as publish (admin design §4.5): V34, then every assistant rule as refusals and V8's /v1/models call.
+                    var audience = await AudienceClientsAsync(admin, id, attempt);
+                    Refuse(await AssistantRules.CheckAsync(admin, assistant, restored, audience, attempt, publishing: true));
+                    await models.EnsureServableAsync(restored.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt);
+
+                    var before = AssistantAudit.Of(assistant);
+                    if (assistant.PublishedVersionId is { } current)
+                    {
+                        var published = await admin.Db.AssistantVersions.SingleAsync(v => v.Id == current, attempt);
+                        published.State = AssistantVersionStates.Superseded;
+                        await admin.Db.SaveChangesAsync(attempt);
+                    }
+
+                    // An open draft is kept; its base is now older, so its publish asks for confirmation (draft_base_changed).
+                    admin.Db.AssistantVersions.Add(restored);
+                    assistant.PublishedVersionId = restored.Id;
+                    assistant.UpdatedAt = admin.Now;
+                    assistant.UpdatedBy = admin.Actor;
+                    return new AdminChange<Assistant>(assistant, "restore", AuditEntityTypes.Assistant, assistant.Id, before,
+                        new { assistant = AssistantAudit.Of(assistant), version = DraftAudit.Of(restored), restoredFrom = source.Number })
+                    {
+                        DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
+                    };
+                }, ct);
+                return await DetailAsync(admin, saved, ct);
+            })
+            .RequireAuthorization(AdminPolicies.Edit).WithName("RestoreAssistantVersion").WithSummary("Publish a new version with an earlier version's settings (as publish)");
+
+        assistants.MapPost("/{id:guid}/archive", (Guid id, VersionRequest request, AdminContext admin, CancellationToken ct) =>
+                SetStateAsync(admin, id, request, AssistantStates.Archived, ct))
+            .RequireAuthorization(AdminPolicies.Edit).WithName("ArchiveAssistant").WithSummary("Hide the assistant from every client; versions, audiences and statistics are kept");
+
+        assistants.MapPost("/{id:guid}/unarchive", (Guid id, VersionRequest request, AdminContext admin, CancellationToken ct) =>
+                SetStateAsync(admin, id, request, AssistantStates.Active, ct))
+            .RequireAuthorization(AdminPolicies.Edit).WithName("UnarchiveAssistant").WithSummary("Offer the assistant again with the same published version");
+
+        assistants.MapPut("/{id:guid}/retention", async (Guid id, RetentionRequest request, AdminContext admin, CancellationToken ct) =>
+            {
+                var saved = await admin.WriteAsync(async attempt =>
+                {
+                    var assistant = await LoadAsync(admin, id, attempt);
+                    admin.ExpectVersion(assistant, request.Version);
+                    var policy = await admin.Db.DataProtectionPolicies.AsNoTracking().SingleOrDefaultAsync(p => p.Classification == assistant.Classification, attempt)
+                        ?? DataProtectionEndpoints.Defaults(assistant.Classification);
+                    // V10: a mode the level allows (and the schema accepts: none until A1), at most the level's maximum days.
+                    if (!policy.AllowedHistoryModes.Contains(request.HistoryMode) || !HistoryModes.All.Contains(request.HistoryMode) ||
+                        request.RetentionDays > policy.RetentionMaxDays)
+                    {
+                        throw AdminFaults.Of(AdminErrorCodes.RetentionOutsidePolicy, new Dictionary<string, string>
+                        {
+                            ["level"] = assistant.Classification, ["modes"] = string.Join(", ", policy.AllowedHistoryModes.Where(HistoryModes.All.Contains)),
+                            ["maxDays"] = policy.RetentionMaxDays.ToString(CultureInfo.InvariantCulture),
+                        });
+                    }
+
+                    var before = new { assistant.HistoryMode, assistant.RetentionDays };
+                    assistant.HistoryMode = request.HistoryMode;
+                    assistant.RetentionDays = request.RetentionDays;
+                    assistant.UpdatedAt = admin.Now;
+                    assistant.UpdatedBy = admin.Actor;
+                    return new AdminChange<Assistant>(assistant, "retention", AuditEntityTypes.Assistant, assistant.Id, before,
+                        new { assistant.HistoryMode, assistant.RetentionDays })
+                    {
+                        DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
+                    };
+                }, ct);
+                return await DetailAsync(admin, saved, ct);
+            })
+            .RequireAuthorization(AdminPolicies.Manage).WithName("SetAssistantRetention").WithSummary("History mode and retention days within the level's policy (V10)");
+
         return api;
+    }
+
+    /// <summary>Version <paramref name="number"/> of the assistant, or 404 (the number is parsed here, so any route value reaches the policy first).</summary>
+    private static async Task<AssistantVersion> VersionAsync(AdminContext admin, Guid assistantId, string number, CancellationToken ct)
+    {
+        if (!int.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out var n))
+        {
+            throw AdminFaults.Of(AdminErrorCodes.NotFound);
+        }
+
+        return await admin.Db.AssistantVersions.AsNoTracking().SingleOrDefaultAsync(v => v.AssistantId == assistantId && v.Number == n, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+    }
+
+    /// <summary>Archive or unarchive (admin design §4.5): only the state changes; an unchanged state is answered without a write.</summary>
+    private static async Task<AssistantDto> SetStateAsync(AdminContext admin, Guid id, VersionRequest request, string state, CancellationToken ct)
+    {
+        var saved = await admin.WriteAsync(async attempt =>
+        {
+            var assistant = await LoadAsync(admin, id, attempt);
+            admin.ExpectVersion(assistant, request.Version);
+            var before = AssistantAudit.Of(assistant);
+            assistant.State = state;
+            assistant.UpdatedAt = admin.Now;
+            assistant.UpdatedBy = admin.Actor;
+            return new AdminChange<Assistant>(assistant, state == AssistantStates.Archived ? "archive" : "unarchive", AuditEntityTypes.Assistant, assistant.Id, before,
+                AssistantAudit.Of(assistant))
+            {
+                DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
+            };
+        }, ct);
+        return await DetailAsync(admin, saved, ct);
     }
 
     private static IQueryable<Assistant> Scoped(AdminContext admin)
@@ -649,6 +792,45 @@ public sealed record AudiencesRequest : AdminRequest
 {
     [MaxLength(50)]
     public IReadOnlyList<Guid> ClientIds { get; init; } = [];
+
+    [Required]
+    public string? Version { get; init; }
+}
+
+/// <summary>A version in the list: number, state, who and when, and the number it was restored from.</summary>
+public sealed record VersionSummary(int Number, string State, DateTimeOffset CreatedAt, string? CreatedBy, DateTimeOffset? PublishedAt, string? PublishedBy, int? RestoredFrom)
+{
+    public static VersionSummary Of(AssistantVersion v, IReadOnlyDictionary<Guid, int> numbers)
+    {
+        ArgumentNullException.ThrowIfNull(v);
+        ArgumentNullException.ThrowIfNull(numbers);
+        return new(v.Number, v.State, v.CreatedAt, v.CreatedBy, v.PublishedAt, v.PublishedBy,
+            v.RestoredFromVersionId is { } from && numbers.TryGetValue(from, out var n) ? n : null);
+    }
+}
+
+/// <summary>One version's settings (the draft's fields, admin design §4.5) with its state and history.</summary>
+public sealed record VersionDto(
+    int Number, string State, string? GatewayModel, string SystemPrompt, JsonElement QuerySteps, JsonElement NotFound, IReadOnlyList<Guid> CollectionIds, int? RestoredFrom,
+    DateTimeOffset CreatedAt, string? CreatedBy, DateTimeOffset? PublishedAt, string? PublishedBy)
+{
+    public static VersionDto Of(AssistantVersion v, int? restoredFrom)
+    {
+        ArgumentNullException.ThrowIfNull(v);
+        using var steps = JsonDocument.Parse(v.QuerySteps);
+        using var notFound = JsonDocument.Parse(v.NotFound);
+        return new(v.Number, v.State, v.GatewayModel, v.SystemPrompt, steps.RootElement.Clone(), notFound.RootElement.Clone(), v.CollectionIds, restoredFrom, v.CreatedAt,
+            v.CreatedBy, v.PublishedAt, v.PublishedBy);
+    }
+}
+
+public sealed record RetentionRequest : AdminRequest
+{
+    [Required, StringLength(20)]
+    public string HistoryMode { get; init; } = HistoryModes.None;
+
+    [Range(1, 3650)]
+    public int RetentionDays { get; init; } = 90;
 
     [Required]
     public string? Version { get; init; }

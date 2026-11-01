@@ -93,14 +93,15 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
 
         var assistants = new Dictionary<Guid, AssistantEntry>();
         await ReadAsync(connection, transaction, """
-            SELECT "Id", "Slug", "Name", "Classification", "HistoryMode", "State", "DepartmentId", "OwnerTeamId", "Description", "ContactName", "ContactEmail"
+            SELECT "Id", "Slug", "Name", "Classification", "HistoryMode", "State", "DepartmentId", "OwnerTeamId", "Description", "ContactName", "ContactEmail",
+                   "RetentionDays"
             FROM config."Assistants"
             """, r =>
         {
             var id = r.GetGuid(0);
             var entry = new AssistantEntry(id, r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetGuid(6),
                 r.IsDBNull(7) ? null : r.GetGuid(7), published.GetValueOrDefault(id), audiences.TryGetValue(id, out var list) ? list : [],
-                r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9), r.IsDBNull(10) ? null : r.GetString(10));
+                r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9), r.IsDBNull(10) ? null : r.GetString(10), r.GetInt32(11));
             if (Levels.Rank(entry.Classification) is null)
             {
                 LogUnparsable(logger, "Assistants", id);
@@ -129,12 +130,17 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
         }, cancellationToken);
 
         var sources = new Dictionary<Guid, List<Guid>>();
+        var demote = new Dictionary<Guid, string>();
         await ReadAsync(connection, transaction, """
-            SELECT "CollectionId", "Id" FROM config."Sources" WHERE "DeletedAt" IS NULL
+            SELECT "CollectionId", "Id", "DemoteRules"::text FROM config."Sources" WHERE "DeletedAt" IS NULL
             """, r =>
         {
             var collection = r.GetGuid(0);
             (sources.TryGetValue(collection, out var list) ? list : sources[collection] = []).Add(r.GetGuid(1));
+            if (!r.IsDBNull(2) && r.GetString(2) is { Length: > 0 } rules && rules != "null")
+            {
+                demote[r.GetGuid(1)] = rules;
+            }
         }, cancellationToken);
 
         var profiles = new Dictionary<Guid, EmbeddingProfileEntry>();
@@ -169,7 +175,10 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
 
         await transaction.CommitAsync(cancellationToken);
         return new PolicySnapshot(version, clients, assistants, collections,
-            sources.ToDictionary(s => s.Key, s => (IReadOnlyList<Guid>)s.Value), profiles, levels, departments, retrieval, chat);
+            sources.ToDictionary(s => s.Key, s => (IReadOnlyList<Guid>)s.Value), profiles, levels, departments, retrieval, chat)
+        {
+            DemoteRules = demote,
+        };
     }
 
     private static async Task ReadAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql, Action<NpgsqlDataReader> row,

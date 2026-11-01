@@ -66,7 +66,7 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         var stub = new CountingHandler();
         using var host = Build(stub, levels: ["OnPrem", "Eu"]);
 
-        await Should.ThrowAsync<GatewayCallRefusedException>(() => SendAsync(host, Post("v1/chat/completions").WithMaxResidency(Residency.External)));
+        (await Should.ThrowAsync<GatewayKeyMissingException>(() => SendAsync(host, Post("v1/chat/completions").WithMaxResidency(Residency.External)))).Ceiling.ShouldBe(Residency.External);
         stub.Calls.ShouldBe(0);
     }
 

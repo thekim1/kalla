@@ -12,13 +12,18 @@ namespace Ume.Rag.AdminApi;
 /// V8 (admin design §4.6, identity §4.7, gateway-changes §13.4): a model is servable at a ceiling when the mirror knows it
 /// with a residency within the ceiling, and the gateway's <c>/v1/models</c> called with that level's key and ceiling lists
 /// it. Called on assistant publish and on a level or audience save (item 14); P1 sends no <c>x-ume-on-behalf-of</c>.
+/// The ceiling is capped by <c>Gateway:MaxResidency</c> first, as chat caps it (#237).
 /// </summary>
-public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway)
+public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOptions<GatewayOptions> options)
 {
-    /// <summary>Throws the V8 fault (<c>model_residency</c>, <c>model_not_listed</c>, <c>gateway_unavailable</c>) unless servable.</summary>
+    /// <summary>
+    /// Throws the V8 fault (<c>model_residency</c>, <c>model_not_listed</c>, <c>gateway_key_missing</c>,
+    /// <c>gateway_unavailable</c>) unless servable.
+    /// </summary>
     public async Task EnsureServableAsync(string model, Residency ceiling, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(model);
+        ceiling = options.Value.Cap(ceiling);
         var parameters = new Dictionary<string, string> { ["model"] = model, ["ceiling"] = ResidencyCeiling.ToHeader(ceiling) };
         var row = await db.GatewayModels.AsNoTracking().SingleOrDefaultAsync(m => m.Name == model, cancellationToken);
         if (row is null || !row.Residencies.Any(r => ResidencyCeiling.TryParse(r, out var residency) && residency <= ceiling))
@@ -30,6 +35,10 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway)
         try
         {
             listed = await gateway.ListModelsAsync(ceiling, cancellationToken);
+        }
+        catch (GatewayKeyMissingException)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.GatewayKeyMissing, parameters);
         }
         catch (Exception ex) when (ex is GatewayUnavailableException or GatewayRefusedException or GatewayResidencyException or GatewayCallRefusedException)
         {

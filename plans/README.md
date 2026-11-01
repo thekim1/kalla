@@ -8,19 +8,24 @@ detail steps 1–10 (`platform/data-model.md`, `platform/repo-and-deployment.md`
 Kernel Memory and OpenSearch) and [`../02-architecture-review.md`](../02-architecture-review.md) (improvements R1–R7,
 now applied to these plans).
 
+**Two layers of truth:** the Decisions table (`01-general-idea.md` §10, status column) and the detail documents. The
+cross-cutting passes below were folded into the detail documents on 2026-11-01 and no longer bind (each ends with a
+ledger of where every rule went); they stay for the reasoning, and the capacity model of the performance pass stays as
+binding reference.
+
 Cross-cutting passes, in order: [`consistency-pass.md`](consistency-pass.md) (detail step 11),
 [`performance-pass.md`](performance-pass.md) (≈ 10× the pilot on 3–5 hosts: capacity model, bottlenecks, topologies,
 scaling triggers, scale test) and [`simplification-pass.md`](simplification-pass.md) (thin P0/P1, fixed pipelines,
 stock Postgres, backups and key escrow, residency by structure, one gateway release, advisory evaluation, umea.se
 findings and learned site profiles, six containers in the pilot, many assistants per department: assistant versions
-and a derived mode). Where the simplification pass and an older passage differ, the simplification
-pass wins. [`weakness-review.md`](weakness-review.md) is binding over both (§1: P1 split into P1a walking skeleton and
+and a derived mode). [`weakness-review.md`](weakness-review.md) (§1: P1 split into P1a walking skeleton and
 P1b pilot hardening; site-profile learning, shared frontier, answer judge, effect-tag publish plans, adaptive
 embedding and the assistant extras move to P2; §5: two gateway releases, on-prem capacity measured in P0, one Open
 WebUI instance per department until W3 and E1 are solved, owners and dates before each phase).
 
-Implementation: [`p0/`](p0/README.md) (P0 checklist, stream briefs, progress and results files) and
-[`p1/`](p1/README.md) (P1a plan); overall progress in [`progress.md`](progress.md).
+Implementation: [`p1/`](p1/README.md) (P1a plan) and [`p1b/`](p1b/README.md) (P1b plan); overall progress in
+[`progress.md`](progress.md). Finished, kept for the record: [`p0/`](p0/README.md) (P0 checklist, stream briefs,
+progress and results files; released as `v0.1.0`).
 
 Decisions put off on purpose, with their stopgaps and deadlines: [`postponed-decisions.md`](postponed-decisions.md)
 (reviewed at the start of every phase). Package, behaviour and estimate checks from every document's "To verify"

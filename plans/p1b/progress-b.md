@@ -24,29 +24,30 @@ Refs: [data-model §2.3, §8](../platform/data-model.md), [weakness review §3, 
 - [x] `chat`: `Conversations`, `Messages`, `MessageSources`, `Feedback`, `FeedbackImportState`, `AssistantDailyTotals`; `DataKeys`, `ToolCalls` created, unused (this PR)
 - [x] Freshness columns P1a's item 2 did not create (`Sources.DemoteRules`, `CrawlRuns.SeedsFailed`/`Complete`) (`DemoteRules`, `Incremental`, `RemovalCheck` in #219; `SeedsFailed`/`Complete` were already in P1a's schema; plus #219's parse-rule key, evaluation and chunk columns)
 - [x] Grants; `DatabaseRoleTests` extended (#219, this PR)
-- [ ] **Hand-off L2:** issue to stream A
+- [x] **Hand-off L2:** issue to stream A (#234)
 
 ### 3. Age decay and `demote`
 Refs: [knowledge §6.5, §16.1](../knowledge-api/design.md), [weakness review §3](../weakness-review.md)
-- [ ] `recency` multiplier after fusion; `demote` lowest factor; uploads never demoted
-- [ ] `website` template default set on a collection's first `website` source
+- [x] `recency` multiplier after fusion; `demote` lowest factor; uploads never demoted (#235, this PR)
+- [x] `website` template default set on a collection's first `website` source (#235)
+- [x] Keyword stop list: lexemes in > 30 % of the scope's chunks dropped from K's query (this PR); K ≤ 30 ms p95 met for frequent terms, not for terms in 10–30 % of the 100k scope (`results-b.md` row 5, flagged to the main session)
 - [ ] **Done:** §16.1 tests green; evaluator order == `/v1/retrieve` order
-- [ ] **Hand-off L3:** issue to stream A
+- [x] **Hand-off L3:** issue to stream A (#249)
 
 ### 9. Admin API for P1b
 Refs: [admin §4, §6.6, §6.7, §12](../admin/design.md), [identity §4.9](../identity/design.md)
 - [ ] Sources: preflight, preview, impact, runs, deletion decisions, documents with PII view/clear, release hold, template parameters, `demote`
 - [ ] Pipeline publish: plan → confirm (409 on change) → report → keep / roll back
-- [ ] Evaluation set and reports (gold set first, threshold proposal as numbers); retrieval settings with the on-demand comparison
-- [ ] Assistants: draft → publish, versions with restore, archive, description, contact; test panel in `rag-admin`; audiences; retention; impact lines
-- [ ] Audit list; explain access
+- [x] Evaluation set and reports (gold set first, threshold proposal as numbers); retrieval settings with the on-demand comparison (#258, #259; retrieval settings and publish in #176)
+- [x] Assistants: draft → publish, versions with restore, archive, description, contact; test panel in `rag-admin`; audiences; retention; impact lines (#260, this PR; draft, publish and audiences earlier in P1a)
+- [x] Audit list; explain access (#257)
 - [ ] **Done:** audited, config version bumped, `PermissionMatrix` covers each endpoint; #23 recorded
 - [ ] **Hand-off L4:** issue to stream A
 
 ### 10. Chat: history `none`, feedback
 Refs: [chat §11–§14](../chat-api/design.md)
-- [ ] Issued conversation ids; `ConversationWriter` (metadata only, daily totals)
-- [ ] Conversation endpoints, user delete, 90-day metadata retention
+- [x] Issued conversation ids; `ConversationWriter` (metadata only, daily totals) (#262; with `chat.rag_retention_chat_step`)
+- [x] Conversation endpoints, user delete, 90-day metadata retention (this PR; retention in #262)
 - [ ] `/v1/feedback` (ratings; `comment_not_stored`)
 - [ ] `FeedbackImporter` (ratings and reason categories, watermark, advisory lock) and feedback pruning
 - [ ] **Done:** chat §18 tests for these parts green; #20, #51, #135 recorded

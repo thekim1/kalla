@@ -15,6 +15,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   model_residency: 'Modellen {model} kan inte användas på nivåns tak {ceiling}.',
   model_not_listed: 'AI-gatewayen erbjuder inte {model} på {ceiling} just nu. Försök igen senare.',
   gateway_unavailable: 'AI-gatewayen gick inte att nå för att kontrollera modellen. Försök igen.',
+  gateway_key_missing: 'Ingen nyckel till AI-gatewayen är inställd för {ceiling}, så {model} kan inte kontrolleras där. Kontakta plattformsadministratören.',
   policy_rule: 'Dataskyddsinställningen bryter mot en regel: {rule}',
   not_in_scope: 'Förvaltningen hör inte till dina förvaltningar.',
   no_embedding_profile: 'Det finns ingen standardprofil för inbäddning. Kontakta plattformsteamet.',
@@ -31,6 +32,9 @@ export const ERROR_MESSAGES: Record<string, string> = {
   template_unsupported: 'Det finns ingen pipeline för källtypen {type}.',
   admin_only: 'Bara en plattformsadministratör kan ändra detta.',
   run_not_active: 'Körningen har redan avslutats ({state}).',
+  reason_too_short: 'Motiveringen måste vara minst {min} tecken.',
+  deletion_superseded: 'Förslaget om borttagning gäller inte längre. Öppna källans senaste körning.',
+  pii_not_flagged: 'Dokumentet är inte flaggat för personuppgifter.',
   not_an_upload_source: 'Filer kan bara laddas upp till en källa av typen uppladdning.',
   upload_format_deferred: 'Filer av typen {extension} kan inte laddas upp ännu. Spara filen som PDF eller i ett nyare Office-format.',
   upload_type_refused: 'Filer av typen {extension} kan inte laddas upp.',
@@ -61,6 +65,11 @@ export const ERROR_MESSAGES: Record<string, string> = {
   client_stores_history: 'En assistent med klassen känslig kan inte erbjudas i en klient som sparar chatthistorik.',
   query_steps_invalid: 'Inställningen {field} ligger utanför det tillåtna intervallet.',
   link_host_not_allowed: 'En länk måste vara https till en tillåten webbplats, och högst 5 länkar.',
+  evaluation_model_unset: 'Ingen modell för att skapa testfrågor är vald. En plattformsadministratör väljer den under Inställningar.',
+  version_not_restorable: 'Version {number} är utkastet eller den publicerade versionen och kan inte återställas.',
+  retention_outside_policy: 'Informationsklassen {level} tillåter historik {modes} och högst {maxDays} dagar.',
+  test_answer_failed: 'Modellen kunde inte svara på testfrågan ({reason}). Försök igen.',
+  search_unavailable: 'Sökningen kunde inte köras just nu. Försök igen om en stund.',
 }
 
 /** When the problem has no code we know: by status. */

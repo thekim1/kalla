@@ -17,7 +17,8 @@ public sealed record AudienceEntry(string Kind, Guid? SubjectId, string? GroupVa
 public sealed record AssistantEntry(
     Guid Id, string Slug, string Name, string Classification, string HistoryMode, string State, Guid DepartmentId, Guid? OwnerTeamId,
     PublishedVersionEntry? Published, IReadOnlyList<AudienceEntry> Audiences, string? Description = null, string? ContactName = null,
-    string? ContactEmail = null);
+    string? ContactEmail = null,
+    int RetentionDays = 90);
 
 /// <summary>A collection: level, profile, settings, publication and deletion (data-model §2.1).</summary>
 public sealed record CollectionEntry(
@@ -64,6 +65,12 @@ public sealed record PolicySnapshot(
     /// </summary>
     public IReadOnlyDictionary<string, CollectionEntry> CollectionsBySlug =>
         BySlug.GetValue(Collections, static c => c.Values.ToDictionary(e => e.Slug, StringComparer.Ordinal));
+
+    /// <summary>
+    /// <c>Sources.DemoteRules</c> (jsonb, the crawl's <c>demote</c> list) by source id, for sources that have some
+    /// (knowledge design §6.5; weakness review §3). Compiled by the knowledge role once per version.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, string> DemoteRules { get; init; } = new Dictionary<Guid, string>();
 
     /// <summary>An empty snapshot (before the first load; every decision refuses).</summary>
     public static PolicySnapshot Empty { get; } = new(-1, new Dictionary<Guid, ClientEntry>(), new Dictionary<Guid, AssistantEntry>(),

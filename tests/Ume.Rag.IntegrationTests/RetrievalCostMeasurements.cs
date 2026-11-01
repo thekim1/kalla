@@ -93,15 +93,28 @@ public sealed class RetrievalCostMeasurements(RagDatabaseFixture database)
         var index = new PostgresSearchIndex(api);
         var scope = new SearchScope(profile, 8, [new CollectionInScope(collection, RetrievalSettings.Default)], ["public"], RetrievalPlatformSettings.Default);
         var output = TestContext.Current.TestOutputHelper!;
+
+        // The stop list's statistics (ts_stat over the scope's search vectors), read in the background every 10 minutes.
+        var statistics = Stopwatch.StartNew();
+        var lexemes = await index.FrequentLexemesAsync(ScopeSizeCache.KeywordStatisticsMinChunks, ScopeSizeCache.KeywordStatisticsShare, Ct);
+        output.WriteLine($"#5 stop-list statistics over 100,000 chunks: {statistics.Elapsed.TotalMilliseconds:F0} ms, {lexemes.Count} lexemes at ≥ 10 %");
+        using var sizes = new ScopeSizeCache(index, new FakeTimeProvider());
+        var stop = await sizes.StopLexemesAsync(scope, Ct);
+        output.WriteLine($"#5 stop list (> 30 %): {string.Join(", ", stop)}");
+        stop.Count.ShouldBe(4);
+        var stopped = scope with { KeywordStopLexemes = stop };
+
         foreach (var query in new[] { "umeå kommun", "bygglov i umeå kommun", "kontakt information umeå kommun bygglov", "förskoleplats", "simhall öppettider" })
         {
             var searchText = QueryNormalizer.SearchText(query, Ume.Rag.Retrieval.Text.SwedishDecompounder.Default);
-            var timing = await TimeAsync(() => index.KeywordAsync(scope, searchText, null, 100, Ct));
-            output.WriteLine($"#5 K \"{query}\" over 100,000 chunks: {timing}");
+            var without = await TimeAsync(() => index.KeywordAsync(scope, searchText, null, 100, Ct));
+            var with = await TimeAsync(() => index.KeywordAsync(stopped, searchText, null, 100, Ct));
+            output.WriteLine($"#5 K \"{query}\" over 100,000 chunks: with the stop list {with}; without {without}");
         }
 
-        output.WriteLine(await ExplainAnalyzeAsync(RetrievalStatements.Keyword(profile, 100, FilterFragments.None), collection, "'umeå kommun'"));
-        output.WriteLine(await ExplainGenericAnalyzeAsync(RetrievalStatements.Keyword(profile, 100, FilterFragments.None), collection, "'umeå kommun'"));
+        var lexemeArray = "ARRAY[" + string.Join(", ", stop.Select(l => "'" + l + "'")) + "]::text[]";
+        output.WriteLine(await ExplainAnalyzeAsync(RetrievalStatements.Keyword(profile, 100, FilterFragments.None), collection, "'bygglov i umeå kommun'", lexemeArray));
+        output.WriteLine(await ExplainGenericAnalyzeAsync(RetrievalStatements.Keyword(profile, 100, FilterFragments.None), collection, "'bygglov i umeå kommun'", lexemeArray));
     }
 
     private static float[] RandomUnitVector(Random random, int dimensions)
@@ -144,11 +157,12 @@ public sealed class RetrievalCostMeasurements(RagDatabaseFixture database)
         return new Timing(samples[24], samples[47], samples[^1]);
     }
 
-    private async Task<string> ExplainAnalyzeAsync(string statement, Guid collection, string first)
+    private async Task<string> ExplainAnalyzeAsync(string statement, Guid collection, string first, string stop = "ARRAY[]::text[]")
     {
         var sql = statement.Replace("$1", first, StringComparison.Ordinal)
             .Replace("$2", $"ARRAY['{collection}']::uuid[]", StringComparison.Ordinal)
-            .Replace("$3", "ARRAY['public']", StringComparison.Ordinal);
+            .Replace("$3", "ARRAY['public']", StringComparison.Ordinal)
+            .Replace("$4::text[]", stop, StringComparison.Ordinal);
         await using var connection = new NpgsqlConnection(database.Connection(Api, pooling: false));
         await connection.OpenAsync(Ct);
         await using var explain = new NpgsqlCommand("EXPLAIN (ANALYZE, BUFFERS) " + sql, connection);
@@ -163,7 +177,7 @@ public sealed class RetrievalCostMeasurements(RagDatabaseFixture database)
     }
 
     /// <summary>The plan a prepared statement runs once Postgres switches to the generic plan (plan_cache_mode forced).</summary>
-    private async Task<string> ExplainGenericAnalyzeAsync(string statement, Guid collection, string first)
+    private async Task<string> ExplainGenericAnalyzeAsync(string statement, Guid collection, string first, string stop)
     {
         await using var connection = new NpgsqlConnection(database.Connection(Api, pooling: false));
         await connection.OpenAsync(Ct);
@@ -179,7 +193,8 @@ public sealed class RetrievalCostMeasurements(RagDatabaseFixture database)
         }
 
         await using var explain = new NpgsqlCommand(
-            $"EXPLAIN (ANALYZE, BUFFERS) EXECUTE measured({first}, ARRAY['{collection}']::uuid[], ARRAY['public'])", connection, transaction);
+            $"EXPLAIN (ANALYZE, BUFFERS) EXECUTE measured({first}, ARRAY['{collection}']::uuid[], ARRAY['public'], {stop})",
+            connection, transaction);
         await using var reader = await explain.ExecuteReaderAsync(Ct);
         var lines = new List<string> { "Generic plan:" };
         while (await reader.ReadAsync(Ct))
