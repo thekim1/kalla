@@ -187,21 +187,47 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         await using (var reader = await feedback.ExecuteReaderAsync(Ct))
         {
             (await reader.ReadAsync(Ct)).ShouldBeTrue();
-            // "incorrect" is not one of Open WebUI's fixed keys: category other. The day's totals may include other tests' turns.
-            (reader.GetInt16(0), reader.GetString(1), reader.GetBoolean(2)).ShouldBe(((short)-1, "other", true));
+            // The API's own reasons keep their category (main-session decision on #264). The day's totals may include other tests' turns.
+            (reader.GetInt16(0), reader.GetString(1), reader.GetBoolean(2)).ShouldBe(((short)-1, "incorrect", true));
             reader.GetInt32(4).ShouldBeGreaterThanOrEqualTo(1);
         }
 
         (await client.GetFromJsonAsync<JsonElement>($"/v1/conversations/{issued}", Ct)).GetProperty("messages")[1].GetProperty("rating").GetInt32().ShouldBe(-1);
 
+        // #264 review: parallel ratings of one message (a double click, a retry) move exactly one thumb in the end, and never 500.
+        async Task<(long Up, long Down)> ThumbsAsync()
+        {
+            await using var totals = new Npgsql.NpgsqlCommand("""
+                SELECT coalesce(sum("ThumbsUp"), 0), coalesce(sum("ThumbsDown"), 0) FROM chat."AssistantDailyTotals" t
+                JOIN chat."Conversations" c ON c."AssistantId" = t."AssistantId" AND c."ClientId" = t."ClientId" WHERE c."Id" = $1
+                """, connection) { Parameters = { new() { Value = conversationId } } };
+            await using var reader = await totals.ExecuteReaderAsync(Ct);
+            await reader.ReadAsync(Ct);
+            return (reader.GetInt64(0), reader.GetInt64(1));
+        }
+
+        var before = await ThumbsAsync(); // the -1 above counts one thumb down
+        for (var round = 0; round < 10; round++)
+        {
+            var answers = await Task.WhenAll(Rate(client, new { message_id = answerId, rating = 1 }), Rate(client, new { message_id = answerId, rating = -1 }));
+            answers.ShouldAllBe(a => a.StatusCode == HttpStatusCode.NoContent);
+        }
+
+        var stored = (await client.GetFromJsonAsync<JsonElement>($"/v1/conversations/{issued}", Ct)).GetProperty("messages")[1].GetProperty("rating").GetInt32();
+        var after = await ThumbsAsync();
+        (after.Up - before.Up, after.Down - before.Down).ShouldBe(stored == 1 ? (1L, -1L) : (0L, 0L));
+
         using var otherClient = Client(api, db.InternalKey);
         (await Rate(otherClient, new { message_id = answerId, rating = 1 })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await otherClient.GetAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        (await otherClient.DeleteAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        // Another client's delete is a 204 that deletes nothing (whether the id exists is not told, #263 review).
+        (await otherClient.DeleteAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await client.GetAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
 
         (await client.DeleteAsync($"/v1/conversations/{issued}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await client.DeleteAsync($"/v1/conversations/{issued}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await client.GetAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await Rate(client, new { message_id = answerId, rating = 1 })).StatusCode.ShouldBe(HttpStatusCode.NotFound); // the message went with it
         await using (var audit = new Npgsql.NpgsqlCommand("""
             SELECT count(*) FROM audit."AuditLog" WHERE "Action" = 'conversation.delete' AND "EntityId" = $1
             """, connection) { Parameters = { new() { Value = conversationId.ToString("D") } } })
