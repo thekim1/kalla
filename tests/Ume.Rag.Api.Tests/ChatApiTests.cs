@@ -432,6 +432,10 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         {
             sub = "u-1", role = "user", iss = "open-webui", iat = now.ToUnixTimeSeconds(), exp = now.AddMinutes(5).ToUnixTimeSeconds(),
         }));
+        var chatId = "owui-chat-" + Guid.CreateVersion7().ToString("N");
+        owuiClient.DefaultRequestHeaders.Add("X-OpenWebUI-Chat-Id", chatId);
+        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-Message-Id", "owui-answer-1");
+        owuiClient.DefaultRequestHeaders.Add("X-Rag-Owui-User-Message-Id", "owui-question-1");
         var owuiEvents = await StreamAsync(owuiClient, "Behöver jag bygglov för en altan högre än 1,2 meter?");
         var source = owuiEvents.Where(e => e.TryGetProperty("event", out _)).ShouldHaveSingleItem().GetProperty("event");
         source.GetProperty("type").GetString().ShouldBe("source");
@@ -441,6 +445,20 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         var markerIndex = owuiEvents.FindIndex(e => Content([e]).Contains("[1]", StringComparison.Ordinal));
         sourceIndex.ShouldBeLessThan(markerIndex);
         owuiEvents.Any(IsAnnotated).ShouldBeFalse();
+
+        // §11.1, §14.2 (#263 review): Open WebUI's chat is the conversation key, with no issued id; its message ids are kept
+        // for the feedback import.
+        await owui.Services.GetRequiredService<ConversationWriter>().FlushAsync(Ct);
+        await using var connection = new Npgsql.NpgsqlConnection(db.Connection(RagDatabase.Api));
+        await connection.OpenAsync(Ct);
+        await using var stored = new Npgsql.NpgsqlCommand("""
+            SELECT c."SubjectId", c."SubjectKind", string_agg(m."Role" || ':' || m."ExternalMessageId", ',' ORDER BY m."Seq")
+            FROM chat."Conversations" c JOIN chat."Messages" m ON m."ConversationId" = c."Id" WHERE c."ExternalChatId" = $1 GROUP BY c."Id"
+            """, connection) { Parameters = { new() { Value = chatId } } };
+        await using var reader = await stored.ExecuteReaderAsync(Ct);
+        (await reader.ReadAsync(Ct)).ShouldBeTrue();
+        (reader.GetString(0), reader.GetString(1), reader.GetString(2)).ShouldBe(("owui:u-1", "owui-user", "user:owui-question-1,assistant:owui-answer-1"));
+        (await reader.ReadAsync(Ct)).ShouldBeFalse();
     }
 
     [Fact]

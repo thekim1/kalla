@@ -99,6 +99,10 @@ if (chat)
     builder.Services.AddSingleton(new ConversationIds(conversationKeys));
     builder.Services.AddSingleton<ConversationWriter>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<ConversationWriter>());
+    // §14.2: the Open WebUI feedback import and pruning (runs only with OpenWebUi:BaseUrl, AdminApiKey and ClientId set).
+    builder.Services.AddHttpClient(FeedbackImporter.HttpClientName);
+    builder.Services.AddSingleton<FeedbackImporter>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<FeedbackImporter>());
 }
 
 var app = builder.Build();

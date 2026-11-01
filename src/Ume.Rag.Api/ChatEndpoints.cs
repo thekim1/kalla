@@ -68,7 +68,7 @@ public static class ChatEndpoints
                 var conversation = ConversationKey(http, who, assistantId, ids);
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 ValueTask Enqueue(ChatPlan plan, IReadOnlyList<PromptSource> cited, int prompt, int completion) =>
-                    writer.EnqueueAsync(Turn(plan, who, conversation, cited, prompt, completion, (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+                    writer.EnqueueAsync(Turn(http, plan, who, conversation, cited, prompt, completion, (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
                 if (!parsed.Stream)
                 {
                     var answer = await service.CompleteAsync(who, parsed, ct);
@@ -121,7 +121,9 @@ public static class ChatEndpoints
     }
 
     /// <summary>The metadata-only turn for the writer (history mode none, all of P1): no text, the sources with their prompt numbers.</summary>
-    private static ChatTurn Turn(ChatPlan plan, RagPrincipal who, (Guid? Issued, string? External) conversation, IReadOnlyList<PromptSource> cited, int prompt,
+    private static string? Header(HttpContext http, string name) => http.Request.Headers[name].ToString() is { Length: > 0 and <= 200 } value ? value : null;
+
+    private static ChatTurn Turn(HttpContext http, ChatPlan plan, RagPrincipal who, (Guid? Issued, string? External) conversation, IReadOnlyList<PromptSource> cited, int prompt,
         int completion, int latencyMs)
     {
         var numbers = (plan.Prompt?.Sources ?? []).SelectMany(s => s.Chunks.Select(c => (c.ChunkId, s.Number))).GroupBy(x => x.ChunkId)
@@ -138,7 +140,12 @@ public static class ChatEndpoints
             ChatTurn.SubjectKindOf(who.Kind), who.SubjectId, plan.Assistant.Classification, mode, plan.Assistant.RetentionDays, ChatTurn.OutcomeOf(plan.Outcome),
             ChatTurn.CoverageOf(plan.Retrieval), plan.Retrieval?.Degraded, plan.Language, plan.Condense is CondenseOutcome.Rewritten,
             answered ? plan.Assistant.Published?.GatewayModel : null, answered ? Domain.ResidencyCeiling.ToHeader(plan.Ceiling) : null,
-            answered ? prompt : null, answered ? completion : null, latencyMs, null, sources, plan.Created);
+            answered ? prompt : null, answered ? completion : null, latencyMs, null, sources, plan.Created)
+        {
+            // §11.4, §14.2: Open WebUI's message ids from its connection headers (OPENAI_API_CONFIGS), for feedback mapping.
+            UserExternalId = who.Client.Kind == "open-webui" ? Header(http, "X-Rag-Owui-User-Message-Id") : null,
+            AnswerExternalId = who.Client.Kind == "open-webui" ? Header(http, "X-Rag-Owui-Message-Id") : null,
+        };
     }
 
     private static IResult Json(ChatCompletion answer) => Results.Json(new

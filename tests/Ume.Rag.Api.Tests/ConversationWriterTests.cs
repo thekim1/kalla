@@ -9,7 +9,7 @@ namespace Ume.Rag.Api.Tests;
 /// <summary>
 /// Conversation ids and the writer (chat design §11.1, §12; #266): an issued id is bound to client, assistant and subject;
 /// the writer refuses to append to a conversation of another owner or assistant on its own, whatever the MAC said; Open
-/// WebUI chats are one conversation per (user, chat id, assistant).
+/// WebUI chats are one conversation per (user, chat id, assistant), and a resent user message id (a regeneration) is kept once.
 /// </summary>
 public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
 {
@@ -70,6 +70,15 @@ public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture
             WHERE c."ExternalChatId" = '{chat}' AND c."SubjectId" = 'owui:u-1'
             """)).ShouldBe(4);
         (await CountAsync(api, $"""SELECT count(*) FROM chat."Messages" WHERE "Id" = '{second.MessageId}' AND "Role" = 'assistant'""")).ShouldBe(1); // chatcmpl id kept
+
+        // A regeneration resends the user message id: one user message, both answers with their Open WebUI ids.
+        var regenChat = "chat-" + Guid.CreateVersion7().ToString("N");
+        await writer.WriteAsync([Turn(null, regenChat, assistant, client, "owui:u-1") with { UserExternalId = "um-1", AnswerExternalId = "am-1" }], Ct);
+        await writer.WriteAsync([Turn(null, regenChat, assistant, client, "owui:u-1") with { UserExternalId = "um-1", AnswerExternalId = "am-2" }], Ct);
+        (await CountAsync(api, $"""
+            SELECT count(*) FROM chat."Messages" m JOIN chat."Conversations" c ON c."Id" = m."ConversationId"
+            WHERE c."ExternalChatId" = '{regenChat}' AND m."ExternalMessageId" IN ('um-1', 'am-1', 'am-2')
+            """)).ShouldBe(3);
     }
 
     private static async Task<long> CountAsync(NpgsqlDataSource data, string sql)

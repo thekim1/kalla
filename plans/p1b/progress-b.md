@@ -48,10 +48,10 @@ Refs: [admin §4, §6.6, §6.7, §12](../admin/design.md), [identity §4.9](../i
 Refs: [chat §11–§14](../chat-api/design.md)
 - [x] Issued conversation ids; `ConversationWriter` (metadata only, daily totals) (#262; with `chat.rag_retention_chat_step`)
 - [x] Conversation endpoints, user delete, 90-day metadata retention (#263; retention in #262)
-- [x] `/v1/feedback` (ratings; `comment_not_stored`) (this PR)
-- [ ] `FeedbackImporter` (ratings and reason categories, watermark, advisory lock) and feedback pruning
+- [x] `/v1/feedback` (ratings; `comment_not_stored`) (#264)
+- [x] `FeedbackImporter` (ratings and reason categories, watermark, advisory lock) and feedback pruning (this PR)
 - [ ] **Done:** chat §18 tests for these parts green; #20, #51, #135 recorded
-- [ ] **Hand-off L6:** issue to stream A with the configuration names
+- [x] **Hand-off L6:** issue to stream A with the configuration names (#273)
 
 ### 11. Journey pages, part 1
 Refs: [admin §5.3–§5.5, §6.4–§6.7](../admin/design.md)
