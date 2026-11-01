@@ -163,13 +163,71 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         messages[1].GetProperty("sources")[0].GetProperty("number").GetInt32().ShouldBe(1);
         (await client.GetFromJsonAsync<JsonElement>($"/v1/conversations/{conversationId}", Ct)).GetProperty("messages").GetArrayLength().ShouldBe(4);
 
+        // §3.5, §14.1: a rating of the first answer (chatcmpl- id), changed once; the thumbs move by the delta; a comment is
+        // refused in mode none; a bad rating is 400; another client's or an unknown message is 404.
+        var answerId = body.GetProperty("id").GetString()!;
+        async Task<HttpResponseMessage> Rate(HttpClient who, object payload) => await who.PostAsJsonAsync("/v1/feedback", payload, Ct);
+        (await Rate(client, new { message_id = answerId, rating = 1, reason = "other" })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await Rate(client, new { message_id = answerId, rating = -1, reason = "incorrect" })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        using (var withComment = await Rate(client, new { message_id = answerId, rating = -1, comment = "Fel höjd." }))
+        {
+            withComment.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            (await withComment.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error").GetProperty("code").GetString().ShouldBe("comment_not_stored");
+        }
+
+        (await Rate(client, new { message_id = answerId, rating = 3 })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await Rate(client, new { message_id = "chatcmpl-" + Guid.CreateVersion7().ToString("N"), rating = 1 })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        await using (var feedback = new Npgsql.NpgsqlCommand("""
+            SELECT f."Rating", f."ReasonCategory", f."CommentCiphertext" IS NULL, t."ThumbsUp", t."ThumbsDown"
+            FROM chat."Feedback" f JOIN chat."Messages" m ON m."Id" = f."MessageId" JOIN chat."Conversations" c ON c."Id" = m."ConversationId"
+            JOIN chat."AssistantDailyTotals" t ON t."AssistantId" = c."AssistantId" AND t."ClientId" = c."ClientId" AND t."Classification" = c."Classification"
+                AND t."Day" = (m."CreatedAt" AT TIME ZONE 'Europe/Stockholm')::date
+            WHERE f."MessageId" = $1 AND f."Source" = 'api'
+            """, connection) { Parameters = { new() { Value = Guid.ParseExact(answerId["chatcmpl-".Length..], "N") } } })
+        await using (var reader = await feedback.ExecuteReaderAsync(Ct))
+        {
+            (await reader.ReadAsync(Ct)).ShouldBeTrue();
+            // The API's own reasons keep their category (main-session decision on #264). The day's totals may include other tests' turns.
+            (reader.GetInt16(0), reader.GetString(1), reader.GetBoolean(2)).ShouldBe(((short)-1, "incorrect", true));
+            reader.GetInt32(4).ShouldBeGreaterThanOrEqualTo(1);
+        }
+
+        (await client.GetFromJsonAsync<JsonElement>($"/v1/conversations/{issued}", Ct)).GetProperty("messages")[1].GetProperty("rating").GetInt32().ShouldBe(-1);
+
+        // #264 review: parallel ratings of one message (a double click, a retry) move exactly one thumb in the end, and never 500.
+        async Task<(long Up, long Down)> ThumbsAsync()
+        {
+            await using var totals = new Npgsql.NpgsqlCommand("""
+                SELECT coalesce(sum("ThumbsUp"), 0), coalesce(sum("ThumbsDown"), 0) FROM chat."AssistantDailyTotals" t
+                JOIN chat."Conversations" c ON c."AssistantId" = t."AssistantId" AND c."ClientId" = t."ClientId" WHERE c."Id" = $1
+                """, connection) { Parameters = { new() { Value = conversationId } } };
+            await using var reader = await totals.ExecuteReaderAsync(Ct);
+            await reader.ReadAsync(Ct);
+            return (reader.GetInt64(0), reader.GetInt64(1));
+        }
+
+        var before = await ThumbsAsync(); // the -1 above counts one thumb down
+        for (var round = 0; round < 10; round++)
+        {
+            var answers = await Task.WhenAll(Rate(client, new { message_id = answerId, rating = 1 }), Rate(client, new { message_id = answerId, rating = -1 }));
+            answers.ShouldAllBe(a => a.StatusCode == HttpStatusCode.NoContent);
+        }
+
+        var stored = (await client.GetFromJsonAsync<JsonElement>($"/v1/conversations/{issued}", Ct)).GetProperty("messages")[1].GetProperty("rating").GetInt32();
+        var after = await ThumbsAsync();
+        (after.Up - before.Up, after.Down - before.Down).ShouldBe(stored == 1 ? (1L, -1L) : (0L, 0L));
+
         using var otherClient = Client(api, db.InternalKey);
+        (await Rate(otherClient, new { message_id = answerId, rating = 1 })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await otherClient.GetAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        (await otherClient.DeleteAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        // Another client's delete is a 204 that deletes nothing (whether the id exists is not told, #263 review).
+        (await otherClient.DeleteAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await client.GetAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
 
         (await client.DeleteAsync($"/v1/conversations/{issued}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await client.DeleteAsync($"/v1/conversations/{issued}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await client.GetAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await Rate(client, new { message_id = answerId, rating = 1 })).StatusCode.ShouldBe(HttpStatusCode.NotFound); // the message went with it
         await using (var audit = new Npgsql.NpgsqlCommand("""
             SELECT count(*) FROM audit."AuditLog" WHERE "Action" = 'conversation.delete' AND "EntityId" = $1
             """, connection) { Parameters = { new() { Value = conversationId.ToString("D") } } })

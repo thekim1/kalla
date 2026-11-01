@@ -114,6 +114,7 @@ if (knowledge)
     {
         app.MapChat();
         app.MapConversations();
+        app.MapFeedback();
     }
 
     if (publishReference)

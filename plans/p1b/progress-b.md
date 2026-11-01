@@ -47,8 +47,8 @@ Refs: [admin §4, §6.6, §6.7, §12](../admin/design.md), [identity §4.9](../i
 ### 10. Chat: history `none`, feedback
 Refs: [chat §11–§14](../chat-api/design.md)
 - [x] Issued conversation ids; `ConversationWriter` (metadata only, daily totals) (#262; with `chat.rag_retention_chat_step`)
-- [x] Conversation endpoints, user delete, 90-day metadata retention (this PR; retention in #262)
-- [ ] `/v1/feedback` (ratings; `comment_not_stored`)
+- [x] Conversation endpoints, user delete, 90-day metadata retention (#263; retention in #262)
+- [x] `/v1/feedback` (ratings; `comment_not_stored`) (this PR)
 - [ ] `FeedbackImporter` (ratings and reason categories, watermark, advisory lock) and feedback pruning
 - [ ] **Done:** chat §18 tests for these parts green; #20, #51, #135 recorded
 - [ ] **Hand-off L6:** issue to stream A with the configuration names
