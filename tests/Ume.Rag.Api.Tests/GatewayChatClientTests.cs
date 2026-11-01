@@ -75,4 +75,24 @@ public sealed class GatewayChatClientTests
         logs.Text.ShouldNotContain("deprecated");
         logs.Text.ShouldNotContain("gateway-secret");
     }
+
+    [Fact]
+    public async Task Condense_sends_the_reasoning_effort_and_no_temperature()
+    {
+        // #287: the condense call as ChatService makes it (temperature null, reasoning effort from Settings.Chat).
+        using var gateway = new Gateway(HttpStatusCode.OK, Answer);
+        using var loggers = LoggerFactory.Create(_ => { });
+        var client = new GatewayChatClient(new Clients(gateway), Options.Create(new ChatOptions()), loggers.CreateLogger<GatewayChatClient>());
+
+        await client.CompleteAsync("gpt-6-luna", Residency.Eu, [new ChatMessageIn("user", "Och kan man se dem på webben?")], 96, null, Guid.CreateVersion7(), "condense", Ct,
+            reasoningEffort: "none");
+        await client.CompleteAsync("gpt-6-luna", Residency.Eu, [new ChatMessageIn("user", "Hej?")], 96, null, Guid.CreateVersion7(), "condense", Ct);
+
+        gateway.Requests[0].GetProperty("reasoning_effort").GetString().ShouldBe("none");
+        gateway.Requests[0].TryGetProperty("temperature", out _).ShouldBeFalse();
+        gateway.Requests[1].TryGetProperty("reasoning_effort", out _).ShouldBeFalse();
+        PlatformChatSettings.Parse("""{"condenseModel":"gpt-6-luna","condenseReasoningEffort":"none"}""", new ChatOptions()).CondenseReasoningEffort.ShouldBe("none");
+        PlatformChatSettings.Parse("{}", new ChatOptions()).CondenseReasoningEffort.ShouldBeNull();
+        new ChatOptions().CondenseTimeout.ShouldBe(TimeSpan.FromMilliseconds(1200));
+    }
 }

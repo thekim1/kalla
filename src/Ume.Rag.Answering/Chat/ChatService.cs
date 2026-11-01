@@ -27,6 +27,9 @@ public sealed class ChatOptions
     public int MaxAnswerDurationSeconds { get; set; } = 240;
     public int MessagesPerMinutePerUser { get; set; } = 20;
     public string[] AllowedLinkHosts { get; set; } = ["umea.se", "*.umea.se"];
+
+    /// <summary>How long the condense call may take before the raw question is used (chat design §5; #287).</summary>
+    public TimeSpan CondenseTimeout { get; set; } = Condenser.DefaultTimeout;
 }
 
 /// <summary>What the gateway's stream carries: text, the usage, the finish reason.</summary>
@@ -62,9 +65,9 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
     };
 
     public async Task<GatewayAnswer> CompleteAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double? temperature,
-        Guid runId, string step, CancellationToken ct)
+        Guid runId, string step, CancellationToken ct, string? reasoningEffort = null)
     {
-        using var response = await SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: false, step, ct);
+        using var response = await SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: false, step, reasoningEffort, ct);
         using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
         var choice = json.RootElement.GetProperty("choices")[0];
         var text = choice.GetProperty("message").TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString()! : "";
@@ -76,7 +79,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
     /// <summary>Opens the stream: status and residency are checked when this returns; the caller then writes its first byte.</summary>
     public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double? temperature,
         Guid runId, CancellationToken ct) =>
-        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, "chat-answer", ct);
+        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, "chat-answer", null, ct);
 
     /// <summary>The stream's events; an idle gap over <c>Chat:StreamIdleTimeoutSeconds</c> or the total limit ends it with <c>stream_interrupted</c>.</summary>
     public async IAsyncEnumerable<GatewayStreamEvent> ReadAsync(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken ct)
@@ -146,7 +149,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
     }
 
     private async Task<HttpResponseMessage> SendAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double? temperature,
-        Guid runId, bool stream, string step, CancellationToken ct)
+        Guid runId, bool stream, string step, string? reasoningEffort, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(messages);
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("v1/chat/completions", UriKind.Relative))
@@ -157,6 +160,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
                 messages = messages.Select(m => new { role = m.Role, content = m.Text }),
                 max_tokens = maxTokens,
                 temperature,
+                reasoning_effort = reasoningEffort,
                 stream,
                 stream_options = stream ? new { include_usage = true } : null,
             }, options: RequestJson),
@@ -346,11 +350,11 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(Condenser.Timeout);
+        timeout.CancelAfter(options.Value.CondenseTimeout);
         try
         {
             var answer = await gateway.CompleteAsync(platform.CondenseModel!, Condenser.Ceiling(ceiling), Condenser.Messages(chat.History, chat.Question),
-                Condenser.MaxOutputTokens, null, messageId, "condense", timeout.Token);
+                Condenser.MaxOutputTokens, null, messageId, "condense", timeout.Token, platform.CondenseReasoningEffort);
             return Condenser.Accept(answer.Text) is { } rewritten ? (rewritten, CondenseOutcome.Rewritten) : (chat.Question, CondenseOutcome.Rejected);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)

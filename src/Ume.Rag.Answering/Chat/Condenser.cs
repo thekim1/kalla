@@ -11,7 +11,10 @@ namespace Ume.Rag.Answering.Chat;
 /// snapshot with the deployment knobs (<see cref="ChatOptions"/>) as the fallback: <c>condenseModel</c>,
 /// <c>allowedLinkHosts</c>, <c>messagesPerMinutePerUser</c> and the default <c>notFound</c> texts.
 /// </summary>
-public sealed record PlatformChatSettings(string? CondenseModel, IReadOnlyList<string> AllowedLinkHosts, int MessagesPerMinutePerUser, string? NotFound)
+/// <remarks><c>condenseReasoningEffort</c> is sent as <c>reasoning_effort</c> on the condense call when set (#287: a reasoning
+/// model otherwise spends its 96 tokens on hidden reasoning); null sends nothing.</remarks>
+public sealed record PlatformChatSettings(string? CondenseModel, IReadOnlyList<string> AllowedLinkHosts, int MessagesPerMinutePerUser, string? NotFound,
+    string? CondenseReasoningEffort = null)
 {
     public static PlatformChatSettings Parse(string? settingsChat, ChatOptions fallback)
     {
@@ -32,7 +35,8 @@ public sealed record PlatformChatSettings(string? CondenseModel, IReadOnlyList<s
             json?["condenseModel"] is JsonValue m && m.GetValueKind() == JsonValueKind.String && m.GetValue<string>() is { Length: > 0 } model ? model : null,
             hosts is { Count: > 0 } ? hosts : fallback.AllowedLinkHosts,
             json?["messagesPerMinutePerUser"] is JsonValue r && r.GetValueKind() == JsonValueKind.Number && r.TryGetValue<int>(out var rate) ? rate : fallback.MessagesPerMinutePerUser,
-            json?["notFound"] is JsonObject notFound ? notFound.ToJsonString() : null);
+            json?["notFound"] is JsonObject notFound ? notFound.ToJsonString() : null,
+            json?["condenseReasoningEffort"] is JsonValue e && e.GetValueKind() == JsonValueKind.String && e.GetValue<string>() is { Length: > 0 and <= 20 } effort ? effort : null);
     }
 }
 
@@ -57,7 +61,8 @@ public enum CondenseOutcome
 public static partial class Condenser
 {
     public const int MaxOutputTokens = 96;
-    public static readonly TimeSpan Timeout = TimeSpan.FromMilliseconds(600);
+    /// <summary>The default of <c>Chat:CondenseTimeout</c> (#287: 1,200 ms; no EU model met 600 ms).</summary>
+    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromMilliseconds(1200);
 
     private const string Instructions =
         "Du skriver om en följdfråga till en fristående sökfråga.\n" +
