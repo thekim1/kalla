@@ -129,6 +129,7 @@ p=src/Ume.Rag.AppHost
 dotnet user-secrets --project $p set DevelopmentVolumes:Postgres ume-rag-m1-postgres     # now
 dotnet user-secrets --project $p set FakeGateway:Enabled false                           # now
 dotnet user-secrets --project $p set Gateway:BaseUrl https://<gateway host>              # now
+dotnet user-secrets --project $p set Gateway:MaxResidency Eu                            # now
 dotnet user-secrets --project $p set Gateway:Services:api:Keys:Eu <the api's Eu key>      # now
 dotnet user-secrets --project $p set Gateway:Services:admin:Keys:Eu <the admin's Eu key>  # now
 dotnet user-secrets --project $p set Gateway:Services:worker:Keys:Eu <the worker's Eu key>  # now
@@ -143,7 +144,9 @@ dotnet user-secrets --project $p set EmbeddingProfile:MaxResidency Eu           
 
 Set no `External` and no `OnPrem` key: the worker never holds `External` (the AppHost refuses
 `Gateway:Services:worker:Keys:External` and keeps a shared `Gateway:Keys:External` from the worker), and the pilot runs
-at `Eu`. With one key for all three, `Gateway:Keys:Eu` alone works too. The
+at `Eu`. With one key for all three, `Gateway:Keys:Eu` alone works too. `Gateway:MaxResidency Eu` caps every model
+call's ceiling at `Eu` (register M2, identity design §4.7): without it a `public` assistant is checked and answered at
+`External`, for which no key exists (admin code `gateway_key_missing`). The AppHost forwards every `Gateway:*` value. The
 migrator seeds the profile as `pilot-embedding` (#123's default `EmbeddingProfile:Name`) and never changes it once it
 exists: a different model, dimension count or `RequestDimensions` needs a new volume (the migrator only logs that the
 profile differs from `EmbeddingProfile:*`).
@@ -181,6 +184,13 @@ database across restarts (the volume at `/var/lib/postgresql/data`, the cluster 
 `BlobStore__Root` = `~/.ume-rag/blobs/rag` (mode 0700) to the services; `BlobStore:Root` in the AppHost configuration
 wins. A dev volume created before #172 never held the database (it lived in an anonymous volume), so the first start
 after #172 begins with an empty database: run the seed (§4.4) again.
+
+**Open WebUI on the AppHost** (#251): with `Seed:Enabled=false` the `open-webui` container starts only for a configured
+client. Create the Open WebUI client (`POST /api/clients`, kind `open-webui`) and its key (`POST /api/keys`), then put
+the client's id in `OpenWebUi:ClientId` and the whole `ume-rag-sk-…` key in `Parameters:openwebui-api-key` (user
+secrets only) and restart the AppHost. Publish an assistant with that client in its audience; it then appears as a
+model in Open WebUI. `dotnet run --project src/Ume.Rag.AppHost` runs the Debug build even with `-c Release`, so build
+Debug first.
 
 ### 4.4 Seed a URL-list source (now on FakeGateway; for the pilot profile after 4.3)
 
