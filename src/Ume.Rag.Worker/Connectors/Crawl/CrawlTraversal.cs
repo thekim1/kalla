@@ -152,7 +152,9 @@ public sealed class CrawlTraversal(
             switch (e)
             {
                 case ListingEvent<CrawlCheckpoint>.Item { Work: var work }:
-                    admissions.Add(new FrontierAdmission(work.CanonicalIdentity, work.Url!.Authority, 0, false, work.Hints.SitemapLastMod));
+                    // The connector's seed URL is its path form (FetchUrl, #228).
+                    admissions.Add(new FrontierAdmission(work.CanonicalIdentity, work.Url!.Authority, 0, false, work.Hints.SitemapLastMod,
+                        FetchUrl: work.Url.OriginalString));
                     break;
                 case ListingEvent<CrawlCheckpoint>.Failure { Reason: CrawlConnector.RobotsUnreachable, Identity: var robotsUrl }:
                     await runs.PauseHostAsync(context.Run.RunId, new Uri(robotsUrl).Authority, CrawlConnector.RobotsUnreachable, null, cancellationToken);
@@ -198,13 +200,14 @@ public sealed class CrawlTraversal(
 
         var source = await connector.SourceAsync(context.Run.SourceId, context.Run.Classification, context.Settings, cancellationToken);
         var left = (await frontier.LeftSitemapAsync(context.Run, cancellationToken))
-            .Where(r => source.Scope.CheckIdentity(r.Url, source.Canonicalizer).Admitted).ToList();
+            .Where(r => source.Scope.CheckStored(r.Url, r.FetchUrl, source.Canonicalizer).Admitted).ToList();
         if (left.Count == 0)
         {
             return 0;
         }
 
-        var admitted = await frontier.AdmitAsync(context.Run, [.. left.Select(r => new FrontierAdmission(r.Url, r.Host, 0, r.Leaf, RemovalCheck: true))], cancellationToken);
+        var admitted = await frontier.AdmitAsync(context.Run, [.. left.Select(r => new FrontierAdmission(r.Url, r.Host, 0, r.Leaf, RemovalCheck: true, FetchUrl: r.FetchUrl))],
+            cancellationToken);
         await frontier.ClearSitemapLastModAsync(context.Run, [.. admitted.Admitted.Select(r => r.UrlHash)], cancellationToken);
         return admitted.Admitted.Count;
     }
@@ -220,7 +223,7 @@ public sealed class CrawlTraversal(
             return new CrawlFetchResult.Stale();
         }
 
-        var url = new Uri(row.Url);
+        var url = new Uri(row.RequestUrl);
         var robotsEntry = await robots.GetAsync(url, cancellationToken);
         await budget.RecordRobotsAsync(row.Host, robotsEntry, cancellationToken);
         if (robotsEntry.Status == RobotsStatus.Unreachable)
@@ -317,7 +320,7 @@ public sealed class CrawlTraversal(
         }
 
         return await PageLinks.LoadAsync(blobs, context.Run.Classification, hash, cancellationToken) is { } links
-            ? new CrawlPage(new FetchOutcome.NotModified(new Validators(row.ETag, row.LastModified)), links)
+            ? new CrawlPage(new FetchOutcome.NotModified(new Validators(row.ETag, row.LastModified), KnownPathForm(row)), links)
             : null;
     }
 
@@ -327,7 +330,8 @@ public sealed class CrawlTraversal(
         var hasValidators = row.ETag is not null || row.LastModified is not null;
         // A 304 expands the stored outlinks; without them the page is fetched in full so its links are not lost.
         var conditional = hasValidators && row.ContentHash is { } stored && await blobs.ExistsAsync(PageLinks.KeyOf(run.Classification, stored), cancellationToken);
-        var item = new WorkItem(IdentityKind.Url, row.Url, new Uri(row.Url), row.Depth,
+        // The request goes to the path form as found (#228); the identity, and so the document, stays the row's.
+        var item = new WorkItem(IdentityKind.Url, row.Url, new Uri(row.RequestUrl), row.Depth,
             new WorkHints(conditional ? new Validators(row.ETag, row.LastModified) : null, row.ContentHash, row.SitemapLastMod));
 
         var started = time.GetTimestamp();
@@ -342,7 +346,7 @@ public sealed class CrawlTraversal(
             var probe = await connector.ProbeAsync(context.FetchContext, item, cancellationToken);
             if (probe is null && context.Incremental)
             {
-                page = new CrawlPage(new FetchOutcome.NotModified(new Validators(row.ETag, row.LastModified)), null);
+                page = new CrawlPage(new FetchOutcome.NotModified(new Validators(row.ETag, row.LastModified), KnownPathForm(row)), null);
                 status = 200;
             }
             else
@@ -459,8 +463,9 @@ public sealed class CrawlTraversal(
                 continue;
             }
 
-            // The patterns match the path the link names, the frontier keeps its identity (§3.1 rule 10).
-            var scope = source.Scope.Check(UrlCanonicalizer.PathForm(link, source.Canonicalizer).Value!);
+            // The patterns match the path the link names, the frontier keeps its identity (§3.1 rule 10) and the path to fetch (#228).
+            var path = UrlCanonicalizer.PathForm(link, source.Canonicalizer).Value!;
+            var scope = source.Scope.Check(path);
             if (!scope.Admitted)
             {
                 continue;
@@ -473,7 +478,7 @@ public sealed class CrawlTraversal(
                 continue;
             }
 
-            admissions.Add(new FrontierAdmission(canonical, uri.Authority, (short)(depth + 1), scope.Leaf));
+            admissions.Add(new FrontierAdmission(canonical, uri.Authority, (short)(depth + 1), scope.Leaf, FetchUrl: path));
         }
 
         if (found.Count > 0)
@@ -495,7 +500,10 @@ public sealed class CrawlTraversal(
         return result.Admitted.Count;
     }
 
-    /// <summary>§3.3: fold only into a canonical in scope on the same host whose content hash, fetched in this run, equals the page's.</summary>
+    /// <summary>
+    /// §3.3: fold only into a canonical in scope (on the path form its frontier row keeps, <see cref="CrawlScope.CheckStored"/>)
+    /// on the same host whose content hash, fetched in this run, equals the page's.
+    /// </summary>
     private async Task<CanonicalFold> FoldAsync(CrawlRunContext context, FetchOutcome.Content content, CancellationToken cancellationToken)
     {
         if (content.Facts.CanonicalHint is not { } hint || string.Equals(hint, content.Facts.CanonicalIdentity, StringComparison.Ordinal))
@@ -505,12 +513,13 @@ public sealed class CrawlTraversal(
 
         var source = await connector.SourceAsync(context.Run.SourceId, context.Run.Classification, context.Settings, cancellationToken);
         var sameHost = string.Equals(new Uri(hint).Authority, content.Facts.FinalUrl!.Authority, StringComparison.OrdinalIgnoreCase);
-        if (sameHost && source.Scope.CheckIdentity(hint, source.Canonicalizer).Admitted)
+        if (sameHost)
         {
             var hash = Convert.ToHexStringLower(UrlCanonicalizer.IdentityHash(hint));
             var target = await frontier.GetAsync(context.Run.SourceId, context.Run.Classification, hash, cancellationToken);
             if (target is { LastFetchedAt: not null } && target.RunId == context.Run.RunId
-                && string.Equals(target.ContentHash, content.Raw.ContentHash, StringComparison.Ordinal))
+                && string.Equals(target.ContentHash, content.Raw.ContentHash, StringComparison.Ordinal)
+                && source.Scope.CheckStored(hint, target.FetchUrl, source.Canonicalizer).Admitted)
             {
                 return new CanonicalFold(CanonicalFoldKind.Folded, hint);
             }
@@ -540,6 +549,13 @@ public sealed class CrawlTraversal(
             await queue.EnqueueAsync([topUp.Continuation(context, opens)], null, cancellationToken);
         }
     }
+
+    /// <summary>
+    /// The row's kept path form for a document touched without a full response (a <c>lastmod</c> skip, a removal check's
+    /// <c>HEAD</c>): it becomes <c>Documents.Url</c> (#228); null keeps the stored one. A row that redirected has none: its
+    /// document is the target's.
+    /// </summary>
+    private static Uri? KnownPathForm(FrontierRow row) => row is { FetchUrl: { } path, RedirectTo: null } ? new Uri(path) : null;
 
     private static HostResponse Response(FetchOutcome outcome, TimeSpan latency) => outcome switch
     {

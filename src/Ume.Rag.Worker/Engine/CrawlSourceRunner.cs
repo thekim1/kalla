@@ -304,7 +304,8 @@ public sealed class CrawlSourceRunner(
         var completeness = CrawlReportSections.Completeness(record, verdict, options.Value.CompletenessRule, context.Incremental, failedSeeds.Count, history,
             policy.Current.IncompleteRunsAlert);
         var settings = crawl.Settings;
-        var live = all.Where(d => d.DeletedAt is null).Select(d => d.CanonicalIdentity).ToList();
+        // Demote counts over Documents.Url, the URL retrieval matches demote on (the path form on an identity-rule host, #228).
+        var live = all.Where(d => d.DeletedAt is null && d.Url is not null).Select(d => d.Url!).ToList();
         var report = new Dictionary<string, object>
         {
             ["completeness"] = completeness,

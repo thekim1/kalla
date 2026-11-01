@@ -137,7 +137,7 @@ public static class FetchOutcomes
     /// </summary>
     public static FetchOutcome From(HttpFetchResult result) => result switch
     {
-        HttpFetchResult.NotModified notModified => new FetchOutcome.NotModified(notModified.Validators),
+        HttpFetchResult.NotModified notModified => new FetchOutcome.NotModified(notModified.Validators, notModified.FinalUrl),
         HttpFetchResult.Status status => FromStatus(status),
         HttpFetchResult.Refused refused => new FetchOutcome.Refused(refused.Outcome, refused.Reason),
         HttpFetchResult.Skipped skipped => new FetchOutcome.Skipped(skipped.Reason),

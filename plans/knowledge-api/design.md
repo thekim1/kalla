@@ -717,7 +717,7 @@ order: score desc, distance asc (nulls last), chunk Id asc
   compiled once per config version; the worker keeps no copy of the factor on documents or chunks, so that column is
   the only input, and retrieval matches with the crawler's glob semantics (`UrlPattern`, connectors design §5.2).
 - Both multipliers go through the `IScoreAdjuster` seam (`CombinedAdjuster`). Age decay is applied (`RecencyAdjuster`);
-  `demote` is applied in retrieval (`DemoteAdjuster`) to `Documents.Url` (#102); on umea.se it matches path-form patterns once the crawl stores and fetches `FetchUrl ?? Url` (#228, open).
+  `demote` is applied in retrieval (`DemoteAdjuster`) to `Documents.Url` (#102); on umea.se it matches path-form patterns because the crawl stores and fetches `FetchUrl ?? Url` as the document URL.
 - Both multipliers apply after fusion in every mode and before dedup and the per-document cap; they never change
   coverage (§7 uses distances and keyword scores). A query over several collections uses each chunk's own
   collection `recency` (reasoning for both: [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)).

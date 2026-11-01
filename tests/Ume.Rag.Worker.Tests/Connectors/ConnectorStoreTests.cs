@@ -531,6 +531,52 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
     }
 
     [Fact]
+    public async Task The_frontier_keeps_the_latest_path_form_found_and_an_admission_without_one_keeps_it()
+    {
+        var store = new PostgresCrawlStore(Worker);
+        var first = await StartRunAsync(store, 100);
+        const string node = "https://www.umea.se/4.1c16b00a1742340e02e1dd1.html";
+        const string plain = "https://www.umea.se/bygga";
+        const string other = "https://www.umea.se/4.2c16b00a1742340e02e1dd2.html";
+        FrontierAdmission Found(string url, string? fetchUrl) => new(url, "www.umea.se", 0, false, FetchUrl: fetchUrl);
+        async Task<string?> FetchUrlAsync(string url) =>
+            (await store.GetAsync(first.SourceId, first.Classification, Found(url, null).UrlHash, Ct))!.FetchUrl;
+
+        // In one call the first admission with a path form wins; one equal to the identity, or too long for the column, is none.
+        await store.AdmitAsync(first,
+            [
+                Found(node, null), Found(node, "https://www.umea.se/a/sida.4.1c16b00a1742340e02e1dd1.html"), Found(node, "https://www.umea.se/b/sida.4.1c16b00a1742340e02e1dd1.html"),
+                Found(plain, plain), Found(other, "https://www.umea.se/" + new string('x', FrontierAdmission.MaxFetchUrlLength) + ".4.2c16b00a1742340e02e1dd2.html"),
+            ], Ct);
+        (await FetchUrlAsync(node)).ShouldBe("https://www.umea.se/a/sida.4.1c16b00a1742340e02e1dd1.html");
+        (await FetchUrlAsync(plain)).ShouldBeNull();
+        (await FetchUrlAsync(other)).ShouldBeNull();
+
+        async Task<CrawlRunKey> NextAsync(params FrontierAdmission[] urls)
+        {
+            var run = first with { RunId = Guid.NewGuid() };
+            await store.StartAsync(new CrawlRunRecord { RunId = run.RunId, Classification = run.Classification, SourceId = run.SourceId, MaxPages = 100, MaxDepth = 10 }, Ct);
+            await store.AdmitAsync(run, urls, Ct);
+            return run;
+        }
+
+        await NextAsync(Found(node, null));
+        (await FetchUrlAsync(node)).ShouldBe("https://www.umea.se/a/sida.4.1c16b00a1742340e02e1dd1.html", "an admission without a path form keeps the stored one");
+        var third = await NextAsync(Found(node, "https://www.umea.se/ny/sida.4.1c16b00a1742340e02e1dd1.html"));
+        (await FetchUrlAsync(node)).ShouldBe("https://www.umea.se/ny/sida.4.1c16b00a1742340e02e1dd1.html", "the latest path form found wins (a renamed page)");
+
+        foreach (var row in await store.ReleaseAsync(third, "www.umea.se", 10, Ct))
+        {
+            await store.CompleteAsync(third, row.UrlHash, new FrontierFacts(DateTimeOffset.UtcNow, 200, null, null, new string('c', 64), null), Ct);
+        }
+
+        var fourth = third with { RunId = Guid.NewGuid() };
+        await store.StartAsync(new CrawlRunRecord { RunId = fourth.RunId, Classification = fourth.Classification, SourceId = fourth.SourceId, MaxPages = 100, MaxDepth = 10 }, Ct);
+        (await store.MarkListedAsync(fourth, [Found(node, "https://www.umea.se/listad/sida.4.1c16b00a1742340e02e1dd1.html")], Ct)).Count.ShouldBe(1);
+        (await FetchUrlAsync(node)).ShouldBe("https://www.umea.se/listad/sida.4.1c16b00a1742340e02e1dd1.html", "a seed listed without a fetch refreshes it too");
+    }
+
+    [Fact]
     public async Task The_site_profile_reader_returns_the_applied_version_and_lastmod_reliable()
     {
         var reader = new PostgresSiteProfileReader(Worker);

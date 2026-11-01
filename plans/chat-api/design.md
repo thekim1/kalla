@@ -858,7 +858,7 @@ pilot.
 conversations (`ClientId`, `SubjectId`), upsert `chat."Feedback"` by (`MessageId`, `Source = api`), encrypt `reason` +
 `comment` as one JSON plaintext under the rated message's bucket key (§12.3; data-model §7: comments are personal
 data, same retention; in P1, mode `none`, a comment is refused with `comment_not_stored`), store `ReasonCategory` in plaintext (the reason if it is one of the fixed Open WebUI keys,
-`RateComment.svelte:17-35`, else `other`; admin design §8.1), adjust `AssistantDailyTotals.ThumbsUp/Down` by the delta.
+`RateComment.svelte:17-35`, or one of the API reasons of §3.5, else `other`; admin design §8.1), adjust `AssistantDailyTotals.ThumbsUp/Down` by the delta.
 
 ### 14.2 Open WebUI import job (`FeedbackImporter`)
 

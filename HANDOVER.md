@@ -1,8 +1,9 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-01, end of session 13; session 14 added below.
-Repo `~/research/rag`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
-every commit).
+State of the Ume.Rag work for the next session. Rewritten 2026-11-01, end of session 13; sessions 14–16 added below.
+**Direction since session 16: a complete demo first, details after it (`plans/demo-path.md`).**
+Repo `~/git/ume-rag-platform` (this computer; it was `~/research/rag` on the other one), branch `main`, remote `origin` =
+https://github.com/thekim1/ume-rag-platform (push after every commit).
 
 ## What this is
 
@@ -10,7 +11,7 @@ every commit).
 of the team's **LLM gateway** (`~/git/llmgateway`, https://github.com/thekim1/llmgateway). The user owns the gateway
 and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monolith. Design and code live in this repo.
 
-## Where we are (end of session 13; session 14 below)
+## Where we are (end of session 13; sessions 14–16 below, session 16 is the latest)
 
 - **Design** complete. **P0** done and released as `v0.1.0` (2026-10-31). **P1** is built "code first, live testing
   last" (user, 2026-10-31).
@@ -51,6 +52,9 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 ## How we work (user preferences, binding)
 
+- **Demo first, details after (user, 2026-11-01):** work toward the complete demo of `plans/demo-path.md` before any deep dive.
+  Don't over-engineer tests: no extra negative proofs, probes or flake hunts unless a change needs one; merge on green CI.
+  Adversarial review of stream B's security-relevant parts stays (it found real bugs), but keep it proportionate.
 - **Autonomy:** work on your best recommendations; merge stream-A PRs that are obviously ready (verified locally,
   reviewed) without asking. **Handle GitHub without being asked** (user, 2026-11-01): review new and updated stream-B
   PRs (approve / request changes with local evidence), answer B's issues, take the decisions that are the main
@@ -133,6 +137,55 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 | AppHost (B) | `src/Ume.Rag.AppHost/` | dev run fixed (#172: `vector`, PGDATA in `pgdata/`, blob root); `open-webui` resource (#206) |
 | Deploy | `deploy/` | Compose `Knowledge__PublicBaseUrl` (#213); Keycloak realm additions `deploy/keycloak/` (#207, local redirects opt-in #211) |
 | Tests / CI | `tests/`, `.github/workflows/` | Worker.Tests in four parallel collections, finalizer 0.2 s (#174: 4 min → ~45 s, Verify ≈ 3–4 min); `evaluation-smoke` job (#220) |
+
+## Session 16 (2026-11-01, new computer; ended: demo-first plan, AppHost left running)
+
+- **User direction:** "try not overcomplicate every test etc.; adjust the plans so we can come to a complete demo / test
+  of the platform with RAG / chat / crawling; after that dive deeper". Written down in **`plans/demo-path.md`** (the
+  five steps, and what is deliberately deferred). Merge on green CI; no extra negative proofs unless a change needs one.
+- **New computer set-up done:** `rag_key.txt` and `rag_gateway_url.txt` in the repo root (mode 600, in
+  `.git/info/exclude`); AppHost user secrets hold `Gateway:BaseUrl`, `Gateway:Keys:Eu`, `FakeGateway:Enabled=false`, the
+  `EmbeddingProfile:*` values (`text-embedding-3-large`, 1024, `RequestDimensions`, 8191, `Eu`) and
+  `DevelopmentVolumes:Postgres=ume-rag-pilot-postgres`. The gateway answers `GET /v1/models` 200 with the key. Local test
+  images `ume-rag.local/{postgres:ci,clamav:dev,parser:ci}` built. **Git over HTTPS needs a workaround here:** git's
+  credential manager opens a dialog nobody answers; use `git -c credential.helper= -c 'credential.helper=!gh auth
+  git-credential' fetch|push …` (no config change). `gh` works. `gh` acts as `ume-nichlas`, not `Crotalus`.
+- **AppHost is RUNNING** (`aspire start`, `Seed__Enabled=false`, started 2026-11-01 ~18:16, dashboard
+  `https://localhost:17470`): migrations finished, worker, api, adminapi, keycloak, parser, clamav, postgres up; **empty
+  database**, no pilot data, no `open-webui` container (it starts when `OpenWebUi:ClientId` and
+  `Parameters:openwebui-api-key` are set, #236 is done). Next: step 2 of `plans/demo-path.md`.
+- **Doc restructure done** (`plans/doc-restructure.md`, 9 commits): the four passes are folded into the detail
+  documents (present tense, no PR history) and marked not binding, each with a rule **ledger** at its end; precedence is
+  **two layers: Decisions table (status column, rows `current` bind) > detail document** (AGENTS.md, plans/README.md,
+  prompts); `to-verify.md` has a status column; P0 retired in place; `scripts/check-doc-refs.py` checks every `§`
+  citation and link and runs in CI (job `doc-refs`). Follow-ups at the end of `plans/doc-restructure.md`. Design sync
+  still to do for stream B's P1b items 9–10 (#254–#263) and later.
+- **Merged by me/with the user's approval:** #244 (seed suffix), #245 (doc-refs CI), #268 (`CrawlFrontier.FetchUrl`, the
+  crawl keeps and fetches the path form; #228 closed). `main` = `a588317` + later; CI green incl. `doc-refs` (run
+  41333673980).
+- **Open PRs of mine (green locally, runner jobs were finishing; merge needs the user's explicit OK, the auto-mode check
+  blocks my `gh pr merge` otherwise):** #269 faster host-slot livelock test (it flaked ~1 in 12: monitor used `now()`;
+  now 4 req/s, 2.6 s instead of 9 s, `clock_timestamp()`), #270 evaluator applies source demote (L3), #271 removes
+  compatibility-only worker code. Worktrees `../rag-a2`, `../rag-a3`, `../rag-a4`.
+- **Stream B (it merges its own PRs, often before my review lands):** merged #247 (gateway-address scrubbing), #254–#263
+  (P1b item 9 admin API parts, item 10 parts a–b). **My reviews:** #263 and #264 changes requested; **#264 still open**
+  (stacked, B's #267 on it): its required fix is that concurrent ratings of one message corrupt the thumbs totals
+  (probe: 2 parallel ratings → both thumbs counted in 9 of 10). **Issues filed for B:** #265 (rag-admin's `org-sync`
+  HttpClient keeps the standard resilience handler: Polly logs the gateway host at Warning/Error), #266 (issued
+  conversation ids are not bound to the assistant; the writer's `ON CONFLICT ("Id")` doesn't check the owner; proven by
+  probes), #246 (restructure notice). Decision taken on #264: API feedback reasons keep their own `ReasonCategory`
+  (no CHECK on the column; chat §14.1 / admin §8.1 updated). New since the handover and not read: #249, #252, #256.
+- **To do for stream A, small:** add `Security:ConversationIdKeys` (≥ 32 bytes per key, hand-off L6) to the Compose files
+  and `init-deployment.sh`: `rag-api` refuses to start in Production without it. Not blocking the demo (Development gets a
+  per-process key).
+- **Lessons this session:** an implementor/agent report is a claim: check headings (never change heading text), run the
+  ref check, spot-check as-built claims against the code. Resilience handlers (Polly) log exception text; a test that
+  removes the handler from its client hides it. Timing assertions need `clock_timestamp()`, not `now()`, when sampling
+  from the database. Squash-merged B PRs differ from the copies a branch carries: recreate the branch from
+  `origin/main` and cherry-pick the stream-A commit instead of merging.
+- **Scratchpad helpers do not survive:** `verify.sh <worktree> <cores> <branch|main> [full]` (build, Worker.Tests ×2,
+  Pipelines, Contract, ownership; `full` adds the other projects and the smoke test), `watch.sh` (GitHub watcher),
+  `adm.py` (to write: OIDC sign-in, XSRF header), `cells.py`. Recreate only what the demo needs (`adm.py`).
 
 ## Session 15 (2026-11-01, ended: moving to another computer)
 
@@ -272,24 +325,23 @@ or reveal through the admin API (`POST /api/keys/{id}/reveal`, audited).
 
 ## Next step
 
-1. **Set up the new computer and check `main` and GitHub** ("At the restart (session 16)" above): recreate `verify.sh`,
-   `watch.sh`, `adm.py`, `ret.sh`; dispatch `verify.yml` on `main` and run the local suites; arm the watcher. Check B's fix
-   for **#232** when it comes (span exception events still hold the gateway host:port; probe as in the #238 review).
-   Answer #236/#237/#243 when B replies. Don't nudge B.
-2. **When B merges #239 and #241:** open and merge `a/228-fetch-url`, then `a/l3-eval-demote`, then `a/compat-sweep`
-   (each: merge `origin/main`, evidence, PR); check `main`.
-3. **Pilot, with the user:** rebuild the pilot set-up on the new computer's AppHost (session 14's list) and crawl Turkos
-   once with the FetchUrl code; Open WebUI once #236 lands → the first cited answer from `turkos` (item 22 rehearsal;
-   the user signs in). Gold set: the user hands `plans/p1/gold-set/Turkos-guldstandard-utkast.xlsx` to DoIT and names the
-   owner and date (U-f); after DoIT's review, map the ids to the new database, enter the rows as `human` questions,
-   run the three-way evaluation (item 21) and set the thresholds. The rest of umea.se (other sections, `/download/`
-   PDFs ≈ 8,700; `maxPages` ≥ 20,000) when the user wants it.
-4. **Stream-A code left:** P1b item 15 `e2e` (after L7); item 17 importer settings (after L6); item 19 pin review before
-   go-live (incl. condense `Eu` → `OnPrem`, #204); Aspire 13.6.1 → 13.6.4 (shared props + B's AppHost); README line for
-   `audit.yml` (shared, own PR); two stale wording spots in B's code (compat-sweep report, above) for a later B issue.
-5. **Live block** (`plans/p1b/README.md` §5 step 4): gold set (item 21), EU-route capacity (item 19: the gateway key's
-   rate limit was the bound — 60/min throttled the crawl), the user hands `docs/gateway-host-setup.md` to Hermes.
-6. Then the restructure (`plans/doc-restructure.md`).
+**Goal: the demo of `plans/demo-path.md`: a cited answer from crawled umea.se pages in Open WebUI. Everything else waits.**
+
+1. **Check the stack and GitHub** (5 minutes): `aspire describe` (if the AppHost is down, `export Seed__Enabled=false; aspire start
+   --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive`; `aspire` is
+   `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire`); open PRs and CI; ask the user to merge
+   #269–#271 (or merge them if allowed).
+2. **Set-up through the admin API** (recreate `adm.py`: `/bff/login` → Keycloak form with the dev `rag-platform-admin` →
+   form_post to `/signin-oidc`; writes need `X-Requested-With: XMLHttpRequest` and `X-XSRF-TOKEN` from the `RAG-XSRF-TOKEN`
+   cookie). Order in session 14 below (J7). Crawl slice: `maxPages` ≈ 200.
+3. **Crawl once**, check `/v1/retrieve` (body is snake_case: `query`, `collections` slugs, `top_k`), then **Open WebUI**
+   (secrets `OpenWebUi:ClientId`, `Parameters:openwebui-api-key`; restart the AppHost) and ask a question.
+4. **Record the result** (progress.md, this file). Then, and only then, the deferred list of `plans/demo-path.md`.
+
+**After the demo, in this order (user decides):** gold set → DoIT, three-way evaluation, thresholds (item 21); EU-route capacity
+(item 19); stream-A leftovers (P1b item 15 `e2e`, item 17 importer settings, pin review, Aspire 13.6.4, `ConversationIdKeys`
+in Compose); design sync of stream B's merged items 9–10; review B's fixes for #264/#265/#266 when they come (don't nudge);
+the rest of umea.se when wanted.
 
 **Open issues to stream B:** #80, #90, #102, #129, #132, #75, #52, #228, #232, #236, #237, #243 (#134 closed by B). Stream A's own: #48, #51. For the user: #100
 (L8 run steps), #215 (J8, realm additions for the gateway session). Hand-offs received: #193 (J7), #210 (J9).

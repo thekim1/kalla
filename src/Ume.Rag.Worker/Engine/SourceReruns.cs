@@ -57,14 +57,16 @@ public sealed class SourceReruns(
 
     private const int Page = 100;
 
-    // The latest item of each identity in the source's earlier runs; those that failed, unless their document is deleted.
+    // The latest item of each identity in the source's earlier runs; those that failed, unless their document is deleted. With
+    // the URL it was found or fetched under: its frontier row's FetchUrl (UrlHash = SHA-256 of the identity), else Documents.Url.
     private const string FailedSql = """
-        SELECT last."Identity", last."DocumentId", last."Reason" FROM (
+        SELECT last."Identity", last."DocumentId", last."Reason", coalesce(f."FetchUrl", d."Url") FROM (
             SELECT DISTINCT ON (i."Identity") i."Identity", i."DocumentId", i."Reason", i."Outcome"
             FROM content."RunItems" i JOIN content."Runs" r ON r."Id" = i."RunId"
             WHERE r."SourceId" = $1 AND i."RunId" <> $2 AND i."Outcome" <> 'superseded'
             ORDER BY i."Identity", i."CreatedAt" DESC, i."Id" DESC) last
         LEFT JOIN content."Documents" d ON d."Id" = last."DocumentId"
+        LEFT JOIN content."CrawlFrontier" f ON f."Classification" = $3 AND f."SourceId" = $1 AND f."UrlHash" = sha256(convert_to(last."Identity", 'UTF8'))
         WHERE last."Outcome" = 'failed' AND d."DeletedAt" IS NULL
         ORDER BY last."Identity"
         """;
@@ -134,7 +136,7 @@ public sealed class SourceReruns(
             _ => uploadConnector,
         };
         var work = new List<WorkItem>();
-        foreach (var (identityText, last) in await FailedAsync(source.SourceId, run.Id, cancellationToken))
+        foreach (var (identityText, last) in await FailedAsync(source, run.Id, cancellationToken))
         {
             if (connector.FromIdentity(identityText, last) is { } item)
             {
@@ -189,26 +191,38 @@ public sealed class SourceReruns(
         await urlLists.TopUpAsync(source, run.Id, null, cancellationToken);
     }
 
-    /// <summary>Only URLs still in scope, admitted as leaves.</summary>
+    /// <summary>
+    /// Only URLs still in scope, admitted as leaves: the scope is checked on the path form the URL was found or fetched
+    /// under, and on its identity where none is kept (<see cref="CrawlScope.CheckStored"/>); the path form stays the row's fetch URL.
+    /// </summary>
     private async Task RetryCrawlAsync(SourceContext source, RunRow run, List<WorkItem> work, CancellationToken cancellationToken)
     {
         var context = await crawls.StartAsync(source, run, incremental: false, force: false, cancellationToken);
         var crawl = await crawlConnector.SourceAsync(source.SourceId, source.Classification, source.Settings, cancellationToken);
-        await frontier.AdmitAsync(context.Run, [.. work.Where(w => crawl.Scope.CheckIdentity(w.CanonicalIdentity, crawl.Canonicalizer).Admitted)
-            .Select(w => new FrontierAdmission(w.CanonicalIdentity, w.Url!.Authority, 0, Leaf: true))], cancellationToken);
+        var admissions = new List<FrontierAdmission>();
+        foreach (var item in work)
+        {
+            var path = CrawlScope.PathFormOf(item.CanonicalIdentity, item.Url!.OriginalString, crawl.Canonicalizer);
+            if ((path is null ? crawl.Scope.CheckIdentity(item.CanonicalIdentity, crawl.Canonicalizer) : crawl.Scope.Check(path)).Admitted)
+            {
+                admissions.Add(new FrontierAdmission(item.CanonicalIdentity, item.Url.Authority, 0, Leaf: true, FetchUrl: path));
+            }
+        }
+
+        await frontier.AdmitAsync(context.Run, admissions, cancellationToken);
         await runs.SetPhaseAsync(run.Id, RunPhases.Fetch, null, cancellationToken);
         await crawls.TopUpAsync(context, cancellationToken);
     }
 
-    private async Task<IReadOnlyList<(string Identity, FailedItem Last)>> FailedAsync(Guid sourceId, Guid runId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<(string Identity, FailedItem Last)>> FailedAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)
     {
         var failed = new List<(string, FailedItem)>();
         await using var connection = await database.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(FailedSql, connection) { Parameters = { Db.P(sourceId), Db.P(runId) } };
+        await using var command = new NpgsqlCommand(FailedSql, connection) { Parameters = { Db.P(source.SourceId), Db.P(runId), Db.P(source.Classification) } };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            failed.Add((reader.GetString(0), new FailedItem(Db.Nullable<Guid>(reader, 1), Db.String(reader, 2))));
+            failed.Add((reader.GetString(0), new FailedItem(Db.Nullable<Guid>(reader, 1), Db.String(reader, 2), Db.String(reader, 3))));
         }
 
         return failed;

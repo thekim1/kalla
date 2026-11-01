@@ -1110,7 +1110,8 @@ review, `sensitive` flow, access log) are built when A1 allows stored content.
   metadata (`Outcome`, `Coverage`, `Language`, the assistant version that answered from `Messages.AssistantVersionId`),
   cited document titles (`MessageSources.DocumentId` → `Documents.Title`), assistant and client names. **No content**: no question, answer, title or comment.
 - **Reason category** in plaintext: `Feedback.ReasonCategory` filled by the importer and `/v1/feedback` only from the
-  fixed Open WebUI keys (`RateComment.svelte:17-35`), else `other`; the free text stays in the ciphertext (in P1 it is not stored, weakness review §4). Swedish
+  fixed Open WebUI keys (`RateComment.svelte:17-35`) and the API reasons of chat design §3.5 (`incorrect`, `incomplete`,
+  `wrong_sources`, `not_relevant`, `other`), else `other` (the column has no CHECK, so a reason keeps its own category); the free text stays in the ciphertext (in P1 it is not stored, weakness review §4). Swedish
   labels in `labels.ts`.
 - `ReviewState` (`open`/`reviewed`/`dismissed`) set by `FeedbackComments` holders ("Markera som hanterad"). Filters:
   period, assistant, rating, outcome, has comment, state. Totals from `AssistantDailyTotals`.
