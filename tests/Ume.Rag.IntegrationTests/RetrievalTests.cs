@@ -113,15 +113,17 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
     [Fact]
     public async Task The_stop_list_drops_lexemes_in_more_than_thirty_percent_of_the_scope_from_K()
     {
-        // 1,200 chunks: "Umeå kommun informerar" in all, "simhall" in a third (400 > 360), "bygglov" in a tenth.
+        // 1,200 chunks: "Umeå kommun informerar" in all, "simhall" in a third (400 > 360), "xylofon" in a tenth. The topic word
+        // is used by no other test: these chunks stay in the shared database and move its statistics (the planner's choices
+        // in IngestionSchemaTests).
         var collection = Guid.NewGuid();
-        var bygglov = new HashSet<Guid>();
+        var xylofon = new HashSet<Guid>();
         for (var document = 0; document < 12; document++)
         {
             var spec = Enumerable.Range(0, 100).Select(i => document * 100 + i).ToList();
             var doc = await _writer.AddDocumentAsync(Doc(collection), [.. spec.Select(n => new FixtureChunk(
-                $"Umeå kommun informerar om sida {n}{(n % 3 == 0 ? " simhall" : "")}{(n % 10 == 0 ? " bygglov" : "")}") { Embedding = V(1, 0, 0) })], Ct);
-            bygglov.UnionWith(spec.Select((n, i) => (n, i)).Where(p => p.n % 10 == 0).Select(p => doc.ChunkIds[p.i]));
+                $"Umeå kommun informerar om sida {n}{(n % 3 == 0 ? " simhall" : "")}{(n % 10 == 0 ? " xylofon" : "")}") { Embedding = V(1, 0, 0) })], Ct);
+            xylofon.UnionWith(spec.Select((n, i) => (n, i)).Where(p => p.n % 10 == 0).Select(p => doc.ChunkIds[p.i]));
         }
 
         var (engine, index, sizes) = Engine();
@@ -130,19 +132,19 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
         var lexemes = (await index.FrequentLexemesAsync(100, 0.10, Ct)).Where(l => l.CollectionId == collection).ToDictionary(l => l.Lexeme, l => l.Chunks);
         lexemes["kommun"].ShouldBe(1200);
         lexemes["simhall"].ShouldBe(400);
-        lexemes["bygglov"].ShouldBe(120);
+        lexemes["xylofon"].ShouldBe(120);
         lexemes.Keys.ShouldNotContain("1"); // "sida {n}" numbers are in one chunk each, under 10 %
         var stop = await sizes.StopLexemesAsync(Scope(collection), Ct);
         stop.ShouldContain("kommun");
         stop.ShouldContain("simhall");
-        stop.ShouldNotContain("bygglov");
+        stop.ShouldNotContain("xylofon");
 
         // Through the engine: only the topic word is searched, so every keyword hit has it.
-        var result = await engine.SearchAsync(new SearchRequest("bygglov för simhall i Umeå kommun", Scope(collection), Mode: RetrievalMode.Keyword), Ct);
+        var result = await engine.SearchAsync(new SearchRequest("xylofon för simhall i Umeå kommun", Scope(collection), Mode: RetrievalMode.Keyword), Ct);
         result.Hits.Count.ShouldBe(10);
-        result.Hits.ShouldAllBe(h => bygglov.Contains(h.Candidate.ChunkId));
-        (await index.KeywordAsync(Scope(collection) with { KeywordStopLexemes = stop }, "bygglov för simhall i Umeå kommun", null, 200, Ct)).Count.ShouldBe(120);
-        (await index.KeywordAsync(Scope(collection), "bygglov för simhall i Umeå kommun", null, 200, Ct)).Count.ShouldBe(200); // no stop list: everything
+        result.Hits.ShouldAllBe(h => xylofon.Contains(h.Candidate.ChunkId));
+        (await index.KeywordAsync(Scope(collection) with { KeywordStopLexemes = stop }, "xylofon för simhall i Umeå kommun", null, 200, Ct)).Count.ShouldBe(120);
+        (await index.KeywordAsync(Scope(collection), "xylofon för simhall i Umeå kommun", null, 200, Ct)).Count.ShouldBe(200); // no stop list: everything
 
         // Stop lexemes only: no query, no candidates, like stop words (the vector side still answers in hybrid).
         (await engine.SearchAsync(new SearchRequest("Umeå kommun", Scope(collection), Mode: RetrievalMode.Keyword), Ct)).Hits.ShouldBeEmpty();
