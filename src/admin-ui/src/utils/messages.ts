@@ -15,6 +15,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   model_residency: 'Modellen {model} kan inte användas på nivåns tak {ceiling}.',
   model_not_listed: 'AI-gatewayen erbjuder inte {model} på {ceiling} just nu. Försök igen senare.',
   gateway_unavailable: 'AI-gatewayen gick inte att nå för att kontrollera modellen. Försök igen.',
+  gateway_key_missing: 'Ingen nyckel till AI-gatewayen är inställd för {ceiling}, så {model} kan inte kontrolleras där. Kontakta plattformsadministratören.',
   policy_rule: 'Dataskyddsinställningen bryter mot en regel: {rule}',
   not_in_scope: 'Förvaltningen hör inte till dina förvaltningar.',
   no_embedding_profile: 'Det finns ingen standardprofil för inbäddning. Kontakta plattformsteamet.',
