@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Ume.Rag.Domain;
 using Ume.Rag.Pipelines.Processing;
 
@@ -75,8 +77,80 @@ public interface IParseObservationStore
     Task AddAsync(ParseObservationRecord observation, CancellationToken cancellationToken);
 }
 
-/// <summary>The unique key of <c>content."ChunkSets"</c> (engine design §14).</summary>
-public sealed record ChunkSetKey(Guid DocumentId, Guid PipelineVersionId, Guid? SiteProfileVersionId, Guid EmbeddingProfileId, byte[] ContentHash);
+/// <summary>
+/// The unique key of <c>content."ChunkSets"</c> (engine design §14; <c>IX_ChunkSets_Key</c>, nulls not distinct), with its salt
+/// <paramref name="ParseRuleKey"/> (<see cref="ChunkSetSalt"/>).
+/// </summary>
+public sealed record ChunkSetKey(Guid DocumentId, Guid PipelineVersionId, Guid? SiteProfileVersionId, Guid EmbeddingProfileId, byte[] ContentHash,
+    string? ParseRuleKey = null)
+{
+    /// <summary>
+    /// True when the set with key <paramref name="set"/> is this wanted key's: every part equal, and the salt equal or, when
+    /// this key is not forced, the set's rule part equal (<see cref="ChunkSetSalt.RulePart"/>). So a forced set stays current
+    /// for later normal runs until something it was built from changes, and only a retry of the same forced run finds its own set.
+    /// </summary>
+    public bool IsMetBy(ChunkSetKey set)
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        return set.DocumentId == DocumentId &&
+               set.PipelineVersionId == PipelineVersionId &&
+               set.SiteProfileVersionId == SiteProfileVersionId &&
+               set.EmbeddingProfileId == EmbeddingProfileId &&
+               set.ContentHash.AsSpan().SequenceEqual(ContentHash) &&
+               string.Equals(ChunkSetSalt.IsForced(ParseRuleKey) ? set.ParseRuleKey : ChunkSetSalt.RulePart(set.ParseRuleKey), ParseRuleKey,
+                   StringComparison.Ordinal);
+    }
+}
+
+/// <summary>
+/// <c>ChunkSets."ParseRuleKey"</c> (#134; engine design §14), the one salt of the chunk-set key, for the two things that
+/// change a set without changing its other key parts. Its <b>rule part</b> names the admin parse rules the parse stage took
+/// as candidates (<c>rule:{profileId}@{revision},…</c>, the parse key's <c>parseRule</c> input, processing design §3.5;
+/// a SHA-256 of it when too long), null when none applies. A <b>forced reprocess</b> (engine design §8) puts
+/// <c>force:{executionId}</c> before it (<c>;</c> between), so the forced run writes its own set and swaps it. A document
+/// wants only the rule part (<see cref="ChunkSetKey.IsMetBy"/>).
+/// </summary>
+public static class ChunkSetSalt
+{
+    /// <summary>The column's length (data-model §2.2).</summary>
+    public const int MaxLength = 300;
+
+    private const string RulePrefix = "rule:";
+    private const string ForcePrefix = "force:";
+    private const char Separator = ';';
+    // "force:" and the execution id in "N" form.
+    private const int ForceLength = 6 + 32;
+    private const int MaxRuleLength = MaxLength - ForceLength - 1;
+
+    /// <summary>The rule part for the admin rules' parse-key input <paramref name="candidatesKey"/> (<c>AdminParseRuleSet.Key</c>); null for none.</summary>
+    public static string? Rule(string? candidatesKey)
+    {
+        if (candidatesKey is null)
+        {
+            return null;
+        }
+
+        var readable = RulePrefix + candidatesKey;
+        return readable.Length <= MaxRuleLength
+            ? readable
+            : RulePrefix + "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(candidatesKey)));
+    }
+
+    /// <summary>The salt of a set built with <paramref name="rulePart"/>, forced by execution <paramref name="forcedExecutionId"/> when set.</summary>
+    public static string? Of(string? rulePart, Guid? forcedExecutionId) =>
+        forcedExecutionId is { } execution
+            ? ForcePrefix + execution.ToString("N") + (rulePart is null ? string.Empty : Separator + rulePart)
+            : rulePart;
+
+    /// <summary>True when <paramref name="salt"/> is a forced run's.</summary>
+    public static bool IsForced(string? salt) => salt is not null && salt.StartsWith(ForcePrefix, StringComparison.Ordinal);
+
+    /// <summary>The rule part of <paramref name="salt"/>: the salt itself unless it is forced.</summary>
+    public static string? RulePart(string? salt) =>
+        !IsForced(salt) ? salt
+        : salt!.Length > ForceLength + 1 ? salt[(ForceLength + 1)..]
+        : null;
+}
 
 /// <summary><c>ChunkSets."State"</c> values (data-model §2.2).</summary>
 public static class ChunkSetState

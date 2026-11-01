@@ -448,11 +448,11 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         // Only the URL listed before and missing now has left the sitemap; the linked page never was in it.
         var left = await store.LeftSitemapAsync(second, Ct);
         left.Select(r => r.Url).ShouldBe([urls[2]]);
-        var checks = await store.AdmitAsync(second, [.. left.Select(r => new FrontierAdmission(r.Url, r.Host, FrontierRow.RemovalCheckDepth, false))], Ct);
+        var checks = await store.AdmitAsync(second, [.. left.Select(r => new FrontierAdmission(r.Url, r.Host, 0, false, RemovalCheck: true))], Ct);
         await store.ClearSitemapLastModAsync(second, [.. checks.Admitted.Select(r => r.UrlHash)], Ct);
 
         var check = (await store.GetAsync(second.SourceId, "public", checks.Admitted.Single().UrlHash, Ct))!;
-        (check.Depth, check.State, check.SitemapLastMod, check.IsRemovalCheck).ShouldBe((FrontierRow.RemovalCheckDepth, FrontierState.Pending, (DateTimeOffset?)null, true));
+        (check.Depth, check.State, check.SitemapLastMod, check.RemovalCheck).ShouldBe(((short)0, FrontierState.Pending, (DateTimeOffset?)null, true));
         (await store.GetAsync(second.RunId, Ct))!.ShouldSatisfyAllConditions(r => r.Seeds.ShouldBe(2), r => r.Admitted.ShouldBe(3));
         (await store.LeftSitemapAsync(second, Ct)).ShouldBeEmpty();
     }
@@ -506,8 +506,42 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         results[_site.Url("/f/keep").AbsoluteUri].ShouldBeOfType<CrawlFetchResult.Done>().ShouldSatisfyAllConditions(
             d => d.Outcome.ShouldBeOfType<FetchOutcome.Content>(), d => d.Facts.ShouldContain(CrawlTraversal.RemovalCheck));
         (await Sql.ScalarAsync<long>(database.Connection(null),
-            """SELECT count(*) FROM content."CrawlFrontier" WHERE "SourceId" = $1 AND "Depth" = -1 AND "SitemapLastMod" IS NULL AND "RunId" = $2""", source, second.Run.RunId))
+            """SELECT count(*) FROM content."CrawlFrontier" WHERE "SourceId" = $1 AND "RemovalCheck" AND "Depth" = 0 AND "SitemapLastMod" IS NULL AND "RunId" = $2""", source, second.Run.RunId))
             .ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task A_removal_check_row_written_at_depth_minus_one_before_the_flag_is_still_a_removal_check()
+    {
+        // A frontier row admitted for the removal check by a worker before #102 (Depth -1, RemovalCheck false) can outlive a deploy.
+        var store = new PostgresCrawlStore(Worker);
+        await using var rig = CrawlRig.Create(_site, hosts: new PostgresCrawlHostStore(Worker), store: (store, store));
+        var source = Guid.NewGuid();
+        var settings = ContractJson.ToElement(new CrawlSettings { StartUrls = [_site.Url("/").AbsoluteUri], Sitemaps = [_site.Url("/fresh.xml").AbsoluteUri] });
+        CrawlRunContext Run() => new(new CrawlRunKey(source, "public", Guid.NewGuid()), Guid.NewGuid(), SyncKind.Sync, RunTrigger.Manual, settings, Revalidate: false);
+        _fresh["/f/keep"] = "2026-01-15";
+        _fresh["/f/gone"] = "2026-01-15";
+        await rig.CrawlAsync(Run());
+        _freshStatus["/f/gone"] = 404;
+        var second = Run();
+        await rig.Traversal.StartAsync(second, Ct);
+        foreach (var path in new[] { "/f/keep", "/f/gone" })
+        {
+            await Sql.ExecuteAsync(database.Connection(null), """
+                UPDATE content."CrawlFrontier" SET "State" = 'pending', "RunId" = $2, "Depth" = -1, "RemovalCheck" = false, "SitemapLastMod" = NULL
+                WHERE "SourceId" = $1 AND "Url" = $3
+                """, source, second.Run.RunId, _site.Url(path).AbsoluteUri);
+        }
+
+        await rig.TopUp.TopUpAsync(second, null, null, Ct);
+        var results = await rig.DrainAsync(second);
+
+        results.Keys.Order(StringComparer.Ordinal).ShouldBe([_site.Url("/f/gone").AbsoluteUri, _site.Url("/f/keep").AbsoluteUri]);
+        results[_site.Url("/f/gone").AbsoluteUri].ShouldBeOfType<CrawlFetchResult.Done>().ShouldSatisfyAllConditions(
+            d => d.Outcome.ShouldBe(new FetchOutcome.Gone("http.404")), d => d.Facts.ShouldContain(CrawlTraversal.RemovalCheck));
+        results[_site.Url("/f/keep").AbsoluteUri].ShouldBeOfType<CrawlFetchResult.Done>().ShouldSatisfyAllConditions(
+            d => d.Outcome.ShouldBeOfType<FetchOutcome.Content>(), d => d.Facts.ShouldContain(CrawlTraversal.RemovalCheck));
+        (await store.GetAsync(second.Run.RunId, Ct))!.ShouldSatisfyAllConditions(r => r.Seeds.ShouldBe(0), r => r.SeedsFailed.ShouldBe(0));
     }
 
     /// <summary>

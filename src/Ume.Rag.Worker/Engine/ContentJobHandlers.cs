@@ -193,8 +193,10 @@ public sealed partial class ParseJobHandler(
 /// <summary>
 /// <c>embed</c> jobs: the <c>embed</c> and <c>index</c> stages of one document (engine design §7.4, §14; processing design
 /// §11). The wanted set (document, pipeline version, site-profile version, the collection's embedding profile, content
-/// hash) that is already the live one is <c>unchanged</c>; a <c>superseded</c> one is swapped back; when the live set was
-/// built from the same chunks (a noise-only change or a version change no stage noticed) it is re-keyed in one row; else the
+/// hash, and the salt the segment computed, <see cref="EmbedPayload.ParseRuleKey"/>) that the live one already meets
+/// (<see cref="ChunkSetKey.IsMetBy"/>) is <c>unchanged</c>; a <c>superseded</c> one is swapped back; when the live set was
+/// built from the same chunks (a noise-only change, a version change no stage noticed, or a parse-rule change that left the
+/// chunks as they were) it is re-keyed in one row, except for a forced reprocess, which always writes its own set; else the
 /// chunks are embedded (cache first), written invisible, and swapped in one fenced transaction with the run item and the
 /// job's completion. The swap re-checks that the source's published version is still the one written, so a slow write of
 /// an old version never overtakes a newer one; a set of a <c>public</c> collection that personal data flagged goes in
@@ -276,13 +278,15 @@ public sealed partial class EmbedJobHandler(
         }
 
         var draft = input.Value;
-        var key = new ChunkSetKey(document.Id, payload.PipelineVersionId, document.SiteProfileVersionId, source.EmbeddingProfileId, contentHash);
+        var key = new ChunkSetKey(document.Id, payload.PipelineVersionId, document.SiteProfileVersionId, source.EmbeddingProfileId, contentHash,
+            payload.ParseRuleKey);
         var live = await index.LiveAsync(document.Id, cancellationToken);
-        var existing = await index.FindAsync(key, cancellationToken);
-        if (existing is not null && live?.Id == existing.Id)
+        if (live is not null && key.IsMetBy(live.Key))
         {
             return await Terminal(source, payload, job, document, Outcome.Unchanged, null, cancellationToken);
         }
+
+        var existing = await index.FindAsync(key, cancellationToken);
 
         if (existing is { State: ChunkSetStates.Superseded })
         {
@@ -297,7 +301,8 @@ public sealed partial class EmbedJobHandler(
             await index.DeleteWritingAsync(existing.Id, cancellationToken);
         }
 
-        if (existing is null && live is not null && live.Key.EmbeddingProfileId == key.EmbeddingProfileId && live.InputHash.AsSpan().SequenceEqual(inputRow.InputHash))
+        if (existing is null && live is not null && !ChunkSetSalt.IsForced(key.ParseRuleKey) && live.Key.EmbeddingProfileId == key.EmbeddingProfileId &&
+            live.InputHash.AsSpan().SequenceEqual(inputRow.InputHash))
         {
             return await ReKeyAsync(source, payload, job, document, contentHash, live, key, cancellationToken);
         }
@@ -352,7 +357,7 @@ public sealed partial class EmbedJobHandler(
                 await IndexWriter.ReKeyAsync(commit.Connection, commit.Transaction, live.Id, key, cancellationToken);
                 await commit.AddRunItemAsync(new RunItemRow(payload.RunId, document.Classification, document.Id, document.CanonicalIdentity, Outcome.Unchanged)
                 {
-                    Reason = live.Key.PipelineVersionId == key.PipelineVersionId ? "change.noise" : "version.unaffected",
+                    Reason = ReKeyReason(live.Key, key),
                     Strategy = document.ParseStrategy,
                     PipelineVersionId = payload.PipelineVersionId,
                     ExecutionId = payload.ExecutionId,
@@ -374,6 +379,13 @@ public sealed partial class EmbedJobHandler(
     private Task<JobResult> Terminal(SourceContext source, EmbedPayload payload, LeasedJob job, DocumentRow document, Outcome outcome, string? reason,
         CancellationToken cancellationToken) =>
         ingest.TerminalAsync(source, payload.RunId, job, document, document.CanonicalIdentity, outcome, reason, payload.PipelineVersionId, null, cancellationToken);
+
+    /// <summary>A re-key's reason: another version (<c>version.unaffected</c>), only another rule part (<c>rule.unaffected</c>), else new content (<c>change.noise</c>).</summary>
+    private static string ReKeyReason(ChunkSetKey live, ChunkSetKey key) =>
+        live.PipelineVersionId != key.PipelineVersionId ? "version.unaffected"
+        : live.ContentHash.AsSpan().SequenceEqual(key.ContentHash) && live.SiteProfileVersionId == key.SiteProfileVersionId &&
+          !string.Equals(live.ParseRuleKey, key.ParseRuleKey, StringComparison.Ordinal) ? "rule.unaffected"
+        : "change.noise";
 
     [LoggerMessage(LogLevel.Information, "Document {DocumentId}: set {ChunkSetId} {Kind}, now {State}")]
     private static partial void LogSwapped(ILogger logger, Guid documentId, Guid chunkSetId, string kind, string state);

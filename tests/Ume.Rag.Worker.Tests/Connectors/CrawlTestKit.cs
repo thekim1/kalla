@@ -148,11 +148,15 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
                 }
 
                 var updated = (row ?? new FrontierRow { Classification = run.Classification, SourceId = run.SourceId, UrlHash = url.UrlHash, Url = url.Url, Host = url.Host })
-                    with { State = FrontierState.Pending, RunId = run.RunId, Depth = url.Depth, Leaf = url.Leaf, SitemapLastMod = url.SitemapLastMod ?? row?.SitemapLastMod };
+                    with
+                    {
+                        State = FrontierState.Pending, RunId = run.RunId, Depth = url.Depth, Leaf = url.Leaf, RemovalCheck = url.RemovalCheck,
+                        SitemapLastMod = url.SitemapLastMod ?? row?.SitemapLastMod,
+                    };
                 _frontier[key] = updated;
                 _admittedOrder[key] = ++_order;
                 admitted.Add(updated);
-                record = record with { Admitted = record.Admitted + 1, Seeds = record.Seeds + (url.Depth == 0 ? 1 : 0) };
+                record = record with { Admitted = record.Admitted + 1, Seeds = record.Seeds + (url.Depth == 0 && !url.RemovalCheck ? 1 : 0) };
             }
 
             _runs[run.RunId] = record with { LimitHit = record.LimitHit || limitHit };
@@ -171,7 +175,7 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
                 if (_frontier.TryGetValue(key, out var row) && row.State == FrontierState.Idle && row.RunId != run.RunId
                     && row.LastFetchedAt is { } fetched && (seed.SitemapLastMod is null || seed.SitemapLastMod <= fetched))
                 {
-                    _frontier[key] = row with { RunId = run.RunId, SitemapLastMod = seed.SitemapLastMod ?? row.SitemapLastMod };
+                    _frontier[key] = row with { RunId = run.RunId, RemovalCheck = false, SitemapLastMod = seed.SitemapLastMod ?? row.SitemapLastMod };
                     listed.Add(seed.UrlHash);
                 }
             }
@@ -232,7 +236,7 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
         {
             var rows = _frontier
                 .Where(kv => kv.Key.Item1 == run.SourceId && kv.Value.RunId == run.RunId && kv.Value.Host == host && kv.Value.State == FrontierState.Pending)
-                .OrderBy(kv => kv.Value.Depth).ThenBy(kv => _admittedOrder[kv.Key])
+                .OrderBy(kv => kv.Value.IsRemovalCheck ? FrontierRow.LegacyRemovalCheckDepth : kv.Value.Depth).ThenBy(kv => _admittedOrder[kv.Key])
                 .Take(max)
                 .ToList();
             IReadOnlyList<FrontierRow> released = [.. rows.Select(kv => _frontier[kv.Key] = kv.Value with { State = FrontierState.Released })];
@@ -258,7 +262,7 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
             var key = (run.SourceId, run.Classification, target.UrlHash);
             var row = _frontier.GetValueOrDefault(key)
                 ?? new FrontierRow { Classification = run.Classification, SourceId = run.SourceId, UrlHash = target.UrlHash, Url = target.Url, Host = target.Host };
-            _frontier[key] = Apply(row with { State = FrontierState.Idle, RunId = run.RunId, Depth = target.Depth, Leaf = target.Leaf }, facts);
+            _frontier[key] = Apply(row with { State = FrontierState.Idle, RunId = run.RunId, Depth = target.Depth, Leaf = target.Leaf, RemovalCheck = target.RemovalCheck }, facts);
             return Task.CompletedTask;
         }
     }
@@ -321,6 +325,15 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
         lock (_lock)
         {
             _runs[runId] = _runs[runId] with { Complete = complete };
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task SetIncrementalAsync(Guid runId, bool incremental, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            _runs[runId] = _runs[runId] with { Incremental = incremental };
             return Task.CompletedTask;
         }
     }

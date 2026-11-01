@@ -11,8 +11,8 @@ namespace Ume.Rag.Worker.Tests.CommandJobs;
 
 /// <summary>
 /// <c>reprocess-document</c> (P1b item 8; admin design §4.7) through the dispatcher of a worker with the engine: one document
-/// runs again from its stored content in a <c>reprocess</c> run of its source under a new execution id, without a fetch;
-/// the run finishes from the run items; a retried job keeps its run and execution; <c>fetch</c> and unknown documents are
+/// runs again from its stored content in a <c>reprocess</c> run of its source under a new execution id, without a fetch,
+/// into its own chunk set (salted with the execution, #134) that is swapped in; the run finishes from the run items; a retried job keeps its run and execution; <c>fetch</c> and unknown documents are
 /// refused.
 /// </summary>
 [Collection(RagDatabaseGroup1.Name)]
@@ -59,12 +59,12 @@ public sealed class ReprocessDocumentCommandTests(RagDatabaseFixture database, F
             execution.ShouldNotBe(before);
             (await ExecutionAsync(document)).ShouldBe(execution);
             var run = await EngineKit.WaitForRunAsync(database, job);
-            run.ShouldBe(new RunCounters(RunStates.Succeeded, 0, 0, 1, 0, 0, 0));
+            run.ShouldBe(new RunCounters(RunStates.Succeeded, 0, 1, 0, 0, 0, 0));
             (await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Kind" || ':' || "Trigger" FROM content."Runs" WHERE "Id" = $1""", job))
                 .ShouldBe("reprocess:manual");
             (await Sql.ScalarAsync<string>(database.Connection(null), """
                 SELECT string_agg("Outcome" || ':' || "ExecutionId"::text, ',') FROM content."RunItems" WHERE "RunId" = $1
-                """, job)).ShouldBe($"unchanged:{execution}");
+                """, job)).ShouldBe($"updated:{execution}");
             fetches.ShouldBe(fetched, "a reprocess never fetches");
             (await EngineKit.LiveChunksAsync(database, seed)).ShouldBeGreaterThanOrEqualTo(2);
 

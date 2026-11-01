@@ -86,7 +86,7 @@ public sealed class ParseRuleCommandEngineTests(RagDatabaseFixture database, Fak
 
     /// <summary>
     /// Enqueues the command as the admin does, waits for it and returns its result; the reprocess sync it enqueued (held back
-    /// for the catalog's max age) is dropped, so it cannot start during the test.
+    /// a few config polls) is dropped, so it cannot start during the test.
     /// </summary>
     private async Task<System.Text.Json.JsonElement> CommandAsync<T>(SourceSeed seed, T command) where T : JobPayload
     {

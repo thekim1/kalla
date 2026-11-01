@@ -205,15 +205,24 @@ public sealed class OrganisationSyncTests(OrgSyncFixture database) : IClassFixtu
         // The holder's rollback releases the lock on the server a moment after the call returns; a slow runner can see it
         // still held, so wait for a run that got the lock instead of failing on the race. 30 s: under the full suite's
         // parallel load 5 s was not always enough (main @ 4f19651); a run that never gets the lock still fails below.
-        long removed;
+        // A run can also get the lock and then see it "held" on a later iteration, which ends that run early (correct for two
+        // instances, #212). So sum the runs until the expired rows are gone, and check that one run looped past a batch.
+        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+        long removed = 0, largestRun = 0;
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while ((removed = await retention.RunOnceAsync(Ct)) < 0 && waited.Elapsed < TimeSpan.FromSeconds(30))
+        while (await db.AdminSessions.CountAsync(s => s.SessionId.StartsWith("expired-"), Ct) > 0 && waited.Elapsed < TimeSpan.FromSeconds(30))
         {
-            await Task.Delay(50, Ct);
+            var run = await retention.RunOnceAsync(Ct);
+            removed += Math.Max(run, 0);
+            largestRun = Math.Max(largestRun, run);
+            if (run <= 0)
+            {
+                await Task.Delay(50, Ct);
+            }
         }
 
-        removed.ShouldBeGreaterThanOrEqualTo(12000); // three batches of 5000
-        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+        removed.ShouldBeGreaterThanOrEqualTo(12000); // every expired session, in batches of 5000
+        largestRun.ShouldBeGreaterThan(RetentionService.BatchSize); // a run loops while a batch comes back full
         (await db.AdminSessions.CountAsync(s => s.SessionId.StartsWith("expired-"), Ct)).ShouldBe(0);
     }
 }

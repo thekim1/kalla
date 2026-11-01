@@ -59,7 +59,8 @@ public sealed partial class DriftSweep(
                s."ChunkCount",
                EXISTS (SELECT 1 FROM content."Runs" r WHERE r."SourceId" = b."SourceId" AND r."Kind" = 'sync' AND r."State" = 'running'),
                EXISTS (SELECT 1 FROM content."Jobs" j
-                        WHERE j."State" IN ('queued', 'running') AND j."Class" IN ('parse', 'embed') AND j."Payload" ->> 'documentId' = b."Id"::text)
+                        WHERE j."State" IN ('queued', 'running') AND j."Class" IN ('parse', 'embed') AND j."Payload" ->> 'documentId' = b."Id"::text),
+               s."ParseRuleKey"
         FROM batch b LEFT JOIN content."ChunkSets" s ON s."Id" = b."LiveChunkSetId"
         ORDER BY b."Id"
         """;
@@ -128,7 +129,7 @@ public sealed partial class DriftSweep(
                 ChunkSetRow? live = reader.IsDBNull(15)
                     ? null
                     : new ChunkSetRow(reader.GetGuid(15), new ChunkSetKey(document.Id, reader.GetGuid(16), Db.Nullable<Guid>(reader, 17), reader.GetGuid(18),
-                        reader.GetFieldValue<byte[]>(19)), reader.GetString(20), reader.GetFieldValue<byte[]>(21), reader.GetInt32(22));
+                        reader.GetFieldValue<byte[]>(19), Db.String(reader, 25)), reader.GetString(20), reader.GetFieldValue<byte[]>(21), reader.GetInt32(22));
                 rows.Add(new Row(document, Db.String(reader, 14), live, reader.GetBoolean(23), reader.GetBoolean(24)));
             }
         }

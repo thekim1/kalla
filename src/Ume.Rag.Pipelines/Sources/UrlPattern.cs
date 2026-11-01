@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Ume.Rag.Worker.Connectors.Urls;
+namespace Ume.Rag.Pipelines.Sources;
 
 /// <summary>
 /// An <c>include</c> / <c>exclude</c> / <c>demote</c> pattern (connectors design §5.2), matched against the canonical URL
@@ -9,7 +9,8 @@ namespace Ume.Rag.Worker.Connectors.Urls;
 /// characters, everything else literal (also <c>?</c> and <c>.</c>); the host part is case-insensitive, the rest
 /// case-sensitive. <c>re:&lt;regex&gt;</c> is a .NET regular expression, non-backtracking. Matching has no timeout: the
 /// non-backtracking engine is linear in the input, and a timeout under CPU load used to count as "no match", so an
-/// <c>exclude</c> pattern could let an excluded page into the crawl (session 13).
+/// <c>exclude</c> pattern could let an excluded page into the crawl (session 13). Shared by the crawler and retrieval's
+/// <c>demote</c> (<c>Sources.DemoteRules</c>), so both match alike (#102).
 /// </summary>
 public sealed class UrlPattern
 {

@@ -79,7 +79,8 @@ public static class SyncJobs
             RunId = runId,
         };
 
-    public static JobRequest Embed(SourceContext source, DocumentRow document, Guid executionId, Guid pipelineVersionId, Guid runId, byte[] inputKey) =>
+    public static JobRequest Embed(SourceContext source, DocumentRow document, Guid executionId, Guid pipelineVersionId, Guid runId, byte[] inputKey,
+        string? parseRuleKey) =>
         new(JobClasses.Embed, source.DepartmentId, document.Classification, ContractJson.Serialize(new EmbedPayload
         {
             DocumentId = document.Id,
@@ -88,6 +89,7 @@ public static class SyncJobs
             PipelineVersionId = pipelineVersionId,
             RunId = runId,
             InputKey = StageKeys.ToHex(inputKey),
+            ParseRuleKey = parseRuleKey,
         }))
         {
             DedupKey = JobDedupKeys.Embed(document.Id, executionId, pipelineVersionId),

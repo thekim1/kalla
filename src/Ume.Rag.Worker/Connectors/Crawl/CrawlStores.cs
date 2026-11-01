@@ -57,16 +57,19 @@ public sealed record FrontierRow
     public DateTimeOffset? SitemapLastMod { get; init; }
 
     /// <summary>
-    /// The depth of a removal check (§5.4): a URL that left the sitemap, admitted for one <c>HEAD</c> (then <c>GET</c> if
+    /// A removal check (§5.4): a URL that left the sitemap, admitted at depth 0 for one <c>HEAD</c> (then <c>GET</c> if
     /// refused) and not counted as a seed. Its links, when a <c>GET</c> follows, are admitted at depth 1.
     /// </summary>
-    public const short RemovalCheckDepth = -1;
+    public bool RemovalCheck { get; init; }
 
-    public bool IsRemovalCheck => Depth == RemovalCheckDepth;
+    /// <summary>The depth that marked a removal check before <c>CrawlFrontier.RemovalCheck</c> (#102); such a row can outlive a deploy.</summary>
+    public const short LegacyRemovalCheckDepth = -1;
+
+    public bool IsRemovalCheck => RemovalCheck || Depth == LegacyRemovalCheckDepth;
 }
 
-/// <summary>A URL to admit: canonical, in scope, below the depth limit, not a trap.</summary>
-public sealed record FrontierAdmission(string Url, string Host, short Depth, bool Leaf, DateTimeOffset? SitemapLastMod = null)
+/// <summary>A URL to admit: canonical, in scope, below the depth limit, not a trap; <c>RemovalCheck</c> admits it for the removal check (<see cref="FrontierRow.RemovalCheck"/>).</summary>
+public sealed record FrontierAdmission(string Url, string Host, short Depth, bool Leaf, DateTimeOffset? SitemapLastMod = null, bool RemovalCheck = false)
 {
     public string UrlHash => Convert.ToHexStringLower(Urls.UrlCanonicalizer.IdentityHash(Url));
 }
@@ -88,10 +91,10 @@ public sealed record HostLoad(string Host, int Pending, int Released);
 public interface ICrawlFrontierStore
 {
     /// <summary>
-    /// Upserts the URLs for the run: a row not yet of this run becomes <c>pending</c> with the run, depth and leaf (and the
-    /// sitemap <c>lastmod</c> when given); a row already of this run is left as it is. New rows are admitted in order while
-    /// <c>CrawlRuns.Admitted</c> is below <c>MaxPages</c>, which counts them (depth 0 also counts <c>Seeds</c>); the first
-    /// refused one sets <c>LimitHit</c>.
+    /// Upserts the URLs for the run: a row not yet of this run becomes <c>pending</c> with the run, depth, leaf and
+    /// removal-check flag (and the sitemap <c>lastmod</c> when given); a row already of this run is left as it is. New rows
+    /// are admitted in order while <c>CrawlRuns.Admitted</c> is below <c>MaxPages</c>, which counts them (depth 0 also
+    /// counts <c>Seeds</c>, a removal check does not); the first refused one sets <c>LimitHit</c>.
     /// </summary>
     Task<AdmitResult> AdmitAsync(CrawlRunKey run, IReadOnlyList<FrontierAdmission> urls, CancellationToken cancellationToken);
 
@@ -117,7 +120,7 @@ public interface ICrawlFrontierStore
     /// <summary>Hosts with <c>pending</c> or <c>released</c> rows of the run.</summary>
     Task<IReadOnlyList<HostLoad>> HostLoadAsync(CrawlRunKey run, CancellationToken cancellationToken);
 
-    /// <summary>Marks up to <paramref name="max"/> <c>pending</c> rows of the host <c>released</c>, lowest depth first (BFS), and returns them.</summary>
+    /// <summary>Marks up to <paramref name="max"/> <c>pending</c> rows of the host <c>released</c>, removal checks first, then lowest depth (BFS), and returns them.</summary>
     Task<IReadOnlyList<FrontierRow>> ReleaseAsync(CrawlRunKey run, string host, int max, CancellationToken cancellationToken);
 
     /// <summary>The row is done for the run (<c>idle</c>); <paramref name="facts"/> null keeps the last response's facts (an abandoned fetch).</summary>
@@ -160,6 +163,9 @@ public sealed record CrawlRunRecord
 
     public bool Complete { get; init; }
 
+    /// <summary>The run's fixed mode is incremental (<see cref="ICrawlRunStore.SetIncrementalAsync"/>).</summary>
+    public bool Incremental { get; init; }
+
     public CrawlRunKey Key => new(SourceId, Classification, RunId);
 }
 
@@ -181,4 +187,7 @@ public interface ICrawlRunStore
     Task RecordTrapsAsync(Guid runId, IReadOnlyDictionary<string, TrapStat> traps, CancellationToken cancellationToken);
 
     Task SetCompleteAsync(Guid runId, bool complete, CancellationToken cancellationToken);
+
+    /// <summary>Records the run's fixed mode (<c>CrawlRuns.Incremental</c>), which later runs' incomplete-traversal count reads.</summary>
+    Task SetIncrementalAsync(Guid runId, bool incremental, CancellationToken cancellationToken);
 }

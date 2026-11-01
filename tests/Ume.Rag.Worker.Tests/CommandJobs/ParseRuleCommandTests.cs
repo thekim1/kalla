@@ -238,7 +238,7 @@ public sealed class ParseRuleCommandTests(RagDatabaseFixture database) : IAsyncL
     {
         var config = new ConfigVersionState(Options.Create(new ConfigOptions()), TimeProvider.System, new HostingEnvironment { ApplicationName = "test" },
             NullLoggerFactory.Instance);
-        var catalog = new ParseRuleCatalog(database.Database(RagDatabase.Worker), config, TimeProvider.System, NullLogger<ParseRuleCatalog>.Instance);
+        var catalog = new ParseRuleCatalog(database.Database(RagDatabase.Worker), config, NullLogger<ParseRuleCatalog>.Instance);
         var candidates = await catalog.CandidatesForDepartmentAsync(Classification.Internal, Guid.NewGuid(), $"https://{host}/a.pdf", "application/pdf",
             TestContext.Current.CancellationToken);
         return candidates.SingleOrDefault(r => r.Name == profileId.ToString("D"))?.Revision;
@@ -279,12 +279,12 @@ public sealed class ParseRuleCommandTests(RagDatabaseFixture database) : IAsyncL
         return queued;
     }
 
-    /// <summary>The queued sync of the seed: a <c>manual</c> <c>reprocess</c>, its dedup key, level and department, held back for the catalog's max age.</summary>
+    /// <summary>The queued sync of the seed: a <c>manual</c> <c>reprocess</c>, its dedup key, level and department, held back until every instance has applied the change's config version.</summary>
     private async Task AssertSyncJobAsync(SourceSeed seed)
     {
         var row = await Sql.ScalarAsync<string>(database.Connection(null), """
             SELECT "Payload"::text || '|' || "DedupKey" || '|' || "Classification" || '|' || "DepartmentId"::text || '|'
-                   || ("AvailableAt" > now() + interval '50 seconds')::text
+                   || ("AvailableAt" > now() + interval '5 seconds')::text
             FROM content."Jobs" WHERE "Class" = 'sync' AND "Payload" ->> 'sourceId' = $1
             """, seed.SourceId.ToString());
         var parts = row.Split('|');
