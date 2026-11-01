@@ -68,6 +68,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   evaluation_model_unset: 'Ingen modell för att skapa testfrågor är vald. En plattformsadministratör väljer den under Inställningar.',
   version_not_restorable: 'Version {number} är utkastet eller den publicerade versionen och kan inte återställas.',
   retention_outside_policy: 'Informationsklassen {level} tillåter historik {modes} och högst {maxDays} dagar.',
+  test_answer_failed: 'Modellen kunde inte svara på testfrågan ({reason}). Försök igen.',
   search_unavailable: 'Sökningen kunde inte köras just nu. Försök igen om en stund.',
 }
 

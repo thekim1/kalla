@@ -1,7 +1,11 @@
 # Skills, tool hub and MCP: detailed design
 
-Detail step 9 of the Ume.Rag design, rewritten by the simplification pass ([`../simplification-pass.md`](../simplification-pass.md)
-§10 and §15, which win where an older passage differs). Details [`plan.md`](plan.md) (binding, incl. its answered questions 2–4
+**Later (P2–P3).** Nothing here is built in P1; P1 has the client registry (identity design §4.1) and the admin's
+`GatewayModels` sync (admin design §4.10), and its assistants have instructions and directly linked collections, no
+skills or tools.
+
+Detail step 9 of the Ume.Rag design (reasoning for its P2 shape: [`../simplification-pass.md`](../simplification-pass.md)
+§10, §15). Details [`plan.md`](plan.md) (binding, incl. its answered questions 2–4
 and the recommendation of question 1, and §14 here) and the Decisions table in
 [`../../01-general-idea.md`](../../01-general-idea.md) §10. All of it is **P2 scope** unless marked (OBO, write tools,
 external servers P3). Consumes, without redesigning: `IAnswerStrategy`, `AnswerEvent.ToolCall`, the request path, token
@@ -15,8 +19,8 @@ encryption and Redis rules of [`../platform/data-model.md`](../platform/data-mod
 policies of [`../platform/plan.md`](../platform/plan.md) (§6, §8a); projects, networks, secrets and observability of
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md); evaluation sets of
 [`../ingestion-worker/design-processing.md`](../ingestion-worker/design-processing.md) (§13–§14); postponed items M1,
-O2, E1 of [`../postponed-decisions.md`](../postponed-decisions.md). Nothing is implemented. Changes needed elsewhere:
-§13; questions: §14; unverified facts: §15; deferred or removed: §16.
+O2, E1 of [`../postponed-decisions.md`](../postponed-decisions.md). Nothing is implemented. What it needs from other
+documents: §13; questions: §14; unverified facts: §15; deferred or removed: §16.
 
 **Sources read for this step** (all read only, never executed):
 
@@ -72,7 +76,7 @@ sampling, elicitation or roots requests.
 | 18 | Hosted servers | .NET template only (answered 3): stateless MCP SDK server, Entra token with app role `Tools.Invoke`, read-only conventions, golden `tools/list`, contract tests, chiseled image; own internal network plus one egress network per server (§8) |
 | 19 | First server | **`ume-mcp-kommun`** (one container, one registration) starting with the mock fee calculator: tariffs as versioned JSON data (sample values), decimal arithmetic, structured output (§8.5) |
 | 20 | Audit | Every hub call in `audit."ToolCallEvents"` (metadata + keyed HMAC of arguments); full arguments/results only encrypted in `chat."ToolCalls"`; events 5012–5015 (§9) |
-| 21 | Skills and assistants | **Skills carry know-how and tools, never collections**: an assistant's knowledge is only its own collection links (knowledge §4.2). **One assistant type**: it runs the agent loop exactly when its published version links a skill whose served version has a tool it does not exclude, else the fixed RAG path; no mode field (admin shows "Använder verktyg"). Assistant versions pin nothing about skills: every assistant uses each linked skill's served version (§3.5, §5.1, §6.1; simplification pass §15) |
+| 21 | Skills and assistants | **Skills carry know-how and tools, never collections**: an assistant's knowledge is only its own collection links (knowledge §4.2). **One assistant type**: it runs the agent loop exactly when its published version links a skill whose served version has a tool it does not exclude, else the fixed RAG path; no mode field (admin shows "Använder verktyg"). Assistant versions pin nothing about skills: every assistant uses each linked skill's served version (§3.5, §5.1, §6.1) |
 
 ## 2. Placement and interfaces
 
@@ -150,8 +154,8 @@ answer wins, as identity §4.8).
 
 ### 2.4 Tool hub internal API
 
-Removed (simplification pass): no internal hop in P2; the `/internal/v1/tool-calls`, `discover` and `test` routes return
-with `rag-tools` in P3 (§16). Discovery and the connection test run in the admin through the same library.
+**Later (P3):** the `/internal/v1/tool-calls`, `discover` and `test` routes, with `rag-tools` (§16); P2 has no
+internal hop. Discovery and the connection test run in the admin through the same library.
 
 ## 3. Skills
 
@@ -303,7 +307,7 @@ skill (the list is shown).
 ### 3.7 Skill gate (`GateKind.SkillPublish`, advisory)
 
 Runs in **`rag-admin`** (R1: never on the data plane), which already runs `Ume.Rag.Answering` for the test panel and
-holds the gateway keys of every level (simplification pass §11a, 3). Publishing a version starts the run as a
+holds the gateway keys of every level. Publishing a version starts the run as a
 background task of the admin (one run per version, under `pg_try_advisory_xact_lock` on the version id; a run left
 unfinished by a restart is started again); results in `EvaluationRuns` with the version id (`Trigger =
 skill-publish`); questions copied into `EvaluationQuestions` with `Layer = skill` (processing §13.4). The worker takes
@@ -400,7 +404,7 @@ manifest is dropped with a warning) (unresolved → dropped with a
 ### 4.1 Registry and snapshot
 
 Each process that runs the hub builds one immutable `ToolRegistrySnapshot` per config version from its config snapshot
-(data-model §5; the config grace window of simplification pass §9 applies): servers (URL, slug, auth settings,
+(data-model §5; the 90 s config grace window applies): servers (URL, slug, auth settings,
 clearance, result level, residency, `ContainsThirdPartyText`, timeouts, caps, bulkhead size, state), tools with their
 **pinned definition** and approvals, pre-registrations, department grants, skills and assistants, clients. A tool is
 **usable** only if: server `State = active`; tool `State = active`, `IsAllowed`; `RiskLevel = read` (§5.5);
@@ -507,7 +511,7 @@ public sealed record ToolAuth(IReadOnlyDictionary<string, string> Headers, DateT
 
 | Mode | Phase | Stored | Resolution |
 |---|---|---|---|
-| `client-credentials` | P2 | `ToolServers.AuthSettings jsonb` `{ "scope": "api://ume-mcp-kommun/.default" }`; the secret is the certificate of the platform's tool identity (Entra app registration `ume-rag-tools`, one of RAG's own registrations, simplification pass §7) in `/run/certs/ume-rag-tools-entra.pfx`, mounted in `rag-api` and `rag-admin` only (never the worker); never in the database | in-house `ClientCredentialsTokenClient`: OIDC discovery of `UME_RAG_OIDC_AUTHORITY`, `client_credentials` grant with a `private_key_jwt` assertion (Entra) or the dev client secret (Keycloak), token cached until 5 min before expiry, one in-flight request per scope; `Authorization: Bearer …` |
+| `client-credentials` | P2 | `ToolServers.AuthSettings jsonb` `{ "scope": "api://ume-mcp-kommun/.default" }`; the secret is the certificate of the platform's tool identity (Entra app registration `ume-rag-tools`, one of RAG's own registrations, identity design §1.6) in `/run/certs/ume-rag-tools-entra.pfx`, mounted in `rag-api` and `rag-admin` only (never the worker); never in the database | in-house `ClientCredentialsTokenClient`: OIDC discovery of `UME_RAG_OIDC_AUTHORITY`, `client_credentials` grant with a `private_key_jwt` assertion (Entra) or the dev client secret (Keycloak), token cached until 5 min before expiry, one in-flight request per scope; `Authorization: Bearer …` |
 | `obo` | P3 | – | identity §9, with `rag-tools` |
 | `api-key`, `none` | P3 | – | with `municipal`/`external` servers |
 
@@ -560,7 +564,7 @@ The chat role adds a per-message cap of **48,000** characters over all tool resu
 
 ### 4.9 Rate limits
 
-Three counters per call through `IRateLimitStore` (simplification pass §14; window 120 s, data-model §11). On one host
+Three counters per call through `IRateLimitStore` (window 120 s, data-model §11). On one host
 the in-memory implementation counts per instance; when `ConnectionStrings:redis` is configured (tools on several hosts,
 the first multi-host deployment) the Redis implementation checks the three keys in one Lua script (`INCR` + `EXPIRE`,
 the gateway's pattern, `RedisStores.cs:13-44`):
@@ -572,7 +576,7 @@ the gateway's pattern, `RedisStores.cs:13-44`):
 | `ume-rag:rl:tools:{subjectHash}:{minute}` | `Settings.Tools.CallsPerMinutePerUser` 60 over all tools | platform setting |
 
 `subjectHash` = the same HMAC as chat's per-user key. Over a limit → `outcome = rate_limited`. With Redis: Redis down →
-per-instance in-memory limits (simplification pass §9), logged once a minute; the per-message call limit (§6.5) still
+per-instance in-memory limits, logged once a minute; the per-message call limit (§6.5) still
 bounds every run.
 
 ### 4.10 Caching (decision: no result cache)
@@ -647,7 +651,7 @@ Example: the mock fee calculator is hosted on-prem, returns public tariffs and m
 `Residency OnPrem`, clearance `internal`, result level `public`, usable by `public` and `internal` assistants alike.
 
 **Consequence for the effective level**: the run's effective level is fixed at its start — max(assistant level, client
-ceiling for clients that keep history) (chat §8.2; the same level on every turn, simplification pass §6) — and **never
+ceiling for clients that keep history) (chat §8.2; the same level on every turn) — and **never
 rises**. The hub re-checks both rules per call (`level_refused`, 5015) as defence in depth.
 
 ### 5.4 Lethal trifecta (plan §6 rule 2; hard refusal)
@@ -849,7 +853,7 @@ never skill content.
 Per executed or refused call one `chat."ToolCalls"` row in the turn (written by `ConversationWriter`, chat §12):
 `MessageId`, `Classification`, `CallIndex smallint`, `ToolServerId` (null for built-ins), `ToolName` (model name),
 `ToolId`, `DefinitionId`, `SkillVersionId`, `ArgumentsCiphertext`, `ResultCiphertext` (exactly what the model saw),
-encrypted under the message's bucket key (simplification pass §5), `ArgumentsHmac`, `ArgumentsBytes`, `ResultBytes`,
+encrypted under the message's bucket key, `ArgumentsHmac`, `ArgumentsBytes`, `ResultBytes`,
 `DurationMs`, `Outcome`, `CreatedAt`. History mode `none`: metadata only. `ArgumentsHmac` =
 HMAC-SHA256(`Security:ToolAuditKey`, canonical arguments JSON), the same value as the audit row (§9). Statistics:
 `AssistantDailyTotals` adds `ToolCalls`, `ToolErrors`, `AgentLimitHits` (§13).
@@ -893,11 +897,11 @@ app.MapMcp("/mcp").RequireAuthorization("McpUse");
 
 ### 7.4 Per-skill endpoints
 
-Removed (simplification pass): per-skill endpoints `/mcp/skills/<slug>` and `SkillAudiences` move to P3 (§16).
+**Later (P3):** per-skill endpoints `/mcp/skills/<slug>` and `SkillAudiences` (§16).
 
 ### 7.5 `ask_assistant`
 
-Removed (simplification pass): `ask_assistant` and its MCP conversations move to P3 (§16).
+**Later (P3):** `ask_assistant` and its MCP conversations (§16).
 
 ### 7.6 Rate limits
 
@@ -939,7 +943,7 @@ Ume.Mcp.Kommun/
 
 ### 8.2 OpenAPI → MCP generator
 
-Removed (simplification pass): dropped; none of the first tools has an OpenAPI source (§16).
+Dropped: none of the first tools has an OpenAPI source (§16).
 
 ### 8.3 Deployment, network and egress
 
@@ -1162,7 +1166,7 @@ streams).
 | `platform/data-model.md` §1.2 | no `ume_rag_tools` role in P2; `api`: S on `SkillVersionFiles`, `SkillShares`, `ToolDepartmentGrants`, `GatewayModels`, `ToolServers` (no encrypted credential column in P2), I on `audit."ToolCallEvents"`, `audit."ToolDefinitionObservations"`; `worker`: no skill or tool tables; `admin`: S I U D on the new config tables, I on `audit."ToolCallEvents"`, S I on `ToolDefinitionObservations` |
 | `platform/data-model.md` §2.1 `Skills`, `SkillVersions` | `Slug` per spec `name` (ASCII, ≤ 64); add `Name`, `CreatedBy`; versions add `License`, `Metadata jsonb`, `ContentHash bytea`, `CreatedBy`, `PublishedBy`, `GateRunId`; `State` `draft`/`published`/`retired` (no `gating`, `gate-failed`); drop `ReferenceBlobPrefix` |
 | `platform/data-model.md` §2.1 new | `SkillVersionFiles` (§3.3); `SkillShares` (`SkillId`, `DepartmentId`, `SharedBy`, `SharedAt`); `ToolDepartmentGrants`; no `SkillAudiences` in P2 |
-| `platform/data-model.md` §2.1 `AssistantVersions.Skills` | `[{ skillId, excludedToolIds[] }]` per version (replaces `AssistantSkills`; done in the parallel pass, simplification pass §15); **no** pinned skill version; `SkillVersionLinks` (`SkillVersionId`, `ToolId`) without a kind |
+| `platform/data-model.md` §2.1 `AssistantVersions.Skills` | `[{ skillId, excludedToolIds[] }]` per version (replaces `AssistantSkills`); **no** pinned skill version; `SkillVersionLinks` (`SkillVersionId`, `ToolId`) without a kind |
 | `platform/data-model.md` §2.1 `ToolServers` | add `Slug varchar(20)` (U); `Classification` → `Clearance`; add `ResultClassification`, `ContainsThirdPartyText bool NOT NULL DEFAULT true`, `MaxConcurrentCalls smallint` (8); `Residency` `OnPrem`/`Eu`/`External` with `CK_ToolServers_Clearance`; `Hosting` = `hosted` in P2 (`municipal`/`external` P3); `SystemOwnerSubjects text[]` (`oid`); add `OwnerTeamId`, `AuthSettings jsonb`, `ProtocolVersion`, `ServerInfo jsonb`, `InstructionsHash bytea`, `LastDiscoveredAt`; `TimeoutMs` default 10,000 (≤ 30,000), `MaxResponseBytes` 262,144; `EncryptedCredential` and `PerCallConnection` P3 |
 | `platform/data-model.md` §2.1 `Tools`, `ToolDefinitions`, `ToolApprovals` | `Tools` add `Title`, `AllDepartments`, `CallsPerMinute` (600), `CallsPerMinutePerUser` (30), `State` adds `removed`; `ToolDefinitions` add `Title`, `Annotations jsonb`, `ObservationId bigint NULL`, `PreRegistered bool`, `PreRegisteredBy`; `ToolApprovals` add `Comment`; app rule: two different approvers for new and unexpected definitions, one for pre-registered |
 | `platform/data-model.md` §2.1 `Sources` | `ContainsThirdPartyText bool NOT NULL DEFAULT true` (platform admin sets false) |
@@ -1174,7 +1178,7 @@ streams).
 | `identity/design.md` §10 | 5002 reasons of §9.3; 5012–5015 emitted by api and admin; SIEM rules |
 | `chat-api/design.md` §2.2, §7.2–§7.4 | agent effective level fixed at start; neutralised tags of §3.8; RAG skills as `<skill_content>` ≤ 6,000 tokens; lethal trifecta → tools §5.4 (hard refusal); agent prefetch of `search_knowledge` |
 | `chat-api/plan.md` §3 | agent: limits 8 / 60 s / $0.05, prefetch with the user question, static skills ≤ ~4k tokens |
-| `knowledge-api/design.md` §2.2, §4.2, §14 | no `RetrievalRequest.SkillVersionIds`: an assistant searches only its published version's collections, whatever its skills (simplification pass §15; done in the parallel pass); `/mcp` = `search_knowledge` + `list_collections` only, no `document://`, `get_document`, `ask_assistant` or skill endpoints in P2 |
+| `knowledge-api/design.md` §2.2, §4.2, §14 | no `RetrievalRequest.SkillVersionIds`: an assistant searches only its published version's collections, whatever its skills; `/mcp` = `search_knowledge` + `list_collections` only, no `document://`, `get_document`, `ask_assistant` or skill endpoints in P2 |
 | `ingestion-worker/design-processing.md` §13.4, §14 | skill gate = end-to-end run on linked models against read-only tools, advisory (no floor, no relative rule, no weekly re-check); `Settings.Tools.SkillGateModel` for first versions |
 | `ingestion-worker/design-engine.md` | no `eval` kind `skill-gate` (the gate runs in `rag-admin`); the worker is not on network `mcp` and holds no tool certificate |
 | `platform/repo-and-deployment.md` §1, §2.2, §3 | `Ume.Rag.Tools` as a library; no `tools/Ume.Rag.McpGen`, no `Microsoft.OpenApi`; `templates/mcp-server/`, `deploy/compose.mcp.yaml`; settings `Tools:*` (`DriftCheckInterval`, `MaxResultChars`, `MaxArgumentBytes`, `MaxPooledClients`, `AllowWrite=false`), `Agent:*`, `Mcp:CallsPerMinutePerUser`; no `ToolHub:*` settings in P2 |
@@ -1192,9 +1196,9 @@ User, 2026-10-30 (this step):
    **$0.05** model cost; assistants may lower them; platform admins may raise them up to **20 calls / 120 s / $0.25**
    (§6.5).
 2. **Skill authors**: department skill editors (`rag-skill-editor`) draft, publish and serve their department's skills;
-   publishing runs the skill's test questions through the skill gate (advisory since the simplification pass); linking a
+   publishing runs the skill's test questions through the skill gate (advisory); linking a
    tool needs a department grant; the platform team owns platform skills (§3.6–§3.7).
-3. **MCP server template**: **.NET only** (§8.1); the OpenAPI → MCP generator is dropped (simplification pass).
+3. **MCP server template**: **.NET only** (§8.1); the OpenAPI → MCP generator is dropped.
 
 User, 2026-10-30 (simplification pass §15): skills carry know-how and tools, never collections; one assistant type, the
 agent loop starting when the published version links at least one tool-bearing skill; assistant versions pin nothing

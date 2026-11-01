@@ -1,5 +1,7 @@
 # Design-document restructure
 
+**Done 2026-11-01 (session 16).** Steps 0–5 are merged to `main`; the checks under "Done when" pass. Not part of it, still to do: the design sync of stream B's P1b items 9–10 (#254–#262) and later PRs, and the register items the agents reported (below).
+
 Owner: main session. Written 2026-10-31 (session 12); revised and started 2026-11-01 (session 16, user: "do the
 improvements to the plan and then execute it"). Done at the P1a/P1b boundary while stream B is idle and stream A waits
 on B's #239/#241. Stream B and the agent briefs cite these paths and section numbers, so names and numbers stay.
@@ -93,3 +95,11 @@ B's owned paths for no reading gain), per-document change logs (git has them), m
   `repo-and-deployment.md`.
 - The Decisions table has a status on every row; `to-verify.md` has a status on every row.
 - `check-doc-refs.py` reports no misses and runs in `verify.yml`.
+
+## Follow-ups found during the restructure
+
+- Not built, but stated in the designs as rules (marked "not built yet" or "Later"): the engine's CPU lane (`Channel<CpuWork>`), the egress canary of the connectors design §7, `S3BlobStore`, the FakeGateway throughput model, the frequent-term stop list (stream B, P1b), `PUT /api/gateway/models/{name}`.
+- Parser design §12 says the image budget is ≤ 3.5 GB; repo-and-deployment says ≤ 4.0 GB (measured 2.88 GB). Align.
+- The Decisions rows "Gateway changes (step 4)", "Tools (step 9)" and "Parser detail (step 5)" still describe PdfPig, three releases and the OpenAPI generator (statuses say so).
+- PR #178 deviation 1 stays open: moving `UrlCanonicalizer` to `Ume.Rag.Pipelines` would let the admin canonicalise on save.
+- `plans/gateway-changes/adr-drafts.md` was not checked for the two-release wording.

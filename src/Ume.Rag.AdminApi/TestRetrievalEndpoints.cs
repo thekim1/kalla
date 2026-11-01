@@ -43,6 +43,13 @@ public sealed class AdminRetrieval(NpgsqlDataSource dataSource, IHttpClientFacto
     private readonly RetrievalEngine _engine = CreateEngine(dataSource);
     private readonly PostgresHydrator _hydrator = new(dataSource);
 
+    /// <summary>The search core, shared with the test panel's knowledge service (<see cref="AdminTestPanel"/>).</summary>
+    public RetrievalEngine Engine => _engine;
+
+    public PostgresHydrator Hydrator => _hydrator;
+
+    public GatewayQueryEmbedder Embedder => _embedder;
+
     // §4.9: query embeddings use the in-process cache only, keyed with a per-process random key.
     private readonly GatewayQueryEmbedder _embedder = new(clients, new QueryEmbeddingOptions(), RandomNumberGenerator.GetBytes(32), time, logger);
 

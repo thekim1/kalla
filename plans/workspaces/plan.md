@@ -1,12 +1,13 @@
 # Ask-a-file workspaces: plan
 
+**Later (P2–P3).** Nothing here is built in P1; P1's upload source (one fixed `files` pipeline per collection) is what workspaces later reuse, and the E1 and W3 spikes that gate them run in P1b.
+
 Self-service knowledge bases: a person or a team uploads a set of files and gets Q&A, chat and whole-document tasks
 (summarise, overview, compare) over them, with the same Swedish search, classification, residency, personal-data
 checks, citations and audit as department collections. A workspace is a **light kind of collection** that reuses the
 whole pipeline; nothing here is a second RAG stack. Decided by the user on 2026-10-30 (§14; Decisions table row
-"Ask-a-file workspaces"). Builds on the simplification pass ([`../simplification-pass.md`](../simplification-pass.md)
-§1, §2, §5, §8, §9, §14, §15: knowledge only through direct links, one assistant type, versioned assistants); phase
-**P2**.
+"Ask-a-file workspaces"). Builds on knowledge only through direct links, one assistant type and versioned assistants (reasoning:
+[`../simplification-pass.md`](../simplification-pass.md) §15); phase **P2**.
 
 ## 1. Scope
 
@@ -25,13 +26,13 @@ workspaces, agent loops.
 |---|---|---|
 | Collection | `Kind = workspace` (department collections: `Kind = department`); `Classification = internal` always (never `public`; `sensitive` refused until its separate deployment exists, register T1); `PublishedAt` set at creation | data-model §2.1 |
 | Source | exactly **one** `upload` source on the platform `files` pipeline with `summaries` on (§6.1), created with the collection; no schedule, no preview, no parameter edits | connectors §9, engine §13.1 |
-| Assistant | the ordinary assistant type (no separate kind; mode derived, simplification pass §15.2: no skills, so always the RAG path), created automatically and **published as version 1**: name "Fråga: *workspace name*", slug `ws-<8 base32>`, description = the workspace's, the Swedish workspace template, the workspace as its **only** direct link, answer modes of §6.3 | data-model §2.1, chat design §7 |
+| Assistant | the ordinary assistant type (no separate kind; mode derived: no skills, so always the RAG path), created automatically and **published as version 1**: name "Fråga: *workspace name*", slug `ws-<8 base32>`, description = the workspace's, the Swedish workspace template, the workspace as its **only** direct link, answer modes of §6.3 | data-model §2.1, chat design §7 |
 | Files | upload flow and limits, ClamAV fail-closed, sniffed types, parser routing, chunking, personal-data detection (recorded, not blocking: no `public` rule applies), embedding on-prem, flat chunks | connectors §9, §11; processing design |
 | Search | the knowledge API unchanged; a workspace stays ≤ 10,000 chunks (§5.2), so retrieval always takes the **exact scan** path (knowledge plan §3) | knowledge design §6 |
 | Chat | chat API path, residency check before the first byte, citations, history mode and 90-day retention of the `internal` level, bucket-key encryption of everything chat-related | chat plan §4–§5 |
 | Audit | admin write path (change + outbox + audit + jobs in one transaction), `oid` as actor | admin design §4.4 |
 
-**Editing the assistant** uses the same draft → publish versioning as every assistant (simplification pass §15.3) in
+**Editing the assistant** uses the same draft → publish versioning as every assistant in
 a simplified form: managers change name, description and a short "extra instruktioner" field (≤ 1,000 characters,
 inside the locked frame); a save is a draft, **Publicera** makes it live, "Tidigare versioner" restores one (a new
 version). No test panel, test-question set or judge run (the owner's own chat is the test); the chat role serves the
@@ -55,7 +56,7 @@ excluded from nightly retrieval evaluation and the answer-level judge.
 - **Clients**: Open WebUI (each workspace appears as a model to its members), the own chat client (P2, delegated
   token), later Teams (P3).
 - **Attribution**: gateway calls go `x-ume-on-behalf-of` a team (delegation arrives with gateway release 2, P2, before
-  P2a; weakness review §5). P2a proposal: one platform team
+  P2a). P2a proposal: one platform team
   `Settings.Workspaces.TeamId` with a central budget, the matching department as `Collections.DepartmentId` and
   `Jobs.DepartmentId` (one fairness bucket for all workspaces); per-department charge-back is question 2.
 - **Department assistants linking a workspace** (direct links, P2): only a **team** workspace, only after a manager
@@ -74,7 +75,7 @@ registry** (`app.state.MODELS`) overwritten by whichever user last listed models
 and chat resolves the model from it (`main.py:1153-1167`), so per-user model lists can fail with "Model not found"
 when two users with different lists are active. The per-user list cache itself is keyed by user
 (`routers/openai.py:709-715`). This affects every P2 department/group audience, not only workspaces (question 4).
-**Since [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):** the spikes on E1 and on the W3 workaround (Open WebUI group permissions, register W3) run in late P1
+The spikes on E1 and on the W3 workaround (Open WebUI group permissions, register W3) run in late P1
 (P1b), so this gate is known before P2 starts. Departments beyond the first get one Open WebUI instance each (its own
 client, ceiling and audience) until W3 and E1 are solved; that fallback does not serve personal or team workspaces,
 which still wait for both gates.
@@ -223,7 +224,7 @@ level = max(`internal`, client ceiling) = `internal` → ceiling `Eu`, so full t
 
 Files uploaded to a workspace and the answers given over them may be **allmänna handlingar** (inkomna or upprättade),
 and expiry or owner-left deletion may need a gallringsbeslut. This extends register **A1** (for chat
-logs; the pilot runs history mode `none` until it is answered, weakness review §4) to workspace files and summaries; until answered, P2a must not ship with automatic deletion switched on (question
+logs; the pilot runs history mode `none` until it is answered) to workspace files and summaries; until answered, P2a must not ship with automatic deletion switched on (question
 8). Personal data: detection runs and is shown per file; a personnummer gives a warning in the area, not a block
 (question 9). Open WebUI's own chat copies (register W2) apply to workspace chats too.
 
@@ -234,7 +235,7 @@ logs; the pilot runs history mode `none` until it is answered, weakness review �
 | Summary per 30-page PDF | ≈ 18k input + ≈ 600 output tokens on-prem; ≈ 10–30 s per file; one L4/A10-class GPU ≈ 1,000–2,000 files/hour (prefill-bound) |
 | Pilot-scale P2a | 100 users × 20 files = 2,000 files ≈ 36M input tokens once, then only changed files |
 | Embedding | ≈ 600 tokens per PDF page (vs 3,600 per web page, engine §18): a 30-page PDF ≈ 2 s at 10k tokens/s |
-| Full-text turn | ≤ 24k prompt tokens per message vs ≈ 4–9k in passage mode; the answer-model prefill line of performance pass §2.2 grows accordingly; per-user rate limit `MessagesPerMinutePerUser` (20) unchanged |
+| Full-text turn | ≤ 24k prompt tokens per message vs ≈ 4–9k in passage mode; the answer-model prefill line of [performance pass](../performance-pass.md) §2.2 grows accordingly; per-user rate limit `MessagesPerMinutePerUser` (20) unchanged |
 | Blobs | 1 GB per person cap; 1,000 active users at ≈ 100 MB ≈ 100 GB uploads plus parse outputs; backed up within 15 minutes as all uploads |
 | Config churn | creates, shares and deletes are config writes (serialised, data-model §5); fine at a few per minute, snapshot reload per entity type to measure with ~5,000 assistants |
 
@@ -296,8 +297,8 @@ logs; the pilot runs history mode `none` until it is answered, weakness review �
 
 | Item | When | How |
 |---|---|---|
-| Open WebUI process-wide `app.state.MODELS` with per-user lists (`utils/models.py:484-499`, `main.py:1153-1167`) at the P2 version | late P1 (P1b spike, weakness review §5; `../to-verify.md` #174) | two users with different lists, interleaved chats |
-| E1: `system_oauth` token forwarding and refresh with our audience | late P1 (P1b spike, weakness review §5; `../to-verify.md` #175) | as identity design §9.4 |
+| Open WebUI process-wide `app.state.MODELS` with per-user lists (`utils/models.py:484-499`, `main.py:1153-1167`) at the P2 version | late P1 (P1b spike; `../to-verify.md` #174) | two users with different lists, interleaved chats |
+| E1: `system_oauth` token forwarding and refresh with our audience | late P1 (P1b spike; `../to-verify.md` #175) | as identity design §9.4 |
 | Interactive latency: 30-page text PDF searchable p50 ≤ 60 s during a crawl and an OCR batch | P2a | `perf.yml` scenario |
 | Swedish summary quality of the on-prem model (20 municipal PDFs, judged by two staff) and its tokens/s | P2a | sample run |
 | Config snapshot reload cost with ~5,000 assistants and frequent workspace writes | P2a | load test |
@@ -328,5 +329,5 @@ writes were assumed rare (data-model §5), and workspaces make them user-driven;
 `internal` documents at `Eu`, while workspace summaries are `OnPrem` by decision; (6) chat design §6.3 caps sources at
 8,000 tokens, below the full-text budget; (7) `CollectionShares` are written by the owning department's `Manage`
 (admin design §3.2), while a team workspace is shared by its managers, who hold no department role; (8) assistant
-versioning (simplification pass §15.3) assumes a test panel and test-question set on publish, which the workspace
+versioning assumes a test panel and test-question set on publish, which the workspace
 assistant skips.

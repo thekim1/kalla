@@ -1,7 +1,7 @@
 # Parser sidecar: plan
 
-**Detailed design: [`design.md`](design.md)** (step 5); where they differ, the design wins. Rewritten to the
-simplification pass ([`../simplification-pass.md`](../simplification-pass.md)); removed and deferred items in §6.
+**Detailed design: [`design.md`](design.md)** (step 5); where they differ, the design wins. Removed and deferred
+items in §6.
 
 A small, stateless Python service that converts hard formats (PDF, Office, scanned documents) into structured
 Markdown. It exists because Python's document tools (Docling) are far ahead of .NET's for this job; everything else
@@ -38,7 +38,8 @@ cells, per-page quality signals, timings, build) and `docling.json.gz` (lossless
 
 - FastAPI + Docling; OCR with **Tesseract `swe` only**, always set explicitly, never Docling's auto choice (design §9).
 - All models baked into the image at build time: no downloads at runtime (on-prem hosts without internet).
-- CPU-only by default; a GPU image variant later if volumes need it.
+- CPU only (Tesseract and Docling layout on CPU); a CUDA image is a capacity trigger (performance pass §6), not a P1
+  or P2 item (design §12).
 - Concurrency: an own supervisor with pre-warmed conversion slots, one inspect process and one NER process (not
   uvicorn workers), no queue (`503 busy` when full); request deadline and max file size; the worker's `parse` job
   class reads the capacity from `/v1/info`, so the sidecar is never overloaded (RAGFlow's top complaint is stuck
@@ -48,7 +49,7 @@ cells, per-page quality signals, timings, build) and `docling.json.gz` (lossless
 - Runs in the **ingestion resource zone** with hard CPU limits (at most half the host's cores on a shared pilot host);
   it is the first container to move to its own host (platform plan §2, review R1).
 - Parse output is cached by (content hash, parser settings hash, parser build), so identical content is parsed once
-  however many sources hold it (simplification pass §2).
+  however many sources hold it.
 - Hardened container: non-root, read-only root file system with a tmpfs for scratch, no network egress, internal
   network only, memory and CPU limits, temp files removed after each request.
 
@@ -58,11 +59,11 @@ cells, per-page quality signals, timings, build) and `docling.json.gz` (lossless
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P0    | Image builds with models baked in; health; contract skeleton                                                                                                |
 | P1    | `/v1/convert` and `/v1/inspect` for the P1 formats (answered 4) incl. the PDF text-layer fast path; `/v1/ner` (KB BERT NER, one process); OCR auto/force/off with Tesseract `swe` and the 20-page å/ä/ö acceptance check; table modes; page ranges; quality signals; contract tests; timings on a sample of Umeå documents (design §16) |
-| P2    | Legacy Office/RTF (LibreOffice) and email with child documents (Z1); picture crops with a describe-pictures node; OCR of pictures inside DOCX/PPTX; archives and macro-enabled formats (Z1); fuzzing; GPU variant if needed |
+| P2    | Legacy Office/RTF (LibreOffice) and email with child documents (Z1); picture crops with a describe-pictures node; OCR of pictures inside DOCX/PPTX; archives and macro-enabled formats (Z1); fuzzing; adaptive range sizes |
 
 ## 5. Open questions
 
-1. ~~OCR engine choice for Swedish~~ **Closed** (simplification pass §11): Tesseract `swe`; P1 acceptance check å/ä/ö
+1. ~~OCR engine choice for Swedish~~ **Closed** (register P1): Tesseract `swe`; P1 acceptance check å/ä/ö
    recall ≥ 95 % on a 20-page Umeå sample, EasyOCR reconsidered only if it fails (design §9.3).
 2. Licences of the bundled layout/OCR models (Docling itself is MIT): verify before the pilot.
 3. ~~Volume of scanned documents~~ **Answered**: few (under 500) in the pilot, so CPU-only OCR within the parser's
@@ -70,7 +71,7 @@ cells, per-page quality signals, timings, build) and `docling.json.gz` (lossless
 
 Question 2 is a P1 verification task, not a decision.
 
-Answered (2026-10-29, step 5 questions; restated 2026-10-30, simplification pass):
+Answered (2026-10-29, step 5 questions; restated 2026-10-30):
 
 4. **Pilot formats** beyond PDF, DOCX, PPTX, XLSX, HTML: images (JPG/PNG/TIFF, OCR), OpenDocument (.odt/.ods/.odp,
    Docling's native backend), and plain text/Markdown/CSV. Legacy Office (.doc/.xls/.ppt), RTF and email (.eml/.msg
