@@ -7,12 +7,15 @@ namespace Ume.Rag.Worker.Connectors.Urls;
 /// An <c>include</c> / <c>exclude</c> / <c>demote</c> pattern (connectors design §5.2), matched against the canonical URL
 /// without its scheme (<c>host/path?query</c>). Glob: <c>*</c> is any characters except <c>/</c>, <c>**</c> any
 /// characters, everything else literal (also <c>?</c> and <c>.</c>); the host part is case-insensitive, the rest
-/// case-sensitive. <c>re:&lt;regex&gt;</c> is a .NET regular expression (non-backtracking, 50 ms timeout).
+/// case-sensitive. <c>re:&lt;regex&gt;</c> is a .NET regular expression, non-backtracking. Matching has no timeout: the
+/// non-backtracking engine is linear in the input, and a timeout under CPU load used to count as "no match", so an
+/// <c>exclude</c> pattern could let an excluded page into the crawl (session 13).
 /// </summary>
 public sealed class UrlPattern
 {
     public const string RegexPrefix = "re:";
-    private static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(50);
+    /// <summary>No timeout: linear-time matching is the bound (<see cref="RegexOptions.NonBacktracking"/>).</summary>
+    internal static readonly TimeSpan MatchTimeout = Regex.InfiniteMatchTimeout;
 
     private readonly Regex _regex;
 
@@ -23,6 +26,9 @@ public sealed class UrlPattern
     }
 
     public string Text { get; }
+
+    /// <summary>The compiled expression's match timeout (tests).</summary>
+    internal TimeSpan Timeout => _regex.MatchTimeout;
 
     /// <summary>Parses <paramref name="pattern"/>; a <c>re:</c> pattern that is not a valid expression throws <see cref="ArgumentException"/>.</summary>
     public static UrlPattern Parse(string pattern)
@@ -44,20 +50,13 @@ public sealed class UrlPattern
         return new(pattern, new Regex(expression.ToString(), RegexOptions.NonBacktracking | RegexOptions.CultureInvariant, MatchTimeout));
     }
 
-    /// <summary>True when the canonical URL <paramref name="canonicalUrl"/> matches. A timeout counts as no match.</summary>
+    /// <summary>True when the canonical URL <paramref name="canonicalUrl"/> matches.</summary>
     public bool Matches(string canonicalUrl)
     {
         ArgumentNullException.ThrowIfNull(canonicalUrl);
         var schemeEnd = canonicalUrl.IndexOf("://", StringComparison.Ordinal);
         var target = schemeEnd < 0 ? canonicalUrl : canonicalUrl[(schemeEnd + 3)..];
-        try
-        {
-            return _regex.IsMatch(target);
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            return false;
-        }
+        return _regex.IsMatch(target);
     }
 
     public override string ToString() => Text;
