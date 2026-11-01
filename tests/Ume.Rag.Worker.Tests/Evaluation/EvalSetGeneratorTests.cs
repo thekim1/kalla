@@ -8,6 +8,7 @@ using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing.Pii;
 using Ume.Rag.Worker.Tests.CommandJobs;
 using Ume.Rag.Worker.Tests.Engine;
+using FakeChatScripts = fakegateway::Ume.Rag.FakeGateway.FakeChatScripts;
 using FakeContent = fakegateway::Ume.Rag.FakeGateway.FakeContent;
 
 namespace Ume.Rag.Worker.Tests.Evaluation;
@@ -16,10 +17,11 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 /// <c>generate-set</c> and <c>top-up-set</c> (P1b item 7; processing design §13.1–§13.3) from job rows on the test database
 /// and the FakeGateway: a fixture collection gets a generated layer of its target size whose questions pass the filters;
 /// each filtered-out case is dropped; a top-up retires the questions of a changed and a deleted document and regenerates
-/// to size with the next round's seed; a model the gateway does not serve <c>OnPrem</c> refuses the job (O1).
+/// to size with the next round's seed; a model the gateway does not serve <c>OnPrem</c> refuses the job (O1). The fake answers
+/// from its chat scripts: an array is played in call order, and the worker generates and judges one chunk at a time.
 /// </summary>
 [Collection(RagDatabaseGroup3.Name)]
-public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatewayFactory gateway) : IClassFixture<EvalGatewayFactory>, IAsyncLifetime
+public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private const string Model = "ume/chat-onprem";
     private const string Category = "Ume.Rag.Worker.Evaluation.Generation.EvalSetGenerator";
@@ -39,6 +41,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
 
     private static readonly string[] Topics = ["förskola", "bygglov", "snöröjning", "bibliotek", "parkering", "avfall", "färdtjänst", "simhall"];
 
+    private readonly EvalGatewayFactory _gateway = new();
     private PlatformSettings? _previous;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -46,14 +49,20 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
     public async ValueTask InitializeAsync()
     {
         await database.ResetAsync();
-        gateway.Reset();
         _previous = await EvalSeeds.SetModelsAsync(database, Model);
     }
 
-    public async ValueTask DisposeAsync() => await EvalSeeds.RestoreModelsAsync(database, _previous is not null, _previous);
+    public async ValueTask DisposeAsync()
+    {
+        await EvalSeeds.RestoreModelsAsync(database, _previous is not null, _previous);
+        await _gateway.DisposeAsync();
+    }
 
     private static string Reply(string question, string answer, string type = "fakta") =>
         JsonSerializer.Serialize(new Dictionary<string, string> { ["fraga"] = question, ["svar"] = answer, ["typ"] = type });
+
+    private static string Scores(int answerable, int understandable, int specific) =>
+        JsonSerializer.Serialize(new Dictionary<string, int> { ["besvarbar"] = answerable, ["begriplig"] = understandable, ["specifik"] = specific });
 
     private static string Ask(int template, int topic, string tag) => string.Format(System.Globalization.CultureInfo.InvariantCulture, Good[template], Topics[topic], tag);
 
@@ -72,12 +81,9 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
             var doc3 = await EvalSeeds.DocumentAsync(database, seed, "Fritid " + tag, [new(texts[4], "pdf"), new(texts[5], "pdf")]);
             // Personal-data flagged: not sampled, but a duplicated page of doc1's first chunk.
             var flagged = await EvalSeeds.DocumentAsync(database, seed, "Kopia " + tag, [new(texts[0]), new(Text(6))], piiFlagged: true);
-            for (var i = 0; i < 6; i++)
-            {
-                gateway.Generate[texts[i]] = Reply(Ask(i, i, tag), $"Svar nummer {i} {tag}.");
-            }
+            _gateway.Script(EvalModelClient.GenerateStep, [.. Enumerable.Range(0, 6).Select(i => Reply(Ask(i, i, tag), $"Svar nummer {i} {tag}."))]);
 
-            await using var rig = EvalRig.Start(database, gateway);
+            await using var rig = EvalRig.Start(database, _gateway);
             var job = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
             (await rig.RunAsync(job)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
 
@@ -119,7 +125,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
                 "a live document with a chunk of the same TextHash is expected too");
             questions.Where(q => q.SourceChunkId != doc1.ChunkIds[0]).ShouldAllBe(q => q.ExpectedDocumentIds.Length == 1);
 
-            var calls = gateway.Calls.ToList();
+            var calls = _gateway.Calls.ToList();
             calls.ShouldAllBe(c => c.Ceiling == "OnPrem" && c.Model == Model && c.ResponseFormat == "json_object");
             calls.Where(c => c.Step == EvalModelClient.GenerateStep).ShouldAllBe(c => c.Temperature == 0.3);
             calls.Where(c => c.Step == EvalModelClient.JudgeStep).ShouldAllBe(c => c.Temperature == 0);
@@ -166,22 +172,17 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
                 (Reply(judgedLow, "Kundtjänst."), FilterReasons.Judge),
                 ("inte json", FilterReasons.Format),
             };
-            var texts = new List<string>();
             for (var d = 0; d < 4; d++)
             {
                 var chunks = Enumerable.Range(0, 3).Select(i => Text((3 * d) + i < 8 ? (3 * d) + i : 1)).ToList();
-                texts.AddRange(chunks);
                 await EvalSeeds.DocumentAsync(database, seed, $"Dokument {d} {tag}", [.. chunks.Select(c => new SeedChunk(c))]);
             }
 
-            for (var i = 0; i < replies.Length; i++)
-            {
-                gateway.Generate[texts[i]] = replies[i].Reply;
-            }
+            // All 12 chunks are sampled, one reply each in order; the judge sees goodA, goodB, the duplicate and judgedLow, in that order.
+            _gateway.Script(EvalModelClient.GenerateStep, [.. replies.Select(r => r.Reply)]);
+            _gateway.Script(EvalModelClient.JudgeStep, FakeChatScripts.DefaultJudge, FakeChatScripts.DefaultJudge, FakeChatScripts.DefaultJudge, Scores(5, 5, 2));
 
-            gateway.Judge[judgedLow] = (5, 5, 2);
-
-            await using var rig = EvalRig.Start(database, gateway);
+            await using var rig = EvalRig.Start(database, _gateway);
             var job = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
             (await rig.RunAsync(job)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
 
@@ -197,7 +198,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
                 dropped.Count(m => m.EndsWith($"({reason})", StringComparison.Ordinal)).ShouldBe(1, $"{reason}: {string.Join("; ", dropped)}");
             }
 
-            gateway.Calls.Count(c => c.Step == EvalModelClient.JudgeStep).ShouldBe(4, "the judge sees only candidates that passed the cheap filters");
+            _gateway.Calls.Count(c => c.Step == EvalModelClient.JudgeStep).ShouldBe(4, "the judge sees only candidates that passed the cheap filters");
         }
         finally
         {
@@ -216,28 +217,25 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
             var doc1 = await EvalSeeds.DocumentAsync(database, seed, "Ett " + tag, [new(texts[0]), new(texts[1])]);
             var doc2 = await EvalSeeds.DocumentAsync(database, seed, "Två " + tag, [new(texts[2]), new(texts[3])]);
             await EvalSeeds.DocumentAsync(database, seed, "Tre " + tag, [new(texts[4]), new(texts[5])]);
-            for (var i = 0; i < 6; i++)
-            {
-                gateway.Generate[texts[i]] = Reply(Ask(i, i, tag), $"Svar nummer {i} {tag}.");
-            }
+            _gateway.Script(EvalModelClient.GenerateStep, [.. Enumerable.Range(0, 6).Select(i => Reply(Ask(i, i, tag), $"Svar nummer {i} {tag}."))]);
 
-            await using var rig = EvalRig.Start(database, gateway);
+            await using var rig = EvalRig.Start(database, _gateway);
             var first = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
             (await rig.RunAsync(first)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
             var setId = (await CommandSeeds.ResultAsync(database, first.Id)).GetProperty("setId").GetGuid();
             var before = await EvalSeeds.QuestionsAsync(database, setId);
             before.Count.ShouldBe(6);
 
-            // doc1 changes: its first question is no longer answerable, its second still is; doc2 is deleted.
-            var changedTexts = new[] { Text(6), Text(7) };
-            var changed = await EvalSeeds.ChangeAsync(database, seed, doc1.DocumentId, [new(changedTexts[0]), new(changedTexts[1])]);
-            gateway.Generate[changedTexts[0]] = Reply(Ask(6, 6, tag), $"Svar sex {tag}.");
-            gateway.Generate[changedTexts[1]] = Reply(Ask(7, 7, tag), $"Svar sju {tag}.");
-            var unanswerable = before.Single(q => q.SourceChunkId == doc1.ChunkIds[0]);
-            var stillAnswered = before.Single(q => q.SourceChunkId == doc1.ChunkIds[1]);
-            gateway.Judge[unanswerable.Question] = (2, 5, 5);
+            // doc1 changes: its first question by id is no longer answerable, its second still is; doc2 is deleted. The re-check
+            // judges doc1's questions in id order (EvalSetStore.ActiveAsync), then the judge sees the one new candidate.
+            var changed = await EvalSeeds.ChangeAsync(database, seed, doc1.DocumentId, [new(Text(6)), new(Text(7))]);
+            _gateway.Script(EvalModelClient.GenerateStep, Reply(Ask(6, 6, tag), $"Svar sex {tag}."));
+            var doc1Questions = before.Where(q => doc1.ChunkIds.Contains(q.SourceChunkId)).ToList();
+            doc1Questions.Count.ShouldBe(2);
+            var (unanswerable, stillAnswered) = (doc1Questions[0], doc1Questions[1]);
+            _gateway.Script(EvalModelClient.JudgeStep, Scores(2, 5, 5), FakeChatScripts.DefaultJudge, FakeChatScripts.DefaultJudge);
             await EvalSeeds.DeleteAsync(database, doc2.DocumentId);
-            gateway.Calls.Clear();
+            _gateway.Calls.Clear();
 
             var topUp = await rig.LeaseAsync(database, new EvalTopUpSetPayload { CollectionId = seed.CollectionId }, seed);
             (await rig.RunAsync(topUp)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
@@ -258,7 +256,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
             added.Origin["seed"]!.GetValue<string>().ShouldBe(Convert.ToHexStringLower(ChunkSampler.Seed(setId, 2)));
             added.Origin["seed"]!.GetValue<string>().ShouldNotBe(before[0].Origin["seed"]!.GetValue<string>());
             added.CreatedBy.ShouldBe("system:top-up-set");
-            gateway.Calls.Count(c => c.Step == EvalModelClient.JudgeStep).ShouldBe(3, "two re-checks of doc1's questions, one new candidate; none for doc3 or the deleted doc2");
+            _gateway.Calls.Count(c => c.Step == EvalModelClient.JudgeStep).ShouldBe(3, "two re-checks of doc1's questions, one new candidate; none for doc3 or the deleted doc2");
         }
         finally
         {
@@ -274,8 +272,9 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
         try
         {
             await EvalSeeds.SetModelsAsync(database, Model, maxQuestions: 6);
-            // Three table row groups and three lists over four documents, among 20 text chunks without a scripted answer; every
-            // document also has two later row groups of a large table (with good answers), and a fifth document has nothing else.
+            // Three table row groups and three lists over four documents, among 20 text chunks; every document also has two later
+            // row groups of a large table, and a fifth document has nothing else. Every call gets the next of six good answers, so
+            // the six kept questions come from the first six chunks the sample asks about.
             string[] kinds = [ChunkContentKinds.Table, ChunkContentKinds.Table, ChunkContentKinds.List, ChunkContentKinds.Table, ChunkContentKinds.List, ChunkContentKinds.List];
             int[] owners = [0, 1, 1, 2, 2, 3];
             var kindTexts = Enumerable.Range(0, 6).Select(Text).ToList();
@@ -298,17 +297,9 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
                 largeTexts.AddRange(large);
             }
 
-            for (var k = 0; k < 6; k++)
-            {
-                gateway.Generate[kindTexts[k]] = Reply(Ask(k, k, tag), $"Svar nummer {k} {tag}.");
-            }
+            _gateway.Script(EvalModelClient.GenerateStep, [.. Enumerable.Range(0, 6).Select(k => Reply(Ask(k, k, tag), $"Svar nummer {k} {tag}."))]);
 
-            for (var i = 0; i < largeTexts.Count; i++)
-            {
-                gateway.Generate[largeTexts[i]] = Reply(Ask(6 + (i % 2), 6, tag + i), $"Svar stor {i} {tag}.");
-            }
-
-            await using var rig = EvalRig.Start(database, gateway);
+            await using var rig = EvalRig.Start(database, _gateway);
             var job = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
             (await rig.RunAsync(job)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
 
@@ -320,7 +311,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
             questions.Select(q => q.Origin["strata"]!["contentKind"]!.GetValue<string>()).Order(StringComparer.Ordinal)
                 .ShouldBe(["list", "list", "list", "table", "table", "table"]);
             questions.ShouldAllBe(q => !largeIds.Contains(q.SourceChunkId));
-            gateway.Calls.Where(c => c.Step == EvalModelClient.GenerateStep)
+            _gateway.Calls.Where(c => c.Step == EvalModelClient.GenerateStep)
                 .ShouldAllBe(c => !largeTexts.Any(t => c.User.Contains(t, StringComparison.Ordinal)), "a large table's later row groups are never sampled");
         }
         finally
@@ -336,11 +327,10 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
         var seed = await EngineKit.SeedUrlListAsync(database, []);
         try
         {
-            var text = Text(0);
-            await EvalSeeds.DocumentAsync(database, seed, "Ett " + tag, [new(text)]);
-            gateway.Generate[text] = "inte json";
+            await EvalSeeds.DocumentAsync(database, seed, "Ett " + tag, [new(Text(0))]);
+            _gateway.Script(EvalModelClient.GenerateStep, "inte json");
 
-            await using var rig = EvalRig.Start(database, gateway);
+            await using var rig = EvalRig.Start(database, _gateway);
             var first = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
             (await rig.RunAsync(first)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
             var result = await CommandSeeds.ResultAsync(database, first.Id);
@@ -349,7 +339,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
             (await Sql.ScalarAsync<int>(database.Connection(null), """SELECT "Round" FROM content."EvaluationSets" WHERE "Id" = $1""", setId))
                 .ShouldBe(2, "the set's Round is the round the next generation uses");
 
-            gateway.Generate[text] = Reply(Ask(0, 0, tag), $"Svar {tag}.");
+            _gateway.Script(EvalModelClient.GenerateStep, Reply(Ask(0, 0, tag), $"Svar {tag}."));
             var second = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
             (await rig.RunAsync(second)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
             (await CommandSeeds.ResultAsync(database, second.Id)).GetProperty("round").GetInt32().ShouldBe(2);
@@ -375,11 +365,10 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
         try
         {
             await EvalSeeds.SetModelsAsync(database, model, judgeModel);
-            var text = Text(0);
-            await EvalSeeds.DocumentAsync(database, seed, "Ett " + tag, [new(text)]);
-            gateway.Generate[text] = Reply(Ask(0, 0, tag), "Nämnden.");
+            await EvalSeeds.DocumentAsync(database, seed, "Ett " + tag, [new(Text(0))]);
+            _gateway.Script(EvalModelClient.GenerateStep, Reply(Ask(0, 0, tag), "Nämnden."));
 
-            await using var rig = EvalRig.Start(database, gateway);
+            await using var rig = EvalRig.Start(database, _gateway);
             var job = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
 
             (await rig.RunAsync(job)).ShouldBe(new JobResult.FatalError(code));
@@ -388,7 +377,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
                 """, seed.CollectionId)).ShouldBe(0);
             if (code != EvalModelClient.ResidencyAboveCeiling)
             {
-                gateway.Calls.ShouldBeEmpty("refused before any model call");
+                _gateway.Calls.ShouldBeEmpty("refused before any model call");
             }
         }
         finally
@@ -403,13 +392,13 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
         var seed = await EngineKit.SeedUrlListAsync(database, []);
         try
         {
-            await using (var rig = EvalRig.Start(database, gateway, onPremKey: false))
+            await using (var rig = EvalRig.Start(database, _gateway, onPremKey: false))
             {
                 var job = await rig.LeaseAsync(database, new EvalTopUpSetPayload { CollectionId = seed.CollectionId }, seed);
                 (await rig.RunAsync(job)).ShouldBe(new JobResult.FatalError(EvalModelClient.NoOnPremKey));
             }
 
-            await using (var rig = EvalRig.Start(database, gateway))
+            await using (var rig = EvalRig.Start(database, _gateway))
             {
                 var nightly = await rig.LeaseAsync(database, new EvalNightlyPayload { CollectionId = seed.CollectionId, ScheduledFor = DateTimeOffset.UtcNow }, seed);
                 (await rig.RunAsync(nightly)).ShouldBe(new JobResult.FatalError(EvalSetGenerator.UnknownKind));
@@ -417,7 +406,7 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
                 (await rig.RunAsync(unknown)).ShouldBe(new JobResult.FatalError(EvalSetGenerator.CollectionUnknown));
             }
 
-            gateway.Calls.ShouldBeEmpty();
+            _gateway.Calls.ShouldBeEmpty();
         }
         finally
         {
