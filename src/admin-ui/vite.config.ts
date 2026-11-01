@@ -38,6 +38,7 @@ export default defineConfig({
     proxy: {
       '/api': proxyOptions,
       '/bff': proxyOptions,
+      '/openapi': proxyOptions,
       '/signin-oidc': proxyOptions,
       '/signout-callback-oidc': proxyOptions,
     },

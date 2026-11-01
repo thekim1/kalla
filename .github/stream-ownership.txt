@@ -80,6 +80,7 @@ docs/**                                       a
 
 # Stream B: application and the serving side
 src/Ume.Rag.AppHost/**                        b
+src/admin-ui/src/platform/**                  a
 src/**                                        b
 tests/**                                      b
 contracts/admin/**                            b
