@@ -176,7 +176,8 @@ public sealed class PreviewSegment(
                 return loaded;
             }
 
-            await using var stream = await store.Blobs.OpenReadAsync(content.RawKey, null, cancellationToken)
+            // An upload key names no level: it is read by the document's, which may be below the preview's (data-model §7).
+            await using var stream = await store.Blobs.ForLevel(level).OpenReadAsync(content.RawKey, null, cancellationToken)
                 ?? throw new StageFatalException(RunItemOutcome.Failed, "raw.missing");
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer, cancellationToken);
