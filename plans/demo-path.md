@@ -15,7 +15,7 @@ citations from pages the platform crawled itself, over the real (interim) gatewa
    `Gateway:Keys:Eu`, the `EmbeddingProfile:*` values; `docs/p1a-local-run.md` §4.2–§4.3). Started 2026-11-01 on a new empty
    database volume (`DevelopmentVolumes:Postgres` = `ume-rag-pilot-postgres`).
 2. **Set-up through the admin API** (OIDC sign-in as the dev `rag-platform-admin`; recreate the small script `adm.py`;
-   `HANDOVER.md` session 14 has the order, J7): public data-protection row; department DoIT (local seed); collection
+   `HANDOVER.md` "Lessons" has the script's sign-in and headers; the order is J7's): public data-protection row; department DoIT (local seed); collection
    `Turkos` (slug `turkos`, public, published); crawl source on `/kommunochpolitik` with **`maxPages` ≈ 200** (a slice, not
    all 1,166 pages: minutes, not an hour); umea.se site profile; `Settings.Crawl` (`municipalHosts`, `www.umea.se`
    2 req/s); `PiiOwnDomains`; the Open WebUI client (`internal`) and its key; assistant `turkos` on `claude-opus-5-5`
