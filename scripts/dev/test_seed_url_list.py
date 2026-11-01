@@ -1,7 +1,8 @@
 """Tests for seed_url_list.py that need no database: the connection-string parsing, the localhost-only guard (a
-non-local database is refused before psql runs), the URL checks, the psql input and the --api-key handling (key format,
-hash, pepper from the environment only, the key printed once). The SQL itself, and rag-api accepting the key, are tested
-against TestPostgres by tests/Ume.Rag.Worker.Tests/Engine/DevSeedScriptTests.cs. Standard library only:
+non-local database is refused before psql runs), the URL checks, the psql input (with the source's piiMode) and the
+--api-key handling (key format, hash, pepper from the environment only, the key printed once). The SQL itself, and
+rag-api accepting the key, are tested against TestPostgres by tests/Ume.Rag.Worker.Tests/Engine/DevSeedScriptTests.cs.
+Standard library only:
 
     python3 -I -m unittest discover -s scripts/dev -v
 """
@@ -106,9 +107,29 @@ class MainTests(unittest.TestCase):
         stdin = kwargs["input"]
         self.assertIn("SELECT set_config('ume_seed.urls', '[\"https://example.org/a\"]', false);", stdin)
         self.assertIn("SELECT set_config('ume_seed.enqueue', 'true', false);", stdin)
+        self.assertIn("SELECT set_config('ume_seed.pii_mode', 'report', false);", stdin)
         self.assertTrue(stdin.endswith(seed_url_list.SQL_FILE.read_text(encoding="utf-8")))
         self.assertIn("  source: abc (created)", out.getvalue())
         self.assertNotIn("source_id", out.getvalue())
+
+    def test_pii_mode_hold_is_passed_and_another_value_is_refused_before_psql_runs(self) -> None:
+        completed = mock.Mock(returncode=0, stdout="Key,Value\nsource,abc (created)\n", stderr="")
+        with mock.patch("subprocess.run", return_value=completed) as run, redirect_stdout(io.StringIO()):
+            code = seed_url_list.main(
+                ["--connection", LOCAL, "--profile", "p", "--pii-mode", "hold", "https://example.org/a"]
+            )
+        self.assertEqual(0, code)
+        self.assertIn("SELECT set_config('ume_seed.pii_mode', 'hold', false);", run.call_args.kwargs["input"])
+
+        with (
+            mock.patch("subprocess.run") as run,
+            redirect_stderr(io.StringIO()) as err,
+            self.assertRaises(SystemExit) as exit_,
+        ):
+            seed_url_list.main(["--connection", LOCAL, "--profile", "p", "--pii-mode", "off", "https://example.org/a"])
+        self.assertEqual(2, exit_.exception.code)
+        self.assertIn("invalid choice: 'off'", err.getvalue())
+        run.assert_not_called()
 
     def test_socket_mode_runs_psql_in_the_container_as_postgres_without_a_password(self) -> None:
         completed = mock.Mock(returncode=0, stdout="Key,Value\nsource,abc (created)\n", stderr="")

@@ -186,8 +186,10 @@ after #172 begins with an empty database: run the seed (§4.4) again.
 
 `scripts/dev/seed_url_list.py` creates, in the local database only, a department (`Pilot (dev seed)`), a public and
 published collection (`pilot-public`) on the given embedding profile, and a URL-list source (`Pilot URL list`) on the
-platform `url-list` pipeline, then enqueues a manual sync as the admin's "sync now" does. A re-run finds the same rows
-and replaces the source's URL list. It refuses any database host other than `localhost`, `127.0.0.1` or `::1`.
+platform `url-list` pipeline, then enqueues a manual sync as the admin's "sync now" does. The source's settings carry
+`piiMode: report`, as a source on the municipality's own published site does (Decisions table, 2026-11-01): a
+personal-data flag is reported, not held, except a personnummer or samordningsnummer; `--pii-mode hold` keeps the
+hold. A re-run finds the same rows and replaces the source's URL list and `piiMode`. It refuses any database host other than `localhost`, `127.0.0.1` or `::1`.
 The SQL is `scripts/dev/seed-url-list.sql`; `DevSeedScriptTests` runs the same file against the test database.
 
 Pick a handful of public pages (five is plenty for the milestone); the worker fetches them as `UmeaKommunBot/1.0`,

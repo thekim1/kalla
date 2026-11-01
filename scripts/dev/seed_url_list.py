@@ -14,7 +14,9 @@ or ::1: it is for a developer's own database only. The password reaches psql thr
 It finds or creates the department (by name, or --department-id for a synced one), the collection (by slug: public,
 published, on the embedding profile) and the URL-list source (by name in the collection; a re-run replaces its URL
 list), on the platform url-list pipeline the migrator publishes, then enqueues a manual sync as the admin's "sync now"
-does (--no-sync leaves it to the scheduler's url-list schedule). It prints what it found, created and enqueued.
+does (--no-sync leaves it to the scheduler's url-list schedule). It prints what it found, created and enqueued. The
+source gets piiMode report, as a source on the municipality's own published site does (Decisions table, 2026-11-01);
+--pii-mode hold keeps personal-data flags holding the chunk set.
 
 --api-key also creates, until the admin's key endpoints (J7) exist, what a /v1/retrieve call on rag-api needs: the
 public level's data-protection row (when missing), an internal client with ceiling public (by --client-name) and a
@@ -162,6 +164,7 @@ def script(args: argparse.Namespace, urls: list[str], key: str | None = None, pe
         "ume_seed.collection_slug": args.collection_slug,
         "ume_seed.collection_name": args.collection_name,
         "ume_seed.source_name": args.source_name,
+        "ume_seed.pii_mode": args.pii_mode,
         "ume_seed.enqueue": "false" if args.no_sync else "true",
         "ume_seed.client_name": args.client_name,
         "ume_seed.key_hash": key_hash(pepper, key) if key and pepper else "",
@@ -232,6 +235,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--collection-slug", default="pilot-public")
     parser.add_argument("--collection-name", default="Pilot: umea.se (public)")
     parser.add_argument("--source-name", default="Pilot URL list")
+    parser.add_argument(
+        "--pii-mode",
+        choices=("report", "hold"),
+        default="report",
+        help="the source's piiMode: report (default; the municipality's own site) or hold",
+    )
     parser.add_argument(
         "--no-sync", action="store_true", help="enqueue no sync; the scheduler runs the source on its schedule"
     )
