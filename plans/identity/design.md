@@ -525,6 +525,13 @@ reason in the `code` extension; knowledge design §3.6); the in-process path car
 | `internal` | `Eu` | `Eu`-max |
 | `sensitive` | `OnPrem` | `OnPrem`-only |
 
+The deployment knob **`Gateway:MaxResidency`** (api and admin; unset by default) caps the ladder: every call's ceiling is
+`min(ForLevel(level), cap)`, for chat (and its condense call) and the admin's V8 `/v1/models` check and test panel. It
+implements register M2 (every model call EU-hosted until on-prem hardware exists): the pilot sets `Eu`, so a `public`
+assistant is checked and answered at `Eu` with the `Eu` key. It only lowers a ceiling, and is unset (or `External`)
+once External routes and keys exist. A call whose ceiling has no key in this service is refused before sending
+(admin `gateway_key_missing`, admin design §4.6 V8).
+
 The keys are delegating gateway keys per level, issued per deployable that needs them, with `AllowedIpRanges`,
 `RequireMaxResidency` (the gateway refuses a request without the header) and `ApplyTeamPolicy = false` (gateway
 design §13.4); the worker never holds the open key. **Until gateway release 2 (P1)** they are the pilot department's
@@ -570,10 +577,14 @@ without `x-ume-on-behalf-of` (weakness review §5).
 
 ### 4.9 Explain access (admin, new)
 
-`POST /api/access/explain` `{ clientId, subject: { kind, id, departments?, groups? }, assistantId }` → `{ allowed,
-step, reason, status, effectiveLevel, maxResidency, configVersion }`. The admin API builds a `RagPrincipal` from the
-input (the client kind's normal credential and permissions, membership as given with `Known = true`) and calls
-`IAccessPolicy.Decide` on its current snapshot. `step` is the stable id of the first failing §4.3 step (`0`, `1`,
+`POST /api/access/explain` `{ clientId, subject: { kind, id, departments?, groups?, permissions? }, assistantId,
+action? }` → `{ allowed, step, reason, status, effectiveLevel, maxResidency, configVersion }`. `kind` is `key` (`id` =
+the key id), `owui-user` (`id` = the JWT `sub`) or `entra-user` (`id` = the `oid`); `permissions` are an `entra-user`'s
+token scopes and default to the delegated scopes (`Chat.Use`, `Knowledge.Read`, `Mcp.Use`); `action` defaults to a
+chat turn. The admin API builds a `RagPrincipal` from the input (the client kind's normal credential and permissions,
+membership as given with `Known = true`) and calls `IAccessPolicy.Decide` on its current snapshot, with the
+assistant's published version read from `config."PublishedAssistantVersions"` as the data plane reads it
+(data-model §1.2). `step` is the stable id of the first failing §4.3 step (`0`, `1`,
 `1a`, … `12`; an id never changes meaning, a new step gets a new id) and `reason` its stable deny code from the same
 table, so the admin UI and support notes can key on both. Because the policy is pure there is no gateway or Graph call
 and nothing to clean up; no security event is emitted (nothing is accessed). Who: `rag-platform-admin`, and

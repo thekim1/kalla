@@ -246,7 +246,7 @@ The matrix is data (`PermissionMatrix` in `Ume.Rag.Domain`), used for endpoint a
 | `Edit` | collections (create, edit, retrieval settings, test retrieval, run evaluation), sources (create, edit, pause/resume, sync now, retry failed, upload, delete files), assistants (create, edit the draft, publish, restore a version, archive/unarchive, test panel; P2: create from a template, copy, assistant test questions and runs), human test questions, generate test questions, link served skills (P2); P2 limited to the owner team when the department says so (§3.2) |
 | `EditPipelines` | template parameters of the department's sources (preview, plan, publish, roll back), pipeline test retrieval |
 | `EditSkills` (P2) | skills of own departments: draft, publish, serve, roll back, share list, re-run the gate; skill test panel |
-| `Manage` | collection publish, collection share lists (P2), delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients, P2 department settings (owner-team scoping) and owner-team changes while it is on |
+| `Manage` | collection publish, collection share lists (P2), delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients, audit log (own departments, §9.1), P2 department settings (owner-team scoping) and owner-team changes while it is on |
 | `FeedbackComments` | reveal one feedback comment (`public`/`internal`) |
 | `Review` | open a conversation with a reason; P2: request/approve `sensitive` access, search conversations |
 | `Admin` (platform) | templates, assistant templates (P2), site profiles (edit, roll back; approve P2), embedding profiles, clients, `GatewayModels` manual rows, settings, data protection, raised agent limits, tool servers, approvals (platform side, incl. pre-registrations), grants, platform skills, parse-profile proposals (P2), audit log (all), organisation sync now, explain access |
@@ -333,7 +333,8 @@ COMMIT  → rag_config and rag_jobs notifications delivered
 
 ### 4.5 Resources per area
 
-Policy in brackets; department scope applies. Bodies and DTOs are the data-model columns unless noted.
+Policy in brackets; department scope applies. Bodies and DTOs are the data-model columns unless noted. Two policies
+separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined policy in `PermissionMatrix`).
 
 **Organisation, models, access**
 
@@ -347,7 +348,7 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 | `GET /api/gateway/status` | Admin | per level key: one `x-ume-max-residency` embedding call and (from gateway release 2, P2) the delegation echo |
 | `GET /api/organisation/departments/{id}/map` (P2, weakness review §1) | Read | department map (§5.5.6): sources → collections (own and shared in) → assistants (published links; draft-only links flagged) → audiences (clients), from the admin's snapshot; no content |
 | `GET/PUT /api/organisation/departments/{id}/settings` (P2) | Read / Manage | `DepartmentSettings` (`EditOwnerTeamOnly`, `version`); audited `departmentsettings.update` (§3.2) |
-| `POST /api/access/explain` `{ clientId, subject, assistantId }` | Admin; Manage (own department's assistants and clients) | runs the pure `IAccessPolicy` steps (identity §4.3) against the admin's snapshot for that client, subject (`oid`, key id or Open WebUI user) and assistant; returns `{ allowed, step, reason, status, effectiveLevel, maxResidency, configVersion }` (`step` = the stable step id, `reason` = the stable deny code, identity §4.9); no content; no security event |
+| `POST /api/access/explain` `{ clientId, subject, assistantId, action? }` | Admin; Manage (own department's assistants and clients) | runs the pure `IAccessPolicy` steps (identity §4.3) against the admin's snapshot for that client, subject (`oid`, key id or Open WebUI user) and assistant; returns `{ allowed, step, reason, status, effectiveLevel, maxResidency, configVersion }` (`step` = the stable step id, `reason` = the stable deny code, identity §4.9); no content; no security event |
 
 **Collections and retrieval**
 
@@ -391,10 +392,9 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET /api/documents` (keyset; `collectionId`, `sourceId`, `q`, `pii`, `outcome`) | Read | – |
+| `GET /api/documents` (keyset; `collectionId`, `sourceId`, `q`, `pii`, `outcome`) | Read | `pii` is `flagged` (a held flagged set or a flagged live set) or `cleared` |
 | `GET /api/documents/{id}` | Read | its source, chunk sets (pipeline version, site-profile version), run items 90 days, PII counts and state of the live chunk set |
 | `GET /api/documents/{id}/chunks` | Edit, EditPipelines | chunk text with heading path (breadcrumb prefix), tokens |
-| `POST /api/documents/{id}/pii-preview` | Manage | `preview` job up to the personal-data stage; spans from preview blobs (24 h); audited `pii.view` |
 | `POST /api/documents/{id}/pii-clear` | Manage | reason ≥ 10 (V26); `command` `clear-pii-flag` |
 | `POST /api/documents/{id}/reprocess` | Manage | `command` `reprocess-document` |
 
@@ -404,7 +404,7 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 |---|---|---|
 | `GET /api/templates`, `GET /api/templates/{id}/versions/{v}` | Read | parameter schema (`paramsSchema` with `x-labels`, `x-help`, `x-unit`), defaults, effect tags per parameter, worker support |
 | `GET /api/pipelines/{id}`, `GET /api/pipelines/{id}/versions` | Read | a source's pipeline: template version + parameters per version |
-| `POST /api/pipelines/{id}/preview` `{ templateVersionId, parameters, documentIds \| urls }` | EditPipelines, Edit | `preview` `stage-preview` on unsaved parameters (§6.4) |
+| `POST /api/pipelines/{id}/preview` `{ templateVersionId, parameters, documentIds \| urls }` | EditPipelines, Edit | `preview` `stage-preview` on the pipeline's saved draft version (§6.4) |
 | `POST /api/pipelines/{id}/publications` `{ templateVersionId, parameters, version }` | EditPipelines | V24; enqueues `publish-plan`; returns `publicationId` |
 | `GET /api/publications/{id}`, `POST /api/publications/{id}/confirm` `{ version }`, `/cancel` | Read / EditPipelines | §6.6; confirm refused (409) if the pipeline changed since the plan |
 | `POST /api/pipelines/{id}/rollback` `{ versionId }` | EditPipelines | one click; within 14 days the previous chunk sets are swapped back without re-parsing (§6.7) |
@@ -416,6 +416,7 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 |---|---|---|
 | `GET /api/jobs/{id}` | Read (job's department) | `State`, `Result` (secrets stripped), queue position and age |
 | `GET /api/previews/{jobId}/documents/{documentId}/stages/{stage}/output` | Edit, EditPipelines | decrypted preview blob, ≤ 2 MB, `text/markdown` or JSON |
+| `POST /api/documents/{id}/pii-preview` | Manage | `preview` job up to the personal-data stage; spans from preview blobs (24 h); audited `pii.view` |
 
 **Evaluation**
 
@@ -423,9 +424,9 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 |---|---|---|
 | `GET /api/collections/{id}/evaluation` | Read | set size per layer, stale/retired counts, latest reports |
 | `GET /api/collections/{id}/evaluation/questions` (keyset; `layer`, `state`, `q`) | Read | question, expected answer, expected documents (titles), last rank |
-| `POST /api/collections/{id}/evaluation/generate` | Edit | `eval` `generate-set`/`top-up-set` with cost forecast; P1b, with the evaluation items (P1a's evaluation is the human gold set plus on-demand runs; generated sets are not run on the pilot until an on-prem model exists, O1) |
+| `POST /api/collections/{id}/evaluation/generate` | Edit | `eval` `generate-set`/`top-up-set` with cost forecast (≈ 400 prompt and 120 output tokens per candidate, around twice the mean eligible chunk; a top-up's forecast is a lower bound, since the stale questions its re-check retires are known only in the worker); P1b, with the evaluation items (P1a's evaluation is the human gold set plus on-demand runs; generated sets are not run on the pilot until an on-prem model exists, O1) |
 | `POST/PUT/DELETE /api/collections/{id}/evaluation/questions[/{qid}]` | Edit | human layer via `command` `edit-eval-question`; expected documents picked by search |
-| `POST /api/collections/{id}/evaluation/run` | Edit | on demand (§4.7) |
+| `POST /api/collections/{id}/evaluation/run` | Edit | on demand (§4.7); a refused `candidateSettings` value is reported as `settings.<key>`, as the retrieval-settings save does |
 | `GET /api/evaluation-runs/{id}`, `GET /api/evaluation-runs/{id}/results` | Read | recall@10 and MRR with counts, the previous run's values, per-question rank changes (§7.2) |
 
 **Assistants**
@@ -436,7 +437,7 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 | `GET/PUT/DELETE /api/assistants/{id}/draft` | Read / Edit / Edit | the version fields: instructions, model, collections, skills (with excluded tools), query steps, P2 agent limits, not-found texts and links. One draft per assistant (`DraftVersionId`), created on the first edit as a copy of the published version with `Number` + 1; saving applies field rules and returns the assistant V-rules as `warnings[]` (never refused, so work in progress can be saved); `DELETE` discards it |
 | `POST /api/assistants/{id}/publish` `{ draftVersion, version, confirmBaseChanged? }` | Edit | V34, then every assistant rule (V3–V17) as refusals and V8's `/v1/models` call; one transaction (§4.4) marks the draft `published` and the previous one `superseded`, sets `PublishedVersionId` and clears `DraftVersionId` (data-model §2.1); starts the test run (§7.4; P2). A draft created before the current published version (a restore happened since; its `Number` is lower) answers 409 `draft_base_changed` (with the diff from P2) until confirmed |
 | `GET /api/assistants/{id}/versions`, `GET …/versions/{n}`, `GET …/versions/{n}/diff?against={m}` (`m` = a number or `draft`; **diff P2**, weakness review §1) | Read | number, state, who and when, restored-from, test-run summary (P2); the diff is structured: changed settings by name, collections and skills added or removed, and a line diff of instructions and not-found texts (in-house Myers diff over ≤ 20,000 characters, no package) |
-| `POST /api/assistants/{id}/versions/{n}/restore` `{ version }` | Edit | one click: a **new** version with version n's settings (`RestoredFromVersionId`), published at once exactly as publish; an open draft is kept (its base is now older); refused with the list when a link no longer resolves (V34) |
+| `POST /api/assistants/{id}/versions/{n}/restore` `{ version }` | Edit | one click: a **new** version with version n's settings (`RestoredFromVersionId`), published at once exactly as publish; an open draft is kept (its base is now older); refused with the list when a link no longer resolves (V34); restoring the draft or the published version is refused (409 `version_not_restorable`) |
 | `POST /api/assistants/{id}/copy` `{ name, slug, departmentId, ownerTeamId }` (P2, weakness review §1) | Read (source) + Edit (target department) | new assistant with only a draft = the source's published version (its draft if never published); test questions copied; audiences, keys, versions and statistics not copied; V11/V12 for the target department as warnings; audited `assistant.copy` |
 | `POST /api/assistants/{id}/archive`, `/unarchive` | Edit | `State = archived` hides the assistant from every client (identity §4.3 step 5) and keeps versions, audiences and statistics; unarchive returns `State = active` with the same published version |
 | `GET/POST/PUT/DELETE /api/assistants/{id}/test-questions[/{qid}]` (P2, weakness review §1) | Read / Edit | V33; the expected document is picked by title search in the draft's collections |
@@ -490,7 +491,7 @@ kept so references stay stable.
 | V5 | for every reachable tool server: max(assistant level, ceilings of history-resending audience clients) ≤ **clearance** | `tool_clearance` | publish; level or audience save; skill serve; server edit | tools §5.3 |
 | V6 | every reachable tool server's result level ≤ assistant level | `tool_result_level` | as V5 | tools §5.3 |
 | V7 | an audience client's ceiling ≥ assistant level (else the assistant is invisible to it) | `audience_above_ceiling` | audience save; client ceiling lowered; assistant level raised | identity §4.1 |
-| V8 | **residency**: the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on publish and on a level or audience save, the model is listed by the gateway's `/v1/models` called with `x-ume-max-residency` = the level's ceiling** (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later) | `model_residency`, `model_not_listed` (409), `gateway_unavailable` (503) | publish; level save; audience save; model sync changed residency (warning on Overview; chat checks per call) | chat §8.2, simplification pass §7 |
+| V8 | **residency**: the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on publish and on a level or audience save, the model is listed by the gateway's `/v1/models` called with `x-ume-max-residency` = the level's ceiling** (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later) | `model_residency`, `model_not_listed` (409), `gateway_unavailable` (503), `gateway_key_missing` (503: the service holds no gateway key for the ceiling, identity §4.7) | publish; level save; audience save; model sync changed residency (warning on Overview; chat checks per call) | chat §8.2, simplification pass §7 |
 | V9 | `sensitive` assistants only for clients with `StoresHistory = false` when `DataProtectionPolicies.ClientsWithoutHistoryOnly` | `client_stores_history` | audience save; policy change | platform §8a |
 | V10 | `HistoryMode` ∈ allowed modes, `RetentionDays` ≤ level max (default ≤ max ≤ 90) | `retention_outside_policy` | assistant save; policy tightened (lists assistants) | data-model §2.1 |
 | V11 | ≤ 20 collections per assistant; each of the assistant's department (from P2 also one shared with it, `CollectionShares`, §3.2) | `too_many_collections`, `collection_not_shared` | publish; share list narrowed | knowledge §4.2, §3.2 here |
@@ -600,12 +601,12 @@ answer. Nothing is stored. Query embeddings use the in-process L1 cache only, ke
 key. **Release coupling**: `rag-admin` and `rag-api` are built and deployed from one release (`release.yml`), and the
 panel ships in the same P1 release as the chat role, so it never runs a different `Ume.Rag.Answering` than chat does.
 
-| Input | Output (JSON, non-streamed; ≤ 60 s) |
+| Input | Output (JSON, non-streamed through the chat client; ≤ 60 s by its timeouts) |
 |---|---|
 | `question`; optional `history[]` (≤ 10 messages, to test condense); assistant id and `target` (`draft` default, `published`); optional `collectionIds` subset | `retrieval`: searched collections (with a not-published flag), coverage `{status, bestDistance, threshold, collection}`, candidates `{rank, title, url or file name, headingPath, text (600 characters, expandable), distance, keywordRank, vectorRank, fused, cited}`, timings; `condense` `{used, skipped, question}`; `prompt` token budget per part against the limit; `answer` `{raw, delivered, filtered[] (kind, text), citations [n] → document, outcome, language}`; `gateway` `{model, residency, latencyMs, ttftMs, inputTokens, outputTokens, costUsd}`; `usesTools`; P2 `toolCalls[]` `{tool, state, durationMs, arguments (admin view), resultExcerpt}`, skill inclusion (static/progressive) |
 
-- Rate: 20 test questions per minute per user, metric `rag.admin.test_panel{outcome}`; no audit entry, no 6007 (the
-  content is the caller's own department's).
+- Rate: 20 test questions per minute per user on the full panel (the retrieval-only variant has no limit), metric
+  `rag.admin.test_panel{outcome}`; no audit entry, no 6007 (the content is the caller's own department's).
 - The answer is shown as **plain text** with preserved line breaks and `[n]` chips (no Markdown renderer).
 - P2: an assistant that uses tools (its draft, when testing the draft) calls hosted MCP servers through the admin's in-process hub as `admin-console` (needs
   `Clients.ToolPolicy = read` for that client, §13), with the same limits; write tools stay impossible.
@@ -966,7 +967,8 @@ templates (`Ume.Rag.Pipelines.Tests`).
 
 ### 6.4 Preview
 
-Preview runs on the form's unsaved values (sent as transient parameters). The result view: documents as tabs, each with
+Preview runs on the form's values saved as the pipeline's draft version: the `stage-preview` payload names a
+`pipelineVersionId` (engine design §9.1), and draft pipeline versions come with pipeline publish (§6.6). The result view: documents as tabs, each with
 a stage strip (state, duration, cache hit, cost) and the selected stage's output (parsed Markdown with page markers,
 sections, chunks with heading path and token count, PII counts). For a crawl source the first tab is **Före / Efter**:
 the raw page text next to the extracted main text under the site profile the worker learned for the host or would apply
@@ -1155,7 +1157,8 @@ reviewers (their own). Reading the list emits 6007. Export CSV (`;`, as `ReportE
 
 - A list page in P1: platform admins every `AuditLog` entry (filters: period, actor, action, entity type, entity id,
   department, service incl. `system:retention` and worker entries), keyset; the detail shows the stored before/after
-  snapshot JSON as text. Department admins see their departments' entries through `AuditLog.DepartmentId` (§13). The
+  snapshot JSON as text. Policy `Manage` with department scope: department admins see their departments' entries
+  through `AuditLog.DepartmentId` (§13). The
   field-level diff viewer and **Historik** tabs on entity pages are P2.
 - Reading the audit log emits 6007 (identity §10).
 

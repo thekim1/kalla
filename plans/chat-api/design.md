@@ -182,7 +182,7 @@ Non-streaming (`object: chat.completion`):
 | Method | Path | Behaviour |
 |---|---|---|
 | `GET` | `/v1/conversations?limit=20&after=<cursor>` | the caller's conversations for this client (`ClientId`, `SubjectId`), keyset on `(LastMessageAt, Id)` (index data-model §2.3), titles decrypted; `{ data: [{ id, assistant, title, created_at, last_message_at, history_mode }], next }` |
-| `GET` | `/v1/conversations/{id}` | messages (decrypted) with their cited sources (number, title, link from the stored snapshot), feedback state; 404 `conversation_not_found` for anything not owned |
+| `GET` | `/v1/conversations/{id}` | messages (decrypted) with their cited sources (number, title, link from the stored snapshot; in mode `none`, which stores no snapshot, the cited document id instead), feedback state; 404 `conversation_not_found` for anything not owned |
 | `DELETE` | `/v1/conversations/{id}` | deletes the conversation's rows at once (§13.2); 204; idempotent |
 
 In P1 every conversation is in history mode `none` (§11.2): titles and messages come back empty, metadata only.
@@ -292,6 +292,7 @@ integration sync point). Elsewhere this document still cites v0.12.5 source.
 | `ENABLE_PASSWORD_AUTH` | `false`; `true` only while `deploy/openwebui-feedback-key.sh` runs | `ENABLE_LOGIN_FORM=false` hides the form but does not block API password sign-in (`routers/auths.py:663-667` at v0.12.3) |
 | `DEFAULT_USER_ROLE` | `user` | the service account is the only admin, so with the default `pending` nobody could approve an OIDC account and no one could chat; every enabled account of realm `ume` becomes a user (who may sign in stays identity §16 question 5) |
 | `BYPASS_MODEL_ACCESS_CONTROL=true`, `ENABLE_PERSISTENT_CONFIG=false`, Open WebUI RAG/web/code/tools off | as chat plan §6 | – |
+| `DEFAULT_MODEL_METADATA` | `{"capabilities":{"builtin_tools":false}}` | Open WebUI adds its builtin tools to every browser chat unless a model's capabilities say otherwise; with this default browser chats send no `tools` (rag-api refuses client tools with 400 `tools_not_supported`, §3.2) |
 
 **Sign-in (P1, identity §5.3, §11.2, 2026-10-31).** Open WebUI signs in over OIDC against the **shared Keycloak**
 (Decisions table "P1 pilot sign-in"): `OAUTH_CLIENT_ID=open-webui` (realm `ume`), that client's secret in
@@ -740,8 +741,8 @@ bounded wait before dropping (`Pipeline/GatewayRequestHandler.Accounting.cs:118-
 
 | Setting | Value | Why |
 |---|---|---|
-| Capacity | 5,000 turns **and** 64 MB of plaintext (a byte counter next to the channel) | turns carry content, unlike usage records |
-| Enqueue wait when full | `Chat:WriterEnqueueTimeout` 2 s, then drop + `rag.chat.writer.dropped` + a warning with the message id | the answer is already delivered; waiting only holds memory |
+| Capacity | 5,000 turns; with stored content (A1) also 64 MB of plaintext (a byte counter next to the channel) | turns with content are large, unlike usage records; mode `none` turns carry no text, so there is no byte counter |
+| Enqueue wait when full | `Chat:WriterEnqueueTimeout` 2 s, awaited on the request path after the answer is written, then drop + `rag.chat.writer.dropped` + a warning with the message id | the answer is already delivered; waiting only holds memory |
 | Batch | ≤ 200 turns or 250 ms, whichever first | a batch is one transaction |
 | Shutdown | drain within `ShutdownDrain` (gateway ServiceDefaults) up to 20 s | rolling updates lose nothing in the normal case |
 | Journal | **none** | the gateway journals usage to Redis; chat content must not leave the encrypted tables (plan §8a), and an encrypted journal would need the same keys and retention; the loss bound below is accepted |
@@ -790,8 +791,8 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
   of attaching feedback (the importer counts such feedback as unmapped, §14.3).
 - `CostUsd` for streamed answers (P2): a job reads the gateway Data API usage feed (`/v1/usage/records`, cursor by id,
   permission `usage.detail`, `src/Ume.LlmGateway.DataApi/DataEndpoints.cs:66-80`; `runId` added in gateway release 2, gateway
-  design §5.9) and fills `Messages.CostUsd` and the daily totals by run id. Until then cost is visible in the gateway's
-  own reports per team.
+  design §5.9) and fills `Messages.CostUsd` and the daily totals by run id. Until then the writer stores `CostUsd` 0
+  and TTFT null (the chat path measures neither), and cost is visible in the gateway's own reports per team.
 - **No sticky sessions**: the chat path keeps no per-instance state a request depends on. The history is the client's,
   the config snapshot is per instance (90 s grace, then 503), conversation ids are signed and verified without SQL,
   rate limits are per instance in P1 (Redis from P2), and `Seq` is assigned under the conversation row lock, correct

@@ -551,10 +551,10 @@ document's live pointer as a safety net (§6.3).
 ### 6.2 Statements K and V (flat chunks)
 
 Parameters: `$1` query search text (K, §5.1) or `vector(1024)` (V), `$2 uuid[]` scope (collection ids), `$3 text[]`
-allowed levels, then only the filters present: `$4 text[]` tags, `$5 text[]` document types, `$6 timestamptz` modified
-after. Filter predicates are **appended only when the filter is present**, so the planner never sees `($x IS NULL OR
-…)`; the profile id is an inlined literal from config (data-model §3.3), so a generic plan still matches the partial
-indexes. Each distinct text is one auto-prepared statement (variants: K/V × approximate/exact × 2³ filter
+allowed levels, in K `$4 text[]` the keyword stop lexemes (empty for none), then only the filters present, from `$4` in
+V and `$5` in K: tags (`text[]`), document types (`text[]`), modified after (`timestamptz`). Filter predicates are
+**appended only when the filter is present**, so the planner never sees `($x IS NULL OR …)`; the profile id is an
+inlined literal from config (data-model §3.3), so a generic plan still matches the partial indexes. Each distinct text is one auto-prepared statement (variants: K/V × approximate/exact × 2³ filter
 combinations). The dimensions and the candidate depth (`LIMIT`) are inlined too (checked ints, never user input), so
 variants also differ per profile and depth; the vector and every filter stay parameters. K's query CTE `q` is
 `MATERIALIZED`: inlined, a generic plan evaluated `rag_or_query(to_tsvector($1))` once per candidate row, which more
@@ -562,8 +562,8 @@ than doubled K at 100k chunks (to-verify #5).
 
 ```sql
 -- K: keyword candidates (data-model §3.2 partial GIN index: "Kind" = 'child' AND "DeletedAt" IS NULL)
-WITH q AS MATERIALIZED (   -- OR over the lexemes of the query search text; never by rewriting plainto_tsquery text
-    SELECT content.rag_or_query(to_tsvector('swedish', $1)) AS tsq
+WITH q AS MATERIALIZED (   -- OR over the lexemes of the query search text minus the stop lexemes $4
+    SELECT content.rag_or_query(ts_delete(to_tsvector('swedish', $1), $4::text[])) AS tsq
 ), kw AS MATERIALIZED (
     SELECT c."Id", c."DocumentId", c."ChunkSetId", c."Ordinal", c."TextHash", c."CollectionId", c."Classification",
            c."DocumentType", c."SourceModifiedAt",                -- age decay (§6.5)
@@ -574,9 +574,9 @@ WITH q AS MATERIALIZED (   -- OR over the lexemes of the query search text; neve
       AND c."EmbeddingProfileId" = '01929b6e-0000-7000-8000-00000000b6e3'
       AND c."CollectionId" = ANY ($2)
       AND c."Classification" = ANY ($3)
-      AND c."Tags" && $4                               -- only when filters.tags
-      AND c."DocumentType" = ANY ($5)                  -- only when filters.document_types
-      AND c."SourceModifiedAt" >= $6                   -- only when filters.modified_after
+      AND c."Tags" && $5                               -- only when filters.tags
+      AND c."DocumentType" = ANY ($6)                  -- only when filters.document_types
+      AND c."SourceModifiedAt" >= $7                   -- only when filters.modified_after
     ORDER BY score DESC, c."Id"
     LIMIT 100
 )
@@ -611,10 +611,15 @@ FROM vec JOIN content."Documents" d ON d."Id" = vec."DocumentId";
 normalised by `swedish`, so `simple` only quotes them; user input never reaches `to_tsquery` syntax. A query of stop
 words only gives `NULL` and K returns nothing.
 
-**Frequent terms (P1b, before the pilot crawl):** the .NET query builder drops from the query search text every term
-found in more than 30 % of the scope's chunks (a keyword stop list), because OR semantics make K rank tens of thousands
-of matches for terms like `umeå` or `kommun` (measured 375–659 ms p95 at 100k chunks against the 30 ms budget of §11,
-to-verify #5; Decisions "Keyword stop list before the pilot crawl"). No Postgres configuration changes.
+**Frequent terms (P1b, before the pilot crawl):** K drops every lexeme found in more than 30 % of the scope's chunks
+(a keyword stop list), because OR semantics make K rank tens of thousands of matches for terms like `umeå` or `kommun`
+(measured 375–659 ms p95 at 100k chunks against the 30 ms budget of §11, to-verify #5; Decisions "Keyword stop list
+before the pilot crawl"). .NET chooses the stop list and passes it as `$4`; Postgres removes those lexemes from the
+query vector with `ts_delete`, since only its `swedish` stemmer knows the query text's lexemes. The statistics are
+kept per collection (collections of at least 100 chunks, lexemes in at least 10 % of the collection's chunks, read
+with the §6.4 chunk counts); a multi-collection scope sums them as a lower bound, so the list only errs towards keeping
+a term. Scopes under 1,000 chunks get no stop list: K is cheap there and a share says little. A query of stop lexemes
+only gives no candidates, like stop words. No Postgres configuration changes.
 
 Compared with data-model §3.3: fusion, dedup and the final `LIMIT` move to .NET (§6.5); the `ParentId`/`ParentText`
 join is gone (flat chunks; sections come from §9); `ChunkSetId`, `Ordinal`, `CollectionId` and the document's
@@ -1202,8 +1207,8 @@ None.
 - Planner: exact variant `ORDER BY (… <=> $1) + 0` uses the `CollectionId` B-tree and never the HNSW index;
   approximate V and K use their partial indexes under a generic plan with the profile literal (EXPLAIN tests, §16.2).
 - Cost of K for frequent terms with OR semantics (`umeå`, `kommun` in most chunks): `ts_rank_cd` over tens of thousands
-  of matches at 100k chunks; if K exceeds 30 ms p95, drop terms with document frequency > 30 % in the .NET query
-  builder (no Postgres configuration change).
+  of matches at 100k chunks, and that the keyword stop list (§6.2: lexemes in > 30 % of the scope's chunks, chosen in
+  .NET, removed with `ts_delete`) brings K within 30 ms p95.
 - `content.rag_or_query`: the built-in `tsquery_or` can back a custom aggregate on the stock image, and
   `plainto_tsquery('simple', lexeme)` accepts every lexeme the `swedish` parser emits (hosts, URLs, file paths,
   hyphenated words, `'`, `\`) without error; fuzz test over the lexemes of the test corpus.

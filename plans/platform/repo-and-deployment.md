@@ -267,7 +267,9 @@ Knowledge-role settings (knowledge design §2.3, §3.5, §4.6, §5.3, §6, §9, 
 `opensearch` \| `shadow`). The exact-scan threshold and the total expansion budget are **platform values in
 `config."Settings".Retrieval`** (`exactScanMaxChunks` 10,000, `expandTotalMaxTokens` 8,000; data-model §2.1, knowledge
 design §12.1), not deployment settings, so the API, the evaluator (worker) and the admin test panel always agree. The
-admin host also needs `Gateway:*` for test-panel query embeddings (knowledge design §4.2).
+admin host also needs `Gateway:*` for test-panel query embeddings (knowledge design §4.2). `Gateway:MaxResidency` (api
+and admin; unset by default) caps every model-call ceiling at that residency, `min(ForLevel(level), cap)` (identity
+design §4.7): `Eu` while register M2 holds, unset (or `External`) once External routes and keys exist.
 
 Chat-role settings (chat design §3.7, §8, §12, §14.2): `Chat:PublishApiReference` (default `true`, off in production
 until P2), `Chat:CondenseTimeout` (600 ms, hard; falls back to the raw question), `Chat:GatewayHeadersTimeout` (15 s, proposed), `Chat:StreamIdleTimeout` (60 s),

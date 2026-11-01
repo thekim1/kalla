@@ -112,7 +112,7 @@ evaluation model check (processing design §13.1).
 
 | Object | admin | api | worker |
 |---|---|---|---|
-| `config` tables except below | S I U D | S on: `Departments`, `Teams`, `Settings`, `DataProtectionPolicies`, `EmbeddingProfiles`, `Collections`, `Sources` (columns `Id`, `CollectionId`, `Type`, `Classification`, `State`, `DeletedAt`, `ContainsThirdPartyText`, `DemoteRules`; knowledge design §6.3, §6.5), `Assistants`, `AssistantAudiences`, the view `PublishedAssistantVersions` (published versions only, §2.1; never `AssistantVersions` itself, so a draft cannot reach chat), `Skills`, `SkillVersions`, `SkillVersionLinks`, `SkillVersionFiles` (P2), `SkillShares` (P2), `Tools`, `ToolDefinitions`, `ToolApprovals`, `ToolDepartmentGrants` (P2), `GatewayModels`, `Clients`, `Keys`, `CollectionAudiences` (P2), `CollectionShares` (P2) | S on: `Departments`, `Teams`, `Settings`, `DataProtectionPolicies`, `EmbeddingProfiles`, `Collections`, `Sources`, `Pipelines`, `PipelineVersions`, `GatewayModels` |
+| `config` tables except below | S I U D; S on the view `PublishedAssistantVersions` (explain access decides as the api does, identity §4.9) | S on: `Departments`, `Teams`, `Settings`, `DataProtectionPolicies`, `EmbeddingProfiles`, `Collections`, `Sources` (columns `Id`, `CollectionId`, `Type`, `Classification`, `State`, `DeletedAt`, `ContainsThirdPartyText`, `DemoteRules`; knowledge design §6.3, §6.5), `Assistants`, `AssistantAudiences`, the view `PublishedAssistantVersions` (published versions only, §2.1; never `AssistantVersions` itself, so a draft cannot reach chat), `Skills`, `SkillVersions`, `SkillVersionLinks`, `SkillVersionFiles` (P2), `SkillShares` (P2), `Tools`, `ToolDefinitions`, `ToolApprovals`, `ToolDepartmentGrants` (P2), `GatewayModels`, `Clients`, `Keys`, `CollectionAudiences` (P2), `CollectionShares` (P2) | S on: `Departments`, `Teams`, `Settings`, `DataProtectionPolicies`, `EmbeddingProfiles`, `Collections`, `Sources`, `Pipelines`, `PipelineVersions`, `GatewayModels` |
 | `config."ToolServers"` (P2) | S I U D | S | – |
 | `config."KeyLastUse"` | S | S I U | – |
 | `config."DataProtectionKeys"` | S I | S | S |
@@ -203,7 +203,7 @@ the cross-rules apply only to objects P1 has (skills, tool servers and shares jo
 draft copies the source's published (or draft) version, without audiences; a **template** (P2) fills a first draft the same
 way; in P1 the first draft starts from `Settings.Chat` defaults. The data plane reads only published versions, through the view `config."PublishedAssistantVersions"`
 (`AssistantVersions` joined on `Assistants.PublishedVersionId`; owner migrator; the api is granted the view, not the
-table, §1.2). **Mode** is not stored: an assistant runs the agent loop (P2) iff its published version links a skill
+table, and the admin reads the view for explain access, §1.2). **Mode** is not stored: an assistant runs the agent loop (P2) iff its published version links a skill
 whose served version has a tool not in that link's `excludedToolIds`, and the fixed RAG path otherwise; the config
 snapshot computes it (chat design §2.2) and the admin shows it as "Använder verktyg". Serving a skill version that
 adds the first tool therefore switches linking assistants to the agent loop, which is why skill serve re-checks the
@@ -245,7 +245,9 @@ delivered with gateway release 2 in P2 (weakness review §5); until then `Member
   once published; `Number ≥ 1`; at most 20 `CollectionIds`, checked in the database. `Skills` and `TestRunId` (P2)
   are not created. Published and superseded rows are immutable by application rule; no trigger enforces it.
 - **`PublishedAssistantVersions`**: also filters `State = 'published'` and is a `security_barrier` view. The admin
-  gets no grant on it (§1.2 lists only the api).
+  has `SELECT` on it (§1.2): explain access (identity §4.9) decides exactly as the data plane does, from the view that
+  defines a published version; the admin already reads every `AssistantVersions` row, so the grant shows it nothing
+  new.
 - **`AssistantAudiences`**: has an `Id` PK. The designed key contains `coalesce(...)`, so it is a unique expression
   index, not a PK; the outbox `EntityId` is the audience id. The CHECK allows `client` only (P1).
 - **`GatewayModels`**: no change stamps or `xmin` (not an editable root) and no "disabled" column (admin design
