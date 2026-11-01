@@ -175,6 +175,61 @@
       "code": "upload_batch_committed",
       "status": 409,
       "message": "The batch has already been committed with other files."
+    },
+    {
+      "code": "no_draft",
+      "status": 409,
+      "message": "There is no draft to publish."
+    },
+    {
+      "code": "draft_is_only_version",
+      "status": 409,
+      "message": "The draft is the assistant\u0027s only version."
+    },
+    {
+      "code": "draft_base_changed",
+      "status": 409,
+      "message": "The draft is based on an older version than the published one. Confirm to publish it anyway."
+    },
+    {
+      "code": "assistant_contact_missing",
+      "status": 409,
+      "message": "Add a description and a contact before publishing."
+    },
+    {
+      "code": "version_link_missing",
+      "status": 409,
+      "message": "The assistant refers to something that is missing: {link}."
+    },
+    {
+      "code": "too_many_collections",
+      "status": 409,
+      "message": "An assistant can use at most 20 knowledge banks."
+    },
+    {
+      "code": "collection_not_shared",
+      "status": 409,
+      "message": "A knowledge bank belongs to another department."
+    },
+    {
+      "code": "audience_above_ceiling",
+      "status": 409,
+      "message": "A client cannot show an assistant at level {level}."
+    },
+    {
+      "code": "client_stores_history",
+      "status": 409,
+      "message": "A sensitive assistant cannot be offered to a client that stores chat history."
+    },
+    {
+      "code": "query_steps_invalid",
+      "status": 409,
+      "message": "The setting {field} is outside its allowed range."
+    },
+    {
+      "code": "link_host_not_allowed",
+      "status": 409,
+      "message": "A link must be https on an allowed site, at most 5 links."
     }
   ]
 }

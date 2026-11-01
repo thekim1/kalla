@@ -38,6 +38,17 @@ export const ERROR_MESSAGES: Record<string, string> = {
   source_paused: 'Källan är pausad. Återuppta den först.',
   slug_taken: 'Kortnamnet {slug} används redan. Prova {suggestion}.',
   upload_batch_committed: 'Omgången är redan sparad med andra filer.',
+  no_draft: 'Det finns inget utkast att publicera.',
+  draft_is_only_version: 'Utkastet är assistentens enda version.',
+  draft_base_changed: 'Utkastet bygger på en äldre version än den publicerade. Bekräfta för att publicera ändå.',
+  assistant_contact_missing: 'Lägg till en beskrivning och en kontakt innan du publicerar.',
+  version_link_missing: 'Assistenten hänvisar till något som saknas: {link}.',
+  too_many_collections: 'En assistent kan använda högst 20 kunskapsbanker.',
+  collection_not_shared: 'En kunskapsbank hör till en annan förvaltning.',
+  audience_above_ceiling: 'En klient kan inte visa en assistent med informationsklassen {level}.',
+  client_stores_history: 'En assistent med klassen känslig kan inte erbjudas i en klient som sparar chatthistorik.',
+  query_steps_invalid: 'Inställningen {field} ligger utanför det tillåtna intervallet.',
+  link_host_not_allowed: 'En länk måste vara https till en tillåten webbplats, och högst 5 länkar.',
 }
 
 /** When the problem has no code we know: by status. */
