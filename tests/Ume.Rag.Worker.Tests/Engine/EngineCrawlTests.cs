@@ -306,6 +306,65 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
     }
 
     [Fact]
+    public async Task A_path_include_on_a_host_with_an_identity_rule_keeps_its_node_id_documents_and_checks_one_that_left_the_sitemap()
+    {
+        // P1a item 20: include matches the path form, documents keep the node id; a node-id document is neither
+        // scope-narrowed by the path include nor spared the removal check when it leaves the sitemap.
+        var tag = Guid.NewGuid().ToString("N");
+        var listsB = true;
+        var bGone = false;
+        await using var site = await TestSite.StartAsync(app =>
+        {
+            app.MapGet("/robots.txt", (HttpContext context) =>
+                Results.Text($"User-agent: *\nAllow: /\nSitemap: http://{TestSite.Host}:{context.Request.Host.Port}/sitemap.xml\n", "text/plain"));
+            app.MapGet("/sitemap.xml", (HttpContext context) => Results.Content(
+                """<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">"""
+                + (listsB ? $"<url><loc>http://{TestSite.Host}:{context.Request.Host.Port}/sektion/sida-b.4.20000000000b.html</loc><lastmod>2026-01-15</lastmod></url>" : string.Empty)
+                + $"<url><loc>http://{TestSite.Host}:{context.Request.Host.Port}/annan/sida-c.4.30000000000c.html</loc><lastmod>2026-01-15</lastmod></url></urlset>",
+                "application/xml"));
+            app.MapGet("/sektion", () => EngineKit.Html(EngineKit.Page($"sektion {tag}",
+                """<a href="/sektion/sida-a.4.10000000000a.html">A</a> <a href="/sektion/under/sida-a.4.10000000000a.html">A igen</a> <a href="/annan/sida-d.4.40000000000d.html">D</a>""")));
+            app.MapGet("/{node}", (string node) => node switch
+            {
+                "4.20000000000b.html" when bGone => Results.NotFound(),
+                "4.10000000000a.html" or "4.20000000000b.html" or "4.30000000000c.html" or "4.40000000000d.html" => EngineKit.Html(EngineKit.Page($"nod {node} {tag}")),
+                _ => Results.NotFound(),
+            });
+        });
+        var section = $"{TestSite.Host}:{site.Port}/sektion";
+        var seed = await EngineKit.SeedCrawlAsync(database, new { startUrls = new[] { site.Url("/sektion").AbsoluteUri }, include = new[] { section, section + "/**" } });
+        await ApplySiteProfileAsync(seed, TestSite.Host, new Pipelines.SiteProfiles.SiteProfile
+        {
+            MainRoot = "main",
+            IdentityRule = new() { Pattern = @"^/(?:.*/)?(?:[^/]+\.)?(?<id>[0-9]+\.[0-9a-f]{10,})\.html$", Replacement = "/${id}.html", Verified = true },
+        });
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
+        try
+        {
+            var first = await EngineKit.WaitForRunAsync(database, await EngineKit.SyncNowAsync(database, seed));
+
+            first.ShouldBe(new RunCounters(RunStates.Succeeded, 3, 0, 0, 0, 0, 0), "the start page, A (two paths, one node) and B from the sitemap");
+            (await IdentitiesAsync(seed)).ShouldBe([site.Url("/4.10000000000a.html").AbsoluteUri, site.Url("/4.20000000000b.html").AbsoluteUri, site.Url("/sektion").AbsoluteUri]);
+
+            listsB = false;
+            bGone = true;
+            var runId = await EngineKit.SyncNowAsync(database, seed);
+            var second = await EngineKit.WaitForRunAsync(database, runId);
+
+            second.ShouldBe(new RunCounters(RunStates.Succeeded, 0, 0, 2, 1, 0, 0), "B left the sitemap: its removal check finds the 404");
+            using var report = await ReportAsync(runId);
+            report.RootElement.GetProperty("removalChecks").GetProperty("gone").GetInt32().ShouldBe(1);
+            (await IdentitiesAsync(seed)).ShouldBe([site.Url("/4.10000000000a.html").AbsoluteUri, site.Url("/sektion").AbsoluteUri]);
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+            await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM content."SiteProfiles" WHERE "Classification" = $1 AND "Host" = $2""",
+                seed.Classification, TestSite.Host);
+        }
+    }
+
+    [Fact]
     public async Task Retry_failed_on_a_crawl_fetches_only_the_failed_page_and_the_incomplete_traversal_is_reported()
     {
         await using var site = await SiteAsync();
@@ -482,6 +541,24 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
             """, version, profileId, Pipelines.Json.ContractJson.Serialize(profile));
         await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."SiteProfiles" SET "AppliedVersionId" = $1 WHERE "Id" = $2""", version, profileId);
         return version;
+    }
+
+    /// <summary>The source's live documents' identities, in order.</summary>
+    private async Task<List<string>> IdentitiesAsync(SourceSeed seed)
+    {
+        await using var connection = new Npgsql.NpgsqlConnection(database.Connection(null));
+        await connection.OpenAsync(Ct);
+        await using var command = new Npgsql.NpgsqlCommand("""
+            SELECT "CanonicalIdentity" FROM content."Documents" WHERE "SourceId" = $1 AND "DeletedAt" IS NULL ORDER BY "CanonicalIdentity"
+            """, connection) { Parameters = { new Npgsql.NpgsqlParameter { Value = seed.SourceId } } };
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        var identities = new List<string>();
+        while (await reader.ReadAsync(Ct))
+        {
+            identities.Add(reader.GetString(0));
+        }
+
+        return identities;
     }
 
     private async Task<Dictionary<string, Guid>> LiveSetsAsync(SourceSeed seed)

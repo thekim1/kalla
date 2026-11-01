@@ -18,7 +18,8 @@ namespace Ume.Rag.Worker.Connectors.Http;
 /// <param name="MaxBytes">A cap below the type's body limit; null for the limit of §4.</param>
 /// <param name="Truncate">Keep the first <paramref name="MaxBytes"/> of a longer body instead of refusing it (robots.txt).</param>
 /// <param name="InScope">
-/// Asked for every redirect target (§3.2): false ends the fetch with <see cref="HttpFetchResult.OutOfScope"/>. Null follows
+/// Asked for every redirect target (§3.2) in its path form (<see cref="UrlCanonicalizer.PathForm"/>, what the scope patterns
+/// match): false ends the fetch with <see cref="HttpFetchResult.OutOfScope"/>. Null follows
 /// every target the guard and robots.txt allow (URL lists, robots.txt, sitemaps).
 /// </param>
 /// <param name="Head">
@@ -132,7 +133,7 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, Time
                 return WithRedirects(new HttpFetchResult.Refused(RunItemOutcome.Blocked, "redirect.downgrade"), redirects);
             }
 
-            if (request.InScope is { } inScope && !inScope(next))
+            if (request.InScope is { } inScope && !inScope(UrlCanonicalizer.ResolvePathForm(url, location!, request.Canonicalizer).ToUri()))
             {
                 return WithRedirects(new HttpFetchResult.OutOfScope(next, permanent), redirects);
             }
