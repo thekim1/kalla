@@ -17,6 +17,15 @@ public sealed class OpenWebUiOptions
     public string? JwtSecret { get; set; }
     public int MaxLifetimeSeconds { get; set; } = 600;
 
+    /// <summary>Open WebUI's address for the feedback import and pruning (chat design §14.2); unset: no import.</summary>
+    public Uri? BaseUrl { get; set; }
+
+    /// <summary>The feedback service account's API key (<c>OpenWebUi__AdminApiKey</c>, written by <c>deploy/openwebui-feedback-key.sh</c>).</summary>
+    public string? AdminApiKey { get; set; }
+
+    /// <summary>The import's schedule (§14.2: every 15 minutes).</summary>
+    public TimeSpan FeedbackImportInterval { get; set; } = TimeSpan.FromMinutes(15);
+
     /// <summary>The configured client, or null when <c>ClientId</c> is empty or not a GUID.</summary>
     public Guid? Client => Guid.TryParse(ClientId, out var id) ? id : null;
 }

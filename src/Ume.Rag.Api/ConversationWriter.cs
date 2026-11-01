@@ -20,6 +20,12 @@ public sealed record ChatTurn(
     string? GatewayModel, string? Residency, int? InputTokens, int? OutputTokens, int? LatencyMs, int? TimeToFirstTokenMs, IReadOnlyList<TurnSource> Sources,
     DateTimeOffset At)
 {
+    /// <summary>Open WebUI's id of the user message (<c>X-Rag-Owui-User-Message-Id</c>); a regeneration resends it (§11.4).</summary>
+    public string? UserExternalId { get; init; }
+
+    /// <summary>Open WebUI's id of the answer (<c>X-Rag-Owui-Message-Id</c>): what its feedback names (§14.2).</summary>
+    public string? AnswerExternalId { get; init; }
+
     /// <summary>The sort key of a batch (chat design §12.2: sorted keys, so overlapping batches cannot deadlock).</summary>
     public string Key => IssuedId is { } id ? "i:" + id.ToString("N") : $"o:{ClientId:N}:{SubjectId}:{ExternalChatId}:{AssistantId:N}";
 
@@ -259,17 +265,19 @@ public sealed partial class ConversationWriter : BackgroundService
             const string message = """
                 INSERT INTO chat."Messages" ("Id", "ConversationId", "Classification", "Seq", "Role", "ExpiresAt", "AssistantVersionId", "GatewayModel",
                     "ObservedResidency", "InputTokens", "OutputTokens", "LatencyMs", "TimeToFirstTokenMs", "Coverage", "Degraded", "Language", "CondenseUsed",
-                    "Outcome", "CreatedAt")
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                    "Outcome", "CreatedAt", "ExternalMessageId")
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                ON CONFLICT ("ConversationId", "ExternalMessageId") WHERE "ExternalMessageId" IS NOT NULL DO NOTHING
                 """;
             await ExecuteAsync(connection, transaction, message, ct, Guid.CreateVersion7(), conversationId, turn.Classification, seq + 1, "user", expires,
                 DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, false,
-                turn.Outcome, turn.At);
+                turn.Outcome, turn.At, Db(turn.UserExternalId));
             // The assistant message keeps the turn's id (chatcmpl-<N>), so /v1/feedback finds it (§3.5).
             var answerId = turn.MessageId;
             await ExecuteAsync(connection, transaction, message, ct, answerId, conversationId, turn.Classification, seq + 2, "assistant", expires,
                 Db(turn.AssistantVersionId), Db(turn.GatewayModel), Db(turn.Residency), Db(turn.InputTokens), Db(turn.OutputTokens), Db(turn.LatencyMs),
-                Db(turn.TimeToFirstTokenMs), Db(turn.Coverage), Db(turn.Degraded), Db(turn.Language), turn.CondenseUsed, turn.Outcome, turn.At);
+                Db(turn.TimeToFirstTokenMs), Db(turn.Coverage), Db(turn.Degraded), Db(turn.Language), turn.CondenseUsed, turn.Outcome, turn.At,
+                Db(turn.AnswerExternalId));
             foreach (var source in turn.Sources)
             {
                 await ExecuteAsync(connection, transaction, """
