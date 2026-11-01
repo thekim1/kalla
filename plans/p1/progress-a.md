@@ -98,7 +98,15 @@ Refs: [repo-and-deployment §6, §7.1](../platform/repo-and-deployment.md), [cha
 
 ## 12. umea.se set-up and crawl (#20, after J7, J10, J12)
 - [ ] Pilot collection, umea.se crawl source with the manual profile, pilot URL list, one upload, set up through Scalar
+      (2026-11-01, session 14, through the admin API on the local AppHost: collection `Turkos` (DoIT, public, published),
+      crawl source "umea.se Kommun och politik" with the manual profile v1, Open WebUI client + key, an `internal` retrieval
+      client + key; **open:** the pilot URL list and one upload)
 - [ ] Full traversal with EU embeddings; crawl report reviewed; #94 recorded
+      (crawl part done 2026-11-01: run `01a19671-3dee-7338-82d1-68f10fb9c51d` on the Kommun och politik section, complete
+      (1,168/1,168 seeds resolved), 1,166 added (43 with a `pii.flagged` report, none with a personnummer), 104 hub pages
+      `parse.empty`, 0 failed; 4,990 chunks at 1024 dims `Eu`; the acceptance page live with date 2026-01-15; `/v1/retrieve`
+      right page first for three test questions. Two crawler bugs found and fixed on the way: #229 scope on the path form,
+      #231 host-slot livelock; also #233 gateway URL out of the log. **Open:** #94 (web editors), the rest of umea.se)
 
 ## 13. Gold set three-way run (#21, after J13)
 - [ ] Three-way run recorded (#168); proposal handed to stream B for the thresholds
