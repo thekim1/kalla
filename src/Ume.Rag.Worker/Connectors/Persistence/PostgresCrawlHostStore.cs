@@ -30,7 +30,8 @@ internal static class Db
 /// <summary>
 /// <see cref="ICrawlHostStore"/> over <c>content."CrawlHosts"</c> (data-model §2.2, connectors design §6.3) on the worker's
 /// pool. The slot is the design's single <c>UPDATE … RETURNING</c> on the database clock, so every source, preview and
-/// instance shares one budget per host; responses are applied with <see cref="HostBudgetPolicy.Apply"/> under a row lock.
+/// instance shares one budget per host (when it takes no slot, a read of the free time follows); responses are applied
+/// with <see cref="HostBudgetPolicy.Apply"/> under a row lock.
 /// </summary>
 public sealed class PostgresCrawlHostStore(JobDatabase database) : ICrawlHostStore
 {
@@ -53,12 +54,19 @@ public sealed class PostgresCrawlHostStore(JobDatabase database) : ICrawlHostSto
 
     private const string LockSql = $"""SELECT {Columns}, now() FROM content."CrawlHosts" WHERE "Host" = $1 FOR UPDATE""";
 
-    // Connectors design §6.3.
+    // Connectors design §6.3, taking the slot only when it is at most $3 away (HostBudgetPolicy.TakeSlot).
     private const string SlotSql = """
         UPDATE content."CrawlHosts"
            SET "NextAllowedAt" = greatest("NextAllowedAt", now()) + $2::interval
          WHERE "Host" = $1 AND "BlockedAt" IS NULL AND ("PausedUntil" IS NULL OR "PausedUntil" < now())
+           AND greatest("NextAllowedAt", now()) <= now() + $3::interval
         RETURNING "NextAllowedAt" - $2::interval
+        """;
+
+    // No slot taken: the next free time, left as it is; no row when the host is blocked, paused or unknown.
+    private const string FreeSql = """
+        SELECT greatest("NextAllowedAt", now()) FROM content."CrawlHosts"
+         WHERE "Host" = $1 AND "BlockedAt" IS NULL AND ("PausedUntil" IS NULL OR "PausedUntil" < now())
         """;
 
     private const string ApplySql = """
@@ -101,11 +109,20 @@ public sealed class PostgresCrawlHostStore(JobDatabase database) : ICrawlHostSto
         return Read(existing);
     }
 
-    public async Task<DateTimeOffset?> TryTakeSlotAsync(string host, TimeSpan interval, CancellationToken cancellationToken)
+    public async Task<SlotTake?> TryTakeSlotAsync(string host, TimeSpan interval, TimeSpan maxWait, CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(SlotSql, connection) { Parameters = { Db.P(host), Db.P(interval) } };
-        return await command.ExecuteScalarAsync(cancellationToken) is DateTime slot ? new DateTimeOffset(DateTime.SpecifyKind(slot, DateTimeKind.Utc)) : null;
+        await using (var take = new NpgsqlCommand(SlotSql, connection) { Parameters = { Db.P(host), Db.P(interval), Db.P(maxWait) } })
+        {
+            if (await take.ExecuteScalarAsync(cancellationToken) is DateTime slot)
+            {
+                return new SlotTake(AsUtc(slot), Taken: true);
+            }
+        }
+
+        // The take's condition decides; this read only says when to come back.
+        await using var free = new NpgsqlCommand(FreeSql, connection) { Parameters = { Db.P(host) } };
+        return await free.ExecuteScalarAsync(cancellationToken) is DateTime at ? new SlotTake(AsUtc(at), Taken: false) : null;
     }
 
     public async Task<CrawlHostState> RecordResponseAsync(string host, HostResponse response, CancellationToken cancellationToken)
@@ -155,6 +172,8 @@ public sealed class PostgresCrawlHostStore(JobDatabase database) : ICrawlHostSto
         };
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    private static DateTimeOffset AsUtc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
     private static CrawlHostState Read(NpgsqlDataReader reader) => new()
     {

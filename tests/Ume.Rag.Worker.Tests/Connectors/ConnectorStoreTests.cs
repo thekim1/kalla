@@ -60,13 +60,15 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         var state = await store.EnsureAsync(new CrawlHostState { Host = host, Kind = HostKind.Municipal, RequestsPerSecond = 10, MaxConnections = 4 }, Ct);
         var interval = HostBudgetPolicy.Interval(state);
 
-        // Eight takers at once (within the worker role's connection cap), five slots each.
+        // Eight takers at once (within the worker role's connection cap), five slots each; the wait allows all 40 (4 s).
         var taken = await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ =>
         {
             var mine = new List<DateTimeOffset>();
             for (var i = 0; i < 5; i++)
             {
-                mine.Add((await store.TryTakeSlotAsync(host, interval, Ct))!.Value);
+                var slot = (await store.TryTakeSlotAsync(host, interval, TimeSpan.FromMinutes(1), Ct))!;
+                slot.Taken.ShouldBeTrue();
+                mine.Add(slot.At);
             }
 
             return mine;
@@ -83,6 +85,77 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
     }
 
     [Fact]
+    public async Task Ten_fetch_jobs_on_a_one_per_second_host_all_get_a_slot_and_requeued_ones_never_push_the_slots_out()
+    {
+        // The pilot crawl's livelock (2026-11-01): each requeued job reserved a slot it never used, so the next free slot
+        // ran ≈ 10 s ahead of now and no job ever found one within the in-process wait.
+        var hosts = new RecordingHostStore(new PostgresCrawlHostStore(Worker));
+        var budget = new HostBudget(hosts, new FixedCrawlPolicy(), TimeProvider.System);
+        var host = $"{Guid.NewGuid():N}.example";
+        var interval = HostBudgetPolicy.Interval(await budget.EnsureHostAsync(host, Ct));
+        interval.ShouldBe(TimeSpan.FromSeconds(1));
+        var bound = TimeSpan.FromSeconds(45);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        deadline.CancelAfter(bound);
+
+        // How far ahead of the database's now the host's next free slot is, sampled while the jobs run.
+        var running = true;
+        var ahead = TimeSpan.Zero;
+        var monitor = Task.Run(async () =>
+        {
+            while (Volatile.Read(ref running))
+            {
+                var seconds = await Sql.ScalarAsync<double>(database.Connection(null),
+                    """SELECT extract(epoch FROM "NextAllowedAt" - now())::float8 FROM content."CrawlHosts" WHERE "Host" = $1""", host);
+                ahead = TimeSpan.FromSeconds(Math.Max(ahead.TotalSeconds, seconds));
+                await Task.Delay(20, Ct);
+            }
+        }, Ct);
+
+        // Ten fetch jobs as the dispatcher runs them: acquire; on Later wait for the returned delay (the requeue) and retry.
+        var jobs = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => Task.Run(async () =>
+        {
+            var requeues = 0;
+            try
+            {
+                while (true)
+                {
+                    switch (await budget.AcquireAsync(host, deadline.Token))
+                    {
+                        case HostSlot.Granted granted:
+                            using (granted.Lease)
+                            {
+                                await Task.Delay(50, deadline.Token);
+                                await granted.Lease.CompleteAsync(new HostResponse(HostResponseKind.Success, null), deadline.Token);
+                            }
+
+                            return (Served: true, Requeues: requeues);
+                        case HostSlot.Later later:
+                            requeues++;
+                            await Task.Delay(later.Delay, deadline.Token);
+                            break;
+                        default:
+                            throw new InvalidOperationException("The host is neither blocked nor paused.");
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested && !Ct.IsCancellationRequested)
+            {
+                return (Served: false, Requeues: requeues);
+            }
+        }, Ct)));
+        Volatile.Write(ref running, false);
+        await monitor;
+
+        jobs.Count(j => j.Served).ShouldBe(10, $"jobs served within {bound.TotalSeconds} s ({jobs.Sum(j => j.Requeues)} requeues)");
+        // Every slot taken was used: none was reserved for a job that requeued instead. No two closer than the interval.
+        var slots = hosts.Slots.Order().ToList();
+        slots.Count.ShouldBe(10, "slots taken");
+        slots.Zip(slots.Skip(1)).ShouldAllBe(p => p.Second - p.First >= interval);
+        ahead.ShouldBeLessThanOrEqualTo(HostBudgetPolicy.MaxInProcessWait + interval, "NextAllowedAt ahead of now");
+    }
+
+    [Fact]
     public async Task Blocked_and_paused_hosts_get_no_slot_and_responses_move_the_backoff()
     {
         var store = new PostgresCrawlHostStore(Worker);
@@ -94,12 +167,12 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         limited.LatencyEwmaMs.ShouldBe(200);
         var paused = await store.RecordResponseAsync(host, new HostResponse(HostResponseKind.RateLimited, null, TimeSpan.FromHours(2)), Ct);
         paused.PausedUntil.ShouldNotBeNull();
-        (await store.TryTakeSlotAsync(host, TimeSpan.FromSeconds(1), Ct)).ShouldBeNull();
+        (await store.TryTakeSlotAsync(host, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), Ct)).ShouldBeNull();
 
         var blocked = $"{Guid.NewGuid():N}.example";
         await store.EnsureAsync(new CrawlHostState { Host = blocked, Kind = HostKind.External, RequestsPerSecond = 1, MaxConnections = 1 }, Ct);
         await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."CrawlHosts" SET "BlockedAt" = now() WHERE "Host" = $1""", blocked);
-        (await store.TryTakeSlotAsync(blocked, TimeSpan.FromSeconds(1), Ct)).ShouldBeNull();
+        (await store.TryTakeSlotAsync(blocked, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), Ct)).ShouldBeNull();
 
         // A changed budget updates the row; an unchanged one returns it as it is.
         (await store.EnsureAsync(new CrawlHostState { Host = host, Kind = HostKind.Municipal, RequestsPerSecond = 10, MaxConnections = 4 }, Ct))
@@ -653,7 +726,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         app.MapGet("/d", () => Html("<p>D</p>"));
     }
 
-    /// <summary>Records every slot the statement granted.</summary>
+    /// <summary>Records every slot the statement took.</summary>
     private sealed class RecordingHostStore(ICrawlHostStore inner) : ICrawlHostStore
     {
         private readonly System.Collections.Concurrent.ConcurrentBag<DateTimeOffset> _slots = [];
@@ -662,12 +735,12 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
 
         public Task<CrawlHostState> EnsureAsync(CrawlHostState initial, CancellationToken cancellationToken) => inner.EnsureAsync(initial, cancellationToken);
 
-        public async Task<DateTimeOffset?> TryTakeSlotAsync(string host, TimeSpan interval, CancellationToken cancellationToken)
+        public async Task<SlotTake?> TryTakeSlotAsync(string host, TimeSpan interval, TimeSpan maxWait, CancellationToken cancellationToken)
         {
-            var slot = await inner.TryTakeSlotAsync(host, interval, cancellationToken);
-            if (slot is { } granted)
+            var slot = await inner.TryTakeSlotAsync(host, interval, maxWait, cancellationToken);
+            if (slot is { Taken: true } taken)
             {
-                _slots.Add(granted);
+                _slots.Add(taken.At);
             }
 
             return slot;

@@ -37,6 +37,9 @@ public sealed record CrawlHostState
     public DateTimeOffset? BlockedAt { get; init; }
 }
 
+/// <summary>The slot statement's answer: the slot taken, or (<paramref name="Taken"/> false) the host's next free time, not reserved.</summary>
+public sealed record SlotTake(DateTimeOffset At, bool Taken);
+
 /// <summary>What one response tells the budget (§6.4).</summary>
 public enum HostResponseKind
 {
@@ -81,7 +84,7 @@ public static class HostBudgetPolicy
     /// <summary>A <c>Retry-After</c> above this pauses the host for the run instead (§6.4).</summary>
     public static readonly TimeSpan MaxRetryAfter = TimeSpan.FromHours(1);
 
-    /// <summary>A slot further away than this is not waited for in process: the job requeues without an attempt at the slot.</summary>
+    /// <summary>A slot further away than this is not taken or waited for in process: the job requeues without an attempt at it.</summary>
     public static readonly TimeSpan MaxInProcessWait = TimeSpan.FromSeconds(1);
 
     /// <summary>The default budget of a host of <paramref name="kind"/>, with the platform admin's override applied.</summary>
@@ -115,10 +118,12 @@ public static class HostBudgetPolicy
     }
 
     /// <summary>
-    /// The slot statement of §6.3: no slot for a blocked or paused host; otherwise
-    /// <c>NextAllowedAt = greatest(NextAllowedAt, now) + interval</c> and the slot is the value before the interval.
+    /// The slot statement of §6.3: no slot for a blocked or paused host. The next free time is
+    /// <c>greatest(NextAllowedAt, now)</c>; it is taken (<c>NextAllowedAt = free + interval</c>) only when it is at most
+    /// <paramref name="maxWait"/> away, otherwise <c>NextAllowedAt</c> stays and the caller requeues at the free time. A
+    /// slot is therefore never reserved for a job that will not use it, and a requeue never pushes the host further out.
     /// </summary>
-    public static (CrawlHostState State, DateTimeOffset? Slot) TakeSlot(CrawlHostState state, TimeSpan interval, DateTimeOffset now)
+    public static (CrawlHostState State, SlotTake? Slot) TakeSlot(CrawlHostState state, TimeSpan interval, DateTimeOffset now, TimeSpan maxWait)
     {
         ArgumentNullException.ThrowIfNull(state);
         if (state.BlockedAt is not null || (state.PausedUntil is { } paused && paused >= now))
@@ -126,8 +131,10 @@ public static class HostBudgetPolicy
             return (state, null);
         }
 
-        var next = (state.NextAllowedAt > now ? state.NextAllowedAt : now) + interval;
-        return (state with { NextAllowedAt = next }, next - interval);
+        var free = state.NextAllowedAt > now ? state.NextAllowedAt : now;
+        return free - now <= maxWait
+            ? (state with { NextAllowedAt = free + interval }, new SlotTake(free, Taken: true))
+            : (state, new SlotTake(free, Taken: false));
     }
 
     /// <summary>
