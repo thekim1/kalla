@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.TestKit;
 
 namespace Ume.Rag.AdminApi.Tests;
@@ -205,9 +206,10 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
 
         busy.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable, await busy.Content.ReadAsStringAsync(Ct));
         (await busy.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().ShouldBe(AdminErrorCodes.ConfigBusy.Code);
-        // One wait for the lock, not one per retry of the execution strategy.
+        // One wait for the lock, not one per retry of the execution strategy: two waits take at least 10 s, so the bound is
+        // just under that, leaving ~5 s for the request on a busy machine (it flaked at 9 s; #188 review).
         watch.Elapsed.ShouldBeGreaterThanOrEqualTo(TimeSpan.FromSeconds(4.5));
-        watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(9));
+        watch.Elapsed.ShouldBeLessThan(ConfigWrites.LockTimeout * 2 - TimeSpan.FromMilliseconds(100));
         await transaction.RollbackAsync(Ct);
     }
 
