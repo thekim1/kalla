@@ -185,6 +185,13 @@ database across restarts (the volume at `/var/lib/postgresql/data`, the cluster 
 wins. A dev volume created before #172 never held the database (it lived in an anonymous volume), so the first start
 after #172 begins with an empty database: run the seed (§4.4) again.
 
+**Open WebUI on the AppHost** (#251): with `Seed:Enabled=false` the `open-webui` container starts only for a configured
+client. Create the Open WebUI client (`POST /api/clients`, kind `open-webui`) and its key (`POST /api/keys`), then put
+the client's id in `OpenWebUi:ClientId` and the whole `ume-rag-sk-…` key in `Parameters:openwebui-api-key` (user
+secrets only) and restart the AppHost. Publish an assistant with that client in its audience; it then appears as a
+model in Open WebUI. `dotnet run --project src/Ume.Rag.AppHost` runs the Debug build even with `-c Release`, so build
+Debug first.
+
 ### 4.4 Seed a URL-list source (now on FakeGateway; for the pilot profile after 4.3)
 
 `scripts/dev/seed_url_list.py` creates, in the local database only, a department (`Pilot (dev seed)`), a public and
