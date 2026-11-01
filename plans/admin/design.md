@@ -998,8 +998,14 @@ form change ──Publicera…──▶ plan (dialog) ──Bekräfta──▶ r
                                           Behåll (nothing to do)   │   Återställ (one click, ≤ 14 days)
 ```
 
-1. `POST /api/pipelines/{id}/publications`: V24; enqueue `publish-plan`. Nothing is frozen; the confirm carries the
-   pipeline's `version` and is refused (409) if it changed since the plan.
+1. `POST /api/pipelines/{id}/publications`: V24; enqueue `publish-plan`; the publication's id is the plan job's id
+   (`GET /api/publications/{id}` reads the job's result with the draft and the pipeline version it was planned
+   against). Nothing is frozen; the confirm carries the pipeline's `version` and is refused (409) if it changed since
+   the plan. **Copy on write:** platform pipelines (`DepartmentId` null) are published by `rag-platform-admin` only (403
+   `admin_only` otherwise). A department user's first publication on a platform pipeline creates a department pipeline
+   whose version 1 is the platform pipeline's published version, re-points the collection's sources of that template to
+   it, and publishes the draft there, in one config transaction; later publications of that collection go to the
+   department pipeline.
 2. Dialog: **Plan** ("1 240 dokument: 1 180 från steget Dela upp (ingen ny tolkning, ~25 min), 60 från Tolka (~900 sidor,
    ~1 h); uppskattad kostnad 0,00 USD"); **Påverkade kunskapsbanker och assistenter**.
    The per-stage split comes from effect tags and is **P2** (weakness review §1); in P1 the plan lists every document
