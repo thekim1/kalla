@@ -130,6 +130,8 @@ export const PAGE = {
   overview: { title: 'Översikt', description: 'Din behörighet och det som behöver göras' },
   organisation: { title: 'Organisation', description: 'Förvaltningar och team från AI-gatewayen' },
   collections: { title: 'Kunskapsbanker', description: 'Innehållet som assistenterna söker i' },
+  source: { title: 'Källa' },
+  run: { title: 'Körning' },
   forbidden: { title: 'Ingen åtkomst' },
   notFound: { title: 'Sidan finns inte' },
 } as const
@@ -281,3 +283,64 @@ export const SOURCE = {
   saved: (name: string) => `Källan ${name} är sparad och hämtningen har börjat.`,
   savedNoSync: (name: string) => `Källan ${name} är sparad.`,
 } as const
+
+export const SOURCE_PAGE = {
+  settings: 'Inställningar',
+  addresses: 'Adresser',
+  startAddresses: 'Startadresser',
+  maxPages: 'Högst antal sidor',
+  syncNow: 'Hämta nu',
+  syncStarted: 'Hämtningen har börjat.',
+  alreadyRunning: 'En hämtning pågår redan.',
+  runs: 'Körningar',
+  noRuns: 'Ingen körning ännu. Välj Hämta nu.',
+  started: 'Startad',
+  run: 'Körning',
+  state: 'Läge',
+  counts: 'Resultat',
+  more: 'Visa fler',
+  pii: 'Personuppgifter',
+  piiNone: 'Inga dokument med personuppgifter.',
+  piiHeld: 'Hålls utanför sökningen',
+  piiLive: 'Sökbart',
+  piiNotApplies: 'Gäller bara offentliga kunskapsbanker.',
+} as const
+
+export const RUN_STATE_LABEL: Record<string, string> = {
+  running: 'Pågår',
+  succeeded: 'Klar',
+  degraded: 'Klar med anmärkning',
+  failed: 'Misslyckades',
+  'awaiting-deletion-confirmation': 'Väntar på beslut om borttagning',
+  cancelled: 'Avbruten',
+}
+
+export const RUN_PAGE = {
+  title: 'Körning',
+  added: 'Nya',
+  updated: 'Ändrade',
+  unchanged: 'Oförändrade',
+  deleted: 'Borttagna',
+  failed: 'Misslyckade',
+  complete: 'Hela webbplatsen gicks igenom.',
+  incomplete: 'Webbplatsen gicks inte igenom helt:',
+  seeds: (resolved: number, all: number) => `${resolved} av ${all} startadresser svarade`,
+  items: 'Dokument i körningen',
+  onlyFailed: 'Bara misslyckade',
+  noItems: 'Inga dokument att visa.',
+  document: 'Dokument',
+  outcome: 'Utfall',
+  reason: 'Orsak',
+  back: 'Till källan',
+  more: 'Visa fler',
+} as const
+
+/** Run item outcomes as the worker writes them; an unknown one is shown as written. */
+export const RUN_OUTCOME_LABEL: Record<string, string> = {
+  added: 'Ny',
+  updated: 'Ändrad',
+  unchanged: 'Oförändrad',
+  deleted: 'Borttagen',
+  failed: 'Misslyckades',
+  skipped: 'Hoppades över',
+}

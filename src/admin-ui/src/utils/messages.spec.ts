@@ -39,6 +39,8 @@ const WORKER_CODES = [
   'robots.disallow', 'robots.unreachable', 'robots.noindex', 'sitemap.unavailable', 'sitemap.invalid', 'sitemap.too_large',
   'sitemap.truncated', 'http.200', 'http.301', 'http.404', 'http.410', 'http.5xx', 'http.moved_out_of_scope', 'http.content_type',
   'http.body_limit', 'http.unexpected', 'tls.invalid_certificate',
+  // Crawl completeness reasons (TraversalCompleteness.cs).
+  'crawl.incremental', 'crawl.host_paused', 'crawl.seeds_failed', 'crawl.seeds_unreachable', 'crawl.claims_pending', 'crawl.cancelled',
 ]
 
 describe('worker messages', () => {
