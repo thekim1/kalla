@@ -235,8 +235,8 @@ public sealed class RetrievalEngine : IDisposable
                 lists.Add(new CandidateList(CandidateListKind.Keyword, ranking.KeywordWeight, keywordCandidates));
             }
 
-            // §6.5: each chunk's own collection recency, times the injected adjuster (demote).
-            var adjuster = CombinedAdjuster.Of(RecencyAdjuster.For(scope, _time.GetUtcNow()), _adjuster);
+            // §6.5: decay (each chunk's own collection recency) · demote (its source's patterns) · an injected adjuster.
+            var adjuster = CombinedAdjuster.Of(RecencyAdjuster.For(scope, _time.GetUtcNow()), DemoteAdjuster.For(scope), _adjuster);
             var deduped = ResultDiversifier.Dedup(RrfFusion.Fuse(lists, adjuster));
 
             var rerankTime = 0.0;

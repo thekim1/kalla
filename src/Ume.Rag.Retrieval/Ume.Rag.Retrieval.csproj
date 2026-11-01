@@ -2,6 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Ume.Rag.Domain\Ume.Rag.Domain.csproj" />
     <ProjectReference Include="..\Ume.Rag.Infrastructure\Ume.Rag.Infrastructure.csproj" />
+    <ProjectReference Include="..\Ume.Rag.Pipelines\Ume.Rag.Pipelines.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- Already pinned for P0 #6 (to-verify #13): UseVector() for the query vector parameter (knowledge design §6.6). -->
