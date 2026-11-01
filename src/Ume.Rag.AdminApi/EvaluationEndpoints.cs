@@ -88,7 +88,7 @@ public static class EvaluationEndpoints
                         throw AdminFaults.Of(AdminErrorCodes.NoEvaluationSet);
                     }
 
-                    var variants = request.Variants is { Count: > 0 } given ? given.Distinct().ToList() : [EvaluationVariant.Hybrid];
+                    var variants = request.Variants is { Count: > 0 } given ? given.Select(v => v.Value).Distinct().ToList() : [EvaluationVariant.Hybrid];
                     var job = new JobRequest(JobClasses.Eval, collection.DepartmentId, collection.Classification,
                         ContractJson.Serialize(new EvalOnDemandPayload { CollectionId = id, Variants = variants }))
                     {
@@ -98,7 +98,7 @@ public static class EvaluationEndpoints
                     var queued = await admin.Db.Jobs.AsNoTracking().Where(j => j.DedupKey == job.DedupKey && (j.State == JobStates.Queued || j.State == JobStates.Running))
                         .Select(j => (Guid?)j.Id).FirstOrDefaultAsync(attempt);
                     return new AdminChange<EvaluationRunStarted>(new EvaluationRunStarted(queued ?? job.Id, queued is not null), "evaluation-run", AuditEntityTypes.Collection, id,
-                        null, new { variants }) { DepartmentId = collection.DepartmentId, Classification = collection.Classification, Jobs = queued is null ? [job] : [] };
+                        null, new { variants = variants.Select(v => new VariantName(v)) }) { DepartmentId = collection.DepartmentId, Classification = collection.Classification, Jobs = queued is null ? [job] : [] };
                 }, ct)))
             .RequireAuthorization(AdminPolicies.Edit).WithName("RunEvaluation").WithSummary("Run the evaluation now (eval on-demand; variants hybrid, vector, hybrid-no-decompounder)");
 
@@ -233,7 +233,34 @@ public sealed record EvaluationQuestionRequest : AdminRequest
 
 public sealed record EvaluationRunRequest : AdminRequest
 {
-    /// <summary>Default: hybrid. The P1a three-way gold-set run lists all three (item 21).</summary>
+    /// <summary>
+    /// Default: <c>hybrid</c>. The P1a three-way gold-set run lists all three (item 21). The contract's names
+    /// (<c>hybrid</c>, <c>vector</c>, <c>hybrid-no-decompounder</c>, as the job payload and <c>EvaluationRuns.Variant</c>);
+    /// the enum names (<c>Hybrid</c>, …) are read too.
+    /// </summary>
     [MaxLength(3)]
-    public IReadOnlyList<EvaluationVariant>? Variants { get; init; }
+    public IReadOnlyList<VariantName>? Variants { get; init; }
+}
+
+/// <summary>An evaluation variant by the contract's kebab-case name (<see cref="EvaluationVariant"/>).</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(VariantNameConverter))]
+public readonly record struct VariantName(EvaluationVariant Value);
+
+/// <summary>Reads and writes <see cref="VariantName"/> as the contract's names, accepting the enum names on read.</summary>
+public sealed class VariantNameConverter : System.Text.Json.Serialization.JsonConverter<VariantName>
+{
+    public override VariantName Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+    {
+        var text = reader.TokenType == System.Text.Json.JsonTokenType.String ? reader.GetString() : null;
+        var match = Enum.GetValues<EvaluationVariant>().Cast<EvaluationVariant?>().FirstOrDefault(v =>
+            string.Equals(System.Text.Json.JsonNamingPolicy.KebabCaseLower.ConvertName(v!.Value.ToString()), text, StringComparison.Ordinal) ||
+            string.Equals(v!.Value.ToString(), text, StringComparison.OrdinalIgnoreCase));
+        return match is { } value ? new VariantName(value) : throw new System.Text.Json.JsonException($"Unknown evaluation variant '{text}'.");
+    }
+
+    public override void Write(System.Text.Json.Utf8JsonWriter writer, VariantName value, System.Text.Json.JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        writer.WriteStringValue(System.Text.Json.JsonNamingPolicy.KebabCaseLower.ConvertName(value.Value.ToString()));
+    }
 }
