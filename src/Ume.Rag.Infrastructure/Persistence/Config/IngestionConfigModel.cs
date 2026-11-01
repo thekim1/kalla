@@ -122,6 +122,7 @@ internal static class IngestionConfigModel
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Classification).HasMaxLength(20);
             e.Property(x => x.Settings).HasColumnType("jsonb");
+            e.Property(x => x.DemoteRules).HasColumnType("jsonb").HasComputedColumnSql("\"Settings\" -> 'demote'", stored: true);
             e.Property(x => x.Schedule).HasMaxLength(100);
             // NOT NULL DEFAULT true (data-model §2.1); the sentinel lets EF send false and leave true to the default.
             e.Property(x => x.ContainsThirdPartyText).HasDefaultValue(true).HasSentinel(true);

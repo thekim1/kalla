@@ -211,9 +211,10 @@ internal static class IngestionContentModel
             e.Property(x => x.StageKeys).HasColumnType("jsonb");
             e.Property(x => x.State).HasMaxLength(20);
             e.Property(x => x.PiiCounts).HasColumnType("jsonb");
+            e.Property(x => x.ParseRuleKey).HasMaxLength(300);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
             // The set's key; a page without a site profile version is one key (nulls not distinct), engine design §14.
-            e.HasIndex(x => new { x.DocumentId, x.PipelineVersionId, x.SiteProfileVersionId, x.EmbeddingProfileId, x.ContentHash }, "IX_ChunkSets_Key")
+            e.HasIndex(x => new { x.DocumentId, x.PipelineVersionId, x.SiteProfileVersionId, x.EmbeddingProfileId, x.ContentHash, x.ParseRuleKey }, "IX_ChunkSets_Key")
                 .IsUnique().AreNullsDistinct(false);
             // The orphan sweep (engine design §14).
             e.HasIndex(x => new { x.State, x.CreatedAt }, "IX_ChunkSets_Writing").HasFilter("\"State\" = 'writing'");
@@ -227,10 +228,12 @@ internal static class IngestionContentModel
             {
                 ClassificationCheck(t, "Chunks");
                 ValuesCheck(t, "Chunks", "Kind", ChunkKinds.All);
+                ValuesCheck(t, "Chunks", "ContentKind", ChunkContentKinds.All);
             });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Classification).HasMaxLength(20);
             e.Property(x => x.Kind).HasMaxLength(10).HasDefaultValue(ChunkKinds.Child);
+            e.Property(x => x.ContentKind).HasMaxLength(16).HasDefaultValue(ChunkContentKinds.Text);
             e.Property(x => x.OverlapChars).HasDefaultValue((short)0);
             e.Property(x => x.Tags).HasColumnType("text[]");
             e.Property(x => x.DocumentType).HasMaxLength(30);

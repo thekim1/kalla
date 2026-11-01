@@ -242,6 +242,12 @@ public sealed class Source
 
     public Guid PipelineId { get; set; }
     public bool ContainsThirdPartyText { get; set; } = true;
+
+    /// <summary>
+    /// <c>jsonb GENERATED ALWAYS AS ("Settings" -> 'demote') STORED</c> (weakness review §3, #102): the crawl's demote
+    /// patterns, readable by retrieval without a grant on <c>Settings</c>. Read-only.
+    /// </summary>
+    public string? DemoteRules { get; private set; }
     public string State { get; set; } = SourceStates.Active;
     public DateTimeOffset? DeletedAt { get; set; }
 

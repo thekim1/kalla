@@ -158,6 +158,9 @@ public sealed class CrawlFrontierEntry
 
     /// <summary>The sitemap's <c>lastmod</c>; cleared when the URL leaves the sitemap.</summary>
     public DateTimeOffset? SitemapLastMod { get; set; }
+
+    /// <summary>A removal-check row (#102); replaces the <c>Depth = -1</c> sentinel.</summary>
+    public bool RemovalCheck { get; set; }
 }
 
 /// <summary>Per crawl run limits and report data (<c>content."CrawlRuns"</c>, connectors design §6.1, §5.5).</summary>
@@ -181,6 +184,9 @@ public sealed class CrawlRun
 
     /// <summary>A complete traversal (weakness review §3).</summary>
     public bool Complete { get; set; }
+
+    /// <summary>An incremental run (#102): never a complete traversal, so the incomplete-traversal alert skips it.</summary>
+    public bool Incremental { get; set; }
 }
 
 /// <summary>Checkpoint kinds (connectors design §2.3).</summary>
@@ -432,6 +438,12 @@ public sealed class ChunkSet
     public string State { get; set; } = ChunkSetStates.Writing;
     public bool PiiFlagged { get; set; }
 
+    /// <summary>When the set was first flagged (#175; set by the worker with the 5103 event's time, kept on re-flag).</summary>
+    public DateTimeOffset? PiiFlaggedAt { get; set; }
+
+    /// <summary>The admin parse rules that shaped the set (#134); part of the set's key, null without rules.</summary>
+    public string? ParseRuleKey { get; set; }
+
     /// <summary><c>jsonb</c>.</summary>
     public string? PiiCounts { get; set; }
 
@@ -451,6 +463,19 @@ public static class ChunkKinds
 }
 
 /// <summary>
+/// What a chunk's body is (#129 point 2; processing §13.1 stratification), next to its structural <see cref="ChunkKinds"/>:
+/// a table row group, a list (list items at least half of the body tokens), else text. Parents are text.
+/// </summary>
+public static class ChunkContentKinds
+{
+    public const string Text = "text";
+    public const string Table = "table";
+    public const string List = "list";
+
+    public static IReadOnlyList<string> All { get; } = [Text, Table, List];
+}
+
+/// <summary>
 /// One chunk of the collection index (<c>content."Chunks"</c>, data-model §2.2, §3.2). Searchable iff
 /// <see cref="DeletedAt"/> is null. Two columns are created by the migration and not mapped: <c>Embedding vector</c>
 /// (untyped, so profiles may differ in size; written by binary <c>COPY</c>) and the generated <c>SearchVector tsvector</c>.
@@ -466,6 +491,12 @@ public sealed class Chunk
 
     public required string Classification { get; set; }
     public string Kind { get; set; } = ChunkKinds.Child;
+
+    /// <summary><see cref="ChunkContentKinds"/> (#129).</summary>
+    public string ContentKind { get; set; } = ChunkContentKinds.Text;
+
+    /// <summary>The second or a later row group of a table over the chunker's large-table limit (#129); the first is false.</summary>
+    public bool LargeTable { get; set; }
     public Guid? ParentId { get; set; }
     public int Ordinal { get; set; }
     public string? HeadingPath { get; set; }

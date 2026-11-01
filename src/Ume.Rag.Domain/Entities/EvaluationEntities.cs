@@ -11,6 +11,9 @@ public sealed class EvaluationSet
     public Guid CollectionId { get; set; }
     public required string Classification { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>The generation round of the set's newest questions (#130): 1 for the first set, +1 per top-up.</summary>
+    public int Round { get; set; } = 1;
 }
 
 /// <summary>Question layers of P1 (<c>feedback</c> and <c>skill</c> are P2; processing design §13.4).</summary>
@@ -125,6 +128,13 @@ public sealed class EvaluationRun
     public string Variant { get; set; } = EvaluationVariants.Hybrid;
     public string? PromptVersion { get; set; }
     public byte[]? Seed { get; set; }
+
+    /// <summary>A run of candidate settings (#129), not of the collection's saved ones.</summary>
+    public bool Candidate { get; set; }
+
+    /// <summary><c>jsonb</c>: the coverage threshold proposal of an on-demand run (#129), kept beyond job retention.</summary>
+    public string? ThresholdProposal { get; set; }
+
     public DateTimeOffset StartedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
 }
