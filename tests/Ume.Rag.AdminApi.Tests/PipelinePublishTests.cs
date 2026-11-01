@@ -140,4 +140,62 @@ public sealed class PipelinePublishTests(AdminDatabaseFixture database)
         (await db.AuditLog.AsNoTracking().Where(a => a.EntityType == "pipeline" && a.EntityId == copyId.ToString()).OrderBy(a => a.Id).Select(a => a.Action).ToListAsync(Ct))
             .ShouldBe(["plan", "publish", "rollback"]);
     }
+
+    [Fact]
+    public async Task A_preview_runs_the_published_version_or_the_draft_on_urls_or_documents()
+    {
+        var code = "W" + Random.Shared.Next(100_000, 999_999);
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var template = TemplateCatalog.BuiltIn.All.Where(t => t.Template.SourceType == SourceTypes.UrlList).MaxBy(t => t.Template.Version)!.Template;
+        var department = new Department { Id = Guid.CreateVersion7(), Name = "Prv " + code, CostCenterCode = code, SyncedAt = DateTimeOffset.UtcNow };
+        var profile = await db.EmbeddingProfiles.Select(p => (Guid?)p.Id).FirstOrDefaultAsync(Ct);
+        if (profile is null)
+        {
+            var created = new EmbeddingProfile
+            {
+                Name = "prv-" + code, GatewayModel = "bge-m3", Dimensions = 1024, MaxInputTokens = 8192, MaxResidency = Residency.Eu,
+                CanaryText = EmbeddingCanaryText.Default, IsDefault = true, UpdatedAt = DateTimeOffset.UtcNow,
+            };
+            db.EmbeddingProfiles.Add(created);
+            await db.SaveChangesAsync(Ct);
+            profile = created.Id;
+        }
+
+        var collection = new Collection
+        {
+            Slug = "prv-" + code.ToLowerInvariant(), Name = "Förhandsgranskning " + code, DepartmentId = department.Id, Classification = Classification.Public,
+            EmbeddingProfileId = profile.Value, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        var pipeline = new Pipeline { Name = template.Name + "-" + code.ToLowerInvariant(), TemplateId = template.Name, DepartmentId = department.Id, UpdatedAt = DateTimeOffset.UtcNow };
+        db.AddRange(department, collection, pipeline);
+        await db.SaveChangesAsync(Ct);
+        var published = new PipelineVersion
+        {
+            PipelineId = pipeline.Id, Number = 1, State = PipelineVersionStates.Published, PublishedAt = DateTimeOffset.UtcNow,
+            Definition = JsonSerializer.Serialize(new { schema = PipelineDefinition.CurrentSchema, template = template.Name, templateVersion = template.Version, @params = new { } }),
+        };
+        db.Add(published);
+        await db.SaveChangesAsync(Ct);
+        pipeline.PublishedVersionId = published.Id;
+        await db.SaveChangesAsync(Ct);
+
+        await using var factory = database.HeaderFactory();
+        using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, code);
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
+        var path = $"/api/pipelines/{pipeline.Id}/preview";
+
+        (await viewer.PostAsJsonAsync(path, new { collectionId = collection.Id, urls = new[] { "https://www.umea.se/a" } }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await editor.PostAsJsonAsync(path, new { collectionId = collection.Id }, Ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await editor.PostAsJsonAsync(path, new { collectionId = collection.Id, documentIds = new[] { Guid.CreateVersion7() } }, Ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        // Without a draft: the published version (a new source's form), on URLs fetched live.
+        using var started = await editor.PostAsJsonAsync(path, new { collectionId = collection.Id, urls = new[] { "https://www.umea.se/a", "https://www.umea.se/b" } }, Ct);
+        started.StatusCode.ShouldBe(HttpStatusCode.Accepted, await started.Content.ReadAsStringAsync(Ct));
+        var jobId = (await Json(started)).GetProperty("jobId").GetGuid();
+        var job = await db.Jobs.AsNoTracking().SingleAsync(j => j.Id == jobId, Ct);
+        using var payload = JsonDocument.Parse(job.Payload);
+        Ume.Rag.Pipelines.Schemas.ContractSchemas.Validator(typeof(Ume.Rag.Pipelines.Jobs.StagePreviewPayload)).Validate(payload.RootElement).ShouldBeEmpty();
+        payload.RootElement.GetProperty("pipelineVersionId").GetGuid().ShouldBe(published.Id);
+        payload.RootElement.GetProperty("urls").GetArrayLength().ShouldBe(2);
+    }
 }
