@@ -6,14 +6,13 @@ redesigning: `IRetriever`, `RetrievalResult`, `Coverage`, `MarkCited`, download 
 the latency budget of [`../knowledge-api/design.md`](../knowledge-api/design.md) (§2.2, §3.6, §4.6, §5, §5.5, §9, §10,
 §11, §15, §16); `RagPrincipal`, the client registry, `IAccessPolicy`, the OpenAI error shape, the residency ceiling,
 Open WebUI trust, keys and security events of [`../identity/design.md`](../identity/design.md) (§3–§7, §10);
-delegation, residency ceiling, key flags, run headers and the two releases (weakness review §5) of
+delegation, residency ceiling, key flags, run headers and the two releases of
 [`../gateway-changes/design.md`](../gateway-changes/design.md) (§3, §5, §7.1, §13); the `chat` tables, config
 versioning, envelope encryption with bucket keys, retention and Redis rules of
 [`../platform/data-model.md`](../platform/data-model.md) (§2.1, §2.3, §5, §7, §8, §11, §12.23) and level policies of
 [`../platform/plan.md`](../platform/plan.md) §8a; projects, roles, FakeGateway, observability and the R1 test of
-[`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (§1, §3, §4.3, §8.3, §9); the decided form
-of [`../simplification-pass.md`](../simplification-pass.md). Nothing is implemented. Changes needed elsewhere: §20;
-questions: §21; unverified facts: §22; removed or deferred: §23.
+[`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (§1, §3, §4.3, §8.3, §9). Changes needed
+elsewhere: §20; questions: §21; unverified facts: §22; removed or deferred: §23.
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); "Pipeline" means
 `src/Ume.LlmGateway.Gateway/Pipeline/`. Open WebUI citations are `path:line` in `~/git/rag-platforms/open-webui` at
@@ -29,9 +28,9 @@ package source had to be checked for this step.
 |---|---|---|
 | 1 | Placement | Chat role of `Ume.Rag.Api` (HTTP, SSE, writer, importer) over the answer core in `Ume.Rag.Answering` (shared with the admin test panel, admin design §2.1); `IRetriever` in process; gateway calls through the shared `IGatewayClient` with a raw `HttpClient` + copied `SseReader` (headers must be read before the body); P2 agent loop behind `IAnswerStrategy` (§2) |
 | 2 | Contract | OpenAI-compatible `/v1/models`, `/v1/chat/completions` (stream and not); unknown fields ignored, a fixed list refused; text content parts only (§3, answered 6) |
-| 3 | History | **The messages the client sends are authoritative for the prompt**; our store is a record for the user, review, feedback and retention. 0 SQL on the hot path (§11.3). **P1 pilot: history mode `none`** until A1 is answered: metadata and ratings only (§11.2, weakness review §4) |
+| 3 | History | **The messages the client sends are authoritative for the prompt**; our store is a record for the user, review, feedback and retention. 0 SQL on the hot path (§11.3). **P1 pilot: history mode `none`** until A1 is answered: metadata and ratings only (§11.2) |
 | 4 | Open WebUI tasks | One connection only (ours); Open WebUI title, tag and follow-up generation **switched off**; no task model of ours (§4.2, §4.3) |
-| 5 | Condense | On by default, **follow-ups only**, skipped when the question is self-contained (length, no anaphora); one call ≤ 96 output tokens to `Settings.Chat.CondenseModel` (on-prem), hard **600 ms** timeout, falls back to the raw question (§5, answered 1) |
+| 5 | Condense | On by default, **follow-ups only**, skipped when the question is self-contained (length, no anaphora); one call ≤ 96 output tokens to `Settings.Chat.CondenseModel` (a small instruct model: `Eu` until register M2, then on-prem), hard **600 ms** timeout, falls back to the raw question (§5, answered 1) |
 | 6 | History window | Last **10 messages, ≤ 4,000 tokens**, oldest dropped first, old markers stripped, sources never resent; per assistant (§6.3, answered 2) |
 | 7 | Prompt budget | Character estimate (÷ 3, Swedish-safe) against the assistant's `ContextTokens`; fixed priority: frame + question + answer reserve, then sources, then history (§6.3) |
 | 8 | Sources | In the final user message as `<source n="…">` blocks marked untrusted; numbered per document by best rank (knowledge §10.4); `</source` neutralised (§7) |
@@ -40,8 +39,8 @@ package source had to be checked for this step.
 | 11 | Output filter | Markdown/HTML images removed; links to hosts outside the allow-list de-linked; bounded look-ahead transducer (§9.4) |
 | 12 | Not found | Coverage `Low` (vector and keyword both weak) → the assistant's fixed Swedish or English text + contact links, no model call; conversational messages skip retrieval and the gate; a failed condense never yields the not-found text; `Unknown` → model answer from keyword results with a caveat, or a "search unavailable" text when nothing was found (§6.2, §10, answered 3) |
 | 13 | Conversation ids | Open WebUI: (client, `sub`, chat id, assistant); others: issued **signed** ids `c1.…` verified without SQL; temporary Open WebUI chats stored as `none` (§11) |
-| 14 | Writer | Bounded channel (bytes and items), batches of ≤ 200 turns / 250 ms, encryption in the writer (built when A1 allows stored content; P1 writes metadata only, weakness review §4), one transaction per batch, no journal (no content outside the encrypted tables); loss bound stated (§12) |
-| 15 | Feedback | `POST /v1/feedback` + a 15-minute import of Open WebUI ratings via its admin API, mapped by chat id and the forwarded message id; comments encrypted under the message's bucket key (P1 pilot in mode `none`: ratings only, comments stay in Open WebUI, weakness review §4); department roles see ratings in P1, comments only `rag-reviewer` and `rag-department-admin` (§14, answered 4, 7; admin design §3) |
+| 14 | Writer | Bounded channel (bytes and items), batches of ≤ 200 turns / 250 ms, encryption in the writer (built when A1 allows stored content; P1 writes metadata only), one transaction per batch, no journal (no content outside the encrypted tables); loss bound stated (§12) |
+| 15 | Feedback | `POST /v1/feedback` + a 15-minute import of Open WebUI ratings via its admin API, mapped by chat id and the forwarded message id; comments encrypted under the message's bucket key (P1 pilot in mode `none`: ratings only, comments stay in Open WebUI); department roles see ratings in P1, comments only `rag-reviewer` and `rag-department-admin` (§14, answered 4, 7; admin design §3) |
 | 16 | Attachments C1 | P1: refused with `attachments_not_supported`, uploads off in Open WebUI. P2: chat-scoped storage in the `chat` schema under the chat bucket keys, parsed by the worker, written back through the API, searched only within that conversation (§15, answered 5–6) |
 | 17 | Latency | Chat overhead < 10 ms p95 excluding condense and retrieval; 0 Postgres statements and 0 Redis commands of our own per message (P1 has no Redis); measured by benchmarks, interaction audit, a `benchmarks/compare`-style run and the R1 test (§16) |
 
@@ -58,10 +57,9 @@ package source had to be checked for this step.
 | `Ume.Rag.Api` role `knowledge` | hosts `KnowledgeService : IRetriever` (code in `Ume.Rag.Answering`) | called in process (knowledge §2.1–§2.2) |
 
 The chat role maps its routes only when `Rag:Roles` contains `chat` (repo-and-deployment §3). With the roles split,
-`IRetriever` is `HttpRetriever` (knowledge §2.2); nothing in the chat code changes. As built in PR #198 (2026-11-01):
-`HttpRetriever` does not exist yet, so startup refuses `chat` without `knowledge` in the same process; and the
-`Knowledge:OpenToClientKinds` gate (identity §4.3 step 1a) applies to the knowledge routes only, while for chat the
-access policy decides per assistant.
+`IRetriever` is `HttpRetriever` (knowledge §2.2); nothing in the chat code changes. `HttpRetriever` does not exist yet, so startup refuses `chat` without `knowledge` in
+the same process. The `Knowledge:OpenToClientKinds` gate (identity §4.3 step 1a) applies to the knowledge routes only;
+for chat the access policy decides per assistant.
 
 ### 2.2 The answer seam (P1 RAG, P2 agent)
 
@@ -92,7 +90,7 @@ public sealed record ChatContext(
 `config."PublishedAssistantVersions"`, so a draft never reaches chat; drafts run only in the admin test panel through
 the same `Ume.Rag.Answering` core), and each turn records it (`Messages.AssistantVersionId`). Its `Mode` is derived when
 the snapshot is built: `Agent` iff the published version links a skill whose served version has a tool not in that
-link's `excludedToolIds` (P2), else `Rag`; there is no mode field to edit (simplification pass §15).
+link's `excludedToolIds` (P2), else `Rag`; there is no mode field to edit.
 `ChatPipeline` (§4) selects the strategy by `AssistantSnapshot.Mode`, feeds its events through `AnswerFilter` and
 `CitationEmitter` (§9) into `ChatStreamWriter` (SSE or JSON per client kind) and hands the finished `ChatTurn` to the
 `ConversationWriter` (§12). The P2 agent strategy reuses everything except the middle: a bounded loop of gateway calls
@@ -143,7 +141,7 @@ whole chat), else 413.
 |---|---|
 | `model` | assistant slug; unknown, unpublished or denied → **404 `model_not_found`** (identity §4.3 steps 5–10) |
 | `messages` | 1–1,000 items (Open WebUI resends the whole branch, so long chats must not fail; only the window of §6.3 is used); roles `system`, `developer`, `user`, `assistant`, `tool`; the **last must be `user`** (Open WebUI "continue" sends a final `assistant` prefill: 400 `continue_not_supported`); `system`/`developer` messages are **ignored** (the assistant's prompt is authoritative; Open WebUI user system prompts are also switched off, §4.3); `tool` messages ignored in P1 |
-| `content` | string, or parts: `text` parts concatenated with `\n`; `image_url`, `input_audio`, `file`, `input_file` → **400 `attachments_not_supported`** (answered 6); per message ≤ 32,000 characters; last user message (the question) 1–8,000 characters after NFC and whitespace normalisation (knowledge §5.1 `QueryNormalizer`); as built in PR #198 (2026-11-01) 1–2,000 characters, `QueryNormalizer.MaxLength`, since the question is also the retrieval query (longer: 400 `question_too_long`) |
+| `content` | string, or parts: `text` parts concatenated with `\n`; `image_url`, `input_audio`, `file`, `input_file` → **400 `attachments_not_supported`** (answered 6); per message ≤ 32,000 characters; last user message (the question) 1–8,000 characters after NFC and whitespace normalisation (knowledge §5.1 `QueryNormalizer`) and at most 2,000 characters (`QueryNormalizer.MaxLength`), since the question is also the retrieval query (longer: 400 `question_too_long`) |
 | `stream` | default `false`; `true` → SSE (§9) |
 | `stream_options.include_usage` | honoured: one final usage chunk with the **answer call's** usage (condense not included) |
 | `max_tokens`, `max_completion_tokens` | min(value, assistant `MaxOutputTokens`); never raises it |
@@ -245,7 +243,7 @@ As knowledge §3.7: `AddOpenApi("chat", …)` with typed results, `WithTags("Cha
 | 1 | Authenticate | identity §6.2–§6.3 (key cache, throttle), Open WebUI JWT (§5.2 there), token (§7 there) → `RagPrincipal` | 401/429 |
 | 2 | Parse body | §3.2; content-part refusal before anything else is done | 400/413 |
 | 3 | Message kind | `MessageKind`: conversational (no content words, §6.2) → steps 9–11 skipped | – |
-| 4 | Rate limit | `IRateLimitStore`, per user (`subjectHash`) and minute, `RateWindowSeconds` 120 (gateway pattern); `Settings.Chat.MessagesPerMinutePerUser` **20**. P1: in process per instance (exact with one slot). As built in PRs #203 and #204 (2026-11-01): keyed per (client, subject), the subject being the key id for key callers and the user with the Open WebUI JWT; `Settings.Chat.messagesPerMinutePerUser` and `allowedLinkHosts` fall back to the deployment knobs `Chat:MessagesPerMinutePerUser` and `Chat:AllowedLinkHosts` when unsaved. From the first multi-host deployment (P2, `ConnectionStrings:redis` set): `ume-rag:rl:user:{subjectHash}:{minute}` via one Lua `INCR`+`EXPIRE` script (data-model §11); Redis down → the per-instance limit, logged once a minute (simplification pass §9) | 429 |
+| 4 | Rate limit | `IRateLimitStore`, per user (`subjectHash`) and minute, `RateWindowSeconds` 120 (gateway pattern); `Settings.Chat.MessagesPerMinutePerUser` **20**. P1: in process per instance (exact with one slot). Keyed per (client, subject), the subject being the key id for key callers and the user with the Open WebUI JWT; `Settings.Chat.messagesPerMinutePerUser` and `allowedLinkHosts` fall back to the deployment knobs `Chat:MessagesPerMinutePerUser` and `Chat:AllowedLinkHosts` when unsaved. From the first multi-host deployment (P2, `ConnectionStrings:redis` set): `ume-rag:rl:user:{subjectHash}:{minute}` via one Lua `INCR`+`EXPIRE` script (data-model §11); Redis down → the per-instance limit, logged once a minute | 429 |
 | 5 | Policy | `IAccessPolicy.Decide(who, assistant, Chat)` at the current snapshot, within the config grace window (identity §4.3 steps 0–11) | 404 `model_not_found` (+5002/5005), 503 |
 | 6 | Conversation key | §11.1: Open WebUI chat id or verified issued id or new id; **no SQL** | 404 |
 | 7 | Effective level | history-keeping client (`Clients.StoresHistory`): max(assistant level, client ceiling) on **every** turn; else the assistant's level (§8.2); ceiling header and key from it | – |
@@ -264,7 +262,7 @@ model call before any byte to the client.
 
 ### 4.2 Open WebUI task requests (title, tags, follow-ups)
 
-Removed (simplification pass): Open WebUI's title, tag and follow-up generation are switched off (§4.3), so there is
+Removed: Open WebUI's title, tag and follow-up generation are switched off (§4.3), so there is
 no `owui-tasks` model, `Clients.TaskModel` or task heuristic. Without the switches Open WebUI would send each task
 prompt (a single user message starting with `### Task:`, `ow/config.py:2289`, `:2314`, `:2357`) to the chat model
 itself (`ow/utils/task.py:17-28`), i.e. as a RAG question to our assistant; the contract test (§18.3) asserts that no
@@ -272,7 +270,7 @@ such request arrives with the §4.3 settings.
 
 ### 4.3 Open WebUI configuration (pilot, v0.12.3)
 
-`deploy/compose.openwebui.yaml` pins **v0.12.3** by digest (P0, PR #31): v0.12.4 and v0.12.5 were under 7 days old.
+`deploy/compose.openwebui.yaml` pins **v0.12.3** by digest: v0.12.4 and v0.12.5 were under 7 days old when it was pinned.
 The settings below exist under the same names at v0.12.3 and the environment wins with
 `ENABLE_PERSISTENT_CONFIG=false` (to-verify #134); the line numbers in this table are at v0.12.3 (settled at the P0
 integration sync point). Elsewhere this document still cites v0.12.5 source.
@@ -287,12 +285,12 @@ integration sync point). Elsewhere this document still cites v0.12.5 source.
 | `ENABLE_CONTEXT_COMPACTION` | `false` (default, `ow/config.py:2239`) | a compaction summary would rewrite history with a model we do not control |
 | `USER_PERMISSIONS_CHAT_FILE_UPLOAD`, `USER_PERMISSIONS_CHAT_WEB_UPLOAD` | `false` | answered 6 (`ow/config.py:1885-1887`) |
 | `USER_PERMISSIONS_CHAT_SYSTEM_PROMPT`, `USER_PERMISSIONS_CHAT_PARAMS` | `false` | user system prompts and sampling params would be ignored by us anyway (§3.2); hiding them avoids confusion (`ow/config.py:1881-1883`) |
-| `ENABLE_ADMIN_CHAT_ACCESS`, `ENABLE_ADMIN_EXPORT` | `false` | Open WebUI admins can otherwise read every user's chats (`ow/env.py:371`, `ow/config.py:2127`); our rule is review only in our admin UI with a reason (plan §5; none in P1, weakness review §4) |
-| `WEBUI_BANNERS` | `[{"id":"ume-rag-input","type":"warning","content":"Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.","dismissible":false,"timestamp":<release time>}]` | fixed input warning (weakness review §4; residual risk recorded in the DPIA, G1). JSON list of `BannerModel` (`id`, `type`, `title?`, `content`, `dismissible`, `timestamp`, `i18n?`; `ow/config.py:2195-2212`); with `ENABLE_PERSISTENT_CONFIG=false` the env value is used and an admin edit lasts only until restart (`ow/models/config.py`; tested in P0); shown on the new-chat screen only (`src/lib/components/chat/Navbar.svelte:283`). **`dismissible: false` is not "cannot be closed"**: the banner always draws its close button (`common/Banner.svelte:142-149`), and × hides it until the page reloads; only `dismissible: true` is remembered in `localStorage` (`Navbar.svelte:311-327`). Whether hidden-until-reload is enough is for the DPIA (G1) (P0, PR #31, to-verify #172) |
-| `ENABLE_API_KEYS=true`, `ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS=true`, `API_KEYS_ALLOWED_ENDPOINTS=/api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback`, `USER_PERMISSIONS_FEATURES_API_KEYS=false` | as listed | only the feedback service account has a key and it reaches the feedback list and per-id feedback routes (prefix match, `ow/utils/auth.py:539-542`; admin delete, `ow/routers/evaluations.py:488-497`; `ow/config.py:1956`, `:2530-2544`). As built in P1b item 17 (PR #135, 2026-10-31): the key can also create feedback (`POST /api/v1/evaluations/feedback`), since that path is a prefix of the per-id routes and cannot be narrowed |
-| `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_NAME`, `WEBUI_ADMIN_PASSWORD` | the feedback service account (generated by `init-deployment.sh --openwebui-host`; never a person) | as built in P1b item 17 (PR #135, 2026-10-31): Open WebUI creates it as the first user on an empty store, so it is the store's only admin; its key is minted by `deploy/openwebui-feedback-key.sh` (§14.2) |
-| `ENABLE_PASSWORD_AUTH` | `false`; `true` only while `deploy/openwebui-feedback-key.sh` runs | `ENABLE_LOGIN_FORM=false` hides the form but does not block API password sign-in (`routers/auths.py:663-667` at v0.12.3); as built in PR #135, 2026-10-31 |
-| `DEFAULT_USER_ROLE` | `user` | as built in PR #135 (2026-10-31): the service account is the only admin, so with the default `pending` nobody could approve an OIDC account and no one could chat; every enabled account of realm `ume` becomes a user (who may sign in stays identity §16 question 5) |
+| `ENABLE_ADMIN_CHAT_ACCESS`, `ENABLE_ADMIN_EXPORT` | `false` | Open WebUI admins can otherwise read every user's chats (`ow/env.py:371`, `ow/config.py:2127`); our rule is review only in our admin UI with a reason (plan §5; none in P1) |
+| `WEBUI_BANNERS` | `[{"id":"ume-rag-input","type":"warning","content":"Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter.","dismissible":false,"timestamp":<release time>}]` | fixed input warning (residual risk recorded in the DPIA, G1; reasoning: weakness review §4). JSON list of `BannerModel` (`id`, `type`, `title?`, `content`, `dismissible`, `timestamp`, `i18n?`; `ow/config.py:2195-2212`); with `ENABLE_PERSISTENT_CONFIG=false` the env value is used and an admin edit lasts only until restart (`ow/models/config.py`; tested in P0); shown when a new chat is opened and not inside an existing chat (`src/lib/components/chat/Navbar.svelte:283`). **`dismissible: false` is not "cannot be closed"**: the banner always draws its close button (`common/Banner.svelte:142-149`), and × hides it until the page reloads; only `dismissible: true` is remembered in `localStorage` (`Navbar.svelte:311-327`). Whether hidden-until-reload is enough is for the DPIA (G1) (to-verify #172) |
+| `ENABLE_API_KEYS=true`, `ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS=true`, `API_KEYS_ALLOWED_ENDPOINTS=/api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback`, `USER_PERMISSIONS_FEATURES_API_KEYS=false` | as listed | only the feedback service account has a key and it reaches the feedback list and per-id feedback routes (prefix match, `ow/utils/auth.py:539-542`; admin delete, `ow/routers/evaluations.py:488-497`; `ow/config.py:1956`, `:2530-2544`). The key can also create feedback (`POST /api/v1/evaluations/feedback`), since that path is a prefix of the per-id routes and cannot be narrowed |
+| `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_NAME`, `WEBUI_ADMIN_PASSWORD` | the feedback service account (generated by `init-deployment.sh --openwebui-host`; never a person) | Open WebUI creates it as the first user on an empty store, so it is the store's only admin; its key is minted by `deploy/openwebui-feedback-key.sh` (§14.2) |
+| `ENABLE_PASSWORD_AUTH` | `false`; `true` only while `deploy/openwebui-feedback-key.sh` runs | `ENABLE_LOGIN_FORM=false` hides the form but does not block API password sign-in (`routers/auths.py:663-667` at v0.12.3) |
+| `DEFAULT_USER_ROLE` | `user` | the service account is the only admin, so with the default `pending` nobody could approve an OIDC account and no one could chat; every enabled account of realm `ume` becomes a user (who may sign in stays identity §16 question 5) |
 | `BYPASS_MODEL_ACCESS_CONTROL=true`, `ENABLE_PERSISTENT_CONFIG=false`, Open WebUI RAG/web/code/tools off | as chat plan §6 | – |
 
 **Sign-in (P1, identity §5.3, §11.2, 2026-10-31).** Open WebUI signs in over OIDC against the **shared Keycloak**
@@ -301,7 +299,7 @@ integration sync point). Elsewhere this document still cites v0.12.5 source.
 `OAUTH_PROVIDER_NAME` that names the Keycloak sign-in instead of the P0 compose's `Microsoft Entra ID` (P1 item 18,
 stream A); callback and trust settings as identity §5.3. Entra (`ume-rag-open-webui`) replaces it in P2. **Who may sign
 in is open** (identity §16 question 5): every enabled account of realm `ume` can today, and gets the role `user`
-(`DEFAULT_USER_ROLE=user`, PR #135, 2026-10-31).
+(`DEFAULT_USER_ROLE=user`).
 
 Per-model `stream_response` stays default (streaming); the `usage` capability is not set, so Open WebUI does not
 request `include_usage` (`ow/main.py:1243-1244`, capabilities from model info `:1206`); we capture usage ourselves.
@@ -313,14 +311,14 @@ request `include_usage` (`ow/main.py:1243-1244`, capabilities from model info `:
 | When | `QuerySteps.condense.enabled` (default **true**) **and** the request has at least one earlier `user` message **and** the question is not self-contained; skipped on the first message |
 | Self-contained (skip) | heuristic: ≥ 6 words (proposed) and no word from a short anaphora list (sv `det`, `den`, `dem`, `detta`, `denna`, `dessa`, `där`, `dit`, `då`, `samma`, `hen`, `han`, `hon`, `sådan`, `också`; en `it`, `this`, `that`, `these`, `those`, `there`, `they`, `same`, `also`); errs towards condensing; counted `skipped_self_contained` |
 | Input | the last ≤ 6 messages before the question, user messages ≤ 500 characters each, assistant messages ≤ 600 characters with `[n]` markers and links removed; plus the question; total ≤ 4,000 characters |
-| Model | `Settings.Chat.CondenseModel` = the gateway's **on-prem small instruct model** alias (one platform-wide value; an assistant may override with another on-prem alias). As built in PR #204 (2026-11-01): platform-wide only (the per-assistant override comes with the assistant forms), and called at ceiling `Eu`, never above the turn's own ceiling, while P1a has no on-prem models (register M2); a turn with ceiling `OnPrem` gets no condense and uses the raw question (the fallback below). It moves to `OnPrem` when the hardware exists |
-| Why this model | `OnPrem` satisfies every level, so one model serves all assistants and no residency branch exists; rewriting a question is a small-model task (short output, no knowledge needed); on-prem GPUs avoid an extra internet round trip; the cost is negligible next to the answer |
-| Call | non-streaming `/v1/chat/completions`, `temperature: 0`, `max_tokens: 96`, headers as §8.1 with `x-ume-max-residency: OnPrem` always and `x-ume-step: condense` |
+| Model | `Settings.Chat.CondenseModel` = the gateway alias of a small instruct model, one platform-wide value (a per-assistant override comes with the assistant forms). Until on-prem model hardware exists (register M2) it is called at ceiling `Eu`, never above the turn's own ceiling; a turn with ceiling `OnPrem` gets no condense and uses the raw question (the fallback below). It moves to `OnPrem` for every level when the hardware exists |
+| Why this model | once on-prem (from M2), `OnPrem` satisfies every level, so one model serves all assistants and no residency branch exists; rewriting a question is a small-model task (short output, no knowledge needed); on-prem GPUs avoid an extra internet round trip; the cost is negligible next to the answer |
+| Call | non-streaming `/v1/chat/completions`, `temperature: 0`, `max_tokens: 96`, headers as §8.1 with `x-ume-max-residency` as in the Model row (`Eu` until M2, then `OnPrem`) and `x-ume-step: condense` |
 | Budget | `Chat:CondenseTimeout` **600 ms** hard timeout (no retry) |
-| Accept the output if | 2–400 characters after trim, one line, not a refusal pattern, no `### Task`, residency `OnPrem`, PII header absent or `detected` |
+| Accept the output if | 2–400 characters after trim, one line, not a refusal pattern, no `### Task`, residency within the call's ceiling, PII header absent or `detected` |
 | Otherwise | the raw question is used for retrieval and coverage `Low` is not turned into the not-found text (§6.2); outcome counted (`timeout`, `error`, `residency`, `rejected`) |
 | Use | **retrieval only**: the answer prompt keeps the user's own question and history (§7), so a bad rewrite can only make retrieval worse, never change what the user asked |
-| Language | the prompt says "behåll språket i användarens fråga"; the output language is not checked (retrieval is mostly Swedish anyway; BGE-M3 is multilingual) |
+| Language | the prompt says "behåll språket i användarens fråga"; the output language is not checked (retrieval is mostly Swedish anyway; the embedding models are multilingual) |
 | Turn off | per assistant (`condense.enabled = false`); tuned in P2 with the advisory evaluation (chat plan §7) |
 
 Prompt (system message; the user message is the transcript and the question):
@@ -347,7 +345,7 @@ client ceiling and levels, and returns sections ≤ 8,000 tokens in total (knowl
 |---|---|---|---|
 | – (conversational) | – | no retrieval; the model answers with the no-sources frame (§7.3) | `answered` (`Coverage = skipped`) |
 | `Ok` | ≥ 1 | answer from sources | `answered` |
-| `Low` (vector and keyword both weak, knowledge §7; vector side alone until the keyword floor is calibrated, weakness review §2) | any | §10.1 fixed not-found text, **no model call** | `not-found` |
+| `Low` (vector and keyword both weak, knowledge §7; vector side alone until the keyword floor is calibrated) | any | §10.1 fixed not-found text, **no model call** | `not-found` |
 | `Low` after a failed or timed-out condense | any | answer from what was found (the frame tells the model to say when sources do not suffice); a failed rewrite of a follow-up must not turn into "not found" | `answered` |
 | `Unknown` (`degraded` set) | ≥ 1 | answer from the keyword results; caveat line first (§10.2); system prompt adds "källorna kommer från en förenklad textsökning och kan vara ofullständiga" | `answered` (+ `Degraded` column) |
 | `Unknown` | 0 | §10.2 "search unavailable" text, no model call; **never** the not-found text | `unavailable` |
@@ -487,21 +485,21 @@ traceparent: …
   `src/Ume.LlmGateway.Infrastructure/Providers/OpenAICompatibleAdapter.cs:225-260`).
 - `temperature` from `QuerySteps.answer.temperature` (default 0.2); no other sampling parameter.
 
-**Keys and ceiling** (gateway design §13; simplification pass §6). **Until gateway release 2** (P1, [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)) the
+**Keys and ceiling** (gateway design §13). **Until gateway release 2** (P1; reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)) the
 three keys are the pilot department's team's own keys per level (`AllowedIpRanges`, `RequireMaxResidency`, no
 delegation, so the gateway also applies that team's request policy, which stays empty), and every call is charged to
 the pilot team. From release 2 (P2) they are delegating keys:
 
 | Ceiling | Key (`rag-api`, with `AllowedIpRanges`, `RequireMaxResidency`, `ApplyTeamPolicy` false) | Used for |
 |---|---|---|
-| `OnPrem` | `OnPrem`-only delegating key | `sensitive` answers, condense (every level), query embeddings (knowledge §5.2) |
+| `OnPrem` | `OnPrem`-only delegating key | `sensitive` answers, condense (every level, once on-prem exists), query embeddings of an on-prem profile (knowledge §5.2) |
 | `Eu` | `Eu`-max delegating key | `internal` answers; `public` answers in history-keeping clients with ceiling `internal` |
 | `External` | open delegating key | `public` answers in clients without history |
 
 `ResidencyCeilingHandler`, a `DelegatingHandler` on every gateway `HttpClient`, refuses (throws before sending) any
 request without an explicit `x-ume-max-residency` or whose key does not belong to that ceiling; unit-tested for every
 call site (answer, condense, judge, evaluation generation; the worker's NER/LLM stages use the same handler). Keys are
-secret files, never logged; the worker never holds the open key. As built in P1a item 13 (PR #123, 2026-10-31): the
+secret files, never logged; the worker never holds the open key. The
 handler exempts `GET /v1/models` from the `x-ume-residency` check of §8.2, because the gateway sets that header only
 when a deployment answers; the ceiling and key checks still apply.
 
@@ -537,7 +535,7 @@ WebUI use EU or on-prem models.
 | Topic | Rule |
 |---|---|
 | HttpClient | named `gateway-chat`, standard resilience handler **removed** (`RemoveStandardResilienceHandler()`, as knowledge §5.3 and the gateway, `src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:51-68`); `SocketsHttpHandler` with `PooledConnectionLifetime` 5 min, no automatic decompression |
-| Headers timeout | `Chat:GatewayHeadersTimeout` **15 s** (proposed): a stuck model gives an error, not a long spinner; a long prompt on a large on-prem model must still reach its first event within it (*to verify*, §22). The check's "full 16k-token prompt" is **15,360 prompt tokens + `max_tokens` 1,024**: `ContextTokens` 16,384 minus the answer reserve (§6.3); `scripts/capacity/capacity.py answer-ttft` measures it (`--prompt-tokens` changes it) (P0 #22, PR #37; settled at the integration sync point) |
+| Headers timeout | `Chat:GatewayHeadersTimeout` **15 s** (proposed): a stuck model gives an error, not a long spinner; a long prompt on a large on-prem model must still reach its first event within it (*to verify*, §22). The check's "full 16k-token prompt" is **15,360 prompt tokens + `max_tokens` 1,024**: `ContextTokens` 16,384 minus the answer reserve (§6.3); `scripts/capacity/capacity.py answer-ttft` measures it (`--prompt-tokens` changes it); settled at the P0 integration sync point |
 | Idle timeout | `Chat:StreamIdleTimeout` **60 s** between events: the gateway relays a stream as long as the client is connected and has no idle limit (`OpenAICompatibleAdapter.cs:44`), so we impose one |
 | Total | `Chat:MaxAnswerDuration` **240 s** (below Open WebUI's default 300 s client timeout, `ow/env.py:614-618`) |
 | Retries | none by us after the request was accepted: the gateway already falls back and retries before its first byte and never after (`docs/routing-rules.md:170-171`, `Pipeline/GatewayRequestHandler.cs:245-252`). One retry only for a **connection failure** (no response) within 300 ms |
@@ -600,7 +598,7 @@ both would duplicate sources: the client kind decides, never both.
 | `metadata[i].name` | label: title, heading-path tail, "s. 12–13", modified date (knowledge §10.4) | shown as the citation name |
 | `metadata[i].external` | `true` | without it an `http(s)` source is renamed to its URL (`Citations.svelte:127`) |
 | `metadata[i].page` | 0-based page of that chunk (Open WebUI shows `page + 1`) | – |
-| `document[i]` | the cited chunk text, ≤ 1,000 characters (as built in PR #203, 2026-11-01: the text of the document's first chunk in the sources block, §7.2; several cited chunks of one document share one entry, since Open WebUI dedups by `metadata.source`) | the snippet panel; it is stored in Open WebUI's database, governed by the client's data-handling profile |
+| `document[i]` | the cited chunk text, ≤ 1,000 characters (the text of the document's first chunk in the sources block, §7.2; several cited chunks of one document share one entry, since Open WebUI dedups by `metadata.source`) | the snippet panel; it is stored in Open WebUI's database, governed by the client's data-handling profile |
 | `distances` | omitted | our scores are rank-based; no relevance bar |
 
 Annotation `title` for OpenAI clients = the same label; `url` = the same link.
@@ -702,10 +700,12 @@ row under the same id (§13.2).
 Mode = the assistant's `HistoryMode` (within the level policy, identity §4.3 step 9), tightened to `none` for Open
 WebUI temporary chats.
 
-**P1: `none` only** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant runs history mode `none` until A1 is
+**P1: `none` only** (reasoning: [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant runs history mode `none` until A1 is
 answered; `stored` and `session` (and with them the bucket keys of §12.3, content encryption and crypto-shredding) are
 built when A1 allows stored content. Until then the level policies allow `none` only (admin V29), and Open WebUI's own
 store is the primary copy of every conversation (§13.3).
+The schema enforces it: `CK_Conversations_HistoryMode` allows `none` only, and the CHECK constraints `CK_Conversations_NoTitleCiphertext`, `CK_Messages_NoContentCiphertext` and
+`CK_Feedback_NoCommentCiphertext` keep every chat ciphertext column NULL; A1's migration drops them together.
 
 ### 11.3 Which history is authoritative (decision)
 
@@ -756,7 +756,7 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
 
 1. Group turns by conversation; conversations and every multi-row upsert's keys are processed in **sorted key
    order**, so instances flushing overlapping key sets cannot deadlock
-   ([`../performance-pass.md`](../performance-pass.md) §3.2).
+   (reasoning: [`../performance-pass.md`](../performance-pass.md) §3.2).
 2. **Conversation upsert**: `INSERT … ON CONFLICT (ClientId, SubjectId, ExternalChatId, AssistantId) DO UPDATE SET
    "LastMessageAt" = excluded."LastMessageAt", "ExpiresAt" = … RETURNING "Id"` (issued ids: `ON CONFLICT ("Id")`).
 3. **Bucket key** (§12.3) for each message with content (none in P1, mode `none`).
@@ -768,7 +768,7 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
    `MessageSources` (multi-row insert), **`AssistantDailyTotals`** upsert with the batch's aggregated deltas per
    (Europe/Stockholm day, assistant, client, level) (data-model §2.3: statistics never depend on rows retention
    removes), placed as the **last** statement of the batch with its keys sorted, so the hot totals row lock is held for
-   one statement only ([`../performance-pass.md`](../performance-pass.md) §3.2), commit.
+   one statement only, commit.
 7. Failure: the batch is retried after 2 s (as `UsageWriter`'s `RetryInterval`); a batch failing three times is split
    and retried per turn; a turn failing alone three times is dropped (`rag.chat.writer.dropped{reason=poison}`, ids
    logged). While Postgres is down the queue fills, then the enqueue rule applies.
@@ -789,9 +789,13 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
   outage up to the capacity. The answer was delivered; what is lost is our record, its statistics and the possibility
   of attaching feedback (the importer counts such feedback as unmapped, §14.3).
 - `CostUsd` for streamed answers (P2): a job reads the gateway Data API usage feed (`/v1/usage/records`, cursor by id,
-  permission `usage.detail`, `src/Ume.LlmGateway.DataApi/DataEndpoints.cs:66-80`; `runId` added in gateway release 2 (weakness review §5), gateway
+  permission `usage.detail`, `src/Ume.LlmGateway.DataApi/DataEndpoints.cs:66-80`; `runId` added in gateway release 2, gateway
   design §5.9) and fills `Messages.CostUsd` and the daily totals by run id. Until then cost is visible in the gateway's
   own reports per team.
+- **No sticky sessions**: the chat path keeps no per-instance state a request depends on. The history is the client's,
+  the config snapshot is per instance (90 s grace, then 503), conversation ids are signed and verified without SQL,
+  rate limits are per instance in P1 (Redis from P2), and `Seq` is assigned under the conversation row lock, correct
+  across instances.
 
 ## 13. Retention and deletion
 
@@ -801,7 +805,7 @@ Nightly `chat.rag_retention_chat_step` (admin, batched; data-model §8) **delete
 (with their sources, feedback, tool calls and P2 attachment rows), then conversations without messages whose
 `ExpiresAt` passed. The title shares the first message's bucket and is cleared when that message expires. Metadata of
 mode `none` messages goes with their conversation. Bucket-key destruction (§12.3) is off until A1. `AssistantDailyTotals`
-3 years. In P1 (mode `none`, weakness review §4) the 90-day retention applies to metadata rows only.
+3 years. In P1 (mode `none`) the 90-day retention applies to metadata rows only.
 
 ### 13.2 User delete
 
@@ -828,16 +832,15 @@ our `source` snippets inside them, and feedback with a **full chat snapshot** (`
 - A user deleting a chat in Open WebUI does **not** reach us (no callback); our copy follows our retention. The privacy
   notice of the pilot says so.
 - Client data-handling profile (registry): `StoresHistory = true`, `ClientRetentionDays = 90`.
-- **Primary copy** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). With the pilot in mode `none`, this store holds the only
+- **Primary copy** (reasoning: [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). With the pilot in mode `none`, this store holds the only
   content of every pilot conversation and feedback comment. The **DPIA** (register G1, the user with the data
   protection officer; started in P0, finished before go-live) covers it: chats, feedback snapshots, the
   `openwebui-data` volume and who holds Open WebUI's admin role; it decides W2. A **public-records request** for a
   conversation is answered from this copy in the pilot; the runbook has a section on finding and exporting one
   conversation for the registrar (repo-and-deployment §11 #19). *Open*: with `ENABLE_ADMIN_CHAT_ACCESS=false` and
   `ENABLE_ADMIN_EXPORT=false` no admin can open another user's chat, so the runbook's route (a temporary admin-access
-  window, the user's own export, or another route G1 names) is settled in the DPIA. As built in P1b item 17 (PR #135,
-  2026-10-31): the runbook lists these three; a read-only query is not one of them, because direct SQL against Open
-  WebUI's store is ruled out (weakness review §4).
+  window, the user's own export, or another route G1 names) is settled in the DPIA. The runbook lists these three; a read-only query is not one of them, because direct SQL against Open
+  WebUI's store is ruled out.
 
 ### 13.4 Archive law
 
@@ -854,7 +857,7 @@ pilot.
 `POST /v1/feedback` (§3.5) writes synchronously (not hot path): resolve the message by id within the caller's
 conversations (`ClientId`, `SubjectId`), upsert `chat."Feedback"` by (`MessageId`, `Source = api`), encrypt `reason` +
 `comment` as one JSON plaintext under the rated message's bucket key (§12.3; data-model §7: comments are personal
-data, same retention; in P1, mode `none`, a comment is refused with `comment_not_stored`, weakness review §4), store `ReasonCategory` in plaintext (the reason if it is one of the fixed Open WebUI keys,
+data, same retention; in P1, mode `none`, a comment is refused with `comment_not_stored`), store `ReasonCategory` in plaintext (the reason if it is one of the fixed Open WebUI keys,
 `RateComment.svelte:17-35`, else `other`; admin design §8.1), adjust `AssistantDailyTotals.ThumbsUp/Down` by the delta.
 
 ### 14.2 Open WebUI import job (`FeedbackImporter`)
@@ -862,14 +865,14 @@ data, same retention; in P1, mode `none`, a comment is refused with `comment_not
 | Topic | Design |
 |---|---|
 | Source | `GET {OpenWebUi:BaseUrl}/api/v1/evaluations/feedbacks/list?order_by=updated_at&direction=desc&page=n` (admin only; 30 per page; `ow/routers/evaluations.py:366`, `:399-422`; router prefix `ow/main.py:913`). The list returns `FeedbackUserResponse` **without the chat snapshot** (`ow/models/feedbacks.py:51-60`, `:121-127`); `/feedbacks/all/export` (with snapshots) is never used |
-| Credential | an Open WebUI service account with role `admin` and an API key (`sk-…`), stored as secret `OpenWebUi__AdminApiKey` (per instance `OpenWebUi:Instances:<name>:AdminApiKey`); Open WebUI restricts every API key to the list endpoint (§4.3). As built in P1b item 17 (PR #135, 2026-10-31): the account is Open WebUI's first user (`WEBUI_ADMIN_EMAIL`/`WEBUI_ADMIN_PASSWORD`, §4.3); `deploy/openwebui-feedback-key.sh` switches password sign-in on, mints the key, checks it (list 200, other routes 403), writes the single-instance secret file `OpenWebUi__AdminApiKey` and switches password sign-in off again; a re-run rotates the key. The importer's configuration names wait for stream B (L6) |
+| Credential | an Open WebUI service account with role `admin` and an API key (`sk-…`), stored as secret `OpenWebUi__AdminApiKey` (per instance `OpenWebUi:Instances:<name>:AdminApiKey`); Open WebUI restricts every API key to the list endpoint (§4.3). The account is Open WebUI's first user (`WEBUI_ADMIN_EMAIL`/`WEBUI_ADMIN_PASSWORD`, §4.3); `deploy/openwebui-feedback-key.sh` switches password sign-in on, mints the key, checks it (list 200, other routes 403), writes the single-instance secret file `OpenWebUi__AdminApiKey` and switches password sign-in off again; a re-run rotates the key. The importer's configuration names wait for stream B (L6) |
 | Schedule | every 15 minutes in the chat role, one runner across instances via `pg_try_advisory_lock`; the same run deletes Open WebUI feedback older than `ClientRetentionDays` (§13.3) |
 | Watermark | `chat."FeedbackImportState"` (`ClientId` PK, `WatermarkUpdatedAt bigint`, `LastRunAt`, `LastOutcome`, `Unmapped int`; §20); pages until an item's `updated_at` < watermark − 1 h (overlap for clock skew), max 50 pages per run |
 | Fields used | `id`, `user_id`, `updated_at`, `data.rating` (1/−1), `data.details.rating` (1–10, optional), `data.reason`, `data.comment`, `data.model_id`, `meta.chat_id`, `meta.message_id` (`ow/models/feedbacks.py:77-90`, front end `ResponseMessage.svelte:506-524`) |
 | Discarded at once | `user.email`, `user.name` and every other user field of the response, `data.tags`, `meta.base_models`; never logged |
 | Mapping | `data.model_id` must be one of our assistant slugs (else skipped: not ours); conversation by (client, `SubjectId = user_id`, `ExternalChatId = meta.chat_id`, assistant of `model_id`); message by `Messages.ExternalMessageId = meta.message_id` (= the assistant message id we received as `X-Rag-Owui-Message-Id`, `ow/main.py:1842-1847`) |
 | Upsert | `chat."Feedback"` by (`Source = owui-import`, `ExternalId = id`): rating, score, `ReasonCategory` (plaintext, as §14.1), `reason` + `comment` encrypted under the message's bucket key, `UpdatedAt`; daily totals adjusted by the delta (a changed rating moves one count) |
-| Privacy | comments are personal data: encrypted, conversation retention, readable only through the review path (§14.4); the importer runs with the API's keys and grants (chat writer). In P1 every conversation is in mode `none`, so the import stores ratings only and drops `reason` + `comment` (§14.3; weakness review §4) |
+| Privacy | comments are personal data: encrypted, conversation retention, readable only through the review path (§14.4); the importer runs with the API's keys and grants (chat writer). In P1 every conversation is in mode `none`, so the import stores ratings only and drops `reason` + `comment` (§14.3) |
 
 ### 14.3 When mapping fails
 
@@ -925,9 +928,12 @@ typed text: accepted for the pilot, since its content stays within the user's ow
 | Prompt building, budget, serialisation | ≤ 2 ms | ≤ 8,000 source tokens + history |
 | Gateway request write → our first byte after the gateway's first event | ≤ 2 ms | header checks, first chunk rewrite, flush |
 | **Chat overhead** | **< 10 ms** | everything except condense, retrieval and the gateway's own TTFT |
-| Condense (follow-ups that are not self-contained) | ≤ 400 ms, cut at 600 ms | on-prem small model, ≤ 96 output tokens (*to measure*, §22) |
+| Condense (follow-ups that are not self-contained) | ≤ 400 ms, cut at 600 ms | small model (`Eu` until M2, then on-prem), ≤ 96 output tokens (*to measure*, §22) |
 | Retrieval | ≤ 90 ms miss / ≤ 40 ms hit | knowledge §11 |
 | Answer model TTFT through the gateway | model-dependent | gateway adds ≈ 1.3 ms (`docs/performance.md:298-311`) |
+
+**Instances.** The pilot runs one slot with a maintenance window; P2 runs two per data-plane host (a/b) behind the
+proxy with `proxy_buffering off` for SSE. Instances are for availability, not throughput.
 
 **Overhead definition** (metric `rag.chat.overhead`): (time the gateway request is sent − `ReceivedAt` − condense −
 retrieval) + (time our first content byte is flushed − time the gateway's first event arrived).
@@ -1017,12 +1023,12 @@ totals).
   annotation indices for JSON answers.
 - `LanguageGuess` labelled set; `ConversationIds` MAC round trip, tamper, wrong subject/client, key rotation.
 - Writer: batching by time and size, byte cap, enqueue timeout, poison split; messages of one turn in different
-  expiry months use their own bucket keys (that case when A1 allows stored content, weakness review §4).
+  expiry months use their own bucket keys (that case when A1 allows stored content).
 
 ### 18.2 Integration (Testcontainers: our Postgres, Keycloak; FakeGateway; Redis from P2)
 
 - Full turn persisted: conversation upsert, `Seq`, `MessageSources` numbers, daily totals; mode `none` writes no
-  ciphertext and no `DataKeys` row (P1). When A1 allows stored content (weakness review §4): ciphertext decrypts with
+  ciphertext and no `DataKeys` row (P1). When A1 allows stored content: ciphertext decrypts with
   the bucket key and fails with another conversation's AAD; `session` expiry.
 - User delete: conversation and all rows under it gone; retention step deletes expired messages, then empty expired
   conversations; no bucket key is destroyed while the A1 setting is off.
@@ -1082,7 +1088,7 @@ worker runs only retrieval evaluation and references neither `Ume.Rag.Answering`
 §14.8). From live traffic, the `uncited_answer` rate per assistant comes from `AssistantDailyTotals.UncitedAnswers`
 (§20); `rag.chat.citations{kind=uncited_answer}` stays the platform-wide counter.
 
-**Assistant tests** (P2, weakness review §1; designed with assistant versions, simplification pass §15). Each assistant's test questions
+**Assistant tests** (P2; designed with assistant versions). Each assistant's test questions
 (`config."AssistantTestQuestions"`, ≤ 30: question, expected behaviour, optional expected source and phrase) run through
 the same core after every publish, on the new published version, and on demand against the draft from the test panel.
 Expected source and phrase are checked in code; the same judge gives a verdict (`pass`/`fail`/`unsure`) against the
@@ -1094,9 +1100,9 @@ waits for or depends on it.
 
 | Phase | Deliverable |
 |---|---|
-| P1 | `/v1/models`; `/v1/chat/completions` stream and JSON; conversational check; condense on follow-ups with skip heuristic and 600 ms timeout; retrieval with coverage handling; token budget; prompt frame; per-level keys, `ResidencyCeilingHandler`, residency and echo checks; marker renumbering, Open WebUI `source` events and `url_citation`; output filter; not-found and degraded texts; signed conversation ids; writer with daily totals (history mode `none`: metadata and ratings only, weakness review §4); conversation endpoints; user delete; `/v1/feedback` (ratings; comments refused in mode `none`); Open WebUI feedback import (ratings) and feedback pruning over its API; Open WebUI configuration incl. the `WEBUI_BANNERS` input warning; P1 refusal of attachments; metrics, traces, events 5003/5011; benchmarks, audit, overhead run, R1 |
-| When A1 allows stored content (weakness review §4) | history modes `stored`/`session`; bucket keys and encryption in the writer (§12.3); crypto-shredding behind its own A1 setting; feedback comments; conversation review in the admin |
-| P2 | answer-level evaluation and assistant tests (§18.8; weakness review §1); agent loop for assistants with tool-bearing skills (`AgentAnswerStrategy`, tool hub, skills; detail in `../tools/design.md` §6, milestones §12); chat attachments (§15.2); public widget (`pk` keys, sessions, server-side history); gateway-served rerank per assistant (knowledge §6.7); cost reconciliation from the gateway usage feed; condense tuning with the advisory evaluation; feedback review workflow beyond P1 |
+| P1 | `/v1/models`; `/v1/chat/completions` stream and JSON; conversational check; condense on follow-ups with skip heuristic and 600 ms timeout; retrieval with coverage handling; token budget; prompt frame; per-level keys, `ResidencyCeilingHandler`, residency and echo checks; marker renumbering, Open WebUI `source` events and `url_citation`; output filter; not-found and degraded texts; signed conversation ids; writer with daily totals (history mode `none`: metadata and ratings only); conversation endpoints; user delete; `/v1/feedback` (ratings; comments refused in mode `none`); Open WebUI feedback import (ratings) and feedback pruning over its API; Open WebUI configuration incl. the `WEBUI_BANNERS` input warning; P1 refusal of attachments; metrics, traces, events 5003/5011; benchmarks, audit, overhead run, R1 |
+| When A1 allows stored content | history modes `stored`/`session`; bucket keys and encryption in the writer (§12.3); crypto-shredding behind its own A1 setting; feedback comments; conversation review in the admin |
+| P2 | answer-level evaluation and assistant tests (§18.8); agent loop for assistants with tool-bearing skills (`AgentAnswerStrategy`, tool hub, skills; detail in `../tools/design.md` §6, milestones §12); chat attachments (§15.2); public widget (`pk` keys, sessions, server-side history); gateway-served rerank per assistant (knowledge §6.7); cost reconciliation from the gateway usage feed; condense tuning with the advisory evaluation; feedback review workflow beyond P1 |
 | P3 | Teams client; OBO tools; write tools with confirmation |
 
 ## 20. Changes to other documents
@@ -1142,11 +1148,11 @@ waits for or depends on it.
    not-found text (§10).
 4. **Feedback in P1**: `/v1/feedback` plus a scheduled import of Open WebUI ratings through its API, mapped by chat id
    and message id; comments encrypted under the chat bucket keys, same retention; editors see ratings in P1 (§14).
-   *Later change (weakness review §4):* the P1 pilot runs history mode `none`, so ratings only; comments stay in Open
-   WebUI until A1 allows stored content.
+   In the P1 pilot (history mode `none`) only ratings are stored; comments stay in Open WebUI until A1 allows stored
+   content (§11.2).
 5. **C1 chat attachments (P2)**: chat-scoped storage with conversation retention, parsed and chunked by the worker,
    encrypted under the chat bucket keys, never in the shared document store or a collection, searched only within
-   the conversation (§15.2). *Later change (weakness review §4):* needs the bucket keys, so it also waits for A1.
+   the conversation (§15.2). It needs the bucket keys, so it also waits for A1.
 6. **P1 file uploads in Open WebUI**: disabled in Open WebUI's user permissions; our API refuses file and image
    content parts with an OpenAI-shaped error (§15.1).
 
@@ -1154,7 +1160,7 @@ waits for or depends on it.
    pre-filled reason ("Granskning av återkoppling"), audited as a conversation access, for `public` and `internal`;
    `sensitive` comments only through the full conversation-review flow with a second approver. Only the comment is
    shown, never the conversation. *Who* was settled in step 10 (admin design §14.1 answer 3): `rag-reviewer` and
-   `rag-department-admin`, not platform admins implicitly (§14.4). *Later change (weakness review §4):* built when A1
+   `rag-department-admin`, not platform admins implicitly (§14.4). Built when A1
    allows stored content, not in P1.
 
 ### 21.2 Open (user)
@@ -1166,9 +1172,8 @@ waits for or depends on it.
    unpruned Open WebUI copies in the pilot, stated in the privacy notice. Recommendation: (b) for the pilot together
    with A1, unless the registrar requires the 90 days in Open WebUI too, then (a). Registered as postponed item **W2**
    "Open WebUI chat-copy retention", decided together with A1 before the pilot; stopgap: unpruned copies in the pilot,
-   stated in Open WebUI's data-handling profile. Feedback pruning through the API stays (§13.3). *Later change
-   (weakness review §4):* W2 is decided within the DPIA (G1) before go-live, as part of assessing Open WebUI's store as
-   the primary copy.
+   stated in Open WebUI's data-handling profile. Feedback pruning through the API stays (§13.3). W2 is decided within the DPIA (G1) before go-live, as part of assessing Open WebUI's store as the
+   primary copy.
 
 ## 22. To verify
 
@@ -1182,12 +1187,12 @@ waits for or depends on it.
   `updated_at` and admin `DELETE /api/v1/evaluations/feedback/{id}` with an endpoint-restricted API key (§13.3).
 - Open WebUI v0.12.3: `WEBUI_BANNERS` (§4.3) with `dismissible: false` shows on every new chat for every user (browser
   check, P1b); it is not shown inside an existing chat (`Navbar.svelte:283`), which is accepted or needs an upstream
-  change (weakness review §4). **Partly refuted in P0** (PR #31, to-verify #172): it can be closed until the page
+  change. **Partly refuted in P0** (to-verify #172): it can be closed until the page
   reloads (§4.3); whether that is enough is for the DPIA (G1). Served from the environment and back after a restart
   (tested).
 - Open WebUI: creating the admin service account when `ENABLE_LOGIN_FORM=false` (OIDC-only login): in P1 a Keycloak
   account in the shared realm `ume` (Entra service user from P2), or a one-time local account before the form is
-  disabled (identity §5.3, §11.2, 2026-10-31). **Settled as built** (P1b item 17, PR #135, 2026-10-31): a local
+  disabled (identity §5.3, §11.2, 2026-10-31). **Settled:** a local
   account, the store's first user from `WEBUI_ADMIN_*`, with password sign-in off except while its key is minted
   (§4.3, §14.2); confirmed locally on v0.12.3 (to-verify #49).
 - Open WebUI: headers template `{{MESSAGE_ID}}` is non-empty for every chat completion (multi-model and legacy paths,
@@ -1219,7 +1224,7 @@ waits for or depends on it.
 
 ## 23. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8, §9, §14, §15:
+Removed or deferred, with where each went:
 
 | Item | Where it went |
 |---|---|
@@ -1236,19 +1241,19 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §1, §5, §6, §8,
 | `MarkCited` with every chunk of every cited document | only the cited ranks (§9.5) |
 | Gateway headers timeout 60 s | 15 s, proposed (§8.3) |
 | Strict fail-closed on an unconfirmed config version | grace window (§4.1) |
-| `Assistants.Mode` as an editable field; knowledge from linked skills' collections; chat serving the current assistant row (simplification pass §15) | mode derived from tool-bearing skills; direct collections only (knowledge §4.2); chat serves the published version (§2.2) |
-| Redis rate limit per user in P1 ("not applied" when Redis is down) | P2, first multi-host deployment; P1 limits in process behind `IRateLimitStore`, P2 falls back to per-instance limits (§4.1 step 4, simplification pass §9, §14) |
+| `Assistants.Mode` as an editable field; knowledge from linked skills' collections; chat serving the current assistant row | mode derived from tool-bearing skills; direct collections only (knowledge §4.2); chat serves the published version (§2.2) |
+| Redis rate limit per user in P1 ("not applied" when Redis is down) | P2, first multi-host deployment; P1 limits in process behind `IRateLimitStore`, P2 falls back to per-instance limits (§4.1 step 4) |
 
 ## 24. Deferred or removed (weakness review)
 
-Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+Reasoning: [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
 
 | Item | Where it went |
 |---|---|
 | Nightly answer-level evaluation (run kind `answers`, §18.8) | P2 |
 | Assistant tests (run kind `assistant-tests`, §18.8) | P2, with the assistant version diff, templates and copy (admin design §17) |
 
-Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
+Reasoning: [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
 
 | Item | Where it went |
 |---|---|
@@ -1256,7 +1261,7 @@ Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-sec
 | Feedback comments in our store (`/v1/feedback`, import), comment reveal, conversation review | Same; comments are refused (`comment_not_stored`) or dropped on import and stay in Open WebUI (§14) |
 | Chat attachments (§15.2), widget conversations stored for review, server-side history (P2) | Also wait for A1 to allow stored content |
 
-Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+Reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
 
 | Item | Where it went |
 |---|---|

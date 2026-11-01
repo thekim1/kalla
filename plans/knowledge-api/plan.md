@@ -58,10 +58,12 @@ version** links directly, and only those: skills carry no collections (design §
   `swedish` configuration, GIN index; the query is decompounded in .NET by `SwedishDecompounder` and turned into an OR
   query built from its lexeme array) run **in parallel with the query embedding**, then **vector** candidates
   (pgvector, cosine; exact scan for scopes ≤ 10,000 chunks, HNSW above), then one batched **hydrate** statement;
-  reciprocal rank fusion, then per-collection age decay and source `demote` patterns (weakness review §3, answer 7),
+  reciprocal rank fusion, then per-collection age decay and source `demote` patterns (answer 7),
   dedup and diversity in .NET (`Ume.Rag.Retrieval`); filters (scalar `CollectionId` via
   B-tree, tags via GIN, type, dates) in both candidate statements.
-- **Embedding profiles (R3)**: in the normal case every collection uses the one on-prem platform profile, so a query
+- **Embedding profiles (R3)**: in the normal case every collection uses the one platform profile (the pilot's is
+  `text-embedding-3-large` at 1024 dimensions from an `Eu` provider; on-prem BGE-M3 once the hardware exists, register
+  M2), so a query
   is embedded **once** and one HNSW index serves all collections. Chunks store `embedding_profile_id`; there is one
   partial HNSW index per profile. If an assistant spans collections in different profiles (exception), the API
   searches each profile separately and fuses the result lists with RRF, which is rank-based and so does not need
@@ -71,7 +73,7 @@ version** links directly, and only those: skills carry no collections (design §
   document (design §8).
 - **Section expansion**: with `expand=section` the hit's section is rebuilt from neighbouring chunks (≤ 1,500 tokens,
   returned once per section; design §9).
-- **Query embedding** through the gateway on the on-prem profile (attribution: the assistant's or caller's team);
+- **Query embedding** through the gateway with the profile's model and residency ceiling (attribution: the assistant's or caller's team);
   cached by (profile, HMAC of the normalised query) for a few minutes in process memory (P1 has no Redis); from the
   first multi-host deployment (P2) also in Redis for `public`/`internal` queries, never for `sensitive` (embeddings
   partly reveal text; design §5.4).
@@ -80,8 +82,8 @@ version** links directly, and only those: skills carry no collections (design §
   coverage), so callers can say "I don't know" without guessing; outcomes and near-threshold distances are metrics
   (never query text) for calibration (design §7). Until the keyword floor is calibrated, `low` is decided by the
   vector side alone; both thresholds are set from the pilot gold set's answerable and unanswerable questions together,
-  at the value that separates them best ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)).
-- **Hybrid has to earn its place** ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): in P1a the pilot gold set is run three ways
+  at the value that separates them best.
+- **Hybrid has to earn its place**: in P1a the pilot gold set is run three ways
   (vector-only, hybrid, hybrid without the decompounder) and the result recorded; hybrid and the decompounder stay
   only if they beat vector-only.
 - Exact SQL of the statements: design §6; indexes: `../platform/data-model.md` §3.
@@ -104,7 +106,7 @@ version** links directly, and only those: skills carry no collections (design §
 | Phase | Deliverable |
 |---|---|
 | P0 | `Ume.Rag.Retrieval` skeleton on the stock pgvector image; `SwedishDecompounder` compound tests in .NET plus one Postgres match test |
-| P1 | `/v1/retrieve` hybrid + filters + section expansion (HTTP for `internal` clients and download grants only), access + ceiling checks, single-profile query embedding + cache, coverage signal (vector and keyword; vector side alone until the keyword floor is calibrated), document dedup, `IReranker` seam, retrieval counters, evaluation set run in CI; P1a: three-way gold-set run (vector-only, hybrid, hybrid without decompounder) and thresholds calibrated from the gold set (weakness review §2); P1b: age decay (`RetrievalSettings.recency`) and `demote` multipliers after fusion (weakness review §3) |
+| P1 | `/v1/retrieve` hybrid + filters + section expansion (HTTP for `internal` clients and download grants only), access + ceiling checks, single-profile query embedding + cache, coverage signal (vector and keyword; vector side alone until the keyword floor is calibrated), document dedup, `IReranker` seam, retrieval counters, evaluation set run in CI; P1a: three-way gold-set run (vector-only, hybrid, hybrid without decompounder) and thresholds calibrated from the gold set; P1b: age decay (`RetrievalSettings.recency`) and `demote` multipliers after fusion |
 | P2 | Gateway-served rerank per assistant (advisory evaluation shows the gain); tuning per collection (weights, thresholds) with the advisory evaluation report; `search_knowledge` and `list_collections` through `/mcp` |
 | P3 | Cross-profile fusion if any exception profile exists, OpenSearch implementation if a trigger fires |
 
@@ -131,18 +133,17 @@ Answered (2026-10-30; detail in [`design.md`](design.md) §19.1):
    `DisplayName` of a source the caller may see.
 6. **No query rewriting** in P1: the query is used as given; condense stays a chat-API step; multi-query/HyDE only in
    P3 behind evaluation.
-7. **No recency boost**: relevance only; `modified_after` filter; citations carry the modified date. **Replaced by
-   [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)**: per-collection
-   age decay `RetrievalSettings.recency` = `{ halfLifeDays, weight, kinds }`, off by default, on for PDFs in the
+7. **No recency boost**: relevance only; `modified_after` filter; citations carry the modified date. **Replaced**
+   by per-collection age decay `RetrievalSettings.recency` = `{ halfLifeDays, weight, kinds }`, off by default, on for PDFs in the
    `website` template (730 days, weight 0.15), a multiplier `1 − weight · (1 − 2^(−age/halfLife))` on
    `SourceModifiedAt` after fusion; source `demote` URL patterns (default factor 0.5) for archive sections; the
-   `modified_after` filter stays (design §6.5).
+   `modified_after` filter stays (design §6.5; reasoning: [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)).
 8. **Download links for Open WebUI users**: signed grant link valid 7 days (`sensitive`: 1 hour), reachable only from
    the staff network, access re-checked at every download; Entra sign-in on the download path a possible P2 addition.
 
 ## 7. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §8, §14, §15:
+Removed or deferred, with where each went:
 
 | Item | Where it went |
 |---|---|
@@ -151,5 +152,5 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §8, §14
 | Coverage from vector distance alone | vector **and** keyword weak (§3) |
 | Rerank in P3 | `IReranker` seam P1, gateway rerank P2 (§3, §5) |
 | `building` collections, tuning "behind the evaluation gate" | removed; unpublished collections are not searched, evaluation is advisory |
-| Redis query-embedding cache in P1 | P2, first multi-host deployment; P1 caches in process (§3, simplification pass §14) |
-| Collections of linked skills in an assistant's scope (P2) | removed (simplification pass §15); the published version's direct collections only (§2) |
+| Redis query-embedding cache in P1 | P2, first multi-host deployment; P1 caches in process (§3) |
+| Collections of linked skills in an assistant's scope (P2) | removed; the published version's direct collections only (§2) |
