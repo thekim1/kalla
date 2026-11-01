@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-01, end of session 13.
+State of the Ume.Rag work for the next session. Rewritten 2026-11-01, end of session 13; session 14 added below.
 Repo `~/research/rag`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
 
@@ -10,7 +10,7 @@ every commit).
 of the team's **LLM gateway** (`~/git/llmgateway`, https://github.com/thekim1/llmgateway). The user owns the gateway
 and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monolith. Design and code live in this repo.
 
-## Where we are (end of session 13)
+## Where we are (end of session 13; session 14 below)
 
 - **Design** complete. **P0** done and released as `v0.1.0` (2026-10-31). **P1** is built "code first, live testing
   last" (user, 2026-10-31).
@@ -130,6 +130,41 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 | Deploy | `deploy/` | Compose `Knowledge__PublicBaseUrl` (#213); Keycloak realm additions `deploy/keycloak/` (#207, local redirects opt-in #211) |
 | Tests / CI | `tests/`, `.github/workflows/` | Worker.Tests in four parallel collections, finalizer 0.2 s (#174: 4 min → ~45 s, Verify ≈ 3–4 min); `evaluation-smoke` job (#220) |
 
+## Session 14 (2026-11-01)
+
+- **Start:** `main` @ `366b4fa` green (runner + local). No stream-B activity since session 13; #223 still waits on B.
+- **Pilot set-up (P1a item 20), through the admin API on the local AppHost** (`aspire start`, interim-gateway user
+  secrets), as the dev `rag-platform-admin` (scripted OIDC sign-in, cookie jar in the scratchpad, `adm.py`; recreate it:
+  `/bff/login` → Keycloak form → form_post to `/signin-oidc`; writes need `X-Requested-With: XMLHttpRequest` and
+  `X-XSRF-TOKEN` from the `RAG-XSRF-TOKEN` cookie). In J7's order: public data-protection row; Open WebUI client + key;
+  department **DoIT seeded locally** (no Data API key for the org sync: `cost centre dev-seed-doit`); collection
+  **`Turkos`** (slug `turkos`, public, published); crawl source **"umea.se Kommun och politik"** (`startUrls`
+  `/kommunochpolitik`, include `www.umea.se/kommunochpolitik` + `/**`, `maxPages` 2000, `piiMode: report`); umea.se
+  site profile v1; `Settings.Crawl`: `municipalHosts` `umea.se`, `*.umea.se`, override `www.umea.se` 2 req/s, 2
+  connections; `PiiOwnDomains` `umea.se`, `vakin.se`, `umeaenergi.se`, `visitumea.se`; an `internal` client
+  "Pilot retrieval (checks)" + a key scoped to Turkos. Keys are in the scratchpad's `secrets/` only (gone next session:
+  reveal or re-issue through the admin API). Decisions rows "Pilot set-up inputs" and "PiiOwnDomains".
+- **The crawl** (run `01a19671-…`): complete, 1,168/1,168 seeds, 1,166 added (43 personal-data reports, none with a
+  personnummer), 104 hub pages `parse.empty` (counted Unchanged by design, engine §10.2), 0 failed, 4,990 chunks;
+  acceptance page live (date 2026-01-15); `/v1/retrieve` right page first for three questions (0.2 s warm). The
+  gateway rate-limits embeddings (429 `gateway.rate_limited`, requeued without an attempt; drained fine). `costUsd`
+  stays 0 (the interim gateway reports no cost?).
+- **Bugs found live and fixed (stream A):** #229 scope patterns ran on the identity-rule form (`/4.<id>.html`), so a
+  path include never matched on umea.se, and reconcile would have deleted node-id documents as `scope-narrowed`; #231
+  host-slot livelock (every requeued fetch reserved a new slot; 10 jobs on a 1 req/s host never sent a request); #233
+  the worker logged the gateway URL (HttpClient at Information; **the address appeared in the AppHost log and in the
+  session-14 transcript**). Also merged: #227 (eval-set tests on FakeGateway ChatScripts), #230 (dev seed `piiMode
+  report`). Filed for B: **#228** `CrawlFrontier.FetchUrl` (path-form URL: citations, demote, scope re-checks), **#232**
+  Api/AdminApi log the gateway URL; #102 comment: demote matches `Documents.Url`.
+- **Design sync** of #159–#226 folded in (`75e9d5f`, 9 design docs) plus connectors §5.2/§6.3 for #229/#231
+  (`44fa1b2`). Not folded (need a call): #217 fired-types list in the PII report; `UrlCanonicalizer` → Pipelines
+  (#178); identity §16 Q2–4, Q8 (gateway session); admin design says `GET /api/departments`/`/api/teams`, code has
+  `/api/organisation/departments` with teams nested.
+
+**At the restart (session 14):** the AppHost was left **running** with the pilot data (Postgres dev volume from the
+user secrets' `DevelopmentVolumes:Postgres`; blobs under `~/.ume-rag/blobs/rag`); `aspire stop` keeps both. Worktrees:
+`../rag-main` only. `main` = `3e484d6` (+ this handover).
+
 ## Session 13 (done)
 
 - **Milestone 1** (above). Findings: #168 (AppHost dev run; fixed by B's #172); the gateway answers a PII policy block
@@ -154,34 +189,30 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 ## Next step
 
-1. **Check `main` and GitHub** at the start (recreate `verify.sh`; dispatch `verify.yml` on `main`; arm the watcher).
-2. **With the user: the pilot set-up through Scalar (P1a item 20)**, in J7 #193's order: data-protection row, Open
-   WebUI client + key, collection (+ publish), sources (umea.se crawl with `piiMode: report`), the umea.se site profile
-   (`contracts/site-profiles/v1/www.umea.se.profile.json`), sync, gold set, assistant + audience. Needs from the user:
-   a sign-in, the pilot collection's name and department, the crawl's start URLs, and the municipal companies' e-mail
-   domains for `Settings.Engine.PiiOwnDomains` (seeded with `umea.se`). Start the AppHost first (`aspire start`).
-3. **Design sync** of deviations from #159 on: `piiMode` (processing §9.3–§9.6, connectors §12.3, 6a §14 rule 3);
-   #169 (knowledge §9/§4.7); #174 (`Worker:FinalizerSeconds` double ≥ 0.1); #176/#178 (admin §4.5/§4.6: V16
-   `candidates` 20–200, delete refused with live sources, V25 exact duplicates); #197/#224 (connectors §5.2 no regex
-   timeout, matcher location; §5.4/§6.0 `RemovalCheck`, `CrawlRuns.Incremental`); #198/#209 (identity §4.3 step 6
-   collection scopes reach the assistant's collections; step 9 data-protection defaults); #200 (identity §6.3 cached
-   key after a key change); #225 (engine §2.3/§8/§14, processing §3.5, data-model §2.2 `ParseRuleKey`); #226 (processing
-   §13.1/§13.6, `PiiFlaggedAt` kept on re-flag); data-model §2.1 `EmbeddingProfiles.RequestDimensions`. Then the
-   restructure (`plans/doc-restructure.md`).
-4. **Stream-A code left:**
-   - `EvalSetTestKit` → B's `FakeGateway:ChatScripts` (#221);
-   - drop the `-1` removal-check fallback once B migrates before its `Depth >= 0` CHECK (#102);
-   - P1b item 15 `e2e` (after L7); item 17 importer settings (after L6); item 19 pin review before go-live (incl. the
-     condense step `Eu` → `OnPrem`, B's #204 note);
-   - small: Aspire 13.6.1 → 13.6.4; `seed-url-list.sql` with `piiMode: report`; the `parse.empty` run counter shows
-     `Unchanged` (check intent); a package audit in a weekly/release workflow.
-5. **Then the live block** (`plans/p1b/README.md` §5 step 4): the umea.se pilot crawl (personal-data dry run), the gold
-   set with the department (item 21), capacity on the EU routes; the user hands `docs/gateway-host-setup.md` to Hermes.
+1. **Check `main` and GitHub** at the start (recreate `verify.sh`, `watch.sh`, `adm.py`; dispatch `verify.yml` on
+   `main`; arm the watcher). Answer B on #228 and #232 when it replies.
+2. **Finish the pilot set-up (P1a item 20) with the user**, on the AppHost's existing volume (Turkos is there):
+   the pilot URL list and one upload (item 20's text; the user names them); then the **assistant** (`POST
+   /api/assistants`, draft with `gatewayModel`, system prompt, `collectionIds` [Turkos], publish — V8 checks the model
+   against the gateway, which may need the Data API key — and audience = the Open WebUI client); then Open WebUI on the
+   AppHost (`open-webui` resource, the client key, user-JWT trust; J9 #210) for the first cited answer locally (item 22's
+   rehearsal). The rest of umea.se (other sections, `/download/` PDFs: the sitemap lists ≈ 8,700) when the user wants
+   it; `maxPages` must then be ≥ 20,000 (connectors §5.2).
+3. **Stream-A code left:** drop the `-1` removal-check fallback once B migrates before its `Depth >= 0` CHECK (#102);
+   use `CrawlFrontier.FetchUrl` when #228 lands (fetch the path form, re-check scope on it, report demote counts); P1b
+   item 15 `e2e` (after L7); item 17 importer settings (after L6); item 19 pin review before go-live (incl. the condense
+   step `Eu` → `OnPrem`, B's #204 note); small: Aspire 13.6.1 → 13.6.4 (shared `Directory.Packages.props` + B's
+   AppHost: coordinate); a package audit in a weekly/release workflow; the worker's canary health stays `Degraded`
+   until its hourly re-check when the canary is recorded after the worker started (cosmetic).
+4. **Then the live block** (`plans/p1b/README.md` §5 step 4): the gold set with DoIT (item 21), capacity on the EU
+   routes (item 19; the gateway's embedding rate limit is the bound seen so far), the user hands
+   `docs/gateway-host-setup.md` to Hermes.
+5. Then the restructure (`plans/doc-restructure.md`).
 
-**Open issues to stream B:** #80, #90, #102, #129, #132, #134, #75, #52. Stream A's own: #48, #51. For the user: #100
+**Open issues to stream B:** #80, #90, #102, #129, #132, #134, #75, #52, #228, #232. Stream A's own: #48, #51. For the user: #100
 (L8 run steps), #215 (J8, realm additions for the gateway session). Hand-offs received: #193 (J7), #210 (J9).
 
-**Waiting on the user:** the pilot set-up inputs (Next step 2); the gateway session (release 1 incl. the embedding-batch
+**Waiting on the user:** the pilot URL list and upload (Next step 2); a Data API key (`catalog.read`) for the org and model syncs (DoIT is a local seed until then); the gateway session (release 1 incl. the embedding-batch
 fix, a 4xx for policy blocks, the shared Keycloak realm `ume` with J8 #215, identity §16 Q1–Q4/Q6); handing
 `docs/gateway-host-setup.md` to Hermes; **O7** (go-live host); identity §16 Q5, Q7–Q9; runbook review by the operations
 owner; U1 with the web editors; names and dates for A1, G1, N1, U1, W2, P2 and the gold-set owner; DPIA G1.
