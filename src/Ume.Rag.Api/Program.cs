@@ -78,6 +78,8 @@ if (chat)
     builder.AddGatewayClient(Ume.Rag.Answering.Chat.GatewayChatClient.HttpClientName);
     builder.Services.AddSingleton<Ume.Rag.Answering.Chat.GatewayChatClient>();
     builder.Services.AddSingleton<Ume.Rag.Answering.Chat.ChatService>();
+    builder.Services.AddOptions<OpenWebUiOptions>().BindConfiguration(OpenWebUiOptions.SectionName);
+    builder.Services.AddSingleton<ChatCallers>();
 }
 
 var app = builder.Build();
