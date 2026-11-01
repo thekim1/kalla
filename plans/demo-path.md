@@ -45,7 +45,11 @@ rag-api maps that 400 to a bare 502 `upstream_error`. `mistral-large-4` and `glm
 
 **Found by the demo:** the chat request sends `temperature` to every model (omit it unless the assistant sets one, or
 per model), and an unmapped gateway 4xx is logged nowhere useful (the api log showed nothing for the 502); then back to
-`claude-opus-5-5`.
+`claude-opus-5-5`. Open WebUI 0.12.3 adds its builtin tools to every browser chat and rag-api refuses `tools` (400
+`tools_not_supported`); fixed locally by the model capability `builtin_tools: false` on `turkos` in Open WebUI's own
+database, still to set in the AppHost and Compose (or have rag-api ignore Open WebUI's builtin tools). The collection's
+`coverageMaxDistance` is 0.55 for the demo: at the 0.50 default, browser questions about pages in the slice came back
+not-found (in-slice questions measured 0.30–0.49, off-topic 0.58–0.69); the gold set calibrates it (item 21).
 
 
 Gold set, three-way evaluation and thresholds (item 21); EU-route capacity (item 19); P1b item 15 `e2e`, item 17 importer
