@@ -118,6 +118,22 @@ public static class AdminErrorCodes
 
     /// <summary>The batch is committed: no more files, and a commit with other entries is refused.</summary>
     public static AdminErrorCode UploadBatchCommitted { get; } = new("upload_batch_committed", 409, "The batch has already been committed with other files.");
+    /// <summary>Only active keys that have not been rotated can be rotated.</summary>
+    public static AdminErrorCode KeyNotRotatable { get; } = new("key_not_rotatable", 409, "Only an active key that has not been rotated can be rotated.");
+
+    public static AdminErrorCode KeyRevoked { get; } = new("key_revoked", 409, "The key is revoked.");
+
+    /// <summary>The key has no stored secret (created outside the admin, e.g. by a seed); rotate it to get one that can be shown.</summary>
+    public static AdminErrorCode KeySecretUnavailable { get; } = new("key_secret_unavailable", 409, "The key's secret cannot be shown. Rotate the key to get one that can.");
+
+    /// <summary>V23: a scoped assistant or collection is not of the key team's department.</summary>
+    public static AdminErrorCode KeyScopeInvalid { get; } = new("key_scope_invalid", 400, "A key can only be limited to assistants and knowledge banks of its team's department.");
+
+    /// <summary>A department admin's key must be limited to at least one assistant or knowledge bank of the team's department.</summary>
+    public static AdminErrorCode KeyScopeRequired { get; } = new("key_scope_required", 400, "Limit the key to at least one assistant or knowledge bank of your department.");
+
+    /// <summary>The admin has no valid <c>Security:KeyPepper</c>, so it cannot create keys.</summary>
+    public static AdminErrorCode KeysUnavailable { get; } = new("keys_unavailable", 503, "Keys cannot be created right now. Ask the platform team.");
 
     /// <summary>Publish without a draft.</summary>
     public static AdminErrorCode NoDraft { get; } = new("no_draft", 409, "There is no draft to publish.");
@@ -157,6 +173,7 @@ public static class AdminErrorCodes
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
             RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
             NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
-            SourcePaused, SlugTaken, UploadBatchCommitted, NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing,
-            TooManyCollections, CollectionNotShared, AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed];
+            SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
+            KeysUnavailable, NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections,
+            CollectionNotShared, AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed];
 }
