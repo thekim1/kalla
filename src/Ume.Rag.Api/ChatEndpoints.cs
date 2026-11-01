@@ -45,7 +45,7 @@ public static class ChatEndpoints
             }))
             .WithName("ListModels").WithSummary("The assistants this caller may use, as OpenAI models");
 
-        chat.MapPost("/chat/completions", async (HttpContext http, ChatCallers callers, ChatService service, CancellationToken ct) =>
+        chat.MapPost("/chat/completions", async (HttpContext http, ChatCallers callers, ChatService service, ChatRateLimiter limiter, CancellationToken ct) =>
             await OpenAiAsync(http, async () =>
             {
                 var who = await callers.AuthenticateAsync(http.Request, userRequired: true, ct);
@@ -60,42 +60,52 @@ public static class ChatEndpoints
                 }
 
                 var parsed = ChatRequestParser.Parse(body);
-                if (parsed.Stream)
+                limiter.Check(who); // §4.1 step 4: per user and minute, before any model call
+                if (!parsed.Stream)
                 {
-                    // Streaming (SSE, Open WebUI source events) is part b of item 15.
-                    throw new ChatException(400, "unsupported_parameter", "Streaming is not available yet; send stream: false.", "stream");
+                    return Json(await service.CompleteAsync(who, parsed, ct));
                 }
 
-                var answer = await service.CompleteAsync(who, parsed, ct);
-                return Results.Json(new
+                var plan = await service.PlanAsync(who, parsed, ct);
+                if (plan.Fixed is not null)
                 {
-                    id = "chatcmpl-" + answer.MessageId.ToString("N"),
-                    @object = "chat.completion",
-                    created = answer.Created.ToUnixTimeSeconds(),
-                    model = answer.Model,
-                    choices = new[]
-                    {
-                        new
-                        {
-                            index = 0, finish_reason = answer.FinishReason,
-                            message = new
-                            {
-                                role = "assistant", content = answer.Content,
-                                annotations = answer.Annotations.Select(a => new
-                                {
-                                    type = "url_citation", url_citation = new { url = a.Url, title = a.Title, start_index = a.StartIndex, end_index = a.EndIndex },
-                                }),
-                            },
-                        },
-                    },
-                    usage = new { prompt_tokens = answer.PromptTokens, completion_tokens = answer.CompletionTokens, total_tokens = answer.PromptTokens + answer.CompletionTokens },
-                });
+                    return new ChatSse(plan, null, service, who.Client.Kind == "open-webui", parsed.IncludeUsage);
+                }
+
+                // §8.2: status and residency are checked here, before our first byte; a refusal is still a JSON error.
+                var response = await service.Gateway.OpenStreamAsync(plan.Assistant.Published!.GatewayModel, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens,
+                    plan.Settings.Temperature, plan.MessageId, ct);
+                return new ChatSse(plan, response, service, who.Client.Kind == "open-webui", parsed.IncludeUsage);
             }))
             .WithMetadata(new ChatBodyLimit())
-            .WithName("ChatCompletions").WithSummary("Ask an assistant (OpenAI chat completions; non-streaming in this release)");
+            .WithName("ChatCompletions").WithSummary("Ask an assistant (OpenAI chat completions, JSON or stream)");
 
         return app;
     }
+
+    private static IResult Json(ChatCompletion answer) => Results.Json(new
+    {
+        id = "chatcmpl-" + answer.MessageId.ToString("N"),
+        @object = "chat.completion",
+        created = answer.Created.ToUnixTimeSeconds(),
+        model = answer.Model,
+        choices = new[]
+        {
+            new
+            {
+                index = 0, finish_reason = answer.FinishReason,
+                message = new
+                {
+                    role = "assistant", content = answer.Content,
+                    annotations = answer.Annotations.Select(a => new
+                    {
+                        type = "url_citation", url_citation = new { url = a.Url, title = a.Title, start_index = a.StartIndex, end_index = a.EndIndex },
+                    }),
+                },
+            },
+        },
+        usage = new { prompt_tokens = answer.PromptTokens, completion_tokens = answer.CompletionTokens, total_tokens = answer.PromptTokens + answer.CompletionTokens },
+    });
 
     /// <summary>The description Open WebUI shows (§3.1): the assistant's description and its contact.</summary>
     private static string? Description(AssistantEntry assistant)
