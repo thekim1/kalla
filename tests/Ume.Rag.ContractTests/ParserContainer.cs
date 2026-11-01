@@ -65,6 +65,56 @@ public sealed class ParserContainer : IAsyncLifetime
         Assert.Fail($"The parser's convert lane was not ready within {ReadyTimeout} (last capacity: {capacity}).");
     }
 
+    /// <summary>
+    /// <see cref="ParserClient.ConvertAsync"/> of the file at <paramref name="path"/>, retried while the parser answers
+    /// <c>not_ready</c>: the slot can pass <see cref="RequireReadyAsync"/> and then recycle on RSS growth from the previous
+    /// conversion (to-verify #65). Each attempt waits for readiness again, reopens the file and empties
+    /// <paramref name="docling"/>. Bounded by <see cref="ReadyTimeout"/>; any other answer is returned or thrown as it is.
+    /// </summary>
+    public async Task<ParserConvertResult> ConvertWhenReadyAsync(string path, ParserConvertOptions options, MemoryStream? docling, bool strict = true)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var deadline = DateTimeOffset.UtcNow + ReadyTimeout;
+        while (true)
+        {
+            await RequireReadyAsync();
+            docling?.SetLength(0);
+            await using var file = File.OpenRead(path);
+            try
+            {
+                return await Client(strict).ConvertAsync(file, options, docling, ct);
+            }
+            catch (ParserException e) when (e.Error?.Error.Code == "not_ready" && DateTimeOffset.UtcNow < deadline)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(500), ct);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A raw <c>POST /v1/convert</c> with the content <paramref name="content"/> builds for each attempt, retried like
+    /// <see cref="ConvertWhenReadyAsync"/> while the answer is 503 <c>not_ready</c> (no error case expects that code).
+    /// </summary>
+    public async Task<HttpResponseMessage> PostConvertWhenReadyAsync(Func<HttpContent> content)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var deadline = DateTimeOffset.UtcNow + ReadyTimeout;
+        while (true)
+        {
+            await RequireReadyAsync();
+            using var body = content();
+            var response = await Http.PostAsync(new Uri("v1/convert", UriKind.Relative), body, ct);
+            if (response.StatusCode != System.Net.HttpStatusCode.ServiceUnavailable || DateTimeOffset.UtcNow >= deadline
+                || !(await response.Content.ReadAsStringAsync(ct)).Contains("\"not_ready\"", StringComparison.Ordinal))
+            {
+                return response;
+            }
+
+            response.Dispose();
+            await Task.Delay(TimeSpan.FromMilliseconds(500), ct);
+        }
+    }
+
     public async ValueTask InitializeAsync()
     {
         if (Image is not { } image)

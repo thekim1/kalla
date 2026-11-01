@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Jobs;
+using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors.Persistence;
 using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing.Persistence;
@@ -31,7 +32,7 @@ public sealed record DriftResult(long Checked, long Enqueued, long SwappedBack, 
 /// running <c>sync</c> run (that run reconciles them), and documents whose last processing ended at a stage
 /// (<c>skipped</c>, <c>unsupported</c>, <c>failed</c>, …: settled until their next fetch). Then the sets whose name check is
 /// still <c>pending</c> get <c>personal-data</c> again in place (<see cref="PiiLifecycle.SweepPendingAsync"/>, processing
-/// design §9.6).
+/// design §9.6), their state settled by the source's <c>piiMode</c>.
 /// </summary>
 public sealed partial class DriftSweep(
     JobDatabase database,
@@ -217,9 +218,10 @@ public sealed partial class DriftSweep(
         {
             var document = await documents.GetAsync(set.Key.DocumentId, ct);
             var source = document is null ? null : (await ContextAsync(document.SourceId, contexts, ct))?.Source ?? await sources.GetAsync(document.SourceId, ct);
-            // Without its source the set's own level decides: fail closed at least as strictly.
+            // Without its source the set's own level decides, in hold mode: fail closed at least as strictly.
             var level = source?.CollectionClassification ?? set.Classification;
-            return (values.PersonalData(level), new PiiSwapContext(level, source?.SourceId ?? Guid.Empty, null, values.PiiFlagRules));
+            return (values.PersonalData(level),
+                new PiiSwapContext(level, source?.SourceId ?? Guid.Empty, null, values.PiiFlagRules, source?.PiiMode ?? PiiMode.Hold));
         }, BatchSize, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return settled;

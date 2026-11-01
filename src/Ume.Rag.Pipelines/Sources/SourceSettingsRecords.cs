@@ -17,6 +17,18 @@ internal static class SettingPatterns
     public const string Cron = "^\\S+( \\S+){4}$";
 }
 
+/// <summary>Descriptions shared by the source settings.</summary>
+internal static class SettingDescriptions
+{
+    /// <summary>
+    /// <c>piiMode</c> (Decisions table, 2026-11-01). Cosmetic: the mode is read at each swap, so a change needs no run and no
+    /// re-processing; sets already swapped keep their state until their next swap or a clearance.
+    /// </summary>
+    public const string PiiMode =
+        "What a personal-data flag does in a public collection: hold (the set is held until the document is cleared) or report (the set goes live " +
+        "and the flag is reported; a personnummer or samordningsnummer still holds). A change applies at each document's next swap.";
+}
+
 /// <summary><c>Sources.Settings</c> of a URL-list source (connectors design §4, §12.3).</summary>
 [Description("Settings of a URL-list source (Sources.Settings; connectors design §4, §12.3). Each member's x-effect says what a change needs.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -60,6 +72,10 @@ public sealed record UrlListSettings
     [Description("Whole-request timeout in seconds; the HTML and file body limits of connectors design §4 still apply.")]
     [Range(5, 120)]
     public int TimeoutSeconds { get; init; } = 30;
+
+    [Effect(SettingEffect.Cosmetic)]
+    [Description(SettingDescriptions.PiiMode)]
+    public PiiMode PiiMode { get; init; } = PiiMode.Hold;
 }
 
 /// <summary><c>Sources.Settings</c> of a website crawl (connectors design §5, §12.3).</summary>
@@ -159,6 +175,10 @@ public sealed record CrawlSettings
     [MaxLength(100)]
     [RegularExpression(SettingPatterns.Cron)]
     public string? IncrementalSchedule { get; init; }
+
+    [Effect(SettingEffect.Cosmetic)]
+    [Description(SettingDescriptions.PiiMode)]
+    public PiiMode PiiMode { get; init; } = PiiMode.Hold;
 }
 
 /// <summary>A <c>demote</c> entry (weakness review §3): pages matching the pattern rank lower, nothing else changes.</summary>
@@ -184,4 +204,8 @@ public sealed record UploadSettings
     [Description("Per-file limit in MB (platform cap 50); applies to new uploads only.")]
     [Range(1, 50)]
     public int MaxFileSizeMb { get; init; } = 50;
+
+    [Effect(SettingEffect.Cosmetic)]
+    [Description(SettingDescriptions.PiiMode)]
+    public PiiMode PiiMode { get; init; } = PiiMode.Hold;
 }

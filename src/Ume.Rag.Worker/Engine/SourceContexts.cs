@@ -5,6 +5,7 @@ using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Pipelines.Definitions;
+using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors.Persistence;
 
 namespace Ume.Rag.Worker.Engine;
@@ -21,7 +22,11 @@ public sealed record SourceContext(
     Guid DepartmentId,
     Guid EmbeddingProfileId,
     Guid PipelineId,
-    Guid? PublishedVersionId);
+    Guid? PublishedVersionId)
+{
+    /// <summary>The source's <c>piiMode</c>: what a personal-data flag does in a <c>public</c> collection (settings that do not bind hold).</summary>
+    public PiiMode PiiMode => SourceSettings.PiiModeOf(Type, Settings);
+}
 
 /// <summary>A published pipeline version, validated and resolved (engine design §4: the worker runs rules 1–3, fail closed).</summary>
 public sealed record PipelineRun(Guid VersionId, ResolvedPipeline Pipeline);

@@ -14,7 +14,7 @@ namespace Ume.Rag.Worker.Tests.CommandJobs;
 /// an earlier version, and each new applied version enqueues a <c>reprocess</c> sync only for the sources with live HTML
 /// documents on that host at that level. Writes commit with the job or not at all.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup2.Name)]
 public sealed class SiteProfileCommandTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private const string Umea = "www.umea.se";

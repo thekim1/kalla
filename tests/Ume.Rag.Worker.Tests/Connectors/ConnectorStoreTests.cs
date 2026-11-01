@@ -31,7 +31,7 @@ namespace Ume.Rag.Worker.Tests.Connectors;
 /// uploads by slot, EICAR to quarantine, proposals, checkpoints and <c>Settings.Crawl</c>. No assertion depends on how
 /// fast the machine is: slots are compared with each other, never with the wall clock.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup3.Name)]
 public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private static readonly byte[] Eicar = Encoding.ASCII.GetBytes(@"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*");

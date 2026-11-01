@@ -22,7 +22,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// only the matching one, with the rule's override, while the other keeps its key; removing the rule returns the document
 /// to its built-in key, which the parse cache serves without a parser call.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup1.Name)]
 public sealed class AdminParseRuleEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

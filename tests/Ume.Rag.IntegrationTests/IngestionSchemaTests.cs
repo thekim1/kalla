@@ -332,6 +332,25 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
     }
 
     [Fact]
+    public async Task The_dev_seeder_adds_the_open_webui_client_and_its_key_once()
+    {
+        // repo-and-deployment §4 "Seed": client Open WebUI (dev) at ceiling internal with key ume-rag-sk- + dev-key (#164).
+        await using var db = TestPostgres.Context(database.Connection(Migrator));
+        var hasher = new Domain.Services.KeyHasher(System.Text.Encoding.UTF8.GetBytes(new string('p', 32)));
+        var devKey = new string('D', 43);
+        await DevSeeder.SeedDevClientAsync(db, hasher, devKey, TimeProvider.System, Ct);
+        await DevSeeder.SeedDevClientAsync(db, hasher, devKey, TimeProvider.System, Ct);
+
+        var client = await db.Clients.AsNoTracking().Include(c => c.Keys).SingleAsync(c => c.Id == DevSeeder.DevClientId, Ct);
+        (client.Name, client.Kind, client.ClassificationCeiling, client.StoresHistory).ShouldBe(
+            (DevSeeder.DevClientName, ClientKinds.OpenWebUi, Classification.Internal, false));
+        var key = client.Keys.ShouldHaveSingleItem();
+        hasher.Verify(Domain.Services.KeyHasher.SecretPrefix + devKey, key.KeyHash).ShouldBeTrue();
+        key.Prefix.ShouldBe("ume-rag-sk-DDDD");
+        await Should.ThrowAsync<InvalidOperationException>(() => DevSeeder.SeedDevClientAsync(db, hasher, "too-short", TimeProvider.System, Ct));
+    }
+
+    [Fact]
     public async Task The_platform_profile_is_seeded_from_deployment_settings_once_and_never_changed()
     {
         // P1a item 13: EmbeddingProfile:* names the pilot's EU route (U-b); the admin API records its canary embedding.

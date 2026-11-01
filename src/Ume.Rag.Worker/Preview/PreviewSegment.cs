@@ -6,6 +6,7 @@ using Ume.Rag.Pipelines.Definitions;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.Processing;
+using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors.Urls;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Processing;
@@ -43,6 +44,9 @@ public sealed record PreviewContent(int Index, string Level, byte[] ContentHash,
 
     /// <summary>The document's source, or the preview's; null for a URL previewed against the collection alone.</summary>
     public Guid? SourceId { get; init; }
+
+    /// <summary>That source's <c>piiMode</c> (hold without a source), for the state shown.</summary>
+    public PiiMode PiiMode { get; init; } = PiiMode.Hold;
 }
 
 /// <summary>The personal-data output of a preview: the counts, the rules that fired, the state the set would get and, with <c>piiSpans</c>, where each match is.</summary>
@@ -318,7 +322,7 @@ public sealed class PreviewSegment(
         var wouldBe = new ChunkSetRecord(Guid.Empty,
             new ChunkSetKey(content.DocumentId ?? Guid.Empty, run.Pipeline.VersionId, profile?.Id, run.Collection.EmbeddingProfileId, content.ContentHash),
             level, run.Collection.Id, chunksHash) { PiiFlagged = fired.Count > 0, PiiCounts = counts };
-        var state = PiiLifecycle.StateFor(wouldBe, collectionLevel, clearance, values.PiiFlagRules);
+        var state = PiiLifecycle.StateFor(wouldBe, collectionLevel, content.PiiMode, clearance, values.PiiFlagRules);
         var pii = new PreviewPii(counts, fired, state) { Spans = run.PiiSpans ? Spans(withPii) : null };
         var shownPii = await store.ShowAsync(content.Index, StageNames.PersonalData, StageNames.PersonalData, pii, pii.Spans?.Count ?? 0,
             (p, n) => p with { Spans = p.Spans?.Take(n).ToList() }, cancellationToken);

@@ -24,7 +24,7 @@ namespace Ume.Rag.Worker.Tests.Preview;
 /// parse output under its own key (a cache hit, no parser call): the matched one under the key with the rule, the other
 /// under the built-in key.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup2.Name)]
 public sealed class PreviewParseRuleTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

@@ -29,7 +29,7 @@ namespace Ume.Rag.Worker.Tests.Preview;
 /// after 24 h; a second preview with <c>basePreviewJobId</c> reuses the first one's fetch and unchanged stages; six
 /// documents are refused; a URL-list preflight reports a robots-disallowed and an egress-blocked URL with their reasons.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup2.Name)]
 public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -184,6 +184,44 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
             embed.Facts.Value.GetProperty("dimensions").GetInt32().ShouldBe(EngineKit.Dimensions);
             embed.Facts.Value.GetProperty("embeddingTokens").GetInt64().ShouldBeGreaterThan(0);
             (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."EmbeddingCache" """)).ShouldBe(cached);
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task The_personal_data_state_shown_follows_the_source_pii_mode()
+    {
+        var marker = Guid.NewGuid().ToString("N");
+        await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page($"kontakt {name} {marker}",
+            "Frågor besvaras av anna.svensson@gmail.com."))));
+        var seed = await EngineKit.SeedUrlListAsync(database, [site.Url("/p/other")], Ume.Rag.Domain.Classification.Public);
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
+        try
+        {
+            async Task<JsonElement> PersonalDataAsync()
+            {
+                var job = await EnqueueAsync(seed, new StagePreviewPayload
+                {
+                    PipelineVersionId = seed.VersionId,
+                    CollectionId = seed.CollectionId,
+                    SourceId = seed.SourceId,
+                    Urls = [site.Url("/p/contact").AbsoluteUri],
+                });
+                return (await ResultAsync<StagePreviewResult>(job)).Documents.ShouldHaveSingleItem().Stages.Single(s => s.Stage == "personal-data").Facts!.Value;
+            }
+
+            var held = await PersonalDataAsync();
+            held.GetProperty("state").GetString().ShouldBe("held");
+            held.GetProperty("flagged").GetBoolean().ShouldBeTrue();
+
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Sources" SET "Settings" = "Settings" || '{"piiMode":"report"}'::jsonb WHERE "Id" = $1""",
+                seed.SourceId);
+            var reported = await PersonalDataAsync();
+            reported.GetProperty("state").GetString().ShouldBe("live", "report mode: an external e-mail address does not hold");
+            reported.GetProperty("flagged").GetBoolean().ShouldBeTrue();
         }
         finally
         {

@@ -22,7 +22,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// <c>reprocess-document</c> bypasses from its <c>fromStage</c>. The old outputs stay (write-once). Each PDF's content and
 /// parse output carry the test's marker, so the outputs counted are this test's.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup4.Name)]
 public sealed class ForcedReprocessTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -144,31 +144,37 @@ public sealed class ForcedReprocessTests(RagDatabaseFixture database, FakeGatewa
 
     /// <summary>
     /// The <c>NodeOutputs</c> rows of one content's <paramref name="stage"/> (engine design §3.3): <c>detect</c> and
-    /// <c>parse</c> take the content hash as input, every later stage its predecessor's outputs.
+    /// <c>parse</c> take the content hash as input, every later stage its predecessor's outputs. Each step is a materialized
+    /// CTE: <c>InputHash</c> has no index, and nested <c>IN</c> subqueries planned on stale row estimates took seconds once
+    /// the table held a whole suite's outputs.
     /// </summary>
-    private static string OutputsWhere(string stage)
+    private static string Outputs(string stage)
     {
-        var where = "\"InputHash\" = $1";
         if (stage is "detect" or "parse")
         {
-            return $"\"NodeType\" = '{stage}' AND {where}";
+            return $"""SELECT * FROM content."NodeOutputs" WHERE "NodeType" = '{stage}' AND "InputHash" = $1""";
         }
 
         string[] chain = ["parse", "clean", "chunk", "personal-data"];
-        for (var i = 1; i <= Array.IndexOf(chain, stage); i++)
+        var last = Array.IndexOf(chain, stage);
+        var steps = new List<string> { """s0 AS MATERIALIZED (SELECT "OutputHash" FROM content."NodeOutputs" WHERE "NodeType" = 'parse' AND "InputHash" = $1)""" };
+        for (var i = 1; i < last; i++)
         {
-            where = $"\"InputHash\" IN (SELECT \"OutputHash\" FROM content.\"NodeOutputs\" WHERE \"NodeType\" = '{chain[i - 1]}' AND {where})";
+            steps.Add($"""s{i} AS MATERIALIZED (SELECT "OutputHash" FROM content."NodeOutputs" WHERE "NodeType" = '{chain[i]}' AND "InputHash" IN (SELECT "OutputHash" FROM s{i - 1}))""");
         }
 
-        return $"\"NodeType\" = '{stage}' AND {where}";
+        return $"""
+            WITH {string.Join(", ", steps)}
+            SELECT * FROM content."NodeOutputs" WHERE "NodeType" = '{stage}' AND "InputHash" IN (SELECT "OutputHash" FROM s{last - 1})
+            """;
     }
 
     private Task<long> OutputsAsync(byte[] content, string stage) =>
-        Sql.ScalarAsync<long>(database.Connection(null), $"""SELECT count(*) FROM content."NodeOutputs" WHERE {OutputsWhere(stage)}""", content);
+        Sql.ScalarAsync<long>(database.Connection(null), $"""SELECT count(*) FROM ({Outputs(stage)}) o""", content);
 
     private Task<byte[]> FirstOutputKeyAsync(byte[] content, string stage) =>
         Sql.ScalarAsync<byte[]>(database.Connection(null), $"""
-            SELECT "CacheKey" FROM content."NodeOutputs" WHERE {OutputsWhere(stage)} ORDER BY "CreatedAt", "CacheKey" LIMIT 1
+            SELECT "CacheKey" FROM ({Outputs(stage)}) o ORDER BY "CreatedAt", "CacheKey" LIMIT 1
             """, content);
 
     private Task<bool> OutputExistsAsync(byte[] key) =>

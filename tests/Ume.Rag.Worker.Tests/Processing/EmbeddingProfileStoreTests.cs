@@ -5,7 +5,7 @@ using Ume.Rag.Worker.Processing.Persistence;
 namespace Ume.Rag.Worker.Tests.Processing;
 
 /// <summary><see cref="PostgresEmbeddingProfileStore"/> reads <c>"RequestDimensions"</c> as <c>ume_rag_worker</c> (U-b, #142).</summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup4.Name)]
 public sealed class EmbeddingProfileStoreTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

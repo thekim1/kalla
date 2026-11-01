@@ -118,6 +118,28 @@ public sealed class PersonalDataTests
         external.Counts.EmailExternal.ShouldBe(1);
     }
 
+    [Theory]
+    [InlineData("umea.se", "kontaktcenter@umea.se", 0)]
+    [InlineData("umea.se", "x@sub.umea.se", 0)]
+    [InlineData("umea.se", "Kontaktcenter@UMEA.SE", 0)]
+    [InlineData("umea.se", "kontaktcenter [at] skola.umea.se", 0)]
+    [InlineData("Umea.SE", "kontaktcenter@umea.se", 0)]
+    [InlineData(" umea.se. ", "kontaktcenter@umea.se", 0)]
+    [InlineData("@umea.se", "kontaktcenter@umea.se", 0)]
+    [InlineData("*.umea.se", "x@sub.umea.se", 0)]
+    [InlineData("umea.se", "x@notumea.se", 1)]
+    [InlineData("umea.se", "x@umea.se.example.com", 1)]
+    public async Task Own_domains_match_subdomains_in_any_case(string ownDomain, string address, int external)
+    {
+        var (stage, _, _) = Stage();
+        var context = new PersonalDataContext(Classification.Internal) { OwnDomains = [ownDomain] };
+
+        var (_, assessment) = await stage.RunAsync(Chunks($"Skriv till {address} om du har frågor."), context, Ct);
+
+        assessment.Counts.Email.ShouldBe(1);
+        assessment.Counts.EmailExternal.ShouldBe(external);
+    }
+
     [Fact]
     public async Task Offsets_are_code_points_with_emoji_and_combining_characters()
     {
