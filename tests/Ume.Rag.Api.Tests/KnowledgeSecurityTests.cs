@@ -11,6 +11,8 @@ using Ume.Rag.Answering;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Access;
 using Ume.Rag.Infrastructure.Security;
+using Microsoft.Extensions.DependencyInjection;
+using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.TestKit;
 
 namespace Ume.Rag.Api.Tests;
@@ -231,6 +233,16 @@ public sealed class KnowledgeSecurityTests(KnowledgeFixture db) : IClassFixture<
         using var valid = Client(api, db.InternalKey);
         using var wrong = Client(api, "ume-rag-sk-" + new string('w', 43));
         var collections = new Uri("/v1/collections", UriKind.Relative);
+        // The config monitor's first load is a full reload, which clears the key cache (KeyStore.ApplyAsync). Wait for it, so
+        // it can't land after the key below is cached and make the last request miss the cache (#187).
+        var state = api.Services.GetRequiredService<ConfigVersionState>();
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (state.LastConfirmedAt is null && waited.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            await Task.Delay(50, Ct);
+        }
+
+        state.LastConfirmedAt.ShouldNotBeNull();
         (await valid.GetAsync(collections, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK); // now in the key cache
 
         var statuses = new List<HttpStatusCode>();
