@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.Retrieval;
 using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Evaluation;
 using Ume.Rag.Worker.Processing.Embedding;
@@ -77,6 +78,99 @@ public sealed class EvaluatorApiContractTests(RagDatabaseFixture database, FakeG
         }
 
         differences.Count.ShouldBe(0, $"questions of {target.Questions.Count} that differ; the first: {differences.FirstOrDefault()}");
+    }
+
+    /// <summary>
+    /// Knowledge design §6.5 in the contract (#241, hand-off L3): a published crawl collection with <c>recency</c> on and a
+    /// source <c>demote</c> pattern for its archive section. The archive page matches the question best and ranks first
+    /// without demote; with it, the evaluator (every variant, and candidate settings) and <c>POST /v1/retrieve</c> both put
+    /// it lower, in the same order. A ten-year-old page carries the age decay.
+    /// </summary>
+    [Fact]
+    public async Task The_evaluator_and_the_retrieve_endpoint_apply_recency_and_source_demote_alike()
+    {
+        var tag = "zq" + Guid.NewGuid().ToString("N")[..12];
+        var seed = await EngineKit.SeedCrawlAsync(database, new
+        {
+            startUrls = new[] { "https://www.example.org/" },
+            demote = new[] { new { pattern = "www.example.org/arkiv/**", factor = 0.5 } },
+        }, Classification.Public);
+        await EngineKit.PauseAsync(database, seed);
+        await EvaluationSmokeKit.PublishAsync(database, seed.CollectionId);
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Collections" SET "RetrievalSettings" = $2::jsonb WHERE "Id" = $1""",
+            seed.CollectionId, """{"coverageMaxDistance":0.85,"recency":{"halfLifeDays":730,"weight":0.15}}""");
+        await Sql.ExecuteAsync(database.Connection(RagDatabase.Worker), "SELECT content.rag_ensure_profile_index($1, $2)", EngineKit.ProfileId, EngineKit.Dimensions);
+
+        var question = $"Vad kostar parkeringstillstånd {tag} för boende i centrum?";
+        var now = DateTimeOffset.UtcNow;
+        FixtureDocument archive, current, old;
+        await using (var writer = new ContentFixtureWriter(database.Connection(RagDatabase.Worker), database.Connection(RagDatabase.Admin),
+            (text, dims) => FakeContent.Vector(text, dims)))
+        {
+            archive = await AddPageAsync(writer, seed, $"https://www.example.org/arkiv/parkering-{tag}", question, now);
+            current = await AddPageAsync(writer, seed, $"https://www.example.org/parkering-{tag}",
+                question + " Taxan gäller från januari och betalas varje månad.", now);
+            old = await AddPageAsync(writer, seed, $"https://www.example.org/trafik-{tag}",
+                question + " Ansökan görs hos trafikavdelningen på stadshuset med blankett.", now.AddYears(-10));
+        }
+
+        await AddQuestionAsync(seed, question, [current.Id]);
+        var slug = await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Slug" FROM config."Collections" WHERE "Id" = $1""", seed.CollectionId);
+        var (_, key) = await EvaluationSmokeKit.AddClientAsync(database, ClientKinds.Internal, Classification.Sensitive);
+
+        await using var worker = await StartWorkerAsync();
+        var target = (await worker.Services.GetRequiredService<EvaluationStore>().LoadAsync(seed.CollectionId, Ct)).ShouldNotBeNull();
+        target.Settings.Recency.ShouldNotBeNull();
+        target.Demote.Keys.ShouldBe([seed.SourceId]);
+        var row = target.Questions.ShouldHaveSingleItem();
+        var evaluator = worker.Services.GetRequiredService<RetrievalEvaluator>();
+        await using var api = EvaluationSmokeKit.ApiHost(database, gateway, _blobs);
+        using var http = await EvaluationSmokeKit.ClientAsync(api, key);
+
+        // Without demote the archive page is first: the fixture reorders.
+        using (var undemoted = await evaluator.OpenAsync(target with { Demote = new Dictionary<Guid, IReadOnlyList<DemotePattern>>() }, Ct))
+        {
+            (await undemoted.SearchAsync(row, EvaluationVariant.Hybrid, target.Settings, Ct)).Hits[0].Candidate.DocumentId
+                .ShouldBe(archive.Id, "the archive page ranks first without demote");
+        }
+
+        using var session = await evaluator.OpenAsync(target, Ct);
+        var evaluated = (await session.SearchAsync(row, EvaluationVariant.Hybrid, target.Settings, Ct)).Hits.Select(h => h.Candidate).ToList();
+        var retrieved = await EvaluationSmokeKit.RetrieveAsync(http, slug, question);
+
+        evaluated.Select(c => c.ChunkId).ShouldBe(retrieved.Select(r => r.ChunkId), "evaluator and /v1/retrieve: the same chunks in the same order");
+        evaluated.Select(c => c.DocumentId).ShouldBe([current.Id, archive.Id, old.Id], ignoreOrder: true);
+        retrieved[0].DocumentId.ShouldNotBe(archive.Id, "/v1/retrieve demotes the archive page");
+        evaluated[0].DocumentId.ShouldNotBe(archive.Id, "the evaluator demotes the archive page");
+        foreach (var (variant, settings) in new[]
+                 {
+                     (EvaluationVariant.Vector, target.Settings), (EvaluationVariant.HybridNoDecompounder, target.Settings),
+                     (EvaluationVariant.Hybrid, target.Settings with { KeywordWeight = 0.9 }),
+                 })
+        {
+            (await session.SearchAsync(row, variant, settings, Ct)).Hits[0].Candidate.DocumentId
+                .ShouldNotBe(archive.Id, $"{variant}, keyword weight {settings.KeywordWeight}");
+        }
+    }
+
+    /// <summary>A live page of the seed's source at <paramref name="url"/>, modified at <paramref name="modified"/>, with one chunk.</summary>
+    private static Task<FixtureDocument> AddPageAsync(ContentFixtureWriter writer, SourceSeed seed, string url, string text, DateTimeOffset modified) =>
+        writer.AddDocumentAsync(new FixtureDocumentSpec
+        {
+            CollectionId = seed.CollectionId, EmbeddingProfileId = EngineKit.ProfileId, SourceId = seed.SourceId, Classification = seed.Classification,
+            Url = url, Title = url, SourceModifiedAt = modified,
+        }, [new FixtureChunk(text) { DocumentType = "page", SourceModifiedAt = modified }], Ct);
+
+    /// <summary>One active <c>human</c> question in a new set of the seed's collection.</summary>
+    private async Task AddQuestionAsync(SourceSeed seed, string question, Guid[] expected)
+    {
+        var setId = Guid.CreateVersion7();
+        await Sql.ExecuteAsync(database.Connection(null),
+            """INSERT INTO content."EvaluationSets" ("Id", "CollectionId", "Classification") VALUES ($1, $2, $3)""", setId, seed.CollectionId, seed.Classification);
+        await Sql.ExecuteAsync(database.Connection(null), """
+            INSERT INTO content."EvaluationQuestions" ("Id", "SetId", "Classification", "Layer", "Question", "ExpectedDocumentIds", "State")
+            VALUES ($1, $2, $3, $4, $5, $6, 'active')
+            """, Guid.CreateVersion7(), setId, seed.Classification, EvaluationLayers.Human, question, expected);
     }
 
     /// <summary>The 30 smoke questions as the collection's <c>human</c> layer, in file order (UUIDv7 ids keep it), expecting their documents.</summary>
