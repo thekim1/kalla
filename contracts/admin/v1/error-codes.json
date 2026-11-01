@@ -62,6 +62,11 @@
       "message": "The AI gateway could not be reached to check the model. Try again."
     },
     {
+      "code": "gateway_key_missing",
+      "status": 503,
+      "message": "No AI gateway key is configured for {ceiling}, so {model} cannot be checked there."
+    },
+    {
       "code": "policy_rule",
       "status": 400,
       "message": "The data protection policy breaks a rule: {rule}"

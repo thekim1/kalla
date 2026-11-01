@@ -240,7 +240,7 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
 /// through the <see cref="AnswerTransducer"/> (§9.2–§9.4). Condense is part c of item 15.
 /// </summary>
 public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccessPolicy policy, KnowledgeService knowledge, GatewayChatClient gateway,
-    IOptions<ChatOptions> options, TimeProvider time, ILogger<ChatService> logger)
+    IOptions<ChatOptions> options, IOptions<GatewayOptions> gatewayOptions, TimeProvider time, ILogger<ChatService> logger)
 {
     public GatewayChatClient Gateway => gateway;
 
@@ -261,7 +261,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
         var settings = AssistantChatSettings.Parse(assistant.Published.QuerySteps);
         var language = settings.AlwaysSwedish ? LanguageGuess.Swedish : LanguageGuess.Detect(chat.Question);
-        var ceiling = Ceiling(who, assistant, snapshot);
+        var ceiling = gatewayOptions.Value.Cap(Ceiling(who, assistant, snapshot)); // Gateway:MaxResidency (M2, #237)
         var messageId = Guid.CreateVersion7();
         var maxTokens = Math.Min(chat.MaxTokens ?? settings.MaxOutputTokens, settings.MaxOutputTokens);
         var platform = PlatformChatSettings.Parse(snapshot.ChatSettings, options.Value);

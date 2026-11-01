@@ -104,6 +104,42 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
     }
 
     [Fact]
+    public async Task Under_a_max_residency_a_public_assistant_answers_at_the_cap_with_the_eu_key()
+    {
+        // A public assistant's level asks for External; this host holds only the Eu key (M2, #237).
+        var snapshot = Snapshot();
+        snapshot = snapshot with
+        {
+            Assistants = new Dictionary<Guid, AssistantEntry>
+            {
+                [db.AssistantId] = snapshot.Assistants[db.AssistantId] with { Classification = Ume.Rag.Domain.Classification.Public },
+            },
+        };
+        WebApplicationFactory<Program> Public(string? maxResidency) => db.ApiHost(snapshot).WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Rag:Roles", "knowledge,chat");
+            if (maxResidency is not null)
+            {
+                web.UseSetting("Gateway:MaxResidency", maxResidency);
+            }
+
+            web.ConfigureTestServices(services =>
+                services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+        });
+
+        await using (var capped = Public("Eu"))
+        {
+            using var client = Client(capped, db.IntegrationKey);
+            using var response = await Ask(client, "Behöver jag bygglov för en altan högre än 1,2 meter?");
+            response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        }
+
+        await using var uncapped = Public(null);
+        using var refused = await Ask(Client(uncapped, db.IntegrationKey), "Behöver jag bygglov för en altan högre än 1,2 meter?");
+        refused.IsSuccessStatusCode.ShouldBeFalse(); // External without an External key: never sent
+    }
+
+    [Fact]
     public async Task A_question_without_coverage_gets_the_not_found_text_and_requests_are_checked()
     {
         await using var api = Host();
