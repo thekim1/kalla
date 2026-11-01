@@ -31,7 +31,7 @@ builder.AddRagDatabase();
 builder.AddRagJobQueue();
 // API keys (identity §6.4): hashed with Security:KeyPepper as rag-api does; resolved when a key is created or rotated.
 builder.Services.AddOptions<SecurityOptions>().BindConfiguration(SecurityOptions.SectionName);
-builder.Services.AddSingleton(sp => KeyHasherFactory.Create(sp.GetRequiredService<IOptions<SecurityOptions>>().Value));
+builder.Services.AddSingleton<AdminKeyHasher>();
 builder.AddRagDataProtection();
 builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();

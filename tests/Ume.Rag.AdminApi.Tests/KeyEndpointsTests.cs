@@ -74,6 +74,13 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
             (await Json(teamless)).GetProperty("errorCodes").GetProperty("teamId")[0].GetProperty("code").GetString().ShouldBe("not_in_scope");
         }
 
+        // Clients are global: a department admin's key must be scoped to the team's department, or it would reach other departments.
+        using (var unscoped = await admin.PostAsJsonAsync("/api/keys", new { clientId = client, teamId = team, name = "Oavgränsad" }, Ct))
+        {
+            unscoped.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            (await Json(unscoped)).GetProperty("errorCodes").GetProperty("scopes")[0].GetProperty("code").GetString().ShouldBe("key_scope_required");
+        }
+
         using (var outside = await admin.PostAsJsonAsync("/api/keys", new { clientId = client, teamId = team, name = "Fel", scopes = new { collectionIds = new[] { other } } }, Ct))
         {
             outside.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
@@ -102,12 +109,20 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
         }
 
         (await admin.GetFromJsonAsync<JsonElement[]>($"/api/keys?clientId={client}", Ct))!.ShouldHaveSingleItem().TryGetProperty("secret", out _).ShouldBeFalse();
+        using (var cleared = await admin.PutAsJsonAsync($"/api/keys/{id}", new { name = "Bygglov-portalen", scopes = new { collectionIds = Array.Empty<Guid>() } }, Ct))
+        {
+            cleared.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            (await Json(cleared)).GetProperty("errorCodes").GetProperty("scopes")[0].GetProperty("code").GetString().ShouldBe("key_scope_required");
+        }
+
+        (await admin.PutAsJsonAsync($"/api/keys/{id}", new { name = "Bygglov-portal" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK); // null keeps the scopes
         (await stranger.GetAsync($"/api/keys/{id}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await stranger.GetFromJsonAsync<JsonElement[]>($"/api/keys?clientId={client}", Ct))!.ShouldBeEmpty();
 
         // Reveal: platform admins only, audited; a department admin gets 403.
         (await admin.PostAsJsonAsync($"/api/keys/{id}/reveal", new { }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        (await platform.PostAsJsonAsync("/api/keys", new { clientId = client, name = "Plattformsintegration" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Created); // unscoped, team-less
         using (var revealed = await platform.PostAsJsonAsync($"/api/keys/{id}/reveal", new { purpose = "Copy" }, Ct))
         {
             revealed.StatusCode.ShouldBe(HttpStatusCode.OK, await revealed.Content.ReadAsStringAsync(Ct));
@@ -123,10 +138,10 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
     [Fact]
     public async Task Rotation_with_grace_keeps_the_old_key_for_24_hours_and_revoke_ends_it()
     {
-        var (code, team, _, _, client) = await SeedAsync();
+        var (code, team, mine, _, client) = await SeedAsync();
         await using var factory = Factory();
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
-        using var created = await admin.PostAsJsonAsync("/api/keys", new { clientId = client, teamId = team, name = "Rotera" }, Ct);
+        using var created = await admin.PostAsJsonAsync("/api/keys", new { clientId = client, teamId = team, name = "Rotera", scopes = new { collectionIds = new[] { mine } } }, Ct);
         var id = (await Json(created)).GetProperty("key").GetProperty("id").GetGuid();
 
         using var rotated = await admin.PostAsJsonAsync($"/api/keys/{id}/rotate", new { mode = "Grace24Hours" }, Ct);
@@ -150,5 +165,16 @@ public sealed class KeyEndpointsTests(AdminDatabaseFixture database)
         (await db.AuditLog.AsNoTracking().Where(a => a.EntityType == "key" && (a.EntityId == id.ToString() || a.EntityId == replacement.ToString()))
                 .OrderBy(a => a.Id).Select(a => a.Action).ToListAsync(Ct))
             .ShouldBe(["create", "rotate", "revoke"]);
+    }
+
+    [Fact]
+    public async Task Without_a_valid_pepper_keys_are_503_keys_unavailable()
+    {
+        var (_, _, _, _, client) = await SeedAsync();
+        await using var factory = database.HeaderFactory();
+        using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        using var refused = await platform.PostAsJsonAsync("/api/keys", new { clientId = client, name = "Ingen peppar" }, Ct);
+        refused.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+        (await Json(refused)).GetProperty("code").GetString().ShouldBe("keys_unavailable");
     }
 }

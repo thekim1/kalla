@@ -38,15 +38,15 @@ public static class KeyEndpoints
         keys.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) => KeyDto.Of(await FindAsync(admin, id, ct), admin.Now))
             .RequireAuthorization(AdminPolicies.Manage).WithName("GetKey").WithSummary("One key");
 
-        keys.MapPost("", async (KeyCreateRequest request, AdminContext admin, KeyHasher hasher, IDataProtectionProvider protection, CancellationToken ct) =>
+        keys.MapPost("", async (KeyCreateRequest request, AdminContext admin, AdminKeyHasher hasher, IDataProtectionProvider protection, CancellationToken ct) =>
             {
-                var generated = hasher.Generate();
+                var generated = hasher.Get().Generate();
                 var key = await admin.WriteAsync(async attempt =>
                 {
                     var client = await admin.Db.Clients.AsNoTracking().SingleOrDefaultAsync(c => c.Id == request.ClientId, attempt)
                         ?? throw AdminFaults.Field("clientId", AdminErrorCodes.InvalidValue);
                     var department = await CheckTeamAsync(admin, request.TeamId, attempt);
-                    await CheckScopesAsync(admin, department, request.Scopes, attempt);
+                    await CheckScopesAsync(admin, department, request.Scopes, attempt, required: !admin.IsPlatformAdmin);
                     var key = new ApiKey
                     {
                         ClientId = client.Id, TeamId = request.TeamId, Kind = KeyKinds.Secret, Name = request.Name.Trim(), Prefix = generated.Prefix,
@@ -68,7 +68,8 @@ public static class KeyEndpoints
                 {
                     var key = await FindAsync(admin, id, attempt, tracked: true);
                     var department = await CheckTeamAsync(admin, key.TeamId, attempt);
-                    await CheckScopesAsync(admin, department, request.Scopes, attempt);
+                    // Null keeps the (non-empty) scopes; a department admin cannot clear them.
+                    await CheckScopesAsync(admin, department, request.Scopes, attempt, required: !admin.IsPlatformAdmin && request.Scopes is not null);
                     var before = KeyAudit.Of(key);
                     key.Name = request.Name.Trim();
                     Apply(key, request);
@@ -76,9 +77,10 @@ public static class KeyEndpoints
                 }, ct), admin.Now))
             .RequireAuthorization(AdminPolicies.Manage).WithName("UpdateKey").WithSummary("Change a key's name, scopes, limits or expiry");
 
-        keys.MapPost("/{id:guid}/rotate", async (Guid id, RotateRequest request, AdminContext admin, KeyHasher hasher, IDataProtectionProvider protection, CancellationToken ct) =>
+        keys.MapPost("/{id:guid}/rotate", async (Guid id, RotateRequest request, AdminContext admin, AdminKeyHasher hasher, IDataProtectionProvider protection,
+                CancellationToken ct) =>
             {
-                var generated = hasher.Generate();
+                var generated = hasher.Get().Generate();
                 var (replacement, old) = await admin.WriteAsync(async attempt =>
                 {
                     var old = await FindAsync(admin, id, attempt, tracked: true);
@@ -163,11 +165,20 @@ public static class KeyEndpoints
             ?? throw AdminFaults.Field("teamId", AdminErrorCodes.NotInScope);
     }
 
-    /// <summary>V23: scoped assistants and collections belong to the key team's department (any, for a team-less platform key).</summary>
-    private static async Task CheckScopesAsync(AdminContext admin, Guid? department, KeyScopesRequest? scopes, CancellationToken ct)
+    /// <summary>
+    /// V23: scoped assistants and collections belong to the key team's department (any, for a team-less platform key). A
+    /// department admin's key must be scoped (<paramref name="required"/>): clients are global, so an unscoped key would reach
+    /// every collection the client's ceiling and audiences allow, other departments' included (#185 review).
+    /// </summary>
+    private static async Task CheckScopesAsync(AdminContext admin, Guid? department, KeyScopesRequest? scopes, CancellationToken ct, bool required = false)
     {
-        if (scopes is null)
+        if (scopes is null || (scopes.AssistantIds.Count == 0 && scopes.CollectionIds.Count == 0))
         {
+            if (required)
+            {
+                throw AdminFaults.Field("scopes", AdminErrorCodes.KeyScopeRequired);
+            }
+
             return;
         }
 
@@ -202,6 +213,15 @@ public static class KeyEndpoints
     }
 
     private static IDataProtector Protector(IDataProtectionProvider protection) => protection.CreateProtector("Ume.Rag.AdminApi.KeySecret.v1");
+}
+
+/// <summary>The key hasher with <c>Security:KeyPepper</c>; 503 <c>keys_unavailable</c> when the pepper is missing or short.</summary>
+public sealed class AdminKeyHasher(Microsoft.Extensions.Options.IOptions<Infrastructure.Security.SecurityOptions> options)
+{
+    private readonly Lazy<KeyHasher?> _hasher = new(() =>
+        options.Value.KeyPepper is { Length: >= 32 } ? Infrastructure.Security.KeyHasherFactory.Create(options.Value) : null);
+
+    public KeyHasher Get() => _hasher.Value ?? throw AdminFaults.Of(AdminErrorCodes.KeysUnavailable);
 }
 
 public record KeyFields : AdminRequest, IValidatableObject

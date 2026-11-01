@@ -26,6 +26,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   key_revoked: 'Nyckeln är återkallad.',
   key_secret_unavailable: 'Nyckelns hemlighet kan inte visas. Byt nyckeln för att få en som kan visas.',
   key_scope_invalid: 'En nyckel kan bara begränsas till assistenter och kunskapsbanker i teamets förvaltning.',
+  key_scope_required: 'Begränsa nyckeln till minst en assistent eller kunskapsbank i din förvaltning.',
+  keys_unavailable: 'Nycklar kan inte skapas just nu. Kontakta plattformsteamet.',
 }
 
 /** When the problem has no code we know: by status. */

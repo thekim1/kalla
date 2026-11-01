@@ -82,8 +82,14 @@ public static class AdminErrorCodes
     /// <summary>V23: a scoped assistant or collection is not of the key team's department.</summary>
     public static AdminErrorCode KeyScopeInvalid { get; } = new("key_scope_invalid", 400, "A key can only be limited to assistants and knowledge banks of its team's department.");
 
+    /// <summary>A department admin's key must be limited to at least one assistant or knowledge bank of the team's department.</summary>
+    public static AdminErrorCode KeyScopeRequired { get; } = new("key_scope_required", 400, "Limit the key to at least one assistant or knowledge bank of your department.");
+
+    /// <summary>The admin has no valid <c>Security:KeyPepper</c>, so it cannot create keys.</summary>
+    public static AdminErrorCode KeysUnavailable { get; } = new("keys_unavailable", 503, "Keys cannot be created right now. Ask the platform team.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
-            RetrievalSettingsInvalid, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid];
+            RetrievalSettingsInvalid, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired, KeysUnavailable];
 }
