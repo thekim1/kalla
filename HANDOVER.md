@@ -120,6 +120,13 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
   - (Session 13) The user wants GitHub handled without being asked: review new/updated B PRs (local evidence: PR merged
     with main, affected suites twice), answer issues, decide what is the main session's (memory `handle-github-autonomously`).
 
+  - (Session 13) Don't let more than two full Worker.Tests runs overlap: each starts four Postgres containers; with
+    three implementors plus the main session running suites at once, `ResetAsync` timed out (10 s) in cascades that
+    looked like a real failure. Judge a branch on a quiet run; one isolated failure that doesn't reproduce in 8 runs on
+    the branch and on `main` is load.
+  - (Session 13) A CI workflow can render Compose in more than one step, each with its own `env`: after changing a
+    required Compose variable, grep `verify.yml`/`release.yml` for every `compose config`/bundle step (#213 → #216).
+
 ## Code map (what exists, on `main` at the end of session 13)
 
 | Area | Where | State |
@@ -154,7 +161,9 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
 - **User decision** (Decisions table, 2026-11-01): `piiMode` report for the municipality's own published site; built in
   #173 (B's part: #175). The CI-speed work (approved in session 12) merged as #174. A second runner `ume-rag2` already
   exists (`/home/kim/actions-runner2`), so the second-runner question is settled.
-- **Merged (stream A):** #220 (item 17: `evaluation-smoke` job + evaluator == API contract test), #213 (Compose
+- **Merged (stream A):** #224 (crawl `RemovalCheck`/`Incremental`, `UrlPattern` → Pipelines, #102), #225
+  (`ChunkSets.ParseRuleKey`, #134), #226 (`ContentKind`/`LargeTable`, eval stratification, `Round`, run columns, #129;
+  `PiiFlaggedAt`, #175), #220 (item 17: `evaluation-smoke` job + evaluator == API contract test), #213 (Compose
   `Knowledge__PublicBaseUrl`, J9) and #218 (its missed CI env, #216), #202 (eval-trigger test clock, #201), #170, #171, #183, #184, #192 (docs), #197 (URL patterns without a match timeout: under load an
   `exclude` could miss; from B's #196), #173, #174, #177, #179, #186 (worker reads uploads through the
   envelope, #181), #182 (a real product race behind the
@@ -181,8 +190,9 @@ Worktrees: `../rag-main` (detached, for main checks) only.
    J9 #210, item 15 Done #209), item 16 (realm additions #207/#211, J8 #215 for the gateway session) and **item 17**
    (smoke set #208 + stream A's `evaluation-smoke` job and evaluator == API contract test #220, green on the runner) are
    merged or approved. Next with the user: the pilot set-up through Scalar (item 20) in #193's order, then the live block.
-2. Open B reviews at the end of the session: #217 (`piiMode` report; should-fix: include held pages) and #214 approved,
-   waiting for B's merge.
+2. **Stream A follow-ups left:** `EvalSetTestKit` → B's `FakeGateway:ChatScripts` (#221); drop the `-1` removal-check
+   fallback after B's `Depth >= 0` migration; design sync of #224–#226 deviations (connectors §5.2/§5.4/§6.0, engine
+   §2.3/§8/§14, processing §3.5/§13.1/§13.6, data-model §2.2).
 3. **Watch B:** #176 then #178 (merge order), the #178 should-fix (`source_paused`), #175 (`piiMode` admin side), item 14c
    (`/api/keys`, then the run book points to it), item 17's smoke loader (then stream A's `evaluation-smoke`).
 4. **The two held umea.se pages** in the m1 database need `clear-pii-flag` or a reprocess after setting the source to
