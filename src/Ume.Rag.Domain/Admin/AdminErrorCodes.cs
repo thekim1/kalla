@@ -142,6 +142,14 @@ public static class AdminErrorCodes
 
     /// <summary>An edit of the same question is still waiting for the worker.</summary>
     public static AdminErrorCode QuestionEditPending { get; } = new("question_edit_pending", 409, "An earlier change of this question is still being saved. Try again in a moment.");
+    /// <summary>The site profile breaks <c>contracts/site-profiles/v1</c> at <c>{field}</c>: <c>{problem}</c>.</summary>
+    public static AdminErrorCode SiteProfileInvalid { get; } = new("site_profile_invalid", 400, "The site profile field {field} is invalid: {problem}");
+
+    /// <summary>A rollback to the version that is already applied.</summary>
+    public static AdminErrorCode SiteProfileVersionApplied { get; } = new("site_profile_version_applied", 400, "That version is already applied.");
+
+    /// <summary>No department exists yet to queue the work for (run the organisation sync first).</summary>
+    public static AdminErrorCode NoDepartment { get; } = new("no_department", 409, "There are no departments yet. Run the organisation sync first.");
 
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
@@ -149,5 +157,5 @@ public static class AdminErrorCodes
             RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
             NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
-            KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending];
+            KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment];
 }

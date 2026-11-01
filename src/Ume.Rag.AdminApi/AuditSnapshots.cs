@@ -13,6 +13,7 @@ public static class AuditEntityTypes
     public const string Collection = "collection";
     public const string Department = "department";
     public const string EvaluationQuestion = "evaluationquestion";
+    public const string SiteProfile = "siteprofile";
     public const string Source = "source";
     public const string Run = "run";
     public const string Key = "key";
