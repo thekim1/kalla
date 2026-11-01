@@ -64,12 +64,15 @@ public sealed class RunStore(JobDatabase database)
           AND "StartedAt" < (SELECT "StartedAt" FROM content."Runs" WHERE "Id" = $2)
         """;
 
+    // Incremental from CrawlRuns (#102); a run started before that column was written has it only in Report.mode.
     private const string HistorySql = """
-        SELECT ("Report" -> 'completeness' ->> 'complete')::boolean, coalesce(("Report" -> 'mode' ->> 'incremental')::boolean, false)
-        FROM content."Runs"
-        WHERE "SourceId" = $1 AND "Kind" = 'sync' AND "Id" <> $2 AND ("Report" -> 'completeness') IS NOT NULL
-          AND "StartedAt" < (SELECT "StartedAt" FROM content."Runs" WHERE "Id" = $2)
-        ORDER BY "StartedAt" DESC
+        SELECT (r."Report" -> 'completeness' ->> 'complete')::boolean,
+               coalesce(c."Incremental", false) OR coalesce((r."Report" -> 'mode' ->> 'incremental')::boolean, false)
+        FROM content."Runs" r
+        LEFT JOIN content."CrawlRuns" c ON c."RunId" = r."Id"
+        WHERE r."SourceId" = $1 AND r."Kind" = 'sync' AND r."Id" <> $2 AND (r."Report" -> 'completeness') IS NOT NULL
+          AND r."StartedAt" < (SELECT "StartedAt" FROM content."Runs" WHERE "Id" = $2)
+        ORDER BY r."StartedAt" DESC
         LIMIT 100
         """;
 

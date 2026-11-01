@@ -121,10 +121,46 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
             removal.GetProperty("gone").GetInt32().ShouldBe(1);
             removal.GetProperty("goneByReason").GetProperty("http.404").GetInt32().ShouldBe(1);
             report.RootElement.GetProperty("completeness").GetProperty("seeds").GetInt32().ShouldBe(2, "a removal check is no seed");
+            (await Sql.ScalarAsync<long>(database.Connection(null), """
+                SELECT count(*) FROM content."CrawlFrontier" WHERE "SourceId" = $1 AND "RunId" = $2 AND "RemovalCheck" AND "Depth" = 0
+                """, seed.SourceId, runId)).ShouldBe(1, "the removal check is flagged at depth 0, not at the old depth -1");
         }
         finally
         {
             await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task An_incremental_run_is_recorded_on_crawl_runs_and_the_next_runs_history_reads_it_from_there()
+    {
+        await using var site = await SiteAsync();
+        var seed = await EngineKit.SeedCrawlAsync(database, Settings(site));
+        // An incremental run stays incremental only when the host's profile marks lastmod reliable.
+        await ApplySiteProfileAsync(seed, TestSite.Host, new Pipelines.SiteProfiles.SiteProfile { MainRoot = "main", LastmodReliable = true });
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
+        try
+        {
+            var fullId = await EngineKit.SyncNowAsync(database, seed);
+            (await EngineKit.WaitForRunAsync(database, fullId)).Added.ShouldBe(4);
+            var incrementalId = await EngineKit.SyncNowAsync(database, seed, incremental: true);
+            (await EngineKit.WaitForRunAsync(database, incrementalId)).State.ShouldBe(RunStates.Succeeded);
+            var nextId = await EngineKit.SyncNowAsync(database, seed);
+            await EngineKit.WaitForRunAsync(database, nextId);
+
+            (await CrawlRunIncrementalAsync(fullId)).ShouldBeFalse();
+            (await CrawlRunIncrementalAsync(incrementalId)).ShouldBeTrue();
+            (await CrawlRunIncrementalAsync(nextId)).ShouldBeFalse();
+            // Without the Report's mode the history still knows the incremental run: it reads CrawlRuns.Incremental.
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."Runs" SET "Report" = "Report" - 'mode' WHERE "Id" = $1""", incrementalId);
+            var history = await worker.Services.GetRequiredService<RunStore>().CrawlHistoryAsync(seed.SourceId, nextId, Ct);
+            history.Select(h => h.Incremental).ShouldBe([true, false]);
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+            await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM content."SiteProfiles" WHERE "Classification" = $1 AND "Host" = $2""",
+                seed.Classification, TestSite.Host);
         }
     }
 
@@ -478,6 +514,9 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
             await Task.Delay(100, Ct);
         }
     }
+
+    private Task<bool> CrawlRunIncrementalAsync(Guid runId) =>
+        Sql.ScalarAsync<bool>(database.Connection(null), """SELECT "Incremental" FROM content."CrawlRuns" WHERE "RunId" = $1""", runId);
 
     private Task<long> OpenRowsAsync(SourceSeed seed) =>
         Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."CrawlFrontier" WHERE "SourceId" = $1 AND "State" <> 'idle'""", seed.SourceId);

@@ -16,7 +16,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
 {
     private const string FrontierColumns = """
         "Classification", "SourceId", "UrlHash", "Url", "Host", "State", "RunId", "Depth", "Leaf", "LastFetchedAt", "LastStatus",
-        "RedirectTo", "ETag", "LastModified", "ContentHash", "SitemapLastMod"
+        "RedirectTo", "ETag", "LastModified", "ContentHash", "SitemapLastMod", "RemovalCheck"
         """;
 
     private const string LockRunSql = """SELECT "Admitted", "MaxPages" FROM content."CrawlRuns" WHERE "RunId" = $1 FOR UPDATE""";
@@ -27,11 +27,11 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
         """;
 
     private const string AdmitSql = $"""
-        INSERT INTO content."CrawlFrontier" ("Classification", "SourceId", "UrlHash", "Url", "Host", "State", "RunId", "Depth", "Leaf", "SitemapLastMod")
-        SELECT $1, $2, u.h, u.url, u.host, 'pending', $3, u.depth, u.leaf, u.lastmod
-        FROM unnest($4::bytea[], $5::text[], $6::text[], $7::smallint[], $8::boolean[], $9::timestamptz[]) AS u(h, url, host, depth, leaf, lastmod)
+        INSERT INTO content."CrawlFrontier" ("Classification", "SourceId", "UrlHash", "Url", "Host", "State", "RunId", "Depth", "Leaf", "SitemapLastMod", "RemovalCheck")
+        SELECT $1, $2, u.h, u.url, u.host, 'pending', $3, u.depth, u.leaf, u.lastmod, u.removal
+        FROM unnest($4::bytea[], $5::text[], $6::text[], $7::smallint[], $8::boolean[], $9::timestamptz[], $10::boolean[]) AS u(h, url, host, depth, leaf, lastmod, removal)
         ON CONFLICT ("Classification", "SourceId", "UrlHash") DO UPDATE
-           SET "State" = 'pending', "RunId" = EXCLUDED."RunId", "Depth" = EXCLUDED."Depth", "Leaf" = EXCLUDED."Leaf",
+           SET "State" = 'pending', "RunId" = EXCLUDED."RunId", "Depth" = EXCLUDED."Depth", "Leaf" = EXCLUDED."Leaf", "RemovalCheck" = EXCLUDED."RemovalCheck",
                "SitemapLastMod" = coalesce(EXCLUDED."SitemapLastMod", content."CrawlFrontier"."SitemapLastMod")
          WHERE content."CrawlFrontier"."RunId" IS DISTINCT FROM EXCLUDED."RunId"
         RETURNING {FrontierColumns}
@@ -44,7 +44,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
     // An incremental run's unchanged seeds: listed for the run without a fetch (connectors design §5.4).
     private const string MarkListedSql = """
         UPDATE content."CrawlFrontier" f
-           SET "RunId" = $3, "SitemapLastMod" = coalesce(u.lastmod, f."SitemapLastMod")
+           SET "RunId" = $3, "RemovalCheck" = false, "SitemapLastMod" = coalesce(u.lastmod, f."SitemapLastMod")
         FROM unnest($4::bytea[], $5::timestamptz[]) AS u(h, lastmod)
         WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."UrlHash" = u.h AND f."State" = 'idle'
           AND f."RunId" IS DISTINCT FROM $3 AND f."LastFetchedAt" IS NOT NULL
@@ -74,12 +74,12 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
         GROUP BY "Host"
         """;
 
-    // Lowest depth first (BFS); SKIP LOCKED keeps two top-ups of one host from releasing a row twice.
+    // Removal checks first (as at their former depth -1), then lowest depth (BFS); SKIP LOCKED keeps two top-ups of one host from releasing a row twice.
     private const string ReleaseSql = $"""
         WITH next AS (
             SELECT "UrlHash" AS h FROM content."CrawlFrontier"
             WHERE "Classification" = $1 AND "SourceId" = $2 AND "RunId" = $3 AND "Host" = $4 AND "State" = 'pending'
-            ORDER BY "Depth", "Url"
+            ORDER BY CASE WHEN "RemovalCheck" THEN -1 ELSE "Depth" END, "Url"
             LIMIT $5
             FOR UPDATE SKIP LOCKED
         )
@@ -100,10 +100,10 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
 
     private const string TargetSql = """
         INSERT INTO content."CrawlFrontier" ("Classification", "SourceId", "UrlHash", "Url", "Host", "State", "RunId", "Depth", "Leaf",
-                                            "LastFetchedAt", "LastStatus", "ETag", "LastModified", "ContentHash", "RedirectTo")
-        VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $8, $9, $10, $11, $12, $13, NULL)
+                                            "LastFetchedAt", "LastStatus", "ETag", "LastModified", "ContentHash", "RedirectTo", "RemovalCheck")
+        VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $8, $9, $10, $11, $12, $13, NULL, $14)
         ON CONFLICT ("Classification", "SourceId", "UrlHash") DO UPDATE
-           SET "State" = 'idle', "RunId" = EXCLUDED."RunId", "Depth" = EXCLUDED."Depth", "Leaf" = EXCLUDED."Leaf",
+           SET "State" = 'idle', "RunId" = EXCLUDED."RunId", "Depth" = EXCLUDED."Depth", "Leaf" = EXCLUDED."Leaf", "RemovalCheck" = EXCLUDED."RemovalCheck",
                "LastFetchedAt" = EXCLUDED."LastFetchedAt", "LastStatus" = EXCLUDED."LastStatus", "ETag" = EXCLUDED."ETag",
                "LastModified" = EXCLUDED."LastModified", "ContentHash" = EXCLUDED."ContentHash", "RedirectTo" = NULL
         """;
@@ -116,7 +116,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
 
     private const string RunSql = """
         SELECT "RunId", "Classification", "SourceId", "Admitted", "MaxPages", "MaxDepth", "LimitHit", "Seeds", "SeedsFailed",
-               "PausedHosts"::text, "TrapStats"::text, "Complete"
+               "PausedHosts"::text, "TrapStats"::text, "Complete", "Incremental"
         FROM content."CrawlRuns" WHERE "RunId" = $1
         """;
 
@@ -136,6 +136,8 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
     private const string TrapsSql = """UPDATE content."CrawlRuns" SET "TrapStats" = $2::jsonb WHERE "RunId" = $1""";
 
     private const string CompleteRunSql = """UPDATE content."CrawlRuns" SET "Complete" = $2 WHERE "RunId" = $1""";
+
+    private const string IncrementalSql = """UPDATE content."CrawlRuns" SET "Incremental" = $2 WHERE "RunId" = $1""";
 
     public async Task<AdmitResult> AdmitAsync(CrawlRunKey run, IReadOnlyList<FrontierAdmission> urls, CancellationToken cancellationToken)
     {
@@ -188,7 +190,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
                     Db.P(run.Classification), Db.P(run.SourceId), Db.P(run.RunId),
                     Db.P(take.Select(u => Db.Bytes(u.UrlHash)).ToArray()), Db.P(take.Select(u => u.Url).ToArray()),
                     Db.P(take.Select(u => u.Host).ToArray()), Db.P(take.Select(u => u.Depth).ToArray()), Db.P(take.Select(u => u.Leaf).ToArray()),
-                    Db.P(take.Select(u => Db.Utc(u.SitemapLastMod)).ToArray()),
+                    Db.P(take.Select(u => Db.Utc(u.SitemapLastMod)).ToArray()), Db.P(take.Select(u => u.RemovalCheck).ToArray()),
                 },
             };
             await using var reader = await admit.ExecuteReaderAsync(cancellationToken);
@@ -200,7 +202,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
 
         await using (var count = new NpgsqlCommand(CountSql, connection, transaction)
         {
-            Parameters = { Db.P(run.RunId), Db.P(rows.Count), Db.P(rows.Count(r => r.Depth == 0)), Db.P(limitHit) },
+            Parameters = { Db.P(run.RunId), Db.P(rows.Count), Db.P(rows.Count(r => r.Depth == 0 && !r.IsRemovalCheck)), Db.P(limitHit) },
         })
         {
             await count.ExecuteNonQueryAsync(cancellationToken);
@@ -304,7 +306,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
             rows.Add(ReadRow(reader));
         }
 
-        return [.. rows.OrderBy(r => r.Depth).ThenBy(r => r.Url, StringComparer.Ordinal)];
+        return [.. rows.OrderBy(r => r.IsRemovalCheck ? FrontierRow.LegacyRemovalCheckDepth : r.Depth).ThenBy(r => r.Url, StringComparer.Ordinal)];
     }
 
     public async Task CompleteAsync(CrawlRunKey run, string urlHash, FrontierFacts? facts, CancellationToken cancellationToken)
@@ -336,7 +338,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
             {
                 Db.P(run.Classification), Db.P(run.SourceId), Db.P(Db.Bytes(target.UrlHash)), Db.P(target.Url), Db.P(target.Host), Db.P(run.RunId),
                 Db.P(target.Depth), Db.P(target.Leaf), Db.P(facts.FetchedAt.ToUniversalTime()), Db.P(facts.LastStatus), Db.P(facts.ETag),
-                Db.P(facts.LastModified), Db.P(facts.ContentHash is { } hash ? Db.Bytes(hash) : null),
+                Db.P(facts.LastModified), Db.P(facts.ContentHash is { } hash ? Db.Bytes(hash) : null), Db.P(target.RemovalCheck),
             },
         };
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -372,6 +374,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
             PausedHosts = Json<HostPause>(Db.String(reader, 9)),
             TrapStats = Json<TrapStat>(Db.String(reader, 10)),
             Complete = reader.GetBoolean(11),
+            Incremental = reader.GetBoolean(12),
         };
     }
 
@@ -415,6 +418,9 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
     public Task SetCompleteAsync(Guid runId, bool complete, CancellationToken cancellationToken) =>
         ExecuteAsync(CompleteRunSql, cancellationToken, Db.P(runId), Db.P(complete));
 
+    public Task SetIncrementalAsync(Guid runId, bool incremental, CancellationToken cancellationToken) =>
+        ExecuteAsync(IncrementalSql, cancellationToken, Db.P(runId), Db.P(incremental));
+
     private static Dictionary<string, T> Json<T>(string? json) =>
         json is null ? new(StringComparer.Ordinal) : new(JsonSerializer.Deserialize<Dictionary<string, T>>(json, JsonSerializerOptions.Web) ?? [], StringComparer.Ordinal);
 
@@ -436,6 +442,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
         LastModified = Db.String(reader, 13),
         ContentHash = reader.IsDBNull(14) ? null : Db.Hex(reader.GetFieldValue<byte[]>(14)),
         SitemapLastMod = Db.Nullable<DateTimeOffset>(reader, 15),
+        RemovalCheck = reader.GetBoolean(16),
     };
 
     private async Task ExecuteAsync(string sql, CancellationToken cancellationToken, params NpgsqlParameter[] parameters)

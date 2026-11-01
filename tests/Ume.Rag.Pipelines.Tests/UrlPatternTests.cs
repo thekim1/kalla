@@ -1,6 +1,6 @@
-using Ume.Rag.Worker.Connectors.Urls;
+using Ume.Rag.Pipelines.Sources;
 
-namespace Ume.Rag.Worker.Tests.Connectors;
+namespace Ume.Rag.Pipelines.Tests;
 
 /// <summary>Include/exclude globs and <c>re:</c> patterns over <c>host/path?query</c> (connectors design §5.2).</summary>
 public sealed class UrlPatternTests

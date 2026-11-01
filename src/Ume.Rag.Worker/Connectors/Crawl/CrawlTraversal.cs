@@ -203,7 +203,7 @@ public sealed class CrawlTraversal(
             return 0;
         }
 
-        var admitted = await frontier.AdmitAsync(context.Run, [.. left.Select(r => new FrontierAdmission(r.Url, r.Host, FrontierRow.RemovalCheckDepth, r.Leaf))], cancellationToken);
+        var admitted = await frontier.AdmitAsync(context.Run, [.. left.Select(r => new FrontierAdmission(r.Url, r.Host, 0, r.Leaf, RemovalCheck: true))], cancellationToken);
         await frontier.ClearSitemapLastModAsync(context.Run, [.. admitted.Admitted.Select(r => r.UrlHash)], cancellationToken);
         return admitted.Admitted.Count;
     }
@@ -394,10 +394,11 @@ public sealed class CrawlTraversal(
         var facts = new FrontierFacts(now, status ?? StatusOf(page.Outcome), validators.ETag, validators.LastModified, contentHash ?? row.ContentHash, redirectTo);
         if (redirectTo is not null && page.Outcome is FetchOutcome.Content final)
         {
-            await frontier.RecordTargetAsync(run, new FrontierAdmission(redirectTo, final.Facts.FinalUrl!.Authority, row.Depth, row.Leaf), facts with { RedirectTo = null }, cancellationToken);
+            await frontier.RecordTargetAsync(run, new FrontierAdmission(redirectTo, final.Facts.FinalUrl!.Authority, Math.Max(row.Depth, (short)0), row.Leaf,
+                RemovalCheck: row.IsRemovalCheck), facts with { RedirectTo = null }, cancellationToken);
         }
 
-        var seedFailed = row.Depth == 0 && page.Outcome is FetchOutcome.Failed or FetchOutcome.Refused { Outcome: RunItemOutcome.Blocked };
+        var seedFailed = row.Depth == 0 && !row.IsRemovalCheck && page.Outcome is FetchOutcome.Failed or FetchOutcome.Refused { Outcome: RunItemOutcome.Blocked };
         var outcome = page.Outcome;
         var changed = outcome is FetchOutcome.Content changedContent && !string.Equals(changedContent.Raw.ContentHash, row.ContentHash, StringComparison.Ordinal);
         var admitted = 0;
@@ -441,7 +442,7 @@ public sealed class CrawlTraversal(
     {
         var source = await connector.SourceAsync(context.Run.SourceId, context.Run.Classification, context.Settings, cancellationToken);
         var traps = _traps.GetOrAdd(context.Run.RunId, _ => new TrapDetector(time));
-        // A removal check's links count from depth 1: it was not reached from a seed.
+        // A removal check's links count from depth 1: it was not reached from a seed (Max: a row at depth -1 from before #102).
         var depth = Math.Max(row.Depth, (short)0);
         if (depth >= source.Settings.MaxDepth || !traps.ShouldExpand(contentHash))
         {
@@ -519,7 +520,7 @@ public sealed class CrawlTraversal(
     private async Task<CrawlFetchResult> NotReachedAsync(CrawlRunContext context, FrontierRow row, string reason, CancellationToken cancellationToken)
     {
         await frontier.CompleteAsync(context.Run, row.UrlHash, null, cancellationToken);
-        if (row.Depth == 0)
+        if (row.Depth == 0 && !row.IsRemovalCheck)
         {
             await runs.SeedFailedAsync(context.Run.RunId, cancellationToken);
         }
