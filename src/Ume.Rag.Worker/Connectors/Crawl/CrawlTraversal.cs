@@ -311,7 +311,7 @@ public sealed class CrawlTraversal(
     /// </summary>
     private async Task<CrawlPage?> LastmodSkipAsync(CrawlRunContext context, FrontierRow row, Uri url, CancellationToken cancellationToken)
     {
-        if (context.Revalidate || row.IsRemovalCheck || row.SitemapLastMod is not { } sitemapLastMod || row.LastFetchedAt is not { } fetchedAt
+        if (context.Revalidate || row.RemovalCheck || row.SitemapLastMod is not { } sitemapLastMod || row.LastFetchedAt is not { } fetchedAt
             || sitemapLastMod > fetchedAt || row.ContentHash is not { } hash
             || !await lastmod.IsReliableAsync(context.Run.Classification, row.Host, cancellationToken)
             || await robots.CheckAsync(url, cancellationToken) is not null)
@@ -338,7 +338,7 @@ public sealed class CrawlTraversal(
         var runFacts = new List<string>();
         short? status = null;
         CrawlPage page;
-        if (row.IsRemovalCheck)
+        if (row.RemovalCheck)
         {
             // The removal check (§5.4): HEAD, GET when refused. A live URL is kept; a full traversal fetches it as usual
             // so its content stays current, an incremental run only records it as reached.
@@ -399,11 +399,11 @@ public sealed class CrawlTraversal(
         var facts = new FrontierFacts(now, status ?? StatusOf(page.Outcome), validators.ETag, validators.LastModified, contentHash ?? row.ContentHash, redirectTo);
         if (redirectTo is not null && page.Outcome is FetchOutcome.Content final)
         {
-            await frontier.RecordTargetAsync(run, new FrontierAdmission(redirectTo, final.Facts.FinalUrl!.Authority, Math.Max(row.Depth, (short)0), row.Leaf,
-                RemovalCheck: row.IsRemovalCheck), facts with { RedirectTo = null }, cancellationToken);
+            await frontier.RecordTargetAsync(run, new FrontierAdmission(redirectTo, final.Facts.FinalUrl!.Authority, row.Depth, row.Leaf,
+                RemovalCheck: row.RemovalCheck), facts with { RedirectTo = null }, cancellationToken);
         }
 
-        var seedFailed = row.Depth == 0 && !row.IsRemovalCheck && page.Outcome is FetchOutcome.Failed or FetchOutcome.Refused { Outcome: RunItemOutcome.Blocked };
+        var seedFailed = row.Depth == 0 && !row.RemovalCheck && page.Outcome is FetchOutcome.Failed or FetchOutcome.Refused { Outcome: RunItemOutcome.Blocked };
         var outcome = page.Outcome;
         var changed = outcome is FetchOutcome.Content changedContent && !string.Equals(changedContent.Raw.ContentHash, row.ContentHash, StringComparison.Ordinal);
         var admitted = 0;
@@ -447,9 +447,8 @@ public sealed class CrawlTraversal(
     {
         var source = await connector.SourceAsync(context.Run.SourceId, context.Run.Classification, context.Settings, cancellationToken);
         var traps = _traps.GetOrAdd(context.Run.RunId, _ => new TrapDetector(time));
-        // A removal check's links count from depth 1: it was not reached from a seed (Max: a row at depth -1 from before #102).
-        var depth = Math.Max(row.Depth, (short)0);
-        if (depth >= source.Settings.MaxDepth || !traps.ShouldExpand(contentHash))
+        // A removal check sits at depth 0, so its links are admitted at depth 1 although it was not reached from a seed.
+        if (row.Depth >= source.Settings.MaxDepth || !traps.ShouldExpand(contentHash))
         {
             return 0;
         }
@@ -478,7 +477,7 @@ public sealed class CrawlTraversal(
                 continue;
             }
 
-            admissions.Add(new FrontierAdmission(canonical, uri.Authority, (short)(depth + 1), scope.Leaf, FetchUrl: path));
+            admissions.Add(new FrontierAdmission(canonical, uri.Authority, (short)(row.Depth + 1), scope.Leaf, FetchUrl: path));
         }
 
         if (found.Count > 0)
@@ -531,7 +530,7 @@ public sealed class CrawlTraversal(
     private async Task<CrawlFetchResult> NotReachedAsync(CrawlRunContext context, FrontierRow row, string reason, CancellationToken cancellationToken)
     {
         await frontier.CompleteAsync(context.Run, row.UrlHash, null, cancellationToken);
-        if (row.Depth == 0 && !row.IsRemovalCheck)
+        if (row.Depth == 0 && !row.RemovalCheck)
         {
             await runs.SeedFailedAsync(context.Run.RunId, cancellationToken);
         }

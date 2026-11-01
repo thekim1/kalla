@@ -78,12 +78,12 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
         GROUP BY "Host"
         """;
 
-    // Removal checks first (as at their former depth -1), then lowest depth (BFS); SKIP LOCKED keeps two top-ups of one host from releasing a row twice.
+    // Removal checks first, then lowest depth (BFS); SKIP LOCKED keeps two top-ups of one host from releasing a row twice.
     private const string ReleaseSql = $"""
         WITH next AS (
             SELECT "UrlHash" AS h FROM content."CrawlFrontier"
             WHERE "Classification" = $1 AND "SourceId" = $2 AND "RunId" = $3 AND "Host" = $4 AND "State" = 'pending'
-            ORDER BY CASE WHEN "RemovalCheck" THEN -1 ELSE "Depth" END, "Url"
+            ORDER BY "RemovalCheck" DESC, "Depth", "Url"
             LIMIT $5
             FOR UPDATE SKIP LOCKED
         )
@@ -207,7 +207,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
 
         await using (var count = new NpgsqlCommand(CountSql, connection, transaction)
         {
-            Parameters = { Db.P(run.RunId), Db.P(rows.Count), Db.P(rows.Count(r => r.Depth == 0 && !r.IsRemovalCheck)), Db.P(limitHit) },
+            Parameters = { Db.P(run.RunId), Db.P(rows.Count), Db.P(rows.Count(r => r.Depth == 0 && !r.RemovalCheck)), Db.P(limitHit) },
         })
         {
             await count.ExecuteNonQueryAsync(cancellationToken);
@@ -312,7 +312,7 @@ public sealed class PostgresCrawlStore(JobDatabase database) : ICrawlFrontierSto
             rows.Add(ReadRow(reader));
         }
 
-        return [.. rows.OrderBy(r => r.IsRemovalCheck ? FrontierRow.LegacyRemovalCheckDepth : r.Depth).ThenBy(r => r.Url, StringComparer.Ordinal)];
+        return [.. rows.OrderByDescending(r => r.RemovalCheck).ThenBy(r => r.Depth).ThenBy(r => r.Url, StringComparer.Ordinal)];
     }
 
     public async Task CompleteAsync(CrawlRunKey run, string urlHash, FrontierFacts? facts, CancellationToken cancellationToken)

@@ -187,8 +187,8 @@ public sealed class CrawlScope
 
     /// <summary>
     /// The scope decision for a stored URL (a frontier row, a document, a canonical hint; #228): <see cref="Check"/> on its
-    /// kept path form (<see cref="PathFormOf"/>), <see cref="CheckIdentity"/> where none is kept (rows and documents from
-    /// before #228, or a document last fetched under its identity, such as a redirect target).
+    /// kept path form (<see cref="PathFormOf"/>), <see cref="CheckIdentity"/> where none is kept (a row or document last
+    /// fetched under its identity, such as a redirect target).
     /// </summary>
     /// <param name="canonicalIdentity">The stored identity.</param>
     /// <param name="foundUrl">The URL it was found or fetched under (<c>CrawlFrontier.FetchUrl</c>, <c>Documents.Url</c>); null when not known.</param>

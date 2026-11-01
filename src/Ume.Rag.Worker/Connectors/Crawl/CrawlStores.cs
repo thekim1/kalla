@@ -30,7 +30,7 @@ public sealed record FrontierRow
 
     /// <summary>
     /// The URL as found: canonical but for the site profile's identity rule (<see cref="Urls.UrlCanonicalizer.PathForm"/>,
-    /// §3.1 rule 10); null when it equals <see cref="Url"/> or is not known (a row from before #228). The fetch requests it.
+    /// §3.1 rule 10); null when it equals <see cref="Url"/> or is not known (a redirect target). The fetch requests it.
     /// </summary>
     public string? FetchUrl { get; init; }
 
@@ -70,11 +70,6 @@ public sealed record FrontierRow
     /// refused) and not counted as a seed. Its links, when a <c>GET</c> follows, are admitted at depth 1.
     /// </summary>
     public bool RemovalCheck { get; init; }
-
-    /// <summary>The depth that marked a removal check before <c>CrawlFrontier.RemovalCheck</c> (#102); such a row can outlive a deploy.</summary>
-    public const short LegacyRemovalCheckDepth = -1;
-
-    public bool IsRemovalCheck => RemovalCheck || Depth == LegacyRemovalCheckDepth;
 }
 
 /// <summary>
@@ -92,7 +87,7 @@ public sealed record FrontierAdmission(string Url, string Host, short Depth, boo
 
     /// <summary>
     /// <c>CrawlFrontier.FetchUrl</c> as written: <see cref="FetchUrl"/>, null when it equals <see cref="Url"/> or is longer
-    /// than the column (the row then fetches its identity, as before #228).
+    /// than the column (the row then fetches its identity).
     /// </summary>
     public string? StoredFetchUrl => FetchUrl is null || FetchUrl.Length > MaxFetchUrlLength || string.Equals(FetchUrl, Url, StringComparison.Ordinal) ? null : FetchUrl;
 
