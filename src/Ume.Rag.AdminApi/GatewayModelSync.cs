@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain;
+using Ume.Rag.ServiceDefaults;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Gateway;
@@ -160,7 +161,7 @@ public sealed partial class GatewayModelSync(
             _lastError = ErrorText(ex);
             var failures = Interlocked.Increment(ref _failures);
             _runs.Add(1, new("kind", "models"), new("outcome", "failed"));
-            LogRunFailed(logger, ex, failures);
+            LogRunFailed(logger, ErrorText(ex), ExceptionText.Types(ex), failures); // never the messages: they can name the gateway (#232)
             return null;
         }
     }
@@ -296,7 +297,7 @@ public sealed partial class GatewayModelSync(
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _lastCanaryError = ErrorText(ex);
-            LogCanaryFailed(logger, ex);
+            LogCanaryFailed(logger, ErrorText(ex), ExceptionText.Types(ex));
             return 0;
         }
     }
@@ -348,12 +349,12 @@ public sealed partial class GatewayModelSync(
     [LoggerMessage(Level = LogLevel.Information, Message = "Gateway model sync wrote {Written} and removed {Removed} models")]
     private static partial void LogRun(ILogger logger, int written, int removed);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Gateway model sync failed ({Failures} in a row); the mirror is kept")]
-    private static partial void LogRunFailed(ILogger logger, Exception ex, int failures);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Gateway model sync failed: {Error} ({Types}; {Failures} in a row); the mirror is kept")]
+    private static partial void LogRunFailed(ILogger logger, string error, string types, int failures);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Recorded the canary embedding of profile {Profile} (answered at {Residency})")]
     private static partial void LogCanaryRecorded(ILogger logger, string profile, Residency residency);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Recording a canary embedding failed; it is retried at the next sync")]
-    private static partial void LogCanaryFailed(ILogger logger, Exception ex);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Recording a canary embedding failed: {Error} ({Types}); it is retried at the next sync")]
+    private static partial void LogCanaryFailed(ILogger logger, string error, string types);
 }
