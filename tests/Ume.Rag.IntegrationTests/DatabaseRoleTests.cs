@@ -51,7 +51,9 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites], ignoreOrder: true);
         (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions"], ignoreOrder: true);
 
-        (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. ingestionConfig, .. workerTables, .. ingestionContent, .. servingContent], ignoreOrder: true);
+        // The worker also reads the model mirror (the evaluation's residency checks, #130).
+        (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. ingestionConfig, .. workerTables, .. ingestionContent, .. servingContent, "config.GatewayModels"],
+            ignoreOrder: true);
         (await PrivilegesAsync(Worker, "INSERT")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent, "audit.AuditLog"], ignoreOrder: true);
         (await PrivilegesAsync(Worker, "UPDATE")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent], ignoreOrder: true);
         (await PrivilegesAsync(Worker, "DELETE")).ShouldBe([.. workerTables, .. ingestionContent, .. servingContent], ignoreOrder: true);
@@ -71,7 +73,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
     ];
 
     /// <summary>data-model §1.2: what retrieval reads of a source (knowledge design §6.3, §6.5); never its settings.</summary>
-    private static readonly string[] ApiSourceColumns = ["Id", "CollectionId", "Type", "Classification", "State", "DeletedAt", "ContainsThirdPartyText"];
+    private static readonly string[] ApiSourceColumns = ["Id", "CollectionId", "Type", "Classification", "State", "DeletedAt", "ContainsThirdPartyText", "DemoteRules"];
 
     /// <summary>data-model §1.2: the citation and download columns of a document (knowledge design §3.5).</summary>
     private static readonly string[] ApiDocumentColumns =
@@ -142,10 +144,12 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         await Sql.ShouldBeDeniedAsync(api, """INSERT INTO config."GatewayModels" ("Name", "Kind", "Residencies", "Source", "SupportsTools", "SupportsToolsSource") VALUES ('x', 'model', ARRAY['Eu'], 'manual', false, 'manual')""");
 
         var worker = database.Connection(Worker);
-        foreach (var table in new[] { "Assistants", "AssistantVersions", "AssistantAudiences", "PublishedAssistantVersions", "GatewayModels" })
+        foreach (var table in new[] { "Assistants", "AssistantVersions", "AssistantAudiences", "PublishedAssistantVersions" })
         {
             await Sql.ShouldBeDeniedAsync(worker, $"""SELECT count(*) FROM config."{table}" """);
         }
+
+        await Sql.ExecuteAsync(worker, """SELECT count(*) FROM config."GatewayModels" """); // the model mirror only (#130)
 
         // The admin edits versions in the table; the view is the data plane's.
         (await Sql.ScalarAsync<long>(admin, $"""SELECT count(*) FROM config."AssistantVersions" WHERE "AssistantId" = '{assistantId}'""")).ShouldBe(2);
