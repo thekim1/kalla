@@ -9,6 +9,8 @@ using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.TestKit;
+using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Tests.Connectors;
 using Ume.Rag.Worker.Tests.Processing;
 
@@ -20,7 +22,8 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// <c>Runs.Report</c> carries the crawl report's sections and <c>rag.crawl.incomplete_runs</c> is recorded; a worker killed
 /// between a crawl fetch and the document's commit loses no document and duplicates none; <c>reprocess</c> after a new
 /// published version re-processes every live document without a request (and only re-keys when no stage changed);
-/// <c>retry-failed</c> fetches only what failed, for a crawl and a URL list.
+/// <c>retry-failed</c> fetches only what failed, for a crawl and a URL list; a fetch-phase continuation reconciles only
+/// once the run's fetches are done.
 /// </summary>
 [Collection(RagDatabaseGroup1.Name)]
 public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -342,6 +345,55 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
         }
     }
 
+    [Fact]
+    public async Task A_fetch_phase_continuation_while_the_runs_fetches_are_in_flight_does_not_reconcile_before_them()
+    {
+        // The finalizer can find the run with no job between a top-up's release and its enqueue; its fetch-phase continuation
+        // may then run after the fetches were enqueued, and their dedup keys drop its enqueues. Reconciling then would see
+        // the rows still open (an incomplete traversal) and miss the documents the run did not see.
+        var tag = Guid.NewGuid().ToString("N");
+        var pages = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var site = await TestSite.StartAsync(app =>
+        {
+            app.MapGet("/robots.txt", (HttpContext context) =>
+                Results.Text($"User-agent: *\nAllow: /\nSitemap: http://{TestSite.Host}:{context.Request.Host.Port}/sitemap.xml\n", "text/plain"));
+            app.MapGet("/sitemap.xml", () => Results.Content(
+                """<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>""", "application/xml"));
+            app.MapGet("/", () => EngineKit.Html(EngineKit.Page($"startsida {tag}", """<a href="/p/1">Ett</a> <a href="/p/2">Två</a>""")));
+            app.MapGet("/p/{name}", async (string name) =>
+            {
+                reached.TrySetResult();
+                await pages.Task;
+                return EngineKit.Html(EngineKit.Page($"bygglov {name} {tag}"));
+            });
+        });
+        var seed = await EngineKit.SeedCrawlAsync(database, new { startUrls = new[] { site.Url("/").AbsoluteUri } });
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
+        try
+        {
+            var runId = await EngineKit.SyncNowAsync(database, seed);
+            await reached.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+            var continuation = SyncJobs.Continuation(seed.SourceId, runId, seed.DepartmentId, seed.Classification, RunKinds.Sync, RunTriggers.Manual,
+                SyncPhase.Fetch);
+            (await database.Queue(RagDatabase.Worker).EnqueueAsync([continuation], null, Ct)).ShouldContain(continuation.Id);
+            await WaitForJobAsync(continuation.Id);
+
+            (await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Phase" FROM content."Runs" WHERE "Id" = $1""", runId))
+                .ShouldBe(RunPhases.Fetch, "the run's fetches are still running");
+
+            pages.SetResult();
+            (await EngineKit.WaitForRunAsync(database, runId)).ShouldBe(new RunCounters(RunStates.Succeeded, 3, 0, 0, 0, 0, 0));
+            using var report = await ReportAsync(runId);
+            report.RootElement.GetProperty("completeness").GetProperty("complete").GetBoolean().ShouldBeTrue();
+        }
+        finally
+        {
+            pages.TrySetResult();
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
     private static object Settings(TestSite site) => new
     {
         startUrls = new[] { site.Url("/").AbsoluteUri },
@@ -411,6 +463,20 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
         }
 
         return sets;
+    }
+
+    private async Task WaitForJobAsync(Guid jobId)
+    {
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "State" FROM content."Jobs" WHERE "Id" = $1""", jobId) is "queued" or "running")
+        {
+            if (waited.Elapsed > TimeSpan.FromSeconds(60))
+            {
+                throw new TimeoutException($"Job {jobId} did not finish.");
+            }
+
+            await Task.Delay(100, Ct);
+        }
     }
 
     private Task<long> OpenRowsAsync(SourceSeed seed) =>
