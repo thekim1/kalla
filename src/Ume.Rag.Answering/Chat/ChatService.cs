@@ -218,7 +218,11 @@ public enum ChatOutcome
 
 /// <summary>A completed turn as the JSON endpoint writes it.</summary>
 public sealed record ChatCompletion(Guid MessageId, string Model, string Content, IReadOnlyList<UrlCitation> Annotations, IReadOnlyList<PromptSource> Cited,
-    int PromptTokens, int CompletionTokens, string FinishReason, ChatOutcome Outcome, DateTimeOffset Created);
+    int PromptTokens, int CompletionTokens, string FinishReason, ChatOutcome Outcome, DateTimeOffset Created)
+{
+    /// <summary>The plan the turn ran (for the conversation writer, chat design §12).</summary>
+    public ChatPlan? Plan { get; init; }
+}
 
 /// <summary>
 /// A turn decided up to the gateway call (chat design §4.1 steps 5–12): either a fixed text (<see cref="Fixed"/>, no model
@@ -344,7 +348,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var plan = await PlanAsync(who, chat, ct);
         if (plan.Fixed is { } text)
         {
-            return new ChatCompletion(plan.MessageId, plan.Model, text, [], [], 0, 0, "stop", plan.Outcome, plan.Created);
+            return new ChatCompletion(plan.MessageId, plan.Model, text, [], [], 0, 0, "stop", plan.Outcome, plan.Created) { Plan = plan };
         }
 
         var answer = await gateway.CompleteAsync(plan.Assistant.Published!.GatewayModel, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens,
@@ -356,7 +360,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var annotations = pieces.SelectMany(p => p.Annotations).Select(a => a with { StartIndex = a.StartIndex + caveat.Length, EndIndex = a.EndIndex + caveat.Length }).ToList();
         Finish(plan, transducer);
         return new ChatCompletion(plan.MessageId, plan.Model, content, annotations, transducer.Cited, answer.PromptTokens, answer.CompletionTokens, answer.FinishReason,
-            ChatOutcome.Answered, plan.Created);
+            ChatOutcome.Answered, plan.Created) { Plan = plan };
     }
 
     /// <summary>After the answer (§9.5): the counters with only the cited ranks, and a log line.</summary>

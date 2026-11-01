@@ -15,7 +15,8 @@ namespace Ume.Rag.Api;
 /// (<c>url_citation</c>). A fixed text (not found, unavailable) is one content chunk without a model call. After the first
 /// byte an error is one error chunk and <c>[DONE]</c>.
 /// </summary>
-public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatService service, bool openWebUi, bool includeUsage) : IResult
+public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatService service, bool openWebUi, bool includeUsage,
+    Func<IReadOnlyList<PromptSource>, int, int, ValueTask>? finished = null) : IResult
 {
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
@@ -49,6 +50,11 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
                     await WriteAsync(response, Chunk(new { }, "stop"), ct);
                     await UsageAsync(response, id, created, 0, 0, ct);
                     await DoneAsync(response, ct);
+                    if (finished is not null)
+                    {
+                        await finished([], 0, 0);
+                    }
+
                     return;
                 }
 
@@ -82,6 +88,10 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
                 await UsageAsync(response, id, created, promptTokens, completionTokens, ct);
                 await DoneAsync(response, ct);
                 service.Finish(plan, transducer);
+                if (finished is not null)
+                {
+                    await finished(transducer.Cited, promptTokens, completionTokens);
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
