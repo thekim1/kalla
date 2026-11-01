@@ -53,9 +53,9 @@ public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatO
     public const string HttpClientName = "gateway-chat";
 
     public async Task<GatewayAnswer> CompleteAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double temperature,
-        Guid runId, CancellationToken ct)
+        Guid runId, string step, CancellationToken ct)
     {
-        using var response = await SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: false, ct);
+        using var response = await SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: false, step, ct);
         using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
         var choice = json.RootElement.GetProperty("choices")[0];
         var text = choice.GetProperty("message").TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString()! : "";
@@ -67,7 +67,7 @@ public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatO
     /// <summary>Opens the stream: status and residency are checked when this returns; the caller then writes its first byte.</summary>
     public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double temperature,
         Guid runId, CancellationToken ct) =>
-        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, ct);
+        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, "chat-answer", ct);
 
     /// <summary>The stream's events; an idle gap over <c>Chat:StreamIdleTimeoutSeconds</c> or the total limit ends it with <c>stream_interrupted</c>.</summary>
     public async IAsyncEnumerable<GatewayStreamEvent> ReadAsync(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken ct)
@@ -137,7 +137,7 @@ public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatO
     }
 
     private async Task<HttpResponseMessage> SendAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double temperature,
-        Guid runId, bool stream, CancellationToken ct)
+        Guid runId, bool stream, string step, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(messages);
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("v1/chat/completions", UriKind.Relative))
@@ -152,7 +152,7 @@ public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatO
                 stream_options = stream ? new { include_usage = true } : null,
             }),
         }.WithMaxResidency(ceiling);
-        request.Headers.Add("x-ume-step", "chat-answer");
+        request.Headers.Add("x-ume-step", step);
         request.Headers.Add("x-ume-run-id", runId.ToString());
         using var headers = CancellationTokenSource.CreateLinkedTokenSource(ct);
         headers.CancelAfter(TimeSpan.FromSeconds(options.Value.GatewayHeadersTimeoutSeconds));
@@ -225,7 +225,8 @@ public sealed record ChatCompletion(Guid MessageId, string Model, string Content
 /// call) or the prompt with everything the call and the citations need.
 /// </summary>
 public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Created, AssistantEntry Assistant, Residency Ceiling, AssistantChatSettings Settings,
-    int MaxTokens, string Language, string? Fixed, ChatOutcome Outcome, BuiltPrompt? Prompt, RetrievalResult? Retrieval, bool Degraded)
+    int MaxTokens, string Language, string? Fixed, ChatOutcome Outcome, BuiltPrompt? Prompt, RetrievalResult? Retrieval, bool Degraded,
+    PlatformChatSettings Platform, CondenseOutcome? Condense = null)
 {
     /// <summary>The caveat line of a degraded answer (§10.2), or null.</summary>
     public string? Caveat => Degraded ? (Language == LanguageGuess.English ? FixedTexts.CaveatEn : FixedTexts.CaveatSv) + "\n\n" : null;
@@ -243,7 +244,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 {
     public GatewayChatClient Gateway => gateway;
 
-    public IReadOnlyList<string> AllowedLinkHosts => options.Value.AllowedLinkHosts;
+    /// <summary><c>Settings.Chat</c> at the current snapshot, over the deployment knobs.</summary>
+    public PlatformChatSettings Platform => PlatformChatSettings.Parse(snapshots.Current.ChatSettings, options.Value);
 
     public async Task<ChatPlan> PlanAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct)
     {
@@ -262,16 +264,21 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var ceiling = Ceiling(who, assistant, snapshot);
         var messageId = Guid.CreateVersion7();
         var maxTokens = Math.Min(chat.MaxTokens ?? settings.MaxOutputTokens, settings.MaxOutputTokens);
+        var platform = PlatformChatSettings.Parse(snapshot.ChatSettings, options.Value);
+        CondenseOutcome? condense = null;
         ChatPlan Plan(string? fixedText, ChatOutcome outcome, BuiltPrompt? prompt, RetrievalResult? retrieval, bool degraded) =>
-            new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded);
+            new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded, platform, condense);
 
         RetrievalResult? retrieval = null;
         var conversational = MessageKind.IsConversational(chat.Question);
         if (!conversational)
         {
+            // §5: follow-ups that are not self-contained are rewritten for retrieval only; the prompt keeps the user's question.
+            var query = chat.Question;
+            (query, condense) = await CondenseAsync(chat, settings, platform, ceiling, messageId, ct);
             try
             {
-                retrieval = await knowledge.RetrieveAsync(who, new RetrievalRequest(chat.Question, assistant.Id, null, settings.TopK,
+                retrieval = await knowledge.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, null, settings.TopK, Expand: ExpandMode.Section,
                     Purpose: RetrievalPurpose.Chat, AllowDegraded: true, RunId: messageId), ct);
             }
             catch (RetrievalDeniedException denied) when (denied.Status == 503)
@@ -283,9 +290,11 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
                 throw NotFound(chat.Model);
             }
 
-            if (retrieval.Coverage.Status == CoverageStatus.Low)
+            // A failed rewrite of a follow-up must not turn into "not found": then the answer comes from what was found (§6.2).
+            var condenseFailed = condense is CondenseOutcome.Timeout or CondenseOutcome.Error or CondenseOutcome.Rejected;
+            if (retrieval.Coverage.Status == CoverageStatus.Low && !(condenseFailed && retrieval.Results.Count > 0))
             {
-                return Plan(FixedTexts.NotFound(assistant.Published.NotFound, null, language), ChatOutcome.NotFound, null, retrieval, false);
+                return Plan(FixedTexts.NotFound(assistant.Published.NotFound, platform.NotFound, language), ChatOutcome.NotFound, null, retrieval, false);
             }
 
             if (retrieval.Coverage.Status == CoverageStatus.Unknown && retrieval.Results.Count == 0)
@@ -296,8 +305,38 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
         var degraded = retrieval is not null && retrieval.Coverage.Status == CoverageStatus.Unknown;
         var prompt = PromptBuilder.Build(assistant.Name, assistant.Published.SystemPrompt, language, settings.AlwaysSwedish, chat.Question, chat.History,
-            conversational ? null : retrieval!.Results, settings, degraded);
+            conversational ? null : retrieval!.Results, settings, degraded, retrieval?.Sections);
         return Plan(null, ChatOutcome.Answered, prompt, retrieval, degraded);
+    }
+
+    /// <summary>
+    /// §5: rewrites a follow-up on the platform condense model at <c>Eu</c> (never above the turn's ceiling), ≤ 96 tokens,
+    /// 600 ms; anything but an accepted rewrite keeps the raw question.
+    /// </summary>
+    private async Task<(string Query, CondenseOutcome Outcome)> CondenseAsync(ParsedChat chat, AssistantChatSettings settings, PlatformChatSettings platform,
+        Residency ceiling, Guid messageId, CancellationToken ct)
+    {
+        if (Condenser.Skip(settings.CondenseEnabled && platform.CondenseModel is not null, chat.History, chat.Question) is { } skipped)
+        {
+            return (chat.Question, skipped);
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(Condenser.Timeout);
+        try
+        {
+            var answer = await gateway.CompleteAsync(platform.CondenseModel!, Condenser.Ceiling(ceiling), Condenser.Messages(chat.History, chat.Question),
+                Condenser.MaxOutputTokens, 0, messageId, "condense", timeout.Token);
+            return Condenser.Accept(answer.Text) is { } rewritten ? (rewritten, CondenseOutcome.Rewritten) : (chat.Question, CondenseOutcome.Rejected);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return (chat.Question, CondenseOutcome.Timeout);
+        }
+        catch (Exception ex) when (ex is ChatException or GatewayCallRefusedException or HttpRequestException or JsonException)
+        {
+            return (chat.Question, CondenseOutcome.Error);
+        }
     }
 
     public async Task<ChatCompletion> CompleteAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct)
@@ -309,8 +348,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         }
 
         var answer = await gateway.CompleteAsync(plan.Assistant.Published!.GatewayModel, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens,
-            plan.Settings.Temperature, plan.MessageId, ct);
-        var transducer = new AnswerTransducer(plan.Prompt.Sources, AllowedLinkHosts);
+            plan.Settings.Temperature, plan.MessageId, "chat-answer", ct);
+        var transducer = new AnswerTransducer(plan.Prompt.Sources, plan.Platform.AllowedLinkHosts);
         var caveat = plan.Caveat ?? "";
         var pieces = transducer.Feed(answer.Text).Concat(transducer.Flush()).OfType<AnswerPiece.Text>().ToList();
         var content = caveat + string.Concat(pieces.Select(p => p.Content));
@@ -330,7 +369,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             knowledge.MarkCited(plan.Retrieval, transducer.CitedRanks);
         }
 
-        LogAnswered(logger, plan.Model, plan.MessageId, plan.Prompt?.Sources.Count ?? 0, transducer.Cited.Count);
+        LogAnswered(logger, plan.Model, plan.MessageId, plan.Prompt?.Sources.Count ?? 0, transducer.Cited.Count, plan.Condense?.ToString() ?? "none");
     }
 
     /// <summary>
@@ -355,6 +394,6 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
     private static ChatException NotFound(string model) => new(404, "model_not_found", $"The model '{model}' does not exist or you do not have access to it.", "model");
 
-    [LoggerMessage(LogLevel.Information, "Chat answer for {Assistant}, message {MessageId}: {Sources} sources in the prompt, {Cited} cited")]
-    private static partial void LogAnswered(ILogger logger, string assistant, Guid messageId, int sources, int cited);
+    [LoggerMessage(LogLevel.Information, "Chat answer for {Assistant}, message {MessageId}: {Sources} sources in the prompt, {Cited} cited, condense {Condense}")]
+    private static partial void LogAnswered(ILogger logger, string assistant, Guid messageId, int sources, int cited, string condense);
 }

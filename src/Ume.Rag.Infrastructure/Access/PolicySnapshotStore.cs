@@ -161,12 +161,13 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
             r => departments[r.GetGuid(0)] = r.GetString(1), cancellationToken);
 
         string? retrieval = null;
-        await ReadAsync(connection, transaction, """SELECT "Retrieval"::text FROM config."Settings" """,
-            r => retrieval = r.GetString(0), cancellationToken);
+        string? chat = null;
+        await ReadAsync(connection, transaction, """SELECT "Retrieval"::text, "Chat"::text FROM config."Settings" """,
+            r => (retrieval, chat) = (r.GetString(0), r.GetString(1)), cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
         return new PolicySnapshot(version, clients, assistants, collections,
-            sources.ToDictionary(s => s.Key, s => (IReadOnlyList<Guid>)s.Value), profiles, levels, departments, retrieval);
+            sources.ToDictionary(s => s.Key, s => (IReadOnlyList<Guid>)s.Value), profiles, levels, departments, retrieval, chat);
     }
 
     private static async Task ReadAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql, Action<NpgsqlDataReader> row,

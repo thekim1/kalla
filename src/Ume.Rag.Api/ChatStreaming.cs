@@ -52,7 +52,7 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
                     return;
                 }
 
-                var transducer = new AnswerTransducer(plan.Prompt!.Sources, service.AllowedLinkHosts);
+                var transducer = new AnswerTransducer(plan.Prompt!.Sources, plan.Platform.AllowedLinkHosts);
                 var caveat = plan.Caveat ?? "";
                 if (caveat.Length > 0)
                 {
@@ -179,10 +179,11 @@ public sealed class ChatRateLimiter(IOptions<ChatOptions> options, TimeProvider 
     private const int MaxTracked = 100_000;
     private readonly ConcurrentDictionary<string, Window> _windows = new(StringComparer.Ordinal);
 
-    public void Check(RagPrincipal who)
+    /// <summary><paramref name="limit"/>: <c>Settings.Chat.messagesPerMinutePerUser</c>, else <c>Chat:MessagesPerMinutePerUser</c>.</summary>
+    public void Check(RagPrincipal who, int? limit = null)
     {
         ArgumentNullException.ThrowIfNull(who);
-        var limit = options.Value.MessagesPerMinutePerUser;
+        limit ??= options.Value.MessagesPerMinutePerUser;
         if (limit <= 0)
         {
             return;

@@ -276,4 +276,45 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         limited.Headers.RetryAfter.ShouldNotBeNull();
         (await limited.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error").GetProperty("code").GetString().ShouldBe("rate_limited");
     }
+
+    [Fact]
+    public async Task Settings_chat_supplies_the_not_found_default_and_a_follow_up_is_condensed_before_retrieval()
+    {
+        // The assistant has no not-found text of its own: Settings.Chat's default answers. A condense model is configured.
+        var snapshot = Snapshot();
+        var bygg = snapshot.Assistants[db.AssistantId];
+        snapshot = snapshot with
+        {
+            ChatSettings = """{"condenseModel":"ume/chat-eu","notFound":{"sv":"Plattformens svar: inget hittades."}}""",
+            Assistants = new Dictionary<Guid, AssistantEntry> { [db.AssistantId] = bygg with { Published = bygg.Published! with { NotFound = "{}" } } },
+        };
+        await using var api = db.ApiHost(snapshot).WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Rag:Roles", "knowledge,chat");
+            web.ConfigureTestServices(services =>
+                services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+        });
+        using var client = Client(api, db.IntegrationKey);
+
+        using (var none = await Ask(client, "Hur långt är det till månen i kilometer?"))
+        {
+            (await none.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()
+                .ShouldBe("Plattformens svar: inget hittades.");
+        }
+
+        // A follow-up with an anaphora goes through condense (one extra gateway call) and is still answered.
+        using var followUp = await client.PostAsJsonAsync("/v1/chat/completions", new
+        {
+            model = "bygg",
+            messages = new object[]
+            {
+                new { role = "user", content = "Behöver jag bygglov för en altan?" },
+                new { role = "assistant", content = "Ja, över 1,2 meter [1]." },
+                new { role = "user", content = "Gäller det även en altan som är högre än 1,2 meter?" },
+            },
+        }, Ct);
+        followUp.StatusCode.ShouldBe(HttpStatusCode.OK, await followUp.Content.ReadAsStringAsync(Ct));
+        (await followUp.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()!
+            .ShouldStartWith("Testsvar på");
+    }
 }

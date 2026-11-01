@@ -52,7 +52,8 @@ public sealed record PolicySnapshot(
     IReadOnlyDictionary<Guid, EmbeddingProfileEntry> EmbeddingProfiles,
     IReadOnlyDictionary<string, LevelPolicyEntry> LevelPolicies,
     IReadOnlyDictionary<Guid, string> DepartmentNames,
-    string? RetrievalSettings)
+    string? RetrievalSettings,
+    string? ChatSettings = null)
 {
     private static readonly ConditionalWeakTable<IReadOnlyDictionary<Guid, CollectionEntry>, IReadOnlyDictionary<string, CollectionEntry>> BySlug = new();
 
