@@ -71,6 +71,17 @@ public sealed class CollectionEndpointsTests(AdminDatabaseFixture database)
 
         var list = await admin.GetFromJsonAsync<JsonElement>($"/api/collections?q={code}", Ct);
         list.GetProperty("total").GetInt32().ShouldBe(1);
+        // q is text, not a pattern: "_" matches only an underscore.
+        (await admin.GetFromJsonAsync<JsonElement>("/api/collections?q=_", Ct)).GetProperty("total").GetInt32().ShouldBe(0);
+
+        // The slug is taken (also after a delete); the problem points at the field with a free suggestion.
+        using (var taken = await admin.PostAsJsonAsync("/api/collections", new { name = "Bygglov och Ärenden " + code, departmentId = department, classification = "public" }, Ct))
+        {
+            taken.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            var entry = (await Json(taken)).GetProperty("errorCodes").GetProperty("slug")[0];
+            entry.GetProperty("code").GetString().ShouldBe("slug_taken");
+            entry.GetProperty("params").GetProperty("suggestion").GetString().ShouldBe($"bygglov-och-arenden-{code.ToLowerInvariant()}-2");
+        }
         (await stranger.GetFromJsonAsync<JsonElement>($"/api/collections?q={code}", Ct)).GetProperty("total").GetInt32().ShouldBe(0);
         _ = otherDepartment;
 

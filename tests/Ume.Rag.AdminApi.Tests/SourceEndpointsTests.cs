@@ -153,7 +153,7 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
         using (var queued = await admin.PostAsync($"/api/sources/{id}/sync", null, Ct)) // dedup sync:{id}: the queued job is answered
         {
             var body = await Json(queued);
-            (body.GetProperty("jobId").GetGuid(), body.GetProperty("alreadyRunning").GetBoolean()).ShouldBe((firstJob, true));
+            (body.GetProperty("jobId").GetGuid(), body.GetProperty("alreadyRunning").GetBoolean(), body.GetProperty("kind").GetString()).ShouldBe((firstJob, true, "sync"));
         }
         (await stranger.PostAsync($"/api/sources/{id}/sync", null, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
@@ -208,5 +208,12 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
 
         var cancel = await db.Jobs.AsNoTracking().SingleAsync(j => j.DedupKey == $"cancel:{running.Id}", Ct);
         (cancel.Class, cancel.RunId).ShouldBe((JobClasses.Command, running.Id));
+
+        // A paused source is not synced (the worker would start no run): 409 source_paused, no implicit resume.
+        var current = (await admin.GetFromJsonAsync<JsonElement>($"/api/sources/{id}", Ct)).GetProperty("version").GetString();
+        (await admin.PostAsJsonAsync($"/api/sources/{id}/pause", new { version = current }, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var paused = await admin.PostAsync($"/api/sources/{id}/sync", null, Ct);
+        paused.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await Json(paused)).GetProperty("code").GetString().ShouldBe("source_paused");
     }
 }

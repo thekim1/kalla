@@ -95,8 +95,22 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
 
         (await stranger.PostAsJsonAsync($"{path}/questions", new { question = "Annan förvaltning" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
+        // The worker writes the created question; a second edit of it while the first waits is refused.
+        await using (var seedDb = TestPostgres.Context(database.Connection(null)))
+        {
+            var setId = await seedDb.EvaluationSets.Where(x => x.CollectionId == seed.Collection).Select(x => x.Id).SingleAsync(Ct);
+            var human = Guid.CreateVersion7();
+            seedDb.EvaluationQuestions.Add(new EvaluationQuestion { Id = human, SetId = setId, Classification = "public", Layer = EvaluationLayers.Human, Question = "Mänsklig fråga?" });
+            await seedDb.SaveChangesAsync(Ct);
+            (await admin.PutAsJsonAsync($"{path}/questions/{human}", new { question = "Första ändringen?" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Accepted);
+            using var pending = await admin.PutAsJsonAsync($"{path}/questions/{human}", new { question = "Andra ändringen?" }, Ct);
+            pending.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await Json(pending)).GetProperty("code").GetString().ShouldBe("question_edit_pending");
+            await seedDb.Database.ExecuteSqlAsync($"""UPDATE content."Jobs" SET "State" = 'succeeded' WHERE "Payload"::jsonb ->> 'questionId' = {human.ToString("D")}""", Ct);
+        }
+
         await using var db = TestPostgres.Context(database.Connection(null));
-        var command = await db.Jobs.AsNoTracking().Where(j => j.Class == JobClasses.Command && j.DepartmentId == seed.Department).SingleAsync(Ct);
+        var command = await db.Jobs.AsNoTracking().Where(j => j.Class == JobClasses.Command && j.DepartmentId == seed.Department).OrderBy(j => j.EnqueuedAt).FirstAsync(Ct);
         using (var payload = JsonDocument.Parse(command.Payload))
         {
             (payload.RootElement.GetProperty("kind").GetString(), payload.RootElement.GetProperty("action").GetString(), payload.RootElement.GetProperty("collectionId").GetGuid())

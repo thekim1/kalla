@@ -158,6 +158,17 @@ public static class EvaluationEndpoints
                 }
             }
 
+            // Commands carry no order: a second edit while one for the same question waits could apply first (#189 review).
+            var key = questionId.ToString("D");
+            if (await admin.Db.Database.SqlQuery<int>($"""
+                    SELECT 1 AS "Value" FROM content."Jobs"
+                    WHERE "Class" = 'command' AND "State" IN ('queued', 'running')
+                      AND "Payload"::jsonb ->> 'kind' = 'edit-eval-question' AND "Payload"::jsonb ->> 'questionId' = {key}
+                    """).AnyAsync(attempt))
+            {
+                throw AdminFaults.Of(AdminErrorCodes.QuestionEditPending);
+            }
+
             var documents = request?.ExpectedDocumentIds.Distinct().ToList() ?? [];
             if (documents.Count > 0)
             {
