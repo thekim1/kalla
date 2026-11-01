@@ -227,8 +227,8 @@ internal sealed class EvalRig : IAsyncDisposable
     }
 }
 
-/// <summary>A chunk to seed: its body and document type.</summary>
-internal sealed record SeedChunk(string Text, string DocumentType = "page");
+/// <summary>A chunk to seed: its body, document type, content kind and large-table flag (#129).</summary>
+internal sealed record SeedChunk(string Text, string DocumentType = "page", string ContentKind = ChunkContentKinds.Text, bool LargeTable = false);
 
 /// <summary>A seeded document: its live set and chunk ids in order.</summary>
 internal sealed record SeededDocument(Guid DocumentId, Guid SetId, IReadOnlyList<Guid> ChunkIds, byte[] ContentHash);
@@ -341,7 +341,7 @@ internal static class EvalSeeds
             {
                 Ordinal = i, Prefix = "Avsnitt", HeadingPath = "Avsnitt", Text = c.Text, SearchText = c.Text, OverlapChars = 0,
                 TextHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(c.Text))), TokenCount = Bgem3TokenCounter.Shared.Count(c.Text),
-                DocumentType = c.DocumentType,
+                DocumentType = c.DocumentType, ContentKind = c.ContentKind, LargeTable = c.LargeTable,
             }, EngineKit.ProfileId, new float[EngineKit.Dimensions]) { DeletedAt = DateTimeOffset.UtcNow }).ToList();
         await writer.WriteInvisibleAsync(set, rows, Ct);
         await using var connection = new NpgsqlConnection(database.Connection(null));

@@ -1,6 +1,6 @@
 {
   "versions": {
-    "chunk": 1,
+    "chunk": 2,
     "clean": 1,
     "detect": 1,
     "parse.csv": 1,
@@ -189,7 +189,9 @@
       "tags": [],
       "documentType": "spreadsheet",
       "sourceModifiedAt": "2026-03-01",
-      "isTable": true
+      "isTable": true,
+      "contentKind": "table",
+      "largeTable": false
     }
   ],
   "chunkFacts": {

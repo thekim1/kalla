@@ -266,6 +266,102 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database, EvalGatew
         }
     }
 
+    [Fact]
+    public async Task Generation_never_samples_a_large_table_row_group_and_gives_tables_and_lists_their_minimums()
+    {
+        var tag = EvalSeeds.Tag();
+        var seed = await EngineKit.SeedUrlListAsync(database, []);
+        try
+        {
+            await EvalSeeds.SetModelsAsync(database, Model, maxQuestions: 6);
+            // Three table row groups and three lists over four documents, among 20 text chunks without a scripted answer; every
+            // document also has two later row groups of a large table (with good answers), and a fifth document has nothing else.
+            string[] kinds = [ChunkContentKinds.Table, ChunkContentKinds.Table, ChunkContentKinds.List, ChunkContentKinds.Table, ChunkContentKinds.List, ChunkContentKinds.List];
+            int[] owners = [0, 1, 1, 2, 2, 3];
+            var kindTexts = Enumerable.Range(0, 6).Select(Text).ToList();
+            var kindIds = new List<Guid>();
+            var largeTexts = new List<string>();
+            var largeIds = new List<Guid>();
+            for (var d = 0; d < 5; d++)
+            {
+                var texts = d < 4 ? Enumerable.Range(0, 5).Select(_ => new SeedChunk(Text(7))).ToList() : [];
+                var mine = Enumerable.Range(0, 6).Where(k => owners[k] == d).ToList();
+                var large = Enumerable.Range(0, 2).Select(_ => Text(6)).ToList();
+                var document = await EvalSeeds.DocumentAsync(database, seed, $"Dokument {d} {tag}",
+                [
+                    .. texts,
+                    .. mine.Select(k => new SeedChunk(kindTexts[k], ContentKind: kinds[k])),
+                    .. large.Select(t => new SeedChunk(t, ContentKind: ChunkContentKinds.Table, LargeTable: true)),
+                ]);
+                kindIds.AddRange(document.ChunkIds.Skip(texts.Count).Take(mine.Count));
+                largeIds.AddRange(document.ChunkIds.TakeLast(2));
+                largeTexts.AddRange(large);
+            }
+
+            for (var k = 0; k < 6; k++)
+            {
+                gateway.Generate[kindTexts[k]] = Reply(Ask(k, k, tag), $"Svar nummer {k} {tag}.");
+            }
+
+            for (var i = 0; i < largeTexts.Count; i++)
+            {
+                gateway.Generate[largeTexts[i]] = Reply(Ask(6 + (i % 2), 6, tag + i), $"Svar stor {i} {tag}.");
+            }
+
+            await using var rig = EvalRig.Start(database, gateway);
+            var job = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
+            (await rig.RunAsync(job)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
+
+            var result = await CommandSeeds.ResultAsync(database, job.Id);
+            result.GetProperty("kept").GetInt32().ShouldBe(6, "N = min(6, 3 × 5 documents, 26 eligible chunks)");
+            var questions = await EvalSeeds.QuestionsAsync(database, result.GetProperty("setId").GetGuid());
+            questions.Select(q => q.SourceChunkId).ShouldBe(kindIds, ignoreOrder: true,
+                "tables and lists come first: at least their share and min(5, available), so all three of each");
+            questions.Select(q => q.Origin["strata"]!["contentKind"]!.GetValue<string>()).Order(StringComparer.Ordinal)
+                .ShouldBe(["list", "list", "list", "table", "table", "table"]);
+            questions.ShouldAllBe(q => !largeIds.Contains(q.SourceChunkId));
+            gateway.Calls.Where(c => c.Step == EvalModelClient.GenerateStep)
+                .ShouldAllBe(c => !largeTexts.Any(t => c.User.Contains(t, StringComparison.Ordinal)), "a large table's later row groups are never sampled");
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task A_round_that_keeps_nothing_still_advances_the_round_and_its_seed()
+    {
+        var tag = EvalSeeds.Tag();
+        var seed = await EngineKit.SeedUrlListAsync(database, []);
+        try
+        {
+            var text = Text(0);
+            await EvalSeeds.DocumentAsync(database, seed, "Ett " + tag, [new(text)]);
+            gateway.Generate[text] = "inte json";
+
+            await using var rig = EvalRig.Start(database, gateway);
+            var first = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
+            (await rig.RunAsync(first)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
+            var result = await CommandSeeds.ResultAsync(database, first.Id);
+            (result.GetProperty("round").GetInt32(), result.GetProperty("generated").GetInt32(), result.GetProperty("kept").GetInt32()).ShouldBe((1, 1, 0));
+            var setId = result.GetProperty("setId").GetGuid();
+            (await Sql.ScalarAsync<int>(database.Connection(null), """SELECT "Round" FROM content."EvaluationSets" WHERE "Id" = $1""", setId))
+                .ShouldBe(2, "the set's Round is the round the next generation uses");
+
+            gateway.Generate[text] = Reply(Ask(0, 0, tag), $"Svar {tag}.");
+            var second = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
+            (await rig.RunAsync(second)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
+            (await CommandSeeds.ResultAsync(database, second.Id)).GetProperty("round").GetInt32().ShouldBe(2);
+            (await EvalSeeds.QuestionsAsync(database, setId)).ShouldHaveSingleItem().Origin["seed"]!.GetValue<string>()
+                .ShouldBe(Convert.ToHexStringLower(ChunkSampler.Seed(setId, 2)));
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
     [Theory]
     [InlineData("ume/chat-eu", null, EvalModelClient.ModelNotOnPrem)]
     [InlineData(Model, "ume/chat-eu", EvalModelClient.ModelNotOnPrem)]

@@ -98,8 +98,9 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
 
     private const string InsertRunSql = """
         INSERT INTO content."EvaluationRuns" ("Id", "SetId", "Classification", "Kind", "SubjectId", "SubjectVersion", "ComparedRunId", "QuestionCount",
-                                             "K", "Found", "Wins", "Losses", "RecallAtK", "Mrr", "Reranked", "Variant", "StartedAt", "FinishedAt")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                                             "K", "Found", "Wins", "Losses", "RecallAtK", "Mrr", "Reranked", "Variant", "StartedAt", "FinishedAt", "Candidate",
+                                             "ThresholdProposal")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb)
         """;
 
     private const string InsertResultsSql = """
@@ -231,7 +232,7 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
             await CommandCommit.ExecuteAsync(commit, InsertRunSql, cancellationToken,
                 Db.P(run.Id), Db.P(run.SetId), Db.P(run.Classification), Db.P(run.Kind), Db.P(run.SubjectId), Db.P(run.SubjectVersion), Db.P(run.ComparedRunId),
                 Db.P(run.QuestionCount), Db.P(run.K), Db.P(run.Found), Db.P(run.Wins), Db.P(run.Losses), Db.P(run.RecallAtK), Db.P(run.Mrr), Db.P(run.Reranked),
-                Db.P(run.Variant), Db.P(run.StartedAt.ToUniversalTime()), Db.P(run.FinishedAt?.ToUniversalTime()));
+                Db.P(run.Variant), Db.P(run.StartedAt.ToUniversalTime()), Db.P(run.FinishedAt?.ToUniversalTime()), Db.P(run.Candidate), Db.P(run.ThresholdProposal));
             if (results.Count > 0)
             {
                 await CommandCommit.ExecuteAsync(commit, InsertResultsSql, cancellationToken,

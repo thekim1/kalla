@@ -262,7 +262,8 @@ public sealed class PostgresChunkSetStore(JobDatabase database) : IChunkSetStore
 {
     private const string SetColumns = """
         "Id", "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash", "Classification", "CollectionId",
-        "InputHash", "StageKeys"::text, "State", "PiiFlagged", "PiiCounts"::text, "ChunkCount", "CreatedAt", "LiveAt", "SupersededAt", "ParseRuleKey"
+        "InputHash", "StageKeys"::text, "State", "PiiFlagged", "PiiCounts"::text, "ChunkCount", "CreatedAt", "LiveAt", "SupersededAt", "PiiFlaggedAt",
+        "ParseRuleKey"
         """;
 
     public async Task InsertWritingAsync(ChunkSetRecord set, IReadOnlyList<ChunkRecord> chunks, CancellationToken cancellationToken)
@@ -323,6 +324,14 @@ public sealed class PostgresChunkSetStore(JobDatabase database) : IChunkSetStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task MarkFlaggedAsync(Guid chunkSetId, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await Engine.IndexWriter.MarkPiiFlaggedAsync(connection, transaction, chunkSetId, at, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task<PiiClearance?> GetClearanceAsync(Guid documentId, CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenAsync(cancellationToken);
@@ -368,7 +377,7 @@ public sealed class PostgresChunkSetStore(JobDatabase database) : IChunkSetStore
         await using var command = new NpgsqlCommand("""
             SELECT "Id", "ChunkSetId", "DocumentId", "CollectionId", "Classification", "Ordinal", "HeadingPath", "Page", "PageEnd", "Text", "SearchText",
                    "OverlapChars", "TextHash", "TokenCount", "Tags", "DocumentType", "SourceModifiedAt", "EmbeddingProfileId", "Embedding"::real[],
-                   "Kind", "DeletedAt"
+                   "Kind", "DeletedAt", "ContentKind", "LargeTable"
             FROM content."Chunks" WHERE "ChunkSetId" = $1 ORDER BY "Ordinal"
             """, connection)
         {
@@ -394,6 +403,9 @@ public sealed class PostgresChunkSetStore(JobDatabase database) : IChunkSetStore
                 Tags = reader.IsDBNull(14) ? [] : reader.GetFieldValue<string[]>(14),
                 DocumentType = Db.String(reader, 15) ?? string.Empty,
                 SourceModifiedAt = Db.Nullable<DateTimeOffset>(reader, 16) is { } modified ? DateOnly.FromDateTime(modified.UtcDateTime) : null,
+                IsTable = reader.GetString(21) == Domain.Entities.ChunkContentKinds.Table,
+                ContentKind = reader.GetString(21),
+                LargeTable = reader.GetBoolean(22),
             };
             chunks.Add(new ChunkRecord(reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2), reader.GetGuid(3), reader.GetString(4), draft.Ordinal, draft,
                 Db.Nullable<Guid>(reader, 17) ?? Guid.Empty, reader.IsDBNull(18) ? [] : reader.GetFieldValue<float[]>(18))
@@ -439,6 +451,7 @@ public sealed class PostgresChunkSetStore(JobDatabase database) : IChunkSetStore
                 CreatedAt = reader.GetFieldValue<DateTimeOffset>(14),
                 LiveAt = Db.Nullable<DateTimeOffset>(reader, 15),
                 SupersededAt = Db.Nullable<DateTimeOffset>(reader, 16),
+                PiiFlaggedAt = Db.Nullable<DateTimeOffset>(reader, reader.GetOrdinal("PiiFlaggedAt")),
             });
         }
 

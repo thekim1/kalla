@@ -31,8 +31,10 @@ public sealed record PiiSwapContext(string CollectionClassification, Guid Source
 /// rises above it, else it is re-flagged and held. A source in <see cref="PiiMode.Report"/> (Decisions table, 2026-11-01)
 /// holds only for the personnummer and samordningsnummer rules (a clearance covers it while neither count rises); every
 /// other flag, and a NER-pending set, goes in <c>live</c> and is reported (run item reason, event 5103). The sweep re-runs
-/// <c>personal-data</c> for <c>pending</c> sets once NER is ready. Event 5103 is raised once per transition to flagged. The engine's embed job decides the state with
-/// <see cref="StateFor"/> inside its fenced swap and raises the event with <see cref="RaiseIfFlagged"/> after the commit.
+/// <c>personal-data</c> for <c>pending</c> sets once NER is ready. Event 5103 is raised once per transition to flagged, and the
+/// set's <c>PiiFlaggedAt</c> gets the same time unless it has one (#175). The engine's embed job decides the state with
+/// <see cref="StateFor"/> inside its fenced swap, stamps <c>PiiFlaggedAt</c> there when <see cref="Flags"/> holds, and raises
+/// the event with <see cref="RaiseIfFlagged"/> after the commit.
 /// </summary>
 public sealed class PiiLifecycle(IChunkSetStore store, ILoggerFactory loggers, TimeProvider clock)
 {
@@ -83,13 +85,26 @@ public sealed class PiiLifecycle(IChunkSetStore store, ILoggerFactory loggers, T
             : null;
     }
 
+    /// <summary>A transition to flagged (§9.5): the set is flagged and the clearance does not cover it; event 5103 follows.</summary>
+    public static bool Flags(ChunkSetRecord set, PiiClearance? clearance, PiiFlagRules rules)
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        return set.PiiFlagged && !PiiFlagPolicy.Covered(set.PiiCounts ?? new PiiCounts(), clearance?.Counts, rules);
+    }
+
     public async Task<string> SwapAsync(Guid chunkSetId, PiiSwapContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         var set = await store.GetAsync(chunkSetId, cancellationToken) ?? throw new InvalidOperationException("Unknown chunk set.");
         var clearance = await store.GetClearanceAsync(set.Key.DocumentId, cancellationToken);
         var state = StateFor(set, context.CollectionClassification, context.Mode, clearance, context.Rules);
-        await store.SwapAsync(set.Id, state, clock.GetUtcNow(), cancellationToken);
+        var now = clock.GetUtcNow();
+        await store.SwapAsync(set.Id, state, now, cancellationToken);
+        if (Flags(set, clearance, context.Rules))
+        {
+            await store.MarkFlaggedAsync(set.Id, now, cancellationToken);
+        }
+
         RaiseIfFlagged(set, context, clearance);
         return state;
     }
@@ -102,7 +117,7 @@ public sealed class PiiLifecycle(IChunkSetStore store, ILoggerFactory loggers, T
     {
         ArgumentNullException.ThrowIfNull(set);
         ArgumentNullException.ThrowIfNull(context);
-        if (set.PiiFlagged && !PiiFlagPolicy.Covered(set.PiiCounts ?? new PiiCounts(), clearance?.Counts, context.Rules))
+        if (Flags(set, clearance, context.Rules))
         {
             Raise(set, context, reflag: clearance is not null);
         }
@@ -151,9 +166,11 @@ public sealed class PiiLifecycle(IChunkSetStore store, ILoggerFactory loggers, T
             await store.UpdatePiiAsync(set.Id, assessment.Counts, assessment.Flagged, cancellationToken);
             var updated = set with { PiiCounts = assessment.Counts, PiiFlagged = assessment.Flagged };
             var clearance = await store.GetClearanceAsync(set.Key.DocumentId, cancellationToken);
-            await store.SetStateAsync(set.Id, StateFor(updated, swap.CollectionClassification, swap.Mode, clearance, swap.Rules), clock.GetUtcNow(), cancellationToken);
-            if (updated.PiiFlagged && !PiiFlagPolicy.Covered(assessment.Counts, clearance?.Counts, swap.Rules))
+            var now = clock.GetUtcNow();
+            await store.SetStateAsync(set.Id, StateFor(updated, swap.CollectionClassification, swap.Mode, clearance, swap.Rules), now, cancellationToken);
+            if (Flags(updated, clearance, swap.Rules))
             {
+                await store.MarkFlaggedAsync(set.Id, now, cancellationToken);
                 Raise(updated, swap, reflag: clearance is not null);
             }
 

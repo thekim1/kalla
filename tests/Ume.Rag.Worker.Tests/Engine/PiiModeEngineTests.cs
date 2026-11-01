@@ -70,12 +70,14 @@ public sealed class PiiModeEngineTests(RagDatabaseFixture database, FakeGatewayF
                 """, contact)).ShouldBe("true|1|1");
             (await ReasonAsync(run, "/p/contact")).ShouldBe(PiiLifecycle.FlaggedReason);
             FlaggedEvents(contact).ShouldHaveSingleItem().Message.ShouldContain("emailExternal=1");
+            (await FlaggedAtAsync(contact)).ShouldBe("flagged at the swap", "PiiFlaggedAt is the swap's time (#175), the set's LiveAt here");
 
             var pnr = await DocumentAsync(seed, "/p/pnr");
             (await StateAsync(pnr)).ShouldBe(ChunkSetStates.Held, "a personnummer holds in report mode too");
             (await ServedChunksAsync(pnr)).ShouldBe(0);
             (await ReasonAsync(run, "/p/pnr")).ShouldBe(PiiLifecycle.FlaggedReason);
             FlaggedEvents(pnr).ShouldHaveSingleItem().Message.ShouldContain("personnummer=1");
+            (await FlaggedAtAsync(pnr)).ShouldBe("flagged", "a held set has no LiveAt yet");
 
             var clear = new JobRequest(JobClasses.Command, seed.DepartmentId, seed.Classification,
                 ContractJson.Serialize(new ClearPiiFlagCommand { DocumentId = pnr, DecidedBy = "admin-oid" }));
@@ -126,6 +128,7 @@ public sealed class PiiModeEngineTests(RagDatabaseFixture database, FakeGatewayF
             var sweep = worker.Services.GetRequiredService<DriftSweep>();
             (await sweep.RunAsync(Ct)).PendingSettled.ShouldBe(0, "NER still down: the set stays pending");
             (await StateAsync(document)).ShouldBe(ChunkSetStates.Live);
+            (await FlaggedAtAsync(document)).ShouldBe("never flagged");
 
             ner.Ready = true;
             (await sweep.RunAsync(Ct)).PendingSettled.ShouldBe(1);
@@ -137,6 +140,7 @@ public sealed class PiiModeEngineTests(RagDatabaseFixture database, FakeGatewayF
             (await StateAsync(document)).ShouldBe(ChunkSetStates.Live, "names never hold in report mode, not even after the sweep");
             (await ServedChunksAsync(document)).ShouldBeGreaterThan(0);
             FlaggedEvents(document).ShouldHaveSingleItem().Message.ShouldContain("name=5");
+            (await FlaggedAtAsync(document)).ShouldBe("flagged at the swap", "the sweep stamps PiiFlaggedAt with the time of its state change");
         }
         finally
         {
@@ -159,6 +163,13 @@ public sealed class PiiModeEngineTests(RagDatabaseFixture database, FakeGatewayF
     private Task<string> StateAsync(Guid document) =>
         Sql.ScalarAsync<string>(database.Connection(null), """
             SELECT s."State" FROM content."ChunkSets" s JOIN content."Documents" d ON d."LiveChunkSetId" = s."Id" WHERE d."Id" = $1
+            """, document);
+
+    /// <summary>The live set's <c>PiiFlaggedAt</c>: never flagged, flagged at the swap (equal to <c>LiveAt</c>) or flagged.</summary>
+    private Task<string> FlaggedAtAsync(Guid document) =>
+        Sql.ScalarAsync<string>(database.Connection(null), """
+            SELECT CASE WHEN s."PiiFlaggedAt" IS NULL THEN 'never flagged' WHEN s."PiiFlaggedAt" = s."LiveAt" THEN 'flagged at the swap' ELSE 'flagged' END
+            FROM content."ChunkSets" s JOIN content."Documents" d ON d."LiveChunkSetId" = s."Id" WHERE d."Id" = $1
             """, document);
 
     private Task<string> NerAsync(Guid document) =>

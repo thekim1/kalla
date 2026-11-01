@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Ume.Rag.Domain.Entities;
 using Ume.Rag.Retrieval.Text;
 using Ume.Rag.Worker.Processing.Clean;
 
@@ -32,12 +33,14 @@ public static class ChunkText
 /// section starts with whole trailing sentences up to the overlap (a list continues with its lead-in sentence); never
 /// across sections, tables or code. A short tail is merged (≤ 115 %) or the last two chunks re-split evenly; short sibling
 /// sections are packed together under their parent. Tables become <c>Kolumn: värde; …</c> row groups. Each chunk gets its
-/// <c>SearchText</c> from <see cref="SwedishDecompounder"/>, its <c>TextHash</c> and token count, and the document's
-/// metadata.
+/// <c>SearchText</c> from <see cref="SwedishDecompounder"/>, its <c>TextHash</c> and token count, the document's metadata,
+/// and its content kind (#129): <c>table</c> for a row group (<c>LargeTable</c> on the second and later groups of a table
+/// over <see cref="ChunkOptions.LargeTableRows"/> rows), <c>list</c> when list items are at least half of the body tokens,
+/// else <c>text</c>.
 /// </summary>
 public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompounder)
 {
-    public const int Version = 1;
+    public const int Version = 2;
 
     public ChunkSetDraft Chunk(ParsedDocument document, ChunkOptions options, DocumentMetadata metadata)
     {
@@ -130,7 +133,9 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
             Tags = metadata.Tags,
             DocumentType = metadata.DocumentType,
             SourceModifiedAt = metadata.SourceModifiedAt,
-            IsTable = draft.IsTable,
+            IsTable = draft.ContentKind == ChunkContentKinds.Table,
+            ContentKind = draft.ContentKind,
+            LargeTable = draft.LargeTable,
         };
     }
 
@@ -248,6 +253,8 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
             rows.Add(string.Join("; ", group));
         }
 
+        var large = table.Rows > ChunkOptions.LargeTableRows;
+        var groups = 0;
         var current = new List<string>();
         foreach (var row in rows)
         {
@@ -273,7 +280,7 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
                 body = body[..TokenCuts.PrefixLength(tokens, body, options.ChunkTokens - tokens.Count(prefix) - 2)];
             }
 
-            return new Pending(prefix, path, body, 0, block.Page, block.PageEnd ?? block.Page, IsTable: true);
+            return new Pending(prefix, path, body, 0, block.Page, block.PageEnd ?? block.Page, ChunkContentKinds.Table, LargeTable: large && groups++ > 0);
         }
     }
 
@@ -313,8 +320,9 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
         public string? LeadIn { get; init; }
     }
 
-    /// <summary>A chunk before its hashes: prefix, path, body and the overlap length.</summary>
-    private sealed record Pending(string Prefix, IReadOnlyList<string> HeadingPath, string Body, int OverlapChars, int? Page, int? PageEnd, bool IsTable = false);
+    /// <summary>A chunk before its hashes: prefix, path, body, the overlap length and its content kind.</summary>
+    private sealed record Pending(string Prefix, IReadOnlyList<string> HeadingPath, string Body, int OverlapChars, int? Page, int? PageEnd,
+        string ContentKind = ChunkContentKinds.Text, bool LargeTable = false);
 
     /// <summary>Greedy packing of one section's prose units (rules 2–4).</summary>
     private sealed class Packer(Chunker owner, ChunkOptions options, string prefix, Section section)
@@ -536,11 +544,18 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
                 var body = Body(units, overlap);
                 var pages = units.Where(u => u.Page is not null).ToList();
                 _done.Add(new Pending(prefix, section.HeadingPath, body, overlap?.Length ?? 0,
-                    pages.Count == 0 ? null : pages.Min(u => u.Page), pages.Count == 0 ? null : pages.Max(u => u.PageEnd)));
+                    pages.Count == 0 ? null : pages.Min(u => u.Page), pages.Count == 0 ? null : pages.Max(u => u.PageEnd), KindOf(units, body)));
             }
 
             _closed.Clear();
             _overlaps.Clear();
+        }
+
+        /// <summary><c>list</c> when the list items hold at least half of the body's tokens (#129), else <c>text</c>.</summary>
+        private string KindOf(IReadOnlyList<Unit> units, string body)
+        {
+            var listTokens = units.Where(u => u.Kind == UnitKind.ListItem).Sum(u => owner.Tokens.Count(u.Text));
+            return listTokens > 0 && 2 * listTokens >= owner.Tokens.Count(body) ? ChunkContentKinds.List : ChunkContentKinds.Text;
         }
 
         /// <summary>Re-splits the last two chunks evenly at a unit boundary, both within the budget.</summary>

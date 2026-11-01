@@ -10,6 +10,7 @@ using Ume.Rag.Worker.Processing.Detect;
 using Ume.Rag.Worker.Processing.Html;
 using Ume.Rag.Worker.Processing.Parse;
 using Ume.Rag.Worker.Processing.Persistence;
+using ChunkContentKinds = Ume.Rag.Domain.Entities.ChunkContentKinds;
 
 namespace Ume.Rag.Worker.Tests.Processing;
 
@@ -353,6 +354,54 @@ public sealed class StageRuleTests
         tables[0].Text.Split('\n')[1].ShouldBe("Avgift: Avgift 1; Belopp: 100 kr");
         tables.Sum(c => c.Text.Split('\n').Length - 1).ShouldBe(45);
         chunks[0].IsTable.ShouldBeFalse(); // the lead-in prose comes first
+    }
+
+    [Fact]
+    public void Chunks_carry_their_content_kind_and_only_later_row_groups_of_a_large_table_are_marked()
+    {
+        static DocTable Table(int dataRows)
+        {
+            var cells = new List<DocCell> { new(0, 0, 1, 1, true, "Tjänst"), new(0, 1, 1, 1, true, "Belopp") };
+            for (var r = 1; r <= dataRows; r++)
+            {
+                cells.Add(new DocCell(r, 0, 1, 1, false, $"Tjänst {r}"));
+                cells.Add(new DocCell(r, 1, 1, 1, false, $"{r * 10} kr"));
+            }
+
+            return new DocTable(dataRows + 1, 2, 1, cells);
+        }
+
+        DocBlock H(string text) => new(BlockKinds.Heading, text) { Level = 2, LevelSource = LevelSources.Html };
+        DocBlock Item(string text) => new(BlockKinds.ListItem, text);
+        var document = new ParsedDocument
+        {
+            Title = "Taxa",
+            Blocks =
+            [
+                H("Om taxan"), new DocBlock(BlockKinds.Paragraph, Sentences(6, "taxan")),
+                H("Så ansöker du"), new DocBlock(BlockKinds.Paragraph, "Gör så här."),
+                .. Enumerable.Range(1, 6).Select(i => Item($"Steg {i}: fyll i uppgifterna om fastigheten och skicka in blanketten till nämnden.")),
+                H("Mer om ansökan"), new DocBlock(BlockKinds.Paragraph, Sentences(5, "ansökan")), Item("Se blanketten."),
+                new DocBlock(BlockKinds.Paragraph, Sentences(3, "avgiften")),
+                H("Stor taxa"), new DocBlock(BlockKinds.Table, "t") { Table = 0 },
+                H("Liten taxa"), new DocBlock(BlockKinds.Table, "t") { Table = 1 },
+            ],
+            Tables = [Table(ChunkOptions.LargeTableRows), Table(45)],
+        };
+        var chunks = Chunk(document).Chunks;
+
+        var large = chunks.Where(c => c.HeadingPath.EndsWith("Stor taxa", StringComparison.Ordinal)).ToList();
+        var small = chunks.Where(c => c.HeadingPath.EndsWith("Liten taxa", StringComparison.Ordinal)).ToList();
+        large.Count.ShouldBeGreaterThan(2);
+        large.ShouldAllBe(c => c.ContentKind == ChunkContentKinds.Table && c.IsTable);
+        large[0].LargeTable.ShouldBeFalse("the first row group of a large table stays eligible");
+        large.Skip(1).ShouldAllBe(c => c.LargeTable, "a table over 2,000 rows: every later row group");
+        small.Count.ShouldBe(3);
+        small.ShouldAllBe(c => c.ContentKind == ChunkContentKinds.Table && !c.LargeTable);
+        chunks.Single(c => c.HeadingPath.EndsWith("Så ansöker du", StringComparison.Ordinal)).ContentKind.ShouldBe(ChunkContentKinds.List);
+        chunks.Where(c => c.HeadingPath.EndsWith("Mer om ansökan", StringComparison.Ordinal) || c.HeadingPath.EndsWith("Om taxan", StringComparison.Ordinal))
+            .ShouldAllBe(c => c.ContentKind == ChunkContentKinds.Text && !c.LargeTable && !c.IsTable, "one short list item in prose is text");
+        chunks.Where(c => !c.IsTable).ShouldAllBe(c => !c.LargeTable);
     }
 
     [Fact]

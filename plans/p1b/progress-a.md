@@ -59,10 +59,12 @@ Refs: [processing §13, §14](../ingestion-worker/design-processing.md), [ingest
 - [x] Reports lead with the `human` layer (PR: a/10-eval-on-demand)
 - [x] **Done:** reproducibility test green; set triggers (first syncs, weekly top-up, `D` +25 %) in the evaluation scheduler (PR: a/p1b-7-eval-reproducibility)
 - [x] **Hand-off L5** (with items 5, 6, 8): issue to stream B (#132)
+- [x] Follow-up #129: chunks carry `ContentKind` and `LargeTable`; `generate-set` skips later large-table row groups and gives tables and lists their minimums; the round from `EvaluationSets.Round`; on-demand runs store `Candidate` and `ThresholdProposal` (PR: a/129-chunk-kind-pii-flagged-at)
 
 ### 8. Remaining commands and admin parse rules
 Refs: [admin §4.7](../admin/design.md), [processing §3.5, §9.5](../ingestion-worker/design-processing.md), [connectors §13](../ingestion-worker/design-connectors.md)
 - [x] Deletion decisions, release hold, PII clearance, reprocess one document (PR: a/10-commands)
+- [x] #175 part 4: `ChunkSets.PiiFlaggedAt` set with event 5103's time at the swap and by the pending sweep, the first time kept on re-flag (PR: a/129-chunk-kind-pii-flagged-at)
 - [x] Admin-made parse rules matched and re-keying only matching documents (PR: a/p1b-8-parse-rules)
 - [x] Parse-rule commands `edit-parse-rule` / `disable-parse-rule`: contracts, handlers, audit, reprocess of the affected sources (PR: a/p1b-8-parse-rule-commands)
 

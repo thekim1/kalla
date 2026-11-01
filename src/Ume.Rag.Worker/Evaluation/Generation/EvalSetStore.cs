@@ -19,9 +19,9 @@ public sealed record EvalSettings(string? Model, string? JudgeModel, int MaxQues
     public const int DefaultMaxQuestions = 100;
 }
 
-/// <summary>A chunk with its text, its document's title and the content hash of its set.</summary>
+/// <summary>A chunk with its text, its document's title, the content hash of its set and its content kind.</summary>
 public sealed record EvalChunk(Guid ChunkId, Guid DocumentId, string Text, string HeadingPath, string Title, string DocumentType, byte[] TextHash,
-    byte[] ContentHash);
+    byte[] ContentHash, string ContentKind);
 
 /// <summary>An active generated question of the set.</summary>
 public sealed record ActiveQuestion(Guid Id, string Question, string ExpectedAnswer, Guid[] ExpectedDocumentIds, byte[]? SourceContentHash,
@@ -34,13 +34,18 @@ public sealed record DocumentNow(bool Deleted, byte[]? LiveContentHash);
 public sealed record NewQuestion(Guid Id, string Question, string ExpectedAnswer, Guid[] ExpectedDocumentIds, byte[] SourceContentHash, string Origin,
     Guid SourceChunkId);
 
-/// <summary>What a round writes: questions retired as stale, questions whose changed document still answers them, new questions.</summary>
-public sealed record EvalSetWrite(IReadOnlyList<Guid> Stale, IReadOnlyList<(Guid QuestionId, byte[] ContentHash)> Rechecked, IReadOnlyList<NewQuestion> Added);
+/// <summary>
+/// What a round writes: questions retired as stale, questions whose changed document still answers them, new questions, and
+/// the set's next round when this one sampled (<c>EvaluationSets."Round"</c>; null when it generated nothing).
+/// </summary>
+public sealed record EvalSetWrite(IReadOnlyList<Guid> Stale, IReadOnlyList<(Guid QuestionId, byte[] ContentHash)> Rechecked, IReadOnlyList<NewQuestion> Added,
+    int? NextRound = null);
 
 /// <summary>
 /// The SQL of set generation (data-model §2.2: <c>EvaluationSets</c>, <c>EvaluationQuestions</c>). Eligible chunks are the
-/// children of the collection's live sets that are not personal-data flagged (processing design §13.1). The round's
-/// writes and the job's completion commit in one transaction, fenced by the lease (engine design §7.6).
+/// children of the collection's live sets that are not personal-data flagged and not a large table's second or later row
+/// group (processing design §13.1, #129). The round's writes and the job's completion commit in one transaction, fenced
+/// by the lease (engine design §7.6).
 /// </summary>
 public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerIdentity identity, TimeProvider time)
 {
@@ -58,9 +63,16 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
 
     private const string SetSql = """SELECT "Id" FROM content."EvaluationSets" WHERE "CollectionId" = $1""";
 
-    private const string LastRoundSql = $"""
-        SELECT coalesce(max(("Origin" ->> 'round')::int), 0) FROM content."EvaluationQuestions" WHERE "SetId" = $1 AND "Layer" = '{EvaluationLayers.Generated}'
+    // The set's "Round" is the round the next generation uses (#130); a question of a later round (written before the column) wins.
+    private const string RoundSql = $"""
+        SELECT greatest(s."Round", coalesce(max((q."Origin" ->> 'round')::int), 0) + 1)
+        FROM content."EvaluationSets" s
+        LEFT JOIN content."EvaluationQuestions" q ON q."SetId" = s."Id" AND q."Layer" = '{EvaluationLayers.Generated}'
+        WHERE s."Id" = $1
+        GROUP BY s."Round"
         """;
+
+    private const string NextRoundSql = """UPDATE content."EvaluationSets" SET "Round" = greatest("Round", $2) WHERE "Id" = $1""";
 
     private const string ActiveSql = $"""
         SELECT "Id", "Question", coalesce("ExpectedAnswer", ''), "ExpectedDocumentIds", "SourceContentHash", "SourceChunkId",
@@ -76,17 +88,17 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
         """;
 
     private const string EligibleSql = """
-        SELECT c."Id", c."DocumentId", coalesce(c."DocumentType", ''), c."Ordinal"
+        SELECT c."Id", c."DocumentId", coalesce(c."DocumentType", ''), c."Ordinal", c."ContentKind"
         FROM content."Chunks" c
         JOIN content."ChunkSets" cs ON cs."Id" = c."ChunkSetId"
         JOIN content."Documents" d ON d."Id" = c."DocumentId" AND d."LiveChunkSetId" = cs."Id"
-        WHERE c."CollectionId" = $1 AND c."DeletedAt" IS NULL AND c."Kind" = 'child' AND c."TokenCount" >= $2
+        WHERE c."CollectionId" = $1 AND c."DeletedAt" IS NULL AND c."Kind" = 'child' AND c."TokenCount" >= $2 AND NOT c."LargeTable"
           AND cs."State" = 'live' AND NOT cs."PiiFlagged" AND d."DeletedAt" IS NULL
         """;
 
     private const string ChunkColumns = """
         c."Id", c."DocumentId", c."Text", coalesce(c."HeadingPath", ''), coalesce(d."Title", d."DisplayName", d."Url", ''), coalesce(c."DocumentType", ''),
-        c."TextHash", cs."ContentHash"
+        c."TextHash", cs."ContentHash", c."ContentKind"
         """;
 
     private const string ChunksSql = $"""
@@ -166,11 +178,14 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
         return (Guid)(await read.ExecuteScalarAsync(cancellationToken))!;
     }
 
-    /// <summary>The highest round of the set's generated questions (retired ones included), 0 before the first.</summary>
-    public async Task<int> LastRoundAsync(Guid setId, CancellationToken cancellationToken)
+    /// <summary>
+    /// The round this generation runs: the set's <c>Round</c> (1 for a new set, advanced by every round that sampled, even one
+    /// that kept nothing), or one past the highest round of its generated questions (retired ones included) if that is later.
+    /// </summary>
+    public async Task<int> RoundAsync(Guid setId, CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(LastRoundSql, connection) { Parameters = { Db.P(setId) } };
+        await using var command = new NpgsqlCommand(RoundSql, connection) { Parameters = { Db.P(setId) } };
         return (int)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 
@@ -209,7 +224,7 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
         var chunks = new List<SampleChunk>();
         while (await reader.ReadAsync(cancellationToken))
         {
-            chunks.Add(new SampleChunk(reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetInt32(3)));
+            chunks.Add(new SampleChunk(reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetInt32(3), reader.GetString(4)));
         }
 
         return chunks;
@@ -284,6 +299,11 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
                 Db.P(question.SourceChunkId), Db.P(createdBy));
         }
 
+        if (write.NextRound is { } next)
+        {
+            await CommandCommit.ExecuteAsync(commit, NextRoundSql, cancellationToken, Db.P(setId), Db.P(next));
+        }
+
         return await CommandCommit.CompleteAsync(commit, queue, job, identity, result, cancellationToken);
     }
 
@@ -296,7 +316,7 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
         while (await reader.ReadAsync(cancellationToken))
         {
             chunks.Add(new EvalChunk(reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5),
-                reader.GetFieldValue<byte[]>(6), reader.GetFieldValue<byte[]>(7)));
+                reader.GetFieldValue<byte[]>(6), reader.GetFieldValue<byte[]>(7), reader.GetString(8)));
         }
 
         return chunks;
