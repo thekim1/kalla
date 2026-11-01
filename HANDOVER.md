@@ -154,7 +154,8 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
 - **User decision** (Decisions table, 2026-11-01): `piiMode` report for the municipality's own published site; built in
   #173 (B's part: #175). The CI-speed work (approved in session 12) merged as #174. A second runner `ume-rag2` already
   exists (`/home/kim/actions-runner2`), so the second-runner question is settled.
-- **Merged (stream A):** #170, #171, #183, #184 (docs), #173, #174, #177, #179, #186 (worker reads uploads through the
+- **Merged (stream A):** #170, #171, #183, #184, #192 (docs), #197 (URL patterns without a match timeout: under load an
+  `exclude` could miss; from B's #196), #173, #174, #177, #179, #186 (worker reads uploads through the
   envelope, #181), #182 (a real product race behind the
   `SettingsEffectsTests` flake: a crawl could reconcile while its fetches were in flight and silently miss deletions). **Plans:** `d748909` (Decisions row), `691cdad`
   (progress boxes, P1 README milestone result).
@@ -175,9 +176,9 @@ Worktrees: `../rag-main` (detached, for main checks) only.
 
 ## Next step
 
-1. **B's admin surface (item 14) is merged** (#176, #178, #180, #185, #188, #189, #190; all reviewed). Next: B announces
-   **J7**; then run the pilot set-up through Scalar (item 20) with the user. The run book issues keys through
-   `POST /api/keys` (#192).
+1. **J7 is announced (#193); item 14 done (#194).** Next: the pilot set-up through Scalar with the user (item 20), in
+   #193's order (data-protection row, Open WebUI client + key, collection + publish, sources, umea.se site profile,
+   sync, gold set, assistant). Asked B to accept the contract's kebab variant names (`hybrid-no-decompounder`).
 2. **#187** (filed): B's flaky `KnowledgeSecurityTests` (a cached key refused after the throttle; product or test?).
 3. **Watch B:** #176 then #178 (merge order), the #178 should-fix (`source_paused`), #175 (`piiMode` admin side), item 14c
    (`/api/keys`, then the run book points to it), item 17's smoke loader (then stream A's `evaluation-smoke`).
