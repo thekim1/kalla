@@ -23,7 +23,8 @@ public sealed record EvaluationQuestionRow(Guid Id, EvaluationLayer Layer, strin
 
 /// <summary>
 /// The collection under evaluation: its level, department, profile and resolved retrieval settings (knowledge design
-/// §12.1), and its set's active questions, <c>human</c> first (processing design §13.4).
+/// §12.1), its live sources' compiled <c>demote</c> patterns (§6.5), and its set's active questions, <c>human</c> first
+/// (processing design §13.4).
 /// </summary>
 public sealed record EvaluationTarget(
     Guid CollectionId,
@@ -33,15 +34,17 @@ public sealed record EvaluationTarget(
     EmbeddingProfileRecord Profile,
     RetrievalPlatformSettings Platform,
     RetrievalSettings Settings,
+    IReadOnlyDictionary<Guid, IReadOnlyList<DemotePattern>> Demote,
     Guid? SetId,
     IReadOnlyList<EvaluationQuestionRow> Questions)
 {
     /// <summary>
-    /// The evaluator's scope (processing design §13.5): the one collection over its live sets with every level, under
-    /// <paramref name="settings"/> (the collection's own, or an on-demand run's candidate settings).
+    /// The evaluator's scope (processing design §13.5): the one collection over its live sets with every level and its
+    /// sources' demote patterns, under <paramref name="settings"/> (the collection's own, or an on-demand run's candidate
+    /// settings; demote is source config, so candidate settings keep it).
     /// </summary>
     public SearchScope Scope(RetrievalSettings settings) =>
-        new(Profile.Id, Profile.Dimensions, [new CollectionInScope(CollectionId, settings)], Domain.Classification.All, Platform);
+        new(Profile.Id, Profile.Dimensions, [new CollectionInScope(CollectionId, settings)], Domain.Classification.All, Platform) { Demote = Demote };
 }
 
 /// <summary>A finished earlier run to compare with: its id and, per answerable question, the rank it found (null: not found).</summary>
@@ -63,6 +66,13 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
                (SELECT s."Id" FROM content."EvaluationSets" s WHERE s."CollectionId" = c."Id")
         FROM config."Collections" c
         WHERE c."Id" = $1 AND c."DeletedAt" IS NULL
+        """;
+
+    // As the API's policy snapshot reads them (PolicySnapshotStore): live sources whose settings have a demote list.
+    private const string DemoteSql = """
+        SELECT "Id", "DemoteRules"::text FROM config."Sources"
+        WHERE "CollectionId" = $1 AND "DeletedAt" IS NULL AND "DemoteRules" IS NOT NULL
+        ORDER BY "Id"
         """;
 
     // Human first (reports lead with the gold set), then in creation order (UUIDv7 ids): a fixed order per set.
@@ -150,8 +160,9 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
             throw new FormatException("The retrieval settings do not resolve.", e);
         }
 
+        var demote = await DemoteAsync(collectionId, cancellationToken);
         var questions = setId is { } set ? await QuestionsAsync(set, cancellationToken) : [];
-        return new EvaluationTarget(collectionId, classification, department, publishedAt, profile, platform, settings, setId, questions);
+        return new EvaluationTarget(collectionId, classification, department, publishedAt, profile, platform, settings, demote, setId, questions);
     }
 
     /// <summary>The last publish report or nightly run of the set that started before <paramref name="before"/>, with its ranks.</summary>
@@ -243,6 +254,24 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
         }
 
         return await CommandCommit.CompleteAsync(commit, queue, job, identity, result, cancellationToken);
+    }
+
+    /// <summary>The collection's sources with at least one demote pattern that compiles (<see cref="DemoteAdjuster.Compile"/>).</summary>
+    private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<DemotePattern>>> DemoteAsync(Guid collectionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(DemoteSql, connection) { Parameters = { Db.P(collectionId) } };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var bySource = new Dictionary<Guid, IReadOnlyList<DemotePattern>>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (DemoteAdjuster.Compile(reader.GetString(1)) is { Count: > 0 } patterns)
+            {
+                bySource[reader.GetGuid(0)] = patterns;
+            }
+        }
+
+        return bySource;
     }
 
     private async Task<IReadOnlyList<EvaluationQuestionRow>> QuestionsAsync(Guid setId, CancellationToken cancellationToken)
