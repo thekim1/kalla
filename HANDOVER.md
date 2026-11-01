@@ -148,7 +148,7 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - The milestone-1 AppHost is **stopped** (and its leftover containers removed). Its user secrets still hold the
   milestone switches (`docs/p1a-local-run.md` §4.6 removes them; keep them for the pilot set-up). After #172 the first
   start begins with an empty database.
-- Worktrees: `../rag-main` (detached) only. No agent running, no stream-A PR open.
+- Worktrees: none. No agent running, no stream-A PR open.
 - Open from B: #223 (chat schema), approved with a condition: the chat metadata retention lands in the same PR as the
   conversation writer (P1b item 10).
 
