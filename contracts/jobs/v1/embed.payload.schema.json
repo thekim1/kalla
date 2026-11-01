@@ -33,6 +33,14 @@
       "description": "Cache key (hex) of the embed stage's input (engine design §3.3).",
       "pattern": "^[0-9a-f]{64}$"
     },
+    "parseRuleKey": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ChunkSets.ParseRuleKey of the set to write (engine design §14, #134): the admin parse rules the parse took (rule:…) and, for a forced reprocess, its execution (force:…); null: neither.",
+      "maxLength": 300
+    },
     "minBuild": {
       "type": [
         "string",

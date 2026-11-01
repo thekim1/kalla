@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Npgsql;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
@@ -124,11 +125,16 @@ internal static class ParseRuleRows
 /// live parser-route documents that the rule's old or new scope matches, at the rule's level and in its department. The
 /// match is the catalog's own (<see cref="AdminParseRuleSet.Candidates"/>): domain, path glob and media type, never the text
 /// pattern, because a rule with a text pattern is a candidate of every document in its scope and so re-keys all of them.
-/// The reprocess run's <c>EnsureCurrent</c> then re-parses only the documents whose parse key changed. The syncs wait
-/// <see cref="ParseRuleCatalog.MaxAge"/>, so every instance's rule cache has expired before they parse.
+/// The reprocess run's <c>EnsureCurrent</c> then re-processes the documents whose wanted chunk set changed with the rule
+/// (the rule part of its salt, <see cref="ChunkSetSalt"/>); a re-parse whose chunks come out as before re-keys the live set.
+/// The change moves the config version (<c>TR_ParseProfiles_ConfigChanged</c>), and the syncs wait <see cref="Settle"/>, a few
+/// of the config monitor's polls, so the instance that runs them has applied that version (and so read the rules again).
 /// </summary>
 internal static class ParseRuleFollowUp
 {
+    /// <summary>How long the syncs wait for every instance to apply the change's config version.</summary>
+    public static readonly TimeSpan Settle = 5 * ConfigVersionMonitor.PollInterval;
+
     private const string DocumentsSql = """
         SELECT d."SourceId", s."Classification", c."DepartmentId", d."Url", d."MediaType"
         FROM content."Documents" d
@@ -181,7 +187,7 @@ internal static class ParseRuleFollowUp
                 }))
                 {
                     DedupKey = JobDedupKeys.Sync(sourceId),
-                    Delay = ParseRuleCatalog.MaxAge,
+                    Delay = Settle,
                 });
             }
         }
