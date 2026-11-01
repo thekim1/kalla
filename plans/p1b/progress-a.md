@@ -12,7 +12,7 @@ before ticking it here.
 ## Waiting on (tick when it lands)
 - [ ] P1b ownership rules (README §2) and these briefs merged
 - [x] **L2** B's schema part 3 and freshness columns (needed for item 4's database tests) (#219; worker switched to them in PR: a/102-crawl-freshness-urlpattern)
-- [ ] **L3** B's `RetrievalEngine` with decay and `demote` (needed for item 7's temporal checks and item 25)
+- [x] **L3** B's `RetrievalEngine` with decay and `demote` (needed for item 7's temporal checks and item 25) (#241; evaluator applies source demote in PR: a/l3-eval-demote)
 - [ ] **L4** B's P1b admin endpoints (then the jobs run end to end from the admin)
 - [ ] **L6** B's chat writer and importer with their configuration names (needed for item 17)
 - [ ] **L7** B's pilot-journey E2E specs (needed for item 15's `e2e` job)
@@ -70,9 +70,11 @@ Refs: [admin §4.7](../admin/design.md), [processing §3.5, §9.5](../ingestion-
 
 ### 16. Gold-set grading script
 Refs: [weakness review §2](../weakness-review.md), [ingestion plan §7](../ingestion-worker/plan.md)
-- [ ] Script in `scripts/`: questions through the chat API as the pilot assistant → CSV (question, answer, citations, coverage)
-  (code part done: `scripts/grading/grading.py answer` tested against a fake chat API, streamed and not, #?; the run
-  against the AppHost with FakeGateway on `tests/evaluation/smoke` waits for stream B's chat API (J9) and smoke set)
+- [x] Script in `scripts/`: questions through the chat API as the pilot assistant → CSV (question, answer, citations, coverage)
+  (code: `scripts/grading/grading.py answer`, tested against a fake chat API, streamed and not; live run 2026-11-01 on
+  the local AppHost against the interim gateway: an `integration` client in `turkos`'s audience, 8 questions over the
+  200-page `/kommunochpolitik` slice → 6 answered, each citing its expected page, 2 off-topic not-found, 1.3–4.4 s per
+  answer; `plans/demo-path.md` "Result")
 - [x] Totals for the four gate measures from a graded file (#101)
 - [ ] **Hand-off L8:** issue to the user with the CSV format
 

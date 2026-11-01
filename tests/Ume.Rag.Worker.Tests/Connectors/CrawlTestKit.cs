@@ -239,7 +239,7 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
         {
             var rows = _frontier
                 .Where(kv => kv.Key.Item1 == run.SourceId && kv.Value.RunId == run.RunId && kv.Value.Host == host && kv.Value.State == FrontierState.Pending)
-                .OrderBy(kv => kv.Value.IsRemovalCheck ? FrontierRow.LegacyRemovalCheckDepth : kv.Value.Depth).ThenBy(kv => _admittedOrder[kv.Key])
+                .OrderByDescending(kv => kv.Value.RemovalCheck).ThenBy(kv => kv.Value.Depth).ThenBy(kv => _admittedOrder[kv.Key])
                 .Take(max)
                 .ToList();
             IReadOnlyList<FrontierRow> released = [.. rows.Select(kv => _frontier[kv.Key] = kv.Value with { State = FrontierState.Released })];

@@ -57,7 +57,9 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<AdminContext>();
 builder.Services.AddOptions<OrgSyncOptions>().BindConfiguration(OrgSyncOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
-builder.Services.AddHttpClient(OrganisationSync.HttpClientName);
+// The sync calls the gateway's Data API (OrgSync:BaseUrl) on its own cadence: no standard resilience handler, whose Polly
+// telemetry would log the gateway's address at Warning and Error on every retry (#265).
+builder.Services.AddHttpClient(OrganisationSync.HttpClientName).RemoveStandardResilienceHandler();
 builder.Services.AddSingleton<OrganisationSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<OrganisationSync>());
 // The gateway client of item 13: the model mirror, canary embeddings, V8's /v1/models check and the key status.

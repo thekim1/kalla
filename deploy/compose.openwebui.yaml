@@ -68,6 +68,9 @@ services:
       ENABLE_AUTOCOMPLETE_GENERATION: "false"
       ENABLE_CONTEXT_COMPACTION: "false"
       BYPASS_EMBEDDING_AND_RETRIEVAL: "true"
+      # Open WebUI adds its builtin tools to every browser chat unless a model's capabilities say otherwise, and rag-api
+      # refuses a request with tools (400 tools_not_supported).
+      DEFAULT_MODEL_METADATA: '{"capabilities":{"builtin_tools":false}}'
       ENABLE_WEB_SEARCH: "false"
       ENABLE_CODE_EXECUTION: "false"
       ENABLE_CODE_INTERPRETER: "false"

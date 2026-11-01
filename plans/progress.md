@@ -50,8 +50,13 @@ exists (M2 triggered, user 2026-10-30; `p1/README.md` §1).
       realm additions (J11)
 - [ ] Pilot gold set written with the department; three-way run recorded; not-found thresholds calibrated
       ([`weakness-review.md`](weakness-review.md) §2; `to-verify.md` #143, #168, #169)
-- [ ] **Demo first** (user, 2026-11-01): crawl a slice of umea.se, retrieve, and a cited answer in Open WebUI, by the five steps of
-      [`demo-path.md`](demo-path.md); the gold set, evaluation, capacity and the other details follow the demo
+- [x] **Demo first** (user, 2026-11-01): crawl a slice of umea.se, retrieve, and a cited answer in Open WebUI, by the five steps of
+      [`demo-path.md`](demo-path.md); the gold set, evaluation, capacity and the other details follow the demo. **Done
+      2026-11-01 (session 17):** 200-page slice of `/kommunochpolitik` (193 added, 0 failed, 2 min 20 s), `/v1/retrieve`
+      right page first, `turkos` answered in Open WebUI with `url_citation` annotations to the crawled page, over the
+      interim gateway at `Eu` on `gpt-6.1-sol` (`claude-opus-5-5` refuses `temperature`: see `demo-path.md`)
+- [ ] **Admin UI focus** (user, 2026-11-01): the demo's set-up from the browser first, then the rest of P1b items 11–13
+      ([`demo-path.md`](demo-path.md) "Next focus: the admin UI"; stream B)
 - [ ] **P1a done:** first cited answer in Open WebUI, shown locally with the pilot member present
 
 Owned by the user, outside the streams ([`p1/README.md`](p1/README.md) §7):

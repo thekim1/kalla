@@ -111,6 +111,7 @@ env_is "$owui" open-webui ENABLE_LOGIN_FORM false
 env_is "$owui" open-webui ENABLE_PASSWORD_AUTH false
 env_is "$owui" open-webui DEFAULT_USER_ROLE user
 env_is "$owui" open-webui ENABLE_PERSISTENT_CONFIG false
+env_is "$owui" open-webui DEFAULT_MODEL_METADATA '{"capabilities":{"builtin_tools":false}}'
 env_is "$(UME_RAG_OPENWEBUI_PASSWORD_AUTH=true render compose.openwebui.yaml)" open-webui ENABLE_PASSWORD_AUTH true
 
 # --- init-deployment.sh: the feedback service account ---------------------------------------------------------------
