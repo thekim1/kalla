@@ -382,18 +382,32 @@ if (File.Exists(Path.Combine(builder.AppHostDirectory, "..", "admin-ui", "packag
 }
 
 // Open WebUI against rag-api (P1a item 15; chat design §4.3), OpenWebUi:Enabled (default true) in run mode. It connects with
-// the seeded dev client "Open WebUI (dev)" (DevSeeder.DevClientId, key ume-rag-sk- + dev-key) and forwards each user as an
-// HS256 JWT that rag-api checks (identity §5.2). Local accounts sign in (the first is Open WebUI's admin); the pilot signs in
+// the seeded dev client "Open WebUI (dev)" (DevSeeder.DevClientId, key ume-rag-sk- + dev-key), or, when OpenWebUi:ClientId is
+// set, with that client (one made through the admin API, e.g. the pilot stack run with Seed:Enabled=false, #236) and its
+// key from the secret parameter openwebui-api-key (user secrets Parameters:openwebui-api-key, the whole ume-rag-sk- key).
+// It forwards each user as an HS256 JWT that rag-api checks (identity §5.2). Local accounts sign in (the first is Open WebUI's admin); the pilot signs in
 // over OIDC through deploy/compose.openwebui.yaml (item 18). Same pin as the Compose file; update both together.
 const string OpenWebUiImage = "ghcr.io/open-webui/open-webui";
 const string OpenWebUiTag = "v0.12.3";
 const string OpenWebUiDigest = "a537bbe1e6b428820f52ed4a029d7fff97062e24d5cf32c365fba36fd0542def";
 const string DevOpenWebUiClientId = "01929b6e-0000-7000-8000-0000000c11e7"; // DevSeeder.DevClientId
-if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWebUi:Enabled", true) && builder.Configuration.GetValue("Seed:Enabled", true))
+var openWebUiClientId = builder.Configuration["OpenWebUi:ClientId"];
+if (openWebUiClientId is { Length: > 0 } && !Guid.TryParse(openWebUiClientId, out _))
+{
+    throw new InvalidOperationException("OpenWebUi:ClientId: the id of an open-webui client (POST /api/clients), a uuid.");
+}
+
+if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWebUi:Enabled", true)
+    && (openWebUiClientId is { Length: > 0 } || builder.Configuration.GetValue("Seed:Enabled", true)))
 {
     var openWebUiJwtSecret = Secret("openwebui-jwt-secret", 48);
     var openWebUiSecretKey = Secret("openwebui-secret-key", 48);
-    api.WithEnvironment("OpenWebUi__ClientId", DevOpenWebUiClientId).WithEnvironment("OpenWebUi__JwtSecret", openWebUiJwtSecret);
+    // A configured client wins over the seeded one; its key is never generated, only read from the user secrets.
+    var openWebUiApiKey = openWebUiClientId is { Length: > 0 }
+        ? ReferenceExpression.Create($"{builder.AddParameter("openwebui-api-key", secret: true)}")
+        : ReferenceExpression.Create($"ume-rag-sk-{devKey}");
+    api.WithEnvironment("OpenWebUi__ClientId", openWebUiClientId is { Length: > 0 } ? openWebUiClientId : DevOpenWebUiClientId)
+        .WithEnvironment("OpenWebUi__JwtSecret", openWebUiJwtSecret);
     builder.AddContainer("open-webui", OpenWebUiImage, OpenWebUiTag).WithImageSHA256(OpenWebUiDigest)
         .WithHttpEndpoint(targetPort: 8080, name: "http")
         .WithVolume("ume-rag-openwebui-data", "/app/backend/data")
@@ -406,7 +420,7 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
         .WithEnvironment("ENABLE_OPENAI_API", "true")
         // rag-api's HTTP endpoint: the container does not trust the AppHost's development certificate.
         .WithEnvironment("OPENAI_API_BASE_URLS", ReferenceExpression.Create($"{api.GetEndpoint("http")}/v1"))
-        .WithEnvironment("OPENAI_API_KEYS", ReferenceExpression.Create($"ume-rag-sk-{devKey}"))
+        .WithEnvironment("OPENAI_API_KEYS", openWebUiApiKey)
         .WithEnvironment("OPENAI_API_CONFIGS", """{"0":{"headers":{"X-Rag-Owui-Message-Id":"{{MESSAGE_ID}}","X-Rag-Owui-User-Message-Id":"{{USER_MESSAGE_ID}}"}}}""")
         .WithEnvironment("ENABLE_FORWARD_USER_INFO_HEADERS", "true")
         .WithEnvironment("FORWARD_USER_INFO_HEADER_JWT_SECRET", openWebUiJwtSecret)

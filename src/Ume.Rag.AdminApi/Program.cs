@@ -113,6 +113,7 @@ api.MapAssistants();
 api.MapSources();
 api.MapRuns();
 api.MapPiiReport();
+api.MapDocuments();
 api.MapAudit();
 api.MapExplainAccess();
 api.MapUploads();

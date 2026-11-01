@@ -132,6 +132,21 @@
       "message": "The run has already ended ({state})."
     },
     {
+      "code": "reason_too_short",
+      "status": 400,
+      "message": "The reason must be at least {min} characters."
+    },
+    {
+      "code": "deletion_superseded",
+      "status": 409,
+      "message": "This deletion proposal is no longer current. Open the source\u0027s latest run."
+    },
+    {
+      "code": "pii_not_flagged",
+      "status": 409,
+      "message": "The document is not flagged for personal data."
+    },
+    {
       "code": "not_an_upload_source",
       "status": 409,
       "message": "Files can only be uploaded to an upload source."
