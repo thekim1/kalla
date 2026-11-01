@@ -46,7 +46,7 @@ public static class ChatEndpoints
             .WithName("ListModels").WithSummary("The assistants this caller may use, as OpenAI models");
 
         chat.MapPost("/chat/completions", async (HttpContext http, ChatCallers callers, ChatService service, ChatRateLimiter limiter, ConversationIds ids,
-                ConversationWriter writer, IPolicySnapshotSource snapshots, CancellationToken ct) =>
+                ConversationWriter writer, IPolicySnapshotSource snapshots, KnowledgeSecurity security, CancellationToken ct) =>
             await OpenAiAsync(http, async () =>
             {
                 var who = await callers.AuthenticateAsync(http.Request, userRequired: true, ct);
@@ -65,7 +65,16 @@ public static class ChatEndpoints
                 // §11.1: an issued id is verified before any model call, bound to the asked assistant (#266); an unknown model is
                 // the plan's 404, so Guid.Empty only ever signs or verifies an id that is never used.
                 var assistantId = snapshots.Current.Assistants.Values.FirstOrDefault(a => string.Equals(a.Slug, parsed.Model, StringComparison.Ordinal))?.Id ?? Guid.Empty;
-                var conversation = ConversationKey(http, who, assistantId, ids);
+                (Guid? Issued, string? External) conversation;
+                try
+                {
+                    conversation = ConversationKey(http, who, assistantId, ids);
+                }
+                catch (ChatException refused) when (refused.Code == "conversation_not_found")
+                {
+                    security.ConversationNotOwned(http, who, http.Request.Headers[ConversationIds.HeaderName].ToString(), "Chat", snapshots.Current.Version);
+                    throw;
+                }
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 ValueTask Enqueue(ChatPlan plan, IReadOnlyList<PromptSource> cited, int prompt, int completion) =>
                     writer.EnqueueAsync(Turn(http, plan, who, conversation, cited, prompt, completion, (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));

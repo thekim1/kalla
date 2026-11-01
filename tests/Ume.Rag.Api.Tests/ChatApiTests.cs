@@ -2,9 +2,11 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Answering.Chat;
 using Ume.Rag.Domain.Access;
@@ -515,5 +517,37 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         followUp.StatusCode.ShouldBe(HttpStatusCode.OK, await followUp.Content.ReadAsStringAsync(Ct));
         (await followUp.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()!
             .ShouldStartWith("Testsvar på");
+    }
+
+    [Fact]
+    public async Task A_conversation_id_refused_for_another_client_writes_one_5002_per_refusal()
+    {
+        // #284: chat with a foreign issued id, the detail and the delete of another client's conversation each write a 5002
+        // with reason conversation_not_owned, naming the conversation id and nothing of its content.
+        var logs = new CapturingLoggerProvider();
+        await using var api = Host().WithWebHostBuilder(web => web.ConfigureLogging(l => l.AddProvider(logs)));
+        using var owner = Client(api, db.IntegrationKey);
+        using var other = Client(api, db.InternalKey);
+        using var first = await Ask(owner, "Behöver jag bygglov för en altan högre än 1,2 meter?");
+        var issued = first.Headers.GetValues("x-rag-conversation-id").Single();
+        var conversationId = Guid.ParseExact(issued.Split('.')[1], "N");
+        await api.Services.GetRequiredService<ConversationWriter>().FlushAsync(Ct);
+
+        using (var turn = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
+               {
+                   Content = JsonContent.Create(new { model = "bygg", messages = new[] { new { role = "user", content = "Och för ett plank?" } } }),
+               })
+        {
+            turn.Headers.Add("x-rag-conversation-id", issued);
+            (await other.SendAsync(turn, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        }
+
+        (await other.GetAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await other.DeleteAsync($"/v1/conversations/{conversationId}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        var events = logs.Entries.Where(e => e.Category == Ume.Rag.Infrastructure.Security.SecurityEvents.Category && e.EventId.Id == 5002).ToList();
+        events.Count(e => e.Message.Contains("conversation_not_owned", StringComparison.Ordinal)).ShouldBe(3);
+        events.ShouldAllBe(e => e.Message.Contains(conversationId.ToString("D"), StringComparison.Ordinal));
+        string.Join('\n', events.Select(e => e.Message)).ShouldNotContain("plank");
     }
 }

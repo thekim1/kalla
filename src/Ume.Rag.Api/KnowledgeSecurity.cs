@@ -219,6 +219,29 @@ public sealed partial class KnowledgeSecurity
     }
 
     /// <summary>
+    /// 5002 with reason <c>conversation_not_owned</c> (chat design §11.1, identity design; #284): a conversation id refused
+    /// for this subject, on a chat turn, the conversation detail or a delete. The resource id is the conversation's id when
+    /// the presented value names one, never content; throttled like every denial, per action.
+    /// </summary>
+    public void ConversationNotOwned(HttpContext http, RagPrincipal who, string presented, string action, long configVersion)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(who);
+        ArgumentNullException.ThrowIfNull(presented);
+        var id = (presented.StartsWith(ConversationIds.Prefix, StringComparison.Ordinal) ? ConversationIds.Parse(presented) : Guid.TryParse(presented, out var g) ? g : null)
+            ?.ToString("D") ?? "invalid";
+        const string reason = "conversation_not_owned";
+        var key = string.Join('|', "deny", who.Kind.ToString(), who.SubjectId, reason, "conversation", id, action);
+        if (!Due(key, out var count))
+        {
+            return;
+        }
+
+        SecurityEvents.AccessDenied(_events, reason, action, "conversation", id, who.Kind.ToString(), who.SubjectId, who.Client.Id, who.Key?.Id, configVersion,
+            AddressOf(http), count);
+    }
+
+    /// <summary>
     /// A download's outcome (<c>ok</c>, <c>integrity</c>, <c>not_found</c>, <c>not_served</c>, <c>unavailable</c>,
     /// <c>missing</c>) and credential kind.
     /// </summary>
