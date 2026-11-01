@@ -48,6 +48,11 @@ gateway's conventions for names, config keys, claims, key format and security ev
   **Suspended during development** (user, 2026-10-31): until the first production deployment, newer releases may be
   pinned; exact versions and digests are still required, and the rule applies again before go-live.
   Match the gateway's pin when it has one.
+- **No backward compatibility before production** (user, 2026-11-01): until the user says explicitly that the platform
+  runs in production, any change is allowed. Schemas, migrations, contracts, job payloads, APIs and configuration keys
+  may change in one step: no expand/contract steps, no fallbacks for old rows or payloads, no compatibility shims
+  (existing ones may go). Rebuild or re-crawl development data instead. The gateway's real API still binds, and the PR
+  still lists the change and its hand-offs.
 - **Verify before relying:** check a library, API or site claim against the real source. Download packages into a
   scratch directory and read them there without executing them.
 - **Language:** code, comments, docs and commits are in English. Admin UI text is Swedish and lives only in

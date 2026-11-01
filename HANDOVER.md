@@ -227,7 +227,7 @@ or reveal through the admin API (`POST /api/keys/{id}/reveal`, audited).
    `dev-embedding` profile) → the first cited answer from `turkos` locally (item 22 rehearsal); then the gold set with
    DoIT (item 21). The rest of umea.se (other sections, `/download/` PDFs ≈ 8,700; `maxPages` ≥ 20,000) when the user
    wants it. Item 20 still lists a pilot URL list and one upload (user: skip until DoIT names them).
-4. **Stream-A code left:** drop the `-1` removal-check fallback once B migrates before its `Depth >= 0` CHECK (#102);
+4. **Stream-A code left:** drop the `-1` removal-check fallback now (no backward compatibility before production, Decisions 2026-11-01; B may add its `Depth >= 0` CHECK without a data migration, #102);
    an evaluator == API contract test on a collection *with* `recency` (after L3, #235 note); P1b item 15 `e2e` (after
    L7); item 17 importer settings (after L6); item 19 pin review before go-live (incl. condense `Eu` → `OnPrem`, #204);
    small: Aspire 13.6.1 → 13.6.4 (shared props + B's AppHost); a package audit workflow.

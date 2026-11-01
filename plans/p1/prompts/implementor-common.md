@@ -20,6 +20,7 @@ your own git worktree (given in your task). The main repo is `/home/crotalus/res
 - Code, comments, docs in English. Keep comments short and factual.
 - Respect the "Deferred or removed" sections of each design: don't build P2 items.
 - Package pins: avoid new packages; if unavoidable, exact version via `Directory.Packages.props` (shared — tell me instead of editing).
+- **No backward compatibility before production** (Decisions table, 2026-11-01): change schemas, contracts, payloads and APIs in one step; don't add fallbacks for old rows/payloads or compatibility shims (remove existing ones you touch). Development data is rebuilt or re-crawled.
 - If an approach fails 3 times, stop and switch strategy; if blocked, stop and report rather than inventing scope.
 
 ## Proofs you must deliver
