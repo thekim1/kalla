@@ -70,8 +70,8 @@ Refs: [chat §3–§10, §15.1, §18](../chat-api/design.md), [identity §5](../
 
 ## 8. Realm additions (#16)
 Refs: [identity §11](../identity/design.md), Decisions table "P1 pilot sign-in", issue #47
-- [ ] `deploy/keycloak/` additions: clients, `rag-*` roles, `departmentCodes`, full scope off, no test users, password policy, brute force, admin OTP
-- [ ] **Done:** imports next to a minimal `ume` realm; sign-in test; #83 rechecked
+- [x] `deploy/keycloak/` additions: clients, `rag-*` roles, `departmentCodes`, full scope off, no test users, password policy, brute force, admin OTP (this PR: `rag-additions.json`, the separable `rag-realm-settings.json`, `apply-additions.py`)
+- [x] **Done:** imports next to a minimal `ume` realm; sign-in test; #83 rechecked (this PR: `RealmAdditionsTests`; #176, #177, #83 recorded)
 - [ ] **Hand-off J8:** issue to the user for the gateway session
 
 ## 9. Evaluation smoke (#17, your part)
