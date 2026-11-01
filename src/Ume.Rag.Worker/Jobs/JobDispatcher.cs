@@ -216,8 +216,8 @@ public sealed partial class JobDispatcher(
         }
         catch (Exception ex)
         {
-            // Type name only: an exception message may carry content (engine design §7.3, repo-and-deployment §9).
-            LogJobException(logger, entry.Job.Id, entry.Job.Class, ex.GetType().FullName ?? ex.GetType().Name);
+            // Types and throw site only: an exception message may carry content (engine design §7.3, repo-and-deployment §9).
+            LogJobException(logger, entry.Job.Id, entry.Job.Class, ExceptionSummary.Types(ex), ExceptionSummary.Site(ex));
             return new JobResult.TransientError(ExceptionCode);
         }
     }
@@ -360,8 +360,8 @@ public sealed partial class JobDispatcher(
     [LoggerMessage(LogLevel.Information, "Stopping: waiting up to {GraceSeconds} s for {Count} running jobs")]
     private static partial void LogDraining(ILogger logger, int count, int graceSeconds);
 
-    [LoggerMessage(LogLevel.Error, "Job {JobId} ({JobClass}) threw {ExceptionType}")]
-    private static partial void LogJobException(ILogger logger, Guid jobId, string jobClass, string exceptionType);
+    [LoggerMessage(LogLevel.Error, "Job {JobId} ({JobClass}) threw {ExceptionType} at {ThrowSite}")]
+    private static partial void LogJobException(ILogger logger, Guid jobId, string jobClass, string exceptionType, string throwSite);
 
     [LoggerMessage(LogLevel.Debug, "Job {JobId} ({JobClass}) succeeded")]
     private static partial void LogSucceeded(ILogger logger, Guid jobId, string jobClass);
