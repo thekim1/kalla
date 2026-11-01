@@ -119,8 +119,9 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
             Ume.Rag.Pipelines.Schemas.ContractSchemas.Validator(typeof(Ume.Rag.Pipelines.Jobs.EditEvalQuestionCommand)).Validate(payload.RootElement).ShouldBeEmpty();
         }
 
-        // Runs: one eval on-demand job with the three variants; a second request while it is queued answers it.
-        using (var run = await admin.PostAsJsonAsync($"{path}/run", new { variants = new[] { "Hybrid", "Vector", "HybridNoDecompounder" } }, Ct))
+        // Runs: one eval on-demand job with the three variants (the contract's names; the enum names are read too); a second
+        // request while it is queued answers it.
+        using (var run = await admin.PostAsJsonAsync($"{path}/run", new { variants = new[] { "hybrid", "Vector", "hybrid-no-decompounder" } }, Ct))
         {
             run.StatusCode.ShouldBe(HttpStatusCode.Accepted, await run.Content.ReadAsStringAsync(Ct));
             (await Json(run)).GetProperty("alreadyQueued").GetBoolean().ShouldBeFalse();

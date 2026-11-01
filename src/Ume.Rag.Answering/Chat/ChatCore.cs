@@ -173,7 +173,7 @@ public static class ChatRequestParser
 
 /// <summary>An assistant's chat settings from its published <c>QuerySteps</c> (chat design §15.2), with the defaults.</summary>
 public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int HistoryMaxTokens, int ContextTokens, int MaxOutputTokens, double Temperature,
-    bool AlwaysSwedish)
+    bool AlwaysSwedish, bool CondenseEnabled = true)
 {
     public static AssistantChatSettings Default { get; } = new(10, 10, 4000, 16_384, 1024, 0.2, false);
 
@@ -188,7 +188,8 @@ public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int
             Int(json?["answer"]?["contextTokens"]) ?? d.ContextTokens,
             Int(json?["answer"]?["maxOutputTokens"]) ?? d.MaxOutputTokens,
             json?["answer"]?["temperature"] is JsonValue t && t.GetValueKind() == JsonValueKind.Number ? t.GetValue<double>() : d.Temperature,
-            json?["answer"]?["language"] is JsonValue l && l.GetValueKind() == JsonValueKind.String && l.GetValue<string>() == "sv");
+            json?["answer"]?["language"] is JsonValue l && l.GetValueKind() == JsonValueKind.String && l.GetValue<string>() == "sv",
+            json?["condense"]?["enabled"] is not JsonValue c || c.GetValueKind() != JsonValueKind.False);
     }
 
     private static int? Int(JsonNode? node) => node is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<int>(out var i) ? i : null;
@@ -270,8 +271,10 @@ public static partial class PromptBuilder
     public static int Tokens(string text) => ((text?.Length ?? 0) + CharsPerToken - 1) / CharsPerToken + 4;
 
     public static BuiltPrompt Build(string assistantName, string systemPrompt, string language, bool alwaysSwedish, string question,
-        IReadOnlyList<ChatMessageIn> history, IReadOnlyList<RetrievedChunk>? results, AssistantChatSettings settings, bool degraded = false)
+        IReadOnlyList<ChatMessageIn> history, IReadOnlyList<RetrievedChunk>? results, AssistantChatSettings settings, bool degraded = false,
+        IReadOnlyList<SectionText>? sections = null)
     {
+        var sectionText = sections?.ToDictionary(x => x.Id) ?? [];
         ArgumentNullException.ThrowIfNull(settings);
         var system = Frame(assistantName, results is not null, alwaysSwedish, degraded) +
             (string.IsNullOrWhiteSpace(systemPrompt) ? "" : "\n\n" + systemPrompt.Trim()) +
@@ -295,7 +298,7 @@ public static partial class PromptBuilder
             {
                 var number = sources.Count + 1;
                 var chunks = document.OrderBy(r => r.Rank).ToList();
-                var block = SourceBlock(number, chunks);
+                var block = SourceBlock(number, chunks, sectionText);
                 var cost = Tokens(block);
                 if (used + cost > budget)
                 {
@@ -366,7 +369,8 @@ public static partial class PromptBuilder
         return string.Join('\n', lines);
     }
 
-    private static string SourceBlock(int number, List<RetrievedChunk> chunks)
+    /// <summary>One document's block: its chunks' sections (knowledge §9, expanded once each) or the chunk texts.</summary>
+    private static string SourceBlock(int number, List<RetrievedChunk> chunks, Dictionary<int, SectionText> sections)
     {
         var first = chunks[0];
         var attributes = new StringBuilder($"n=\"{number}\" title=\"{Attribute(first.Citation.Title, 200)}\"");
@@ -388,7 +392,9 @@ public static partial class PromptBuilder
             attributes.Append(CultureInfo.InvariantCulture, $" modified=\"{modified:yyyy-MM-dd}\"");
         }
 
-        return $"<source {attributes}>\n{string.Join("\n…\n", chunks.Select(c => Neutralise(c.Text)))}\n</source>\n";
+        var texts = chunks.Select(c => c.SectionRef is { } id && sections.TryGetValue(id, out var section) ? (Key: "s" + id, section.Text) : (Key: "c" + c.ChunkId, c.Text))
+            .DistinctBy(t => t.Key).Select(t => Neutralise(t.Text));
+        return $"<source {attributes}>\n{string.Join("\n…\n", texts)}\n</source>\n";
     }
 
     private static string Attribute(string? value, int max)
@@ -538,9 +544,15 @@ public static class FixedTexts
     public const string CaveatSv = "*Sökningen fungerar just nu med begränsad precision; svaret bygger på en enklare textsökning.*";
     public const string CaveatEn = "*Search is running with reduced precision right now; this answer is based on a simpler text search.*";
 
-    public static string NotFound(string? assistantNotFound, string? platformChat, string language) =>
-        Render(Text(assistantNotFound, language) ?? Text(Section(platformChat, "notFound"), language)
-            ?? (language == LanguageGuess.English ? DefaultNotFoundEn : DefaultNotFoundSv), assistantNotFound);
+    /// <summary>
+    /// The assistant's text in the language, else <c>Settings.Chat.notFound</c>'s (<paramref name="platformNotFound"/>), else the
+    /// built-in; the assistant's links, else the platform's.
+    /// </summary>
+    public static string NotFound(string? assistantNotFound, string? platformNotFound, string language) =>
+        Render(Text(assistantNotFound, language) ?? Text(platformNotFound, language) ?? (language == LanguageGuess.English ? DefaultNotFoundEn : DefaultNotFoundSv),
+            HasLinks(assistantNotFound) ? assistantNotFound : platformNotFound);
+
+    private static bool HasLinks(string? notFound) => Parse(notFound)?["links"] is JsonArray { Count: > 0 };
 
     public static string Unavailable(string? assistantNotFound, string language) =>
         Render(language == LanguageGuess.English ? UnavailableEn : UnavailableSv, assistantNotFound);
@@ -554,8 +566,6 @@ public static class FixedTexts
 
     private static string? Text(string? json, string language) =>
         Parse(json)?[language] is JsonValue v && v.GetValueKind() == JsonValueKind.String && v.GetValue<string>() is { Length: > 0 } text ? text : null;
-
-    private static string? Section(string? json, string name) => Parse(json)?[name]?.ToJsonString();
 
     private static JsonObject? Parse(string? json) => string.IsNullOrWhiteSpace(json) ? null : JsonNode.Parse(json) as JsonObject;
 }

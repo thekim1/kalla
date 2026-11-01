@@ -60,7 +60,7 @@ public static class ChatEndpoints
                 }
 
                 var parsed = ChatRequestParser.Parse(body);
-                limiter.Check(who); // §4.1 step 4: per user and minute, before any model call
+                limiter.Check(who, service.Platform.MessagesPerMinutePerUser); // §4.1 step 4: per user and minute, before any model call
                 if (!parsed.Stream)
                 {
                     return Json(await service.CompleteAsync(who, parsed, ct));
