@@ -40,11 +40,16 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         string[] evaluationWrites = ["content.EvaluationRuns", "content.EvaluationResults"];
         string[] servingContent = ["content.EvaluationSets", "content.EvaluationQuestions", .. evaluationWrites, "content.RetrievalStats"];
 
+        // Chat (P1b item 1, data-model §2.3): the api owns it, the admin reads it (and marks feedback reviewed, a column
+        // grant), the worker has no access.
+        string[] chat = [.. new[] { "Conversations", "DataKeys", "Messages", "MessageSources", "Feedback", "ToolCalls", "AssistantDailyTotals", "FeedbackImportState" }
+            .Select(t => "chat." + t)];
+
         // config.Sources and content.Documents are column grants for the api (below), so they are not table privileges.
-        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. apiServingConfig, "content.ChunkSets", "content.Chunks"], ignoreOrder: true);
-        (await PrivilegesAsync(Api, "INSERT")).ShouldBe(["config.KeyLastUse", "audit.AuditLog"], ignoreOrder: true);
-        (await PrivilegesAsync(Api, "UPDATE")).ShouldBe(["config.KeyLastUse"]);
-        (await PrivilegesAsync(Api, "DELETE")).ShouldBeEmpty();
+        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. apiServingConfig, "content.ChunkSets", "content.Chunks", .. chat], ignoreOrder: true);
+        (await PrivilegesAsync(Api, "INSERT")).ShouldBe(["config.KeyLastUse", "audit.AuditLog", .. chat], ignoreOrder: true);
+        (await PrivilegesAsync(Api, "UPDATE")).ShouldBe(["config.KeyLastUse", .. chat], ignoreOrder: true);
+        (await PrivilegesAsync(Api, "DELETE")).ShouldBe(chat, ignoreOrder: true);
 
         (await PrivilegesAsync(Admin, "SELECT")).ShouldBe(all, ignoreOrder: true);
         (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog"], ignoreOrder: true);
@@ -60,7 +65,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
 
         // Column grants exist only where data-model §1.2 lists columns: the api's reads of Sources and Documents.
         (await ColumnPrivilegesAsync(Api)).ShouldBe([.. ApiSourceColumns.Select(c => "config.Sources." + c), .. ApiDocumentColumns.Select(c => "content.Documents." + c)], ignoreOrder: true);
-        (await ColumnPrivilegesAsync(Admin)).ShouldBeEmpty();
+        (await ColumnPrivilegesAsync(Admin)).ShouldBe(["chat.Feedback.ReviewState:UPDATE"]);
         (await ColumnPrivilegesAsync(Worker)).ShouldBeEmpty();
     }
 

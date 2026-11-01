@@ -284,6 +284,81 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.AssistantDailyTotal", b =>
+                {
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("AssistantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("AgentLimitHits")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Cancelled")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Conversations")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("CostUsd")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<int>("Degraded")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Errors")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("InputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Messages")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NotFound")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("OutputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("ThumbsDown")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ThumbsUp")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ToolCalls")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ToolErrors")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Unavailable")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UncitedAnswers")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Day", "AssistantId", "ClientId", "Classification");
+
+                    b.ToTable("AssistantDailyTotals", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_AssistantDailyTotals_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.AssistantVersion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -944,6 +1019,85 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Conversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssistantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalChatId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("HistoryMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("LastMessageAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RetentionDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubjectId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SubjectKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<byte[]>("TitleCiphertext")
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid?>("TitleDataKeyId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("TitleDataKeyId");
+
+                    b.HasIndex("SubjectId", "LastMessageAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex("ClientId", "SubjectId", "ExternalChatId", "AssistantId")
+                        .IsUnique();
+
+                    b.ToTable("Conversations", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_Conversations_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Conversations_HistoryMode", "\"HistoryMode\" IN ('none')");
+
+                            t.HasCheckConstraint("CK_Conversations_RetentionDays", "\"RetentionDays\" >= 0");
+
+                            t.HasCheckConstraint("CK_Conversations_SubjectKind", "\"SubjectKind\" IN ('entra-user', 'owui-user', 'anonymous', 'application')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.CrawlFrontierEntry", b =>
                 {
                     b.Property<string>("Classification")
@@ -1136,6 +1290,53 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasAnnotation("Npgsql:StorageParameter:autovacuum_vacuum_cost_limit", 2000)
                         .HasAnnotation("Npgsql:StorageParameter:autovacuum_vacuum_scale_factor", 0.02)
                         .HasAnnotation("Npgsql:StorageParameter:fillfactor", 50);
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.DataKey", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateOnly>("ExpiryMonth")
+                        .HasColumnType("date");
+
+                    b.Property<string>("KeyProvider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("MasterKeyName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("MasterKeyVersion")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<byte[]>("WrappedKey")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Classification", "ExpiryMonth")
+                        .IsUnique();
+
+                    b.ToTable("DataKeys", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_DataKeys_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
                 });
 
             modelBuilder.Entity("Ume.Rag.Domain.Entities.DataProtectionPolicy", b =>
@@ -1775,6 +1976,118 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Feedback", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("CommentCiphertext")
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("DataKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<short>("Rating")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("ReasonCategory")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ReviewState")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("open");
+
+                    b.Property<short?>("Score")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DataKeyId");
+
+                    b.HasIndex("Source", "ClientId", "ExternalId")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "MessageId", "Source" }, "IX_Feedback_MessageId_Api")
+                        .IsUnique()
+                        .HasFilter("\"Source\" = 'api'");
+
+                    b.HasIndex(new[] { "ReviewState" }, "IX_Feedback_Open")
+                        .HasFilter("\"ReviewState\" = 'open'");
+
+                    b.ToTable("Feedback", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_Feedback_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Feedback_Rating", "\"Rating\" IN (-1, 1)");
+
+                            t.HasCheckConstraint("CK_Feedback_ReviewState", "\"ReviewState\" IN ('open', 'reviewed', 'dismissed')");
+
+                            t.HasCheckConstraint("CK_Feedback_Score", "\"Score\" BETWEEN 1 AND 10");
+
+                            t.HasCheckConstraint("CK_Feedback_Source", "\"Source\" IN ('api', 'owui-import')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.FeedbackImportState", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastOutcome")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset?>("LastRunAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Unmapped")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("WatermarkUpdatedAt")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ClientId");
+
+                    b.ToTable("FeedbackImportState", "chat");
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.GatewayModel", b =>
                 {
                     b.Property<string>("Name")
@@ -1964,6 +2277,173 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.HasKey("KeyId");
 
                     b.ToTable("KeyLastUse", "config");
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Message", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssistantVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("CondenseUsed")
+                        .HasColumnType("boolean");
+
+                    b.Property<byte[]>("ContentCiphertext")
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("CostUsd")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<string>("Coverage")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("DataKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Degraded")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalMessageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("GatewayModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("GatewayRequestId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("InputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Language")
+                        .HasColumnType("char(2)");
+
+                    b.Property<int?>("LatencyMs")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ObservedResidency")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("OutputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParentMessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Seq")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TimeToFirstTokenMs")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DataKeyId");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("ConversationId", "ExternalMessageId")
+                        .IsUnique()
+                        .HasFilter("\"ExternalMessageId\" IS NOT NULL");
+
+                    b.HasIndex("ConversationId", "Seq")
+                        .IsUnique();
+
+                    b.ToTable("Messages", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_Messages_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Messages_Coverage", "\"Coverage\" IN ('ok', 'low', 'unknown', 'skipped')");
+
+                            t.HasCheckConstraint("CK_Messages_Outcome", "\"Outcome\" IN ('answered', 'not-found', 'unavailable', 'refused', 'error', 'cancelled')");
+
+                            t.HasCheckConstraint("CK_Messages_Role", "\"Role\" IN ('user', 'assistant')");
+                        });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.MessageSource", b =>
+                {
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ChunkId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DataKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<short?>("Number")
+                        .HasColumnType("smallint");
+
+                    b.Property<int?>("Page")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PageEnd")
+                        .HasColumnType("integer");
+
+                    b.Property<byte[]>("SnippetCiphertext")
+                        .HasColumnType("bytea");
+
+                    b.Property<bool>("Used")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("MessageId", "Rank");
+
+                    b.HasIndex("DataKeyId");
+
+                    b.ToTable("MessageSources", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_MessageSources_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
                 });
 
             modelBuilder.Entity("Ume.Rag.Domain.Entities.NodeManifestEntry", b =>
@@ -2841,6 +3321,82 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("Teams", "config");
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.ToolCall", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ArgumentsBytes")
+                        .HasColumnType("integer");
+
+                    b.Property<byte[]>("ArgumentsCiphertext")
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("ArgumentsHmac")
+                        .HasColumnType("bytea");
+
+                    b.Property<short>("CallIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("DataKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DefinitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("DurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int?>("ResultBytes")
+                        .HasColumnType("integer");
+
+                    b.Property<byte[]>("ResultCiphertext")
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid?>("SkillVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ToolId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToolName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("ToolServerId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DataKeyId");
+
+                    b.HasIndex("MessageId");
+
+                    b.ToTable("ToolCalls", "chat", t =>
+                        {
+                            t.HasCheckConstraint("CK_ToolCalls_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+                        });
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.Upload", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3040,6 +3596,14 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Conversation", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.DataKey", null)
+                        .WithMany()
+                        .HasForeignKey("TitleDataKeyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.EvaluationQuestion", b =>
                 {
                     b.HasOne("Ume.Rag.Domain.Entities.EvaluationSet", null)
@@ -3067,11 +3631,53 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Feedback", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.DataKey", null)
+                        .WithMany()
+                        .HasForeignKey("DataKeyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Ume.Rag.Domain.Entities.Message", null)
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Ume.Rag.Domain.Entities.KeyLastUse", b =>
                 {
                     b.HasOne("Ume.Rag.Domain.Entities.ApiKey", null)
                         .WithOne()
                         .HasForeignKey("Ume.Rag.Domain.Entities.KeyLastUse", "KeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.Message", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.Conversation", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ume.Rag.Domain.Entities.DataKey", null)
+                        .WithMany()
+                        .HasForeignKey("DataKeyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.MessageSource", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.DataKey", null)
+                        .WithMany()
+                        .HasForeignKey("DataKeyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Ume.Rag.Domain.Entities.Message", null)
+                        .WithMany()
+                        .HasForeignKey("MessageId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -3126,6 +3732,20 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.ToolCall", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.DataKey", null)
+                        .WithMany()
+                        .HasForeignKey("DataKeyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Ume.Rag.Domain.Entities.Message", null)
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Ume.Rag.Domain.Entities.WorkerNodeSupport", b =>

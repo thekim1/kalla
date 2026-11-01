@@ -78,6 +78,16 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<EvaluationResult> EvaluationResults => Set<EvaluationResult>();
     public DbSet<RetrievalStat> RetrievalStats => Set<RetrievalStat>();
 
+    // Chat, P1b (data-model §2.3): configured in Chat/ChatModel.cs.
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<DataKey> DataKeys => Set<DataKey>();
+    public DbSet<Message> Messages => Set<Message>();
+    public DbSet<MessageSource> MessageSources => Set<MessageSource>();
+    public DbSet<Feedback> Feedback => Set<Feedback>();
+    public DbSet<ToolCall> ToolCalls => Set<ToolCall>();
+    public DbSet<AssistantDailyTotal> AssistantDailyTotals => Set<AssistantDailyTotal>();
+    public DbSet<FeedbackImportState> FeedbackImportState => Set<FeedbackImportState>();
+
     /// <summary>Npgsql options every registration of the context uses (service, design time, tests).</summary>
     public static void ConfigureNpgsql(NpgsqlDbContextOptionsBuilder npgsql)
     {
@@ -287,6 +297,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
         IngestionContentModel.Configure(modelBuilder);
         ServingConfigModel.Configure(modelBuilder);
         ServingContentModel.Configure(modelBuilder);
+        Chat.ChatModel.Configure(modelBuilder);
     }
 
     /// <summary><c>CK_&lt;table&gt;_Classification</c> on a row that carries its level (data-model §2).</summary>
