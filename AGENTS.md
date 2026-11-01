@@ -6,12 +6,19 @@ This repo holds the design (`01-general-idea.md`, `plans/`, `platforms/`) and, f
 
 ## Where the truth is
 
-Read in this order. A later source overrides an earlier one only where the earlier one says so:
+Two layers, read in this order:
 
-1. `01-general-idea.md` §10 **Decisions table**. Later rows win over earlier rows.
-2. `plans/weakness-review.md`. It overrides the simplification pass and the detail documents.
-3. `plans/simplification-pass.md`. It overrides the detail documents wherever they disagree.
-4. The detail document for your area. `HANDOVER.md` maps areas to documents.
+1. `01-general-idea.md` §10 **Decisions table**. Rows with status `current` bind; a `partly superseded` row binds for
+   what its status says; a `superseded` row doesn't bind.
+2. The detail document for your area (`plans/*/design*.md`, `plans/platform/data-model.md`,
+   `plans/platform/repo-and-deployment.md`). `HANDOVER.md` maps areas to documents. It states every rule that
+   applies, in the present tense; where it and the Decisions table differ, the table wins and the document is a bug
+   to report.
+
+`plans/weakness-review.md`, `plans/simplification-pass.md`, `plans/consistency-pass.md` and most of
+`plans/performance-pass.md` are folded into the detail documents and no longer bind; they stay for the reasoning, each
+with a ledger of where every rule went. The capacity model, scaling triggers and scale tests of the performance pass
+remain binding as reference (its header says which sections).
 
 Your assignment is in `plans/p0/`:
 - the brief for your stream gives your items in order, each item's done-when criterion, and what you hand to the

@@ -33,17 +33,21 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 ## Reading order
 
-1. `01-general-idea.md` §10 **Decisions table** (later rows win). Recent rows that matter: "Code first, live testing
+1. `01-general-idea.md` §10 **Decisions table** (rows with status `current` bind; two layers: Decisions table > detail
+   document). Recent rows that matter: "Code first, live testing
    last", "7-day rule in development" (suspended until the first production deployment), "Interim gateway for P1a",
    "Pilot embedding model, U-b", "CI on the self-hosted runner for every pull request", "Merge on local evidence, then
    check main", and **"Personal data on the municipality's own published site"** (2026-11-01: `piiMode` report).
-2. `plans/weakness-review.md` (binding), then `plans/simplification-pass.md`.
+2. The passes (`plans/weakness-review.md`, `plans/simplification-pass.md`, `plans/performance-pass.md`,
+   `plans/consistency-pass.md`) are folded into the detail documents (2026-11-01) and don't bind; read them only for the
+   reasoning. Each ends with a ledger: every rule, where it went.
 3. `plans/p1/README.md` §1a, §3 (P1a checklist, binding done-when), §4 (hand-offs J1–J15), "Milestone 1 result";
    `plans/p1b/README.md` (items, hand-offs L1–L12, §7 settled options, **O7 open**).
 4. Progress: `plans/progress.md`, `plans/p1/progress-{a,b}.md`, `plans/p1b/progress-{a,b}.md`; results
    `plans/p1/results-{a,b}.md`.
-5. The detail document for the area (`plans/*/design*.md`; map in `plans/README.md`). Deviations up to #156 are folded
-   in; **#159 and later are not** (see Next step 3).
+5. The detail document for the area (`plans/*/design*.md`; map in `plans/README.md`). Written in the present tense,
+   passes folded (2026-11-01); the deviations up to #226 and #228–#243 are in. **Not yet in:** stream B's merged P1b
+   items 9–10 (#254–#262) and the later PRs (design sync, Next step 3).
 
 ## How we work (user preferences, binding)
 
