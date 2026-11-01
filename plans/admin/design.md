@@ -466,7 +466,7 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 | `GET/PUT /api/settings/{section}` (`network`, `retention`, `deletion-guard`, `crawl`, `evaluation`, `retrieval`, `chat`, `pii`, `worker`; `tools` from P2) | Admin | sections of `config."Settings"`; `network` holds `TrustedProxies` (data-model §2.1), as on the gateway's settings page; one `version` (the singleton's `xmin`) shared by all sections, so a save in one section makes a concurrent save in another answer `concurrent_change` |
 | `GET/PUT /api/data-protection/{level}` | Read / Admin | V29; key service status read-only; allowed history modes `none` only and the shredding switch off until A1 (weakness review §4) |
 | `GET/PUT /api/embedding-profiles…` | Read / Admin | P1 read-only; changes P3 (R3). The pilot profile is seeded by the migrator from the deployment knobs `EmbeddingProfile:*` (data-model §2.1) |
-| `GET /api/forms/{resource}` | Read | JSON Schema of the resource's request record + list columns for the generic form (§5.8) |
+| `GET /openapi/v1.json` | Admin | the generic forms read each operation's request schema from the OpenAPI document; the resources, list columns and actions are a registry in the UI (§5.8) |
 
 **Feedback, conversations, audit, overview** — §8, §9; `GET /api/overview` returns the attention items of §5.5.1 for
 the caller's scope.
@@ -646,8 +646,9 @@ Overview page (P1).
   + `router/index.ts` (pages below; same `meta.roles` guard and focus handling; title suffix "· Kunskapsplattform",
   product name N1 open), `index.html` `lang="sv"`.
 - New: `utils/labels.ts`, `utils/messages.ts`, `composables/useJobPoller.ts`, `components/rag/*` (classification badge,
-  run state badge, evaluation report card, setup checklist, preview viewer with before/after, test panel,
-  `GenericForm`/`GenericList` (§5.8)), `views/*`.
+  run state badge, evaluation report card, setup checklist, preview viewer with before/after, test panel),
+  `platform/*` (the generic forms of §5.8: resource registry, schema mapper, `GenericForm`, list and form views),
+  `views/*`.
 
 ### 5.2 Navigation per role
 
@@ -912,10 +913,13 @@ through Scalar only; the generic forms below come in P1b (Decisions "P1a plan an
 clients, keys, templates, assistant templates (simplification pass §15; P2, weakness review §1), site profiles, embedding profiles (read),
 gateway models, organisation mirror (read); P2 department settings (owner-team scoping, also for department admins).
 
-- `GenericList` + `GenericForm` render any resource from `GET /api/forms/{resource}`: the JSON Schema of the resource's
-  request record (generated from the same DataAnnotations the API validates with, so the form and the server agree) and
-  the list columns. Controls come from `FormModel` (§6.3); `jsonb` members (e.g. a site profile, `Settings.Crawl`) are a
-  JSON text area validated by the server.
+- One **Plattformsobjekt** page (`/plattform`, platform admins) lists the resources; each opens a list and a form in a
+  drawer. A registry in the UI (`platform/resources.ts`) names each resource's list, create, update and action
+  endpoints and its list columns; the form's fields come from that operation's request schema in the OpenAPI document
+  (`/openapi/v1.json`, generated from the same DataAnnotations the API validates with, so the form and the server
+  agree; Admin-only, the audience of these forms). Controls follow the table of §6.3; `jsonb` members (e.g. a site
+  profile, `Settings.Crawl`) are a JSON text area validated by the server. A new, rotated or revealed key's secret is
+  shown once with a copy button.
 - Labels are the schema `title` (Swedish where the record gives one, else the property name) and `description` as help;
   these pages are for platform admins, so English property names are acceptable (answered 1 applies to the journey).
 - Actions that are not CRUD (rotate a key, run a sync, approve or roll back a site profile) are buttons from a small
@@ -948,8 +952,9 @@ edit (§16).
 ### 6.3 Forms generated from schemas
 
 `FormModel` (in `Ume.Rag.Pipelines`, so the server validates exactly what the UI offers) turns a JSON Schema 2020-12
-into a form description, used for template parameters and the generic forms (§5.8); the UI renders it with the copied
-`components/ui` fields. No JSON Schema form library and no browser-side validator.
+into a form description for template parameters; the generic forms (§5.8) map the OpenAPI request schemas in the UI
+(`platform/schema.ts`) with the same table. Both render with the copied `components/ui` fields. No JSON Schema form
+library and no browser-side validator: the server validates.
 
 | Schema | Control |
 |---|---|
@@ -1240,8 +1245,9 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 
 - `ConfigRules`: one table-driven test per active V-rule (pass, fail, boundary; the re-check triggers of §4.6).
 - `PermissionMatrix` invariants: `Admin` never implies `Review`/`FeedbackComments`; every endpoint has a policy.
-- `FormModel`: every template's `paramsSchema` and every generic-form resource renders; unsupported constructs fall
-  back to JSON; Swedish labels present on templates.
+- `FormModel`: every template's `paramsSchema` renders; unsupported constructs fall back to JSON; Swedish labels present
+  on templates. The UI's schema mapper: every generic-form operation maps to fields (vitest, against a cut of the
+  OpenAPI document).
 - `AccessExplainer`: one case per `IAccessPolicy` step (identity §4.3) returns that step and code.
 - Assistant versions: the structured diff (P2) (settings, links, line diff of instructions incl. Swedish characters and
   empty texts); `usesTools` derivation (no skills, skills without tools, a tool excluded by `ExcludedToolIds`, a served
@@ -1400,8 +1406,9 @@ None.
 - **Gateway**: whether release 2's `memberGroups`/`code` fields and the proposed `/v1/catalog/routes` land; that
   release 1's `/v1/models` test at a ceiling passes (with a delegating key from release 2; weakness review §5) (gateway-changes design §3.6; V8 relies
   on it); residency semantics of a route alias under the header.
-- **Generic forms** (new): the .NET 10 OpenAPI generator (or our own `FormSchemas`) emits DataAnnotations ranges,
-  required members and enums as JSON Schema keywords that `FormModel` can render; `jsonb` members round-trip.
+- **Generic forms**: the .NET 10 OpenAPI generator emits DataAnnotations ranges, required members and enums as JSON
+  Schema keywords the UI's mapper renders (checked against the live document: every create, update and action of the
+  generic-form resources and all nine settings sections map); `jsonb` members round-trip.
 - **Site profiles** (new, P2 with learning): the worker's preview can return before/after text for a host without a profile within the
   preview deadline (2 min).
 - **Open WebUI v0.12.5**: the feedback `data.reason` values are always one of the fixed keys and never free text from

@@ -156,8 +156,13 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - **Stream B:** #264/#266 fixed on B's branch (667139c), waiting on my re-review; nudged #265.
 - **Design sync done** (`d0f246b`): the deviations of #248–#274 folded into the designs. Main-session decisions: the
   "either-of" policies stay (B: #283), the admin reads `PublishedAssistantVersions`, `Gateway:MaxResidency` implements M2,
-  the 5002 `conversation_not_owned` event stays (B: #284), Open WebUI's `DEFAULT_MODEL_METADATA` in chat §4.3. Still to
-  fold: #281's forms deviation (after it merges) and `temperature` (after #275).
+  the 5002 `conversation_not_owned` event stays (B: #284), Open WebUI's `DEFAULT_MODEL_METADATA` in chat §4.3. #281's forms (UI registry + OpenAPI schemas, no `/api/forms`) folded into admin
+  §4.8/§5.1/§5.8/§6.3. Still to fold: `temperature` (after #275).
+- **Admin UI:** B merged #279 (Kunskapsbanker); A's #281 merged (Plattformsobjekt: generic forms for clients, keys,
+  settings, data protection, site profiles, gateway models; `src/admin-ui/src/platform/**` is stream A's).
+- **Crawl:** a full-site attempt found ≈ 15,400 URLs (≈ 8,100 PDFs); cancelled on the user's call ("too excessive at this
+  stage") after 2,323 HTML pages, which are live. The source "umea.se" is capped at `maxPages` 2,500 with `**.pdf`
+  excluded, no schedule. A cancelled run writes no counts (`Added` 0); six node-id URLs (`/4.<id>.html`) answered 404.
 
 ## Session 16 (2026-11-01, new computer; ended: demo-first plan, AppHost left running)
 
