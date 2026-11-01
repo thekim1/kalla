@@ -30,7 +30,7 @@ package source had to be checked for this step.
 | 2 | Contract | OpenAI-compatible `/v1/models`, `/v1/chat/completions` (stream and not); unknown fields ignored, a fixed list refused; text content parts only (§3, answered 6) |
 | 3 | History | **The messages the client sends are authoritative for the prompt**; our store is a record for the user, review, feedback and retention. 0 SQL on the hot path (§11.3). **P1 pilot: history mode `none`** until A1 is answered: metadata and ratings only (§11.2) |
 | 4 | Open WebUI tasks | One connection only (ours); Open WebUI title, tag and follow-up generation **switched off**; no task model of ours (§4.2, §4.3) |
-| 5 | Condense | On by default, **follow-ups only**, skipped when the question is self-contained (length, no anaphora); one call ≤ 96 output tokens to `Settings.Chat.CondenseModel` (a small instruct model: `Eu` until register M2, then on-prem), hard **600 ms** timeout, falls back to the raw question (§5, answered 1) |
+| 5 | Condense | On by default, **follow-ups only**, skipped when the question is self-contained (length, no anaphora); one call ≤ 96 output tokens to `Settings.Chat.CondenseModel` (a small instruct model, reasoning off: `Eu` until register M2, then on-prem), hard **1,200 ms** timeout on the EU route, falls back to the raw question (§5, answered 1) |
 | 6 | History window | Last **10 messages, ≤ 4,000 tokens**, oldest dropped first, old markers stripped, sources never resent; per assistant (§6.3, answered 2) |
 | 7 | Prompt budget | Character estimate (÷ 3, Swedish-safe) against the assistant's `ContextTokens`; fixed priority: frame + question + answer reserve, then sources, then history (§6.3) |
 | 8 | Sources | In the final user message as `<source n="…">` blocks marked untrusted; numbered per document by best rank (knowledge §10.4); `</source` neutralised (§7) |
@@ -182,7 +182,7 @@ Non-streaming (`object: chat.completion`):
 | Method | Path | Behaviour |
 |---|---|---|
 | `GET` | `/v1/conversations?limit=20&after=<cursor>` | the caller's conversations for this client (`ClientId`, `SubjectId`), keyset on `(LastMessageAt, Id)` (index data-model §2.3), titles decrypted; `{ data: [{ id, assistant, title, created_at, last_message_at, history_mode }], next }` |
-| `GET` | `/v1/conversations/{id}` | messages (decrypted) with their cited sources (number, title, link from the stored snapshot), feedback state; 404 `conversation_not_found` for anything not owned |
+| `GET` | `/v1/conversations/{id}` | messages (decrypted) with their cited sources (number, title, link from the stored snapshot; in mode `none`, which stores no snapshot, the cited document id instead), feedback state; 404 `conversation_not_found` for anything not owned |
 | `DELETE` | `/v1/conversations/{id}` | deletes the conversation's rows at once (§13.2); 204; idempotent |
 
 In P1 every conversation is in history mode `none` (§11.2): titles and messages come back empty, metadata only.
@@ -248,7 +248,7 @@ As knowledge §3.7: `AddOpenApi("chat", …)` with typed results, `WithTags("Cha
 | 6 | Conversation key | §11.1: Open WebUI chat id or verified issued id or new id; **no SQL** | 404 |
 | 7 | Effective level | history-keeping client (`Clients.StoresHistory`): max(assistant level, client ceiling) on **every** turn; else the assistant's level (§8.2); ceiling header and key from it | – |
 | 8 | Language | `LanguageGuess` on the question (§10.3) | – |
-| 9 | Condense | follow-ups that are not self-contained (§5) | 600 ms timeout → raw question |
+| 9 | Condense | follow-ups that are not self-contained (§5) | `Chat:CondenseTimeout` (1,200 ms on the EU route) → raw question |
 | 10 | Retrieve | `IRetriever.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, null, TopK, Hybrid, filters, Section, Chat, true, RunId: messageId))` (knowledge §2.2) | `RetrievalDeniedException` → OpenAI code; 503 `search_unavailable` |
 | 11 | Coverage | §6.2: `Low` → §10.1 fixed text (no model call) unless condense failed; `Unknown` with zero results → §10.2 unavailable text; else continue | – |
 | 12 | Prompt | §6.3 budget, §7 template | 400 `context_length_exceeded` |
@@ -292,6 +292,7 @@ integration sync point). Elsewhere this document still cites v0.12.5 source.
 | `ENABLE_PASSWORD_AUTH` | `false`; `true` only while `deploy/openwebui-feedback-key.sh` runs | `ENABLE_LOGIN_FORM=false` hides the form but does not block API password sign-in (`routers/auths.py:663-667` at v0.12.3) |
 | `DEFAULT_USER_ROLE` | `user` | the service account is the only admin, so with the default `pending` nobody could approve an OIDC account and no one could chat; every enabled account of realm `ume` becomes a user (who may sign in stays identity §16 question 5) |
 | `BYPASS_MODEL_ACCESS_CONTROL=true`, `ENABLE_PERSISTENT_CONFIG=false`, Open WebUI RAG/web/code/tools off | as chat plan §6 | – |
+| `DEFAULT_MODEL_METADATA` | `{"capabilities":{"builtin_tools":false}}` | Open WebUI adds its builtin tools to every browser chat unless a model's capabilities say otherwise; with this default browser chats send no `tools` (rag-api refuses client tools with 400 `tools_not_supported`, §3.2) |
 
 **Sign-in (P1, identity §5.3, §11.2, 2026-10-31).** Open WebUI signs in over OIDC against the **shared Keycloak**
 (Decisions table "P1 pilot sign-in"): `OAUTH_CLIENT_ID=open-webui` (realm `ume`), that client's secret in
@@ -313,8 +314,8 @@ request `include_usage` (`ow/main.py:1243-1244`, capabilities from model info `:
 | Input | the last ≤ 6 messages before the question, user messages ≤ 500 characters each, assistant messages ≤ 600 characters with `[n]` markers and links removed; plus the question; total ≤ 4,000 characters |
 | Model | `Settings.Chat.CondenseModel` = the gateway alias of a small instruct model, one platform-wide value (a per-assistant override comes with the assistant forms). Until on-prem model hardware exists (register M2) it is called at ceiling `Eu`, never above the turn's own ceiling; a turn with ceiling `OnPrem` gets no condense and uses the raw question (the fallback below). It moves to `OnPrem` for every level when the hardware exists |
 | Why this model | once on-prem (from M2), `OnPrem` satisfies every level, so one model serves all assistants and no residency branch exists; rewriting a question is a small-model task (short output, no knowledge needed); on-prem GPUs avoid an extra internet round trip; the cost is negligible next to the answer |
-| Call | non-streaming `/v1/chat/completions`, `temperature: 0`, `max_tokens: 96`, headers as §8.1 with `x-ume-max-residency` as in the Model row (`Eu` until M2, then `OnPrem`) and `x-ume-step: condense` |
-| Budget | `Chat:CondenseTimeout` **600 ms** hard timeout (no retry) |
+| Call | non-streaming `/v1/chat/completions`, `max_tokens: 96`, no `temperature`, and `reasoning_effort` = `Settings.Chat.CondenseReasoningEffort` when set (**`none`** for the EU model: a reasoning model otherwise spends the 96 tokens on hidden reasoning), headers as §8.1 with `x-ume-max-residency` as in the Model row (`Eu` until M2, then `OnPrem`) and `x-ume-step: condense` |
+| Budget | `Chat:CondenseTimeout` **1,200 ms** hard timeout (no retry) while the model is on the EU route (`gpt-6-luna` with reasoning off answers in ≈ 0.8 s, P1 item 19); 600 ms once it is on-prem |
 | Accept the output if | 2–400 characters after trim, one line, not a refusal pattern, no `### Task`, residency within the call's ceiling, PII header absent or `detected` |
 | Otherwise | the raw question is used for retrieval and coverage `Low` is not turned into the not-found text (§6.2); outcome counted (`timeout`, `error`, `residency`, `rejected`) |
 | Use | **retrieval only**: the answer prompt keeps the user's own question and history (§7), so a bad rewrite can only make retrieval worse, never change what the user asked |
@@ -474,7 +475,7 @@ x-ume-session: <conversation id>                         (session affinity for o
 traceparent: …
 
 { "model": "<Assistants.GatewayModel>", "messages": [ … ], "stream": true,
-  "stream_options": { "include_usage": true }, "max_tokens": 1024, "temperature": 0.2 }
+  "stream_options": { "include_usage": true }, "max_tokens": 1024 }
 ```
 
 - `x-ume-session` makes the gateway send every turn of a conversation to the same target so vLLM/Ollama prefix caches
@@ -483,7 +484,8 @@ traceparent: …
   `src/Ume.LlmGateway.Domain/Services/RequestRewriter.cs:35-42`, but strips the usage-only chunk unless the client asked,
   `Pipeline/GatewayRequestHandler.cs:256`,
   `src/Ume.LlmGateway.Infrastructure/Providers/OpenAICompatibleAdapter.cs:225-260`).
-- `temperature` from `QuerySteps.answer.temperature` (default 0.2); no other sampling parameter.
+- `temperature` only when `QuerySteps.answer.temperature` is set (default unset: the model's own default; some models,
+  e.g. the Claude models on the gateway, refuse it); no other sampling parameter.
 
 **Keys and ceiling** (gateway design §13). **Until gateway release 2** (P1; reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)) the
 three keys are the pilot department's team's own keys per level (`AllowedIpRanges`, `RequireMaxResidency`, no
@@ -740,8 +742,8 @@ bounded wait before dropping (`Pipeline/GatewayRequestHandler.Accounting.cs:118-
 
 | Setting | Value | Why |
 |---|---|---|
-| Capacity | 5,000 turns **and** 64 MB of plaintext (a byte counter next to the channel) | turns carry content, unlike usage records |
-| Enqueue wait when full | `Chat:WriterEnqueueTimeout` 2 s, then drop + `rag.chat.writer.dropped` + a warning with the message id | the answer is already delivered; waiting only holds memory |
+| Capacity | 5,000 turns; with stored content (A1) also 64 MB of plaintext (a byte counter next to the channel) | turns with content are large, unlike usage records; mode `none` turns carry no text, so there is no byte counter |
+| Enqueue wait when full | `Chat:WriterEnqueueTimeout` 2 s, awaited on the request path after the answer is written, then drop + `rag.chat.writer.dropped` + a warning with the message id | the answer is already delivered; waiting only holds memory |
 | Batch | ≤ 200 turns or 250 ms, whichever first | a batch is one transaction |
 | Shutdown | drain within `ShutdownDrain` (gateway ServiceDefaults) up to 20 s | rolling updates lose nothing in the normal case |
 | Journal | **none** | the gateway journals usage to Redis; chat content must not leave the encrypted tables (plan §8a), and an encrypted journal would need the same keys and retention; the loss bound below is accepted |
@@ -790,8 +792,8 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
   of attaching feedback (the importer counts such feedback as unmapped, §14.3).
 - `CostUsd` for streamed answers (P2): a job reads the gateway Data API usage feed (`/v1/usage/records`, cursor by id,
   permission `usage.detail`, `src/Ume.LlmGateway.DataApi/DataEndpoints.cs:66-80`; `runId` added in gateway release 2, gateway
-  design §5.9) and fills `Messages.CostUsd` and the daily totals by run id. Until then cost is visible in the gateway's
-  own reports per team.
+  design §5.9) and fills `Messages.CostUsd` and the daily totals by run id. Until then the writer stores `CostUsd` 0
+  and TTFT null (the chat path measures neither), and cost is visible in the gateway's own reports per team.
 - **No sticky sessions**: the chat path keeps no per-instance state a request depends on. The history is the client's,
   the config snapshot is per instance (90 s grace, then 503), conversation ids are signed and verified without SQL,
   rate limits are per instance in P1 (Redis from P2), and `Seq` is assigned under the conversation row lock, correct
@@ -928,7 +930,7 @@ typed text: accepted for the pilot, since its content stays within the user's ow
 | Prompt building, budget, serialisation | ≤ 2 ms | ≤ 8,000 source tokens + history |
 | Gateway request write → our first byte after the gateway's first event | ≤ 2 ms | header checks, first chunk rewrite, flush |
 | **Chat overhead** | **< 10 ms** | everything except condense, retrieval and the gateway's own TTFT |
-| Condense (follow-ups that are not self-contained) | ≤ 400 ms, cut at 600 ms | small model (`Eu` until M2, then on-prem), ≤ 96 output tokens (*to measure*, §22) |
+| Condense (follow-ups that are not self-contained) | EU route: ≤ 900 ms, cut at 1,200 ms; on-prem: ≤ 400 ms, cut at 600 ms | small model with reasoning off (`Eu` until M2, then on-prem), ≤ 96 output tokens; EU measured ≈ 0.8 s (`gpt-6-luna`, P1 item 19) |
 | Retrieval | ≤ 90 ms miss / ≤ 40 ms hit | knowledge §11 |
 | Answer model TTFT through the gateway | model-dependent | gateway adds ≈ 1.3 ms (`docs/performance.md:298-311`) |
 
@@ -987,7 +989,8 @@ totals).
   (knowledge §15), `rag.chat.prompt`, `rag.chat.answer` (HTTP span); attributes: assistant id, level, client kind,
   history mode, coverage, degraded, outcome, token counts, cited count, condense outcome, config version. **Never**
   message text, condensed queries, titles, comments, snippets or URLs of non-`public` documents.
-- **Logs**: `[LoggerMessage]` as the gateway; events: gateway error (status, code), residency/echo refusal, condense
+- **Logs**: `[LoggerMessage]` as the gateway; events: gateway error (a refused chat call: one Warning with status, the
+  gateway's error code and `x-request-id`), residency/echo refusal, condense
   failure (reason), stream interrupted, writer batch failure, dropped turn (message id), import run summary. Scopes: `ConfigVersion`, `AssistantId`, `ClientId`, `Classification`, `ConversationId` hash
   (repo-and-deployment §9), `MessageId`.
 - **Telemetry scan test**: a marker question, marker answer (FakeGateway) and marker comment never appear in logs,
@@ -1109,7 +1112,7 @@ waits for or depends on it.
 
 | Document | Change |
 |---|---|
-| `platform/data-model.md` §2.1 `Assistants` | `NotFoundText` → `NotFound jsonb` (`sv`, `en`, `links[]{title,url}`, §10.1); `QuerySteps jsonb` schema: `{ condense: { enabled: true, model?: null }, retrieval: { topK: 10, filters, rerank: false (P2) }, history: { maxMessages: 10, maxTokens: 4000 }, answer: { contextTokens: 16384, maxOutputTokens: 1024, temperature: 0.2, language: "auto" }, attachments: { enabled: false } (P2) }` |
+| `platform/data-model.md` §2.1 `Assistants` | `NotFoundText` → `NotFound jsonb` (`sv`, `en`, `links[]{title,url}`, §10.1); `QuerySteps jsonb` schema: `{ condense: { enabled: true, model?: null }, retrieval: { topK: 10, filters, rerank: false (P2) }, history: { maxMessages: 10, maxTokens: 4000 }, answer: { contextTokens: 16384, maxOutputTokens: 1024, temperature?: null, language: "auto" }, attachments: { enabled: false } (P2) }` |
 | `platform/data-model.md` §2.1 `Settings` | `Chat jsonb`: `CondenseModel` (on-prem alias, the only task model), `MaxContextTokens`, default not-found texts sv/en, `AllowedLinkHosts`, `MessagesPerMinutePerUser` 20 |
 | `platform/data-model.md` §2.1 `Clients` | remove `TaskModel`, `TaskModelResidency` and `CK_Clients_TaskModel` (§4.2) |
 | `platform/data-model.md` §2.3 `Conversations` | unique index (`ClientId`, `SubjectId`, `ExternalChatId`, `AssistantId`) (§11.1); no tombstone (`DeletedByUserAt` removed; user delete deletes the row, §13.2); plain `Classification`, no composite keys; title from the first question |

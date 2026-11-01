@@ -172,10 +172,11 @@ public static class ChatRequestParser
 }
 
 /// <summary>An assistant's chat settings from its published <c>QuerySteps</c> (chat design §15.2), with the defaults.</summary>
-public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int HistoryMaxTokens, int ContextTokens, int MaxOutputTokens, double Temperature,
+/// <remarks><see cref="Temperature"/> null (the default) leaves <c>temperature</c> out of the gateway call (#275).</remarks>
+public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int HistoryMaxTokens, int ContextTokens, int MaxOutputTokens, double? Temperature,
     bool AlwaysSwedish, bool CondenseEnabled = true)
 {
-    public static AssistantChatSettings Default { get; } = new(10, 10, 4000, 16_384, 1024, 0.2, false);
+    public static AssistantChatSettings Default { get; } = new(10, 10, 4000, 16_384, 1024, null, false);
 
     public static AssistantChatSettings Parse(string? querySteps)
     {

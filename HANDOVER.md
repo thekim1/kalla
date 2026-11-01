@@ -154,6 +154,23 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   writes send `X-Requested-With` and `X-XSRF-TOKEN` (the `RAG-XSRF-TOKEN` cookie from `/bff/user`); send the body as
   UTF-8 bytes (`requests` sends a `str` body as Latin-1, which breaks `å`). `/openapi/v1.json` needs the session.
 - **Stream B:** #264/#266 fixed on B's branch (667139c), waiting on my re-review; nudged #265.
+- **Design sync done** (`d0f246b`): the deviations of #248–#274 folded into the designs. Main-session decisions: the
+  "either-of" policies stay (B: #283), the admin reads `PublishedAssistantVersions`, `Gateway:MaxResidency` implements M2,
+  the 5002 `conversation_not_owned` event stays (B: #284), Open WebUI's `DEFAULT_MODEL_METADATA` in chat §4.3. #281's forms (UI registry + OpenAPI schemas, no `/api/forms`) folded into admin
+  §4.8/§5.1/§5.8/§6.3. `temperature` folded (#282: sent only when set, condense none; chat §8, data-model
+  `QuerySteps`). **Stream A follow-up:** the worker's evaluation client still sends fixed temperatures (0.3 generation,
+  0 judge), which a Claude evaluation model would refuse.
+- **Admin UI:** B merged #279 (Kunskapsbanker); A's #281 merged (Plattformsobjekt: generic forms for clients, keys,
+  settings, data protection, site profiles, gateway models; `src/admin-ui/src/platform/**` is stream A's).
+- **Crawl:** a full-site attempt found ≈ 15,400 URLs (≈ 8,100 PDFs); cancelled on the user's call ("too excessive at this
+  stage") after 2,323 HTML pages, which are live. The source "umea.se" is capped at `maxPages` 2,500 with `**.pdf`
+  excluded, no schedule. A cancelled run writes no counts (`Added` 0); six node-id URLs (`/4.<id>.html`) answered 404.
+  **A scope change re-syncs the source by itself** (trigger `config-change`): the cap change started a 2,500-page run,
+  cancelled before it fetched anything.
+- **EU-route capacity done (#286, P1 item 19):** embedding 18–20k tokens/s (key-limited), query embedding p95 156 ms,
+  answer TTFT p99 3.1 s; initial load of all umea.se ≈ 2–3 h (fetch-bound), ≈ $6–22. **Open for the user:** condense
+  fails the 600 ms cut on every EU model (reasoning eats `max_tokens` 96; `gpt-6-luna` + `reasoning_effort: none` ≈ 0.8 s):
+  accept skipping, raise the cut, or send `reasoning_effort` (stream B + design).
 
 ## Session 16 (2026-11-01, new computer; ended: demo-first plan, AppHost left running)
 
