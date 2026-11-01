@@ -35,6 +35,8 @@ public sealed class SourceSettingsTests
     [InlineData(SourceTypes.UrlList, """{"urls":["https://www.umea.se/"],"incrementalSchedule":"0 3 * * *"}""")]
     [InlineData(SourceTypes.UrlList, """{"urls":["https://www.umea.se/"],"revalidateEvery":0}""")]
     [InlineData(SourceTypes.Upload, """{"maxFileSizeMb":51}""")]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"piiMode":"block"}""")]
+    [InlineData(SourceTypes.UrlList, """{"urls":["https://www.umea.se/"],"piiMode":"Report"}""")]
     public void Invalid_settings_fail_the_schema(string sourceType, string json) =>
         ContractSchemas.Validator(SourceSettings.SettingsType(sourceType)).Validate(Repository.Json(json)).ShouldNotBeEmpty();
 
@@ -68,6 +70,7 @@ public sealed class SourceSettingsTests
     [InlineData("crawlWindow", "\"23:00-05:00\"", SettingEffect.Cosmetic)]
     [InlineData("incrementalSchedule", "\"0 3 * * *\"", SettingEffect.Cosmetic)]
     [InlineData("revalidateEvery", "8", SettingEffect.Behaviour)]
+    [InlineData("piiMode", "\"report\"", SettingEffect.Cosmetic)]
     public void A_change_moves_exactly_its_tag(string member, string value, SettingEffect effect)
     {
         var before = Repository.Json(Umea);
@@ -102,6 +105,27 @@ public sealed class SourceSettingsTests
                  "exclude":["**/sok?*", "**/search?*", "**?*sort=*", "**?*print=*", "**/login*", "**/logout*"]}
                 """)));
     }
+
+    [Theory]
+    [InlineData(SourceTypes.UrlList, """{"urls":["https://www.umea.se/"]}""", PiiMode.Hold)]
+    [InlineData(SourceTypes.UrlList, """{"urls":["https://www.umea.se/"],"piiMode":"report"}""", PiiMode.Report)]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"piiMode":"report"}""", PiiMode.Report)]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"piiMode":"hold"}""", PiiMode.Hold)]
+    [InlineData(SourceTypes.Upload, """{"piiMode":"report"}""", PiiMode.Report)]
+    [InlineData(SourceTypes.Upload, "{}", PiiMode.Hold)]
+    public void Pii_mode_defaults_to_hold_and_validates(string sourceType, string json, PiiMode mode)
+    {
+        ContractSchemas.Validator(SourceSettings.SettingsType(sourceType)).Validate(Repository.Json(json)).ShouldBeEmpty();
+        SourceSettings.PiiModeOf(sourceType, Repository.Json(json)).ShouldBe(mode);
+    }
+
+    [Theory]
+    [InlineData(SourceTypes.UrlList, """{"piiMode":"report"}""")]
+    [InlineData(SourceTypes.Crawl, """{"startUrls":["https://www.umea.se/"],"piiMode":"block"}""")]
+    [InlineData(SourceTypes.Upload, """{"piiMode":"report","virusScan":false}""")]
+    [InlineData("sharepoint", """{"piiMode":"report"}""")]
+    public void Settings_that_do_not_bind_hold(string sourceType, string json) =>
+        SourceSettings.PiiModeOf(sourceType, Repository.Json(json)).ShouldBe(PiiMode.Hold);
 
     [Fact]
     public void Hashes_are_lower_case_sha256_hex() =>

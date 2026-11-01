@@ -73,6 +73,11 @@ dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
 To run against the interim gateway instead of FakeGateway, see [`docs/p1a-local-run.md`](docs/p1a-local-run.md).
 Addresses and keys go only in user secrets or secret files, never in the repository.
 
+On Linux or WSL, `aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj` runs the same stack in the
+background (`aspire describe`, `aspire logs <resource>`, `aspire stop`); `Seed__Enabled=false` in the environment starts
+it without demo data. Milestone 1, ingestion and `/v1/retrieve` against the interim gateway, passed on 2026-11-01
+([`docs/p1a-local-run.md`](docs/p1a-local-run.md) §4).
+
 Container health probe: every .NET service image runs its own probe with `--health-check` (exit 0 healthy, 1 not),
 against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 

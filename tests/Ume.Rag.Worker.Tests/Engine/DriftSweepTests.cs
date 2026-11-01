@@ -14,7 +14,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// sweeps while those jobs are queued enqueues nothing more (the dedup key holds); a drifted document with a kept set of the
 /// wanted key is swapped back with no job, as a <c>reprocess</c> run does (§12.3, §14 rule 1).
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup1.Name)]
 public sealed class DriftSweepTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

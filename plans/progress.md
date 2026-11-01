@@ -42,6 +42,10 @@ exists (M2 triggered, user 2026-10-30; `p1/README.md` §1).
       `chat.umea.se`; the product owner decides the relation)
 - [x] Sync point after J2/J3: schema and contracts checked; results folded into [`to-verify.md`](to-verify.md) (2026-10-31, `4b0f3a6`; repeated for later results)
 - [ ] Local skeleton: fixture pages answered with a citation in Open WebUI on FakeGateway (`p1/README.md` §5)
+- [x] **Milestone 1** (first live run, 2026-11-01, session 13): five public umea.se pages ingested through the interim
+      gateway (`text-embedding-3-large`, 1024 dims via `dimensions`, `Eu`), canary recorded, `/v1/retrieve` answered with
+      the right chunk first; run steps and findings in [`../docs/p1a-local-run.md`](../docs/p1a-local-run.md) §4 (#168 for
+      the AppHost dev-run bugs; Decisions row "Personal data on the municipality's own published site")
 - [ ] Gateway session: gateway reachable with EU routes and the pilot team's keys (J10); shared Keycloak with RAG's
       realm additions (J11)
 - [ ] Pilot gold set written with the department; three-way run recorded; not-found thresholds calibrated
@@ -50,7 +54,8 @@ exists (M2 triggered, user 2026-10-30; `p1/README.md` §1).
 
 Owned by the user, outside the streams ([`p1/README.md`](p1/README.md) §7):
 - [x] P1a shown locally (U-a, decided 2026-10-30)
-- [ ] The EU embedding model (U-b); pilot accounts (U-c)
+- [x] The EU embedding model (U-b): `text-embedding-3-large` at 1024 dims, `Eu` (Decisions table, 2026-10-31; proven in milestone 1)
+- [ ] Pilot accounts (U-c)
 - [ ] Gateway production session briefed and run (U-d); U1 with the web editors (U-e); gold set owner and date (U-f)
 
 ## P1b Pilot hardening ([`README.md`](README.md) P1b row)

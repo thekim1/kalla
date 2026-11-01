@@ -207,7 +207,9 @@ public sealed partial class StagePreview(
             log.Done(reused);
         }
 
-        return content;
+        // The state shown follows the piiMode of the document's source (a document previewed without the preview's source has its own).
+        var owner = source ?? (content.SourceId is { } ownerId ? await sources.GetAsync(ownerId, cancellationToken) : null);
+        return owner is null ? content : content with { PiiMode = owner.PiiMode };
     }
 
     /// <summary>The base preview's raw content of the same URL, copied into this preview; null when there is none.</summary>

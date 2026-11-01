@@ -20,7 +20,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// applies to the next parse of a matching PDF in the same worker without a config-version change (the command drops the
 /// worker's rule cache), and after a <c>disable-parse-rule</c> job the document is back on its built-in parse key.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup3.Name)]
 public sealed class ParseRuleCommandEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

@@ -135,9 +135,8 @@ public sealed class ParserContractTests(ParserContainer parser)
         // Strict: an option the client's records do not know fails here, not silently at the parser.
         var options = optionsJson.Deserialize<ParserConvertOptions>(ParserJson.Create(strict: true))!;
 
-        await using var file = File.OpenRead(ContractFiles.Fixture(testCase["file"]!.GetValue<string>()));
         using var docling = new MemoryStream();
-        var result = await parser.Client(strict: true).ConvertAsync(file, options, docling, ct);
+        var result = await parser.ConvertWhenReadyAsync(ContractFiles.Fixture(testCase["file"]!.GetValue<string>()), options, docling);
 
         result.Input.Pipeline.ShouldBe(testCase["pipeline"]!.GetValue<string>());
         (docling.Length > 0).ShouldBe(testCase["docling_part"]!.GetValue<bool>());
@@ -168,10 +167,12 @@ public sealed class ParserContractTests(ParserContainer parser)
         options["request_id"] = ContractFiles.RequestId(name);
 
         // Raw multipart, so an option the client cannot express (an unknown property) reaches the parser.
-        using var content = new MultipartFormDataContent();
-        content.Add(new ByteArrayContent(await File.ReadAllBytesAsync(ContractFiles.Fixture(testCase["file"]!.GetValue<string>()), ct)), "file", "input");
-        content.Add(new StringContent(options.ToJsonString(), Encoding.UTF8, "application/json"), "options");
-        using var response = await parser.Http.PostAsync(new Uri("v1/convert", UriKind.Relative), content, ct);
+        var bytes = await File.ReadAllBytesAsync(ContractFiles.Fixture(testCase["file"]!.GetValue<string>()), ct);
+        using var response = await parser.PostConvertWhenReadyAsync(() => new MultipartFormDataContent
+        {
+            { new ByteArrayContent(bytes), "file", "input" },
+            { new StringContent(options.ToJsonString(), Encoding.UTF8, "application/json"), "options" },
+        });
 
         ((int)response.StatusCode).ShouldBe(testCase["status"]!.GetValue<int>());
         var json = await response.Content.ReadAsStringAsync(ct);
@@ -192,10 +193,8 @@ public sealed class ParserContractTests(ParserContainer parser)
     {
         await parser.RequireReadyAsync();
         var ct = TestContext.Current.CancellationToken;
-        await using var file = File.OpenRead(ContractFiles.Fixture("corrupt.pdf"));
-
         var thrown = await Should.ThrowAsync<ParserException>(() =>
-            parser.Client().ConvertAsync(file, new ParserConvertOptions("client-corrupt", ".pdf"), null, ct));
+            parser.ConvertWhenReadyAsync(ContractFiles.Fixture("corrupt.pdf"), new ParserConvertOptions("client-corrupt", ".pdf"), null, strict: false));
 
         thrown.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
         thrown.Error.ShouldNotBeNull().Error.Code.ShouldBe("corrupt");

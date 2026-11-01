@@ -11,7 +11,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// Engine design §4, §17: a published pipeline version that fails the worker's validation is not run, and the refusal is
 /// event 5105 <c>rag.pipeline.refused</c>, once, with the pipeline and version ids and the reason.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup2.Name)]
 public sealed class PipelineRefusedTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-refused-");

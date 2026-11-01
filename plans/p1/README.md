@@ -54,6 +54,22 @@ These override the detail documents for P1a. The main session records them in th
 | **Licence EUPL-1.2** (#65) | New source files need no header; third-party notices (#51, #52) before any distribution. |
 | **Identity reworked for the Keycloak pilot** (`../identity/design.md` §11.2, §16) | Item 16 (realm additions) follows §11.2. §16's open questions (realm administrator, import procedure, **whether realm-wide settings such as password policy, brute force and OTP live in RAG's file or the gateway's base realm**) are answered by the gateway session: build the file so those realm-wide parts are a separable section, and say so in the PR. |
 
+### Milestone 1 result (2026-11-01, session 13)
+
+The first live run (AppHost on the developer machine against the interim gateway, `docs/p1a-local-run.md` §4) passed:
+5 umea.se pages fetched, 4 added (1 hub page `parse.empty`), 17 chunks at 1024 dims, canary recorded at `Eu`,
+`/v1/retrieve` with the dev seed's key answered in under 1 s with the right chunk first. Findings that change work:
+
+- **AppHost dev run (stream B, #168):** no `vector` extension in the dev database, the Postgres volume mounted at the
+  Postgres 18 path on a Postgres 17 image (data lost on every restart), `BlobStore:Root` unset (fails on Linux).
+- **Personal data:** two pages were held for e-mail addresses only (`PiiOwnDomains` empty). The user decided
+  `piiMode: report` for the municipality's own published site (Decisions table, 2026-11-01); stream A builds the
+  worker side, stream B the admin toggle, the editors' report and a seeded `PiiOwnDomains`.
+- **Gateway:** its PII filter answered a policy block with 503, which the worker retries as an outage (passed on
+  attempt 5 of 6 after the key policy changed). For the gateway session: a policy refusal should be a 4xx with a
+  reason code.
+- Linux/WSL runs the AppHost with the Aspire CLI (`aspire start`), no Windows step needed.
+
 ## 2. Ownership
 
 `.github/stream-ownership.txt` stays the authority. P0's seam is unchanged. P1a needs these rules added by the main

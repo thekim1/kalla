@@ -19,7 +19,7 @@ namespace Ume.Rag.Worker.Tests.CommandJobs;
 /// engine and preview (<see cref="SiteProfiles.AppliedAsync"/>), whether the URL has no port, the explicit default port or
 /// another port.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup1.Name)]
 public sealed class SiteProfileHostTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

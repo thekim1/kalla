@@ -2,6 +2,7 @@ using System.Globalization;
 using Ume.Rag.Domain;
 using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Pipelines.Processing;
+using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Processing.Persistence;
 
 namespace Ume.Rag.Worker.Processing.Pii;
@@ -16,31 +17,70 @@ public static partial class PiiEvents
         Guid sourceId, Guid? runId, bool reflag);
 }
 
-/// <summary>Where a set belongs: the collection's level decides blocking (only <c>public</c> collections are blocked).</summary>
-public sealed record PiiSwapContext(string CollectionClassification, Guid SourceId, Guid? RunId, PiiFlagRules Rules);
+/// <summary>
+/// Where a set belongs: the collection's level decides blocking (only <c>public</c> collections are blocked) and the source's
+/// <see cref="PiiMode"/> what blocks there.
+/// </summary>
+public sealed record PiiSwapContext(string CollectionClassification, Guid SourceId, Guid? RunId, PiiFlagRules Rules, PiiMode Mode = PiiMode.Hold);
 
 /// <summary>
 /// The personal-data lifecycle of processing design §9.5–§9.6 on top of <see cref="IChunkSetStore"/>: at the swap a
 /// flagged or NER-pending set of a <c>public</c> collection that the document's clearance does not cover is swapped in
 /// <c>held</c> (the old content stops being served, the new is not served); other collections never block. Clearing
 /// releases the held set without re-processing and records the clearance; a later set is covered while no flagging count
-/// rises above it, else it is re-flagged and held. The sweep re-runs <c>personal-data</c> for <c>pending</c> sets once NER
-/// is ready. Event 5103 is raised once per transition to flagged. The engine's embed job decides the state with
+/// rises above it, else it is re-flagged and held. A source in <see cref="PiiMode.Report"/> (Decisions table, 2026-11-01)
+/// holds only for the personnummer and samordningsnummer rules (a clearance covers it while neither count rises); every
+/// other flag, and a NER-pending set, goes in <c>live</c> and is reported (run item reason, event 5103). The sweep re-runs
+/// <c>personal-data</c> for <c>pending</c> sets once NER is ready. Event 5103 is raised once per transition to flagged. The engine's embed job decides the state with
 /// <see cref="StateFor"/> inside its fenced swap and raises the event with <see cref="RaiseIfFlagged"/> after the commit.
 /// </summary>
 public sealed class PiiLifecycle(IChunkSetStore store, ILoggerFactory loggers, TimeProvider clock)
 {
+    /// <summary>The run item reason of a flagged set (§9.5).</summary>
+    public const string FlaggedReason = "pii.flagged";
+
+    /// <summary>The run item reason of a set held while its names are unchecked (§9.6).</summary>
+    public const string NerPendingReason = "pii.ner_pending";
+
     private readonly ILogger _security = SecurityEvents.CreateLogger(loggers);
 
+    /// <summary>The types whose rule still holds a set of a <see cref="PiiMode.Report"/> source.</summary>
+    private static readonly string[] HoldInReport = [PiiTypes.Personnummer, PiiTypes.Samordningsnummer];
+
     /// <summary>The state the set is swapped in as: <c>live</c> or <c>held</c>.</summary>
-    public static string StateFor(ChunkSetRecord set, string collectionClassification, PiiClearance? clearance, PiiFlagRules rules)
+    public static string StateFor(ChunkSetRecord set, string collectionClassification, PiiMode mode, PiiClearance? clearance, PiiFlagRules rules)
     {
         ArgumentNullException.ThrowIfNull(set);
         var counts = set.PiiCounts ?? new PiiCounts();
-        var blocking = set.PiiFlagged || counts.Ner == NerStatus.Pending;
-        return collectionClassification == Classification.Public && blocking && !PiiFlagPolicy.Covered(counts, clearance?.Counts, rules)
-            ? ChunkSetState.Held
-            : ChunkSetState.Live;
+        if (collectionClassification != Classification.Public || !(set.PiiFlagged || counts.Ner == NerStatus.Pending))
+        {
+            return ChunkSetState.Live;
+        }
+
+        var held = mode == PiiMode.Report
+            ? set.PiiFlagged && PiiFlagPolicy.Fired(counts, rules).Intersect(HoldInReport, StringComparer.Ordinal)
+                .Any(type => counts.Count(type) > (clearance?.Counts.Count(type) ?? 0))
+            : !PiiFlagPolicy.Covered(counts, clearance?.Counts, rules);
+        return held ? ChunkSetState.Held : ChunkSetState.Live;
+    }
+
+    /// <summary>
+    /// The run item's reason for a set swapped in as <paramref name="state"/> (§9.5): <c>pii.flagged</c> for a held flagged set
+    /// and for a flagged set of a <c>public</c> collection that went live uncovered (a <see cref="PiiMode.Report"/> source),
+    /// <c>pii.ner_pending</c> for a set held while its names are unchecked; null otherwise.
+    /// </summary>
+    public static string? ReasonFor(ChunkSetRecord set, string state, string collectionClassification, PiiClearance? clearance, PiiFlagRules rules)
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        if (state == ChunkSetState.Held)
+        {
+            return set.PiiFlagged ? FlaggedReason : NerPendingReason;
+        }
+
+        return collectionClassification == Classification.Public && set.PiiFlagged
+            && !PiiFlagPolicy.Covered(set.PiiCounts ?? new PiiCounts(), clearance?.Counts, rules)
+            ? FlaggedReason
+            : null;
     }
 
     public async Task<string> SwapAsync(Guid chunkSetId, PiiSwapContext context, CancellationToken cancellationToken)
@@ -48,7 +88,7 @@ public sealed class PiiLifecycle(IChunkSetStore store, ILoggerFactory loggers, T
         ArgumentNullException.ThrowIfNull(context);
         var set = await store.GetAsync(chunkSetId, cancellationToken) ?? throw new InvalidOperationException("Unknown chunk set.");
         var clearance = await store.GetClearanceAsync(set.Key.DocumentId, cancellationToken);
-        var state = StateFor(set, context.CollectionClassification, clearance, context.Rules);
+        var state = StateFor(set, context.CollectionClassification, context.Mode, clearance, context.Rules);
         await store.SwapAsync(set.Id, state, clock.GetUtcNow(), cancellationToken);
         RaiseIfFlagged(set, context, clearance);
         return state;
@@ -88,7 +128,8 @@ public sealed class PiiLifecycle(IChunkSetStore store, ILoggerFactory loggers, T
 
     /// <summary>
     /// The nightly sweep's part for <c>pending</c> sets (§9.6, engine design §2.3): re-runs <c>personal-data</c> on the stored
-    /// chunks and settles the state. Sets whose NER is still not ready stay <c>pending</c> and <c>held</c>. Returns how many settled.
+    /// chunks and settles the state by the source's mode. Sets whose NER is still not ready stay <c>pending</c> in the state they
+    /// have (<c>held</c>, or <c>live</c> for a <see cref="PiiMode.Report"/> source). Returns how many settled.
     /// </summary>
     public async Task<int> SweepPendingAsync(PersonalDataStage stage, Func<ChunkSetRecord, CancellationToken, Task<(PersonalDataContext Data, PiiSwapContext Swap)>> contextOf,
         int limit, CancellationToken cancellationToken)
@@ -110,7 +151,7 @@ public sealed class PiiLifecycle(IChunkSetStore store, ILoggerFactory loggers, T
             await store.UpdatePiiAsync(set.Id, assessment.Counts, assessment.Flagged, cancellationToken);
             var updated = set with { PiiCounts = assessment.Counts, PiiFlagged = assessment.Flagged };
             var clearance = await store.GetClearanceAsync(set.Key.DocumentId, cancellationToken);
-            await store.SetStateAsync(set.Id, StateFor(updated, swap.CollectionClassification, clearance, swap.Rules), clock.GetUtcNow(), cancellationToken);
+            await store.SetStateAsync(set.Id, StateFor(updated, swap.CollectionClassification, swap.Mode, clearance, swap.Rules), clock.GetUtcNow(), cancellationToken);
             if (updated.PiiFlagged && !PiiFlagPolicy.Covered(assessment.Counts, clearance?.Counts, swap.Rules))
             {
                 Raise(updated, swap, reflag: clearance is not null);

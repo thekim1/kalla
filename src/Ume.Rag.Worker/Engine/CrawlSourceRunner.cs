@@ -199,7 +199,9 @@ public sealed class CrawlSourceRunner(
 
     /// <summary>
     /// Phase <c>fetch</c> (the night window opened, or the finalizer found open rows with no job): releases and enqueues
-    /// again; when nothing can move, a <c>sync</c> run goes on to its reconcile and a <c>retry-failed</c> run ends.
+    /// again; when nothing can move, a <c>sync</c> run goes on to its reconcile and a <c>retry-failed</c> run ends. A
+    /// released row is still moving even when its enqueue was dropped: its dedup key is held by a fetch already queued or
+    /// running (the top-up that released it enqueued it after the finalizer looked).
     /// </summary>
     public async Task<JobResult> FetchPhaseAsync(SourceContext source, RunRow run, LeasedJob job, CancellationToken cancellationToken)
     {
@@ -345,7 +347,10 @@ public sealed class CrawlSourceRunner(
     private Task<DocumentRow?> KnownAsync(SourceContext source, string url, CancellationToken cancellationToken) =>
         documents.FindAsync(source.SourceId, IdentityKinds.Url, url, cancellationToken);
 
-    /// <summary>Released rows of the run enqueued again; a row whose job is still open is dropped by its dedup key. Returns the jobs enqueued.</summary>
+    /// <summary>
+    /// Released rows of the run enqueued again; a row whose job is still open is dropped by its dedup key. Returns the
+    /// released rows: each has a queued or running fetch now.
+    /// </summary>
     private async Task<int> RequeueReleasedAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)
     {
         var released = new List<string>();
@@ -359,7 +364,12 @@ public sealed class CrawlSourceRunner(
             }
         }
 
-        return released.Count == 0 ? 0 : (await queue.EnqueueAsync([.. released.Select(h => SyncJobs.FetchUrl(source, runId, h))], null, cancellationToken)).Count;
+        if (released.Count > 0)
+        {
+            await queue.EnqueueAsync([.. released.Select(h => SyncJobs.FetchUrl(source, runId, h))], null, cancellationToken);
+        }
+
+        return released.Count;
     }
 
     private async Task<IReadOnlySet<Guid>> FailedSeedsAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)

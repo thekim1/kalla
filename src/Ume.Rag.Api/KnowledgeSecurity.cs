@@ -22,12 +22,16 @@ public sealed class ApiSecurityOptions
 /// <summary>
 /// The knowledge role's security events and auth-failure throttle (knowledge design §4.7, identity design §6.3, §10):
 /// <list type="bullet">
-/// <item>5001 per bucket (reason, credential, endpoint, key, address) once a minute with the count since the last one;</item>
+/// <item>5001 per bucket (reason, credential, endpoint, key, address) once a minute with the count since the last one;
+/// failures held back after the last emit are flushed by <see cref="FlushAuthFailures"/> once the minute has passed
+/// (<see cref="KnowledgeSecurityFlusher"/>, every 10 s), so a short burst that then stops is still counted;</item>
 /// <item>the per-address window: above <c>AuthFailuresPerMinute</c> refused credentials a minute only cached keys are
 /// accepted (the caller answers 429 otherwise), with 5006 once per address per window (IPv6 per /64, ≤ 100,000 addresses);</item>
 /// <item>5002 (5005 for a ceiling denial) once a minute per (subject, reason, resource) for explicit denials;</item>
 /// <item>5004 through <see cref="ConfigVersionState.RecordStaleRefusal"/>;</item>
-/// <item><c>rag.documents.downloads{outcome, kind}</c> and an Information line per download (no subject, a grant has none).</item>
+/// <item><c>rag.documents.downloads{outcome, kind}</c> and an Information line per download (no subject, a grant has none);
+/// a served body counts <c>ok</c> once fully read and <c>integrity</c> when a segment fails its check mid-stream
+/// (<see cref="CountDownload"/>).</item>
 /// </list>
 /// Nothing here logs a presented key, a grant or a query.
 /// </summary>
@@ -100,6 +104,7 @@ public sealed partial class KnowledgeSecurity
         DateTimeOffset first;
         lock (bucket)
         {
+            bucket.Failure ??= new AuthFailure(reason, credential, endpoint, address, keyId, keyPrefix, clientId);
             bucket.Pending++;
             bucket.LastSeen = now;
             if (bucket.Pending == 1)
@@ -119,6 +124,53 @@ public sealed partial class KnowledgeSecurity
         }
 
         SecurityEvents.AuthFailed(_events, reason, credential, endpoint, address, keyId, keyPrefix, clientId, count, first, now);
+    }
+
+    /// <summary>
+    /// Emits 5001 for every bucket whose failures were held back and whose minute has passed since its last emit, with
+    /// the count, first and last time of the held-back failures; drops buckets idle for a minute. Run every 10 s.
+    /// </summary>
+    public int FlushAuthFailures()
+    {
+        var now = _time.GetUtcNow();
+        var flushed = 0;
+        foreach (var (key, bucket) in _buckets)
+        {
+            AuthFailure? failure;
+            int count;
+            DateTimeOffset first, last;
+            lock (bucket)
+            {
+                if (now - bucket.LoggedAt < Window)
+                {
+                    continue;
+                }
+
+                if (bucket.Pending == 0)
+                {
+                    _buckets.TryRemove(new KeyValuePair<string, Bucket>(key, bucket));
+                    continue;
+                }
+
+                if (bucket.Failure is null)
+                {
+                    continue; // a 5002/5005 bucket: those report on the next denial (one per resource is enough)
+                }
+
+                failure = bucket.Failure;
+                count = bucket.Pending;
+                first = bucket.FirstSeen;
+                last = bucket.LastSeen;
+                bucket.Pending = 0;
+                bucket.LoggedAt = now;
+            }
+
+            SecurityEvents.AuthFailed(_events, failure.Reason, failure.Credential, failure.Endpoint, failure.Address, failure.KeyId, failure.KeyPrefix,
+                failure.ClientId, count, first, last);
+            flushed++;
+        }
+
+        return flushed;
     }
 
     /// <summary>A <c>config_unconfirmed</c> refusal (5004, throttled by the state).</summary>
@@ -166,7 +218,10 @@ public sealed partial class KnowledgeSecurity
         }
     }
 
-    /// <summary>A download's outcome (<c>ok</c>, <c>not_found</c>, <c>not_served</c>, <c>unavailable</c>, <c>missing</c>) and credential kind.</summary>
+    /// <summary>
+    /// A download's outcome (<c>ok</c>, <c>integrity</c>, <c>not_found</c>, <c>not_served</c>, <c>unavailable</c>,
+    /// <c>missing</c>) and credential kind.
+    /// </summary>
     public void Download(string outcome, string kind, Guid documentId, Guid? clientId)
     {
         _downloads.Add(1, new KeyValuePair<string, object?>("outcome", outcome), new KeyValuePair<string, object?>("kind", kind));
@@ -175,6 +230,22 @@ public sealed partial class KnowledgeSecurity
             LogDownload(_log, documentId, clientId, kind);
         }
     }
+
+    /// <summary>
+    /// The served body, counted when it ends: <c>ok</c> once read to its end, <c>integrity</c> (Error logged) when the
+    /// envelope finds a damaged segment mid-stream, which then aborts the response (knowledge §3.5). A body the client
+    /// stops reading counts neither.
+    /// </summary>
+    public Stream CountDownload(Stream body, long? length, string kind, Guid documentId, Guid? clientId) =>
+        new CountedDownloadStream(body, length, outcome =>
+        {
+            if (outcome == "integrity")
+            {
+                LogIntegrity(_log, documentId, kind);
+            }
+
+            Download(outcome, kind, documentId, clientId);
+        });
 
     /// <summary>The route template (never the path: it would carry ids, and the query a grant).</summary>
     public static string EndpointOf(HttpContext http) =>
@@ -264,8 +335,14 @@ public sealed partial class KnowledgeSecurity
     [LoggerMessage(LogLevel.Information, "Document {DocumentId} downloaded by client {ClientId} with {CredentialKind}")]
     private static partial void LogDownload(ILogger logger, Guid documentId, Guid? clientId, string credentialKind);
 
+    [LoggerMessage(LogLevel.Error, "Document {DocumentId}'s blob failed its integrity check mid-download ({CredentialKind}); the response was aborted")]
+    private static partial void LogIntegrity(ILogger logger, Guid documentId, string credentialKind);
+
+    private sealed record AuthFailure(string Reason, string Credential, string Endpoint, string? Address, Guid? KeyId, string? KeyPrefix, Guid? ClientId);
+
     private sealed class Bucket
     {
+        public AuthFailure? Failure;
         public int Pending;
         public DateTimeOffset FirstSeen;
         public DateTimeOffset LastSeen;
