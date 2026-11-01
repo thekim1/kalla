@@ -75,7 +75,7 @@ Refs: [identity §11](../identity/design.md), Decisions table "P1 pilot sign-in"
 - [ ] **Hand-off J8:** issue to the user for the gateway session
 
 ## 9. Evaluation smoke (#17, your part)
-- [ ] `tests/evaluation/smoke` (fixture collection + 30 questions) and its test: recall@10 ≥ 0.8, every answer cited
+- [x] `tests/evaluation/smoke` (fixture collection + 30 questions) and its test: recall@10 ≥ 0.8, every answer cited (this PR: `SmokeSet` in TestKit, `SmokeEvaluationTests`: recall@10 1.000, recall@3 1.000, 30/30 cited; the `evaluation-smoke` job is stream A's)
 
 ## 10. Gold set and thresholds (#21, after J13)
 - [ ] Gold set entered as `human` questions through Scalar
