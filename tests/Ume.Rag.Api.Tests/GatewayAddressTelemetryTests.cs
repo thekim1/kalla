@@ -26,14 +26,23 @@ public sealed class GatewayAddressTelemetryTests
         level.GetString().ShouldBeOneOf(["Warning", "Error", "Critical", "None"], "request URLs (the gateway's address) must not reach the log");
     }
 
-    [Fact]
-    public async Task An_outgoing_span_keeps_method_scheme_and_path_but_no_host_port_or_query()
+    [Theory]
+    [InlineData("http://gateway-secret.invalid:8443/v1/embeddings?key=abc", "gateway-secret", "http://redacted/v1/embeddings")] // DNS failure
+    [InlineData("http://127.0.0.1:{free}/v1/embeddings?key=abc", "127.0.0.1", "http://redacted/v1/embeddings")]              // refused
+    public async Task A_failed_outgoing_span_names_no_host_in_tags_events_or_status(string url, string host, string redacted)
     {
+        // A port that was just free refuses at once (a fixed low port can be dropped instead, and then the test waits).
+        var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        probe.Start();
+        var free = ((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        url = url.Replace("{free}", free.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.AddServiceDefaults();
         builder.Services.AddHttpClient("gateway").RemoveStandardResilienceHandler();
-        using var host = builder.Build();
-        await host.StartAsync(Ct);
+        using var app = builder.Build();
+        await app.StartAsync(Ct);
 
         var finished = new List<Activity>();
         using var listener = new ActivityListener
@@ -44,24 +53,28 @@ public sealed class GatewayAddressTelemetryTests
         };
         ActivitySource.AddActivityListener(listener);
 
-        using (var client = host.Services.GetRequiredService<IHttpClientFactory>().CreateClient("gateway"))
+        using (var client = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient("gateway"))
         {
-            await Should.ThrowAsync<HttpRequestException>(() => client.PostAsync("http://gateway-secret.invalid:8443/v1/embeddings?key=abc", null, Ct));
+            client.Timeout = TimeSpan.FromSeconds(10);
+            await Should.ThrowAsync<HttpRequestException>(() => client.PostAsync(url, null, Ct));
         }
 
-        await host.StopAsync(Ct);
+        await app.StopAsync(Ct);
         Activity span;
         lock (finished)
         {
-            span = finished.ShouldHaveSingleItem();
+            span = finished.Where(a => a.Status == ActivityStatusCode.Error).ShouldHaveSingleItem();
         }
 
         var tags = span.TagObjects.ToDictionary(t => t.Key, t => t.Value?.ToString());
-        tags.GetValueOrDefault("url.full").ShouldBe("http://redacted/v1/embeddings");
+        tags.GetValueOrDefault("url.full").ShouldBe(redacted);
         tags.ShouldNotContainKey("server.address");
         tags.ShouldNotContainKey("server.port");
         tags.ShouldNotContainKey("url.query");
-        tags.Values.ShouldAllBe(v => v == null || !v.Contains("gateway-secret", StringComparison.Ordinal));
-        span.DisplayName.ShouldNotContain("gateway-secret");
+        var exception = span.Events.Where(e => e.Name == "exception").ShouldHaveSingleItem();
+        var eventTags = exception.Tags.ToDictionary(t => t.Key, t => t.Value?.ToString());
+        eventTags["exception.message"].ShouldStartWith("System.Net.Http.HttpRequestException"); // the type chain only
+        var everything = tags.Values.Concat(eventTags.Values).Append(span.StatusDescription).Append(span.DisplayName);
+        everything.ShouldAllBe(v => v == null || !v.Contains(host, StringComparison.Ordinal), string.Join(" | ", everything));
     }
 }
