@@ -16,6 +16,12 @@ export const ERROR_MESSAGES: Record<string, string> = {
   model_not_listed: 'AI-gatewayen erbjuder inte {model} på {ceiling} just nu. Försök igen senare.',
   gateway_unavailable: 'AI-gatewayen gick inte att nå för att kontrollera modellen. Försök igen.',
   policy_rule: 'Dataskyddsinställningen bryter mot en regel: {rule}',
+  not_in_scope: 'Förvaltningen hör inte till dina förvaltningar.',
+  no_embedding_profile: 'Det finns ingen standardprofil för inbäddning. Kontakta plattformsteamet.',
+  collection_in_use: 'Kunskapsbanken används fortfarande. Ta bort den från assistenterna och ta bort dess källor först.',
+  collection_level_conflict: 'Kunskapsbanken kan inte sänkas till {level}: en källa har högre informationsklass.',
+  assistant_below_collection: 'Assistentens informationsklass är lägre än kunskapsbanken {collection} ({level}). Höj assistentens klass eller ta bort kunskapsbanken.',
+  retrieval_settings_invalid: 'Sökinställningen {field} måste vara {expected}.',
 }
 
 /** When the problem has no code we know: by status. */

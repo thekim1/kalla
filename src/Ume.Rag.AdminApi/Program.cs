@@ -89,6 +89,7 @@ var api = app.MapGroup("/api").RequireAuthorization(AdminPolicies.Read).RequireR
     .AddEndpointFilter<AdminValidationFilter>();
 api.MapGet("/ping", () => Results.Ok(new { ok = true })).RequireAuthorization(AdminPolicies.Read);
 api.MapClients();
+api.MapCollections();
 api.MapOrganisation();
 api.MapSettings();
 api.MapDataProtection();
