@@ -95,6 +95,26 @@
       "code": "retrieval_settings_invalid",
       "status": 400,
       "message": "The retrieval setting {field} must be {expected}."
+    },
+    {
+      "code": "key_not_rotatable",
+      "status": 409,
+      "message": "Only an active key that has not been rotated can be rotated."
+    },
+    {
+      "code": "key_revoked",
+      "status": 409,
+      "message": "The key is revoked."
+    },
+    {
+      "code": "key_secret_unavailable",
+      "status": 409,
+      "message": "The key\u0027s secret cannot be shown. Rotate the key to get one that can."
+    },
+    {
+      "code": "key_scope_invalid",
+      "status": 400,
+      "message": "A key can only be limited to assistants and knowledge banks of its team\u0027s department."
     }
   ]
 }

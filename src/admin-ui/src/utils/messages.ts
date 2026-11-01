@@ -22,6 +22,10 @@ export const ERROR_MESSAGES: Record<string, string> = {
   collection_level_conflict: 'Kunskapsbanken kan inte sänkas till {level}: en källa har högre informationsklass.',
   assistant_below_collection: 'Assistentens informationsklass är lägre än kunskapsbanken {collection} ({level}). Höj assistentens klass eller ta bort kunskapsbanken.',
   retrieval_settings_invalid: 'Sökinställningen {field} måste vara {expected}.',
+  key_not_rotatable: 'Bara en aktiv nyckel som inte redan har bytts kan bytas.',
+  key_revoked: 'Nyckeln är återkallad.',
+  key_secret_unavailable: 'Nyckelns hemlighet kan inte visas. Byt nyckeln för att få en som kan visas.',
+  key_scope_invalid: 'En nyckel kan bara begränsas till assistenter och kunskapsbanker i teamets förvaltning.',
 }
 
 /** When the problem has no code we know: by status. */

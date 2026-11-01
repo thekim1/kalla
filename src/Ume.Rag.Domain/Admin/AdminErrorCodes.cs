@@ -71,8 +71,19 @@ public static class AdminErrorCodes
     /// <summary>V16: <c>{field}</c> must be <c>{expected}</c>.</summary>
     public static AdminErrorCode RetrievalSettingsInvalid { get; } = new("retrieval_settings_invalid", 400, "The retrieval setting {field} must be {expected}.");
 
+    /// <summary>Only active keys that have not been rotated can be rotated.</summary>
+    public static AdminErrorCode KeyNotRotatable { get; } = new("key_not_rotatable", 409, "Only an active key that has not been rotated can be rotated.");
+
+    public static AdminErrorCode KeyRevoked { get; } = new("key_revoked", 409, "The key is revoked.");
+
+    /// <summary>The key has no stored secret (created outside the admin, e.g. by a seed); rotate it to get one that can be shown.</summary>
+    public static AdminErrorCode KeySecretUnavailable { get; } = new("key_secret_unavailable", 409, "The key's secret cannot be shown. Rotate the key to get one that can.");
+
+    /// <summary>V23: a scoped assistant or collection is not of the key team's department.</summary>
+    public static AdminErrorCode KeyScopeInvalid { get; } = new("key_scope_invalid", 400, "A key can only be limited to assistants and knowledge banks of its team's department.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
-            RetrievalSettingsInvalid];
+            RetrievalSettingsInvalid, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid];
 }

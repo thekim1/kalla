@@ -9,6 +9,7 @@ using Ume.Rag.Infrastructure;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Infrastructure.Jobs;
+using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Infrastructure.Stores;
 
 if (await WebDefaults.ExitIfHealthProbeAsync(args))
@@ -28,6 +29,9 @@ builder.AddUmeWebDefaults(maxRequestBodySize: 1024 * 1024, errors =>
 builder.AddRagDatabase();
 // Admin actions enqueue worker jobs in their own transaction (H4, #28); the admin registers no rag_jobs listener.
 builder.AddRagJobQueue();
+// API keys (identity §6.4): hashed with Security:KeyPepper as rag-api does; resolved when a key is created or rotated.
+builder.Services.AddOptions<SecurityOptions>().BindConfiguration(SecurityOptions.SectionName);
+builder.Services.AddSingleton(sp => KeyHasherFactory.Create(sp.GetRequiredService<IOptions<SecurityOptions>>().Value));
 builder.AddRagDataProtection();
 builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
@@ -90,6 +94,7 @@ var api = app.MapGroup("/api").RequireAuthorization(AdminPolicies.Read).RequireR
 api.MapGet("/ping", () => Results.Ok(new { ok = true })).RequireAuthorization(AdminPolicies.Read);
 api.MapClients();
 api.MapCollections();
+api.MapKeys();
 api.MapOrganisation();
 api.MapSettings();
 api.MapDataProtection();
