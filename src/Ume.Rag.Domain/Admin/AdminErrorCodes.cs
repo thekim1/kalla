@@ -71,8 +71,26 @@ public static class AdminErrorCodes
     /// <summary>V16: <c>{field}</c> must be <c>{expected}</c>.</summary>
     public static AdminErrorCode RetrievalSettingsInvalid { get; } = new("retrieval_settings_invalid", 400, "The retrieval setting {field} must be {expected}.");
 
+    /// <summary>V1: a source above its collection <c>{collection}</c> (<c>{level}</c>).</summary>
+    public static AdminErrorCode SourceAboveCollection { get; } = new("source_above_collection", 400, "A source cannot have a higher level than its collection {collection} ({level}).");
+
+    /// <summary>V25: the source settings break a rule at <c>{field}</c>: <c>{problem}</c>.</summary>
+    public static AdminErrorCode SourceSettingsInvalid { get; } = new("source_settings_invalid", 400, "The source setting {field} is invalid: {problem}");
+
+    /// <summary>V25: a scope or identity change was saved without the token from the impact check.</summary>
+    public static AdminErrorCode ImpactNotConfirmed { get; } = new("impact_not_confirmed", 409, "The change affects which documents the source holds. Check its impact and confirm.");
+
+    /// <summary>V24: no published pipeline of a template for source type <c>{type}</c>.</summary>
+    public static AdminErrorCode TemplateUnsupported { get; } = new("template_unsupported", 400, "There is no pipeline for the source type {type}.");
+
+    /// <summary>A field only platform admins may change.</summary>
+    public static AdminErrorCode AdminOnly { get; } = new("admin_only", 403, "Only a platform administrator can change this.");
+
+    /// <summary>The run is not running (<c>{state}</c>), so it cannot be cancelled.</summary>
+    public static AdminErrorCode RunNotActive { get; } = new("run_not_active", 409, "The run has already ended ({state}).");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
-            RetrievalSettingsInvalid];
+            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive];
 }

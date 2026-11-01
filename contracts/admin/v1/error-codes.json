@@ -95,6 +95,36 @@
       "code": "retrieval_settings_invalid",
       "status": 400,
       "message": "The retrieval setting {field} must be {expected}."
+    },
+    {
+      "code": "source_above_collection",
+      "status": 400,
+      "message": "A source cannot have a higher level than its collection {collection} ({level})."
+    },
+    {
+      "code": "source_settings_invalid",
+      "status": 400,
+      "message": "The source setting {field} is invalid: {problem}"
+    },
+    {
+      "code": "impact_not_confirmed",
+      "status": 409,
+      "message": "The change affects which documents the source holds. Check its impact and confirm."
+    },
+    {
+      "code": "template_unsupported",
+      "status": 400,
+      "message": "There is no pipeline for the source type {type}."
+    },
+    {
+      "code": "admin_only",
+      "status": 403,
+      "message": "Only a platform administrator can change this."
+    },
+    {
+      "code": "run_not_active",
+      "status": 409,
+      "message": "The run has already ended ({state})."
     }
   ]
 }
