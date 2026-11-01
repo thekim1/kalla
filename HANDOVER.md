@@ -130,6 +130,20 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 | Deploy | `deploy/` | Compose `Knowledge__PublicBaseUrl` (#213); Keycloak realm additions `deploy/keycloak/` (#207, local redirects opt-in #211) |
 | Tests / CI | `tests/`, `.github/workflows/` | Worker.Tests in four parallel collections, finalizer 0.2 s (#174: 4 min → ~45 s, Verify ≈ 3–4 min); `evaluation-smoke` job (#220) |
 
+## Session 15 (2026-11-01, in progress)
+
+- **Start:** `main` @ `1900916` green on the runner (run 41299302356) and locally (all suites; Worker.Tests 1116 ×2);
+  session 14's last run on `9d3c7ae` green. AppHost still running with the Turkos data; worker, api and adminapi rebuilt
+  and restarted on `1900916`. Scratchpad `verify.sh`, `watch.sh`, `adm.py` (OIDC sign-in; Keycloak's form_post page is
+  upper-case HTML), `ret.sh` (`/v1/retrieve` body is snake_case: `query`, `collections` slugs, `top_k`) re-created; the
+  Open WebUI and retrieval keys revealed into the scratchpad `secrets/`.
+- **Reviewed:** B's #241 (source demote after fusion) approved with two nits (doc summary misplaced; `(long, Dictionary)?`
+  cache fields can tear on the singleton). Hand-off taken: the evaluator puts `SearchScope.Demote` on its scope.
+- **User decisions:** gold set drafted by the main session, DoIT reviews (Decisions row, `13c32f4`); owner/date later;
+  Open WebUI rehearsal waits for #236.
+- **Running:** implementor `a/228-fetch-url` (worktree `../rag-a1`, on main + #239's head), implementor
+  `a/audit-scheduled` (`../rag-a2`), the gold-set draft (scratchpad `gold/`, from 1,166 exported Turkos pages).
+
 ## Session 14 (2026-11-01)
 
 - **Start:** `main` @ `366b4fa` green (runner + local). No stream-B activity since session 13; #223 still waits on B.

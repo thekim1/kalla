@@ -1,0 +1,98 @@
+name: Audit
+# Daily dependency audit of main (plans/platform/repo-and-deployment.md §8.4). verify.yml and parser.yml audit the
+# dependencies only when a pull request changes code, so a new advisory against an unchanged main would go unnoticed
+# until the next such pull request; this workflow runs the same checks every morning and from the Actions tab
+# (workflow_dispatch). No push or pull request trigger. The checks are shared, not copied: scripts/audit/audit.py reads
+# the .NET and npm reports in both places, and the parser job repeats parser.yml's two pip-audit commands (pip-audit
+# itself decides; there is nothing to extract). The npm exceptions (dated, dev-only) live in
+# scripts/audit/npm-audit-exceptions.txt; .NET and Python have none. Every job runs on the self-hosted runner (labels
+# self-hosted, linux, x64) and writes what it audited and what it found to the run summary.
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: audit
+  cancel-in-progress: false
+jobs:
+  dotnet:
+    # As the backend job in verify.yml: restore, then every project's top-level and transitive packages against the
+    # NuGet vulnerability data.
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.401
+      - name: Restore
+        run: dotnet restore UmeRag.slnx --nologo
+      - name: Audit .NET packages
+        run: |
+          dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/ume-package-audit.json"
+          python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/ume-package-audit.json" --summary "$GITHUB_STEP_SUMMARY"
+
+  admin-ui:
+    # As the admin-ui job in verify.yml: npm ci from the lock only (src/admin-ui/.npmrc: ignore-scripts,
+    # min-release-age, allow-git=none), then npm audit, production dependencies without exceptions first.
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/admin-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/admin-ui/package-lock.json
+      - name: Install from the lock
+        run: npm ci
+      - name: Audit npm packages
+        # Both checks run and are summarised; the step fails if either fails.
+        run: |
+          status=0
+          if npm audit --omit=dev --audit-level=low; then prod="no advisories"; else prod="advisories, see the log"; status=1; fi
+          { echo "### npm audit, production dependencies"; echo; echo "$prod"; echo; } >> "$GITHUB_STEP_SUMMARY"
+          npm audit --json > "$RUNNER_TEMP/audit.json" || true
+          if ! python3 -I ../../scripts/audit/audit.py npm "$RUNNER_TEMP/audit.json" --summary "$GITHUB_STEP_SUMMARY"; then
+            status=1
+          fi
+          exit "$status"
+
+  parser:
+    # As the parser job in parser.yml: uv from the image the parser's Dockerfile pins, then pip-audit against the
+    # locked export (torch and torchvision come from the PyTorch CPU index, which pip-audit cannot look up; it lists
+    # them as skipped).
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: src/parser
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv from the image the Dockerfile pins
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          cid="$(docker create ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff x)"
+          docker cp "$cid:/uv" "$RUNNER_TEMP/bin/uv"
+          docker rm "$cid"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Install from the lock
+        run: uv sync --frozen
+      - name: pip-audit against the locked export
+        run: |
+          uv export --frozen --no-emit-project --format requirements.txt -o "$RUNNER_TEMP/requirements.txt"
+          if uv run pip-audit -r "$RUNNER_TEMP/requirements.txt" --require-hashes --disable-pip --progress-spinner off \
+            > "$RUNNER_TEMP/pip-audit.txt" 2>&1; then
+            status=0
+          else
+            status=$?
+          fi
+          cat "$RUNNER_TEMP/pip-audit.txt"
+          { echo "### pip-audit, src/parser locked export"; echo; echo '```'; cat "$RUNNER_TEMP/pip-audit.txt"; echo '```'; } \
+            >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

@@ -6,7 +6,8 @@ name: Verify
 # verified from the Actions tab (workflow_dispatch), and release.yml calls this workflow in full.
 # Jobs: ownership and backend (Stage 0), evaluation-smoke (P1 item 17), images (P0 checklist #5), deploy-checks (P0
 # checklist #14), admin-ui (P0 checklist #3, plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract
-# jobs (P0 checklist #13) are in parser.yml, which runs them only when the parser changed.
+# jobs (P0 checklist #13) are in parser.yml, which runs them only when the parser changed. The dependency audits of the
+# backend and admin-ui jobs (scripts/audit/) also run daily against main in audit.yml.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -64,8 +65,9 @@ jobs:
           code="$(git diff --name-only "$range" | grep -vE '^(plans/|platforms/)|^[^/]+\.md$' || true)"
           # The production Compose files and init-deployment.sh, or this workflow.
           deploy="$(git diff --name-only "$range" | grep -E '^(deploy/|\.github/workflows/verify\.yml$)' || true)"
-          # The admin UI, the error codes its Swedish texts are checked against, its size budget script, or this workflow.
-          adminui="$(git diff --name-only "$range" | grep -E '^(src/admin-ui/|contracts/admin/|scripts/admin-ui-size-budget\.mjs$|\.github/workflows/verify\.yml$)' || true)"
+          # The admin UI, the error codes its Swedish texts are checked against, its size budget or audit script, or this
+          # workflow.
+          adminui="$(git diff --name-only "$range" | grep -E '^(src/admin-ui/|contracts/admin/|scripts/admin-ui-size-budget\.mjs$|scripts/audit/|\.github/workflows/verify\.yml$)' || true)"
           [ "$ui" = true ] || adminui=""
           { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"; } >> "$GITHUB_OUTPUT"
 
@@ -100,7 +102,8 @@ jobs:
           # the evaluation smoke test has a job of its own (evaluation-smoke).
           dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Category=Flaky" --filter-not-trait "Category=EvaluationSmoke"
           dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/ume-package-audit.json"
-          python3 -c "import json, os; d=json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'ume-package-audit.json'))); p=[p for x in d.get('projects',[]) for f in x.get('frameworks',[]) for k in ('topLevelPackages','transitivePackages') for p in f.get(k,[]) if p.get('vulnerabilities')]; assert not p, 'Vulnerable .NET dependencies detected'"
+          # The same check runs daily against main in audit.yml.
+          python3 -I scripts/audit/audit.py dotnet "$RUNNER_TEMP/ume-package-audit.json"
 
   evaluation-smoke:
     # Knowledge design §16.4, repo-and-deployment §8.2: without the AppHost, the 13 pages of tests/evaluation/smoke go
@@ -276,7 +279,7 @@ jobs:
   admin-ui:
     # The admin UI (repo-and-deployment §2.3, §8.2; admin design §10.2), as the gateway's "Verify UI" step: npm ci from
     # the lock only (src/admin-ui/.npmrc: ignore-scripts, min-release-age, allow-git=none; never npm install), npm audit
-    # failing on any advisory (dated, dev-only exceptions in the step), lint, typecheck, unit tests, build, then the gzip size budget and the design-system drift
+    # failing on any advisory (dated, dev-only exceptions in scripts/audit/), lint, typecheck, unit tests, build, then the gzip size budget and the design-system drift
     # report, which only warns. Node 24 as every gateway workflow; package.json engines asks for >= 22.
     needs: changes
     if: needs.changes.outputs.adminui == 'true'
@@ -294,40 +297,14 @@ jobs:
       - name: Install from the lock
         run: npm ci
       - name: Audit dependencies
-        # Production dependencies: any advisory fails. All dependencies: any advisory fails, except the dated
-        # exceptions below (dev-only lint toolchain advisories whose fixed versions are not yet 7 days old; issue #61).
-        # An exception stops applying on its date, so the job turns red again unless the fix has landed.
-        env:
-          # One line per exception: "<GHSA id> <last day, YYYY-MM-DD> <reason>". None today (#61 fixed by #71).
-          AUDIT_EXCEPTIONS: ""
+        # Production dependencies: any advisory fails. All dependencies: any advisory fails, except the dated, dev-only
+        # exceptions in scripts/audit/npm-audit-exceptions.txt (e.g. lint toolchain fixes not yet 7 days old; issue
+        # #61). An exception stops applying after its date, so the job turns red again unless the fix has landed. The
+        # same check runs daily against main in audit.yml.
         run: |
           npm audit --omit=dev --audit-level=low
           npm audit --json > "$RUNNER_TEMP/audit.json" || true
-          python3 - "$RUNNER_TEMP/audit.json" <<'PY'
-          import datetime, json, os, sys
-          today = datetime.date.today().isoformat()
-          allowed = {}
-          for line in os.environ["AUDIT_EXCEPTIONS"].splitlines():
-              if line.strip():
-                  ghsa, until = line.split()[:2]
-                  allowed[ghsa] = until
-          report = json.load(open(sys.argv[1]))
-          if "vulnerabilities" not in report:
-              sys.exit(f"npm audit gave no report: {report.get('error', report)}")
-          found = {}
-          for name, vuln in report["vulnerabilities"].items():
-              for via in vuln["via"]:
-                  if isinstance(via, dict):
-                      found.setdefault(via["url"].rsplit("/", 1)[-1], set()).add(f"{via['name']} ({via['severity']})")
-          bad = []
-          for ghsa, where in sorted(found.items()):
-              until = allowed.get(ghsa)
-              state = "excepted until " + until if until and today <= until else "FAILS"
-              print(f"{ghsa}: {', '.join(sorted(where))}: {state}")
-              if state == "FAILS":
-                  bad.append(ghsa)
-          sys.exit(f"{len(bad)} advisory(ies) without a current exception: {', '.join(bad)}" if bad else 0)
-          PY
+          python3 -I ../../scripts/audit/audit.py npm "$RUNNER_TEMP/audit.json"
       - name: Lint, typecheck, test and build
         # messages.spec.ts checks every code in contracts/admin/v1/error-codes.json has a Swedish text.
         run: |
