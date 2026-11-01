@@ -65,6 +65,36 @@
       "code": "policy_rule",
       "status": 400,
       "message": "The data protection policy breaks a rule: {rule}"
+    },
+    {
+      "code": "not_in_scope",
+      "status": 400,
+      "message": "That department is not one of yours."
+    },
+    {
+      "code": "no_embedding_profile",
+      "status": 409,
+      "message": "There is no default embedding profile. Ask the platform team."
+    },
+    {
+      "code": "collection_in_use",
+      "status": 409,
+      "message": "The collection is still used. Remove it from the assistants and delete its sources first."
+    },
+    {
+      "code": "collection_level_conflict",
+      "status": 409,
+      "message": "The collection cannot be lowered to {level}: a source has a higher level."
+    },
+    {
+      "code": "assistant_below_collection",
+      "status": 409,
+      "message": "An assistant\u0027s level is below the collection {collection} ({level})."
+    },
+    {
+      "code": "retrieval_settings_invalid",
+      "status": 400,
+      "message": "The retrieval setting {field} must be {expected}."
     }
   ]
 }

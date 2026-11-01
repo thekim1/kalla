@@ -53,7 +53,26 @@ public static class AdminErrorCodes
     /// <summary>V29: a data-protection policy breaks a rule (history modes, encryption, retention, blob key).</summary>
     public static AdminErrorCode PolicyRule { get; } = new("policy_rule", 400, "The data protection policy breaks a rule: {rule}");
 
+    /// <summary>A field names a department (or something of one) outside the caller's departments (admin design §3.2).</summary>
+    public static AdminErrorCode NotInScope { get; } = new("not_in_scope", 400, "That department is not one of yours.");
+
+    /// <summary>No active default embedding profile to put a new collection on (V31; the migrator seeds it).</summary>
+    public static AdminErrorCode NoEmbeddingProfile { get; } = new("no_embedding_profile", 409, "There is no default embedding profile. Ask the platform team.");
+
+    /// <summary>A collection is still linked by an assistant's published version or draft, or still has sources; <c>affected</c> lists them.</summary>
+    public static AdminErrorCode CollectionInUse { get; } = new("collection_in_use", 409, "The collection is still used. Remove it from the assistants and delete its sources first.");
+
+    /// <summary>V2: lowering a collection to <c>{level}</c> would put a source above it; <c>affected</c> lists the sources.</summary>
+    public static AdminErrorCode CollectionLevelConflict { get; } = new("collection_level_conflict", 409, "The collection cannot be lowered to {level}: a source has a higher level.");
+
+    /// <summary>V3: an assistant's level is below the collection <c>{collection}</c> at <c>{level}</c>; <c>affected</c> lists the assistants.</summary>
+    public static AdminErrorCode AssistantBelowCollection { get; } = new("assistant_below_collection", 409, "An assistant's level is below the collection {collection} ({level}).");
+
+    /// <summary>V16: <c>{field}</c> must be <c>{expected}</c>.</summary>
+    public static AdminErrorCode RetrievalSettingsInvalid { get; } = new("retrieval_settings_invalid", 400, "The retrieval setting {field} must be {expected}.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
-            GatewayUnavailable, PolicyRule];
+            GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
+            RetrievalSettingsInvalid];
 }
