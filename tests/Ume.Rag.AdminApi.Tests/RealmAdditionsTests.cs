@@ -89,13 +89,18 @@ public sealed class RealmAdditionsFixture : IAsyncLifetime
     }
 
     /// <summary>Runs <c>deploy/keycloak/apply-additions.py</c> against the container, as the gateway session would.</summary>
-    public async Task<(int ExitCode, string Output)> ApplyAsync(string part)
+    public async Task<(int ExitCode, string Output)> ApplyAsync(string part, bool localRedirects = true)
     {
         var script = TestPostgres.RepositoryFile(Path.Combine("deploy", "keycloak", "apply-additions.py"));
         var start = new ProcessStartInfo("python3") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         foreach (var argument in new[] { "-I", script, "--url", BaseUrl, "--realm", "ume", "--admin-user", "admin", "--part", part })
         {
             start.ArgumentList.Add(argument);
+        }
+
+        if (localRedirects)
+        {
+            start.ArgumentList.Add("--include-local-redirects"); // the BFF sign-in below runs on https://localhost:5174
         }
 
         start.Environment["KEYCLOAK_ADMIN_PASSWORD"] = _adminPassword;
@@ -186,9 +191,21 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
         rag.Count.ShouldBe(4);
         rag.ShouldAllBe(c => !c.GetProperty("fullScopeAllowed").GetBoolean());
         rag.Single(c => c.GetProperty("clientId").GetString() == "open-webui").GetProperty("redirectUris").EnumerateArray().Select(u => u.GetString())
-            .ShouldBe(["https://chat.example.invalid/oauth/oidc/callback", "http://localhost:8080/oauth/oidc/callback"], ignoreOrder: true);
+            .ShouldBe(["https://chat.example.invalid/oauth/oidc/callback", "http://localhost:8080/oauth/oidc/callback"], ignoreOrder: true); // this realm took the local ones
         using var users = JsonDocument.Parse(await admin.GetStringAsync("users?briefRepresentation=true", Ct));
         users.RootElement.GetArrayLength().ShouldBe(3); // only the three the fixture created
+    }
+
+    [Fact]
+    public void The_production_files_hold_no_localhost_uri()
+    {
+        // #207 review: the local AppHost URIs are only in rag-additions.local.json, applied with --include-local-redirects.
+        foreach (var file in new[] { "rag-additions.json", "rag-realm-settings.json" })
+        {
+            File.ReadAllText(TestPostgres.RepositoryFile(Path.Combine("deploy", "keycloak", file))).ShouldNotContain("localhost", Case.Insensitive, file);
+        }
+
+        File.ReadAllText(TestPostgres.RepositoryFile(Path.Combine("deploy", "keycloak", "rag-additions.local.json"))).ShouldContain("https://localhost:5174/signin-oidc");
     }
 
     [Fact]

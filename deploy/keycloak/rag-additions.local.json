@@ -1,0 +1,29 @@
+{
+  "description": "Local AppHost redirect URIs (issue #95 part 3). Only for a test or dev realm: apply-additions.py --include-local-redirects merges them into the clients of rag-additions.json. Never on the production realm.",
+  "clients": {
+    "ume-rag-admin": {
+      "redirectUris": [
+        "https://localhost:5174/signin-oidc",
+        "https://localhost:7402/signin-oidc"
+      ],
+      "webOrigins": [
+        "https://localhost:5174",
+        "https://localhost:7402"
+      ],
+      "postLogoutRedirectUris": [
+        "https://localhost:5174/",
+        "https://localhost:5174/signout-callback-oidc",
+        "https://localhost:7402/",
+        "https://localhost:7402/signout-callback-oidc"
+      ]
+    },
+    "open-webui": {
+      "redirectUris": [
+        "http://localhost:8080/oauth/oidc/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ]
+    }
+  }
+}

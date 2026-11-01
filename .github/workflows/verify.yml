@@ -205,6 +205,7 @@ jobs:
           UME_RAG_SECRETS_DIR: /secrets
           UME_RAG_OIDC_AUTHORITY: https://keycloak.example.se/realms/ume
           UME_RAG_GATEWAY_URL: https://llm.example.se
+          UME_RAG_API_PUBLIC_URL: https://rag-api.example.se
         run: |
           digest="sha256:$(printf '0%.0s' $(seq 64))"
           for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV POSTGRES; do
