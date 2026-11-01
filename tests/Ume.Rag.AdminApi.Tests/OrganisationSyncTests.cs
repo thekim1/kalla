@@ -203,10 +203,11 @@ public sealed class OrganisationSyncTests(OrgSyncFixture database) : IClassFixtu
         }
 
         // The holder's rollback releases the lock on the server a moment after the call returns; a slow runner can see it
-        // still held, so wait (≤ 5 s) for a run that got the lock instead of failing on the race.
+        // still held, so wait for a run that got the lock instead of failing on the race. 30 s: under the full suite's
+        // parallel load 5 s was not always enough (main @ 4f19651); a run that never gets the lock still fails below.
         long removed;
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while ((removed = await retention.RunOnceAsync(Ct)) < 0 && waited.Elapsed < TimeSpan.FromSeconds(5))
+        while ((removed = await retention.RunOnceAsync(Ct)) < 0 && waited.Elapsed < TimeSpan.FromSeconds(30))
         {
             await Task.Delay(50, Ct);
         }

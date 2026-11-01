@@ -32,6 +32,17 @@ public sealed class UrlPatternTests
     public void Matches_the_canonical_url_without_scheme(string pattern, string url, bool expected) =>
         UrlPattern.Parse(pattern).Matches(url).ShouldBe(expected);
 
+    [Theory]
+    [InlineData("www.umea.se/intranat/**")]
+    [InlineData("re:^www\\.umea\\.se/intranat/")]
+    public void Patterns_have_no_match_timeout_so_load_never_turns_an_exclude_into_no_match(string pattern)
+    {
+        var parsed = UrlPattern.Parse(pattern);
+
+        parsed.Timeout.ShouldBe(System.Text.RegularExpressions.Regex.InfiniteMatchTimeout);
+        parsed.Matches("https://www.umea.se/intranat/" + new string('a', 100_000)).ShouldBeTrue();
+    }
+
     [Fact]
     public void An_invalid_regex_is_refused_on_parse() =>
         Should.Throw<ArgumentException>(() => UrlPattern.Parse("re:("));
