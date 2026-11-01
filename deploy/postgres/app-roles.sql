@@ -90,6 +90,14 @@ GRANT SELECT ON content."EvaluationSets", content."EvaluationQuestions", content
   content."RetrievalStats" TO ume_rag_admin;
 GRANT INSERT, UPDATE ON content."EvaluationRuns", content."EvaluationResults" TO ume_rag_admin;
 
+-- chat (data-model §1.2, §2.3): the api owns it; the admin reads it and marks feedback reviewed (admin design §8.1); the
+-- worker has no access to the schema. P1 writes metadata and ratings only (weakness review §4).
+GRANT SELECT, INSERT, UPDATE, DELETE ON chat."Conversations", chat."DataKeys", chat."Messages", chat."MessageSources",
+  chat."Feedback", chat."ToolCalls", chat."AssistantDailyTotals", chat."FeedbackImportState" TO ume_rag_api;
+GRANT SELECT ON chat."Conversations", chat."DataKeys", chat."Messages", chat."MessageSources", chat."Feedback",
+  chat."ToolCalls", chat."AssistantDailyTotals", chat."FeedbackImportState" TO ume_rag_admin;
+GRANT UPDATE ("ReviewState") ON chat."Feedback" TO ume_rag_admin;
+
 -- audit: every service appends, only the admin reads; no role deletes (retention runs through step functions).
 GRANT INSERT ON audit."AuditLog" TO ume_rag_api, ume_rag_admin, ume_rag_worker;
 GRANT SELECT ON audit."AuditLog" TO ume_rag_admin;

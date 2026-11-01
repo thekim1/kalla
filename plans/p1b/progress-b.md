@@ -21,9 +21,9 @@ here.
 
 ### 1. Schema part 3 (first)
 Refs: [data-model §2.3, §8](../platform/data-model.md), [weakness review §3, §4](../weakness-review.md)
-- [ ] `chat`: `Conversations`, `Messages`, `MessageSources`, `Feedback`, `FeedbackImportState`, `AssistantDailyTotals`; `DataKeys`, `ToolCalls` created, unused
-- [ ] Freshness columns P1a's item 2 did not create (`Sources.DemoteRules`, `CrawlRuns.SeedsFailed`/`Complete`)
-- [ ] Grants; `DatabaseRoleTests` extended
+- [x] `chat`: `Conversations`, `Messages`, `MessageSources`, `Feedback`, `FeedbackImportState`, `AssistantDailyTotals`; `DataKeys`, `ToolCalls` created, unused (this PR)
+- [x] Freshness columns P1a's item 2 did not create (`Sources.DemoteRules`, `CrawlRuns.SeedsFailed`/`Complete`) (`DemoteRules`, `Incremental`, `RemovalCheck` in #219; `SeedsFailed`/`Complete` were already in P1a's schema; plus #219's parse-rule key, evaluation and chunk columns)
+- [x] Grants; `DatabaseRoleTests` extended (#219, this PR)
 - [ ] **Hand-off L2:** issue to stream A
 
 ### 3. Age decay and `demote`
