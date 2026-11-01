@@ -52,6 +52,8 @@ GRANT SELECT ("Id", "CollectionId", "Type", "Classification", "State", "DeletedA
 -- checks, #130).
 GRANT SELECT, INSERT, UPDATE, DELETE ON config."Assistants", config."AssistantVersions", config."AssistantAudiences",
   config."GatewayModels" TO ume_rag_admin;
+-- Explain access (identity design 4.9) builds the api's policy snapshot in rag-admin, which reads the published view too.
+GRANT SELECT ON config."PublishedAssistantVersions" TO ume_rag_admin;
 GRANT SELECT ON config."Assistants", config."AssistantAudiences", config."PublishedAssistantVersions",
   config."GatewayModels" TO ume_rag_api;
 GRANT SELECT ON config."GatewayModels" TO ume_rag_worker;

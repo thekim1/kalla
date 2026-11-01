@@ -51,7 +51,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         (await PrivilegesAsync(Api, "UPDATE")).ShouldBe(["config.KeyLastUse", .. chat], ignoreOrder: true);
         (await PrivilegesAsync(Api, "DELETE")).ShouldBe(chat, ignoreOrder: true);
 
-        (await PrivilegesAsync(Admin, "SELECT")).ShouldBe(all, ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "SELECT")).ShouldBe([.. all, "config.PublishedAssistantVersions"], ignoreOrder: true); // explain access (identity §4.9)
         (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog"], ignoreOrder: true);
         (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites], ignoreOrder: true);
         (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions"], ignoreOrder: true);
@@ -156,9 +156,10 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
 
         await Sql.ExecuteAsync(worker, """SELECT count(*) FROM config."GatewayModels" """); // the model mirror only (#130)
 
-        // The admin edits versions in the table; the view is the data plane's.
+        // The admin edits versions in the table, and reads the data plane's view only to explain access exactly as the
+        // api decides (identity design §4.9, P1b item 9): the published version, never a draft.
         (await Sql.ScalarAsync<long>(admin, $"""SELECT count(*) FROM config."AssistantVersions" WHERE "AssistantId" = '{assistantId}'""")).ShouldBe(2);
-        await Sql.ShouldBeDeniedAsync(admin, """SELECT count(*) FROM config."PublishedAssistantVersions" """);
+        (await Sql.ScalarAsync<long>(admin, $"""SELECT count(*) FROM config."PublishedAssistantVersions" WHERE "AssistantId" = '{assistantId}'""")).ShouldBe(1);
     }
 
     [Fact]
