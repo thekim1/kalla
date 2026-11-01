@@ -7,6 +7,7 @@ using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Deletion;
+using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Urls;
 
 namespace Ume.Rag.Worker.Tests.Connectors;
@@ -46,7 +47,39 @@ public sealed class CrawlPathScopeTests : IAsyncLifetime
             "a path include admits the section's node-id pages under their identity, and no page of another section");
         Content(results, "/4.10000000000a.html").Facts.CanonicalIdentity.ShouldBe(Url("/4.10000000000a.html"));
         Content(results, "/section/go-in").Facts.CanonicalIdentity.ShouldBe(Url("/4.60000000000f.html"));
+        // #228: each node row keeps the path it was first found under in the run and is fetched there; a redirect target keeps none.
+        rig.Store.Rows(context.Run.SourceId).OrderBy(r => r.Url, StringComparer.Ordinal).Select(r => r.FetchUrl).ShouldBe(
+            [
+                Url("/section/sida-a.4.10000000000a.html"), Url("/section/sida-b.4.20000000000b.html"), Url("/section/hidden/sida-d.4.40000000000d.html"),
+                Url("/section/djup/sida-e.4.50000000000e.html"), null, null, null, null,
+            ],
+            ignoreOrder: false);
+        Content(results, "/4.10000000000a.html").Facts.FinalUrl!.AbsoluteUri.ShouldBe(Url("/section/sida-a.4.10000000000a.html"));
+        Content(results, "/section/go-in").Facts.FinalUrl!.AbsoluteUri.ShouldBe(Url("/4.60000000000f.html"), "a redirect target is fetched under its identity, as before");
         Done(results, "/section/go-out").Outcome.ShouldBe(new FetchOutcome.Skipped("redirect.out_of_scope"));
+        (await rig.Traversal.EvaluateAsync(context, cancelled: false, Ct)).Complete.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_cold_host_whose_latency_stretches_the_slot_interval_past_a_second_still_drains()
+    {
+        // The flake of the test above (2026-11-01): a slow first response (a cold start) makes the external host's slot
+        // interval its latency (HostBudgetPolicy.Interval); past MaxInProcessWait the fetches come back Later, and a drain
+        // bounded by rounds ran out of them before the slot opened.
+        var hosts = new InMemoryCrawlHostStore(TimeProvider.System);
+        hosts[$"{TestSite.Host}:{_site.Port}"] = new CrawlHostState
+        {
+            Host = $"{TestSite.Host}:{_site.Port}", Kind = HostKind.External, RequestsPerSecond = 500, MaxConnections = 4,
+            NextAllowedAt = DateTimeOffset.UtcNow, LatencyEwmaMs = 2500,
+        };
+        await using var rig = Rig(hosts);
+        var context = Context(Settings(include: [Glob("/section"), Glob("/section/**")]));
+
+        var results = await rig.CrawlAsync(context);
+
+        rig.Requeues.ShouldBeGreaterThan(0, "the stretched interval sent fetches back");
+        results.Values.ShouldAllBe(r => r is CrawlFetchResult.Done);
+        rig.Store.Rows(context.Run.SourceId).ShouldAllBe(r => r.State == FrontierState.Idle);
         (await rig.Traversal.EvaluateAsync(context, cancelled: false, Ct)).Complete.ShouldBeTrue();
     }
 
@@ -91,6 +124,39 @@ public sealed class CrawlPathScopeTests : IAsyncLifetime
             .ShouldBeEmpty("a node-id document is never scope-narrowed by a path pattern");
     }
 
+    [Fact]
+    public void A_kept_path_form_decides_the_patterns_and_a_row_or_document_without_one_keeps_the_identity_check()
+    {
+        var settings = new CrawlSettings { StartUrls = ["https://www.umea.se/kommunochpolitik"], Include = ["www.umea.se/kommunochpolitik/**"] };
+        var scope = CrawlScope.Create(settings);
+        var canonicalizer = new CanonicalizerOptions
+        {
+            Hosts = new Dictionary<string, HostCanonicalRules>(StringComparer.Ordinal) { ["www.umea.se"] = new([], PathIdentityRule.Create(Pattern, "/${id}.html")) },
+        };
+        const string node = "https://www.umea.se/4.1c16b00a1742340e02e1dd1.html";
+        const string inside = "https://www.umea.se/kommunochpolitik/languages.4.1c16b00a1742340e02e1dd1.html";
+        const string outside = "https://www.umea.se/bygga/languages.4.1c16b00a1742340e02e1dd1.html";
+
+        // #228: the path form a row or document keeps decides; the bare node id (an old row, a redirect target's URL) does not.
+        scope.CheckStored(node, inside, canonicalizer).ShouldBe(ScopeDecision.In);
+        scope.CheckStored(node, outside, canonicalizer).Reason.ShouldBe(CrawlScope.NotIncluded);
+        scope.CheckStored(node, null, canonicalizer).ShouldBe(ScopeDecision.In);
+        scope.CheckStored(node, node, canonicalizer).ShouldBe(ScopeDecision.In);
+        scope.CheckStored("https://www.umea.se/bygga", "https://www.umea.se/bygga", canonicalizer).Reason.ShouldBe(CrawlScope.NotIncluded);
+
+        SourceDocument Document(string? url, string? fetchUrl) =>
+            new() { Id = Guid.NewGuid(), CanonicalIdentity = node, Url = url, FetchUrl = fetchUrl, LastSeenAt = DateTimeOffset.UtcNow };
+        var old = Document(node, null);
+        var foundOutside = Document(inside, outside);
+        var fetchedOutside = Document(outside, null);
+        var kept = Document(inside, null);
+        var verdict = new TraversalVerdict(false, [], null, null);
+        SettingsCandidates.Crawl(Guid.NewGuid(), [old, foundOutside, fetchedOutside, kept], verdict, new Dictionary<Guid, string>(), new HashSet<Guid>(),
+                DateTimeOffset.UtcNow, new CrawlSource(settings, scope, canonicalizer), new Dictionary<Guid, string>(), new HashSet<Guid>(), identityChanged: false)
+            .ShouldBe([new DeletionCandidate(foundOutside.Id, DeletionReasons.ScopeNarrowed), new DeletionCandidate(fetchedOutside.Id, DeletionReasons.ScopeNarrowed)],
+                "the frontier's path form wins over Documents.Url, which counts where the frontier keeps none; an old node-id document is kept");
+    }
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static CrawlFetchResult.Done Done(Dictionary<string, CrawlFetchResult> results, string path) =>
@@ -103,9 +169,9 @@ public sealed class CrawlPathScopeTests : IAsyncLifetime
         new(new CrawlRunKey(Guid.NewGuid(), "public", Guid.NewGuid()), Guid.NewGuid(), SyncKind.Sync, RunTrigger.Manual, settings, Revalidate: false);
 
     /// <summary>A rig whose test host has a verified Sitevision identity rule (the umea.se profile's).</summary>
-    private CrawlRig Rig()
+    private CrawlRig Rig(InMemoryCrawlHostStore? hosts = null)
     {
-        var rig = CrawlRig.Create(_site);
+        var rig = CrawlRig.Create(_site, hosts: hosts);
         rig.Profiles.Set("public", TestSite.Host, new SiteProfile
         {
             MainRoot = "main",
@@ -137,13 +203,14 @@ public sealed class CrawlPathScopeTests : IAsyncLifetime
             + "<a href=\"/section/go-in\">In</a><a href=\"/section/go-out\">Ut</a>"));
         app.MapGet("/section/go-in", () => Results.Redirect("/section/ny.4.60000000000f.html"));
         app.MapGet("/section/go-out", () => Results.Redirect("/other/ny.4.70000000000a.html"));
-        // The crawler requests the identity (the node id), as Sitevision serves it (design §3.3).
-        app.MapGet("/{node}", (string node) => node switch
+        // Sitevision serves a node under any path that ends in its id; the crawler requests the path as found (#228).
+        app.MapGet("/{**path}", (string path) => Node(Sitevision.NodeOf(path)));
+        IResult Node(string node) => node switch
         {
             "4.10000000000a.html" => Html("<p>A</p><a href=\"/section/djup/sida-e.4.50000000000e.html\">E</a><a href=\"/other/sida-g.4.80000000000b.html\">G</a>"),
             "4.20000000000b.html" or "4.30000000000c.html" or "4.40000000000d.html" or "4.50000000000e.html" or "4.60000000000f.html"
                 or "4.70000000000a.html" or "4.80000000000b.html" => Html($"<p>{node}</p>"),
             _ => Results.NotFound(),
-        });
+        };
     }
 }

@@ -28,6 +28,15 @@ public sealed record FrontierRow
     /// <summary>The canonical URL (§3.1).</summary>
     public required string Url { get; init; }
 
+    /// <summary>
+    /// The URL as found: canonical but for the site profile's identity rule (<see cref="Urls.UrlCanonicalizer.PathForm"/>,
+    /// §3.1 rule 10); null when it equals <see cref="Url"/> or is not known (a row from before #228). The fetch requests it.
+    /// </summary>
+    public string? FetchUrl { get; init; }
+
+    /// <summary>The URL a fetch requests: <see cref="FetchUrl"/>, else <see cref="Url"/>.</summary>
+    public string RequestUrl => FetchUrl ?? Url;
+
     /// <summary>The URL's authority: host, with <c>:port</c> when not the default (the <c>CrawlHosts</c> key).</summary>
     public required string Host { get; init; }
 
@@ -68,10 +77,46 @@ public sealed record FrontierRow
     public bool IsRemovalCheck => RemovalCheck || Depth == LegacyRemovalCheckDepth;
 }
 
-/// <summary>A URL to admit: canonical, in scope, below the depth limit, not a trap; <c>RemovalCheck</c> admits it for the removal check (<see cref="FrontierRow.RemovalCheck"/>).</summary>
-public sealed record FrontierAdmission(string Url, string Host, short Depth, bool Leaf, DateTimeOffset? SitemapLastMod = null, bool RemovalCheck = false)
+/// <summary>
+/// A URL to admit: canonical, in scope, below the depth limit, not a trap; <c>RemovalCheck</c> admits it for the removal
+/// check (<see cref="FrontierRow.RemovalCheck"/>). <c>FetchUrl</c> is the URL's path form as found
+/// (<see cref="FrontierRow.FetchUrl"/>), null when not known.
+/// </summary>
+public sealed record FrontierAdmission(string Url, string Host, short Depth, bool Leaf, DateTimeOffset? SitemapLastMod = null, bool RemovalCheck = false,
+    string? FetchUrl = null)
 {
+    /// <summary>The length of <c>CrawlFrontier.FetchUrl</c> (data-model §2.2).</summary>
+    public const int MaxFetchUrlLength = 2048;
+
     public string UrlHash => Convert.ToHexStringLower(Urls.UrlCanonicalizer.IdentityHash(Url));
+
+    /// <summary>
+    /// <c>CrawlFrontier.FetchUrl</c> as written: <see cref="FetchUrl"/>, null when it equals <see cref="Url"/> or is longer
+    /// than the column (the row then fetches its identity, as before #228).
+    /// </summary>
+    public string? StoredFetchUrl => FetchUrl is null || FetchUrl.Length > MaxFetchUrlLength || string.Equals(FetchUrl, Url, StringComparison.Ordinal) ? null : FetchUrl;
+
+    /// <summary>One admission per identity, in the order of first appearance: the first with a stored path form, else the first.</summary>
+    public static IReadOnlyList<FrontierAdmission> OnePerIdentity(IEnumerable<FrontierAdmission> urls)
+    {
+        ArgumentNullException.ThrowIfNull(urls);
+        var index = new Dictionary<string, int>(StringComparer.Ordinal);
+        var distinct = new List<FrontierAdmission>();
+        foreach (var url in urls)
+        {
+            if (!index.TryGetValue(url.UrlHash, out var at))
+            {
+                index[url.UrlHash] = distinct.Count;
+                distinct.Add(url);
+            }
+            else if (distinct[at].StoredFetchUrl is null && url.StoredFetchUrl is not null)
+            {
+                distinct[at] = url;
+            }
+        }
+
+        return distinct;
+    }
 }
 
 /// <param name="Admitted">The rows new to the run, now <c>pending</c>.</param>
@@ -92,7 +137,9 @@ public interface ICrawlFrontierStore
 {
     /// <summary>
     /// Upserts the URLs for the run: a row not yet of this run becomes <c>pending</c> with the run, depth, leaf and
-    /// removal-check flag (and the sitemap <c>lastmod</c> when given); a row already of this run is left as it is. New rows
+    /// removal-check flag (and the sitemap <c>lastmod</c> and <c>FetchUrl</c> when given: the latest path form found wins,
+    /// an admission without one keeps the stored one); a row already of this run is left as it is. Of several URLs with one
+    /// identity in a call, the first with a path form is admitted (else the first). New rows
     /// are admitted in order while <c>CrawlRuns.Admitted</c> is below <c>MaxPages</c>, which counts them (depth 0 also
     /// counts <c>Seeds</c>, a removal check does not); the first refused one sets <c>LimitHit</c>.
     /// </summary>
@@ -104,7 +151,8 @@ public interface ICrawlFrontierStore
     /// An incremental run's listing (§5.4): the seeds that need no fetch are marked listed for the run (<c>RunId</c> set,
     /// <c>SitemapLastMod</c> updated when given, nothing admitted or counted) and their hashes returned. A seed needs no
     /// fetch when its row is <c>idle</c>, was fetched, and its sitemap <c>lastmod</c> is absent or not newer than
-    /// <c>LastFetchedAt</c>; every other seed is left for <see cref="AdmitAsync"/>.
+    /// <c>LastFetchedAt</c>; every other seed is left for <see cref="AdmitAsync"/>. A listed seed's path form refreshes
+    /// <c>FetchUrl</c> as in <see cref="AdmitAsync"/>.
     /// </summary>
     Task<IReadOnlySet<string>> MarkListedAsync(CrawlRunKey run, IReadOnlyList<FrontierAdmission> seeds, CancellationToken cancellationToken);
 

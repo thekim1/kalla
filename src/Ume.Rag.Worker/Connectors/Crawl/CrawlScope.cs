@@ -172,7 +172,8 @@ public sealed class CrawlScope
     public ScopeDecision Check(string pathUrl) => Decide(pathUrl, patterns: true);
 
     /// <summary>
-    /// The scope decision for a URL known only by its canonical identity (a frontier row, a document, a canonical hint).
+    /// The scope decision for a URL known only by its canonical identity (a frontier row or a document without a kept path
+    /// form, <see cref="CheckStored"/>).
     /// When its host's verified identity rule mapped the path (§3.1 rule 10), the path the patterns were written for is
     /// not known: <c>include</c> and <c>exclude</c> decide nothing and only the host and type rules apply, so an unknown
     /// path never narrows the scope. Any other identity is its own path form.
@@ -182,6 +183,31 @@ public sealed class CrawlScope
         ArgumentNullException.ThrowIfNull(canonicalIdentity);
         ArgumentNullException.ThrowIfNull(canonicalizer);
         return Decide(canonicalIdentity, patterns: !UrlCanonicalizer.IsIdentityRuleForm(canonicalIdentity, canonicalizer));
+    }
+
+    /// <summary>
+    /// The scope decision for a stored URL (a frontier row, a document, a canonical hint; #228): <see cref="Check"/> on its
+    /// kept path form (<see cref="PathFormOf"/>), <see cref="CheckIdentity"/> where none is kept (rows and documents from
+    /// before #228, or a document last fetched under its identity, such as a redirect target).
+    /// </summary>
+    /// <param name="canonicalIdentity">The stored identity.</param>
+    /// <param name="foundUrl">The URL it was found or fetched under (<c>CrawlFrontier.FetchUrl</c>, <c>Documents.Url</c>); null when not known.</param>
+    /// <param name="canonicalizer">The source's canonicaliser with its hosts' rules.</param>
+    public ScopeDecision CheckStored(string canonicalIdentity, string? foundUrl, CanonicalizerOptions canonicalizer) =>
+        PathFormOf(canonicalIdentity, foundUrl, canonicalizer) is { } path ? Check(path) : CheckIdentity(canonicalIdentity, canonicalizer);
+
+    /// <summary>
+    /// The path form (<see cref="UrlCanonicalizer.PathForm"/>) of <paramref name="foundUrl"/> when it differs from
+    /// <paramref name="canonicalIdentity"/>, so it still tells the path the identity rule mapped; null otherwise.
+    /// </summary>
+    public static string? PathFormOf(string canonicalIdentity, string? foundUrl, CanonicalizerOptions canonicalizer)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalIdentity);
+        ArgumentNullException.ThrowIfNull(canonicalizer);
+        return foundUrl is not null && UrlCanonicalizer.PathForm(foundUrl, canonicalizer).Value is { } path
+            && !string.Equals(path, canonicalIdentity, StringComparison.Ordinal)
+            ? path
+            : null;
     }
 
     private ScopeDecision Decide(string canonicalUrl, bool patterns)

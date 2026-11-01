@@ -75,7 +75,12 @@ public sealed class CrawlConnector(
 
     public Type SettingsType => typeof(CrawlSettings);
 
-    public WorkItem? FromIdentity(string canonicalIdentity, FailedItem last) => RetryWork.FromUrl(canonicalIdentity);
+    /// <summary>The failed URL, fetched under the URL it was last found or fetched under (<see cref="FailedItem.FoundUrl"/>) when known.</summary>
+    public WorkItem? FromIdentity(string canonicalIdentity, FailedItem last)
+    {
+        ArgumentNullException.ThrowIfNull(last);
+        return RetryWork.FromUrl(canonicalIdentity, last.FoundUrl);
+    }
 
     /// <summary>
     /// The source's settings and scope, with the canonicaliser of the source's settings and of the scope hosts' applied
@@ -282,7 +287,8 @@ public sealed class CrawlConnector(
             return sitemap is null ? new ListingEvent<CrawlCheckpoint>.Failure(url, canonical.Refusal!) : null;
         }
 
-        // The patterns match the path the sitemap or the start URL names, the seed keeps its identity (§3.1 rule 10).
+        // The patterns match the path the sitemap or the start URL names, the seed keeps its identity (§3.1 rule 10) and is
+        // fetched under that path (#228).
         var path = sitemap is null ? UrlCanonicalizer.PathForm(url, source.Canonicalizer) : UrlCanonicalizer.ResolvePathForm(sitemap, url, source.Canonicalizer);
         var scope = source.Scope.Check(path.Value!);
         if (!scope.Admitted)
@@ -292,7 +298,7 @@ public sealed class CrawlConnector(
         }
 
         return listed.Add(canonical.Value!)
-            ? new ListingEvent<CrawlCheckpoint>.Item(new WorkItem(IdentityKind.Url, canonical.Value!, canonical.ToUri(), 0, new WorkHints(SitemapLastMod: lastModified)))
+            ? new ListingEvent<CrawlCheckpoint>.Item(new WorkItem(IdentityKind.Url, canonical.Value!, path.ToUri(), 0, new WorkHints(SitemapLastMod: lastModified)))
             : null;
     }
 
