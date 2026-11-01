@@ -148,6 +148,9 @@ services:
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
       # Open WebUI's client in the registry; the user JWT's key is the secret file OpenWebUi__JwtSecret (identity §5.2).
       OpenWebUi__ClientId: ${UME_RAG_OPENWEBUI_CLIENT_ID:-}
+      # The origin staff browsers reach rag-api at (J9, #210): citation links are absolute, so they resolve from Open
+      # WebUI too (relative links would resolve against Open WebUI's origin). init-deployment.sh writes it.
+      Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:?Set UME_RAG_API_PUBLIC_URL in deploy/.env}
       # Placeholder (P1b item 17, waiting on stream B's L6): the feedback importer's settings (chat design §14.2, Open
       # WebUI's base URL per instance) go here once its configuration names exist. Its key is already the secret file
       # OpenWebUi__AdminApiKey, written by deploy/openwebui-feedback-key.sh.
