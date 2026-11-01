@@ -74,6 +74,8 @@ over="$(jq -r '.services | to_entries[] | select((.value.cpus // 0) > 2) | .key'
 if [ -z "$over" ]; then ok "base files: every cpus cap is 2 or less"; else fail "base files: cpus above 2: $over"; fi
 env_is "$base" rag-parser PARSER_WORKERS 1
 env_is "$base" rag-parser PARSER_THREADS 2
+env_is "$base" rag-api OpenWebUi__BaseUrl ""
+env_is "$base" rag-api OpenWebUi__FeedbackImportInterval 00:15:00
 
 # --- 24 GB pilot host: pilot caps and limits ------------------------------------------------------------------------
 pilot="$(render compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml)"
@@ -134,6 +136,9 @@ if grep -qx "WEBUI_ADMIN_EMAIL='feedback-import@localhost'" "$i/first" &&
 else fail "init-deployment.sh: no feedback service account in secrets/openwebui.env"; fi
 if diff -q "$i/first" "$i/second" >/dev/null; then ok "init-deployment.sh: a re-run keeps the service account"
 else fail "init-deployment.sh: a re-run changed the service account"; fi
+if grep -qx "UME_RAG_OPENWEBUI_BASE_URL=https://chat.example.se" "$i/deploy/.env"; then
+  ok "init-deployment.sh --openwebui-host: rag-api's importer reads https://chat.example.se"
+else fail "init-deployment.sh --openwebui-host: no UME_RAG_OPENWEBUI_BASE_URL in deploy/.env"; fi
 if grep -q "compose.host-24g.yaml" "$i/deploy/.env"; then ok "init-deployment.sh --host-memory 24: COMPOSE_FILE has compose.host-24g.yaml"
 else fail "init-deployment.sh --host-memory 24: compose.host-24g.yaml not in COMPOSE_FILE"; fi
 if (
