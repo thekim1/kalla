@@ -48,11 +48,20 @@ public sealed record GatewayAnswer(string Text, int PromptTokens, int Completion
 /// before a byte is read), <c>x-ume-step: chat-answer</c> and <c>x-ume-run-id</c> = the message id. Streams are opened with
 /// <see cref="HttpCompletionOption.ResponseHeadersRead"/>, so every check runs before our first byte. Errors map to §3.6.
 /// </summary>
-public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatOptions> options)
+public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatOptions> options, ILogger<GatewayChatClient> logger)
 {
     public const string HttpClientName = "gateway-chat";
 
-    public async Task<GatewayAnswer> CompleteAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double temperature,
+    /// <summary>
+    /// <c>temperature</c> only when the assistant sets one (#275: the gateway refuses it for models that deprecate it, Claude
+    /// among them); a null property is left out of the request, as is <c>stream_options</c> on a non-streamed call.
+    /// </summary>
+    private static readonly JsonSerializerOptions RequestJson = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    public async Task<GatewayAnswer> CompleteAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double? temperature,
         Guid runId, string step, CancellationToken ct)
     {
         using var response = await SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: false, step, ct);
@@ -65,7 +74,7 @@ public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatO
     }
 
     /// <summary>Opens the stream: status and residency are checked when this returns; the caller then writes its first byte.</summary>
-    public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double temperature,
+    public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double? temperature,
         Guid runId, CancellationToken ct) =>
         SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, "chat-answer", ct);
 
@@ -136,7 +145,7 @@ public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatO
         }
     }
 
-    private async Task<HttpResponseMessage> SendAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double temperature,
+    private async Task<HttpResponseMessage> SendAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double? temperature,
         Guid runId, bool stream, string step, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(messages);
@@ -150,7 +159,7 @@ public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatO
                 temperature,
                 stream,
                 stream_options = stream ? new { include_usage = true } : null,
-            }),
+            }, options: RequestJson),
         }.WithMaxResidency(ceiling);
         request.Headers.Add("x-ume-step", step);
         request.Headers.Add("x-ume-run-id", runId.ToString());
@@ -184,8 +193,11 @@ public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatO
     private static int Int(JsonElement usage, string name) =>
         usage.ValueKind == JsonValueKind.Object && usage.TryGetProperty(name, out var v) && v.TryGetInt32(out var i) ? i : 0;
 
-    /// <summary>§3.6: the gateway's status and code to ours; its <c>Retry-After</c> passed on for 429 and 503.</summary>
-    private static async Task<ChatException> MapAsync(HttpResponseMessage response, CancellationToken ct)
+    /// <summary>
+    /// §3.6: the gateway's status and code to ours; its <c>Retry-After</c> passed on for 429 and 503. One Warning names the
+    /// refusal (status, the gateway's <c>error.code</c>, its <c>x-request-id</c>; no body text, no address, #275).
+    /// </summary>
+    private async Task<ChatException> MapAsync(HttpResponseMessage response, CancellationToken ct)
     {
         string? code = null;
         try
@@ -196,6 +208,7 @@ public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatO
         {
         }
 
+        LogRefused(logger, (int)response.StatusCode, Printable(code), Printable(response.Headers.TryGetValues("x-request-id", out var ids) ? ids.FirstOrDefault() : null));
         var retryAfter = response.Headers.RetryAfter?.Delta is { } delta ? (int?)Math.Ceiling(delta.TotalSeconds) : null;
         return (int)response.StatusCode switch
         {
@@ -206,6 +219,13 @@ public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatO
             _ => new ChatException(502, "upstream_error", "The model service could not answer."),
         };
     }
+
+    /// <summary>A short printable token for the log (codes and request ids are ASCII identifiers; anything else is cut).</summary>
+    private static string Printable(string? value) =>
+        value is null ? "-" : new string([.. value.Take(80).Where(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_' or '.' or ':')]);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The gateway refused a chat call: HTTP {Status}, code {Code}, request {RequestId}")]
+    private static partial void LogRefused(ILogger logger, int status, string code, string requestId);
 }
 
 /// <summary>The outcome of a turn (chat design §6.2): an answer, the fixed not-found text, or the unavailable text.</summary>
@@ -330,7 +350,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         try
         {
             var answer = await gateway.CompleteAsync(platform.CondenseModel!, Condenser.Ceiling(ceiling), Condenser.Messages(chat.History, chat.Question),
-                Condenser.MaxOutputTokens, 0, messageId, "condense", timeout.Token);
+                Condenser.MaxOutputTokens, null, messageId, "condense", timeout.Token);
             return Condenser.Accept(answer.Text) is { } rewritten ? (rewritten, CondenseOutcome.Rewritten) : (chat.Question, CondenseOutcome.Rejected);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
