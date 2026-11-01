@@ -141,7 +141,11 @@ public static class StageBypass
 public abstract record SegmentResult(IReadOnlyList<NodeOutputRecord> Outputs)
 {
     /// <summary>Through <c>personal-data</c>: the <c>embed</c> job continues from <paramref name="PersonalDataKey"/>.</summary>
-    public sealed record Embed(byte[] PersonalDataKey, DocumentFacts Facts, IReadOnlyList<NodeOutputRecord> Outputs) : SegmentResult(Outputs);
+    public sealed record Embed(byte[] PersonalDataKey, DocumentFacts Facts, IReadOnlyList<NodeOutputRecord> Outputs) : SegmentResult(Outputs)
+    {
+        /// <summary>The salt of the set the <c>embed</c> job writes (<see cref="ChunkSetSalt"/>): the admin rules the parse took, and a forced run's execution.</summary>
+        public string? ParseRuleKey { get; init; }
+    }
 
     /// <summary>A parser-bound document at the end of the <c>fetch</c> job: the <c>parse</c> job continues from <paramref name="DetectKey"/>.</summary>
     public sealed record Parse(byte[] DetectKey, DocumentFacts Facts, IReadOnlyList<NodeOutputRecord> Outputs) : SegmentResult(Outputs)
@@ -169,7 +173,9 @@ public abstract record SegmentResult(IReadOnlyList<NodeOutputRecord> Outputs)
 /// the document's metadata inputs (URL, name, dates) and <c>personal-data</c> the collection's level, since both read them.
 /// In a <c>parse</c> job the parser route stores each range under the parse output's prefix (<see cref="BlobParseRanges"/>)
 /// and resumes from them, and yields at a range boundary when the job's slice is used up (§9.5). A forced reprocess salts
-/// the keys of the stages it bypasses with the execution id (<see cref="StageBypass"/>).
+/// the keys of the stages it bypasses with the execution id (<see cref="StageBypass"/>), so they run again instead of being
+/// served from the cache; the set the <c>embed</c> job writes is salted separately (<see cref="SegmentResult.Embed.ParseRuleKey"/>),
+/// with the admin rules the parse took and, when forced, the execution id, so it is a new set that is swapped in.
 /// </summary>
 public sealed class ProcessingSegment(
     StageOutputs outputs,
@@ -218,9 +224,10 @@ public sealed class ProcessingSegment(
         var level = document.Classification;
         var pipeline = input.Pipeline.Pipeline;
         var contentHash = document.ContentHash ?? throw new InvalidOperationException("The document has no content yet.");
-        var salt = input.BypassFrom is null
-            ? null
-            : (document.CurrentExecutionId ?? throw new InvalidOperationException("A forced reprocess has an execution id.")).ToString("N");
+        var forcedExecutionId = input.BypassFrom is null
+            ? (Guid?)null
+            : document.CurrentExecutionId ?? throw new InvalidOperationException("A forced reprocess has an execution id.");
+        var salt = forcedExecutionId?.ToString("N");
         string? Salt(string stage) => StageBypass.Covers(input.BypassFrom, stage) ? salt : null;
         ReadOnlyMemory<byte>? raw = null;
         async Task<ReadOnlyMemory<byte>> RawAsync()
@@ -326,7 +333,10 @@ public sealed class ProcessingSegment(
             written.Add(await outputs.PutAsync(level, StageNames.PersonalData, pdKey, pdSettings, chunksHash, withPii, cancellationToken));
         }
 
-        return new SegmentResult.Embed(pdKey, Facts(detected, parsed, cleaned, parseKey, input), written);
+        return new SegmentResult.Embed(pdKey, Facts(detected, parsed, cleaned, parseKey, input), written)
+        {
+            ParseRuleKey = ChunkSetSalt.Of(ChunkSetSalt.Rule(AdminParseRuleSet.Key(rules)), forcedExecutionId),
+        };
     }
 
     private async Task<(T Value, byte[] Hash)> StageAsync<T>(string level, ResolvedPipeline pipeline, string stage, byte[] inputHash,

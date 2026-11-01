@@ -10,17 +10,14 @@ namespace Ume.Rag.Worker.Processing.Persistence;
 
 /// <summary>
 /// The active admin-made parse rules (<c>content."ParseProfiles"</c>, <c>Origin = manual</c>, <c>State = active</c>;
-/// processing design §3.5), cached per config version: read again when the applied config version moves, and at the
-/// latest after <see cref="MaxAge"/>, because <c>ParseProfiles</c> lives in <c>content</c> and has no outbox trigger, so
-/// a rule change alone does not move the version (the parse-rule commands <see cref="Invalidate"/> it in their own process).
-/// The sources' departments (their collections', for department-scoped rules) are cached in the same snapshot. A row that
-/// does not read is skipped with a warning; a failed read throws, so the stage retries rather than keying documents without
-/// their rules.
+/// processing design §3.5), cached per config version: read again when the applied config version moves, which every
+/// <c>ParseProfiles</c> write does through its outbox trigger (<c>TR_ParseProfiles_ConfigChanged</c>, data-model §5; the
+/// parse-rule commands also <see cref="Invalidate"/> it in their own process at once). The sources' departments (their
+/// collections', for department-scoped rules) are cached in the same snapshot. A row that does not read is skipped with a
+/// warning; a failed read throws, so the stage retries rather than keying documents without their rules.
 /// </summary>
-public sealed partial class ParseRuleCatalog(JobDatabase database, ConfigVersionState config, TimeProvider time, ILogger<ParseRuleCatalog> logger)
+public sealed partial class ParseRuleCatalog(JobDatabase database, ConfigVersionState config, ILogger<ParseRuleCatalog> logger)
 {
-    public static readonly TimeSpan MaxAge = TimeSpan.FromSeconds(60);
-
     private const string RulesSql = """
         SELECT "Id", "Classification", "DepartmentId", "Match"::text, "Strategy"::text, "CleanupRules"::text
         FROM content."ParseProfiles" WHERE "Origin" = $1 AND "State" = $2
@@ -34,7 +31,7 @@ public sealed partial class ParseRuleCatalog(JobDatabase database, ConfigVersion
 
     /// <summary>
     /// Drops the snapshot, so the next parse in this process reads the rules again: called by the parse-rule commands after
-    /// their commit. Other instances see the change at their next config version or after <see cref="MaxAge"/>.
+    /// their commit, before this process has applied the config version the change moved. Other instances see it at that version.
     /// </summary>
     public void Invalidate() => _snapshot = null;
 
@@ -78,8 +75,7 @@ public sealed partial class ParseRuleCatalog(JobDatabase database, ConfigVersion
     private async Task<Snapshot> SnapshotAsync(CancellationToken cancellationToken)
     {
         var version = config.Version;
-        var now = time.GetUtcNow();
-        if (_snapshot is { } current && current.ConfigVersion == version && now - current.ReadAt < MaxAge)
+        if (_snapshot is { } current && current.ConfigVersion == version)
         {
             return current;
         }
@@ -104,7 +100,7 @@ public sealed partial class ParseRuleCatalog(JobDatabase database, ConfigVersion
             }
         }
 
-        var snapshot = new Snapshot(version, now, new AdminParseRuleSet(rules), new ConcurrentDictionary<Guid, Guid?>());
+        var snapshot = new Snapshot(version, new AdminParseRuleSet(rules), new ConcurrentDictionary<Guid, Guid?>());
         _snapshot = snapshot;
         return snapshot;
     }
@@ -126,5 +122,5 @@ public sealed partial class ParseRuleCatalog(JobDatabase database, ConfigVersion
     [LoggerMessage(LogLevel.Warning, "Parse rule {ProfileId} is not applied: {Reason}.")]
     private static partial void LogRuleRefused(ILogger logger, Guid profileId, string reason);
 
-    private sealed record Snapshot(long ConfigVersion, DateTimeOffset ReadAt, AdminParseRuleSet Rules, ConcurrentDictionary<Guid, Guid?> Departments);
+    private sealed record Snapshot(long ConfigVersion, AdminParseRuleSet Rules, ConcurrentDictionary<Guid, Guid?> Departments);
 }

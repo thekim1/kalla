@@ -19,8 +19,9 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// The explicit cache bypass (engine design §7.5, §8; admin design §4.7): a <c>sync</c> <c>reprocess</c> with <c>force</c>
 /// and <c>fromStage</c> re-processes every live document of the source under a new execution id, its stages from
 /// <c>fromStage</c> on under new keys (the parser is called again) and the earlier ones from the cache; a
-/// <c>reprocess-document</c> bypasses from its <c>fromStage</c>. The old outputs stay (write-once). Each PDF's content and
-/// parse output carry the test's marker, so the outputs counted are this test's.
+/// <c>reprocess-document</c> bypasses from its <c>fromStage</c>. The old outputs stay (write-once). Each forced document gets
+/// its own chunk set, salted with the execution (<c>ParseRuleKey</c> <c>force:{executionId}</c>, #134), and swapped in
+/// (<c>updated</c>). Each PDF's content and parse output carry the test's marker, so the outputs counted are this test's.
 /// </summary>
 [Collection(RagDatabaseGroup4.Name)]
 public sealed class ForcedReprocessTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -60,7 +61,7 @@ public sealed class ForcedReprocessTests(RagDatabaseFixture database, FakeGatewa
             _converter.Calls.ShouldBe(2, "without force a reprocess recomputes nothing");
 
             var run = await ForcedSyncAsync(seed, "parse");
-            (await EngineKit.WaitForRunAsync(database, run)).ShouldBe(new RunCounters(RunStates.Succeeded, 0, 0, 2, 0, 0, 0));
+            (await EngineKit.WaitForRunAsync(database, run)).ShouldBe(new RunCounters(RunStates.Succeeded, 0, 2, 0, 0, 0, 0));
             _converter.Calls.ShouldBe(4, "a forced reprocess from parse calls the parser again for every live document");
             foreach (var document in documents)
             {
@@ -75,7 +76,10 @@ public sealed class ForcedReprocessTests(RagDatabaseFixture database, FakeGatewa
                 File.Exists(Path.Join(_blobs.FullName, "parse", seed.Classification, Convert.ToHexStringLower(parseKey), "result.json")).ShouldBeTrue();
                 (await Sql.ScalarAsync<string>(database.Connection(null), """
                     SELECT string_agg("Outcome" || ':' || "ExecutionId"::text, ',') FROM content."RunItems" WHERE "RunId" = $1 AND "DocumentId" = $2
-                    """, run, document)).ShouldBe($"unchanged:{forced}");
+                    """, run, document)).ShouldBe($"updated:{forced}", "the forced run's own set is swapped in");
+                (await Sql.ScalarAsync<string>(database.Connection(null), """
+                    SELECT s."ParseRuleKey" FROM content."ChunkSets" s JOIN content."Documents" d ON d."LiveChunkSetId" = s."Id" WHERE d."Id" = $1
+                    """, document)).ShouldBe($"force:{forced:N}");
             }
 
             (await EngineKit.LiveChunksAsync(database, seed)).ShouldBeGreaterThanOrEqualTo(2);

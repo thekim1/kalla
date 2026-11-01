@@ -262,7 +262,7 @@ public sealed class PostgresChunkSetStore(JobDatabase database) : IChunkSetStore
 {
     private const string SetColumns = """
         "Id", "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash", "Classification", "CollectionId",
-        "InputHash", "StageKeys"::text, "State", "PiiFlagged", "PiiCounts"::text, "ChunkCount", "CreatedAt", "LiveAt", "SupersededAt"
+        "InputHash", "StageKeys"::text, "State", "PiiFlagged", "PiiCounts"::text, "ChunkCount", "CreatedAt", "LiveAt", "SupersededAt", "ParseRuleKey"
         """;
 
     public async Task InsertWritingAsync(ChunkSetRecord set, IReadOnlyList<ChunkRecord> chunks, CancellationToken cancellationToken)
@@ -424,9 +424,11 @@ public sealed class PostgresChunkSetStore(JobDatabase database) : IChunkSetStore
         command.Parameters.AddRange(parameters);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var sets = new List<ChunkSetRecord>();
+        var salt = reader.GetOrdinal("ParseRuleKey");
         while (await reader.ReadAsync(cancellationToken))
         {
-            var key = new ChunkSetKey(reader.GetGuid(1), reader.GetGuid(2), Db.Nullable<Guid>(reader, 3), reader.GetGuid(4), reader.GetFieldValue<byte[]>(5));
+            var key = new ChunkSetKey(reader.GetGuid(1), reader.GetGuid(2), Db.Nullable<Guid>(reader, 3), reader.GetGuid(4), reader.GetFieldValue<byte[]>(5),
+                Db.String(reader, salt));
             sets.Add(new ChunkSetRecord(reader.GetGuid(0), key, reader.GetString(6), reader.GetGuid(7), reader.GetFieldValue<byte[]>(8))
             {
                 StageKeys = Db.String(reader, 9),

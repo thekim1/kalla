@@ -144,6 +144,10 @@ public sealed record EmbedPayload : JobPayload
     [Description("Cache key (hex) of the embed stage's input (engine design §3.3).")]
     [RegularExpression(ContractPatterns.Sha256Hex)]
     public required string InputKey { get; init; }
+
+    [Description("ChunkSets.ParseRuleKey of the set to write (engine design §14, #134): the admin parse rules the parse took (rule:…) and, for a forced reprocess, its execution (force:…); null: neither.")]
+    [MaxLength(300)]
+    public string? ParseRuleKey { get; init; }
 }
 
 /// <summary>

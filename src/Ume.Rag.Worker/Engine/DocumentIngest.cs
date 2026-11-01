@@ -300,7 +300,8 @@ public sealed partial class DocumentIngest(
                 {
                     case SegmentResult.Embed embed:
                         await commit.SetFactsAsync(document.Id, embed.Facts, cancellationToken);
-                        await commit.EnqueueAsync(queue, [SyncJobs.Embed(source, document, executionId, pipelineVersionId, runId, embed.PersonalDataKey)], cancellationToken);
+                        await commit.EnqueueAsync(queue, [SyncJobs.Embed(source, document, executionId, pipelineVersionId, runId, embed.PersonalDataKey,
+                            embed.ParseRuleKey)], cancellationToken);
                         break;
                     case SegmentResult.Parse parse:
                         await commit.SetFactsAsync(document.Id, parse.Facts, cancellationToken);

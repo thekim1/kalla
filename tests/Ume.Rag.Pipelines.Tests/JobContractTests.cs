@@ -31,6 +31,7 @@ public sealed class JobContractTests
             new ParsePayload { DocumentId = Id, Level = "internal", ExecutionId = Id, PipelineVersionId = Id, InputKey = new string('0', 64), Slice = 2 },
             new ParsePayload { DocumentId = Id, Level = "public", ExecutionId = Id, PipelineVersionId = Id, InputKey = new string('1', 64), BypassFrom = "chunk" },
             new EmbedPayload { DocumentId = Id, Level = "public", ExecutionId = Id, PipelineVersionId = Id, RunId = Id, InputKey = new string('f', 64) },
+            new EmbedPayload { DocumentId = Id, Level = "public", ExecutionId = Id, PipelineVersionId = Id, RunId = Id, InputKey = new string('f', 64), ParseRuleKey = $"force:{Id:N};rule:{Id:D}@0123456789abcdef" },
             new EvalOnDemandPayload { CollectionId = Id, Variants = [EvaluationVariant.Vector, EvaluationVariant.Hybrid, EvaluationVariant.HybridNoDecompounder] },
             new CancelRunCommand { RunId = Id },
             new EditSiteProfileCommand { Host = "www.umea.se", PresetId = "sitevision", Profile = Umea },

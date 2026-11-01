@@ -1,7 +1,9 @@
 using System.Data.Common;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Worker.Processing.Detect;
 using Ume.Rag.Worker.Processing.Html;
+using Ume.Rag.Worker.Processing.Parse;
 using Ume.Rag.Worker.Processing.Persistence;
 
 namespace Ume.Rag.Worker.Engine;
@@ -33,13 +35,16 @@ public sealed record Reconciliation(ReconcileAction Action, ChunkSetKey Wanted, 
 /// <summary>
 /// <c>EnsureCurrent(D)</c>'s decision (engine design §2.3), the one place that computes a document's wanted set: the
 /// source's published pipeline version, the applied site-profile version of its host (URL documents, as the fetch path
-/// applies it), the collection's embedding profile and the document's content hash. The live set with that key is
-/// current; else a kept <c>superseded</c> set with it is swapped back (<see cref="DocumentIngest.SwapBackAsync"/>); else
-/// the document is re-processed. The fetch path, a <c>reprocess</c> run (<see cref="DocumentIngest"/>) and the drift
-/// sweep (<see cref="DriftSweep"/>) all decide here. Outside a fetch, re-processing is a <c>parse</c> job from the
-/// document's <c>detect</c> key (<see cref="EnqueueAsync"/>) or the segment run inline.
+/// applies it), the collection's embedding profile, the document's content hash and, for a parser-bound document, the
+/// rule part of the salt (<see cref="ChunkSetSalt"/>): the admin parse rules in its scope, as the parse stage takes them
+/// (<see cref="ParseRuleCatalog"/>), so a rule change makes the document's set stale. The live set that meets that key
+/// (<see cref="ChunkSetKey.IsMetBy"/>; a forced set does too) is current; else a kept <c>superseded</c> set with it is
+/// swapped back (<see cref="DocumentIngest.SwapBackAsync"/>); else the document is re-processed. The fetch path, a
+/// <c>reprocess</c> run (<see cref="DocumentIngest"/>) and the drift sweep (<see cref="DriftSweep"/>) all decide here.
+/// Outside a fetch, re-processing is a <c>parse</c> job from the document's <c>detect</c> key (<see cref="EnqueueAsync"/>)
+/// or the segment run inline.
 /// </summary>
-public sealed class Reconciler(SiteProfiles siteProfiles, IndexWriter index, IChunkSetStore chunkSets, IJobQueue queue)
+public sealed class Reconciler(SiteProfiles siteProfiles, ParseRuleCatalog parseRules, IndexWriter index, IChunkSetStore chunkSets, IJobQueue queue)
 {
     /// <summary>The decision for <paramref name="document"/> under <paramref name="pipelineVersionId"/>, its live set read here.</summary>
     public async Task<Reconciliation> ReconcileAsync(SourceContext source, DocumentRow document, Guid pipelineVersionId, CancellationToken cancellationToken)
@@ -57,9 +62,12 @@ public sealed class Reconciler(SiteProfiles siteProfiles, IndexWriter index, ICh
         var profile = document.IdentityKind == IdentityKinds.Url
             ? await siteProfiles.AppliedAsync(document.Classification, document.Url, cancellationToken)
             : null;
+        var rules = document.MediaType is { } mediaType && ProcessingMediaTypes.Route(mediaType) == ParseRoute.Parser
+            ? await parseRules.CandidatesAsync(document.Classification, document.SourceId, document.Url, mediaType, cancellationToken)
+            : [];
         var wanted = new ChunkSetKey(document.Id, pipelineVersionId, profile?.Id, source.EmbeddingProfileId,
-            document.ContentHash ?? throw new InvalidOperationException("The document has no content yet."));
-        if (IsMetBy(wanted, live))
+            document.ContentHash ?? throw new InvalidOperationException("The document has no content yet."), ChunkSetSalt.Rule(AdminParseRuleSet.Key(rules)));
+        if (live is { State: ChunkSetStates.Live or ChunkSetStates.Held } && wanted.IsMetBy(live.Key))
         {
             return new Reconciliation(ReconcileAction.Current, wanted, profile, live, null);
         }
@@ -86,12 +94,4 @@ public sealed class Reconciler(SiteProfiles siteProfiles, IndexWriter index, ICh
         var job = SyncJobs.Parse(source, document, executionId, pipeline.VersionId, runId, ProcessingSegment.DetectKey(pipeline.Pipeline, contentHash));
         return (await queue.EnqueueAsync([job], transaction, cancellationToken)).Contains(job.Id);
     }
-
-    /// <summary>True when <paramref name="live"/> is the set with key <paramref name="wanted"/>, <c>live</c> or <c>held</c>.</summary>
-    private static bool IsMetBy(ChunkSetKey wanted, ChunkSetRow? live) =>
-        live is { State: ChunkSetStates.Live or ChunkSetStates.Held } &&
-        live.Key.PipelineVersionId == wanted.PipelineVersionId &&
-        live.Key.SiteProfileVersionId == wanted.SiteProfileVersionId &&
-        live.Key.EmbeddingProfileId == wanted.EmbeddingProfileId &&
-        live.Key.ContentHash.AsSpan().SequenceEqual(wanted.ContentHash);
 }

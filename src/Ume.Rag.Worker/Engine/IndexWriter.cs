@@ -34,8 +34,9 @@ public sealed class IndexWriter(JobDatabase database)
 
     private const string InsertSetSql = """
         INSERT INTO content."ChunkSets" ("Id", "DocumentId", "Classification", "CollectionId", "PipelineVersionId", "SiteProfileVersionId",
-                                        "EmbeddingProfileId", "ContentHash", "InputHash", "StageKeys", "State", "PiiFlagged", "PiiCounts", "ChunkCount")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13::jsonb, $14)
+                                        "EmbeddingProfileId", "ContentHash", "InputHash", "StageKeys", "State", "PiiFlagged", "PiiCounts", "ChunkCount",
+                                        "ParseRuleKey")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13::jsonb, $14, $15)
         """;
 
     private const string InsertChunksSql = """
@@ -51,13 +52,14 @@ public sealed class IndexWriter(JobDatabase database)
         """;
 
     private const string SetColumns = """
-        "Id", "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash", "State", "InputHash", "ChunkCount"
+        "Id", "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash", "State", "InputHash", "ChunkCount",
+        "ParseRuleKey"
         """;
 
     private const string FindSql = $"""
         SELECT {SetColumns} FROM content."ChunkSets"
         WHERE "DocumentId" = $1 AND "PipelineVersionId" = $2 AND "SiteProfileVersionId" IS NOT DISTINCT FROM $3 AND "EmbeddingProfileId" = $4
-          AND "ContentHash" = $5
+          AND "ContentHash" = $5 AND "ParseRuleKey" IS NOT DISTINCT FROM $6
         """;
 
     private const string LiveSql = $"""
@@ -89,7 +91,7 @@ public sealed class IndexWriter(JobDatabase database)
         """;
 
     private const string ReKeySql = """
-        UPDATE content."ChunkSets" SET "PipelineVersionId" = $2, "SiteProfileVersionId" = $3, "ContentHash" = $4 WHERE "Id" = $1
+        UPDATE content."ChunkSets" SET "PipelineVersionId" = $2, "SiteProfileVersionId" = $3, "ContentHash" = $4, "ParseRuleKey" = $5 WHERE "Id" = $1
         """;
 
     private const string ReKeyDocumentSql = """UPDATE content."Documents" SET "PipelineVersionId" = $2 WHERE "LiveChunkSetId" = $1""";
@@ -121,7 +123,8 @@ public sealed class IndexWriter(JobDatabase database)
     {
         ArgumentNullException.ThrowIfNull(key);
         return await ReadSetAsync(FindSql, cancellationToken,
-            Db.P(key.DocumentId), Db.P(key.PipelineVersionId), Db.P(key.SiteProfileVersionId), Db.P(key.EmbeddingProfileId), Db.P(key.ContentHash));
+            Db.P(key.DocumentId), Db.P(key.PipelineVersionId), Db.P(key.SiteProfileVersionId), Db.P(key.EmbeddingProfileId), Db.P(key.ContentHash),
+            Db.P(key.ParseRuleKey));
     }
 
     /// <summary>The set the document's live pointer names (<c>live</c> or <c>held</c>), or null.</summary>
@@ -236,13 +239,13 @@ public sealed class IndexWriter(JobDatabase database)
         await ApplyStateAsync(connection, transaction, chunkSetId, state, now.ToUniversalTime(), documentDeleted, cancellationToken);
     }
 
-    /// <summary>Rule 4 inside the caller's fenced transaction: the live set takes the new key in one row, no new chunks.</summary>
+    /// <summary>Rule 4 inside the caller's fenced transaction: the live set takes the new key (its salt too) in one row, no new chunks.</summary>
     public static async Task ReKeyAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid chunkSetId, ChunkSetKey newKey,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(newKey);
         await ExecuteAsync(connection, transaction, ReKeySql, cancellationToken,
-            Db.P(chunkSetId), Db.P(newKey.PipelineVersionId), Db.P(newKey.SiteProfileVersionId), Db.P(newKey.ContentHash));
+            Db.P(chunkSetId), Db.P(newKey.PipelineVersionId), Db.P(newKey.SiteProfileVersionId), Db.P(newKey.ContentHash), Db.P(newKey.ParseRuleKey));
         await ExecuteAsync(connection, transaction, ReKeyDocumentSql, cancellationToken, Db.P(chunkSetId), Db.P(newKey.PipelineVersionId));
     }
 
@@ -310,7 +313,7 @@ public sealed class IndexWriter(JobDatabase database)
                 Db.P(set.Id), Db.P(set.Key.DocumentId), Db.P(set.Classification), Db.P(set.CollectionId), Db.P(set.Key.PipelineVersionId),
                 Db.P(set.Key.SiteProfileVersionId), Db.P(set.Key.EmbeddingProfileId), Db.P(set.Key.ContentHash), Db.P(set.InputHash),
                 Db.P(set.StageKeys), Db.P(set.State), Db.P(set.PiiFlagged), Db.P(set.PiiCounts is null ? null : ContractJson.Serialize(set.PiiCounts)),
-                Db.P(set.ChunkCount),
+                Db.P(set.ChunkCount), Db.P(set.Key.ParseRuleKey),
             },
         };
 
@@ -369,7 +372,8 @@ public sealed class IndexWriter(JobDatabase database)
             return null;
         }
 
-        var key = new ChunkSetKey(reader.GetGuid(1), reader.GetGuid(2), Db.Nullable<Guid>(reader, 3), reader.GetGuid(4), reader.GetFieldValue<byte[]>(5));
+        var key = new ChunkSetKey(reader.GetGuid(1), reader.GetGuid(2), Db.Nullable<Guid>(reader, 3), reader.GetGuid(4), reader.GetFieldValue<byte[]>(5),
+            Db.String(reader, 9));
         return new ChunkSetRow(reader.GetGuid(0), key, reader.GetString(6), reader.GetFieldValue<byte[]>(7), reader.GetInt32(8));
     }
 }
