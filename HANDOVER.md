@@ -22,7 +22,7 @@ URB2), #164 (key endpoints J7, `DataProtectionPolicies` rows), chat API (J9), re
 against the user's interim gateway): 5 umea.se pages fetched, 4 added, 17 chunks at 1024 dims, canary at `Eu`,
 `/v1/retrieve` answered with the right chunk first. Results and findings: `docs/p1a-local-run.md` §4 and §4.7,
 `plans/p1/README.md` "Milestone 1 result". The AppHost needed three manual workarounds (#168, fixed by B's #172,
-approved, not merged at the end of the session). Afterwards the user hands `docs/gateway-host-setup.md` to Hermes.
+merged; the run docs no longer need the workarounds, #183/#184). Afterwards the user hands `docs/gateway-host-setup.md` to Hermes.
 
 Overviews: **`docs/phase1-guide.html`** (Swedish, stakeholders; private artifact
 https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/stakeholder-report.html`
@@ -140,13 +140,13 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
 | Schema (B) | `src/Ume.Rag.Infrastructure/Persistence/**` | parts 1–2 (#76, #93); #118 (5105, `Sources.CreatedAt`, run defaults, pgvector) approved, not merged |
 | Blobs | `src/Ume.Rag.Infrastructure/Blobs/` | URB2 envelope, file key provider, worker encrypts `internal` blobs, `IBlobEnvelope` for rag-api (#153) |
 | Engine extras (session 11) | `src/Ume.Rag.Worker/Engine/` | one `Reconciler.ReconcileAsync` decision + drift-sweep swap-back (#138); forced reprocess with salted keys (#140); settings-change effects via `Runs.SettingsHashes` (#141); 24 h ClamAV cap, embed batch cap 6000 tokens (#143); 5105, `CreatedAt` scheduler (follow-up PR in verification) |
-| Session 13 additions | | `piiMode` hold/report per source (#173); Worker.Tests in four parallel `ragdb-N` collections, test finalizer 0.2 s (#174, 4 min → 45 s; Verify ≈ 3 min 46 s); parser contract retries on `not_ready` (#177); job log names type chain + throw site (#179); README/run docs for Linux and milestone 1 (#170, #171) |
+| Session 13 additions | | crawl fetch-phase race fixed (#182: no reconcile while fetches are in flight; deletions were silently missed); `piiMode` hold/report per source (#173); Worker.Tests in four parallel `ragdb-N` collections, test finalizer 0.2 s (#174, 4 min → 45 s; Verify ≈ 3 min 46 s); parser contract retries on `not_ready` (#177); job log names type chain + throw site (#179); README/run docs for Linux and milestone 1 (#170, #171) |
 
 ## Session 13 (done)
 
 - **`main` checked** at the start (runner + local, green; one AdminApi lock-timing failure under AppHost load, did not
   repeat) and after each batch (#165/#167; #169/#173/#174: runner green, Verify 3 min 46 s; local: one
-  `SettingsEffectsTests` failure, see Next step 1).
+  `SettingsEffectsTests` failure, fixed by #182); after #172/#179/#182–#184 all local suites green (`acb16f6`).
 - **Milestone 1 passed** (above). Found: #168 (AppHost: no `vector` extension, Postgres volume at the PG18 path on a
   PG17 image so data was lost on restart, `BlobStore:Root` unset); the gateway answers a PII policy block with 503 (the
   worker retried it as an outage; tell the gateway session: 4xx with a reason code); two umea.se pages held for e-mail
@@ -154,28 +154,31 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
 - **User decision** (Decisions table, 2026-11-01): `piiMode` report for the municipality's own published site; built in
   #173 (B's part: #175). The CI-speed work (approved in session 12) merged as #174. A second runner `ume-rag2` already
   exists (`/home/kim/actions-runner2`), so the second-runner question is settled.
-- **Merged (stream A):** #170, #171 (docs), #173, #174, #177, #179. **Plans:** `d748909` (Decisions row), `691cdad`
+- **Merged (stream A):** #170, #171, #183, #184 (docs), #173, #174, #177, #179, #186 (worker reads uploads through the
+  envelope, #181), #182 (a real product race behind the
+  `SettingsEffectsTests` flake: a crawl could reconcile while its fetches were in flight and silently miss deletions). **Plans:** `d748909` (Decisions row), `691cdad`
   (progress boxes, P1 README milestone result).
 - **Reviewed B:** #169 approved (merged); #172 changes requested (a PGDATA/old-volume bug that would break every dev
-  setup), fixed, approved; #176 (collections) approved; #178 (sources, sync now, runs, cancel-run; stacked on #176)
-  approved with a should-fix (sync now on a paused source looks accepted but the worker cancels it: 409
-  `source_paused`). Decided B's #178 deviation 1: the URL canonicaliser stays in the worker.
+  setup), fixed, approved, merged (closes #168); #180 (upload batches) changes requested: the #181 envelope write, and an
+  idempotent/safe repeated commit (write-once manifest silently kept a different first list; a repeat after success 404s); #176 (collections) approved; #178 (sources, sync now, runs, cancel-run; stacked on #176)
+  approved with a should-fix (sync now on a paused source: 409 `source_paused`, done in #180); #176 and #178 merged;
+  #185 (API keys) changes requested (unscoped keys by department admins). Decided B's #178 deviation 1: the URL canonicaliser stays in the worker.
 - **Answered B:** #129 (FakeGateway chat scripts keyed by `x-ume-step` from `FakeGateway:ChatScripts:<step>`, built-in
   defaults; `Chunks.ContentKind` text/table/list + `LargeTable` on 2nd+ row groups), #163 (smoke loader: deterministic
-  ids, shared default variant), #164 (settled; B closes it with item 14c). **Filed:** #168, #175.
+  ids, shared default variant), #164 (settled; B closes it with item 14c), #181 (decided: encrypt `internal` uploads now;
+  stream A's worker read merges first, then #180 with B's envelope write). **Filed:** #168, #175.
 
 **At the restart:** the m1 AppHost may still be running (`aspire describe --apphost src/Ume.Rag.AppHost/…`; stop it
 with `aspire stop`); its user secrets still hold the milestone switches (`docs/p1a-local-run.md` §4.6 removes them).
-Worktrees: `../rag-main` (detached, for main checks) and possibly `../rag-a3` (finalizer race, see Next step 1).
+Worktrees: `../rag-main` (detached, for main checks) only.
 
 ## Next step
 
-1. **Finalizer / identity-change race** (watch item, session 13): `SettingsEffectsTests.An_identity_change_re_syncs…`
-   fails about 1 in 7 full Worker.Tests runs under load (`Deleted = 0` where 6 expected, run `succeeded`). An implementor
-   was tracing it in `../rag-a3` (branch `a/fix-finalizer-identity-race`) at the end of session 13: product race in
-   `RunFinalizer` vs test race. If the branch has no PR, resume or restart from its report.
-2. **When #172 merges:** drop the #168 workarounds from `docs/p1a-local-run.md` §4.3 (keep the Linux start), note that the
-   first start after #172 begins with an empty database; close #168 if B hasn't.
+1. **#180** (upload batches): approved after the envelope write and the idempotent commit; B must rebase it onto `main`
+   (it carries unsquashed #176/#178 commits) and merge. Stream A's side of #181 is merged (#186).
+2. **#185** (API keys): changes requested, a department admin can mint an unscoped key on any (global) client; require
+   scopes for non-platform admins on create and update. Re-review on B's push; then switch §4.4 of the run book to
+   `POST /api/keys`. **#187** (filed): B's flaky `KnowledgeSecurityTests` (a cached key refused after the throttle).
 3. **Watch B:** #176 then #178 (merge order), the #178 should-fix (`source_paused`), #175 (`piiMode` admin side), item 14c
    (`/api/keys`, then the run book points to it), item 17's smoke loader (then stream A's `evaluation-smoke`).
 4. **The two held umea.se pages** in the m1 database need `clear-pii-flag` or a reprocess after setting the source to
@@ -193,7 +196,7 @@ Worktrees: `../rag-main` (detached, for main checks) and possibly `../rag-a3` (f
 8. Then the live block with the user (`plans/p1b/README.md` §5 step 4): the umea.se pilot crawl (personal-data dry run,
    `PiiOwnDomains` with the municipal companies' domains from the user).
 
-**Open issues to stream B:** #80, #90, #92, #95, #102, #114, #116, #129, #132, #134, #164, #168, #175; also #52, #75.
+**Open issues to stream B:** #80, #90, #92, #95, #102, #114, #116, #129, #132, #134, #164, #175, #181, #187; also #52, #75.
 Stream A's own: #48, #51. For the user: #100 (L8 run steps).
 
 **Waiting on the user:** the municipal companies' e-mail domains for `PiiOwnDomains`; the gateway session (release 1 incl.
@@ -210,7 +213,7 @@ item needs a named person and a date.
 
 ## Environment notes
 
-- Worktrees: `../rag-main` (detached, main checks) and `../rag-a3` (finalizer race) at the end of session 13; `git worktree list`.
+- Worktrees: `../rag-main` (detached, main checks) at the end of session 13; `git worktree list`.
 - `rag_key.txt` in the repo root holds the user's interim-gateway key; it is excluded locally (`.git/info/exclude`),
   mode 600, and already copied into the AppHost user secrets. Never commit, print or move it into the repo.
 - Local images: `ume-rag.local/clamav:dev` (tests use `UME_RAG_TEST_CLAMAV_IMAGE`), `ume-rag.local/parser:ci`

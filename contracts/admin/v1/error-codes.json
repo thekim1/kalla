@@ -97,6 +97,86 @@
       "message": "The retrieval setting {field} must be {expected}."
     },
     {
+      "code": "source_above_collection",
+      "status": 400,
+      "message": "A source cannot have a higher level than its collection {collection} ({level})."
+    },
+    {
+      "code": "source_settings_invalid",
+      "status": 400,
+      "message": "The source setting {field} is invalid: {problem}"
+    },
+    {
+      "code": "impact_not_confirmed",
+      "status": 409,
+      "message": "The change affects which documents the source holds. Check its impact and confirm."
+    },
+    {
+      "code": "template_unsupported",
+      "status": 400,
+      "message": "There is no pipeline for the source type {type}."
+    },
+    {
+      "code": "admin_only",
+      "status": 403,
+      "message": "Only a platform administrator can change this."
+    },
+    {
+      "code": "run_not_active",
+      "status": 409,
+      "message": "The run has already ended ({state})."
+    },
+    {
+      "code": "not_an_upload_source",
+      "status": 409,
+      "message": "Files can only be uploaded to an upload source."
+    },
+    {
+      "code": "upload_format_deferred",
+      "status": 415,
+      "message": "Files of type {extension} cannot be uploaded yet. Save the file as PDF or a newer Office format."
+    },
+    {
+      "code": "upload_type_refused",
+      "status": 415,
+      "message": "Files of type {extension} cannot be uploaded."
+    },
+    {
+      "code": "upload_too_large",
+      "status": 413,
+      "message": "The file is larger than {mb} MB."
+    },
+    {
+      "code": "upload_file_exists",
+      "status": 409,
+      "message": "File {n} of the batch has already been sent."
+    },
+    {
+      "code": "upload_file_missing",
+      "status": 400,
+      "message": "File {n} has not been uploaded to the batch."
+    },
+    {
+      "code": "upload_batch_too_large",
+      "status": 400,
+      "message": "A batch holds 1 to 100 files and at most 500 MB."
+    },
+    {
+      "code": "source_paused",
+      "status": 409,
+      "message": "The source is paused. Resume it first."
+    },
+    {
+      "code": "slug_taken",
+      "status": 400,
+      "message": "The short name {slug} is already used. Try {suggestion}."
+    },
+    {
+      "code": "upload_batch_committed",
+      "status": 409,
+      "message": "The batch has already been committed with other files."
+    },
+    {
       "code": "key_not_rotatable",
       "status": 409,
       "message": "Only an active key that has not been rotated can be rotated."

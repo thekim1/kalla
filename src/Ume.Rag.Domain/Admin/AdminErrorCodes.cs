@@ -71,6 +71,53 @@ public static class AdminErrorCodes
     /// <summary>V16: <c>{field}</c> must be <c>{expected}</c>.</summary>
     public static AdminErrorCode RetrievalSettingsInvalid { get; } = new("retrieval_settings_invalid", 400, "The retrieval setting {field} must be {expected}.");
 
+    /// <summary>V1: a source above its collection <c>{collection}</c> (<c>{level}</c>).</summary>
+    public static AdminErrorCode SourceAboveCollection { get; } = new("source_above_collection", 400, "A source cannot have a higher level than its collection {collection} ({level}).");
+
+    /// <summary>V25: the source settings break a rule at <c>{field}</c>: <c>{problem}</c>.</summary>
+    public static AdminErrorCode SourceSettingsInvalid { get; } = new("source_settings_invalid", 400, "The source setting {field} is invalid: {problem}");
+
+    /// <summary>V25: a scope or identity change was saved without the token from the impact check.</summary>
+    public static AdminErrorCode ImpactNotConfirmed { get; } = new("impact_not_confirmed", 409, "The change affects which documents the source holds. Check its impact and confirm.");
+
+    /// <summary>V24: no published pipeline of a template for source type <c>{type}</c>.</summary>
+    public static AdminErrorCode TemplateUnsupported { get; } = new("template_unsupported", 400, "There is no pipeline for the source type {type}.");
+
+    /// <summary>A field only platform admins may change.</summary>
+    public static AdminErrorCode AdminOnly { get; } = new("admin_only", 403, "Only a platform administrator can change this.");
+
+    /// <summary>The run is not running (<c>{state}</c>), so it cannot be cancelled.</summary>
+    public static AdminErrorCode RunNotActive { get; } = new("run_not_active", 409, "The run has already ended ({state}).");
+
+    /// <summary>Upload batches belong to upload sources only.</summary>
+    public static AdminErrorCode NotAnUploadSource { get; } = new("not_an_upload_source", 409, "Files can only be uploaded to an upload source.");
+
+    /// <summary>Connectors §9.2: a legacy format (<c>{extension}</c>) deferred to P2.</summary>
+    public static AdminErrorCode UploadFormatDeferred { get; } = new("upload_format_deferred", 415, "Files of type {extension} cannot be uploaded yet. Save the file as PDF or a newer Office format.");
+
+    /// <summary>Connectors §9.2: an extension (<c>{extension}</c>) the platform does not accept.</summary>
+    public static AdminErrorCode UploadTypeRefused { get; } = new("upload_type_refused", 415, "Files of type {extension} cannot be uploaded.");
+
+    /// <summary>The file is larger than the source's limit (<c>{mb}</c> MB).</summary>
+    public static AdminErrorCode UploadTooLarge { get; } = new("upload_too_large", 413, "The file is larger than {mb} MB.");
+
+    /// <summary>File number <c>{n}</c> of the batch was already sent.</summary>
+    public static AdminErrorCode UploadFileExists { get; } = new("upload_file_exists", 409, "File {n} of the batch has already been sent.");
+
+    /// <summary>The commit names file <c>{n}</c>, which the batch does not hold.</summary>
+    public static AdminErrorCode UploadFileMissing { get; } = new("upload_file_missing", 400, "File {n} has not been uploaded to the batch.");
+
+    /// <summary>A batch holds 1–100 entries and at most 500 MB.</summary>
+    public static AdminErrorCode UploadBatchTooLarge { get; } = new("upload_batch_too_large", 400, "A batch holds 1 to 100 files and at most 500 MB.");
+
+    /// <summary>Sync now on a paused source: the worker would start no run. Resume it first.</summary>
+    public static AdminErrorCode SourcePaused { get; } = new("source_paused", 409, "The source is paused. Resume it first.");
+
+    /// <summary>The slug <c>{slug}</c> is taken (also by a deleted collection); <c>{suggestion}</c> is free.</summary>
+    public static AdminErrorCode SlugTaken { get; } = new("slug_taken", 400, "The short name {slug} is already used. Try {suggestion}.");
+
+    /// <summary>The batch is committed: no more files, and a commit with other entries is refused.</summary>
+    public static AdminErrorCode UploadBatchCommitted { get; } = new("upload_batch_committed", 409, "The batch has already been committed with other files.");
     /// <summary>Only active keys that have not been rotated can be rotated.</summary>
     public static AdminErrorCode KeyNotRotatable { get; } = new("key_not_rotatable", 409, "Only an active key that has not been rotated can be rotated.");
 
@@ -91,5 +138,8 @@ public static class AdminErrorCodes
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
-            RetrievalSettingsInvalid, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired, KeysUnavailable];
+            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
+            NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
+            SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
+            KeysUnavailable];
 }
