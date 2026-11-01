@@ -94,8 +94,15 @@ public sealed class AccessPolicy(IReadOnlySet<string> knowledgeOpenToClientKinds
             return AccessDecision.Deny("5", DenyReasons.NotFound, 404, v);
         }
 
-        // 6: key scope.
+        // 6: key scope. Assistant scopes name the assistant; collection scopes must reach at least one of its published
+        // collections (the search is then narrowed to them, knowledge §4.2), so a collection-scoped key cannot use an
+        // assistant to search outside its scope, nor see other departments' assistants in /v1/models.
         if (who.Key is { AssistantScopes.Count: > 0 } key && !key.AssistantScopes.Contains(id))
+        {
+            return AccessDecision.Deny("6", DenyReasons.KeyScope, 404, v);
+        }
+
+        if (who.Key is { CollectionScopes.Count: > 0 } scoped && !assistant.Published.CollectionIds.Any(scoped.CollectionScopes.Contains))
         {
             return AccessDecision.Deny("6", DenyReasons.KeyScope, 404, v);
         }

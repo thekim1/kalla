@@ -3,7 +3,12 @@ using System.Runtime.CompilerServices;
 namespace Ume.Rag.Domain.Access;
 
 /// <summary>An assistant's published version as the api sees it (<c>config."PublishedAssistantVersions"</c>; never a draft).</summary>
-public sealed record PublishedVersionEntry(Guid Id, int Number, string GatewayModel, IReadOnlyList<Guid> CollectionIds);
+/// <remarks>
+/// The chat fields (chat design §5–§10): <see cref="SystemPrompt"/>, <see cref="QuerySteps"/> and <see cref="NotFound"/> as
+/// stored (<c>jsonb</c> text, parsed by the chat role), and <see cref="PublishedAt"/>.
+/// </remarks>
+public sealed record PublishedVersionEntry(Guid Id, int Number, string GatewayModel, IReadOnlyList<Guid> CollectionIds, string SystemPrompt = "",
+    string QuerySteps = "{}", string NotFound = "{}", DateTimeOffset? PublishedAt = null);
 
 /// <summary>An audience row (<c>AssistantAudiences</c>): <c>client</c> (P1), <c>department</c>/<c>group</c> (P2).</summary>
 public sealed record AudienceEntry(string Kind, Guid? SubjectId, string? GroupValue);
@@ -11,7 +16,8 @@ public sealed record AudienceEntry(string Kind, Guid? SubjectId, string? GroupVa
 /// <summary>An assistant with its access fields, its published version (null: none yet) and its audiences.</summary>
 public sealed record AssistantEntry(
     Guid Id, string Slug, string Name, string Classification, string HistoryMode, string State, Guid DepartmentId, Guid? OwnerTeamId,
-    PublishedVersionEntry? Published, IReadOnlyList<AudienceEntry> Audiences);
+    PublishedVersionEntry? Published, IReadOnlyList<AudienceEntry> Audiences, string? Description = null, string? ContactName = null,
+    string? ContactEmail = null);
 
 /// <summary>A collection: level, profile, settings, publication and deletion (data-model §2.1).</summary>
 public sealed record CollectionEntry(

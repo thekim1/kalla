@@ -377,7 +377,22 @@ public sealed partial class KnowledgeService(
                 continue;
             }
 
+            if (who.Key is { CollectionScopes.Count: > 0 } key && !key.CollectionScopes.Contains(id))
+            {
+                LogSkipped(logger, id, "outside_key_scope"); // identity §4.3 step 6: a collection-scoped key searches only its collections
+                continue;
+            }
+
             collections.Add(collection);
+        }
+
+        if (collections.Count == 0 && who.Key is { CollectionScopes.Count: > 0 })
+        {
+            // The scoped collections are not live: nothing this key may search through the assistant.
+            throw new RetrievalDeniedException(404, KnowledgeCodes.NotFound)
+            {
+                Reason = DenyReasons.KeyScope, Step = "6", ResourceType = "assistant", ResourceId = assistantId.ToString("D"), Action = action.ToString(),
+            };
         }
 
         return (collections, assistant.Classification);
