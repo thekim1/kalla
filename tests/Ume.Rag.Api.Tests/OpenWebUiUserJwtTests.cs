@@ -60,6 +60,8 @@ public sealed class OpenWebUiUserJwtTests(KnowledgeFixture db) : IClassFixture<K
         Check(Jwt(Claims(role: "pending"))).Refusal.ShouldBe("user_jwt_role");
         Check(Jwt(Claims(sub: ""))).Refusal.ShouldBe("user_jwt_invalid");
         Check("not.a.jwt").Refusal.ShouldBe("user_jwt_invalid");
+        // Out of DateTimeOffset's range, with a valid signature: a refusal, not a 500 (#205 review).
+        Check(Jwt(new { sub = "u-123", role = "user", iss = "open-webui", iat = Now.ToUnixTimeSeconds(), exp = long.MaxValue })).Refusal.ShouldBe("user_jwt_invalid");
     }
 
     private WebApplicationFactory<Program> Host(string? clientId) => db.ApiHost().WithWebHostBuilder(web =>

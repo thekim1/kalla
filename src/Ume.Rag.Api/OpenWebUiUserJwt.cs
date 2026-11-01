@@ -104,7 +104,7 @@ public static class OpenWebUiUserJwt
                 ? (new OpenWebUiUser(subject, Text(claims, "name"), Text(claims, "email"), role), null)
                 : (null, "user_jwt_role");
         }
-        catch (Exception ex) when (ex is JsonException or FormatException)
+        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentOutOfRangeException)
         {
             return (null, "user_jwt_invalid");
         }
