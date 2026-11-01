@@ -140,6 +140,13 @@ public sealed class CrawlFrontierEntry
     public required byte[] UrlHash { get; set; }
 
     public required string Url { get; set; }
+
+    /// <summary>
+    /// The URL as found (canonical except the site profile's identity rule, connectors design §3.1 rule 10), null when it
+    /// equals <see cref="Url"/> (#228): the worker requests it, so <c>Documents.Url</c> keeps the readable path form.
+    /// </summary>
+    public string? FetchUrl { get; set; }
+
     public required string Host { get; set; }
     public string State { get; set; } = CrawlFrontierStates.Pending;
     public Guid? RunId { get; set; }

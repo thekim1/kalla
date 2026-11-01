@@ -174,8 +174,14 @@ public sealed class RetrievalEngine : IDisposable
         if (request.Mode != RetrievalMode.Vector)
         {
             var searchText = QueryNormalizer.SearchText(normalized, request.Decompound ? _decompounder : null);
+            // The stop list (§6.2, §20) comes from memory once the statistics are read; only a cold cache reads them here.
             keywordTask = TimedAsync(
-                () => _index.KeywordAsync(scope, searchText, request.Filters, ranking.Candidates, linked.Token),
+                async () =>
+                {
+                    var stop = await _sizes.StopLexemesAsync(scope, linked.Token);
+                    var keywordScope = stop.Count == 0 ? scope : scope with { KeywordStopLexemes = stop };
+                    return await _index.KeywordAsync(keywordScope, searchText, request.Filters, ranking.Candidates, linked.Token);
+                },
                 ms => keywordTime = ms);
         }
 

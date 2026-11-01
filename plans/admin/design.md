@@ -1,8 +1,8 @@
 # Admin API and admin UI: detailed design
 
-Detail step 10 of the Ume.Rag design, rewritten by the simplification pass
-([`../simplification-pass.md`](../simplification-pass.md) §1, §2, §5, §7–§10, §13, §15; it wins where an older passage
-differs). Details [`plan.md`](plan.md) (binding, incl. its answered questions 1–3 and §14 here) and the Decisions table
+Detail step 10 of the Ume.Rag design. The rules of the weakness review and the simplification, performance and
+consistency passes are stated here (reasoning: [`../simplification-pass.md`](../simplification-pass.md) §1, §2, §5,
+§7–§10, §13, §15). Details [`plan.md`](plan.md) (binding, incl. its answered questions 1–3 and §14 here) and the Decisions table
 in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consumes, without redesigning: the BFF, claim mapping,
 `RagPrincipal`, internal callers, keys and security events of [`../identity/design.md`](../identity/design.md) (§1–§4,
 §6, §10–§12); tables, grants, the outbox, encryption and retention of
@@ -16,7 +16,8 @@ flags and evaluation sets of [`../ingestion-worker/design-processing.md`](../ing
 [`../chat-api/design.md`](../chat-api/design.md) (§8.2, §9.4, §10, §13–§14); skills, tool servers, approvals, grants,
 drift, policy, agent limits and `GatewayModels` of [`../tools/design.md`](../tools/design.md) (§3–§6, §9); projects,
 build, images, networks, CI and observability of [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md).
-Nothing is implemented. Changes needed elsewhere: §13; questions: §14; unverified facts: §15; deferred or removed: §16.
+Where the code exists (`src/Ume.Rag.AdminApi`, `src/admin-ui`), the text states what it does. Changes needed
+elsewhere: §13; questions: §14; unverified facts: §15; deferred or removed: §16.
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); `AdminApi/` = `src/Ume.LlmGateway.AdminApi/`,
 `ui/` = `src/admin-ui/src/`. "Copy" = copied with names changed; "adapt" = copied and changed as stated; "new" = no
@@ -72,8 +73,8 @@ gateway counterpart.
 | 16 | Notifications | In-app only (attention cards, nav badges) plus SIEM events; no e-mail in P1/P2 (§5.2) |
 | 17 | Accessibility | Gateway target WCAG 2.2 AA; copied axe/target-size/reflow tests, a keyboard-only Playwright run of the pilot journey, one NVDA pass; tillgänglighetsredogörelse as the gateway's (§10.1) |
 | 18 | Dependencies | No new npm or NuGet package: no Markdown, chart, JSON-schema-form, graph or i18n package (§10.2) |
-| 19 | Platform objects | In P1, settings, data protection, clients, templates, site profiles, embedding profiles, gateway models and keys use **generic schema-driven forms** plus the OpenAPI UI (Scalar), not dedicated pages (§5.8) |
-| 20 | Site profiles | The source preview shows the profile's before/after text on sample pages; platform admins see profiles per host with versions and roll back (generic form + preview in P1). In P1 the profile is a manual, hand-checked Sitevision preset JSON; learned profiles, proposals and approve are **P2 (weakness review §1)** (§4.5, §6.4) |
+| 19 | Platform objects | In P1a the platform team sets everything up through the OpenAPI UI (Scalar) only; from P1b settings, data protection, clients, templates, site profiles, embedding profiles, gateway models and keys use **generic schema-driven forms** plus Scalar, not dedicated pages (§5.8) |
+| 20 | Site profiles | The source preview shows the profile's before/after text on sample pages; platform admins see profiles per host with versions and roll back (Scalar in P1a; generic form + preview from P1b). In P1 the profile is a manual, hand-checked Sitevision preset JSON; learned profiles, proposals and approve are **P2 (weakness review §1)** (§4.5, §6.4) |
 | 21 | Explain access | `POST /api/access/explain` returns the stable id of the first failing `IAccessPolicy` step and its reason code for (client, subject, assistant); platform admins, and department admins for their own department's assistants and clients; no security event (§4.5, identity §4.9) |
 | 22 | Assistant versions | **One assistant type**: no `rag`/`agent` choice; an assistant uses the agent loop (P2) exactly when a linked skill carries tools, shown as **Använder verktyg**. Edits go to a **draft** (`AssistantVersions`, `State = draft`); the test panel runs the draft; **Publicera** makes it the published version (`Assistants.PublishedVersionId`), the only one chat reads (data-model view `PublishedAssistantVersions`); history with one-click **Återställ** (= a new version; the version diff is **P2**, weakness review §1). Audience, level, retention, owner team, description and contact belong to the assistant, not to a version, so publishing never changes who may use it (§4.5, §5.5.4) |
 | 23 | Assistant tests (**P2**, weakness review §1) | Each assistant has up to 50 **test questions** (question, expected behaviour as free text, optional expected document and phrase), run by `AssistantTestRunner` in `rag-admin` through `Ume.Rag.Answering` and the on-prem answer judge after every publish and on demand; **advisory**, shown as the §7.2 card with **Behåll** / **Återställ förra versionen** (§7.4) |
@@ -85,7 +86,7 @@ gateway counterpart.
 
 | Project | Owns (admin) | Notes |
 |---|---|---|
-| `Ume.Rag.AdminApi` | BFF (identity §1, adapted from `AdminApi/AdminAuthentication.cs`), endpoint groups (§4.5), `AdminContext` (scope, version lock, audit, save), `ConfigRules` (§4.6), `JobEnqueuer` (§4.7), `ContentReader`/`ChatReader` (§4.8), `TestPanelService` (§4.9), `AssistantVersions` (draft, publish, restore, diff; §4.5), `AssistantTestRunner` (§7.4), `DepartmentMap` (§5.5.6), `AccessExplainer`, `FormSchemas` (§5.8), `OrganisationSync`, `GatewayModelSync` (§4.10), `RetentionService` (data-model §8), `ConversationAccessService` (§8), late P1 `AnswerEvaluationService` (run kind `answers`, processing §14.8); P2 `DefinitionDriftMonitor` (tools §4.4), `SkillGateRunner` (tools §3.7) | serves `src/admin-ui/dist` as `wwwroot` (`PublishAdminUi=true`) |
+| `Ume.Rag.AdminApi` | BFF (identity §1, adapted from `AdminApi/AdminAuthentication.cs`), endpoint groups (§4.5), `AdminContext` (scope, version lock, audit, save), `ConfigRules` (§4.6), `JobEnqueuer` (§4.7), `ContentReader`/`ChatReader` (§4.8), `TestPanelService` (§4.9), `AssistantVersions` (draft, publish, restore, diff; §4.5), `AssistantTestRunner` (§7.4), `DepartmentMap` (§5.5.6), `AccessExplainer`, `FormSchemas` (§5.8), `OrganisationSync`, `GatewayModelSync` (§4.10), `RetentionService` (data-model §8), `ConversationAccessService` (§8); P2 `AnswerEvaluationService` (run kind `answers`, processing §14.8), `DefinitionDriftMonitor` (tools §4.4), `SkillGateRunner` (tools §3.7) | serves `src/admin-ui/dist` as `wwwroot` (`PublishAdminUi=true`) |
 | `Ume.Rag.Pipelines` | `PipelineValidator` (parameters against the template's schema, template version supported by a running worker), `FormModel` (JSON Schema → form description, §6.3) | shared with the worker |
 | `Ume.Rag.Retrieval` | retrieval core | test panel |
 | **`Ume.Rag.Answering`** | `KnowledgeService` core (access within a given scope, hydrate, sections, citations), chat answer core (`RagAnswerStrategy`, `PromptBuilder`, `TokenBudget`, `Condenser`, `AnswerFilter`, `CitationEmitter`, `LanguageGuess`), P2 `AgentAnswerStrategy` | the knowledge and chat roles keep HTTP, SSE, writer and importer; the test panel shows the real prompt, budget and filter (chat §9.4) |
@@ -100,21 +101,24 @@ gateway counterpart.
   (`config."AdminSessions"`, owned by `rag-admin`; identity §1.1), so either slot serves any user; no Redis in P1
   (simplification pass §14).
 - Networks: `edge` (proxy, inbound only), `data` (Postgres), `llm` (the default route, so also the OIDC authority and,
-  from P2, Graph for feature C; repo-and-deployment §6.1, as built in P0 #14, PR #40; gateway: test panel, model validation, answer-level evaluation, P2 skill gate, Data API sync), P2 `mcp` (hosted MCP servers:
+  from P2, Graph for feature C; repo-and-deployment §6.1; gateway: test panel, model validation, answer-level evaluation, P2 skill gate, Data API sync), P2 `mcp` (hosted MCP servers:
   discovery, connection test, drift polling, test-panel and skill-gate tool calls; the worker is not on it).
 - Background services:
 
 | Service | Interval | Leader | Writes |
 |---|---|---|---|
-| `OrganisationSync` | 5 min + on demand | a config write (version lock, data-model §5, since the mirror tables carry outbox triggers), then `pg_try_advisory_xact_lock` per run, as `AdminApi/ModelListSync.cs:148-153`; an unchanged run writes nothing and doesn't bump the version (P0, PR #39) | `Departments`, `Teams` (changed rows only) |
+| `OrganisationSync` | 5 min + on demand | a config write (version lock, data-model §5, since the mirror tables carry outbox triggers), then `pg_try_advisory_xact_lock` per run, as `AdminApi/ModelListSync.cs:148-153`; an unchanged run writes nothing and doesn't bump the version | `Departments`, `Teams` (changed rows only) |
 | `GatewayModelSync` | 5 min + on demand | same pattern | `GatewayModels` (changed rows only) |
-| `RetentionService` | nightly, 03:00 Europe/Stockholm (batches of 5,000 rows; both constants, only `Admin:Retention` is a knob; P0, PR #39) | each step batch idempotent under `pg_try_advisory_xact_lock(<step>)` ([`../performance-pass.md`](../performance-pass.md) §3.5); `Admin:Retention` (default `true`) as an off switch | chat/audit/config deletions, expired admin sessions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
+| `RetentionService` | nightly, 03:00 Europe/Stockholm (batches of 5,000 rows; both constants, only `Admin:Retention` is a knob) | pilot: the one slot runs it; from P2 each step batch is idempotent under `pg_try_advisory_xact_lock(<step>)` on both slots (reasoning: [`../performance-pass.md`](../performance-pass.md) §3.5); `Admin:Retention` (default `true`) stays an off switch | chat/audit/config deletions, expired admin sessions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
 | `DefinitionDriftMonitor` (P2) | 15 min | advisory lock (the one drift leader) | `Tools.State`, repins from pre-registrations (tools §4.4) |
 | `ConfigVersionMonitor` | `rag_config` + 2 s poll | every instance | none (keeps the admin's own snapshot for validators and the test panel) |
 | `AnswerEvaluationService` (P2, weakness review §1) | nightly | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Ume.Rag.Answering` and the on-prem judge (processing §14.8) |
 | `AssistantTestRunner` (P2, weakness review §1) | on assistant publish/restore and **Kör testfrågor** | `pg_try_advisory_xact_lock` on (assistant, version); an unfinished run is restarted after a restart | `EvaluationRuns` of kind `assistant-tests` and their `EvaluationResults` (§7.4) |
 | `SkillGateRunner` (P2) | on publish and **Kör igen** | `pg_try_advisory_xact_lock` on the version id; an unfinished run is restarted after a restart | `EvaluationRuns` with `Trigger = skill-publish` (tools §3.7) |
 
+- Tick leaders (`OrganisationSync`, `GatewayModelSync`, P2 drift monitor) keep `pg_try_advisory_xact_lock` and no
+  in-memory state the next run needs (the in-memory sync status is display only, §4.10); in P2, with two slots, the
+  config singletons (`Admin:Retention`) run as lock-guarded idempotent batches.
 - Request body: 1 MB like the gateway (`AdminApi/Program.cs:20`), except the upload file route (50 MB + multipart
   overhead, `IHttpMaxRequestBodySizeFeature` per endpoint) with its own rate-limit policy; the proxy's
   `client_max_body_size` for that path is 60 MB.
@@ -131,8 +135,8 @@ gateway counterpart.
   `/bff`, Scalar with nonce for platform admins (`:74`, `:94-95`), `AdminActivityMiddleware`, authn/z, per-user rate
   limit (`Admin:RequestsPerMinute` 120), antiforgery, `/api` group with `AdminValidationFilter` (`:84-85`),
   `UseDefaultFiles`/`UseStaticFiles`/`MapFallbackToFile("index.html")` (`:96-98`). Authorization runs before the
-  antiforgery check, as in the gateway, so an anonymous unsafe call is challenged before the CSRF check (P0, PR #38).
-  OpenAPI and Scalar arrive with P1a, where Scalar is the set-up surface (§12); P0 has neither.
+  antiforgery check, as in the gateway, so an anonymous unsafe call is challenged before the CSRF check. OpenAPI and
+  Scalar are the P1a set-up surface (§12).
 - CSP holds for everything new: fonts self-hosted (fontsource), no inline script. Preview outputs, CSV exports and
   conversation views are fetched from `/api` (never blob URLs from another origin).
 - Cross-links to the gateway admin (separate app, plan answered 1): `Admin:GatewayAdminUrl`; member groups →
@@ -185,9 +189,10 @@ with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-6
 - Platform objects (templates, site profiles, embedding profiles, clients, `GatewayModels`, tool servers, settings,
   data-protection policies) are readable where a form needs them (pickers show name, kind, level, residency only) and
   writable by `Admin` only.
-- **Share lists** (simplification pass §10): the owning department's `Manage` (collections) or `EditSkills` (skills)
-  may share a collection or skill with named departments (`CollectionShares`, `SkillShares`). An assistant links
-  collections and skills of its own department, those shared with its department, and platform skills (V11, V12).
+- **Share lists (P2**; reasoning: simplification pass §10): the owning department's `Manage` (collections) or
+  `EditSkills` (skills) may share a collection or skill with named departments (`CollectionShares`, `SkillShares`). An
+  assistant links collections and skills of its own department, those shared with its department, and platform skills
+  (V11, V12). In P1 there are no share lists: an assistant links its own department's collections only.
   Sharing gives read use through assistants only: the other department cannot edit, see sources' settings, or publish.
   Knowledge reaches an assistant only through its own collection links; skills carry know-how and tools, never
   collections (simplification pass §15).
@@ -212,7 +217,7 @@ schema-driven form (§5.8).
 |---|---|---|---|---|---|---|---|---|
 | Översikt | P1 | R (all + platform health) | R | R | R | R | R | R |
 | Karta (department map) | P2 (weakness review §1) | R | R | R | R | R | R | R |
-| Kunskapsbanker (incl. Dokument, Testfrågor och kvalitet, Sökinställningar, Delning) | P1 | W | W | R | R | R | W (no sharing) | R |
+| Kunskapsbanker (incl. Dokument, Testfrågor och kvalitet, Sökinställningar; Delning P2) | P1 | W | W | R | R | R | W (no sharing) | R |
 | Källor, körningar, filer, borttagningar (incl. mallinställningar) | P1 | W | W | W (template parameters only) | R | R | W (no deletion decisions) | R |
 | Publicering (plan, rapport, behåll/återställ) | P1 | W | W | W | R | – | W | R |
 | Assistenter (incl. Testa, Versioner; Testfrågor P2, weakness review §1) | P1 | W | W | R | R | R (+ test) | W | R |
@@ -241,7 +246,7 @@ The matrix is data (`PermissionMatrix` in `Ume.Rag.Domain`), used for endpoint a
 | `Edit` | collections (create, edit, retrieval settings, test retrieval, run evaluation), sources (create, edit, pause/resume, sync now, retry failed, upload, delete files), assistants (create, edit the draft, publish, restore a version, archive/unarchive, test panel; P2: create from a template, copy, assistant test questions and runs), human test questions, generate test questions, link served skills (P2); P2 limited to the owner team when the department says so (§3.2) |
 | `EditPipelines` | template parameters of the department's sources (preview, plan, publish, roll back), pipeline test retrieval |
 | `EditSkills` (P2) | skills of own departments: draft, publish, serve, roll back, share list, re-run the gate; skill test panel |
-| `Manage` | collection publish, collection share lists, delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients, P2 department settings (owner-team scoping) and owner-team changes while it is on |
+| `Manage` | collection publish, collection share lists (P2), delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients, P2 department settings (owner-team scoping) and owner-team changes while it is on |
 | `FeedbackComments` | reveal one feedback comment (`public`/`internal`) |
 | `Review` | open a conversation with a reason; P2: request/approve `sensitive` access, search conversations |
 | `Admin` (platform) | templates, assistant templates (P2), site profiles (edit, roll back; approve P2), embedding profiles, clients, `GatewayModels` manual rows, settings, data protection, raised agent limits, tool servers, approvals (platform side, incl. pre-registrations), grants, platform skills, parse-profile proposals (P2), audit log (all), organisation sync now, explain access |
@@ -296,8 +301,8 @@ concurrent_change: 'Någon annan har ändrat detta medan du arbetade. Ladda om s
 - An assistant's draft (its `AssistantVersions` row with `State = draft`) carries its own `version`, so editing the
   draft and editing the assistant's own fields (audience, level, retention) do not conflict; publish and restore
   require both.
-- Singletons (`Settings` per section, `DataProtectionPolicies` per level) use the same rule (as built in PR #167,
-  2026-11-01: `Settings` has one `version` for all its sections, §4.5).
+- Singletons (`Settings`, `DataProtectionPolicies` per level) use the same rule; `Settings` has one `version` (the
+  singleton's `xmin`) for all its sections (§4.5).
 - Job-backed actions are idempotent by `DedupKey` (§4.7), not by version.
 
 ### 4.4 Write path (one transaction, serialised)
@@ -334,23 +339,23 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET /api/departments`, `GET /api/teams` | Read | mirror with `SyncedAt`, member groups (read-only; link to gateway) |
-| `PUT /api/organisation/departments/{id}/member-groups` (as built in PR #189, 2026-11-01) | Admin | member groups by hand until gateway release 2 (§4.10); departments carry no `version`, so the save has no concurrency check (last write wins, audited); the sync never touches the field. As built, the department list is `GET /api/organisation/departments` (teams nested) |
-| `GET /api/organisation/sync`, `POST /api/organisation/sync` | Read / Admin | last run, outcome, changed rows; run now |
+| `GET /api/organisation/departments` | Read | the mirror: departments in scope (all for a platform admin), active first, each with `SyncedAt` and its teams nested (name, code, active); there is no separate teams route. Member groups are returned by the `PUT` below |
+| `PUT /api/organisation/departments/{id}/member-groups` `{ memberGroups }` | Admin | member groups by hand until gateway release 2 (§4.10): ≤ 50 values, trimmed, empty ones dropped, de-duplicated and sorted; departments carry no `version`, so the save has no concurrency check (last write wins, audited `member-groups` on the department); the sync never touches the field |
+| `GET /api/organisation/sync`, `POST /api/organisation/sync` | Admin | last runs and outcome (held in memory per instance, §4.10); run now |
 | `GET /api/gateway/models` | Read | `GatewayModels` with residencies, `SupportsTools`, context window, prices, `Source` |
-| `POST /api/gateway/models/sync`; `PUT /api/gateway/models/{name}` | Admin | run now; manual row (aliases, `SupportsTools` until the catalogue has `features`) |
+| `POST /api/gateway/sync`; `PUT /api/gateway/models/{name}` | Admin | run the model sync now; manual row (aliases, `SupportsTools` until the catalogue has `features`; not built yet) |
 | `GET /api/gateway/status` | Admin | per level key: one `x-ume-max-residency` embedding call and (from gateway release 2, P2) the delegation echo |
-| `GET /api/departments/{id}/map` (P2, weakness review §1) | Read | department map (§5.5.6): sources → collections (own and shared in) → assistants (published links; draft-only links flagged) → audiences (clients), from the admin's snapshot; no content |
-| `GET/PUT /api/departments/{id}/settings` (P2) | Read / Manage | `DepartmentSettings` (`EditOwnerTeamOnly`, `version`); audited `departmentsettings.update` (§3.2) |
+| `GET /api/organisation/departments/{id}/map` (P2, weakness review §1) | Read | department map (§5.5.6): sources → collections (own and shared in) → assistants (published links; draft-only links flagged) → audiences (clients), from the admin's snapshot; no content |
+| `GET/PUT /api/organisation/departments/{id}/settings` (P2) | Read / Manage | `DepartmentSettings` (`EditOwnerTeamOnly`, `version`); audited `departmentsettings.update` (§3.2) |
 | `POST /api/access/explain` `{ clientId, subject, assistantId }` | Admin; Manage (own department's assistants and clients) | runs the pure `IAccessPolicy` steps (identity §4.3) against the admin's snapshot for that client, subject (`oid`, key id or Open WebUI user) and assistant; returns `{ allowed, step, reason, status, effectiveLevel, maxResidency, configVersion }` (`step` = the stable step id, `reason` = the stable deny code, identity §4.9); no content; no security event |
 
 **Collections and retrieval**
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET/POST /api/collections`, `GET/PUT/DELETE /api/collections/{id}` | Read / Edit / Manage (delete) | create: name, slug (from name, ASCII), department, owner team, classification; profile = default; the detail carries `usedBy[]` (assistants whose published version or draft links it, with `published`/`draft`), which the save drawer shows as "Påverkar 3 assistenter: …"; delete refused while a published version or a draft links it (409 `collection_in_use` with the list; superseded versions do not block, a restore of one fails V34); as built in PR #176 (2026-11-01) also while it has sources that are not deleted (same code, `sources` in the list), so the worker never writes into a deleted collection: delete the sources first |
-| `PUT /api/collections/{id}/shares` `{ departmentIds, version }` | Manage | share list (V11); removing a department refused while one of its assistants links the collection |
-| `PUT /api/collections/{id}/retrieval-settings` | Edit | saved directly within the V16 ranges; enqueues an advisory evaluation run (§4.7) whose report is compared with the previous run (as built in PR #176, 2026-11-01: none when the collection has no evaluation set) |
+| `GET/POST /api/collections`, `GET/PUT/DELETE /api/collections/{id}` | Read / Edit / Manage (delete) | create: name, slug (from name, ASCII), department, owner team, classification; profile = default; the detail carries `usedBy[]` (assistants whose published version or draft links it, with `published`/`draft`), which the save drawer shows as "Påverkar 3 assistenter: …"; delete refused while a published version or a draft links it (409 `collection_in_use` with the list; superseded versions do not block, a restore of one fails V34); also refused while it has sources that are not deleted (same code, `sources` in the list), so the worker never writes into a deleted collection: delete the sources first |
+| `PUT /api/collections/{id}/shares` `{ departmentIds, version }` (P2) | Manage | share list (V11); removing a department refused while one of its assistants links the collection |
+| `PUT /api/collections/{id}/retrieval-settings` | Edit | saved directly within the V16 ranges; enqueues an advisory evaluation run (§4.7) whose report is compared with the previous run (none when the collection has no evaluation set) |
 | `POST /api/collections/{id}/test-retrieval` | Edit, EditPipelines | retrieval-only test panel (§4.9), incl. unpublished |
 | `POST /api/collections/{id}/publish` | Manage | sets `PublishedAt`; the latest evaluation report (if any) is shown before confirm; never blocked |
 
@@ -360,8 +365,8 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 |---|---|---|
 | `POST /api/collections/{id}/sources`, `GET/PUT/DELETE /api/sources/{id}` | Edit / Manage (delete) | settings per `contracts/sources/v1/{type}.schema.json`; template + parameters (§6.1); schedule default per type; `ContainsThirdPartyText` (default true) writable by `Admin` only (tools §5.4, V13) |
 | `POST /api/sources/preflight` | Edit | unsaved settings → `preview` `preflight` job (§4.7) |
-| `POST /api/sources/{id}/impact` | Edit | effect tags of a changed settings object with counts ("38 dokument tas bort") and the collection's `usedBy[]` ("påverkar 3 assistenter"); returns `impactToken` that the `PUT` must echo when the tag is `scope`/`identity` (V25; as built in PR #178, 2026-11-01: the token is a hash proving the impact was asked for this change from this version, not an authorization) |
-| `POST /api/sources/{id}/sync`, `/retry-failed`, `/pause`, `/resume` | Edit | sync now answers 200 with the existing run when one is queued/running (dedup); as built in PR #178 (2026-11-01) sync now and retry failed are audited as actions on the source (`sync`, `retry-failed`) and move no config version |
+| `POST /api/sources/{id}/impact` | Edit | effect tags of a changed settings object with counts ("38 dokument tas bort") and the collection's `usedBy[]` ("påverkar 3 assistenter"); returns `impactToken` that the `PUT` must echo when the tag is `scope`/`identity` (V25). The token is a hash that proves the impact was asked for this exact change from this exact version; it is not an authorization |
+| `POST /api/sources/{id}/sync`, `/retry-failed`, `/pause`, `/resume` | Edit | sync now answers 200 with the existing run when one is queued/running (dedup); sync now and retry failed are audited as actions on the source (`sync`, `retry-failed`) and move no config version |
 | `GET /api/sources/{id}/runs` (keyset), `GET /api/runs/{id}`, `GET /api/runs/{id}/items` (keyset; `outcome`, `reason`, `q`) | Read | crawl report from `Runs.Report` (incl. the site-profile version used, extraction quality, the "no complete traversal for N runs" alert) |
 | `POST /api/runs/{id}/cancel` | Edit | `command` `cancel-run` |
 | `GET /api/runs/{id}/deletions` (+ `?format=csv`), `POST /api/runs/{id}/deletions/confirm`, `/reject` | Read / Manage | connectors §13.3–§13.5; body carries `proposedCount` seen by the user; 409 `deletion_superseded` if a newer run took over |
@@ -369,16 +374,18 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 | `POST /api/sources/{id}/upload-batches` → `{ batchId }`; `PUT /api/upload-batches/{batchId}/files/{n}` (raw body, `X-File-Name`); `POST /api/upload-batches/{batchId}/commit`; `DELETE /api/upload-batches/{batchId}` | Edit | per-file progress and retry; extension pre-check 415; SHA-256 while streaming; commit writes the manifest and the `sync` job; uncommitted batches swept after 24 h. Identity is (source, upload slot), so replacing a file keeps the document id |
 | `GET /api/sources/{id}/files` (keyset), `POST /api/sources/{id}/files/delete`, `/restore` | Read / Edit | connectors §9.3 |
 | `GET /api/sources/{id}/quarantine` | Read | metadata only |
+| `GET /api/sources/{id}/pii-report` | Read | the web editors' personal-data report, a list per source: it applies only to a `piiMode: report` source in a `public` collection (any other answers `applies: false`); held documents first, then live documents whose live set is flagged, each with the non-zero counts per type and the number of fired rules (numbers only, never values) and the last `pii.flagged` run item; at most 500 documents (`truncated`) |
 
 **Site profiles** (simplification pass §13; `content."SiteProfiles"`/`"SiteProfileVersions"` per (level, host), written by the worker, so changes are `command` jobs; connectors §5.6). In P1 every profile is `manual` (the hand-checked Sitevision preset for umea.se); `learned` versions, proposals and approve/reject are **P2** (weakness review §1)
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET /api/site-profiles` (`host`, `state`) | Read (hosts of the caller's sources) / Admin (all); as built in PR #188 (2026-11-01) Admin only until the source page (P1b), since matching sources to hosts needs the worker's canonical hosts | level, host, CMS preset, applied version, origin (`learned`/`manual`/`preset`), last re-learn, sources using it, open proposal |
+| `GET /api/site-profiles` (`host`, `level`) | Admin; from P1b's source page also Read for the hosts of the caller's sources (matching sources to hosts needs the worker's canonical hosts) | level, host, CMS preset, applied version, origin (`learned`/`manual`/`preset`), last re-learn, sources using it, open proposal |
 | `GET /api/site-profiles/{id}/versions`, `GET …/versions/{v}` | Admin | versioned JSON, check results of a proposal (words lost per sample page, empty pages, boilerplate share), sample before/after texts |
 | `POST /api/site-profiles/{id}/versions/{v}/approve`, `/reject` (P2) | Admin | a `proposed` version (re-learned profile that failed the auto-apply check); `command` `approve-site-profile`/`reject-site-profile`; audited |
+| `POST /api/site-profiles` `{ host, level, presetId?, profile }` | Admin | a host's first profile as a `manual` version; `command` `edit-site-profile` (dedup `site-profile:{level}:{host}`); audited |
 | `POST /api/site-profiles/{id}/rollback` `{ toVersion }` | Admin | one click; `command` `rollback-site-profile`; audited |
-| `PUT /api/site-profiles/{id}` `{ profile, version }` | Admin | a platform admin's edit as a new `manual` version (generic JSON form, §5.8); `command` `edit-site-profile`; audited. As built in PR #188 (2026-11-01): a profile belongs to no department, so its commands are queued (`Jobs.DepartmentId`, fairness only) for the department of the oldest live source whose settings name the host, else the first department (409 `no_department` before the organisation sync) |
+| `PUT /api/site-profiles/{id}` `{ profile, version }` | Admin | a platform admin's edit as a new `manual` version (generic JSON form, §5.8); `command` `edit-site-profile`; audited. A profile belongs to no department, so its commands are queued (`Jobs.DepartmentId`, fairness only) for the department of the oldest live source whose settings name the host, else the first department (409 `no_department` before the organisation sync) |
 
 **Documents**
 
@@ -416,7 +423,7 @@ Policy in brackets; department scope applies. Bodies and DTOs are the data-model
 |---|---|---|
 | `GET /api/collections/{id}/evaluation` | Read | set size per layer, stale/retired counts, latest reports |
 | `GET /api/collections/{id}/evaluation/questions` (keyset; `layer`, `state`, `q`) | Read | question, expected answer, expected documents (titles), last rank |
-| `POST /api/collections/{id}/evaluation/generate` | Edit | `eval` `generate-set`/`top-up-set` with cost forecast (not built in P1a, PR #189: P1a's evaluation is the human gold set plus on-demand runs; comes with P1b's evaluation items) |
+| `POST /api/collections/{id}/evaluation/generate` | Edit | `eval` `generate-set`/`top-up-set` with cost forecast; P1b, with the evaluation items (P1a's evaluation is the human gold set plus on-demand runs; generated sets are not run on the pilot until an on-prem model exists, O1) |
 | `POST/PUT/DELETE /api/collections/{id}/evaluation/questions[/{qid}]` | Edit | human layer via `command` `edit-eval-question`; expected documents picked by search |
 | `POST /api/collections/{id}/evaluation/run` | Edit | on demand (§4.7) |
 | `GET /api/evaluation-runs/{id}`, `GET /api/evaluation-runs/{id}/results` | Read | recall@10 and MRR with counts, the previous run's values, per-question rank changes (§7.2) |
@@ -455,9 +462,9 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 | `GET/POST/PUT/DELETE /api/clients[/{id}]` | Read (pickers) / Admin | `CK_Clients_*` as field rules (V21); raising a ceiling or changing `StoresHistory` re-validates every assistant offered to the client |
 | `GET /api/clients/{id}/health` | Admin | missing `X-Rag-Owui-Message-Id` warning (chat §11.4), feedback import state (§8.1) |
 | `/api/keys…` | Manage (own teams) / Admin | copied from the gateway (`KeyEndpoints.cs:61-133`): create (secret once), update, rotate (immediate or 24 h grace), reveal/copy (Admin, audited), revoke; `ume-rag-sk-`/`-pk-` (identity §6.4) |
-| `GET/PUT /api/settings/{section}` (`retention`, `deletion-guard`, `crawl`, `evaluation`, `retrieval`, `chat`, `tools`, `pii`, `worker`) | Admin | sections of `config."Settings"` with `version` each. As built in PR #167 (2026-11-01): a `network` section for `TrustedProxies` (data-model §2.1), as on the gateway's settings page; no `tools` section yet (P2); one `version` (the singleton's `xmin`) shared by all sections, so a save in one section makes a concurrent save in another answer `concurrent_change` |
+| `GET/PUT /api/settings/{section}` (`network`, `retention`, `deletion-guard`, `crawl`, `evaluation`, `retrieval`, `chat`, `pii`, `worker`; `tools` from P2) | Admin | sections of `config."Settings"`; `network` holds `TrustedProxies` (data-model §2.1), as on the gateway's settings page; one `version` (the singleton's `xmin`) shared by all sections, so a save in one section makes a concurrent save in another answer `concurrent_change` |
 | `GET/PUT /api/data-protection/{level}` | Read / Admin | V29; key service status read-only; allowed history modes `none` only and the shredding switch off until A1 (weakness review §4) |
-| `GET/PUT /api/embedding-profiles…` | Read / Admin | P1 read-only; changes P3 (R3). As built (PR #123, 2026-10-31): the pilot profile is seeded by the migrator from the deployment knobs `EmbeddingProfile:*` (data-model §2.1) |
+| `GET/PUT /api/embedding-profiles…` | Read / Admin | P1 read-only; changes P3 (R3). The pilot profile is seeded by the migrator from the deployment knobs `EmbeddingProfile:*` (data-model §2.1) |
 | `GET /api/forms/{resource}` | Read | JSON Schema of the resource's request record + list columns for the generic form (§5.8) |
 
 **Feedback, conversations, audit, overview** — §8, §9; `GET /api/overview` returns the attention items of §5.5.1 for
@@ -483,16 +490,16 @@ kept so references stay stable.
 | V5 | for every reachable tool server: max(assistant level, ceilings of history-resending audience clients) ≤ **clearance** | `tool_clearance` | publish; level or audience save; skill serve; server edit | tools §5.3 |
 | V6 | every reachable tool server's result level ≤ assistant level | `tool_result_level` | as V5 | tools §5.3 |
 | V7 | an audience client's ceiling ≥ assistant level (else the assistant is invisible to it) | `audience_above_ceiling` | audience save; client ceiling lowered; assistant level raised | identity §4.1 |
-| V8 | **residency**: the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on publish and on a level or audience save, the model is listed by the gateway's `/v1/models` called with `x-ume-max-residency` = the level's ceiling** (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later) | `model_residency`, `model_not_listed` (409), `gateway_unavailable` (503; as built, PR #123) | publish; level save; audience save; model sync changed residency (warning on Overview; chat checks per call) | chat §8.2, simplification pass §7 |
+| V8 | **residency**: the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on publish and on a level or audience save, the model is listed by the gateway's `/v1/models` called with `x-ume-max-residency` = the level's ceiling** (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later) | `model_residency`, `model_not_listed` (409), `gateway_unavailable` (503) | publish; level save; audience save; model sync changed residency (warning on Overview; chat checks per call) | chat §8.2, simplification pass §7 |
 | V9 | `sensitive` assistants only for clients with `StoresHistory = false` when `DataProtectionPolicies.ClientsWithoutHistoryOnly` | `client_stores_history` | audience save; policy change | platform §8a |
 | V10 | `HistoryMode` ∈ allowed modes, `RetentionDays` ≤ level max (default ≤ max ≤ 90) | `retention_outside_policy` | assistant save; policy tightened (lists assistants) | data-model §2.1 |
-| V11 | ≤ 20 collections per assistant; each of the assistant's department or shared with it (as built in PRs #176 and #190, 2026-11-01: `CollectionShares` is P2, so the assistant's department's only, and `PUT …/shares` is not built) | `too_many_collections`, `collection_not_shared` | publish; share list narrowed | knowledge §4.2, §3.2 here |
+| V11 | ≤ 20 collections per assistant; each of the assistant's department (from P2 also one shared with it, `CollectionShares`, §3.2) | `too_many_collections`, `collection_not_shared` | publish; share list narrowed | knowledge §4.2, §3.2 here |
 | V12 | ≤ 20 skills per assistant, each of its department, shared with it, or a platform skill; for an assistant without tools, skill bodies ≤ 6,000 estimated tokens in total | `too_many_skills`, `skill_not_shared`, `skill_bodies_too_long` | publish; skill serve; share list narrowed | tools §3.4, §3.9 |
 | V13 | lethal trifecta false — a hard refusal, no acceptance in P2 | `lethal_trifecta` | publish; skill serve; tool approval/grant; `ContainsThirdPartyText` changed | tools §5.4 |
 | V14 | assistant that uses tools (a linked skill's served version links a tool): `SupportsTools`, synced price; limits ≤ `AgentDefaults` unless `Admin`, always ≤ `AgentHardCaps` | `model_no_tools`, `price_unknown`, `limit_above_default`, `limit_above_cap` | publish; skill serve (it can switch an assistant to tools); settings change | tools §6.4–§6.5 |
-| V15 | not-found texts ≤ 1,000 characters each, ≤ 5 links, `https`, host matches `Settings.Chat.AllowedLinkHosts` (as built in PR #190, 2026-11-01: `Settings.Chat.allowedLinkHosts`; an empty or missing list refuses every link) | `link_host_not_allowed` | publish; allow-list narrowed | chat §9.4, §10.1 |
-| V16 | `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–200 (as built in PR #176, 2026-11-01: the range retrieval accepts, `RetrievalSettings.Validated()`; there is no `efSearch`, knowledge §12.1), `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `coverageMinKeywordScore` null or > 0 (weakness review §2), `recency` null or `halfLifeDays` 30–3,650, `weight` 0–0.5, `kinds` non-empty subset of the document types (weakness review §3), `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows) | `retrieval_settings_invalid` | collection settings save | knowledge §12.1 |
-| V17 | `QuerySteps`: `topK` 1–50, history 0–20 messages / ≤ 8,000 tokens, `contextTokens` ≤ the model's `ContextWindow` when known, `maxOutputTokens` 64–4,096, temperature 0–1, language `auto`/`sv`; condense model on-prem (as built in PR #190, 2026-11-01: `retrieval.topK`, `history.maxMessages`/`maxTokens` and `answer.maxOutputTokens`/`temperature`/`language` only; the `contextTokens` and condense checks are not built) | `query_steps_invalid` | publish; model sync | chat §5–§6, §10.3 |
+| V15 | not-found texts ≤ 1,000 characters each, ≤ 5 links, `https`, host matches `Settings.Chat.allowedLinkHosts` (an empty or missing list refuses every link) | `link_host_not_allowed` | publish; allow-list narrowed | chat §9.4, §10.1 |
+| V16 | `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–200 (the range retrieval accepts, `RetrievalSettings.Validated()`; there is no `efSearch`, knowledge §12.1), `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `coverageMinKeywordScore` null or > 0 (weakness review §2), `recency` null or `halfLifeDays` 30–3,650, `weight` 0–0.5, `kinds` non-empty subset of the document types (weakness review §3), `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows) | `retrieval_settings_invalid` | collection settings save | knowledge §12.1 |
+| V17 | `QuerySteps`: `retrieval.topK` 1–50, `history.maxMessages` 0–20 and `history.maxTokens` ≤ 8,000, `answer.maxOutputTokens` 64–4,096, `answer.temperature` 0–1, `answer.language` `auto`/`sv`; not built yet: `contextTokens` ≤ the model's `ContextWindow` when known, and the condense model within the V32 ceiling | `query_steps_invalid` | publish; model sync | chat §5–§6, §10.3 |
 | V18 | skill version label > every existing; **serve** only after the version's gate run finished, and only if V4–V6, V12–V14 and V19 hold for every assistant whose published version links the skill | `version_not_increasing`, `gate_not_finished`, `serve_breaks_assistants` | skill publish/serve/rollback | tools §3.5 |
 | V19 | skill tool links need a `ToolDepartmentGrant` for the skill's department; platform skills only `AllDepartments` tools; sharing never grants: a linking assistant of another department sees a shared skill's tool only with its own grant (warning lists the tools) | `tool_grant_missing` | skill draft; grant revoked (lists skills); share list widened | tools §3.6 |
 | V20 | *retired* (skill MCP exposure vs audience ceilings: per-skill endpoints moved to P3) | – | – | – |
@@ -500,14 +507,14 @@ kept so references stay stable.
 | V22 | tool servers: `CK_ToolServers_Clearance`; `Hosting = hosted` (P2); approvers differ for new and unexpected definitions; system-owner approval and pre-registration only by a listed subject; `write` tools refused while `WriteToolsEnabled = false` | `toolserver_rule`, `same_approver` | server save; approval; pre-registration | tools §4.4–§4.5, §5.3 |
 | V23 | keys: team in the caller's departments; scopes only assistants/collections of the key team's department; `pk` keys only `public` assistants, exact origins | `key_scope_invalid` | key save; assistant level raised (lists `pk` keys) | identity §6.4–§6.5 |
 | V24 | pipeline: parameters valid against the template version's `paramsSchema`; template version supported by a running worker; the template matches the source type | `pipeline_params_invalid`, `template_unsupported` | parameters save; publish; template version change | engine (templates and parameters) |
-| V25 | source settings: URL list ≤ 5,000 (canonicalised, duplicates listed; as built in PR #178, 2026-11-01: exact duplicates refused, and the worker canonicalises when it lists, since `UrlCanonicalizer` is the worker's); crawl `include`/`exclude`/`demote` compile (`re:` with `NonBacktracking`, no match timeout, connectors §5.2), `demote` factor in (0, 1), default 0.5 (weakness review §3); `maxPages` ≤ platform cap (as built in PR #178: the schema's maximum, since `Settings.Crawl` has no cap key yet); `maxFileSizeMb` ≤ 50; cron 5 fields; `collectionId` immutable; `scope`/`identity` changes need the `impactToken` | `source_settings_invalid`, `impact_not_confirmed` | source save | connectors §4–§5, §9, §12.3 |
+| V25 | source settings: URL list ≤ 5,000, exact duplicates refused (canonicalisation is the worker's: `UrlCanonicalizer` runs when it lists the URLs); crawl `include`/`exclude`/`demote` compile (`re:` with `NonBacktracking`, no match timeout, connectors §5.2), `demote` factor in (0, 1), default 0.5 (weakness review §3); `maxPages` ≤ the sources schema's maximum (there is no `Settings.Crawl` cap key); `maxFileSizeMb` ≤ 50; cron 5 fields; `collectionId` immutable; `scope`/`identity` changes need the `impactToken` | `source_settings_invalid`, `impact_not_confirmed` | source save | connectors §4–§5, §9, §12.3 |
 | V26 | reasons: PII clear ≥ 10 and the document's source in the caller's departments; conversation access ≥ 20 (comment reveal: the fixed one-click text) | `reason_too_short`, `not_in_scope` | the action | processing §9.5 |
 | V27 | *retired* (collection floor before publish: evaluation is advisory) | – | – | – |
 | V28 | deletion decisions only by `Manage` of the source's department, while the run is `awaiting-deletion-confirmation` and the proposal is the current one | `deletion_superseded` | confirm/reject | connectors §13.3 |
 | V29 | data protection: history modes other than `none` refused until stored chat content is built after A1 (weakness review §4); `internal`/`sensitive` ⇒ chat encryption required; default ≤ max ≤ 90; changes apply to messages written afterwards (their expiry-month bucket); bucket-key destruction cannot be switched on before A1 is recorded as answered | `policy_rule` | policy save | data-model `CK_DataProtectionPolicies_*`, simplification pass §5 |
 | V30 | `Settings` ranges as the `CK_Settings_*` checks (guard 1–100 %, min/max counts, sample sizes, …) | `setting_out_of_range` | settings save | data-model §2.1 |
 | V31 | embedding profile fixed per collection (`platform-default`); other profiles only `Admin` (P3) | `profile_admin_only` | collection save | R3 |
-| V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` are `GatewayModels` rows servable `OnPrem` (`SkillGateModel` also `SupportsTools`) | `settings_model_residency` | settings save; model sync changed residency (warning on Overview) | processing §13.1, chat §5, tools §3.7 |
+| V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` are `GatewayModels` rows servable at most at the platform ceiling: `Eu` until M2 (on-prem models once the on-prem hardware exists, register M2) (`SkillGateModel` also `SupportsTools`) | `settings_model_residency` | settings save; model sync changed residency (warning on Overview) | processing §13.1, chat §5, tools §3.7 |
 | V33 | assistant test questions: ≤ 30 per assistant; question 1–2,000 characters; expected behaviour 1–2,000; expected phrase ≤ 200; an expected document must belong to a collection the draft or published version links (unlinking it later marks the question in the report, never refuses) | `test_question_invalid`, `test_question_document_unlinked` | test-question save | §7.4 |
 | V34 | publish and restore: the definition resolves (collections not deleted, skills not retired and usable by the department, the model in `GatewayModels`); description and contact are set; a draft created before the current published version (lower `Number`) is published only when confirmed | `version_link_missing`, `assistant_contact_missing`, `draft_base_changed` | publish; restore | §4.5, simplification pass §15 |
 
@@ -538,9 +545,8 @@ pass §9) and `pg_notify('rag_jobs', class)` in the same transaction as any conf
 | Site profile approve / reject (P2) / roll back / edit | `command` `approve-site-profile` / `reject-site-profile` / `rollback-site-profile` / `edit-site-profile` | `site-profile:{siteProfileId}`; an `edit-site-profile` that creates a host's first profile: `site-profile:{level}:{host}` | – | `SiteProfileVersions`, `SiteProfiles.AppliedVersionId` |
 | Approve / reject a parse-profile proposal (P2) | `command` `approve-profile` / `reject-profile` | `profile:{id}` | – | `ParseProfiles` |
 
-As built in P1a item 4 (PR #78) and P1b item 2 (PR #88), 2026-10-31 (payload schemas in `contracts/jobs/v1/`,
-engine design §9.1):
-- The preview kind is `stage-preview`, not `node-preview` (P1b README §7 O9).
+Payload schemas are in `contracts/jobs/v1/` (engine design §9.1):
+- The preview kind is `stage-preview`.
 - The worker enqueues two kinds the table does not show: `eval` `nightly` (dedup `eval-nightly:{collectionId}`) and
   `publish-report`. `eval-nightly:` is kept apart from `eval:{collectionId}`, so a queued on-demand run and the
   nightly run never drop each other.
@@ -548,16 +554,15 @@ engine design §9.1):
 - `edit-site-profile` carries `baseVersion` (`site_profile.version_conflict` on mismatch).
 - Only P1 kinds exist; the P2 rows above have no schema yet.
 
-As built in P1a item 10 and P1b item 8 (PR #115), P1b item 6 (PR #131), 2026-10-31 (engine design §9.1, §12):
+What the commands do (engine design §9.1, §12):
 - `reprocess-document` re-runs the document from stored content in a `reprocess` run whose id is the job id;
-  `fromStage: fetch` is refused (`reprocess.fetch_unsupported`). Since PR #140 (2026-10-31) it bypasses the stage
-  caches from `fromStage` (default `parse`; `embed` re-runs through the caches), and a `sync` `reprocess` with
+  `fromStage: fetch` is refused (`reprocess.fetch_unsupported`). It bypasses the stage caches from `fromStage` (default `parse`; `embed` re-runs through the caches), and a `sync` `reprocess` with
   `force` is accepted (default `fromStage` `parse`, `fetch` refused the same way; engine §8).
 - `release-hold` clears deletion holds only; a PII-held set is released by `clear-pii-flag`, without re-processing.
 - `edit-site-profile` and `rollback-site-profile` take an optional `decidedBy` (absent = `system:worker`) and enqueue
   a `sync` `reprocess` (`Trigger = site-profile`, dedup `sync:{sourceId}`) per source with live HTML on the host.
   When the version changes `excludedTypes`, `identityRule` or `ignoreQueryParams`, each crawl source with live
-  documents on the host gets a `sync` of kind `sync` instead (PR #141, 2026-10-31; connectors §5.6).
+  documents on the host gets a `sync` of kind `sync` instead (connectors §5.6).
 - `confirm-deletion` sets the run back to `running` for the finalizer; `reject-deletion` sets `degraded` without a
   stored reason.
 - The worker enqueues `publish-report` for `reprocess` runs with `Trigger = publish` or `rollback` only, whatever
@@ -610,10 +615,10 @@ panel ships in the same P1 release as the chat role, so it never runs a differen
 
 | Sync | Source (gateway Data API, `catalog.read` key `OrgSync__DataApiKey`) | Rule |
 |---|---|---|
-| Departments | `GET /v1/catalog/departments` (`DataEndpoints.cs:140-142`; `memberGroups` from gateway release 2, P2, weakness review §5) | upsert by id; only changed rows written; a department missing from the gateway → `IsActive = false`; member groups replace the stored array **only when the catalogue carries the field** (gateway release 2); until then they are entered by hand (P1) and the sync leaves them alone (P0, PR #39) |
+| Departments | `GET /v1/catalog/departments` (`DataEndpoints.cs:140-142`; `memberGroups` from gateway release 2, P2, weakness review §5) | upsert by id; only changed rows written; a department missing from the gateway → `IsActive = false`; member groups replace the stored array **only when the catalogue carries the field** (gateway release 2); until then they are entered by hand (P1) and the sync leaves them alone |
 | Teams | `GET /v1/catalog/teams` (`:143-145`; `code` from gateway release 2) | as departments |
-| Models | `GET /v1/catalog/models`, `/providers`, `/prices` (`:149-157`) | `GatewayModels` row per chat/embedding deployment: `Kind = model`, `Residencies = [provider residency]`, latest price; `SupportsTools`/`ContextWindow` manual until the catalogue carries them (gateway-changes §7.3); disabled models removed from pickers, kept for existing assistants with a warning. As built (PR #123, 2026-10-31): the rows of disabled or no longer served deployments are deleted (`GatewayModels` has no "disabled" column), so the warning shows as V34/V8 refusing the model on the assistant's next publish |
-| Route aliases | none today (`DataEndpoints.cs:139-160`) | manual rows `Kind = route`, `Residencies` = its targets' residencies, `Source = manual`; servable at a ceiling when any target is within it; replaced by a synced `/v1/catalog/routes` when the gateway adds it. As built (PR #123): multi-target model names are routes, so they are not in the synced catalogue (nor in the FakeGateway's) |
+| Models | `GET /v1/catalog/models`, `/providers`, `/prices` (`:149-157`) | `GatewayModels` row per chat/embedding deployment: `Kind = model`, `Residencies = [provider residency]`, latest price; `SupportsTools`/`ContextWindow` manual until the catalogue carries them (gateway-changes §7.3); the rows of disabled or no longer served deployments are deleted (`GatewayModels` has no "disabled" column), so an assistant that still names one is refused by V34/V8 on its next publish |
+| Route aliases | none today (`DataEndpoints.cs:139-160`) | manual rows `Kind = route`, `Residencies` = its targets' residencies, `Source = manual`; servable at a ceiling when any target is within it; replaced by a synced `/v1/catalog/routes` when the gateway adds it. Multi-target model names are routes, so they are not in the synced catalogue (nor in the FakeGateway's) |
 
 The mirror feeds pickers and V8's first check; V8's `/v1/models` call at save is the authoritative check, because it
 asks the gateway what it will serve at that ceiling. Failures keep the last mirror; after 3 failed runs the Overview
@@ -633,7 +638,7 @@ Overview page (P1).
   gateway-only components (`KeyStatusBadge`, `ResidencyLabel`, `AddressListField`, `SecretDialog`) arrive with keys in
   P1. `package.json` pins the gateway's resolved versions exactly and the lock file is the gateway's, so CI and
   developers use `npm ci` only (npm's `allow-remote=none` refuses to re-resolve); `vite.config.ts` allows
-  `contracts/admin` for the error-code spec (P0, PR #45);
+  `contracts/admin` for the error-code spec;
   `api/client.ts` (constant `RAG-XSRF-TOKEN`), `composables/useFormErrors.ts:8-44`, `useTableView.ts:9-54`,
   `stores/loadable.ts`, `test/*` helpers; charts `components/usage/TimeSeriesChart.vue` for evaluation trends.
 - Adapted: `utils/problem.ts` (§4.2), `utils/format.ts` (dates `sv-SE`), `stores/auth.ts` (RAG roles), `router/nav.ts`
@@ -683,7 +688,7 @@ drift and pending approvals appear as attention cards and badges, plus SIEM even
 |---|---|---|---|
 | Översikt | attention items, setup checklist, sync health per department, queue age, org/model sync | drift, approvals, parse-profile proposals | trends |
 | Karta | – | department map (§5.5.6; moved from P1, weakness review §1), skills and workspaces in the map | – |
-| Kunskapsbanker | list; detail tabs Översikt (checklist, sources, counts, state), Källor, Dokument (incl. personuppgifter), Testfrågor och kvalitet, Sökinställningar, Delning | Historik tab, coverage-threshold histogram and proposal | analytics |
+| Kunskapsbanker | list; detail tabs Översikt (checklist, sources, counts, state), Källor, Dokument (incl. personuppgifter), Testfrågor och kvalitet, Sökinställningar | Delning (share lists), Historik tab, coverage-threshold histogram and proposal | analytics |
 | Källa | URL list, crawl, upload forms with template parameters; preflight; preview with site-profile before/after; impact; runs; crawl report; files; quarantine; deletions; held | SharePoint with preflight, crawl hierarchy tree, parameter diff | more connectors |
 | Publicering | plan, re-process progress, evaluation report, keep/roll back | – | – |
 | Assistenter | create, draft form with description and contact, test panel on the draft, Publicera, Versioner (restore), audiences (clients), retention, stats, archive | create from a template, copy, version diff, Testfrågor with the test report, latest answer evaluation (weakness review §1); skills (with **Använder verktyg** when one carries tools), limits, widget audiences | risk acceptance |
@@ -707,7 +712,7 @@ progress flags), which disappears when the collection has a published assistant 
 | 4 | Kontrollera | same drawer | preflight: reachability, robots status, sitemap found, estimated pages, egress, "samma webbplats hämtas redan av X" (shared crawl frontier, P2; weakness review §1), CMS recognised ("Sitevision") | fail blocks save; warn explains |
 | 5 | Förhandsgranska | preview panel | up to 5 URLs or uploaded files; for a crawl source the site profile the worker would apply (P1: the manual Sitevision preset; learned from P2), shown as **Före / Efter** text per sample page (boilerplate removed, breadcrumb, date); each stage's output (text, sections, chunks with token counts) | preview isolated |
 | 6 | Spara och hämta | source page → run page | saves, enqueues the first sync; live counters, failures by reason in plain Swedish | – |
-| 7 | Testfrågor | Testfrågor och kvalitet | generated after the first runs; cost shown before; own questions with expected documents | – |
+| 7 | Testfrågor | Testfrågor och kvalitet | generated after the first runs, cost shown before (on the pilot not until an on-prem model exists, O1: there the set is the gold set); own questions with expected documents | – |
 | 8 | Publicera kunskapsbanken | collection page | latest evaluation report shown ("Träffsäkerhet 0,78 · 86 frågor"); **Publicera** | – |
 | 9 | Skapa assistent | assistant drawer → assistant page | pick an **assistant template** ("Allmän rådgivning" preselected; P2, weakness review §1: in P1 the draft starts from `Settings.Chat` defaults); name, description, contact person; collections (the new one preselected; unpublished ones work in Testa only), model picker showing only models servable for the level, not-found texts and contact link from the template; saved as **utkast** | warnings only (V3, V8, V15 at publish) |
 | 10 | Testa | Testa tab | runs the draft; sample questions from the evaluation set as one-click prompts; sources, coverage, raw vs delivered answer; **Spara som testfråga** (P2) turns a tried question into a test question with the expected behaviour typed in | V33 |
@@ -839,6 +844,8 @@ Import från Open WebUI: senast 10:45, lyckad · 2 kunde inte kopplas till ett s
 
 #### 5.5.6 Karta (department map; P2, weakness review §1)
 
+**Later (P2):** the department map.
+
 ```
 Karta · Stadsbyggnad                                                  Visa: [Allt ▾]  [Tabell]
 Källor                    Kunskapsbanker               Assistenter                       Målgrupper
@@ -852,7 +859,7 @@ One column per stage, each item a link to its page; selecting an item highlights
 lines are drawn as plain SVG next to lists that carry the same relations as text ("matar: …", "används av: …"), and
 **Tabell** shows one row per source → collection → assistant → audience path, so nothing depends on the drawing (no
 graph library, §10.2). Shared collections appear with their owning department; assistants show their published
-version, draft-only links are marked "(utkast)". Source: `GET /api/departments/{id}/map`.
+version, draft-only links are marked "(utkast)". Source: `GET /api/organisation/departments/{id}/map`.
 
 ### 5.6 Empty and error states
 
@@ -899,7 +906,8 @@ version, draft-only links are marked "(utkast)". Source: `GET /api/departments/{
 
 ### 5.8 Generic forms for platform objects (P1)
 
-Platform-admin objects get no dedicated pages in P1 (simplification pass §10): settings sections, data protection,
+Platform-admin objects get no dedicated pages in P1 (reasoning: simplification pass §10). In P1a they are set up
+through Scalar only; the generic forms below come in P1b (Decisions "P1a plan answers"): settings sections, data protection,
 clients, keys, templates, assistant templates (simplification pass §15; P2, weakness review §1), site profiles, embedding profiles (read),
 gateway models, organisation mirror (read); P2 department settings (owner-team scoping, also for department admins).
 
@@ -969,7 +977,7 @@ affected stage.
 
 ### 6.5 Diff
 
-Removed (simplification pass): version diff moves to P2 as a parameter diff if needed (§16).
+Removed (simplification pass): no version diff; a parameter diff is a P2 option if needed (§16).
 
 ### 6.6 Publish flow
 
@@ -1015,7 +1023,8 @@ demonstrably need custom flows (§16).
 ### 7.1 Testfrågor och kvalitet (per collection)
 
 - Set: size per layer (`generated`, `human`, P2 `skill`/`feedback`), stale and retired counts, last generation (model,
-  cost), **Skapa fler** with the forecast (processing §13.1).
+  cost), **Skapa fler** with the forecast (processing §13.1). Generated sets are built and tested on FakeGateway but
+  not generated on the pilot until an on-prem model exists (O1); until then the pilot's set is the `human` gold set.
 - Questions table (keyset): question, layer, expected documents (titles), last rank, state; editors add/edit/retire
   human questions (expected documents picked by title search); generated questions can be edited (become human) or
   retired.
@@ -1056,6 +1065,8 @@ per model with tool use and restraint lines and **Servera** instead of Behåll/�
 Removed (simplification pass): no gate, so no overrides (§16).
 
 ### 7.4 Testfrågor per assistent (simplification pass §15)
+
+**Later (P2):** per-assistant test questions (weakness review §1).
 
 - **Set**: `AssistantTestQuestions` per assistant (V33, ordered by `Ordinal`): question, expected behaviour as free text ("Ska hänvisa till
   kontaktcenter och inte ange någon avgift"), optional expected document (picked by title in the linked collections)
@@ -1099,7 +1110,8 @@ review, `sensitive` flow, access log) are built when A1 allows stored content.
   metadata (`Outcome`, `Coverage`, `Language`, the assistant version that answered from `Messages.AssistantVersionId`),
   cited document titles (`MessageSources.DocumentId` → `Documents.Title`), assistant and client names. **No content**: no question, answer, title or comment.
 - **Reason category** in plaintext: `Feedback.ReasonCategory` filled by the importer and `/v1/feedback` only from the
-  fixed Open WebUI keys (`RateComment.svelte:17-35`), else `other`; the free text stays in the ciphertext (in P1 it is not stored, weakness review §4). Swedish
+  fixed Open WebUI keys (`RateComment.svelte:17-35`) and the API reasons of chat design §3.5 (`incorrect`, `incomplete`,
+  `wrong_sources`, `not_relevant`, `other`), else `other` (the column has no CHECK, so a reason keeps its own category); the free text stays in the ciphertext (in P1 it is not stored, weakness review §4). Swedish
   labels in `labels.ts`.
 - `ReviewState` (`open`/`reviewed`/`dismissed`) set by `FeedbackComments` holders ("Markera som hanterad"). Filters:
   period, assistant, rating, outcome, has comment, state. Totals from `AssistantDailyTotals`.
@@ -1127,7 +1139,7 @@ review, `sensitive` flow, access log) are built when A1 allows stored content.
 
 ### 8.4 `sensitive` (P2; no `sensitive` data while file keys are used, platform §8a)
 
-Request (reason) → a second `rag-reviewer` with the department in scope approves (`approved`, approver ≠ requester)
+**Later (P2):** request (reason) → a second `rag-reviewer` with the department in scope approves (`approved`, approver ≠ requester)
 within 24 h → the requester decrypts within 30 minutes. Comments of `sensitive` conversations only through this flow
 (chat §14.4). The pending queue is a tab of Samtalsgranskning.
 
@@ -1151,7 +1163,7 @@ reviewers (their own). Reading the list emits 6007. Export CSV (`;`, as `ReportE
 
 `EntityType` + `Action` columns as the gateway (`AuditSnapshots.cs:11-51`); dotted names are `entity.action` shorthand.
 Admin entries: `collection.create|update|delete|publish|share|retrieval_settings`,
-`source.create|update|delete|pause|resume|sync`, `upload.batch|delete|restore`, `deletion.confirm|reject`,
+`source.create|update|delete|pause|resume|sync|retry-failed`, `upload.batch|delete|restore`, `deletion.confirm|reject`,
 `hold.release`, `pii.view|clear`, `pipeline.publish|cancel|rollback`, `template.*`,
 `siteprofile.update|approve|reject|rollback`, `evaluation.generate|question|run`,
 `assistant.create|update|delete|draft|discard_draft|publish|restore|copy|archive|unarchive|audience|retention|limits`,
@@ -1166,7 +1178,7 @@ Admin entries: `collection.create|update|delete|publish|share|retrieval_settings
 |---|---|---|
 | Nycklar | status, last use (`KeyLastUse`), grace, keys used after rotation | Manage (own teams), Admin |
 | Inloggningsfel | `audit."AuthFailures"` aggregated by credential kind and client (never the presented value) | Admin |
-| Personuppgifter | flagged documents in scope, types and counts (no values), `public` collections affected, highlight preview, clearance with reason | Manage |
+| Personuppgifter | the per-source report (`GET /api/sources/{id}/pii-report`, §4.5): held and live flagged documents of a `piiMode: report` source in a `public` collection, non-zero counts per type and the fired-rule count (no values); per document the highlight preview and clearance with reason | Read (report); Manage (preview, clearance) |
 | Karantän | quarantined files: name (own sources), type, signature name, date; no download | Read |
 | Verktyg (P2) | drift observations, pending approvals and pre-registrations, grants, definition diff | Admin, system owners |
 | Åtkomstlogg | §8.5 | §8.5 |
@@ -1292,12 +1304,12 @@ component axe checks.
 
 | Phase | Deliverable |
 |---|---|
-| P0 | BFF against `ume-rag-admin` + roles (incl. `rag-reviewer` in the realm and Bicep), design system and shell in Swedish, `labels.ts`/`messages.ts` skeleton, `AdminContext` write path (version lock + rules + audit + outbox + version), `PermissionMatrix` with generated role tests, org sync, error-code export. **Built** (PRs #32, #35, #38, #39, #45, #46): pages Översikt (your roles and departments with their source) and Organisation (synced departments and teams; **Hämta nu** for platform admins); `/api/clients` is the first resource on the write path (its generic form is P1, §5.8); the `cancel-run` enqueue waits for `Runs` (P1a item 14), the enqueue path is in place |
-| P1a (walking skeleton, weakness review §1) | none of the journey pages: the pilot's collection, sources and one assistant are created through the write path with Scalar and generic forms; the umea.se site profile as a manual profile JSON; `GatewayModels` sync; clients; the pilot gold set entered as `human` questions through Scalar (weakness review §2) |
+| P0 | BFF against `ume-rag-admin` + roles (incl. `rag-reviewer` in the realm and Bicep), design system and shell in Swedish, `labels.ts`/`messages.ts` skeleton, `AdminContext` write path (version lock + rules + audit + outbox + version), `PermissionMatrix` with generated role tests, org sync, error-code export. **Built**: pages Översikt (your roles and departments with their source) and Organisation (synced departments and teams; **Hämta nu** for platform admins); `/api/clients` is the first resource on the write path (its generic form is P1b, §5.8) |
+| P1a (walking skeleton, weakness review §1) | none of the journey pages: the pilot's collection, sources and one assistant are created through the write path with Scalar (generic forms come in P1b); the umea.se site profile as a manual profile JSON; `GatewayModels` sync; clients; the pilot gold set entered as `human` questions through Scalar (weakness review §2) |
 | P1b (1) | collections (incl. documents tab, PII view/clear), sources (URL list, crawl, upload batches), preflight, preview with site-profile before/after, impact, runs and crawl report, deletion decisions, template parameters, publish (plan of every document → re-process → report → keep or roll back), rollback |
-| P1b (2) | evaluation set and reports (led by the gold set; coverage-threshold proposal as numbers, weakness review §2), retrieval settings, collection publish, share lists, assistants (draft → publish, versions with restore, archive, description and contact), test panel on the draft (`Ume.Rag.Answering`, same release as `rag-api`), impact lines, V8 `/v1/models` check, audiences (clients), retention, generic forms (settings, data protection, clients, keys, templates, site profiles, embedding profiles, gateway models, organisation), audit list, explain access |
+| P1b (2) | evaluation set and reports (led by the gold set; coverage-threshold proposal as numbers, weakness review §2), retrieval settings, collection publish, assistants (draft → publish, versions with restore, archive, description and contact), test panel on the draft (`Ume.Rag.Answering`, same release as `rag-api`), impact lines, V8 `/v1/models` check, audiences (clients), retention, generic forms (settings, data protection, clients, keys, templates, site profiles, embedding profiles, gateway models, organisation), audit list, explain access |
 | P1b (3) | feedback page (ratings, import health; comment reveal, conversation review behind feedback and the access log when A1 allows stored content, weakness review §4); accessibility pass and tillgänglighetsredogörelse; pilot journey E2E green |
-| P2 | from weakness review §1: assistant templates and copy, version diff, assistant test questions and `AssistantTestRunner`, department map, unused-assistant attention item, latest answer evaluation (`AnswerEvaluationService`), site-profile proposals with learning, effect-tag publish plans; skills (share lists, gate report, serve); tool servers (registration, approvals, pre-registration, grants, drift leader); tool use through skills (the derived **Använder verktyg**, limits, tool calls in the test panel); owner-team scoping; parse-profile proposals; SharePoint; crawl hierarchy tree; parameter diff; coverage histogram and proposal; audit diff viewer and Historik tabs; conversation search and `sensitive` two-person flow; feedback → test question; widget keys; dedicated pages where generic forms prove too thin |
+| P2 | from weakness review §1: assistant templates and copy, version diff, assistant test questions and `AssistantTestRunner`, department map, unused-assistant attention item, latest answer evaluation (`AnswerEvaluationService`), site-profile proposals with learning, effect-tag publish plans; collection share lists (Delning); skills (share lists, gate report, serve); tool servers (registration, approvals, pre-registration, grants, drift leader); tool use through skills (the derived **Använder verktyg**, limits, tool calls in the test panel); owner-team scoping; parse-profile proposals; SharePoint; crawl hierarchy tree; parameter diff; coverage histogram and proposal; audit diff viewer and Historik tabs; conversation search and `sensitive` two-person flow; feedback → test question; widget keys; dedicated pages where generic forms prove too thin |
 | P3 | analytics, OBO configuration, risk acceptance, skill import/export, embedding profile changes |
 
 ## 13. Changes to other documents
@@ -1413,7 +1425,7 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 | P1 node editor, node palette, ports, locks, JSON definition view, rules 1–12 (§6.2) | Removed: template + parameters (§2) |
 | Version diff (§6.5), rebase, bulk rebase, `locked_node_below_min` | Parameter diff P2 if needed; a source moves to the latest template on its next publish (§10) |
 | `gating` state, `PlanJobId`, blocking pipeline/collection/retrieval gates, gate cards with intervals, escalation and McNemar, collection floor (V27), `building` state, platform-admin overrides (§7.3), `gate.override` | Removed; advisory evaluation report, keep or roll back (§8) |
-| Coverage-threshold proposal and histogram | P2 (§10); later change (weakness review §2): the proposal as numbers on the report card is P1, only the histogram stays P2 (§7.1) |
+| Coverage-threshold proposal and histogram | Histogram P2 (§10); the proposal as numbers on the report card is P1 (weakness review §2, §7.1) |
 | Crawl hierarchy tree (`hierarchy` preview job) | P2 (§10) |
 | Audit field-level diff viewer, Historik tabs | P2 (§10); the audit list stays |
 | Dedicated P1 pages for settings, data protection, clients, keys, gateway, embedding profiles, organisation | Generic schema-driven forms + Scalar (§10) |
@@ -1422,7 +1434,7 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 | Interim per-team gateway key links (`/api/gateway/key-links`, `gatewaylink.*`) | Removed (§7) |
 | Clients' task model (`owui-tasks`, `TaskModelResidency` in V21) | Removed (§1) |
 | Shared document store views ("used by another department"), `recompute-membership` | Removed: documents belong to one source (§2) |
-| Own-department-only links | Share lists for collections and skills (§10) |
+| Own-department-only links | Share lists for collections and skills, P2 (§10; P1 links own-department collections only) |
 | Skill MCP exposure and audiences (V20), MAJOR auto-pin preview | P3 / removed (§10) |
 | Risk acceptance (`/risk-acceptance`, `assistant.risk_accept`) | P3 (§10) |
 | "(+ request)" right on tool servers | Removed: platform team's intake (§10) |
@@ -1441,11 +1453,11 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | Assistant version diff (`…/diff`, **Jämför**, the diff in the publish dialog) | P2 |
 | Assistant test questions, `AssistantTestRunner`, test reports, **Spara som testfråga** (§7.4) | P2 |
 | Assistant templates (generic form, `templateId` on create), copy an assistant | P2 |
-| Department map (Karta, §5.5.6, `GET /api/departments/{id}/map`), unused-assistant attention item | P2; the impact line on saves stays in P1 |
+| Department map (Karta, §5.5.6, `GET /api/organisation/departments/{id}/map`), unused-assistant attention item | P2; the impact line on saves stays in P1 |
 | Latest answer evaluation (`AnswerEvaluationService`, nightly `answers` run) | P2 |
 | Learned site profiles, proposals, approve/reject | P2; P1 has manual profile versions (edit, roll back), the umea.se one a hand-checked Sitevision preset |
 | Publish plan split by effect tags | P2; P1 re-processes every document of the collection, still with report and keep or roll back |
-| Dedicated journey pages before the first answer | P1b; the walking skeleton (P1a) uses Scalar and the generic forms |
+| Dedicated journey pages before the first answer | P1b; the walking skeleton (P1a) uses Scalar only, generic forms come in P1b |
 
 Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
 

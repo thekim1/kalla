@@ -1,9 +1,11 @@
 # Skills, tools and MCP: plan
 
+**Later (P2–P3).** Nothing here is built in P1; P1 has the client registry only (needed for ceilings), and its assistants have instructions and directly linked collections, no skills or tools.
+
 How assistants gain know-how (skills) and capabilities (tools), how the platform speaks MCP, and how municipal MCP
 servers are built and hosted. Decisions (2026-10-29): skills are **both** know-how packages and tool bundles; tools are
 **read-only first**; user-delegated access (Entra OBO) is **designed now, built later** (`../identity/plan.md` §7).
-Simplified on 2026-10-30 ([`../simplification-pass.md`](../simplification-pass.md) §10, §15): a smaller P2 with the
+Simplified on 2026-10-30 (reasoning: [`../simplification-pass.md`](../simplification-pass.md) §10, §15): a smaller P2 with the
 tool hub in process, `hosted` servers only and one first server; skills without collections; one assistant type.
 Detail: [`design.md`](design.md) (detail step 9).
 
@@ -179,7 +181,7 @@ Answered (2026-10-29):
 2. **Registration and approval**: only platform admins register tool servers; departments request them through the
    platform team's normal intake (no request flow in the admin). A new tool definition needs two approvals, recorded in
    the audit log: the platform admin (security, classification) and the system owner (correctness). A planned change
-   pre-registered by the owner needs one approver; unexpected drift needs two (simplification pass §10).
+   pre-registered by the owner needs one approver; unexpected drift needs two.
 3. **Anonymous MCP**: no. The MCP server always requires Entra login; citizens reach public assistants through the web
    widget.
 4. **Open WebUI's own tools/MCP**: always off. Every tool call goes through the tool hub.

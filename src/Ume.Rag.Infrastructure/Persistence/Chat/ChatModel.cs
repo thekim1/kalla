@@ -33,6 +33,7 @@ internal static class ChatModel
                 ValuesCheck(t, "Conversations", "SubjectKind", ChatSubjectKinds.All);
                 ValuesCheck(t, "Conversations", "HistoryMode", HistoryModes.All);
                 t.HasCheckConstraint("CK_Conversations_RetentionDays", "\"RetentionDays\" >= 0");
+                NoContent(t, "Conversations", "TitleCiphertext");
             });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Classification).HasMaxLength(20);
@@ -56,6 +57,7 @@ internal static class ChatModel
                 ValuesCheck(t, "Messages", "Role", MessageRoles.All);
                 ValuesCheck(t, "Messages", "Outcome", MessageOutcomes.All);
                 ValuesCheck(t, "Messages", "Coverage", MessageCoverage.All);
+                NoContent(t, "Messages", "ContentCiphertext");
             });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Classification).HasMaxLength(20);
@@ -80,7 +82,11 @@ internal static class ChatModel
 
         modelBuilder.Entity<MessageSource>(e =>
         {
-            e.ToTable("MessageSources", ChatSchema, t => ClassificationCheck(t, "MessageSources"));
+            e.ToTable("MessageSources", ChatSchema, t =>
+            {
+                ClassificationCheck(t, "MessageSources");
+                NoContent(t, "MessageSources", "SnippetCiphertext");
+            });
             e.HasKey(x => new { x.MessageId, x.Rank });
             e.Property(x => x.Classification).HasMaxLength(20);
             e.HasOne<Message>().WithMany().HasForeignKey(x => x.MessageId).OnDelete(DeleteBehavior.Cascade);
@@ -96,6 +102,7 @@ internal static class ChatModel
                 ValuesCheck(t, "Feedback", "ReviewState", FeedbackReviewStates.All);
                 t.HasCheckConstraint("CK_Feedback_Rating", "\"Rating\" IN (-1, 1)");
                 t.HasCheckConstraint("CK_Feedback_Score", "\"Score\" BETWEEN 1 AND 10");
+                NoContent(t, "Feedback", "CommentCiphertext");
             });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Classification).HasMaxLength(20);
@@ -114,7 +121,12 @@ internal static class ChatModel
 
         modelBuilder.Entity<ToolCall>(e =>
         {
-            e.ToTable("ToolCalls", ChatSchema, t => ClassificationCheck(t, "ToolCalls"));
+            e.ToTable("ToolCalls", ChatSchema, t =>
+            {
+                ClassificationCheck(t, "ToolCalls");
+                NoContent(t, "ToolCalls", "ArgumentsCiphertext");
+                NoContent(t, "ToolCalls", "ResultCiphertext");
+            });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Classification).HasMaxLength(20);
             e.Property(x => x.ToolName).HasMaxLength(200);
@@ -140,4 +152,11 @@ internal static class ChatModel
             e.Property(x => x.LastOutcome).HasMaxLength(40);
         });
     }
+
+    /// <summary>
+    /// No stored chat content until A1 (weakness review §4; #223 review): the ciphertext column stays null. A1's
+    /// migration drops these checks with <c>CK_Conversations_HistoryMode</c>.
+    /// </summary>
+    private static void NoContent<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.TableBuilder<T> table, string tableName, string column) where T : class =>
+        table.HasCheckConstraint($"CK_{tableName}_No{column}", $"\"{column}\" IS NULL");
 }

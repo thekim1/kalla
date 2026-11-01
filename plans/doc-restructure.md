@@ -1,80 +1,105 @@
-# Design-document restructure (planned, not started)
+# Design-document restructure
 
-Owner: main session. Written 2026-10-31 (session 12) after a review of `plans/`. **Do this after milestone 1, at
-the P1a/P1b boundary, while stream B is between items.** Stream B and the agent briefs cite these paths and section
-numbers, so don't change them in the middle of an item.
+**Done 2026-11-01 (session 16).** Steps 0–5 are merged to `main`; the checks under "Done when" pass. Not part of it, still to do: the design sync of stream B's P1b items 9–10 (#254–#262) and later PRs, and the register items the agents reported (below).
+
+Owner: main session. Written 2026-10-31 (session 12); revised and started 2026-11-01 (session 16, user: "do the
+improvements to the plan and then execute it"). Done at the P1a/P1b boundary while stream B is idle and stream A waits
+on B's #239/#241. Stream B and the agent briefs cite these paths and section numbers, so names and numbers stay.
 
 ## Why
 
-The documents have grown in layers, and finding out how something works now takes five sources:
+The documents have grown in layers, and finding out how something works takes five sources:
 
-1. **Precedence chain.** To read one area you need the Decisions table (`01-general-idea.md` §10, 89 rows, "later
-   rows win"), then `weakness-review.md`, then `simplification-pass.md` (and `performance-pass.md`,
-   `consistency-pass.md`), then the detail design, and then the code. The passes are deltas over the detail documents.
-   52 files refer to them. A single section can't be trusted on its own, and an implementor briefed with one section
-   gets a partly wrong picture.
-2. **Detail documents are turning into changelogs.** 208 "As built (PR #…)" notes and 245 PR references across the
-   design documents (connectors 52, engine 44, processing 24, data-model 22, repo-and-deployment 16, knowledge 13).
-   Many sentences read "design says X; as built (#108): Y; as built (#155): Z". Every session-end sync adds more.
-3. **Detail documents mix four things.** They are 900–1,460 lines each and hold the current spec, rationale and
-   alternatives (Eneo/Onyx comparisons), P2/P3 outlines and as-built notes. The text doesn't show which parts are
-   binding now.
-4. **The Decisions table keeps superseded rows** without a marker (about 6 of 89 say what they replace).
-5. **Phase scaffolding piles up.** `plans/p0/` is finished but sits beside `p1/` and `p1b/`. `to-verify.md` mixes
-   139 open and resolved rows.
+1. **Precedence chain.** Decisions table (`01-general-idea.md` §10, 94 rows, "later rows win") → `weakness-review.md`
+   → `simplification-pass.md` (and `performance-pass.md`, `consistency-pass.md`) → the detail design → the code. The
+   passes are deltas over the detail documents, so a single section can't be trusted on its own, and an implementor
+   briefed with one section gets a partly wrong picture.
+2. **Detail documents are turning into changelogs.** 139 "As built" notes and 438 PR references in the design
+   documents (connectors 31, engine 28, processing 18, data-model 15, knowledge 12, repo-and-deployment 10, admin 8,
+   chat 7). Every session-end sync adds more.
+3. **Detail documents mix four things**: the current spec, rationale and alternatives, P2/P3 outlines and as-built
+   notes. The text doesn't show which parts bind now.
+4. **The Decisions table keeps superseded rows** without a marker.
+5. **Phase scaffolding piles up.** `plans/p0/` is finished; `to-verify.md` mixes open and resolved rows.
 
 ## Hard constraint: stable names and section numbers
 
-About 1,360 code comments in `src/` and `tests/` cite design sections ("processing design §3.7", "data-model §2.1",
-"engine §9.6"). The results files and PR bodies cite `to-verify.md` row numbers. So:
+About 4,100 named citations ("engine design §9.6", "data-model §2.1"), 600 path-form citations and 800 relative links
+point into these documents from code, tests, plans and docs; results files and PR bodies cite `to-verify.md` rows.
 
-- **Never renumber a section or move it to another file.** Move content *within* a section, or to the end of a
-  document under a new, higher section number.
-- **Keep `to-verify.md` row numbers.**
-- Leave a stub (one line with a link) wherever a file moves.
+- **Never renumber a section, rename a linked heading, or move a file.** Move content *within* a section, or add it
+  at the end under a new, higher number.
+- **Keep `to-verify.md` row numbers and Decisions-table row positions.**
+- Retired documents stay where they are, with a header that says they no longer bind (archive in place, no stubs).
 
-## Steps (in order of value)
+## Guard: `scripts/check-doc-refs.py`
 
-1. **Fold the passes into the detail documents, then archive the passes.** For each binding rule in
-   `weakness-review.md`, `simplification-pass.md`, `performance-pass.md` and `consistency-pass.md`, write it into the
-   detail section it changes. Then move the four files to `plans/archive/`, each with a header: "Folded into the detail
-   documents on <date>; kept for the reasoning." Change the precedence in `AGENTS.md`, `HANDOVER.md`,
-   `plans/README.md` and the implementor/stream prompts to two layers: **Decisions table > detail document**.
-   Needs a Decisions-table row ("Design documents: one layer").
-2. **Write as-built notes as present tense.** "As built (PR #155): the scheduler counts from `CreatedAt`" becomes
-   "The scheduler counts from `Sources.CreatedAt`." Collect the PR references in a short `## Change log` at the end of
-   each document (one line per PR: number, date, sections touched), or leave them to git history. From then on the
-   session-end design sync **edits the sentence in place** and doesn't append notes. Update
-   `plans/p1/prompts/main-session.md` accordingly.
-3. **Separate "later" from "now" inside each document**, without renumbering. A P2+ subsection gets "**Later (P2):**"
-   as its first line, or moves into a final "Later phases" section. Alternatives and comparisons with other platforms
-   move to a final "Rationale" section, or become a link to `platforms/`.
-4. **Give the Decisions table a status.** Either add a column (`current` / `superseded by row N`), or split it into
-   "Current decisions" and "History" (keeping the history rows verbatim, since the Architecture Decisions are
-   append-only). AGENTS.md's "later rows win" then becomes "the Current section is binding".
-5. **Archive finished phases and split `to-verify.md`.** Move `plans/p0/` to `plans/archive/p0/`, with a redirect line
-   in `plans/README.md` and `plans/progress.md`. Split `to-verify.md` into open and resolved rows (same numbers), or
-   add a status column and sort on it.
-6. **Tidy the repo root (optional).** Move `01-general-idea.md` and `02-architecture-review.md` under `plans/`, leaving
-   stubs. Only do this if AGENTS.md and the prompts are updated in the same commit.
+Written first (2026-11-01). For every named or path-form `§N.N` citation in `src/`, `tests/`, `plans/`, `docs/`,
+`scripts/`, `deploy/`, `contracts/`, `.github/` and the root `*.md`, it checks that the document has that section (a
+numbered heading, or a numbered list item or table row under it). For every relative Markdown link it checks the file
+and the `#fragment`. It also reports duplicate section numbers. Baseline at the start: 5,569 references, 1 miss (two
+`§2.1` headings in `gateway-changes/design.md`). Negative proof: renumbering `engine §9.6` gives 16 misses, renaming
+one weakness-review heading 23.
 
-**Keep as is:** the area folders (`plans/<area>/plan.md` + `design*.md`), `docs/` for operating and `plans/` for
-design, `platforms/` as reference, and the `p1`/`p1b` stream layout.
+It runs before and after every restructure commit (no new misses), and stays in CI afterwards (the `changes` set of
+`verify.yml`) so broken references can't come back.
+
+## Steps
+
+0. **Fold the outstanding deviations first** (not yet in the design): #217's fired-types list in the PII report,
+   `UrlCanonicalizer` staying in the worker (#178), the admin routes `/api/organisation/departments` with nested teams,
+   and the deviations of #228/#239/#241 once merged. Otherwise they come back as new "as built" notes.
+1. **Fold the passes into the detail documents, with a rule ledger.** For each of `weakness-review.md`,
+   `simplification-pass.md`, `performance-pass.md` and `consistency-pass.md`, list every binding rule with its target
+   section and a status: *folded* (written into the target section), *already there*, *obsolete* (superseded by a later
+   Decisions row, named) or *not a rule* (rationale, history). Open risks and unresolved findings are not rules: they
+   go to `postponed-decisions.md` or `to-verify.md`, so they survive the archiving. Review against the ledger, not
+   only the diff. Then give each pass a header: "Folded into the detail documents on <date> (ledger below); kept for
+   the reasoning; not binding." The ledger goes at the end of the pass.
+   - `performance-pass.md` is also the only home of the capacity model, topologies, scaling triggers and scale tests
+     (§2, §5–§7). Those sections stay binding as the reference for capacity; only its overrides (§1, §3, §9) are folded.
+     Its header says which is which.
+   - Precedence becomes two layers: **Decisions table > detail document**, in `AGENTS.md`, `HANDOVER.md`,
+     `plans/README.md`, the stream prompts and `plans/p1/prompts/implementor-common.md`. Decisions row "Design
+     documents: one layer".
+2. **Present tense, no PR history in design text.** "As built (PR #155): the scheduler counts from `CreatedAt`"
+   becomes "The scheduler counts from `Sources.CreatedAt`." References to merged PRs go; git history (`git log -L`,
+   `blame`) keeps them, so no change-log sections. Links to open issues and hand-offs (work still to do) stay. The session-end design sync edits the sentence in place from then on
+   (`plans/p1/prompts/main-session.md`).
+3. **Mark what is later.** Whole documents that are P2/P3 (`tools/`, `workspaces/`) get one line at the top. In mixed
+   documents a P2+ subsection starts with "**Later (P2):**". Alternatives and comparisons with other platforms move to
+   the end of their section or become a link to `platforms/`.
+4. **Decisions table status column**: `current`, or `superseded by "<Topic>"` / `partly superseded by "<Topic>": <what holds>` (rows are named by Topic). Rows keep
+   their place. "Later rows win" becomes "rows marked current bind".
+5. **Retire finished phase material in place.** `plans/p0/README.md` gets a "Finished (v0.1.0, 2026-10-31); kept for
+   the record" header; `plans/README.md` lists it under "Finished". `to-verify.md` gets a status column (rows keep
+   their numbers and order).
+
+Dropped from the first version: moving the passes and `plans/p0/` to `plans/archive/` (breaks ~70 links and stream
+B's owned paths for no reading gain), per-document change logs (git has them), moving the root documents.
 
 ## How
 
-- Main session, through agents, one area per commit (e.g. "connectors: passes folded, present tense, later marked").
-  Review each diff. Push after each.
-- **Check script** (write it first, in `scripts/`): for every `<doc> §N.N` cited in `src/`, `tests/` and `plans/`,
-  check that the heading still exists in that file; also check that every relative Markdown link resolves. Run it
-  before and after each commit, and it must show no new misses.
-- Tell stream B on GitHub before starting (issue labelled `stream-b`): which files change, that § numbers stay, and
-  that the precedence is now two layers.
-- Estimate: steps 1, 2 and 4 are about one session of agent work plus review; steps 3, 5 and 6 are cheap follow-ups.
+- Main session, with agents: one area per agent on disjoint files, each reading all four passes for its own
+  documents and returning its part of the ledger. Areas: connectors; engine; processing; platform (data-model,
+  repo-and-deployment, plan); knowledge + chat; admin + identity; parser + tools + gateway-changes + workspaces.
+- One commit per area, reviewed against its ledger and checked with `check-doc-refs.py`, pushed after each.
+- Stream B is told first (issue labelled `stream-b`): which files change, that § numbers stay, the two-layer
+  precedence.
 
 ## Done when
 
 - `AGENTS.md`, `HANDOVER.md`, `plans/README.md` and the prompts name two layers of truth.
-- No "As built (PR #" left in `plans/**/design*.md`, `data-model.md` or `repo-and-deployment.md`; each has a change log.
-- The passes and `plans/p0/` are in `plans/archive/` with stubs or redirects.
-- The check script reports no broken § references or links.
+- Each pass has its header and complete ledger; no ledger row without a status.
+- No "As built" note and no reference to a merged PR in `plans/**/design*.md`, `data-model.md` or
+  `repo-and-deployment.md`.
+- The Decisions table has a status on every row; `to-verify.md` has a status on every row.
+- `check-doc-refs.py` reports no misses and runs in `verify.yml`.
+
+## Follow-ups found during the restructure
+
+- Not built, but stated in the designs as rules (marked "not built yet" or "Later"): the engine's CPU lane (`Channel<CpuWork>`), the egress canary of the connectors design §7, `S3BlobStore`, the FakeGateway throughput model, the frequent-term stop list (stream B, P1b), `PUT /api/gateway/models/{name}`.
+- Parser design §12 says the image budget is ≤ 3.5 GB; repo-and-deployment says ≤ 4.0 GB (measured 2.88 GB). Align.
+- The Decisions rows "Gateway changes (step 4)", "Tools (step 9)" and "Parser detail (step 5)" still describe PdfPig, three releases and the OpenAPI generator (statuses say so).
+- PR #178 deviation 1 stays open: moving `UrlCanonicalizer` to `Ume.Rag.Pipelines` would let the admin canonicalise on save.
+- `plans/gateway-changes/adr-drafts.md` was not checked for the two-release wording.

@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Scalar.AspNetCore;
@@ -38,6 +39,13 @@ builder.AddRagBlobEnvelope();
 builder.Services.AddOptions<SecurityOptions>().BindConfiguration(SecurityOptions.SectionName);
 builder.Services.AddSingleton<AdminKeyHasher>();
 builder.AddRagDataProtection();
+// Explain access (identity §4.9): the policy snapshot loaded at the current version for each question (no monitor: the
+// admin applies no outbox), and the api's policy with the same Knowledge:OpenToClientKinds.
+builder.Services.TryAddSingleton<ConfigVersionState>();
+builder.Services.AddSingleton(sp => new Ume.Rag.Infrastructure.Access.PolicySnapshotStore(sp.GetRequiredService<NpgsqlDataSource>(),
+    sp.GetRequiredService<ConfigVersionState>(), sp.GetRequiredService<ILogger<Ume.Rag.Infrastructure.Access.PolicySnapshotStore>>()));
+builder.Services.AddSingleton<Ume.Rag.Domain.Access.IAccessPolicy>(new Ume.Rag.Domain.Access.AccessPolicy(new HashSet<string>(
+    builder.Configuration.GetSection("Knowledge:OpenToClientKinds").Get<string[]>() ?? ["internal"], StringComparer.Ordinal)));
 builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -58,6 +66,14 @@ builder.Services.AddSingleton<GatewayApi>();
 builder.Services.AddSingleton<GatewayModelSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayModelSync>());
 builder.Services.AddScoped<GatewayModelCheck>();
+// The retrieval test (admin design §4.9): the search core on the process's data source, query embeddings on their own gateway client.
+builder.AddGatewayClient(Ume.Rag.Answering.GatewayQueryEmbedder.HttpClientName);
+builder.Services.AddSingleton<AdminRetrieval>();
+// The test panel (admin design §4.9): chat's gateway client and options, the panel over Ume.Rag.Answering's chat pipeline.
+builder.AddGatewayClient(Ume.Rag.Answering.Chat.GatewayChatClient.HttpClientName);
+builder.Services.AddOptions<Ume.Rag.Answering.Chat.ChatOptions>().BindConfiguration(Ume.Rag.Answering.Chat.ChatOptions.SectionName);
+builder.Services.AddSingleton<Ume.Rag.Answering.Chat.GatewayChatClient>();
+builder.Services.AddSingleton<AdminTestPanel>();
 builder.Services.AddHostedService<RetentionService>();
 builder.Services.AddRateLimiter(o =>
 {
@@ -69,6 +85,9 @@ builder.Services.AddRateLimiter(o =>
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0,
         }));
+    o.AddPolicy(AssistantTestEndpoints.RatePolicy, http => RateLimitPartition.GetFixedWindowLimiter(
+        http.User.Identity?.IsAuthenticated == true ? AdminActor.SubjectOf(http.User) : http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = AssistantTestEndpoints.QuestionsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     o.RejectWithProblem("Too many requests. Wait a minute.");
 });
 builder.AddAdminAuthentication();
@@ -105,6 +124,12 @@ api.MapAssistants();
 api.MapSources();
 api.MapRuns();
 api.MapPiiReport();
+api.MapDocuments();
+api.MapAudit();
+api.MapExplainAccess();
+api.MapPreviews();
+api.MapTestRetrieval();
+api.MapAssistantTest();
 api.MapUploads();
 api.MapKeys();
 api.MapOrganisation();

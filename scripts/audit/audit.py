@@ -1,0 +1,145 @@
+"""Dependency audit checks shared by verify.yml (each pull request) and audit.yml (daily against main), so the two
+cannot drift (plans/platform/repo-and-deployment.md §8.2, §8.4). Standard library only; it reads a report the
+package manager wrote and never runs it.
+
+Usage:
+  dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > dotnet.json
+  python3 -I scripts/audit/audit.py dotnet dotnet.json [--summary FILE]
+
+  npm audit --json > npm.json || true          # in src/admin-ui, after npm ci
+  python3 -I scripts/audit/audit.py npm npm.json [--exceptions FILE] [--today YYYY-MM-DD] [--summary FILE]
+
+dotnet  fails on any top-level or transitive package with a vulnerability, and on an error the report lists.
+npm     fails on any advisory without a current exception. An exception is a line "<GHSA id> <last day, YYYY-MM-DD>
+        <reason>" in the exceptions file (default: npm-audit-exceptions.txt next to this script); it stops applying
+        after its last day, so the check turns red again unless the fix has landed.
+
+Exit 0 when clean, 1 with a message on stderr otherwise. --summary appends a short Markdown summary to FILE
+(the workflow's $GITHUB_STEP_SUMMARY).
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import sys
+from pathlib import Path
+
+DEFAULT_EXCEPTIONS = Path(__file__).resolve().parent / "npm-audit-exceptions.txt"
+
+
+def dotnet(report: dict) -> tuple[list[str], list[str]]:
+    """Returns (findings, errors): one line per vulnerable package and advisory, one per error in the report."""
+    findings = []
+    for project in report.get("projects", []):
+        name = Path(project.get("path", "?")).name
+        for framework in project.get("frameworks", []):
+            for kind in ("topLevelPackages", "transitivePackages"):
+                for package in framework.get(kind, []):
+                    where = "top-level" if kind == "topLevelPackages" else "transitive"
+                    for vulnerability in package.get("vulnerabilities") or []:
+                        findings.append(
+                            f"{name} ({framework.get('framework', '?')}): {package.get('id')} "
+                            f"{package.get('resolvedVersion')} ({where}): "
+                            f"{vulnerability.get('severity')} {vulnerability.get('advisoryurl')}"
+                        )
+    errors = [p.get("text", str(p)) for p in report.get("problems", []) if p.get("level") == "error"]
+    return findings, errors
+
+
+def read_exceptions(path: Path) -> dict[str, str]:
+    allowed = {}
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        parts = line.split(maxsplit=2)
+        try:
+            if len(parts) < 3 or not parts[0].startswith("GHSA-"):
+                raise ValueError
+            datetime.date.fromisoformat(parts[1])
+        except ValueError:
+            sys.exit(f"{path}:{number}: expected '<GHSA id> <YYYY-MM-DD> <reason>', got: {line}")
+        allowed[parts[0]] = parts[1]
+    return allowed
+
+
+def npm(report: dict, allowed: dict[str, str], today: str) -> list[tuple[str, str, bool]]:
+    """Returns (advisory, packages, fails) per advisory, sorted by advisory id."""
+    found: dict[str, set[str]] = {}
+    for vuln in report["vulnerabilities"].values():
+        for via in vuln["via"]:
+            if isinstance(via, dict):
+                found.setdefault(via["url"].rsplit("/", 1)[-1], set()).add(f"{via['name']} ({via['severity']})")
+    out = []
+    for ghsa, where in sorted(found.items()):
+        until = allowed.get(ghsa)
+        out.append((ghsa, ", ".join(sorted(where)), not (until and today <= until)))
+    return out
+
+
+def iso_date(value: str) -> str:
+    return datetime.date.fromisoformat(value).isoformat()
+
+
+def append(path: str | None, lines: list[str]) -> None:
+    if path:
+        with open(path, "a", encoding="utf-8") as summary:
+            summary.write("\n".join(lines) + "\n\n")
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    sub = parser.add_subparsers(dest="ecosystem", required=True)
+    p_dotnet = sub.add_parser("dotnet", help="dotnet list package --vulnerable --include-transitive --format json")
+    p_dotnet.add_argument("report", type=Path)
+    p_dotnet.add_argument("--summary")
+    p_npm = sub.add_parser("npm", help="npm audit --json")
+    p_npm.add_argument("report", type=Path)
+    p_npm.add_argument("--exceptions", type=Path, default=DEFAULT_EXCEPTIONS)
+    p_npm.add_argument("--today", type=iso_date, default=datetime.date.today().isoformat())
+    p_npm.add_argument("--summary")
+    args = parser.parse_args(argv)
+    report = json.loads(args.report.read_text(encoding="utf-8"))
+
+    if args.ecosystem == "dotnet":
+        findings, errors = dotnet(report)
+        for line in errors + findings:
+            print(line)
+        audited = f"{len(report.get('projects', []))} projects, top-level and transitive packages"
+        append(
+            args.summary,
+            [f"### .NET packages ({audited})", ""]
+            + ([f"- error: {e}" for e in errors] + [f"- {f}" for f in findings] or ["No vulnerable packages."]),
+        )
+        if errors:
+            sys.exit(f"dotnet list package reported {len(errors)} error(s)")
+        if findings:
+            sys.exit("Vulnerable .NET dependencies detected")
+        return 0
+
+    if "vulnerabilities" not in report:
+        message = f"npm audit gave no report: {report.get('error', report)}"
+        append(args.summary, ["### npm audit, all dependencies", "", message])
+        sys.exit(message)
+    allowed = read_exceptions(args.exceptions)
+    advisories = npm(report, allowed, args.today)
+    lines = []
+    for ghsa, where, fails in advisories:
+        state = "FAILS" if fails else "excepted until " + allowed[ghsa]
+        lines.append(f"{ghsa}: {where}: {state}")
+        print(lines[-1])
+    total = report.get("metadata", {}).get("dependencies", {}).get("total", "?")
+    append(
+        args.summary,
+        [f"### npm audit, all dependencies ({total} packages)", ""]
+        + ([f"- {line}" for line in lines] or ["No advisories."]),
+    )
+    bad = [ghsa for ghsa, _, fails in advisories if fails]
+    if bad:
+        sys.exit(f"{len(bad)} advisory(ies) without a current exception: {', '.join(bad)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -26,7 +26,7 @@ public sealed class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptions> opti
         var key = options.CurrentValue.Keys.GetValueOrDefault(ceiling);
         if (string.IsNullOrEmpty(key))
         {
-            throw new GatewayCallRefusedException($"This service holds no gateway key for the ceiling {ResidencyCeiling.ToHeader(ceiling)}.");
+            throw new GatewayKeyMissingException(ceiling);
         }
 
         if (request.Headers.Authorization is { } authorization)
@@ -88,7 +88,17 @@ public sealed class ResidencyCeilingHandler(IOptionsMonitor<GatewayOptions> opti
 }
 
 /// <summary>A gateway call refused by this process before sending (programming error: no ceiling, wrong key).</summary>
-public sealed class GatewayCallRefusedException(string message) : InvalidOperationException(message);
+public class GatewayCallRefusedException(string message) : InvalidOperationException(message);
+
+/// <summary>
+/// This process holds no gateway key for the call's ceiling (a configuration gap, not a programming error): e.g. a public
+/// assistant at <c>External</c> on a deployment with only <c>Eu</c> keys, without <c>Gateway:MaxResidency</c> (#237).
+/// </summary>
+public sealed class GatewayKeyMissingException(Residency ceiling)
+    : GatewayCallRefusedException($"This service holds no gateway key for the ceiling {ResidencyCeiling.ToHeader(ceiling)}.")
+{
+    public Residency Ceiling { get; } = ceiling;
+}
 
 /// <summary>The gateway answered from a residency above the call's ceiling, or did not say; the answer was discarded.</summary>
 public sealed class GatewayResidencyException(Residency ceiling, string? observed)

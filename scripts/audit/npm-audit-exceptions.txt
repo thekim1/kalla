@@ -1,0 +1,5 @@
+# Dated npm audit exceptions for src/admin-ui, read by scripts/audit/audit.py in verify.yml (admin-ui) and audit.yml.
+# Only for dev-only advisories whose fixed version is not yet usable (e.g. issue #61: lint toolchain fixes younger
+# than 7 days); production dependencies never get one (npm audit --omit=dev runs first, without exceptions).
+# One line per exception: <GHSA id> <last day, YYYY-MM-DD> <reason>. After its last day it no longer applies.
+# None today (#61 fixed by #71).

@@ -3,8 +3,8 @@
 **Detailed design**: [`design-engine.md`](design-engine.md) (6a: engine, stages, jobs, runs, preview, publish),
 [`design-connectors.md`](design-connectors.md) (6b: connectors, frontier, site profiles, change detection, deletion
 guard) and [`design-processing.md`](design-processing.md) (6c: parsing, HTML extraction, chunking, personal data,
-embedding, evaluation). Where they differ, the designs win. Rewritten to the decided form of
-[`../simplification-pass.md`](../simplification-pass.md) (2026-10-30) and thinned by the [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer) (§13).
+embedding, evaluation). Where they differ, the designs win. The plan states the decided form: fixed linear pipelines,
+P1 scope as in §10 (reasoning: [`../simplification-pass.md`](../simplification-pass.md), [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer); deferred items in §12 and §13).
 
 Background service that keeps the document store and collection indexes in step with their sources: it runs
 connectors, executes each source's fixed linear pipeline, decides how to parse each document, embeds through the
@@ -139,16 +139,18 @@ child documents.
 
 ## 5. Embedding (R3)
 
-- One **platform embedding profile**: a multilingual model served on-prem through the gateway, used for every
-  collection and classification. Content is never sent off-premises to be indexed.
-- Calls go through the gateway with the worker's `OnPrem` delegating key on behalf of the collection's owning team,
-  with the explicit `OnPrem` residency ceiling header. Until gateway release 2 (P1) the key is the pilot department's
-  team's own `OnPrem` key and no `x-ume-on-behalf-of` is sent (weakness review §5).
-- BGE-M3 throughput on the real gateway hardware is measured in P0 (checklist #22); if it falls short, register M2
-  decides before P1 between more on-prem capacity and a longer initial-load window. The profile stays on-prem
-  BGE-M3 (weakness review §5).
+- One **platform embedding profile**, used for every collection and classification. The pilot runs EU-hosted models
+  through the gateway: `text-embedding-3-large` at 1024 dimensions, requested with the `dimensions` parameter
+  (Decisions "Pilot embedding model, U-b", "M2 and test hosting"). The profile moves to on-prem BGE-M3 (1024
+  dimensions, no `dimensions` parameter) when the on-prem hardware exists (register M2); that move re-embeds every
+  chunk.
+- Calls go through the gateway with the worker's delegating key for the profile's residency ceiling, sent as the
+  explicit `x-ume-max-residency` header: at most the platform ceiling, `Eu` until M2. Until gateway release 2 (P1)
+  the key is the pilot department's team's own per-level key and no `x-ume-on-behalf-of` is sent.
+- On-prem embedding throughput is measured when the hardware exists (H8, no P1b gate); until then the fixed
+  concurrency is set from the EU provider's measured rate.
 - Embedding cache by (profile, text hash): re-chunking only embeds new text; batches sized for the gateway. Embedding
-  concurrency is a fixed value from configuration in P1; adaptive concurrency (AIMD) is P2 (weakness review §1).
+  concurrency is a fixed value from configuration in P1; adaptive concurrency (AIMD) is P2.
 - Other profiles are an explicit exception set by platform admins. A profile change (P3) re-embeds every affected
   chunk in the background into new, invisible sets, shows the evaluation comparison, then swaps.
 
@@ -181,14 +183,14 @@ child documents.
 ## 7. Evaluation (R6)
 
 - **Evaluation set per collection**, built in layers:
-  1. *Generated*: sample chunks, have an on-prem model write a question the chunk answers plus the expected answer,
+  1. *Generated* (P1b; built and tested on FakeGateway, not run on the pilot until an on-prem model exists, O1): sample chunks, have an on-prem model write a question the chunk answers plus the expected answer,
      keyed to the chunk's document; filter out trivial or ambiguous questions with a judge pass. Regenerated as
      content changes.
   2. *Human*: questions from editors, plus questions derived from chat feedback. Feedback never enters a set
      directly: an editor turns a flagged chat into a **rewritten test question without personal data**, and only the
      rewritten question is kept, with the collection's classification (decision 2026-10-29). The original chat still
      expires under its own retention. The postponed Swedish benchmark becomes this curated layer.
-     **Pilot gold set** (P1a, before go-live; [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): 100–150 answerable real questions
+     **Pilot gold set** (P1a, before go-live; reasoning: [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): 100–150 answerable real questions
      written with the pilot department (its FAQ, contact-centre questions and, if W1 allows, the existing umea.se
      chat), each with expected source URL(s) and the facts a correct answer contains; 30–50 unanswerable off-topic and
      near-miss questions whose expected outcome is "not found"; at least 10 temporal questions where an outdated
@@ -199,9 +201,9 @@ child documents.
   shared `Ume.Rag.Retrieval` engine with the Knowledge API's fusion, dedup, variant collapse and per-document cap
   (design-processing §13.5), compared with the previous run (questions won and lost). **Reports lead with the
   gold-set (`human`) results; generated questions are a regression signal only** (weakness review §2).
-- **Three-way run** (P1a, weakness review §2): the gold set is run vector-only, hybrid, and hybrid without the
-  decompounder (on both sides: a scratch copy of the collection whose `SearchText` is recomputed by `reindex-fts`
-  without compound parts, and queries without them); the result is recorded, and hybrid and the decompounder stay only if they beat vector-only. The same
+- **Three-way run** (P1a): the gold set is run vector-only, hybrid, and hybrid without the decompounder (on both
+  sides: the copy without compound parts is computed inside the keyword statement from `Chunks.Text`, processing
+  §13.4, and queries without them); the result is recorded, and hybrid and the decompounder stay only if they beat vector-only. The same
   run supplies the coverage-threshold proposal from answerable and unanswerable questions together
   (`../knowledge-api/design.md` §7).
 - **Advisory, not a gate**: runs on the **full collection** after each publish and nightly; the result is shown on the
@@ -378,4 +380,4 @@ Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-
 | Item | Where it went |
 |---|---|
 | Delegated attribution of worker calls (`x-ume-on-behalf-of` = collection owner team) in P1 | P2 with gateway release 2; P1 uses the pilot team's own per-level keys (§5) |
-| BGE-M3 throughput measured in P1 (R1) | P0, checklist #22 (`to-verify.md` #98, #125) |
+| BGE-M3 throughput measured in P1 (R1) | on-prem capacity run H8 when the hardware exists (register M2; `to-verify.md` #98, #125) |

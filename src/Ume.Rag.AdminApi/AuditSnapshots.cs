@@ -17,6 +17,7 @@ public static class AuditEntityTypes
     public const string Assistant = "assistant";
     public const string Source = "source";
     public const string Run = "run";
+    public const string Document = "document";
     public const string Key = "key";
 }
 

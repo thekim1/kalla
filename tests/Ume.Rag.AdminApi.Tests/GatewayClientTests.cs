@@ -211,8 +211,27 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         (await Code(() => check.EnsureServableAsync("no-such-model", Residency.Eu, Ct))).ShouldBe(AdminErrorCodes.ModelResidency.Code);
         // The mirror allows it at OnPrem, but its OnPrem target is drained: the gateway does not list it (gateway-changes §3.4).
         (await Code(() => check.EnsureServableAsync(drained, Residency.OnPrem, Ct))).ShouldBe(AdminErrorCodes.ModelNotListed.Code);
-        // This instance holds no External key: the gateway cannot be asked.
-        (await Code(() => check.EnsureServableAsync("ume/chat-advanced", Residency.External, Ct))).ShouldBe(AdminErrorCodes.GatewayUnavailable.Code);
+        // This instance holds no External key: the gateway cannot be asked, and the code says which key is missing (#237).
+        (await Code(() => check.EnsureServableAsync("ume/chat-eu", Residency.External, Ct))).ShouldBe(AdminErrorCodes.GatewayKeyMissing.Code);
+    }
+
+    [Fact]
+    public async Task Under_a_max_residency_V8_checks_a_public_ceiling_at_the_cap()
+    {
+        await using var gateway = database.Gateway();
+        await using var eu = database.AdminApi(gateway, Residency.Eu);
+        await using var admin = eu.WithWebHostBuilder(web => web.UseSetting("Gateway:MaxResidency", "Eu"));
+        await SyncedAsync(admin);
+        await using var scope = admin.Services.CreateAsyncScope();
+        var check = scope.ServiceProvider.GetRequiredService<GatewayModelCheck>();
+
+        // A public assistant asks for External; M2's cap checks it at Eu, with the Eu key (#237).
+        await check.EnsureServableAsync("ume/chat-eu", Residency.External, Ct);
+        var refused = await Should.ThrowAsync<ApiFaultException>(() => check.EnsureServableAsync("ume/chat-advanced", Residency.External, Ct));
+        refused.Extensions!["code"].ShouldBe(AdminErrorCodes.ModelResidency.Code);
+        ((IReadOnlyDictionary<string, string>)refused.Extensions["params"]!)["ceiling"].ShouldBe("Eu"); // the capped ceiling
+        // The cap only lowers: an OnPrem ceiling stays OnPrem, and this instance has no OnPrem key.
+        (await Code(() => check.EnsureServableAsync("bge-m3", Residency.OnPrem, Ct))).ShouldBe(AdminErrorCodes.GatewayKeyMissing.Code);
     }
 
     [Fact]

@@ -16,6 +16,17 @@ public sealed class GatewayOptions
     /// <c>External</c>.
     /// </summary>
     public Dictionary<Residency, string> Keys { get; set; } = [];
+
+    /// <summary>
+    /// The highest ceiling this deployment calls models at (<c>Gateway:MaxResidency</c>), or none. Under M2 (no on-prem model
+    /// hardware, every model call EU-hosted; P1 README §1) the pilot sets <c>Eu</c>, so a public assistant, whose level
+    /// asks for <c>External</c>, is checked (V8) and answered at <c>Eu</c> with the <c>Eu</c> key (#237). It only lowers a
+    /// ceiling, never raises one.
+    /// </summary>
+    public Residency? MaxResidency { get; set; }
+
+    /// <summary><paramref name="ceiling"/>, lowered to <see cref="MaxResidency"/> when that is set and lower.</summary>
+    public Residency Cap(Residency ceiling) => MaxResidency is { } cap && cap < ceiling ? cap : ceiling;
 }
 
 /// <summary>Header names shared with the gateway (<c>Pipeline/GatewayHeaders.cs</c>, gateway design §2.1).</summary>

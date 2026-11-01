@@ -32,5 +32,8 @@ approves each merge.
 5. **All code items done:** run the live block with the user (J10–J13, items 19–22, P1b's live items), then tick P1a
    and P1b in `plans/progress.md`.
 
-Record decisions in the Decisions table (`01-general-idea.md` §10). Update `HANDOVER.md` at the end of the session,
-then commit and push.
+Record decisions in the Decisions table (`01-general-idea.md` §10): a new row has status `current`, and an older row it
+changes gets its status updated in the same commit. The design sync at the end of a session edits the sentence in the
+detail document in place, in the present tense: no "As built" notes, no references to merged PRs (git history has
+them), no new text in the passes. Run `python3 -I scripts/check-doc-refs.py` before committing design documents. Update
+`HANDOVER.md` at the end of the session, then commit and push.

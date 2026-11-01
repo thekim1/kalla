@@ -9,7 +9,7 @@ namespace Ume.Rag.AdminApi;
 /// The nightly retention of the config schema (adapted from the gateway's <c>RetentionService</c>; data-model §8): calls
 /// <c>config.rag_retention_config_step</c> (expired admin sessions, outbox rows older than 30 days) until a batch comes back
 /// smaller than the batch size. Each batch is one statement under <c>pg_try_advisory_xact_lock</c>, so several instances
-/// share or skip the work (repo-and-deployment §3, <c>Admin:Retention</c>). The chat and audit steps join it with their
+/// share or skip the work (repo-and-deployment §3, <c>Admin:Retention</c>). The chat step (<c>chat.rag_retention_chat_step</c>) runs after it under its own lock; the audit step joins it with its
 /// tables (P1).
 /// </summary>
 public sealed partial class RetentionService(IServiceScopeFactory scopes, IOptions<AdminOptions> options, TimeProvider time, ILogger<RetentionService> logger)
@@ -20,6 +20,9 @@ public sealed partial class RetentionService(IServiceScopeFactory scopes, IOptio
 
     /// <summary>Advisory lock key of the config step ("RAG0" + 0x11).</summary>
     public const long ConfigStepLockKey = 0x5241_4730_0011;
+
+    /// <summary>The chat step's advisory lock (chat design §13.1).</summary>
+    public const long ChatStepLockKey = 0x5241_4730_0012;
 
     /// <summary>After the worker's content maintenance (02:00), as the gateway's nightly run.</summary>
     public static readonly TimeOnly RunAt = new(3, 0);
@@ -95,8 +98,21 @@ public sealed partial class RetentionService(IServiceScopeFactory scopes, IOptio
             }
             while (step >= BatchSize);
 
-            LogRun(logger, removed, step < 0);
-            return step < 0 && removed == 0 ? -1 : removed;
+            var skipped = step < 0;
+
+            // Chat metadata (chat design §13.1: expired messages, then empty expired conversations, totals after 3 years).
+            do
+            {
+                step = await db.Database.SqlQuery<long>(
+                    $"""SELECT CASE WHEN pg_try_advisory_xact_lock({ChatStepLockKey}) THEN chat.rag_retention_chat_step({BatchSize}) ELSE -1 END AS "Value" """)
+                    .SingleAsync(cancellationToken);
+                removed += Math.Max(step, 0);
+            }
+            while (step >= BatchSize);
+
+            skipped &= step < 0;
+            LogRun(logger, removed, skipped);
+            return skipped && removed == 0 ? -1 : removed;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
