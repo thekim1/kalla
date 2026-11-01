@@ -86,7 +86,7 @@ public sealed partial class DocumentIngest(
                 return await ProcessAsync(fetch, upsert.Document, content.Raw.Key, content.Raw.MediaType, upsert.ContentChanged, frontier, cancellationToken);
 
             case FetchOutcome.NotModified notModified when known is { DeletedAt: null, ContentHash: not null }:
-                await documents.SeenAsync(known.Id, fetch.Run.Id, now, cancellationToken);
+                await documents.SeenAsync(known.Id, fetch.Run.Id, now, notModified.FinalUrl?.AbsoluteUri, cancellationToken);
                 return await ProcessAsync(fetch, known, RawContentKeys.Of(known), known.MediaType, changed: false,
                     Frontier(fetch, 304, notModified.Validators, null), cancellationToken);
 

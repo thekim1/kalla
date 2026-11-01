@@ -132,7 +132,7 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
             var record = _runs[run.RunId];
             var admitted = new List<FrontierRow>();
             var limitHit = false;
-            foreach (var url in urls)
+            foreach (var url in FrontierAdmission.OnePerIdentity(urls))
             {
                 var key = (run.SourceId, run.Classification, url.UrlHash);
                 _frontier.TryGetValue(key, out var row);
@@ -151,7 +151,7 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
                     with
                     {
                         State = FrontierState.Pending, RunId = run.RunId, Depth = url.Depth, Leaf = url.Leaf, RemovalCheck = url.RemovalCheck,
-                        SitemapLastMod = url.SitemapLastMod ?? row?.SitemapLastMod,
+                        SitemapLastMod = url.SitemapLastMod ?? row?.SitemapLastMod, FetchUrl = url.StoredFetchUrl ?? row?.FetchUrl,
                     };
                 _frontier[key] = updated;
                 _admittedOrder[key] = ++_order;
@@ -169,13 +169,16 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
         lock (_lock)
         {
             var listed = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var seed in seeds)
+            foreach (var seed in FrontierAdmission.OnePerIdentity(seeds))
             {
                 var key = (run.SourceId, run.Classification, seed.UrlHash);
                 if (_frontier.TryGetValue(key, out var row) && row.State == FrontierState.Idle && row.RunId != run.RunId
                     && row.LastFetchedAt is { } fetched && (seed.SitemapLastMod is null || seed.SitemapLastMod <= fetched))
                 {
-                    _frontier[key] = row with { RunId = run.RunId, RemovalCheck = false, SitemapLastMod = seed.SitemapLastMod ?? row.SitemapLastMod };
+                    _frontier[key] = row with
+                    {
+                        RunId = run.RunId, RemovalCheck = false, SitemapLastMod = seed.SitemapLastMod ?? row.SitemapLastMod, FetchUrl = seed.StoredFetchUrl ?? row.FetchUrl,
+                    };
                     listed.Add(seed.UrlHash);
                 }
             }
@@ -349,6 +352,18 @@ internal sealed class InMemoryCrawlStore : ICrawlFrontierStore, ICrawlRunStore
     };
 }
 
+/// <summary>Test sites that serve a Sitevision node under any path that ends in its id (#228: the crawler requests the path as found).</summary>
+internal static class Sitevision
+{
+    /// <summary>The node a request path names: <c>section/sida-a.4.10000000000a.html</c> → <c>4.10000000000a.html</c>; another last segment as it is.</summary>
+    public static string NodeOf(string path)
+    {
+        var last = path[(path.LastIndexOf('/') + 1)..];
+        var at = last.IndexOf(".4.", StringComparison.Ordinal);
+        return at < 0 ? last : last[(at + 1)..];
+    }
+}
+
 /// <summary>A queue that records what was enqueued (dedup by key among the recorded, open jobs).</summary>
 internal sealed class RecordingJobQueue : IJobQueue
 {
@@ -448,6 +463,10 @@ internal sealed class InMemoryUploadSlots : IUploadSlotReader
 /// </summary>
 internal sealed class CrawlRig : IAsyncDisposable
 {
+    private static readonly TimeSpan DrainLimit = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan MaxRequeueWait = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan MinRequeueWait = TimeSpan.FromMilliseconds(10);
+
     private readonly InMemoryCrawlStore? _memory;
 
     private CrawlRig(FetchPath path, CrawlConnector connector, CrawlTraversal traversal, ICrawlFrontierStore frontier, ICrawlRunStore runs,
@@ -481,6 +500,9 @@ internal sealed class CrawlRig : IAsyncDisposable
     public RecordingJobQueue Queue { get; }
 
     public FetchTopUp TopUp { get; }
+
+    /// <summary>The fetch jobs <see cref="DrainAsync"/> sent back (no host slot yet, a transient answer).</summary>
+    public int Requeues { get; private set; }
 
     /// <summary>The hosts' site profiles, read by the traversal and the connector (none: no host marks <c>lastmod</c> reliable).</summary>
     public InMemorySiteProfiles Profiles { get; }
@@ -555,11 +577,17 @@ internal sealed class CrawlRig : IAsyncDisposable
     /// <summary><see cref="RunAsync"/> for a run that stays as given (no incremental downgrade expected).</summary>
     public async Task<Dictionary<string, CrawlFetchResult>> CrawlAsync(CrawlRunContext context) => (await RunAsync(context)).Results;
 
+    /// <summary>
+    /// Runs the queued fetch jobs until none is left. A round in which every job was requeued (no host slot yet: the budget's
+    /// interval follows the host's latency, which a cold start can stretch past a second) waits for the shortest requeue
+    /// delay, at most a second, as the queue would; the drain is bounded by time, not by rounds.
+    /// </summary>
     public async Task<Dictionary<string, CrawlFetchResult>> DrainAsync(CrawlRunContext context)
     {
         var ct = TestContext.Current.CancellationToken;
         var results = new Dictionary<string, CrawlFetchResult>(StringComparer.Ordinal);
-        for (var round = 0; round < 1000; round++)
+        var drain = System.Diagnostics.Stopwatch.StartNew();
+        while (drain.Elapsed < DrainLimit)
         {
             var jobs = Queue.Take().Where(j => j.Class == "fetch").ToList();
             if (jobs.Count == 0)
@@ -567,22 +595,34 @@ internal sealed class CrawlRig : IAsyncDisposable
                 return results;
             }
 
+            TimeSpan? wait = MaxRequeueWait;
             foreach (var job in jobs)
             {
                 var hash = System.Text.Json.JsonDocument.Parse(job.Payload).RootElement.GetProperty("urlHash").GetString()!;
                 var url = (await Frontier.GetAsync(context.Run.SourceId, context.Run.Classification, hash, ct))!.Url;
                 var result = await Traversal.ProcessAsync(context, hash, ct);
-                if (result is CrawlFetchResult.Requeue)
+                if (result is CrawlFetchResult.Requeue requeue)
                 {
                     // As the queue would: the job comes back without an attempt.
                     await Queue.EnqueueAsync([job], null, ct);
+                    Requeues++;
+                    wait = wait is { } shortest && requeue.Delay is { } delay && delay < shortest ? delay : wait;
                 }
-                else if (result is CrawlFetchResult.Done done)
+                else
                 {
-                    await CommitAsync(context, done);
+                    wait = null;
+                    if (result is CrawlFetchResult.Done done)
+                    {
+                        await CommitAsync(context, done);
+                    }
                 }
 
                 results[url] = result;
+            }
+
+            if (wait is { } pause)
+            {
+                await Task.Delay(pause > MinRequeueWait ? pause : MinRequeueWait, ct);
             }
         }
 

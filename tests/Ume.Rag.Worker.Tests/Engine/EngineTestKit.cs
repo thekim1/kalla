@@ -136,7 +136,7 @@ internal static class EngineKit
     private static async Task<SourceSeed> SeedAsync(RagDatabaseFixture database, string type, string template, string settings, string collectionClassification,
         Guid? collectionId = null, Guid? sourceId = null)
     {
-        var suffix = Guid.CreateVersion7().ToString("N")[..12];
+        var suffix = Guid.NewGuid().ToString("N")[..12];
         await using var db = TestPostgres.Context(database.Connection(null));
         if (!db.EmbeddingProfiles.Any(p => p.Id == ProfileId))
         {

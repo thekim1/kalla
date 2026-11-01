@@ -50,6 +50,8 @@ exists (M2 triggered, user 2026-10-30; `p1/README.md` §1).
       realm additions (J11)
 - [ ] Pilot gold set written with the department; three-way run recorded; not-found thresholds calibrated
       ([`weakness-review.md`](weakness-review.md) §2; `to-verify.md` #143, #168, #169)
+- [ ] **Demo first** (user, 2026-11-01): crawl a slice of umea.se, retrieve, and a cited answer in Open WebUI, by the five steps of
+      [`demo-path.md`](demo-path.md); the gold set, evaluation, capacity and the other details follow the demo
 - [ ] **P1a done:** first cited answer in Open WebUI, shown locally with the pilot member present
 
 Owned by the user, outside the streams ([`p1/README.md`](p1/README.md) §7):

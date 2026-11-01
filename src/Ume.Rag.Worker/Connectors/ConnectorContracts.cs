@@ -37,7 +37,10 @@ public interface IIdListingConnector : IConnector
 /// <summary>The last run item of an identity that failed (<c>RunItems</c>, outcome <c>failed</c>).</summary>
 /// <param name="DocumentId">Its document, when one exists.</param>
 /// <param name="Reason">The item's reason code.</param>
-public sealed record FailedItem(Guid? DocumentId, string? Reason);
+/// <param name="FoundUrl">
+/// The URL it was last found or fetched under, when kept (a crawl's <c>CrawlFrontier.FetchUrl</c>, else <c>Documents.Url</c>; #228).
+/// </param>
+public sealed record FailedItem(Guid? DocumentId, string? Reason, string? FoundUrl = null);
 
 /// <summary>
 /// A <c>retry-failed</c> run (§2.2, engine design §9.2): rebuilds the work item of an identity whose last run item failed;
@@ -51,13 +54,17 @@ public interface IRetryFailedConnector : IConnector
 /// <summary>The work item of a canonical URL identity again (URL lists and crawls), at depth 0 with no hints.</summary>
 public static class RetryWork
 {
-    public static WorkItem? FromUrl(string canonicalIdentity)
+    /// <param name="canonicalIdentity">The identity.</param>
+    /// <param name="fetchUrl">The URL to fetch instead of the identity (a crawl's kept path form); ignored unless an http(s) URL.</param>
+    public static WorkItem? FromUrl(string canonicalIdentity, string? fetchUrl = null)
     {
         ArgumentNullException.ThrowIfNull(canonicalIdentity);
-        return Uri.TryCreate(canonicalIdentity, UriKind.Absolute, out var url) && url.Scheme is "http" or "https"
-            ? new WorkItem(IdentityKind.Url, canonicalIdentity, url, 0, new WorkHints())
+        return Http(canonicalIdentity) is { } url
+            ? new WorkItem(IdentityKind.Url, canonicalIdentity, (fetchUrl is null ? null : Http(fetchUrl)) ?? url, 0, new WorkHints())
             : null;
     }
+
+    private static Uri? Http(string text) => Uri.TryCreate(text, UriKind.Absolute, out var url) && url.Scheme is "http" or "https" ? url : null;
 }
 
 /// <summary>A typed resume point, stored in <c>content."ConnectorCheckpoints"</c> (§2.3).</summary>
@@ -177,8 +184,12 @@ public abstract record FetchOutcome
 
     public sealed record Content(RawContentRef Raw, Validators Validators, FetchFacts Facts) : FetchOutcome;
 
-    /// <summary>304: validators refreshed, the document is touched and <c>EnsureCurrent</c> runs.</summary>
-    public sealed record NotModified(Validators Validators) : FetchOutcome;
+    /// <summary>
+    /// 304: validators refreshed, the document is touched and <c>EnsureCurrent</c> runs. <paramref name="FinalUrl"/> is the URL
+    /// that answered (after redirects), or the known path form of a crawl URL that was not requested (#228); when set, it
+    /// becomes <c>Documents.Url</c>, as a 200's final URL does.
+    /// </summary>
+    public sealed record NotModified(Validators Validators, Uri? FinalUrl = null) : FetchOutcome;
 
     /// <summary><c>http.404</c>, <c>http.410</c>, <c>http.moved_out_of_scope</c>: a deletion candidate for a known document (§13.1).</summary>
     public sealed record Gone(string Reason) : FetchOutcome;

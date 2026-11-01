@@ -139,9 +139,10 @@ public sealed class DocumentStore(JobDatabase database)
          WHERE s."Id" = $1 AND s."State" = 'live' AND c."ChunkSetId" = s."Id" AND c."DeletedAt" IS NOT NULL
         """;
 
+    // A URL given (a 304's final URL, a crawl row's kept path form; #228) replaces Documents.Url.
     private const string SeenSql = """
         UPDATE content."Documents"
-           SET "LastSeenAt" = $2, "LastRunId" = $3, "HeldAt" = NULL, "HeldBy" = NULL, "ConsecutiveFailures" = 0
+           SET "LastSeenAt" = $2, "LastRunId" = $3, "HeldAt" = NULL, "HeldBy" = NULL, "ConsecutiveFailures" = 0, "Url" = coalesce($4, "Url")
          WHERE "Id" = $1 AND "DeletedAt" IS NULL
         """;
 
@@ -149,9 +150,13 @@ public sealed class DocumentStore(JobDatabase database)
         UPDATE content."Documents" SET "ConsecutiveFailures" = least("ConsecutiveFailures" + 1, 32000) WHERE "Id" = $1
         """;
 
+    // With the FetchUrl of the identity's frontier row (crawls and URL lists; #228).
     private const string SourceDocumentsSql = """
-        SELECT "Id", "CanonicalIdentity", "LastRunId", "LastSeenAt", "ConsecutiveFailures", "HeldAt", "HeldBy", "DeletedAt", "PurgeAfter"
-        FROM content."Documents" WHERE "SourceId" = $1
+        SELECT d."Id", d."CanonicalIdentity", d."LastRunId", d."LastSeenAt", d."ConsecutiveFailures", d."HeldAt", d."HeldBy", d."DeletedAt", d."PurgeAfter",
+               d."Url", f."FetchUrl"
+        FROM content."Documents" d
+        LEFT JOIN content."CrawlFrontier" f ON f."Classification" = d."Classification" AND f."SourceId" = d."SourceId" AND f."UrlHash" = d."IdentityHash"
+        WHERE d."SourceId" = $1
         """;
 
     private const string LiveDocumentsSql = $"""
@@ -247,11 +252,14 @@ public sealed class DocumentStore(JobDatabase database)
         return new DocumentUpsert(row, changed);
     }
 
-    /// <summary>A 304 or an unchanged listing: the document was seen in the run (connectors design §13.3).</summary>
-    public async Task SeenAsync(Guid documentId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken)
+    /// <summary>
+    /// A 304 or an unchanged listing: the document was seen in the run (connectors design §13.3); <paramref name="url"/>, when
+    /// given, becomes <c>Documents.Url</c> (identity, content and chunks unchanged).
+    /// </summary>
+    public async Task SeenAsync(Guid documentId, Guid runId, DateTimeOffset now, string? url, CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(SeenSql, connection) { Parameters = { Db.P(documentId), Db.P(now.ToUniversalTime()), Db.P(runId) } };
+        await using var command = new NpgsqlCommand(SeenSql, connection) { Parameters = { Db.P(documentId), Db.P(now.ToUniversalTime()), Db.P(runId), Db.P(url) } };
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -283,6 +291,8 @@ public sealed class DocumentStore(JobDatabase database)
                 HeldBy = Db.String(reader, 6),
                 DeletedAt = Db.Nullable<DateTimeOffset>(reader, 7),
                 PurgeAfter = Db.Nullable<DateTimeOffset>(reader, 8),
+                Url = Db.String(reader, 9),
+                FetchUrl = Db.String(reader, 10),
             });
         }
 

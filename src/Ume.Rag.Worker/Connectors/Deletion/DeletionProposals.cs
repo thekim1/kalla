@@ -7,6 +7,12 @@ public sealed record SourceDocument
 
     public required string CanonicalIdentity { get; init; }
 
+    /// <summary><c>Documents.Url</c>: the URL as fetched (a crawl's path form since #228; retrieval matches <c>demote</c> on it).</summary>
+    public string? Url { get; init; }
+
+    /// <summary>The <c>CrawlFrontier.FetchUrl</c> of the document's identity: the path form it was last found under (#228).</summary>
+    public string? FetchUrl { get; init; }
+
     public Guid? LastRunId { get; init; }
 
     public DateTimeOffset LastSeenAt { get; init; }

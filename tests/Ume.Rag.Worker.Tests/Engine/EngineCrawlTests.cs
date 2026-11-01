@@ -324,10 +324,11 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
                 "application/xml"));
             app.MapGet("/sektion", () => EngineKit.Html(EngineKit.Page($"sektion {tag}",
                 """<a href="/sektion/sida-a.4.10000000000a.html">A</a> <a href="/sektion/under/sida-a.4.10000000000a.html">A igen</a> <a href="/annan/sida-d.4.40000000000d.html">D</a>""")));
-            app.MapGet("/{node}", (string node) => node switch
+            // Sitevision serves a node under any path that ends in its id (the crawler requests the path as found, #228).
+            app.MapGet("/{**path}", (string path) => Sitevision.NodeOf(path) switch
             {
                 "4.20000000000b.html" when bGone => Results.NotFound(),
-                "4.10000000000a.html" or "4.20000000000b.html" or "4.30000000000c.html" or "4.40000000000d.html" => EngineKit.Html(EngineKit.Page($"nod {node} {tag}")),
+                ("4.10000000000a.html" or "4.20000000000b.html" or "4.30000000000c.html" or "4.40000000000d.html") and var node => EngineKit.Html(EngineKit.Page($"nod {node} {tag}")),
                 _ => Results.NotFound(),
             });
         });
