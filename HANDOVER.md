@@ -163,6 +163,12 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - **Crawl:** a full-site attempt found ≈ 15,400 URLs (≈ 8,100 PDFs); cancelled on the user's call ("too excessive at this
   stage") after 2,323 HTML pages, which are live. The source "umea.se" is capped at `maxPages` 2,500 with `**.pdf`
   excluded, no schedule. A cancelled run writes no counts (`Added` 0); six node-id URLs (`/4.<id>.html`) answered 404.
+  **A scope change re-syncs the source by itself** (trigger `config-change`): the cap change started a 2,500-page run,
+  cancelled before it fetched anything.
+- **EU-route capacity done (#286, P1 item 19):** embedding 18–20k tokens/s (key-limited), query embedding p95 156 ms,
+  answer TTFT p99 3.1 s; initial load of all umea.se ≈ 2–3 h (fetch-bound), ≈ $6–22. **Open for the user:** condense
+  fails the 600 ms cut on every EU model (reasoning eats `max_tokens` 96; `gpt-6-luna` + `reasoning_effort: none` ≈ 0.8 s):
+  accept skipping, raise the cut, or send `reasoning_effort` (stream B + design).
 
 ## Session 16 (2026-11-01, new computer; ended: demo-first plan, AppHost left running)
 
