@@ -66,8 +66,8 @@ public static class RunEndpoints
 
                 if (!string.IsNullOrWhiteSpace(q))
                 {
-                    var pattern = $"%{q.Trim()}%";
-                    query = query.Where(i => EF.Functions.ILike(i.Identity, pattern));
+                    var pattern = $"%{Like.Escape(q.Trim())}%";
+                    query = query.Where(i => EF.Functions.ILike(i.Identity, pattern, Like.EscapeCharacter));
                 }
 
                 if (after is { } last)
