@@ -85,20 +85,26 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
     }
 
     [Fact]
-    public async Task Ten_fetch_jobs_on_a_one_per_second_host_all_get_a_slot_and_requeued_ones_never_push_the_slots_out()
+    public async Task Ten_fetch_jobs_on_a_four_per_second_host_all_get_a_slot_and_requeued_ones_never_push_the_slots_out()
     {
         // The pilot crawl's livelock (2026-11-01): each requeued job reserved a slot it never used, so the next free slot
         // ran ≈ 10 s ahead of now and no job ever found one within the in-process wait.
+        // Four requests a second leave five slots inside MaxInProcessWait, so ten jobs (the worker role allows 12 connections)
+        // force the requeue path in about three seconds; at the default one a second it takes ten seconds.
+        const int jobCount = 10;
         var hosts = new RecordingHostStore(new PostgresCrawlHostStore(Worker));
-        var budget = new HostBudget(hosts, new FixedCrawlPolicy(), TimeProvider.System);
+        var policy = new FixedCrawlPolicy();
+        var budget = new HostBudget(hosts, policy, TimeProvider.System);
         var host = $"{Guid.NewGuid():N}.example";
+        policy.Overrides[host] = new HostOverride(RequestsPerSecond: 4);
         var interval = HostBudgetPolicy.Interval(await budget.EnsureHostAsync(host, Ct));
-        interval.ShouldBe(TimeSpan.FromSeconds(1));
-        var bound = TimeSpan.FromSeconds(45);
+        interval.ShouldBe(TimeSpan.FromMilliseconds(250));
+        var bound = TimeSpan.FromSeconds(20);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Ct);
         deadline.CancelAfter(bound);
 
-        // How far ahead of the database's now the host's next free slot is, sampled while the jobs run.
+        // How far ahead of the database's clock the host's next free slot is, sampled while the jobs run. clock_timestamp(), not
+        // now(): now() is the sampling transaction's start, which can be older than the snapshot it reads.
         var running = true;
         var ahead = TimeSpan.Zero;
         var monitor = Task.Run(async () =>
@@ -106,14 +112,14 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
             while (Volatile.Read(ref running))
             {
                 var seconds = await Sql.ScalarAsync<double>(database.Connection(null),
-                    """SELECT extract(epoch FROM "NextAllowedAt" - now())::float8 FROM content."CrawlHosts" WHERE "Host" = $1""", host);
+                    """SELECT extract(epoch FROM "NextAllowedAt" - clock_timestamp())::float8 FROM content."CrawlHosts" WHERE "Host" = $1""", host);
                 ahead = TimeSpan.FromSeconds(Math.Max(ahead.TotalSeconds, seconds));
                 await Task.Delay(20, Ct);
             }
         }, Ct);
 
         // Ten fetch jobs as the dispatcher runs them: acquire; on Later wait for the returned delay (the requeue) and retry.
-        var jobs = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => Task.Run(async () =>
+        var jobs = await Task.WhenAll(Enumerable.Range(0, jobCount).Select(_ => Task.Run(async () =>
         {
             var requeues = 0;
             try
@@ -147,10 +153,11 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         Volatile.Write(ref running, false);
         await monitor;
 
-        jobs.Count(j => j.Served).ShouldBe(10, $"jobs served within {bound.TotalSeconds} s ({jobs.Sum(j => j.Requeues)} requeues)");
+        jobs.Count(j => j.Served).ShouldBe(jobCount, $"jobs served within {bound.TotalSeconds} s ({jobs.Sum(j => j.Requeues)} requeues)");
+        jobs.Sum(j => j.Requeues).ShouldBeGreaterThan(0, "the requeue path ran");
         // Every slot taken was used: none was reserved for a job that requeued instead. No two closer than the interval.
         var slots = hosts.Slots.Order().ToList();
-        slots.Count.ShouldBe(10, "slots taken");
+        slots.Count.ShouldBe(jobCount, "slots taken");
         slots.Zip(slots.Skip(1)).ShouldAllBe(p => p.Second - p.First >= interval);
         ahead.ShouldBeLessThanOrEqualTo(HostBudgetPolicy.MaxInProcessWait + interval, "NextAllowedAt ahead of now");
     }
