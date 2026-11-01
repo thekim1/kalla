@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
@@ -80,7 +81,16 @@ public static class EvaluationEndpoints
             .RequireAuthorization(AdminPolicies.Edit).WithName("RetireEvaluationQuestion").WithSummary("Retire a human question (command edit-eval-question)");
 
         evaluation.MapPost("/run", async (Guid id, EvaluationRunRequest request, AdminContext admin, CancellationToken ct) =>
-                Results.Accepted(value: await admin.WriteAsync(async attempt =>
+            {
+                // On-demand comparison (admin design §7.1, processing design §14.5): unsaved settings, checked as a save would check them.
+                string? candidateSettings = null;
+                if (request.CandidateSettings is { ValueKind: not JsonValueKind.Null and not JsonValueKind.Undefined } given)
+                {
+                    candidateSettings = RetrievalSettingsRules.Normalize(given);
+                    RetrievalSettingsRules.CheckResolves(await admin.Db.Settings.AsNoTracking().Select(s => s.Retrieval).SingleOrDefaultAsync(ct), candidateSettings);
+                }
+
+                return Results.Accepted(value: await admin.WriteAsync(async attempt =>
                 {
                     var collection = await Collection(admin, id, attempt);
                     if (!await admin.Db.EvaluationSets.AsNoTracking().AnyAsync(s => s.CollectionId == id, attempt))
@@ -89,8 +99,9 @@ public static class EvaluationEndpoints
                     }
 
                     var variants = request.Variants is { Count: > 0 } given ? given.Select(v => v.Value).Distinct().ToList() : [EvaluationVariant.Hybrid];
+                    var candidate = candidateSettings is null ? (JsonElement?)null : JsonDocument.Parse(candidateSettings).RootElement.Clone();
                     var job = new JobRequest(JobClasses.Eval, collection.DepartmentId, collection.Classification,
-                        ContractJson.Serialize(new EvalOnDemandPayload { CollectionId = id, Variants = variants }))
+                        ContractJson.Serialize(new EvalOnDemandPayload { CollectionId = id, Variants = variants, CandidateSettings = candidate }))
                     {
                         DedupKey = JobDedupKeys.Eval(id),
                         TeamId = collection.OwnerTeamId,
@@ -98,9 +109,48 @@ public static class EvaluationEndpoints
                     var queued = await admin.Db.Jobs.AsNoTracking().Where(j => j.DedupKey == job.DedupKey && (j.State == JobStates.Queued || j.State == JobStates.Running))
                         .Select(j => (Guid?)j.Id).FirstOrDefaultAsync(attempt);
                     return new AdminChange<EvaluationRunStarted>(new EvaluationRunStarted(queued ?? job.Id, queued is not null), "evaluation-run", AuditEntityTypes.Collection, id,
-                        null, new { variants = variants.Select(v => new VariantName(v)) }) { DepartmentId = collection.DepartmentId, Classification = collection.Classification, Jobs = queued is null ? [job] : [] };
+                        null, new { variants = variants.Select(v => new VariantName(v)), candidateSettings = candidate })
+                    {
+                        DepartmentId = collection.DepartmentId, Classification = collection.Classification, Jobs = queued is null ? [job] : [],
+                    };
+                }, ct));
+            })
+            .RequireAuthorization(AdminPolicies.Edit).WithName("RunEvaluation")
+            .WithSummary("Run the evaluation now (eval on-demand; variants hybrid, vector, hybrid-no-decompounder; optional candidateSettings compared with the saved ones)");
+
+        evaluation.MapGet("/generate", async (Guid id, AdminContext admin, CancellationToken ct) =>
+                await ForecastAsync(admin, await Collection(admin, id, ct), ct))
+            .RequireAuthorization(AdminPolicies.Read).WithName("ForecastEvaluationGeneration")
+            .WithSummary("What generating test questions would do now: generate-set or top-up-set, target size, model calls, tokens and cost");
+
+        evaluation.MapPost("/generate", async (Guid id, AdminContext admin, CancellationToken ct) =>
+                Results.Accepted(value: await admin.WriteAsync(async attempt =>
+                {
+                    var collection = await Collection(admin, id, attempt);
+                    var forecast = await ForecastAsync(admin, collection, attempt);
+                    if (forecast.Model is null)
+                    {
+                        throw AdminFaults.Of(AdminErrorCodes.EvaluationModelUnset);
+                    }
+
+                    var payload = forecast.Kind == EvalKinds.GenerateSet
+                        ? ContractJson.Serialize(new EvalGenerateSetPayload { CollectionId = id })
+                        : ContractJson.Serialize(new EvalTopUpSetPayload { CollectionId = id });
+                    var job = new JobRequest(JobClasses.Eval, collection.DepartmentId, collection.Classification, payload)
+                    {
+                        DedupKey = JobDedupKeys.EvalGenerate(id),
+                        TeamId = collection.OwnerTeamId,
+                    };
+                    var queued = await admin.Db.Jobs.AsNoTracking().Where(j => j.DedupKey == job.DedupKey && (j.State == JobStates.Queued || j.State == JobStates.Running))
+                        .Select(j => (Guid?)j.Id).FirstOrDefaultAsync(attempt);
+                    return new AdminChange<EvaluationGenerationStarted>(new EvaluationGenerationStarted(queued ?? job.Id, queued is not null, forecast), "evaluation-generate",
+                        AuditEntityTypes.Collection, id, null, new { forecast.Kind, forecast.Target, forecast.Needed, forecast.EstimatedTokens, forecast.EstimatedCostUsd })
+                    {
+                        DepartmentId = collection.DepartmentId, Classification = collection.Classification, Jobs = queued is null ? [job] : [],
+                    };
                 }, ct)))
-            .RequireAuthorization(AdminPolicies.Edit).WithName("RunEvaluation").WithSummary("Run the evaluation now (eval on-demand; variants hybrid, vector, hybrid-no-decompounder)");
+            .RequireAuthorization(AdminPolicies.Edit).WithName("GenerateEvaluationQuestions")
+            .WithSummary("Generate test questions (eval generate-set, or top-up-set once the collection has generated questions)");
 
         var runs = api.MapGroup("/evaluation-runs").WithTags("Evaluation");
 
@@ -138,6 +188,67 @@ public static class EvaluationEndpoints
         return await admin.Db.EvaluationRuns.AsNoTracking().SingleOrDefaultAsync(r => r.Id == runId && sets.Contains(r.SetId), ct)
             ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
     }
+
+    /// <summary>
+    /// The generation forecast (admin design §7.1 "Skapa fler with the forecast"; processing design §13.1, §14.7): the worker's
+    /// target <c>N = min(Settings.EvaluationMaxQuestions, 3 × D, eligible chunks)</c>, minus the active generated questions,
+    /// over-generated 1.6 ×; each candidate costs a generation and a judge call over its chunk. A top-up also replaces the
+    /// stale questions its re-check finds, so its forecast is a lower bound. Cost from the model's <c>GatewayModels</c> prices,
+    /// null when they are unknown.
+    /// </summary>
+    private static async Task<GenerationForecast> ForecastAsync(AdminContext admin, Collection collection, CancellationToken ct)
+    {
+        var settings = await admin.Db.Settings.AsNoTracking().Select(s => new { s.EvaluationModel, s.EvaluationJudgeModel, s.EvaluationMaxQuestions }).SingleOrDefaultAsync(ct);
+        var model = string.IsNullOrWhiteSpace(settings?.EvaluationModel) ? null : settings.EvaluationModel;
+        var judge = string.IsNullOrWhiteSpace(settings?.EvaluationJudgeModel) ? model : settings.EvaluationJudgeModel;
+        var liveSets = admin.Db.ChunkSets.AsNoTracking().Where(cs => cs.CollectionId == collection.Id && cs.State == ChunkSetStates.Live);
+        var liveDocuments = await admin.Db.Documents.AsNoTracking()
+            .CountAsync(d => d.DeletedAt == null && d.LiveChunkSetId != null && liveSets.Any(cs => cs.Id == d.LiveChunkSetId), ct);
+        var eligible = await (from c in admin.Db.Chunks.AsNoTracking()
+                              join d in admin.Db.Documents.AsNoTracking() on c.DocumentId equals d.Id
+                              join cs in liveSets.Where(cs => !cs.PiiFlagged) on c.ChunkSetId equals cs.Id
+                              where c.CollectionId == collection.Id && c.DeletedAt == null && c.Kind == ChunkKinds.Child && c.TokenCount >= MinBodyTokens && !c.LargeTable
+                                    && d.DeletedAt == null && d.LiveChunkSetId == cs.Id
+                              group c by 1 into g
+                              select new { Count = g.Count(), Tokens = g.Average(c => (double)c.TokenCount) }).SingleOrDefaultAsync(ct);
+        var sets = admin.Db.EvaluationSets.AsNoTracking().Where(s => s.CollectionId == collection.Id).Select(s => s.Id);
+        var generated = admin.Db.EvaluationQuestions.AsNoTracking().Where(q => sets.Contains(q.SetId) && q.Layer == EvaluationLayers.Generated);
+        var anyGenerated = await generated.AnyAsync(ct);
+        var active = await generated.CountAsync(q => q.State == EvaluationQuestionStates.Active && q.RetiredAt == null, ct);
+
+        var eligibleCount = eligible?.Count ?? 0;
+        var target = Math.Max(0, Math.Min(settings?.EvaluationMaxQuestions ?? 100, Math.Min(3 * liveDocuments, eligibleCount)));
+        var needed = Math.Max(0, target - active);
+        var candidates = needed == 0 ? 0 : (int)Math.Ceiling(OverGeneration * needed);
+        var chunkTokens = eligible?.Tokens ?? 0;
+        var inputTokens = (long)Math.Round(candidates * ((2 * chunkTokens) + PromptTokensPerCandidate));
+        var outputTokens = (long)candidates * OutputTokensPerCandidate;
+        decimal? cost = null;
+        var names = new[] { model, judge }.OfType<string>().Distinct().ToList();
+        var prices = await admin.Db.GatewayModels.AsNoTracking().Where(m => names.Contains(m.Name))
+            .Select(m => new { m.Name, m.InputPerMillionUsd, m.OutputPerMillionUsd }).ToListAsync(ct);
+        if (names.Count > 0 && prices.Count == names.Count && prices.All(p => p.InputPerMillionUsd is not null && p.OutputPerMillionUsd is not null))
+        {
+            // Half the calls are the generator's, half the judge's.
+            cost = Math.Round(prices.Sum(p => (p.InputPerMillionUsd!.Value * inputTokens + p.OutputPerMillionUsd!.Value * outputTokens) / 1_000_000m)
+                * (names.Count == 1 ? 1m : 0.5m), 4);
+        }
+
+        return new GenerationForecast(anyGenerated ? EvalKinds.TopUpSet : EvalKinds.GenerateSet, model, judge, liveDocuments, eligibleCount, active, target, needed,
+            2 * candidates, inputTokens + outputTokens, cost);
+    }
+
+    /// <summary>Eligible chunks have a body of at least this many tokens (processing design §13.1, as the worker's <c>EvalSetGenerator</c>).</summary>
+    private const int MinBodyTokens = 50;
+
+    /// <summary>Over-generation to survive filtering (processing design §13.1).</summary>
+    private const double OverGeneration = 1.6;
+
+    /// <summary>Prompt text of the generation and the judge call around the chunk, and the question in the judge call.</summary>
+    private const int PromptTokensPerCandidate = 400;
+
+    /// <summary>The generator's JSON answer and the judge's scores.</summary>
+    private const int OutputTokensPerCandidate = 120;
 
     /// <summary>
     /// The human layer through <c>edit-eval-question</c> (admin design §4.7; no dedup): an update or a retire names a question
@@ -201,13 +312,29 @@ public sealed record EvaluationOverview(bool HasSet, IReadOnlyList<QuestionCount
 public sealed record EvaluationQuestionDto(Guid Id, string Layer, string State, string Question, string? ExpectedAnswer, IReadOnlyList<Guid> ExpectedDocumentIds,
     string? Origin, string? CreatedBy, DateTimeOffset? RetiredAt);
 
+/// <summary>
+/// A run. <see cref="Candidate"/> marks an on-demand run under unsaved settings; <see cref="ThresholdProposal"/> is the
+/// worker's coverage-threshold proposal as stored (<c>CoverageProposal</c>: the proposed <c>coverageMaxDistance</c> and
+/// <c>coverageMinKeywordScore</c> with the questions each misclassifies; admin design §7.1).
+/// </summary>
 public sealed record EvaluationRunDto(
     Guid Id, string Kind, string Variant, int? QuestionCount, int K, int? Found, decimal? RecallAtK, decimal? Mrr, int? Wins, int? Losses, Guid? ComparedRunId,
-    DateTimeOffset StartedAt, DateTimeOffset? FinishedAt)
+    bool Candidate, JsonElement? ThresholdProposal, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt)
 {
     public static EvaluationRunDto Of(EvaluationRun r) => new(r.Id, r.Kind, r.Variant, r.QuestionCount, r.K, r.Found, r.RecallAtK, r.Mrr, r.Wins, r.Losses,
-        r.ComparedRunId, r.StartedAt, r.FinishedAt);
+        r.ComparedRunId, r.Candidate, r.ThresholdProposal is { } proposal ? JsonDocument.Parse(proposal).RootElement.Clone() : null, r.StartedAt, r.FinishedAt);
 }
+
+/// <summary>
+/// What generating would do now: the kind, the models, the worker's target and the questions still needed, the model calls,
+/// and the tokens and cost (null without prices) as an estimate.
+/// </summary>
+public sealed record GenerationForecast(
+    string Kind, string? Model, string? JudgeModel, int LiveDocuments, int EligibleChunks, int ActiveQuestions, int Target, int Needed, int ModelCalls,
+    long EstimatedTokens, decimal? EstimatedCostUsd);
+
+/// <summary>The generation job: enqueued now, or the one already queued or running; with the forecast it was started on.</summary>
+public sealed record EvaluationGenerationStarted(Guid JobId, bool AlreadyQueued, GenerationForecast Forecast);
 
 public sealed record EvaluationResultDto(Guid QuestionId, string Question, string Layer, int? Rank, int? PreviousRank, bool? Hit, string? Coverage, float? BestDistance,
     float? BestKeywordScore);
@@ -240,6 +367,12 @@ public sealed record EvaluationRunRequest : AdminRequest
     /// </summary>
     [MaxLength(3)]
     public IReadOnlyList<VariantName>? Variants { get; init; }
+
+    /// <summary>
+    /// Unsaved retrieval settings (V16) to compare with the saved ones: each variant runs twice, the second run marked
+    /// <c>candidate</c> (processing design §14.5). Saving them is <c>PUT /api/collections/{id}/retrieval-settings</c>.
+    /// </summary>
+    public JsonElement? CandidateSettings { get; init; }
 }
 
 /// <summary>An evaluation variant by the contract's kebab-case name (<see cref="EvaluationVariant"/>).</summary>

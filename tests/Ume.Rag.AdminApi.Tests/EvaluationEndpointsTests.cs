@@ -182,4 +182,149 @@ public sealed class EvaluationEndpointsTests(AdminDatabaseFixture database)
         (await db.Departments.AsNoTracking().SingleAsync(d => d.Id == seed.Department, Ct)).MemberGroups.ShouldBe(["SG-Admin", "SG-Bygg"]);
         (await db.AuditLog.AsNoTracking().CountAsync(a => a.EntityType == "department" && a.EntityId == seed.Department.ToString() && a.Action == "member-groups", Ct)).ShouldBe(1);
     }
+
+    [Fact]
+    public async Task Generation_is_forecast_then_enqueued_once_and_needs_the_evaluation_model()
+    {
+        var seed = await SeedAsync();
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var collection = await db.Collections.AsNoTracking().SingleAsync(c => c.Id == seed.Collection, Ct);
+        var pipeline = await db.Sources.AsNoTracking().Where(s => s.CollectionId == seed.Collection).Select(s => s.PipelineId).SingleAsync(Ct);
+        var version = new PipelineVersion { PipelineId = pipeline, Number = 1, State = PipelineVersionStates.Published, Definition = "{}", PublishedAt = DateTimeOffset.UtcNow };
+        db.Add(version);
+        await db.SaveChangesAsync(Ct);
+        var chunkSet = new ChunkSet
+        {
+            DocumentId = seed.Document, Classification = Classification.Public, CollectionId = seed.Collection, PipelineVersionId = version.Id,
+            EmbeddingProfileId = collection.EmbeddingProfileId, ContentHash = RandomNumberGenerator.GetBytes(32), InputHash = RandomNumberGenerator.GetBytes(32),
+            State = ChunkSetStates.Live, CreatedAt = DateTimeOffset.UtcNow, LiveAt = DateTimeOffset.UtcNow,
+        };
+        db.Add(chunkSet);
+        await db.SaveChangesAsync(Ct);
+        await db.Documents.Where(d => d.Id == seed.Document).ExecuteUpdateAsync(u => u.SetProperty(d => d.LiveChunkSetId, chunkSet.Id), Ct);
+        // Two eligible chunks of 300 tokens; one too short.
+        foreach (var (ordinal, tokens) in new[] { (0, 300), (1, 300), (2, 10) })
+        {
+            db.Add(new Chunk
+            {
+                ChunkSetId = chunkSet.Id, DocumentId = seed.Document, CollectionId = seed.Collection, Classification = Classification.Public, Ordinal = ordinal,
+                Text = "Bygglov " + ordinal, SearchText = "bygglov", TextHash = RandomNumberGenerator.GetBytes(32), TokenCount = tokens,
+            });
+        }
+
+        await db.SaveChangesAsync(Ct);
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
+        var path = $"/api/collections/{seed.Collection}/evaluation/generate";
+
+        // N = min(100, 3 × 1 document, 2 eligible) = 2, one generated question active: 1 needed, ⌈1.6⌉ = 2 candidates, 4 calls,
+        // 2 × (2 × 300 + 400) input + 2 × 120 output tokens. The collection has a generated question, so it is a top-up.
+        var forecast = await viewer.GetFromJsonAsync<JsonElement>(path, Ct);
+        (forecast.GetProperty("kind").GetString(), forecast.GetProperty("liveDocuments").GetInt32(), forecast.GetProperty("eligibleChunks").GetInt32(),
+                forecast.GetProperty("activeQuestions").GetInt32(), forecast.GetProperty("target").GetInt32(), forecast.GetProperty("needed").GetInt32(),
+                forecast.GetProperty("modelCalls").GetInt32(), forecast.GetProperty("estimatedTokens").GetInt64())
+            .ShouldBe(("top-up-set", 1, 2, 1, 2, 1, 4, 2240L));
+        (await viewer.PostAsJsonAsync(path, new { }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        // The platform settings row is a singleton other tests may share: put back what was there.
+        var settings = await db.Settings.AsNoTracking().SingleOrDefaultAsync(Ct);
+        if (settings is null)
+        {
+            db.Settings.Add(new PlatformSettings());
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var model = "eval-" + seed.Code.ToLowerInvariant();
+        try
+        {
+            if (settings?.EvaluationModel is not null)
+            {
+                await db.Settings.ExecuteUpdateAsync(u => u.SetProperty(x => x.EvaluationModel, (string?)null), Ct);
+            }
+
+            using (var unset = await admin.PostAsJsonAsync(path, new { }, Ct))
+            {
+                unset.StatusCode.ShouldBe(HttpStatusCode.Conflict, await unset.Content.ReadAsStringAsync(Ct));
+                (await Json(unset)).GetProperty("code").GetString().ShouldBe("evaluation_model_unset");
+            }
+
+            db.GatewayModels.Add(new GatewayModel { Name = model, Residencies = ["OnPrem"], InputPerMillionUsd = 1m, OutputPerMillionUsd = 2m });
+            await db.SaveChangesAsync(Ct);
+            await db.Settings.ExecuteUpdateAsync(u => u.SetProperty(x => x.EvaluationModel, model).SetProperty(x => x.EvaluationJudgeModel, (string?)null), Ct);
+
+            using (var started = await admin.PostAsJsonAsync(path, new { }, Ct))
+            {
+                started.StatusCode.ShouldBe(HttpStatusCode.Accepted, await started.Content.ReadAsStringAsync(Ct));
+                var body = await Json(started);
+                body.GetProperty("alreadyQueued").GetBoolean().ShouldBeFalse();
+                // 2000 input tokens at 1 USD and 240 output tokens at 2 USD per million.
+                body.GetProperty("forecast").GetProperty("estimatedCostUsd").GetDecimal().ShouldBe(0.0025m);
+            }
+
+            using (var again = await admin.PostAsJsonAsync(path, new { }, Ct))
+            {
+                (await Json(again)).GetProperty("alreadyQueued").GetBoolean().ShouldBeTrue();
+            }
+
+            var job = await db.Jobs.AsNoTracking().SingleAsync(j => j.DedupKey == $"eval-generate:{seed.Collection}", Ct);
+            using var payload = JsonDocument.Parse(job.Payload);
+            payload.RootElement.GetProperty("kind").GetString().ShouldBe("top-up-set");
+            Ume.Rag.Pipelines.Schemas.ContractSchemas.Validator(typeof(Ume.Rag.Pipelines.Jobs.EvalTopUpSetPayload)).Validate(payload.RootElement).ShouldBeEmpty();
+            (await db.AuditLog.AsNoTracking().CountAsync(a => a.Action == "evaluation-generate" && a.EntityId == seed.Collection.ToString(), Ct)).ShouldBe(2);
+        }
+        finally
+        {
+            if (settings is null)
+            {
+                await db.Settings.ExecuteDeleteAsync(Ct);
+            }
+            else
+            {
+                await db.Settings.ExecuteUpdateAsync(u => u.SetProperty(x => x.EvaluationModel, settings.EvaluationModel)
+                    .SetProperty(x => x.EvaluationJudgeModel, settings.EvaluationJudgeModel), Ct);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Candidate_settings_are_checked_and_compared_and_runs_carry_the_threshold_proposal()
+    {
+        var seed = await SeedAsync();
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
+        var path = $"/api/collections/{seed.Collection}/evaluation/run";
+
+        using (var invalid = await admin.PostAsJsonAsync(path, new { candidateSettings = new { candidates = 5 } }, Ct))
+        {
+            invalid.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            (await Json(invalid)).GetProperty("errorCodes").GetProperty("settings.candidates")[0].GetProperty("code").GetString().ShouldBe("retrieval_settings_invalid");
+        }
+
+        using (var run = await admin.PostAsJsonAsync(path, new { candidateSettings = new { vectorWeight = 2, recency = new { halfLifeDays = 365, weight = 0.2, kinds = new[] { "pdf" } } } }, Ct))
+        {
+            run.StatusCode.ShouldBe(HttpStatusCode.Accepted, await run.Content.ReadAsStringAsync(Ct));
+        }
+
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var job = await db.Jobs.AsNoTracking().SingleAsync(j => j.DedupKey == $"eval:{seed.Collection}", Ct);
+        using (var payload = JsonDocument.Parse(job.Payload))
+        {
+            var candidate = payload.RootElement.GetProperty("candidateSettings");
+            (candidate.GetProperty("vectorWeight").GetDouble(), candidate.GetProperty("recency").GetProperty("halfLifeDays").GetInt32()).ShouldBe((2d, 365));
+            Ume.Rag.Pipelines.Schemas.ContractSchemas.Validator(typeof(Ume.Rag.Pipelines.Jobs.EvalOnDemandPayload)).Validate(payload.RootElement).ShouldBeEmpty();
+        }
+
+        var set = await db.EvaluationSets.AsNoTracking().SingleAsync(s => s.CollectionId == seed.Collection, Ct);
+        var proposal = """{"answerable": 8, "unanswerable": 4, "falseNotFound": 1, "unanswerableNotFound": 3, "coverageMaxDistance": {"value": 0.42, "misclassified": 1}}""";
+        var run2 = new EvaluationRun { SetId = set.Id, Classification = "public", Kind = "on-demand", StartedAt = DateTimeOffset.UtcNow, Candidate = true, ThresholdProposal = proposal };
+        db.EvaluationRuns.Add(run2);
+        await db.SaveChangesAsync(Ct);
+        var dto = await admin.GetFromJsonAsync<JsonElement>($"/api/evaluation-runs/{run2.Id}", Ct);
+        dto.GetProperty("candidate").GetBoolean().ShouldBeTrue();
+        var max = dto.GetProperty("thresholdProposal").GetProperty("coverageMaxDistance");
+        (max.GetProperty("value").GetDouble(), max.GetProperty("misclassified").GetInt32()).ShouldBe((0.42, 1));
+        var latest = (await admin.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}/evaluation", Ct)).GetProperty("latestRuns")[0];
+        latest.GetProperty("thresholdProposal").GetProperty("answerable").GetInt32().ShouldBe(8);
+    }
 }

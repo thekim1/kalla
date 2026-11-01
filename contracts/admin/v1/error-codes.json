@@ -310,6 +310,11 @@
       "code": "link_host_not_allowed",
       "status": 409,
       "message": "A link must be https on an allowed site, at most 5 links."
+    },
+    {
+      "code": "evaluation_model_unset",
+      "status": 409,
+      "message": "No model is chosen for generating test questions."
     }
   ]
 }
