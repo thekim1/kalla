@@ -68,6 +68,9 @@ public sealed class SmokeEvaluationTests(SmokeFixture smoke) : IClassFixture<Smo
     {
         web.UseSetting("Rag:Roles", "knowledge,chat");
         web.UseSetting("Chat:MessagesPerMinutePerUser", "0"); // 30 questions from one caller in a few seconds
+        // 60 query embeddings in a row on a loaded CI runner: the 1.5 s attempt limit degraded one to keyword-only (#214's run).
+        web.UseSetting("Retrieval:AttemptTimeout", "00:00:10");
+        web.UseSetting("Retrieval:TotalTimeout", "00:00:20");
         web.ConfigureTestServices(services =>
             services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
     });
