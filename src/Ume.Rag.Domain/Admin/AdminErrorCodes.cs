@@ -134,6 +134,14 @@ public static class AdminErrorCodes
 
     /// <summary>The admin has no valid <c>Security:KeyPepper</c>, so it cannot create keys.</summary>
     public static AdminErrorCode KeysUnavailable { get; } = new("keys_unavailable", 503, "Keys cannot be created right now. Ask the platform team.");
+    /// <summary>The collection has no evaluation set yet (generate one or add human questions first).</summary>
+    public static AdminErrorCode NoEvaluationSet { get; } = new("no_evaluation_set", 409, "The knowledge bank has no test questions yet.");
+
+    /// <summary>Only questions of the human layer are edited by hand; generated ones are replaced by the generator.</summary>
+    public static AdminErrorCode QuestionNotHuman { get; } = new("question_not_human", 409, "Only questions written by people can be changed here.");
+
+    /// <summary>An edit of the same question is still waiting for the worker.</summary>
+    public static AdminErrorCode QuestionEditPending { get; } = new("question_edit_pending", 409, "An earlier change of this question is still being saved. Try again in a moment.");
 
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
@@ -141,5 +149,5 @@ public static class AdminErrorCodes
             RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
             NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
-            KeysUnavailable];
+            KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending];
 }

@@ -44,6 +44,9 @@ export const ERROR_MESSAGES: Record<string, string> = {
   key_scope_invalid: 'En nyckel kan bara begränsas till assistenter och kunskapsbanker i teamets förvaltning.',
   key_scope_required: 'Begränsa nyckeln till minst en assistent eller kunskapsbank i din förvaltning.',
   keys_unavailable: 'Nycklar kan inte skapas just nu. Kontakta plattformsteamet.',
+  no_evaluation_set: 'Kunskapsbanken har inga testfrågor ännu.',
+  question_not_human: 'Bara frågor som människor har skrivit kan ändras här.',
+  question_edit_pending: 'En tidigare ändring av frågan sparas fortfarande. Försök igen om en stund.',
 }
 
 /** When the problem has no code we know: by status. */
