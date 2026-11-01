@@ -1,0 +1,30 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Ume.Rag.MigrationService;
+using Ume.Rag.TestKit;
+
+namespace Ume.Rag.IntegrationTests;
+
+/// <summary>Issue #175: <c>Settings.Engine.PiiOwnDomains</c> seeded with <c>umea.se</c>, insert-if-absent.</summary>
+public sealed class SettingsSeederTests
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task The_first_settings_row_gets_the_own_domains_and_an_existing_row_is_never_changed()
+    {
+        await using var database = new RagDatabase(); // its own: Settings is one row per database
+        await database.InitializeAsync();
+        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Migrator));
+
+        (await SettingsSeeder.SeedAsync(db, new SettingsSeedOptions(), TimeProvider.System, NullLogger.Instance, Ct)).ShouldBeTrue();
+        var row = await db.Settings.AsNoTracking().SingleAsync(Ct);
+        row.PiiOwnDomains.ShouldBe(["umea.se"]);
+        row.UpdatedBy.ShouldBe(SettingsSeeder.Actor);
+
+        // The companies' domains are added later through the admin; a second migration keeps them.
+        await db.Settings.ExecuteUpdateAsync(s => s.SetProperty(x => x.PiiOwnDomains, ["umea.se", "umeaenergi.se"]), Ct);
+        (await SettingsSeeder.SeedAsync(db, new SettingsSeedOptions { PiiOwnDomains = ["other.se"] }, TimeProvider.System, NullLogger.Instance, Ct)).ShouldBeFalse();
+        (await db.Settings.AsNoTracking().SingleAsync(Ct)).PiiOwnDomains.ShouldBe(["umea.se", "umeaenergi.se"]);
+    }
+}

@@ -72,7 +72,7 @@ Refs: [chat §3–§10, §15.1, §18](../chat-api/design.md), [identity §5](../
 Refs: [identity §11](../identity/design.md), Decisions table "P1 pilot sign-in", issue #47
 - [x] `deploy/keycloak/` additions: clients, `rag-*` roles, `departmentCodes`, full scope off, no test users, password policy, brute force, admin OTP (this PR: `rag-additions.json`, the separable `rag-realm-settings.json`, `apply-additions.py`)
 - [x] **Done:** imports next to a minimal `ume` realm; sign-in test; #83 rechecked (this PR: `RealmAdditionsTests`; #176, #177, #83 recorded)
-- [ ] **Hand-off J8:** issue to the user for the gateway session
+- [x] **Hand-off J8:** issue to the user for the gateway session (#215)
 
 ## 9. Evaluation smoke (#17, your part)
 - [x] `tests/evaluation/smoke` (fixture collection + 30 questions) and its test: recall@10 ≥ 0.8, every answer cited (this PR: `SmokeSet` in TestKit, `SmokeEvaluationTests`: recall@10 1.000, recall@3 1.000, 30/30 cited; the `evaluation-smoke` job is stream A's)
