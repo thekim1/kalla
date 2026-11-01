@@ -194,7 +194,9 @@ public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
         actions.ShouldBe(
         [
             "dataprotection:update", "client:create", "key:create", "collection:create", "collection:publish",
-            "source:create", "source:create", "source:create", "source:upload-commit", "source:sync", "siteprofile:site-profile.create",
+            // The crawl is the collection's first website source: it turns on age decay for PDFs (P1b item 3).
+            "source:create", "collection:retrieval-settings", "source:create", "source:create", "source:upload-commit", "source:sync",
+            "siteprofile:site-profile.create",
             "evaluationquestion:evaluation-question.create",
             "assistant:create", "assistant:draft", "assistant:publish", "assistant:audiences",
         ], ignoreOrder: false);
