@@ -89,8 +89,30 @@ public static class AdminErrorCodes
     /// <summary>The run is not running (<c>{state}</c>), so it cannot be cancelled.</summary>
     public static AdminErrorCode RunNotActive { get; } = new("run_not_active", 409, "The run has already ended ({state}).");
 
+    /// <summary>Upload batches belong to upload sources only.</summary>
+    public static AdminErrorCode NotAnUploadSource { get; } = new("not_an_upload_source", 409, "Files can only be uploaded to an upload source.");
+
+    /// <summary>Connectors §9.2: a legacy format (<c>{extension}</c>) deferred to P2.</summary>
+    public static AdminErrorCode UploadFormatDeferred { get; } = new("upload_format_deferred", 415, "Files of type {extension} cannot be uploaded yet. Save the file as PDF or a newer Office format.");
+
+    /// <summary>Connectors §9.2: an extension (<c>{extension}</c>) the platform does not accept.</summary>
+    public static AdminErrorCode UploadTypeRefused { get; } = new("upload_type_refused", 415, "Files of type {extension} cannot be uploaded.");
+
+    /// <summary>The file is larger than the source's limit (<c>{mb}</c> MB).</summary>
+    public static AdminErrorCode UploadTooLarge { get; } = new("upload_too_large", 413, "The file is larger than {mb} MB.");
+
+    /// <summary>File number <c>{n}</c> of the batch was already sent.</summary>
+    public static AdminErrorCode UploadFileExists { get; } = new("upload_file_exists", 409, "File {n} of the batch has already been sent.");
+
+    /// <summary>The commit names file <c>{n}</c>, which the batch does not hold.</summary>
+    public static AdminErrorCode UploadFileMissing { get; } = new("upload_file_missing", 400, "File {n} has not been uploaded to the batch.");
+
+    /// <summary>A batch holds 1–100 entries and at most 500 MB.</summary>
+    public static AdminErrorCode UploadBatchTooLarge { get; } = new("upload_batch_too_large", 400, "A batch holds 1 to 100 files and at most 500 MB.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
-            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive];
+            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
+            NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge];
 }

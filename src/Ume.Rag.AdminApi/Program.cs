@@ -6,6 +6,7 @@ using Scalar.AspNetCore;
 using Ume.Rag.AdminApi;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Infrastructure;
+using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Infrastructure.Jobs;
@@ -28,6 +29,8 @@ builder.AddUmeWebDefaults(maxRequestBodySize: 1024 * 1024, errors =>
 builder.AddRagDatabase();
 // Admin actions enqueue worker jobs in their own transaction (H4, #28); the admin registers no rag_jobs listener.
 builder.AddRagJobQueue();
+// Upload batches (admin design §4.5): staged under tmp/, promoted to uploads/ at commit (BlobStore:Root).
+builder.AddRagBlobStore();
 builder.AddRagDataProtection();
 builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
@@ -92,6 +95,7 @@ api.MapClients();
 api.MapCollections();
 api.MapSources();
 api.MapRuns();
+api.MapUploads();
 api.MapOrganisation();
 api.MapSettings();
 api.MapDataProtection();
