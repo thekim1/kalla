@@ -35,7 +35,7 @@ public static class AssistantTestEndpoints
         ArgumentNullException.ThrowIfNull(api);
         api.MapPost("/assistants/{id:guid}/test", async (Guid id, AssistantTestRequest request, AdminContext admin, AdminTestPanel panel, CancellationToken ct) =>
                 await panel.RunAsync(admin, id, request, ct))
-            .WithTags("Assistants").RequireAuthorization(AdminPolicies.Edit).RequireRateLimiting(RatePolicy).WithName("TestAssistant")
+            .WithTags("Assistants").RequireAuthorization(AdminPolicies.EditOrEditSkills).RequireRateLimiting(RatePolicy).WithName("TestAssistant")
             .WithSummary("Answer one question with the draft (or the published version); nothing is stored");
         return api;
     }

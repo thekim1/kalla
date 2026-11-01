@@ -115,7 +115,7 @@ public static class DocumentEndpoints
                     .ToListAsync(ct);
                 return new DocumentChunks(id, set, [.. rows.Take(MaxChunks)], rows.Count > MaxChunks);
             })
-            .RequireAuthorization(AdminPolicies.EditPipelines).WithName("GetDocumentChunks")
+            .RequireAuthorization(AdminPolicies.EditOrEditPipelines).WithName("GetDocumentChunks")
             .WithSummary("The live chunk set's chunks: text, heading path, tokens");
 
         documents.MapPost("/{id:guid}/pii-clear", async (Guid id, PiiClearRequest request, AdminContext admin, CancellationToken ct) =>

@@ -41,7 +41,23 @@ public static class AdminPolicies
     /// <summary>Every rag-* role. A user without one gets 403 on every <c>/api</c> call.</summary>
     public const string Read = "read";
 
-    public static IReadOnlyList<string> All { get; } = [Admin, Manage, EditPipelines, EditSkills, Edit, Review, FeedbackComments, Read];
+    /// <summary>
+    /// "Edit, EditPipelines" in admin design §4.5: either policy suffices (main-session decision on #283), for chunk text,
+    /// preview output and the retrieval test panel.
+    /// </summary>
+    public const string EditOrEditPipelines = "edit-or-edit-pipelines";
+
+    /// <summary>"Edit, EditSkills" in admin design §4.5/§4.9: either suffices (#283), for the assistant test panel.</summary>
+    public const string EditOrEditSkills = "edit-or-edit-skills";
+
+    /// <summary>The combined policies and the policies any one of which grants them.</summary>
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>> AnyOf { get; } = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+    {
+        [EditOrEditPipelines] = [Edit, EditPipelines],
+        [EditOrEditSkills] = [Edit, EditSkills],
+    };
+
+    public static IReadOnlyList<string> All { get; } = [Admin, Manage, EditPipelines, EditSkills, Edit, Review, FeedbackComments, Read, EditOrEditPipelines, EditOrEditSkills];
 }
 
 /// <summary>
@@ -64,9 +80,14 @@ public static class PermissionMatrix
 
     /// <summary>The roles that hold <paramref name="policy"/>.</summary>
     public static IReadOnlyList<string> RolesFor(string policy) =>
-        [.. PoliciesByRole.Where(r => r.Value.Contains(policy, StringComparer.Ordinal)).Select(r => r.Key)];
+        [.. PoliciesByRole.Where(r => Holds(r.Value, policy)).Select(r => r.Key)];
 
     /// <summary>Whether any of <paramref name="roles"/> holds <paramref name="policy"/>.</summary>
     public static bool Allows(IEnumerable<string> roles, string policy) =>
-        roles.Any(role => PoliciesByRole.TryGetValue(role, out var policies) && policies.Contains(policy, StringComparer.Ordinal));
+        roles.Any(role => PoliciesByRole.TryGetValue(role, out var policies) && Holds(policies, policy));
+
+    /// <summary>A role's policies grant <paramref name="policy"/> directly, or one of a combined policy's parts.</summary>
+    private static bool Holds(IReadOnlyList<string> policies, string policy) =>
+        policies.Contains(policy, StringComparer.Ordinal) ||
+        (AdminPolicies.AnyOf.TryGetValue(policy, out var parts) && parts.Any(p => policies.Contains(p, StringComparer.Ordinal)));
 }

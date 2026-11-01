@@ -115,6 +115,11 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
 
         (await editor.PostAsJsonAsync(path, new { question = word, target = "Published" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await viewer.PostAsJsonAsync(path, new { question = word }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // #283: Edit or EditSkills; a skill editor runs the test panel too.
+        using (var skills = await AdminDatabaseFixture.UserAsync(factory, RagRoles.SkillEditor, code))
+        {
+            (await skills.PostAsJsonAsync(path, new { question = $"Hur gör jag med {word}?" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        }
         (await stranger.PostAsJsonAsync(path, new { question = word }, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await db.AuditLog.AsNoTracking().CountAsync(Ct)).ShouldBe(auditBefore);
         (await db.Conversations.AsNoTracking().CountAsync(c => c.AssistantId == assistant.Id, Ct)).ShouldBe(0);

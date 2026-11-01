@@ -31,7 +31,7 @@ public static class TestRetrievalEndpoints
         api.MapPost("/collections/{id:guid}/test-retrieval", async (Guid id, TestRetrievalRequest request, AdminContext admin, AdminRetrieval retrieval,
                     CancellationToken ct) =>
                 await retrieval.RunAsync(admin, id, request, ct))
-            .WithTags("Collections").RequireAuthorization(AdminPolicies.Edit).WithName("TestRetrieval")
+            .WithTags("Collections").RequireAuthorization(AdminPolicies.EditOrEditPipelines).WithName("TestRetrieval")
             .WithSummary("Search one collection (also unpublished) as the knowledge role does; nothing is stored");
         return api;
     }
