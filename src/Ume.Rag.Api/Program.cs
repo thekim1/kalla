@@ -113,6 +113,7 @@ if (knowledge)
     if (chat)
     {
         app.MapChat();
+        app.MapConversations();
     }
 
     if (publishReference)

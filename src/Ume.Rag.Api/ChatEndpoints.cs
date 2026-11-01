@@ -171,7 +171,7 @@ public static class ChatEndpoints
     }
 
     /// <summary>Runs the handler and writes refusals as OpenAI errors (§3.6, identity §4.4).</summary>
-    private static async Task<IResult> OpenAiAsync(HttpContext http, Func<Task<IResult>> handler)
+    public static async Task<IResult> OpenAiAsync(HttpContext http, Func<Task<IResult>> handler)
     {
         try
         {

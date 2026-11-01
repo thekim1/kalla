@@ -37,6 +37,9 @@ public sealed class ConversationIds
         return (id, Prefix + id.ToString("N") + "." + Mac(_signing, clientId, subjectId, id));
     }
 
+    /// <summary>The header value of an existing conversation for its (client, subject), signed with the newest key.</summary>
+    public string HeaderFor(Guid id, Guid clientId, string subjectId) => Prefix + id.ToString("N") + "." + Mac(_signing, clientId, subjectId, id);
+
     /// <summary>The id of a header issued to this (client, subject); otherwise 404 <c>conversation_not_found</c>.</summary>
     public Guid Verify(string header, Guid clientId, string subjectId)
     {
