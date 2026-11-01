@@ -134,15 +134,35 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 - **Start:** `main` @ `1900916` green on the runner (run 41299302356) and locally (all suites; Worker.Tests 1116 ×2);
   session 14's last run on `9d3c7ae` green. AppHost still running with the Turkos data; worker, api and adminapi rebuilt
-  and restarted on `1900916`. Scratchpad `verify.sh`, `watch.sh`, `adm.py` (OIDC sign-in; Keycloak's form_post page is
-  upper-case HTML), `ret.sh` (`/v1/retrieve` body is snake_case: `query`, `collections` slugs, `top_k`) re-created; the
-  Open WebUI and retrieval keys revealed into the scratchpad `secrets/`.
-- **Reviewed:** B's #241 (source demote after fusion) approved with two nits (doc summary misplaced; `(long, Dictionary)?`
-  cache fields can tear on the singleton). Hand-off taken: the evaluator puts `SearchScope.Demote` on its scope.
-- **User decisions:** gold set drafted by the main session, DoIT reviews (Decisions row, `13c32f4`); owner/date later;
-  Open WebUI rehearsal waits for #236.
-- **Running:** implementor `a/228-fetch-url` (worktree `../rag-a1`, on main + #239's head), implementor
-  `a/audit-scheduled` (`../rag-a2`), the gold-set draft (scratchpad `gold/`, from 1,166 exported Turkos pages).
+  and restarted on `1900916`. Scratchpad `verify.sh`, `watch.sh` (ignores Crotalus's PRs), `adm.py` (OIDC sign-in;
+  Keycloak's form_post page is upper-case HTML; the post-login redirect to `/` 404s, ignore it), `ret.sh`
+  (`/v1/retrieve` body is snake_case: `query`, `collections` slugs, `top_k`) re-created; the Open WebUI and retrieval keys
+  revealed into the scratchpad `secrets/`.
+- **User decisions:** gold set drafted by the main session, DoIT reviews (`13c32f4`); owner/date later; Open WebUI
+  rehearsal waits for #236; **no backward compatibility before production** (`0d73352`: Decisions row, AGENTS.md,
+  implementor-common.md; B told in #243); **don't nudge stream B** (it may idle and start later).
+- **Merged:** #242 scheduled dependency audit (`audit.yml`, daily 04:17 UTC on the self-hosted runner; `scripts/audit/`
+  shared with verify.yml); its runner run and a dispatched `audit.yml` run (41301857132) green.
+- **Reviewed:** B's #241 (source demote) approved with two nits (doc summary misplaced; `(long, Dictionary)?` cache fields
+  can tear on the singleton).
+- **Gold set draft (item 21):** 199 rows (138 answerable, 21 temporal, 40 unanswerable) from 1,166 exported Turkos pages,
+  ids checked; `~/ume-rag-pilot/gold/Turkos-guldstandard-utkast.xlsx` (Swedish review sheet for DoIT), `draft.csv`,
+  `README.md` (known weaknesses). Spot check of 30 answerable questions on live Turkos: 29/30 found@10, 23 first, MRR
+  0.83 (likely easier than real questions: DoIT should add real ones). With the user to hand to DoIT.
+- **Stream-A branches ready, waiting for B to merge #239 and #241** (each carries B's unmerged commit, so no PR yet):
+  - `a/228-fetch-url` (`../rag-a1`, `c6019e6`): crawl stores and fetches `FetchUrl ?? Url`; scope re-checks
+    (`CrawlScope.CheckStored`), retry-failed, demote counts on the path form; a 304 or lastmod skip refreshes
+    `Documents.Url`; `CrawlRig` drains by time (cold-start flake fixed). Local evidence green (Worker.Tests 1124 ×2,
+    Pipelines, Contract); ownership fails only on #239's files. PR body in the implementor's report (see deviations 1–8).
+  - `a/l3-eval-demote` (`../rag-a3`, `a605031`, on #241): evaluator applies `SearchScope.Demote`; contract case with
+    recency + demote; Worker.Tests 1117 ×2.
+  - `a/compat-sweep` (`../rag-a4`, `4246dff`, on `a/228-fetch-url`): removes the `-1` removal-check sentinel, the
+    `Report.mode` incremental fallback and the pre-#130 eval-round fallback; new test pins "removal checks first".
+    Worker.Tests 1124 ×2. PR after `a/228-fetch-url` merges. For B later (wording only, not filed):
+    `Domain/Entities/IngestionEntities.cs:169` (`Depth = -1` history), `MigrationService/MigrationWorker.cs:10`
+    ("expand/contract, backwards compatible").
+  - Order: B merges #239/#241 → recreate each branch's PR on `origin/main` (merge main; B's commits drop out) →
+    FetchUrl, then eval-demote, then compat-sweep → check main → restart the worker → re-crawl Turkos once.
 
 ## Session 14 (2026-11-01)
 
