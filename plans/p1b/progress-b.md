@@ -42,7 +42,7 @@ Refs: [admin §4, §6.6, §6.7, §12](../admin/design.md), [identity §4.9](../i
 - [x] Assistants: draft → publish, versions with restore, archive, description, contact; test panel in `rag-admin`; audiences; retention; impact lines (#260, this PR; draft, publish and audiences earlier in P1a)
 - [x] Audit list; explain access (#257)
 - [ ] **Done:** audited, config version bumped, `PermissionMatrix` covers each endpoint; #23 recorded
-- [ ] **Hand-off L4:** issue to stream A
+- [x] **Hand-off L4:** issue to stream A (#300)
 
 ### 10. Chat: history `none`, feedback
 Refs: [chat §11–§14](../chat-api/design.md)
