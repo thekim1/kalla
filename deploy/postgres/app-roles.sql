@@ -44,15 +44,17 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON config."Settings", config."DataProtectio
 GRANT SELECT ON config."Settings", config."DataProtectionPolicies", config."EmbeddingProfiles", config."Collections",
   config."Sources", config."Pipelines", config."PipelineVersions" TO ume_rag_worker;
 GRANT SELECT ON config."Settings", config."DataProtectionPolicies", config."EmbeddingProfiles", config."Collections" TO ume_rag_api;
-GRANT SELECT ("Id", "CollectionId", "Type", "Classification", "State", "DeletedAt", "ContainsThirdPartyText")
+GRANT SELECT ("Id", "CollectionId", "Type", "Classification", "State", "DeletedAt", "ContainsThirdPartyText", "DemoteRules")
   ON config."Sources" TO ume_rag_api;
 -- Assistants and the gateway model mirror (data-model §1.2): the admin manages them; the api reads assistants,
 -- audiences and models, and versions only through the view of published versions, never AssistantVersions itself, so a
--- draft cannot reach chat. The worker reads no assistant tables.
+-- draft cannot reach chat. The worker reads no assistant tables, only the model mirror (the evaluation's residency
+-- checks, #130).
 GRANT SELECT, INSERT, UPDATE, DELETE ON config."Assistants", config."AssistantVersions", config."AssistantAudiences",
   config."GatewayModels" TO ume_rag_admin;
 GRANT SELECT ON config."Assistants", config."AssistantAudiences", config."PublishedAssistantVersions",
   config."GatewayModels" TO ume_rag_api;
+GRANT SELECT ON config."GatewayModels" TO ume_rag_worker;
 
 -- content: the worker owns it; the admin reads it and enqueues jobs (decisions are command jobs, data-model §12.2).
 GRANT SELECT, INSERT, UPDATE, DELETE ON content."Jobs", content."WorkerInstances", content."RunItems" TO ume_rag_worker;

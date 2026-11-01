@@ -158,6 +158,9 @@ public sealed class CrawlFrontierEntry
 
     /// <summary>The sitemap's <c>lastmod</c>; cleared when the URL leaves the sitemap.</summary>
     public DateTimeOffset? SitemapLastMod { get; set; }
+
+    /// <summary>A removal-check row (#102); replaces the <c>Depth = -1</c> sentinel.</summary>
+    public bool RemovalCheck { get; set; }
 }
 
 /// <summary>Per crawl run limits and report data (<c>content."CrawlRuns"</c>, connectors design §6.1, §5.5).</summary>
@@ -181,6 +184,9 @@ public sealed class CrawlRun
 
     /// <summary>A complete traversal (weakness review §3).</summary>
     public bool Complete { get; set; }
+
+    /// <summary>An incremental run (#102): never a complete traversal, so the incomplete-traversal alert skips it.</summary>
+    public bool Incremental { get; set; }
 }
 
 /// <summary>Checkpoint kinds (connectors design §2.3).</summary>
@@ -431,6 +437,12 @@ public sealed class ChunkSet
 
     public string State { get; set; } = ChunkSetStates.Writing;
     public bool PiiFlagged { get; set; }
+
+    /// <summary>When the set was first flagged (#175; set by the worker with the 5103 event's time, kept on re-flag).</summary>
+    public DateTimeOffset? PiiFlaggedAt { get; set; }
+
+    /// <summary>The admin parse rules that shaped the set (#134); part of the set's key, null without rules.</summary>
+    public string? ParseRuleKey { get; set; }
 
     /// <summary><c>jsonb</c>.</summary>
     public string? PiiCounts { get; set; }

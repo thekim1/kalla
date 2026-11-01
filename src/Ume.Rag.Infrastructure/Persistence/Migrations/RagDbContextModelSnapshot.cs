@@ -636,11 +636,18 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("LiveAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ParseRuleKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
                     b.Property<string>("PiiCounts")
                         .HasColumnType("jsonb");
 
                     b.Property<bool>("PiiFlagged")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("PiiFlaggedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("PipelineVersionId")
                         .HasColumnType("uuid");
@@ -663,10 +670,10 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SupersededAt");
 
-                    b.HasIndex(new[] { "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash" }, "IX_ChunkSets_Key")
+                    b.HasIndex(new[] { "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash", "ParseRuleKey" }, "IX_ChunkSets_Key")
                         .IsUnique();
 
-                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex(new[] { "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash" }, "IX_ChunkSets_Key"), false);
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex(new[] { "DocumentId", "PipelineVersionId", "SiteProfileVersionId", "EmbeddingProfileId", "ContentHash", "ParseRuleKey" }, "IX_ChunkSets_Key"), false);
 
                     b.HasIndex(new[] { "State", "CreatedAt" }, "IX_ChunkSets_Writing")
                         .HasFilter("\"State\" = 'writing'");
@@ -971,6 +978,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<string>("RedirectTo")
                         .HasColumnType("text");
 
+                    b.Property<bool>("RemovalCheck")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid?>("RunId")
                         .HasColumnType("uuid");
 
@@ -1074,6 +1084,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)");
 
                     b.Property<bool>("Complete")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Incremental")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("LimitHit")
@@ -1621,6 +1634,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("Candidate")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Classification")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1679,6 +1695,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<int?>("SubjectVersion")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ThresholdProposal")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("Variant")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1727,6 +1746,11 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
+
+                    b.Property<int>("Round")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
 
                     b.HasKey("Id");
 
@@ -2711,6 +2735,11 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DemoteRules")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("jsonb")
+                        .HasComputedColumnSql("\"Settings\" -> 'demote'", true);
 
                     b.Property<string>("Name")
                         .IsRequired()

@@ -20,6 +20,7 @@ internal static class ServingContentModel
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Classification).HasMaxLength(20);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+            e.Property(x => x.Round).HasDefaultValue(1).HasSentinel(1);
             e.HasIndex(x => x.CollectionId).IsUnique();
         });
 
@@ -61,6 +62,7 @@ internal static class ServingContentModel
             e.Property(x => x.Mrr).HasPrecision(5, 4);
             e.Property(x => x.Variant).HasMaxLength(30).HasDefaultValue(EvaluationVariants.Hybrid);
             e.Property(x => x.PromptVersion).HasMaxLength(50);
+            e.Property(x => x.ThresholdProposal).HasColumnType("jsonb");
             e.HasIndex(x => new { x.SetId, x.StartedAt }).IsDescending(false, true);
             e.HasOne<EvaluationSet>().WithMany().HasForeignKey(x => x.SetId).OnDelete(DeleteBehavior.Cascade);
         });

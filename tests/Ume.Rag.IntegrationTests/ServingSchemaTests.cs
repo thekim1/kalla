@@ -383,6 +383,18 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
             FROM content."RetrievalStats" WHERE "DocumentId" = '{document}' ORDER BY "TextHash"
             """)).ShouldBe(["01:internal:6:2", "02:public:10:0"]);
 
+        // #114: a later flush at a lower level keeps the stored higher one; a higher level replaces it.
+        string Flush(string hash, string level) => $"""
+            SELECT content.rag_count_retrievals('{day:yyyy-MM-dd}'::date, ARRAY['{document}']::uuid[], ARRAY['\x{hash}']::bytea[],
+                ARRAY['{collection}']::uuid[], ARRAY['{level}']::varchar[], ARRAY[1]::integer[], ARRAY[0]::integer[])
+            """;
+        await Sql.ExecuteAsync(api, Flush("01", "public"));
+        await Sql.ExecuteAsync(api, Flush("02", "sensitive"));
+        (await Sql.ListAsync(database.Connection(Worker), $"""
+            SELECT encode("TextHash", 'hex') || ':' || "Classification" || ':' || "Retrieved"
+            FROM content."RetrievalStats" WHERE "DocumentId" = '{document}' ORDER BY "TextHash"
+            """)).ShouldBe(["01:internal:7", "02:sensitive:11"]);
+
         foreach (var bad in new[]
                  {
                      "SELECT content.rag_count_retrievals(current_date, ARRAY[gen_random_uuid()], ARRAY['\\x01'::bytea], '{}', ARRAY['public'], ARRAY[1], ARRAY[0])",
