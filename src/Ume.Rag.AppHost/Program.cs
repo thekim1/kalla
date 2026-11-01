@@ -378,6 +378,60 @@ if (File.Exists(Path.Combine(builder.AppHostDirectory, "..", "admin-ui", "packag
     adminApi.PublishWithContainerFiles(adminUi, "wwwroot");
 }
 
+// Open WebUI against rag-api (P1a item 15; chat design §4.3), OpenWebUi:Enabled (default true) in run mode. It connects with
+// the seeded dev client "Open WebUI (dev)" (DevSeeder.DevClientId, key ume-rag-sk- + dev-key) and forwards each user as an
+// HS256 JWT that rag-api checks (identity §5.2). Local accounts sign in (the first is Open WebUI's admin); the pilot signs in
+// over OIDC through deploy/compose.openwebui.yaml (item 18). Same pin as the Compose file; update both together.
+const string OpenWebUiImage = "ghcr.io/open-webui/open-webui";
+const string OpenWebUiTag = "v0.12.3";
+const string OpenWebUiDigest = "a537bbe1e6b428820f52ed4a029d7fff97062e24d5cf32c365fba36fd0542def";
+const string DevOpenWebUiClientId = "01929b6e-0000-7000-8000-0000000c11e7"; // DevSeeder.DevClientId
+if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWebUi:Enabled", true) && builder.Configuration.GetValue("Seed:Enabled", true))
+{
+    var openWebUiJwtSecret = Secret("openwebui-jwt-secret", 48);
+    var openWebUiSecretKey = Secret("openwebui-secret-key", 48);
+    api.WithEnvironment("OpenWebUi__ClientId", DevOpenWebUiClientId).WithEnvironment("OpenWebUi__JwtSecret", openWebUiJwtSecret);
+    builder.AddContainer("open-webui", OpenWebUiImage, OpenWebUiTag).WithImageSHA256(OpenWebUiDigest)
+        .WithHttpEndpoint(targetPort: 8080, name: "http")
+        .WithVolume("ume-rag-openwebui-data", "/app/backend/data")
+        .WithEnvironment("WEBUI_SECRET_KEY", openWebUiSecretKey)
+        .WithEnvironment("ENABLE_PERSISTENT_CONFIG", "false")
+        // No model downloads and no retrieval of Open WebUI's own: rag-api does the RAG (as deploy/compose.openwebui.yaml).
+        .WithEnvironment("OFFLINE_MODE", "true")
+        .WithEnvironment("BYPASS_EMBEDDING_AND_RETRIEVAL", "true")
+        .WithEnvironment("ENABLE_OLLAMA_API", "false")
+        .WithEnvironment("ENABLE_OPENAI_API", "true")
+        // rag-api's HTTP endpoint: the container does not trust the AppHost's development certificate.
+        .WithEnvironment("OPENAI_API_BASE_URLS", ReferenceExpression.Create($"{api.GetEndpoint("http")}/v1"))
+        .WithEnvironment("OPENAI_API_KEYS", ReferenceExpression.Create($"ume-rag-sk-{devKey}"))
+        .WithEnvironment("OPENAI_API_CONFIGS", """{"0":{"headers":{"X-Rag-Owui-Message-Id":"{{MESSAGE_ID}}","X-Rag-Owui-User-Message-Id":"{{USER_MESSAGE_ID}}"}}}""")
+        .WithEnvironment("ENABLE_FORWARD_USER_INFO_HEADERS", "true")
+        .WithEnvironment("FORWARD_USER_INFO_HEADER_JWT_SECRET", openWebUiJwtSecret)
+        .WithEnvironment("ENABLE_DIRECT_CONNECTIONS", "false")
+        .WithEnvironment("ENABLE_TITLE_GENERATION", "false")
+        .WithEnvironment("ENABLE_TAGS_GENERATION", "false")
+        .WithEnvironment("ENABLE_FOLLOW_UP_GENERATION", "false")
+        .WithEnvironment("ENABLE_RETRIEVAL_QUERY_GENERATION", "false")
+        .WithEnvironment("ENABLE_SEARCH_QUERY_GENERATION", "false")
+        .WithEnvironment("ENABLE_AUTOCOMPLETE_GENERATION", "false")
+        .WithEnvironment("ENABLE_CONTEXT_COMPACTION", "false")
+        .WithEnvironment("ENABLE_WEB_SEARCH", "false")
+        .WithEnvironment("ENABLE_CODE_EXECUTION", "false")
+        .WithEnvironment("ENABLE_CODE_INTERPRETER", "false")
+        .WithEnvironment("ENABLE_IMAGE_GENERATION", "false")
+        .WithEnvironment("USER_PERMISSIONS_CHAT_FILE_UPLOAD", "false")
+        .WithEnvironment("USER_PERMISSIONS_CHAT_WEB_UPLOAD", "false")
+        .WithEnvironment("USER_PERMISSIONS_CHAT_SYSTEM_PROMPT", "false")
+        .WithEnvironment("USER_PERMISSIONS_CHAT_PARAMS", "false")
+        .WithEnvironment("ENABLE_ADMIN_CHAT_ACCESS", "false")
+        .WithEnvironment("ENABLE_ADMIN_EXPORT", "false")
+        .WithEnvironment("BYPASS_MODEL_ACCESS_CONTROL", "true")
+        .WithEnvironment("DEFAULT_USER_ROLE", "user")
+        .WithEnvironment("ENABLE_SIGNUP", "true")
+        .WithEnvironment("ENABLE_LOGIN_FORM", "true")
+        .WaitFor(api);
+}
+
 builder.Build().Run();
 
 IResourceBuilder<ParameterResource> Secret(string name, int length) =>
