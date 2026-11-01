@@ -487,6 +487,8 @@ UME_RAG_SECRETS_DIR=$secrets
 UME_RAG_OIDC_AUTHORITY=$oidc_authority
 UME_RAG_OIDC_CLIENT_ID=$oidc_client
 UME_RAG_GATEWAY_URL=$gateway_url
+# Register M2: every model call EU-hosted until on-prem hardware exists; empty once External routes and keys exist.
+UME_RAG_GATEWAY_MAX_RESIDENCY=Eu
 UME_RAG_API_PUBLIC_URL=https://$api_host$public_api
 UME_RAG_ADMIN_PUBLIC_HOST=$admin_host
 # Listeners default to loopback (0.0.0.0 with --proxy: firewall them to the proxy only).
@@ -513,6 +515,8 @@ EOF
 # Optional Open WebUI stack (compose.openwebui.yaml, a project of its own). Its OIDC client: P1 the shared Keycloak's
 # open-webui (realm ume), P2 Entra's ume-rag-open-webui.
 UME_RAG_OPENWEBUI_HOST=$owui_host
+# rag-api's feedback importer reads Open WebUI here (OpenWebUi:BaseUrl); empty turns the import off.
+UME_RAG_OPENWEBUI_BASE_URL=https://$owui_host
 UME_RAG_OPENWEBUI_BIND=$bind
 UME_RAG_OPENWEBUI_PORT=3000
 UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=$owui_client

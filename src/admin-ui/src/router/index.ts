@@ -3,6 +3,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw, type RouterHistory
 import type { Role } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { APP, PAGE } from '@/utils/labels'
+import { platformRoutes } from '@/platform/routes'
 import { ALL_ROLES } from './nav'
 
 declare module 'vue-router' {
@@ -27,6 +28,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/sources/:id', name: 'source', component: () => import('@/views/SourceView.vue'), props: true, meta: { title: PAGE.source.title, roles: ALL_ROLES } },
   { path: '/runs/:id', name: 'run', component: () => import('@/views/RunView.vue'), props: true, meta: { title: PAGE.run.title, roles: ALL_ROLES } },
   { path: '/organisation', name: 'organisation', component: () => import('@/views/OrganisationView.vue'), meta: { title: PAGE.organisation.title, roles: ALL_ROLES } },
+  ...platformRoutes,
   { path: '/forbidden', name: 'forbidden', component: () => import('@/views/ForbiddenView.vue'), meta: { title: PAGE.forbidden.title } },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue'), meta: { title: PAGE.notFound.title } },
 ]

@@ -1,5 +1,6 @@
 import type { RouteLocationRaw } from 'vue-router'
 import { ROLES, type Role } from '@/api/types'
+import { platformNavItems } from '@/platform/nav'
 import { NAV_GROUP, PAGE } from '@/utils/labels'
 
 /** A place inside a page (a tab or a card) that search can jump straight to. */
@@ -80,6 +81,7 @@ export const navGroups: NavGroup[] = [
         keywords: ['förvaltning', 'team', 'kostnadsställe', 'synkning', 'gateway'],
         roles: ALL_ROLES,
       },
+      ...platformNavItems,
     ],
   },
 ]

@@ -422,6 +422,10 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
         .WithEnvironment("OPENAI_API_BASE_URLS", ReferenceExpression.Create($"{api.GetEndpoint("http")}/v1"))
         .WithEnvironment("OPENAI_API_KEYS", openWebUiApiKey)
         .WithEnvironment("OPENAI_API_CONFIGS", """{"0":{"headers":{"X-Rag-Owui-Message-Id":"{{MESSAGE_ID}}","X-Rag-Owui-User-Message-Id":"{{USER_MESSAGE_ID}}"}}}""")
+        // Open WebUI 0.12.3 adds its builtin tools to every browser chat unless a model's capabilities.builtin_tools is false
+        // (utils/middleware.py:2076-2082), and rag-api refuses tools (chat design §3.2): the default metadata is merged into every
+        // model's capabilities, per-model overrides win (utils/models.py:367-381), and it holds with ENABLE_PERSISTENT_CONFIG=false (#276).
+        .WithEnvironment("DEFAULT_MODEL_METADATA", """{"capabilities":{"builtin_tools":false}}""")
         .WithEnvironment("ENABLE_FORWARD_USER_INFO_HEADERS", "true")
         .WithEnvironment("FORWARD_USER_INFO_HEADER_JWT_SECRET", openWebUiJwtSecret)
         .WithEnvironment("ENABLE_DIRECT_CONNECTIONS", "false")

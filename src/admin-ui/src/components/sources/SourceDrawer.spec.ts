@@ -48,7 +48,7 @@ describe('Lägg till källa (admin design §5.4 steps 3, 4, 6)', () => {
       collectionId: 'c1', type: 'crawl',
       settings: {
         startUrls: ['https://www.umea.se/bygga'], include: [], exclude: ['**/sok?*', '**/search?*', '**?*sort=*', '**?*print=*', '**/login*', '**/logout*'],
-        maxPages: 10000, maxDepth: 10, piiMode: 'hold',
+        maxPages: 500, maxDepth: 10, piiMode: 'hold',
       },
     })
     const text = document.body.textContent!

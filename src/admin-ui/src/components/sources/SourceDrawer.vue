@@ -32,7 +32,9 @@ const level = ref<Level>('public')
 const urls = ref('')
 const include = ref('')
 const exclude = ref(DEFAULT_EXCLUDE.join('\n'))
-const maxPages = ref('10000')
+// A modest first crawl (#285 review): the form starts at 500 pages; the schema's default (10,000) stays for the API.
+const FIRST_CRAWL_PAGES = '500'
+const maxPages = ref(FIRST_CRAWL_PAGES)
 const maxDepth = ref('10')
 const piiMode = ref<'hold' | 'report'>('hold')
 const saving = ref(false)
@@ -62,7 +64,7 @@ watch(
     urls.value = ''
     include.value = ''
     exclude.value = DEFAULT_EXCLUDE.join('\n')
-    maxPages.value = '10000'
+    maxPages.value = FIRST_CRAWL_PAGES
     maxDepth.value = '10'
     piiMode.value = 'hold'
     preflight.stop()
