@@ -86,7 +86,7 @@ Refs: [repo-and-deployment §8.1–§8.3](../platform/repo-and-deployment.md), [
 
 ### 17. Pilot stack for P1b
 Refs: [chat §4.3, §13.3, §14.2](../chat-api/design.md), [repo-and-deployment §6.2, §7](../platform/repo-and-deployment.md)
-- [ ] Open WebUI API keys restricted to the feedback routes; service account; `OpenWebUi__AdminApiKey` secret; importer settings — all but the importer settings done (PR: a/p1b-17-test-host-stack); the importer settings wait for L6
+- [x] Open WebUI API keys restricted to the feedback routes; service account; `OpenWebUi__AdminApiKey` secret; importer settings (PR: a/p1b-17-test-host-stack; importer settings `OpenWebUi__BaseUrl` and `OpenWebUi__FeedbackImportInterval` after L6 #273, PR: a/17-importer-settings)
 - [x] Test-host Compose with the pilot caps; test-host run book (PR: a/p1b-17-test-host-stack)
 - [x] Runbook public-records section lists the three candidate routes (PR: a/p1b-17-test-host-stack)
 - [ ] **Done:** `docker compose config` green; local import and pruning work; #49 recorded

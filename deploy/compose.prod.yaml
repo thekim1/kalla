@@ -151,9 +151,11 @@ services:
       # The origin staff browsers reach rag-api at (J9, #210): citation links are absolute, so they resolve from Open
       # WebUI too (relative links would resolve against Open WebUI's origin). init-deployment.sh writes it.
       Knowledge__PublicBaseUrl: ${UME_RAG_API_PUBLIC_URL:?Set UME_RAG_API_PUBLIC_URL in deploy/.env}
-      # Placeholder (P1b item 17, waiting on stream B's L6): the feedback importer's settings (chat design §14.2, Open
-      # WebUI's base URL per instance) go here once its configuration names exist. Its key is already the secret file
-      # OpenWebUi__AdminApiKey, written by deploy/openwebui-feedback-key.sh.
+      # The feedback importer and pruning (chat design §14.2, §13.3): Open WebUI through its reverse proxy, which works
+      # whether it runs on this host or its own VM; empty = no import. Its key is the secret file OpenWebUi__AdminApiKey
+      # (deploy/openwebui-feedback-key.sh).
+      OpenWebUi__BaseUrl: ${UME_RAG_OPENWEBUI_BASE_URL:-}
+      OpenWebUi__FeedbackImportInterval: ${UME_RAG_OPENWEBUI_FEEDBACK_IMPORT_INTERVAL:-00:15:00}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: rag-api
       SSL_CERT_FILE: /run/certs/ca.pem

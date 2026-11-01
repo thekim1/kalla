@@ -513,6 +513,8 @@ EOF
 # Optional Open WebUI stack (compose.openwebui.yaml, a project of its own). Its OIDC client: P1 the shared Keycloak's
 # open-webui (realm ume), P2 Entra's ume-rag-open-webui.
 UME_RAG_OPENWEBUI_HOST=$owui_host
+# rag-api's feedback importer reads Open WebUI here (OpenWebUi:BaseUrl); empty turns the import off.
+UME_RAG_OPENWEBUI_BASE_URL=https://$owui_host
 UME_RAG_OPENWEBUI_BIND=$bind
 UME_RAG_OPENWEBUI_PORT=3000
 UME_RAG_OPENWEBUI_OIDC_CLIENT_ID=$owui_client
