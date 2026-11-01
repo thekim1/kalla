@@ -80,6 +80,8 @@ if (chat)
     builder.Services.AddSingleton<Ume.Rag.Answering.Chat.ChatService>();
     builder.Services.AddOptions<Ume.Rag.Answering.Chat.ChatOptions>().BindConfiguration(Ume.Rag.Answering.Chat.ChatOptions.SectionName);
     builder.Services.AddSingleton<ChatRateLimiter>();
+    builder.Services.AddOptions<OpenWebUiOptions>().BindConfiguration(OpenWebUiOptions.SectionName);
+    builder.Services.AddSingleton<ChatCallers>();
 }
 
 var app = builder.Build();

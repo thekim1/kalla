@@ -8,8 +8,8 @@ namespace Ume.Rag.Api;
 
 /// <summary>
 /// The chat role's routes (chat design §3; P1a item 15, part a): <c>GET /v1/models</c> and <c>POST /v1/chat/completions</c>
-/// (non-streaming in this part). Errors in the OpenAI shape (§3.6), also for authentication. Keys only in this part; the
-/// Open WebUI user JWT (identity §5) comes with part d.
+/// (non-streaming in this part). Errors in the OpenAI shape (§3.6), also for authentication. Open WebUI clients present
+/// the user's JWT (identity §5, <see cref="ChatCallers"/>).
 /// </summary>
 public static class ChatEndpoints
 {
@@ -21,10 +21,10 @@ public static class ChatEndpoints
         ArgumentNullException.ThrowIfNull(app);
         var chat = app.MapGroup("/v1").WithTags("Chat");
 
-        chat.MapGet("/models", async (HttpContext http, KnowledgeCallers callers, IPolicySnapshotSource snapshots, IAccessPolicy policy, CancellationToken ct) =>
+        chat.MapGet("/models", async (HttpContext http, ChatCallers callers, IPolicySnapshotSource snapshots, IAccessPolicy policy, CancellationToken ct) =>
             await OpenAiAsync(http, async () =>
             {
-                var who = await callers.AuthenticateAsync(http.Request, ct, knowledgeRoute: false);
+                var who = await callers.AuthenticateAsync(http.Request, userRequired: false, ct);
                 var snapshot = snapshots.Current;
                 var candidates = snapshot.Assistants.Values.Where(a => a.State == "active" && a.Published is not null).ToList();
                 var allowed = policy.Filter(who, candidates.Select(a => ResourceRef.Assistant(a.Id)), RagAction.ListModels, snapshot, snapshots.IsConfirmed)
@@ -45,10 +45,10 @@ public static class ChatEndpoints
             }))
             .WithName("ListModels").WithSummary("The assistants this caller may use, as OpenAI models");
 
-        chat.MapPost("/chat/completions", async (HttpContext http, KnowledgeCallers callers, ChatService service, ChatRateLimiter limiter, CancellationToken ct) =>
+        chat.MapPost("/chat/completions", async (HttpContext http, ChatCallers callers, ChatService service, ChatRateLimiter limiter, CancellationToken ct) =>
             await OpenAiAsync(http, async () =>
             {
-                var who = await callers.AuthenticateAsync(http.Request, ct, knowledgeRoute: false);
+                var who = await callers.AuthenticateAsync(http.Request, userRequired: true, ct);
                 JsonElement body;
                 try
                 {
