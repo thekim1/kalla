@@ -11,7 +11,7 @@ https://github.com/thekim1/ume-rag-platform (push after every commit).
 of the team's **LLM gateway** (`~/git/llmgateway`, https://github.com/thekim1/llmgateway). The user owns the gateway
 and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monolith. Design and code live in this repo.
 
-## Where we are (end of session 13; sessions 14–16 below, session 16 is the latest)
+## Where we are (end of session 13; sessions 14–17 below, session 17 is the latest)
 
 - **Design** complete. **P0** done and released as `v0.1.0` (2026-10-31). **P1** is built "code first, live testing
   last" (user, 2026-10-31).
@@ -137,6 +137,23 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 | AppHost (B) | `src/Ume.Rag.AppHost/` | dev run fixed (#172: `vector`, PGDATA in `pgdata/`, blob root); `open-webui` resource (#206) |
 | Deploy | `deploy/` | Compose `Knowledge__PublicBaseUrl` (#213); Keycloak realm additions `deploy/keycloak/` (#207, local redirects opt-in #211) |
 | Tests / CI | `tests/`, `.github/workflows/` | Worker.Tests in four parallel collections, finalizer 0.2 s (#174: 4 min → ~45 s, Verify ≈ 3–4 min); `evaluation-smoke` job (#220) |
+
+## Session 17 (2026-11-01: the demo runs)
+
+- **Demo done** (`plans/demo-path.md` "Result"): `turkos` answers in Open WebUI with citations to crawled umea.se pages,
+  over the interim gateway at `Eu`. Model **`gpt-6.1-sol`**, because the gateway refuses `temperature` for
+  `claude-opus-5-5`/`claude-haiku-5-5` and rag-api always sends it (first follow-up, see the deferred list).
+- **Local state (AppHost running, Open WebUI at the `open-webui` resource's http port):** department DoIT (SQL seed),
+  collection `turkos` (public, published) with crawl source "umea.se Kommun och politik" (`maxPages` 200), site profile
+  www.umea.se (sitevision), `Settings.Crawl`, `PiiOwnDomains`, clients "Open WebUI" (`open-webui`) and "Pilot retrieval
+  (checks)" (`internal`) with one key each, assistant `turkos` v2 published to the Open WebUI client. User secrets now
+  also hold `OpenWebUi:ClientId` and `Parameters:openwebui-api-key`. Open WebUI's first account (admin) is
+  `demo@umea.se`; it and the keys were in the session scratchpad only (gone: reveal or re-issue).
+- **`adm.py`** (scratchpad, gone next session): `/bff/login` follows to Keycloak's form, posts `rag-platform-admin` and
+  the `Parameters:dev-user-password` user secret, then posts the `form_post` page (uppercase `<FORM`) to `/signin-oidc`;
+  writes send `X-Requested-With` and `X-XSRF-TOKEN` (the `RAG-XSRF-TOKEN` cookie from `/bff/user`); send the body as
+  UTF-8 bytes (`requests` sends a `str` body as Latin-1, which breaks `å`). `/openapi/v1.json` needs the session.
+- **Stream B:** #264/#266 fixed on B's branch (667139c), waiting on my re-review; nudged #265.
 
 ## Session 16 (2026-11-01, new computer; ended: demo-first plan, AppHost left running)
 
@@ -325,7 +342,9 @@ or reveal through the admin API (`POST /api/keys/{id}/reveal`, audited).
 
 ## Next step
 
-**Goal: the demo of `plans/demo-path.md`: a cited answer from crawled umea.se pages in Open WebUI. Everything else waits.**
+**The demo runs (session 17). Next: the "Found by the demo" items of `plans/demo-path.md` (`temperature`, then back to
+`claude-opus-5-5`), re-review B's #264/#266 fix, then the deferred list in the user's order.** The steps below are how
+the demo was reached.
 
 1. **Check the stack and GitHub** (5 minutes): `aspire describe` (if the AppHost is down, `export Seed__Enabled=false; aspire start
    --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive`; `aspire` is
