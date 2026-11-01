@@ -342,8 +342,9 @@ or reveal through the admin API (`POST /api/keys/{id}/reveal`, audited).
 
 ## Next step
 
-**The demo runs (session 17). Next: the "Found by the demo" items of `plans/demo-path.md` (`temperature`, then back to
-`claude-opus-5-5`), re-review B's #264/#266 fix, then the deferred list in the user's order.** The steps below are how
+**The demo runs (session 17). Next: the admin UI (user: "more focus on the admin UI"; `plans/demo-path.md` "Next focus",
+stream B), the "Found by the demo" items (#275, #276), the draft gold set over the demo slice, then the deferred list in
+the user's order.** The steps below are how
 the demo was reached.
 
 1. **Check the stack and GitHub** (5 minutes): `aspire describe` (if the AppHost is down, `export Seed__Enabled=false; aspire start

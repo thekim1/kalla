@@ -41,6 +41,31 @@ answered with `[1]` markers and `url_citation` annotations to the crawled Kommun
 400 `provider_rejected` "`temperature` is deprecated for this model", and `ChatService` always sends `temperature`;
 rag-api maps that 400 to a bare 502 `upstream_error`. `mistral-large-4` and `glm-5.3` answered 502 at the gateway.
 
+## Next focus: the admin UI (user, 2026-11-01)
+
+**Direction (user, after the demo):** "We need more focus on the admin UI." The admin API is far along (the whole demo
+set-up ran through it), but the admin UI has two pages (Översikt, Organisation): P1b items 11–13 (journey pages part 1
+and 2, the Feedback page) have not started. They move to the front of stream B's queue, ahead of its other open P1b code
+items; B's open review fixes still come first.
+
+**First slice: the demo's set-up, done in the browser.** Every step the demo did with `adm.py` gets a page, in this order
+(admin design §5.3–§5.5, §6.4–§6.7; P1b items 11 and 12):
+
+1. **Kunskapsbanker:** list, create (department, classification, slug), publish; Översikt with its sources and
+   documents.
+2. **Källa:** the crawl and URL-list forms with the template parameters (`startUrls`, `include`/`exclude`, `maxPages`,
+   `piiMode`), Synka nu, the run list and the crawl report (counts, `crawl.limit_pages`, personal-data reports).
+3. **Assistenter:** create, draft (model, system prompt, collections), Testa on the draft, Publicera, Målgrupp
+   (clients).
+4. **Generic forms for platform objects:** clients and keys (the secret shown once), `Settings.Crawl`, `Settings.Pii`,
+   data protection, site profiles, gateway models (a manual row), departments; one form per object type over its
+   existing endpoint and `jsonb`.
+
+**Done when** the demo set-up of "Result" above can be repeated on an empty database from the browser only, signed in
+as the dev `rag-platform-admin`, ending in a cited answer in Open WebUI. Then the rest of items 11–13 (preview Före /
+Efter, publicering, deletions, held, testfrågor, versioner, Granskningslogg, Feedback) in the brief's order, and item
+14 (accessibility, pilot-journey E2E, hand-off L7).
+
 ## After the demo (deliberately deferred)
 
 **Found by the demo:** the chat request sends `temperature` to every model (omit it unless the assistant sets one, or
