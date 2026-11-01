@@ -115,7 +115,7 @@ issue). Until the admin's set-up endpoints (J7) exist, the source comes from a d
 | `EmbeddingProfiles.RequestDimensions` and `dimensions` sent on every embedding call (without it the model answers 3072 dimensions and the profile's 1024 refuses them) | now (#159: column, seeder, admin calls, query embedding; #162: the worker's embed, canary and evaluation calls) |
 | The AppHost passes `EmbeddingProfile:*` to the `migrations` resource (without it the pilot profile is not seeded) | now (#159) |
 | `KnowledgeService`, query embedding and `/v1/retrieve` | now (#127) |
-| An API key for `/v1/retrieve`: the dev seed's `--api-key` (§4.4) until the admin's key endpoints (J7) exist | now |
+| An API key for `/v1/retrieve`: `POST /api/keys` in the admin API (#185), or the dev seed's `--api-key` offline (§4.4) | now |
 | On the gateway: a key restricted to residency `Eu`; the `text-embedding-3-large` deployment's `ContextWindow` empty; a Data API key with `catalog.read` for the org and model syncs | now (the gateway session) |
 | `psql` on your machine, or the AppHost's Postgres container (`--docker` below); Python 3.12 | now |
 
@@ -215,8 +215,8 @@ start seeds that profile).
 The department is not in the gateway catalogue, so the org sync marks it inactive on its next run; the worker does not
 read that flag, so ingestion is not affected. Pass `--department-id <id>` to use a synced department instead.
 
-**An API key for `/v1/retrieve` (now).** rag-api's knowledge routes take an `internal` client's key only, and the
-admin's key endpoints (J7) do not exist yet. `--api-key` also creates, insert-if-absent like the rest: an `internal`
+**An API key for `/v1/retrieve` (now).** rag-api's knowledge routes take an `internal` client's key only. The admin
+API issues keys since #185 (below); offline, the seed script does it. `--api-key` also creates, insert-if-absent like the rest: an `internal`
 client `Pilot retrieval (dev seed)` (`--client-name`) with ceiling `public` and no history store; a secret key of that
 client scoped to the collection, expiring after 30 days; and the `public` level's data-protection row (history mode
 `none`, 90/90 days), without which rag-api refuses every public collection. The pepper comes only from the environment:
@@ -235,6 +235,18 @@ one hashed under an earlier pepper (a new AppHost secrets store), is replaced by
 ```sql
 UPDATE config."Keys" SET "RevokedAt" = now() WHERE "Name" = 'dev seed: pilot-public' AND "RevokedAt" IS NULL;
 ```
+
+**Or through the admin API (now, #185).** Signed in to Scalar (`https://localhost:7402/scalar`) as `rag-platform-admin`:
+
+1. `POST /api/clients` `{"name": "Pilot retrieval", "kind": "internal", "classificationCeiling": "public", "storesHistory": false}`
+   (clients are global and only a platform admin creates them).
+2. `POST /api/keys` `{"clientId": "<its id>", "name": "pilot retrieval", "scopes": {"collectionIds": ["<pilot-public's id>"]}, "isEnabled": true}`.
+   The response holds the secret (`ume-rag-sk-…`) once; copy it into `read -rs UME_RAG_KEY` (§4.5). A platform admin
+   may leave out `teamId` and `scopes`; a department admin must give a team of theirs and non-empty scopes in its
+   department (`key_scope_required`).
+
+The admin hashes the key with the same `Security:KeyPepper` as rag-api, so no pepper is copied by hand. The seed
+script's `--api-key` stays for runs without signing in (it reads the pepper from `UME_RAG_DEV_KEY_PEPPER`).
 
 ### 4.5 What to check
 
