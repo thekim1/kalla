@@ -233,4 +233,112 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         refused.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await Json(refused)).GetProperty("code").GetString().ShouldBe("model_residency");
     }
+
+    [Fact]
+    public async Task Versions_are_listed_restored_as_a_new_published_version_and_archive_and_retention_are_saved()
+    {
+        var seed = await SeedAsync();
+        await using var gateway = Gateway();
+        await using var factory = Admin(gateway);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        using var editor = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Editor, seed.Code);
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
+        using var created = await admin.PostAsJsonAsync("/api/assistants", new
+        {
+            name = "Versioner " + seed.Code, departmentId = seed.Department, classification = "internal", description = "Svarar om bygglov.", contactName = "Bygglov",
+            contactEmail = "bygglov@umea.se",
+        }, Ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+        var id = (await Json(created)).GetProperty("id").GetGuid();
+        var path = $"/api/assistants/{id}";
+
+        async Task<string?> Version() => (await admin.GetFromJsonAsync<JsonElement>(path, Ct)).GetProperty("version").GetString();
+
+        async Task<string?> DraftAsync(string prompt)
+        {
+            var open = (await admin.GetFromJsonAsync<JsonElement>(path, Ct)).GetProperty("draft");
+            var version = open.ValueKind == JsonValueKind.Null ? null : open.GetProperty("version").GetString();
+            using var draft = await admin.PutAsJsonAsync($"{path}/draft", new { gatewayModel = Model, systemPrompt = prompt, collectionIds = new[] { seed.Collection }, version }, Ct);
+            draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
+            return (await Json(draft)).GetProperty("version").GetString();
+        }
+
+        async Task PublishAsync(string prompt)
+        {
+            var draftVersion = await DraftAsync(prompt);
+            using var published = await admin.PostAsJsonAsync($"{path}/publish", new { version = await Version(), draftVersion }, Ct);
+            published.StatusCode.ShouldBe(HttpStatusCode.OK, await published.Content.ReadAsStringAsync(Ct));
+        }
+
+        await PublishAsync("Första.");
+        await PublishAsync("Andra.");
+        var openDraft = await DraftAsync("Tredje, inte publicerad.");
+
+        // Restore 1: a new version 4 with version 1's settings, published at once; 2 is superseded; the draft (3) is kept with an older base.
+        (await viewer.PostAsJsonAsync($"{path}/versions/1/restore", new { version = await Version() }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        using (var restored = await editor.PostAsJsonAsync($"{path}/versions/1/restore", new { version = await Version() }, Ct))
+        {
+            restored.StatusCode.ShouldBe(HttpStatusCode.OK, await restored.Content.ReadAsStringAsync(Ct));
+            var body = await Json(restored);
+            body.GetProperty("publishedVersion").GetInt32().ShouldBe(4);
+            (body.GetProperty("draft").GetProperty("number").GetInt32(), body.GetProperty("draft").GetProperty("baseChanged").GetBoolean()).ShouldBe((3, true));
+        }
+
+        var versions = (await admin.GetFromJsonAsync<JsonElement[]>($"{path}/versions", Ct))!;
+        versions.Select(v => (v.GetProperty("number").GetInt32(), v.GetProperty("state").GetString())).ShouldBe(
+            [(4, "published"), (3, "draft"), (2, "superseded"), (1, "superseded")]);
+        versions[0].GetProperty("restoredFrom").GetInt32().ShouldBe(1);
+        var four = await admin.GetFromJsonAsync<JsonElement>($"{path}/versions/4", Ct);
+        (four.GetProperty("systemPrompt").GetString(), four.GetProperty("restoredFrom").GetInt32()).ShouldBe(("Första.", 1));
+
+        // The kept draft asks for confirmation; the draft and the live version are not restorable; an unknown number is 404.
+        using (var stale = await admin.PostAsJsonAsync($"{path}/publish", new { version = await Version(), draftVersion = openDraft }, Ct))
+        {
+            stale.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await Json(stale)).GetProperty("code").GetString().ShouldBe("draft_base_changed");
+        }
+
+        foreach (var number in new[] { "3", "4" })
+        {
+            using var refused = await admin.PostAsJsonAsync($"{path}/versions/{number}/restore", new { version = await Version() }, Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, number);
+            (await Json(refused)).GetProperty("code").GetString().ShouldBe("version_not_restorable");
+        }
+
+        (await admin.PostAsJsonAsync($"{path}/versions/x/restore", new { version = await Version() }, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await admin.GetAsync($"{path}/versions/9", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        // Archive and unarchive keep the published version.
+        using (var archived = await editor.PostAsJsonAsync($"{path}/archive", new { version = await Version() }, Ct))
+        {
+            var body = await Json(archived);
+            (body.GetProperty("state").GetString(), body.GetProperty("publishedVersion").GetInt32()).ShouldBe(("archived", 4));
+        }
+
+        using (var active = await editor.PostAsJsonAsync($"{path}/unarchive", new { version = await Version() }, Ct))
+        {
+            var body = await Json(active);
+            (body.GetProperty("state").GetString(), body.GetProperty("publishedVersion").GetInt32()).ShouldBe(("active", 4));
+        }
+
+        // Retention (V10): within the internal level's policy (history none, at most 90 days), by Manage only.
+        (await editor.PutAsJsonAsync($"{path}/retention", new { historyMode = "none", retentionDays = 30, version = await Version() }, Ct))
+            .StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        foreach (var (mode, days) in new[] { ("none", 120), ("stored", 30) })
+        {
+            using var outside = await admin.PutAsJsonAsync($"{path}/retention", new { historyMode = mode, retentionDays = days, version = await Version() }, Ct);
+            outside.StatusCode.ShouldBe(HttpStatusCode.Conflict, mode);
+            (await Json(outside)).GetProperty("code").GetString().ShouldBe("retention_outside_policy");
+        }
+
+        using (var retention = await admin.PutAsJsonAsync($"{path}/retention", new { historyMode = "none", retentionDays = 30, version = await Version() }, Ct))
+        {
+            retention.StatusCode.ShouldBe(HttpStatusCode.OK, await retention.Content.ReadAsStringAsync(Ct));
+            (await Json(retention)).GetProperty("retentionDays").GetInt32().ShouldBe(30);
+        }
+
+        await using var db = TestPostgres.Context(database.Connection(null));
+        (await db.AuditLog.AsNoTracking().Where(a => a.EntityType == "assistant" && a.EntityId == id.ToString()).OrderBy(a => a.Id).Select(a => a.Action).ToListAsync(Ct))
+            .ShouldBe(["create", "draft", "publish", "draft", "publish", "draft", "restore", "archive", "unarchive", "retention"]);
+    }
 }
