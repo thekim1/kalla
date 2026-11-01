@@ -87,11 +87,11 @@ public sealed class CrawlSourceRunner(
         WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."Depth" > $3 AND d."DeletedAt" IS NULL
         """;
 
-    // The run's removal checks (RemovalCheck, or depth -1 when written before #102) and the latest item of each.
+    // The run's removal checks and the latest item of each.
     private const string RemovalSql = """
         SELECT DISTINCT ON (i."Identity") i."Outcome", i."Reason"
         FROM content."CrawlFrontier" f JOIN content."RunItems" i ON i."RunId" = f."RunId" AND i."Identity" = f."Url"
-        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3 AND (f."RemovalCheck" OR f."Depth" = -1) AND i."Outcome" <> 'superseded'
+        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3 AND f."RemovalCheck" AND i."Outcome" <> 'superseded'
         ORDER BY i."Identity", i."CreatedAt" DESC, i."Id" DESC
         """;
 

@@ -63,14 +63,8 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
 
     private const string SetSql = """SELECT "Id" FROM content."EvaluationSets" WHERE "CollectionId" = $1""";
 
-    // The set's "Round" is the round the next generation uses (#130); a question of a later round (written before the column) wins.
-    private const string RoundSql = $"""
-        SELECT greatest(s."Round", coalesce(max((q."Origin" ->> 'round')::int), 0) + 1)
-        FROM content."EvaluationSets" s
-        LEFT JOIN content."EvaluationQuestions" q ON q."SetId" = s."Id" AND q."Layer" = '{EvaluationLayers.Generated}'
-        WHERE s."Id" = $1
-        GROUP BY s."Round"
-        """;
+    // The set's "Round" is the round the next generation uses (#130).
+    private const string RoundSql = """SELECT "Round" FROM content."EvaluationSets" WHERE "Id" = $1""";
 
     private const string NextRoundSql = """UPDATE content."EvaluationSets" SET "Round" = greatest("Round", $2) WHERE "Id" = $1""";
 
@@ -180,7 +174,7 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
 
     /// <summary>
     /// The round this generation runs: the set's <c>Round</c> (1 for a new set, advanced by every round that sampled, even one
-    /// that kept nothing), or one past the highest round of its generated questions (retired ones included) if that is later.
+    /// that kept nothing).
     /// </summary>
     public async Task<int> RoundAsync(Guid setId, CancellationToken cancellationToken)
     {

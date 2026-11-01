@@ -123,7 +123,7 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
             report.RootElement.GetProperty("completeness").GetProperty("seeds").GetInt32().ShouldBe(2, "a removal check is no seed");
             (await Sql.ScalarAsync<long>(database.Connection(null), """
                 SELECT count(*) FROM content."CrawlFrontier" WHERE "SourceId" = $1 AND "RunId" = $2 AND "RemovalCheck" AND "Depth" = 0
-                """, seed.SourceId, runId)).ShouldBe(1, "the removal check is flagged at depth 0, not at the old depth -1");
+                """, seed.SourceId, runId)).ShouldBe(1, "the removal check is flagged at depth 0");
         }
         finally
         {

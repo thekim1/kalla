@@ -241,6 +241,20 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
     }
 
     [Fact]
+    public async Task Removal_checks_are_released_before_seeds_of_the_same_depth_and_returned_first()
+    {
+        var store = new PostgresCrawlStore(Worker);
+        var run = await StartRunAsync(store, maxPages: 100);
+        static FrontierAdmission Removal(string url) => new(url, new Uri(url).Authority, 0, false, RemovalCheck: true);
+        await store.AdmitAsync(run, [Admission("https://www.umea.se/a-seed", 0), Admission("https://www.umea.se/b-mid", 1), Removal("https://www.umea.se/z-removed")], Ct);
+        await store.AdmitAsync(run, [Admission("https://umea.se/a-seed", 0), Removal("https://umea.se/z-removed")], Ct);
+
+        (await store.ReleaseAsync(run, "www.umea.se", 1, Ct)).Select(r => r.Url).ShouldBe(["https://www.umea.se/z-removed"], "the statement takes the removal check first");
+        (await store.ReleaseAsync(run, "umea.se", 2, Ct)).Select(r => r.Url).ShouldBe(["https://umea.se/z-removed", "https://umea.se/a-seed"],
+            "the released rows are returned removal checks first");
+    }
+
+    [Fact]
     public async Task C7_against_the_database_a_page_limit_crawl_is_incomplete_and_deletes_nothing()
     {
         var store = new PostgresCrawlStore(Worker);
@@ -627,40 +641,6 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         (await Sql.ScalarAsync<long>(database.Connection(null),
             """SELECT count(*) FROM content."CrawlFrontier" WHERE "SourceId" = $1 AND "RemovalCheck" AND "Depth" = 0 AND "SitemapLastMod" IS NULL AND "RunId" = $2""", source, second.Run.RunId))
             .ShouldBe(2);
-    }
-
-    [Fact]
-    public async Task A_removal_check_row_written_at_depth_minus_one_before_the_flag_is_still_a_removal_check()
-    {
-        // A frontier row admitted for the removal check by a worker before #102 (Depth -1, RemovalCheck false) can outlive a deploy.
-        var store = new PostgresCrawlStore(Worker);
-        await using var rig = CrawlRig.Create(_site, hosts: new PostgresCrawlHostStore(Worker), store: (store, store));
-        var source = Guid.NewGuid();
-        var settings = ContractJson.ToElement(new CrawlSettings { StartUrls = [_site.Url("/").AbsoluteUri], Sitemaps = [_site.Url("/fresh.xml").AbsoluteUri] });
-        CrawlRunContext Run() => new(new CrawlRunKey(source, "public", Guid.NewGuid()), Guid.NewGuid(), SyncKind.Sync, RunTrigger.Manual, settings, Revalidate: false);
-        _fresh["/f/keep"] = "2026-01-15";
-        _fresh["/f/gone"] = "2026-01-15";
-        await rig.CrawlAsync(Run());
-        _freshStatus["/f/gone"] = 404;
-        var second = Run();
-        await rig.Traversal.StartAsync(second, Ct);
-        foreach (var path in new[] { "/f/keep", "/f/gone" })
-        {
-            await Sql.ExecuteAsync(database.Connection(null), """
-                UPDATE content."CrawlFrontier" SET "State" = 'pending', "RunId" = $2, "Depth" = -1, "RemovalCheck" = false, "SitemapLastMod" = NULL
-                WHERE "SourceId" = $1 AND "Url" = $3
-                """, source, second.Run.RunId, _site.Url(path).AbsoluteUri);
-        }
-
-        await rig.TopUp.TopUpAsync(second, null, null, Ct);
-        var results = await rig.DrainAsync(second);
-
-        results.Keys.Order(StringComparer.Ordinal).ShouldBe([_site.Url("/f/gone").AbsoluteUri, _site.Url("/f/keep").AbsoluteUri]);
-        results[_site.Url("/f/gone").AbsoluteUri].ShouldBeOfType<CrawlFetchResult.Done>().ShouldSatisfyAllConditions(
-            d => d.Outcome.ShouldBe(new FetchOutcome.Gone("http.404")), d => d.Facts.ShouldContain(CrawlTraversal.RemovalCheck));
-        results[_site.Url("/f/keep").AbsoluteUri].ShouldBeOfType<CrawlFetchResult.Done>().ShouldSatisfyAllConditions(
-            d => d.Outcome.ShouldBeOfType<FetchOutcome.Content>(), d => d.Facts.ShouldContain(CrawlTraversal.RemovalCheck));
-        (await store.GetAsync(second.Run.RunId, Ct))!.ShouldSatisfyAllConditions(r => r.Seeds.ShouldBe(0), r => r.SeedsFailed.ShouldBe(0));
     }
 
     /// <summary>
