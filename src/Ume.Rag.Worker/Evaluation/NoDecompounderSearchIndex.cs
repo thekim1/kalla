@@ -48,6 +48,7 @@ public sealed class NoDecompounderSearchIndex(NpgsqlDataSource dataSource, ISear
             command.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = querySearchText });
             command.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Uuid, Value = scope.CollectionIds.ToArray() });
             command.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text, Value = scope.AllowedLevels.ToArray() });
+            command.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text, Value = scope.KeywordStopLexemes.ToArray() });
             await using var reader = await command.ExecuteReaderAsync(timeout.Token);
             while (await reader.ReadAsync(timeout.Token))
             {
@@ -84,11 +85,12 @@ public sealed class NoDecompounderSearchIndex(NpgsqlDataSource dataSource, ISear
     /// <summary>
     /// Statement K over the scratch copy: <c>scratch</c> is the chunks the stored vector matches (the partial GIN index),
     /// each with <c>setweight(heading path, A) || setweight(text, B)</c>, the generated column with <c>"Text"</c> for
-    /// <c>"SearchText"</c> (migration <c>IngestionSchema</c>); then K's match, rank, order and limit on that vector.
+    /// <c>"SearchText"</c> (migration <c>IngestionSchema</c>); then K's match, rank, order and limit on that vector. The
+    /// query drops the scope's keyword stop list (<c>$4</c>) as K does.
     /// </summary>
     internal static string Keyword(Guid profileId, int limit) => $"""
         WITH q AS MATERIALIZED (
-            SELECT content.rag_or_query(to_tsvector('swedish', $1)) AS tsq
+            SELECT content.rag_or_query(ts_delete(to_tsvector('swedish', $1), $4::text[])) AS tsq
         ), scratch AS MATERIALIZED (
             SELECT c."Id", c."DocumentId", c."ChunkSetId", c."Ordinal", c."TextHash", c."CollectionId", c."Classification",
                    c."DocumentType", c."SourceModifiedAt",
