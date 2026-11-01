@@ -74,6 +74,67 @@ public sealed class PiiTargetTests
     public void A_look_alike_is_no_phone_number(string text) =>
         Patterns.Scan(text).ShouldNotContain(m => m.Type == PiiTypes.Phone, text);
 
+    [Theory]
+    [InlineData("Ärende-id f0701234567a i systemet.")] // mobile digits inside a hex id
+    [InlineData("Id 9b1e0703112233c4f0a8 registrerat.")]
+    [InlineData("Hash ab0703112233 sparad.")] // a letter before only
+    [InlineData("Hash 0703112233ab sparad.")] // a letter after only
+    [InlineData("Kod x090161000 och 090161000y.")] // landline digits
+    [InlineData("Token Q+4722334455 och +4722334455z.")] // an international form
+    [InlineData("Id 7c3a0123-4567-89ab-cdef-0123456789ab.")] // a GUID's hyphen-joined groups
+    [InlineData("Id 3f2a1b9c-0123-4567-89ab-cdef01234567.")]
+    public void A_digit_run_inside_an_alphanumeric_token_is_no_phone_number(string text) =>
+        Patterns.Scan(text).ShouldNotContain(m => m.Type == PiiTypes.Phone, text);
+
+    [Theory]
+    [InlineData("Ring 070-311 22 33.", "703112233")]
+    [InlineData("tel:0703112233", "703112233")]
+    [InlineData("Tel.090-16 10 00", "90161000")]
+    [InlineData("Växel (090-16 10 00), fax saknas.", "90161000")]
+    [InlineData("Ring +46 70 311 22 33!", "703112233")]
+    [InlineData("tel:+46703112233", "703112233")]
+    [InlineData("Ring 0046 70 311 22 33.", "703112233")]
+    [InlineData("Ring +46 (0)90-16 10 00, vardagar.", "90161000")]
+    [InlineData("Norge: +47 22 33 44 55.", "+4722334455")]
+    [InlineData("Kontoret (+47 22 33 44 55) svarar.", "+4722334455")]
+    public void A_phone_number_between_spaces_or_punctuation_is_still_found(string text, string value)
+    {
+        var match = Patterns.Scan(text).ShouldHaveSingleItem(text);
+        match.Type.ShouldBe(PiiTypes.Phone, text);
+        match.Value.ShouldBe(value, text);
+    }
+
+    [Theory]
+    [InlineData("Id ab19121212-1212 sparat.")]
+    [InlineData("Id 19121212-1212cd sparat.")]
+    [InlineData("Hash f191212121212e sparad.")]
+    [InlineData("Hash 0a121212+1212 sparad.")]
+    public void A_personnummer_shape_inside_an_alphanumeric_token_is_no_personnummer(string text) =>
+        Patterns.Scan(text).ShouldNotContain(m => m.Type == PiiTypes.Personnummer || m.Type == PiiTypes.Samordningsnummer, text);
+
+    [Fact]
+    public void A_guid_marker_never_reads_as_a_phone_number_or_a_personnummer()
+    {
+        // PiiModeEngineTests once had a GUID in each page title, and a digit run inside one was counted as a phone number.
+        var random = new Random(9_4);
+        var bytes = new byte[16];
+        var hits = new List<string>();
+        for (var n = 0; n < 20_000; n++)
+        {
+            random.NextBytes(bytes);
+            var guid = new Guid(bytes);
+            foreach (var text in new[] { $"kontakt contact {guid:N}", $"kontakt pnr {guid:D}.", $"Sida {guid:N}-{guid:N}" })
+            {
+                if (Patterns.Scan(text).Count > 0)
+                {
+                    hits.Add(text);
+                }
+            }
+        }
+
+        hits.ShouldBeEmpty();
+    }
+
     [Fact]
     public void A_100_year_old_is_written_with_a_plus_and_both_centuries_are_counted_alike()
     {
