@@ -277,7 +277,7 @@ the page itself; serving crawled HTML from our origin would also be an XSS vecto
 |---|---|
 | Authentication | `?grant=` download grant (§4.6) or a normal credential of an allowed client kind |
 | Blob | uploads: the upload blob `uploads/{sourceId}/{slot}/{ContentHash}`, which is the document's raw content (connectors §9.1, no copy); others: `raw/{level}/{ContentHash}` (data-model §9); write-once keys |
-| Decryption | `public` blobs are not envelope-encrypted (encrypted disk only) and are streamed as stored; `internal` blobs: read the `URB2` header and unwrap its data key with `IKeyProvider` (`rag-blob-<level>`; data-model §7), then decrypt and **verify each 64 KiB segment before writing it**; a failing tag or a missing final segment aborts the response (connection reset, error logged, metric `outcome=integrity`). As built (PR #146, PR #153, 2026-10-31): the reader is `IBlobEnvelope.OpenReadAsync(key, level)` (data-model §7), but rag-api does not use it yet: its `StoredBlobContentReader` streams blobs without the header as stored and answers 503 `content_unavailable` for a `URB2` blob, so `internal` content written by the worker since PR #153 is not served until rag-api registers `AddRagBlobEnvelope` |
+| Decryption | `public` blobs are not envelope-encrypted (encrypted disk only) and are streamed as stored; `internal` blobs: read the `URB2` header and unwrap its data key with `IKeyProvider` (`rag-blob-<level>`; data-model §7), then decrypt and **verify each 64 KiB segment before writing it**; a failing tag or a missing final segment aborts the response (connection reset, error logged, metric `outcome=integrity`). As built (PR #146, PR #153, 2026-10-31): the reader is `IBlobEnvelope.OpenReadAsync(key, level)` (data-model §7), but rag-api does not use it yet: its `StoredBlobContentReader` streams blobs without the header as stored and answers 503 `content_unavailable` for a `URB2` blob, so `internal` content written by the worker since PR #153 is not served until rag-api registers `AddRagBlobEnvelope`. As built in PR #165 (2026-11-01): rag-api registers it, and `EnvelopeContentReader` reads `IBlobEnvelope.OpenReadAsync(key, document level)`: `public` as stored, `internal` decrypted with each segment verified; an integrity or key failure on open is 503 `content_unavailable`, damage mid-stream aborts the response |
 | `Content-Type` | `Documents.MediaType` (sniffed type, connectors §9.2) if on the allow-list of §9.2's types; else `application/octet-stream` |
 | `Content-Disposition` | `inline` for `application/pdf`, `image/png`, `image/jpeg`; `attachment` for everything else (Office, email, HTML, text); `filename*=UTF-8''…` from the visible `DisplayName` (§10.2), else `dokument-{id:N}.{ext}` |
 | Other headers | `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` for non-PDF, `Cache-Control: private, no-store`, `ETag` = hex `ContentHash`, `Content-Length` = plaintext length computed from the blob length and segment count |
@@ -417,7 +417,12 @@ path, binding the download to the user.
 
 - **No audit rows** for retrievals or downloads: they are normal use, not privileged reads, and would be the
   highest-volume table. Downloads are counted (`rag.documents.downloads{outcome, kind}`) and logged at Information
-  with `DocumentId`, `CollectionId`, `ClientId`, credential kind; never the subject of a grant (it has none).
+  with `DocumentId`, `CollectionId`, `ClientId`, credential kind; never the subject of a grant (it has none). As built
+  in PR #169 (2026-11-01): `ok` is counted when the body has been sent to its end and `integrity` when a segment fails
+  mid-stream; a download the client abandons counts neither.
+- **5001 counts** (as built in PRs #163 and #169, 2026-11-01): aggregated in memory per bucket and emitted once a
+  minute with the count; a 10 s flush reports failures held back after the last emit (identity §6.3). 5002 and 5005
+  keep reporting their held-back count on the next denial for the same (subject, reason, resource).
 - **Counters only** (plan answered 2): `RetrievalCounter` aggregates in memory per (Europe/Stockholm day,
   `DocumentId`, `TextHash`, `CollectionId`, level) a `Retrieved` count for every returned result and a `Cited` count
   for the ranks `MarkCited` receives: only the results actually cited (chat §9.5). Flushed every 30 s or at 5,000 keys
@@ -1088,7 +1093,9 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 
 - `verify.yml` **evaluation-smoke** (repo-and-deployment §8.2): ingest `tests/evaluation/smoke`, run the 30 questions
   through `POST /v1/retrieve`; recall@10 ≥ 0.8 and every answer cited. With FakeGateway this tests the pipeline, not
-  BGE-M3 quality.
+  BGE-M3 quality. As built in PRs #208 and #220 (2026-11-01): the smoke collection's own `coverageMaxDistance` is
+  0.85 (FakeGateway distances, §7), the evaluator == API contract test (§16.3) runs over the smoke set, and both live
+  in `Ume.Rag.Worker.Tests`, which hosts rag-api too.
 - `evaluation.yml` nightly (P1, before the pilot) on the test host with real BGE-M3 (self-hosted runner, open item R1
   in the register): the evaluation sets of every published collection plus the smoke set; advisory trend in
   `rag.evaluation.recall_at_10`, no gate. Reports lead with the `human` gold-set results; generated questions are a
