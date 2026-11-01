@@ -65,6 +65,12 @@ public sealed record PolicySnapshot(
     public IReadOnlyDictionary<string, CollectionEntry> CollectionsBySlug =>
         BySlug.GetValue(Collections, static c => c.Values.ToDictionary(e => e.Slug, StringComparer.Ordinal));
 
+    /// <summary>
+    /// <c>Sources.DemoteRules</c> (jsonb, the crawl's <c>demote</c> list) by source id, for sources that have some
+    /// (knowledge design §6.5; weakness review §3). Compiled by the knowledge role once per version.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, string> DemoteRules { get; init; } = new Dictionary<Guid, string>();
+
     /// <summary>An empty snapshot (before the first load; every decision refuses).</summary>
     public static PolicySnapshot Empty { get; } = new(-1, new Dictionary<Guid, ClientEntry>(), new Dictionary<Guid, AssistantEntry>(),
         new Dictionary<Guid, CollectionEntry>(), new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, EmbeddingProfileEntry>(),

@@ -55,6 +55,7 @@ public sealed partial class KnowledgeService(
     public const int MaxCollections = 20;
 
     private (long Version, RetrievalPlatformSettings Platform, Dictionary<Guid, RetrievalSettings> Collections)? _settings;
+    private (long Version, Dictionary<Guid, IReadOnlyList<DemotePattern>> BySource)? _demote;
 
     public async Task<RetrievalResult> RetrieveAsync(RagPrincipal who, RetrievalRequest request, CancellationToken ct)
     {
@@ -96,8 +97,14 @@ public sealed partial class KnowledgeService(
         }
 
         var (platform, settings) = Settings(snapshot);
+        var demote = Demote(snapshot);
         var scope = new SearchScope(profile.Id, profile.Dimensions,
-            [.. collections.Select(c => new CollectionInScope(c.Id, settings.GetValueOrDefault(c.Id, platform.Defaults)))], allowedLevels, platform);
+            [.. collections.Select(c => new CollectionInScope(c.Id, settings.GetValueOrDefault(c.Id, platform.Defaults)))], allowedLevels, platform)
+        {
+            // §6.5: the demote patterns of the searched collections' sources.
+            Demote = collections.SelectMany(c => snapshot.SourcesByCollection.GetValueOrDefault(c.Id, []))
+                .Where(demote.ContainsKey).ToDictionary(s => s, s => demote[s]),
+        };
         var policyMs = Ms(started);
 
         SearchResult search;
@@ -509,6 +516,20 @@ public sealed partial class KnowledgeService(
         r.IsDBNull(8) ? null : r.GetInt32(8), r.GetGuid(9), r.IsDBNull(10) ? null : r.GetString(10), r.GetBoolean(11));
 
     /// <summary>The settings resolved per collection (§12.1), rebuilt when the snapshot's version changes.</summary>
+    /// <summary>The sources' compiled demote patterns, once per config version (knowledge design §6.5).</summary>
+    private Dictionary<Guid, IReadOnlyList<DemotePattern>> Demote(PolicySnapshot snapshot)
+    {
+        if (_demote is { } cached && cached.Version == snapshot.Version)
+        {
+            return cached.BySource;
+        }
+
+        var bySource = snapshot.DemoteRules.Select(r => (r.Key, Patterns: DemoteAdjuster.Compile(r.Value)))
+            .Where(r => r.Patterns.Count > 0).ToDictionary(r => r.Key, r => r.Patterns);
+        _demote = (snapshot.Version, bySource);
+        return bySource;
+    }
+
     private (RetrievalPlatformSettings, Dictionary<Guid, RetrievalSettings>) Settings(PolicySnapshot snapshot)
     {
         if (_settings is { } cached && cached.Version == snapshot.Version)

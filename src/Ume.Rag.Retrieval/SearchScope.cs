@@ -22,6 +22,9 @@ public sealed record SearchScope(
 {
     public IReadOnlyList<Guid> CollectionIds { get; } = [.. Collections.Select(c => c.CollectionId)];
 
+    /// <summary>The compiled <c>demote</c> patterns of the scope's sources that have any (<see cref="DemoteAdjuster"/>).</summary>
+    public IReadOnlyDictionary<Guid, IReadOnlyList<DemotePattern>> Demote { get; init; } = new Dictionary<Guid, IReadOnlyList<DemotePattern>>();
+
     /// <summary>
     /// The settings that act on the whole ranking (weights, candidate depth, per-document cap): the collections' values
     /// when all agree, else the platform defaults (knowledge design §6.5: one coherent ranking).
