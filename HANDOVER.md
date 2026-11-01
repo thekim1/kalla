@@ -162,7 +162,7 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
   setup), fixed, approved, merged (closes #168); #180 (upload batches) changes requested: the #181 envelope write, and an
   idempotent/safe repeated commit (write-once manifest silently kept a different first list; a repeat after success 404s); #176 (collections) approved; #178 (sources, sync now, runs, cancel-run; stacked on #176)
   approved with a should-fix (sync now on a paused source: 409 `source_paused`, done in #180); #176, #178, #180 merged;
-  #185 (API keys) changes requested (unscoped keys by department admins), fixed, merged; #188, #189, #190 approved;
+  #185 (API keys) changes requested (unscoped keys by department admins), fixed, merged; #188, #189, #190 approved, merged;
   #191 (B's lock-timing flake fix) approved, merged. Decided B's #178 deviation 1: the URL canonicaliser stays in the worker.
 - **Answered B:** #129 (FakeGateway chat scripts keyed by `x-ume-step` from `FakeGateway:ChatScripts:<step>`, built-in
   defaults; `Chunks.ContentKind` text/table/list + `LargeTable` on 2nd+ row groups), #163 (smoke loader: deterministic
@@ -175,9 +175,9 @@ Worktrees: `../rag-main` (detached, for main checks) only.
 
 ## Next step
 
-1. **B's admin surface (item 14):** #180 (uploads), #185 (keys) merged; #188 (site profiles), #189 (evaluation, member
-   groups), #190 (assistants) approved, waiting for B's merge. Then B announces **J7**; run the pilot set-up through Scalar
-   (item 20) with the user. The run book already issues keys through `POST /api/keys` (#192).
+1. **B's admin surface (item 14) is merged** (#176, #178, #180, #185, #188, #189, #190; all reviewed). Next: B announces
+   **J7**; then run the pilot set-up through Scalar (item 20) with the user. The run book issues keys through
+   `POST /api/keys` (#192).
 2. **#187** (filed): B's flaky `KnowledgeSecurityTests` (a cached key refused after the throttle; product or test?).
 3. **Watch B:** #176 then #178 (merge order), the #178 should-fix (`source_paused`), #175 (`piiMode` admin side), item 14c
    (`/api/keys`, then the run book points to it), item 17's smoke loader (then stream A's `evaluation-smoke`).
