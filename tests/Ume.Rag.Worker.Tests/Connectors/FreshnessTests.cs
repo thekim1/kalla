@@ -98,7 +98,7 @@ public sealed class FreshnessTests : IAsyncLifetime
 
         (await rig.Traversal.ListingDoneAsync(second, Completeness.Partial(CrawlConnector.SitemapUnavailable), Ct)).ShouldBe(0);
         (await rig.Traversal.ListingDoneAsync(second, Completeness.Full, Ct)).ShouldBe(1);
-        rig.Store.Row(source, Url("/p/gone"))!.Depth.ShouldBe(FrontierRow.RemovalCheckDepth);
+        rig.Store.Row(source, Url("/p/gone"))!.ShouldSatisfyAllConditions(r => r.RemovalCheck.ShouldBeTrue(), r => r.Depth.ShouldBe((short)0));
     }
 
     [Fact]

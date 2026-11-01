@@ -13,7 +13,6 @@ using Ume.Rag.Worker.Connectors.Deletion;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Persistence;
-using Ume.Rag.Worker.Connectors.Urls;
 using Ume.Rag.Worker.Jobs;
 using Outcome = Ume.Rag.Pipelines.Jobs.RunItemOutcome;
 
@@ -73,7 +72,7 @@ public sealed class CrawlSourceRunner(
     private const string FailedSeedsSql = """
         SELECT d."Id" FROM content."CrawlFrontier" f
         JOIN content."Documents" d ON d."SourceId" = f."SourceId" AND d."IdentityKind" = 'url' AND d."IdentityHash" = f."UrlHash"
-        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3 AND f."Depth" = 0
+        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3 AND f."Depth" = 0 AND NOT f."RemovalCheck"
           AND d."DeletedAt" IS NULL AND d."LastRunId" IS DISTINCT FROM $3
         """;
 
@@ -88,11 +87,11 @@ public sealed class CrawlSourceRunner(
         WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."Depth" > $3 AND d."DeletedAt" IS NULL
         """;
 
-    // The run's removal checks (frontier rows at depth -1) and the latest item of each.
+    // The run's removal checks (RemovalCheck, or depth -1 when written before #102) and the latest item of each.
     private const string RemovalSql = """
         SELECT DISTINCT ON (i."Identity") i."Outcome", i."Reason"
         FROM content."CrawlFrontier" f JOIN content."RunItems" i ON i."RunId" = f."RunId" AND i."Identity" = f."Url"
-        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3 AND f."Depth" = -1 AND i."Outcome" <> 'superseded'
+        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3 AND (f."RemovalCheck" OR f."Depth" = -1) AND i."Outcome" <> 'superseded'
         ORDER BY i."Identity", i."CreatedAt" DESC, i."Id" DESC
         """;
 
@@ -116,23 +115,27 @@ public sealed class CrawlSourceRunner(
     /// <summary>
     /// Opens the run's <c>CrawlRuns</c> row and fixes its mode once: an incremental run stays incremental only when every
     /// scope host's profile marks <c>lastmod</c> reliable; every <c>revalidateEvery</c>-th full traversal and a forced run
-    /// revalidate. A <c>retry-failed</c> run is a full, non-revalidating fetch of its rows.
+    /// revalidate. A <c>retry-failed</c> run is a full, non-revalidating fetch of its rows. The fixed mode's incremental flag
+    /// is written to <c>CrawlRuns.Incremental</c> on every start, so a listing resumed after a crash between the two writes
+    /// still records it.
     /// </summary>
     public async Task<CrawlRunContext> StartAsync(SourceContext source, RunRow run, bool incremental, bool force, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(run);
-        if (await runs.CrawlModeAsync(run.Id, cancellationToken) is { } fixedMode)
-        {
-            return Context(source, run, fixedMode);
-        }
+        var mode = await runs.CrawlModeAsync(run.Id, cancellationToken) ?? await FixModeAsync(source, run, incremental, force, cancellationToken);
+        await crawlRuns.SetIncrementalAsync(run.Id, mode.Incremental, cancellationToken);
+        return Context(source, run, mode);
+    }
 
+    private async Task<CrawlRunMode> FixModeAsync(SourceContext source, RunRow run, bool incremental, bool force, CancellationToken cancellationToken)
+    {
         // A site profile applied just before this run (a site-profile follow-up) is read now, not from this instance's cache.
         await connector.SourceAsync(source.SourceId, source.Classification, source.Settings, fresh: true, cancellationToken);
         var started = await traversal.StartAsync(Context(source, run, new CrawlRunMode(incremental && run.Kind == RunKinds.Sync, false)), cancellationToken);
         var revalidate = run.Kind == RunKinds.Sync && CrawlFreshness.Revalidates(await runs.TraversalsBeforeAsync(source.SourceId, run.Id, cancellationToken),
             ContractJson.Deserialize<CrawlSettings>(source.Settings).RevalidateEvery, force, started.Incremental);
-        return Context(source, run, await runs.SetCrawlModeAsync(run.Id, new CrawlRunMode(started.Incremental, revalidate), cancellationToken));
+        return await runs.SetCrawlModeAsync(run.Id, new CrawlRunMode(started.Incremental, revalidate), cancellationToken);
     }
 
     /// <summary>

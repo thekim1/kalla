@@ -11,7 +11,7 @@ before ticking it here.
 
 ## Waiting on (tick when it lands)
 - [ ] P1b ownership rules (README §2) and these briefs merged
-- [ ] **L2** B's schema part 3 and freshness columns (needed for item 4's database tests)
+- [x] **L2** B's schema part 3 and freshness columns (needed for item 4's database tests) (#219; worker switched to them in PR: a/102-crawl-freshness-urlpattern)
 - [ ] **L3** B's `RetrievalEngine` with decay and `demote` (needed for item 7's temporal checks and item 25)
 - [ ] **L4** B's P1b admin endpoints (then the jobs run end to end from the admin)
 - [ ] **L6** B's chat writer and importer with their configuration names (needed for item 17)
