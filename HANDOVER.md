@@ -130,8 +130,7 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 3. **Answer #256** (main-session question from B: which pipeline a department's parameter change publishes, P1b item
    9c); it blocks the preview step of the source drawer.
 4. **Stream-A items from B's hand-offs:** #273 → #289 (importer settings) and #252 → #290 (`Gateway:MaxResidency`,
-   Open WebUI on the AppHost) merged; #249 → #291 (evaluator's no-decompounder variant uses the stop list), merge when
-   green with the user's OK. **Open decision (user + main):** LLM test-question generation and the judge run at ceiling
+   Open WebUI on the AppHost) merged; #249 → #291 (evaluator's no-decompounder variant uses the stop list) merged. **Open decision (user + main):** LLM test-question generation and the judge run at ceiling
    `OnPrem` only (`plans/ingestion-worker/design-processing.md` §13.1, "Model"), so they can't run before on-prem models exist (M2); allowing `Eu` under M2 would also
    need the evaluation client's fixed temperatures (0.3, 0) dropped or made optional (Claude models refuse them).
 5. **When #287 lands:** set `Settings.Chat.CondenseModel = gpt-6-luna` and `CondenseReasoningEffort = none` on the local
@@ -142,7 +141,7 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 **Open issues to stream B:** #278 (admin UI order), #283 (either-of policies), #284 (5002 `conversation_not_owned`),
 #287 (condense), plus the older hand-off issues #52, #75, #80, #90, #102, #129, #132, #246. **For stream A:** #48, #51,
-#193, #210, #249 (PR #291). **For the main session:** #100 (L8). (#256 decided: copy on write, admin §6.6.) **For the user:** #215 (J8).
+#193, #210. **For the main session:** #100 (L8). (#256 decided: copy on write, admin §6.6.) **For the user:** #215 (J8).
 
 **Not folded into the design yet (need a call):** #217's fired-types list in the PII report; `UrlCanonicalizer` →
 Pipelines (#178); identity §16 Q2–4, Q8 (gateway session); admin design says `GET /api/departments`/`/api/teams`, the
