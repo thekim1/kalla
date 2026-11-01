@@ -12,6 +12,8 @@ public readonly record struct PiiMatch(string Type, int Start, int Length, strin
 /// samordningsnummer (valid date with the century rule, Luhn, a keyword within 30 characters before an unseparated
 /// 10-digit form, negative keywords within 20), e-mail (plain and obfuscated), Swedish and international phone numbers
 /// (7–9 national significant digits, mobile <c>7[02369]</c> with 9, not a personnummer, not after payment keywords).
+/// No match starts or ends inside an alphanumeric token (a letter or digit directly before or after, so a digit run in
+/// a hex id or hash is no match); a phone number also not inside a hyphen-joined one (a GUID's groups).
 /// Source-generated regular expressions; deterministic for a fixed <see cref="TimeProvider"/> (the century rule).
 /// </summary>
 public sealed partial class PiiPatterns(TimeProvider clock)
@@ -231,7 +233,7 @@ public sealed partial class PiiPatterns(TimeProvider clock)
         return sum % 10 == 0;
     }
 
-    [GeneratedRegex(@"(?<![\d-])(?<c>18|19|20)?(?<yy>\d{2})(?<mm>\d{2})(?<dd>\d{2})(?<sep>[-+]?)(?<nnn>\d{3})(?<k>\d)(?![\d-])", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<![\p{L}\p{N}-])(?<c>18|19|20)?(?<yy>\d{2})(?<mm>\d{2})(?<dd>\d{2})(?<sep>[-+]?)(?<nnn>\d{3})(?<k>\d)(?![\p{L}\p{N}-])", RegexOptions.CultureInvariant)]
     private static partial Regex Personnummer();
 
     [GeneratedRegex(@"(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]{1,64}@[\p{L}\p{N}.-]{1,253}\.\p{L}{2,24}(?![\p{L}\p{N}])", RegexOptions.CultureInvariant)]
@@ -240,9 +242,9 @@ public sealed partial class PiiPatterns(TimeProvider clock)
     [GeneratedRegex(@"(?<local>[\p{L}\p{N}._%+-]{1,64})\s*(?:\[at\]|\(at\)|\s+snabel-a\s+)\s*(?<domain>[\p{L}\p{N}-]{1,63}(?:\.[\p{L}\p{N}-]{1,63})*\.\p{L}{2,24})(?![\p{L}\p{N}])", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex ObfuscatedEmail();
 
-    [GeneratedRegex(@"(?<![\d+])(?:\+46|0046|0)[\s-]?\(?0?\)?[1-9]\d{0,3}[\s-]?\d{2,3}(?:[\s-]?\d{2,3}){1,3}(?!\d)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<![\p{L}\p{N}+]|[\p{L}\p{N}]-)(?:\+46|0046|0)[\s-]?\(?0?\)?[1-9]\d{0,3}[\s-]?\d{2,3}(?:[\s-]?\d{2,3}){1,3}(?![\p{L}\p{N}]|-[\p{L}\p{N}])", RegexOptions.CultureInvariant)]
     private static partial Regex SwedishPhone();
 
-    [GeneratedRegex(@"(?<![\d+])\+(?!46)\d{1,3}[\s\d-]{6,16}(?<=\d)(?!\d)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<![\p{L}\p{N}+]|[\p{L}\p{N}]-)\+(?!46)\d{1,3}[\s\d-]{6,16}(?<=\d)(?![\p{L}\p{N}]|-[\p{L}\p{N}])", RegexOptions.CultureInvariant)]
     private static partial Regex InternationalPhone();
 }
