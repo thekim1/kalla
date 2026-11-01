@@ -11,6 +11,9 @@ Two parts, applied separately or together:
              (OTP for RAG's admins; refused if a flow of that name exists), then password policy, brute-force
              protection, OTP policy and the browser-flow binding. Prints each realm value it changes.
 
+--include-local-redirects (test or dev realms only) adds the local AppHost redirect URIs, web origins and post-logout
+URIs of rag-additions.local.json to the clients before the import (issue #95 part 3). Never on the production realm.
+
 Placeholders ${NAME} and ${NAME:default} in the files are replaced from the environment, as Keycloak's start-up import
 does; a placeholder without a value stops the script before any call.
 
@@ -18,7 +21,7 @@ Usage:
   KEYCLOAK_ADMIN_PASSWORD=... UME_RAG_ADMIN_PUBLIC_HOST=... UME_RAG_OPENWEBUI_HOST=... \\
   UME_RAG_OIDC_CLIENT_SECRET=... UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=... \\
     python3 -I deploy/keycloak/apply-additions.py --url https://keycloak.example --realm ume --admin-user admin \\
-      [--part additions|settings|all]
+      [--part additions|settings|all] [--include-local-redirects]
 
 Standard library only. Exit code 0 on success, 1 on a refused or failed step (the message says which).
 """
@@ -100,6 +103,22 @@ class Admin:
 
 def q(value):
     return urllib.parse.quote(value, safe="")
+
+
+def with_local_redirects(additions, local):
+    """Merges rag-additions.local.json's URIs into the clients (a test or dev realm only)."""
+    clients = {c["clientId"]: c for c in additions["clients"]}
+    for client_id, extra in local["clients"].items():
+        client = clients.get(client_id)
+        if client is None:
+            raise Refused(f"rag-additions.local.json: no client {client_id} in rag-additions.json")
+        client["redirectUris"] = client.get("redirectUris", []) + extra.get("redirectUris", [])
+        client["webOrigins"] = client.get("webOrigins", []) + extra.get("webOrigins", [])
+        if extra.get("postLogoutRedirectUris"):
+            attributes = client.setdefault("attributes", {})
+            uris = [u for u in attributes.get("post.logout.redirect.uris", "").split("##") if u] + extra["postLogoutRedirectUris"]
+            attributes["post.logout.redirect.uris"] = "##".join(uris)
+    return additions
 
 
 def apply_additions(admin, additions):
@@ -188,6 +207,8 @@ def main():
     parser.add_argument("--admin-realm", default="master")
     parser.add_argument("--admin-user", required=True)
     parser.add_argument("--part", choices=["additions", "settings", "all"], default="all")
+    parser.add_argument("--include-local-redirects", action="store_true",
+                        help="also the local AppHost redirect URIs (rag-additions.local.json); test or dev realms only")
     args = parser.parse_args()
     password = os.environ.get("KEYCLOAK_ADMIN_PASSWORD")
     if not password:
@@ -195,6 +216,9 @@ def main():
         return 1
     try:
         additions = load("rag-additions.json") if args.part in ("additions", "all") else None
+        if additions is not None and args.include_local_redirects:
+            additions = with_local_redirects(additions, load("rag-additions.local.json"))
+            print("additions: with the local AppHost redirect URIs (test or dev realm)")
         settings = load("rag-realm-settings.json") if args.part in ("settings", "all") else None
         admin = Admin(args.url, args.realm, args.admin_realm, args.admin_user, password)
         if additions is not None:
