@@ -16,6 +16,14 @@ declare module 'vue-router' {
 
 export const routes: RouteRecordRaw[] = [
   { path: '/', name: 'overview', component: () => import('@/views/OverviewView.vue'), meta: { title: PAGE.overview.title, roles: ALL_ROLES } },
+  { path: '/collections', name: 'collections', component: () => import('@/views/CollectionsView.vue'), meta: { title: PAGE.collections.title, roles: ALL_ROLES } },
+  {
+    path: '/collections/:id',
+    name: 'collection',
+    component: () => import('@/views/CollectionView.vue'),
+    props: true,
+    meta: { title: PAGE.collections.title, roles: ALL_ROLES },
+  },
   { path: '/organisation', name: 'organisation', component: () => import('@/views/OrganisationView.vue'), meta: { title: PAGE.organisation.title, roles: ALL_ROLES } },
   { path: '/forbidden', name: 'forbidden', component: () => import('@/views/ForbiddenView.vue'), meta: { title: PAGE.forbidden.title } },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue'), meta: { title: PAGE.notFound.title } },

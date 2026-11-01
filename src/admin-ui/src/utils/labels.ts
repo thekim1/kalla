@@ -1,4 +1,4 @@
-import type { DepartmentSource, Role } from '@/api/types'
+import type { DepartmentSource, Level, Role, SourceType } from '@/api/types'
 
 /**
  * Every Swedish word of the admin UI except error messages (those are in messages.ts). Admin design §5.7: one glossary,
@@ -122,12 +122,14 @@ export const SESSION = {
 
 export const NAV_GROUP = {
   overview: 'Överblick',
+  content: 'Innehåll',
   platform: 'Plattform',
 } as const
 
 export const PAGE = {
   overview: { title: 'Översikt', description: 'Din behörighet och det som behöver göras' },
   organisation: { title: 'Organisation', description: 'Förvaltningar och team från AI-gatewayen' },
+  collections: { title: 'Kunskapsbanker', description: 'Innehållet som assistenterna söker i' },
   forbidden: { title: 'Ingen åtkomst' },
   notFound: { title: 'Sidan finns inte' },
 } as const
@@ -172,3 +174,66 @@ export const ORGANISATION = {
   /** Admin design §4.10: shown to platform admins after three failed runs. */
   failing: (since: string) => `Synkningen mot AI-gatewayen fungerar inte sedan ${since}.`,
 } as const
+
+/** Informationsklass (admin design §5.7 glossary). */
+export const LEVEL_LABEL: Record<Level, string> = { public: 'Offentlig', internal: 'Intern', sensitive: 'Känslig' }
+
+/** "Vem får läsa innehållet?" (admin design §5.4 step 2): the three levels explained, none preselected. */
+export const LEVEL_HELP: Record<Level, string> = {
+  public: 'Alla får läsa det, också invånare. Till exempel sidor på umea.se.',
+  internal: 'Bara medarbetare i kommunen får läsa det.',
+  sensitive: 'Bara de som behöver det i sitt arbete får läsa det. Kräver extra skydd.',
+}
+
+export const SOURCE_TYPE_LABEL: Record<SourceType, string> = { 'url-list': 'Adresslista', crawl: 'Webbplats', upload: 'Filer', sharepoint: 'SharePoint' }
+
+export const COLLECTIONS = {
+  lead: 'En kunskapsbank samlar källor, till exempel en webbplats eller filer, som assistenterna kan söka i.',
+  empty: 'Här bygger du kunskapsbanker och assistenter för din förvaltning.',
+  create: 'Skapa kunskapsbank',
+  search: 'Sök kunskapsbank',
+  name: 'Namn',
+  level: 'Informationsklass',
+  levelQuestion: 'Vem får läsa innehållet?',
+  levelRequired: 'Välj vem som får läsa innehållet.',
+  nameRequired: 'Skriv ett namn.',
+  department: 'Förvaltning',
+  departmentRequired: 'Välj förvaltning.',
+  ownerTeam: 'Ansvarigt team',
+  noTeam: 'Inget team',
+  state: 'Läge',
+  published: 'Publicerad',
+  notPublished: 'Ej publicerad',
+  notPublishedHint: 'Ej publicerad: syns bara i Testa.',
+  created: (name: string) => `Kunskapsbanken ${name} är skapad.`,
+  list: 'Kunskapsbanker',
+} as const
+
+export const COLLECTION = {
+  tabs: { overview: 'Översikt', sources: 'Källor', documents: 'Dokument' },
+  tabsLabel: 'Delar av kunskapsbanken',
+  usedBy: 'Används av',
+  notUsed: 'Ingen assistent använder kunskapsbanken än.',
+  draftOnly: 'utkast',
+  publish: 'Publicera',
+  published: (name: string) => `${name} är publicerad.`,
+  sources: 'Källor',
+  noSources: 'Lägg till en källa, till exempel en webbplats eller filer.',
+  sourceName: 'Namn',
+  sourceType: 'Typ',
+  sourceState: 'Läge',
+  sourceStates: { active: 'Aktiv', paused: 'Pausad' } as Record<string, string>,
+  documents: 'Dokument',
+  noDocuments: 'Inga dokument ännu. De kommer när en källa har hämtats.',
+  documentTitle: 'Dokument',
+  documentFetched: 'Hämtat',
+  documentState: 'Läge',
+  onlyPii: 'Bara dokument med personuppgifter',
+  pii: 'Personuppgifter',
+  piiCleared: 'Godkänt för offentlig',
+  held: 'Behållet',
+  live: 'Sökbart',
+  notLive: 'Inte sökbart',
+  more: 'Visa fler',
+} as const
+

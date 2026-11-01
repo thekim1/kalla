@@ -55,7 +55,7 @@ Refs: [chat §11–§14](../chat-api/design.md)
 
 ### 11. Journey pages, part 1
 Refs: [admin §5.3–§5.5, §6.4–§6.7](../admin/design.md)
-- [ ] Kunskapsbanker (list, Översikt, Källor, Dokument with personuppgifter)
+- [x] Kunskapsbanker (list, Översikt, Källor, Dokument with personuppgifter) (this PR)
 - [ ] Källa (forms with template parameters, preflight, preview Före / Efter, impact, runs, crawl report, files, quarantine, deletions, held, Nedprioritera)
 - [ ] Publicering (plan, progress, report, Behåll / Återställ)
 - [ ] **Done:** admin §5.4 steps 1–8 work locally on FakeGateway

@@ -55,6 +55,20 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    id: 'content',
+    label: NAV_GROUP.content,
+    items: [
+      {
+        name: 'collections',
+        label: PAGE.collections.title,
+        icon: 'library_books',
+        description: PAGE.collections.description,
+        keywords: ['kunskapsbank', 'källa', 'webbplats', 'filer', 'dokument', 'personuppgifter'],
+        roles: ALL_ROLES,
+      },
+    ],
+  },
+  {
     id: 'platform',
     label: NAV_GROUP.platform,
     items: [
@@ -71,7 +85,10 @@ export const navGroups: NavGroup[] = [
 ]
 
 /** Bottom bar on phones (admin design §5.2); the rest is under Meny. */
-export const mobileTabs: NavItem[] = [{ name: 'overview', label: PAGE.overview.title, icon: 'space_dashboard', roles: ALL_ROLES }]
+export const mobileTabs: NavItem[] = [
+  { name: 'overview', label: PAGE.overview.title, icon: 'space_dashboard', roles: ALL_ROLES },
+  { name: 'collections', label: PAGE.collections.title, icon: 'library_books', roles: ALL_ROLES },
+]
 
 /** True when the current route is the item's page or one of its sub-pages. */
 export function isNavItemActive(item: NavItem, routeName: unknown): boolean {

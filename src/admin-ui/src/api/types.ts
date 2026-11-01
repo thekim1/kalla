@@ -78,3 +78,78 @@ export interface OrgSyncStatus {
   lastError: string | null
   lastResult: OrgSyncResult | null
 }
+
+// ---------- Collections, sources, documents (admin design §4.5) ----------
+export type Level = 'public' | 'internal' | 'sensitive'
+export type SourceType = 'url-list' | 'crawl' | 'upload' | 'sharepoint'
+
+export interface Page<T> {
+  items: T[]
+  total: number
+}
+
+export interface KeysetPage<T> {
+  items: T[]
+  next: string | null
+}
+
+export interface CollectionSummary {
+  id: string
+  slug: string
+  name: string
+  departmentId: string
+  classification: Level
+  publishedAt: IsoDateTime | null
+}
+
+/** An assistant that links the collection, through its published version, its draft, or both. */
+export interface CollectionUser {
+  id: string
+  name: string
+  classification: Level
+  published: boolean
+  draft: boolean
+}
+
+export interface Collection extends CollectionSummary {
+  ownerTeamId: string | null
+  embeddingProfileId: string
+  retrievalSettings: Record<string, unknown>
+  usedBy: CollectionUser[]
+  updatedAt: IsoDateTime
+  updatedBy: string | null
+  version: string
+}
+
+export interface CollectionCreate {
+  name: string
+  departmentId: string
+  ownerTeamId: string | null
+  classification: Level
+}
+
+export interface SourceSummary {
+  id: string
+  collectionId: string
+  type: SourceType
+  name: string
+  classification: Level
+  state: string
+}
+
+export interface DocumentSummary {
+  id: string
+  sourceId: string
+  title: string | null
+  url: string | null
+  displayName: string | null
+  mediaType: string | null
+  parseOutcome: string | null
+  piiFlagged: boolean
+  piiCleared: boolean
+  held: boolean
+  live: boolean
+  sourceModifiedAt: IsoDateTime | null
+  fetchedAt: IsoDateTime | null
+  lastSeenAt: IsoDateTime
+}
