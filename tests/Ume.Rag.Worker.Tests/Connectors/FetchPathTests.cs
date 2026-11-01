@@ -48,7 +48,7 @@ public sealed class FetchPathTests : IAsyncLifetime
         (await _path.Blobs.ExistsAsync(first.Raw.Key, TestContext.Current.CancellationToken)).ShouldBeTrue();
 
         var second = await FetchAsync(_site.Url("/page"), first.Validators);
-        second.ShouldBe(new FetchOutcome.NotModified(first.Validators));
+        second.ShouldBe(new FetchOutcome.NotModified(first.Validators, _site.Url("/page")), "a 304 carries the URL that answered (#228)");
         _site.Requests["/page"]["If-None-Match"].ToString().ShouldBe("W/\"v1\"");
         _site.Requests["/page"]["If-Modified-Since"].ToString().ShouldBe("Thu, 15 Jan 2026 10:00:00 GMT");
     }
