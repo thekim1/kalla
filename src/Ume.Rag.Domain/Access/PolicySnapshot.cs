@@ -17,7 +17,8 @@ public sealed record AudienceEntry(string Kind, Guid? SubjectId, string? GroupVa
 public sealed record AssistantEntry(
     Guid Id, string Slug, string Name, string Classification, string HistoryMode, string State, Guid DepartmentId, Guid? OwnerTeamId,
     PublishedVersionEntry? Published, IReadOnlyList<AudienceEntry> Audiences, string? Description = null, string? ContactName = null,
-    string? ContactEmail = null);
+    string? ContactEmail = null,
+    int RetentionDays = 90);
 
 /// <summary>A collection: level, profile, settings, publication and deletion (data-model §2.1).</summary>
 public sealed record CollectionEntry(

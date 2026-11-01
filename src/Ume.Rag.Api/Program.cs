@@ -82,6 +82,23 @@ if (chat)
     builder.Services.AddSingleton<ChatRateLimiter>();
     builder.Services.AddOptions<OpenWebUiOptions>().BindConfiguration(OpenWebUiOptions.SectionName);
     builder.Services.AddSingleton<ChatCallers>();
+    // §11.1, §12: issued conversation ids and the background conversation writer (metadata only in P1).
+    var conversationKeys = builder.Configuration.GetSection("Security:ConversationIdKeys").GetChildren().Where(k => !string.IsNullOrEmpty(k.Value))
+        .ToDictionary(k => k.Key, k => System.Text.Encoding.UTF8.GetBytes(k.Value!), StringComparer.Ordinal);
+    if (conversationKeys.Count == 0)
+    {
+        if (builder.Environment.IsProduction())
+        {
+            throw new InvalidOperationException("Security:ConversationIdKeys must have at least one key in production.");
+        }
+
+        // Development and tests: one per-process key (issued ids then verify on this instance only).
+        conversationKeys["process"] = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+    }
+
+    builder.Services.AddSingleton(new ConversationIds(conversationKeys));
+    builder.Services.AddSingleton<ConversationWriter>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<ConversationWriter>());
 }
 
 var app = builder.Build();

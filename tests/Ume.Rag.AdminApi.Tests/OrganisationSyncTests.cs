@@ -192,12 +192,13 @@ public sealed class OrganisationSyncTests(OrgSyncFixture database) : IClassFixtu
         var retention = new RetentionService(admin.Services.GetRequiredService<IServiceScopeFactory>(), Options.Create(new AdminOptions()),
             TimeProvider.System, NullLogger<RetentionService>.Instance);
 
-        // Another instance holds the step's lock: nothing is removed.
+        // Another instance holds the steps' locks: nothing is removed.
         await using (var holder = new NpgsqlConnection(database.Connection(RagDatabase.Admin, pooling: false)))
         {
             await holder.OpenAsync(Ct);
             await using var transaction = await holder.BeginTransactionAsync(Ct);
-            await using var take = new NpgsqlCommand($"SELECT pg_advisory_xact_lock({RetentionService.ConfigStepLockKey})", holder, transaction);
+            await using var take = new NpgsqlCommand(
+                $"SELECT pg_advisory_xact_lock({RetentionService.ConfigStepLockKey}), pg_advisory_xact_lock({RetentionService.ChatStepLockKey})", holder, transaction);
             await take.ExecuteNonQueryAsync(Ct);
             (await retention.RunOnceAsync(Ct)).ShouldBe(-1);
         }

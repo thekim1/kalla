@@ -46,7 +46,7 @@ Refs: [admin §4, §6.6, §6.7, §12](../admin/design.md), [identity §4.9](../i
 
 ### 10. Chat: history `none`, feedback
 Refs: [chat §11–§14](../chat-api/design.md)
-- [ ] Issued conversation ids; `ConversationWriter` (metadata only, daily totals)
+- [x] Issued conversation ids; `ConversationWriter` (metadata only, daily totals) (this PR; with `chat.rag_retention_chat_step`)
 - [ ] Conversation endpoints, user delete, 90-day metadata retention
 - [ ] `/v1/feedback` (ratings; `comment_not_stored`)
 - [ ] `FeedbackImporter` (ratings and reason categories, watermark, advisory lock) and feedback pruning

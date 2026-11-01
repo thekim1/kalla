@@ -101,6 +101,55 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         annotation.GetProperty("title").GetString()!.ShouldStartWith("Altan och uteplats");
         content[annotation.GetProperty("start_index").GetInt32()..annotation.GetProperty("end_index").GetInt32()].ShouldBe("[1]");
         body.GetProperty("usage").GetProperty("prompt_tokens").GetInt32().ShouldBeGreaterThan(0);
+
+        // §11.1, §12: an issued conversation id; a follow-up with it joins the conversation, a forged one is 404; the writer
+        // stores metadata only (mode none): two messages per turn, the sources with their prompt numbers, the daily totals.
+        var issued = response.Headers.GetValues("x-rag-conversation-id").ShouldHaveSingleItem();
+        issued.ShouldStartWith("c1.");
+        var conversationId = Guid.ParseExact(issued.Split('.')[1], "N");
+        using (var followUp = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
+               {
+                   Content = JsonContent.Create(new { model = "bygg", messages = new[] { new { role = "user", content = "Behöver jag bygglov för en altan?" } } }),
+               })
+        {
+            followUp.Headers.Add("x-rag-conversation-id", issued);
+            using var second = await client.SendAsync(followUp, Ct);
+            second.StatusCode.ShouldBe(HttpStatusCode.OK, await second.Content.ReadAsStringAsync(Ct));
+        }
+
+        using (var forged = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
+               {
+                   Content = JsonContent.Create(new { model = "bygg", messages = new[] { new { role = "user", content = "Hej?" } } }),
+               })
+        {
+            forged.Headers.Add("x-rag-conversation-id", issued[..^2] + (issued[^2] == 'A' ? "BB" : "AA"));
+            using var refused = await client.SendAsync(forged, Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+            (await refused.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error").GetProperty("code").GetString().ShouldBe("conversation_not_found");
+        }
+
+        await api.Services.GetRequiredService<ConversationWriter>().FlushAsync(Ct);
+        await using var connection = new Npgsql.NpgsqlConnection(db.Connection(RagDatabase.Api));
+        await connection.OpenAsync(Ct);
+        await using (var conversation = new Npgsql.NpgsqlCommand("""
+            SELECT c."HistoryMode", c."TitleCiphertext" IS NULL, count(m.*), count(*) FILTER (WHERE m."ContentCiphertext" IS NULL), max(m."Seq"),
+                   c."ExpiresAt" > now() + interval '89 days'
+            FROM chat."Conversations" c JOIN chat."Messages" m ON m."ConversationId" = c."Id" WHERE c."Id" = $1 GROUP BY c."Id"
+            """, connection) { Parameters = { new() { Value = conversationId } } })
+        await using (var reader = await conversation.ExecuteReaderAsync(Ct))
+        {
+            (await reader.ReadAsync(Ct)).ShouldBeTrue();
+            (reader.GetString(0), reader.GetBoolean(1), reader.GetInt64(2), reader.GetInt64(3), reader.GetInt32(4), reader.GetBoolean(5))
+                .ShouldBe(("none", true, 4L, 4L, 4, true));
+        }
+
+        await using (var sources = new Npgsql.NpgsqlCommand("""
+            SELECT count(*) FILTER (WHERE s."Used" AND s."Number" = 1) FROM chat."MessageSources" s
+            JOIN chat."Messages" m ON m."Id" = s."MessageId" WHERE m."ConversationId" = $1
+            """, connection) { Parameters = { new() { Value = conversationId } } })
+        {
+            ((long)(await sources.ExecuteScalarAsync(Ct))!).ShouldBeGreaterThan(0);
+        }
     }
 
     [Fact]
