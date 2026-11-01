@@ -89,8 +89,17 @@ public static class AdminErrorCodes
     /// <summary>The run is not running (<c>{state}</c>), so it cannot be cancelled.</summary>
     public static AdminErrorCode RunNotActive { get; } = new("run_not_active", 409, "The run has already ended ({state}).");
 
+    /// <summary>The site profile breaks <c>contracts/site-profiles/v1</c> at <c>{field}</c>: <c>{problem}</c>.</summary>
+    public static AdminErrorCode SiteProfileInvalid { get; } = new("site_profile_invalid", 400, "The site profile field {field} is invalid: {problem}");
+
+    /// <summary>A rollback to the version that is already applied.</summary>
+    public static AdminErrorCode SiteProfileVersionApplied { get; } = new("site_profile_version_applied", 400, "That version is already applied.");
+
+    /// <summary>No department exists yet to queue the work for (run the organisation sync first).</summary>
+    public static AdminErrorCode NoDepartment { get; } = new("no_department", 409, "There are no departments yet. Run the organisation sync first.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
-            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive];
+            RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment];
 }

@@ -125,6 +125,21 @@
       "code": "run_not_active",
       "status": 409,
       "message": "The run has already ended ({state})."
+    },
+    {
+      "code": "site_profile_invalid",
+      "status": 400,
+      "message": "The site profile field {field} is invalid: {problem}"
+    },
+    {
+      "code": "site_profile_version_applied",
+      "status": 400,
+      "message": "That version is already applied."
+    },
+    {
+      "code": "no_department",
+      "status": 409,
+      "message": "There are no departments yet. Run the organisation sync first."
     }
   ]
 }
