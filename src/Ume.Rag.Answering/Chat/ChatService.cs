@@ -1,8 +1,9 @@
-using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Access;
 using Ume.Rag.Domain.Retrieval;
@@ -11,21 +12,132 @@ using Ume.Rag.Infrastructure.Gateway;
 
 namespace Ume.Rag.Answering.Chat;
 
+/// <summary>
+/// Chat deployment knobs (chat design §8.3, §9.4, §4.1 step 4): <c>Chat:GatewayHeadersTimeoutSeconds</c> (15),
+/// <c>Chat:StreamIdleTimeoutSeconds</c> (60), <c>Chat:MaxAnswerDurationSeconds</c> (240), <c>Chat:MessagesPerMinutePerUser</c>
+/// (20) and <c>Chat:AllowedLinkHosts</c> (<c>umea.se</c>, <c>*.umea.se</c>). The last two move to <c>Settings.Chat</c> with
+/// part c of item 15.
+/// </summary>
+public sealed class ChatOptions
+{
+    public const string SectionName = "Chat";
+
+    public int GatewayHeadersTimeoutSeconds { get; set; } = 15;
+    public int StreamIdleTimeoutSeconds { get; set; } = 60;
+    public int MaxAnswerDurationSeconds { get; set; } = 240;
+    public int MessagesPerMinutePerUser { get; set; } = 20;
+    public string[] AllowedLinkHosts { get; set; } = ["umea.se", "*.umea.se"];
+}
+
+/// <summary>What the gateway's stream carries: text, the usage, the finish reason.</summary>
+public abstract record GatewayStreamEvent
+{
+    public sealed record Delta(string Text) : GatewayStreamEvent;
+
+    public sealed record Usage(int PromptTokens, int CompletionTokens) : GatewayStreamEvent;
+
+    public sealed record Finish(string Reason) : GatewayStreamEvent;
+}
+
 /// <summary>The gateway's answer: the model text, token usage and finish reason.</summary>
 public sealed record GatewayAnswer(string Text, int PromptTokens, int CompletionTokens, string FinishReason);
 
 /// <summary>
 /// Chat calls to the gateway (chat design §8): <c>POST /v1/chat/completions</c> with the assistant's gateway model, an explicit
-/// <c>x-ume-max-residency</c> (the <see cref="ResidencyCeilingHandler"/> adds that level's key and checks
-/// <c>x-ume-residency</c> before a byte is read), <c>x-ume-step: chat-answer</c> and <c>x-ume-run-id</c> = the message id.
-/// Gateway errors map to the OpenAI codes of §3.6.
+/// <c>x-ume-max-residency</c> (the <see cref="ResidencyCeilingHandler"/> adds that level's key and checks <c>x-ume-residency</c>
+/// before a byte is read), <c>x-ume-step: chat-answer</c> and <c>x-ume-run-id</c> = the message id. Streams are opened with
+/// <see cref="HttpCompletionOption.ResponseHeadersRead"/>, so every check runs before our first byte. Errors map to §3.6.
 /// </summary>
-public sealed class GatewayChatClient(IHttpClientFactory clients)
+public sealed class GatewayChatClient(IHttpClientFactory clients, IOptions<ChatOptions> options)
 {
     public const string HttpClientName = "gateway-chat";
 
     public async Task<GatewayAnswer> CompleteAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double temperature,
         Guid runId, CancellationToken ct)
+    {
+        using var response = await SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: false, ct);
+        using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        var choice = json.RootElement.GetProperty("choices")[0];
+        var text = choice.GetProperty("message").TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString()! : "";
+        var finish = choice.TryGetProperty("finish_reason", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString()! : "stop";
+        var usage = json.RootElement.TryGetProperty("usage", out var u) ? u : default;
+        return new GatewayAnswer(text, Int(usage, "prompt_tokens"), Int(usage, "completion_tokens"), finish);
+    }
+
+    /// <summary>Opens the stream: status and residency are checked when this returns; the caller then writes its first byte.</summary>
+    public Task<HttpResponseMessage> OpenStreamAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double temperature,
+        Guid runId, CancellationToken ct) =>
+        SendAsync(model, ceiling, messages, maxTokens, temperature, runId, stream: true, ct);
+
+    /// <summary>The stream's events; an idle gap over <c>Chat:StreamIdleTimeoutSeconds</c> or the total limit ends it with <c>stream_interrupted</c>.</summary>
+    public async IAsyncEnumerable<GatewayStreamEvent> ReadAsync(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        using var total = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        total.CancelAfter(TimeSpan.FromSeconds(options.Value.MaxAnswerDurationSeconds));
+        await using var body = await response.Content.ReadAsStreamAsync(total.Token);
+        using var reader = new StreamReader(body);
+        while (true)
+        {
+            string? line;
+            using (var idle = CancellationTokenSource.CreateLinkedTokenSource(total.Token))
+            {
+                idle.CancelAfter(TimeSpan.FromSeconds(options.Value.StreamIdleTimeoutSeconds));
+                try
+                {
+                    line = await reader.ReadLineAsync(idle.Token);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    throw new ChatException(502, "stream_interrupted", "The model stopped answering.");
+                }
+            }
+
+            if (line is null || line == "data: [DONE]")
+            {
+                yield break;
+            }
+
+            if (!line.StartsWith("data:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            JsonNode? chunk;
+            try
+            {
+                chunk = JsonNode.Parse(line.AsSpan(5).Trim().ToString());
+            }
+            catch (JsonException)
+            {
+                throw new ChatException(502, "stream_interrupted", "The model's stream could not be read.");
+            }
+
+            if (chunk?["error"] is not null)
+            {
+                throw new ChatException(502, "stream_interrupted", "The model stopped answering.");
+            }
+
+            var choice = chunk?["choices"] is JsonArray { Count: > 0 } choices ? choices[0] : null;
+            if (choice?["delta"]?["content"] is JsonValue content && content.GetValueKind() == JsonValueKind.String && content.GetValue<string>() is { Length: > 0 } text)
+            {
+                yield return new GatewayStreamEvent.Delta(text);
+            }
+
+            if (choice?["finish_reason"] is JsonValue finish && finish.GetValueKind() == JsonValueKind.String)
+            {
+                yield return new GatewayStreamEvent.Finish(finish.GetValue<string>());
+            }
+
+            if (chunk?["usage"] is JsonObject usage)
+            {
+                yield return new GatewayStreamEvent.Usage(usage["prompt_tokens"]?.GetValue<int>() ?? 0, usage["completion_tokens"]?.GetValue<int>() ?? 0);
+            }
+        }
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(string model, Residency ceiling, IReadOnlyList<ChatMessageIn> messages, int maxTokens, double temperature,
+        Guid runId, bool stream, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(messages);
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("v1/chat/completions", UriKind.Relative))
@@ -36,39 +148,37 @@ public sealed class GatewayChatClient(IHttpClientFactory clients)
                 messages = messages.Select(m => new { role = m.Role, content = m.Text }),
                 max_tokens = maxTokens,
                 temperature,
-                stream = false,
+                stream,
+                stream_options = stream ? new { include_usage = true } : null,
             }),
         }.WithMaxResidency(ceiling);
         request.Headers.Add("x-ume-step", "chat-answer");
         request.Headers.Add("x-ume-run-id", runId.ToString());
+        using var headers = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        headers.CancelAfter(TimeSpan.FromSeconds(options.Value.GatewayHeadersTimeoutSeconds));
         HttpResponseMessage response;
         try
         {
-            response = await clients.CreateClient(HttpClientName).SendAsync(request, ct);
+            response = await clients.CreateClient(HttpClientName).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, headers.Token);
         }
         catch (GatewayResidencyException)
         {
             throw new ChatException(502, "upstream_error", "The model service answered in a way that could not be accepted.");
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {
             throw new ChatException(503, "upstream_unavailable", "The model service is unavailable. Try again shortly.");
         }
 
-        using (response)
+        if (!response.IsSuccessStatusCode)
         {
-            if (!response.IsSuccessStatusCode)
+            using (response)
             {
                 throw await MapAsync(response, ct);
             }
-
-            using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
-            var choice = json.RootElement.GetProperty("choices")[0];
-            var text = choice.GetProperty("message").TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString()! : "";
-            var finish = choice.TryGetProperty("finish_reason", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString()! : "stop";
-            var usage = json.RootElement.TryGetProperty("usage", out var u) ? u : default;
-            return new GatewayAnswer(text, Int(usage, "prompt_tokens"), Int(usage, "completion_tokens"), finish);
         }
+
+        return response;
     }
 
     private static int Int(JsonElement usage, string name) =>
@@ -80,8 +190,7 @@ public sealed class GatewayChatClient(IHttpClientFactory clients)
         string? code = null;
         try
         {
-            var body = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct));
-            code = body?["error"]?["code"]?.GetValue<string>();
+            code = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))?["error"]?["code"]?.GetValue<string>();
         }
         catch (JsonException)
         {
@@ -107,29 +216,45 @@ public enum ChatOutcome
     Unavailable,
 }
 
-/// <summary>A completed turn as the endpoint writes it.</summary>
+/// <summary>A completed turn as the JSON endpoint writes it.</summary>
 public sealed record ChatCompletion(Guid MessageId, string Model, string Content, IReadOnlyList<UrlCitation> Annotations, IReadOnlyList<PromptSource> Cited,
     int PromptTokens, int CompletionTokens, string FinishReason, ChatOutcome Outcome, DateTimeOffset Created);
 
 /// <summary>
-/// One chat turn of a RAG assistant (chat design §4.1, non-streaming): policy decision on the assistant (404
-/// <c>model_not_found</c> for anything not allowed), effective level and ceiling, language, the conversational check,
-/// retrieval through the knowledge role in process (the assistant's published collections), coverage handling (§6.2), the
-/// prompt (§6.3, §7), the gateway call (§8) and the citations (§9.2–§9.3). P1a: no condense (15c), no streaming (15b).
+/// A turn decided up to the gateway call (chat design §4.1 steps 5–12): either a fixed text (<see cref="Fixed"/>, no model
+/// call) or the prompt with everything the call and the citations need.
+/// </summary>
+public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Created, AssistantEntry Assistant, Residency Ceiling, AssistantChatSettings Settings,
+    int MaxTokens, string Language, string? Fixed, ChatOutcome Outcome, BuiltPrompt? Prompt, RetrievalResult? Retrieval, bool Degraded)
+{
+    /// <summary>The caveat line of a degraded answer (§10.2), or null.</summary>
+    public string? Caveat => Degraded ? (Language == LanguageGuess.English ? FixedTexts.CaveatEn : FixedTexts.CaveatSv) + "\n\n" : null;
+}
+
+/// <summary>
+/// One chat turn of a RAG assistant (chat design §4.1): policy decision on the assistant (404 <c>model_not_found</c> for
+/// anything not allowed), effective level and ceiling, language, the conversational check, retrieval through the knowledge
+/// role in process (the assistant's published collections), coverage handling (§6.2), the prompt (§6.3, §7), then the gateway
+/// call as JSON (<see cref="CompleteAsync"/>) or a stream the endpoint relays (<see cref="PlanAsync"/> + <see cref="GatewayChatClient"/>),
+/// through the <see cref="AnswerTransducer"/> (§9.2–§9.4). Condense is part c of item 15.
 /// </summary>
 public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccessPolicy policy, KnowledgeService knowledge, GatewayChatClient gateway,
-    TimeProvider time, ILogger<ChatService> logger)
+    IOptions<ChatOptions> options, TimeProvider time, ILogger<ChatService> logger)
 {
-    public async Task<ChatCompletion> CompleteAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct)
+    public GatewayChatClient Gateway => gateway;
+
+    public IReadOnlyList<string> AllowedLinkHosts => options.Value.AllowedLinkHosts;
+
+    public async Task<ChatPlan> PlanAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(who);
         ArgumentNullException.ThrowIfNull(chat);
-        var started = time.GetUtcNow();
+        var created = time.GetUtcNow();
         var snapshot = snapshots.Current;
         var assistant = snapshot.Assistants.Values.FirstOrDefault(a => string.Equals(a.Slug, chat.Model, StringComparison.Ordinal));
         if (assistant?.Published is null || !policy.Decide(who, ResourceRef.Assistant(assistant.Id), RagAction.Chat, snapshot, snapshots.IsConfirmed).Allowed)
         {
-            throw new ChatException(404, "model_not_found", $"The model '{chat.Model}' does not exist or you do not have access to it.", "model");
+            throw NotFound(chat.Model);
         }
 
         var settings = AssistantChatSettings.Parse(assistant.Published.QuerySteps);
@@ -137,6 +262,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var ceiling = Ceiling(who, assistant, snapshot);
         var messageId = Guid.CreateVersion7();
         var maxTokens = Math.Min(chat.MaxTokens ?? settings.MaxOutputTokens, settings.MaxOutputTokens);
+        ChatPlan Plan(string? fixedText, ChatOutcome outcome, BuiltPrompt? prompt, RetrievalResult? retrieval, bool degraded) =>
+            new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded);
 
         RetrievalResult? retrieval = null;
         var conversational = MessageKind.IsConversational(chat.Question);
@@ -153,37 +280,57 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             }
             catch (RetrievalDeniedException)
             {
-                throw new ChatException(404, "model_not_found", $"The model '{chat.Model}' does not exist or you do not have access to it.", "model");
+                throw NotFound(chat.Model);
             }
 
             if (retrieval.Coverage.Status == CoverageStatus.Low)
             {
-                return Fixed(messageId, chat, FixedTexts.NotFound(assistant.Published.NotFound, null, language), ChatOutcome.NotFound, started);
+                return Plan(FixedTexts.NotFound(assistant.Published.NotFound, null, language), ChatOutcome.NotFound, null, retrieval, false);
             }
 
             if (retrieval.Coverage.Status == CoverageStatus.Unknown && retrieval.Results.Count == 0)
             {
-                return Fixed(messageId, chat, FixedTexts.Unavailable(assistant.Published.NotFound, language), ChatOutcome.Unavailable, started);
+                return Plan(FixedTexts.Unavailable(assistant.Published.NotFound, language), ChatOutcome.Unavailable, null, retrieval, false);
             }
         }
 
         var degraded = retrieval is not null && retrieval.Coverage.Status == CoverageStatus.Unknown;
         var prompt = PromptBuilder.Build(assistant.Name, assistant.Published.SystemPrompt, language, settings.AlwaysSwedish, chat.Question, chat.History,
             conversational ? null : retrieval!.Results, settings, degraded);
-        var watch = Stopwatch.StartNew();
-        var answer = await gateway.CompleteAsync(assistant.Published.GatewayModel, ceiling, prompt.Messages, maxTokens, settings.Temperature, messageId, ct);
-        LogAnswered(logger, assistant.Slug, messageId, prompt.Sources.Count, watch.Elapsed.TotalMilliseconds);
-        var cited = Citations.Apply(answer.Text, prompt.Sources);
-        if (retrieval is not null && cited.CitedRanks.Count > 0)
+        return Plan(null, ChatOutcome.Answered, prompt, retrieval, degraded);
+    }
+
+    public async Task<ChatCompletion> CompleteAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct)
+    {
+        var plan = await PlanAsync(who, chat, ct);
+        if (plan.Fixed is { } text)
         {
-            knowledge.MarkCited(retrieval, cited.CitedRanks);
+            return new ChatCompletion(plan.MessageId, plan.Model, text, [], [], 0, 0, "stop", plan.Outcome, plan.Created);
         }
 
-        var content = degraded ? (language == LanguageGuess.English ? FixedTexts.CaveatEn : FixedTexts.CaveatSv) + "\n\n" + cited.Content : cited.Content;
-        var shift = content.Length - cited.Content.Length;
-        var annotations = shift == 0 ? cited.Annotations : [.. cited.Annotations.Select(a => a with { StartIndex = a.StartIndex + shift, EndIndex = a.EndIndex + shift })];
-        return new ChatCompletion(messageId, chat.Model, content, annotations, cited.Cited, answer.PromptTokens, answer.CompletionTokens, answer.FinishReason,
-            ChatOutcome.Answered, started);
+        var answer = await gateway.CompleteAsync(plan.Assistant.Published!.GatewayModel, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens,
+            plan.Settings.Temperature, plan.MessageId, ct);
+        var transducer = new AnswerTransducer(plan.Prompt.Sources, AllowedLinkHosts);
+        var caveat = plan.Caveat ?? "";
+        var pieces = transducer.Feed(answer.Text).Concat(transducer.Flush()).OfType<AnswerPiece.Text>().ToList();
+        var content = caveat + string.Concat(pieces.Select(p => p.Content));
+        var annotations = pieces.SelectMany(p => p.Annotations).Select(a => a with { StartIndex = a.StartIndex + caveat.Length, EndIndex = a.EndIndex + caveat.Length }).ToList();
+        Finish(plan, transducer);
+        return new ChatCompletion(plan.MessageId, plan.Model, content, annotations, transducer.Cited, answer.PromptTokens, answer.CompletionTokens, answer.FinishReason,
+            ChatOutcome.Answered, plan.Created);
+    }
+
+    /// <summary>After the answer (§9.5): the counters with only the cited ranks, and a log line.</summary>
+    public void Finish(ChatPlan plan, AnswerTransducer transducer)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(transducer);
+        if (plan.Retrieval is not null && transducer.CitedRanks.Count > 0)
+        {
+            knowledge.MarkCited(plan.Retrieval, transducer.CitedRanks);
+        }
+
+        LogAnswered(logger, plan.Model, plan.MessageId, plan.Prompt?.Sources.Count ?? 0, transducer.Cited.Count);
     }
 
     /// <summary>
@@ -206,9 +353,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
     private static int Rank(string level) => level switch { Classification.Public => 0, Classification.Internal => 1, _ => 2 };
 
-    private static ChatCompletion Fixed(Guid messageId, ParsedChat chat, string text, ChatOutcome outcome, DateTimeOffset started) =>
-        new(messageId, chat.Model, text, [], [], 0, 0, "stop", outcome, started);
+    private static ChatException NotFound(string model) => new(404, "model_not_found", $"The model '{model}' does not exist or you do not have access to it.", "model");
 
-    [LoggerMessage(LogLevel.Information, "Chat answer for {Assistant}, message {MessageId}: {Sources} sources in the prompt, gateway {GatewayMs} ms")]
-    private static partial void LogAnswered(ILogger logger, string assistant, Guid messageId, int sources, double gatewayMs);
+    [LoggerMessage(LogLevel.Information, "Chat answer for {Assistant}, message {MessageId}: {Sources} sources in the prompt, {Cited} cited")]
+    private static partial void LogAnswered(ILogger logger, string assistant, Guid messageId, int sources, int cited);
 }

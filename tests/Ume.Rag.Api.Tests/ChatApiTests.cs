@@ -118,12 +118,6 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
             body.GetProperty("usage").GetProperty("total_tokens").GetInt32().ShouldBe(0); // no model call
         }
 
-        using (var stream = await client.PostAsJsonAsync("/v1/chat/completions", new { model = "bygg", stream = true, messages = new[] { new { role = "user", content = "q" } } }, Ct))
-        {
-            stream.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-            (await stream.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error").GetProperty("param").GetString().ShouldBe("stream");
-        }
-
         using (var unknown = await Ask(client, "fråga", model: "finns-inte"))
         {
             unknown.StatusCode.ShouldBe(HttpStatusCode.NotFound);
@@ -201,5 +195,84 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
 
         (await CitedSources(scoped)).ShouldBe([db.DeptASource]);
         (await CitedSources(unscoped)).ShouldNotBeEmpty(); // unchanged: either department's document may rank first
+    }
+
+    private static async Task<List<JsonElement>> StreamAsync(HttpClient client, string question, bool usage = false)
+    {
+        using var response = await client.PostAsJsonAsync("/v1/chat/completions", new
+        {
+            model = "bygg", stream = true, stream_options = usage ? new { include_usage = true } : null, messages = new[] { new { role = "user", content = question } },
+        }, Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("text/event-stream");
+        var lines = (await response.Content.ReadAsStringAsync(Ct)).Split("\n\n", StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).ToList();
+        lines[^1].ShouldBe("data: [DONE]");
+        return [.. lines.SkipLast(1).Select(l => JsonDocument.Parse(l["data: ".Length..]).RootElement.Clone())];
+    }
+
+    private static bool IsEvent(JsonElement e) => e.TryGetProperty("event", out _);
+
+    private static bool IsAnnotated(JsonElement e) =>
+        e.TryGetProperty("choices", out var c) && c.GetArrayLength() > 0 && c[0].GetProperty("delta").TryGetProperty("annotations", out _);
+
+    private static string? FinishReason(JsonElement e) =>
+        e.TryGetProperty("choices", out var c) && c.GetArrayLength() > 0 && c[0].TryGetProperty("finish_reason", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString() : null;
+
+    private static string Content(IEnumerable<JsonElement> events) => string.Concat(events
+        .Where(e => e.TryGetProperty("choices", out var c) && c.GetArrayLength() > 0 && c[0].GetProperty("delta").TryGetProperty("content", out _))
+        .Select(e => e.GetProperty("choices")[0].GetProperty("delta").GetProperty("content").GetString()));
+
+    [Fact]
+    public async Task A_streamed_answer_carries_annotations_and_open_webui_gets_source_events()
+    {
+        await using var api = Host();
+        using var client = Client(api, db.IntegrationKey);
+        var events = await StreamAsync(client, "Behöver jag bygglov för en altan högre än 1,2 meter?", usage: true);
+        events[0].GetProperty("choices")[0].GetProperty("delta").GetProperty("role").GetString().ShouldBe("assistant");
+        Content(events).ShouldEndWith("Se [1].");
+        var annotated = events.Where(e => e.TryGetProperty("choices", out var c) && c.GetArrayLength() > 0 && c[0].GetProperty("delta").TryGetProperty("annotations", out _)).ToList();
+        annotated.ShouldHaveSingleItem().GetProperty("choices")[0].GetProperty("delta").GetProperty("annotations")[0].GetProperty("url_citation")
+            .GetProperty("title").GetString()!.ShouldStartWith("Altan och uteplats");
+        events.Any(IsEvent).ShouldBeFalse();
+        events.Single(e => e.TryGetProperty("usage", out _)).GetProperty("usage").GetProperty("completion_tokens").GetInt32().ShouldBeGreaterThan(0);
+        events.Any(e => FinishReason(e) == "stop").ShouldBeTrue();
+
+        // The same client as an Open WebUI client: one source event before the text, no annotations.
+        var snapshot = Snapshot();
+        snapshot = snapshot with
+        {
+            Clients = snapshot.Clients.ToDictionary(c => c.Key, c => c.Key == db.IntegrationClient ? c.Value with { Kind = ClientKinds.OpenWebUi } : c.Value),
+        };
+        await using var owui = db.ApiHost(snapshot).WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Rag:Roles", "knowledge,chat");
+            web.ConfigureTestServices(services =>
+                services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+        });
+        using var owuiClient = Client(owui, db.IntegrationKey);
+        var owuiEvents = await StreamAsync(owuiClient, "Behöver jag bygglov för en altan högre än 1,2 meter?");
+        var source = owuiEvents.Where(e => e.TryGetProperty("event", out _)).ShouldHaveSingleItem().GetProperty("event");
+        source.GetProperty("type").GetString().ShouldBe("source");
+        source.GetProperty("data").GetProperty("metadata")[0].GetProperty("external").GetBoolean().ShouldBeTrue();
+        source.GetProperty("data").GetProperty("document")[0].GetString()!.ShouldContain("bygglov");
+        var sourceIndex = owuiEvents.FindIndex(e => e.TryGetProperty("event", out _));
+        var markerIndex = owuiEvents.FindIndex(e => Content([e]).Contains("[1]", StringComparison.Ordinal));
+        sourceIndex.ShouldBeLessThan(markerIndex);
+        owuiEvents.Any(IsAnnotated).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_streamed_not_found_is_one_chunk_and_the_per_user_limit_answers_429()
+    {
+        await using var api = Host().WithWebHostBuilder(web => web.UseSetting("Chat:MessagesPerMinutePerUser", "2"));
+        using var client = Client(api, db.IntegrationKey);
+        var events = await StreamAsync(client, "Hur långt är det till månen i kilometer?");
+        Content(events).ShouldBe("Inget svar i källorna.");
+
+        (await Ask(client, "Hur långt är det till månen?")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var limited = await Ask(client, "Och till solen?");
+        limited.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
+        limited.Headers.RetryAfter.ShouldNotBeNull();
+        (await limited.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error").GetProperty("code").GetString().ShouldBe("rate_limited");
     }
 }

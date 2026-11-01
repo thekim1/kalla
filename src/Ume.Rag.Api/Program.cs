@@ -78,6 +78,8 @@ if (chat)
     builder.AddGatewayClient(Ume.Rag.Answering.Chat.GatewayChatClient.HttpClientName);
     builder.Services.AddSingleton<Ume.Rag.Answering.Chat.GatewayChatClient>();
     builder.Services.AddSingleton<Ume.Rag.Answering.Chat.ChatService>();
+    builder.Services.AddOptions<Ume.Rag.Answering.Chat.ChatOptions>().BindConfiguration(Ume.Rag.Answering.Chat.ChatOptions.SectionName);
+    builder.Services.AddSingleton<ChatRateLimiter>();
 }
 
 var app = builder.Build();
