@@ -94,7 +94,8 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         var message = body.GetProperty("choices")[0].GetProperty("message");
         var content = message.GetProperty("content").GetString()!;
         // The FakeGateway cites every [n] it sees in the prompt: the frame's example [1] and [3]; only [1] is a source.
-        content.ShouldStartWith("Testsvar på \"<sources note="); // the fake echoes the start of the final user message: the sources block
+        // The fake echoes the start of the final user message (the sources block); the answer filter escapes its "<".
+        content.ShouldStartWith("Testsvar på \"&lt;sources note=");
         content.ShouldEndWith("Se [1].");
         var annotation = message.GetProperty("annotations").EnumerateArray().ShouldHaveSingleItem().GetProperty("url_citation");
         annotation.GetProperty("title").GetString()!.ShouldStartWith("Altan och uteplats");
