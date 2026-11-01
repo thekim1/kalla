@@ -247,10 +247,18 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         await using var owui = db.ApiHost(snapshot).WithWebHostBuilder(web =>
         {
             web.UseSetting("Rag:Roles", "knowledge,chat");
+            // An Open WebUI client chats as its user (identity §5.2): the instance is configured and each request has the JWT.
+            web.UseSetting("OpenWebUi:ClientId", db.IntegrationClient.ToString());
+            web.UseSetting("OpenWebUi:JwtSecret", "open-webui-jwt-secret-for-tests-0123456789");
             web.ConfigureTestServices(services =>
                 services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
         });
         using var owuiClient = Client(owui, db.IntegrationKey);
+        var now = DateTimeOffset.UtcNow;
+        owuiClient.DefaultRequestHeaders.Add("X-OpenWebUI-User-Jwt", OpenWebUiUserJwtTests.Jwt(new
+        {
+            sub = "u-1", role = "user", iss = "open-webui", iat = now.ToUnixTimeSeconds(), exp = now.AddMinutes(5).ToUnixTimeSeconds(),
+        }));
         var owuiEvents = await StreamAsync(owuiClient, "Behöver jag bygglov för en altan högre än 1,2 meter?");
         var source = owuiEvents.Where(e => e.TryGetProperty("event", out _)).ShouldHaveSingleItem().GetProperty("event");
         source.GetProperty("type").GetString().ShouldBe("source");
