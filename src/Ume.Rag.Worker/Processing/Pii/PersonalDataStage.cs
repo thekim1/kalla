@@ -51,6 +51,7 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
         ArgumentNullException.ThrowIfNull(chunks);
         ArgumentNullException.ThrowIfNull(context);
         var bodies = chunks.Chunks.Select(c => c.OverlapChars > 0 && c.OverlapChars <= c.Text.Length ? c.Text[c.OverlapChars..] : c.Text).ToList();
+        var own = OwnDomains(context.OwnDomains);
         var values = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var type in PiiTypes.All)
         {
@@ -62,7 +63,7 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
             foreach (var match in patterns.Scan(body))
             {
                 values[match.Type].Add(match.Value);
-                if (match.Type == PiiTypes.Email && !IsOwn(PiiPatterns.Domain(match.Value), context.OwnDomains))
+                if (match.Type == PiiTypes.Email && !IsOwn(PiiPatterns.Domain(match.Value), own))
                 {
                     values[PiiTypes.EmailExternal].Add(match.Value);
                 }
@@ -80,7 +81,7 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
         };
 
         var fired = PiiFlagPolicy.Fired(counts, context.Rules);
-        var contacts = values[PiiTypes.Phone].Count + values[PiiTypes.Email].Count(e => IsOwn(PiiPatterns.Domain(e), context.OwnDomains));
+        var contacts = values[PiiTypes.Phone].Count + values[PiiTypes.Email].Count(e => IsOwn(PiiPatterns.Domain(e), own));
         var needed = context.CollectionClassification == Classification.Public && fired.Count == 0 && context.Rules.ListLike is not null
             && contacts >= context.Rules.ListLike.MinContacts;
         if (needed)
@@ -234,8 +235,13 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
         }
     }
 
+    /// <summary>An address's domain is own when it is an own domain or a subdomain of one (<c>sub.umea.se</c>), in any case.</summary>
     private static bool IsOwn(string domain, IReadOnlyList<string> own) =>
         own.Any(d => domain.Equals(d, StringComparison.OrdinalIgnoreCase) || domain.EndsWith("." + d, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary><c>Settings.PiiOwnDomains</c> as bare domains: entered as <c>@umea.se</c>, <c>*.umea.se</c> or <c> umea.se. </c> they still match.</summary>
+    private static string[] OwnDomains(IReadOnlyList<string> domains) =>
+        [.. domains.Select(d => d.Trim().TrimStart('@', '*', '.').TrimEnd('.')).Where(d => d.Length > 0)];
 
     /// <summary>The entity's text by its code-point offsets (<see cref="ParserText"/>), or null when they are outside the text.</summary>
     private static string? Span(string text, NerEntity entity)

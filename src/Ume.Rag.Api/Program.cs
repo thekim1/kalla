@@ -32,11 +32,14 @@ var publishReference = false;
 if (knowledge)
 {
     builder.AddRagBlobStore();
+    // Citation downloads decrypt internal blobs (knowledge §3.5): the rag-blob-internal key under KeyProvider:Directory.
+    builder.AddRagBlobEnvelope();
     builder.AddRagKnowledge();
     builder.Services.AddSingleton<KnowledgeCallers>();
     builder.Services.AddOptions<ApiSecurityOptions>().BindConfiguration("Api").Configure<IConfiguration>((o, c) =>
         o.SourceAddress = c["Api:Security:SourceAddress"] ?? o.SourceAddress);
     builder.Services.AddSingleton<KnowledgeSecurity>();
+    builder.Services.AddHostedService<KnowledgeSecurityFlusher>();
     builder.Services.AddRateLimiter(o =>
     {
         o.AddPolicy(KnowledgeEndpoints.DownloadsPolicy, http => RateLimitPartition.GetFixedWindowLimiter(

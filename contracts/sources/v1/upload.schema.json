@@ -11,6 +11,15 @@
       "minimum": 1,
       "maximum": 50,
       "default": 50
+    },
+    "piiMode": {
+      "enum": [
+        "hold",
+        "report"
+      ],
+      "x-effect": "cosmetic",
+      "description": "What a personal-data flag does in a public collection: hold (the set is held until the document is cleared) or report (the set goes live and the flag is reported; a personnummer or samordningsnummer still holds). A change applies at each document's next swap.",
+      "default": "hold"
     }
   },
   "additionalProperties": false,

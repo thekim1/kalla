@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Domain;
 using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Pipelines.Processing;
+using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Persistence;
@@ -181,6 +182,89 @@ public sealed class PiiLifecycleTests
         (await _store.GetAsync(flagged, Ct))!.PiiCounts!.Ner.ShouldBe(NerStatus.Skipped); // names never awaited
         Events.Count().ShouldBe(1); // the flag is shown (5103) but nothing is blocked
     }
+
+    [Fact]
+    public async Task Report_mode_puts_a_set_with_contact_details_live_and_still_reports_it()
+    {
+        var flagged = await WriteAsync("Skriv till anna@gmail.com eller ring 070-311 22 33.");
+
+        (await _lifecycle.SwapAsync(flagged, Report, Ct)).ShouldBe(ChunkSetState.Live);
+
+        Served.ShouldBe("Skriv till anna@gmail.com eller ring 070-311 22 33.");
+        (await _store.GetAsync(flagged, Ct))!.PiiFlagged.ShouldBeTrue("the flag is still counted on the set");
+        Events.ShouldHaveSingleItem().Message.ShouldContain("emailExternal=1");
+    }
+
+    [Fact]
+    public async Task Report_mode_holds_a_personnummer_and_a_clearance_covers_it_until_its_count_rises()
+    {
+        var flagged = await WriteAsync("Sökande 19121212-1212 har ansökt.");
+        (await _lifecycle.SwapAsync(flagged, Report, Ct)).ShouldBe(ChunkSetState.Held);
+        Served.ShouldBeEmpty();
+        (await _lifecycle.ClearAsync(Document, "anna.admin", Ct)).ShouldBeTrue();
+        Served.ShouldBe("Sökande 19121212-1212 har ansökt.");
+
+        // More contact details do not hold in report mode; they are reported again as a re-flag.
+        var moreContacts = await WriteAsync("Sökande 19121212-1212, svar till anna@gmail.com.");
+        (await _lifecycle.SwapAsync(moreContacts, Report, Ct)).ShouldBe(ChunkSetState.Live);
+        Events.Count().ShouldBe(2);
+        Events.Last().Message.ShouldContain("reflag True");
+
+        var higher = await WriteAsync("Sökande 19121212-1212 och medsökande 20000101-0008.");
+        (await _lifecycle.SwapAsync(higher, Report, Ct)).ShouldBe(ChunkSetState.Held);
+        Served.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Report_mode_puts_a_pending_set_live_and_the_sweep_keeps_it_live()
+    {
+        var down = Ner(ready: false);
+        var stage = new PersonalDataStage(new PiiPatterns(_clock), down, new EmptyGazetteer(), _clock);
+        var text = string.Join('\n', ListLike);
+        var pending = await PendingAsync(stage, text);
+
+        (await _lifecycle.SwapAsync(pending, Report, Ct)).ShouldBe(ChunkSetState.Live);
+        Served.ShouldBe(text);
+
+        (await _lifecycle.SweepPendingAsync(stage, ReportContext, 100, Ct)).ShouldBe(0);
+        (await _store.GetAsync(pending, Ct))!.State.ShouldBe(ChunkSetState.Live);
+        down.Ready = true;
+        (await _lifecycle.SweepPendingAsync(stage, ReportContext, 100, Ct)).ShouldBe(1);
+
+        var settled = (await _store.GetAsync(pending, Ct))!;
+        settled.PiiFlagged.ShouldBeTrue("list-like: five names and five phones");
+        settled.State.ShouldBe(ChunkSetState.Live);
+        Served.ShouldBe(text);
+        Events.ShouldHaveSingleItem().Message.ShouldContain("name=5");
+    }
+
+    [Fact]
+    public void The_run_item_reason_names_a_held_set_and_a_reported_live_one()
+    {
+        ChunkSetRecord Set(PiiCounts counts, bool flagged) =>
+            new(Guid.CreateVersion7(), new ChunkSetKey(Document, Guid.CreateVersion7(), null, Profile, [1]), Classification.Public, Collection, [1])
+            {
+                PiiCounts = counts,
+                PiiFlagged = flagged,
+            };
+        var email = Set(new PiiCounts { Email = 1, EmailExternal = 1, Rules = 1 }, flagged: true);
+        var rules = PiiFlagRules.Default;
+
+        PiiLifecycle.ReasonFor(email, ChunkSetState.Held, Classification.Public, null, rules).ShouldBe(PiiLifecycle.FlaggedReason);
+        PiiLifecycle.ReasonFor(Set(new PiiCounts { Ner = NerStatus.Pending }, flagged: false), ChunkSetState.Held, Classification.Public, null, rules)
+            .ShouldBe(PiiLifecycle.NerPendingReason);
+        PiiLifecycle.ReasonFor(email, ChunkSetState.Live, Classification.Public, null, rules).ShouldBe(PiiLifecycle.FlaggedReason, "reported");
+        PiiLifecycle.ReasonFor(email, ChunkSetState.Live, Classification.Public, new PiiClearance(_clock.GetUtcNow(), "anna.admin", email.PiiCounts!), rules)
+            .ShouldBeNull("covered by the clearance");
+        PiiLifecycle.ReasonFor(email, ChunkSetState.Live, Classification.Internal, null, rules).ShouldBeNull("other collections: as before");
+        PiiLifecycle.StateFor(email, Classification.Public, PiiMode.Hold, null, rules).ShouldBe(ChunkSetState.Held);
+        PiiLifecycle.StateFor(email, Classification.Public, PiiMode.Report, null, rules).ShouldBe(ChunkSetState.Live);
+    }
+
+    private static PiiSwapContext Report => Public with { Mode = PiiMode.Report };
+
+    private static Task<(PersonalDataContext Data, PiiSwapContext Swap)> ReportContext(ChunkSetRecord set, CancellationToken cancellationToken) =>
+        Task.FromResult((new PersonalDataContext(Classification.Public), Report));
 
     /// <summary>A set written while NER has not been ready for more than five minutes: the stage completes as pending.</summary>
     private async Task<Guid> PendingAsync(PersonalDataStage stage, string text)

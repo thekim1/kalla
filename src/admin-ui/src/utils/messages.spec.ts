@@ -21,7 +21,7 @@ describe('error messages', () => {
   })
 })
 
-// The worker's codes as built (#115, #117; issue #116): every one has a Swedish text.
+// The worker's codes as built (#115, #117, #128, #130; issues #116, #129): every one has a Swedish text.
 const WORKER_CODES = [
   'site_profile.unknown', 'site_profile.host_mismatch', 'site_profile.version_unknown', 'site_profile.version_conflict',
   'collection.unknown', 'eval_question.unknown', 'eval_question.conflict', 'eval_question.retired',
@@ -31,6 +31,10 @@ const WORKER_CODES = [
   'preview.unsupported', 'preview.collection_unknown', 'preview.source_unknown', 'preview.document_unknown',
   'preview.upload_unknown', 'preview.deadline', 'preflight.none_reachable', 'preflight.deadline', 'pages.within_limit',
   'crawl.limit_pages', 'sitemap.found', 'sitemap.none', 'robots.ok', 'robots.missing', 'cms.sitevision', 'cms.unknown',
+  // The eval class (#128, #130; issue #129).
+  'eval.unsupported', 'eval.invalid_payload', 'eval.no_questions', 'eval.invalid_candidate_settings', 'eval.invalid_settings',
+  'eval.embedding_residency', 'eval.search_unavailable', 'eval.model_unset', 'eval.model_not_onprem', 'eval.no_onprem_key',
+  'eval.unknown_kind',
 ]
 
 describe('worker messages', () => {

@@ -48,11 +48,11 @@ Refs: [knowledge §2–§5, §9, §10, §16.3, §16.6](../knowledge-api/design.m
 - [x] `KnowledgeService`, in-process `IRetriever`; query embedding at the profile's ceiling, in-process cache, circuit, degrade (#127)
 - [x] Section expansion; citations; download grants and `/content` (#146, this PR; `URB2` decryption waits for #145)
 - [x] `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; Scalar (this PR)
-- [ ] **Done:** §16.3, §16.6 tests; #95, #102, #162 recorded (part 4b: §16.6 and the events, #95/#102/#162 recorded with #95 open for the browser check and #102 not met until the stop list; left in §16.3: evaluator == API on the smoke collection (needs stream A's evaluator fixture), tampered ciphertext (#145), roles split (chat role))
+- [ ] **Done:** §16.3, §16.6 tests; #95, #102, #162 recorded (part 4b: §16.6 and the events, #95/#102/#162 recorded with #95 open for the browser check and #102 not met until the stop list; left in §16.3: evaluator == API on the smoke collection (item 17's collection; stream A adds the comparison), roles split (chat role); tampered ciphertext → aborted response and `integrity` metric done in the #163 follow-up)
 
 ## 6. Admin API set-up surface (#14)
 Refs: [admin §4.1–§4.7, §12](../admin/design.md), [weakness review §1](../weakness-review.md)
-- [ ] OpenAPI and Scalar on `rag-admin`; `AdminClientAddresses` with `Settings.TrustedProxies` (#32, #38)
+- [x] OpenAPI and Scalar on `rag-admin`; `AdminClientAddresses` with `Settings.TrustedProxies` (#32, #38) (item 14a; settings, data protection and templates (read) of the third box are in it too)
 - [ ] Collections (publish, retrieval settings), sources (sync now, upload batches), runs and crawl report, `cancel-run` (#46)
 - [ ] Site profiles (edit, roll back), templates (read), clients and keys, settings, data protection (history `none` only)
 - [ ] Assistants: create, draft, publish, audience = client; evaluation questions and runs; member groups by hand
