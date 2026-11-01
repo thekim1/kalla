@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-01, end of session 12.
+State of the Ume.Rag work for the next session. Rewritten 2026-11-01, end of session 13.
 Repo `~/research/rag`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
 
@@ -18,12 +18,11 @@ the end-of-P1b pin review. Stream B (remote) merged the gateway client (#123), t
 #127, #146, #152), `RequestDimensions` (#159) and the knowledge security events (#163); next for B: #158 (rag-api reads
 URB2), #164 (key endpoints J7, `DataProtectionPolicies` rows), chat API (J9), realm (J8), schema part 3 (#134).
 
-**Milestone 1 (first live run) is unblocked in code**: `dimensions` is sent on both the worker path (#162) and the
-rag-api path (#159), the AppHost forwards `EmbeddingProfile:*` to the migrator (#159), and the dev seed script makes an
-API key for `/v1/retrieve` (#166). The user's interim gateway (address only in local user secrets and the main
-session's memory, never in the repo) serves `text-embedding-3-large` from an `Eu` provider. Steps:
-`docs/p1a-local-run.md` §4 (developer machine) and **`docs/gateway-host-setup.md`** (on the gateway's host, for a
-person or the user's infra agent "Hermes").
+**Milestone 1 (first live run) passed on 2026-11-01** (session 13, on this machine under WSL with the Aspire CLI,
+against the user's interim gateway): 5 umea.se pages fetched, 4 added, 17 chunks at 1024 dims, canary at `Eu`,
+`/v1/retrieve` answered with the right chunk first. Results and findings: `docs/p1a-local-run.md` §4 and §4.7,
+`plans/p1/README.md` "Milestone 1 result". The AppHost needed three manual workarounds (#168, fixed by B's #172,
+approved, not merged at the end of the session). Afterwards the user hands `docs/gateway-host-setup.md` to Hermes.
 
 Overviews: **`docs/phase1-guide.html`** (Swedish, stakeholders; private artifact
 https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/stakeholder-report.html`
@@ -58,7 +57,7 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
   main session commits, merges `origin/main` into the branch, re-runs build + suites, pushes, opens the PR, merges
   when green, then `git worktree prune`. Send heads-ups to running agents when a merge changes an API they call.
 - **CI** (user, 2026-10-31; Decisions "CI on the self-hosted runner for every pull request" and **"Merge on local
-  evidence, then check main"**): `verify.yml`/`parser.yml` run on the single self-hosted runner `ume-rag` for every
+  evidence, then check main"**): `verify.yml`/`parser.yml` run on the self-hosted runners `ume-rag` and `ume-rag2` for every
   non-draft PR. **Merge a PR on its local evidence without waiting for the runner**: merge `origin/main` into the
   branch, then `dotnet build UmeRag.slnx -c Release`, `Ume.Rag.Worker.Tests` (with
   `UME_RAG_TEST_CLAMAV_IMAGE=ume-rag.local/clamav:dev UME_RAG_TEST_PARSER_IMAGE=ume-rag.local/parser:ci`) **twice**,
@@ -111,7 +110,17 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
   - (Session 12) Closing issues needs the user's go-ahead in this environment (the auto-mode classifier refused it once);
     the user approved closing issues the main session recommends (2026-11-01).
 
-## Code map (what exists, on `main` at the end of session 12)
+  - (Session 13) MTP colours `failed` with an escape code right after the word, so `grep 'failed [A-Z]'` lost names:
+    the verify helper sets `NO_COLOR=1` and strips ANSI; it keeps raw logs per suite in the scratchpad (`logs/`).
+  - (Session 13) `psql -c "A; B"` is one transaction: an error in B rolls back A (lost a `CREATE EXTENSION` once).
+  - (Session 13) Run the AppHost here with the Aspire CLI (`aspire start/describe/logs/resource <r> start/stop`); WSL
+    mirrored networking lets the Windows browser reach every `localhost` port (a blank/other page on 5174 = browser cache).
+  - (Session 13) Secrets for live runs: read them into variables from `dotnet user-secrets list` / `docker exec … printenv`,
+    never print them; the dev API key went to a mode-600 scratchpad file.
+  - (Session 13) The user wants GitHub handled without being asked: review new/updated B PRs (local evidence: PR merged
+    with main, affected suites twice), answer issues, decide what is the main session's (memory `handle-github-autonomously`).
+
+## Code map (what exists, on `main` at the end of session 13)
 
 | Area | Where | State |
 |---|---|---|
@@ -131,69 +140,66 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
 | Schema (B) | `src/Ume.Rag.Infrastructure/Persistence/**` | parts 1–2 (#76, #93); #118 (5105, `Sources.CreatedAt`, run defaults, pgvector) approved, not merged |
 | Blobs | `src/Ume.Rag.Infrastructure/Blobs/` | URB2 envelope, file key provider, worker encrypts `internal` blobs, `IBlobEnvelope` for rag-api (#153) |
 | Engine extras (session 11) | `src/Ume.Rag.Worker/Engine/` | one `Reconciler.ReconcileAsync` decision + drift-sweep swap-back (#138); forced reprocess with salted keys (#140); settings-change effects via `Runs.SettingsHashes` (#141); 24 h ClamAV cap, embed batch cap 6000 tokens (#143); 5105, `CreatedAt` scheduler (follow-up PR in verification) |
+| Session 13 additions | | `piiMode` hold/report per source (#173); Worker.Tests in four parallel `ragdb-N` collections, test finalizer 0.2 s (#174, 4 min → 45 s; Verify ≈ 3 min 46 s); parser contract retries on `not_ready` (#177); job log names type chain + throw site (#179); README/run docs for Linux and milestone 1 (#170, #171) |
 
-## Session 12 (done)
+## Session 13 (done)
 
-- **`main` checked** at the start: session 11's runner run on `124c66b` green; runner and local (all suites) green on
-  `26aa576`; after the batch #159/#161/#162 green on the runner (`0f4aa9c`) and locally except one ContractTests
-  failure that passed on two re-runs (watch item, name lost).
-- **Merged (stream A):** #161 throughput-test flake (fastest of 7 rounds; closes B's #160); #162 worker sends
-  `dimensions` (#142 worker side); #166 dev API key for `/v1/retrieve` in `scripts/dev/seed_url_list.py --api-key`
-  (+ `public` `DataProtectionPolicies` row, run steps §4.1–§4.5 marked **now**).
-- **Reviewed/approved B:** #159 (`RequestDimensions`, merged; notes: seeder never updates an existing profile, nit on a
-  test), #163 (security events, merged; notes: 5001 counts lost after the last emit without a flush, no
-  `ForwardedHeaders` behind a proxy, one dedup pool).
-- **Filed:** #158 (rag-api must read URB2 via `IBlobEnvelope`; internal downloads answer 503 today), #164 (no key
-  endpoints J7, `Seed__DevKey` unused, no `DataProtectionPolicies` rows). **Closed:** #34, #120, #145, #160; #142 by #159.
-- **Design:** session-12 sync of #123–#156 deviations (`5ebc1e8`); **`plans/doc-restructure.md`** (restructure plan,
-  after milestone 1, `f5f658f`); stakeholder report points to the phase-1 guide.
-- **CI speed analysis** (user asked; user approved the recommendation 2026-11-01): a Verify run takes ≈ 7 min;
-  Worker.Tests is 3 min 50 s and runs almost fully serially (37 of 80 classes in the one `ragdb` collection; 54 tests
-  ≥ 1 s are 205 of 235 s, engine tests waiting on 1 s poll/finalizer/heartbeat timers and a 5 s stop grace); the four
-  small jobs run one after another on the single runner (≈ 2 min). Not started yet: see Next step 1.
+- **`main` checked** at the start (runner + local, green; one AdminApi lock-timing failure under AppHost load, did not
+  repeat) and after each batch (#165/#167; #169/#173/#174: runner green, Verify 3 min 46 s; local: one
+  `SettingsEffectsTests` failure, see Next step 1).
+- **Milestone 1 passed** (above). Found: #168 (AppHost: no `vector` extension, Postgres volume at the PG18 path on a
+  PG17 image so data was lost on restart, `BlobStore:Root` unset); the gateway answers a PII policy block with 503 (the
+  worker retried it as an outage; tell the gateway session: 4xx with a reason code); two umea.se pages held for e-mail
+  only because `PiiOwnDomains` was empty.
+- **User decision** (Decisions table, 2026-11-01): `piiMode` report for the municipality's own published site; built in
+  #173 (B's part: #175). The CI-speed work (approved in session 12) merged as #174. A second runner `ume-rag2` already
+  exists (`/home/kim/actions-runner2`), so the second-runner question is settled.
+- **Merged (stream A):** #170, #171 (docs), #173, #174, #177, #179. **Plans:** `d748909` (Decisions row), `691cdad`
+  (progress boxes, P1 README milestone result).
+- **Reviewed B:** #169 approved (merged); #172 changes requested (a PGDATA/old-volume bug that would break every dev
+  setup), fixed, approved; #176 (collections) approved; #178 (sources, sync now, runs, cancel-run; stacked on #176)
+  approved with a should-fix (sync now on a paused source looks accepted but the worker cancels it: 409
+  `source_paused`). Decided B's #178 deviation 1: the URL canonicaliser stays in the worker.
+- **Answered B:** #129 (FakeGateway chat scripts keyed by `x-ume-step` from `FakeGateway:ChatScripts:<step>`, built-in
+  defaults; `Chunks.ContentKind` text/table/list + `LargeTable` on 2nd+ row groups), #163 (smoke loader: deterministic
+  ids, shared default variant), #164 (settled; B closes it with item 14c). **Filed:** #168, #175.
 
-**At the restart:** no PR open from stream A, no agent running, no stream worktree. `main` = `afeb0fb` (#166) is not
-checked yet after #163 and #166.
+**At the restart:** the m1 AppHost may still be running (`aspire describe --apphost src/Ume.Rag.AppHost/…`; stop it
+with `aspire stop`); its user secrets still hold the milestone switches (`docs/p1a-local-run.md` §4.6 removes them).
+Worktrees: `../rag-main` (detached, for main checks) and possibly `../rag-a3` (finalizer race, see Next step 1).
 
 ## Next step
 
-1. **Check `main`** @ head (dispatch `verify.yml` + local suites; recreate the scratchpad `verify.sh` helper and keep
-   failure names). Fix first if red.
-2. **CI / test speed (user-approved, 2026-11-01)**, one implementor in its own worktree, stream A's test code:
-   (a) run the worker DB tests in 3–4 parallel xUnit collections, each on its own database in the same Postgres
-   container; `ResetAsync` and the connection-budget test filter `pg_stat_activity` by `datname` as well as the role;
-   (b) trace one 6–8 s engine test (e.g. `UploadEngineTests.A_replace_keeps_the_document…`) to see where it waits
-   (finalizer tick, poll, missed wake-up, stop grace) and lower test-only timers where safe. Target Worker.Tests
-   3 min 50 s → ≈ 1.5 min; done-when: two full worker runs green, the suite's wall time reported before/after, no
-   order-dependent failure in 3 runs. Also small: package audit (`dotnet list package --vulnerable`, ≈ 20 s) to a
-   weekly/release workflow; optionally fold `changes`/`deploy-checks`/`admin-ui` into fewer jobs. **A second runner
-   instance on the runner's host** (≈ 1.5–2 min per run) is the user's call (R1 / L11; the runner is on the user's
-   other machine, `/home/kim/actions-runner`) — ask.
-3. **Milestone 1 (live):** follow `docs/p1a-local-run.md` §4 against the interim gateway: AppHost user secrets
-   (`Gateway:*`, `EmbeddingProfile:*` incl. `RequestDimensions=true`, `FakeGateway:Enabled=false`, own Postgres volume),
-   `Start-Dev.ps1 -Empty`, seed with `seed_url_list.py --profile pilot-embedding --api-key` (pepper from the dashboard
-   into `UME_RAG_DEV_KEY_PEPPER`; the key is printed once — never into a log or chat), check run, 1024-dim chunks,
-   canary, `/v1/retrieve`. Still unverified: the dashboard's `key-pepper` parameter name, rag-api's port under Aspire,
-   curl trusting the dev certificate, and whether the provider accepts `dimensions` for `text-embedding-3-large`.
-   Afterwards the user hands `docs/gateway-host-setup.md` to Hermes.
-4. **Stream-A code left:** P1a item 17 `evaluation-smoke` (after B's smoke set); P1b item 15 `e2e` (after L7); item 17
-   importer settings (after L6); worker upload reads via `ForLevel` (with the admin's encrypted uploads); chunk-set key
-   salt with B's schema part 3 (#134); optional binary `COPY` in `IndexWriter`; item 19 pin review before go-live;
-   `docs/p1a-local-run.md`: drop the "set only `Gateway:Keys:Eu`" caveat (#119 merged; #95 part 2).
-5. **Watch items:** `EngineCrawlTests.A_crawl_syncs_the_site…` (1 of ≈ 14 runs, session 11); the lost-name ContractTests
-   failure (session 12).
-6. **Design sync** of #159–#166 deviations; data-model §2.1 gets `EmbeddingProfiles.RequestDimensions`. Then the
-   restructure (`plans/doc-restructure.md`) after milestone 1.
-7. Then the live block with the user (`plans/p1b/README.md` §5 step 4).
+1. **Finalizer / identity-change race** (watch item, session 13): `SettingsEffectsTests.An_identity_change_re_syncs…`
+   fails about 1 in 7 full Worker.Tests runs under load (`Deleted = 0` where 6 expected, run `succeeded`). An implementor
+   was tracing it in `../rag-a3` (branch `a/fix-finalizer-identity-race`) at the end of session 13: product race in
+   `RunFinalizer` vs test race. If the branch has no PR, resume or restart from its report.
+2. **When #172 merges:** drop the #168 workarounds from `docs/p1a-local-run.md` §4.3 (keep the Linux start), note that the
+   first start after #172 begins with an empty database; close #168 if B hasn't.
+3. **Watch B:** #176 then #178 (merge order), the #178 should-fix (`source_paused`), #175 (`piiMode` admin side), item 14c
+   (`/api/keys`, then the run book points to it), item 17's smoke loader (then stream A's `evaluation-smoke`).
+4. **The two held umea.se pages** in the m1 database need `clear-pii-flag` or a reprocess after setting the source to
+   `piiMode: report` (only if the m1 database still exists; after #172 it starts empty anyway).
+5. **Design sync** of deviations from #159–#179: `piiMode` (processing §9.3–§9.6, connectors §12.3, 6a §14 rule 3,
+   `PiiFlaggedAt` → `PiiFlagged`), #169 (knowledge §9/§4.7 download outcomes), #176 (admin §4.6 V16 `candidates` 20–200,
+   delete refused with live sources), #178 (V25 exact duplicates), #174 (`Worker:FinalizerSeconds` double ≥ 0.1),
+   data-model §2.1 `EmbeddingProfiles.RequestDimensions`. Then the restructure (`plans/doc-restructure.md`).
+6. **Small:** Aspire 13.6.1 → 13.6.4 patch bump (shared `Directory.Packages.props` + B's AppHost csproj: own PR or ask B);
+   `scripts/dev/seed-url-list.sql` could set `piiMode: report` for the pilot source; the run counter for a skipped
+   `parse.empty` item shows as `Unchanged` (check intent); package audit to a weekly/release workflow.
+7. **Stream-A code left:** P1a item 17 `evaluation-smoke` (after B's smoke loader); P1b item 15 `e2e` (after L7); item
+   17 importer settings (after L6); worker upload reads via `ForLevel`; chunk-set key salt and `ContentKind`/`LargeTable`
+   with B's schema part 3 (#134, #129); item 19 pin review before go-live.
+8. Then the live block with the user (`plans/p1b/README.md` §5 step 4): the umea.se pilot crawl (personal-data dry run,
+   `PiiOwnDomains` with the municipal companies' domains from the user).
 
-**Open issues to stream B:** #80, #90, #92, #95, #102, #114, #116, #129, #132, #134, #158, #164; also #52, #75.
+**Open issues to stream B:** #80, #90, #92, #95, #102, #114, #116, #129, #132, #134, #164, #168, #175; also #52, #75.
 Stream A's own: #48, #51. For the user: #100 (L8 run steps).
 
-**Waiting on the user:** the second-runner question (above); interim-gateway keys restricted to `Eu` (one per service)
-and the embedding deployment's `ContextWindow` left empty; the **gateway session** (release 1 incl. the embedding-batch
-fix, shared Keycloak realm `ume`, identity §16 Q1–Q4/Q6); **O7** (go-live host); identity §16 Q5, Q7–Q9; runbook
-review by the operations owner; U1 with the web editors; names and dates for A1, G1, N1, U1, W2, P2 and the gold-set
-owner; DPIA G1.
+**Waiting on the user:** the municipal companies' e-mail domains for `PiiOwnDomains`; the gateway session (release 1 incl.
+the embedding-batch fix, a 4xx for policy blocks, shared Keycloak realm `ume`, identity §16 Q1–Q4/Q6); handing
+`docs/gateway-host-setup.md` to Hermes; **O7** (go-live host); identity §16 Q5, Q7–Q9; runbook review by the operations
+owner; U1 with the web editors; names and dates for A1, G1, N1, U1, W2, P2 and the gold-set owner; DPIA G1.
 
 ## Open register items (`plans/postponed-decisions.md`)
 
@@ -204,11 +210,12 @@ item needs a named person and a date.
 
 ## Environment notes
 
-- Worktrees: none at the end of session 12; `git worktree list` to check.
+- Worktrees: `../rag-main` (detached, main checks) and `../rag-a3` (finalizer race) at the end of session 13; `git worktree list`.
 - `rag_key.txt` in the repo root holds the user's interim-gateway key; it is excluded locally (`.git/info/exclude`),
   mode 600, and already copied into the AppHost user secrets. Never commit, print or move it into the repo.
 - Local images: `ume-rag.local/clamav:dev` (tests use `UME_RAG_TEST_CLAMAV_IMAGE`), `ume-rag.local/parser:ci`
   (`UME_RAG_TEST_PARSER_IMAGE`; rebuild from `src/parser` when the parser changes). Testcontainers needs a registry
   part with a dot in local image names. `172.30.0.0/16` is taken on this machine (Compose subnet overrides locally).
-- Aspire CLI: `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
+- Aspire CLI: `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH); it runs the
+  whole AppHost here (milestone 1). Dev volumes from before #172 hold an empty `data/` dir (harmless after #172).
 - Tools in the session scratchpad (actionlint, shellcheck) don't survive; re-download when needed.
