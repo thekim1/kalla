@@ -186,7 +186,7 @@ public sealed class AccessPolicy(IReadOnlySet<string> knowledgeOpenToClientKinds
             return AccessDecision.Deny("8", DenyReasons.AnonymousNotAllowed, 404, v);
         }
 
-        // A level without a policy row refuses (fail closed): every level has one (data-model §2.1).
+        // A level missing from the snapshot refuses (fail closed); the snapshot fills unsaved levels with the code defaults.
         if (!config.LevelPolicies.TryGetValue(level, out var policy) || (policy.ClientsWithoutHistoryOnly && client.StoresHistory) ||
             (historyMode is not null && !policy.AllowedHistoryModes.Contains(historyMode)))
         {

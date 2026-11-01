@@ -96,6 +96,29 @@ public sealed class DataProtectionPolicy
     public DateTimeOffset UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
     public uint Version { get; set; }
+
+    /// <summary>
+    /// A level's policy while its row is not saved (data-model §2.1: no seeded rows; the admin shows and saves these, the
+    /// api's snapshot and the blob key policy apply them): history <c>none</c>, 90 days (<c>sensitive</c> 30),
+    /// encryption and <c>rag-blob-&lt;level&gt;</c> except for <c>public</c>, and for <c>sensitive</c> a second approver
+    /// and clients without history only.
+    /// </summary>
+    public static DataProtectionPolicy DefaultFor(string level)
+    {
+        var sensitive = level == Domain.Classification.Sensitive;
+        return new DataProtectionPolicy
+        {
+            Classification = level,
+            AllowedHistoryModes = [HistoryModes.None],
+            DefaultHistoryMode = HistoryModes.None,
+            RetentionDefaultDays = sensitive ? 30 : 90,
+            RetentionMaxDays = sensitive ? 30 : 90,
+            EncryptionRequired = level != Domain.Classification.Public,
+            ReviewSecondApprover = sensitive,
+            ClientsWithoutHistoryOnly = sensitive,
+            BlobMasterKeyName = level == Domain.Classification.Public ? null : $"rag-blob-{level}",
+        };
+    }
 }
 
 /// <summary>Embedding profile states (data-model §2.1).</summary>
