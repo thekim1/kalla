@@ -77,8 +77,10 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 - **Demo first, details after; admin UI focus now.** No extra negative proofs, probes or flake hunts unless a change
   needs one; merge on green CI. Keep adversarial review of stream B's security-relevant parts, proportionate.
-- **GitHub actions need the user's explicit OK in this environment:** the auto-mode check blocks `gh pr merge`,
-  `gh pr review --approve` and branch deletes without it. Ask ("May I merge #N?"), then act. Comments and issues are fine.
+- **Approve and merge without asking (user, 2026-11-02):** approve PRs judged ready for merge (reviewed, checked against
+  the live stack where relevant, CI green) and merge PRs that should be merged; tell the user afterwards. Real decisions
+  (design, scope, anything destructive) still go to the user. Branch deletes on GitHub are still blocked by the
+  auto-mode check.
 - **Stream B** is a remote agent (GitHub `thekim1`); talk only through GitHub (labels `stream-b`, `stream-a`, `main`).
   **B merges its own PRs**, usually fast. Nudging B is allowed (user, session 17). `gh` acts as `ume-nichlas`.
 - **Main session** (this session) owns design documents (`plans/**`, root `*.md`, `.github/stream-ownership.txt`):
