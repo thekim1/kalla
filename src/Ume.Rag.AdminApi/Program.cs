@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Scalar.AspNetCore;
@@ -38,6 +39,13 @@ builder.AddRagBlobEnvelope();
 builder.Services.AddOptions<SecurityOptions>().BindConfiguration(SecurityOptions.SectionName);
 builder.Services.AddSingleton<AdminKeyHasher>();
 builder.AddRagDataProtection();
+// Explain access (identity §4.9): the policy snapshot loaded at the current version for each question (no monitor: the
+// admin applies no outbox), and the api's policy with the same Knowledge:OpenToClientKinds.
+builder.Services.TryAddSingleton<ConfigVersionState>();
+builder.Services.AddSingleton(sp => new Ume.Rag.Infrastructure.Access.PolicySnapshotStore(sp.GetRequiredService<NpgsqlDataSource>(),
+    sp.GetRequiredService<ConfigVersionState>(), sp.GetRequiredService<ILogger<Ume.Rag.Infrastructure.Access.PolicySnapshotStore>>()));
+builder.Services.AddSingleton<Ume.Rag.Domain.Access.IAccessPolicy>(new Ume.Rag.Domain.Access.AccessPolicy(new HashSet<string>(
+    builder.Configuration.GetSection("Knowledge:OpenToClientKinds").Get<string[]>() ?? ["internal"], StringComparer.Ordinal)));
 builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -109,6 +117,8 @@ api.MapSources();
 api.MapRuns();
 api.MapPiiReport();
 api.MapDocuments();
+api.MapAudit();
+api.MapExplainAccess();
 api.MapPreviews();
 api.MapTestRetrieval();
 api.MapUploads();
