@@ -65,6 +65,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   client_stores_history: 'En assistent med klassen känslig kan inte erbjudas i en klient som sparar chatthistorik.',
   query_steps_invalid: 'Inställningen {field} ligger utanför det tillåtna intervallet.',
   link_host_not_allowed: 'En länk måste vara https till en tillåten webbplats, och högst 5 länkar.',
+  evaluation_model_unset: 'Ingen modell för att skapa testfrågor är vald. En plattformsadministratör väljer den under Inställningar.',
 }
 
 /** When the problem has no code we know: by status. */

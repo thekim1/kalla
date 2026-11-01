@@ -199,6 +199,9 @@ public static class AdminErrorCodes
     /// <summary>V15: a not-found link is not https on an allowed host, or there are more than 5.</summary>
     public static AdminErrorCode LinkHostNotAllowed { get; } = new("link_host_not_allowed", 409, "A link must be https on an allowed site, at most 5 links.");
 
+    /// <summary>Generating test questions needs <c>Settings.EvaluationModel</c> (processing design §13.1: no implicit default).</summary>
+    public static AdminErrorCode EvaluationModelUnset { get; } = new("evaluation_model_unset", 409, "No model is chosen for generating test questions.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -207,5 +210,5 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed, EvaluationModelUnset];
 }
