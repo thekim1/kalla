@@ -104,6 +104,7 @@ api.MapSiteProfiles();
 api.MapAssistants();
 api.MapSources();
 api.MapRuns();
+api.MapPiiReport();
 api.MapUploads();
 api.MapKeys();
 api.MapOrganisation();
