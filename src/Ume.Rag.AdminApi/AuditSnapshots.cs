@@ -19,6 +19,7 @@ public static class AuditEntityTypes
     public const string Run = "run";
     public const string Document = "document";
     public const string Key = "key";
+    public const string Pipeline = "pipeline";
 }
 
 /// <summary>The <c>Details</c> of an audit entry. Copied.</summary>

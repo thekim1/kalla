@@ -335,6 +335,26 @@
       "code": "test_answer_failed",
       "status": 502,
       "message": "The model could not answer the test question ({reason}). Try again."
+    },
+    {
+      "code": "pipeline_params_invalid",
+      "status": 400,
+      "message": "The setting {param} is not valid for this processing: {message}"
+    },
+    {
+      "code": "publication_not_ready",
+      "status": 409,
+      "message": "The plan is not ready. Wait for it or make a new one."
+    },
+    {
+      "code": "publication_stale",
+      "status": 409,
+      "message": "The processing changed after the plan was made. Make a new plan."
+    },
+    {
+      "code": "version_not_rollbackable",
+      "status": 409,
+      "message": "Only an earlier published version can be restored."
     }
   ]
 }

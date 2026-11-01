@@ -68,6 +68,10 @@ export const ERROR_MESSAGES: Record<string, string> = {
   evaluation_model_unset: 'Ingen modell för att skapa testfrågor är vald. En plattformsadministratör väljer den under Inställningar.',
   version_not_restorable: 'Version {number} är utkastet eller den publicerade versionen och kan inte återställas.',
   retention_outside_policy: 'Informationsklassen {level} tillåter historik {modes} och högst {maxDays} dagar.',
+  pipeline_params_invalid: 'Inställningen {param} fungerar inte för den här bearbetningen: {message}',
+  publication_not_ready: 'Planen är inte klar. Vänta en stund eller gör en ny plan.',
+  publication_stale: 'Bearbetningen har ändrats sedan planen gjordes. Gör en ny plan.',
+  version_not_rollbackable: 'Bara en tidigare publicerad version kan återställas.',
   test_answer_failed: 'Modellen kunde inte svara på testfrågan ({reason}). Försök igen.',
   search_unavailable: 'Sökningen kunde inte köras just nu. Försök igen om en stund.',
 }
