@@ -169,8 +169,8 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   the interim gateway key's rate limit from 60/min (the crawl's 429s).
 - **Merged later:** #240 PII patterns refuse a match inside an alphanumeric token (from a `PiiModeEngineTests` flake:
   a GUID's digits read as a phone number); B's #223 (chat schema) and #235 (age decay, approved). **Reviewed:** #238
-  (gateway address out of logs/telemetry) **changes requested**: a failed request's span keeps an `exception` event
-  whose message/stacktrace hold host:port (probe); #239 (`CrawlFrontier.FetchUrl`, chat ciphertext CHECKs) approved.
+  (gateway address out of logs/telemetry): B merged it 17 s after my change request, so the leak is on `main` — a
+  failed request's span keeps an `exception` event whose message/stacktrace hold host:port (probe); **#232 reopened**; #239 (`CrawlFrontier.FetchUrl`, chat ciphertext CHECKs) approved.
   Closed #234 (L2). `main` = `9d3c7ae` green locally (Worker.Tests 1116 ×2); its runner run was queued at the end.
 
 **At the restart (session 14):** the AppHost was left **running** with the pilot data (Postgres dev volume from the
@@ -204,7 +204,7 @@ or reveal through the admin API (`POST /api/keys/{id}/reveal`, audited).
 ## Next step
 
 1. **Check `main` and GitHub** (recreate `verify.sh`, `watch.sh`, `adm.py`; dispatch `verify.yml` on `main`; arm the
-   watcher). Re-review **#238** when B pushes the span-event scrub; B merges #239. Answer #236/#237 when B replies.
+   watcher). Check B's fix for **#232** (reopened: span exception events still hold the gateway host:port); B merges #239. Answer #236/#237 when B replies.
 2. **Stream A: use `CrawlFrontier.FetchUrl`** once #239 is on `main`: fetch `FetchUrl ?? Url` (so `Documents.Url` is
    the readable path on umea.se), re-check scope on the path form where only the identity was known (#229's
    `CheckIdentity` cases: removal checks, `scope-narrowed`, retry-failed), report demote counts over it; then re-crawl
