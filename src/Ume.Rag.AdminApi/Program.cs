@@ -101,6 +101,7 @@ api.MapClients();
 api.MapCollections();
 api.MapEvaluation();
 api.MapSiteProfiles();
+api.MapAssistants();
 api.MapSources();
 api.MapRuns();
 api.MapUploads();

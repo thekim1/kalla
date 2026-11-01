@@ -151,11 +151,46 @@ public static class AdminErrorCodes
     /// <summary>No department exists yet to queue the work for (run the organisation sync first).</summary>
     public static AdminErrorCode NoDepartment { get; } = new("no_department", 409, "There are no departments yet. Run the organisation sync first.");
 
+    /// <summary>Publish without a draft.</summary>
+    public static AdminErrorCode NoDraft { get; } = new("no_draft", 409, "There is no draft to publish.");
+
+    /// <summary>A never-published assistant's draft is its only version and cannot be dropped.</summary>
+    public static AdminErrorCode DraftIsOnlyVersion { get; } = new("draft_is_only_version", 409, "The draft is the assistant's only version.");
+
+    /// <summary>V34: the draft was created before the current published version (a restore since); confirm to publish it.</summary>
+    public static AdminErrorCode DraftBaseChanged { get; } = new("draft_base_changed", 409, "The draft is based on an older version than the published one. Confirm to publish it anyway.");
+
+    /// <summary>V34: description and contact are required to publish.</summary>
+    public static AdminErrorCode AssistantContactMissing { get; } = new("assistant_contact_missing", 409, "Add a description and a contact before publishing.");
+
+    /// <summary>V34: the definition does not resolve (<c>{link}</c>); <c>affected</c> lists the ids.</summary>
+    public static AdminErrorCode VersionLinkMissing { get; } = new("version_link_missing", 409, "The assistant refers to something that is missing: {link}.");
+
+    /// <summary>V11: at most 20 collections.</summary>
+    public static AdminErrorCode TooManyCollections { get; } = new("too_many_collections", 409, "An assistant can use at most 20 knowledge banks.");
+
+    /// <summary>V11: a collection of another department (shares are P2); <c>affected</c> lists them.</summary>
+    public static AdminErrorCode CollectionNotShared { get; } = new("collection_not_shared", 409, "A knowledge bank belongs to another department.");
+
+    /// <summary>V7: an audience client's ceiling is below the assistant's level <c>{level}</c>; <c>affected</c> lists the clients.</summary>
+    public static AdminErrorCode AudienceAboveCeiling { get; } = new("audience_above_ceiling", 409, "A client cannot show an assistant at level {level}.");
+
+    /// <summary>V9: a sensitive assistant for a client that stores history.</summary>
+    public static AdminErrorCode ClientStoresHistory { get; } = new("client_stores_history", 409, "A sensitive assistant cannot be offered to a client that stores chat history.");
+
+    /// <summary>V17 (and V15's text lengths): <c>{field}</c> is outside its range.</summary>
+    public static AdminErrorCode QueryStepsInvalid { get; } = new("query_steps_invalid", 409, "The setting {field} is outside its allowed range.");
+
+    /// <summary>V15: a not-found link is not https on an allowed host, or there are more than 5.</summary>
+    public static AdminErrorCode LinkHostNotAllowed { get; } = new("link_host_not_allowed", 409, "A link must be https on an allowed site, at most 5 links.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
             RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
             NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
-            KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment];
+            KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
+            NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared,
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed];
 }
