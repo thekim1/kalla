@@ -317,6 +317,11 @@
       "message": "No model is chosen for generating test questions."
     },
     {
+      "code": "search_unavailable",
+      "status": 503,
+      "message": "The search could not run right now. Try again."
+    },
+    {
       "code": "version_not_restorable",
       "status": 409,
       "message": "Version {number} is the draft or the published version and cannot be restored."

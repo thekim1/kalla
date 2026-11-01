@@ -66,6 +66,9 @@ builder.Services.AddSingleton<GatewayApi>();
 builder.Services.AddSingleton<GatewayModelSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayModelSync>());
 builder.Services.AddScoped<GatewayModelCheck>();
+// The retrieval test (admin design §4.9): the search core on the process's data source, query embeddings on their own gateway client.
+builder.AddGatewayClient(Ume.Rag.Answering.GatewayQueryEmbedder.HttpClientName);
+builder.Services.AddSingleton<AdminRetrieval>();
 builder.Services.AddHostedService<RetentionService>();
 builder.Services.AddRateLimiter(o =>
 {
@@ -117,6 +120,7 @@ api.MapDocuments();
 api.MapAudit();
 api.MapExplainAccess();
 api.MapPreviews();
+api.MapTestRetrieval();
 api.MapUploads();
 api.MapKeys();
 api.MapOrganisation();

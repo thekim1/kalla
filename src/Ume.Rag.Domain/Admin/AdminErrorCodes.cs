@@ -207,6 +207,8 @@ public static class AdminErrorCodes
 
     /// <summary>V10: the history mode or the retention days are outside the level's data-protection policy.</summary>
     public static AdminErrorCode RetentionOutsidePolicy { get; } = new("retention_outside_policy", 409, "The level {level} allows history {modes} and at most {maxDays} days.");
+    /// <summary>The retrieval test could not search: the database or the query embedding is unavailable (knowledge design §5.5).</summary>
+    public static AdminErrorCode SearchUnavailable { get; } = new("search_unavailable", 503, "The search could not run right now. Try again.");
 
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
@@ -216,5 +218,5 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed, EvaluationModelUnset, VersionNotRestorable, RetentionOutsidePolicy];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy];
 }
