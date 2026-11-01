@@ -8,9 +8,13 @@ import type {
   DocumentSummary,
   KeysetPage,
   OrgSyncResult,
+  Job,
   OrgSyncStatus,
   Page,
+  Source,
+  SourceCreate,
   SourceSummary,
+  SyncStarted,
 } from './types'
 
 /** The admin API, one function per endpoint (adapted from the gateway's api/index.ts). */
@@ -32,6 +36,16 @@ export const api = {
     create: (body: CollectionCreate) => http.post<Collection>('/api/collections', body),
     publish: (id: string, version: string) => http.post<Collection>(`/api/collections/${id}/publish`, { version }),
     sources: (id: string) => http.get<SourceSummary[]>(`/api/collections/${id}/sources`),
+    addSource: (id: string, body: SourceCreate) => http.post<Source>(`/api/collections/${id}/sources`, body),
+  },
+  sources: {
+    get: (id: string) => http.get<Source>(`/api/sources/${id}`),
+    sync: (id: string) => http.post<SyncStarted>(`/api/sources/${id}/sync`),
+    preflight: (body: { collectionId: string; type: string; settings: Record<string, unknown> }) =>
+      http.post<{ jobId: string }>('/api/sources/preflight', body),
+  },
+  jobs: {
+    get: <T = unknown>(id: string) => http.get<Job<T>>(`/api/jobs/${id}`),
   },
   documents: {
     list: (query: { collectionId?: string; sourceId?: string; q?: string; pii?: string; after?: string; limit?: number }) =>

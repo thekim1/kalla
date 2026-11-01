@@ -153,3 +153,49 @@ export interface DocumentSummary {
   fetchedAt: IsoDateTime | null
   lastSeenAt: IsoDateTime
 }
+
+export interface Source extends SourceSummary {
+  settings: Record<string, unknown>
+  schedule: string | null
+  pipelineId: string
+  containsThirdPartyText: boolean
+  updatedAt: IsoDateTime
+  updatedBy: string | null
+  version: string
+}
+
+export interface SourceCreate {
+  type: SourceType
+  name: string
+  classification: Level
+  settings: Record<string, unknown>
+}
+
+export interface SyncStarted {
+  jobId: string | null
+  runId: string | null
+  alreadyRunning: boolean
+  kind: string | null
+}
+
+/** A job the UI polls (admin design §4.7): `state` queued, running, succeeded, failed, dead or cancelled. */
+export interface Job<TResult = unknown> {
+  id: string
+  class: string
+  kind: string | null
+  state: string
+  enqueuedAt: IsoDateTime
+  completedAt: IsoDateTime | null
+  runId: string | null
+  result: TResult | null
+  lastError: string | null
+}
+
+export type CheckState = 'pass' | 'warn' | 'fail'
+
+export interface PreflightResult {
+  state: CheckState
+  checks: { check: string; state: CheckState; code: string; target?: string | null }[]
+  estimatedPages?: number | null
+  cms?: string | null
+}
