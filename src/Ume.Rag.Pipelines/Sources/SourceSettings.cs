@@ -27,6 +27,33 @@ public static class SourceSettings
     /// <summary>The settings as their record (<see cref="UrlListSettings"/>, …); unknown members throw <see cref="JsonException"/>.</summary>
     public static object Bind(string sourceType, JsonElement settings) => ContractJson.Deserialize(settings, SettingsType(sourceType));
 
+    /// <summary>
+    /// The source's <c>piiMode</c>; <see cref="PiiMode.Hold"/> (the strictest) when the type is unknown or the settings do
+    /// not bind, so settings the admin would refuse never relax a hold.
+    /// </summary>
+    public static PiiMode PiiModeOf(string sourceType, JsonElement settings)
+    {
+        if (!SourceTypes.All.Contains(sourceType, StringComparer.Ordinal))
+        {
+            return PiiMode.Hold;
+        }
+
+        try
+        {
+            return Bind(sourceType, settings) switch
+            {
+                UrlListSettings urlList => urlList.PiiMode,
+                CrawlSettings crawl => crawl.PiiMode,
+                UploadSettings upload => upload.PiiMode,
+                _ => PiiMode.Hold,
+            };
+        }
+        catch (JsonException)
+        {
+            return PiiMode.Hold;
+        }
+    }
+
     /// <summary>The effect tag of every member, by JSON name.</summary>
     public static IReadOnlyDictionary<string, SettingEffect> Effects(string sourceType)
     {
