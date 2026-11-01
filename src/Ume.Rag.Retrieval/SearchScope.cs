@@ -26,6 +26,13 @@ public sealed record SearchScope(
     public IReadOnlyDictionary<Guid, IReadOnlyList<DemotePattern>> Demote { get; init; } = new Dictionary<Guid, IReadOnlyList<DemotePattern>>();
 
     /// <summary>
+    /// The keyword stop list: lexemes statement K drops from the query (knowledge design §6.2, §20; Decisions "Keyword stop
+    /// list before the pilot crawl"). <see cref="RetrievalEngine"/> sets it from <see cref="ScopeSizeCache.StopLexemesAsync"/>;
+    /// callers leave it empty.
+    /// </summary>
+    public IReadOnlyList<string> KeywordStopLexemes { get; init; } = [];
+
+    /// <summary>
     /// The settings that act on the whole ranking (weights, candidate depth, per-document cap): the collections' values
     /// when all agree, else the platform defaults (knowledge design §6.5: one coherent ranking).
     /// </summary>

@@ -54,6 +54,19 @@ internal sealed class FakeIndex : ISearchIndex, IScopeSizeSource
 
     public List<string> KeywordQueries { get; } = [];
 
+    /// <summary>The stop list each keyword call was given (<see cref="SearchScope.KeywordStopLexemes"/>).</summary>
+    public List<IReadOnlyList<string>> KeywordStopLists { get; } = [];
+
+    /// <summary>The frequent-lexeme rows; a thrown exception when <see cref="LexemeFailure"/> is set.</summary>
+    public IReadOnlyList<FrequentLexeme> Lexemes { get; set; } = [];
+
+    public Exception? LexemeFailure { get; set; }
+
+    public int LexemeReads { get; private set; }
+
+    /// <summary>When set, a lexeme read waits for it (to observe a background refresh).</summary>
+    public TaskCompletionSource? HoldLexemes { get; set; }
+
     public List<VectorSearch> VectorSearches { get; } = [];
 
     public TaskCompletionSource? HoldKeyword { get; set; }
@@ -61,6 +74,7 @@ internal sealed class FakeIndex : ISearchIndex, IScopeSizeSource
     public async Task<IReadOnlyList<Candidate>> KeywordAsync(SearchScope scope, string querySearchText, RetrievalFilters? filters, int limit, CancellationToken cancellationToken)
     {
         KeywordQueries.Add(querySearchText);
+        KeywordStopLists.Add(scope.KeywordStopLexemes);
         if (HoldKeyword is not null)
         {
             await HoldKeyword.Task.WaitAsync(cancellationToken);
@@ -76,6 +90,17 @@ internal sealed class FakeIndex : ISearchIndex, IScopeSizeSource
     }
 
     public Task<IReadOnlyList<CollectionChunkCount>> CountChunksAsync(CancellationToken cancellationToken) => Task.FromResult(Counts);
+
+    public async Task<IReadOnlyList<FrequentLexeme>> FrequentLexemesAsync(long minChunks, double minShare, CancellationToken cancellationToken)
+    {
+        LexemeReads++;
+        if (HoldLexemes is not null)
+        {
+            await HoldLexemes.Task.WaitAsync(cancellationToken);
+        }
+
+        return LexemeFailure is null ? Lexemes : throw LexemeFailure;
+    }
 }
 
 /// <summary>A reranker with fixed scores per chunk id, or one that fails.</summary>
