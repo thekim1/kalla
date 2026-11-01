@@ -13,8 +13,11 @@ public interface ICrawlHostStore
     /// <summary>The host's row, inserted with <paramref name="initial"/> when absent; budget columns follow the current kind and override.</summary>
     Task<CrawlHostState> EnsureAsync(CrawlHostState initial, CancellationToken cancellationToken);
 
-    /// <summary>Takes the next slot (<see cref="HostBudgetPolicy.TakeSlot"/>); null when the host is blocked, paused or unknown.</summary>
-    Task<DateTimeOffset?> TryTakeSlotAsync(string host, TimeSpan interval, CancellationToken cancellationToken);
+    /// <summary>
+    /// Takes the next slot when it is at most <paramref name="maxWait"/> away, else returns the free time untaken
+    /// (<see cref="HostBudgetPolicy.TakeSlot"/>); null when the host is blocked, paused or unknown.
+    /// </summary>
+    Task<SlotTake?> TryTakeSlotAsync(string host, TimeSpan interval, TimeSpan maxWait, CancellationToken cancellationToken);
 
     /// <summary>Applies one response (<see cref="HostBudgetPolicy.Apply"/>) and returns the row after it.</summary>
     Task<CrawlHostState> RecordResponseAsync(string host, HostResponse response, CancellationToken cancellationToken);
@@ -87,9 +90,10 @@ public sealed class HostLease : IDisposable
 /// The per-host politeness budget every crawl request takes before it is sent (connectors design §6.0, §6.3–§6.4): a slot
 /// from <c>CrawlHosts.NextAllowedAt</c> spaced by the host's interval (shared by every source and level), then a
 /// connection of the host's in-process cap (P1: one worker instance; the Redis lease is P2). A slot more than 1 s away is
-/// not waited for: the job requeues at it without an attempt. Responses feed back-off, latency and the circuit breaker
-/// (≥ 50 of the last 100 responses 5xx, timeouts or 404 → paused 30 minutes). The breaker window and the connection
-/// semaphores are per instance; the row is the authority for slots and pauses.
+/// neither taken nor waited for: the job requeues at it without an attempt and the row is left as it was, so waiting jobs
+/// never push the slots further out (a livelock on a busy 1 req/s host, pilot crawl 2026-11-01). Responses feed back-off,
+/// latency and the circuit breaker (≥ 50 of the last 100 responses 5xx, timeouts or 404 → paused 30 minutes). The breaker
+/// window and the connection semaphores are per instance; the row is the authority for slots and pauses.
 /// </summary>
 public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy, TimeProvider time)
 {
@@ -142,15 +146,16 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
         }
 
         var interval = HostBudgetPolicy.Interval(state);
-        if (await store.TryTakeSlotAsync(host, interval, cancellationToken) is not { } slot)
+        if (await store.TryTakeSlotAsync(host, interval, HostBudgetPolicy.MaxInProcessWait, cancellationToken) is not { } slot)
         {
             return new HostSlot.Refused(Paused, null);
         }
 
-        var wait = slot - time.GetUtcNow();
-        if (wait > HostBudgetPolicy.MaxInProcessWait)
+        var wait = slot.At - time.GetUtcNow();
+        if (!slot.Taken)
         {
-            return new HostSlot.Later(wait, Politeness);
+            // The database clock decided the free time is more than MaxInProcessWait away; a skewed local clock cannot shorten that.
+            return new HostSlot.Later(wait > HostBudgetPolicy.MaxInProcessWait ? wait : HostBudgetPolicy.MaxInProcessWait, Politeness);
         }
 
         if (wait > TimeSpan.Zero)
@@ -158,6 +163,8 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
             await Task.Delay(wait, time, cancellationToken);
         }
 
+        // A slot lost to the connection wait costs one interval; it happens only while a request has held the connection
+        // longer than ConnectionWait, so it cannot repeat without a request in flight.
         var connections = _connections.GetOrAdd(host, _ => new SemaphoreSlim(state.MaxConnections, state.MaxConnections));
         using var timeout = new CancellationTokenSource(ConnectionWait, time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);

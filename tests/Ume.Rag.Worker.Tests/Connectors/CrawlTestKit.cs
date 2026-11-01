@@ -51,16 +51,16 @@ internal sealed class InMemoryCrawlHostStore(TimeProvider time) : ICrawlHostStor
         }
     }
 
-    public Task<DateTimeOffset?> TryTakeSlotAsync(string host, TimeSpan interval, CancellationToken cancellationToken)
+    public Task<SlotTake?> TryTakeSlotAsync(string host, TimeSpan interval, TimeSpan maxWait, CancellationToken cancellationToken)
     {
         lock (_lock)
         {
             if (!_rows.TryGetValue(host, out var row))
             {
-                return Task.FromResult<DateTimeOffset?>(null);
+                return Task.FromResult<SlotTake?>(null);
             }
 
-            var (state, slot) = HostBudgetPolicy.TakeSlot(row, interval, time.GetUtcNow());
+            var (state, slot) = HostBudgetPolicy.TakeSlot(row, interval, time.GetUtcNow(), maxWait);
             _rows[host] = state;
             return Task.FromResult(slot);
         }

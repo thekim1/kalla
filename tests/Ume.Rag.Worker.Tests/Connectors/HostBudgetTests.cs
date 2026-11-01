@@ -45,8 +45,10 @@ public sealed class HostBudgetTests
         var slots = new List<DateTimeOffset>();
         for (var i = 0; i < 100; i++)
         {
-            (state, var slot) = HostBudgetPolicy.TakeSlot(state, HostBudgetPolicy.Interval(state), Start);
-            slots.Add(slot!.Value);
+            // A wait long enough for all 100 (10 s).
+            (state, var slot) = HostBudgetPolicy.TakeSlot(state, HostBudgetPolicy.Interval(state), Start, TimeSpan.FromSeconds(10));
+            slot!.Taken.ShouldBeTrue();
+            slots.Add(slot.At);
         }
 
         slots[0].ShouldBe(Start);
@@ -61,10 +63,27 @@ public sealed class HostBudgetTests
     [Fact]
     public void A_blocked_or_paused_host_gets_no_slot_and_an_idle_one_starts_now()
     {
-        HostBudgetPolicy.TakeSlot(Host() with { BlockedAt = Start }, TimeSpan.FromSeconds(1), Start).Slot.ShouldBeNull();
-        HostBudgetPolicy.TakeSlot(Host() with { PausedUntil = Start.AddMinutes(1) }, TimeSpan.FromSeconds(1), Start).Slot.ShouldBeNull();
-        HostBudgetPolicy.TakeSlot(Host() with { PausedUntil = Start.AddMinutes(-1), NextAllowedAt = Start.AddHours(-1) }, TimeSpan.FromSeconds(1), Start)
-            .Slot.ShouldBe(Start);
+        var second = TimeSpan.FromSeconds(1);
+        HostBudgetPolicy.TakeSlot(Host() with { BlockedAt = Start }, second, Start, second).Slot.ShouldBeNull();
+        HostBudgetPolicy.TakeSlot(Host() with { PausedUntil = Start.AddMinutes(1) }, second, Start, second).Slot.ShouldBeNull();
+        HostBudgetPolicy.TakeSlot(Host() with { PausedUntil = Start.AddMinutes(-1), NextAllowedAt = Start.AddHours(-1) }, second, Start, second)
+            .Slot.ShouldBe(new SlotTake(Start, Taken: true));
+    }
+
+    [Fact]
+    public void A_slot_further_away_than_the_wait_is_not_taken_and_the_row_stays_as_it_was()
+    {
+        var second = TimeSpan.FromSeconds(1);
+        var busy = Host() with { NextAllowedAt = Start.AddSeconds(10) };
+
+        var (state, slot) = HostBudgetPolicy.TakeSlot(busy, second, Start, second);
+
+        slot.ShouldBe(new SlotTake(Start.AddSeconds(10), Taken: false));
+        state.ShouldBe(busy);
+        // Exactly the wait away: taken, and the next free time moves by one interval.
+        (state, slot) = HostBudgetPolicy.TakeSlot(Host() with { NextAllowedAt = Start.AddSeconds(1) }, second, Start, second);
+        slot.ShouldBe(new SlotTake(Start.AddSeconds(1), Taken: true));
+        state.NextAllowedAt.ShouldBe(Start.AddSeconds(2));
     }
 
     [Fact]
