@@ -262,8 +262,8 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
         var plan = await ExplainAsync(Api, ["enable_seqscan", "enable_indexscan"], """
             SELECT "Id" FROM content."Chunks"
             WHERE "Kind" = 'child' AND "DeletedAt" IS NULL
-              AND "SearchVector" @@ content.rag_or_query(to_tsvector('swedish', 'bygglov'))
-            """);
+              AND "SearchVector" @@ content.rag_or_query(to_tsvector('swedish', 'pelargon'))
+            """); // a word no test writes: other tests' chunks in the shared database must not make it common
         plan.ShouldContain("IX_Chunks_SearchVector", customMessage: plan);
 
         // (ChunkSetId, Ordinal) is unique: section expansion reads neighbours by it.
