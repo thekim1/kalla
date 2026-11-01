@@ -53,11 +53,11 @@ Refs: [knowledge §2–§5, §9, §10, §16.3, §16.6](../knowledge-api/design.m
 ## 6. Admin API set-up surface (#14)
 Refs: [admin §4.1–§4.7, §12](../admin/design.md), [weakness review §1](../weakness-review.md)
 - [x] OpenAPI and Scalar on `rag-admin`; `AdminClientAddresses` with `Settings.TrustedProxies` (#32, #38) (item 14a; settings, data protection and templates (read) of the third box are in it too)
-- [x] Collections (publish, retrieval settings), sources (sync now, upload batches), runs and crawl report, `cancel-run` (#46) (#176, #178, this PR; #32 recorded with its live part open)
-- [ ] Site profiles (edit, roll back), templates (read), clients and keys, settings, data protection (history `none` only)
-- [ ] Assistants: create, draft, publish, audience = client; evaluation questions and runs; member groups by hand
-- [ ] **Done:** the pilot set-up works through Scalar alone; audited; `PermissionMatrix` covers each endpoint; #32 recorded
-- [ ] **Hand-off J7:** issue to stream A and the user
+- [x] Collections (publish, retrieval settings), sources (sync now, upload batches), runs and crawl report, `cancel-run` (#46) (#176, #178, #180; #32 recorded with its live part open)
+- [x] Site profiles (edit, roll back), templates (read), clients and keys, settings, data protection (history `none` only) (#167, #185, #188)
+- [x] Assistants: create, draft, publish, audience = client; evaluation questions and runs; member groups by hand (#189, #190)
+- [x] **Done:** the pilot set-up works through Scalar alone; audited; `PermissionMatrix` covers each endpoint; #32 recorded (this PR: `PilotSetupTests`; #32 in #180 with its live part open)
+- [x] **Hand-off J7:** issue to stream A and the user (#193)
 
 ## 7. Chat API (#15)
 Refs: [chat §3–§10, §15.1, §18](../chat-api/design.md), [identity §5](../identity/design.md)
