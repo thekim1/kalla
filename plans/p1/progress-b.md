@@ -66,7 +66,7 @@ Refs: [chat §3–§10, §15.1, §18](../chat-api/design.md), [identity §5](../
 - [x] Marker renumbering; Open WebUI `source` events and `url_citation`; output filter; attachments refused (#198, #203)
 - [x] Open WebUI user-JWT trust; `open-webui` resource in the AppHost (#205, #206)
 - [x] **Done:** a FakeGateway answer cites a fixture document in Open WebUI; #42, #47, #48, #50, #103, #105, #136, #154, #164, #165 recorded (this PR: through Open WebUI's API on the AppHost, smoke pages ingested by the pipeline; the browser checks of #47, #50 and #165 and the pilot-data rows stay open, see results)
-- [ ] **Hand-off J9:** issue to stream A
+- [x] **Hand-off J9:** issue to stream A (#210)
 
 ## 8. Realm additions (#16)
 Refs: [identity §11](../identity/design.md), Decisions table "P1 pilot sign-in", issue #47
