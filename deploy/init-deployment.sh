@@ -487,6 +487,8 @@ UME_RAG_SECRETS_DIR=$secrets
 UME_RAG_OIDC_AUTHORITY=$oidc_authority
 UME_RAG_OIDC_CLIENT_ID=$oidc_client
 UME_RAG_GATEWAY_URL=$gateway_url
+# Register M2: every model call EU-hosted until on-prem hardware exists; empty once External routes and keys exist.
+UME_RAG_GATEWAY_MAX_RESIDENCY=Eu
 UME_RAG_API_PUBLIC_URL=https://$api_host$public_api
 UME_RAG_ADMIN_PUBLIC_HOST=$admin_host
 # Listeners default to loopback (0.0.0.0 with --proxy: firewall them to the proxy only).

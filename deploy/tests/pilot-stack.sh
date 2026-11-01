@@ -76,6 +76,8 @@ env_is "$base" rag-parser PARSER_WORKERS 1
 env_is "$base" rag-parser PARSER_THREADS 2
 env_is "$base" rag-api OpenWebUi__BaseUrl ""
 env_is "$base" rag-api OpenWebUi__FeedbackImportInterval 00:15:00
+env_is "$base" rag-api Gateway__MaxResidency ""
+env_is "$base" rag-admin Gateway__MaxResidency ""
 
 # --- 24 GB pilot host: pilot caps and limits ------------------------------------------------------------------------
 pilot="$(render compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml)"
@@ -139,6 +141,8 @@ else fail "init-deployment.sh: a re-run changed the service account"; fi
 if grep -qx "UME_RAG_OPENWEBUI_BASE_URL=https://chat.example.se" "$i/deploy/.env"; then
   ok "init-deployment.sh --openwebui-host: rag-api's importer reads https://chat.example.se"
 else fail "init-deployment.sh --openwebui-host: no UME_RAG_OPENWEBUI_BASE_URL in deploy/.env"; fi
+if grep -qx "UME_RAG_GATEWAY_MAX_RESIDENCY=Eu" "$i/deploy/.env"; then ok "init-deployment.sh: Gateway:MaxResidency Eu (register M2)"
+else fail "init-deployment.sh: no UME_RAG_GATEWAY_MAX_RESIDENCY=Eu in deploy/.env"; fi
 if grep -q "compose.host-24g.yaml" "$i/deploy/.env"; then ok "init-deployment.sh --host-memory 24: COMPOSE_FILE has compose.host-24g.yaml"
 else fail "init-deployment.sh --host-memory 24: compose.host-24g.yaml not in COMPOSE_FILE"; fi
 if (

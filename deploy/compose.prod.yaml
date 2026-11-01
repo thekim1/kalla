@@ -146,6 +146,8 @@ services:
       BlobStore__Root: /data/blobs/rag
       # Gateway keys per level are secret files (Gateway__Keys__<level>, init-deployment.sh --gateway-key-file).
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
+      # Caps every model call's ceiling (identity design §4.7): Eu under register M2; empty once External routes exist.
+      Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-}
       # Open WebUI's client in the registry; the user JWT's key is the secret file OpenWebUi__JwtSecret (identity §5.2).
       OpenWebUi__ClientId: ${UME_RAG_OPENWEBUI_CLIENT_ID:-}
       # The origin staff browsers reach rag-api at (J9, #210): citation links are absolute, so they resolve from Open
@@ -207,6 +209,7 @@ services:
       Oidc__ClientId: ${UME_RAG_OIDC_CLIENT_ID:-ume-rag-admin}
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL}
+      Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: rag-admin
       SSL_CERT_FILE: /run/certs/ca.pem
