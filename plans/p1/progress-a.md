@@ -94,7 +94,11 @@ Refs: [repo-and-deployment §6, §7.1](../platform/repo-and-deployment.md), [cha
 - [ ] **Done:** stack healthy locally
 
 ## 11. EU-route capacity (#19, after J10)
-- [ ] `scripts/capacity/` against the EU embedding and chat routes; umea.se initial-load time and cost told to the user
+- [x] `scripts/capacity/` against the EU embedding and chat routes; umea.se initial-load time and cost told to the user
+      (2026-11-01, interim gateway: embedding ≈ 18–20k tokens/s (key-limited), query embedding p95 156 ms, answer TTFT
+      p99 3.1 s, condense fails the 600 ms cut on every EU model; `results-a.md` #98, #99, #104, #125, #149. Initial
+      load: fetch-bound at 2 req/s, ≈ 2.1 h for ≈ 15,400 URLs plus PDF parsing; embedding ≈ 5M tokens for the HTML and
+      an estimated 40–160M for ≈ 8,100 PDFs, ≈ $6–22 at the list price; told to the user)
 
 ## 12. umea.se set-up and crawl (#20, after J7, J10, J12)
 - [ ] Pilot collection, umea.se crawl source with the manual profile, pilot URL list, one upload, set up through Scalar
