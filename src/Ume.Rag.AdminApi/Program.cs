@@ -90,6 +90,8 @@ var api = app.MapGroup("/api").RequireAuthorization(AdminPolicies.Read).RequireR
 api.MapGet("/ping", () => Results.Ok(new { ok = true })).RequireAuthorization(AdminPolicies.Read);
 api.MapClients();
 api.MapCollections();
+api.MapSources();
+api.MapRuns();
 api.MapOrganisation();
 api.MapSettings();
 api.MapDataProtection();

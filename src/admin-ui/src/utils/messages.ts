@@ -22,6 +22,12 @@ export const ERROR_MESSAGES: Record<string, string> = {
   collection_level_conflict: 'Kunskapsbanken kan inte sänkas till {level}: en källa har högre informationsklass.',
   assistant_below_collection: 'Assistentens informationsklass är lägre än kunskapsbanken {collection} ({level}). Höj assistentens klass eller ta bort kunskapsbanken.',
   retrieval_settings_invalid: 'Sökinställningen {field} måste vara {expected}.',
+  source_above_collection: 'En källa kan inte ha högre informationsklass än sin kunskapsbank {collection} ({level}).',
+  source_settings_invalid: 'Källinställningen {field} är ogiltig: {problem}',
+  impact_not_confirmed: 'Ändringen påverkar vilka dokument källan innehåller. Kontrollera påverkan och bekräfta.',
+  template_unsupported: 'Det finns ingen pipeline för källtypen {type}.',
+  admin_only: 'Bara en plattformsadministratör kan ändra detta.',
+  run_not_active: 'Körningen har redan avslutats ({state}).',
 }
 
 /** When the problem has no code we know: by status. */
