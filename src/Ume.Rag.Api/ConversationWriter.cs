@@ -151,7 +151,7 @@ public sealed partial class ConversationWriter : BackgroundService
                 }
 
                 await WriteWithRetryAsync(batch, stoppingToken);
-                batch.Clear();
+                batch.Clear(); // written or dropped and counted down; on shutdown a cancelled write throws before this and the drain retries it
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -171,6 +171,7 @@ public sealed partial class ConversationWriter : BackgroundService
 
     private async Task WriteWithRetryAsync(List<ChatTurn> batch, CancellationToken ct)
     {
+        var completed = false;
         try
         {
             if (!await TryAsync(batch, ct))
@@ -184,10 +185,16 @@ public sealed partial class ConversationWriter : BackgroundService
                     }
                 }
             }
+
+            completed = true;
         }
         finally
         {
-            Interlocked.Add(ref _pending, -batch.Count);
+            // A batch cancelled by shutdown is written again by the drain, which counts it down then (#263 review).
+            if (completed || !ct.IsCancellationRequested)
+            {
+                Interlocked.Add(ref _pending, -batch.Count);
+            }
         }
     }
 
@@ -241,15 +248,23 @@ public sealed partial class ConversationWriter : BackgroundService
         {
             var expires = turn.At.AddDays(turn.RetentionDays);
             var conflict = turn.IssuedId is null ? """("ClientId", "SubjectId", "ExternalChatId", "AssistantId")""" : """("Id")""";
-            var (conversationId, inserted) = await ScalarPairAsync(connection, transaction, $"""
+            var owned = await ScalarPairAsync(connection, transaction, $"""
                 INSERT INTO chat."Conversations" AS c ("Id", "Classification", "AssistantId", "ClientId", "SubjectKind", "SubjectId", "ExternalChatId",
                     "HistoryMode", "RetentionDays", "CreatedAt", "LastMessageAt", "ExpiresAt")
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11)
                 ON CONFLICT {conflict} DO UPDATE SET "LastMessageAt" = GREATEST(c."LastMessageAt", excluded."LastMessageAt"),
                     "ExpiresAt" = GREATEST(c."ExpiresAt", excluded."ExpiresAt")
+                    WHERE c."ClientId" = excluded."ClientId" AND c."SubjectId" = excluded."SubjectId" AND c."AssistantId" = excluded."AssistantId"
                 RETURNING "Id", (xmax = 0)
                 """, ct, turn.IssuedId ?? Guid.CreateVersion7(), turn.Classification, turn.AssistantId, turn.ClientId, turn.SubjectKind, turn.SubjectId,
                 (object?)turn.ExternalChatId ?? DBNull.Value, turn.HistoryMode, turn.RetentionDays, turn.At, expires);
+            if (owned is not var (conversationId, inserted))
+            {
+                // The id belongs to another client, subject or assistant (#266): the SQL refuses it on its own, whatever the MAC said.
+                _dropped.Add(1, new KeyValuePair<string, object?>("reason", "owner"));
+                LogDropped(_logger, turn.IssuedId?.ToString("N") ?? "open-webui chat", "owner");
+                continue;
+            }
 
             // Seq under a row lock on the conversation, held for this transaction only.
             await ExecuteAsync(connection, transaction, """SELECT 1 FROM chat."Conversations" WHERE "Id" = $1 FOR UPDATE""", ct, conversationId);
@@ -329,13 +344,13 @@ public sealed partial class ConversationWriter : BackgroundService
         return (T)(await command.ExecuteScalarAsync(ct))!;
     }
 
-    private static async Task<(Guid, bool)> ScalarPairAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql, CancellationToken ct,
+    /// <summary>The upsert's row, or null when its <c>WHERE</c> refused the update (another owner's conversation).</summary>
+    private static async Task<(Guid, bool)?> ScalarPairAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql, CancellationToken ct,
         params object[] values)
     {
         await using var command = Command(connection, transaction, sql, values);
         await using var reader = await command.ExecuteReaderAsync(ct);
-        await reader.ReadAsync(ct);
-        return (reader.GetGuid(0), reader.GetBoolean(1));
+        return await reader.ReadAsync(ct) ? (reader.GetGuid(0), reader.GetBoolean(1)) : null;
     }
 
     private static NpgsqlCommand Command(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql, object[] values)

@@ -46,7 +46,7 @@ public static class ChatEndpoints
             .WithName("ListModels").WithSummary("The assistants this caller may use, as OpenAI models");
 
         chat.MapPost("/chat/completions", async (HttpContext http, ChatCallers callers, ChatService service, ChatRateLimiter limiter, ConversationIds ids,
-                ConversationWriter writer, CancellationToken ct) =>
+                ConversationWriter writer, IPolicySnapshotSource snapshots, CancellationToken ct) =>
             await OpenAiAsync(http, async () =>
             {
                 var who = await callers.AuthenticateAsync(http.Request, userRequired: true, ct);
@@ -62,7 +62,10 @@ public static class ChatEndpoints
 
                 var parsed = ChatRequestParser.Parse(body);
                 limiter.Check(who, service.Platform.MessagesPerMinutePerUser); // §4.1 step 4: per user and minute, before any model call
-                var conversation = ConversationKey(http, who, ids); // §11.1: an issued id is verified before any model call
+                // §11.1: an issued id is verified before any model call, bound to the asked assistant (#266); an unknown model is
+                // the plan's 404, so Guid.Empty only ever signs or verifies an id that is never used.
+                var assistantId = snapshots.Current.Assistants.Values.FirstOrDefault(a => string.Equals(a.Slug, parsed.Model, StringComparison.Ordinal))?.Id ?? Guid.Empty;
+                var conversation = ConversationKey(http, who, assistantId, ids);
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 ValueTask Enqueue(ChatPlan plan, IReadOnlyList<PromptSource> cited, int prompt, int completion) =>
                     writer.EnqueueAsync(Turn(plan, who, conversation, cited, prompt, completion, (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
@@ -97,7 +100,7 @@ public static class ChatEndpoints
     /// The turn's conversation (chat design §11.1): Open WebUI's chat id (<c>X-OpenWebUI-Chat-Id</c>), or for other clients
     /// the issued id sent back (verified, else 404) or a new one, returned in <c>x-rag-conversation-id</c>.
     /// </summary>
-    private static (Guid? Issued, string? External) ConversationKey(HttpContext http, RagPrincipal who, ConversationIds ids)
+    private static (Guid? Issued, string? External) ConversationKey(HttpContext http, RagPrincipal who, Guid assistantId, ConversationIds ids)
     {
         if (who.Client.Kind == "open-webui" && http.Request.Headers["X-OpenWebUI-Chat-Id"].ToString() is { Length: > 0 and <= 200 } chatId)
         {
@@ -107,12 +110,12 @@ public static class ChatEndpoints
         var sent = http.Request.Headers[ConversationIds.HeaderName].ToString();
         if (sent.Length > 0)
         {
-            var id = ids.Verify(sent, who.Client.Id, who.SubjectId);
+            var id = ids.Verify(sent, who.Client.Id, assistantId, who.SubjectId);
             http.Response.Headers[ConversationIds.HeaderName] = sent;
             return (id, null);
         }
 
-        var (issued, header) = ids.Issue(who.Client.Id, who.SubjectId);
+        var (issued, header) = ids.Issue(who.Client.Id, assistantId, who.SubjectId);
         http.Response.Headers[ConversationIds.HeaderName] = header;
         return (issued, null);
     }

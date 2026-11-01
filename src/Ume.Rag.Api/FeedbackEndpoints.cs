@@ -8,9 +8,9 @@ namespace Ume.Rag.Api;
 
 /// <summary>
 /// <c>POST /v1/feedback</c> (chat design §3.5, §14.1): a rating of an assistant message of the caller's own conversation,
-/// upserted by (message, <c>api</c>), with the daily totals' thumbs moved by the delta. History mode <c>none</c> (all of
+/// upserted by (message, <c>api</c>) under a lock on the message row, with the daily totals' thumbs moved by the delta. History mode <c>none</c> (all of
 /// P1, weakness review §4): a comment is refused with 400 <c>comment_not_stored</c>. <c>ReasonCategory</c> is the reason
-/// when it is one of Open WebUI's fixed keys, else <c>other</c> (admin design §8.1).
+/// when it is one of Open WebUI's fixed keys or the API's own reasons, else <c>other</c>.
 /// </summary>
 public static class FeedbackEndpoints
 {
@@ -30,7 +30,14 @@ public static class FeedbackEndpoints
 
     private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
-    public static string CategoryOf(string? reason) => reason is not null && OpenWebUiReasons.Contains(reason) ? reason : "other";
+    /// <summary>
+    /// The plaintext category (main-session decision on #264): an Open WebUI key or one of the API's own reasons is kept,
+    /// anything else is <c>other</c>.
+    /// </summary>
+    public static string CategoryOf(string? reason) => reason is not null && (OpenWebUiReasons.Contains(reason) || Reasons.Contains(reason)) ? reason : "other";
+
+    /// <summary>The body limit: a rating with a 2,000-character comment fits in far less.</summary>
+    public const int MaxBodyBytes = 16 * 1024;
 
     public static IEndpointRouteBuilder MapFeedback(this IEndpointRouteBuilder app)
     {
@@ -43,7 +50,26 @@ public static class FeedbackEndpoints
                 JsonElement body;
                 try
                 {
-                    body = (await JsonDocument.ParseAsync(http.Request.Body, cancellationToken: ct)).RootElement;
+                    if (http.Request.ContentLength > MaxBodyBytes)
+                    {
+                        throw new ChatException(413, "request_too_large", "The body is too large.");
+                    }
+
+                    using var limited = new MemoryStream();
+                    var buffer = new byte[4096];
+                    int read;
+                    while ((read = await http.Request.Body.ReadAsync(buffer, ct)) > 0)
+                    {
+                        if (limited.Length + read > MaxBodyBytes)
+                        {
+                            throw new ChatException(413, "request_too_large", "The body is too large.");
+                        }
+
+                        limited.Write(buffer, 0, read);
+                    }
+
+                    limited.Position = 0;
+                    body = (await JsonDocument.ParseAsync(limited, cancellationToken: ct)).RootElement;
                 }
                 catch (JsonException)
                 {
@@ -56,8 +82,7 @@ public static class FeedbackEndpoints
                 await using var connection = await data.OpenConnectionAsync(ct);
                 await using var transaction = await connection.BeginTransactionAsync(ct);
                 await using var find = new NpgsqlCommand("""
-                    SELECT m."ConversationId", m."Classification", m."CreatedAt", c."AssistantId", c."HistoryMode",
-                           (SELECT f."Rating" FROM chat."Feedback" f WHERE f."MessageId" = m."Id" AND f."Source" = 'api')
+                    SELECT m."ConversationId", m."Classification", m."CreatedAt", c."AssistantId", c."HistoryMode"
                     FROM chat."Messages" m JOIN chat."Conversations" c ON c."Id" = m."ConversationId"
                     WHERE m."Id" = $1 AND m."Role" = 'assistant' AND c."ClientId" = $2 AND c."SubjectId" = $3
                     FOR UPDATE OF m
@@ -78,7 +103,14 @@ public static class FeedbackEndpoints
 
                     (conversationId, level, at, assistantId, mode) = (reader.GetGuid(0), reader.GetString(1), reader.GetFieldValue<DateTimeOffset>(2), reader.GetGuid(3),
                         reader.GetString(4));
-                    previous = reader.IsDBNull(5) ? null : reader.GetInt16(5);
+                }
+
+                // After the lock, in its own statement: READ COMMITTED gives it a fresh snapshot, so a request that waited sees the
+                // rating the other one committed (a sub-select of the locking statement would not, #264 review).
+                await using (var current = new NpgsqlCommand("""SELECT "Rating" FROM chat."Feedback" WHERE "MessageId" = $1 AND "Source" = 'api'""",
+                                 connection, transaction) { Parameters = { new() { Value = messageId } } })
+                {
+                    previous = await current.ExecuteScalarAsync(ct) is short value ? value : null;
                 }
 
                 // Identity §4.3 step 4: the Feedback permission on the message's assistant; anything else looks like a missing message.

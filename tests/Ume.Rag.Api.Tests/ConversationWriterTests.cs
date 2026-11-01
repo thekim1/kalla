@@ -1,0 +1,80 @@
+using System.Diagnostics.Metrics;
+using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
+using Ume.Rag.Answering.Chat;
+using Ume.Rag.TestKit;
+
+namespace Ume.Rag.Api.Tests;
+
+/// <summary>
+/// Conversation ids and the writer (chat design §11.1, §12; #266): an issued id is bound to client, assistant and subject;
+/// the writer refuses to append to a conversation of another owner or assistant on its own, whatever the MAC said; Open
+/// WebUI chats are one conversation per (user, chat id, assistant).
+/// </summary>
+public sealed class ConversationWriterTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private sealed class Meters : IMeterFactory
+    {
+        public Meter Create(MeterOptions options) => new(options);
+
+        public void Dispose()
+        {
+        }
+    }
+
+    [Fact]
+    public void An_issued_id_verifies_only_for_its_client_assistant_and_subject_and_across_key_rotation()
+    {
+        var (client, assistant, other) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        var old = new ConversationIds(new Dictionary<string, byte[]> { ["2026a"] = new byte[32] });
+        var (id, header) = old.Issue(client, assistant, "user-1");
+        var rotated = new ConversationIds(new Dictionary<string, byte[]> { ["2026a"] = new byte[32], ["2026b"] = Enumerable.Repeat((byte)7, 32).ToArray() });
+
+        rotated.Verify(header, client, assistant, "user-1").ShouldBe(id);
+        rotated.HeaderFor(id, client, assistant, "user-1").ShouldNotBe(header); // the newest key signs
+        foreach (var (c, a, s) in new[] { (client, other, "user-1"), (other, assistant, "user-1"), (client, assistant, "user-2") })
+        {
+            Should.Throw<ChatException>(() => rotated.Verify(header, c, a, s)).Code.ShouldBe("conversation_not_found");
+        }
+    }
+
+    private static ChatTurn Turn(Guid? issued, string? chat, Guid assistant, Guid client, string subject, string level = "public") => new(
+        Guid.CreateVersion7(), issued, chat, assistant, Guid.CreateVersion7(), Guid.CreateVersion7(), client, chat is null ? "application" : "owui-user", subject, level,
+        "none", 90, "answered", "ok", null, "sv", false, "ume/chat-eu", "Eu", 10, 5, 100, null, [], DateTimeOffset.UtcNow);
+
+    [Fact]
+    public async Task The_writer_refuses_another_owners_or_assistants_conversation_and_keeps_open_webui_chats_apart()
+    {
+        await using var api = NpgsqlDataSource.Create(db.Connection(RagDatabase.Api));
+        using var meters = new Meters();
+        var writer = new ConversationWriter(api, meters, NullLogger<ConversationWriter>.Instance);
+        var (client, assistant, internalAssistant) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        var issued = Guid.CreateVersion7();
+
+        await writer.WriteAsync([Turn(issued, null, assistant, client, "user-C")], Ct);
+        // Another subject, and another assistant (of another level), with the same id: refused by the upsert's WHERE.
+        await writer.WriteAsync([Turn(issued, null, assistant, client, "user-D"), Turn(issued, null, internalAssistant, client, "user-C", "internal")], Ct);
+        (await CountAsync(api, $"""SELECT count(*) FROM chat."Messages" WHERE "ConversationId" = '{issued}'""")).ShouldBe(2);
+        (await CountAsync(api, $"""SELECT count(*) FROM chat."Messages" WHERE "ConversationId" = '{issued}' AND "Classification" <> 'public'""")).ShouldBe(0);
+
+        // Open WebUI: two turns of one chat are one conversation; the same chat id of another user is its own.
+        var chat = "chat-" + Guid.CreateVersion7().ToString("N");
+        var second = Turn(null, chat, assistant, client, "owui:u-1");
+        await writer.WriteAsync([Turn(null, chat, assistant, client, "owui:u-1")], Ct);
+        await writer.WriteAsync([second, Turn(null, chat, assistant, client, "owui:u-2")], Ct);
+        (await CountAsync(api, $"""SELECT count(*) FROM chat."Conversations" WHERE "ExternalChatId" = '{chat}'""")).ShouldBe(2);
+        (await CountAsync(api, $"""
+            SELECT count(*) FROM chat."Messages" m JOIN chat."Conversations" c ON c."Id" = m."ConversationId"
+            WHERE c."ExternalChatId" = '{chat}' AND c."SubjectId" = 'owui:u-1'
+            """)).ShouldBe(4);
+        (await CountAsync(api, $"""SELECT count(*) FROM chat."Messages" WHERE "Id" = '{second.MessageId}' AND "Role" = 'assistant'""")).ShouldBe(1); // chatcmpl id kept
+    }
+
+    private static async Task<long> CountAsync(NpgsqlDataSource data, string sql)
+    {
+        await using var command = data.CreateCommand(sql);
+        return (long)(await command.ExecuteScalarAsync(Ct))!;
+    }
+}
