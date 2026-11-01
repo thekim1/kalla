@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Answering.Chat;
 using Ume.Rag.Domain.Access;
 using Ume.Rag.Domain.Entities;
@@ -133,5 +134,72 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         refused.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         refused.Headers.WwwAuthenticate.ToString().ShouldBe("Bearer");
         (await refused.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error").GetProperty("type").GetString().ShouldBe("authentication_error");
+    }
+
+    /// <summary>A key of the integration client scoped to <paramref name="collections"/> (as a department admin's key, #185).</summary>
+    private async Task<string> ScopedKeyAsync(params Guid[] collections)
+    {
+        var generated = new Ume.Rag.Domain.Services.KeyHasher(System.Text.Encoding.UTF8.GetBytes(KnowledgeFixture.KeyPepper)).Generate();
+        await using var context = TestPostgres.Context(db.Connection(RagDatabase.Admin));
+        await Ume.Rag.Infrastructure.Config.ConfigWrites.ExecuteConfigWriteAsync(context, async (_, ct) =>
+        {
+            context.Keys.Add(new ApiKey
+            {
+                ClientId = db.IntegrationClient, Name = "scoped", Prefix = generated.Prefix, KeyHash = generated.Hash, CreatedAt = DateTimeOffset.UtcNow, CreatedBy = "test",
+                Scopes = new KeyScopes([], collections),
+            });
+            await context.SaveChangesAsync(ct);
+            return 0;
+        }, Ct);
+        return generated.PlainText;
+    }
+
+    [Fact]
+    public async Task A_collection_scoped_key_searches_only_its_collections_and_sees_only_assistants_that_reach_them()
+    {
+        // #198 review: "bygg" links department A's and B's collections; "miljo" links only B's. A key scoped to A's collection.
+        var snapshot = Snapshot();
+        var bygg = snapshot.Assistants[db.AssistantId];
+        var miljo = Guid.NewGuid();
+        snapshot = snapshot with
+        {
+            Assistants = new Dictionary<Guid, AssistantEntry>
+            {
+                [db.AssistantId] = bygg with { Published = bygg.Published! with { CollectionIds = [db.DeptACollection, db.DeptBCollection] } },
+                [miljo] = bygg with { Id = miljo, Slug = "miljo", Name = "Miljö", Published = bygg.Published! with { Id = Guid.NewGuid(), CollectionIds = [db.DeptBCollection] } },
+            },
+        };
+        await using var api = db.ApiHost(snapshot).WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Rag:Roles", "knowledge,chat");
+            web.ConfigureTestServices(services =>
+                services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+        });
+        using var scoped = Client(api, await ScopedKeyAsync(db.DeptACollection));
+        using var unscoped = Client(api, db.IntegrationKey);
+
+        (await scoped.GetFromJsonAsync<JsonElement>("/v1/models", Ct)).GetProperty("data").EnumerateArray().Select(m => m.GetProperty("id").GetString()).ShouldBe(["bygg"]);
+        (await unscoped.GetFromJsonAsync<JsonElement>("/v1/models", Ct)).GetProperty("data").EnumerateArray().Select(m => m.GetProperty("id").GetString())
+            .ShouldBe(["bygg", "miljo"]);
+        using (var outside = await Ask(scoped, "Vad visar tomtkartan?", model: "miljo"))
+        {
+            outside.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+            (await outside.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error").GetProperty("code").GetString().ShouldBe("model_not_found");
+        }
+
+        // The scoped key's answer cites only department A's document (B's is never in the prompt).
+        await using var check = TestPostgres.Context(db.Connection(null));
+        async Task<IReadOnlyList<Guid>> CitedSources(HttpClient client)
+        {
+            using var response = await Ask(client, "Vad visar tomtkartan om fastighetsgränser och servitut?");
+            response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+            var documents = body.GetProperty("choices")[0].GetProperty("message").GetProperty("annotations").EnumerateArray()
+                .Select(a => Guid.Parse(a.GetProperty("url_citation").GetProperty("url").GetString()!.Split('/')[3])).ToList();
+            return await check.Documents.AsNoTracking().Where(d => documents.Contains(d.Id)).Select(d => d.SourceId).Distinct().ToListAsync(Ct);
+        }
+
+        (await CitedSources(scoped)).ShouldBe([db.DeptASource]);
+        (await CitedSources(unscoped)).ShouldNotBeEmpty(); // unchanged: either department's document may rank first
     }
 }
