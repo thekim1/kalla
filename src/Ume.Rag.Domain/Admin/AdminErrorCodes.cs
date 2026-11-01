@@ -202,6 +202,12 @@ public static class AdminErrorCodes
     /// <summary>Generating test questions needs <c>Settings.EvaluationModel</c> (processing design §13.1: no implicit default).</summary>
     public static AdminErrorCode EvaluationModelUnset { get; } = new("evaluation_model_unset", 409, "No model is chosen for generating test questions.");
 
+    /// <summary>Restore takes an earlier published version: not the draft and not the version that is live.</summary>
+    public static AdminErrorCode VersionNotRestorable { get; } = new("version_not_restorable", 409, "Version {number} is the draft or the published version and cannot be restored.");
+
+    /// <summary>V10: the history mode or the retention days are outside the level's data-protection policy.</summary>
+    public static AdminErrorCode RetentionOutsidePolicy { get; } = new("retention_outside_policy", 409, "The level {level} allows history {modes} and at most {maxDays} days.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -210,5 +216,5 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed, EvaluationModelUnset];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed, EvaluationModelUnset, VersionNotRestorable, RetentionOutsidePolicy];
 }

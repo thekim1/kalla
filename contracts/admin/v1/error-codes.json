@@ -315,6 +315,16 @@
       "code": "evaluation_model_unset",
       "status": 409,
       "message": "No model is chosen for generating test questions."
+    },
+    {
+      "code": "version_not_restorable",
+      "status": 409,
+      "message": "Version {number} is the draft or the published version and cannot be restored."
+    },
+    {
+      "code": "retention_outside_policy",
+      "status": 409,
+      "message": "The level {level} allows history {modes} and at most {maxDays} days."
     }
   ]
 }
