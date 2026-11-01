@@ -21,7 +21,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// with a personnummer is still held and <c>clear-pii-flag</c> releases it; a NER-pending set goes live and the drift sweep
 /// that later checks its names does not hold it.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup2.Name)]
 public sealed class PiiModeEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private static readonly string[] ListLike =
