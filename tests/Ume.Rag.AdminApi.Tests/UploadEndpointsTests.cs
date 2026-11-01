@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Domain.Ports;
 using Ume.Rag.TestKit;
 
 namespace Ume.Rag.AdminApi.Tests;
@@ -24,9 +25,33 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
     private readonly string _blobs = Directory.CreateTempSubdirectory("ume-rag-admin-blobs-").FullName;
 
-    public void Dispose() => Directory.Delete(_blobs, recursive: true);
+    public void Dispose()
+    {
+        Directory.Delete(_blobs, recursive: true);
+        if (_keys is not null)
+        {
+            Directory.Delete(_keys, recursive: true);
+        }
+    }
 
-    private WebApplicationFactory<Program> Factory() => database.HeaderFactory().WithWebHostBuilder(web => web.UseSetting("BlobStore:Root", _blobs));
+    private WebApplicationFactory<Program> Factory()
+    {
+        var keys = Directory.CreateDirectory(Path.Combine(_blobs, "..", Path.GetFileName(_blobs) + "-keys")).FullName;
+        var keyFile = Path.Combine(keys, "rag-blob-internal");
+        if (!File.Exists(keyFile))
+        {
+            File.WriteAllText(keyFile, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)) + "\n");
+        }
+
+        _keys = keys;
+        return database.HeaderFactory().WithWebHostBuilder(web =>
+        {
+            web.UseSetting("BlobStore:Root", _blobs);
+            web.UseSetting("KeyProvider:Directory", keys);
+        });
+    }
+
+    private string? _keys;
 
     private static async Task<JsonElement> Json(HttpResponseMessage response) => await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
 
@@ -130,8 +155,19 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
         entry.GetProperty("fileName").GetString().ShouldBe("Taxa för bygglov.pdf");
         var slot = entry.GetProperty("uploadId").GetGuid();
         var sha = entry.GetProperty("sha256").GetString()!;
-        (await File.ReadAllBytesAsync(Path.Combine(_blobs, "uploads", sourceId.ToString("D"), slot.ToString("D"), sha), Ct)).ShouldBe(pdf);
-        Directory.Exists(Path.Combine(_blobs, "tmp", "upload-batches", batch.ToString("D"))).ShouldBeFalse();
+        // The source is internal: the stored blob is URB2 (#181) and decrypts to exactly the upload; its key ends in the plaintext's SHA-256.
+        var stored = await File.ReadAllBytesAsync(Path.Combine(_blobs, "uploads", sourceId.ToString("D"), slot.ToString("D"), sha), Ct);
+        stored[..4].ShouldBe("URB2"u8.ToArray());
+        var envelope = factory.Services.GetRequiredService<Ume.Rag.Infrastructure.Blobs.IBlobEnvelope>();
+        var plain = (await envelope.OpenReadAsync(new BlobKey($"uploads/{sourceId:D}/{slot:D}/{sha}"), Classification.Internal, Ct)).ShouldNotBeNull();
+        await using (plain.Content)
+        {
+            using var buffer = new MemoryStream();
+            await plain.Content.CopyToAsync(buffer, Ct);
+            buffer.ToArray().ShouldBe(pdf);
+        }
+
+        Directory.Exists(Path.Combine(_blobs, "tmp", "upload-batches", batch.ToString("D"), "data")).ShouldBeFalse();
         ContractSchemaCheck(manifest.RootElement);
 
         await using var db = TestPostgres.Context(database.Connection(null));
@@ -143,11 +179,26 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
 
         (await db.AuditLog.AsNoTracking().CountAsync(a => a.EntityType == "source" && a.EntityId == sourceId.ToString() && a.Action == "upload-commit", Ct)).ShouldBe(1);
 
-        // A committed batch is gone; a discarded one too.
-        (await PutFileAsync(admin, batch, 2, "sen.pdf", pdf)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        // A repeated commit (a lost response) answers the same job; one with other entries, or another file, is 409.
+        var jobId = job.Id;
+        using (var repeat = await admin.PostAsJsonAsync($"/api/upload-batches/{batch}/commit", new { files = new[] { 1 } }, Ct))
+        {
+            repeat.StatusCode.ShouldBe(HttpStatusCode.OK, await repeat.Content.ReadAsStringAsync(Ct));
+            (await Json(repeat)).GetProperty("jobId").GetGuid().ShouldBe(jobId);
+        }
+
+        using (var other = await admin.PostAsJsonAsync($"/api/upload-batches/{batch}/commit", new { files = new[] { 1, 2 } }, Ct))
+        {
+            other.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await Json(other)).GetProperty("code").GetString().ShouldBe("upload_batch_committed");
+        }
+
+        (await PutFileAsync(admin, batch, 2, "sen.pdf", pdf)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await db.Jobs.AsNoTracking().CountAsync(j => j.DedupKey == $"sync-upload:{batch}", Ct)).ShouldBe(1);
         using var second = await admin.PostAsync($"/api/sources/{sourceId}/upload-batches", null, Ct);
         var discarded = (await Json(second)).GetProperty("batchId").GetGuid();
         (await PutFileAsync(admin, discarded, 1, "x.pdf", pdf)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await PutFileAsync(admin, discarded, 2, "y.pdf", "%PDF-1.7 annan"u8.ToArray())).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await admin.DeleteAsync($"/api/upload-batches/{discarded}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await admin.PostAsJsonAsync($"/api/upload-batches/{discarded}/commit", new { files = new[] { 1 } }, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         Directory.Exists(Path.Combine(_blobs, "tmp", "upload-batches", discarded.ToString("D"))).ShouldBeFalse();
@@ -184,5 +235,33 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
         var batch = (await Json(create)).GetProperty("batchId").GetGuid();
         using var file = await PutFileAsync(admin, batch, 1, "stor.pdf", new byte[3 * 1024 * 1024]);
         file.StatusCode.ShouldBe(HttpStatusCode.OK, await file.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_manifest_left_by_a_failed_commit_with_other_entries_is_refused()
+    {
+        // A first commit wrote the manifest and failed after it (config lock, a conflict); a second with another list must not
+        // go on, or the worker would sync the first list.
+        var (sourceId, code) = await UploadSourceAsync();
+        await using var factory = Factory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
+        using var create = await admin.PostAsync($"/api/sources/{sourceId}/upload-batches", null, Ct);
+        var batch = (await Json(create)).GetProperty("batchId").GetGuid();
+        (await PutFileAsync(admin, batch, 1, "a.pdf", "%PDF-1.7 a"u8.ToArray())).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var leftover = new Ume.Rag.Pipelines.Jobs.UploadBatchManifest
+        {
+            BatchId = batch, SourceId = sourceId,
+            Entries = [new() { Operation = Ume.Rag.Pipelines.Jobs.UploadOperation.Delete, UploadId = Guid.CreateVersion7() }],
+        };
+        var blobs = factory.Services.GetRequiredService<IBlobStore>();
+        await blobs.PutAsync(new BlobKey($"uploads/{sourceId:D}/batches/{batch:D}.json"),
+            new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(leftover, Ume.Rag.Pipelines.Json.ContractJson.Options)), null, Ct);
+
+        using var commit = await admin.PostAsJsonAsync($"/api/upload-batches/{batch}/commit", new { files = new[] { 1 } }, Ct);
+        commit.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await Json(commit)).GetProperty("code").GetString().ShouldBe("upload_batch_committed");
+        await using var db = TestPostgres.Context(database.Connection(null));
+        (await db.Jobs.AsNoTracking().AnyAsync(j => j.DedupKey == $"sync-upload:{batch}", Ct)).ShouldBeFalse();
     }
 }

@@ -31,6 +31,8 @@ builder.AddRagDatabase();
 builder.AddRagJobQueue();
 // Upload batches (admin design §4.5): staged under tmp/, promoted to uploads/ at commit (BlobStore:Root).
 builder.AddRagBlobStore();
+// Internal uploads are envelope-encrypted when staged (data-model §7, #181): KeyProvider:Directory holds rag-blob-internal.
+builder.AddRagBlobEnvelope();
 builder.AddRagDataProtection();
 builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();

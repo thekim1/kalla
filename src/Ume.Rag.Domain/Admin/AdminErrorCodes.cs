@@ -116,10 +116,13 @@ public static class AdminErrorCodes
     /// <summary>The slug <c>{slug}</c> is taken (also by a deleted collection); <c>{suggestion}</c> is free.</summary>
     public static AdminErrorCode SlugTaken { get; } = new("slug_taken", 400, "The short name {slug} is already used. Try {suggestion}.");
 
+    /// <summary>The batch is committed: no more files, and a commit with other entries is refused.</summary>
+    public static AdminErrorCode UploadBatchCommitted { get; } = new("upload_batch_committed", 409, "The batch has already been committed with other files.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
             RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
             NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
-            SourcePaused, SlugTaken];
+            SourcePaused, SlugTaken, UploadBatchCommitted];
 }

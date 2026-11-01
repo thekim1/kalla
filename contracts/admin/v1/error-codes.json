@@ -170,6 +170,11 @@
       "code": "slug_taken",
       "status": 400,
       "message": "The short name {slug} is already used. Try {suggestion}."
+    },
+    {
+      "code": "upload_batch_committed",
+      "status": 409,
+      "message": "The batch has already been committed with other files."
     }
   ]
 }

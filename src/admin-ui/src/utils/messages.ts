@@ -37,6 +37,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   upload_batch_too_large: 'En omgång rymmer 1 till 100 filer och högst 500 MB.',
   source_paused: 'Källan är pausad. Återuppta den först.',
   slug_taken: 'Kortnamnet {slug} används redan. Prova {suggestion}.',
+  upload_batch_committed: 'Omgången är redan sparad med andra filer.',
 }
 
 /** When the problem has no code we know: by status. */

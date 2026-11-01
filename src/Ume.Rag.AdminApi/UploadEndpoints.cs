@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.Sources;
@@ -64,10 +65,11 @@ public static class UploadEndpoints
 
         var batches = api.MapGroup("/upload-batches").WithTags("Uploads");
 
-        batches.MapPut("/{batchId:guid}/files/{n}", async (Guid batchId, string n, HttpContext http, AdminContext admin, IBlobStore blobs, CancellationToken ct) =>
+        batches.MapPut("/{batchId:guid}/files/{n}", async (Guid batchId, string n, HttpContext http, AdminContext admin, IBlobStore blobs, IBlobEnvelope envelope,
+                CancellationToken ct) =>
             {
                 var number = FileNumber(n);
-                var (batch, source) = await OpenAsync(admin, blobs, batchId, ct);
+                var (_, source) = await OpenAsync(admin, blobs, batchId, ct, open: true);
                 var name = FileName(http.Request.Headers[FileNameHeader].ToString());
                 var extension = Path.GetExtension(name);
                 if (Deferred.Contains(extension))
@@ -99,12 +101,13 @@ public static class UploadEndpoints
                     throw AdminFaults.Of(AdminErrorCodes.UploadTooLarge, new Dictionary<string, string> { ["mb"] = (maxBytes / 1024 / 1024).ToString(System.Globalization.CultureInfo.InvariantCulture) });
                 }
 
-                // Staged under a fresh key, hashed while streaming; the file record makes it part of the batch.
+                // Staged under a fresh key, hashed while streaming (over the received plaintext) and written at the source's level:
+                // internal uploads are envelope-encrypted (URB2, data-model §7; #181). The commit promotes the blob unchanged.
                 var staged = new BlobKey($"tmp/upload-batches/{batchId:D}/data/{Guid.CreateVersion7():N}");
                 await using var counting = new HashingStream(http.Request.Body, maxBytes);
                 try
                 {
-                    await blobs.PutAsync(staged, counting, http.Request.ContentLength, ct);
+                    await envelope.PutAsync(staged, source.Classification, counting, http.Request.ContentLength, ct);
                 }
                 catch (FileTooLargeException)
                 {
@@ -121,7 +124,6 @@ public static class UploadEndpoints
                     throw AdminFaults.Of(AdminErrorCodes.UploadFileExists, new Dictionary<string, string> { ["n"] = number.ToString(System.Globalization.CultureInfo.InvariantCulture) });
                 }
 
-                _ = batch;
                 return new UploadedFile(number, file.UploadId, file.Operation.ToString().ToLowerInvariant(), file.FileName, file.Bytes, file.Sha256);
             })
             // No Accepts<> metadata: it would make routing answer 415 by content type before authorization; any type is taken.
@@ -131,8 +133,17 @@ public static class UploadEndpoints
 
         batches.MapPost("/{batchId:guid}/commit", async (Guid batchId, UploadCommitRequest request, AdminContext admin, IBlobStore blobs, CancellationToken ct) =>
             {
-                var (batch, source) = await OpenAsync(admin, blobs, batchId, ct);
+                var (_, source) = await OpenAsync(admin, blobs, batchId, ct);
                 var files = new List<StagedFile>();
+                var requested = new CommitRecord([.. request.Files.Distinct().Order()], [.. request.Deletes.Distinct().Order()], Guid.Empty, 0);
+                // A committed batch answers a repeat of the same commit with its result (a lost response, a double click).
+                if (await ReadAsync<CommitRecord>(blobs, CommittedKey(batchId), ct) is { } done)
+                {
+                    return done.Files.SequenceEqual(requested.Files) && done.Deletes.SequenceEqual(requested.Deletes)
+                        ? new UploadCommitted(batchId, done.JobId, done.Entries)
+                        : throw AdminFaults.Of(AdminErrorCodes.UploadBatchCommitted);
+                }
+
                 foreach (var number in request.Files.Distinct())
                 {
                     await using var stream = await blobs.OpenReadAsync(FileKey(batchId, number), null, ct)
@@ -180,8 +191,17 @@ public static class UploadEndpoints
                         .. deletes.Select(d => new UploadManifestEntry { Operation = UploadOperation.Delete, UploadId = d }),
                     ],
                 };
-                await blobs.PutAsync(new BlobKey($"uploads/{source.Id:D}/batches/{batchId:D}.json"),
-                    new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(manifest, ContractJson.Options)), null, ct);
+                var manifestKey = new BlobKey($"uploads/{source.Id:D}/batches/{batchId:D}.json");
+                if (await blobs.PutAsync(manifestKey, new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(manifest, ContractJson.Options)), null, ct)
+                    == BlobWriteResult.AlreadyExisted)
+                {
+                    // An earlier commit wrote the manifest and failed after it: go on only when it lists the same entries.
+                    var stored = await ReadAsync<UploadBatchManifest>(blobs, manifestKey, ct) ?? throw new InvalidOperationException("The manifest vanished.");
+                    if (!Same(stored.Entries, manifest.Entries))
+                    {
+                        throw AdminFaults.Of(AdminErrorCodes.UploadBatchCommitted);
+                    }
+                }
 
                 var result = await admin.WriteAsync(async attempt =>
                 {
@@ -199,15 +219,18 @@ public static class UploadEndpoints
                     };
                 }, ct);
 
-                await blobs.DeletePrefixAsync(new BlobKey($"tmp/upload-batches/{batchId:D}"), ct);
-                _ = batch;
-                return result;
+                // Keep batch.json and the commit record (the 24 h sweep removes them); the staged data is promoted, the file records done.
+                await blobs.PutAsync(CommittedKey(batchId), new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(
+                    requested with { JobId = await JobIdAsync(admin, batchId, result.JobId, ct), Entries = result.Entries }, ContractJson.Options)), null, ct);
+                await blobs.DeletePrefixAsync(new BlobKey($"tmp/upload-batches/{batchId:D}/data"), ct);
+                await blobs.DeletePrefixAsync(new BlobKey($"tmp/upload-batches/{batchId:D}/files"), ct);
+                return result with { JobId = await JobIdAsync(admin, batchId, result.JobId, ct) };
             })
             .RequireAuthorization(AdminPolicies.Edit).WithName("CommitUploadBatch").WithSummary("Commit a batch: manifest and the upload sync");
 
         batches.MapDelete("/{batchId:guid}", async (Guid batchId, AdminContext admin, IBlobStore blobs, CancellationToken ct) =>
             {
-                _ = await OpenAsync(admin, blobs, batchId, ct);
+                _ = await OpenAsync(admin, blobs, batchId, ct, open: true);
                 await blobs.DeletePrefixAsync(new BlobKey($"tmp/upload-batches/{batchId:D}"), ct);
                 return Results.NoContent();
             })
@@ -220,14 +243,44 @@ public static class UploadEndpoints
 
     private static BlobKey FileKey(Guid batchId, int n) => new($"tmp/upload-batches/{batchId:D}/files/{n}.json");
 
-    /// <summary>The batch and its source, both in the caller's scope; 404 for an unknown, committed or dropped batch.</summary>
-    private static async Task<(BatchState Batch, Source Source)> OpenAsync(AdminContext admin, IBlobStore blobs, Guid batchId, CancellationToken ct)
+    private static BlobKey CommittedKey(Guid batchId) => new($"tmp/upload-batches/{batchId:D}/committed.json");
+
+    /// <summary>
+    /// The batch and its source, both in the caller's scope; 404 for an unknown or dropped batch. With <paramref name="open"/>
+    /// (adding files, dropping) a committed batch is 409 <c>upload_batch_committed</c>.
+    /// </summary>
+    private static async Task<(BatchState Batch, Source Source)> OpenAsync(AdminContext admin, IBlobStore blobs, Guid batchId, CancellationToken ct, bool open = false)
     {
-        await using var stream = await blobs.OpenReadAsync(BatchKey(batchId), null, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-        var batch = await JsonSerializer.DeserializeAsync<BatchState>(stream, ContractJson.Options, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+        var batch = await ReadAsync<BatchState>(blobs, BatchKey(batchId), ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
         var source = await SourceEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == batch.SourceId, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+        if (open && await blobs.ExistsAsync(CommittedKey(batchId), ct))
+        {
+            throw AdminFaults.Of(AdminErrorCodes.UploadBatchCommitted);
+        }
+
         return (batch, source);
     }
+
+    private static async Task<T?> ReadAsync<T>(IBlobStore blobs, BlobKey key, CancellationToken ct)
+    {
+        await using var stream = await blobs.OpenReadAsync(key, null, ct);
+        return stream is null ? default : await JsonSerializer.DeserializeAsync<T>(stream, ContractJson.Options, ct);
+    }
+
+    /// <summary>The job of the batch's sync: the one enqueued now, or the one an earlier attempt enqueued (dedup <c>sync-upload:{batchId}</c>).</summary>
+    private static async Task<Guid> JobIdAsync(AdminContext admin, Guid batchId, Guid enqueued, CancellationToken ct)
+    {
+        var dedup = JobDedupKeys.SyncUpload(batchId);
+        return await admin.Db.Jobs.AsNoTracking().Where(j => j.DedupKey == dedup).OrderBy(j => j.EnqueuedAt).Select(j => (Guid?)j.Id).FirstOrDefaultAsync(ct) ?? enqueued;
+    }
+
+    private static bool Same(IReadOnlyList<UploadManifestEntry> a, IReadOnlyList<UploadManifestEntry> b) =>
+        a.Count == b.Count && a.Select(Key).Order(StringComparer.Ordinal).SequenceEqual(b.Select(Key).Order(StringComparer.Ordinal), StringComparer.Ordinal);
+
+    private static string Key(UploadManifestEntry e) => $"{e.Operation}|{e.UploadId:N}|{e.Sha256}";
+
+    /// <summary>The commit as requested and its result, kept with the batch so a repeat is answered the same.</summary>
+    private sealed record CommitRecord(IReadOnlyList<int> Files, IReadOnlyList<Guid> Deletes, Guid JobId, int Entries);
 
     private static int FileNumber(string n) =>
         int.TryParse(n, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) && number is >= 1 and <= MaxFilesPerBatch
