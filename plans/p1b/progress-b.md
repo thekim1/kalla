@@ -28,8 +28,8 @@ Refs: [data-model §2.3, §8](../platform/data-model.md), [weakness review §3, 
 
 ### 3. Age decay and `demote`
 Refs: [knowledge §6.5, §16.1](../knowledge-api/design.md), [weakness review §3](../weakness-review.md)
-- [ ] `recency` multiplier after fusion; `demote` lowest factor; uploads never demoted
-- [ ] `website` template default set on a collection's first `website` source
+- [x] `recency` multiplier after fusion; `demote` lowest factor; uploads never demoted (#235, this PR)
+- [x] `website` template default set on a collection's first `website` source (#235)
 - [ ] **Done:** §16.1 tests green; evaluator order == `/v1/retrieve` order
 - [ ] **Hand-off L3:** issue to stream A
 

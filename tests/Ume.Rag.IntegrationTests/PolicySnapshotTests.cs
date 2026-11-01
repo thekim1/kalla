@@ -46,6 +46,7 @@ public sealed class PolicySnapshotTests(RagDatabaseFixture database)
         snapshot.Collections[seeded.UnpublishedCollectionId].IsLive.ShouldBeFalse();
         snapshot.CollectionsBySlug[snapshot.Collections[seeded.CollectionId].Slug].Id.ShouldBe(seeded.CollectionId);
         snapshot.SourcesByCollection[seeded.CollectionId].ShouldBe([seeded.SourceId]);
+        snapshot.DemoteRules[seeded.SourceId].ShouldContain("www.umea.se/arkiv/**"); // Sources.DemoteRules, read with the api's column grant
         snapshot.EmbeddingProfiles[seeded.ProfileId].MaxResidency.ShouldBe(Residency.Eu);
         Classification.All.ShouldBeSubsetOf(snapshot.LevelPolicies.Keys);
 
@@ -123,7 +124,11 @@ public sealed class PolicySnapshotTests(RagDatabaseFixture database)
         var pipeline = new Pipeline { Name = "p-" + Guid.NewGuid().ToString("N"), TemplateId = "url-list", UpdatedAt = now };
         db.AddRange(collection, unpublished, pipeline);
         await db.SaveChangesAsync(Ct);
-        var source = new Source { CollectionId = collection.Id, Type = SourceTypes.UrlList, Name = "S", Classification = Classification.Public, PipelineId = pipeline.Id, UpdatedAt = now };
+        var source = new Source
+        {
+            CollectionId = collection.Id, Type = SourceTypes.UrlList, Name = "S", Classification = Classification.Public, PipelineId = pipeline.Id, UpdatedAt = now,
+            Settings = """{"urls": ["https://www.umea.se/a"], "demote": [{"pattern": "www.umea.se/arkiv/**", "factor": 0.5}]}""",
+        };
         var assistant = new Assistant { Slug = "a-" + Guid.NewGuid().ToString("N"), Name = "A", DepartmentId = collection.DepartmentId, Classification = Classification.Internal, UpdatedAt = now };
         db.AddRange(source, assistant);
         await db.SaveChangesAsync(Ct);

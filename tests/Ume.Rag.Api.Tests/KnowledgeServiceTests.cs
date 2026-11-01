@@ -257,6 +257,28 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         new("Behöver jag bygglov för altan?", null, collections, Purpose: RetrievalPurpose.Http);
 
     [Fact]
+    public async Task A_source_demote_pattern_ranks_its_pages_lower_and_never_an_upload()
+    {
+        // P1b item 3 part b (knowledge design §6.5): Sources.DemoteRules from the snapshot, matched on Documents.Url.
+        var plain = db.Snapshot();
+        var demoted = plain with
+        {
+            DemoteRules = new Dictionary<Guid, string> { [db.PublicSource] = """[{"pattern": "www.umea.se/bygga/**", "factor": 0.1}]""" },
+        };
+        var (service, _, host) = Build(demoted);
+        using var _ = host;
+        var (plainService, _, plainHost) = Build(plain);
+        using var __ = plainHost;
+
+        var before = await plainService.RetrieveAsync(db.Who(db.InternalClient, plain), Search(db.PublicCollection), Ct);
+        var after = await service.RetrieveAsync(db.Who(db.InternalClient, demoted), Search(db.PublicCollection), Ct);
+
+        before.Results[0].DocumentId.ShouldBe(db.Altan.Id);
+        after.Results.Select(r => r.DocumentId).ShouldBe([db.Upload.Id, db.Altan.Id]); // the upload has no URL: never demoted
+        after.Coverage.Status.ShouldBe(before.Coverage.Status);
+    }
+
+    [Fact]
     public async Task An_internal_caller_gets_hybrid_results_with_citations_and_the_counters_are_written()
     {
         var snapshot = db.Snapshot();
