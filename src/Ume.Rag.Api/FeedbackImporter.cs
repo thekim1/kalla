@@ -159,8 +159,7 @@ public sealed partial class FeedbackImporter(
 
         await using var transaction = await connection.BeginTransactionAsync(ct);
         await using var find = new NpgsqlCommand("""
-            SELECT m."Id", m."ConversationId", m."Classification", m."CreatedAt",
-                   (SELECT f."Rating" FROM chat."Feedback" f WHERE f."Source" = 'owui-import' AND f."ClientId" = $1 AND f."ExternalId" = $6)
+            SELECT m."Id", m."ConversationId", m."Classification", m."CreatedAt"
             FROM chat."Conversations" c JOIN chat."Messages" m ON m."ConversationId" = c."Id"
             WHERE c."ClientId" = $1 AND c."SubjectId" = $2 AND c."ExternalChatId" = $3 AND c."AssistantId" = $4 AND m."ExternalMessageId" = $5 AND m."Role" = 'assistant'
             FOR UPDATE OF m
@@ -169,7 +168,7 @@ public sealed partial class FeedbackImporter(
             Parameters =
             {
                 new() { Value = clientId }, new() { Value = "owui:" + item.UserId }, new() { Value = item.ChatId }, new() { Value = assistant.Id },
-                new() { Value = item.MessageId }, new() { Value = item.Id },
+                new() { Value = item.MessageId },
             },
         };
         Guid messageId, conversationId;
@@ -184,7 +183,14 @@ public sealed partial class FeedbackImporter(
             }
 
             (messageId, conversationId, level, at) = (reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetFieldValue<DateTimeOffset>(3));
-            previous = reader.IsDBNull(4) ? null : reader.GetInt16(4);
+        }
+
+        // After the lock, in its own statement (a fresh READ COMMITTED snapshot; #264 review).
+        await using (var current = new NpgsqlCommand("""
+            SELECT "Rating" FROM chat."Feedback" WHERE "Source" = 'owui-import' AND "ClientId" = $1 AND "ExternalId" = $2
+            """, connection, transaction) { Parameters = { new() { Value = clientId }, new() { Value = item.Id } } })
+        {
+            previous = await current.ExecuteScalarAsync(ct) is short value ? value : null;
         }
 
         await using (var upsert = new NpgsqlCommand("""
