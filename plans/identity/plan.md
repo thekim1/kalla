@@ -72,7 +72,8 @@ checks are no-ops (design §1.7, §11.2).
 
 **Mechanism**: the gateway's BFF pattern unchanged: OIDC code + PKCE, secure HttpOnly cookie, CSRF, 8-hour session,
 extend before expiry, never more than `Admin:MaxSessionHours` (12) from sign-in; audit actor is the **`oid`** claim
-(fallback `sub`), which is the same user id in every registration of the tenant.
+(fallback `sub`), which is the same user id in every registration of the tenant; on the P1 Keycloak there is no `oid`,
+so the actor is `sub` (design §1.1).
 
 **Claims**: exactly the gateway's names and meanings:
 
@@ -116,8 +117,8 @@ alternative, exactly as in the gateway.
 **Departments without a department attribute.** Both systems get department scope only from `departmentCodes`, and
 the municipality has no such attribute today (answered: users are organised in groups). Rather than a RAG-only
 mapping, the same small feature is added to **both systems** (see `../gateway-changes/plan.md`, feature C), **claims
-only**. It reaches production with **gateway release 2 in P2** ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)): our mirror gets member groups only from the
-gateway's catalogue. The resolver itself is built and tested in P0 against the FakeGateway catalogue.
+only**. It reaches production with **gateway release 2 in P2** ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)): only then does our mirror get member groups
+from the gateway's catalogue; until then they are entered by hand (below). The resolver itself is built and tested in P0 against the FakeGateway catalogue.
 
 - A department (in the gateway's *Organisation* page, and mirrored here because organisation data comes from the
   gateway) may list **member groups** (group claim values).
@@ -126,8 +127,9 @@ gateway's catalogue. The resolver itself is built and tested in P0 against the F
 - A group the token does not show adds nothing (scope can only narrow). A Graph lookup for such groups is P2 (§2).
 - When IT later adds a department attribute, the claim takes over without any code change.
 - **Until release 2** (P1), department scope comes from the `departmentCodes` claim, plus **member groups entered by
-  hand on our own department record** (settled, weakness review §5): a platform admin enters the pilot department's
-  group claim values in the department form (P1: Keycloak group names, design §2.2, §11.2; Entra object ids from P2), and our resolver matches them against the `groups` claim exactly as
+  hand on our own department record** (weakness review §5): a platform admin enters the pilot department's
+  group claim values with `PUT /api/organisation/departments/{id}/member-groups` (admin design §4.5; P1: Keycloak
+  group names, design §2.2, §11.2; Entra object ids from P2), and our resolver matches them against the `groups` claim exactly as
   it will later with synced data. With release 2 the org sync from the gateway catalogue fills the same field and the
   hand-entered values are replaced. The gateway itself is unchanged; platform admins need no department scope.
 
@@ -170,7 +172,8 @@ secret, short expiry, only from the Open WebUI instance's network.
   process-wide model list); Open WebUI's e-mail is never the basis of a grant.
 - **Beyond one department in Open WebUI** ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)): until W3 and E1 are solved, each department gets **its own Open
   WebUI instance**, registered as its own client with its own ceiling, and its assistants' audience is that client.
-  Spikes on E1 and on the W3 workaround (Open WebUI group permissions) run in late P1 (P1b).
+  The spike on the W3 workaround (Open WebUI group permissions) runs in P1b; E1 is P2, with Entra (Decisions table
+  "P1b briefs", O3).
 
 **Assistant versions** (`../simplification-pass.md` §15): audience and classification belong to the assistant, not to
 its versions, so publishing or restoring a version never changes who may use it; only the published version reaches
@@ -182,8 +185,9 @@ the data plane (design §4.3).
 **Client registry** (review R5): every client has an id, a classification ceiling and a data-handling profile. Pilot
 defaults: own chat client `sensitive`, Open WebUI `internal`, widget `public`, integrations as configured. The
 Open WebUI pilot client keeps `internal` only for EU providers covered by a processor agreement (PUB-avtal) and listed
-in the DPIA (register G1); if the DPIA requires more, it is limited to on-prem models (weakness review §4; how that is
-expressed in the registry is open, design §4.1).
+in the DPIA (register G1); if the DPIA requires more, it is limited to on-prem models by model choice, not by the
+registry (weakness review §4; design §4.1). With no on-prem hardware yet (register M2) that fallback does not exist
+(accepted risk, Decisions table "P1a plan answers").
 
 - **MCP clients: `public` by default**; a platform admin may raise a vetted client to `internal`, never `sensitive`.
 - **Clients that keep their own copy of conversations** (Open WebUI, Teams) have a ceiling of at most `internal`.
@@ -212,8 +216,7 @@ systems to the SIEM. Every denial is a security event.
 - **P3, on-behalf-of**: the tool hub exchanges the user's `rag-api` token for a downstream token with Entra OBO.
   - Needs a real Entra token: our own client, Teams and MCP clients send one; Open WebUI can too with
     `auth_type: system_oauth` if its login requests `api://rag-api/Chat.Use`
-    (`open-webui/backend/open_webui/utils/headers.py:209-212`; spiked in late P1 (P1b), weakness review §5, register
-    E1).
+    (`open-webui/backend/open_webui/utils/headers.py:209-212`; register E1, spiked in P2 with Entra).
   - **Decided**: the exchange uses the `rag-api` registration's credential (Entra requires the token to be issued to
     the app doing the exchange); `ume-rag-tools` stays for service-identity calls.
   - The user token is an internal, short-lived hand-off from the Chat API, never stored or logged; OBO caches are
@@ -224,9 +227,9 @@ systems to the SIEM. Every denial is a security event.
 
 | Phase | Deliverable |
 |---|---|
-| P0 | Keycloak realm with the gateway's claims for dev and CI; OIDC and claim mapping copied from the gateway (`UME_RAG_OIDC_*`); keys in gateway style; package 1 built as Bicep (#36), kept for P2, not submitted |
-| P1 | Admin sign-in on the shared Keycloak (`ume-rag-admin`, realm `ume`; Entra in P2); `rag-reviewer` role; department scope from the `departmentCodes` claim; Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; explain access; security events; package 2 submitted; P1b: spikes on E1 and the W3 workaround (weakness review §5) |
-| P2 | Department scope from groups in the claim with gateway release 2 (feature C, both systems; weakness review §5), `rag-api` tokens and OAuth machine clients, department/group audiences (one Open WebUI instance per department until W3 and E1 are solved), Graph member-group lookup, owner-team scoping of admin writes, MCP server authorisation, `rag-ingestion`, tool identity `ume-rag-tools` (in-process hub), `ume-rag-pk-` widget keys |
+| P0 | Keycloak realm with the gateway's claims for dev and CI; OIDC and claim mapping copied from the gateway (`UME_RAG_OIDC_*`); keys in gateway style; package 1 built as Bicep, kept for P2, not submitted |
+| P1 | Admin sign-in on the shared Keycloak (`ume-rag-admin`, realm `ume`; Entra in P2); `rag-reviewer` role; department scope from the `departmentCodes` claim plus member groups entered by hand; Open WebUI sign-in and JWT trust; client registry with ceilings; client-based audiences; explain access; security events; package 2 submitted; P1b: the spike on the W3 workaround (weakness review §5) |
+| P2 | Department scope from groups in the claim with gateway release 2 (feature C, both systems; weakness review §5), `rag-api` tokens and OAuth machine clients, department/group audiences (one Open WebUI instance per department until W3 and E1 are solved), the E1 spike, Graph member-group lookup, owner-team scoping of admin writes, MCP server authorisation, `rag-ingestion`, tool identity `ume-rag-tools` (in-process hub), `ume-rag-pk-` widget keys |
 | P3 | OBO for user-delegated tools (with the `rag-tools` service), Teams client, claims-challenge handling |
 
 ## 9. Answered questions (2026-10-29)
@@ -236,7 +239,7 @@ systems to the SIEM. Every denial is a security event.
 3. **Guests**: no; only accounts in the municipality's tenant.
 4. **Citizen login**: out of scope for now.
 5. **Group naming**: no convention; groups are picked by search once the Graph lookup arrives (P2); in P1 they are
-   entered as object ids.
+   entered as values (Keycloak group names on the shared realm, design §2.2).
 6. **Approval timing**: no registration is needed for P0 or development; package 1 (admin and Open WebUI sign-in)
    only has to be approved before the pilot. **Revised 2026-10-30:** the pilot signs in with the shared Keycloak, so
    package 1 is needed only for P2 (Decisions table "P1 pilot sign-in").
@@ -269,6 +272,6 @@ Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-
 
 | Item | Where it went |
 |---|---|
-| Department scope from groups in the claim in production (feature C, both systems) | P2, with gateway release 2; the resolver is still built and tested in P0 (§3) |
+| Department scope from groups in the claim in production (feature C, both systems) | P2, with gateway release 2; the resolver is built and tested in P0, and in P1 it matches member groups entered by hand (§3) |
 | Delegating gateway keys for the pilot | the pilot team's per-level keys until release 2 (§2) |
-| E1 test (OBO through Open WebUI) and the W3 workaround | spikes moved from P2 to late P1 (P1b); fallback decided: one Open WebUI instance per department (§5) |
+| E1 test (OBO through Open WebUI) and the W3 workaround | W3 spike in P1b; E1 in P2 with Entra (Decisions table "P1b briefs", O3); fallback decided: one Open WebUI instance per department (§5) |

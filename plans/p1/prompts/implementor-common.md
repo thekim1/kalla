@@ -9,7 +9,7 @@ your own git worktree (given in your task). The main repo is `/home/crotalus/res
 1. `AGENTS.md` (working rules, conventions), `README.md` (build/test commands).
 2. `01-general-idea.md` §10 Decisions table — skim the 2026-10-31 rows ("Code first, live testing last", "7-day rule in development", "Low CPU during development").
 3. `plans/p1/README.md` §1a, §2 (ownership), §3 (binding done-when); `plans/p1b/README.md` §1–§3 if your item is P1b.
-4. The design sections named in your task. Precedence: Decisions table > `plans/weakness-review.md` > `plans/simplification-pass.md` > detail design.
+4. The design sections named in your task. Precedence: Decisions table (rows with status `current`) > detail design. The passes are folded into the detail designs and don't bind.
 5. The existing code you build on (named in your task). Match its style, naming, logging/event conventions and test patterns.
 
 ## Hard rules

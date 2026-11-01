@@ -57,14 +57,16 @@ zones** from day one, even when they share a host (P2 adds a third, `tools-hoste
 
 - **Pilot**: one host is allowed: **8 vCPU / 16 GB minimum, 24 GB recommended** (Docling models and ClamAV
   signatures need several GB together), with Docker CPU shares and limits giving the data plane priority. The parser
-  gets at most half the cores. BGE-M3 runs at the gateway's on-prem provider, not on this host. The pilot runs **one
+  gets at most half the cores. The embedding model runs behind the gateway, not on this host (EU-hosted until the
+  on-prem hardware exists, §6). The pilot runs **one
   slot** per service; updates use a short announced maintenance window (a/b slots come with P2). Six long-running
   containers (`rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`, `postgres`) plus the one-shot
   `rag-migrate` (simplification pass §14): **no Redis** (rate limits and the query-embedding cache in process behind
   `IRateLimitStore`/`ISharedCache`, admin sessions in Postgres) and no backup sidecar (scheduled backups run
   `pgbackrest backup` inside `postgres` from a host timer).
 - **Production**: ingestion zone on its own host or node pool; the data plane host never runs OCR. Scale-out is
-  **Compose per host, roles per host** (decided 2026-10-30; [`../performance-pass.md`](../performance-pass.md) §5): same images, `Worker:Classes` and
+  **Compose per host, roles per host** (decided 2026-10-30; cross-host rules, failure domains and Kubernetes:
+  repo-and-deployment §6.4, §10): same images, `Worker:Classes` and
   deployment settings per instance, one Postgres (with a streaming standby, §10), one Redis (enabled by
   `ConnectionStrings:redis`) and one S3-compatible
   object store (the municipality's S3 service if IT offers one, else SeaweedFS; decided with IT before the first
@@ -73,7 +75,12 @@ zones** from day one, even when they share a host (P2 adds a third, `tools-hoste
   | Topology | Hosts and what they run |
   |---|---|
   | 3 hosts (P2) | **D** data (8–16 vCPU, 64 GB, NVMe): postgres (+ standby elsewhere), redis, object store, OTel collector; **A** data plane + control (8 vCPU, 16 GB): rag-api a/b, rag-admin a/b (Open WebUI on its own VM); **I** ingestion (16 vCPU, 32 GB): rag-worker (all classes), rag-parser, rag-clamav |
-  | 5 hosts (P3) | **D** as above; **A1**/**A2**: two rag-api instances each, rag-admin a on A1 and b on A2; **F** fetch: worker `preview,command,sync,fetch,eval`, clamav, small parser for inspect/preview (crawl egress host); **P** processing: worker `parse,embed`, parser 4 × 2 slots (16–24 vCPU, 48 GB), no crawl network. A sixth host is a second **P** |
+  | 5 hosts (P3, when its trigger fires) | **D** as above; **A1**/**A2**: two rag-api instances each (`Rag__Roles=knowledge,chat[,mcp]`), rag-admin a on A1 and b on A2; **F** fetch: worker `preview,command,sync,fetch,eval`, clamav, small parser for inspect/preview (crawl egress host); **P** processing: worker `parse,embed`, parser 4 × 2 slots (16–24 vCPU, 48 GB), no crawl network. A sixth host is a second **P** (same Compose files, more parser), which is how ingestion grows beyond 10× |
+
+  Up to five hosts the connection budget fits `max_connections` 100 without a pooler; PgBouncer is required on
+  Kubernetes and otherwise comes only by trigger (repo-and-deployment §6.2, §10). The other P3 steps (read routing to
+  the standby, a broker, a binary-quantized index, OpenSearch O1, a CUDA parser, Kubernetes, Redis HA, a distributed
+  object store, a query lane) are each taken only when their scaling trigger fires (performance pass §6).
 - **Database protection**: one connection pool per service role with a hard cap (starting values per instance api 12,
   admin 5, worker 10, measured in P0; retrieval limited to 4 concurrent searches per api instance; data-model §1.1), a `statement_timeout` per role, chunk writes in batches of ≤ 1,000 rows with one
   short swap transaction per document, `RunItems` partitioned by day so old partitions are dropped rather than
@@ -182,14 +189,18 @@ Levels `public` < `internal` < `sensitive` on sources, collections, skills, tool
   **max(assistant level, client ceiling)** from the first message. The admin validates an assistant's model against
   the gateway's `/v1/models` at that ceiling on save (in the pilot, `public` assistants in Open WebUI use EU or on-prem
   models).
-- **Embeddings are always on-prem** (R3): the platform embedding profile is an on-prem multilingual model, so
-  indexing never sends content out of the municipality, whatever its classification.
+- **Embeddings** (R3): the target platform embedding profile is an on-prem multilingual model (BGE-M3), so indexing
+  never sends content out of the municipality, whatever its classification. **Until the on-prem model hardware exists
+  (register M2) the pilot embeds through the gateway with the EU-hosted `text-embedding-3-large` at 1024 dimensions**,
+  requested with OpenAI's `dimensions` parameter (Decisions "M2 and test hosting", "Pilot embedding model, U-b"); the
+  profile's ceiling is `EmbeddingProfiles.MaxResidency` = `Eu`, covered by the processor agreement in the DPIA (G1), so
+  no `sensitive` content is indexed on it. Moving to on-prem BGE-M3 re-embeds every chunk.
 
 ## 7. Gateway integration (R4)
 
 Detailed in [`../gateway-changes/plan.md`](../gateway-changes/plan.md):
 
-- **Two gateway releases** ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control); before it, one combined release):
+- **Two gateway releases** (reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)):
   - **Release 1, before the pilot**: residency ceiling with the key flag `RequireMaxResidency` and the 503/403 split;
     `/v1/models` lists only models within the request's ceiling, which the admin's model validation relies on; FakeLlm
     `dimensions`. ADR 018.
@@ -199,9 +210,12 @@ Detailed in [`../gateway-changes/plan.md`](../gateway-changes/plan.md):
     mode. ADRs 019–020.
 - **Keys per level** (§6), not one platform key; each deployable holds only the levels it needs. **Pilot
   attribution** until release 2: the pilot department's team's own gateway keys per level (no `x-ume-on-behalf-of`;
-  the team keeps no request policy). This reverses the "no interim per-team keys" rule of simplification pass §7 for
-  that one team; the gateway is unchanged by it. From release 2: delegating keys per level.
-- Development and test use the FakeGateway; the pilot waits for release 1.
+  the team keeps no request policy); every P1 gateway call is charged to that team. This is the one exception to "no
+  interim per-team keys"; the gateway is unchanged by it. From release 2: delegating keys per level, and the team's
+  keys are revoked.
+- Tests and CI use the FakeGateway. P1a develops against an interim test/dev gateway as it is (v0.8.5: keys enforce
+  `AllowedResidencies`, answers carry `x-ume-residency`, which RAG checks); release 1 lands in P1b, and go-live waits for
+  it (Decisions "P1a plan answers", "Interim gateway for P1a").
 
 ## 8. Retention and personal data
 
@@ -241,7 +255,7 @@ content and crypto-shredding (§8a). It no longer blocks the pilot, which runs h
 
 **Open WebUI is the primary copy** (weakness review §4). Because the pilot assistant runs history mode `none`, every
 chat and feedback snapshot with content exists only in Open WebUI's own store (its database and volume). The
-**DPIA** (register item G1, started in P0, finished before go-live) covers that store, its volume and who holds its
+**DPIA** (register item G1, in P1b, finished before go-live) covers that store, its volume and who holds its
 admin role, decides W2 and records the residual risk of user input (§8a). **Public-records requests** for a
 conversation are answered from Open WebUI's copy in the pilot (where, in general, the DPIA and the A1 owner decide);
 the runbook has a section on finding and exporting one conversation for the registrar (repo-and-deployment §11 #19).
@@ -314,7 +328,9 @@ refuses them, chat design §3.5). Blob encryption for `internal` uploads is unch
 banner: "Skriv inte in sekretessbelagda uppgifter eller känsliga personuppgifter." (chat design §4.3). The pilot
 client's ceiling stays `internal` only for EU providers covered by a processor agreement (PUB-avtal) and listed in the
 DPIA (G1); if the DPIA requires more, the pilot runs on on-prem models only, set by model choice on its assistants
-(answer and condense models without EU fallbacks; identity design §4.1). The DPIA records the residual risk.
+(answer and condense models without EU fallbacks; identity design §4.1). The DPIA records the residual risk. With no
+on-prem model hardware yet (register M2) that fallback does not exist: if the DPIA refuses EU processing, the pilot
+waits for hardware or another provider (accepted risk, Decisions "P1a plan answers").
 
 **Content beyond chat logs.** `internal` blobs (uploads, raw content, parse outputs) are envelope-encrypted; `public`
 blobs rely on the encrypted disk only. Chunk text cannot be column-encrypted because full-text search needs it, so
@@ -330,7 +346,9 @@ source is onboarded.
 Detail: `../ingestion-worker/design-processing.md` §13–§14.
 
 Every collection has an **evaluation set**: question/answer pairs generated automatically from sampled chunks by an
-on-prem model (judge-filtered), plus human questions and rewritten feedback questions over time. The harness is
+on-prem model (judge-filtered), plus human questions and rewritten feedback questions over time. Generation is built
+and tested on the FakeGateway in P1 but not run on the pilot until an on-prem model exists (register M2); the pilot's
+nightly runs use the deployment's own (EU) embedding profile (Decisions "P1b briefs", O1 and O4). The harness is
 **advisory**: it runs on the full collection after each publish and nightly, reports recall@10 and MRR with counts
 compared with the previous run on the publish screen, and the owner decides to keep or roll back (previous chunk sets
 are kept 14 days for one-click rollback). A collection goes live when its owner publishes it. The worker runs the
@@ -342,15 +360,22 @@ the collection report (run kind `assistant-tests`, data-model §2.2). A blocking
 run-to-run variance shows it can tell versions apart. The postponed Swedish benchmark becomes the curated part of
 these sets.
 
-**Pilot gold set and go-live gate** ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)). In P1a the pilot department and the platform
-team write 100–150 answerable, 30–50 unanswerable and at least 10 temporal questions, stored as `human` questions
-(the start of register B1). Reports lead with their results; generated questions are a regression signal only. The
+**Pilot gold set and go-live gate** (reasoning: [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)). The main session drafts the
+candidate gold set from the Turkos crawl: about 120–150 answerable questions, each with its expected source URL(s) and
+facts, 30–50 unanswerable ones (off-topic and near-miss, expected outcome "not found") and at least 10 temporal ones,
+in residents' wording rather than page headings, short and long mixed, each marked as a draft. DoIT (the pilot
+department) reviews, edits and approves them, and may add its own, before they go in as `human` questions (the start
+of register B1; Decisions "Gold set drafted by the main session, reviewed by DoIT"). Reports lead with their results;
+generated questions are a regression signal only. The
 same set calibrates both not-found thresholds (vector side alone until `coverageMinKeywordScore` is calibrated) and
 decides, run three ways, whether hybrid and the decompounder beat vector-only. The pilot goes live when department
 reviewers, grading the gold-set answers by hand, find correct answers ≥ 80 %, citation precision ≥ 90 %, false
 not-found ≤ 10 % and off-topic questions answered "not found" ≥ 80 % (starting thresholds, confirmed by the
-department when the set is written). This gate applies once; publish stays advisory. **Pilot success** = the gate is
-met at go-live and still met at the end of the pilot (re-run monthly), and the department decides to continue.
+department when the set is written). This gate applies once; publish stays advisory. **Grading**: a script
+(`scripts/grading/grading.py`) sends each gold-set question through the chat API as the pilot assistant and writes
+question, answer, citations and coverage to a CSV; reviewers grade it in a spreadsheet, and the graded file with its
+totals is attached to the go-live decision. P1 has no grading UI. **Pilot success** = the gate is met at go-live and
+still met at the end of the pilot (re-run monthly), and the department decides to continue.
 
 ## 10. Cross-cutting engineering
 
@@ -366,7 +391,7 @@ met at go-live and still met at the end of the pilot (re-run monthly), and the d
   browser tests; evaluation sets in CI on a fixture collection; the R1 release test (P1).
 - **Backup and recovery**: pgBackRest with continuous WAL archiving (`archive_timeout` 60 s) and point-in-time
   restore; RPO ≤ 5 min, RTO ≤ 4 h for the pilot; uploads copied to the backup target within 15 minutes; a
-  point-in-time restore drill in P0. A streaming standby is an **availability** requirement before production beyond
+  point-in-time restore drill on the test host before go-live (P1b), then quarterly. A streaming standby is an **availability** requirement before production beyond
   the pilot (P2). Detail: repo-and-deployment §7.4.
 - **Releases**: release bundle with compose files, init script, backup/restore, upgrade guide; rolling update from
   P2 (a/b slots), a short announced maintenance window in the single-host pilot.
@@ -374,6 +399,8 @@ met at go-live and still met at the end of the pilot (re-run monthly), and the d
 ## 11. P0 deliverables
 
 P0 is a skeleton that builds, deploys, is observable and can be restored (ordered checklist: repo-and-deployment §11).
+**P0 is finished** (`v0.1.0`, 2026-10-31). Items 5, 7, 8 and 9 changed after it was planned, as noted in each item
+(Decisions "M2 and test hosting", "P1 pilot sign-in").
 
 1. Repository skeleton, projects, `verify.yml` (incl. the image test job), builds and tests in CI.
 2. ServiceDefaults, health endpoints, OpenTelemetry; config-version library with the grace window (§4).
@@ -383,17 +410,19 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (ordere
 4. FakeGateway, Keycloak realm, keys, admin UI skeleton and write path, AppHost, parser contract, worker dispatcher
    skeleton.
 5. Single-host Compose with resource zones; pgBackRest with WAL archiving and a **point-in-time restore drill**;
-   `release.yml`; deploy to a test host.
+   `release.yml`. The test-host deploy and the test host's restore drill run in P1b, before go-live.
 6. Scale seams: pooler-safe SQL rule and scan test; `IBlobStore` with the write-once contract; `IJobQueue` over the
    Postgres queue; `Worker:Classes` and `Worker:Concurrency:<class>`.
-7. Entra approval package 1 (RAG's own registrations) submitted; no Entra registration is needed for P0 itself;
+7. Entra approval package 1 (RAG's own registrations) built and kept, not submitted: the pilot signs in with the
+   Keycloak shared with the gateway, and package 1 is submitted for P2; no Entra registration is needed for P0 itself;
    gateway release 1 agreed with the gateway team and scheduled before the pilot (release 2 in P2, weakness review §5).
-8. Data protection (weakness review §4, owned by the user, outside the build streams): the DPIA (register G1) started
-   with the data protection officer; A1 has a named owner. Key escrow covers the blob master key and the pgBackRest
+8. Data protection (weakness review §4, owned by the user, outside the build streams): the DPIA (register G1) with
+   the data protection officer, moved to P1b and finished before go-live; A1 has a named owner. Key escrow covers the blob master key and the pgBackRest
    passphrase only (no chat master keys before A1 allows stored content).
 9. On-prem capacity measured on the real gateway hardware (weakness review §5, checklist #22): BGE-M3 embedding
-   throughput and condense and answer model latency, recorded against the performance-pass estimates; a shortfall
-   goes to register M2, decided before P1.
+   throughput and condense and answer model latency, recorded against the performance-pass estimates. Register M2 is
+   triggered (no on-prem model hardware yet), so this run waits until the hardware exists and is no P1b gate; until
+   then the pilot's models are EU-hosted (§6).
 10. Owners and dates (weakness review §5, owned by the user): A1, G1, W1, W2, N1, U1 and P2 each have a named person
     and a date (`postponed-decisions.md`, phase-start rule).
 
@@ -404,8 +433,11 @@ P0 is a skeleton that builds, deploys, is observable and can be restored (ordere
 2. **Virus scanning**: yes, a ClamAV container in the ingestion zone scans every upload and fetched file before
    parsing; infected files are quarantined and reported in the run.
 3. **Name**: keep `Ume.Rag` as the working name; the user-facing name is decided before the pilot.
-4. **Embedding model**: **BGE-M3** (multilingual, 1024 dimensions, 8k-token input, MIT licence) as the on-prem
-   platform profile, served through the gateway; confirmed with the generated evaluation sets in P1.
+4. **Embedding model**: **BGE-M3** (multilingual, 1024 dimensions, 8k-token input, MIT licence) is the on-prem
+   platform profile, served through the gateway, once the on-prem model hardware exists (register M2). Until then the
+   pilot profile is the EU-hosted `text-embedding-3-large` at 1024 dimensions through the gateway, with `dimensions`
+   sent on every embedding call and `MaxInputTokens` 8191 (§6; Decisions "Pilot embedding model, U-b"); moving to
+   BGE-M3 re-embeds every chunk (a P1b/P2 item).
 
 ## 13. Deferred or removed (simplification pass)
 
@@ -417,7 +449,7 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 | Platform-wide document store, shared chunk sets | Removed: per-source documents and chunk sets, reuse by caches (§2 there) |
 | Tier resolver and data tiers | Removed: separate deployment if ever needed (T1/K2) |
 | Per-conversation keys, 7-day epochs, always-on shred buckets, one ≤ 30-day key backup rule | Removed: bucket keys, shredding after A1, two key classes with escrow (§4–§5 there) |
-| Interim linked keys, releases B → C → A, one platform service key, shared Entra registration | Removed: one combined release, keys per level, RAG's own registrations (§6–§7 there) |
+| Interim linked keys, releases B → C → A, one platform service key, shared Entra registration | Removed: two gateway releases (§7), keys per level, RAG's own registrations (§6–§7 there) |
 | Evaluation gates, `building` state, parse auto-apply, `ner` job class | Removed (§1, §2, §8 there) |
 | Graph member-group lookup; `rag-renderer` (only if needed); a/b slots and the multi-host seams | P2 |
 | Separate `rag-tools` service (with the first external, OBO or write tool) | P3 |
@@ -427,7 +459,11 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 
 ## 14. Deferred or removed (weakness review)
 
-Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer), P1 is
+split into **P1a**, a walking skeleton (URL list, umea.se crawl with a hand-checked Sitevision preset, upload, hybrid
+retrieval with citations, chat API, one assistant in Open WebUI; done when a pilot member gets a cited answer from
+umea.se content), and **P1b**, pilot hardening (feedback, the go-live gate of §9, freshness, data protection, admin
+journey pages); phase table in [`../README.md`](../README.md). Moved out of P1:
 
 | Item | Where it went |
 |---|---|
@@ -452,4 +488,4 @@ Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-
 | One combined gateway release before the pilot | release 1 (residency ceiling, FakeLlm `dimensions`) before the pilot; release 2 (delegation, member groups) in P2 (§7) |
 | Delegating keys for the pilot; "no interim per-team keys" | the pilot team's per-level keys until release 2 (§7) |
 | Department scope from groups in the claim in P1 | P2 with release 2 (§5) |
-| On-prem throughput measured in P1 (R1) | P0 (§11 item 9) |
+| On-prem throughput measured in P1 (R1) | When the on-prem model hardware exists (register M2; §11 item 9) |

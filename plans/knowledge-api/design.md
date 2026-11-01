@@ -11,9 +11,8 @@ parse-output layout and index writer of [`../ingestion-worker/design-engine.md`]
 (§8, §14); `RagPrincipal`, `IAccessPolicy`, keys, tokens and security events of
 [`../identity/design.md`](../identity/design.md) (§3, §4, §6, §7, §8, §10); delegation, residency ceiling and FakeLlm of
 [`../gateway-changes/design.md`](../gateway-changes/design.md) (§3, §5, §6, §7.1); projects, roles and observability of
-[`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (§1, §3, §8, §9); the decided form of
-[`../simplification-pass.md`](../simplification-pass.md). Nothing is implemented. Changes needed elsewhere: §18;
-questions: §19; unverified facts: §20; removed or deferred: §21.
+[`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (§1, §3, §8, §9). Changes needed
+elsewhere: §18; questions: §19; unverified facts: §20; removed or deferred: §21.
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5). Library facts checked for this step
 (downloaded into the scratchpad, read only): **pgvector 0.8.7** source (tag `v0.8.7`, 2026-10-01; `src/hnsw.c:28-31`
@@ -36,16 +35,16 @@ materialised CTE); NuGet **`Pgvector` 0.3.2** (depends on `Npgsql` ≥ 8.0.5; co
 | 3 | Errors | RFC 9457 problem details as the gateway's Data API (`ApiFaultException` + `code` extension); the OpenAI error shape stays for the chat role (§3.6) |
 | 4 | `top_k` | Default **10**, max **50** (answered 1); candidates 100 per list |
 | 5 | Query handling | Query used as given: no rewriting, no instruction prefix; NFC, whitespace collapsed, 1–2,000 characters (answered 3) |
-| 6 | Statements | Three short statements instead of one: **keyword** candidates run **in parallel with the query embedding**, then **vector** candidates, then one batched **hydrate** (chunks, sections, documents); fusion in .NET (§6). Hybrid and the decompounder stay only if they beat vector-only on the pilot gold set, run three ways in P1a (weakness review §2, §20) |
+| 6 | Statements | Three short statements instead of one: **keyword** candidates run **in parallel with the query embedding**, then **vector** candidates, then one batched **hydrate** (chunks, sections, documents); fusion in .NET (§6). Hybrid and the decompounder stay only if they beat vector-only on the pilot gold set, run three ways in P1a (§20; reasoning: weakness review §2) |
 | 7 | Exact vs HNSW | Scopes of ≤ 10,000 chunks are searched **exactly** (B-tree on the scalar `CollectionId` + sort), larger ones through HNSW with `relaxed_order` iterative scan unless the scope is too selective; HNSW settings are role defaults, no per-query `SET`; same rule in the evaluator (§6.4) |
-| 8 | Fusion | RRF k = 60, weights from `RetrievalSettings` (default 1.0 / 1.0); multi-collection queries use the platform defaults unless all collections agree; after fusion, per-collection **age decay** (`RetrievalSettings.recency`) and source **`demote`** patterns multiply the score (weakness review §3); deterministic tie-breaks (§6.5) |
+| 8 | Fusion | RRF k = 60, weights from `RetrievalSettings` (default 1.0 / 1.0); multi-collection queries use the platform defaults unless all collections agree; after fusion, per-collection **age decay** (`RetrievalSettings.recency`) and source **`demote`** patterns multiply the score; deterministic tie-breaks (§6.5) |
 | 9 | Embedding failure | `hybrid` degrades to keyword-only with `degraded: "embedding_unavailable"` and coverage `unknown`; `vector` answers 503; the evaluator never degrades (§5.5) |
 | 10 | Embedding cache | In-process cache for every level (P1 has no Redis); from the first multi-host deployment (P2) a shared Redis L2 only for `public`/`internal` behind `ISharedCache`; key is an **HMAC** of the normalised query, 5 min (§5.4) |
-| 11 | Coverage | `low` only when the vector side is weak (best cosine distance above every searched collection's `coverageMaxDistance`, default 0.50) **and** the keyword side is weak (no candidate at or above `coverageMinKeywordScore`); until that floor is calibrated (`null`), `low` is decided by the vector side alone; both thresholds are set from the pilot gold set's answerable and unanswerable questions together (weakness review §2); keyword-only → `unknown`; outcomes and near-threshold margins are metrics for calibration, never query text (§7) |
+| 11 | Coverage | `low` only when the vector side is weak (best cosine distance above every searched collection's `coverageMaxDistance`, default 0.50) **and** the keyword side is weak (no candidate at or above `coverageMinKeywordScore`); until that floor is calibrated (`null`), `low` is decided by the vector side alone; both thresholds are set from the pilot gold set's answerable and unanswerable questions together; keyword-only → `unknown`; outcomes and near-threshold margins are metrics for calibration, never query text (§7) |
 | 12 | Diversity | Dedup `(DocumentId, TextHash)`; documents of different sources with the same identity (URL) collapse to one; **max 3 chunks per document** (configurable 1–10) (§8) |
 | 13 | Section expansion | From **neighbouring chunks in Postgres** (`ChunkSetId`, `Ordinal`, heading path), not from blobs; overlap stripped by a new `Chunks.OverlapChars`; ≤ 1,500 tokens per section, ≤ 8,000 per response; hits in one section merged (§9) |
 | 14 | Citations | Title, page range, heading path and modified date always; public `url` or an access-checked **download link**; upload titles from the document's `DisplayName` (§10) |
-| 15 | Ranking | Relevance, then per-collection **age decay** on `SourceModifiedAt` (`RetrievalSettings.recency`, off by default; the `website` template turns it on for PDFs: half-life 730 days, weight 0.15) and source **`demote`** URL patterns (default factor 0.5) for archive sections; the `modified_after` filter stays (weakness review §3, replacing "no recency boost" of answered 4; §6.5) |
+| 15 | Ranking | Relevance, then per-collection **age decay** on `SourceModifiedAt` (`RetrievalSettings.recency`, off by default; the `website` template turns it on for PDFs: half-life 730 days, weight 0.15) and source **`demote`** URL patterns (default factor 0.5) for archive sections; the `modified_after` filter stays (§6.5; reasoning: weakness review §3) |
 | 16 | Latency | p95 retrieval ≤ 90 ms on an embedding miss, ≤ 40 ms on a hit, at 100k chunks; alert at 250 ms (§11) |
 | 17 | Result cache | None; config snapshot and embeddings are cached, results are not (§12) |
 | 18 | OpenSearch seam | `ISearchIndex` replaces candidate generation only; hydration, access defence and citations stay in Postgres, which re-checks every hit (§13) |
@@ -149,9 +148,8 @@ same records; the knowledge role recomputes the assistant's collections from its
 The P1 gate is `Knowledge:OpenToClientKinds` (default `["internal"]`; P2 adds `integration`, `entra-app`,
 `own-client`); any other client gets `403 client_not_allowed` before resource checks, so it reveals nothing. Every
 route is mapped only when `Rag:Roles` contains `knowledge` (repo-and-deployment §3). MCP (`/mcp`, P2) calls `IRetriever`
-in process (§14). As built in P1a item 12 part 4a (PR #152, 2026-10-31): knowledge routes authenticate by key only
-(`Authorization`, `x-api-key` or `api-key`) or by download grant; tokens and Open WebUI user JWTs are not accepted in
-P1, since P1 callers are `internal` clients and grants.
+in process (§14). In P1 knowledge routes authenticate by key only (`Authorization`, `x-api-key` or `api-key`) or by
+download grant; tokens and Open WebUI user JWTs are not accepted, since P1 callers are `internal` clients and grants.
 
 ## 3. API contract
 
@@ -254,8 +252,8 @@ Collections the caller may search (identity `Filter`, silent, no events; memoise
               "published_at": "2026-11-20T09:00:00Z" } ] }
 ```
 
-As built (PR #152, 2026-10-31): `document_types` is left out, since no per-collection aggregate exists yet; it can
-come from the snapshot or a cheap query when a client needs it.
+`document_types` is not returned yet: no per-collection aggregate exists; it comes from the snapshot or a cheap query
+when a client needs it.
 
 Unpublished collections never appear (§4.5). Document counts are not shown (cheap to compute, but they would turn the
 endpoint into a change monitor for other departments' sources; the admin UI has them).
@@ -277,12 +275,12 @@ the page itself; serving crawled HTML from our origin would also be an XSS vecto
 |---|---|
 | Authentication | `?grant=` download grant (§4.6) or a normal credential of an allowed client kind |
 | Blob | uploads: the upload blob `uploads/{sourceId}/{slot}/{ContentHash}`, which is the document's raw content (connectors §9.1, no copy); others: `raw/{level}/{ContentHash}` (data-model §9); write-once keys |
-| Decryption | `public` blobs are not envelope-encrypted (encrypted disk only) and are streamed as stored; `internal` blobs: read the `URB2` header and unwrap its data key with `IKeyProvider` (`rag-blob-<level>`; data-model §7), then decrypt and **verify each 64 KiB segment before writing it**; a failing tag or a missing final segment aborts the response (connection reset, error logged, metric `outcome=integrity`). As built (PR #146, PR #153, 2026-10-31): the reader is `IBlobEnvelope.OpenReadAsync(key, level)` (data-model §7), but rag-api does not use it yet: its `StoredBlobContentReader` streams blobs without the header as stored and answers 503 `content_unavailable` for a `URB2` blob, so `internal` content written by the worker since PR #153 is not served until rag-api registers `AddRagBlobEnvelope`. As built in PR #165 (2026-11-01): rag-api registers it, and `EnvelopeContentReader` reads `IBlobEnvelope.OpenReadAsync(key, document level)`: `public` as stored, `internal` decrypted with each segment verified; an integrity or key failure on open is 503 `content_unavailable`, damage mid-stream aborts the response |
+| Decryption | `EnvelopeContentReader` reads `IBlobEnvelope.OpenReadAsync(key, document level)` (data-model §7): `public` blobs are not envelope-encrypted (encrypted disk only) and are streamed as stored; for `internal` blobs it reads the `URB2` header, unwraps its data key with `IKeyProvider` (`rag-blob-<level>`), then decrypts and **verifies each 64 KiB segment before writing it**. An integrity or key failure on open is 503 `content_unavailable`; a failing tag or a missing final segment mid-stream aborts the response (connection reset, error logged, metric `outcome=integrity`) |
 | `Content-Type` | `Documents.MediaType` (sniffed type, connectors §9.2) if on the allow-list of §9.2's types; else `application/octet-stream` |
 | `Content-Disposition` | `inline` for `application/pdf`, `image/png`, `image/jpeg`; `attachment` for everything else (Office, email, HTML, text); `filename*=UTF-8''…` from the visible `DisplayName` (§10.2), else `dokument-{id:N}.{ext}` |
 | Other headers | `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` for non-PDF, `Cache-Control: private, no-store`, `ETag` = hex `ContentHash`, `Content-Length` = plaintext length computed from the blob length and segment count |
 | Ranges | **not supported in P1** (`Accept-Ranges: none`; uploads ≤ 50 MB, connectors §9.1). The segment format allows ranges later (seek to segment ⌊offset / 64 KiB⌋) |
-| Limits | one stream per request, `Knowledge:DownloadsPerMinutePerAddress` 120 through `IRateLimitStore` (in process per instance in P1; from P2 Redis `ume-rag:rl:dl:{ipHash}:{minute}`, data-model §11; not the P2 widget key `rl:ip`). As built (PR #152, 2026-10-31): P1 uses ASP.NET Core's in-process fixed-window rate limiter per address instead of `IRateLimitStore`, the same behaviour per instance |
+| Limits | one stream per request, `Knowledge:DownloadsPerMinutePerAddress` 120 per address: in P1 ASP.NET Core's in-process fixed-window rate limiter, per instance; **Later (P2):** through `IRateLimitStore` with Redis `ume-rag:rl:dl:{ipHash}:{minute}` (data-model §11; not the P2 widget key `rl:ip`) |
 | Errors | as §3.6; after the first byte only a reset is possible |
 
 ### 3.6 Errors (problem details)
@@ -305,6 +303,7 @@ into `ValidationProblem` with field errors, and anything else into a 500 that lo
 | 503 | `config_unconfirmed`, `membership_unavailable` | identity §4.3 steps 0 and 11 |
 | 503 | `embedding_unavailable` | `mode: vector`, or `hybrid` with `AllowDegraded = false` (§5.5) |
 | 503 | `search_unavailable` | statement timeout, pool or concurrency limit (§6.6); `Retry-After: 1` |
+| 503 | `content_unavailable` | `/content`: integrity or key failure when the blob is opened (§3.5) |
 
 The chat role keeps the OpenAI shape (identity §4.4) for its own routes; the in-process call carries status and code in
 `RetrievalDeniedException` and the chat role translates.
@@ -338,7 +337,7 @@ Steps 0–5 run in memory against one snapshot; nothing touches Postgres or the 
 
 | Caller | Collections searched |
 |---|---|
-| Chat (in process) and `rag-internal` (`assistant_id`) | the `CollectionIds` of the assistant's **published version** from the snapshot (data-model §2.1), and nothing else: skills carry no collections (simplification pass §15), in either mode; `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
+| Chat (in process) and `rag-internal` (`assistant_id`) | the `CollectionIds` of the assistant's **published version** from the snapshot (data-model §2.1), and nothing else: skills carry no collections, in either mode; `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
 | Integration key (P2) | requested slugs, each in `Keys.Scopes`; no slugs → all collections in the key's scope |
 | Token caller (P2) | requested slugs, each allowed by `CollectionAudiences` (new P2 table, §18) for the client, department or group; no slugs → `Filter` over all |
 | Admin test panel | the collections of the assistant's draft (or a chosen version) or the chosen collections, **including unpublished ones**, checked with the admin's role scope (identity §4.8); runs in the admin process through `KnowledgeService` (`Ume.Rag.Answering`) on `Ume.Rag.Retrieval` |
@@ -394,17 +393,18 @@ mac     = base64url(HMAC-SHA256(Security:DownloadGrantKeys[kid], "g1." + kid + "
 
 | Rule | Detail |
 |---|---|
-| Keys | `Security:DownloadGrantKeys` (secret files `Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes, made by `init-deployment.sh`); the newest signs, all verify, so a key can be rotated with a one-lifetime overlap. As built (PR #146, 2026-10-31): the newest is the greatest kid in ordinal order (kids are dated, e.g. `2026-10`); `Knowledge:PublicBaseUrl` (rag-api's staff-network address) makes the link absolute, and unset it is relative |
+| Keys | `Security:DownloadGrantKeys` (secret files `Security__DownloadGrantKeys__<kid>`, ≥ 32 bytes, made by `init-deployment.sh`); the newest (the greatest kid in ordinal order; kids are dated, e.g. `2026-10`) signs, all verify, so a key can be rotated with a one-lifetime overlap. `Knowledge:PublicBaseUrl` (rag-api's staff-network address) makes the link absolute; unset, it is relative |
 | Lifetime | `Knowledge:DownloadGrantLifetime` **7 days** for `public`/`internal` (answered 5), **1 hour** for `sensitive` (no `sensitive` client stores history). Links in Open WebUI chats older than 7 days stop working (Open WebUI keeps chats 90 days); asking again issues a new link |
 | Contents | ids and the expiry only; no subject, no name, no title (URLs end up in browser history and proxy logs; ServiceDefaults strips `url.query` from traces, `src/Ume.LlmGateway.ServiceDefaults/Extensions.cs:93-97`) |
-| Check on use | constant-time MAC compare; `e` not passed; then, at the current confirmed version: client `cl` enabled, key `k` (if set) not revoked or expired, assistant `a` (if set) `published` and still linked to `c`, collection `c` live and published, `c`'s level ≤ client ceiling, document visible in `c` (§4.4 with the sources of `c`); any failure → 404 `not_found` (5002 with the real reason; as built, PR #146: reasons without an identity §4.3 code are `grant_scope` (another document) and `key_unusable`) |
+| Check on use | constant-time MAC compare; `e` not passed; then, at the current confirmed version: client `cl` enabled, key `k` (if set) not revoked or expired, assistant `a` (if set) `published` and still linked to `c`, collection `c` live and published, `c`'s level ≤ client ceiling, document visible in `c` (§4.4 with the sources of `c`); any failure → 404 `not_found` (5002 with the real reason; reasons without an identity §4.3 code are `grant_scope` (another document) and `key_unusable`) |
 | Failure on the token | 401 `grant_invalid` / `grant_expired`, counted as 5001 with `Credential = grant`; a browser request (`Accept: text/html`) gets a minimal static Swedish page instead ("Länken har gått ut. Ställ frågan igen för att få en ny länk."), same status, CSP `default-src 'none'` |
 | Scope | only `GET /v1/documents/{d}` and `/content` for that one document; never `/v1/retrieve` |
 | Reachability | the reverse proxy exposes `GET /v1/documents/*/content` (and `/v1/documents/*`) to the staff network; all other `rag-api` paths stay restricted to the Open WebUI host (identity §5.3) |
 
 A forwarded link works for its lifetime for anyone on the internal network who has it; revoking the collection link,
-the assistant, the key or the client stops it at once. Possible P2 addition: a BFF-style Entra sign-in on the download
-path, binding the download to the user.
+the assistant, the key or the client stops it at once. A download streams through `rag-api` from the blob store (a GET
+on the LAN, ≈ 5–20 ms); no decrypted copy is cached on disk. Possible P2 addition: a BFF-style Entra sign-in on the
+download path, binding the download to the user.
 
 ### 4.7 Security events, audit and statistics
 
@@ -412,22 +412,23 @@ path, binding the download to the user.
 |---|---|
 | 5001 `rag.auth.failed` | credential failures incl. grants (`Credential` `grant`, reasons `grant_invalid`, `grant_expired`) |
 | 5002 `rag.access.denied` / 5005 `rag.ceiling.refused` | explicit denials: a requested collection, a document id, a grant re-check (throttled once a minute per subject, reason, resource, identity §10) |
-| 5003 `rag.residency.refused` | the gateway answered a query embedding with `x-ume-residency` above `OnPrem` (§5.3) |
+| 5003 `rag.residency.refused` | the gateway answered a query embedding with `x-ume-residency` above the profile's ceiling (§5.2) |
 | 5004 `rag.config.stale_refused` | `config_unconfirmed` |
 
 - **No audit rows** for retrievals or downloads: they are normal use, not privileged reads, and would be the
   highest-volume table. Downloads are counted (`rag.documents.downloads{outcome, kind}`) and logged at Information
-  with `DocumentId`, `CollectionId`, `ClientId`, credential kind; never the subject of a grant (it has none). As built
-  in PR #169 (2026-11-01): `ok` is counted when the body has been sent to its end and `integrity` when a segment fails
-  mid-stream; a download the client abandons counts neither.
-- **5001 counts** (as built in PRs #163 and #169, 2026-11-01): aggregated in memory per bucket and emitted once a
-  minute with the count; a 10 s flush reports failures held back after the last emit (identity §6.3). 5002 and 5005
-  keep reporting their held-back count on the next denial for the same (subject, reason, resource).
+  with `DocumentId`, `CollectionId`, `ClientId`, credential kind; never the subject of a grant (it has none). `ok` is
+  counted when the body has been sent to its end and `integrity` when a segment fails mid-stream; a download the
+  client abandons counts neither.
+- **5001 counts**: aggregated in memory per bucket and emitted once a minute with the count; a 10 s flush reports
+  failures held back after the last emit (identity §6.3). 5002 and 5005 keep reporting their held-back count on the
+  next denial for the same (subject, reason, resource).
 - **Counters only** (plan answered 2): `RetrievalCounter` aggregates in memory per (Europe/Stockholm day,
   `DocumentId`, `TextHash`, `CollectionId`, level) a `Retrieved` count for every returned result and a `Cited` count
   for the ranks `MarkCited` receives: only the results actually cited (chat §9.5). Flushed every 30 s or at 5,000 keys
-  through `content.rag_count_retrievals(...)` (`SECURITY DEFINER`, data-model §12.3), off the request path; a crash
-  loses at most 30 s of counts. Keyed by `(DocumentId, TextHash)`, not chunk id, so counts survive
+  through `content.rag_count_retrievals(...)` (`SECURITY DEFINER`, data-model §12.3), off the request path, which
+  upserts its keys in sorted order so overlapping flushes of several instances cannot deadlock; a crash loses at most
+  30 s of counts. Keyed by `(DocumentId, TextHash)`, not chunk id, so counts survive
   re-chunking (processing §6.5; data-model change §18).
 - **Query text is never stored or logged**: not in Postgres, logs, traces, metrics, problem details or cache keys
   (the cache key is an HMAC, §5.4). A telemetry-scan test (repo-and-deployment §9) runs a retrieval with a marker
@@ -438,8 +439,8 @@ path, binding the download to the user.
 ### 5.1 Normalisation
 
 `QueryNormalizer` (in `Ume.Rag.Retrieval`, used by API and evaluator): Unicode **NFC** (as chunks, processing §11),
-C0/C1 control characters → space, whitespace runs → one space, trim. No lower-casing (BGE-M3's XLM-R tokenizer is
-cased), no instruction prefix (processing §11; *to verify* §20), no rewriting (answered 3). The normalised string is
+C0/C1 control characters → space, whitespace runs → one space, trim. No lower-casing (the embedding models'
+tokenizers are cased), no instruction prefix (processing §11; *to verify* §20), no rewriting (answered 3). The normalised string is
 both what is embedded and what the cache key is computed from, so equal keys always mean equal inputs. The keyword
 statement gets the **query search text** = the normalised string plus the parts `SwedishDecompounder` finds
 (`bygglovsansökan` → `bygglov`, `ansökan`), the same rule the worker uses for `Chunks."SearchText"` (platform §3).
@@ -452,23 +453,25 @@ explicit `x-ume-max-residency` and checks that the key matches it:
 
 ```http
 POST {Gateway:BaseUrl}/v1/embeddings
-Authorization: Bearer <rag-api OnPrem-only delegating key>
+Authorization: Bearer <rag-api key of the profile's ceiling>
 x-ume-on-behalf-of: <team id>               (from gateway release 2, P2; not sent in P1)
-x-ume-max-residency: OnPrem
+x-ume-max-residency: <EmbeddingProfiles.MaxResidency>     (Eu for the pilot profile until register M2)
 x-ume-run-id: <RunId or retrieval id>
 x-ume-step: query-embed
 traceparent: …
 
-{ "model": "bge-m3", "input": "<normalised query>", "encoding_format": "float" }
+{ "model": "<EmbeddingProfiles.GatewayModel>", "input": "<normalised query>", "encoding_format": "float",
+  "dimensions": 1024 }                      (dimensions only when the profile asks for it)
 ```
 
 | Topic | Rule |
 |---|---|
-| Model | `EmbeddingProfiles.GatewayModel` of the profile being searched (`bge-m3`, 1024 dims, data-model §2.1); never `dimensions` (gateway design §6) |
-| Attribution | from gateway release 2 (P2); in P1 every call is charged to the pilot department's team, whose own `OnPrem` key is used (weakness review §5). Then: chat: the assistant's `OwnerTeamId` (identity §4.7); integration key: `Keys.TeamId`; token callers and MCP: the first searched collection's `OwnerTeamId`; test panel: the assistant's or collection's owner team |
-| Residency | `OnPrem` always (R3); the gateway applies it to `/v1/embeddings` (gateway design §3.4 table) |
-| Response checks | `x-ume-residency` (`src/Ume.LlmGateway.Gateway/Pipeline/GatewayHeaders.cs:15`) must be `OnPrem` (case-insensitive) else discard + 5003; `x-ume-pii` (`GatewayHeaders.cs:36`) must be absent or not `redacted`/`blocked`, else discard (a redacted query embeds different text, `GatewayRequestHandler.cs:145-157`); from release 2, the `x-ume-on-behalf-of` echo must match when `Gateway:RequireDelegationEcho` is set (6a §7.7); exactly one vector of `Dimensions` finite floats, not all zero |
-| Key | the `OnPrem`-only delegating key (`RequireMaxResidency`, `AllowedIpRanges`; until release 2 the pilot team's own `OnPrem` key, whose team keeps no request policy); delegated requests apply only the key's request policy (`ApplyTeamPolicy` false), so its `PiiPolicy` must be `Off` or `Allow` for `/v1/embeddings` (a `Redact` or `Block` key would silently change or refuse queries containing personnummer); checked at startup by one canary embedding (§5.6) |
+| Model | `EmbeddingProfiles.GatewayModel` of the profile being searched (data-model §2.1). The pilot profile is `text-embedding-3-large` from an `Eu` provider at **1024** dimensions, requested with `dimensions` (Decisions "Pilot embedding model, U-b"); an on-prem BGE-M3 profile (register M2, once on-prem hardware exists; moving to it re-embeds every chunk) never sends `dimensions` (gateway design §6) |
+| Attribution | from gateway release 2 (P2); in P1 every call is charged to the pilot department's team, whose own key is used (reasoning: weakness review §5). Then: chat: the assistant's `OwnerTeamId` (identity §4.7); integration key: `Keys.TeamId`; token callers and MCP: the first searched collection's `OwnerTeamId`; test panel: the assistant's or collection's owner team |
+| Residency | the profile's `EmbeddingProfiles.MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile until M2, `OnPrem` for an on-prem profile (Decisions "M2 and test hosting"); the gateway applies it to `/v1/embeddings` (gateway design §3.4 table) |
+| Response checks | `x-ume-residency` (`src/Ume.LlmGateway.Gateway/Pipeline/GatewayHeaders.cs:15`) must be within the profile's ceiling (`OnPrem < Eu < External`, case-insensitive) else discard + 5003; `x-ume-pii` (`GatewayHeaders.cs:36`) must be absent or not `redacted`/`blocked`, else discard (a redacted query embeds different text, `GatewayRequestHandler.cs:145-157`); from release 2, the `x-ume-on-behalf-of` echo must match when `Gateway:RequireDelegationEcho` is set (6a §7.7); exactly one vector of `Dimensions` finite floats, not all zero |
+| Key | the `Gateway:Keys` entry of the profile's ceiling (secret files `Gateway__Keys__<ceiling>`), chosen and checked by the `ResidencyCeilingHandler`: until release 2 the pilot team's own key of that level (`RequireMaxResidency`, `AllowedIpRanges`), whose team keeps no request policy; from release 2 a delegating key. Delegated requests apply only the key's request policy (`ApplyTeamPolicy` false), so its `PiiPolicy` must be `Off` or `Allow` for `/v1/embeddings` (a `Redact` or `Block` key would silently change or refuse queries containing personnummer); checked at startup by one canary embedding (§5.6) |
+| Query lane | **Later (P3):** by trigger only: a separate gateway route or replica for `x-ume-step: query-embed` (or a CPU replica) when query-embedding p95 during ingestion exceeds 2 × idle (`rag.retrieval.stage.duration{stage=embed}`); the canary (§5.6, processing §11) then checks both routes |
 
 ### 5.3 Timeouts, retries, circuit
 
@@ -478,7 +481,8 @@ traceparent: …
 - Attempt timeout `Retrieval:EmbeddingTimeout` **1,500 ms**; **one** retry after 50 ms only for connection failures and
   502/503 without `Retry-After`, within a total of 2,000 ms. No retry for 4xx, 429 (`rate limit`), 402 (budget), 503
   with `Retry-After` (in-ceiling targets drained or circuit-open: degrade at once) or a failed response check. `403
-  max_residency_not_met` (no on-prem embedding target configured) is a configuration fault: degrade, log at Error.
+  max_residency_not_met` (no embedding target within the profile's ceiling) is a configuration fault: degrade, log at
+  Error.
 - Circuit: after 5 consecutive failures within 30 s, `hybrid` requests skip the embedding for 15 s (keyword-only at
   once instead of waiting for a timeout each); one probe request then decides. State per instance, in memory.
 - Single flight: concurrent identical misses (same cache key) share one gateway call, the gateway's own rule for cache
@@ -495,7 +499,7 @@ traceparent: …
 of a short question is reversible by dictionary, the HMAC is not without the pepper (a secret file like the key pepper,
 identity §6.1). `RedisKeys.QueryEmbedding(Guid profileId, string queryMac)` is added to the copied `RedisKeys` class
 (gateway `src/Ume.LlmGateway.Infrastructure/Stores/RedisKeys.cs`, one method per key with its lifetime in the doc
-comment). L2 goes through `ISharedCache`: P1 has no Redis (single slot, simplification pass §14), so P1 registers the
+comment). L2 goes through `ISharedCache`: P1 has no Redis (single slot), so P1 registers the
 no-op implementation (every L2 read is a miss, every write is dropped) and L1 alone is the cache; a second in-memory
 copy would only duplicate L1. From the first multi-host deployment (P2) `ConnectionStrings:redis` selects
 the Redis implementation, which shares hits across instances; a Redis failure is then a miss (logged once a minute),
@@ -513,7 +517,7 @@ admin test panel uses L1 only, with a per-process random HMAC key instead of the
 | evaluator, `AllowDegraded = false` | the question fails (evaluation run error) | same |
 
 **Why degrade**: the keyword half already ran in parallel (§6.1), so a degraded answer costs nothing extra; the chat
-model may well be reachable (an EU model) while the on-prem embedding service is down, and a keyword hit on a
+model may well be reachable while the embedding model is not, and a keyword hit on a
 diarienummer or a form name is still useful. The chat role sees `Coverage = Unknown` and decides how to phrase the
 answer (chat step 8: it must not claim "no information" from a degraded search). Metric
 `rag.retrieval.degraded{reason}` alerts above 1 % of requests over 5 minutes.
@@ -525,7 +529,7 @@ answer (chat step 8: it must not claim "no information" from a degraded search).
   `/health/ready` degraded and alerts: queries would be embedded in another vector space than the chunks. The same
   call checks the residency and PII headers of §5.2.
 - Development and CI: `Ume.Rag.FakeGateway` serves 1024-dim feature-hashing vectors (repo-and-deployment §4.3); against
-  a real local gateway, FakeLlm `fake-embed-1024` behind the alias `bge-m3` (gateway design §6). Fault models
+  a real local gateway, FakeLlm `fake-embed-1024` behind the profile's model alias (gateway design §6). Fault models
   `fake-fail-500`, `fake-slow`, `fake-wrong-residency` drive the §5.5 tests.
 
 ## 6. Candidate search and fusion
@@ -551,10 +555,10 @@ allowed levels, then only the filters present: `$4 text[]` tags, `$5 text[]` doc
 after. Filter predicates are **appended only when the filter is present**, so the planner never sees `($x IS NULL OR
 …)`; the profile id is an inlined literal from config (data-model §3.3), so a generic plan still matches the partial
 indexes. Each distinct text is one auto-prepared statement (variants: K/V × approximate/exact × 2³ filter
-combinations). As built in P1a item 11 (PR #112, 2026-10-31): the dimensions and the candidate depth (`LIMIT`) are
-inlined too (checked ints, never user input), so variants also differ per profile and depth; the vector and every
-filter stay parameters. K's query CTE `q` is `MATERIALIZED` as well: inlined, a generic plan evaluated
-`rag_or_query(to_tsvector($1))` once per candidate row, which more than doubled K at 100k chunks (to-verify #5).
+combinations). The dimensions and the candidate depth (`LIMIT`) are inlined too (checked ints, never user input), so
+variants also differ per profile and depth; the vector and every filter stay parameters. K's query CTE `q` is
+`MATERIALIZED`: inlined, a generic plan evaluated `rag_or_query(to_tsvector($1))` once per candidate row, which more
+than doubled K at 100k chunks (to-verify #5).
 
 ```sql
 -- K: keyword candidates (data-model §3.2 partial GIN index: "Kind" = 'child' AND "DeletedAt" IS NULL)
@@ -580,7 +584,7 @@ SELECT kw.*, d."IdentityKind", d."IdentityHash", d."SourceId", d."Url"   -- Sour
 FROM kw JOIN content."Documents" d ON d."Id" = kw."DocumentId";
 
 -- V: vector candidates, approximate (HNSW partial index per profile on the halfvec expression, data-model §3.2;
---    the column stays vector, performance-pass §3.3)
+--    the column stays vector)
 WITH vec AS MATERIALIZED (
     SELECT c."Id", c."DocumentId", c."ChunkSetId", c."Ordinal", c."TextHash", c."CollectionId", c."Classification",
            c."DocumentType", c."SourceModifiedAt",
@@ -607,10 +611,15 @@ FROM vec JOIN content."Documents" d ON d."Id" = vec."DocumentId";
 normalised by `swedish`, so `simple` only quotes them; user input never reaches `to_tsquery` syntax. A query of stop
 words only gives `NULL` and K returns nothing.
 
+**Frequent terms (P1b, before the pilot crawl):** the .NET query builder drops from the query search text every term
+found in more than 30 % of the scope's chunks (a keyword stop list), because OR semantics make K rank tens of thousands
+of matches for terms like `umeå` or `kommun` (measured 375–659 ms p95 at 100k chunks against the 30 ms budget of §11,
+to-verify #5; Decisions "Keyword stop list before the pilot crawl"). No Postgres configuration changes.
+
 Compared with data-model §3.3: fusion, dedup and the final `LIMIT` move to .NET (§6.5); the `ParentId`/`ParentText`
 join is gone (flat chunks; sections come from §9); `ChunkSetId`, `Ordinal`, `CollectionId` and the document's
 identity key are returned for diversity and expansion, `DocumentType`, `SourceModifiedAt` and the document's `SourceId`
-and `Url` for age decay and demote patterns (§6.5, weakness review §3); the `$x IS NULL OR` filters become optional fragments. The
+and `Url` for age decay and demote patterns (§6.5); the `$x IS NULL OR` filters become optional fragments. The
 `Kind = 'child'` predicate stays in K only because the partial GIN index requires it; every P1 row is `child`. A
 chunk is searchable iff `DeletedAt IS NULL`: chunks of `writing`, `held` and `superseded` sets carry `DeletedAt`
 (the index writer clears it on the new set's chunks and sets it on the old set's in one swap transaction, engine
@@ -654,9 +663,8 @@ WHERE d."Id" = ANY ($1) AND d."Classification" = ANY ($2) AND d."DeletedAt" IS N
 
 H's `$1` are the final hits (≤ 50), `$4` the scope; D's `$1` the hits' documents, `$3` the ids of
 **sources the caller may see** = sources (from the config snapshot) whose `CollectionId` is in the scope. The neighbour
-lookup needs a new unique index `(ChunkSetId, Ordinal)` on `Chunks` (§18); ≤ 17 rows per hit. As built in P1a item 11
-(PR #112, 2026-10-31): the heading-path match uses `IS NOT DISTINCT FROM`, so a hit without a heading path still
-expands over its neighbours without one.
+lookup needs a new unique index `(ChunkSetId, Ordinal)` on `Chunks` (§18); ≤ 17 rows per hit. The heading-path match
+uses `IS NOT DISTINCT FROM`, so a hit without a heading path still expands over its neighbours without one.
 
 ### 6.4 Exact versus approximate vector search (decision)
 
@@ -666,17 +674,16 @@ walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Itera
 
 - `ScopeSizeCache` (in `Ume.Rag.Retrieval`) holds chunk counts per (embedding profile, collection), from
   `SELECT "EmbeddingProfileId", "CollectionId", count(*) FROM content."Chunks" WHERE "DeletedAt" IS NULL AND "Kind" =
-  'child' GROUP BY 1, 2` every 10 minutes, so a scope's share *s* of its profile's index is known (as built in P1a
-  item 11, PR #112, 2026-10-31; grouped by collection only before).
+  'child' GROUP BY 1, 2` every 10 minutes, so a scope's share *s* of its profile's index is known.
 - Scope ≤ `Settings.Retrieval.exactScanMaxChunks` (**10,000**, tuned by the §11 benchmark; §12.1) → exact variant: a
-  B-tree scan on `CollectionId` and a top-100 sort over at most 10,000 distances. Every pilot collection (a few
-  thousand chunks) takes this path, so P1 runs exact recall in production. Larger → HNSW when the scope's share *s* of
-  the profile's index is ≥ `Settings.Retrieval.minHnswSelectivity` (**0.2 %**, §12.1;
-  [`../performance-pass.md`](../performance-pass.md) §3.3), else exact, counted as `rag.retrieval.exact_large`. The
-  .NET fusion re-sorts by distance, which pgvector requires for relaxed results.
+  B-tree scan on `CollectionId` and a top-100 sort over at most 10,000 distances. Small collections take this path.
+  The pilot's umea.se collection (≈ 14,300 documents) is larger, so the pilot searches it through HNSW. Larger → HNSW
+  when the scope's share *s* of the profile's index is ≥ `Settings.Retrieval.minHnswSelectivity` (**0.2 %**, §12.1),
+  else exact, counted as `rag.retrieval.exact_large`. The .NET fusion re-sorts by distance, which pgvector requires
+  for relaxed results (reasoning: performance pass §3.3).
 - HNSW runs on the half-precision expression index `("Embedding"::halfvec(1024))` from P1 (column stays `vector`, so
   the exact variant keeps full precision); its recall against exact is measured with the evaluation sets before the
-  first large collection ([`../performance-pass.md`](../performance-pass.md) §3.3).
+  first large collection (§20).
 
 The HNSW settings are **role defaults** (`ALTER ROLE ume_rag_api IN DATABASE ragdb SET hnsw.ef_search = 100`, same for
 `hnsw.iterative_scan = relaxed_order` and `hnsw.max_scan_tuples = 100000`, and for the worker and admin roles),
@@ -688,7 +695,7 @@ A walk stops at 100 matching rows, so the higher tuple bound only costs time for
 ```
 for each list L in {vector (by distance asc, Id asc), keyword (by score desc, Id asc)}: rank_L(c) = 1-based position
 rrf(c) = w_v / (60 + rank_v(c)) + w_k / (60 + rank_k(c))         (a missing rank contributes 0)
-score(c) = rrf(c) · decay(c) · demote(c)                          (weakness review §3; both 1 when not set)
+score(c) = rrf(c) · decay(c) · demote(c)                          (both 1 when not set)
 decay(c) = 1 − weight · (1 − 2^(−age(c) / halfLifeDays))           (only when recency is on and c's DocumentType ∈ kinds)
 order: score desc, distance asc (nulls last), chunk Id asc
 ```
@@ -697,24 +704,23 @@ order: score desc, distance asc (nulls last), chunk Id asc
   the collection's editors, with the effect shown in the next evaluation report (processing §13). A query over several
   collections uses their weights if all agree, else the platform defaults from `Settings.Retrieval` (one coherent
   ranking).
-- **Age decay** ([weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered),
-  replacing "no recency boost"): `RetrievalSettings.recency` = `{ halfLifeDays, weight, kinds }` of the chunk's
-  collection (§12.1). Off by default (`null`); the `website` template turns it on for PDFs (`halfLifeDays` 730,
-  `weight` 0.15, `kinds` `["pdf"]`; set on the collection when its first `website` source is added, admin design §5.4). `age(c)` = days from the chunk's `SourceModifiedAt` to now; a
-  chunk without `SourceModifiedAt` gets no decay. A document never falls below `1 − weight` (0.85 at the template
+- **Age decay**: `RetrievalSettings.recency` = `{ halfLifeDays, weight, kinds }` of the chunk's collection (§12.1).
+  Off by default (`null`); the `website` template turns it on for PDFs (`halfLifeDays` 730, `weight` 0.15, `kinds`
+  `["pdf"]`; set on the collection when its first `website` source is added, unless it already has a value; admin
+  design §5.4). `age(c)` = days from the chunk's `SourceModifiedAt` to now; a chunk without `SourceModifiedAt` gets no
+  decay. A document never falls below `1 − weight` (0.85 at the template
   values): an old answer still ranks when nothing newer competes. The `modified_after` filter stays. The temporal
   questions of the pilot gold set check it (`to-verify.md` #171).
-- **Demote** (weakness review §3): `demote(c)` = the lowest `factor` of the chunk's source `demote` patterns
-  (connectors design §5.2, default 0.5) that match the document's URL, else 1; uploads have no URL and are never
-  demoted. Patterns come from the config snapshot (§12.1) and are compiled once per config version. As built in P1b
-  item 4 (PR #101, 2026-10-31): the worker keeps no copy of the factor on documents or chunks, so `Sources.DemoteRules`
-  is the only input, and retrieval must match with the crawler's glob semantics (`UrlPattern`, connectors design
-  §5.2).
-- As built in P1a item 11 (PR #112, 2026-10-31): age decay and demote are a seam only (`IScoreAdjuster`, both
-  factors 1); they are applied in P1b.
+- **Demote**: `demote(c)` = the lowest `factor` of the chunk's source `demote` patterns (connectors design §5.2,
+  default 0.5) that match the document's URL, else 1; uploads have no URL and are never
+  demoted. Patterns come from the generated column `Sources.DemoteRules` in the config snapshot (§12.1) and are
+  compiled once per config version; the worker keeps no copy of the factor on documents or chunks, so that column is
+  the only input, and retrieval matches with the crawler's glob semantics (`UrlPattern`, connectors design §5.2).
+- Both multipliers go through the `IScoreAdjuster` seam (`CombinedAdjuster`). Age decay is applied (`RecencyAdjuster`);
+  `demote` is applied in retrieval (`DemoteAdjuster`) to `Documents.Url` (#102); on umea.se it matches path-form patterns once the crawl stores and fetches `FetchUrl ?? Url` (#228, open).
 - Both multipliers apply after fusion in every mode and before dedup and the per-document cap; they never change
   coverage (§7 uses distances and keyword scores). A query over several collections uses each chunk's own
-  collection `recency`.
+  collection `recency` (reasoning for both: [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)).
 - **Modes**: `vector` = vector list only, order by distance; `keyword` = keyword list only, order by `ts_rank_cd`
   (in both, `rrf` is the one list's term, so without multipliers the order is unchanged); `hybrid` as above. Candidate depth 100 per list (`candidates`, 20–200).
 - **Several profiles** (P3 exception during an embedding-profile migration): each profile contributes one vector list
@@ -724,22 +730,21 @@ order: score desc, distance asc (nulls last), chunk Id asc
 
 | Setting | Value | Why |
 |---|---|---|
-| Data source | one `NpgsqlDataSource` with `UseVector()` (`Pgvector` 0.3.2), `Maximum Pool Size` **12** per `rag-api` instance (starting value measured in P0), `Max Auto Prepare` 64, `Auto Prepare Min Usages` 2 | retrieval statements are prepared per connection after first use |
-| Concurrency | `Retrieval:MaxConcurrentSearches` per instance, default **4** = ⌊(pool − 3) ÷ 2⌋: a search may hold two connections (K and V overlap), and 3 stay for chat writes and the stats flush; wait ≤ 200 ms for a slot or a connection, then 503 `search_unavailable`; more chat throughput comes from more instances ([`../performance-pass.md`](../performance-pass.md) §3.1) | retrieval can never take the whole pool from chat writes and the stats flush (R1) |
-| Read replica | optional `ConnectionStrings__ragdb-read` (only when the [`../performance-pass.md`](../performance-pass.md) §6 trigger fires): K, V, H+D and the evaluator read from it; writes (stats flush, writer) stay on the primary | spreads retrieval load off the primary |
+| Data source | one `NpgsqlDataSource` with `UseVector()` (`Pgvector` 0.3.2), `Maximum Pool Size` **12** per `rag-api` instance (starting value measured in P0), `Max Auto Prepare` 64, `Auto Prepare Min Usages` 2, no `Multiplexing`; multi-statement round trips as one `NpgsqlBatch` (§6.3) | retrieval statements are prepared per connection after first use |
+| Concurrency | `Retrieval:MaxConcurrentSearches` per instance, default **4** = ⌊(pool − 3) ÷ 2⌋: a search may hold two connections (K and V overlap), and 3 stay for chat writes and the stats flush; wait ≤ 200 ms for a slot or a connection, then 503 `search_unavailable`; the value is validated at start-up and measured in P0; more chat throughput comes from more instances, never from a bigger pool (reasoning: [`../performance-pass.md`](../performance-pass.md) §3.1) | retrieval can never take the whole pool from chat writes and the stats flush (R1) |
+| Read replica | **Later (P3), by trigger:** optional `ConnectionStrings__ragdb-read` on the streaming standby (`hot_standby_feedback = on`, `max_standby_streaming_delay = 30s`, repo-and-deployment §7.4), set only when primary CPU in office hours exceeds 70 % with retrieval over half of it, or retrieval p95 exceeds 250 ms during ingestion: K, V, H+D and the evaluator read from it (a lag of seconds only delays a publish swap); writes (stats flush, writer) stay on the primary. The chat path keeps no session state, so instances need no sticky sessions | spreads retrieval load off the primary |
 | Timeout | `CommandTimeout` 2 s per statement (client cancel); role `statement_timeout` 5 s backstop (data-model §1.1) | a slow plan fails fast instead of queueing |
 | Transactions | none (autocommit, read-only role grants) | fewer round trips |
 
-As built in P1a item 11 (PR #112, 2026-10-31): the slot count, the slot wait (200 ms), the statement timeout (2 s) and
-the rerank timeout (500 ms) are configuration knobs (`RetrievalEngineOptions`, `PostgresSearchOptions`), with the
-values above as defaults.
+The slot count, the slot wait (200 ms), the statement timeout (2 s) and the rerank timeout (500 ms) are configuration
+knobs (`RetrievalEngineOptions`, `PostgresSearchOptions`), with the values above as defaults.
 
 ### 6.7 Rerank seam (`IReranker`)
 
 `IReranker.ScoreAsync(query, passages, ct) → scores` in `Ume.Rag.Retrieval`. **P1**: seam only, `NoopReranker` for
 every assistant, a FakeGateway-backed implementation for tests. **P2**: `GatewayReranker` over a gateway rerank
-endpoint serving `bge-reranker-v2-m3` on-prem (a gateway change, §18), called with the `OnPrem` ceiling and key of
-§5.2; the evaluator compares with and without as soon as it exists, and an assistant enables it
+endpoint serving `bge-reranker-v2-m3` on-prem (a gateway change, §18), called with the `OnPrem` ceiling and its key
+(§5.2); the evaluator compares with and without as soon as it exists, and an assistant enables it
 (`QuerySteps.retrieval.rerank`) when the evaluation shows a gain. Placement: after fusion and dedup, before the
 per-document cap, over the top `rerankCandidates` (proposed 30) whose texts are read in one extra statement; coverage
 then uses the best reranker score against `coverageMinRerankScore` (§7). Timeout (proposed 500 ms) or error → fused
@@ -753,7 +758,7 @@ order, `degraded: "rerank_unavailable"`.
 - **Keyword side**: covered when the best keyword candidate's `ts_rank_cd` score is ≥ `coverageMinKeywordScore` of
   its collection (an empty list is never covered). The floor exists because OR semantics match some chunk for almost
   any query. While `coverageMinKeywordScore` is `null` (not yet calibrated) the keyword side counts as uncovered, so
-  `low` is decided by the **vector side alone** ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)).
+  `low` is decided by the **vector side alone**.
 - **Status**: `low` only when **both** sides are uncovered (a wording the embedding misses but a diarienummer or form
   name matches is still answered); `ok` otherwise; `low` also with no searchable collection; `unknown` in `keyword`
   mode and when degraded. The response reports the best distance, its threshold, its collection and the best keyword
@@ -762,12 +767,11 @@ order, `degraded: "rerank_unavailable"`.
 - **Multi-collection rule** (any covered collection counts): an assistant over a broad and a narrow collection must
   not say "I don't know" because the broad one has a strict threshold.
 - **Thresholds**: `RetrievalSettings.coverageMaxDistance`, default **0.50**, and `coverageMinKeywordScore` (default
-  `null` until calibrated, §20) from `Settings.Retrieval`. Calibration ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)):
-  both thresholds are set from the collection's `human` evaluation questions, answerable **and** unanswerable together
-  (for the pilot: the gold set, processing §13.4). The evaluation report proposes, per side (the histogram of both
-  groups is P2, admin design §16), the value that **separates them best** (fewest
-  misclassified questions), not a percentile of answerable questions only (this replaces "95th percentile of answerable
-  questions + 0.03"); an editor saves it (it does not change ranking). Generated questions, all answerable by
+  `null` until calibrated, §20) from `Settings.Retrieval`. Calibration: both thresholds are set from the collection's
+  `human` evaluation questions, answerable **and** unanswerable together (for the pilot: the gold set, processing
+  §13.4). The evaluation report proposes, per side (the histogram of both groups is P2, admin design §16), the value
+  that **separates them best** (fewest misclassified questions), not a percentile of answerable questions only; an
+  editor saves it (it does not change ranking) (reasoning: [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)). Generated questions, all answerable by
   construction, are not used for the proposal. On real traffic, coverage outcomes and the margin `best(C) −
   threshold` are metrics, and a per-retrieval log event carries collection id, best distance, threshold, best keyword
   score and status, **never the query** (§15). P2 adds generated off-topic control questions next to the human ones.
@@ -816,9 +820,8 @@ the cost is only that paragraph breaks between two chunks are unknown (joined wi
   whose `HeadingPath` equals the hit's path or lies below it (`starts_with(path, hitPath || ' › ')`), i.e. the hit's
   section including its subsections. Packed short sibling sections (processing §6.2 rule 5) carry their common parent
   path, so they expand together, as intended.
-- **Window** fetched: ±`Retrieval:ExpandNeighbourChunks` (**8**) ordinals; a run reaching the window edge sets
-  `truncated: true` (as built, PR #146, 2026-10-31: so does a run cut by the token bound below, since the section is
-  incomplete in both cases).
+- **Window** fetched: ±`Retrieval:ExpandNeighbourChunks` (**8**) ordinals; a run reaching the window edge or cut by
+  the token bound below sets `truncated: true` (the section is incomplete in both cases).
 - **Growth**: start with the hit; add the next chunk after, then the one before, alternating (after first: following
   text usually continues an answer), while `Σ TokenCount ≤ expandMaxTokens` (**1,500**, per collection). `TokenCount`
   includes each chunk's heading-path prefix (processing §6.5), so the sum over-estimates the assembled text and the
@@ -883,7 +886,7 @@ at the cited page; label: title, heading path tail, "s. 12–13", modified date.
 |---|---|---|
 | Authentication, policy, scope, settings | ≤ 1 ms | memory only, at the config version |
 | Query embedding, cache hit | ≤ 2 ms | in process ≈ 0 (P2 Redis L2 ≈ 0.5–1 ms) |
-| Query embedding, miss | ≤ 60 ms | gateway time for an embeddings request ≈ 1–2.3 ms (`docs/performance.md:239`, 16 inputs) + BGE-M3 on-prem (*to measure*, §20) |
+| Query embedding, miss | ≤ 60 ms | gateway time for an embeddings request ≈ 1–2.3 ms (`docs/performance.md:239`, 16 inputs) + the profile's model (pilot: the EU provider's `text-embedding-3-large`; on-prem BGE-M3 after M2; *to measure*, §20) |
 | K keyword statement | ≤ 30 ms | parallel to the embedding, normally off the critical path |
 | V vector statement | ≤ 15 ms HNSW, ≤ 25 ms exact at 10,000 chunks | – |
 | H+D hydrate batch | ≤ 5 ms | ≤ 50 hits, ≤ 850 neighbour rows |
@@ -915,7 +918,7 @@ change makes it unreachable without invalidation code (identity §4.6 pattern):
 | collection → | slug, name, level, department, owner team, `EmbeddingProfileId` + its SQL literal and dimensions, published flag, **resolved** `RetrievalSettings` (collection values over `Settings.Retrieval` defaults) |
 | assistant → | the published version's collection ids, level, owner team, `QuerySteps` retrieval part (top-k, filters, expand, mode, rerank) |
 | collection → | visible source ids (for D's `$3`) |
-| source → | compiled `demote` patterns and factors (`Sources.DemoteRules`, §6.5, weakness review §3) |
+| source → | compiled `demote` patterns and factors (`Sources.DemoteRules`, §6.5) |
 | slug → | collection id |
 
 `RetrievalSettings` (jsonb, validated by the admin API on save):
@@ -926,8 +929,7 @@ change makes it unreachable without invalidation code (identity §4.6 pattern):
   "coverageMaxDistance": 0.50, "coverageMinKeywordScore": null, "expandMaxTokens": 1500 }
 ```
 
-`recency` ([weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)) is `null`
-(off) or `{ "halfLifeDays": 730, "weight": 0.15, "kinds": ["pdf"] }` (the `website` template's value, §6.5); `kinds`
+`recency` is `null` (off) or `{ "halfLifeDays": 730, "weight": 0.15, "kinds": ["pdf"] }` (the `website` template's value, §6.5); `kinds`
 are `DocumentType` values. The first five change rankings; the next evaluation report shows their effect (processing §13). `top_k` is not a
 collection setting: it belongs to the request (assistant `QuerySteps`, default 10). Platform-only values live in
 `Settings.Retrieval`: the defaults above plus `exactScanMaxChunks` 10,000, `minHnswSelectivity` 0.2 % (§6.4),
@@ -951,17 +953,26 @@ filters hash, queryMac)`).
 
 `ISearchIndex` (`Ume.Rag.Retrieval`) has `KeywordAsync(scope, query, filters, limit)` and `VectorAsync(scope, vector,
 filters, limit, options)`, both returning `Candidate(ChunkId, DocumentId, ChunkSetId, Ordinal, TextHash, CollectionId,
-Level, Distance?, KeywordScore?, IdentityKey)`; `PostgresSearchIndex` (§6.2) is the only
-implementation. Only candidate generation could move: fusion, dedup, diversity and coverage stay in
+Level, Distance?, KeywordScore?, IdentityKey)`; `PostgresSearchIndex` (§6.2) is the only implementation. Only candidate generation could move: fusion, dedup, diversity and coverage stay in
 `RetrievalEngine`, and hydration, sections, citations and downloads stay on Postgres, the master copy (plan §3), which
 re-checks `CollectionId`, levels and `DeletedAt` for every hit (§6.3), so a stale external index could only return
-fewer results. Index build, sync and switch are designed when a trigger of
-[`../performance-pass.md`](../performance-pass.md) §3.3 fires (`../../platforms/opensearch.md` §8).
+fewer results. Index build, sync and switch are designed when an O1 trigger fires (`../../platforms/opensearch.md` §8;
+register O1), measured, not a chunk count:
+
+- HNSW index size (`rag.db.hnsw.bytes`) > 50 % of the database host's RAM: a binary-quantized index with re-rank
+  first, then O1;
+- V p95 > 50 ms or retrieval p95 > 300 ms (`rag.retrieval.stage.duration`) after tuning: O1 evaluation
+  (`Retrieval:Index=shadow`);
+- filtered recall: HNSW recall@100 against exact < 0.95 for collections in the 0.05–2 % selectivity band (scale test):
+  O1 (efficient filtered kNN) or per-collection partial indexes;
+- the existing recall and facet triggers of register O1.
+
+With the halfvec index (§6.4) a 64 GB host keeps 10M chunks below the first trigger (reasoning: performance pass
+§3.3, §6).
 
 ## 14. MCP exposure (P2 outline)
 
-`/mcp` early in P2, ahead of the tool hub, with `search_knowledge` and `list_collections` only (simplification pass
-§10). In `Ume.Rag.Api` (role `mcp`), MCP C# SDK 2.3.0: `AddMcpServer().WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)` (the default as of protocol
+**Later (P2):** `/mcp` early in P2, ahead of the tool hub, with `search_knowledge` and `list_collections` only. In `Ume.Rag.Api` (role `mcp`), MCP C# SDK 2.3.0: `AddMcpServer().WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)` (the default as of protocol
 2026-07-28; tools design §7.1),
 `MapMcp("/mcp")`, tools as `[McpServerTool(Name = "search_knowledge", ReadOnly = true, Idempotent = true,
 OpenWorld = false, UseStructuredContent = true)]` methods calling `IRetriever` in process with `Purpose = Mcp`.
@@ -1041,7 +1052,7 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 
 - `RrfFusion`: hand-computed RRF values, weights, missing ranks, tie-breaks, modes; multi-profile fusion; age decay
   (half-life arithmetic, kinds, missing `SourceModifiedAt`, per-collection settings in a multi-collection query) and
-  `demote` (lowest matching factor, uploads never demoted) (weakness review §3).
+  `demote` (lowest matching factor, uploads never demoted).
 - `ResultDiversifier`: text-hash dedup, identity-group collapse (same URL in two sources), cap 1/3/10, stable output
   order.
 - `CoverageEvaluator`: `low` only when vector and keyword sides are both weak (four combinations), keyword floor,
@@ -1093,13 +1104,14 @@ as `GatewayMetrics` does (`src/Ume.LlmGateway.Gateway/Pipeline/UsageWriter.cs:61
 
 - `verify.yml` **evaluation-smoke** (repo-and-deployment §8.2): ingest `tests/evaluation/smoke`, run the 30 questions
   through `POST /v1/retrieve`; recall@10 ≥ 0.8 and every answer cited. With FakeGateway this tests the pipeline, not
-  BGE-M3 quality. As built in PRs #208 and #220 (2026-11-01): the smoke collection's own `coverageMaxDistance` is
-  0.85 (FakeGateway distances, §7), the evaluator == API contract test (§16.3) runs over the smoke set, and both live
-  in `Ume.Rag.Worker.Tests`, which hosts rag-api too.
-- `evaluation.yml` nightly (P1, before the pilot) on the test host with real BGE-M3 (self-hosted runner, open item R1
-  in the register): the evaluation sets of every published collection plus the smoke set; advisory trend in
-  `rag.evaluation.recall_at_10`, no gate. Reports lead with the `human` gold-set results; generated questions are a
-  regression signal only (weakness review §2). The pilot's go-live gate is graded by people, not by CI.
+  embedding quality. The smoke collection's own `coverageMaxDistance` is 0.85 (FakeGateway distances, §7); the
+  evaluator == API contract test (§16.3) runs over the smoke set; both live in `Ume.Rag.Worker.Tests`, which hosts
+  rag-api too.
+- `evaluation.yml` nightly (P1, before the pilot) on the test host with the pilot's real embedding model through the
+  gateway (self-hosted runner, open item R1 in the register): the evaluation sets of every published collection plus
+  the smoke set; advisory trend in `rag.evaluation.recall_at_10`, no gate. Reports lead with the `human` gold-set
+  results; generated questions are a regression signal only. The pilot's go-live gate is graded by people, not by CI
+  (reasoning: weakness review §2).
 
 ### 16.5 Performance
 
@@ -1124,7 +1136,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | Phase | Deliverable |
 |---|---|
 | P0 | `Ume.Rag.Retrieval` skeleton; stock pgvector image (0.8.7); role defaults for `hnsw.*`; `SwedishDecompounder` unit tests and one Postgres match test |
-| P1 | In-process `IRetriever` for the chat role; K (lexeme OR query) / V / H+D statements with the exact/HNSW selectivity rule on the halfvec index (recall vs exact measured with the evaluation sets); RRF, age decay and `demote` multipliers (P1b, weakness review §3), dedup, identity-group collapse, cap 3; coverage (vector and keyword; vector side alone until the keyword floor is calibrated) with per-collection thresholds calibrated from the pilot gold set (weakness review §2) and calibration metrics; `IReranker` seam (no-op, FakeGateway implementation); section expansion with `OverlapChars`; citations incl. upload names and attachment parents; download grants and `/content` streaming with envelope decryption; query embedding with L1/L2 cache, circuit and degrade; `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; problem details, OpenAPI/Scalar; counters; metrics, traces; contract test; evaluation smoke; interaction audit; retrieval load test |
+| P1 | In-process `IRetriever` for the chat role; K (lexeme OR query) / V / H+D statements with the exact/HNSW selectivity rule on the halfvec index (recall vs exact measured with the evaluation sets); RRF, age decay and `demote` multipliers (P1b), dedup, identity-group collapse, cap 3; coverage (vector and keyword; vector side alone until the keyword floor is calibrated) with per-collection thresholds calibrated from the pilot gold set and calibration metrics; `IReranker` seam (no-op, FakeGateway implementation); section expansion with `OverlapChars`; citations incl. upload names and attachment parents; download grants and `/content` streaming with envelope decryption; query embedding with L1/L2 cache, circuit and degrade; `/v1/retrieve`, `/v1/collections`, `/v1/documents/{id}` for `internal` clients; problem details, OpenAPI/Scalar; counters; metrics, traces; contract test; evaluation smoke; interaction audit; retrieval load test |
 | P2 | `/mcp` early with `search_knowledge` and `list_collections` (ceiling `public`); HTTP access for integrations and tokens (`CollectionAudiences`, key scopes, rate limits); gateway-served rerank (§6.7) per assistant when the evaluation shows a gain; coverage calibration with control questions; tuning per collection with the advisory evaluation report; range requests if a PDF viewer needs them; optional Entra sign-in for downloads (§4.6) |
 | P3 | MCP `get_document`, `document://` resources; multi-query/HyDE behind evaluation (answered 3); cross-profile fusion during an embedding-profile migration; OpenSearch behind `ISearchIndex` if a trigger fires |
 
@@ -1138,7 +1150,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | `platform/data-model.md` §1.1 and `app-roles.sql` | `ALTER ROLE ume_rag_api, ume_rag_worker, ume_rag_admin IN DATABASE ragdb SET hnsw.ef_search = 100; … SET hnsw.iterative_scan = relaxed_order; … SET hnsw.max_scan_tuples = 100000` |
 | `platform/data-model.md` §1.2 grants | api: S on `content."Documents"` (incl. `SourceId`, `DisplayName`), `ChunkSets`, `Chunks`, S on `config."Sources"` (columns `Id`, `CollectionId`, `Type`, `Classification`, `State`, `DeletedAt`) |
 | `platform/data-model.md` §2.2 `RetrievalStats` | key (`Day`, `DocumentId`, `TextHash`, `CollectionId`) + `Classification`, not `ChunkId`; `content.rag_count_retrievals` takes those arrays |
-| `platform/data-model.md` §2.1 | `Collections.RetrievalSettings` schema of §12.1 (no `efSearch`; adds `coverageMinKeywordScore`; weakness review §3: adds `recency`); `Sources.DemoteRules` generated from `Settings -> 'demote'`, readable by the api role (weakness review §3); `Settings.Retrieval` defaults and platform-only values of §12.1 (P2: `rerankCandidates`, `coverageMinRerankScore`); `Assistants.QuerySteps.retrieval.rerank` (P2); P2 table `CollectionAudiences` (`CollectionId`, `Kind` `client`/`department`/`group`, `SubjectId`, `GroupValue`, same checks as `AssistantAudiences`) |
+| `platform/data-model.md` §2.1 | `Collections.RetrievalSettings` schema of §12.1 (no `efSearch`; adds `coverageMinKeywordScore` and `recency`); `Sources.DemoteRules` generated from `Settings -> 'demote'`, readable by the api role; `Settings.Retrieval` defaults and platform-only values of §12.1 (P2: `rerankCandidates`, `coverageMinRerankScore`); `Assistants.QuerySteps.retrieval.rerank` (P2); P2 table `CollectionAudiences` (`CollectionId`, `Kind` `client`/`department`/`group`, `SubjectId`, `GroupValue`, same checks as `AssistantAudiences`) |
 | `platform/data-model.md` §11, §12.14, §12.15 | P2 Redis key `ume-rag:qemb:{profileId:N}:{queryMac}` with HMAC (`Security:CacheKeyPepper`) and the value format; in process for all levels (P1: the only cache); §12.15 resolved by §7 here |
 | `ingestion-worker/design-processing.md` §6.5 | the chunker writes `OverlapChars` (0 for the first chunk of a section, tables, code) |
 | `ingestion-worker/design-processing.md` §13.5 | the evaluator calls the library with a `Collections` scope over the full collection (no `ChunkSets` scope); same dedup, identity-group collapse and per-document cap (k = 10); P2: compares with and without `IReranker` |
@@ -1147,11 +1159,11 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | `identity/design.md` §5.3 | the proxy exposes `GET /v1/documents/*` and `/content` to the staff network; the rest of `rag-api` stays restricted to the Open WebUI host |
 | `identity/design.md` §7.2, §10 | 5001 reasons `grant_invalid`, `grant_expired` and `Credential` value `grant` |
 | `platform/repo-and-deployment.md` §1, §2.2 | test project `tests/Ume.Rag.Retrieval.Tests`; `benchmarks/Ume.Rag.Benchmarks` (`RetrievalBenchmarks`, `InteractionAudit` copy); `ModelContextProtocol`/`.AspNetCore` **2.3.0** (checked); `PGVECTOR_VERSION` **0.8.7** (stock image tag) |
-| `platform/repo-and-deployment.md` §3, §6.3, §7.1 | `rag-api` mounts the blob container **read-only** and reads the `rag-blob-<level>` master key files of non-`public` levels; secrets `Security__DownloadGrantKeys__<kid>`, `Security__CacheKeyPepper` made by `init-deployment.sh`; settings `Knowledge:*` (`OpenToClientKinds`, `PublicBaseUrl`, `DownloadGrantLifetime`, `DownloadsPerMinutePerAddress`, `PublishApiReference`) and `Retrieval:*` (`EmbeddingTimeout`, `MaxConcurrentSearches` 8, `ExpandNeighbourChunks`); data source pool 10 per instance |
+| `platform/repo-and-deployment.md` §3, §6.3, §7.1 | `rag-api` mounts the blob container **read-only** and reads the `rag-blob-<level>` master key files of non-`public` levels; secrets `Security__DownloadGrantKeys__<kid>`, `Security__CacheKeyPepper` made by `init-deployment.sh`; settings `Knowledge:*` (`OpenToClientKinds`, `PublicBaseUrl`, `DownloadGrantLifetime`, `DownloadsPerMinutePerAddress`, `PublishApiReference`) and `Retrieval:*` (`EmbeddingTimeout`, `MaxConcurrentSearches` 4, `ExpandNeighbourChunks`); data source pool 12 per instance |
 | `platform/repo-and-deployment.md` §4.3 FakeGateway, §9 | a fake rerank endpoint (P1, for the `IReranker` seam); metrics of §15 and dashboard panels |
 | `platform/repo-and-deployment.md` §4.4 / gateway setup notes | the `OnPrem`-only delegating key used for query embeddings has `RequireMaxResidency`, `ApplyTeamPolicy` false and `PiiPolicy` `Off` or `Allow` (§5.2) |
 | `gateway-changes/plan.md`, `design.md` | P2 item: a rerank endpoint serving `bge-reranker-v2-m3` on-prem (contract to define), honouring `x-ume-max-residency` |
-| `performance-pass.md` §3.1, §3.3 | retrieval concurrency 4 on a pool of 12 per instance (⌊(pool − 3) ÷ 2⌋); `hnsw.max_scan_tuples` is a role default (100,000), no per-query `SET LOCAL` from selectivity |
+| (capacity) | retrieval concurrency 4 on a pool of 12 per instance (⌊(pool − 3) ÷ 2⌋); `hnsw.max_scan_tuples` is a role default (100,000), no per-query `SET LOCAL` from selectivity; `max_connections = 100` (`deploy/postgres/postgresql.conf`) |
 | `tools/plan.md` §4, `tools/design.md` §7 | `search_knowledge` schema and output shaping of §14; `/mcp` early in P2 with ceiling `public`; `get_document` and `document://` P3; MCP download grants 1 hour |
 | `admin/plan.md` | test panel runs the knowledge core in the admin process (`KnowledgeService` in `Ume.Rag.Answering` over `Ume.Rag.Retrieval`, incl. unpublished collections), so the admin host needs `Gateway:*` for query embeddings; collection page: `RetrievalSettings` form (§12.1), coverage-threshold proposal from the evaluation set (§7) |
 
@@ -1167,7 +1179,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 3. **No query rewriting** in the knowledge API in P1: the query is used as given; condense stays a chat-API step;
    multi-query/HyDE only in P3 behind evaluation (§5.1, §17).
 4. **No recency boost**: relevance only; callers may filter by `modified_after`; citations carry the modified date;
-   revisit with evaluation (§3.1, §10.1). **Replaced by [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)**:
+   revisit with evaluation (§3.1, §10.1). **Replaced** (reasoning: [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)):
    per-collection age decay (`RetrievalSettings.recency`, off by default, on for PDFs in the `website` template) and
    source `demote` patterns after fusion (§6.5); the `modified_after` filter and the modified date stay.
 
@@ -1181,6 +1193,8 @@ None.
 
 ## 20. To verify
 
+- HNSW over `halfvec` against exact search on the pilot's umea.se collection (larger than `exactScanMaxChunks`, §6.4): recall@100
+  and recall@10 on the gold set (`to-verify.md` #117 measures the halfvec delta on the evaluation sets).
 - Npgsql 10: auto-prepare with `Max Auto Prepare` keeps one prepared statement per variant per connection.
 - `ALTER ROLE … SET hnsw.ef_search` / `hnsw.iterative_scan` / `hnsw.max_scan_tuples` before the `vector` library is
   loaded in a backend: the placeholder values apply when pgvector loads (`MarkGUCPrefixReserved("hnsw")`,
@@ -1195,10 +1209,10 @@ None.
   hyphenated words, `'`, `\`) without error; fuzz test over the lexemes of the test corpus.
 - `coverageMinKeywordScore` default: `ts_rank_cd` values of the pilot gold set's answerable and unanswerable questions
   (the keyword floor of §7 has no measured value yet; until then `low` is vector-side only); the best-separating
-  value, checked against the coverage log events of the first pilot weeks (weakness review §2).
-- Hybrid against vector-only on the pilot gold set (weakness review §2): run three ways in P1a (vector-only, hybrid,
+  value, checked against the coverage log events of the first pilot weeks.
+- Hybrid against vector-only on the pilot gold set: run three ways in P1a (vector-only, hybrid,
   hybrid without the decompounder); hybrid and the decompounder stay only if they beat vector-only.
-- Age decay and `demote` (weakness review §3, `to-verify.md` #171): on the gold set's temporal questions the current
+- Age decay and `demote` (`to-verify.md` #171): on the gold set's temporal questions the current
   document ranks above the outdated one with the `website` template's `recency` (730 days, 0.15 on PDFs), and recall@10
   on the other answerable questions does not drop against `recency` off; the values are adjusted if either fails.
 - Pool of 12 with 4 concurrent searches per instance (§6.6): pool waits when K and V overlap on cache hits, measured in
@@ -1210,8 +1224,9 @@ None.
   compatibility as unverified too).
 - Browser PDF viewers (Edge/Chrome, Firefox) render `inline` PDFs served with `Content-Security-Policy: default-src
   'none'` and without `sandbox`; whether `#page=n` fragments work on our download URLs.
-- BGE-M3 dense retrieval without an instruction prefix for queries (processing §11 lists it too); on-prem embedding
-  latency p95 for one short query on the production hardware (the 60 ms budget assumes a GPU).
+- Dense retrieval without an instruction prefix for queries, for `text-embedding-3-large` and later BGE-M3 (processing §11
+  lists it too); embedding latency p95 for one short query through the gateway (the 60 ms budget; on-prem hardware
+  assumes a GPU).
 - `starts_with(text, text)` uses no index here (none needed: the lateral range is bounded by `(ChunkSetId, Ordinal)`).
 - MCP SDK names (`McpServerToolAttribute.ReadOnly`/`Idempotent`/`OpenWorld`/`UseStructuredContent`,
   `HttpServerTransportOptions.Stateless`) were checked in 2.3.0; recheck the version at P2 start.
@@ -1222,7 +1237,7 @@ None.
 
 ## 21. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §5, §6, §8–§10, §14, §15:
+Removed or deferred, with where each went:
 
 | Item | Where it went |
 |---|---|
@@ -1242,12 +1257,12 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §2, §3, §5, §6,
 | Interim team linked key for query embeddings | `OnPrem`-only delegating key with explicit ceiling (§5.2) |
 | Attachments as child documents (`ParentDocumentId`, `attachment` identity kind, `parent` citation field, "Bilaga *name* i *subject*", separate caps) | P2 with email (Z1, §10.3) |
 | `DocumentKeys` per-document blob keys | data key in the blob header (data-model §7, §3.5) |
-| Redis L2 query-embedding cache and Redis download rate limit in P1 | P2, first multi-host deployment; P1 uses the in-memory `ISharedCache` and `IRateLimitStore` (simplification pass §14; §5.4, §3.5) |
-| Skill collections in the retrieval scope (P2 RAG assistants: every linked skill's; agent: loaded skills' via `SkillVersionIds`), the per-skill MCP endpoint's collection scope (P3) | removed (simplification pass §15): the scope is the published version's direct collections (§4.2); skills carry no collections, so `SkillVersionIds` is gone |
+| Redis L2 query-embedding cache and Redis download rate limit in P1 | P2, first multi-host deployment; P1 uses the in-memory `ISharedCache` and, for downloads, the in-process rate limiter (§5.4, §3.5) |
+| Skill collections in the retrieval scope (P2 RAG assistants: every linked skill's; agent: loaded skills' via `SkillVersionIds`), the per-skill MCP endpoint's collection scope (P3) | removed: the scope is the published version's direct collections (§4.2); skills carry no collections, so `SkillVersionIds` is gone |
 
 ## 22. Deferred or removed (weakness review)
 
-Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+Removed (reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)):
 
 | Item | Where it went |
 |---|---|

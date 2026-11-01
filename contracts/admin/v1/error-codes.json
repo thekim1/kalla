@@ -330,6 +330,11 @@
       "code": "retention_outside_policy",
       "status": 409,
       "message": "The level {level} allows history {modes} and at most {maxDays} days."
+    },
+    {
+      "code": "test_answer_failed",
+      "status": 502,
+      "message": "The model could not answer the test question ({reason}). Try again."
     }
   ]
 }

@@ -38,15 +38,15 @@ Refs: [knowledge §6.5, §16.1](../knowledge-api/design.md), [weakness review §
 Refs: [admin §4, §6.6, §6.7, §12](../admin/design.md), [identity §4.9](../identity/design.md)
 - [ ] Sources: preflight, preview, impact, runs, deletion decisions, documents with PII view/clear, release hold, template parameters, `demote`
 - [ ] Pipeline publish: plan → confirm (409 on change) → report → keep / roll back
-- [ ] Evaluation set and reports (gold set first, threshold proposal as numbers); retrieval settings with the on-demand comparison
-- [ ] Assistants: draft → publish, versions with restore, archive, description, contact; test panel in `rag-admin`; audiences; retention; impact lines
-- [ ] Audit list; explain access
+- [x] Evaluation set and reports (gold set first, threshold proposal as numbers); retrieval settings with the on-demand comparison (#258, #259; retrieval settings and publish in #176)
+- [x] Assistants: draft → publish, versions with restore, archive, description, contact; test panel in `rag-admin`; audiences; retention; impact lines (#260, this PR; draft, publish and audiences earlier in P1a)
+- [x] Audit list; explain access (#257)
 - [ ] **Done:** audited, config version bumped, `PermissionMatrix` covers each endpoint; #23 recorded
 - [ ] **Hand-off L4:** issue to stream A
 
 ### 10. Chat: history `none`, feedback
 Refs: [chat §11–§14](../chat-api/design.md)
-- [x] Issued conversation ids; `ConversationWriter` (metadata only, daily totals) (this PR; with `chat.rag_retention_chat_step`)
+- [x] Issued conversation ids; `ConversationWriter` (metadata only, daily totals) (#262; with `chat.rag_retention_chat_step`)
 - [x] Conversation endpoints, user delete, 90-day metadata retention (this PR; retention in #262)
 - [x] `/v1/feedback` (ratings; `comment_not_stored`) (this PR)
 - [ ] `FeedbackImporter` (ratings and reason categories, watermark, advisory lock) and feedback pruning

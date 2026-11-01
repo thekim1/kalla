@@ -73,7 +73,7 @@ Evidence and the full flaw table: `platforms/00-comparison.md`.
 | **Chat API** | data | OpenAI-compatible chat where `model` is an assistant. Resolves the assistant, calls Knowledge API, builds the prompt, streams the answer from the gateway with citations. Stores conversations with retention and feedback (thumbs, comment). |
 | **Ingestion worker** | background | Executes each source's **pipeline** (section 5a): crawling, SharePoint delta sync, uploads, change detection, parse (via sidecar), chunk, embed (via gateway), upsert. Scales separately; a slow crawl never touches chat latency. |
 | **Parser sidecar** | internal | Python + Docling in one stateless container: PDF, Office, HTML to structured Markdown, tables, OCR for scans. No database, no state, only reachable from the worker. |
-| **Admin API + Admin UI** | control | Departments, teams, collections, sources, assistants, keys, gateway-key links, sync status, retention, audit log. Own app, same design system and login pattern as the gateway admin. |
+| **Admin API + Admin UI** | control | Departments, teams, collections, sources, assistants, keys, sync status, retention, audit log. Own app, same design system and login pattern as the gateway admin. |
 
 Chat API and Knowledge API may start as **one deployable with two endpoint groups** and split later if needed; what
 matters is that the boundary is an HTTP API, not shared internals.
@@ -82,8 +82,8 @@ matters is that the boundary is an HTTP API, not shared internals.
 
 - **Department → Team**: same structure and codes as the gateway (cost-centre code, team code), so roles from the
   IdP (`departmentCodes`, `teamCodes`) mean the same in both systems.
-- **Collection**: a named knowledge base owned by a team, with a classification. All collections share the on-prem
-  platform embedding profile (BGE-M3). Public collections may only contain public sources.
+- **Collection**: a named knowledge base owned by a team, with a classification. All collections share one
+  platform embedding profile (EU `text-embedding-3-large` at 1024 dimensions for the pilot, on-prem BGE-M3 when the hardware exists). Public collections may only contain public sources.
 - **Source**: belongs to a collection; one of
   - *URL list*: specific pages the editor pins ("use exactly these pages").
   - *Website*: crawl from a start URL or sitemap, with include/exclude patterns, depth and schedule.
@@ -96,7 +96,7 @@ matters is that the boundary is an HTTP API, not shared internals.
   (`internal` / `public`), history retention period, allowed origins (public widget).
 - **Conversation / Message / Feedback**: stored with retention per assistant; deleted by a nightly job.
 - **API key** (RAG side): HMAC-stored, per team, scoped to assistants and/or collections.
-- **Gateway link**: per team, the encrypted gateway virtual key used for all model calls of that team.
+- **Gateway keys**: per level (`OnPrem`-only, `Eu`-max, open) and deployable, held as secret files in the deployment, not in the database; the pilot team's own keys until gateway release 2, then delegating keys (`plans/gateway-changes/design.md` §13.4).
 
 ## 5. Ingestion
 
@@ -105,11 +105,10 @@ matters is that the boundary is an HTTP API, not shared internals.
    their URLs; SharePoint uses Graph delta queries, so only changes come back.
 3. **Change detection**: ETag / Last-Modified / content hash; unchanged documents are skipped, removed ones deleted
    (with their chunks).
-4. **Parse**: HTML boilerplate removal in .NET (AngleSharp); PDF/Office/scans through the Docling sidecar into
+4. **Parse**: HTML boilerplate removal in .NET (AngleSharp); PDF/Office/scans through the parser sidecar (Docling) into
    Markdown with headings and tables kept.
 5. **Chunk**: structure-aware (headings, sections), with the document title and heading path prefixed to each chunk.
-6. **Embed**: batched through the gateway's `/v1/embeddings` with the team's gateway key; an on-prem multilingual
-   model is the expected default (Swedish quality to be benchmarked).
+6. **Embed**: batched through the gateway's `/v1/embeddings` with the team's gateway key; one platform embedding profile: an EU-hosted model for the pilot, an on-prem multilingual model later (Swedish quality to be benchmarked).
 7. **Upsert** chunks; sync status and per-document errors visible in the admin UI.
 
 Jobs are queued in Postgres (`SKIP LOCKED`) with retries and back-off; one failing document never fails a whole
@@ -133,7 +132,7 @@ and opts in to what it supports:
 - *Two-stage change detection*: timestamp/ETag first, then content hash; nothing unchanged is re-parsed or re-embedded.
   Embeddings are cached by text hash, so re-chunking only embeds new text.
 - *Run record per document* with an execution id: a newer sync cancels an older one still in progress (Kernel Memory).
-- *Job classes* (crawl, parse, embed, sync; as designed: `preview`, `command`, `sync`, `fetch`, `parse`, `ner`, `embed`,
+- *Job classes* (crawl, parse, embed, sync; as designed: `preview`, `command`, `sync`, `fetch`, `parse`, `embed`,
   `eval`, crawling inside `sync`/`fetch`, `plans/platform/data-model.md` §4.2) with their own concurrency limits, fair per department, so one large
   crawl cannot starve everyone else (Eneo and Dify run everything through one worker queue).
 - *Crawl reports*: every run lists failed pages with reasons; per-department limits on concurrent crawls.
@@ -142,9 +141,11 @@ and opts in to what it supports:
 
 ## 5a. Pipelines and the visual builder
 
-> **Superseded in large part (simplification pass, 2026-10-30):** pipelines are fixed and linear (template +
-> parameters), there is no canvas and no auto-applied parse-strategy learning; learned **site profiles** configure the
-> HTML stages per host (`plans/simplification-pass.md` §2, §13). The text below is the original idea.
+> **Superseded in large part:** pipelines are fixed and linear (template + parameters), there is no canvas and no
+> auto-applied parse-strategy learning; site profiles (hand-checked in P1, learned from P2) configure the HTML stages
+> per host. The visual builder is a **P3 item behind trigger C2** (built only when editors ask for a flow template
+> parameters cannot express, in at least two departments or as one recurring platform-team request). The text below is
+> the original idea.
 
 The steps above are not hard-coded: each source runs a **pipeline**, a directed graph of typed nodes stored as
 versioned JSON. The ingestion worker executes it; the admin UI edits it on a canvas (Vue Flow, in the gateway design
@@ -190,7 +191,7 @@ in P1, sections rebuilt at query time from neighbouring chunks; parent-child onl
 1. **Rules first**: learned and admin-made *parse profiles* (e.g. "PDFs from `*.umea.se/kallelser/*` → OCR";
    "domain X needs headless render"). Fast and explainable.
 2. **Heuristics, per page**: detected properties pick a default for each page, as RAGFlow does: a clean text layer
-   is used directly (PdfPig, fast), an empty or garbled one goes to OCR, a page with nothing found is re-rendered at
+   is used directly (the parser's pypdfium2 fast path), an empty or garbled one goes to OCR, a page with nothing found is re-rendered at
    higher resolution; table-heavy pages go to Docling's table extraction. Garbled-text detectors also feed the
    Quality check.
 3. **Try and score** when unsure: run two or three candidate strategies on the document, score the outputs with the
@@ -244,11 +245,11 @@ and must stay a small fraction of Eneo's.
 | Staff-facing apps (Open WebUI, intranet) | OIDC user token, or a RAG API key | Internal assistants their team/department allows |
 | Integrations | RAG API key (team-scoped) | Named assistants and collections |
 | Public web widget | No login; origin allow-list + rate limit | Only assistants marked `public` |
-| These services → gateway | One platform service key with `x-ume-on-behalf-of: <team id>` and `x-ume-max-residency: Eu \| OnPrem` (interim: per-team keys; gateway releases B → C → A) | Gateway budgets, PII routing, residency and usage per team |
+| These services → gateway | One key per level and deployable with `x-ume-max-residency: OnPrem \| Eu \| External` on every call; the pilot team's own keys until gateway release 2 (P2), then delegating keys with `x-ume-on-behalf-of: <team id>` | Gateway budgets, PII routing, residency and usage per team |
 
 The RAG services issue **their own keys** in the gateway's style rather than reusing gateway keys: the two systems
-stay independently deployable and their key stores do not couple. Cost attribution uses the gateway's new delegated
-attribution (`plans/gateway-changes/`); per-team keys are only the interim until that ships.
+stay independently deployable and their key stores do not couple. Cost attribution uses the gateway's delegated
+attribution (`plans/gateway-changes/`, release 2, P2); until then the pilot team's keys carry it.
 
 Two key kinds, as in Eneo: **public keys** (`pk_`, read-only, bound to allowed origins, for the web widget) and
 **secret keys** (`sk_`, for integrations). (As designed: prefixes `ume-rag-pk-` / `ume-rag-sk-`,
@@ -286,10 +287,10 @@ stated reason, which is itself audited.
 - Microsoft.Extensions.AI for the gateway clients (OpenAI-compatible); `CommunityToolkit.VectorData.PgVector` and
   `Pgvector.EntityFrameworkCore`, with our own hybrid search SQL. (As designed: the chat role calls the gateway with a
   raw `HttpClient`, and `CommunityToolkit.VectorData.PgVector` is not used; `plans/platform/repo-and-deployment.md` §2.2.)
-- AngleSharp + SmartReader (HTML main content), PdfPig (fast PDF text path and detection), Microsoft.Graph
-  (SharePoint delta).
-- Pipeline engine: a small custom DAG executor (typed ports, ~1–2k lines) on a Postgres queue (`SKIP LOCKED`).
-  Not Elsa, Agent Framework Workflows or Microsoft.Extensions.DataIngestion (preview, linear pipelines).
+- AngleSharp + SmartReader (HTML main content), Microsoft.Graph (SharePoint delta); every PDF goes to the parser (no
+  PDF library in the worker).
+- Pipeline engine: a Postgres queue (`SKIP LOCKED`) running fixed linear pipelines (template + parameters). Not
+  Elsa, Agent Framework Workflows or Microsoft.Extensions.DataIngestion (preview, linear pipelines).
 - Not used: Kernel Memory (archived), Semantic Kernel, TickerQ (commercial licence since 2026-10-13).
 - PostgreSQL (pgvector, Swedish FTS with Hunspell): run as our own container so custom dictionaries can be loaded
   (check whether the Azure managed offering allows this), Redis for caches/rate limits (invalidation: the Postgres config outbox).
@@ -398,6 +399,7 @@ with status `current`, and an older row they change gets its status updated in t
 | Municipal companies' e-mail domains, `PiiOwnDomains` (user, 2026-11-01) | After the Kommun och politik crawl's personal-data report (43 pages flagged, none with a personnummer; external e-mail on 18 pages), `Settings.Engine.PiiOwnDomains` is **`umea.se`, `vakin.se`, `umeaenergi.se`, `visitumea.se`** (subdomains such as `edu.umea.se` match their domain). Parties, Region Västerbotten, universities, firms and private addresses stay external. Set through the admin API on the local pilot stack; the seed (`SettingsSeed:PiiOwnDomains`) still has only `umea.se`. | current |
 | Gold set drafted by the main session, reviewed by DoIT (user, 2026-11-01) | For P1a item 21 (J13), the main session drafts the candidate gold set from the Turkos crawl: about 120–150 answerable questions with their expected documents, 30–50 unanswerable ones and at least 10 temporal ones. DoIT reviews, edits and approves them before they go in as `human` questions. To limit the bias of questions written from the pages, the draft uses residents' wording rather than page headings, mixes short and long questions, and marks every question as a draft until DoIT approves it. DoIT may also add questions of its own. The owner and date (U-f) come from the user later (J13, item 21). | current |
 | No backward compatibility before production (user, 2026-11-01) | Until the user states explicitly that the platform runs in production, **any change is allowed** and nothing has to stay backward compatible: database schemas, migrations, contracts (`contracts/**`), job payloads, APIs, configuration keys and file layouts may change in one step. Don't write expand/contract migration steps, fallbacks for old rows or old payloads, tolerant readers for earlier versions, or compatibility shims, and existing ones may be removed. Development and pilot databases are rebuilt or re-crawled instead (the local Turkos data may be dropped). Two limits stay: the code must still match the gateway's actual API and conventions (an external system), and each PR still lists such changes and their hand-offs to the other stream. When the user announces the first production deployment, compatibility rules apply again from then on (as the 7-day rule). | current |
+| Design documents: one layer (user, 2026-11-01) | The cross-cutting passes (weakness review, simplification pass, performance pass, consistency pass) are folded into the detail documents and no longer bind. Two layers of truth remain: this table (rows with status `current`) and the detail document for the area, written in the present tense. Each pass ends with a ledger of where every rule went and keeps only the reasoning; the performance pass stays binding as reference for its capacity model, §3 tables, scaling triggers and scale tests (its header lists them). PR history is not kept in design text (git has it): the design sync edits a sentence in place. `scripts/check-doc-refs.py` runs in `verify.yml` (job `doc-refs`) so section citations and links can't break. Section numbers and linked headings never change (`plans/doc-restructure.md`). | current |
 
 Sections 3–9 above describe the original idea; where they differ from the plans, the plans and this table's binding rows win.
 
