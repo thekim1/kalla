@@ -114,9 +114,13 @@ public sealed class EvalSetTriggerTests(RagDatabaseFixture database) : IAsyncLif
         }
 
         await GeneratedLayerAsync(seed, questions: 3, roundDocuments: before);
-        // This week's check ran an hour after the occurrence; the scheduler looks three days later.
-        var weekly = EvalScheduler.LatestWeeklyOccurrence(DateTimeOffset.UtcNow).ShouldNotBeNull();
-        await PastSetJobAsync(seed, weekly.AddHours(1));
+        // This week's check ran up to an hour after the occurrence; the scheduler looks three days later. Never later than the
+        // real now: in the hour after Sunday 04:30 Stockholm, occurrence + 1 h is still in the future, the "past" job sorted
+        // after the new one, and the order assertion failed (#201).
+        var clock = DateTimeOffset.UtcNow;
+        var weekly = EvalScheduler.LatestWeeklyOccurrence(clock).ShouldNotBeNull();
+        var ranAt = weekly.AddHours(1) < clock ? weekly.AddHours(1) : clock.AddMilliseconds(-1);
+        await PastSetJobAsync(seed, ranAt < weekly ? weekly : ranAt);
         var scheduler = Scheduler(new FakeTimeProvider(weekly.AddDays(3)));
 
         await scheduler.TickAsync(Ct);
