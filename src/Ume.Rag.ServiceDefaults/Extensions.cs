@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
@@ -83,7 +84,11 @@ public static class Extensions
                 .AddMeter(TelemetryName)
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
-                .AddRuntimeInstrumentation())
+                .AddRuntimeInstrumentation()
+                // Outgoing HTTP metrics carry no host (#232): the gateway's address is a secret and OTLP leaves the host.
+                .AddView(instrument => instrument.Meter.Name == HttpClientMeter
+                    ? new MetricStreamConfiguration { TagKeys = HttpClientMetricTags }
+                    : null))
             .WithTracing(tracing => tracing
                 .AddSource(builder.Environment.ApplicationName)
                 .AddSource(TelemetryName)
@@ -93,8 +98,7 @@ public static class Extensions
                     // Never record query strings; they could contain identifiers.
                     o.EnrichWithHttpRequest = (activity, request) => activity.SetTag("url.query", null);
                 })
-                .AddHttpClientInstrumentation(o =>
-                    o.EnrichWithHttpRequestMessage = (activity, request) => activity.SetTag("url.query", null)));
+                .AddHttpClientInstrumentation(o => o.EnrichWithHttpRequestMessage = RedactOutgoing));
 
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
         {
@@ -102,6 +106,26 @@ public static class Extensions
         }
 
         return builder;
+    }
+
+    /// <summary>The meter of .NET's own HttpClient metrics (request duration, active requests, connections).</summary>
+    public const string HttpClientMeter = "System.Net.Http";
+
+    /// <summary>The tags outgoing HTTP metrics keep: never <c>server.address</c> or <c>server.port</c> (#232).</summary>
+    public static readonly string[] HttpClientMetricTags = ["http.request.method", "http.response.status_code", "error.type", "url.scheme", "network.protocol.version"];
+
+    /// <summary>
+    /// An outgoing request's span keeps the method, scheme and path, never the host, port or query (#232): the gateway's
+    /// address is a secret (AGENTS.md), and with an OTLP endpoint spans leave the host. Query strings could hold identifiers.
+    /// </summary>
+    public static void RedactOutgoing(Activity activity, HttpRequestMessage request)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+        ArgumentNullException.ThrowIfNull(request);
+        activity.SetTag("url.query", null);
+        activity.SetTag("server.address", null);
+        activity.SetTag("server.port", null);
+        activity.SetTag("url.full", request.RequestUri is { } uri ? $"{uri.Scheme}://redacted{uri.AbsolutePath}" : null);
     }
 
     public static TBuilder AddDefaultHealthChecks<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
