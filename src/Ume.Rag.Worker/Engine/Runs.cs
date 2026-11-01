@@ -46,8 +46,33 @@ public sealed class RunStore(JobDatabase database)
 
     private const string PhaseSql = """UPDATE content."Runs" SET "Phase" = $2 WHERE "Id" = $1 AND "State" = 'running'""";
 
-    private const string CancelSql = """
-        UPDATE content."Runs" SET "State" = 'cancelled', "Phase" = 'done', "FinishedAt" = now() WHERE "Id" = $1 AND "State" = 'running'
+    /// <summary>
+    /// Each document's or identity's latest outcome in run <c>$1</c> (superseded items left out): the basis of the run's
+    /// counters, for the finalizer and for a cancelled run alike.
+    /// </summary>
+    internal const string LatestOutcomesCte = """
+        latest AS (
+            SELECT DISTINCT ON (coalesce("DocumentId"::text, "Identity")) "Outcome"
+            FROM content."RunItems"
+            WHERE "RunId" = $1 AND "Outcome" <> 'superseded'
+            ORDER BY coalesce("DocumentId"::text, "Identity"), "CreatedAt" DESC, "Id" DESC)
+        """;
+
+    // A cancelled run keeps what it did up to the cancel: the counters are taken from its items, as the finalizer does.
+    private const string CancelSql = $"""
+        WITH {LatestOutcomesCte}, counted AS (
+            SELECT count(*) FILTER (WHERE "Outcome" = 'added') AS added,
+                   count(*) FILTER (WHERE "Outcome" IN ('updated', 'degraded')) AS updated,
+                   count(*) FILTER (WHERE "Outcome" IN ('unchanged', 'skipped')) AS unchanged,
+                   count(*) FILTER (WHERE "Outcome" = 'deleted') AS deleted,
+                   count(*) FILTER (WHERE "Outcome" IN ('unsupported', 'too-large', 'encrypted', 'malware', 'blocked', 'failed')) AS failed
+            FROM latest)
+        UPDATE content."Runs" r
+           SET "Added" = c.added, "Updated" = c.updated, "Unchanged" = c.unchanged, "Deleted" = c.deleted, "Failed" = c.failed,
+               "CostUsd" = (SELECT coalesce(sum("CostUsd"), 0) FROM content."RunItems" WHERE "RunId" = $1),
+               "State" = 'cancelled', "Phase" = 'done', "FinishedAt" = now()
+          FROM counted c
+         WHERE r."Id" = $1 AND r."State" = 'running'
         """;
 
     private const string ModeSql = """SELECT ("Report" -> 'mode')::text FROM content."Runs" WHERE "Id" = $1""";
@@ -256,12 +281,8 @@ public sealed partial class RunFinalizer(
         LIMIT 100
         """;
 
-    private const string CountersSql = """
-        WITH latest AS (
-            SELECT DISTINCT ON (coalesce("DocumentId"::text, "Identity")) "Outcome"
-            FROM content."RunItems"
-            WHERE "RunId" = $1 AND "Outcome" <> 'superseded'
-            ORDER BY coalesce("DocumentId"::text, "Identity"), "CreatedAt" DESC, "Id" DESC)
+    private const string CountersSql = $"""
+        WITH {RunStore.LatestOutcomesCte}
         SELECT count(*) FILTER (WHERE "Outcome" = 'added'),
                count(*) FILTER (WHERE "Outcome" IN ('updated', 'degraded')),
                count(*) FILTER (WHERE "Outcome" IN ('unchanged', 'skipped')),
