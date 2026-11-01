@@ -8,8 +8,9 @@ specifies the internals of the stages [`design-engine.md`](design-engine.md) (6a
 `lastmod` reliability), `ContentHashVersion` and noise rules from [`design-connectors.md`](design-connectors.md); the
 parser contract, signals, ranges and the text-layer fast path from [`../parser/design.md`](../parser/design.md) §3,
 §6–§10; the tables of [`../platform/data-model.md`](../platform/data-model.md) §2.2 and the hybrid query §3.3.
-Rewritten to the decided form of [`../simplification-pass.md`](../simplification-pass.md) (2026-10-30). Nothing is
-implemented. Changes needed elsewhere: §19; questions: §20; unverified facts: §21; removed mechanisms: §22.
+It states the rules of the simplification pass, the weakness review and the performance pass itself; links to them
+give the reasoning ([`../simplification-pass.md`](../simplification-pass.md)). Changes needed elsewhere: §19;
+questions: §20; unverified facts: §21; removed mechanisms: §22.
 
 Library and model facts checked for this step (downloaded into the scratchpad, read only): `Microsoft.ML.Tokenizers`
 2.0.1 (NuGet, MIT; contains `SentencePieceTokenizer` with `SentencePieceUnigramModel` and precompiled-charsmap
@@ -36,8 +37,8 @@ F1 0.922 on SUC 3.0).
 | 10 | Personal data | Runs on the chunk set after chunking; patterns in .NET for every set; names (NER, `POST /v1/ner`) **only when they can change the flag**; counts and flag live **on the chunk set** (§9) |
 | 11 | NER down | Only sets that need the name check wait: `pending`, held out of the `public` collection until checked (§9.6) |
 | 12 | Re-flag | A cleared set's clearance carries to its successor unless a flagging type's count rises above its count at clearance; values are never stored (§9.5) |
-| 13 | Embed | Platform profile only; ≤ 64 inputs and ≤ 16k tokens per request; cache by (level, profile, `TextHash`); a canary embedding detects a silently changed gateway model (§11) |
-| 14 | Noise-only changes | **No new chunk set**: when the chunk-stage input hash equals the live set's, the set is re-keyed in one row update (§12) |
+| 13 | Embed | Platform profile only; ≤ 64 inputs and ≤ `Worker:Embed:MaxTokensPerRequest` (6000) tokens per request; cache by (level, profile, `TextHash`); a canary embedding detects a silently changed gateway model (§11) |
+| 14 | Noise-only changes | **No new chunk set**: when the `chunk` output's hash equals the live set's, the set is re-keyed in one row update (§12) |
 | 15 | Evaluation | **Advisory harness**: questions point at **documents**; recall@10 and MRR@10 with counts on the full collection after each publish and nightly, compared with the previous run; never blocks (§13, §14). Reports lead with the `human` gold-set results; generated questions are a regression signal only (weakness review §2, §13.4) |
 | 16 | Retrieval in evaluation | A shared `Ume.Rag.Retrieval` library runs the Knowledge API's statements, fusion and diversity for both the API and the evaluator (§13.5) |
 
@@ -73,11 +74,10 @@ Evaluated per PDF page (and TIFF frame) on the inspect signals (parser §6.2), f
 | 5 | clean as in 4, `path_objects < 40` | `text-layer` (parser fast path, pypdfium2) | clean text layer |
 | 6 | otherwise (few characters with images, or garble 0.2–0.4) | `docling-ocr` (OCR `auto`: bitmaps only) | scanned or mixed |
 
-As built in P0 (parser §3; P0 #13, PR #16; settled at the integration sync point): the parser checks rule 5 again
-before its fast path, and if any page of a `text-layer` request fails it, converts the **whole request** with Docling
-and OCR and adds the warning `text_layer_rejected`; so the worker groups only rule-5 pages into `text-layer` requests.
-Layout headings on PDFs always need the re-levelling of rule 6 (§5): Heron gives every heading, the title included,
-level 1. `/v1/inspect` answers `501 not_implemented` in P0; the rules above run from P1.
+The parser checks rule 5 again before its fast path (parser §3), and if any page of a `text-layer` request fails it,
+converts the **whole request** with Docling and OCR and adds the warning `text_layer_rejected`; so the worker groups
+only rule-5 pages into `text-layer` requests. Layout headings on PDFs always need the re-levelling of §5.2: Heron gives
+every heading, the title included, level 1.
 
 After conversion, per page (parser §6.4 signals):
 
@@ -111,8 +111,9 @@ version bump, 6a §5.1); P1 tunes them once on the fixture corpus (§17). OCR is
 1. Consecutive pages with the same strategy form a run; each run is cut into ranges (parser §8.1). `blank` pages never
    go to the parser.
 2. First range size: 20 (`text-layer`, `docling-text`, `docling-tables`), 8 (`docling-ocr`, `-force`), 4 (`@3`).
-   **P1** (weakness review §1): these sizes are fixed per strategy from configuration (`Worker:Parse:RangePages:<strategy>`)
-   and only halved on failure (item 4). **P2**: after each range `msPerPage = EWMA(α 0.5)` of `timings.docling_ms / pages` per strategy, and
+   **P1**: these sizes are fixed per strategy from configuration (`Worker:Parse:RangePages:<strategy>`), set
+   conservatively from P1 measurements, and only halved on failure (item 4). **Later (P2):** after each range
+   `msPerPage = EWMA(α 0.5)` of `timings.docling_ms / pages` per strategy, and
    `next = clamp(⌊0.5 × 110,000 / msPerPage⌋, 1, 20)` (half the 110 s request deadline).
 3. Ranges run sequentially in the document's `parse` job; completed ranges are written as `ranges/{from}-{to}.{strategy}`
    (6a §8) so a crash, slice yield (6a §9.5) or retry resumes at the next range.
@@ -144,29 +145,25 @@ patterns, furniture patterns) consumed by *Clean* and *Split by headings* throug
 | `protokoll` | title or first page matches `(?i)\b(protokoll\|sammanträdesprotokoll\|kallelse)\b` | each `§ N` item is a level-1 section; signature blocks (`Justerare`, `Justerandes signatur`, `Utdragsbestyrkande`) are furniture |
 
 - Built-in rules are seeded rows (`ParseProfiles.Origin = builtin`, §19), read-only, versioned with the stage.
-  **Admin-made rules** (`Origin = manual` (data-model §2.2), platform admins, generic schema-driven form in P1) take the
-  same shape (domain, path glob, media type, text pattern → overrides and hints); each save is a new rule version,
-  audited. The matched rule's id and version are part of the parse stage's settings (6a §3.3), so a rule change
-  re-keys only the documents it matches, which the next run or a `reprocess` brings up to date. Strategy-level matches
-  run before the plan; text-level matches run on the joined output.
-  As built in P1b item 8 part 2 (PR #133, 2026-10-31): admin rules are matched like the built-in ones, admin rules
-  first, on the parser route only, and cached per config version. A rule's version is a content hash of the rule
-  (rule ids `{profileId}@{revision}`). A rule with a text pattern is a candidate before the text is known, so it
-  re-keys every document in its scope, not only those it matches. The preview's parse key takes the rule candidates
-  too (PR #136). As built in PR #225 (2026-11-01): the candidates are also the rule part of the chunk-set key
-  (`ChunkSets.ParseRuleKey` = `rule:{candidates}`, engine §14), so a rule change writes a new set, disabling the rule
-  swaps the kept set back, and a re-parse whose chunks come out as before re-keys the live set (`rule.unaffected`).
-  As built in P1b item 8 part 3 (PR #156, 2026-10-31): the admin writes through the `command` jobs `edit-parse-rule`
-  (the first edit creates a `manual` rule, a changing edit a new revision, an unchanged edit writes nothing) and
-  `disable-parse-rule`. Payload limits are tighter than the reader's (furniture ≤ 10 × 150 characters, `pathGlob`
-  ≤ 300) to keep the payload within 4 KB. Each revision is a worker audit entry (`audit."AuditLog"`, entity
-  `parserule`, before and after), since `ParseProfiles` keeps only the current content. A change enqueues a `sync`
-  `reprocess` with `Trigger = manual` for each active source with parser-route documents in the old or new scope (a
-  new trigger value would need a change to the `Runs.Trigger` CHECK, and `config-change` would interfere with the
-  settings-change effects). As built in PR #225 (2026-11-01), on the trigger `TR_ParseProfiles_ConfigChanged` of PR
-  #219: a rule change moves the config version, the catalog is read again when the applied version moves (no
-  `MaxAge`), and the reprocess syncs wait 10 s (5 × `ConfigVersionMonitor.PollInterval`) so every instance has applied
-  that version. A
+  **Admin-made rules** (`Origin = manual` (data-model §2.2), platform admins; through Scalar in P1a, the generic
+  schema-driven form from P1b) take the same shape (domain, path glob, media type, text pattern → overrides and hints);
+  each save is a new rule version, audited. Admin rules are matched like the built-in ones, admin rules first, on the
+  parser route only, and cached per config version. A rule's version is a content hash of the rule (rule ids
+  `{profileId}@{revision}`). The candidate rules' ids and versions are part of the parse stage's settings (6a §3.3) and
+  of the preview's parse key: a rule with a text pattern is a candidate before the text is known, so a rule change
+  re-keys every document in its scope, not only those it matches. The candidates are also the rule part of the
+  chunk-set key (`ChunkSets.ParseRuleKey` = `rule:{candidates}`, engine §14), so a rule change writes a new set,
+  disabling the rule swaps the kept set back, and a re-parse whose chunks come out as before re-keys the live set
+  (`rule.unaffected`). Strategy-level matches run before the plan; text-level matches run on the joined output.
+  The admin writes through the `command` jobs `edit-parse-rule` (the first edit creates a `manual` rule, a changing
+  edit a new revision, an unchanged edit writes nothing) and `disable-parse-rule`. Payload limits are tighter than the
+  reader's (furniture ≤ 10 × 150 characters, `pathGlob` ≤ 300) to keep the payload within 4 KB. Each revision is a
+  worker audit entry (`audit."AuditLog"`, entity `parserule`, before and after), since `ParseProfiles` keeps only the
+  current content. A rule change moves the config version (trigger `TR_ParseProfiles_ConfigChanged`); the catalog is
+  read again when the applied version moves (no `MaxAge`). The change enqueues a `sync` `reprocess` with
+  `Trigger = manual` for each active source with parser-route documents in the old or new scope, after 10 s
+  (5 × `ConfigVersionMonitor.PollInterval`) so every instance has applied that version (a new trigger value would need
+  a change to the `Runs.Trigger` CHECK, and `config-change` would interfere with the settings-change effects). A
   department-scoped rule matches by the department of the source's collection (`Sources` has no `DepartmentId`).
 - **Observations**: one `ParseObservations` row per non-preview parse: `Domain`, `PathPattern` (path with digits and
   the last segment replaced by `*`), `DocumentType`, `Strategy` (share of pages per strategy), `Score` (§8),
@@ -189,13 +186,14 @@ The worker parses only HTML, text, Markdown and CSV (simplification pass §9).
 
 | Parser | Internals |
 |---|---|
-| *HTML extraction* | AngleSharp DOM (already built by the root for links, 6b §12.2), then the host's **site profile** (6b; built-in preset when the host has none; uploaded HTML uses presets only): (1) **main root** by the profile's selector (`main` for Sitevision; as built in P1a item 8, PR #104, 2026-10-31: the Sitevision preset's `main, .pagecontent`, a list of alternatives tried in order, since landing pages have no `main`), fallback landmark (`main`, `article`, `role=main`) then SmartReader (not built in P1a: the fallback ends at `body`, to-verify #31); (2) **strip** the profile's boilerplate selectors and repeated phrases inside the root (share widgets, short-URL lines, cookie banners); (3) **link-list blocks** marked by the profile ("Undersidor") are kept for discovery only, never as text; (4) blocks: `h1`–`h6` (`level_source: html`), `p`, `li` (with nesting depth), `table` (cells, `th`/`thead` as header rows, spans expanded), `pre`/`code`, `figcaption`; (5) facts: **breadcrumb** from the profile's selector, else `aria-label` *Brödsmulor*/*breadcrumb*, else `BreadcrumbList`, with screen-reader-only text (`sr-only` and similar classes, `aria-hidden` excluded, visually hidden helper spans) removed, the current page dropped when it repeats the title; **visible date** by the profile's date pattern (e.g. `Sidan uppdaterades (?<d>\d{4}-\d{2}-\d{2})`); **description** (`meta description`, else `og:description`) and **keywords** (`meta keywords`, split on commas); title: `og:title`, else `<title>` with a repeated site suffix after ` - ` or a vertical bar removed, else first `h1`; the site-profile version used. Contact blocks ("Kontakt") stay ordinary sections: answers to "vem kontaktar jag?" need them; personal-data rules apply (§9) |
+| *HTML extraction* | AngleSharp DOM (already built by the root for links, 6b §12.2), then the host's **site profile** (6b; built-in preset when the host has none; uploaded HTML uses presets only): (1) **main root** by the profile's selector (the Sitevision preset's `main, .pagecontent`, a list of alternatives tried in order, since landing pages have no `main`), fallback landmark (`main`, `article`, `role=main`), then `body` (SmartReader as a further fallback is not built, to-verify #31); (2) **strip** the profile's boilerplate selectors and repeated phrases inside the root (share widgets, short-URL lines, cookie banners); (3) **link-list blocks** marked by the profile ("Undersidor") are kept for discovery only, never as text; (4) blocks: `h1`–`h6` (`level_source: html`), `p`, `li` (with nesting depth), `table` (cells, `th`/`thead` as header rows, spans expanded), `pre`/`code`, `figcaption`; (5) facts: **breadcrumb** from the profile's selector, else `aria-label` *Brödsmulor*/*breadcrumb*, else `BreadcrumbList`, with screen-reader-only text (`sr-only` and similar classes, `aria-hidden` excluded, visually hidden helper spans) removed, the current page dropped when it repeats the title; **visible date** by the profile's date pattern (e.g. `Sidan uppdaterades (?<d>\d{4}-\d{2}-\d{2})`); **description** (`meta description`, else `og:description`) and **keywords** (`meta keywords`, split on commas); title: `og:title`, else `<title>` with a repeated site suffix after ` - ` or a vertical bar removed, else first `h1`; the site-profile version used. Contact blocks ("Kontakt") stay ordinary sections: answers to "vem kontaktar jag?" need them; personal-data rules apply (§9) |
 | `plain-text` | charset (BOM, strict UTF-8, Windows-1252 fallback, parser §3); Markdown via Markdig (`level_source: markdown`), plain text as paragraphs split on blank lines |
 | `csv-table` | delimiter sniffed among `;`, `,`, tab, `\|` on the first 50 lines; header row = first row all non-numeric and distinct; one table block; 200,000-cell cap as parser §7.4 |
 
-The **site-profile check** (P2, weakness review §1; 6b: a re-learned profile is applied automatically only when, on the sample, no page loses
-more than 10 % of its main-text words, none ends up empty and the boilerplate share does not rise) runs this same
-extraction in preview mode on both profile versions; its procedure and thresholds are 6b's.
+**Later (P2):** the **site-profile check** (6b: a re-learned profile is applied automatically only when, on the sample,
+no page loses more than 10 % of its main-text words, none ends up empty and the boilerplate share does not rise) runs
+this same extraction in preview mode on both profile versions; its procedure and thresholds are 6b's. P1 uses manual
+profiles of the same schema.
 
 ## 4. Joining and *Clean*
 
@@ -275,7 +273,8 @@ insufficient) cuts sections above 1,500 tokens into parent windows at block boun
 - Parity test: 1,000 Swedish and English passages from the fixture corpus, counts equal to Hugging Face
   `XLMRobertaTokenizerFast` for `BAAI/bge-m3` (golden file generated once in Python). A mismatch fails the build; if
   parity cannot be reached, the fallback is a 5 % safety margin on the budget (P1 decision at implementation).
-- One shared instance (thread-safe for encoding, *to verify*); `CountTokens` and `GetIndexByTokenCount` on spans.
+- One shared instance (thread-safe, to-verify #26); `CountTokens` and `GetIndexByTokenCount` on spans. Compiled
+  regexes and word lists are shared read-only.
 
 ### 6.2 Packing
 
@@ -397,7 +396,7 @@ and names.
 
 ### 9.1 Patterns (.NET, `Ume.Rag.Worker/Pii`)
 
-| Type | Candidate (regex, with `\b`-style boundaries: no digit or `-` directly before/after; as built in PR #240, 2026-11-01, no letter either, and a phone number also not inside a hyphen-joined token such as a GUID group, so digit runs in ids and hashes are no match) | Validation |
+| Type | Candidate (regex, with `\b`-style boundaries: no digit, letter or `-` directly before/after, and a phone number also not inside a hyphen-joined token such as a GUID group, so digit runs in ids and hashes are no match) | Validation |
 |---|---|---|
 | `personnummer` | `(?<c>18\|19\|20)?(?<yy>\d{2})(?<mm>\d{2})(?<dd>\d{2})(?<sep>[-+]?)(?<nnn>\d{3})(?<k>\d)` | `mm` 01–12; `dd` valid for the month and year (leap years with the century: given, else the latest century with date ≤ today, minus 100 years when `sep = +`); **Luhn** over the 10 digits `yymmddnnn k`; 10-digit form **without** separator only with a keyword (`personnummer`, `pers.nr`, `pnr`, `personnr`, `födelsenummer`) within 30 characters before it |
 | `samordningsnummer` | same | as above with `dd` 61–91 (day + 60) |
@@ -424,12 +423,12 @@ Names are checked **only when they can change the flag** (simplification pass §
 2. no other rule already flags the set (§9.4);
 3. the set has ≥ 5 contact values (phone and own-domain email, distinct), so the list-like rule could fire.
 
-Otherwise `ner` is `skipped` and names count 0. As built in PR #173 (2026-11-01): a source with `piiMode: report`
-(§9.5) runs the same gate, so its names count in the counts and the report but cannot hold the set. Text units sent: sentences of chunk bodies and table rows (context for
-names in lists). **Prefilter**: a unit is sent only if it contains a capitalised word that is not its first word, or a
-first word found in a first-name gazetteer (SCB name statistics, names with ≥ 50 bearers, *to verify* licence); ALL-CAPS
-units are sent as they are. Entities with label `person` and `score ≥ Settings.NerMinScore` (0.80) count; distinct
-names are counted after NFC, case folding and joining hyphenated parts.
+Otherwise `ner` is `skipped` and names count 0. A source with `piiMode: report` (§9.5) runs the same gate; its names
+count in the counts and the report but cannot hold the set. Text units sent: sentences of chunk bodies and table rows
+(context for names in lists). **Prefilter**: a unit is sent only if it contains a capitalised word that is not its first
+word, or a first word found in a first-name gazetteer (SCB name statistics, names with ≥ 50 bearers, *to verify*
+licence); ALL-CAPS units are sent as they are. Entities with label `person` and `score ≥ Settings.NerMinScore` (0.80)
+count; distinct names are counted after NFC, case folding and joining hyphenated parts.
 
 ### 9.4 Counts and the flag
 
@@ -440,7 +439,8 @@ names are counted after NFC, case folding and joining hyphenated parts.
   "ner": "done", "rules": 1, "model": "kb-bert-ner@f3c83af" }
 ```
 
-`emailExternal` = addresses outside `Settings.PiiOwnDomains` (e.g. `umea.se`). `ner` is `done`, `skipped` (not needed,
+`emailExternal` = addresses outside `Settings.PiiOwnDomains` (§9.5). `rules` = the number of flag rules that fired;
+the list of fired types is not stored (it goes only into event 5103, §9.5). `ner` is `done`, `skipped` (not needed,
 §9.3) or `pending` (§9.6). Spans live only in memory during the stage and in preview blobs (24 h), where the document
 page can show highlights to an editor deciding on a clearance.
 
@@ -448,7 +448,8 @@ page can show highlights to an editor deciding on a clearance.
 §20.1): personnummer and samordningsnummer `always` (≥ 1); `emailExternal` `threshold` 1; `name`, `phone`, `email`
 `threshold` together: ≥ 5 distinct names **and** ≥ 5 phone/email values (list-like documents: member lists,
 attendance, case lists). A set is flagged when any rule fires; `ner = pending` counts as flagged for the `public`
-collection (§9.6). The umea.se example page's contact block (3 contact values) is below the name-check threshold.
+collection (§9.6). Contact blocks stay ordinary sections (§3.7) and are counted like any other text; the umea.se
+example page's contact block (3 contact values) is below the name-check threshold.
 
 ### 9.5 Flags, `public` collections, clearing, re-flagging
 
@@ -457,22 +458,27 @@ collection (§9.6). The umea.se example page's contact block (3 contact values) 
   until the document is cleared. In other collections the flag is shown but nothing is blocked. Clearing releases the
   held set (state `live`, `DeletedAt` cleared on its chunks, 6a §14), never re-processing.
 - **`piiMode`** (source setting, `hold` default or `report`; Decisions table "Personal data on the municipality's own
-  published site", 2026-11-01; as built in PR #173, 2026-11-01): `hold` is the rule above. With `report` a set in a
-  `public` collection is held only when the personnummer or samordningsnummer rule fires with a count above the
-  document's cleared count (never stricter than `hold`); every other flag, and a NER-pending set, is swapped in `live`,
-  keeps `PiiFlagged` and its counts, gets reason `pii.flagged` and raises 5103. A clearance of a `report` source compares
-  only personnummer and samordningsnummer; rising contact or name counts go live with 5103 `Reflag`. The mode is read
-  at each swap (`x-effect: cosmetic`, connectors §12.3): a change applies at each document's next swap, with no run or
-  reprocess, and sets already `held` stay held until cleared or re-processed. The web editors' report (as built in PR
-  #217, 2026-11-01): `GET /api/sources/{id}/pii-report` (admin read policy, source-scoped) applies only to a `report`
-  source in a `public` collection and lists, numbers only, first the documents with a held flagged set, then those
-  whose live set is flagged (≤ 500), with the non-zero counts per type, the fired-rule count (`PiiCounts.rules`, not the
-  list of fired types), `LiveAt` and the last `pii.flagged` run item. `Settings.PiiOwnDomains` is seeded with
-  `SettingsSeed:PiiOwnDomains` (default `["umea.se"]`) when no `Settings` row exists; an existing row is never changed.
-  Own domains match subdomains in any case; `@umea.se`, `*.umea.se` and a trailing dot are normalised (PR #173).
-- **New flag**: `PiiFlaggedAt = now()` on the set (as built in PR #226, 2026-11-01: the time of the first transition to
-  flagged, kept when the set already has one, e.g. a re-flag by the drift sweep; NULL on a set never flagged); run items
-  get reason `pii.flagged` (outcome stays `added`/`updated`), as built in PR #173 only in `public` collections.
+  published site"): `hold` is the rule above. With `report` a set in a `public` collection is held only when the
+  personnummer or samordningsnummer rule fires with a count above the document's cleared count (never stricter than
+  `hold`); every other flag, and a NER-pending set, is swapped in `live`, keeps `PiiFlagged` and its counts, gets
+  reason `pii.flagged` and raises 5103. A clearance of a `report` source compares only personnummer and
+  samordningsnummer; rising contact or name counts go live with 5103 `Reflag`. The mode is read at each swap
+  (`x-effect: cosmetic`, connectors §12.3): a change applies at each document's next swap, with no run or reprocess,
+  and sets already `held` stay held until cleared or re-processed.
+- **Personal-data report** for the web editors: `GET /api/sources/{id}/pii-report` (admin read policy,
+  source-scoped). It applies only to a `report` source in a `public` collection (any other source answers
+  `applies: false` with no documents) and lists, numbers only, first the documents whose newest flagged set is `held`
+  (with whether an older version is still live), then those whose live set is flagged, ≤ 500 in all (`truncated`
+  beyond). Per document: title, URL or display name, state, the **non-zero counts per type** and the **number of fired
+  rules** from `ChunkSets.PiiCounts` (`rules`; the names of the fired rules are not stored, §9.4), `LiveAt`, and the
+  time and run of the last `pii.flagged` run item.
+- **Own domains**: `Settings.PiiOwnDomains` is seeded with `SettingsSeed:PiiOwnDomains` (default `["umea.se"]`) when no
+  `Settings` row exists; an existing row is never changed. The pilot's list is `umea.se`, `vakin.se`, `umeaenergi.se`,
+  `visitumea.se` (Decisions table "Municipal companies' e-mail domains, `PiiOwnDomains`"), set through the admin API.
+  Own domains match subdomains in any case; `@umea.se`, `*.umea.se` and a trailing dot are normalised.
+- **New flag**: `ChunkSets.PiiFlaggedAt` is the time of the set's first transition to flagged, kept when the set already
+  has one (e.g. a re-flag by the drift sweep), NULL on a set never flagged; run items get reason `pii.flagged` (outcome
+  stays `added`/`updated`), only in `public` collections.
 - **`clear-pii-flag` command** (6a §9.1): a person's decision on the **document**, issued by `rag-department-admin`
   of the source's department, or `rag-platform-admin`; reason required (≥ 10 characters); admin audit 6001
   `pii.clear`. The worker sets `Documents.PiiClearedAt`, `PiiClearedBy` and `PiiClearedCounts` (= the held set's
@@ -491,9 +497,9 @@ collection (§9.6). The umea.se example page's contact block (3 contact values) 
   lane sizing. NER `busy`/`not_ready` requeue that job without an attempt; it resumes from the cached chunk output.
 - If NER is not ready for more than 5 minutes (`/v1/info`), the stage completes with patterns only and `ner: pending`:
   the set is swapped in `held` (it can only be pending in a `public` collection, §9.3); the nightly drift sweep (6a
-  §2.3) re-runs `personal-data` for `pending` sets once NER is ready. Sets in other collections never wait for NER. As
-  built in PR #173 (2026-11-01): a `pending` set of a `piiMode: report` source goes in `live`, and the sweep settles its
-  counts and flag without holding it (unless the personnummer rule fires, §9.5).
+  §2.3) re-runs `personal-data` for `pending` sets once NER is ready. Sets in other collections never wait for NER. A
+  `pending` set of a `piiMode: report` source goes in `live`, and the sweep settles its counts and flag without holding
+  it (unless the personnummer or samordningsnummer rule fires, §9.5).
 
 ### 9.7 Masking (P2)
 
@@ -532,22 +538,24 @@ Swedish pitfalls (fixtures in §17):
 
 | Topic | Rule |
 |---|---|
-| Profile | the collection's `EmbeddingProfileId`, normally the `EmbeddingProfiles` row with `IsDefault` (`bge-m3`, 1024, cosine, `MaxInputTokens` 8192; data-model §2.1); other profiles only by platform admins (R3, `../../02-architecture-review.md:45-59`) |
+| Profile | the collection's `EmbeddingProfileId`, normally the `EmbeddingProfiles` row with `IsDefault`; other profiles only by platform admins (R3, `../../02-architecture-review.md:45-59`). The platform profile is seeded from `EmbeddingProfile:*` (insert-if-absent, never changed afterwards). Until on-prem hardware exists (register M2) it is `text-embedding-3-large` from an `Eu` provider through the gateway at 1024 dimensions, requested with OpenAI's `dimensions` parameter (`RequestDimensions`), cosine, `MaxInputTokens` 8191, `MaxResidency` `Eu` (Decisions table "Pilot embedding model, U-b", "M2 and test hosting"). On-prem BGE-M3 (1024, cosine, `MaxInputTokens` 8192, never sent `dimensions`) replaces it when the hardware exists, which re-embeds every chunk (P1b/P2); FakeGateway's `bge-m3` (1024) serves development and tests |
 | Input | the embedded string of §6.5 (prefix + body); no instruction prefix (BGE-M3 dense retrieval uses none, *to verify*); queries are embedded raw by the Knowledge API with the same NFC normalisation |
-| Cache | per document: one `SELECT … WHERE "Classification" = @l AND "EmbeddingProfileId" = @p AND "TextHash" = ANY(@h)`; misses deduplicated, embedded, inserted `ON CONFLICT DO NOTHING` in their own short transaction (6a §7.6); `LastUsedAt` touched at most once a day per row; unused 30 days → deleted (platform plan §8). Dify's cached embedding is the precedent (`../../platforms/dify.md:218`) |
-| Batching | ≤ 64 inputs and ≤ 16,384 tokens per request (`TokenCount` sum; gateway limit *to verify*), all misses of one document. Found in P1a items 5/6 (PR #139, 2026-10-31, to-verify #43): the gateway checks the whole request's estimated tokens (body bytes / 4, ≈ 4.5 bytes per token with escaped å/ä/ö) against the model's `ContextWindow`, so with BGE-M3 at 8192 a full batch is refused (`embed.input_rejected`); until the gateway checks per input (gateway session prompt), the worker caps each request at `min(Worker:Embed:MaxTokensPerRequest, profile.MaxInputTokens)`, default 6000 (as built, PR #143, 2026-10-31), and the embedding deployment is left without a `ContextWindow` (Decisions "Pilot embedding model, U-b") |
-| Request | `POST /v1/embeddings` `{model: "bge-m3", input: [...], encoding_format: "float"}`; headers by the engine (6a §7.7): `x-ume-on-behalf-of` = owner team of the collection (from gateway release 2, P2; weakness review §5), `x-ume-max-residency: OnPrem` always (the worker's `OnPrem` key), `x-ume-run-id`, `x-ume-step: embed` |
-| Response checks | count equals inputs; each vector 1024 finite floats (else fatal `embed.bad_vector`); `x-ume-residency` ≤ `OnPrem` (else fatal, 5003); stored as returned (cosine is scale-invariant) |
-| Canary | at startup and hourly the worker embeds a fixed Swedish canary text and compares it with `EmbeddingProfiles.CanaryEmbedding`: cosine < 0.999 → the `embed` class stops on this instance, health `unhealthy`, alert: the gateway alias now serves another model, which would silently mix vector spaces. As built in P1a item 9 (PR #108, 2026-10-31): the embed handler runs the canary itself before embedding with a profile not yet checked on this instance. As built in P1a item 13 (PR #123, 2026-10-31): the admin API records `CanaryEmbedding` after each model sync, for every active profile that has none, at the profile's ceiling and checked for dimensions (the migrator holds no gateway keys); a recorded canary is never replaced |
-| Concurrency | P1: fixed `Worker:Concurrency:embed` from configuration. **P2** (weakness review §1): AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1) |
-| Chat protection at the gateway | the worker's own key (the pilot team's `OnPrem` key until gateway release 2, then a delegating key) with the gateway's existing `MaxConcurrentRequests` cap (429 + `Retry-After`, honoured), so a misconfigured worker cannot starve chat's query embeddings. A separate BGE-M3 query route only when the performance pass's §6 trigger fires ([`../performance-pass.md`](../performance-pass.md) §3.9, §6) |
+| Cache | per document: one `SELECT … WHERE "Classification" = @l AND "EmbeddingProfileId" = @p AND "TextHash" = ANY(@h)`; misses deduplicated, embedded, inserted `ON CONFLICT DO NOTHING` in their own short transaction (6a §7.6); `LastUsedAt` touched at most once a day per row; unused 30 days → deleted (platform plan §8). Dify's cached embedding is the precedent (`../../platforms/dify.md:218`). **Later (P2):** the lookup goes through `Chunks` (index `IX_Chunks_Profile_TextHash` on (`EmbeddingProfileId`, `TextHash`) `WHERE "Kind" = 'child'`), and `EmbeddingCache` keeps only texts not in a live set, as `halfvec` |
+| Batching | ≤ 64 inputs and ≤ `min(Worker:Embed:MaxTokensPerRequest, profile.MaxInputTokens)` tokens per request (`TokenCount` sum; default 6000), all misses of one document; a single chunk above the cap goes alone. The gateway checks the whole request's estimated tokens (body bytes / 4, ≈ 4.5 bytes per token with escaped å/ä/ö) against the model's `ContextWindow` (to-verify #43), so the cap keeps a request below an 8192-token window; the embedding deployment is left without a `ContextWindow` until the gateway checks per input (gateway session prompt; Decisions table "Pilot embedding model, U-b") |
+| Request | `POST /v1/embeddings` `{model: <profile's GatewayModel>, input: [...], encoding_format: "float"}`, plus `dimensions` when the profile asks for it; headers by the engine (6a §7.7): `x-ume-on-behalf-of` = owner team of the collection (from gateway release 2, P2; weakness review §5), `x-ume-max-residency` = the profile's `MaxResidency` (at most the platform ceiling; `Eu` until M2) with the worker's key of that level, `x-ume-run-id`, `x-ume-step: embed` |
+| Response checks | count equals inputs, in input order; each vector of the profile's dimensions, finite floats (else fatal `embed.bad_vector`); `x-ume-residency` ≤ the profile's ceiling (else fatal `gateway.residency_above_ceiling`, 5003); stored as returned (cosine is scale-invariant) |
+| Canary | at startup and hourly the worker embeds a fixed Swedish canary text and compares it with `EmbeddingProfiles.CanaryEmbedding`: cosine < 0.999 → the profile is refused on this instance, health `unhealthy`, alert: the gateway alias now serves another model, which would silently mix vector spaces. The embed handler runs the canary itself before embedding with a profile not yet checked on this instance; until a profile's canary has passed on the instance the profile is refused (fail closed); a profile without a recorded canary is allowed and reported degraded. The admin API records `CanaryEmbedding` after each model sync, for every active profile that has none, at the profile's ceiling and checked for dimensions (the migrator holds no gateway keys); a recorded canary is never replaced |
+| Concurrency | P1: fixed `Worker:Concurrency:embed` from configuration. **Later (P2):** AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1); and, from the first multi-host deployment, a Redis lease `ume-rag:embed:inflight` caps all workers together at `Embedding:GlobalMaxInFlight` (default 2 × provider replicas), with each instance's AIMD as the fallback when Redis is down |
+| Chat protection at the gateway | the worker's own key (the pilot team's key of the profile's level until gateway release 2, then a delegating key) with the gateway's existing `MaxConcurrentRequests` cap (429 + `Retry-After`, honoured: requeued without an attempt), so a misconfigured worker cannot starve chat's query embeddings. A separate query route (`x-ume-step: query-embed`) only when the performance pass's §6 trigger fires ([`../performance-pass.md`](../performance-pass.md) §3.9, §6) |
+| Bulk loads | **Later (P2):** bulk runs (first crawls, re-embeds) at `Priority` −5 in the night window, forecast from the measured tokens/s, and never above `Settings.Ingestion.bulkEmbedShare` (0.75) of the global cap |
 | Failures | 6a §7.3 table; a 400 for one input fails the document (`embed.input_rejected`, a bug: 400 tokens ≪ 8192); partial results of a failed batch are discarded and the batch retried whole |
 
-**Profile migration (P3 outline).** New profile row; `rag_ensure_profile_index` (data-model §3.2); a `reprocess` per
-affected source builds invisible sets keyed by the new profile id from cached chunk outputs (embedding is the cost); the
-evaluation compares both profiles on the full collection (§14.5); the swap sets `Collections.EmbeddingProfileId` and
-swaps sets per document; old sets kept 14 days; the Knowledge API embeds queries per profile while both exist
-(knowledge plan §3).
+**Later (P3): profile migration (outline).** New profile row; a `reprocess` per affected source builds invisible sets
+keyed by the new profile id from cached chunk outputs (embedding is the cost); the profile's partial HNSW index is built
+after that shadow load with `CREATE INDEX CONCURRENTLY` (partitioning `Chunks` by profile does not help; per-collection
+partial indexes are the fallback, performance pass §6); the evaluation compares both profiles on the full collection
+(§14.5); the swap sets `Collections.EmbeddingProfileId` and swaps sets per document; old sets kept 14 days; the
+Knowledge API embeds queries per profile while both exist (knowledge plan §3).
 
 ## 12. Noise-only content changes (6b §12.2 open item)
 
@@ -557,9 +565,10 @@ A new `ContentHash` whose extracted text is unchanged (6b counts it as `rag.conn
 create a new chunk set: identical chunks rewritten, as many HNSW and GIN inserts, the old set superseded, for nothing; a
 noisy site would churn its whole index.
 
-1. `ChunkSets.InputHash` = `OutputHash` of the *Clean* output the set was built from (the chunk stage's input, 6a §8).
+1. `ChunkSets.InputHash` = `OutputHash` of the `chunk` output the set was built from (the personal-data stage's input,
+   6a §8).
 2. In the fenced segment commit, when the live set has the same pipeline version, site-profile version and profile
-   and an `InputHash` equal to the new *Clean* `OutputHash`, the set is **re-keyed** (6a §14 rule 4):
+   and an `InputHash` equal to the new `chunk` `OutputHash`, the set is **re-keyed** (6a §14 rule 4):
    `ContentHash = @new` in one row. No `embed` job is enqueued; the run item is `unchanged`, reason `change.noise`.
 3. This only works if `OutputHash` covers content, not fetch circumstances: the hash of a `ParsedDocument` covers
    blocks, tables, pages with signals, title, language and breadcrumb, and **excludes** volatile facts (fetch time,
@@ -569,22 +578,19 @@ noisy site would churn its whole index.
 5. The same rule serves files whose bytes change without content change (re-exported PDF): they are re-parsed
    (raw-byte hash) but not re-chunked or re-embedded.
 
-As built in P1a item 9 (PR #108, 2026-10-31): `ChunkSets.InputHash` is the personal-data stage's input, the `chunk`
-output's `OutputHash`, not the *Clean* output's; re-key compares chunk outputs, which is the direct form of point 4
-(the chunks are the same).
-
 ## 13. Evaluation sets
 
 ### 13.1 Generation (`eval` job `generate-set`, `top-up-set`)
 
 | Step | Rule |
 |---|---|
-| When | after a collection's first sync runs finish; weekly top-up check (scheduler, 6a §9.6); on demand from the admin. As built in P1b item 7 (PR #137, 2026-10-31; `EvalSetTriggers`, dedup `eval-generate:{collectionId}`): `generate-set` when the collection has no generated question and its first syncs finished (every active source has a `succeeded`, `degraded` or `awaiting-deletion-confirmation` run, none is running, and D > 0; publishing is not required), never repeated while any `eval-generate` job row of the collection exists; the weekly check runs Sunday 04:30 Europe/Stockholm; no trigger fires without `Settings.EvaluationModel` |
+| When | after a collection's first sync runs finish; weekly top-up check (scheduler, 6a §9.6); on demand from the admin. `EvalSetTriggers` (dedup `eval-generate:{collectionId}`) enqueues `generate-set` when the collection has no generated question and its first syncs finished (every active source has a `succeeded`, `degraded` or `awaiting-deletion-confirmation` run, none is running, and D > 0; publishing is not required), never again while any `eval-generate` job row of the collection exists; the weekly check runs Sunday 04:30 Europe/Stockholm; no trigger fires without `Settings.EvaluationModel` |
+| Phase | retrieval evaluation over the `human` layer (the gold set, §13.4) runs from P1a; generated sets come in P1b, built and tested on FakeGateway but not run on the pilot until an on-prem model exists (register M2; Decisions table "P1b briefs", O1) |
 | Size (answered 20) | target `N = min(100, 3 × D, eligible chunks)` for `D` live documents; over-generate 1.6 × N to survive filtering |
-| Eligible chunks | live sets of the collection; body ≥ 50 tokens; not from PII-flagged sets (keeps personal data out of stored questions); not `quality.largeTable` rows beyond the first group (as built in PR #226, 2026-11-01: `Chunks.LargeTable`, true on the second and later row groups of a table over 2,000 rows, is excluded) |
-| Stratification | by document: round-robin over documents in seeded random order, ≤ `⌈N/D⌉ + 1` per document; by document type: proportional to chunk share, each type with ≥ 5 % of chunks gets ≥ 2; by kind: table row groups and lists at least their share, min(5, available) (as built in PR #226, 2026-11-01: by `Chunks.ContentKind` `table`/`list`, a minimum of max(⌈share × candidates⌉, min(5, available)) per kind, taken first and inside the per-document cap; `list` = list items are at least half of the body tokens) |
-| Seed | `SHA-256(setId ‖ round)`; the sample is reproducible; as built in PR #226 (2026-11-01) the round is `EvaluationSets.Round`, the round the next generation uses: every round that generated writes round + 1, also one that kept nothing (a question with a later `Origin.round`, written before the column, wins) |
-| Model | `Settings.EvaluationModel` (on-prem chat model in the gateway catalogue; must be a `GatewayModels` row servable `OnPrem`, admin design §4.10) with ceiling `OnPrem`; `x-ume-step: eval-generate`; temperature 0.3; JSON output. As built in P1b item 7 (PR #130, 2026-10-31): unset refuses with `eval.model_unset` (no implicit default); the job refuses unless `/v1/models` at ceiling `OnPrem` lists the model, read through its own client (`gateway-eval-models`) with no answer check, because `ResidencyCeilingHandler` dropped a model list without `x-ume-residency` (it exempts `GET /v1/models` since PR #123, chat §8.1); it still sends `x-ume-max-residency: OnPrem` and the `OnPrem` key |
+| Eligible chunks | live sets of the collection; body ≥ 50 tokens; not from PII-flagged sets (keeps personal data out of stored questions); not `quality.largeTable` rows beyond the first group (`Chunks.LargeTable`, true on the second and later row groups of a table over 2,000 rows, is excluded) |
+| Stratification | by document: round-robin over documents in seeded random order, ≤ `⌈N/D⌉ + 1` per document; by document type: proportional to chunk share, each type with ≥ 5 % of chunks gets ≥ 2; by kind (`Chunks.ContentKind` `table`/`list`; `list` = list items are at least half of the body tokens): a minimum of max(⌈share × candidates⌉, min(5, available)) per kind, taken first and inside the per-document cap |
+| Seed | `SHA-256(setId ‖ round)`; the sample is reproducible; the round is `EvaluationSets.Round`, the round the next generation uses: every round that generated writes round + 1, also one that kept nothing (the next round is the larger of `Round` and the newest question's `Origin.round` + 1) |
+| Model | `Settings.EvaluationModel` (on-prem chat model in the gateway catalogue; must be a `GatewayModels` row servable `OnPrem`, admin design §4.10) with ceiling `OnPrem`; `x-ume-step: eval-generate`; temperature 0.3; JSON output. Unset refuses with `eval.model_unset` (no implicit default); the job refuses unless `/v1/models` at ceiling `OnPrem` lists the model, read through its own client (`gateway-eval-models`) with `x-ume-max-residency: OnPrem` and the `OnPrem` key (`ResidencyCeilingHandler` exempts `GET /v1/models` from the answer check, chat §8.1) |
 
 Prompt outline (Swedish, versioned as `PromptVersion`):
 
@@ -599,14 +605,13 @@ inga personuppgifter. Svara med JSON: {"fraga": "...", "svar": "...", "typ": "fa
 Questions are Swedish whatever the document language (BGE-M3 is cross-lingual). **Filtering** (cheap first):
 
 1. Rules: Swedish (§2 detector), 6–25 words, ends with `?`, no deictic phrases (`texten`, `dokumentet`, `ovan`,
-   `nedan`, `detta avsnitt`), no pattern hit from §9.1. As built in P1b item 7 (PR #130, 2026-10-31): a question is
-   refused as not Swedish if it is detected as English, or if it has ≥ 8 words and is not detected as Swedish (the
-   detector needs 8 words).
-2. **Answer leakage**: the normalised expected answer is not a substring of the question (as built, PR #130: matched
-   on whole words); share of the question's content words found verbatim in the chunk ≤ 0.8.
+   `nedan`, `detta avsnitt`), no pattern hit from §9.1. A question is refused as not Swedish if it is detected as
+   English, or if it has ≥ 8 words and is not detected as Swedish (the detector needs 8 words).
+2. **Answer leakage**: the normalised expected answer is not contained in the question (matched on whole
+   words); share of the question's content words found verbatim in the chunk ≤ 0.8.
 3. Judge (`Settings.EvaluationJudgeModel`, default the same model, temperature 0, `x-ume-step: eval-judge`): rates
    *answerable from the text*, *understandable without the text*, *specific to this content* on 1–5; keep only all ≥ 4.
-4. Near-duplicates: BGE-M3 cosine ≥ 0.92 between kept questions → keep one.
+4. Near-duplicates: cosine ≥ 0.92 between kept questions (the collection's embedding profile) → keep one.
 5. Never filter on whether retrieval finds the document: that would bias the set towards the current pipeline.
 
 Expected documents: the source chunk's document plus every live document of the collection with a chunk of the same
@@ -629,38 +634,40 @@ charged to the collection's owner team; shown before generation.
 
 - A question becomes **stale** when an expected document is deleted, or its content hash differs from
   `SourceContentHash` and a judge call on that document's best-matching chunk no longer rates it answerable. Only
-  changed documents are re-checked. As built in P1b item 7 (PR #130, 2026-10-31): the best-matching chunk is picked
-  lexically; a re-checked question that stays answerable takes the new `SourceContentHash`.
+  changed documents are re-checked. The best-matching chunk is picked lexically; a re-checked question that stays
+  answerable takes the new `SourceContentHash`.
 - Weekly top-up: retire stale questions (`RetiredAt`), regenerate to the target size with a new round seed; also when
-  `D` grew by ≥ 25 % since the last round. Retired questions keep their results for history. As built (PR #130): a
-  stale question gets `State = stale` and `RetiredAt`. As built in P1b item 7 (PR #137, 2026-10-31): the weekly
-  `top-up-set` runs once per week; D at a round is stored in the generated questions' `Origin.documents` (no schema
-  change), so rows without it never get a growth top-up (the weekly one still covers them); the growth top-up also
-  needs the layer below `min(max, 3·D)` and the last set job at least 1 day old.
+  `D` grew by ≥ 25 % since the last round. Retired questions keep their results for history. A
+  stale question gets `State = stale` and `RetiredAt`. The weekly `top-up-set` runs once per week; D at a round is
+  stored in the generated questions' `Origin.documents`, so rows without it never get a growth top-up (the weekly one
+  still covers them); the growth top-up also needs the layer below `min(max, 3·D)` and the last set job at least 1 day
+  old.
 - An evaluation run uses the set as it was when the run started; a top-up never runs during a run of the collection.
 
 ### 13.4 Human and other layers
 
 - **P1**: editors add questions with expected documents and edit or retire generated ones (`edit-eval-question`
   command, 6a §9.1); `Layer = human`. Every run includes all human questions.
-- **Pilot gold set** (P1a, before go-live; [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): 100–150 answerable real questions
-  (expected source URL(s) as `ExpectedDocumentIds`, the facts a correct answer contains as `ExpectedAnswer`), 30–50
-  unanswerable off-topic and near-miss questions (no expected documents; expected outcome "not found") and at least
-  10 temporal questions where an outdated document competes (they check the age decay and `demote` patterns of
-  [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered): the current document
-  ranks above the outdated one). Stored as `human` questions through the same command
-  (in P1a through Scalar, no journey pages); owned by the pilot department with the platform team; the start of
+- **Pilot gold set** (P1a, before go-live; reasoning: [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)):
+  about 120–150 answerable real questions (expected source URL(s) as `ExpectedDocumentIds`, the facts a correct answer
+  contains as `ExpectedAnswer`), 30–50 unanswerable off-topic and near-miss questions (no expected documents; expected
+  outcome "not found") and at least 10 temporal questions where an outdated document competes (they check the age decay
+  and `demote` patterns of [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered):
+  the current document ranks above the outdated one). The main session drafts them from the Turkos crawl in residents'
+  wording rather than page headings, mixing short and long questions, each marked as a draft; DoIT (the pilot
+  department) reviews, edits and approves them, and may add its own (Decisions table "Gold set drafted by the main
+  session, reviewed by DoIT"; owner and date U-f from the user, J13, P1a item 21). Approved questions are stored as
+  `human` questions through the same command (in P1a through Scalar, no journey pages); they are the start of
   register item B1. Unanswerable questions do not count in recall@10 and MRR@10; for them the run records the coverage
   status, best distance and best keyword score (§13.6).
-- **P1a three-way run** (weakness review §2): an `on-demand` run of the gold set in three variants: vector-only (mode
-  `vector`), hybrid, and hybrid without the decompounder on both sides (weakness review §2: a `reindex-fts` scratch
-  copy of the collection's `SearchText` without compound parts, and queries without them). The result is recorded;
-  hybrid and the decompounder stay only if they beat vector-only. As built in P1a item 10 (PR #128, 2026-10-31): the
-  scratch copy is computed inside statement K from `Chunks.Text`, because the worker has no `TEMPORARY` privilege and
-  this needs no migration; an `on-demand` run covers the whole active set, `human` layer first.
-- **P2**: questions rewritten from flagged chat feedback (plan §7: only the rewritten, personal-data-free question is
-  kept, with the collection's classification); skill test questions run by the skill gate in `rag-admin` as the
-  tools design specifies.
+- **P1a three-way run**: an `on-demand` run of the gold set in three variants: vector-only (mode `vector`), hybrid, and
+  hybrid without the decompounder on both sides: the keyword side is computed inside statement K from `Chunks.Text`
+  without compound parts (the worker has no `TEMPORARY` privilege, and this needs no migration), and queries go without
+  them. An `on-demand` run covers the whole active set, `human` layer first. The result is recorded (to-verify #168);
+  hybrid and the decompounder stay only if they beat vector-only on the gold set.
+- **Later (P2):** questions rewritten from flagged chat feedback (plan §7: only the rewritten, personal-data-free
+  question is kept, with the collection's classification); skill test questions run by the skill gate in `rag-admin` as
+  the tools design specifies.
 - Results are reported per layer, and **reports lead with the gold-set (`human`) results**; the generated layer is a
   regression signal only (weakness review §2).
 
@@ -676,9 +683,9 @@ charged to the collection's owner team; shown before generation.
   chunk-set scope), following the API's exact/HNSW rule (≤ 10,000 chunks exact, knowledge design §6.4).
 - Query embedding through the same embedding client and normalisation as the API, cached in `EmbeddingCache` by the
   question's hash.
-- Runs in the worker on the ingestion pool (R1: the data plane never pays for evaluation). As built in P1a item 10
-  (PR #128, 2026-10-31): the worker's `ragdb` data source gets `UseVector()` for this (one shared pool within the
-  role's cap of 12) until pgvector is mapped in `AddRagDatabase` (PR #118, open); statements time out at 30 s.
+- Runs in the worker on the ingestion pool (R1: the data plane never pays for evaluation), on the worker's `ragdb`
+  data source with pgvector mapped (`UseVector()` in `AddRagDatabase`; one shared pool within the role's cap of 12);
+  statements time out at 30 s.
 - Contract test: evaluator and `POST /v1/retrieve` return the same ids in the same order.
 
 ### 13.6 Metrics
@@ -694,11 +701,10 @@ Coverage (weakness review §2): per question the run also records the coverage s
 score (knowledge design §7). Over `human` questions the report shows false not-found (answerable questions with `low`)
 and not-found on unanswerable questions, and proposes `coverageMaxDistance` and `coverageMinKeywordScore` as the
 values that separate answerable from unanswerable questions best. These are retrieval-level numbers; the go-live gate
-(`../README.md`) is graded by people on the answers. As built in P1a item 10 (PR #128, 2026-10-31): recall@10 and MRR
-count answerable questions only (`EvaluationRuns.QuestionCount`, `EvaluationResults.Hit` null for unanswerable ones);
-the threshold proposal and the `candidate` flag are kept in `Jobs.Result`; as built in PR #226 (2026-11-01) also in
-`EvaluationRuns.Candidate` and `EvaluationRuns.ThresholdProposal` (`on-demand` runs). An `on-demand` run is still never a
-comparison baseline.
+(`../README.md`) is graded by people on the answers (§14). recall@10 and MRR count answerable questions only
+(`EvaluationRuns.QuestionCount`, `EvaluationResults.Hit` null for unanswerable ones). The threshold proposal and the
+`candidate` flag are kept in `Jobs.Result` and, for `on-demand` runs, in `EvaluationRuns.Candidate` and
+`EvaluationRuns.ThresholdProposal`. An `on-demand` run is never a comparison baseline.
 
 ## 14. Evaluation runs (advisory)
 
@@ -712,13 +718,19 @@ public sealed record EvaluationSubject(EvaluationKind Kind, Guid CollectionId, G
 public enum EvaluationKind { PublishReport, Nightly, OnDemand, Answers }  // worker: the first three; rag-admin: Answers (§14.8)
 ```
 
+The harness measures retrieval; answers are judged by people. For the go-live gate, `scripts/grading/grading.py` sends
+each gold-set question (§13.4) through the chat API as the pilot assistant and writes question, answer, citations and
+coverage to a CSV; reviewers grade it in a spreadsheet, and the graded file with its totals is attached to the go-live
+decision. P1 has no grading UI.
+
 ### 14.1 Publish report
 
 After the `reprocess` run of a publish or rollback finishes (6a §10.4), the `eval` job `publish-report` runs the
-collection's full set on the **full collection** with its real index and real query path, and compares with the last
-run before the publish. The admin shows recall@10 and MRR with counts, the change, and the lost questions next to the
-run; the user keeps the version or rolls back in one click (6a §12). A collection with fewer than 10 questions shows
-"too few questions to compare".
+collection's full set on the **full collection** with its real index and real query path, and compares with the last run
+before the publish. In P1 the publish re-processes every document of the collection; the per-stage caches make unchanged
+stages free (publish plans from effect tags are P2, engine §12.2). The admin shows recall@10 and MRR with counts, the
+change, and the lost questions next to the run; the user keeps the version or rolls back in one click (6a §12). A
+collection with fewer than 10 questions shows "too few questions to compare".
 
 ### 14.2 Reading the comparison
 
@@ -754,19 +766,20 @@ Removed (simplification pass): parse strategies are not learned automatically (�
 | Publish report, nightly | ≤ 100 queries on the full collection | < 1 min |
 | On-demand settings comparison | 2 × 100 queries | < 1 min |
 | Set generation | ≈ 200k on-prem LLM tokens | model-bound, ≈ 10–20 min |
-| Answer-level run (P2, weakness review §1; `rag-admin`) | ≤ 100 answers + judge calls on-prem | model-bound, minutes |
+| Answer-level run (P2; `rag-admin`) | ≤ 100 answers + judge calls on-prem | model-bound, minutes |
 
-The re-processing itself is forecast by the publish plan (6a §12.2); the `eval` class (concurrency 1) runs only
-generation and measuring.
+The re-processing itself is forecast by the publish flow (6a §12.2); the `eval` class (concurrency 1, on at most two
+worker instances) runs only generation and measuring. **Later (P2):** its reads go to the standby when read routing
+exists.
 
 ### 14.8 Nightly runs
 
 - **Retrieval**: nightly per published collection: full set, kind `nightly`; feeds the trend on the admin
   evaluation page and `rag.evaluation.recall_at_10` (repo-and-deployment §9). Alert (admin overview) when recall@10
-  falls 5 points below the 4-week median. As built in P1a item 10 + P1b item 7 (PR #128, 2026-10-31): enqueued at
-  03:30 Europe/Stockholm under advisory lock `0x5241_4731_0005`; the median is over 28 days. Onyx found an ingestion bug only through poor evaluation scores
+  falls 5 points below the median of the last 28 days. Enqueued at 03:30 Europe/Stockholm under advisory lock
+  `0x5241_4731_0005`. Onyx found an ingestion bug only through poor evaluation scores
   (`../../platforms/onyx.md:322`); this makes that routine.
-- **Answers** (P2, weakness review §1): nightly per assistant, the evaluation sets of its collections are answered through
+- **Later (P2): answers**: nightly per assistant, the evaluation sets of its collections are answered through
   `Ume.Rag.Answering` with the assistant's settings, and an on-prem judge (`Settings.EvaluationJudgeModel`, ceiling
   `OnPrem`, `x-ume-step: eval-answer`) rates **faithfulness** (every claim supported by the cited chunks) and
   **citation precision** (cited chunks support the claims); results per assistant with counts. The `uncited_answer`
@@ -818,15 +831,15 @@ pages, so the parser path dominates its first full crawl. Evaluation uses the in
 | Kind | Project / location | Content |
 |---|---|---|
 | Golden per stage and version | `Ume.Rag.Worker.Tests`, `tests/fixtures/processing/` | input → expected output for `detect`, parse planning (signals → plan), HTML extraction (presets and profiles), `plain-text`, `csv-table`, `clean`, split, `chunk` (incl. breadcrumb prefix and `SearchText`), metadata, quality facts, `personal-data` (with a fake NER client); a changed output without a version bump fails (6a §19) |
-| umea.se acceptance (P1) | `tests/fixtures/umea/` (≈ 20 saved pages, HTML and PDF) | the example page (simplification pass §13.2) extracts to exactly its main text without share widget, short-URL line and child-link list, breadcrumb "Kommun och politik › Kommunens organisation › Förvaltningar, verksamheter › Teknik och fastighet" (as on the live page, P1a item 8, PR #104, 2026-10-31), date 2026-01-15; the set is a regression corpus (as built: 20 HTML pages and 1 PDF with goldens and `MANIFEST.csv`, byte-identical to what umea.se served, to-verify #138) |
+| umea.se acceptance (P1) | `tests/fixtures/umea/` (20 saved HTML pages and 1 PDF with goldens and `MANIFEST.csv`, byte-identical to what umea.se served, to-verify #138) | the example page (simplification pass §13.2) extracts to exactly its main text without share widget, short-URL line and child-link list, breadcrumb "Kommun och politik › Kommunens organisation › Förvaltningar, verksamheter › Teknik och fastighet" (as on the live page), date 2026-01-15; the set is a regression corpus |
 | Tokenizer parity | same | 1,000 passages, counts equal to the Hugging Face tokenizer (§6.1) |
 | Swedish fixture corpus | `tests/fixtures/processing/` (public or synthetic, `MANIFEST.csv` as parser §15.3) | umea.se pages with deep navigation and contact blocks; a protokoll with `§` items and justering block; föreskrifter with `kap.`/`§`/`Bilaga`; a taxa with fee tables across pages; a report with TOC, footnotes and `1.2.3` numbering; hyphenation and suspended compounds; a PDF whose layout headings have wrong levels; a page with only headings; a 300-row XLSX; a two-column newsletter |
 | Planner | `Ume.Rag.Worker.Tests` | every §3.1 rule at and around its thresholds; range sizing with fake timings; halving and missing-page outcomes; `Strategy` string grammar and truncation |
 | PII precision/recall | `tests/fixtures/pii/` (synthetic only) | generated Swedish texts with Skatteverket test personnummer and samordningsnummer, organisationsnummer, OCR references, bankgiro, case numbers, phone numbers in every §9.1 format, obfuscated emails, names from SCB statistics in running text, tables, all caps, genitive and hyphenated forms; **targets**: personnummer/samordningsnummer precision and recall ≥ 0.99, email ≥ 0.99, phone ≥ 0.95, names (NER) recall ≥ 0.85 and precision ≥ 0.80; the NER model is accepted for P1 only if it reaches them (answered 18) |
 | NER gating and client | `Ume.Rag.Worker.Tests`, `Ume.Rag.ContractTests` | NER called only for `public` + not flagged + ≥ 5 contact values; offsets with emoji and combining characters (code points vs UTF-16); label mapping |
-| Flag lifecycle | `Ume.Rag.IntegrationTests` (as built in P1a items 5/6, PR #139, 2026-10-31: `Ume.Rag.Worker.Tests`, `PiiLifecycleTests`, per P1 README §2) | flagged set in a `public` collection swaps in `held` and the old content stops being served; clear → `live` without re-processing; clearance carried to the next set at equal counts, re-flag on a higher count; NER down → `pending`, `held`, sweep completes it; non-`public` collections never wait; 5103 emitted once per transition |
+| Flag lifecycle | `Ume.Rag.Worker.Tests` (`PiiLifecycleTests`, per P1 README §2) | flagged set in a `public` collection swaps in `held` and the old content stops being served; clear → `live` without re-processing; clearance carried to the next set at equal counts, re-flag on a higher count; NER down → `pending`, `held`, sweep completes it; non-`public` collections never wait; 5103 emitted once per transition |
 | Noise | `Ume.Rag.IntegrationTests` | noise-only HTML change → set re-keyed, zero chunk inserts, `EnsureCurrent` satisfied; real change → new set |
-| Evaluation reproducibility | `Ume.Rag.IntegrationTests` with FakeGateway (deterministic embeddings and LLM answers); as built in P1b item 7 (PR #137, 2026-10-31): `tests/Ume.Rag.Worker.Tests/Evaluation/` (`EvaluationReproducibilityTests`), every job run by a worker from its row, "/v1/retrieve" being the direct `RetrievalEngine` on the api role (as in #128) | same seed → same sample, questions and metrics; a re-run gives identical results; evaluator vs `/v1/retrieve` identical order; win/loss counts against a previous run |
+| Evaluation reproducibility | `tests/Ume.Rag.Worker.Tests/Evaluation/` (`EvaluationReproducibilityTests`) with FakeGateway (deterministic embeddings and LLM answers): every job run by a worker from its row, "/v1/retrieve" being the direct `RetrievalEngine` on the api role | same seed → same sample, questions and metrics; a re-run gives identical results; evaluator vs `/v1/retrieve` identical order; win/loss counts against a previous run |
 
 ## 18. Milestones
 
@@ -845,7 +858,7 @@ applied then and are not repeated.
 |---|---|
 | `parser/design.md` §6.1, §8 | the clean-text-layer strategy is the parser's `text-layer` fast path (pypdfium2), requested per range like the Docling strategies; ranges are all parser outputs; the worker no longer merges PdfPig pages |
 | `parser/design.md` §7.8, §10.1, §13.1 | `/v1/ner` unchanged as a contract; `NER_LANES` sizing and `capacity.ner_slots`-driven worker concurrency removed (one NER process; calls are rare); `ner_ready` stays in `/v1/info` |
-| `platform/data-model.md` §2.2 `ChunkSets` | `PiiCounts jsonb`, `PiiFlagged`/`PiiFlaggedAt` move from `Documents` to `ChunkSets`; the clearance (`PiiClearedAt`, `PiiClearedBy`, `PiiClearedCounts`) stays on `Documents` (a decision on the document); `State` `writing`/`live`/`held`/`superseded`; `InputHash` = *Clean* `OutputHash`; key column `SiteProfileVersionId uuid NULL` |
+| `platform/data-model.md` §2.2 `ChunkSets` | `PiiCounts jsonb`, `PiiFlagged`/`PiiFlaggedAt` move from `Documents` to `ChunkSets`; the clearance (`PiiClearedAt`, `PiiClearedBy`, `PiiClearedCounts`) stays on `Documents` (a decision on the document); `State` `writing`/`live`/`held`/`superseded`; `InputHash` = the `chunk` output's `OutputHash` (§12); key column `SiteProfileVersionId uuid NULL` |
 | `platform/data-model.md` §2.2 `Chunks`, `Documents` | `Chunks.SearchText text` (worker-computed, §6.5) and `SearchVector` over it with built-in `swedish`; `Documents.Description text NULL`, `Documents.Keywords text[] NULL`, `Documents.SiteProfileVersionId` (the last extraction) |
 | `platform/data-model.md` §2.2 profiles, evaluation | `ParseProfiles.Origin` `builtin`/`admin` with versions; `EvaluationRuns`: `Kind` (`publish-report`/`nightly`/`on-demand`/`answers`), `QuestionCount`, `Found`, `Wins`, `Losses`, `ComparedRunId`, `Faithfulness`, `CitationPrecision`; no statistics, decision or override columns: drop `McNemarP`, CI columns, `Decision`, override columns, `Scope = sub-corpus`; `Collections.PublishedAt` stays as the owner's publish, `PublishGateRunId` and `Settings.GateFloor`/`GateSampleSize` removed |
 | `platform/data-model.md` §4.1 | `Jobs.Class` CHECK without `ner` |
@@ -872,20 +885,20 @@ applied then and are not repeated.
 
 - `Microsoft.ML.Tokenizers` 2.0.1: count parity with Hugging Face for BGE-M3 (Unigram with `nmt_nfkc` precompiled
   charsmap), whitespace and dummy-prefix options to match XLM-R, thread safety of one shared instance, speed on
-  5,000-character pages. Done (PRs #98, #139, 2026-10-31, to-verify #26): count parity on 1,000 passages, one
+  5,000-character pages. Done (to-verify #26): count parity on 1,000 passages, one
   trailing-`▁` difference handled in code, thread-safe, ≈ 2 ms per page.
 - KB NER: actual labels returned for persons with the pinned revision (`PER` in `config.json`, `PRS` in the card);
   quality on our fixtures; SUC 3.0 terms for derived weights.
 - Gateway embeddings: maximum inputs and tokens per request for the on-prem BGE-M3 provider; whether BGE-M3 is served
-  without instruction prefixes; throughput (6a §23). Gateway side answered (PR #139, 2026-10-31, to-verify #43): no
+  without instruction prefixes; throughput (6a §23). Gateway side answered (to-verify #43): no
   input or token limit per request, but the whole request is checked against `ContextWindow` (§11 Batching).
 - The parser's `text-layer` fast path output: block shape, heading levels and whether it labels furniture (§4.2).
 - SmartReader as fallback for hosts without a profile; the Sitevision preset against the ≈ 20 saved umea.se pages;
-  the example page's breadcrumb path on the live page. Preset and breadcrumb done (P1a item 8, PR #104, 2026-10-31,
-  to-verify #31, #138); SmartReader not built.
+  the example page's breadcrumb path on the live page. Preset and breadcrumb done (to-verify #31,
+  #138); SmartReader not built.
 - Skatteverket's published test personnummer and samordningsnummer (format, open-data licence) and SCB name
-  statistics (licence) for fixtures and the gazetteer. Test numbers done (PR #139, 2026-10-31, to-verify #111: CC0,
-  tests only); SCB with the P2 gazetteer.
+  statistics (licence) for fixtures and the gazetteer. Test numbers done (to-verify #111: CC0, tests
+  only); SCB with the P2 gazetteer.
 - Docling `timings` granularity for per-page milliseconds (range sizing falls back to `docling_ms / pages`).
 - `SwedishDecompounder` output for `SearchText` vs the query side (same parts for the same word), and the P0
   comparison with Postgres `ispell` (simplification pass §3).
@@ -910,7 +923,7 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 | Publish gate (`IPublishGate`), sub-corpus shadow sets, escalation 50 → 100, Wilson/bootstrap/McNemar, decision rule, `building` state and 0.70 floor, platform-admin override | dropped; advisory harness on the full collection (§13.6, §14) |
 | Skill gate details (retrieval and routing layers) | tools design (simplification pass §10) |
 | Fleet-wide Redis embedding cap, scale batching, bulk embed share | P2, first multi-host deployment ([`../performance-pass.md`](../performance-pass.md) §3.9) |
-| Answer faithfulness as a P3 assistant layer | moved earlier: nightly answer-level run from late P1 (§14.8) |
+| Answer faithfulness as a P3 assistant layer | moved earlier: nightly answer-level run in P2 (§14.8, §23) |
 | `ChunkSets` evaluation scope with exact search | dropped with the gate; collection scope only (§13.5) |
 
 ## 23. Deferred or removed (weakness review)
