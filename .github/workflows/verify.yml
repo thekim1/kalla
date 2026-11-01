@@ -4,9 +4,9 @@ name: Verify
 # leaves draft; a newer push cancels the older run of the same pull request. Merge only on a green run (private repo on
 # the free plan: GitHub cannot enforce required checks). Nothing runs on a push to main; main or any branch can be
 # verified from the Actions tab (workflow_dispatch), and release.yml calls this workflow in full.
-# Jobs: ownership and backend (Stage 0), images (P0 checklist #5), deploy-checks (P0 checklist #14), admin-ui (P0
-# checklist #3, plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract jobs (P0 checklist #13) are in
-# parser.yml, which runs them only when the parser changed.
+# Jobs: ownership and backend (Stage 0), evaluation-smoke (P1 item 17), images (P0 checklist #5), deploy-checks (P0
+# checklist #14), admin-ui (P0 checklist #3, plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract
+# jobs (P0 checklist #13) are in parser.yml, which runs them only when the parser changed.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -96,10 +96,37 @@ jobs:
           UME_RAG_TEST_CLAMAV_IMAGE: ume-rag.local/clamav:ci
         run: |
           dotnet build UmeRag.slnx -c Release --nologo
-          # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here.
-          dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
+          # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] run locally and in the weekly flake hunt, not here;
+          # the evaluation smoke test has a job of its own (evaluation-smoke).
+          dotnet test --solution UmeRag.slnx -c Release --no-build --filter-not-trait "Category=Flaky" --filter-not-trait "Category=EvaluationSmoke"
           dotnet list UmeRag.slnx package --vulnerable --include-transitive --format json > "$RUNNER_TEMP/ume-package-audit.json"
           python3 -c "import json, os; d=json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'ume-package-audit.json'))); p=[p for x in d.get('projects',[]) for f in x.get('frameworks',[]) for k in ('topLevelPackages','transitivePackages') for p in f.get(k,[]) if p.get('vulnerabilities')]; assert not p, 'Vulnerable .NET dependencies detected'"
+
+  evaluation-smoke:
+    # Knowledge design §16.4, repo-and-deployment §8.2: without the AppHost, the 13 pages of tests/evaluation/smoke go
+    # through the worker (an upload batch; Markdown is parsed in the worker, so no parser or ClamAV image) into
+    # ume-rag/postgres as built from this commit, then the 30 questions through rag-api in process on the FakeGateway:
+    # recall@10 >= 0.8 on POST /v1/retrieve and a citation on every chat answer (EvaluationSmokeTests in
+    # tests/Ume.Rag.Worker.Tests, trait Category=EvaluationSmoke, which the backend job leaves out). Detailed output
+    # prints the recall numbers.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.401
+      - name: Build the Postgres image
+        # As in the backend job: the dotted registry part keeps Testcontainers on the local image.
+        run: docker build -f images/postgres/Dockerfile -t ume-rag.local/postgres:ci --build-arg REVISION=${{ github.sha }} .
+      - name: Ingest the smoke set and run its 30 questions
+        env:
+          TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
+          UME_RAG_TEST_POSTGRES_IMAGE: ume-rag.local/postgres:ci
+        run: |
+          dotnet build tests/Ume.Rag.Worker.Tests -c Release --nologo
+          dotnet test --project tests/Ume.Rag.Worker.Tests -c Release --no-build --filter-trait "Category=EvaluationSmoke" --output Detailed
 
   images:
     # ume-rag/postgres: the image test of repo-and-deployment §5.2 (pgvector version, HNSW build, pg_stat_statements,

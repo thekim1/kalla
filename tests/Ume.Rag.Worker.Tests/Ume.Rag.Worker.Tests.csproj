@@ -5,7 +5,8 @@
     top-level Program would clash with the worker's).
     Connector tests (Connectors/): the in-process Kestrel test site needs no container; the ClamAV client's integration
     test runs against the image named by UME_RAG_TEST_CLAMAV_IMAGE and skips without it (verify.yml's backend job sets it).
-    The dev seed's key test (Engine/DevSeedScriptTests) calls rag-api in process, referenced under an alias for the same reason.
+    The dev seed's key test (Engine/DevSeedScriptTests) and the smoke set's tests (Evaluation/EvaluatorApiContractTests,
+    Evaluation/EvaluationSmokeTests) call rag-api in process, referenced under an alias for the same reason.
     Database tests are spread over four ragdb collections, each with its own Postgres container (RagDatabaseFixture.cs).
     Most of their time is spent waiting on worker timers, not CPU, so xunit.runner.json allows three collections per core:
     on CI's two vCPUs the four database collections and two others run side by side.

@@ -1,15 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Options;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
-using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Pipelines.Jobs;
-using Ume.Rag.Pipelines.Json;
 using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Connectors.Uploads;
-using Ume.Rag.Worker.Tests.Blobs;
 using Ume.Rag.Worker.Tests.Engine;
 using Ume.Rag.Worker.Tests.Processing;
 
@@ -225,63 +221,10 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
         $"# {title}\n\nUmeå kommun ansvarar för {title}. Här finns information om hur du ansöker och vem du kontaktar.\n\n" +
         $"## Så ansöker du\n\nDu ansöker via e-tjänsten. Handläggningstiden är normalt fyra veckor. {extra}\n");
 
-    /// <summary>A source of type <c>upload</c> on the <c>files</c> template (the kit seeds URL lists; the rows are turned into an upload source).</summary>
-    private async Task<SourceSeed> SeedUploadAsync(string level = Classification.Internal)
-    {
-        var seed = await EngineKit.SeedUrlListAsync(database, [], level);
-        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Sources" SET "Type" = 'upload', "Settings" = '{}'::jsonb WHERE "Id" = $1""", seed.SourceId);
-        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Pipelines" SET "TemplateId" = 'files' WHERE "Id" = $1""", seed.PipelineId);
-        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."PipelineVersions" SET "Definition" = $2::jsonb WHERE "Id" = $1""", seed.VersionId,
-            """{"schema":"pipeline/v2","template":"files","templateVersion":1,"params":{}}""");
-        return seed;
-    }
+    private Task<SourceSeed> SeedUploadAsync(string level = Classification.Internal) => EngineKit.SeedUploadAsync(database, level);
 
-    /// <summary>
-    /// The admin's upload commit (connectors design §9.1 steps 1–2): each file at <c>uploads/{sourceId}/{slot}/{sha256}</c>
-    /// written through the envelope at the source's level (<c>internal</c>: <c>URB2</c>), the batch manifest, and the
-    /// <c>sync</c> job (dedup <c>sync-upload:{batchId}</c>); returns the run id (the job's).
-    /// </summary>
-    private async Task<Guid> CommitAsync(SourceSeed seed, params (UploadOperation Operation, Guid Slot, string? Name, byte[]? Bytes)[] files)
-    {
-        var blobs = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = _blobs.FullName }), TimeProvider.System);
-        var envelope = TestBlobKeys.Envelope(_blobs);
-        var entries = new List<UploadManifestEntry>();
-        foreach (var file in files)
-        {
-            if (file.Bytes is null)
-            {
-                entries.Add(new UploadManifestEntry { Operation = file.Operation, UploadId = file.Slot });
-                continue;
-            }
-
-            var sha = Convert.ToHexStringLower(SHA256.HashData(file.Bytes));
-            await using (var stream = new MemoryStream(file.Bytes))
-            {
-                await envelope.PutAsync(UploadConnector.BlobKeyOf(seed.SourceId, file.Slot, sha), seed.Classification, stream, file.Bytes.Length, Ct);
-            }
-
-            entries.Add(new UploadManifestEntry
-            {
-                Operation = file.Operation, UploadId = file.Slot, FileName = file.Name, Bytes = file.Bytes.Length, Sha256 = sha,
-            });
-        }
-
-        var batchId = Guid.NewGuid();
-        var manifest = new UploadBatchManifest { BatchId = batchId, SourceId = seed.SourceId, Entries = entries, CommittedBy = "admin@umea.se" };
-        await using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(ContractJson.Serialize(manifest))))
-        {
-            await blobs.PutAsync(UploadConnector.ManifestKey(seed.SourceId, batchId), stream, null, Ct);
-        }
-
-        var payload = new SyncPayload { SourceId = seed.SourceId, Kind = SyncKind.Sync, Trigger = RunTrigger.Upload, BatchId = batchId };
-        var job = new Domain.Ports.JobRequest(JobClasses.Sync, seed.DepartmentId, seed.Classification, ContractJson.Serialize(payload))
-        {
-            DedupKey = JobDedupKeys.SyncUpload(batchId),
-            Priority = 10,
-        };
-        (await database.Queue(RagDatabase.Admin).EnqueueAsync([job], null, Ct)).ShouldContain(job.Id);
-        return job.Id;
-    }
+    private Task<Guid> CommitAsync(SourceSeed seed, params (UploadOperation Operation, Guid Slot, string? Name, byte[]? Bytes)[] files) =>
+        UploadKit.CommitAsync(database, _blobs, seed, files);
 
     private Task<string> SlotStateAsync(Guid slot) =>
         Sql.ScalarAsync<string>(database.Connection(null), """SELECT "State" FROM content."Uploads" WHERE "Id" = $1""", slot);

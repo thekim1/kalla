@@ -107,6 +107,14 @@ internal static class EngineKit
     public static Task<SourceSeed> SeedCrawlAsync(RagDatabaseFixture database, object settings, string collectionClassification = Classification.Internal) =>
         SeedAsync(database, SourceTypes.Crawl, "website", JsonSerializer.Serialize(settings), collectionClassification);
 
+    /// <summary>
+    /// A source of type <c>upload</c> on the <c>files</c> template, with no settings; <paramref name="collectionId"/> and
+    /// <paramref name="sourceId"/> fix the ids (fixture content written under known ids, as <see cref="SmokeSet"/>'s).
+    /// </summary>
+    public static Task<SourceSeed> SeedUploadAsync(RagDatabaseFixture database, string collectionClassification = Classification.Internal,
+        Guid? collectionId = null, Guid? sourceId = null) =>
+        SeedAsync(database, SourceTypes.Upload, "files", "{}", collectionClassification, collectionId, sourceId);
+
     /// <summary>A new published version of the seed's pipeline (number 2 or later) with <paramref name="parameters"/>; the old one is superseded.</summary>
     public static async Task<Guid> PublishAsync(RagDatabaseFixture database, SourceSeed seed, string template, string parameters)
     {
@@ -125,7 +133,8 @@ internal static class EngineKit
     private static string Definition(string template, string parameters) =>
         "{\"schema\":\"pipeline/v2\",\"template\":\"" + template + "\",\"templateVersion\":1,\"params\":" + parameters + "}";
 
-    private static async Task<SourceSeed> SeedAsync(RagDatabaseFixture database, string type, string template, string settings, string collectionClassification)
+    private static async Task<SourceSeed> SeedAsync(RagDatabaseFixture database, string type, string template, string settings, string collectionClassification,
+        Guid? collectionId = null, Guid? sourceId = null)
     {
         var suffix = Guid.CreateVersion7().ToString("N")[..12];
         await using var db = TestPostgres.Context(database.Connection(null));
@@ -146,6 +155,7 @@ internal static class EngineKit
         var department = new Department { Id = Guid.CreateVersion7(), Name = "Engine " + suffix, CostCenterCode = suffix, SyncedAt = DateTimeOffset.UtcNow };
         var collection = new Collection
         {
+            Id = collectionId ?? Guid.CreateVersion7(),
             Slug = "engine-" + suffix,
             Name = "Engine " + suffix,
             DepartmentId = department.Id,
@@ -171,6 +181,7 @@ internal static class EngineKit
         pipeline.PublishedVersionId = version.Id;
         var source = new Source
         {
+            Id = sourceId ?? Guid.CreateVersion7(),
             CollectionId = collection.Id,
             Type = type,
             Name = "Källa " + suffix,
