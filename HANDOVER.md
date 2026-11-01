@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-01, end of session 17. Earlier sessions are in the
+State of the Ume.Rag work for the next session. Rewritten 2026-11-01, end of session 17 (second half included). Earlier sessions are in the
 git history (`git log -- HANDOVER.md`).
 Repo `~/git/ume-rag-platform`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
@@ -14,20 +14,29 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 ## Where we are
 
 - **The demo runs** (`plans/demo-path.md` "Result"): crawl → retrieve → cited answer in Open WebUI from the `turkos`
-  assistant, over the user's interim gateway at `Eu`. P0 released (`v0.1.0`); P1a code complete; P1b in progress.
+  assistant (`claude-haiku-5-5`), over the user's interim gateway at `Eu`. P0 released (`v0.1.0`); P1a code complete;
+  P1b in progress.
 - **Direction (user):** demo first, then details; **more focus on the admin UI** (`plans/demo-path.md` "Next focus",
-  issue #278). Don't over-engineer tests; merge on green CI.
-- **Admin UI:** Kunskapsbanker (B, #279), **Plattformsobjekt** = generic forms for clients, keys, settings, data
-  protection, site profiles, gateway models (A, #281; `src/admin-ui/src/platform/**` is stream A's). B is building the
-  journey pages: #285 (Lägg till källa) and #288 (source and run page) open.
-- **Design** is in sync up to #286 (design syncs `d0f246b`, `0ee7bc4`, `4adfc63`): two layers, Decisions table (rows
-  `current` bind) > detail documents; `scripts/check-doc-refs.py` must print `0 misses`.
-- **Measured (P1 item 19, #286):** on the EU route embedding 18–20k tokens/s (the key's rate limit binds), query
-  embedding p95 156 ms, answer TTFT p99 3.1 s; all of umea.se (≈ 15,400 URLs, ≈ 8,100 PDFs) would take ≈ 2–3 h
-  (fetch-bound at 2 req/s) and ≈ $6–22 in embeddings. Results in `plans/p1/results-a.md`.
-- **Decided today (Decisions table):** "Condense on the EU route": `gpt-6-luna`, `reasoning_effort: none`, no
-  `temperature`, 1,200 ms timeout (B builds it: #287). `temperature` is sent only when an assistant sets it (#282).
-- `main` = `4adfc63`, CI green (one runner flake on a manual Verify run was the runner, re-run).
+  issue #278); no more crawling at this stage. Don't over-engineer tests; merge on green CI.
+- **Admin UI:** Översikt, Organisation, Kunskapsbanker (B, #279), **Plattformsobjekt** = generic forms for clients,
+  keys, settings, data protection, site profiles, gateway models (A, #281; `src/admin-ui/src/platform/**` is stream
+  A's). B builds the journey pages: **#285** (Lägg till källa) approved, B merges; **#288** (source and run page)
+  conflicts, waits for B's rebase.
+- **Stream A's queue is empty:** P1 item 19 (EU-route capacity, #286), P1b item 17's importer settings (#289),
+  `Gateway:MaxResidency` and Open WebUI notes (#290), the evaluator's stop list (#291) are merged. Left for stream A:
+  P1b item 15 `e2e` (after B's L7), the go-live pin review, the live items (17's import run, 21–26).
+- **Design** is in sync with everything merged (design syncs `d0f246b`, `0ee7bc4`, `4adfc63`, `b742f27`): two layers,
+  Decisions table (rows `current` bind) > detail documents. **Gate every docs commit on `scripts/check-doc-refs.py`
+  printing `0 misses`** (one push slipped through with a miss this session).
+- **Decided this session:** Decisions row "Condense on the EU route" (`gpt-6-luna`, `reasoning_effort: none`, no
+  `temperature`, 1,200 ms; B builds it in #287); `temperature` sent only when set (#282, folded); main-session calls on
+  the design sync (either-of policies stay: #283; 5002 `conversation_not_owned` stays: #284; admin reads
+  `PublishedAssistantVersions`; `Gateway:MaxResidency` implements M2); pipeline publish copies on write for departments,
+  publication id = plan job id (admin §6.6, #256).
+- **Measured (P1 item 19):** EU-route embedding 18–20k tokens/s (key-limited), query embedding p95 156 ms, answer TTFT
+  p99 3.1 s; all of umea.se (≈ 15,400 URLs, ≈ 8,100 PDFs) ≈ 2–3 h (fetch-bound) and ≈ $6–22 in embeddings
+  (`plans/p1/results-a.md`).
+- `main` = `6c05377`, CI green.
 
 ## Local stack (this machine, AppHost running)
 
@@ -113,35 +122,37 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 | Parser | `src/parser/`, `src/Ume.Rag.Worker/Parsing/` | done |
 | Connectors | `src/Ume.Rag.Worker/Connectors/` | done; crawl keeps and fetches the path form (`FetchUrl`, #268) |
 | Processing, engine, commands, preview | `src/Ume.Rag.Worker/` | P1a complete, P1b items 4–8 done |
-| Evaluation | `src/Ume.Rag.Worker/Evaluation/` | done incl. source demote (#270); sends fixed temperatures (follow-up below) |
+| Evaluation | `src/Ume.Rag.Worker/Evaluation/` | done incl. source demote (#270) and the stop list in every variant (#291); generation/judge at `OnPrem` only |
 | Admin API (B) | `src/Ume.Rag.AdminApi/` | P1b item 9 parts a–f merged; `/openapi/v1.json` serves the generic forms |
 | Knowledge + chat (B) | `src/Ume.Rag.{Retrieval,Answering,Api}/` | chat with feedback, conversation ids; `temperature` only when set (#282) |
 | Admin UI | `src/admin-ui/` | Översikt, Organisation, Kunskapsbanker (B); Plattformsobjekt `src/platform/` (A) |
 | AppHost (B) | `src/Ume.Rag.AppHost/` | `open-webui` with a configured client and key, no builtin tools (#280) |
-| Deploy (A) | `deploy/` | Compose incl. `DEFAULT_MODEL_METADATA` (#274) |
+| Deploy (A) | `deploy/` | Compose incl. `DEFAULT_MODEL_METADATA` (#274), importer settings (#289), `Gateway__MaxResidency` (#290) |
 | Scripts (A) | `scripts/{capacity,grading,dev,audit}/` | capacity run on the EU route done; grading script run live (#277) |
 
 ## Next step
 
 1. **Check the stack and GitHub:** `aspire describe` (if down: `export Seed__Enabled=false; aspire start --apphost
-   src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive`); open PRs and CI.
-2. **Review B's admin-UI PRs:** #285 (asked B to rebase on #281; then approve with the user's OK; suggested a smaller
-   *Högst antal sidor* default than 10,000) and #288 (new, not read). Test against the live admin API as for #279.
-3. **Answer #256** (main-session question from B: which pipeline a department's parameter change publishes, P1b item
-   9c); it blocks the preview step of the source drawer.
-4. **Stream-A items from B's hand-offs:** #273 → #289 (importer settings) and #252 → #290 (`Gateway:MaxResidency`,
-   Open WebUI on the AppHost) merged; #249 → #291 (evaluator's no-decompounder variant uses the stop list) merged. **Open decision (user + main):** LLM test-question generation and the judge run at ceiling
-   `OnPrem` only (`plans/ingestion-worker/design-processing.md` §13.1, "Model"), so they can't run before on-prem models exist (M2); allowing `Eu` under M2 would also
-   need the evaluation client's fixed temperatures (0.3, 0) dropped or made optional (Claude models refuse them).
-5. **When #287 lands:** set `Settings.Chat.CondenseModel = gpt-6-luna` and `CondenseReasoningEffort = none` on the local
-   stack (Plattformsobjekt → Inställningar → Chatt) and check a follow-up question is condensed.
-6. Then, user decides: the gold set with DoIT and the three-way evaluation with threshold calibration (item 21; the demo
-   runs with `coverageMaxDistance` 0.55, and a weak hit can still get a soft "the sources don't say" answer); P1b item
-   15 `e2e` (after B's L7); pin review and Aspire 13.6.4 (shared/B); more of umea.se only when the user wants it.
+   src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive`); open PRs, new issues, CI on `main`.
+2. **Review B's PRs as they come**, against the live admin API as for #279/#285: #288 after its rebase; then whatever B
+   opens for #278 (journey pages), #283, #284, #287, item 9c (pipeline publish, now unblocked by #256's decision).
+   Approve only with the user's OK.
+3. **When #287 lands:** set `Settings.Chat.CondenseModel = gpt-6-luna` and `CondenseReasoningEffort = none` on the local
+   stack (Plattformsobjekt → Inställningar → Chatt) and check a follow-up question is condensed (`rag.chat.condense
+   {outcome=used}`); fold #287 into chat §5 if it deviates.
+4. **Open decision (user + main):** LLM test-question generation and the judge run at ceiling `OnPrem` only
+   (`plans/ingestion-worker/design-processing.md` §13.1, "Model"), so they can't run before on-prem models exist (M2).
+   Allowing `Eu` under M2 is a design change and needs the evaluation client's fixed temperatures (0.3, 0) dropped or
+   made optional (Claude models refuse them). The human gold set needs neither.
+5. Then, user decides: the gold set with DoIT and the three-way evaluation with threshold calibration (item 21; the demo
+   runs with `coverageMaxDistance` 0.55 and a weak hit can still get a soft "the sources don't say" answer; draft
+   questions in `~/ume-rag-gold-draft-*.csv` and `plans/p1/gold-set/`); P1b item 15 `e2e` (after B's L7); pin review
+   and Aspire 13.6.4 (shared/B); more of umea.se only when the user wants it.
 
 **Open issues to stream B:** #278 (admin UI order), #283 (either-of policies), #284 (5002 `conversation_not_owned`),
-#287 (condense), plus the older hand-off issues #52, #75, #80, #90, #102, #129, #132, #246. **For stream A:** #48, #51,
-#193, #210. **For the main session:** #100 (L8). (#256 decided: copy on write, admin §6.6.) **For the user:** #215 (J8).
+#287 (condense), #256 (decided, B closes it with item 9c), plus the older hand-off issues #52, #75, #80, #90, #102, #129,
+#132, #246. **For stream A:** #48 (H8 on-prem capacity run), #51 (licence notices), #193, #210 (hand-offs received).
+**For the main session:** #100 (L8). **For the user:** #215 (J8).
 
 **Not folded into the design yet (need a call):** #217's fired-types list in the PII report; `UrlCanonicalizer` →
 Pipelines (#178); identity §16 Q2–4, Q8 (gateway session); admin design says `GET /api/departments`/`/api/teams`, the
@@ -151,7 +162,7 @@ code has `/api/organisation/departments` with teams nested.
 seeds until then); the gateway session (release 1 incl. the embedding-batch fix, a 4xx for policy blocks, the shared
 Keycloak realm `ume` with J8 #215, identity §16 Q1–Q4/Q6); handing `docs/gateway-host-setup.md` to Hermes; **O7**
 (go-live host); identity §16 Q5, Q7–Q9; runbook review by the operations owner; U1 with the web editors; names and dates
-for A1, G1, N1, U1, W2, P2 and the gold-set owner (DoIT); DPIA G1.
+for A1, G1, N1, U1, W2, P2 and the gold-set owner (DoIT); DPIA G1; the evaluation-model decision (step 4).
 
 ## Open register items (`plans/postponed-decisions.md`)
 
