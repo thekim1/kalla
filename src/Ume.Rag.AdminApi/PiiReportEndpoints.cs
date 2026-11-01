@@ -11,8 +11,8 @@ namespace Ume.Rag.AdminApi;
 
 /// <summary>
 /// The web editors' report (issue #175; Decisions table "Personal data on the municipality's own published site"):
-/// for a source with <c>piiMode: report</c> in a <c>public</c> collection, the documents that are live although their
-/// live set is flagged, with the counts per type from <c>PiiCounts</c> (numbers only, never values) and the last
+/// for a source with <c>piiMode: report</c> in a <c>public</c> collection, first the documents whose newest flagged set is
+/// held (personnummer, samordningsnummer), then those live although their live set is flagged, with the counts per type from <c>PiiCounts</c> (numbers only, never values) and the last
 /// <c>pii.flagged</c> run item. Read-only; any other source answers <c>applies: false</c> with no documents.
 /// </summary>
 public static class PiiReportEndpoints
@@ -43,13 +43,23 @@ public static class PiiReportEndpoints
                     return new PiiReport(false, modeName, level, [], false);
                 }
 
-                var rows = await (
+                // Held first (#217 review): under piiMode report a page still holds when it has a personnummer or a
+                // samordningsnummer, an error on the public site the editors fix. Then the live flagged pages.
+                var held = await (
+                        from cs in admin.Db.ChunkSets.AsNoTracking()
+                        join d in admin.Db.Documents.AsNoTracking() on cs.DocumentId equals d.Id
+                        where d.SourceId == id && d.DeletedAt == null && cs.State == ChunkSetStates.Held && cs.PiiFlagged
+                        orderby d.Title, d.Id, cs.CreatedAt descending
+                        select new Row(d.Id, d.Title, d.Url, d.DisplayName, cs.PiiCounts, cs.LiveAt, ChunkSetStates.Held, d.LiveChunkSetId != null))
+                    .Take(MaxDocuments + 1).ToListAsync(ct);
+                var live = await (
                         from d in admin.Db.Documents.AsNoTracking()
                         join cs in admin.Db.ChunkSets.AsNoTracking() on d.LiveChunkSetId equals cs.Id
                         where d.SourceId == id && d.DeletedAt == null && cs.State == ChunkSetStates.Live && cs.PiiFlagged
                         orderby d.Title, d.Id
-                        select new { d.Id, d.Title, d.Url, d.DisplayName, cs.PiiCounts, cs.LiveAt })
+                        select new Row(d.Id, d.Title, d.Url, d.DisplayName, cs.PiiCounts, cs.LiveAt, ChunkSetStates.Live, false))
                     .Take(MaxDocuments + 1).ToListAsync(ct);
+                var rows = held.DistinctBy(r => r.Id).Concat(live).ToList(); // the newest held set per document
                 var shown = rows.Take(MaxDocuments).ToList();
                 var ids = shown.Select(r => (Guid?)r.Id).ToList();
                 var flagged = await admin.Db.RunItems.AsNoTracking()
@@ -65,14 +75,17 @@ public static class PiiReportEndpoints
                 }
 
                 return new PiiReport(true, modeName, level, [.. shown.Select(r => new PiiReportDocument(
-                    r.Id, r.Title, r.Url, r.DisplayName, Counts(r.PiiCounts, out var rules), rules, r.LiveAt,
+                    r.Id, r.Title, r.Url, r.DisplayName, r.State, r.PreviousVersionLive, Counts(r.PiiCounts, out var rules), rules, r.LiveAt,
                     flagged.TryGetValue(r.Id, out var at) ? at : null, lastRuns.TryGetValue(r.Id, out var run) ? run : null))], rows.Count > MaxDocuments);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Sources").WithName("GetPiiReport")
-            .WithSummary("Flagged-but-live documents of a piiMode: report source (counts only)");
+            .WithSummary("Held and flagged-but-live documents of a piiMode: report source (counts only)");
 
         return api;
     }
+
+    private sealed record Row(Guid Id, string? Title, string? Url, string? DisplayName, string? PiiCounts, DateTimeOffset? LiveAt, string State,
+        bool PreviousVersionLive);
 
     /// <summary>The non-zero counts per type (<see cref="PiiTypes"/>) and how many flag rules fired; numbers only.</summary>
     public static IReadOnlyDictionary<string, int> Counts(string? json, out int rules)
@@ -93,12 +106,18 @@ public static class PiiReportEndpoints
 /// <summary>The report: whether it applies to the source (<c>piiMode: report</c> in a <c>public</c> collection) and its documents.</summary>
 public sealed record PiiReport(bool Applies, string PiiMode, string CollectionClassification, IReadOnlyList<PiiReportDocument> Documents, bool Truncated);
 
-/// <summary>One flagged-but-live document: counts per type and fired rules (never values), and the last <c>pii.flagged</c> run item.</summary>
+/// <summary>
+/// One flagged document: <see cref="State"/> <c>held</c> (the new version is not served until fixed or cleared; with
+/// <see cref="PreviousVersionLive"/> the older version still is) or <c>live</c> (served with its contact details); counts
+/// per type and fired rules (never values), and the last <c>pii.flagged</c> run item.
+/// </summary>
 public sealed record PiiReportDocument(
     Guid DocumentId,
     string? Title,
     string? Url,
     string? DisplayName,
+    string State,
+    bool PreviousVersionLive,
     IReadOnlyDictionary<string, int> Counts,
     int RulesFired,
     DateTimeOffset? LiveAt,

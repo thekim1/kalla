@@ -11,8 +11,8 @@ using Ume.Rag.TestKit;
 namespace Ume.Rag.AdminApi.Tests;
 
 /// <summary>
-/// The web editors' report (issue #175): flagged-but-live documents of a <c>piiMode: report</c> source in a <c>public</c>
-/// collection, with counts per type (numbers only) and the last <c>pii.flagged</c> run item.
+/// The web editors' report (issue #175): held and flagged-but-live documents of a <c>piiMode: report</c> source in a
+/// <c>public</c> collection, with counts per type (numbers only) and the last <c>pii.flagged</c> run item.
 /// </summary>
 [Collection(AdminDatabaseGroup.Name)]
 public sealed class PiiReportEndpointsTests(AdminDatabaseFixture database)
@@ -70,7 +70,9 @@ public sealed class PiiReportEndpointsTests(AdminDatabaseFixture database)
         var cleanSet = NewSet(cleanDoc, ChunkSetStates.Live, false, """{"email":1,"rules":0}""");
         var heldSet = NewSet(heldDoc, ChunkSetStates.Held, true, Counts);
         var holdSet = NewSet(holdDoc, ChunkSetStates.Live, true, Counts);
-        db.AddRange(flaggedSet, cleanSet, heldSet, holdSet);
+        // taxor's next version came back flagged and held; its clean older version stays live.
+        var cleanNextHeld = NewSet(cleanDoc, ChunkSetStates.Held, true, """{"personnummer":1,"rules":1}""");
+        db.AddRange(flaggedSet, cleanSet, heldSet, holdSet, cleanNextHeld);
         await db.SaveChangesAsync(Ct);
         flaggedDoc.LiveChunkSetId = flaggedSet.Id;
         cleanDoc.LiveChunkSetId = cleanSet.Id;
@@ -90,7 +92,7 @@ public sealed class PiiReportEndpointsTests(AdminDatabaseFixture database)
     }
 
     [Fact]
-    public async Task A_report_source_lists_its_flagged_live_documents_with_counts_only()
+    public async Task A_report_source_lists_its_held_then_flagged_live_documents_with_counts_only()
     {
         var seed = await SeedAsync();
         await using var factory = database.HeaderFactory();
@@ -100,8 +102,12 @@ public sealed class PiiReportEndpointsTests(AdminDatabaseFixture database)
         var report = await editor.GetFromJsonAsync<JsonElement>($"/api/sources/{seed.ReportSource}/pii-report", Ct);
         (report.GetProperty("applies").GetBoolean(), report.GetProperty("piiMode").GetString(), report.GetProperty("truncated").GetBoolean())
             .ShouldBe((true, "report", false));
-        var document = report.GetProperty("documents").EnumerateArray().ShouldHaveSingleItem(); // not the clean one, not the held one
-        document.GetProperty("documentId").GetGuid().ShouldBe(seed.Flagged);
+        var documents = report.GetProperty("documents").EnumerateArray().ToList();
+        // Held first (by title), then the live flagged page; the clean live set itself is never listed.
+        documents.Select(d => (d.GetProperty("documentId").GetGuid(), d.GetProperty("state").GetString(), d.GetProperty("previousVersionLive").GetBoolean()))
+            .ShouldBe([(seed.Held, "held", false), (seed.Clean, "held", true), (seed.Flagged, "live", false)]);
+        documents[1].GetProperty("counts").EnumerateObject().Select(p => (p.Name, p.Value.GetInt32())).ShouldBe([("personnummer", 1)]);
+        var document = documents[2];
         document.GetProperty("title").GetString().ShouldBe("kontakt");
         document.GetProperty("counts").EnumerateObject().Select(p => (p.Name, p.Value.GetInt32())).ShouldBe([("email", 3), ("emailExternal", 2), ("phone", 1)]);
         document.GetProperty("rulesFired").GetInt32().ShouldBe(1);
