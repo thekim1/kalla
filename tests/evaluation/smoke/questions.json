@@ -1,0 +1,215 @@
+{
+  "description": "Smoke evaluation set (P1 item 17; knowledge design 16.4): 30 questions over the fictional documents in documents/. expected = the documents (file names) a correct answer cites. Used by Ume.Rag.Api.Tests SmokeEvaluationTests and the evaluation-smoke CI job.",
+  "questions": [
+    {
+      "id": "q01",
+      "question": "Behöver jag bygglov för en altan?",
+      "expected": [
+        "bygglov-altan.md"
+      ]
+    },
+    {
+      "id": "q02",
+      "question": "Hur hög får altanen vara utan bygglov?",
+      "expected": [
+        "bygglov-altan.md"
+      ]
+    },
+    {
+      "id": "q03",
+      "question": "Krävs bygglov för ett inglasat uterum?",
+      "expected": [
+        "bygglov-altan.md"
+      ]
+    },
+    {
+      "id": "q04",
+      "question": "Vilka ritningar ska bifogas till en bygglovsansökan?",
+      "expected": [
+        "bygglov-altan.md"
+      ]
+    },
+    {
+      "id": "q05",
+      "question": "Vad kostar bygglov för en altan?",
+      "expected": [
+        "bygglov-avgifter.md"
+      ]
+    },
+    {
+      "id": "q06",
+      "question": "Hur beräknas bygglovsavgiften?",
+      "expected": [
+        "bygglov-avgifter.md"
+      ]
+    },
+    {
+      "id": "q07",
+      "question": "Vad kostar en anmälan om attefallshus?",
+      "expected": [
+        "bygglov-avgifter.md"
+      ]
+    },
+    {
+      "id": "q08",
+      "question": "Hur ofta hämtas soporna i villaområden?",
+      "expected": [
+        "sophamtning.md"
+      ]
+    },
+    {
+      "id": "q09",
+      "question": "Var får jag tag på påsar till matavfall?",
+      "expected": [
+        "sophamtning.md"
+      ]
+    },
+    {
+      "id": "q10",
+      "question": "Min soptunna har inte tömts, vad gör jag?",
+      "expected": [
+        "sophamtning.md"
+      ]
+    },
+    {
+      "id": "q11",
+      "question": "Vilka öppettider har återvinningscentralen på Dåva?",
+      "expected": [
+        "atervinningscentraler.md"
+      ]
+    },
+    {
+      "id": "q12",
+      "question": "Var kan jag lämna farligt avfall som färg?",
+      "expected": [
+        "atervinningscentraler.md"
+      ]
+    },
+    {
+      "id": "q13",
+      "question": "Hur ansöker jag om förskoleplats?",
+      "expected": [
+        "forskola.md"
+      ]
+    },
+    {
+      "id": "q14",
+      "question": "Vad är maxtaxan för förskola?",
+      "expected": [
+        "forskola.md"
+      ]
+    },
+    {
+      "id": "q15",
+      "question": "Hur långt bort ska skolan ligga för att mitt barn ska få skolskjuts?",
+      "expected": [
+        "skolskjuts.md"
+      ]
+    },
+    {
+      "id": "q16",
+      "question": "Vad kostar ett nytt busskort om eleven tappat bort det?",
+      "expected": [
+        "skolskjuts.md"
+      ]
+    },
+    {
+      "id": "q17",
+      "question": "Kan jag få parkeringstillstånd som passagerare?",
+      "expected": [
+        "parkeringstillstand.md"
+      ]
+    },
+    {
+      "id": "q18",
+      "question": "Behövs läkarintyg för parkeringstillstånd för rörelsehindrade?",
+      "expected": [
+        "parkeringstillstand.md"
+      ]
+    },
+    {
+      "id": "q19",
+      "question": "Vad kostar boendeparkering per månad?",
+      "expected": [
+        "boendeparkering.md"
+      ]
+    },
+    {
+      "id": "q20",
+      "question": "Gäller datumparkering även med boendeparkering?",
+      "expected": [
+        "boendeparkering.md"
+      ]
+    },
+    {
+      "id": "q21",
+      "question": "Hur skaffar jag ett lånekort på biblioteket?",
+      "expected": [
+        "bibliotek.md"
+      ]
+    },
+    {
+      "id": "q22",
+      "question": "Hur många e-böcker kan jag låna per vecka?",
+      "expected": [
+        "bibliotek.md"
+      ]
+    },
+    {
+      "id": "q23",
+      "question": "När plogas bostadsgatorna?",
+      "expected": [
+        "snorojning.md"
+      ]
+    },
+    {
+      "id": "q24",
+      "question": "Måste jag skotta trottoaren utanför mitt hus?",
+      "expected": [
+        "snorojning.md"
+      ]
+    },
+    {
+      "id": "q25",
+      "question": "Hur ansöker jag om hemtjänst?",
+      "expected": [
+        "hemtjanst.md"
+      ]
+    },
+    {
+      "id": "q26",
+      "question": "Vad kostar ett trygghetslarm?",
+      "expected": [
+        "hemtjanst.md"
+      ]
+    },
+    {
+      "id": "q27",
+      "question": "Kan jag få bidrag för att bygga en ramp till bostaden?",
+      "expected": [
+        "bostadsanpassning.md"
+      ]
+    },
+    {
+      "id": "q28",
+      "question": "Vem ska jag ringa vid en vattenläcka på gatan?",
+      "expected": [
+        "vatten-avlopp.md"
+      ]
+    },
+    {
+      "id": "q29",
+      "question": "Vem betalar när det är stopp i avloppet?",
+      "expected": [
+        "vatten-avlopp.md"
+      ]
+    },
+    {
+      "id": "q30",
+      "question": "Vad betalar en företagare för att lämna avfall på återvinningscentralen?",
+      "expected": [
+        "atervinningscentraler.md"
+      ]
+    }
+  ]
+}

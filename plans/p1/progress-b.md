@@ -70,12 +70,12 @@ Refs: [chat §3–§10, §15.1, §18](../chat-api/design.md), [identity §5](../
 
 ## 8. Realm additions (#16)
 Refs: [identity §11](../identity/design.md), Decisions table "P1 pilot sign-in", issue #47
-- [ ] `deploy/keycloak/` additions: clients, `rag-*` roles, `departmentCodes`, full scope off, no test users, password policy, brute force, admin OTP
-- [ ] **Done:** imports next to a minimal `ume` realm; sign-in test; #83 rechecked
+- [x] `deploy/keycloak/` additions: clients, `rag-*` roles, `departmentCodes`, full scope off, no test users, password policy, brute force, admin OTP (this PR: `rag-additions.json`, the separable `rag-realm-settings.json`, `apply-additions.py`)
+- [x] **Done:** imports next to a minimal `ume` realm; sign-in test; #83 rechecked (this PR: `RealmAdditionsTests`; #176, #177, #83 recorded)
 - [ ] **Hand-off J8:** issue to the user for the gateway session
 
 ## 9. Evaluation smoke (#17, your part)
-- [ ] `tests/evaluation/smoke` (fixture collection + 30 questions) and its test: recall@10 ≥ 0.8, every answer cited
+- [x] `tests/evaluation/smoke` (fixture collection + 30 questions) and its test: recall@10 ≥ 0.8, every answer cited (this PR: `SmokeSet` in TestKit, `SmokeEvaluationTests`: recall@10 1.000, recall@3 1.000, 30/30 cited; the `evaluation-smoke` job is stream A's)
 
 ## 10. Gold set and thresholds (#21, after J13)
 - [ ] Gold set entered as `human` questions through Scalar

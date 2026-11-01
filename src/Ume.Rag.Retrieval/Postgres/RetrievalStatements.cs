@@ -98,7 +98,9 @@ public static class RetrievalStatements
     /// H: the hits and their section neighbours (knowledge design §6.3). <c>$1</c> hit ids, <c>$2</c> allowed levels,
     /// <c>$3</c> the neighbour radius (0 for <c>expand = none</c>: the hit row only), <c>$4</c> the scope. Re-checks
     /// scope, levels and <c>DeletedAt</c>, and that the hit's set is still its document's live set (a candidate whose set
-    /// was swapped out between V and H drops out).
+    /// was swapped out between V and H drops out). Neighbours come only from that live set and with <c>DeletedAt</c> null,
+    /// so a section never brings back a held, superseded or soft-deleted chunk; their level is not re-checked because every
+    /// chunk of a set carries its document's level (the chunk writer, <c>ContentJobHandlers</c>).
     /// </summary>
     public const string Hits = """
         WITH hit AS (

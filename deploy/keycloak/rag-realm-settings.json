@@ -1,0 +1,232 @@
+{
+  "realm": {
+    "passwordPolicy": "length(12) and maxLength(128) and notUsername and notEmail and passwordHistory(5)",
+    "bruteForceProtected": true,
+    "permanentLockout": false,
+    "failureFactor": 10,
+    "waitIncrementSeconds": 60,
+    "maxFailureWaitSeconds": 900,
+    "maxDeltaTimeSeconds": 43200,
+    "quickLoginCheckMilliSeconds": 1000,
+    "minimumQuickLoginWaitSeconds": 60,
+    "otpPolicyType": "totp",
+    "otpPolicyAlgorithm": "HmacSHA1",
+    "otpPolicyDigits": 6,
+    "otpPolicyPeriod": 30,
+    "browserFlow": "rag-browser"
+  },
+  "userProfileAttributes": [
+    {
+      "name": "departmentCodes",
+      "displayName": "Department codes",
+      "multivalued": true,
+      "permissions": {
+        "view": [
+          "admin"
+        ],
+        "edit": [
+          "admin"
+        ]
+      }
+    },
+    {
+      "name": "teamCodes",
+      "displayName": "Team codes",
+      "multivalued": true,
+      "permissions": {
+        "view": [
+          "admin"
+        ],
+        "edit": [
+          "admin"
+        ]
+      }
+    }
+  ],
+  "authenticationFlows": [
+    {
+      "alias": "rag-browser",
+      "description": "Keycloak's browser flow with OTP required for RAG's admins (identity design 11.2).",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticator": "auth-cookie",
+          "authenticatorFlow": false
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticator": "identity-provider-redirector",
+          "authenticatorFlow": false
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "rag-browser forms"
+        }
+      ]
+    },
+    {
+      "alias": "rag-browser forms",
+      "description": "Username and password, then OTP.",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticator": "auth-username-password-form",
+          "authenticatorFlow": false
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "rag-browser OTP"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "rag-browser OTP platform admin"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 40,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "rag-browser OTP department admin"
+        }
+      ]
+    },
+    {
+      "alias": "rag-browser OTP",
+      "description": "OTP for every account that has set it up (as Keycloak's own conditional 2FA).",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticator": "conditional-user-configured",
+          "authenticatorFlow": false
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticator": "auth-otp-form",
+          "authenticatorFlow": false
+        }
+      ]
+    },
+    {
+      "alias": "rag-browser OTP platform admin",
+      "description": "A platform admin without OTP sets it up and uses it at this sign-in.",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticator": "conditional-user-role",
+          "authenticatorFlow": false,
+          "authenticatorConfig": "rag-browser role platform admin"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticator": "conditional-sub-flow-executed",
+          "authenticatorFlow": false,
+          "authenticatorConfig": "rag-browser platform admin no OTP yet"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "authenticator": "auth-otp-form",
+          "authenticatorFlow": false
+        }
+      ]
+    },
+    {
+      "alias": "rag-browser OTP department admin",
+      "description": "A department admin without OTP sets it up and uses it at this sign-in.",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticator": "conditional-user-role",
+          "authenticatorFlow": false,
+          "authenticatorConfig": "rag-browser role department admin"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticator": "conditional-sub-flow-executed",
+          "authenticatorFlow": false,
+          "authenticatorConfig": "rag-browser department admin no OTP yet"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "authenticator": "auth-otp-form",
+          "authenticatorFlow": false
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "rag-browser role platform admin",
+      "config": {
+        "condUserRole": "rag-platform-admin",
+        "negate": "false"
+      }
+    },
+    {
+      "alias": "rag-browser platform admin no OTP yet",
+      "config": {
+        "flow_to_check": "rag-browser OTP",
+        "check_result": "not-executed"
+      }
+    },
+    {
+      "alias": "rag-browser role department admin",
+      "config": {
+        "condUserRole": "rag-department-admin",
+        "negate": "false"
+      }
+    },
+    {
+      "alias": "rag-browser department admin no OTP yet",
+      "config": {
+        "flow_to_check": "rag-browser OTP",
+        "check_result": "not-executed"
+      }
+    }
+  ]
+}
