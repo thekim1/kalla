@@ -15,7 +15,8 @@ public static class RagDatabaseMigrator
         if (string.IsNullOrWhiteSpace(rolesSqlPath))
         {
             // Development (#168): the AppHost's Postgres runs no init.sql, and the migrator is its superuser. Production
-            // and the tests create the extension in deploy/postgres/init.sql; there this is skipped.
+            // and the tests create the extension in deploy/postgres/init.sql; there this is skipped. Idempotent, so it runs
+            // on every dev start.
             await db.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS vector", cancellationToken);
         }
 

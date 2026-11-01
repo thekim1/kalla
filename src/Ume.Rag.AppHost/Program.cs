@@ -35,9 +35,12 @@ var cacheKeyPepper = Secret("cache-key-pepper", 48);
 var downloadGrantKey = Secret("download-grant-key", 48);
 
 // The image is Postgres 17 (PGDATA /var/lib/postgresql/data); Aspire 13's WithDataVolume mounts at /var/lib/postgresql,
-// the Postgres 18 layout, so the data went to the image's anonymous volume and was lost on restart (#168).
+// the Postgres 18 layout, so the data went to the image's anonymous volume and was lost on restart (#168). The volume is
+// mounted at the image's data path and the cluster lives in pgdata/ below it: a volume from the old layout holds an
+// empty data/ directory, which would make initdb refuse a non-empty PGDATA.
 var postgres = builder.AddPostgres("postgres")
-    .WithImage(PostgresImage, PostgresTag).WithImageSHA256(PostgresDigest);
+    .WithImage(PostgresImage, PostgresTag).WithImageSHA256(PostgresDigest)
+    .WithEnvironment("PGDATA", "/var/lib/postgresql/data/pgdata");
 postgres.WithVolume(
     (builder.ExecutionContext.IsRunMode ? builder.Configuration["DevelopmentVolumes:Postgres"] : null) ?? VolumeNameGenerator.Generate(postgres, "data"),
     "/var/lib/postgresql/data");
@@ -229,7 +232,15 @@ var blobRoot = builder.Configuration["BlobStore:Root"];
 if (string.IsNullOrWhiteSpace(blobRoot) && builder.ExecutionContext.IsRunMode)
 {
     blobRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ume-rag", "blobs", "rag");
-    Directory.CreateDirectory(blobRoot);
+    // Owner-only, like the keys directory: public blobs are stored as plaintext.
+    if (OperatingSystem.IsWindows())
+    {
+        Directory.CreateDirectory(blobRoot);
+    }
+    else
+    {
+        Directory.CreateDirectory(blobRoot, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
 }
 
 if (!string.IsNullOrWhiteSpace(blobRoot))
