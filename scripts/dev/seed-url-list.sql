@@ -9,7 +9,9 @@
 --   ume_seed.department_name  department found by name, created when missing
 --   ume_seed.collection_slug  collection found by slug, created when missing (public, published, on the profile)
 --   ume_seed.collection_name  the new collection's name
---   ume_seed.source_name      URL-list source found by name in the collection: created, or its URL list replaced
+--   ume_seed.source_name      URL-list source found by name in the collection: created, or its settings replaced
+--   ume_seed.pii_mode         the source's piiMode (contracts/sources/v1/url-list.schema.json): report (default; the
+--                             municipality's own published site, Decisions table 2026-11-01) or hold
 --   ume_seed.enqueue          true: enqueue a manual sync as the admin's "sync now" does; false: leave it to the scheduler
 --   ume_seed.key_hash         with a key (--api-key): hex HMAC-SHA256 of the new key under Security:KeyPepper (KeyHasher.Hash);
 --                             empty: no client and no key
@@ -49,6 +51,7 @@ DECLARE
     collection_slug text := coalesce(nullif(current_setting('ume_seed.collection_slug', true), ''), 'pilot-public');
     collection_name text := coalesce(nullif(current_setting('ume_seed.collection_name', true), ''), 'Pilot: umea.se (public)');
     source_name text := coalesce(nullif(current_setting('ume_seed.source_name', true), ''), 'Pilot URL list');
+    pii_mode text := coalesce(nullif(current_setting('ume_seed.pii_mode', true), ''), 'report');
     enqueue boolean := coalesce(nullif(current_setting('ume_seed.enqueue', true), '')::boolean, true);
     key_hash text := nullif(current_setting('ume_seed.key_hash', true), '');
     key_prefix text := nullif(current_setting('ume_seed.key_prefix', true), '');
@@ -79,7 +82,10 @@ BEGIN
     IF urls IS NULL OR jsonb_typeof(urls) <> 'array' OR jsonb_array_length(urls) = 0 THEN
         RAISE EXCEPTION 'seed-url-list: ume_seed.urls must be a non-empty JSON array of URLs';
     END IF;
-    settings := jsonb_build_object('urls', urls);
+    IF pii_mode NOT IN ('hold', 'report') THEN
+        RAISE EXCEPTION 'seed-url-list: ume_seed.pii_mode must be hold or report, not %', pii_mode;
+    END IF;
+    settings := jsonb_build_object('urls', urls, 'piiMode', pii_mode);
 
     IF profile_name IS NULL THEN
         RAISE EXCEPTION 'seed-url-list: ume_seed.profile (the embedding profile name) is required';
@@ -224,7 +230,8 @@ BEGIN
         ('collection', collection_id::text || ' ' || collection_slug || ' (' || collection_state || ', public)', 2),
         ('embedding_profile', profile_id::text || ' ' || profile_name, 3),
         ('pipeline', pipeline_id::text || ' url-list, published version ' || version_id::text, 4),
-        ('source', source_id::text || ' ' || source_name || ' (' || source_state || ', ' || jsonb_array_length(urls) || ' URLs)', 5),
+        ('source', source_id::text || ' ' || source_name || ' (' || source_state || ', ' || jsonb_array_length(urls) || ' URLs, piiMode '
+                    || pii_mode || ')', 5),
         ('sync_job', CASE WHEN NOT enqueue THEN 'not enqueued (the scheduler runs it on the url-list schedule)'
                           WHEN job_id IS NULL THEN 'not enqueued (a sync of the source is already queued or running)'
                           ELSE job_id::text || ' (manual; the run id is the job id)' END, 6),

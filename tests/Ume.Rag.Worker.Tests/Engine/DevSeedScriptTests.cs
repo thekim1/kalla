@@ -20,6 +20,8 @@ using Ume.Rag.Infrastructure.Keys;
 using Ume.Rag.Pipelines.Definitions;
 using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Tests.Processing;
+using PiiMode = Ume.Rag.Pipelines.Sources.PiiMode;
+using SourceSettings = Ume.Rag.Pipelines.Sources.SourceSettings;
 
 namespace Ume.Rag.Worker.Tests.Engine;
 
@@ -27,7 +29,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// P1a item 18's dev seed (<c>scripts/dev/seed-url-list.sql</c>, run by <c>seed_url_list.py</c>): the same SQL file, with
 /// its parameters as session settings, yields a public URL-list source on the platform url-list pipeline that a worker with
 /// the FakeGateway syncs into live chunks from the test site; a re-run finds what it created; the config triggers bump the
-/// config version. With a key (<c>--api-key</c>), rag-api in process accepts the key for <c>/v1/retrieve</c> on the seeded
+/// config version. The source's <c>piiMode</c> is <c>report</c> unless <c>ume_seed.pii_mode</c> says <c>hold</c>. With a key (<c>--api-key</c>), rag-api in process accepts the key for <c>/v1/retrieve</c> on the seeded
 /// collection. The localhost-only guard, the key generation and the pepper handling are the Python script's
 /// (<c>scripts/dev/test_seed_url_list.py</c>).
 /// </summary>
@@ -64,9 +66,11 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
 
         first["department"].ShouldEndWith("(created)");
         first["collection"].ShouldEndWith("(created, public)");
-        first["source"].ShouldEndWith("(created, 3 URLs)");
+        first["source"].ShouldEndWith("(created, 3 URLs, piiMode report)");
         var seed = await SourceSeedAsync(first);
         seed.PipelineId.ShouldBe(pipelineId);
+        // The settings bind as the url-list record (contracts/sources/v1, unknown members refused) with piiMode report.
+        (await PiiModeAsync(seed.SourceId)).ShouldBe(PiiMode.Report);
         (await Sql.ScalarAsync<string>(database.Connection(null), """
             SELECT s."Type" || ' ' || s."Classification" || ' ' || s."State" || ' ' || c."Classification" || ' ' || (c."PublishedAt" IS NOT NULL)
                    || ' ' || (c."EmbeddingProfileId" = $2) || ' ' || (c."DepartmentId" = $3)
@@ -95,7 +99,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
 
             second["department"].ShouldEndWith("(existing)");
             second["collection"].ShouldEndWith("(existing, public)");
-            second["source"].ShouldEndWith("(unchanged, 3 URLs)");
+            second["source"].ShouldEndWith("(unchanged, 3 URLs, piiMode report)");
             second["source_id"].ShouldBe(seed.SourceId.ToString());
             var rerun = Guid.Parse(second["sync_job_id"].ShouldNotBeNull());
             (await EngineKit.WaitForRunAsync(database, rerun)).ShouldBe(new RunCounters(RunStates.Succeeded, 0, 0, 3, 0, 0, 0));
@@ -107,7 +111,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
     }
 
     [Fact]
-    public async Task A_rerun_with_other_urls_replaces_the_list_and_without_a_sync_enqueues_nothing()
+    public async Task A_rerun_with_other_urls_and_pii_mode_hold_replaces_the_settings_and_without_a_sync_enqueues_nothing()
     {
         await EnsurePlatformPipelineAsync();
         await EnsureProfileAsync();
@@ -116,15 +120,18 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         var seed = await SourceSeedAsync(await SeedAsync(settings));
         try
         {
+            (await PiiModeAsync(seed.SourceId)).ShouldBe(PiiMode.Report);
             settings["ume_seed.urls"] = """["http://site.test/p/c"]""";
+            settings["ume_seed.pii_mode"] = "hold";
 
             var rerun = await SeedAsync(settings);
 
-            rerun["source"].ShouldEndWith("(updated, 1 URLs)");
+            rerun["source"].ShouldEndWith("(updated, 1 URLs, piiMode hold)");
             rerun["sync_job"].ShouldStartWith("not enqueued (the scheduler");
             rerun["sync_job_id"].ShouldBeNull();
             (await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Settings"::text FROM config."Sources" WHERE "Id" = $1""", seed.SourceId))
-                .ShouldBe("""{"urls": ["http://site.test/p/c"]}""");
+                .ShouldBe("""{"urls": ["http://site.test/p/c"], "piiMode": "hold"}""");
+            (await PiiModeAsync(seed.SourceId)).ShouldBe(PiiMode.Hold);
             (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."Jobs" WHERE "DedupKey" = $1""",
                 "sync:" + seed.SourceId)).ShouldBe(0);
         }
@@ -144,6 +151,21 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         var error = await Should.ThrowAsync<PostgresException>(() => SeedAsync(settings));
 
         error.MessageText.ShouldStartWith("seed-url-list: no active embedding profile no-such-profile-");
+        (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM config."Collections" WHERE "Slug" = $1""",
+            settings["ume_seed.collection_slug"])).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task A_pii_mode_other_than_hold_or_report_is_refused_and_nothing_is_written()
+    {
+        await EnsurePlatformPipelineAsync();
+        await EnsureProfileAsync();
+        var settings = Settings([new Uri("http://site.test/p/a")]);
+        settings["ume_seed.pii_mode"] = "off";
+
+        var error = await Should.ThrowAsync<PostgresException>(() => SeedAsync(settings));
+
+        error.MessageText.ShouldBe("seed-url-list: ume_seed.pii_mode must be hold or report, not off");
         (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM config."Collections" WHERE "Slug" = $1""",
             settings["ume_seed.collection_slug"])).ShouldBe(0);
     }
@@ -298,6 +320,14 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
         while (await reader.NextResultAsync(Ct));
 
         return result;
+    }
+
+    /// <summary>The source's <c>piiMode</c> as the worker reads it (<see cref="SourceSettings.PiiModeOf"/>).</summary>
+    private async Task<PiiMode> PiiModeAsync(Guid sourceId)
+    {
+        var settings = await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Settings"::text FROM config."Sources" WHERE "Id" = $1""", sourceId);
+        using var json = System.Text.Json.JsonDocument.Parse(settings);
+        return SourceSettings.PiiModeOf(SourceTypes.UrlList, json.RootElement);
     }
 
     private async Task<SourceSeed> SourceSeedAsync(Dictionary<string, string?> result)
