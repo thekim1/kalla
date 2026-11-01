@@ -1,6 +1,6 @@
 {
   "versions": {
-    "chunk": 1,
+    "chunk": 2,
     "clean": 1,
     "detect": 1,
     "parse.csv": 1,
@@ -95,7 +95,9 @@
       ],
       "documentType": "information",
       "sourceModifiedAt": "2026-03-01",
-      "isTable": false
+      "isTable": false,
+      "contentKind": "text",
+      "largeTable": false
     }
   ],
   "chunkFacts": {

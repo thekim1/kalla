@@ -1,23 +1,29 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
+using Ume.Rag.Domain.Entities;
 
 namespace Ume.Rag.Worker.Evaluation.Generation;
 
 /// <summary>An eligible chunk as the sampler sees it (processing design §13.1): no text, so a large collection stays cheap.</summary>
-public sealed record SampleChunk(Guid ChunkId, Guid DocumentId, string DocumentType, int Ordinal);
+public sealed record SampleChunk(Guid ChunkId, Guid DocumentId, string DocumentType, int Ordinal, string ContentKind = ChunkContentKinds.Text);
 
 /// <summary>
 /// The sample of a generation round (processing design §13.1). The size is <c>N = min(max, 3 × D, eligible chunks)</c>,
 /// over-generated 1.6 × to survive filtering; the order is round-robin over the documents in seeded random order with at
-/// most <c>⌈N/D⌉ + 1</c> chunks per document, first within per-type quotas proportional to the types' chunk shares (a
-/// type with ≥ 5 % of the chunks gets ≥ 2), then without them. The seed is <c>SHA-256(setId ‖ round)</c>, so the same
-/// seed and inputs give the same order.
+/// most <c>⌈N/D⌉ + 1</c> chunks per document: first table row groups and lists up to their kind minimums (at least their
+/// share of the candidates, and at least <c>min(5, available)</c>; #129), then within per-type quotas proportional to the
+/// types' chunk shares (a type with ≥ 5 % of the chunks gets ≥ 2), then without them. The seed is
+/// <c>SHA-256(setId ‖ round)</c>, so the same seed and inputs give the same order.
 /// </summary>
 public static class ChunkSampler
 {
     public const double OverGeneration = 1.6;
     public const double MinTypeShare = 0.05;
     public const int MinPerType = 2;
+    public const int MinPerKind = 5;
+
+    /// <summary>The content kinds with a minimum in the sample (processing design §13.1); <c>text</c> has none.</summary>
+    public static IReadOnlyList<string> StratifiedKinds { get; } = [ChunkContentKinds.Table, ChunkContentKinds.List];
 
     /// <summary><c>N = min(max, 3 × D, eligible chunks)</c>.</summary>
     public static int Target(int maxQuestions, int liveDocuments, int eligibleChunks) =>
@@ -69,14 +75,16 @@ public static class ChunkSampler
         }).ToList();
 
         var quotas = Quotas(eligible, candidates);
+        var kinds = KindMinimums(eligible, candidates);
         var taken = new HashSet<Guid>();
         var perDocument = new int[queues.Count];
         var order = new List<SampleChunk>();
-        RoundRobin(withQuotas: true);
-        RoundRobin(withQuotas: false);
+        RoundRobin(c => kinds.GetValueOrDefault(c.ContentKind) > 0);
+        RoundRobin(c => quotas[c.DocumentType] > 0);
+        RoundRobin(_ => true);
         return order;
 
-        void RoundRobin(bool withQuotas)
+        void RoundRobin(Func<SampleChunk, bool> wanted)
         {
             bool progress;
             do
@@ -89,7 +97,7 @@ public static class ChunkSampler
                         continue;
                     }
 
-                    var next = queues[d].FirstOrDefault(c => !taken.Contains(c.ChunkId) && (!withQuotas || quotas[c.DocumentType] > 0));
+                    var next = queues[d].FirstOrDefault(c => !taken.Contains(c.ChunkId) && wanted(c));
                     if (next is null)
                     {
                         continue;
@@ -99,14 +107,35 @@ public static class ChunkSampler
                     perDocument[d]++;
                     order.Add(next);
                     progress = true;
-                    if (withQuotas)
+                    quotas[next.DocumentType]--;
+                    if (kinds.TryGetValue(next.ContentKind, out var left))
                     {
-                        quotas[next.DocumentType]--;
+                        kinds[next.ContentKind] = left - 1;
                     }
                 }
             }
             while (progress);
         }
+    }
+
+    /// <summary>
+    /// The minimum chunks of each stratified kind (<see cref="StratifiedKinds"/>) for <paramref name="candidates"/>: the
+    /// ceiling of the kind's share, at least <see cref="MinPerKind"/>, never more than it has. Kinds without chunks are absent.
+    /// </summary>
+    internal static Dictionary<string, int> KindMinimums(IReadOnlyList<SampleChunk> eligible, int candidates)
+    {
+        var minimums = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var kind in StratifiedKinds)
+        {
+            var available = eligible.Count(c => c.ContentKind == kind);
+            if (available > 0)
+            {
+                var share = (int)Math.Ceiling((double)available / eligible.Count * candidates);
+                minimums[kind] = Math.Min(available, Math.Max(share, MinPerKind));
+            }
+        }
+
+        return minimums;
     }
 
     /// <summary>

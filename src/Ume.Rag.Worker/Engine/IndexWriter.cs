@@ -41,13 +41,14 @@ public sealed class IndexWriter(JobDatabase database)
     private const string InsertChunksSql = """
         INSERT INTO content."Chunks" ("Id", "ChunkSetId", "DocumentId", "CollectionId", "Classification", "Kind", "Ordinal", "HeadingPath", "Page",
                                      "PageEnd", "Text", "SearchText", "OverlapChars", "TextHash", "TokenCount", "Tags", "DocumentType",
-                                     "SourceModifiedAt", "EmbeddingProfileId", "Embedding", "DeletedAt")
+                                     "SourceModifiedAt", "EmbeddingProfileId", "Embedding", "DeletedAt", "ContentKind", "LargeTable")
         SELECT u.id, u.cs, u.doc, u.coll, u.lvl, u.kind, u.ord, u.heading, u.page, u.page_end, u.body, u.search, u.overlap, u.hash, u.tokens,
-               ARRAY(SELECT jsonb_array_elements_text(u.tags)), u.dtype, u.modified, u.profile, u.emb::vector, u.deleted
+               ARRAY(SELECT jsonb_array_elements_text(u.tags)), u.dtype, u.modified, u.profile, u.emb::vector, u.deleted, u.content_kind, u.large_table
         FROM unnest($1::uuid[], $2::uuid[], $3::uuid[], $4::uuid[], $5::varchar[], $6::varchar[], $7::int[], $8::text[], $9::int[], $10::int[],
                     $11::text[], $12::text[], $13::smallint[], $14::bytea[], $15::int[], $16::jsonb[], $17::varchar[], $18::timestamptz[],
-                    $19::uuid[], $20::text[], $21::timestamptz[])
-             AS u(id, cs, doc, coll, lvl, kind, ord, heading, page, page_end, body, search, overlap, hash, tokens, tags, dtype, modified, profile, emb, deleted)
+                    $19::uuid[], $20::text[], $21::timestamptz[], $22::varchar[], $23::bool[])
+             AS u(id, cs, doc, coll, lvl, kind, ord, heading, page, page_end, body, search, overlap, hash, tokens, tags, dtype, modified, profile, emb, deleted,
+                  content_kind, large_table)
         """;
 
     private const string SetColumns = """
@@ -93,6 +94,8 @@ public sealed class IndexWriter(JobDatabase database)
         """;
 
     private const string ReKeyDocumentSql = """UPDATE content."Documents" SET "PipelineVersionId" = $2 WHERE "LiveChunkSetId" = $1""";
+
+    private const string PiiFlaggedSql = """UPDATE content."ChunkSets" SET "PiiFlaggedAt" = coalesce("PiiFlaggedAt", $2) WHERE "Id" = $1""";
 
     private const string SoftDeleteChunksSql = """
         UPDATE content."Chunks" SET "DeletedAt" = $2
@@ -247,6 +250,14 @@ public sealed class IndexWriter(JobDatabase database)
     }
 
     /// <summary>
+    /// The set's <c>PiiFlaggedAt</c> (processing design §9.5, #175) inside the caller's transaction: <paramref name="at"/>, the
+    /// time of the event 5103 that follows, unless the set already has one (a re-flag keeps the first time).
+    /// </summary>
+    public static Task MarkPiiFlaggedAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid chunkSetId, DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(connection, transaction, PiiFlaggedSql, cancellationToken, Db.P(chunkSetId), Db.P(at.ToUniversalTime()));
+
+    /// <summary>
     /// Soft-deletes the documents (connectors design §13.4): <c>DeletedAt</c> now, <c>PurgeAfter</c> after the 14-day grace, their
     /// live sets' chunks deleted; in batches of 1,000, each its own transaction. Returns how many were deleted now.
     /// </summary>
@@ -340,6 +351,8 @@ public sealed class IndexWriter(JobDatabase database)
                 Db.P(chunks.Select(c => c.EmbeddingProfileId).ToArray()),
                 Db.P(chunks.Select(c => VectorText.Format(c.Embedding)).ToArray()),
                 Db.P(chunks.Select(c => Db.Utc(c.DeletedAt)).ToArray()),
+                Db.P(chunks.Select(c => c.Draft.ContentKind).ToArray()),
+                Db.P(chunks.Select(c => c.Draft.LargeTable).ToArray()),
             },
         };
 

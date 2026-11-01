@@ -13,8 +13,8 @@ namespace Ume.Rag.Worker.Evaluation.Generation;
 
 /// <summary>
 /// <c>generate-set</c> and <c>top-up-set</c> (processing design §13.1–§13.3): the collection's <c>generated</c> layer, an
-/// advisory regression signal (weakness review §2). A round samples chunks with the seed <c>SHA-256(setId ‖ round)</c>,
-/// asks <c>Settings.EvaluationModel</c> for a question and answer per chunk, filters the candidates
+/// advisory regression signal (weakness review §2). A round samples chunks with the seed <c>SHA-256(setId ‖ round)</c>
+/// (the round is <c>EvaluationSets."Round"</c>, advanced by every round that generated, even one that kept nothing), asks <c>Settings.EvaluationModel</c> for a question and answer per chunk, filters the candidates
 /// (<see cref="QuestionFilters"/>; the judge is <c>Settings.EvaluationJudgeModel</c>, default the same model) and stores the
 /// kept ones with their expected documents (the source document and every live document with a chunk of the same
 /// <c>TextHash</c>, at most <see cref="MaxExpectedDocuments"/>) until the layer has its target size. <c>top-up-set</c>
@@ -104,7 +104,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
         }
 
         var setId = await store.EnsureSetAsync(collection, cancellationToken);
-        var round = await store.LastRoundAsync(setId, cancellationToken) + 1;
+        var round = await store.RoundAsync(setId, cancellationToken);
         var seed = ChunkSampler.Seed(setId, round);
         var usage = new Usage();
         var active = await store.ActiveAsync(setId, cancellationToken);
@@ -171,8 +171,8 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
             Tokens = usage.Tokens,
         };
         LogRound(logger, job.Id, collection.Id, kind, round, target, generated, added.Count, stale.Count);
-        return await store.CommitAsync(job, setId, collection.Classification, "system:" + kind, new EvalSetWrite([.. stale], rechecked, added), result,
-            cancellationToken);
+        var write = new EvalSetWrite([.. stale], rechecked, added, NextRound: generated > 0 ? round + 1 : null);
+        return await store.CommitAsync(job, setId, collection.Classification, "system:" + kind, write, result, cancellationToken);
     }
 
     /// <summary>The chunks to generate from: the ranking's first <paramref name="count"/> with a body of at least <see cref="MinBodyTokens"/>.</summary>
@@ -273,7 +273,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
     {
         Guid[] expected = [chunk.DocumentId, .. sameText.Where(d => d != chunk.DocumentId).Order().Take(MaxExpectedDocuments - 1)];
         var origin = new QuestionOrigin(round.Model, round.JudgeModel, EvalPrompts.PromptVersion, round.Round, round.Seed, chunk.DocumentId, candidate.Type,
-            scores, new QuestionStrata(chunk.DocumentType), round.Documents);
+            scores, new QuestionStrata(chunk.DocumentType, chunk.ContentKind), round.Documents);
         var answer = candidate.Answer.Length > MaxAnswerChars ? candidate.Answer[..MaxAnswerChars] : candidate.Answer;
         return new NewQuestion(Guid.CreateVersion7(), candidate.Question, answer, expected, chunk.ContentHash, JsonSerializer.Serialize(origin, Json), chunk.ChunkId);
     }
@@ -305,5 +305,5 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
     private sealed record QuestionOrigin(string Model, string JudgeModel, string PromptVersion, int Round, string Seed, Guid SourceDocumentId, string? Type,
         JudgeScores Judge, QuestionStrata Strata, int Documents);
 
-    private sealed record QuestionStrata(string DocumentType);
+    private sealed record QuestionStrata(string DocumentType, string ContentKind);
 }

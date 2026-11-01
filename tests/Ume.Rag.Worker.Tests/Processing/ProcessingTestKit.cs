@@ -242,6 +242,16 @@ public sealed class InMemoryChunkSetStore : IChunkSetStore
         return Task.CompletedTask;
     }
 
+    public Task MarkFlaggedAsync(Guid chunkSetId, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            _sets[chunkSetId] = _sets[chunkSetId] with { PiiFlaggedAt = _sets[chunkSetId].PiiFlaggedAt ?? at };
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task<PiiClearance?> GetClearanceAsync(Guid documentId, CancellationToken cancellationToken)
     {
         lock (_lock)

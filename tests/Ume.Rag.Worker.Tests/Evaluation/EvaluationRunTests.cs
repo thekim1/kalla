@@ -76,6 +76,10 @@ public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayF
 
             var proposal = run.Coverage.ShouldNotBeNull();
             (proposal.Answerable, proposal.Unanswerable).ShouldBe((3, 2));
+            (await Sql.ScalarAsync<string>(database.Connection(null), """
+                SELECT "Candidate"::text || '|' || ("ThresholdProposal" ->> 'answerable') || '|' || ("ThresholdProposal" ->> 'unanswerable')
+                FROM content."EvaluationRuns" WHERE "Id" = $1
+                """, run.EvaluationRunId)).ShouldBe("false|3|2", "the proposal is kept on the run beyond job retention (#129)");
             var distance = proposal.CoverageMaxDistance.ShouldNotBeNull("answerable and unanswerable human questions give a distance proposal");
             distance.Misclassified.ShouldBeInRange(0, 5);
             if (run.Variant == EvaluationVariant.Vector)
@@ -169,6 +173,11 @@ public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayF
             JobDedupKeys.Eval(fixture.CollectionId)));
         result.Runs.Select(r => (r.Variant, r.Candidate)).ShouldBe(
             [(EvaluationVariant.Hybrid, false), (EvaluationVariant.Hybrid, true), (EvaluationVariant.Vector, false), (EvaluationVariant.Vector, true)]);
+        foreach (var run in result.Runs)
+        {
+            (await Sql.ScalarAsync<bool>(database.Connection(null), """SELECT "Candidate" FROM content."EvaluationRuns" WHERE "Id" = $1""", run.EvaluationRunId))
+                .ShouldBe(run.Candidate, "the candidate flag is stored on the run (#129)");
+        }
 
         var bad = System.Text.Json.JsonDocument.Parse("""{"maxChunksPerDocument":50}""").RootElement;
         var failed = await EvalKit.RunJobAsync(database, fixture, new EvalOnDemandPayload { CollectionId = fixture.CollectionId, CandidateSettings = bad },

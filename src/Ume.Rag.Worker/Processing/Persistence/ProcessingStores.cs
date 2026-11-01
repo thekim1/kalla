@@ -97,6 +97,9 @@ public sealed record ChunkSetRecord(Guid Id, ChunkSetKey Key, string Classificat
 
     public bool PiiFlagged { get; init; }
 
+    /// <summary>When the set was first flagged (#175): the time of its first event 5103, kept on a later re-flag.</summary>
+    public DateTimeOffset? PiiFlaggedAt { get; init; }
+
     public PiiCounts? PiiCounts { get; init; }
 
     public int ChunkCount { get; init; }
@@ -145,6 +148,9 @@ public interface IChunkSetStore
 
     /// <summary>Rewrites the set's personal-data state (the sweep's re-run of <c>personal-data</c> for a <c>pending</c> set).</summary>
     Task UpdatePiiAsync(Guid chunkSetId, PiiCounts counts, bool flagged, CancellationToken cancellationToken);
+
+    /// <summary><c>PiiFlaggedAt</c> = <paramref name="at"/> unless the set was flagged before (the first flag time is kept, #175).</summary>
+    Task MarkFlaggedAsync(Guid chunkSetId, DateTimeOffset at, CancellationToken cancellationToken);
 
     Task<PiiClearance?> GetClearanceAsync(Guid documentId, CancellationToken cancellationToken);
 

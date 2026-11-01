@@ -178,6 +178,12 @@ public sealed record ChunkDraft
     /// <summary>Table row groups and code: no overlap, rows counted for personal data as they are.</summary>
     public bool IsTable { get; init; }
 
+    /// <summary><c>Chunks."ContentKind"</c> (#129): <c>table</c> for a table row group, <c>list</c> when list items are at least half of the body tokens, else <c>text</c>.</summary>
+    public string ContentKind { get; init; } = Domain.Entities.ChunkContentKinds.Text;
+
+    /// <summary><c>Chunks."LargeTable"</c> (#129): the second or a later row group of a table over <see cref="Chunking.ChunkOptions.LargeTableRows"/> rows.</summary>
+    public bool LargeTable { get; init; }
+
     /// <summary>The string sent to the embedding model: <c>prefix + "\n\n" + Text</c>, NFC.</summary>
     [JsonIgnore]
     public string EmbeddedText => Chunking.ChunkText.Embedded(Prefix, Text);

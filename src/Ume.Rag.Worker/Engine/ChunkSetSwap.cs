@@ -44,7 +44,8 @@ public enum SwapResult
 /// The per-document swap of engine design §14 rule 3, shared by the <c>embed</c> job (a new set, or a kept one) and a
 /// <c>reprocess</c> run's iteration (a kept <c>superseded</c> set swapped back without a <c>parse</c> or <c>embed</c> job,
 /// §2.3, §12.3). One short fenced transaction: the published-version check, the swap (the set <c>live</c>, or <c>held</c>
-/// when personal data blocks it in a <c>public</c> collection under the source's <c>piiMode</c>), the document's site-profile version set to the set's,
+/// when personal data blocks it in a <c>public</c> collection under the source's <c>piiMode</c>; a flagged set's first
+/// <c>PiiFlaggedAt</c> at the swap time, #175), the document's site-profile version set to the set's,
 /// the run item and the job's completion. Live answers see the old set until this commit and the new one after it.
 /// </summary>
 public sealed partial class ChunkSetSwap(
@@ -88,8 +89,13 @@ public sealed partial class ChunkSetSwap(
             return SwapResult.Republished;
         }
 
-        await IndexWriter.SwapInAsync(commit.Connection, commit.Transaction, document.Id, set.Id, state, swap.PipelineVersionId, time.GetUtcNow(),
-            cancellationToken);
+        var now = time.GetUtcNow();
+        await IndexWriter.SwapInAsync(commit.Connection, commit.Transaction, document.Id, set.Id, state, swap.PipelineVersionId, now, cancellationToken);
+        if (PiiLifecycle.Flags(set, clearance, values.PiiFlagRules))
+        {
+            await IndexWriter.MarkPiiFlaggedAsync(commit.Connection, commit.Transaction, set.Id, now, cancellationToken);
+        }
+
         await using (var profile = new NpgsqlCommand(SiteProfileSql, commit.Connection, commit.Transaction)
         {
             Parameters = { Db.P(document.Id), Db.P(set.Key.SiteProfileVersionId) },

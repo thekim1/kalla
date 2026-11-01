@@ -2,6 +2,7 @@ using System.Text.Json;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Retrieval;
 using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Jobs;
@@ -12,7 +13,9 @@ namespace Ume.Rag.Worker.Evaluation;
 /// <summary>
 /// The retrieval runs of the <c>eval</c> class (processing design §13.4–§13.6, §14): <c>on-demand</c> (1–3 variants,
 /// each once more under <c>candidateSettings</c>), <c>publish-report</c> (compared with the last run before the publish)
-/// and <c>nightly</c> (compared with the previous run, <c>rag.evaluation.recall_at_10</c> and the recall alert). Each job
+/// and <c>nightly</c> (compared with the previous run, <c>rag.evaluation.recall_at_10</c> and the recall alert). An
+/// <c>on-demand</c> run also stores its <c>Candidate</c> flag and its coverage threshold proposal (<c>ThresholdProposal</c>,
+/// #129). Each job
 /// searches the set as it was at the start, then writes its runs, their per-question results and its completion in one
 /// transaction. A question whose embedding fails fails the run (knowledge design §5.5): the job is retried as the
 /// gateway error says, and nothing of it is kept.
@@ -74,6 +77,9 @@ public sealed partial class EvaluationRunner(
                 foreach (var (settings, isCandidate) in passes)
                 {
                     var (record, outcomes) = await RunAsync(session, EvaluationRunKinds.OnDemand, variant, settings, cancellationToken);
+                    var coverage = EvaluationScoring.Propose(outcomes);
+                    record.Run.Candidate = isCandidate;
+                    record.Run.ThresholdProposal = coverage is null ? null : ContractJson.Serialize(coverage);
                     records.Add(record);
                     refs.Add(new EvaluationRunRef
                     {
@@ -83,7 +89,7 @@ public sealed partial class EvaluationRunner(
                         Found = record.Run.Found ?? 0,
                         Candidate = isCandidate,
                         Layers = EvaluationScoring.Layers(outcomes),
-                        Coverage = EvaluationScoring.Propose(outcomes),
+                        Coverage = coverage,
                     });
                 }
             }

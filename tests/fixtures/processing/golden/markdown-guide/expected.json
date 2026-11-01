@@ -1,6 +1,6 @@
 {
   "versions": {
-    "chunk": 1,
+    "chunk": 2,
     "clean": 1,
     "detect": 1,
     "parse.csv": 1,
@@ -287,7 +287,9 @@
       "tags": [],
       "documentType": "text",
       "sourceModifiedAt": "2026-03-01",
-      "isTable": false
+      "isTable": false,
+      "contentKind": "text",
+      "largeTable": false
     },
     {
       "ordinal": 1,
@@ -301,7 +303,9 @@
       "tags": [],
       "documentType": "text",
       "sourceModifiedAt": "2026-03-01",
-      "isTable": false
+      "isTable": false,
+      "contentKind": "list",
+      "largeTable": false
     },
     {
       "ordinal": 2,
@@ -315,7 +319,9 @@
       "tags": [],
       "documentType": "text",
       "sourceModifiedAt": "2026-03-01",
-      "isTable": false
+      "isTable": false,
+      "contentKind": "text",
+      "largeTable": false
     },
     {
       "ordinal": 3,
@@ -329,7 +335,9 @@
       "tags": [],
       "documentType": "text",
       "sourceModifiedAt": "2026-03-01",
-      "isTable": true
+      "isTable": true,
+      "contentKind": "table",
+      "largeTable": false
     },
     {
       "ordinal": 4,
@@ -343,7 +351,9 @@
       "tags": [],
       "documentType": "text",
       "sourceModifiedAt": "2026-03-01",
-      "isTable": false
+      "isTable": false,
+      "contentKind": "text",
+      "largeTable": false
     }
   ],
   "chunkFacts": {

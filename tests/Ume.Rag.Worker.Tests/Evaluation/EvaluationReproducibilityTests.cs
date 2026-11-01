@@ -93,6 +93,7 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database, 
 
         // Round 1 of the same set again: the same seed.
         await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM content."EvaluationQuestions" WHERE "SetId" = $1 AND "Layer" = 'generated'""", setId);
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."EvaluationSets" SET "Round" = 1 WHERE "Id" = $1""", setId);
         (await GenerateAsync(corpus)).ShouldBe(setId);
         var second = await EvalSeeds.QuestionsAsync(database, setId);
 
