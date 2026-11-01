@@ -35,6 +35,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   upload_file_exists: 'Fil {n} i omgången har redan skickats.',
   upload_file_missing: 'Fil {n} har inte laddats upp till omgången.',
   upload_batch_too_large: 'En omgång rymmer 1 till 100 filer och högst 500 MB.',
+  source_paused: 'Källan är pausad. Återuppta den först.',
+  slug_taken: 'Kortnamnet {slug} används redan. Prova {suggestion}.',
 }
 
 /** When the problem has no code we know: by status. */

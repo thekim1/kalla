@@ -167,13 +167,19 @@ public static class SourceEndpoints
         await admin.WriteAsync(async attempt =>
         {
             var source = await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+            if (source.State == SourceStates.Paused)
+            {
+                // The worker would end the job at once without a run (source.paused); pausing is deliberate, so no implicit resume.
+                throw AdminFaults.Of(AdminErrorCodes.SourcePaused);
+            }
+
             var collection = await admin.Db.Collections.AsNoTracking().SingleAsync(c => c.Id == source.CollectionId, attempt);
             var running = await admin.Db.Runs.AsNoTracking().Where(r => r.SourceId == id && r.State == RunStates.Running)
                 .OrderByDescending(r => r.StartedAt).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(attempt);
             var action = kind == SyncKind.Sync ? "sync" : "retry-failed";
             if (running is not null)
             {
-                return new AdminChange<SyncStarted>(new SyncStarted(null, running, true), action, AuditEntityTypes.Source, id, null, new { runId = running })
+                return new AdminChange<SyncStarted>(new SyncStarted(null, running, true, null), action, AuditEntityTypes.Source, id, null, new { runId = running })
                 {
                     DepartmentId = collection.DepartmentId, Classification = source.Classification,
                 };
@@ -184,7 +190,7 @@ public static class SourceEndpoints
                 .Select(j => (Guid?)j.Id).FirstOrDefaultAsync(attempt);
             if (queued is not null)
             {
-                return new AdminChange<SyncStarted>(new SyncStarted(queued, null, true), action, AuditEntityTypes.Source, id, null, new { jobId = queued })
+                return new AdminChange<SyncStarted>(new SyncStarted(queued, null, true, await QueuedKindAsync(admin, queued.Value, attempt)), action, AuditEntityTypes.Source, id, null, new { jobId = queued })
                 {
                     DepartmentId = collection.DepartmentId, Classification = source.Classification,
                 };
@@ -197,11 +203,26 @@ public static class SourceEndpoints
                 DedupKey = dedup,
                 TeamId = collection.OwnerTeamId,
             };
-            return new AdminChange<SyncStarted>(new SyncStarted(job.Id, null, false), action, AuditEntityTypes.Source, id, null, new { jobId = job.Id })
+            return new AdminChange<SyncStarted>(new SyncStarted(job.Id, null, false, KindName(kind)), action, AuditEntityTypes.Source, id, null, new { jobId = job.Id })
             {
                 DepartmentId = collection.DepartmentId, Classification = source.Classification, Jobs = [job],
             };
         }, ct);
+
+    private static string KindName(SyncKind kind) => kind == SyncKind.RetryFailed ? "retry-failed" : "sync";
+
+    /// <summary>The kind of the queued sync job, so the caller sees whether its request was answered by a sync or a retry.</summary>
+    private static async Task<string?> QueuedKindAsync(AdminContext admin, Guid jobId, CancellationToken ct)
+    {
+        var payload = await admin.Db.Jobs.AsNoTracking().Where(j => j.Id == jobId).Select(j => j.Payload).SingleOrDefaultAsync(ct);
+        if (payload is null)
+        {
+            return null;
+        }
+
+        using var json = JsonDocument.Parse(payload);
+        return json.RootElement.TryGetProperty("kind", out var kind) ? kind.GetString() : null;
+    }
 
     private static async Task<SourceDto> SetStateAsync(Guid id, string state, VersionRequest request, AdminContext admin, CancellationToken ct) =>
         SourceDto.Of(await admin.WriteAsync(async attempt =>
@@ -389,8 +410,12 @@ public sealed record SourceAudit(
 /// <summary>The effect tags of a change (kebab-case), the source's live documents, the collection's assistants, and the token when needed.</summary>
 public sealed record SourceImpact(IReadOnlyList<string> Effects, int LiveDocuments, IReadOnlyList<CollectionUser> UsedBy, string? ImpactToken);
 
-/// <summary>The sync job enqueued, or the job already queued or the run already running (<see cref="AlreadyRunning"/>: nothing was enqueued).</summary>
-public sealed record SyncStarted(Guid? JobId, Guid? RunId, bool AlreadyRunning);
+/// <summary>
+/// The sync job enqueued, or the job already queued or the run already running (<see cref="AlreadyRunning"/>: nothing was
+/// enqueued). <see cref="Kind"/> is the job's kind (<c>sync</c> or <c>retry-failed</c>; null for a running run): sync now and
+/// retry failed share <c>sync:{sourceId}</c>, so a request may be answered by the other one.
+/// </summary>
+public sealed record SyncStarted(Guid? JobId, Guid? RunId, bool AlreadyRunning, string? Kind);
 
 public record SourceFields : AdminRequest, IValidatableObject
 {

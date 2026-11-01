@@ -110,9 +110,16 @@ public static class AdminErrorCodes
     /// <summary>A batch holds 1–100 entries and at most 500 MB.</summary>
     public static AdminErrorCode UploadBatchTooLarge { get; } = new("upload_batch_too_large", 400, "A batch holds 1 to 100 files and at most 500 MB.");
 
+    /// <summary>Sync now on a paused source: the worker would start no run. Resume it first.</summary>
+    public static AdminErrorCode SourcePaused { get; } = new("source_paused", 409, "The source is paused. Resume it first.");
+
+    /// <summary>The slug <c>{slug}</c> is taken (also by a deleted collection); <c>{suggestion}</c> is free.</summary>
+    public static AdminErrorCode SlugTaken { get; } = new("slug_taken", 400, "The short name {slug} is already used. Try {suggestion}.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
             RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
-            NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge];
+            NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
+            SourcePaused, SlugTaken];
 }

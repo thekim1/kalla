@@ -160,6 +160,16 @@
       "code": "upload_batch_too_large",
       "status": 400,
       "message": "A batch holds 1 to 100 files and at most 500 MB."
+    },
+    {
+      "code": "source_paused",
+      "status": 409,
+      "message": "The source is paused. Resume it first."
+    },
+    {
+      "code": "slug_taken",
+      "status": 400,
+      "message": "The short name {slug} is already used. Try {suggestion}."
     }
   ]
 }
