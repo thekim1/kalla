@@ -63,11 +63,31 @@ public static class ConversationEndpoints
             }))
             .WithName("ListConversations").WithSummary("The caller's conversations for this client (keyset, newest first)");
 
-        conversations.MapGet("/{id}", (HttpContext http, string id, ChatCallers callers, ConversationIds ids, NpgsqlDataSource data, CancellationToken ct) =>
+        conversations.MapGet("/{id}", (HttpContext http, string id, ChatCallers callers, ConversationIds ids, NpgsqlDataSource data, KnowledgeSecurity security,
+                IPolicySnapshotSource snapshots, CancellationToken ct) =>
             ChatEndpoints.OpenAiAsync(http, async () =>
             {
                 var who = await callers.AuthenticateAsync(http.Request, userRequired: true, ct);
-                var (conversationId, assistantId) = await OwnedAsync(id, who, ids, data, ct) ?? throw NotFound();
+                (Guid, Guid)? owned;
+                try
+                {
+                    owned = await OwnedAsync(id, who, ids, data, ct);
+                }
+                catch (ChatException) // a bad MAC
+                {
+                    owned = null;
+                }
+
+                if (owned is not var (conversationId, assistantId))
+                {
+                    if (await ForeignAsync(id, who, data, ct))
+                    {
+                        security.ConversationNotOwned(http, who, id, "ReadConversation", snapshots.Current.Version);
+                    }
+
+                    throw NotFound();
+                }
+
                 await using var command = data.CreateCommand("""
                     SELECT m."Id", m."Seq", m."Role", m."Outcome", m."CreatedAt",
                            coalesce((SELECT json_agg(json_build_object('number', s."Number", 'document_id', s."DocumentId") ORDER BY s."Number")
@@ -95,10 +115,17 @@ public static class ConversationEndpoints
             }))
             .WithName("GetConversation").WithSummary("A conversation's messages (metadata only in P1) with their cited sources and feedback");
 
-        conversations.MapDelete("/{id}", (HttpContext http, string id, ChatCallers callers, NpgsqlDataSource data, CancellationToken ct) =>
+        conversations.MapDelete("/{id}", (HttpContext http, string id, ChatCallers callers, NpgsqlDataSource data, KnowledgeSecurity security,
+                IPolicySnapshotSource snapshots, CancellationToken ct) =>
             ChatEndpoints.OpenAiAsync(http, async () =>
             {
                 var who = await callers.AuthenticateAsync(http.Request, userRequired: true, ct);
+                if (await ForeignAsync(id, who, data, ct))
+                {
+                    // Still 204 below (whether the id exists is not told), but the refusal is an event (#284).
+                    security.ConversationNotOwned(http, who, id, "DeleteConversation", snapshots.Current.Version);
+                }
+
                 // §13.2: every statement is scoped by the owner, so a forged or foreign id deletes nothing (204 either way: whether a
                 // UUID exists is not told, #263 review). Feedback and sources go with the messages (FK cascade).
                 var conversationId = Id(id) ?? throw NotFound();
@@ -136,6 +163,21 @@ public static class ConversationEndpoints
             .WithName("DeleteConversation").WithSummary("Delete a conversation and everything under it (idempotent)");
 
         return app;
+    }
+
+    /// <summary>The path id names an existing conversation of another client or subject (the 5002 case, #284).</summary>
+    private static async Task<bool> ForeignAsync(string id, RagPrincipal who, NpgsqlDataSource data, CancellationToken ct)
+    {
+        if (Id(id) is not { } uuid)
+        {
+            return false;
+        }
+
+        await using var command = data.CreateCommand("""SELECT 1 FROM chat."Conversations" WHERE "Id" = $1 AND ("ClientId" <> $2 OR "SubjectId" <> $3)""");
+        command.Parameters.Add(new() { Value = uuid });
+        command.Parameters.Add(new() { Value = who.Client.Id });
+        command.Parameters.Add(new() { Value = who.SubjectId });
+        return await command.ExecuteScalarAsync(ct) is not null;
     }
 
     /// <summary>The conversation UUID of a path id: the issued form (unverified here) or a bare UUID.</summary>
