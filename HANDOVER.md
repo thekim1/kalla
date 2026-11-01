@@ -130,7 +130,7 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 | Deploy | `deploy/` | Compose `Knowledge__PublicBaseUrl` (#213); Keycloak realm additions `deploy/keycloak/` (#207, local redirects opt-in #211) |
 | Tests / CI | `tests/`, `.github/workflows/` | Worker.Tests in four parallel collections, finalizer 0.2 s (#174: 4 min → ~45 s, Verify ≈ 3–4 min); `evaluation-smoke` job (#220) |
 
-## Session 15 (2026-11-01, in progress)
+## Session 15 (2026-11-01, ended: moving to another computer)
 
 - **Start:** `main` @ `1900916` green on the runner (run 41299302356) and locally (all suites; Worker.Tests 1116 ×2);
   session 14's last run on `9d3c7ae` green. AppHost still running with the Turkos data; worker, api and adminapi rebuilt
@@ -163,6 +163,37 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
     ("expand/contract, backwards compatible").
   - Order: B merges #239/#241 → recreate each branch's PR on `origin/main` (merge main; B's commits drop out) →
     FetchUrl, then eval-demote, then compat-sweep → check main → restart the worker → re-crawl Turkos once.
+
+**At the restart (session 16, on the user's other computer):**
+- **Pull** `main` and fetch the three pushed stream-A branches (`git fetch origin`; `git worktree add ../rag-a1
+  a/228-fetch-url`, `../rag-a3 a/l3-eval-demote`, `../rag-a4 a/compat-sweep`). They are pushed but have **no PR**: each
+  carries B's unmerged #239 (and `a/l3-eval-demote` B's #241). When B has merged #239/#241: merge `origin/main` into each
+  branch (B's commits drop out of the diff), run the evidence, open the PRs in the order above. PR bodies: write them
+  from the bullets above (done-when, tests, negative proofs, deviations); FetchUrl's deviations: (1) the latest path form
+  found in a new run wins, an admission without one keeps it; (2) a path form over 2,048 chars is stored NULL; (3)
+  redirect targets keep `FetchUrl` NULL; (4) demote counts over `Documents.Url` only; (5) `scope-narrowed` prefers the
+  frontier's `FetchUrl` over `Documents.Url`; (6) a 304's final URL replaces `Documents.Url`; (7) a row that redirected
+  writes no `FetchUrl` on a lastmod skip; (8) the removal check's 2xx `HEAD` in an incremental run also writes the kept
+  path form.
+- **The gold-set draft is in the repo:** `plans/p1/gold-set/` (`Turkos-guldstandard-utkast.xlsx` for DoIT, `draft.csv`,
+  `README.md`). Its `dokument_id`s are document ids in **this computer's** pilot database only. On a new database they
+  won't match: map them by URL/title after the new crawl (`dokument_url` is the node-id form today; after `a/228-fetch-url`
+  the crawl stores path forms, so match on the node id `4.<id>`/`5.<id>` inside the URL).
+- **No pilot data on the new computer.** The Turkos crawl, the assistant `turkos`, the Open WebUI and retrieval keys,
+  DoIT, the `GatewayModels` row and the `Settings.Crawl`/`PiiOwnDomains` values live in this computer's AppHost Postgres
+  volume. Under "No backward compatibility before production" rebuild them there (session 14's list, in J7's order,
+  through the admin API with a recreated `adm.py`), then crawl Turkos once **after** `a/228-fetch-url` is merged (one
+  crawl gives readable citations; no re-crawl needed).
+- **Needs the user's hands on the new computer:** the interim-gateway key (`rag_key.txt`, mode 600, excluded in
+  `.git/info/exclude`) and the AppHost user secrets (`Gateway:BaseUrl`, `Gateway:Keys:Eu`, the `EmbeddingProfile:*`
+  values, `DevelopmentVolumes:Postgres`, the `Parameters:*` secrets: `dotnet user-secrets list` here shows the key names,
+  never copy values into the repo or a chat); local images `ume-rag.local/clamav:dev` and `ume-rag.local/parser:ci`
+  (build from `src/parser`); the Aspire CLI 13.6.1 (Environment notes). Claude's memory folder is per machine: the binding
+  preferences are in "How we work" and the Decisions table.
+- **This computer:** the AppHost is still running with the pilot data (`aspire stop` keeps the volume); worktrees
+  `../rag-a1`, `../rag-a3`, `../rag-a4`, `../rag-main`, `../rag-review` (all pushed or disposable). No agent running.
+- **Open with B:** #239, #241 (approved, B merges); #232 (span exception events), #236, #237, #243 (no replies yet).
+  Don't nudge B.
 
 ## Session 14 (2026-11-01)
 
@@ -237,25 +268,26 @@ or reveal through the admin API (`POST /api/keys/{id}/reveal`, audited).
 
 ## Next step
 
-1. **Check `main` and GitHub** (recreate `verify.sh`, `watch.sh`, `adm.py`; dispatch `verify.yml` on `main`; arm the
-   watcher). Check B's fix for **#232** (still open: span exception events still hold the gateway host:port); B merges #239. Answer #236/#237 when B replies.
-2. **Stream A: use `CrawlFrontier.FetchUrl`** once #239 is on `main`: fetch `FetchUrl ?? Url` (so `Documents.Url` is
-   the readable path on umea.se), re-check scope on the path form where only the identity was known (#229's
-   `CheckIdentity` cases: removal checks, `scope-narrowed`, retry-failed), report demote counts over it; then re-crawl
-   Turkos once (identity unchanged, so documents keep their ids; only `Documents.Url` changes).
-3. **Pilot, with the user:** Open WebUI on the AppHost once #236 lands (or the seed path, with care for the
-   `dev-embedding` profile) → the first cited answer from `turkos` locally (item 22 rehearsal); then the gold set with
-   DoIT (item 21). The rest of umea.se (other sections, `/download/` PDFs ≈ 8,700; `maxPages` ≥ 20,000) when the user
-   wants it. Item 20 still lists a pilot URL list and one upload (user: skip until DoIT names them).
-4. **Stream-A code left:** drop the `-1` removal-check fallback now (no backward compatibility before production, Decisions 2026-11-01; B may add its `Depth >= 0` CHECK without a data migration, #102);
-   an evaluator == API contract test on a collection *with* `recency` (after L3, #235 note); P1b item 15 `e2e` (after
-   L7); item 17 importer settings (after L6); item 19 pin review before go-live (incl. condense `Eu` → `OnPrem`, #204);
-   small: Aspire 13.6.1 → 13.6.4 (shared props + B's AppHost); a package audit workflow.
+1. **Set up the new computer and check `main` and GitHub** ("At the restart (session 16)" above): recreate `verify.sh`,
+   `watch.sh`, `adm.py`, `ret.sh`; dispatch `verify.yml` on `main` and run the local suites; arm the watcher. Check B's fix
+   for **#232** when it comes (span exception events still hold the gateway host:port; probe as in the #238 review).
+   Answer #236/#237/#243 when B replies. Don't nudge B.
+2. **When B merges #239 and #241:** open and merge `a/228-fetch-url`, then `a/l3-eval-demote`, then `a/compat-sweep`
+   (each: merge `origin/main`, evidence, PR); check `main`.
+3. **Pilot, with the user:** rebuild the pilot set-up on the new computer's AppHost (session 14's list) and crawl Turkos
+   once with the FetchUrl code; Open WebUI once #236 lands → the first cited answer from `turkos` (item 22 rehearsal;
+   the user signs in). Gold set: the user hands `plans/p1/gold-set/Turkos-guldstandard-utkast.xlsx` to DoIT and names the
+   owner and date (U-f); after DoIT's review, map the ids to the new database, enter the rows as `human` questions,
+   run the three-way evaluation (item 21) and set the thresholds. The rest of umea.se (other sections, `/download/`
+   PDFs ≈ 8,700; `maxPages` ≥ 20,000) when the user wants it.
+4. **Stream-A code left:** P1b item 15 `e2e` (after L7); item 17 importer settings (after L6); item 19 pin review before
+   go-live (incl. condense `Eu` → `OnPrem`, #204); Aspire 13.6.1 → 13.6.4 (shared props + B's AppHost); README line for
+   `audit.yml` (shared, own PR); two stale wording spots in B's code (compat-sweep report, above) for a later B issue.
 5. **Live block** (`plans/p1b/README.md` §5 step 4): gold set (item 21), EU-route capacity (item 19: the gateway key's
    rate limit was the bound — 60/min throttled the crawl), the user hands `docs/gateway-host-setup.md` to Hermes.
 6. Then the restructure (`plans/doc-restructure.md`).
 
-**Open issues to stream B:** #80, #90, #102, #129, #132, #75, #52, #228, #232, #236, #237 (#134 closed by B). Stream A's own: #48, #51. For the user: #100
+**Open issues to stream B:** #80, #90, #102, #129, #132, #75, #52, #228, #232, #236, #237, #243 (#134 closed by B). Stream A's own: #48, #51. For the user: #100
 (L8 run steps), #215 (J8, realm additions for the gateway session). Hand-offs received: #193 (J7), #210 (J9).
 
 **Waiting on the user:** the pilot URL list and upload (Next step 2); a Data API key (`catalog.read`) for the org and model syncs (DoIT is a local seed until then); the gateway session (release 1 incl. the embedding-batch
