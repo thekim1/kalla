@@ -154,6 +154,10 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   writes send `X-Requested-With` and `X-XSRF-TOKEN` (the `RAG-XSRF-TOKEN` cookie from `/bff/user`); send the body as
   UTF-8 bytes (`requests` sends a `str` body as Latin-1, which breaks `å`). `/openapi/v1.json` needs the session.
 - **Stream B:** #264/#266 fixed on B's branch (667139c), waiting on my re-review; nudged #265.
+- **Design sync done** (`d0f246b`): the deviations of #248–#274 folded into the designs. Main-session decisions: the
+  "either-of" policies stay (B: #283), the admin reads `PublishedAssistantVersions`, `Gateway:MaxResidency` implements M2,
+  the 5002 `conversation_not_owned` event stays (B: #284), Open WebUI's `DEFAULT_MODEL_METADATA` in chat §4.3. Still to
+  fold: #281's forms deviation (after it merges) and `temperature` (after #275).
 
 ## Session 16 (2026-11-01, new computer; ended: demo-first plan, AppHost left running)
 
