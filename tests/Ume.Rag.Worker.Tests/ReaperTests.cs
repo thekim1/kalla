@@ -11,7 +11,7 @@ namespace Ume.Rag.Worker.Tests;
 /// The reaper with the production timings (engine design §9.4, data-model §4.2): an instance silent for 30 s loses its
 /// jobs without using an attempt; the third reclaim dead-letters a poison suspect.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup4.Name)]
 public sealed class ReaperTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private static readonly TimeSpan InstanceTimeout = TimeSpan.FromSeconds(30);

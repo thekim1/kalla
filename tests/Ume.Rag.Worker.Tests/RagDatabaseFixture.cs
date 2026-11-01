@@ -6,22 +6,33 @@ using Ume.Rag.TestKit;
 namespace Ume.Rag.Worker.Tests;
 
 /// <summary>
-/// One ragdb with the production roles. Every test class that touches it is in this collection, so they run one after the
-/// other: the queue is shared, and the connection-budget test counts every worker-role connection.
+/// One ragdb with the production roles, in a Postgres container of its own. Every test class that touches a database is in
+/// one of the <c>ragdb-N</c> collections (<see cref="RagDatabaseGroup1"/> and on), and each collection gets its own fixture.
+/// The classes of one collection run one after the other: the queue and the finalizer's and scheduler's advisory locks are
+/// per database, and the connection-budget test counts every worker-role connection of its database. The collections run
+/// in parallel.
 /// </summary>
 public sealed class RagDatabaseFixture : RagDatabase, IAsyncLifetime
 {
+    private static readonly string?[] Roles = [null, Migrator, Api, Admin, Worker];
+
     private readonly ConcurrentDictionary<string, NpgsqlDataSource> _dataSources = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Removes every job and instance, so a test sees only its own, and closes the idle pooled connections earlier tests
-    /// left, so each test starts with the worker role's whole connection cap.
+    /// left in this database, so each test starts with the worker role's whole connection cap.
     /// </summary>
     public async Task ResetAsync()
     {
         await Sql.ExecuteAsync(Connection(null), """DELETE FROM content."Jobs"; DELETE FROM content."WorkerInstances";""");
         await DisposeDataSourcesAsync();
-        NpgsqlConnection.ClearAllPools();
+        // Only this database's pools: the other collections' connections are theirs.
+        foreach (var role in Roles)
+        {
+            await using var connection = new NpgsqlConnection(Connection(role));
+            NpgsqlConnection.ClearPool(connection);
+        }
+
         var waited = System.Diagnostics.Stopwatch.StartNew();
         while (await Sql.ScalarAsync<long>(Connection(null), "SELECT count(*) FROM pg_stat_activity WHERE usename = 'ume_rag_worker'") > 0)
         {
@@ -54,10 +65,31 @@ public sealed class RagDatabaseFixture : RagDatabase, IAsyncLifetime
     }
 }
 
+// The ragdb collections, each with its own database. Classes are spread by measured duration (slow engine classes apart),
+// so the collections end at about the same time.
+
 [CollectionDefinition(Name)]
-public sealed class RagDatabaseGroup : ICollectionFixture<RagDatabaseFixture>
+public sealed class RagDatabaseGroup1 : ICollectionFixture<RagDatabaseFixture>
 {
-    public const string Name = "ragdb";
+    public const string Name = "ragdb-1";
+}
+
+[CollectionDefinition(Name)]
+public sealed class RagDatabaseGroup2 : ICollectionFixture<RagDatabaseFixture>
+{
+    public const string Name = "ragdb-2";
+}
+
+[CollectionDefinition(Name)]
+public sealed class RagDatabaseGroup3 : ICollectionFixture<RagDatabaseFixture>
+{
+    public const string Name = "ragdb-3";
+}
+
+[CollectionDefinition(Name)]
+public sealed class RagDatabaseGroup4 : ICollectionFixture<RagDatabaseFixture>
+{
+    public const string Name = "ragdb-4";
 }
 
 /// <summary>Small ADO.NET helpers: each call opens its own connection.</summary>

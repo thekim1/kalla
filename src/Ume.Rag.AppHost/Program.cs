@@ -34,9 +34,16 @@ var dataApiKey = Secret("data-api-key", 43);
 var cacheKeyPepper = Secret("cache-key-pepper", 48);
 var downloadGrantKey = Secret("download-grant-key", 48);
 
+// The image is Postgres 17 (PGDATA /var/lib/postgresql/data); Aspire 13's WithDataVolume mounts at /var/lib/postgresql,
+// the Postgres 18 layout, so the data went to the image's anonymous volume and was lost on restart (#168). The volume is
+// mounted at the image's data path and the cluster lives in pgdata/ below it: a volume from the old layout holds an
+// empty data/ directory, which would make initdb refuse a non-empty PGDATA.
 var postgres = builder.AddPostgres("postgres")
     .WithImage(PostgresImage, PostgresTag).WithImageSHA256(PostgresDigest)
-    .WithDataVolume(builder.ExecutionContext.IsRunMode ? builder.Configuration["DevelopmentVolumes:Postgres"] : null);
+    .WithEnvironment("PGDATA", "/var/lib/postgresql/data/pgdata");
+postgres.WithVolume(
+    (builder.ExecutionContext.IsRunMode ? builder.Configuration["DevelopmentVolumes:Postgres"] : null) ?? VolumeNameGenerator.Generate(postgres, "data"),
+    "/var/lib/postgresql/data");
 var database = postgres.AddDatabase(DatabaseResourceName);
 
 // Redis:Enabled=true is the P2 path (first multi-host deployment). Off by default: the pilot shape keeps rate limits and
@@ -216,6 +223,31 @@ if (!string.IsNullOrWhiteSpace(keyDirectory))
     foreach (var service in new[] { api, worker, adminApi })
     {
         service.WithEnvironment("KeyProvider__Directory", keyDirectory);
+    }
+}
+
+// The blob root (#168): BlobStore:Root from the AppHost's configuration, else ~/.ume-rag/blobs/rag in run mode, next to
+// the dev keys. The services' default /data/blobs/rag is the container path and is not writable on a developer machine.
+var blobRoot = builder.Configuration["BlobStore:Root"];
+if (string.IsNullOrWhiteSpace(blobRoot) && builder.ExecutionContext.IsRunMode)
+{
+    blobRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ume-rag", "blobs", "rag");
+    // Owner-only, like the keys directory: public blobs are stored as plaintext.
+    if (OperatingSystem.IsWindows())
+    {
+        Directory.CreateDirectory(blobRoot);
+    }
+    else
+    {
+        Directory.CreateDirectory(blobRoot, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+}
+
+if (!string.IsNullOrWhiteSpace(blobRoot))
+{
+    foreach (var service in new[] { api, worker, adminApi })
+    {
+        service.WithEnvironment("BlobStore__Root", blobRoot);
     }
 }
 

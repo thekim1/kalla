@@ -164,8 +164,6 @@ public static partial class KnowledgeEndpoints
             throw new RetrievalDeniedException(404, KnowledgeCodes.NotFound);
         }
 
-        security.Download("ok", kind, documentId, clientId);
-
         foreach (var (name, value) in ContentHeaders.Fixed(content))
         {
             http.Response.Headers[name] = value;
@@ -173,7 +171,9 @@ public static partial class KnowledgeEndpoints
 
         http.Response.Headers.ContentDisposition = ContentHeaders.ContentDisposition(content);
         http.Response.ContentLength = bytes.Length;
-        return Results.Stream(bytes.Content, ContentHeaders.ContentType(content.MediaType), enableRangeProcessing: false);
+        // Counted as it ends: ok when fully sent, integrity when a damaged segment aborts the response (§3.5).
+        var body = security.CountDownload(bytes.Content, bytes.Length, kind, documentId, clientId);
+        return Results.Stream(body, ContentHeaders.ContentType(content.MediaType), enableRangeProcessing: false);
     }
 
     /// <summary>A refused download is counted (<c>not_served</c> for a web page, else <c>not_found</c>) before the problem is answered.</summary>

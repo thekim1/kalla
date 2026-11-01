@@ -10,7 +10,7 @@ namespace Ume.Rag.Worker.Tests.CommandJobs;
 /// <c>human</c> question and is the same result when repeated; update and retire change only that question; the payload
 /// limits (500, 1,000, 10) and unknown collections, questions and documents are refused with nothing written.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup1.Name)]
 public sealed class EvalQuestionCommandTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private CommandRunner _runner = null!;

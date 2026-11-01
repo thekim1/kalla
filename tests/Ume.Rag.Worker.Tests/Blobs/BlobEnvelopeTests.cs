@@ -287,8 +287,12 @@ public sealed class BlobEnvelopeTests : IDisposable
             new($"raw/internal/{hash}"), new($"parse/internal/{hash}/result.json"), new($"stages/internal/chunk/{hash}.json.gz"),
             new($"previews/{job:D}/raw/internal/{hash}"),
         ];
-        BlobKey[] plain = [new($"raw/public/{hash}"), new($"previews/{job:D}/stages/public/chunk/{hash}.json.gz"), new($"uploads/{job:D}/{job:D}/{hash}")];
-        BlobKey[] scoped = [new($"quarantine/{job:D}/{hash}"), new($"previews/{job:D}/0/parse.json"), new($"previews/{job:D}/keys/parse/{hash}.json.gz")];
+        BlobKey[] plain = [new($"raw/public/{hash}"), new($"previews/{job:D}/stages/public/chunk/{hash}.json.gz"), new($"uploads/{job:D}/batches/{job:D}.json")];
+        BlobKey[] scoped =
+        [
+            new($"quarantine/{job:D}/{hash}"), new($"previews/{job:D}/0/parse.json"), new($"previews/{job:D}/keys/parse/{hash}.json.gz"),
+            new($"uploads/{job:D}/{job:D}/{hash}"),
+        ];
 
         foreach (var key in encrypted.Concat(plain))
         {
@@ -324,6 +328,14 @@ public sealed class BlobEnvelopeTests : IDisposable
 
         (await store.ForLevel(Classification.Internal).OpenReadAsync(new BlobKey($"quarantine/{job:D}/absent"), null, Ct)).ShouldBeNull();
         await Should.ThrowAsync<InvalidOperationException>(() => store.PromoteAsync(new BlobKey($"tmp/{job:D}/a"), encrypted[0], Ct));
+
+        // The admin stages an upload through the envelope and promotes it unchanged: it reads back at the source's level.
+        var staged = new BlobKey($"tmp/upload-batches/{job:D}/data/{hash}");
+        await PutAsync(staged, marker);
+        var upload = new BlobKey($"uploads/{job:D}/{Guid.CreateVersion7():D}/{hash}");
+        (await store.PromoteAsync(staged, upload, Ct)).ShouldBe(BlobWriteResult.Created);
+        Encoding.ASCII.GetString((await RawAsync(upload))[..4]).ShouldBe("URB2");
+        (await ReadFromAsync(store.ForLevel(Classification.Internal), upload)).ShouldBe(marker);
     }
 
     private static BlobKey Key() => new($"raw/internal/{Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32))}");

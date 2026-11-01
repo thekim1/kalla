@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Pipelines.Definitions;
 using Ume.Rag.Pipelines.Json;
@@ -229,7 +230,8 @@ public sealed class ProcessingSegment(
                 return loaded;
             }
 
-            await using var stream = await blobs.OpenReadAsync(input.RawKey, null, cancellationToken)
+            // An upload key names no level: it is read by the document's (data-model §7).
+            await using var stream = await blobs.ForLevel(level).OpenReadAsync(input.RawKey, null, cancellationToken)
                 ?? throw new StageTransientException("raw.missing", TimeSpan.FromMinutes(1), countsAttempt: true);
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer, cancellationToken);

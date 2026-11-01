@@ -10,7 +10,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// blob, parse output and stage outputs as <c>URB2</c> with no plaintext on disk and still goes live; a <c>public</c>
 /// source's blobs stay plaintext.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup4.Name)]
 public sealed class EnvelopeEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
 {
     private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-envelope-engine-");

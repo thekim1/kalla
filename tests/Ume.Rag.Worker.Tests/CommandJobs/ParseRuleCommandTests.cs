@@ -20,7 +20,7 @@ namespace Ume.Rag.Worker.Tests.CommandJobs;
 /// revisions, and each enqueues a <c>reprocess</c> sync only for the active sources with parser-route documents in the old or
 /// the new scope. An edit or disable that changes nothing writes nothing; refused commands write nothing.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup4.Name)]
 public sealed class ParseRuleCommandTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private const string Admin = "admin-oid";

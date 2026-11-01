@@ -21,7 +21,7 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 /// and a <c>top-up-set</c> when <c>D</c> grew by 25 % since the last round (not by 10 %). The scheduler scans every
 /// collection, so each test looks only at the set jobs of its own.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup4.Name)]
 public sealed class EvalSetTriggerTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private const string Model = "ume/chat-onprem";

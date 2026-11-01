@@ -16,7 +16,7 @@ namespace Ume.Rag.Worker.Tests;
 /// The worker end to end against the real schema and roles (P0 checklist #20): the admin enqueues, the dispatcher leases
 /// and applies, the reaper recovers from a killed worker.
 /// </summary>
-[Collection(RagDatabaseGroup.Name)]
+[Collection(RagDatabaseGroup4.Name)]
 public sealed class DispatcherTests(RagDatabaseFixture database) : IAsyncLifetime
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

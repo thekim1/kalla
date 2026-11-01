@@ -30,9 +30,15 @@ internal static class TestBlobKeys
     /// <summary>The worker's envelope store over the file system store at <paramref name="root"/>, with the default level policies.</summary>
     public static EnvelopeBlobStore Store(DirectoryInfo root, IKeyProvider? keys = null)
     {
-        var plain = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = root.FullName }), TimeProvider.System);
+        var plain = Plain(root);
         return new EnvelopeBlobStore(new BlobEnvelope(plain, keys ?? Provider(), new DefaultPolicy()), plain);
     }
+
+    /// <summary>The envelope over the file system store at <paramref name="root"/>, as the admin writes uploads with it.</summary>
+    public static BlobEnvelope Envelope(DirectoryInfo root) => new(Plain(root), Provider(), new DefaultPolicy());
+
+    private static FileSystemBlobStore Plain(DirectoryInfo root) =>
+        new(Options.Create(new BlobStoreOptions { Root = root.FullName }), TimeProvider.System);
 
     /// <summary>No policy rows: <see cref="DataProtectionBlobKeyPolicy.DefaultKeyName"/>.</summary>
     internal sealed class DefaultPolicy : IBlobKeyPolicy

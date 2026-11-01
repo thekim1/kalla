@@ -190,6 +190,15 @@
       "description": "Cron (5 fields, Europe/Stockholm) of incremental runs besides Sources.Schedule (connectors design §5.4); null = full traversals only. The scheduler runs them only while the host's site profile has lastmodReliable.",
       "maxLength": 100,
       "pattern": "^\\S+( \\S+){4}$"
+    },
+    "piiMode": {
+      "enum": [
+        "hold",
+        "report"
+      ],
+      "x-effect": "cosmetic",
+      "description": "What a personal-data flag does in a public collection: hold (the set is held until the document is cleared) or report (the set goes live and the flag is reported; a personnummer or samordningsnummer still holds). A change applies at each document's next swap.",
+      "default": "hold"
     }
   },
   "required": [

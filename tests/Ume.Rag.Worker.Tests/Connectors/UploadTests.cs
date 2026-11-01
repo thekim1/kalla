@@ -2,12 +2,14 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
+using Ume.Rag.Domain;
 using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Connectors.Uploads;
+using Ume.Rag.Worker.Tests.Blobs;
 
 namespace Ume.Rag.Worker.Tests.Connectors;
 
@@ -201,6 +203,69 @@ public sealed class UploadTests : IDisposable
         var wrongHash = item with { Hints = item.Hints with { Upload = item.Hints.Upload! with { Sha256 = Sha("other") } } };
         (await down.FetchAsync(context, wrongHash, TestContext.Current.CancellationToken)).ShouldBe(new FetchOutcome.Failed(UploadConnector.BlobMissing));
     }
+
+    [Fact]
+    public async Task An_internal_upload_written_through_the_envelope_is_read_as_plaintext_and_eicar_is_still_found()
+    {
+        var sourceId = Guid.NewGuid();
+        var store = TestBlobKeys.Store(_root);
+        var connector = new UploadConnector(store, new EicarOnlyScanner(), new InMemoryUploadSlots(), TimeProvider.System);
+        var context = new FetchContext(sourceId, Classification.Internal, Guid.NewGuid(), default, false);
+
+        var pdf = await SealAsync(sourceId, "beslut.pdf", Bytes("pdf"), Classification.Internal);
+        StoredHead(sourceId, pdf).ShouldBe("URB2");
+        var content = (await connector.FetchAsync(context, pdf, TestContext.Current.CancellationToken)).ShouldBeOfType<FetchOutcome.Content>();
+        content.Raw.ContentHash.ShouldBe(pdf.Hints.Upload!.Sha256, "the SHA-256 is checked over the plaintext");
+        content.Raw.MediaType.ShouldBe("application/pdf");
+        content.Raw.Bytes.ShouldBe(Bytes("pdf").Length);
+
+        var virus = await SealAsync(sourceId, "virus.pdf", Eicar, Classification.Internal);
+        StoredHead(sourceId, virus).ShouldBe("URB2");
+        var quarantined = (await connector.FetchAsync(context, virus, TestContext.Current.CancellationToken)).ShouldBeOfType<FetchOutcome.Quarantined>();
+        quarantined.Signature.ShouldBe(EicarOnlyScanner.Signature, "the scanner sees the plaintext, not the ciphertext");
+        Encoding.ASCII.GetString(File.ReadAllBytes(Path.Combine(_root.FullName, quarantined.Key.Value))[..4]).ShouldBe("URB2");
+    }
+
+    [Fact]
+    public async Task An_internal_upload_stored_plain_or_with_a_damaged_segment_fails_and_a_public_upload_is_read_as_stored()
+    {
+        var sourceId = Guid.NewGuid();
+        var store = TestBlobKeys.Store(_root);
+        var connector = new UploadConnector(store, new EicarOnlyScanner(), new InMemoryUploadSlots(), TimeProvider.System);
+        var context = new FetchContext(sourceId, Classification.Internal, Guid.NewGuid(), default, false);
+
+        var plain = await SealAsync(sourceId, "beslut.pdf", Bytes("pdf"), Classification.Public);
+        (await connector.FetchAsync(context, plain, TestContext.Current.CancellationToken)).ShouldBe(new FetchOutcome.Failed(UploadConnector.BlobDamaged));
+
+        var damaged = await SealAsync(sourceId, "beslut.pdf", Bytes("pdf"), Classification.Internal);
+        var path = Path.Combine(_root.FullName, UploadConnector.BlobKeyOf(sourceId, damaged.Hints.Upload!.UploadId, damaged.Hints.Upload.Sha256).Value);
+        var stored = File.ReadAllBytes(path);
+        stored[^17] ^= 0x01; // the last ciphertext byte of the final segment, before its 16-byte tag
+        File.WriteAllBytes(path, stored);
+        (await connector.FetchAsync(context, damaged, TestContext.Current.CancellationToken)).ShouldBe(new FetchOutcome.Failed(UploadConnector.BlobDamaged));
+
+        var open = await SealAsync(sourceId, "beslut.pdf", Bytes("pdf"), Classification.Public);
+        File.ReadAllBytes(Path.Combine(_root.FullName, UploadConnector.BlobKeyOf(sourceId, open.Hints.Upload!.UploadId, open.Hints.Upload.Sha256).Value))
+            .ShouldBe(Bytes("pdf"));
+        (await connector.FetchAsync(context with { Classification = Classification.Public }, open, TestContext.Current.CancellationToken))
+            .ShouldBeOfType<FetchOutcome.Content>().Raw.ContentHash.ShouldBe(open.Hints.Upload.Sha256);
+    }
+
+    /// <summary>An upload as the admin writes it: through the envelope at the source's <paramref name="level"/>.</summary>
+    private async Task<WorkItem> SealAsync(Guid sourceId, string name, byte[] bytes, string level)
+    {
+        var slot = Guid.NewGuid();
+        var sha = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        await using (var stream = new MemoryStream(bytes))
+        {
+            await TestBlobKeys.Envelope(_root).PutAsync(UploadConnector.BlobKeyOf(sourceId, slot, sha), level, stream, bytes.Length, TestContext.Current.CancellationToken);
+        }
+
+        return new WorkItem(IdentityKind.Upload, UploadConnector.IdentityOf(slot), null, 0, new WorkHints(Upload: new UploadHint(slot, sha, name, null)));
+    }
+
+    private string StoredHead(Guid sourceId, WorkItem item) => Encoding.ASCII.GetString(
+        File.ReadAllBytes(Path.Combine(_root.FullName, UploadConnector.BlobKeyOf(sourceId, item.Hints.Upload!.UploadId, item.Hints.Upload.Sha256).Value))[..4]);
 
     private async Task<WorkItem> StoreAsync(Guid sourceId, string name, byte[] bytes)
     {

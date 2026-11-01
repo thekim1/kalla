@@ -19,11 +19,13 @@ public sealed record UploadCheckpoint : ConnectorCheckpoint
 
 /// <summary>
 /// The <c>upload</c> source by slot (connectors design §9): the <c>sync</c> of a committed batch reads its manifest and plans
-/// the slots (<see cref="UploadBatchPlanner"/>); the <c>fetch</c> stage <c>upload</c> copies the slot's blob to a local temp
-/// file (checking its SHA-256), scans it with ClamAV (fail closed; a finding is copied to
-/// <c>quarantine/{sourceId}/{sha256}</c> for the runner's row, event and tombstone of the upload blob), sniffs and checks
-/// the type, and returns the upload blob itself as the document's raw content (no copy). The content hash is the
-/// file's SHA-256, so identical bytes in a replace are <c>unchanged</c>.
+/// the slots (<see cref="UploadBatchPlanner"/>); the <c>fetch</c> stage <c>upload</c> reads the slot's blob as plaintext
+/// through the envelope by the source's level (an <c>internal</c> upload is <c>URB2</c>; one that is not, or whose segment
+/// fails its check, fails <see cref="BlobDamaged"/>), copies it to a local temp file (checking the plaintext's SHA-256),
+/// scans the plaintext with ClamAV (fail closed; a finding is copied to <c>quarantine/{sourceId}/{sha256}</c>, encrypted by
+/// the level, for the runner's row, event and tombstone of the upload blob), sniffs and checks the type, and returns the
+/// upload blob itself as the document's raw content (no copy). The content hash is the file's SHA-256, so identical bytes
+/// in a replace are <c>unchanged</c>.
 /// </summary>
 public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, IUploadSlotReader slots, TimeProvider time)
     : IFetchConnector<UploadCheckpoint>, IIdListingConnector, IRetryFailedConnector
@@ -33,6 +35,7 @@ public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, I
     public const string ManifestMissing = "upload.manifest_missing";
     public const string BlobMissing = "upload.blob_missing";
     public const string HashMismatch = "upload.hash_mismatch";
+    public const string BlobDamaged = "upload.blob_damaged";
 
     /// <summary>The platform cap of an upload (connectors design §9.1, answered 3).</summary>
     public const long MaxBytes = 50L * 1024 * 1024;
@@ -124,15 +127,23 @@ public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, I
         ArgumentNullException.ThrowIfNull(item);
         var upload = item.Hints.Upload ?? throw new ArgumentException("An upload item carries its slot.", nameof(item));
         var key = BlobKeyOf(context.SourceId, upload.UploadId, upload.Sha256);
+        // The upload and its quarantine copy are encrypted by the source's level (data-model §7): read as plaintext.
+        var store = blobs.ForLevel(context.Classification);
         FetchedBody? body;
-        await using (var stream = await blobs.OpenReadAsync(key, null, cancellationToken))
+        try
         {
+            await using var stream = await store.OpenReadAsync(key, null, cancellationToken);
             if (stream is null)
             {
                 return new FetchOutcome.Failed(BlobMissing);
             }
 
             body = await FetchedBody.CaptureAsync(stream, MaxBytes, truncate: false, "application/octet-stream", null, cancellationToken);
+        }
+        catch (BlobIntegrityException)
+        {
+            // Not URB2 where the level requires it, or a segment fails its tag: no plaintext to scan or index.
+            return new FetchOutcome.Failed(BlobDamaged);
         }
 
         if (body is null)
@@ -160,7 +171,7 @@ public sealed class UploadConnector(IBlobStore blobs, IMalwareScanner scanner, I
                     await using (var stream = body.OpenRead())
                     {
                         // Encrypted by the source's level: the key names none (data-model §7, §9).
-                        await blobs.ForLevel(context.Classification).PutAsync(quarantine, stream, body.Length, cancellationToken);
+                        await store.PutAsync(quarantine, stream, body.Length, cancellationToken);
                     }
 
                     return new FetchOutcome.Quarantined(quarantine, body.Sha256, malware.Signature, malware.Reason);

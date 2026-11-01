@@ -24,11 +24,13 @@ public static class BlobLevelScopes
 /// <summary>
 /// The worker's <see cref="IBlobStore"/>: the plain store with envelope encryption (<see cref="BlobEnvelope"/>) by the level
 /// the key belongs to. The data-model §9 layout names the level in <c>raw/{level}/…</c>, <c>parse/{level}/…</c> and
-/// <c>stages/{level}/…</c>, also below a preview's prefix (<c>previews/{jobId}/raw/{level}/…</c>). Quarantined files
-/// (<c>quarantine/…</c>) and a preview's own outputs (<c>previews/{jobId}/…</c> otherwise) name none: they belong to the
-/// level of the view (<see cref="ForLevel"/>), and without one they are refused rather than stored in plaintext.
-/// Everything else (uploads, written by the admin; robots.txt; scratch) is stored as it is. Existence, deletes and
-/// listings pass through. A promote into an encrypted level is refused, because a scratch blob is not encrypted.
+/// <c>stages/{level}/…</c>, also below a preview's prefix (<c>previews/{jobId}/raw/{level}/…</c>). Uploads
+/// (<c>uploads/{sourceId}/{slot}/{sha256}</c>, written by the admin through <see cref="IBlobEnvelope.PutAsync"/>),
+/// quarantined files (<c>quarantine/…</c>) and a preview's own outputs (<c>previews/{jobId}/…</c> otherwise) name none:
+/// they belong to the level of the view (<see cref="ForLevel"/>, the source's level), and without one they are refused
+/// rather than read or stored in plaintext. Everything else (upload batch manifests; robots.txt; scratch) is stored as it
+/// is. Existence, deletes and listings pass through. A promote into an encrypted level is refused, because a scratch blob
+/// is not encrypted; a promote to an upload key passes through, because the admin stages uploads through the envelope.
 /// </summary>
 public sealed class EnvelopeBlobStore : IBlobStore, IBlobLevelScope
 {
@@ -72,6 +74,14 @@ public sealed class EnvelopeBlobStore : IBlobStore, IBlobLevelScope
 
     public async Task<BlobWriteResult> PromoteAsync(BlobKey from, BlobKey to, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(to);
+        // The admin stages an upload through the envelope and promotes it unchanged: the header, not the key, is the
+        // segments' associated data (Urb2).
+        if (IsUpload(to.Value.Split('/')))
+        {
+            return await _inner.PromoteAsync(from, to, cancellationToken);
+        }
+
         if (LevelOf(to) is { } level && await _envelope.EncryptsAsync(level, cancellationToken))
         {
             throw new InvalidOperationException($"'{to}' is envelope-encrypted ({level}); write it with PutAsync, not by promoting a scratch blob.");
@@ -105,7 +115,7 @@ public sealed class EnvelopeBlobStore : IBlobStore, IBlobLevelScope
             return Classification.IsValid(level) ? level : throw new ArgumentException($"Blob key '{key}' names no level.", nameof(key));
         }
 
-        if (preview || segments[0] == "quarantine")
+        if (preview || segments[0] == "quarantine" || IsUpload(segments))
         {
             return _level ?? throw new InvalidOperationException(
                 $"Blob key '{key}' names no level; use the store's ForLevel view, so its content is encrypted by its level.");
@@ -113,4 +123,7 @@ public sealed class EnvelopeBlobStore : IBlobStore, IBlobLevelScope
 
         return null;
     }
+
+    /// <summary>An upload blob <c>uploads/{sourceId}/{slot}/{sha256}</c>, not a batch manifest <c>uploads/{sourceId}/batches/…</c>.</summary>
+    private static bool IsUpload(string[] segments) => segments is ["uploads", _, not "batches", _];
 }
