@@ -161,9 +161,23 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   (#178); identity §16 Q2–4, Q8 (gateway session); admin design says `GET /api/departments`/`/api/teams`, code has
   `/api/organisation/departments` with teams nested.
 
+- **Later in session 14:** assistant **`turkos`** published (v1) on `claude-opus-5-5` (row seeded in the local
+  `GatewayModels` mirror, `Source manual`), classified **`internal`** (a public assistant gets ceiling `External`, and
+  only `Eu` keys exist: #237), contact `turkos@umea.se`, audience = the Open WebUI client; `/v1/models` with the Open
+  WebUI key lists `turkos`; `/v1/chat/completions` needs the Open WebUI user JWT (401 `user_jwt_missing`, by design).
+  The AppHost's `open-webui` runs only with the dev seed (#236 asks B for a configured client id + key). The user raised
+  the interim gateway key's rate limit from 60/min (the crawl's 429s).
+- **Merged later:** #240 PII patterns refuse a match inside an alphanumeric token (from a `PiiModeEngineTests` flake:
+  a GUID's digits read as a phone number); B's #223 (chat schema) and #235 (age decay, approved). **Reviewed:** #238
+  (gateway address out of logs/telemetry) **changes requested**: a failed request's span keeps an `exception` event
+  whose message/stacktrace hold host:port (probe); #239 (`CrawlFrontier.FetchUrl`, chat ciphertext CHECKs) approved.
+  Closed #234 (L2). `main` = `9d3c7ae` green locally (Worker.Tests 1116 ×2); its runner run was queued at the end.
+
 **At the restart (session 14):** the AppHost was left **running** with the pilot data (Postgres dev volume from the
-user secrets' `DevelopmentVolumes:Postgres`; blobs under `~/.ume-rag/blobs/rag`); `aspire stop` keeps both. Worktrees:
-`../rag-main` only. `main` = `3e484d6` (+ this handover).
+user secrets' `DevelopmentVolumes:Postgres`; blobs under `~/.ume-rag/blobs/rag`); `aspire stop` keeps both. Its worker
+runs code up to #233 (`97c4adb`; #240 not deployed: restart it after pulling: build `src/Ume.Rag.Worker`, `aspire resource worker
+restart`). Worktrees: `../rag-main` only. No agent running. Scratchpad keys (Open WebUI, retrieval) are gone: re-issue
+or reveal through the admin API (`POST /api/keys/{id}/reveal`, audited).
 
 ## Session 13 (done)
 
@@ -189,27 +203,25 @@ user secrets' `DevelopmentVolumes:Postgres`; blobs under `~/.ume-rag/blobs/rag`)
 
 ## Next step
 
-1. **Check `main` and GitHub** at the start (recreate `verify.sh`, `watch.sh`, `adm.py`; dispatch `verify.yml` on
-   `main`; arm the watcher). Answer B on #228 and #232 when it replies.
-2. **Finish the pilot set-up (P1a item 20) with the user**, on the AppHost's existing volume (Turkos is there):
-   the pilot URL list and one upload (item 20's text; the user names them); then the **assistant** (`POST
-   /api/assistants`, draft with `gatewayModel`, system prompt, `collectionIds` [Turkos], publish — V8 checks the model
-   against the gateway, which may need the Data API key — and audience = the Open WebUI client); then Open WebUI on the
-   AppHost (`open-webui` resource, the client key, user-JWT trust; J9 #210) for the first cited answer locally (item 22's
-   rehearsal). The rest of umea.se (other sections, `/download/` PDFs: the sitemap lists ≈ 8,700) when the user wants
-   it; `maxPages` must then be ≥ 20,000 (connectors §5.2).
-3. **Stream-A code left:** drop the `-1` removal-check fallback once B migrates before its `Depth >= 0` CHECK (#102);
-   use `CrawlFrontier.FetchUrl` when #228 lands (fetch the path form, re-check scope on it, report demote counts); P1b
-   item 15 `e2e` (after L7); item 17 importer settings (after L6); item 19 pin review before go-live (incl. the condense
-   step `Eu` → `OnPrem`, B's #204 note); small: Aspire 13.6.1 → 13.6.4 (shared `Directory.Packages.props` + B's
-   AppHost: coordinate); a package audit in a weekly/release workflow; the worker's canary health stays `Degraded`
-   until its hourly re-check when the canary is recorded after the worker started (cosmetic).
-4. **Then the live block** (`plans/p1b/README.md` §5 step 4): the gold set with DoIT (item 21), capacity on the EU
-   routes (item 19; the gateway's embedding rate limit is the bound seen so far), the user hands
-   `docs/gateway-host-setup.md` to Hermes.
-5. Then the restructure (`plans/doc-restructure.md`).
+1. **Check `main` and GitHub** (recreate `verify.sh`, `watch.sh`, `adm.py`; dispatch `verify.yml` on `main`; arm the
+   watcher). Re-review **#238** when B pushes the span-event scrub; B merges #239. Answer #236/#237 when B replies.
+2. **Stream A: use `CrawlFrontier.FetchUrl`** once #239 is on `main`: fetch `FetchUrl ?? Url` (so `Documents.Url` is
+   the readable path on umea.se), re-check scope on the path form where only the identity was known (#229's
+   `CheckIdentity` cases: removal checks, `scope-narrowed`, retry-failed), report demote counts over it; then re-crawl
+   Turkos once (identity unchanged, so documents keep their ids; only `Documents.Url` changes).
+3. **Pilot, with the user:** Open WebUI on the AppHost once #236 lands (or the seed path, with care for the
+   `dev-embedding` profile) → the first cited answer from `turkos` locally (item 22 rehearsal); then the gold set with
+   DoIT (item 21). The rest of umea.se (other sections, `/download/` PDFs ≈ 8,700; `maxPages` ≥ 20,000) when the user
+   wants it. Item 20 still lists a pilot URL list and one upload (user: skip until DoIT names them).
+4. **Stream-A code left:** drop the `-1` removal-check fallback once B migrates before its `Depth >= 0` CHECK (#102);
+   an evaluator == API contract test on a collection *with* `recency` (after L3, #235 note); P1b item 15 `e2e` (after
+   L7); item 17 importer settings (after L6); item 19 pin review before go-live (incl. condense `Eu` → `OnPrem`, #204);
+   small: Aspire 13.6.1 → 13.6.4 (shared props + B's AppHost); a package audit workflow.
+5. **Live block** (`plans/p1b/README.md` §5 step 4): gold set (item 21), EU-route capacity (item 19: the gateway key's
+   rate limit was the bound — 60/min throttled the crawl), the user hands `docs/gateway-host-setup.md` to Hermes.
+6. Then the restructure (`plans/doc-restructure.md`).
 
-**Open issues to stream B:** #80, #90, #102, #129, #132, #134, #75, #52, #228, #232. Stream A's own: #48, #51. For the user: #100
+**Open issues to stream B:** #80, #90, #102, #129, #132, #75, #52, #228, #232, #236, #237 (#134 closed by B). Stream A's own: #48, #51. For the user: #100
 (L8 run steps), #215 (J8, realm additions for the gateway session). Hand-offs received: #193 (J7), #210 (J9).
 
 **Waiting on the user:** the pilot URL list and upload (Next step 2); a Data API key (`catalog.read`) for the org and model syncs (DoIT is a local seed until then); the gateway session (release 1 incl. the embedding-batch

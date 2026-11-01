@@ -397,7 +397,7 @@ and names.
 
 ### 9.1 Patterns (.NET, `Ume.Rag.Worker/Pii`)
 
-| Type | Candidate (regex, with `\b`-style digit boundaries: no digit or `-` directly before/after) | Validation |
+| Type | Candidate (regex, with `\b`-style boundaries: no digit or `-` directly before/after; as built in PR #240, 2026-11-01, no letter either, and a phone number also not inside a hyphen-joined token such as a GUID group, so digit runs in ids and hashes are no match) | Validation |
 |---|---|---|
 | `personnummer` | `(?<c>18\|19\|20)?(?<yy>\d{2})(?<mm>\d{2})(?<dd>\d{2})(?<sep>[-+]?)(?<nnn>\d{3})(?<k>\d)` | `mm` 01–12; `dd` valid for the month and year (leap years with the century: given, else the latest century with date ≤ today, minus 100 years when `sep = +`); **Luhn** over the 10 digits `yymmddnnn k`; 10-digit form **without** separator only with a keyword (`personnummer`, `pers.nr`, `pnr`, `personnr`, `födelsenummer`) within 30 characters before it |
 | `samordningsnummer` | same | as above with `dd` 61–91 (day + 60) |
