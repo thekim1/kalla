@@ -10,6 +10,7 @@ using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Infrastructure.Jobs;
+using Ume.Rag.Infrastructure.Security;
 using Ume.Rag.Infrastructure.Stores;
 
 if (await WebDefaults.ExitIfHealthProbeAsync(args))
@@ -33,6 +34,9 @@ builder.AddRagJobQueue();
 builder.AddRagBlobStore();
 // Internal uploads are envelope-encrypted when staged (data-model §7, #181): KeyProvider:Directory holds rag-blob-internal.
 builder.AddRagBlobEnvelope();
+// API keys (identity §6.4): hashed with Security:KeyPepper as rag-api does; resolved when a key is created or rotated.
+builder.Services.AddOptions<SecurityOptions>().BindConfiguration(SecurityOptions.SectionName);
+builder.Services.AddSingleton<AdminKeyHasher>();
 builder.AddRagDataProtection();
 builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
@@ -99,6 +103,7 @@ api.MapSiteProfiles();
 api.MapSources();
 api.MapRuns();
 api.MapUploads();
+api.MapKeys();
 api.MapOrganisation();
 api.MapSettings();
 api.MapDataProtection();
