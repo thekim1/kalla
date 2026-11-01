@@ -66,6 +66,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   query_steps_invalid: 'Inställningen {field} ligger utanför det tillåtna intervallet.',
   link_host_not_allowed: 'En länk måste vara https till en tillåten webbplats, och högst 5 länkar.',
   evaluation_model_unset: 'Ingen modell för att skapa testfrågor är vald. En plattformsadministratör väljer den under Inställningar.',
+  search_unavailable: 'Sökningen kunde inte köras just nu. Försök igen om en stund.',
 }
 
 /** When the problem has no code we know: by status. */
