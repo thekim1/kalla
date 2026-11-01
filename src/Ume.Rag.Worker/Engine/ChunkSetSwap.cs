@@ -1,5 +1,4 @@
 using Npgsql;
-using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.Infrastructure.Jobs;
@@ -45,7 +44,7 @@ public enum SwapResult
 /// The per-document swap of engine design §14 rule 3, shared by the <c>embed</c> job (a new set, or a kept one) and a
 /// <c>reprocess</c> run's iteration (a kept <c>superseded</c> set swapped back without a <c>parse</c> or <c>embed</c> job,
 /// §2.3, §12.3). One short fenced transaction: the published-version check, the swap (the set <c>live</c>, or <c>held</c>
-/// when personal data blocks it in a <c>public</c> collection), the document's site-profile version set to the set's,
+/// when personal data blocks it in a <c>public</c> collection under the source's <c>piiMode</c>), the document's site-profile version set to the set's,
 /// the run item and the job's completion. Live answers see the old set until this commit and the new one after it.
 /// </summary>
 public sealed partial class ChunkSetSwap(
@@ -73,7 +72,8 @@ public sealed partial class ChunkSetSwap(
         var (source, document, set) = (swap.Source, swap.Document, swap.Set);
         var values = await settings.GetAsync(cancellationToken);
         var clearance = await chunkSets.GetClearanceAsync(document.Id, cancellationToken);
-        var state = PiiLifecycle.StateFor(set, source.CollectionClassification, clearance, values.PiiFlagRules);
+        var mode = source.PiiMode;
+        var state = PiiLifecycle.StateFor(set, source.CollectionClassification, mode, clearance, values.PiiFlagRules);
         await using var commit = await EngineCommit.BeginAsync(database, cancellationToken);
         if (!await commit.FenceAsync(document.Id, document.Classification, swap.ExecutionId, swap.ContentHash, cancellationToken))
         {
@@ -101,7 +101,8 @@ public sealed partial class ChunkSetSwap(
         await commit.AddRunItemAsync(new RunItemRow(swap.RunId, document.Classification, document.Id, document.CanonicalIdentity,
             swap.Live is null ? Outcome.Added : Outcome.Updated)
         {
-            Reason = state == ChunkSetStates.Held ? (set.PiiFlagged ? "pii.flagged" : "pii.ner_pending") : swap.SwappedBack ? SwappedBackReason : null,
+            Reason = PiiLifecycle.ReasonFor(set, state, source.CollectionClassification, clearance, values.PiiFlagRules)
+                ?? (swap.SwappedBack ? SwappedBackReason : null),
             Strategy = document.ParseStrategy,
             PipelineVersionId = swap.PipelineVersionId,
             ExecutionId = swap.ExecutionId,
@@ -113,7 +114,7 @@ public sealed partial class ChunkSetSwap(
 
         await commit.CommitAsync(cancellationToken);
         LogSwapped(logger, document.Id, set.Id, swap.SwappedBack ? "swapped-back" : "new", state);
-        pii.RaiseIfFlagged(set, new PiiSwapContext(source.CollectionClassification, source.SourceId, swap.RunId, values.PiiFlagRules), clearance);
+        pii.RaiseIfFlagged(set, new PiiSwapContext(source.CollectionClassification, source.SourceId, swap.RunId, values.PiiFlagRules, mode), clearance);
         return SwapResult.Swapped;
     }
 

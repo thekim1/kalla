@@ -192,6 +192,44 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
     }
 
     [Fact]
+    public async Task The_personal_data_state_shown_follows_the_source_pii_mode()
+    {
+        var marker = Guid.NewGuid().ToString("N");
+        await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page($"kontakt {name} {marker}",
+            "Frågor besvaras av anna.svensson@gmail.com."))));
+        var seed = await EngineKit.SeedUrlListAsync(database, [site.Url("/p/other")], Ume.Rag.Domain.Classification.Public);
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
+        try
+        {
+            async Task<JsonElement> PersonalDataAsync()
+            {
+                var job = await EnqueueAsync(seed, new StagePreviewPayload
+                {
+                    PipelineVersionId = seed.VersionId,
+                    CollectionId = seed.CollectionId,
+                    SourceId = seed.SourceId,
+                    Urls = [site.Url("/p/contact").AbsoluteUri],
+                });
+                return (await ResultAsync<StagePreviewResult>(job)).Documents.ShouldHaveSingleItem().Stages.Single(s => s.Stage == "personal-data").Facts!.Value;
+            }
+
+            var held = await PersonalDataAsync();
+            held.GetProperty("state").GetString().ShouldBe("held");
+            held.GetProperty("flagged").GetBoolean().ShouldBeTrue();
+
+            await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Sources" SET "Settings" = "Settings" || '{"piiMode":"report"}'::jsonb WHERE "Id" = $1""",
+                seed.SourceId);
+            var reported = await PersonalDataAsync();
+            reported.GetProperty("state").GetString().ShouldBe("live", "report mode: an external e-mail address does not hold");
+            reported.GetProperty("flagged").GetBoolean().ShouldBeTrue();
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
     public async Task Six_documents_are_refused()
     {
         await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page(name))));

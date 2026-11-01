@@ -21,3 +21,19 @@ public enum SettingEffect
     Behaviour,
     Cosmetic,
 }
+
+/// <summary>
+/// The source setting <c>piiMode</c> (Decisions table, "Personal data on the municipality's own published site", 2026-11-01):
+/// what a personal-data flag does in a <c>public</c> collection. Other collections never block, whatever the mode.
+/// </summary>
+public enum PiiMode
+{
+    /// <summary>Processing design §9.5: a flagged or NER-pending set is swapped in <c>held</c> until the document is cleared.</summary>
+    Hold,
+
+    /// <summary>
+    /// The flags are still counted, raised as event 5103 and reported, but the set is swapped in <c>live</c>; a set whose
+    /// personnummer or samordningsnummer rule fires is still held.
+    /// </summary>
+    Report,
+}
