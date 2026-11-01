@@ -44,6 +44,11 @@ public sealed class ChatSchemaTests(RagDatabaseFixture database)
                      ($"""INSERT INTO chat."Messages" ("Id", "ConversationId", "Classification", "Seq", "Role", "ExpiresAt", "CondenseUsed", "Outcome") VALUES (gen_random_uuid(), '{conversation}', 'internal', 4, 'user', now(), false, 'maybe')""", PostgresErrorCodes.CheckViolation),
                      ($"""INSERT INTO chat."Feedback" ("Id", "MessageId", "ConversationId", "Classification", "ClientId", "Source", "Rating") VALUES (gen_random_uuid(), '{answer}', '{conversation}', 'internal', '{client}', 'owui-import', 0)""", PostgresErrorCodes.CheckViolation),
                      ($"""INSERT INTO chat."Conversations" ("Id", "Classification", "AssistantId", "ClientId", "SubjectKind", "SubjectId", "HistoryMode", "RetentionDays", "LastMessageAt", "ExpiresAt") VALUES (gen_random_uuid(), 'internal', gen_random_uuid(), '{client}', 'owui-user', 'u-1', 'full', 0, now(), now())""", PostgresErrorCodes.CheckViolation),
+                     // No stored content until A1 (weakness review §4): every ciphertext column stays null.
+                     ($"""UPDATE chat."Messages" SET "ContentCiphertext" = '\x01' WHERE "Id" = '{answer}'""", PostgresErrorCodes.CheckViolation),
+                     ($"""UPDATE chat."Conversations" SET "TitleCiphertext" = '\x01' WHERE "Id" = '{conversation}'""", PostgresErrorCodes.CheckViolation),
+                     ($"""UPDATE chat."MessageSources" SET "SnippetCiphertext" = '\x01' WHERE "MessageId" = '{answer}'""", PostgresErrorCodes.CheckViolation),
+                     ($"""UPDATE chat."Feedback" SET "CommentCiphertext" = '\x01' WHERE "MessageId" = '{answer}'""", PostgresErrorCodes.CheckViolation),
                  })
         {
             (await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(api, sql))).SqlState.ShouldBe(state, sql);
