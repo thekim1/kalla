@@ -31,6 +31,7 @@ public sealed partial class AnswerTransducer
     private readonly HashSet<string> _allowedHosts;
     private readonly StringBuilder _held = new();
     private int _delivered;
+    private char _lastDelivered;
 
     public AnswerTransducer(IReadOnlyList<PromptSource> sources, IEnumerable<string> allowedLinkHosts)
     {
@@ -153,10 +154,18 @@ public sealed partial class AnswerTransducer
         return false;
     }
 
+    /// <summary>
+    /// The filter is escape-by-default (#203 review): images and listed tags are removed; a Markdown link is kept only when its
+    /// target is http(s) to an allowed host (protected by a placeholder through the rest); then every remaining <c>&lt;</c> is
+    /// escaped (no HTML, no autolinks, no attributes), every remaining <c>](</c> broken (nothing unvalidated becomes a link,
+    /// whatever its shape: nested brackets, titles, spaces, long text), and line-leading reference definitions escaped.
+    /// </summary>
     private List<AnswerPiece> Process(string text)
     {
+        text = text.Replace(Placeholder, "", StringComparison.Ordinal);
         text = Images().Replace(text, m => Count("image", $"[{m.Groups["alt"].Value}]"));
         text = ActiveHtml().Replace(text, m => Count("html", ""));
+        var kept = new List<string>();
         text = Links().Replace(text, m =>
         {
             var url = m.Groups["url"].Value.Trim();
@@ -165,9 +174,29 @@ public sealed partial class AnswerTransducer
                 return Count("link", m.Groups["text"].Value);
             }
 
-            return m.Value;
+            kept.Add(m.Value);
+            return $"{Placeholder}{kept.Count - 1}{Placeholder}";
         });
+        if (text.Contains('<', StringComparison.Ordinal))
+        {
+            Count("escaped_html", "");
+            text = text.Replace("<", "&lt;", StringComparison.Ordinal);
+        }
+
         text = BareUrls().Replace(text, m => Allowed(m.Value) ? m.Value : Count("url", $"`{m.Value}`"));
+        if (text.Contains("](", StringComparison.Ordinal))
+        {
+            Count("broken_link", "");
+            text = text.Replace("](", "]\\(", StringComparison.Ordinal);
+        }
+
+        if (_lastDelivered == ']' && text.StartsWith('('))
+        {
+            text = "\\" + text; // "]" ended the previous piece: "(" here would complete an unvalidated link
+        }
+
+        text = ReferenceDefinition().Replace(text, m => Count("reference", m.Groups["indent"].Value + "\\["));
+        text = Restore().Replace(text, m => kept[int.Parse(m.Groups["i"].Value, CultureInfo.InvariantCulture)]);
 
         var pieces = new List<AnswerPiece>();
         var output = new StringBuilder();
@@ -223,6 +252,11 @@ public sealed partial class AnswerTransducer
     private AnswerPiece.Text Piece(StringBuilder output, List<UrlCitation> annotations)
     {
         var piece = new AnswerPiece.Text(output.ToString(), [.. annotations]);
+        if (output.Length > 0)
+        {
+            _lastDelivered = output[^1];
+        }
+
         _delivered += output.Length;
         output.Clear();
         annotations.Clear();
@@ -244,6 +278,15 @@ public sealed partial class AnswerTransducer
 
     private static string? Host(string? url) =>
         url is not null && Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" ? uri.Host.ToLowerInvariant() : null;
+
+    /// <summary>Marks a validated link while the escaping runs; removed from the model text first, so it cannot be forged.</summary>
+    private const string Placeholder = "\u0001";
+
+    [GeneratedRegex(@"\u0001(?<i>\d+)\u0001")]
+    private static partial Regex Restore();
+
+    [GeneratedRegex(@"(?m)^(?<indent>[ \t]{0,3})\[(?=[^\]\n]*\]:)", RegexOptions.CultureInvariant)]
+    private static partial Regex ReferenceDefinition();
 
     [GeneratedRegex(@"!\[(?<alt>[^\]]{0,500})\]\((?:[^()\s]|\([^()\s]{0,500}\)){0,2000}\)", RegexOptions.CultureInvariant)]
     private static partial Regex Images();

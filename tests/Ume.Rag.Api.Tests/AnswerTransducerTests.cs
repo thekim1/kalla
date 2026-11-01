@@ -53,6 +53,7 @@ public sealed class AnswerTransducerTests
             "Besök https://evil.example/a och https://kommun.umea.se/b");
 
         text.ShouldBe("Se [karta] och . Läs [mer](https://www.umea.se/bygglov) eller här och js. Besök `https://evil.example/a` och https://kommun.umea.se/b");
+        ShouldBeInert(text);
         transducer.Filtered["image"].ShouldBe(1);
         transducer.Filtered["html"].ShouldBe(1);
         transducer.Filtered["link"].ShouldBe(2);
@@ -73,5 +74,42 @@ public sealed class AnswerTransducerTests
         var transducer = new AnswerTransducer(Sources, ["umea.se"]);
         var held = "[" + new string('a', AnswerTransducer.MaxHeld + 10);
         transducer.Feed(held).OfType<AnswerPiece.Text>().Sum(p => p.Content.Length).ShouldBe(held.Length);
+    }
+
+    /// <summary>Nothing unvalidated may stay clickable: no "](" before an unsafe target, no raw "&lt;", no reference definition.</summary>
+    private static void ShouldBeInert(string text)
+    {
+        text.ShouldNotContain("](javascript", Case.Insensitive);
+        text.ShouldNotContain("](data:", Case.Insensitive);
+        text.ShouldNotContain('<');
+        System.Text.RegularExpressions.Regex.IsMatch(text, @"(?m)^[ \t]{0,3}\[[^\]]*\]:").ShouldBeFalse(text);
+    }
+
+    [Theory]
+    [InlineData("[a [b] c](javascript:alert(1))")]
+    [InlineData("[x](javascript:alert(1) \"t\")")]
+    [InlineData("[x]( javascript:alert(1) )")]
+    [InlineData("[x][r]\n[r]: javascript:alert(1)")]
+    [InlineData("<javascript:alert(1)>")]
+    [InlineData("<div onmouseover=\"alert(1)\">x</div>")]
+    public void Constructs_the_link_pattern_does_not_match_are_escaped(string answer)
+    {
+        // #203 review probes: escape by default instead of chasing every Markdown shape.
+        ShouldBeInert(Run(new AnswerTransducer(Sources, ["umea.se"]), answer).Text);
+    }
+
+    [Fact]
+    public void A_link_after_the_hold_limit_or_split_at_the_parenthesis_stays_inert()
+    {
+        var longText = "[" + new string('a', AnswerTransducer.MaxHeld + 10);
+        ShouldBeInert(Run(new AnswerTransducer(Sources, ["umea.se"]), longText, "](javascript:alert(1))").Text);
+        ShouldBeInert(Run(new AnswerTransducer(Sources, ["umea.se"]), "Klicka [x]", "(javascript:alert(1)) nu").Text);
+    }
+
+    [Fact]
+    public void An_allowed_link_survives_the_escaping()
+    {
+        Run(new AnswerTransducer(Sources, ["umea.se", "*.umea.se"]), "Läs [Bygglov](https://www.umea.se/bygglov) och a < b.").Text
+            .ShouldBe("Läs [Bygglov](https://www.umea.se/bygglov) och a &lt; b.");
     }
 }
