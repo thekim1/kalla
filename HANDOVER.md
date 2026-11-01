@@ -161,8 +161,9 @@ https://claude.ai/artifact/6RMq1GXHc7siE8VVudJwL1) and the older English `docs/s
 - **Reviewed B:** #169 approved (merged); #172 changes requested (a PGDATA/old-volume bug that would break every dev
   setup), fixed, approved, merged (closes #168); #180 (upload batches) changes requested: the #181 envelope write, and an
   idempotent/safe repeated commit (write-once manifest silently kept a different first list; a repeat after success 404s); #176 (collections) approved; #178 (sources, sync now, runs, cancel-run; stacked on #176)
-  approved with a should-fix (sync now on a paused source: 409 `source_paused`, done in #180); #176 and #178 merged;
-  #185 (API keys) changes requested (unscoped keys by department admins). Decided B's #178 deviation 1: the URL canonicaliser stays in the worker.
+  approved with a should-fix (sync now on a paused source: 409 `source_paused`, done in #180); #176, #178, #180 merged;
+  #185 (API keys) changes requested (unscoped keys by department admins), fixed, merged; #188, #189, #190 approved;
+  #191 (B's lock-timing flake fix) approved, merged. Decided B's #178 deviation 1: the URL canonicaliser stays in the worker.
 - **Answered B:** #129 (FakeGateway chat scripts keyed by `x-ume-step` from `FakeGateway:ChatScripts:<step>`, built-in
   defaults; `Chunks.ContentKind` text/table/list + `LargeTable` on 2nd+ row groups), #163 (smoke loader: deterministic
   ids, shared default variant), #164 (settled; B closes it with item 14c), #181 (decided: encrypt `internal` uploads now;
@@ -174,11 +175,10 @@ Worktrees: `../rag-main` (detached, for main checks) only.
 
 ## Next step
 
-1. **#180** (upload batches): approved after the envelope write and the idempotent commit; B must rebase it onto `main`
-   (it carries unsquashed #176/#178 commits) and merge. Stream A's side of #181 is merged (#186).
-2. **#185** (API keys): changes requested, a department admin can mint an unscoped key on any (global) client; require
-   scopes for non-platform admins on create and update. Re-review on B's push; then switch §4.4 of the run book to
-   `POST /api/keys`. **#187** (filed): B's flaky `KnowledgeSecurityTests` (a cached key refused after the throttle).
+1. **B's admin surface (item 14):** #180 (uploads), #185 (keys) merged; #188 (site profiles), #189 (evaluation, member
+   groups), #190 (assistants) approved, waiting for B's merge. Then B announces **J7**; run the pilot set-up through Scalar
+   (item 20) with the user. The run book already issues keys through `POST /api/keys` (#192).
+2. **#187** (filed): B's flaky `KnowledgeSecurityTests` (a cached key refused after the throttle; product or test?).
 3. **Watch B:** #176 then #178 (merge order), the #178 should-fix (`source_paused`), #175 (`piiMode` admin side), item 14c
    (`/api/keys`, then the run book points to it), item 17's smoke loader (then stream A's `evaluation-smoke`).
 4. **The two held umea.se pages** in the m1 database need `clear-pii-flag` or a reprocess after setting the source to
@@ -196,7 +196,7 @@ Worktrees: `../rag-main` (detached, for main checks) only.
 8. Then the live block with the user (`plans/p1b/README.md` §5 step 4): the umea.se pilot crawl (personal-data dry run,
    `PiiOwnDomains` with the municipal companies' domains from the user).
 
-**Open issues to stream B:** #80, #90, #92, #95, #102, #114, #116, #129, #132, #134, #164, #175, #181, #187; also #52, #75.
+**Open issues to stream B:** #80, #90, #92, #95, #102, #114, #116, #129, #132, #134, #175, #187; also #52, #75.
 Stream A's own: #48, #51. For the user: #100 (L8 run steps).
 
 **Waiting on the user:** the municipal companies' e-mail domains for `PiiOwnDomains`; the gateway session (release 1 incl.
