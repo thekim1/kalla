@@ -30,7 +30,7 @@ package source had to be checked for this step.
 | 2 | Contract | OpenAI-compatible `/v1/models`, `/v1/chat/completions` (stream and not); unknown fields ignored, a fixed list refused; text content parts only (§3, answered 6) |
 | 3 | History | **The messages the client sends are authoritative for the prompt**; our store is a record for the user, review, feedback and retention. 0 SQL on the hot path (§11.3). **P1 pilot: history mode `none`** until A1 is answered: metadata and ratings only (§11.2) |
 | 4 | Open WebUI tasks | One connection only (ours); Open WebUI title, tag and follow-up generation **switched off**; no task model of ours (§4.2, §4.3) |
-| 5 | Condense | On by default, **follow-ups only**, skipped when the question is self-contained (length, no anaphora); one call ≤ 96 output tokens to `Settings.Chat.CondenseModel` (a small instruct model: `Eu` until register M2, then on-prem), hard **600 ms** timeout, falls back to the raw question (§5, answered 1) |
+| 5 | Condense | On by default, **follow-ups only**, skipped when the question is self-contained (length, no anaphora); one call ≤ 96 output tokens to `Settings.Chat.CondenseModel` (a small instruct model, reasoning off: `Eu` until register M2, then on-prem), hard **1,200 ms** timeout on the EU route, falls back to the raw question (§5, answered 1) |
 | 6 | History window | Last **10 messages, ≤ 4,000 tokens**, oldest dropped first, old markers stripped, sources never resent; per assistant (§6.3, answered 2) |
 | 7 | Prompt budget | Character estimate (÷ 3, Swedish-safe) against the assistant's `ContextTokens`; fixed priority: frame + question + answer reserve, then sources, then history (§6.3) |
 | 8 | Sources | In the final user message as `<source n="…">` blocks marked untrusted; numbered per document by best rank (knowledge §10.4); `</source` neutralised (§7) |
@@ -248,7 +248,7 @@ As knowledge §3.7: `AddOpenApi("chat", …)` with typed results, `WithTags("Cha
 | 6 | Conversation key | §11.1: Open WebUI chat id or verified issued id or new id; **no SQL** | 404 |
 | 7 | Effective level | history-keeping client (`Clients.StoresHistory`): max(assistant level, client ceiling) on **every** turn; else the assistant's level (§8.2); ceiling header and key from it | – |
 | 8 | Language | `LanguageGuess` on the question (§10.3) | – |
-| 9 | Condense | follow-ups that are not self-contained (§5) | 600 ms timeout → raw question |
+| 9 | Condense | follow-ups that are not self-contained (§5) | `Chat:CondenseTimeout` (1,200 ms on the EU route) → raw question |
 | 10 | Retrieve | `IRetriever.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, null, TopK, Hybrid, filters, Section, Chat, true, RunId: messageId))` (knowledge §2.2) | `RetrievalDeniedException` → OpenAI code; 503 `search_unavailable` |
 | 11 | Coverage | §6.2: `Low` → §10.1 fixed text (no model call) unless condense failed; `Unknown` with zero results → §10.2 unavailable text; else continue | – |
 | 12 | Prompt | §6.3 budget, §7 template | 400 `context_length_exceeded` |
@@ -314,8 +314,8 @@ request `include_usage` (`ow/main.py:1243-1244`, capabilities from model info `:
 | Input | the last ≤ 6 messages before the question, user messages ≤ 500 characters each, assistant messages ≤ 600 characters with `[n]` markers and links removed; plus the question; total ≤ 4,000 characters |
 | Model | `Settings.Chat.CondenseModel` = the gateway alias of a small instruct model, one platform-wide value (a per-assistant override comes with the assistant forms). Until on-prem model hardware exists (register M2) it is called at ceiling `Eu`, never above the turn's own ceiling; a turn with ceiling `OnPrem` gets no condense and uses the raw question (the fallback below). It moves to `OnPrem` for every level when the hardware exists |
 | Why this model | once on-prem (from M2), `OnPrem` satisfies every level, so one model serves all assistants and no residency branch exists; rewriting a question is a small-model task (short output, no knowledge needed); on-prem GPUs avoid an extra internet round trip; the cost is negligible next to the answer |
-| Call | non-streaming `/v1/chat/completions`, `temperature: 0`, `max_tokens: 96`, headers as §8.1 with `x-ume-max-residency` as in the Model row (`Eu` until M2, then `OnPrem`) and `x-ume-step: condense` |
-| Budget | `Chat:CondenseTimeout` **600 ms** hard timeout (no retry) |
+| Call | non-streaming `/v1/chat/completions`, `max_tokens: 96`, no `temperature`, and `reasoning_effort` = `Settings.Chat.CondenseReasoningEffort` when set (**`none`** for the EU model: a reasoning model otherwise spends the 96 tokens on hidden reasoning), headers as §8.1 with `x-ume-max-residency` as in the Model row (`Eu` until M2, then `OnPrem`) and `x-ume-step: condense` |
+| Budget | `Chat:CondenseTimeout` **1,200 ms** hard timeout (no retry) while the model is on the EU route (`gpt-6-luna` with reasoning off answers in ≈ 0.8 s, P1 item 19); 600 ms once it is on-prem |
 | Accept the output if | 2–400 characters after trim, one line, not a refusal pattern, no `### Task`, residency within the call's ceiling, PII header absent or `detected` |
 | Otherwise | the raw question is used for retrieval and coverage `Low` is not turned into the not-found text (§6.2); outcome counted (`timeout`, `error`, `residency`, `rejected`) |
 | Use | **retrieval only**: the answer prompt keeps the user's own question and history (§7), so a bad rewrite can only make retrieval worse, never change what the user asked |
@@ -929,7 +929,7 @@ typed text: accepted for the pilot, since its content stays within the user's ow
 | Prompt building, budget, serialisation | ≤ 2 ms | ≤ 8,000 source tokens + history |
 | Gateway request write → our first byte after the gateway's first event | ≤ 2 ms | header checks, first chunk rewrite, flush |
 | **Chat overhead** | **< 10 ms** | everything except condense, retrieval and the gateway's own TTFT |
-| Condense (follow-ups that are not self-contained) | ≤ 400 ms, cut at 600 ms | small model (`Eu` until M2, then on-prem), ≤ 96 output tokens (*to measure*, §22) |
+| Condense (follow-ups that are not self-contained) | EU route: ≤ 900 ms, cut at 1,200 ms; on-prem: ≤ 400 ms, cut at 600 ms | small model with reasoning off (`Eu` until M2, then on-prem), ≤ 96 output tokens; EU measured ≈ 0.8 s (`gpt-6-luna`, P1 item 19) |
 | Retrieval | ≤ 90 ms miss / ≤ 40 ms hit | knowledge §11 |
 | Answer model TTFT through the gateway | model-dependent | gateway adds ≈ 1.3 ms (`docs/performance.md:298-311`) |
 
