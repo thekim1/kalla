@@ -1,0 +1,517 @@
+using System.ComponentModel.DataAnnotations;
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
+using Ume.Rag.Domain;
+using Ume.Rag.Domain.Admin;
+using Ume.Rag.Domain.Entities;
+using Ume.Rag.Domain.Ports;
+using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.Pipelines.Json;
+using Ume.Rag.Retrieval;
+
+namespace Ume.Rag.AdminApi;
+
+/// <summary>
+/// Collections (admin design §4.5 "Collections and retrieval", P1a item 14): list, create, read with <c>usedBy</c>, change,
+/// delete, publish and retrieval settings (V16, with an advisory evaluation run). Department-scoped: a collection outside
+/// the caller's departments is 404. Shares (V11) are P2: a collection is its own department's.
+/// </summary>
+public static class CollectionEndpoints
+{
+    public static RouteGroupBuilder MapCollections(this RouteGroupBuilder api)
+    {
+        ArgumentNullException.ThrowIfNull(api);
+        var collections = api.MapGroup("/collections").WithTags("Collections");
+
+        collections.MapGet("", async ([AsParameters] PageQuery page, AdminContext admin, CancellationToken ct) =>
+            {
+                var query = Scoped(admin);
+                if (!string.IsNullOrWhiteSpace(page.Q))
+                {
+                    var q = $"%{page.Q.Trim()}%";
+                    query = query.Where(c => EF.Functions.ILike(c.Name, q) || EF.Functions.ILike(c.Slug, q));
+                }
+
+                var total = await query.CountAsync(ct);
+                var items = await query.OrderBy(c => c.Name).Skip(page.Skip).Take(page.Take)
+                    .Select(c => new CollectionSummary(c.Id, c.Slug, c.Name, c.DepartmentId, c.Classification, c.PublishedAt)).ToListAsync(ct);
+                return new PageDto<CollectionSummary>(items, total);
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("ListCollections").WithSummary("Collections of the caller's departments");
+
+        collections.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) =>
+            {
+                var collection = await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                return CollectionDto.Of(collection, await UsedByAsync(admin, id, ct));
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("GetCollection").WithSummary("One collection with the assistants that link it");
+
+        collections.MapPost("", async (CollectionCreateRequest request, AdminContext admin, CancellationToken ct) =>
+            {
+                var created = await admin.WriteAsync(async attempt =>
+                {
+                    await CheckDepartmentAsync(admin, request.DepartmentId, request.OwnerTeamId, attempt);
+                    var profile = await admin.Db.EmbeddingProfiles.AsNoTracking().Where(p => p.IsDefault && p.State == EmbeddingProfileStates.Active)
+                        .Select(p => (Guid?)p.Id).FirstOrDefaultAsync(attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NoEmbeddingProfile);
+                    var collection = new Collection
+                    {
+                        Slug = string.IsNullOrWhiteSpace(request.Slug) ? Slugs.From(request.Name) : request.Slug,
+                        Name = request.Name.Trim(),
+                        DepartmentId = request.DepartmentId,
+                        OwnerTeamId = request.OwnerTeamId,
+                        Classification = request.Classification,
+                        EmbeddingProfileId = profile,
+                        UpdatedAt = admin.Now,
+                        UpdatedBy = admin.Actor,
+                    };
+                    admin.Db.Collections.Add(collection);
+                    return new AdminChange<Collection>(collection, "create", AuditEntityTypes.Collection, collection.Id, null, CollectionAudit.Of(collection))
+                    {
+                        DepartmentId = collection.DepartmentId, Classification = collection.Classification,
+                    };
+                }, ct);
+                return Results.Created($"/api/collections/{created.Id}", CollectionDto.Of(created, []));
+            })
+            .RequireAuthorization(AdminPolicies.Edit).WithName("CreateCollection").WithSummary("Create a collection on the default embedding profile");
+
+        collections.MapPut("/{id:guid}", async (Guid id, CollectionUpdateRequest request, AdminContext admin, CancellationToken ct) =>
+            {
+                var saved = await admin.WriteAsync(async attempt =>
+                {
+                    var collection = await LoadAsync(admin, id, attempt);
+                    admin.ExpectVersion(collection, request.Version);
+                    await CheckDepartmentAsync(admin, collection.DepartmentId, request.OwnerTeamId, attempt);
+                    var before = CollectionAudit.Of(collection);
+                    if (request.Classification != collection.Classification)
+                    {
+                        await CheckLevelChangeAsync(admin, collection, request.Classification, attempt);
+                    }
+
+                    collection.Name = request.Name.Trim();
+                    collection.OwnerTeamId = request.OwnerTeamId;
+                    collection.Classification = request.Classification;
+                    collection.UpdatedAt = admin.Now;
+                    collection.UpdatedBy = admin.Actor;
+                    return new AdminChange<Collection>(collection, "update", AuditEntityTypes.Collection, collection.Id, before, CollectionAudit.Of(collection))
+                    {
+                        DepartmentId = collection.DepartmentId, Classification = collection.Classification,
+                    };
+                }, ct);
+                return CollectionDto.Of(saved, await UsedByAsync(admin, id, ct));
+            })
+            .RequireAuthorization(AdminPolicies.Edit).WithName("UpdateCollection").WithSummary("Change a collection's name, owner team or level (V2, V3)");
+
+        collections.MapDelete("/{id:guid}", async (Guid id, [Microsoft.AspNetCore.Mvc.FromQuery] string? version, AdminContext admin, CancellationToken ct) =>
+            {
+                await admin.WriteAsync(async attempt =>
+                {
+                    var collection = await LoadAsync(admin, id, attempt);
+                    admin.ExpectVersion(collection, version);
+                    var users = await UsedByAsync(admin, id, attempt);
+                    var sources = await admin.Db.Sources.AsNoTracking().Where(s => s.CollectionId == id && s.DeletedAt == null).Select(s => s.Name).ToListAsync(attempt);
+                    if (users.Count > 0 || sources.Count > 0)
+                    {
+                        throw AdminFaults.Of(AdminErrorCodes.CollectionInUse, extensions: new Dictionary<string, object?>
+                        {
+                            ["affected"] = users.Select(u => u.Name).Concat(sources).ToList(),
+                            ["usedBy"] = users,
+                            ["sources"] = sources,
+                        });
+                    }
+
+                    var before = CollectionAudit.Of(collection);
+                    collection.DeletedAt = admin.Now;
+                    collection.UpdatedAt = admin.Now;
+                    collection.UpdatedBy = admin.Actor;
+                    return new AdminChange<bool>(true, "delete", AuditEntityTypes.Collection, collection.Id, before, null)
+                    {
+                        DepartmentId = collection.DepartmentId, Classification = collection.Classification,
+                    };
+                }, ct);
+                return Results.NoContent();
+            })
+            .RequireAuthorization(AdminPolicies.Manage).WithName("DeleteCollection").WithSummary("Delete a collection no assistant and no source uses");
+
+        collections.MapPost("/{id:guid}/publish", async (Guid id, VersionRequest request, AdminContext admin, CancellationToken ct) =>
+            {
+                var saved = await admin.WriteAsync(async attempt =>
+                {
+                    var collection = await LoadAsync(admin, id, attempt);
+                    admin.ExpectVersion(collection, request.Version);
+                    var before = CollectionAudit.Of(collection);
+                    collection.PublishedAt ??= admin.Now;
+                    collection.UpdatedAt = admin.Now;
+                    collection.UpdatedBy = admin.Actor;
+                    return new AdminChange<Collection>(collection, "publish", AuditEntityTypes.Collection, collection.Id, before, CollectionAudit.Of(collection))
+                    {
+                        DepartmentId = collection.DepartmentId, Classification = collection.Classification,
+                    };
+                }, ct);
+                return CollectionDto.Of(saved, await UsedByAsync(admin, id, ct));
+            })
+            .RequireAuthorization(AdminPolicies.Manage).WithName("PublishCollection").WithSummary("Publish a collection (visible to retrieval); never blocked");
+
+        collections.MapPut("/{id:guid}/retrieval-settings", async (Guid id, RetrievalSettingsRequest request, AdminContext admin, CancellationToken ct) =>
+            {
+                var settings = RetrievalSettingsRules.Normalize(request.Settings);
+                var platform = await admin.Db.Settings.AsNoTracking().Select(s => s.Retrieval).SingleOrDefaultAsync(ct);
+                var saved = await admin.WriteAsync(async attempt =>
+                {
+                    var collection = await LoadAsync(admin, id, attempt);
+                    admin.ExpectVersion(collection, request.Version);
+                    RetrievalSettingsRules.CheckResolves(platform, settings);
+                    var before = CollectionAudit.Of(collection);
+                    collection.RetrievalSettings = settings;
+                    collection.UpdatedAt = admin.Now;
+                    collection.UpdatedBy = admin.Actor;
+                    // The advisory evaluation run (§4.7): only when the collection has a set to run.
+                    var hasSet = await admin.Db.EvaluationSets.AsNoTracking().AnyAsync(s => s.CollectionId == id, attempt);
+                    return new AdminChange<Collection>(collection, "retrieval-settings", AuditEntityTypes.Collection, collection.Id, before,
+                        CollectionAudit.Of(collection))
+                    {
+                        DepartmentId = collection.DepartmentId,
+                        Classification = collection.Classification,
+                        Jobs = hasSet ? [EvaluationJob(collection)] : [],
+                    };
+                }, ct);
+                return CollectionDto.Of(saved, await UsedByAsync(admin, id, ct));
+            })
+            .RequireAuthorization(AdminPolicies.Edit).WithName("SetRetrievalSettings").WithSummary("Save retrieval settings (V16); starts an advisory evaluation run");
+
+        return api;
+    }
+
+    /// <summary>The caller's collections that are not deleted (department scope, admin design §3.2).</summary>
+    public static IQueryable<Collection> Scoped(AdminContext admin)
+    {
+        ArgumentNullException.ThrowIfNull(admin);
+        var departments = admin.Departments().Select(d => d.Id);
+        return admin.Db.Collections.Where(c => c.DeletedAt == null && departments.Contains(c.DepartmentId));
+    }
+
+    /// <summary>A tracked collection in scope, or 404.</summary>
+    public static async Task<Collection> LoadAsync(AdminContext admin, Guid id, CancellationToken ct) =>
+        await Scoped(admin).SingleOrDefaultAsync(c => c.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+
+    /// <summary>The assistants whose published version or draft links the collection (admin design §4.5).</summary>
+    public static async Task<List<CollectionUser>> UsedByAsync(AdminContext admin, Guid id, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(admin);
+        var rows = await (from v in admin.Db.AssistantVersions.AsNoTracking()
+                          join a in admin.Db.Assistants.AsNoTracking() on v.AssistantId equals a.Id
+                          where v.CollectionIds.Contains(id) && (a.PublishedVersionId == v.Id || a.DraftVersionId == v.Id)
+                          select new { a.Id, a.Name, a.Classification, Published = a.PublishedVersionId == v.Id })
+            .ToListAsync(ct);
+        return [.. rows.GroupBy(r => r.Id).Select(g => new CollectionUser(g.Key, g.First().Name, g.First().Classification,
+            g.Any(r => r.Published), g.Any(r => !r.Published))).OrderBy(u => u.Name, StringComparer.Ordinal)];
+    }
+
+    /// <summary>The department must be one of the caller's; the owner team, when given, one of that department's.</summary>
+    private static async Task CheckDepartmentAsync(AdminContext admin, Guid departmentId, Guid? ownerTeamId, CancellationToken ct)
+    {
+        if (!await admin.Departments().AnyAsync(d => d.Id == departmentId, ct))
+        {
+            throw AdminFaults.Field("departmentId", AdminErrorCodes.NotInScope);
+        }
+
+        if (ownerTeamId is { } team && !await admin.Db.Teams.AnyAsync(t => t.Id == team && t.DepartmentId == departmentId, ct))
+        {
+            throw AdminFaults.Field("ownerTeamId", AdminErrorCodes.InvalidValue);
+        }
+    }
+
+    /// <summary>
+    /// V2: lowering below a live source's level is refused (<c>collection_level_conflict</c>); V3: raising above the level of
+    /// an assistant whose published version links it is refused (<c>assistant_below_collection</c>). Both list every
+    /// affected object in <c>affected</c>.
+    /// </summary>
+    private static async Task CheckLevelChangeAsync(AdminContext admin, Collection collection, string level, CancellationToken ct)
+    {
+        var rank = Levels.Rank(level);
+        var sources = (await admin.Db.Sources.AsNoTracking().Where(s => s.CollectionId == collection.Id && s.DeletedAt == null)
+                .Select(s => new { s.Name, s.Classification }).ToListAsync(ct))
+            .Where(s => Levels.Rank(s.Classification) > rank).Select(s => s.Name).ToList();
+        if (sources.Count > 0)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.CollectionLevelConflict, new Dictionary<string, string> { ["level"] = level },
+                new Dictionary<string, object?> { ["affected"] = sources });
+        }
+
+        var assistants = (await UsedByAsync(admin, collection.Id, ct))
+            .Where(u => u.Published && Levels.Rank(u.Classification) < rank).Select(u => u.Name).ToList();
+        if (assistants.Count > 0)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.AssistantBelowCollection, new Dictionary<string, string> { ["collection"] = collection.Name, ["level"] = level },
+                new Dictionary<string, object?> { ["affected"] = assistants });
+        }
+    }
+
+    private static JobRequest EvaluationJob(Collection collection) =>
+        new(JobClasses.Eval, collection.DepartmentId, collection.Classification,
+            JsonSerializer.Serialize(new EvalOnDemandPayload { CollectionId = collection.Id }, ContractJson.Options))
+        {
+            DedupKey = JobDedupKeys.Eval(collection.Id),
+            TeamId = collection.OwnerTeamId,
+        };
+}
+
+/// <summary>V16 (admin design §4.6): the keys of knowledge design §12.1 and their ranges, as the retrieval reads them.</summary>
+public static class RetrievalSettingsRules
+{
+    private static readonly HashSet<string> Keys = new(StringComparer.Ordinal)
+    {
+        "vectorWeight", "keywordWeight", "candidates", "maxChunksPerDocument", "recency", "coverageMaxDistance", "coverageMinKeywordScore", "expandMaxTokens",
+    };
+
+    /// <summary>A <c>Chunks.DocumentType</c> value (processing design §6.5: <c>page</c>, <c>pdf</c>, … or a metadata rule's own).</summary>
+    private static readonly System.Text.RegularExpressions.Regex DocumentType = new("^[a-z][a-z0-9-]{0,29}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>The settings object checked against V16 and written back compactly; refusals are 400 <c>retrieval_settings_invalid</c> per field.</summary>
+    public static string Normalize(JsonElement settings)
+    {
+        if (settings.ValueKind != JsonValueKind.Object)
+        {
+            throw Invalid("settings", "an object");
+        }
+
+        var json = JsonNode.Parse(settings.GetRawText())!.AsObject();
+        foreach (var (key, value) in json)
+        {
+            switch (key)
+            {
+                case "vectorWeight" or "keywordWeight":
+                    Range(key, value, 0, 5);
+                    break;
+                case "candidates":
+                    Range(key, value, 20, 200, integer: true);
+                    break;
+                case "maxChunksPerDocument":
+                    Range(key, value, 1, 10, integer: true);
+                    break;
+                case "coverageMaxDistance":
+                    Range(key, value, 0.05, 1.0);
+                    break;
+                case "coverageMinKeywordScore":
+                    if (value is not null && (Number(key, value) is var score && score <= 0))
+                    {
+                        throw Invalid(key, "null or greater than 0");
+                    }
+
+                    break;
+                case "expandMaxTokens":
+                    Range(key, value, 0, 4000, integer: true);
+                    break;
+                case "recency":
+                    Recency(value);
+                    break;
+                default:
+                    if (!Keys.Contains(key))
+                    {
+                        throw Invalid(key, "a retrieval setting (" + string.Join(", ", Keys) + ")");
+                    }
+
+                    break;
+            }
+        }
+
+        return json.ToJsonString();
+    }
+
+    /// <summary>The saved value must resolve as the knowledge role resolves it (over <c>Settings.Retrieval</c>).</summary>
+    public static void CheckResolves(string? platformJson, string collectionJson)
+    {
+        try
+        {
+            RetrievalSettingsResolver.Collection(RetrievalSettingsResolver.Platform(platformJson), collectionJson);
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException or InvalidOperationException or JsonException)
+        {
+            throw Invalid("settings", "valid with the platform's retrieval defaults");
+        }
+    }
+
+    private static void Recency(JsonNode? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        if (value is not JsonObject o || o.Any(p => p.Key is not ("halfLifeDays" or "weight" or "kinds")))
+        {
+            throw Invalid("recency", "null or { halfLifeDays, weight, kinds }");
+        }
+
+        Range("recency.halfLifeDays", o["halfLifeDays"], 30, 3650);
+        Range("recency.weight", o["weight"], 0, 0.5);
+        if (o["kinds"] is not JsonArray kinds || kinds.Count == 0 ||
+            kinds.Any(k => k is not JsonValue v || v.GetValueKind() != JsonValueKind.String || !DocumentType.IsMatch(v.GetValue<string>())))
+        {
+            throw Invalid("recency.kinds", "a non-empty list of document types");
+        }
+    }
+
+    private static void Range(string key, JsonNode? value, double min, double max, bool integer = false)
+    {
+        var number = Number(key, value);
+        if (number < min || number > max || (integer && number != Math.Floor(number)))
+        {
+            throw Invalid(key, string.Create(CultureInfo.InvariantCulture, $"{(integer ? "a whole number" : "a number")} from {min} to {max}"));
+        }
+    }
+
+    private static double Number(string key, JsonNode? value) =>
+        value is JsonValue v && v.GetValueKind() == JsonValueKind.Number ? v.GetValue<double>() : throw Invalid(key, "a number");
+
+    private static Ume.Rag.ServiceDefaults.ApiFaultException Invalid(string field, string expected) =>
+        AdminFaults.Field("settings." + field, AdminErrorCodes.RetrievalSettingsInvalid, new Dictionary<string, string> { ["field"] = field, ["expected"] = expected });
+}
+
+/// <summary>Slugs from names: lower-case ASCII letters, digits and single hyphens (Swedish letters folded), ≤ 100.</summary>
+public static class Slugs
+{
+    public static string From(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        var folded = name.Trim().ToLowerInvariant().Replace("å", "a", StringComparison.Ordinal).Replace("ä", "a", StringComparison.Ordinal)
+            .Replace("ö", "o", StringComparison.Ordinal).Normalize(NormalizationForm.FormD);
+        var slug = new StringBuilder();
+        foreach (var c in folded)
+        {
+            if (c is >= 'a' and <= 'z' or >= '0' and <= '9')
+            {
+                slug.Append(c);
+            }
+            else if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark && slug.Length > 0 && slug[^1] != '-')
+            {
+                slug.Append('-');
+            }
+        }
+
+        var result = slug.ToString().Trim('-');
+        result = result.Length > 100 ? result[..100].TrimEnd('-') : result;
+        return result.Length > 0 ? result : "samling";
+    }
+
+    public const string Pattern = "^[a-z0-9]+(-[a-z0-9]+)*$";
+}
+
+/// <summary><c>page</c> (from 1) and <c>pageSize</c> (≤ 200, default 50), and <c>q</c> (admin design §4.1).</summary>
+public sealed record PageQuery(int? Page, int? PageSize, string? Q)
+{
+    public int Take => Math.Clamp(PageSize ?? 50, 1, 200);
+
+    public int Skip => (Math.Max(Page ?? 1, 1) - 1) * Take;
+}
+
+public sealed record PageDto<T>(IReadOnlyList<T> Items, int Total);
+
+public sealed record CollectionSummary(Guid Id, string Slug, string Name, Guid DepartmentId, string Classification, DateTimeOffset? PublishedAt);
+
+/// <summary>An assistant that links a collection: through its published version, its draft, or both.</summary>
+public sealed record CollectionUser(Guid Id, string Name, string Classification, bool Published, bool Draft);
+
+public sealed record CollectionDto(
+    Guid Id, string Slug, string Name, Guid DepartmentId, Guid? OwnerTeamId, string Classification, Guid EmbeddingProfileId, JsonElement RetrievalSettings,
+    DateTimeOffset? PublishedAt, IReadOnlyList<CollectionUser> UsedBy, DateTimeOffset UpdatedAt, string? UpdatedBy, string Version)
+{
+    public static CollectionDto Of(Collection c, IReadOnlyList<CollectionUser> usedBy)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        using var settings = JsonDocument.Parse(c.RetrievalSettings);
+        return new(c.Id, c.Slug, c.Name, c.DepartmentId, c.OwnerTeamId, c.Classification, c.EmbeddingProfileId, settings.RootElement.Clone(), c.PublishedAt,
+            usedBy, c.UpdatedAt, c.UpdatedBy, c.Version.ToString(CultureInfo.InvariantCulture));
+    }
+}
+
+public sealed record CollectionAudit(
+    Guid Id, string Slug, string Name, Guid DepartmentId, Guid? OwnerTeamId, string Classification, Guid EmbeddingProfileId, string RetrievalSettings,
+    DateTimeOffset? PublishedAt)
+{
+    public static CollectionAudit Of(Collection c) => new(c.Id, c.Slug, c.Name, c.DepartmentId, c.OwnerTeamId, c.Classification, c.EmbeddingProfileId,
+        c.RetrievalSettings, c.PublishedAt);
+}
+
+public sealed record CollectionCreateRequest : AdminRequest, IValidatableObject
+{
+    [Required, StringLength(200, MinimumLength = 1)]
+    public string Name { get; init; } = "";
+
+    /// <summary>Empty: made from the name.</summary>
+    [StringLength(100), RegularExpression(Slugs.Pattern)]
+    public string? Slug { get; init; }
+
+    [Required]
+    public Guid DepartmentId { get; init; }
+
+    public Guid? OwnerTeamId { get; init; }
+
+    [Required]
+    public string Classification { get; init; } = "";
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (DepartmentId == Guid.Empty)
+        {
+            yield return new ValidationResult("The department is required.", [nameof(DepartmentId)]);
+        }
+
+        if (!Domain.Classification.IsValid(Classification))
+        {
+            yield return new ValidationResult($"The level must be one of {string.Join(", ", Domain.Classification.All)}.", [nameof(Classification)]);
+        }
+    }
+}
+
+public sealed record CollectionUpdateRequest : AdminRequest, IValidatableObject
+{
+    [Required, StringLength(200, MinimumLength = 1)]
+    public string Name { get; init; } = "";
+
+    public Guid? OwnerTeamId { get; init; }
+
+    [Required]
+    public string Classification { get; init; } = "";
+
+    [Required]
+    public string? Version { get; init; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (!Domain.Classification.IsValid(Classification))
+        {
+            yield return new ValidationResult($"The level must be one of {string.Join(", ", Domain.Classification.All)}.", [nameof(Classification)]);
+        }
+    }
+}
+
+/// <summary>A state action's body: the <c>version</c> the caller read (admin design §4.3).</summary>
+public sealed record VersionRequest : AdminRequest
+{
+    [Required]
+    public string? Version { get; init; }
+}
+
+public sealed record RetrievalSettingsRequest : AdminRequest
+{
+    /// <summary>The collection's <c>RetrievalSettings</c> (knowledge design §12.1); keys left out fall back to <c>Settings.Retrieval</c>.</summary>
+    public JsonElement Settings { get; init; }
+
+    [Required]
+    public string? Version { get; init; }
+}
+
+/// <summary>The level order <c>public &lt; internal &lt; sensitive</c> (admin design §4.6).</summary>
+public static class Levels
+{
+    public static int Rank(string level) => level switch
+    {
+        Classification.Public => 0,
+        Classification.Internal => 1,
+        Classification.Sensitive => 2,
+        _ => throw new ArgumentOutOfRangeException(nameof(level), level, "Unknown level."),
+    };
+}
