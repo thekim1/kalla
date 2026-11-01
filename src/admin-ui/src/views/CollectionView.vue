@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, DocumentSummary, Source, SourceSummary } from '@/api/types'
 import SourceDrawer from '@/components/sources/SourceDrawer.vue'
@@ -26,6 +27,7 @@ type Tab = 'overview' | 'sources' | 'documents'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
+const router = useRouter()
 const collection = useLoadable<Collection | null>(null)
 const sources = useLoadable<SourceSummary[]>([])
 const documents = useLoadable<DocumentSummary[]>([])
@@ -93,7 +95,12 @@ async function publish(): Promise<void> {
 
 function sourceSaved(source: Source, syncing: boolean): void {
   ui.notify(syncing ? SOURCE.saved(source.name) : SOURCE.savedNoSync(source.name))
-  void sources.run(() => api.collections.sources(props.id))
+  // §5.4 step 6: from saving to the source page, where the run shows.
+  void router.push({ name: 'source', params: { id: source.id } })
+}
+
+function openSource(source: SourceSummary): void {
+  void router.push({ name: 'source', params: { id: source.id } })
 }
 
 watch(tab, (t) => {
@@ -137,7 +144,7 @@ onMounted(load)
           <UiButton variant="primary" icon="add" data-test="add-source" @click="adding = true">{{ SOURCE.add }}</UiButton>
         </div>
         <AsyncState :loading="sources.loading.value" :error="sources.error.value" :empty="sources.data.value.length === 0" :empty-text="COLLECTION.noSources" @retry="load">
-          <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources">
+          <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources" clickable @row-click="openSource">
             <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
             <template #cell-type="{ row }">{{ SOURCE_TYPE_LABEL[row.type as SourceSummary['type']] }}</template>
             <template #cell-state="{ row }">{{ COLLECTION.sourceStates[row.state] ?? row.state }}</template>

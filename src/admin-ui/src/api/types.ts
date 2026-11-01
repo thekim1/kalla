@@ -88,9 +88,9 @@ export interface Page<T> {
   total: number
 }
 
-export interface KeysetPage<T> {
+export interface KeysetPage<T, K = string> {
   items: T[]
-  next: string | null
+  next: K | null
 }
 
 export interface CollectionSummary {
@@ -198,4 +198,65 @@ export interface PreflightResult {
   checks: { check: string; state: CheckState; code: string; target?: string | null }[]
   estimatedPages?: number | null
   cms?: string | null
+}
+
+export interface RunSummary {
+  id: string
+  kind: string
+  trigger: string
+  state: string
+  phase: string | null
+  added: number
+  updated: number
+  unchanged: number
+  deleted: number
+  failed: number
+  proposedDeletions: number
+  costUsd: number
+  startedAt: IsoDateTime
+  finishedAt: IsoDateTime | null
+}
+
+/** A crawl run's report (worker `CrawlSourceRunner`): completeness, the verdict, removal checks and demote counts. */
+export interface CrawlReport {
+  completeness?: { complete: boolean; reasons: string[]; seeds: number; seedsResolved: number; seedsFailed: number; incremental: boolean }
+  verdict?: { runFailure: string | null; runDegradation: string | null }
+  [section: string]: unknown
+}
+
+export interface Run {
+  run: RunSummary
+  sourceId: string
+  pipelineVersionId: string | null
+  scheduledFor: IsoDateTime | null
+  report: CrawlReport | null
+}
+
+export interface RunItem {
+  id: number
+  createdAt: IsoDateTime
+  documentId: string | null
+  identity: string
+  outcome: string
+  reason: string | null
+  strategy: string | null
+  durationMs: number | null
+  costUsd: number | null
+}
+
+export interface PiiReport {
+  applies: boolean
+  piiMode: string
+  collectionClassification: Level
+  documents: {
+    documentId: string
+    title: string | null
+    url: string | null
+    displayName: string | null
+    state: 'held' | 'live'
+    previousVersionLive: boolean
+    counts: Record<string, number>
+    rulesFired: number
+  }[]
+  truncated: boolean
 }

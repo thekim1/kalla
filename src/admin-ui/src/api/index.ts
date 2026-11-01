@@ -11,6 +11,10 @@ import type {
   Job,
   OrgSyncStatus,
   Page,
+  PiiReport,
+  Run,
+  RunItem,
+  RunSummary,
   Source,
   SourceCreate,
   SourceSummary,
@@ -41,8 +45,15 @@ export const api = {
   sources: {
     get: (id: string) => http.get<Source>(`/api/sources/${id}`),
     sync: (id: string) => http.post<SyncStarted>(`/api/sources/${id}/sync`),
+    runs: (id: string, after?: string) => http.get<KeysetPage<RunSummary>>(`/api/sources/${id}/runs`, { after, limit: 20 }),
+    piiReport: (id: string) => http.get<PiiReport>(`/api/sources/${id}/pii-report`),
     preflight: (body: { collectionId: string; type: string; settings: Record<string, unknown> }) =>
       http.post<{ jobId: string }>('/api/sources/preflight', body),
+  },
+  runs: {
+    get: (id: string) => http.get<Run>(`/api/runs/${id}`),
+    items: (id: string, query: { outcome?: string; after?: number; limit?: number } = {}) =>
+      http.get<KeysetPage<RunItem, number>>(`/api/runs/${id}/items`, query),
   },
   jobs: {
     get: <T = unknown>(id: string) => http.get<Job<T>>(`/api/jobs/${id}`),
