@@ -47,8 +47,14 @@ public static class AdminErrorCodes
     /// <summary>V8: the gateway's <c>/v1/models</c> at <c>{ceiling}</c> does not list <c>{model}</c> (also while its targets are drained).</summary>
     public static AdminErrorCode ModelNotListed { get; } = new("model_not_listed", 409, "The AI gateway does not offer {model} at {ceiling} right now. Try again later.");
 
-    /// <summary>V8: the gateway could not be asked (unreachable, 5xx, or this service holds no key for <c>{ceiling}</c>); retry.</summary>
+    /// <summary>V8: the gateway could not be asked (unreachable, 5xx, a refused key); retry.</summary>
     public static AdminErrorCode GatewayUnavailable { get; } = new("gateway_unavailable", 503, "The AI gateway could not be reached to check the model. Try again.");
+
+    /// <summary>
+    /// V8: this service holds no gateway key for <c>{ceiling}</c>, so the model cannot be checked or called there (#237): a
+    /// deployment setting (<c>Gateway:Keys:{ceiling}</c>, or <c>Gateway:MaxResidency</c> under M2), not a retry.
+    /// </summary>
+    public static AdminErrorCode GatewayKeyMissing { get; } = new("gateway_key_missing", 503, "No AI gateway key is configured for {ceiling}, so {model} cannot be checked there.");
 
     /// <summary>V29: a data-protection policy breaks a rule (history modes, encryption, retention, blob key).</summary>
     public static AdminErrorCode PolicyRule { get; } = new("policy_rule", 400, "The data protection policy breaks a rule: {rule}");
@@ -186,7 +192,7 @@ public static class AdminErrorCodes
 
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
-            GatewayUnavailable, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
+            GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
             RetrievalSettingsInvalid, SourceAboveCollection, SourceSettingsInvalid, ImpactNotConfirmed, TemplateUnsupported, AdminOnly, RunNotActive,
             NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
