@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { Collection, DocumentSummary, SourceSummary } from '@/api/types'
+import type { Collection, DocumentSummary, Source, SourceSummary } from '@/api/types'
+import SourceDrawer from '@/components/sources/SourceDrawer.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
@@ -16,7 +17,7 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime } from '@/utils/format'
-import { COLLECTION, COLLECTIONS, LEVEL_LABEL, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { COLLECTION, COLLECTIONS, LEVEL_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
 // Kunskapsbank (admin design §5.5.2): Översikt (state, used by), Källor, Dokument with the personal-data filter
@@ -37,10 +38,14 @@ const usedBy = computed(() =>
   (collection.data.value?.usedBy ?? []).map((u) => (u.published ? u.name : `${u.name} (${COLLECTION.draftOnly})`)).join(', '),
 )
 const canPublish = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
+const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
+const adding = ref(false)
+let documentsRequest = 0
 
 const tabs = computed(() => [
   { value: 'overview' as const, label: COLLECTION.tabs.overview },
-  { value: 'sources' as const, label: `${COLLECTION.tabs.sources} (${sources.data.value.length})` },
+  // The count only once loaded (#279 review: no "(0)" while loading).
+  { value: 'sources' as const, label: sources.loaded.value ? `${COLLECTION.tabs.sources} (${sources.data.value.length})` : COLLECTION.tabs.sources },
   { value: 'documents' as const, label: COLLECTION.tabs.documents },
 ])
 const sourceColumns: Column[] = [
@@ -57,8 +62,11 @@ const documentColumns: Column[] = [
 async function loadDocuments(append = false): Promise<void> {
   const after = append ? next.value ?? undefined : undefined
   const previous = append ? documents.data.value : []
+  // Only the newest request's answer is kept (#279 review: toggling the filter while a page loads raced two requests).
+  const mine = ++documentsRequest
   await documents.run(async () => {
     const page = await api.documents.list({ collectionId: props.id, pii: onlyPii.value ? 'flagged' : undefined, after, limit: 50 })
+    if (mine !== documentsRequest) return documents.data.value
     next.value = page.next
     return [...previous, ...page.items]
   })
@@ -81,6 +89,11 @@ async function publish(): Promise<void> {
   } finally {
     publishing.value = false
   }
+}
+
+function sourceSaved(source: Source, syncing: boolean): void {
+  ui.notify(syncing ? SOURCE.saved(source.name) : SOURCE.savedNoSync(source.name))
+  void sources.run(() => api.collections.sources(props.id))
 }
 
 watch(tab, (t) => {
@@ -120,6 +133,9 @@ onMounted(load)
       </div>
 
       <div v-else-if="tab === 'sources'" id="collection-panel-sources" role="tabpanel" aria-labelledby="collection-tab-sources">
+        <div v-if="canEdit" class="mb-4 flex justify-end">
+          <UiButton variant="primary" icon="add" data-test="add-source" @click="adding = true">{{ SOURCE.add }}</UiButton>
+        </div>
         <AsyncState :loading="sources.loading.value" :error="sources.error.value" :empty="sources.data.value.length === 0" :empty-text="COLLECTION.noSources" @retry="load">
           <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources">
             <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
@@ -153,6 +169,7 @@ onMounted(load)
           <UiButton v-if="next" class="mt-4" :loading="documents.loading.value" @click="loadDocuments(true)">{{ COLLECTION.more }}</UiButton>
         </AsyncState>
       </div>
+      <SourceDrawer v-model:open="adding" :collection="collection.data.value" @saved="sourceSaved" />
     </template>
   </AsyncState>
 </template>

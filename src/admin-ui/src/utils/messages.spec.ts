@@ -35,6 +35,10 @@ const WORKER_CODES = [
   'eval.unsupported', 'eval.invalid_payload', 'eval.no_questions', 'eval.invalid_candidate_settings', 'eval.invalid_settings',
   'eval.embedding_residency', 'eval.search_unavailable', 'eval.model_unset', 'eval.model_not_onprem', 'eval.no_onprem_key',
   'eval.unknown_kind',
+  // Preflight and fetch outcomes the source drawer shows (Preflight.cs, RawContentWriter.cs).
+  'robots.disallow', 'robots.unreachable', 'robots.noindex', 'sitemap.unavailable', 'sitemap.invalid', 'sitemap.too_large',
+  'sitemap.truncated', 'http.200', 'http.301', 'http.404', 'http.410', 'http.5xx', 'http.moved_out_of_scope', 'http.content_type',
+  'http.body_limit', 'http.unexpected', 'tls.invalid_certificate',
 ]
 
 describe('worker messages', () => {
