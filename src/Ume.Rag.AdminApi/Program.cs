@@ -69,6 +69,11 @@ builder.Services.AddScoped<GatewayModelCheck>();
 // The retrieval test (admin design §4.9): the search core on the process's data source, query embeddings on their own gateway client.
 builder.AddGatewayClient(Ume.Rag.Answering.GatewayQueryEmbedder.HttpClientName);
 builder.Services.AddSingleton<AdminRetrieval>();
+// The test panel (admin design §4.9): chat's gateway client and options, the panel over Ume.Rag.Answering's chat pipeline.
+builder.AddGatewayClient(Ume.Rag.Answering.Chat.GatewayChatClient.HttpClientName);
+builder.Services.AddOptions<Ume.Rag.Answering.Chat.ChatOptions>().BindConfiguration(Ume.Rag.Answering.Chat.ChatOptions.SectionName);
+builder.Services.AddSingleton<Ume.Rag.Answering.Chat.GatewayChatClient>();
+builder.Services.AddSingleton<AdminTestPanel>();
 builder.Services.AddHostedService<RetentionService>();
 builder.Services.AddRateLimiter(o =>
 {
@@ -80,6 +85,9 @@ builder.Services.AddRateLimiter(o =>
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0,
         }));
+    o.AddPolicy(AssistantTestEndpoints.RatePolicy, http => RateLimitPartition.GetFixedWindowLimiter(
+        http.User.Identity?.IsAuthenticated == true ? AdminActor.SubjectOf(http.User) : http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = AssistantTestEndpoints.QuestionsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     o.RejectWithProblem("Too many requests. Wait a minute.");
 });
 builder.AddAdminAuthentication();
@@ -121,6 +129,7 @@ api.MapAudit();
 api.MapExplainAccess();
 api.MapPreviews();
 api.MapTestRetrieval();
+api.MapAssistantTest();
 api.MapUploads();
 api.MapKeys();
 api.MapOrganisation();
