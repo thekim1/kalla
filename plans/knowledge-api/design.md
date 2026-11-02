@@ -702,7 +702,9 @@ walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Itera
   embeddings), compares the approximate top 10 with the exact top 10, and records recall as
   `rag.retrieval.hnsw_recall{profile}`. Below **0.95** it runs `REINDEX INDEX CONCURRENTLY` on that profile's index
   (one at a time, `command` class, audited as a system action; the worker role holds `MAINTAIN` on
-  `content."Chunks"` (Postgres 17) and the statement runs with `statement_timeout = 0`) and measures again. Both bounds are
+  `content."Chunks"` (Postgres 17) and the statement runs with `statement_timeout = 0`) and measures again. An interrupted
+  rebuild leaves an invalid `…_ccnew` index the worker cannot drop; the migration service (the owner) drops invalid
+  `IX_Chunks_Embedding_*_ccnew*` indexes on every run. Both bounds are
   `Settings.Retrieval.hnswRecallFloor` and `hnswCheckSample`.
 
 The HNSW settings are **role defaults** (`ALTER ROLE ume_rag_api IN DATABASE ragdb SET hnsw.ef_search = 100`, same for
