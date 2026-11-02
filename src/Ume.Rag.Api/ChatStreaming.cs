@@ -39,6 +39,8 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
             id, @object = "chat.completion.chunk", created, model = plan.Model, choices = new[] { new { index = 0, delta, finish_reason = finish } },
         };
 
+        // The per-token content events, written without a string or an object per token (#333 finding 4).
+        using var content = new SseChunk();
         using (gateway)
         {
             try
@@ -72,7 +74,7 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
                     switch (item)
                     {
                         case GatewayStreamEvent.Delta delta:
-                            await PiecesAsync(response, transducer.Feed(delta.Text), caveat.Length, Chunk, ct);
+                            await PiecesAsync(response, transducer.Feed(delta.Text), caveat.Length, Chunk, content, id, created, ct);
                             break;
                         case GatewayStreamEvent.Finish f:
                             finish = f.Reason;
@@ -83,7 +85,7 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
                     }
                 }
 
-                await PiecesAsync(response, transducer.Flush(), caveat.Length, Chunk, ct);
+                await PiecesAsync(response, transducer.Flush(), caveat.Length, Chunk, content, id, created, ct);
                 await WriteAsync(response, Chunk(new { }, finish), ct);
                 await UsageAsync(response, id, created, promptTokens, completionTokens, ct);
                 await DoneAsync(response, ct);
@@ -106,7 +108,8 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
         }
     }
 
-    private async Task PiecesAsync(HttpResponse response, IReadOnlyList<AnswerPiece> pieces, int shift, Func<object, string?, object> chunk, CancellationToken ct)
+    private async Task PiecesAsync(HttpResponse response, IReadOnlyList<AnswerPiece> pieces, int shift, Func<object, string?, object> chunk, SseChunk content,
+        string id, long created, CancellationToken ct)
     {
         foreach (var piece in pieces)
         {
@@ -116,9 +119,14 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
                     await WriteAsync(response, SourceEvent(first.Source), ct);
                     break;
                 case AnswerPiece.Text text when text.Content.Length > 0 || text.Annotations.Count > 0:
-                    object delta = openWebUi || text.Annotations.Count == 0
-                        ? new { content = text.Content }
-                        : new
+                    if (openWebUi || text.Annotations.Count == 0)
+                    {
+                        await response.Body.WriteAsync(content.Content(id, created, plan.Model, text.Content), ct);
+                        await response.Body.FlushAsync(ct);
+                        break;
+                    }
+
+                    object delta = new
                         {
                             content = text.Content,
                             annotations = text.Annotations.Select(a => new

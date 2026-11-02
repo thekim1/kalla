@@ -16,7 +16,7 @@ solution). Run it by hand:
 |---|---|---|
 | `RetrievalBenchmarks` | the .NET side of one search, with 100 and 200 candidates per list | `QueryNormalizer`, `SwedishDecompounder` (query), `Candidate`, `RrfFusion`, `RecencyAdjuster`, `DemoteAdjuster`, `ResultDiversifier`, `CoverageEvaluator`, `RetrievalEngine` over an in-memory index |
 | `PostgresRetrievalBenchmarks` | the database half of a search at 10,000 and 50,000 chunks of `vector(1024)` | statements K and V (exact and HNSW), `PostgresHydrator`, `RetrievalEngine` on Postgres (no embedding call) |
-| `ChatStreamBenchmarks` | per streamed token, for an answer of ≈ 400 deltas | `ChatService` reading the gateway's SSE, `AnswerTransducer`, `ChatStreaming` writing our SSE. Each `Current` benchmark copies the production code; its `Candidate` sizes a cheaper alternative |
+| `ChatStreamBenchmarks` | per streamed token, for an answer of ≈ 400 deltas | `GatewayStreamLine` (reading the gateway's SSE, as `ChatService` does), `AnswerTransducer`, `SseChunk` (writing our SSE, as `ChatSse` does) |
 | `ChatTurnBenchmarks` | once per turn, around retrieval | `ChatRequestParser`, `LanguageGuess`, `PromptBuilder`, `Citations` |
 | `AccessBenchmarks` | per request, with 10 and 1,000 assistants | `KeyHasher`, `AccessPolicy.Decide`, `AccessPolicy.Filter` (`/v1/models`) |
 | `IngestionBenchmarks` | per crawled page, on three umea.se fixture pages | `DocumentProcessor` (detect → extract → clean → chunk → personal data), and `Chunker`, `PiiPatterns`, `Bgem3TokenCounter`, `SwedishDecompounder`, `LanguageDetector` alone |

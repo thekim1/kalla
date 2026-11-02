@@ -89,62 +89,34 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
         total.CancelAfter(TimeSpan.FromSeconds(options.Value.MaxAnswerDurationSeconds));
         await using var body = await response.Content.ReadAsStreamAsync(total.Token);
         using var reader = new StreamReader(body);
+        // One idle timer for the stream, re-armed before each line (#333: a linked source and timer per line cost ≈ 1 KB each).
+        using var idle = CancellationTokenSource.CreateLinkedTokenSource(total.Token);
+        var idleTimeout = TimeSpan.FromSeconds(options.Value.StreamIdleTimeoutSeconds);
+        var events = new List<GatewayStreamEvent>(3);
         while (true)
         {
             string? line;
-            using (var idle = CancellationTokenSource.CreateLinkedTokenSource(total.Token))
-            {
-                idle.CancelAfter(TimeSpan.FromSeconds(options.Value.StreamIdleTimeoutSeconds));
-                try
-                {
-                    line = await reader.ReadLineAsync(idle.Token);
-                }
-                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-                {
-                    throw new ChatException(502, "stream_interrupted", "The model stopped answering.");
-                }
-            }
-
-            if (line is null || line == "data: [DONE]")
-            {
-                yield break;
-            }
-
-            if (!line.StartsWith("data:", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            JsonNode? chunk;
+            idle.CancelAfter(idleTimeout);
             try
             {
-                chunk = JsonNode.Parse(line.AsSpan(5).Trim().ToString());
+                line = await reader.ReadLineAsync(idle.Token);
             }
-            catch (JsonException)
-            {
-                throw new ChatException(502, "stream_interrupted", "The model's stream could not be read.");
-            }
-
-            if (chunk?["error"] is not null)
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
                 throw new ChatException(502, "stream_interrupted", "The model stopped answering.");
             }
 
-            var choice = chunk?["choices"] is JsonArray { Count: > 0 } choices ? choices[0] : null;
-            if (choice?["delta"]?["content"] is JsonValue content && content.GetValueKind() == JsonValueKind.String && content.GetValue<string>() is { Length: > 0 } text)
+            if (line is null || !GatewayStreamLine.Read(line, events))
             {
-                yield return new GatewayStreamEvent.Delta(text);
+                yield break;
             }
 
-            if (choice?["finish_reason"] is JsonValue finish && finish.GetValueKind() == JsonValueKind.String)
+            foreach (var item in events)
             {
-                yield return new GatewayStreamEvent.Finish(finish.GetValue<string>());
+                yield return item;
             }
 
-            if (chunk?["usage"] is JsonObject usage)
-            {
-                yield return new GatewayStreamEvent.Usage(usage["prompt_tokens"]?.GetValue<int>() ?? 0, usage["completion_tokens"]?.GetValue<int>() ?? 0);
-            }
+            events.Clear();
         }
     }
 

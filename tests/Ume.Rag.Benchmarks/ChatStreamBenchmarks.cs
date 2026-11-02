@@ -1,7 +1,4 @@
-using System.Buffers;
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;
 using Ume.Rag.Answering.Chat;
@@ -12,15 +9,14 @@ namespace Ume.Rag.Benchmarks;
 /// One streamed answer of about 250 words (≈ 400 deltas of one token each, as the gateway streams them), per stage of
 /// the chat path that runs once per delta (chat design §8–§9): reading the gateway's SSE line (<c>ChatService</c>'s
 /// <c>ReadAsync</c>), the <see cref="AnswerTransducer"/> (citations, link filter), and writing our SSE chunk
-/// (<c>ChatStreaming.WriteAsync</c>). Each <c>Current</c> benchmark copies the production code path; the matching
-/// <c>Candidate</c> one is a cheaper way to do the same work, there to size the possible gain.
+/// (<c>ChatSse</c>), all through the production code. Before #333 the same work took 1.11 ms / 2.08 MB upstream and
+/// 0.43 ms / 0.89 MB downstream (results/README.md).
 /// </summary>
 [MemoryDiagnoser]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 [CategoriesColumn]
 public class ChatStreamBenchmarks
 {
-    private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
     private readonly CancellationTokenSource _request = new();
     private string[] _deltas = null!;
     private string[] _upstreamLines = null!;
@@ -42,59 +38,24 @@ public class ChatStreamBenchmarks
     [GlobalCleanup]
     public void Cleanup() => _request.Dispose();
 
-    /// <summary>As <c>ChatService.ReadAsync</c>: a linked token source with an idle timer per line, then a JSON DOM per line.</summary>
-    [Benchmark(Baseline = true, Description = "Upstream: read 400 SSE lines (current: CTS per line + JsonNode)")]
+    /// <summary>As <c>ChatService.ReadAsync</c>: one idle timer re-armed per line and <see cref="GatewayStreamLine"/> per line.</summary>
+    [Benchmark(Description = "Upstream: read 400 SSE lines")]
     [BenchmarkCategory("Upstream")]
-    public int UpstreamCurrent()
-    {
-        var chars = 0;
-        foreach (var line in _upstreamLines)
-        {
-            using (var idle = CancellationTokenSource.CreateLinkedTokenSource(_request.Token))
-            {
-                idle.CancelAfter(TimeSpan.FromSeconds(60));
-            }
-
-            var chunk = JsonNode.Parse(line.AsSpan(5).Trim().ToString());
-            var choice = chunk?["choices"] is JsonArray { Count: > 0 } choices ? choices[0] : null;
-            if (choice?["delta"]?["content"] is JsonValue content && content.GetValueKind() == JsonValueKind.String && content.GetValue<string>() is { Length: > 0 } text)
-            {
-                chars += text.Length;
-            }
-        }
-
-        return chars;
-    }
-
-    /// <summary>One idle timer for the stream, re-armed per line, and a forward-only reader for the one field needed.</summary>
-    [Benchmark(Description = "Upstream: read 400 SSE lines (candidate: one CTS re-armed + Utf8JsonReader)")]
-    [BenchmarkCategory("Upstream")]
-    public int UpstreamCandidate()
+    public int Upstream()
     {
         var chars = 0;
         using var idle = CancellationTokenSource.CreateLinkedTokenSource(_request.Token);
-        var buffer = ArrayPool<byte>.Shared.Rent(4096);
-        try
+        var events = new List<GatewayStreamEvent>(3);
+        foreach (var line in _upstreamLines)
         {
-            foreach (var line in _upstreamLines)
+            idle.CancelAfter(TimeSpan.FromSeconds(60));
+            GatewayStreamLine.Read(line, events);
+            foreach (var e in events)
             {
-                idle.CancelAfter(TimeSpan.FromSeconds(60));
-                var length = Encoding.UTF8.GetBytes(line.AsSpan(6), buffer);
-                var reader = new Utf8JsonReader(buffer.AsSpan(0, length));
-                while (reader.Read())
-                {
-                    if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueTextEquals("content"u8) && reader.Read() &&
-                        reader.TokenType == JsonTokenType.String)
-                    {
-                        chars += reader.GetString()!.Length;
-                        break;
-                    }
-                }
+                chars += e is GatewayStreamEvent.Delta d ? d.Text.Length : 0;
             }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
+
+            events.Clear();
         }
 
         return chars;
@@ -114,55 +75,16 @@ public class ChatStreamBenchmarks
         return pieces + transducer.Flush().Count;
     }
 
-    /// <summary>As <c>ChatStreaming.WriteAsync</c>: an anonymous object serialised to a string, then <c>"data: " + json + "\n\n"</c>.</summary>
-    [Benchmark(Baseline = true, Description = "Downstream: 400 SSE chunks (current: anonymous object → string)")]
+    /// <summary>As <c>ChatSse</c>: one <see cref="SseChunk"/> per response, one content event per delta.</summary>
+    [Benchmark(Description = "Downstream: write 400 SSE chunks")]
     [BenchmarkCategory("Downstream")]
-    public long DownstreamCurrent()
+    public long Downstream()
     {
         long bytes = 0;
-        var id = "chatcmpl-0192f0c8a1b27c3e9d4f5a6b7c8d9e0f";
-        object Chunk(object delta, string? finish) => new
-        {
-            id, @object = "chat.completion.chunk", created = 1_762_000_000L, model = "bygglovsassistenten",
-            choices = new[] { new { index = 0, delta, finish_reason = finish } },
-        };
+        using var chunk = new SseChunk();
         foreach (var delta in _deltas)
         {
-            var text = "data: " + JsonSerializer.Serialize(Chunk(new { content = delta }, null), Json) + "\n\n";
-            bytes += Encoding.UTF8.GetByteCount(text);
-        }
-
-        return bytes;
-    }
-
-    /// <summary>The same bytes written with one reused <see cref="Utf8JsonWriter"/> into a pooled buffer.</summary>
-    [Benchmark(Description = "Downstream: 400 SSE chunks (candidate: Utf8JsonWriter, reused buffer)")]
-    [BenchmarkCategory("Downstream")]
-    public long DownstreamCandidate()
-    {
-        long bytes = 0;
-        var buffer = new ArrayBufferWriter<byte>(512);
-        using var writer = new Utf8JsonWriter(buffer);
-        foreach (var delta in _deltas)
-        {
-            buffer.ResetWrittenCount();
-            writer.Reset(buffer);
-            writer.WriteStartObject();
-            writer.WriteString("id"u8, "chatcmpl-0192f0c8a1b27c3e9d4f5a6b7c8d9e0f");
-            writer.WriteString("object"u8, "chat.completion.chunk"u8);
-            writer.WriteNumber("created"u8, 1_762_000_000L);
-            writer.WriteString("model"u8, "bygglovsassistenten");
-            writer.WriteStartArray("choices"u8);
-            writer.WriteStartObject();
-            writer.WriteNumber("index"u8, 0);
-            writer.WriteStartObject("delta"u8);
-            writer.WriteString("content"u8, delta);
-            writer.WriteEndObject();
-            writer.WriteEndObject();
-            writer.WriteEndArray();
-            writer.WriteEndObject();
-            writer.Flush();
-            bytes += 6 + buffer.WrittenCount + 2;
+            bytes += chunk.Content("chatcmpl-0192f0c8a1b27c3e9d4f5a6b7c8d9e0f", 1_762_000_000L, "bygglovsassistenten", delta).Length;
         }
 
         return bytes;
