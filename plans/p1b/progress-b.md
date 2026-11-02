@@ -77,7 +77,7 @@ Refs: [admin §5.3–§5.5, §6.4–§6.7](../admin/design.md)
 
 ### 12. Journey pages, part 2
 Refs: [admin §5.3, §5.8, §7](../admin/design.md)
-- [ ] Testfrågor och kvalitet and the evaluation report; Sökinställningar
+- [x] Testfrågor och kvalitet and the evaluation report; Sökinställningar (b/12-evaluation)
 - [x] Assistenter: draft, Testa, Publicera, Versioner with restore, Målgrupp, retention, archive
   — #301: list, create, Utkast (model, instructions, collections, warnings), Testa, Publicera, Målgrupp; #304: Versioner with Återställ, Lagring (V10 within the level's policy), Arkivera / Ta fram igen
 - [ ] Översikt setup checklist; Granskningslogg; explain access

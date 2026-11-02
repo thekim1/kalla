@@ -77,4 +77,31 @@ describe('Kunskapsbank (admin design §5.5.2)', () => {
     expect(publish).toHaveBeenCalledWith('c1', '7')
     expect(wrapper.get('[data-test=state]').text()).toBe('Publicerad')
   })
+
+  it('takes the evaluation report threshold proposal to Sökinställningar, filled in', async () => {
+    signIn(['rag-editor'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+    vi.spyOn(api.collections, 'evaluation').mockResolvedValue({
+      hasSet: true,
+      questions: [{ layer: 'human', state: 'active', count: 2 }],
+      latestRuns: [{
+        id: 'r1', kind: 'nightly', variant: 'hybrid', questionCount: 2, k: 10, found: 1, recallAtK: 0.5, mrr: 0.5, wins: null, losses: null, comparedRunId: null,
+        candidate: false, thresholdProposal: { answerable: 1, unanswerable: 1, coverageMaxDistance: { value: 0.4, misclassified: 0 } },
+        startedAt: '2026-11-01T02:00:00Z', finishedAt: '2026-11-01T02:01:00Z',
+      }],
+    })
+    vi.spyOn(api.evaluation, 'results').mockResolvedValue([])
+    vi.spyOn(api.evaluation, 'questions').mockResolvedValue({ items: [], next: null })
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+    await button(wrapper, 'Testfrågor och kvalitet').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test=use-proposal]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test=retrieval]').exists()).toBe(true)
+    expect((wrapper.get('#rs-coverageMaxDistance').element as HTMLInputElement).value).toBe('0,4')
+  })
 })

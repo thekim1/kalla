@@ -357,8 +357,82 @@ export interface EvaluationRun {
   losses: number | null
   comparedRunId: string | null
   candidate: boolean
+  /** The worker's coverage-threshold proposal (processing design §13.6), as stored; null without human questions. */
+  thresholdProposal: CoverageProposal | null
   startedAt: IsoDateTime
   finishedAt: IsoDateTime | null
+}
+
+/** A proposed threshold and how many human questions it misclassifies. */
+export interface ThresholdProposal {
+  value: number
+  misclassified: number
+}
+
+/** `EvaluationRuns.ThresholdProposal` (admin design §7.1): the human layer's not-found counts and the proposed thresholds. */
+export interface CoverageProposal {
+  answerable: number
+  unanswerable: number
+  falseNotFound?: number
+  unanswerableNotFound?: number
+  coverageMaxDistance?: ThresholdProposal | null
+  coverageMinKeywordScore?: ThresholdProposal | null
+}
+
+/** `GET /api/evaluation-runs/{id}/results`: one question's rank in the run and in the compared run. */
+export interface EvaluationResult {
+  questionId: string
+  question: string
+  layer: 'generated' | 'human' | string
+  rank: number | null
+  previousRank: number | null
+  /** Null for an unanswerable question (no expected documents). */
+  hit: boolean | null
+  coverage: 'ok' | 'low' | string | null
+  bestDistance: number | null
+  bestKeywordScore: number | null
+}
+
+export interface EvaluationQuestion {
+  id: string
+  layer: 'generated' | 'human' | string
+  state: 'active' | 'stale' | 'retired' | string
+  question: string
+  expectedAnswer: string | null
+  expectedDocumentIds: string[]
+  origin: string | null
+  createdBy: string | null
+  retiredAt: IsoDateTime | null
+}
+
+export interface EvaluationQuestionInput {
+  question: string
+  expectedAnswer: string | null
+  expectedDocumentIds: string[]
+}
+
+/** `GET /api/collections/{id}/evaluation/generate`: what generating test questions would do now. */
+export interface GenerationForecast {
+  kind: 'generate-set' | 'top-up-set' | string
+  model: string | null
+  judgeModel: string | null
+  liveDocuments: number
+  eligibleChunks: number
+  activeQuestions: number
+  target: number
+  needed: number
+  modelCalls: number
+  estimatedTokens: number
+  estimatedCostUsd: number | null
+}
+
+/** `GET /api/documents/{id}`, the fields the admin UI reads. */
+export interface DocumentDetail {
+  id: string
+  sourceId: string
+  title: string | null
+  url: string | null
+  displayName: string | null
 }
 
 export interface EvaluationOverview {
