@@ -97,7 +97,7 @@ Refs: [admin §10.1, §11.4](../admin/design.md)
 - [ ] **Hand-off L7:** issue to stream A
 
 ### 18. W3 spike
-- [ ] Two users, two groups, interleaved chats on the dev Keycloak and a local Open WebUI; #174 recorded
+- [x] Two users, two groups, interleaved chats on the dev Keycloak and a local Open WebUI; #174 recorded (main session, PR: main-session/18-w3-spike)
 
 ### 33. Organisation schema
 Refs: [data-model §2.1](../platform/data-model.md), Decisions "Organisation" row
