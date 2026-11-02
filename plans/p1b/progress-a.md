@@ -10,7 +10,7 @@ that does the work and put the PR number after it (`[x] … (#12)`). Record ever
 before ticking it here.
 
 ## Waiting on (tick when it lands)
-- [ ] **L13** B's organisation schema and **L14** the search scope with links (item 37)
+- [x] **L13** B's organisation schema and **L14** the search scope with links (item 37) (#346, #347; used in PR: a/37-topics-in-worker)
 - [ ] P1b ownership rules (README §2) and these briefs merged
 - [x] **L2** B's schema part 3 and freshness columns (needed for item 4's database tests) (#219; worker switched to them in PR: a/102-crawl-freshness-urlpattern)
 - [x] **L3** B's `RetrievalEngine` with decay and `demote` (needed for item 7's temporal checks and item 25) (#241; evaluator applies source demote in PR: a/l3-eval-demote)
@@ -94,8 +94,8 @@ Refs: [chat §4.3, §13.3, §14.2](../chat-api/design.md), [repo-and-deployment 
 
 ### 37. Topics in the worker (after L13, L14)
 Refs: [processing §7, §13](../ingestion-worker/design-processing.md), [engine §11](../ingestion-worker/design-engine.md)
-- [ ] Path-rule parameter labelled "Topics" (`x-labels` `en`); tags per document in the stage-preview result
-- [ ] **Done:** evaluator and generation on the new search scope; worker tests green
+- [x] Path-rule parameter labelled "Topics" (`x-labels` `en`); tags per document in the stage-preview result (PR: a/37-topics-in-worker)
+- [x] **Done:** evaluator and generation on the new search scope; worker tests green (PR: a/37-topics-in-worker)
 
 ### 38. Platform forms for organisation
 - [ ] Organisation form: member groups and sharing summary; English keywords

@@ -66,6 +66,12 @@
       "default": []
     }
   },
+  "labels": {
+    "pathRules": {
+      "sv": "Ämnen",
+      "en": "Topics"
+    }
+  },
   "defs": {
     "pathRule": {
       "type": "object",

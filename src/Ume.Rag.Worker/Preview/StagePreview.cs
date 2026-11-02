@@ -148,7 +148,7 @@ public sealed partial class StagePreview(
                 log.Fail(DeadlineReached);
             }
 
-            results.Add(named with { SiteProfile = siteProfile });
+            results.Add(named with { SiteProfile = siteProfile, Tags = log.Tags });
         }
 
         LogPreviewed(logger, job.Id, results.Count, time.GetElapsedTime(started).TotalMilliseconds);

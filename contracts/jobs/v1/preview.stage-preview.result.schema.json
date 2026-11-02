@@ -173,6 +173,18 @@
               "after"
             ],
             "description": "Crawl sources: the extraction without and with the host's site profile."
+          },
+          "tags": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "pattern": "^[\\p{L}\\p{N}-]{1,50}$"
+            },
+            "description": "The tags (topics) the path rules give the document's chunks (processing design §7): empty when no rule matches, null when chunk did not run.",
+            "maxItems": 20
           }
         },
         "required": [
