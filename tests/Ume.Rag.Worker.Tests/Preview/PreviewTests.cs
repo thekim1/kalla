@@ -230,6 +230,38 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
     }
 
     [Fact]
+    public async Task Each_document_lists_the_tags_its_path_rules_give_it()
+    {
+        await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page("bygglov " + name))));
+        var seed = await EngineKit.SeedUrlListAsync(database, [site.Url("/p/a")]);
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
+        try
+        {
+            var draft = await DraftAsync(seed, """
+                {"pathRules":[{"match":"/p/bygglov-*","on":"path","tags":["bygglov","bygga-bo"]},{"match":"/p/bygglov-ansok","on":"path","tags":["bygglov","ansokan"]}]}
+                """);
+            StagePreviewPayload Payload(string untilStage) => new()
+            {
+                PipelineVersionId = draft,
+                CollectionId = seed.CollectionId,
+                SourceId = seed.SourceId,
+                Urls = [site.Url("/p/bygglov-ansok").AbsoluteUri, site.Url("/p/other").AbsoluteUri],
+                UntilStage = untilStage,
+            };
+
+            var documents = (await ResultAsync<StagePreviewResult>(await EnqueueAsync(seed, Payload("chunk")))).Documents;
+            documents.Select(d => d.Tags).ShouldBe([["bygglov", "bygga-bo", "ansokan"], []]);
+
+            var cleaned = (await ResultAsync<StagePreviewResult>(await EnqueueAsync(seed, Payload("clean")))).Documents;
+            cleaned.ShouldAllBe(d => d.Tags == null, "chunk did not run");
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
     public async Task Six_documents_are_refused()
     {
         await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page(name))));
@@ -333,13 +365,15 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
 
     private sealed record JobOutcome(string State, string? LastError);
 
-    private async Task<Guid> DraftAsync(SourceSeed seed, int chunkTokens)
+    private Task<Guid> DraftAsync(SourceSeed seed, int chunkTokens) => DraftAsync(seed, $$"""{"chunkTokens":{{chunkTokens}}}""");
+
+    private async Task<Guid> DraftAsync(SourceSeed seed, string parameters)
     {
         var id = Guid.CreateVersion7();
         await Sql.ExecuteAsync(database.Connection(null), """
             INSERT INTO config."PipelineVersions" ("Id", "PipelineId", "Number", "State", "Definition")
             VALUES ($1, $2, (SELECT coalesce(max("Number"), 0) + 1 FROM config."PipelineVersions" WHERE "PipelineId" = $2), 'draft', $3::jsonb)
-            """, id, seed.PipelineId, $$$"""{"schema":"pipeline/v2","template":"url-list","templateVersion":1,"params":{"chunkTokens":{{{chunkTokens}}}}}""");
+            """, id, seed.PipelineId, $$"""{"schema":"pipeline/v2","template":"url-list","templateVersion":1,"params":{{parameters}}}""");
         return id;
     }
 

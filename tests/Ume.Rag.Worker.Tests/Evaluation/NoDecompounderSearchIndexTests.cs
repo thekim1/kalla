@@ -4,8 +4,10 @@ using Npgsql;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Retrieval;
 using Ume.Rag.Retrieval;
+using Ume.Rag.Retrieval.Postgres;
 using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Evaluation;
+using Ume.Rag.Worker.Processing.Persistence;
 using Ume.Rag.Worker.Tests.Engine;
 using FakeContent = fakegateway::Ume.Rag.FakeGateway.FakeContent;
 
@@ -48,6 +50,23 @@ public sealed class NoDecompounderSearchIndexTests(RagDatabaseFixture database) 
         var stopped = await index.KeywordAsync(scope with { KeywordStopLexemes = ["simhall"] }, "simhall xylofon", null, 10, Ct);
         stopped.ShouldHaveSingleItem("only the chunk with the remaining word matches");
         (await index.KeywordAsync(scope with { KeywordStopLexemes = ["simhall", "xylofon"] }, "simhall xylofon", null, 10, Ct)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task The_evaluator_searches_whole_collections_and_a_scope_limited_to_topics_is_refused()
+    {
+        var target = new EvaluationTarget(Guid.CreateVersion7(), Classification.Public, Guid.CreateVersion7(), null,
+            new EmbeddingProfileRecord(EngineKit.ProfileId, "fixture", "fixture-embed", EngineKit.Dimensions, 512, Residency.Eu),
+            RetrievalPlatformSettings.Default, RetrievalSettings.Default, new Dictionary<Guid, IReadOnlyList<DemotePattern>>(), null, []);
+        var evaluated = target.Scope(RetrievalSettings.Default);
+        evaluated.TopicLinks.ShouldBeEmpty();
+        RetrievalStatements.FragmentsOf(evaluated, null).ShouldBe(FilterFragments.None);
+
+        await using var dataSource = NpgsqlDataSource.Create(database.Connection(RagDatabase.Worker));
+        var index = new NoDecompounderSearchIndex(dataSource, new NoVectors(), TimeSpan.FromSeconds(10));
+        var linked = new SearchScope(evaluated.EmbeddingProfileId, evaluated.Dimensions, [evaluated.Collections[0] with { Topics = ["bygglov"] }],
+            evaluated.AllowedLevels, evaluated.Platform);
+        await Should.ThrowAsync<NotSupportedException>(() => index.KeywordAsync(linked, "bygglov", null, 10, Ct));
     }
 
     private sealed class NoVectors : ISearchIndex

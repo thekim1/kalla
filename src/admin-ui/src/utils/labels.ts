@@ -438,7 +438,7 @@ export const PIPELINE = {
     overlapPercent: 'Overlap between passages (percent)',
     ocr: 'Text recognition in scanned documents',
     tables: 'Tables',
-    pathRules: 'Rules per path',
+    pathRules: 'Topics',
   } as Record<string, string>,
   options: {
     auto: 'Automatic', force: 'Always', off: 'Off', fast: 'Fast', accurate: 'Accurate',

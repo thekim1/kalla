@@ -67,6 +67,11 @@ public sealed class PreviewStageLog(IReadOnlyList<string> stages, TimeProvider t
 
     public IReadOnlyList<PreviewStageResult> Results => _results;
 
+    /// <summary>The tags <c>chunk</c> gave the document's chunks; null until it ran.</summary>
+    public IReadOnlyList<string>? Tags { get; private set; }
+
+    public void Tagged(IReadOnlyList<string> tags) => Tags = tags;
+
     public bool Wants(string stage) => stages.Contains(stage, StringComparer.Ordinal);
 
     public void Begin(string stage)
@@ -285,14 +290,15 @@ public sealed class PreviewSegment(
             DocumentDate = cleaned.DocumentDate,
         };
         var chunkInputs = new Dictionary<string, string>(StringComparer.Ordinal) { ["metadata"] = StageKeys.ToHex(ProcessingJson.OutputHash(metadataInput)) };
+        var metadata = Metadata.Apply(Param<IReadOnlyList<PathRule>>(pipeline, "pathRules") ?? [], metadataInput);
         var (chunks, chunksHash, chunkHit) = await StageAsync(store, pipeline, StageNames.Chunk, cleanedHash, chunkInputs, () =>
         {
-            var metadata = Metadata.Apply(Param<IReadOnlyList<PathRule>>(pipeline, "pathRules") ?? [], metadataInput);
             var options = new ChunkOptions(Param<int?>(pipeline, "chunkTokens") ?? 400, Param<int?>(pipeline, "overlapPercent") ?? 15);
             return chunker.Chunk(cleaned, options, metadata);
         }, cancellationToken);
         var shownChunks = await store.ShowAsync(content.Index, StageNames.Chunk, StageNames.Chunk, chunks, chunks.Chunks.Count, CutChunks, cancellationToken);
         log.Done(chunkHit, new { chunks = chunks.Chunks.Count, tokens = chunks.Chunks.Sum(c => c.TokenCount) }, shownChunks.Path, shownChunks.Truncated);
+        log.Tagged(metadata.Tags);
         if (!log.Wants(StageNames.PersonalData))
         {
             return siteProfile;

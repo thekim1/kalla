@@ -63,6 +63,16 @@ public sealed class TemplateTests
         Repository.Templates.Find("files", 1)!.Template.CollectionDefaults.ShouldBeNull();
     }
 
+    [Theory]
+    [InlineData("website")]
+    [InlineData("url-list")]
+    public void The_path_rules_parameter_is_labelled_topics(string name)
+    {
+        var labels = Repository.Templates.Find(name, 1)!.ParamsSchema["properties"]!["pathRules"]!["x-labels"]!;
+        labels["en"]!.GetValue<string>().ShouldBe("Topics");
+        labels["sv"]!.GetValue<string>().ShouldBe("Ämnen");
+    }
+
     [Fact]
     public void Params_schema_describes_every_parameter_for_the_admin_form()
     {

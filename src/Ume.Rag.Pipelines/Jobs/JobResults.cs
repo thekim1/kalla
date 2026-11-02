@@ -228,6 +228,11 @@ public sealed record PreviewDocumentResult
 
     [Description("Crawl sources: the extraction without and with the host's site profile.")]
     public PreviewSiteProfile? SiteProfile { get; init; }
+
+    [Description("The tags (topics) the path rules give the document's chunks (processing design §7): empty when no rule matches, null when chunk did not run.")]
+    [MaxLength(20)]
+    [SchemaItems(Pattern = "^[\\p{L}\\p{N}-]{1,50}$")]
+    public IReadOnlyList<string>? Tags { get; init; }
 }
 
 public sealed record PreviewStageResult
