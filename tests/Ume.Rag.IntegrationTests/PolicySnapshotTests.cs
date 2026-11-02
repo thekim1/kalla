@@ -40,6 +40,7 @@ public sealed class PolicySnapshotTests(RagDatabaseFixture database)
         var assistant = snapshot.Assistants[seeded.AssistantId];
         assistant.Published.ShouldNotBeNull();
         assistant.Published.Number.ShouldBe(1); // the newer draft never reaches the api
+        assistant.Published.CollectionLinks.ShouldBe([new CollectionLink(seeded.CollectionId, ["bygglov", "strandskydd"])]); // with its topics
         assistant.Published.CollectionIds.ShouldBe([seeded.CollectionId]);
         assistant.Audiences.ShouldBe([new AudienceEntry(AssistantAudienceKinds.Client, seeded.ClientId, null)]);
         snapshot.Collections[seeded.CollectionId].IsLive.ShouldBeTrue();
@@ -133,7 +134,11 @@ public sealed class PolicySnapshotTests(RagDatabaseFixture database)
         db.AddRange(source, assistant);
         await db.SaveChangesAsync(Ct);
 
-        var v1 = new AssistantVersion { AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", CollectionIds = [collection.Id], CreatedAt = now, UpdatedAt = now };
+        var v1 = new AssistantVersion
+        {
+            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", CollectionLinks = [new CollectionLink(collection.Id, ["bygglov", "strandskydd"])],
+            CreatedAt = now, UpdatedAt = now,
+        };
         db.AssistantVersions.Add(v1);
         await db.SaveChangesAsync(Ct);
         v1.State = AssistantVersionStates.Published;
@@ -141,7 +146,7 @@ public sealed class PolicySnapshotTests(RagDatabaseFixture database)
         v1.PublishedBy = "test";
         assistant.PublishedVersionId = v1.Id;
         await db.SaveChangesAsync(Ct);
-        var v2 = new AssistantVersion { AssistantId = assistant.Id, Number = 2, GatewayModel = "ume/chat-eu", CollectionIds = [unpublished.Id], CreatedAt = now, UpdatedAt = now };
+        var v2 = new AssistantVersion { AssistantId = assistant.Id, Number = 2, GatewayModel = "ume/chat-eu", CollectionLinks = [CollectionLink.Whole(unpublished.Id)], CreatedAt = now, UpdatedAt = now };
         db.AssistantVersions.Add(v2);
         db.AssistantAudiences.Add(new AssistantAudience { AssistantId = assistant.Id, Kind = AssistantAudienceKinds.Client, SubjectId = client.Id });
         await db.SaveChangesAsync(Ct);

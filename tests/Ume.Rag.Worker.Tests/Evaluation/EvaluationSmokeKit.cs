@@ -84,7 +84,7 @@ internal static class EvaluationSmokeKit
         await db.SaveChangesAsync(Ct);
         var version = new AssistantVersion
         {
-            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", CollectionIds = [seed.CollectionId], CreatedAt = now, UpdatedAt = now,
+            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", CollectionLinks = [CollectionLink.Whole(seed.CollectionId)], CreatedAt = now, UpdatedAt = now,
         };
         db.AssistantVersions.Add(version);
         db.AssistantAudiences.Add(new AssistantAudience { AssistantId = assistant.Id, Kind = AssistantAudienceKinds.Client, SubjectId = clientId });

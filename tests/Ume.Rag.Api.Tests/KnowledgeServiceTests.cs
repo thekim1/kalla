@@ -194,7 +194,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
             Collection(DeptACollection, Classification.Public, true), Collection(DeptBCollection, Classification.Public, true),
         }.ToDictionary(c => c.Id);
         var assistant = new AssistantEntry(AssistantId, "bygg", "Bygg", Classification.Internal, HistoryModes.None, AssistantStates.Active, Guid.Empty, null,
-            new PublishedVersionEntry(Guid.NewGuid(), 1, "ume/chat-eu", [PublicCollection, UnpublishedCollection]),
+            new PublishedVersionEntry(Guid.NewGuid(), 1, "ume/chat-eu", [CollectionLink.Whole(PublicCollection), CollectionLink.Whole(UnpublishedCollection)]),
             [new AudienceEntry(AssistantAudienceKinds.Client, OwuiClient, null)]);
         return PolicySnapshot.Empty with
         {

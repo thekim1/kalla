@@ -85,9 +85,9 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
 
         var published = new Dictionary<Guid, PublishedVersionEntry>();
         await ReadAsync(connection, transaction, """
-            SELECT "AssistantId", "Id", "Number", "GatewayModel", "CollectionIds", "SystemPrompt", "QuerySteps"::text, "NotFound"::text, "PublishedAt"
+            SELECT "AssistantId", "Id", "Number", "GatewayModel", "CollectionLinks"::text, "SystemPrompt", "QuerySteps"::text, "NotFound"::text, "PublishedAt"
             FROM config."PublishedAssistantVersions"
-            """, r => published[r.GetGuid(0)] = new PublishedVersionEntry(r.GetGuid(1), r.GetInt32(2), r.GetString(3), r.GetFieldValue<Guid[]>(4),
+            """, r => published[r.GetGuid(0)] = new PublishedVersionEntry(r.GetGuid(1), r.GetInt32(2), r.GetString(3), CollectionLink.ParseList(r.GetString(4)),
                 r.GetString(5), r.GetString(6), r.GetString(7), r.IsDBNull(8) ? null : r.GetFieldValue<DateTimeOffset>(8)),
             cancellationToken);
 

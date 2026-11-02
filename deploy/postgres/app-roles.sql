@@ -46,6 +46,10 @@ GRANT SELECT ON config."Settings", config."DataProtectionPolicies", config."Embe
 GRANT SELECT ON config."Settings", config."DataProtectionPolicies", config."EmbeddingProfiles", config."Collections" TO ume_rag_api;
 GRANT SELECT ("Id", "CollectionId", "Type", "Classification", "State", "DeletedAt", "ContainsThirdPartyText", "DemoteRules")
   ON config."Sources" TO ume_rag_api;
+-- Collection shares (data-model §1.2, admin design §3.2): the admin manages them; the api reads who may link a
+-- collection; the worker never needs them.
+GRANT SELECT, INSERT, UPDATE, DELETE ON config."CollectionShares" TO ume_rag_admin;
+GRANT SELECT ON config."CollectionShares" TO ume_rag_api;
 -- Assistants and the gateway model mirror (data-model §1.2): the admin manages them; the api reads assistants,
 -- audiences and models, and versions only through the view of published versions, never AssistantVersions itself, so a
 -- draft cannot reach chat. The worker reads no assistant tables, only the model mirror (the evaluation's residency

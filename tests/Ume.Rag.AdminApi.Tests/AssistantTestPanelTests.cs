@@ -63,7 +63,7 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         };
         var draft = new AssistantVersion
         {
-            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", SystemPrompt = "Svara kort.", CollectionIds = [collection.Id],
+            AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", SystemPrompt = "Svara kort.", CollectionLinks = [CollectionLink.Whole(collection.Id)],
             CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
         };
         var pipeline = new Pipeline { Name = "panel-" + code, TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };

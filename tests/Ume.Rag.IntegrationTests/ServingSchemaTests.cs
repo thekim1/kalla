@@ -64,13 +64,13 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
             SELECT t.tgname || ':' || encode(t.tgargs, 'escape') || ':' || CASE WHEN pg_get_triggerdef(t.oid) LIKE '%WHEN%' THEN 'when' ELSE 'all' END
             FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = 'config' AND NOT t.tgisinternal AND t.tgfoid = 'config.rag_config_changed'::regproc
-              AND c.relname IN ('Assistants', 'AssistantVersions', 'AssistantAudiences', 'GatewayModels')
+              AND c.relname IN ('Assistants', 'AssistantVersions', 'AssistantAudiences', 'GatewayModels', 'CollectionShares')
             """);
         triggers.ShouldBe(
         [
             "TR_Assistants_ConfigChanged:true\\000:all", "TR_AssistantVersions_ConfigChanged:true\\000:when",
             "TR_AssistantVersions_ConfigDeleted:true\\000:when", "TR_AssistantAudiences_ConfigChanged:true\\000:all",
-            "TR_GatewayModels_ConfigChanged:false\\000:all",
+            "TR_GatewayModels_ConfigChanged:false\\000:all", "TR_CollectionShares_ConfigChanged:true\\000:all",
         ], ignoreOrder: true);
         var superuser = database.Connection(null);
         (await Sql.ScalarAsync<string>(superuser, """SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'TR_AssistantVersions_ConfigChanged'"""))
@@ -96,7 +96,7 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
 
         var before = await ConfigVersionAsync();
         draft.SystemPrompt = "Svara kort.";
-        draft.CollectionIds = [Guid.NewGuid()];
+        draft.CollectionLinks = [CollectionLink.Whole(Guid.NewGuid())];
         draft.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(Ct);
         draft.SystemPrompt = "Svara kort och sakligt.";
@@ -129,6 +129,51 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
     }
 
     [Fact]
+    public async Task Collections_carry_a_sharing_level_and_contact_and_shares_bump_the_config_version_as_security_relevant()
+    {
+        // P1b item 33, data-model §2.1, §5.
+        await using var db = TestPostgres.Context(database.Connection(Admin));
+        var now = DateTimeOffset.UtcNow;
+        var profile = new EmbeddingProfile { Name = "p-" + Guid.NewGuid().ToString("N"), GatewayModel = "bge-m3", Dimensions = 3, MaxInputTokens = 10, MaxResidency = Residency.Eu, UpdatedAt = now };
+        var owner = new Department { Id = Guid.CreateVersion7(), Name = "Ägare", CostCenterCode = "cc-" + Guid.NewGuid().ToString("N"), SyncedAt = now };
+        var reader = new Department { Id = Guid.CreateVersion7(), Name = "Läsare", CostCenterCode = "cc-" + Guid.NewGuid().ToString("N"), SyncedAt = now };
+        db.AddRange(profile, owner, reader);
+        await db.SaveChangesAsync(Ct);
+        var collection = new Collection
+        {
+            Slug = "c-" + Guid.NewGuid().ToString("N"), Name = "Delad", DepartmentId = owner.Id, Classification = Classification.Public,
+            EmbeddingProfileId = profile.Id, ContactName = "Kim Kontakt", ContactEmail = "kunskap@umea.se", UpdatedAt = now,
+        };
+        db.Collections.Add(collection);
+        await db.SaveChangesAsync(Ct);
+
+        var admin = database.Connection(Admin);
+        (await Sql.ScalarAsync<string>(admin, $"""SELECT "SharedWith" || ':' || "ContactName" || ':' || "ContactEmail" FROM config."Collections" WHERE "Id" = '{collection.Id}'"""))
+            .ShouldBe("department:Kim Kontakt:kunskap@umea.se");
+        await Sql.ExecuteAsync(admin, $"""UPDATE config."Collections" SET "SharedWith" = 'municipality' WHERE "Id" = '{collection.Id}'""");
+        var error = await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(admin, $"""UPDATE config."Collections" SET "SharedWith" = 'everyone' WHERE "Id" = '{collection.Id}'"""));
+        error.ConstraintName.ShouldBe("CK_Collections_SharedWith");
+
+        var before = await ConfigVersionAsync();
+        db.CollectionShares.Add(new CollectionShare { CollectionId = collection.Id, DepartmentId = reader.Id, SharedBy = "test", SharedAt = now });
+        await db.SaveChangesAsync(Ct);
+        (await ConfigVersionAsync()).ShouldBe(before + 1);
+        (await OutboxAsync(before)).ShouldBe(["CollectionShares:I:True:"]);
+
+        // One share per (collection, department); a share names a mirrored department and goes with its collection.
+        error = await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(admin, $"""
+            INSERT INTO config."CollectionShares" ("CollectionId", "DepartmentId", "SharedBy", "SharedAt") VALUES ('{collection.Id}', '{reader.Id}', 'test', now())
+            """));
+        error.ConstraintName.ShouldBe("PK_CollectionShares");
+        error = await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(admin, $"""
+            INSERT INTO config."CollectionShares" ("CollectionId", "DepartmentId", "SharedBy", "SharedAt") VALUES ('{collection.Id}', '{Guid.NewGuid()}', 'test', now())
+            """));
+        error.ConstraintName.ShouldBe("FK_CollectionShares_Departments_DepartmentId");
+        await Sql.ExecuteAsync(admin, $"""DELETE FROM config."Collections" WHERE "Id" = '{collection.Id}'""");
+        (await Sql.ScalarAsync<long>(admin, $"""SELECT count(*) FROM config."CollectionShares" WHERE "CollectionId" = '{collection.Id}'""")).ShouldBe(0);
+    }
+
+    [Fact]
     public async Task Each_assistant_has_at_most_one_draft_and_one_published_version()
     {
         await using var db = TestPostgres.Context(database.Connection(Admin));
@@ -154,10 +199,15 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
             UPDATE config."AssistantVersions" SET "GatewayModel" = NULL WHERE "Id" = '{draft.Id}'
             """));
         error.ConstraintName.ShouldBe("CK_AssistantVersions_Published");
-        error = await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(admin, $"""
-            UPDATE config."AssistantVersions" SET "CollectionIds" = (SELECT array_agg(gen_random_uuid()) FROM generate_series(1, 21)) WHERE "Id" = '{draft.Id}'
-            """));
-        error.ConstraintName.ShouldBe("CK_AssistantVersions_CollectionIds");
+        // At most 20 collection links (data-model §2.1), checked in the database.
+        string Links(int count) => $"""
+            UPDATE config."AssistantVersions"
+               SET "CollectionLinks" = (SELECT jsonb_agg(jsonb_build_object('collectionId', gen_random_uuid(), 'tags', '["bygglov"]'::jsonb)) FROM generate_series(1, {count}))
+             WHERE "Id" = '{draft.Id}'
+            """;
+        await Sql.ExecuteAsync(admin, Links(20));
+        error = await Should.ThrowAsync<PostgresException>(() => Sql.ExecuteAsync(admin, Links(21)));
+        error.ConstraintName.ShouldBe("CK_AssistantVersions_CollectionLinks");
 
         // A pointer reaches only a version of the same assistant.
         var other = await AddAssistantAsync(db);
@@ -469,8 +519,8 @@ public sealed class ServingSchemaTests(RagDatabaseFixture database)
 
     private static string InsertVersion(Guid assistantId, int number, string state) => $"""
         INSERT INTO config."AssistantVersions" ("Id", "AssistantId", "Number", "State", "GatewayModel", "SystemPrompt", "QuerySteps", "NotFound",
-            "CollectionIds", "CreatedAt", "UpdatedAt", "PublishedBy", "PublishedAt")
-        VALUES ('{Guid.CreateVersion7()}', '{assistantId}', {number}, '{state}', 'gpt-test', '', '{"{}"}', '{"{}"}', '{"{}"}', now(), now(), 'test', now())
+            "CollectionLinks", "CreatedAt", "UpdatedAt", "PublishedBy", "PublishedAt")
+        VALUES ('{Guid.CreateVersion7()}', '{assistantId}', {number}, '{state}', 'gpt-test', '', '{"{}"}', '{"{}"}', '[]', now(), now(), 'test', now())
         """;
 
     private static string InsertAudience(Guid assistantId, string kind, string subject, string group) => $"""

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Ume.Rag.Domain.Entities;
 
 namespace Ume.Rag.Domain.Access;
 
@@ -7,8 +8,12 @@ namespace Ume.Rag.Domain.Access;
 /// The chat fields (chat design §5–§10): <see cref="SystemPrompt"/>, <see cref="QuerySteps"/> and <see cref="NotFound"/> as
 /// stored (<c>jsonb</c> text, parsed by the chat role), and <see cref="PublishedAt"/>.
 /// </remarks>
-public sealed record PublishedVersionEntry(Guid Id, int Number, string GatewayModel, IReadOnlyList<Guid> CollectionIds, string SystemPrompt = "",
-    string QuerySteps = "{}", string NotFound = "{}", DateTimeOffset? PublishedAt = null);
+public sealed record PublishedVersionEntry(Guid Id, int Number, string GatewayModel, IReadOnlyList<CollectionLink> CollectionLinks, string SystemPrompt = "",
+    string QuerySteps = "{}", string NotFound = "{}", DateTimeOffset? PublishedAt = null)
+{
+    /// <summary>The linked collections' ids, without their topics.</summary>
+    public IReadOnlyList<Guid> CollectionIds => CollectionLink.Ids(CollectionLinks);
+}
 
 /// <summary>An audience row (<c>AssistantAudiences</c>): <c>client</c> (P1), <c>department</c>/<c>group</c> (P2).</summary>
 public sealed record AudienceEntry(string Kind, Guid? SubjectId, string? GroupValue);

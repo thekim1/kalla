@@ -79,13 +79,12 @@ public static class SetupEndpoints
         var evaluating = await db.Jobs.AsNoTracking()
             .Where(j => j.DedupKey != null && evalKeys.Contains(j.DedupKey) && (j.State == JobStates.Queued || j.State == JobStates.Running))
             .Select(j => j.DedupKey!).ToListAsync(ct);
-        var linked = await (from v in db.AssistantVersions.AsNoTracking()
+        var linked = await (from v in db.AssistantVersionsLinking([.. ids]).AsNoTracking()
                             join a in db.Assistants.AsNoTracking() on v.AssistantId equals a.Id
                             where (a.PublishedVersionId == v.Id || a.DraftVersionId == v.Id) && a.State == AssistantStates.Active
-                                  && v.CollectionIds.Any(c => ids.Contains(c))
                             select new
                             {
-                                a.Id, a.DepartmentId, v.CollectionIds, Published = a.PublishedVersionId == v.Id,
+                                a.Id, a.DepartmentId, v.CollectionLinks, Published = a.PublishedVersionId == v.Id,
                                 Available = a.PublishedVersionId == v.Id && db.AssistantAudiences.Any(x => x.AssistantId == a.Id && x.Kind == AssistantAudienceKinds.Client),
                             }).ToListAsync(ct);
 
@@ -95,7 +94,7 @@ public static class SetupEndpoints
             {
                 // Only the collection's own department's assistants (#313 review): another department's link to a shared collection
                 // is not this checklist's step, and its assistant would 404 for the caller.
-                var assistants = linked.Where(l => l.CollectionIds.Contains(c.Id) && l.DepartmentId == c.DepartmentId).OrderByDescending(l => l.Available).ThenByDescending(l => l.Published).ThenBy(l => l.Id).ToList();
+                var assistants = linked.Where(l => l.CollectionLinks.Any(link => link.CollectionId == c.Id) && l.DepartmentId == c.DepartmentId).OrderByDescending(l => l.Available).ThenByDescending(l => l.Published).ThenBy(l => l.Id).ToList();
                 var run = runs.GetValueOrDefault(c.Id);
                 var available = assistants.Any(a => a.Available);
                 return new CollectionSetup(

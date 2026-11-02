@@ -30,6 +30,18 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     private const string Model = "ume/chat-eu";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    [Fact]
+    public void A_draft_save_by_ids_keeps_the_topics_of_links_it_already_has()
+    {
+        var kept = Guid.NewGuid();
+        var added = Guid.NewGuid();
+        var draft = new AssistantVersion { CollectionLinks = [new CollectionLink(kept, ["bygglov"]), CollectionLink.Whole(Guid.NewGuid())] };
+
+        new DraftRequest { CollectionIds = [added, kept, added] }.ApplyTo(draft);
+
+        draft.CollectionLinks.ShouldBe([CollectionLink.Whole(added), new CollectionLink(kept, ["bygglov"])]);
+    }
+
     private static WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
     {
         web.UseEnvironment("Development");

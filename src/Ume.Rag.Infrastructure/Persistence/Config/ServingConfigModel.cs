@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using static Ume.Rag.Infrastructure.Persistence.RagDbContext;
@@ -56,7 +58,8 @@ internal static class ServingConfigModel
             {
                 ValuesCheck(t, "AssistantVersions", "State", AssistantVersionStates.All);
                 t.HasCheckConstraint("CK_AssistantVersions_Number", "\"Number\" >= 1");
-                t.HasCheckConstraint("CK_AssistantVersions_CollectionIds", $"cardinality(\"CollectionIds\") <= {AssistantVersion.MaxCollections}");
+                t.HasCheckConstraint("CK_AssistantVersions_CollectionLinks",
+                    $"jsonb_array_length(\"CollectionLinks\") <= {AssistantVersion.MaxCollections}");
                 // A version that was ever published has its model and its publish stamps; a draft may lack the model.
                 t.HasCheckConstraint("CK_AssistantVersions_Published",
                     "\"State\" = 'draft' OR (\"GatewayModel\" IS NOT NULL AND \"PublishedAt\" IS NOT NULL AND \"PublishedBy\" IS NOT NULL)");
@@ -66,7 +69,10 @@ internal static class ServingConfigModel
             e.Property(x => x.GatewayModel).HasMaxLength(200);
             e.Property(x => x.QuerySteps).HasColumnType("jsonb");
             e.Property(x => x.NotFound).HasColumnType("jsonb");
-            e.Property(x => x.CollectionIds).HasColumnType("uuid[]");
+            e.Property(x => x.CollectionLinks).HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb").HasConversion(
+                new ValueConverter<IReadOnlyList<CollectionLink>, string>(v => CollectionLink.Serialize(v), v => CollectionLink.ParseList(v)),
+                new ValueComparer<IReadOnlyList<CollectionLink>>((a, b) => a!.SequenceEqual(b!), v => v.Aggregate(0, (h, l) => HashCode.Combine(h, l)),
+                    v => v.ToArray()));
             e.Property(x => x.CreatedBy).HasMaxLength(200);
             e.Property(x => x.PublishedBy).HasMaxLength(200);
             e.HasIndex(x => new { x.AssistantId, x.Number }).IsUnique();

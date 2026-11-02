@@ -97,16 +97,32 @@ internal static class IngestionConfigModel
 
         modelBuilder.Entity<Collection>(e =>
         {
-            e.ToTable("Collections", ConfigSchema, t => ClassificationCheck(t, "Collections"));
+            e.ToTable("Collections", ConfigSchema, t =>
+            {
+                ClassificationCheck(t, "Collections");
+                ValuesCheck(t, "Collections", "SharedWith", CollectionSharingLevels.All);
+            });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Slug).HasMaxLength(100);
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Classification).HasMaxLength(20);
             e.Property(x => x.RetrievalSettings).HasColumnType("jsonb");
+            e.Property(x => x.SharedWith).HasMaxLength(20).HasDefaultValue(CollectionSharingLevels.Department);
+            e.Property(x => x.ContactName).HasMaxLength(200);
+            e.Property(x => x.ContactEmail).HasMaxLength(254);
             e.HasIndex(x => x.Slug).IsUnique();
             e.HasIndex(x => x.DepartmentId);
             e.HasOne<EmbeddingProfile>().WithMany().HasForeignKey(x => x.EmbeddingProfileId).OnDelete(DeleteBehavior.Restrict);
             ChangeStamps(e);
+        });
+
+        modelBuilder.Entity<CollectionShare>(e =>
+        {
+            e.ToTable("CollectionShares", ConfigSchema);
+            e.HasKey(x => new { x.CollectionId, x.DepartmentId });
+            e.Property(x => x.SharedBy).HasMaxLength(200);
+            e.HasOne<Collection>().WithMany().HasForeignKey(x => x.CollectionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Department>().WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Source>(e =>

@@ -110,7 +110,7 @@ public sealed class AdminTestPanel(
 
             _runs.Add(1, new KeyValuePair<string, object?>("outcome", plan.Outcome.ToString().ToLowerInvariant()));
             var citedChunks = cited.SelectMany(s => s.Chunks.Select(c => c.ChunkId)).ToHashSet();
-            var linked = version.CollectionIds.Where(view.Collections.ContainsKey).Select(c => view.Collections[c])
+            var linked = version.LinkedCollectionIds().Where(view.Collections.ContainsKey).Select(c => view.Collections[c])
                 .Select(c => new TestedCollectionRef(c.Id, c.Name, !notPublished.Contains(c.Id))).ToList();
             var result = plan.Retrieval;
             return new AssistantTestResult(
@@ -154,12 +154,12 @@ public sealed class AdminTestPanel(
         entry = entry with
         {
             State = Domain.Entities.AssistantStates.Active,
-            Published = new PublishedVersionEntry(version.Id, version.Number, version.GatewayModel!, version.CollectionIds, version.SystemPrompt, version.QuerySteps,
+            Published = new PublishedVersionEntry(version.Id, version.Number, version.GatewayModel!, version.CollectionLinks, version.SystemPrompt, version.QuerySteps,
                 version.NotFound, version.PublishedAt),
         };
         var collections = current.Collections.ToDictionary();
         var notPublished = new HashSet<Guid>();
-        foreach (var id in version.CollectionIds)
+        foreach (var id in version.LinkedCollectionIds())
         {
             if (collections.TryGetValue(id, out var c) && !c.Deleted && c.PublishedAt is null)
             {

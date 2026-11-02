@@ -197,10 +197,45 @@ public sealed class Collection
     /// <summary>Null until its owner publishes it; unpublished collections are invisible to retrieval except the test panel.</summary>
     public DateTimeOffset? PublishedAt { get; set; }
 
+    /// <summary>Who may link it besides the owning department (<see cref="CollectionSharingLevels"/>; admin design §3.2).</summary>
+    public string SharedWith { get; set; } = CollectionSharingLevels.Department;
+
+    /// <summary>The responsible person or a functional mailbox, shown to the departments that may link it.</summary>
+    public string? ContactName { get; set; }
+
+    public string? ContactEmail { get; set; }
+
     public DateTimeOffset? DeletedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
     public uint Version { get; set; }
+}
+
+/// <summary>A collection's sharing level (data-model §2.1 <c>Collections.SharedWith</c>).</summary>
+public static class CollectionSharingLevels
+{
+    /// <summary>Only the owning department.</summary>
+    public const string Department = "department";
+
+    /// <summary>Also the departments in <c>CollectionShares</c>.</summary>
+    public const string Selected = "selected";
+
+    /// <summary>Every active department.</summary>
+    public const string Municipality = "municipality";
+
+    public static IReadOnlyList<string> All { get; } = [Department, Selected, Municipality];
+}
+
+/// <summary>
+/// A department a collection is shared with when its level is <see cref="CollectionSharingLevels.Selected"/>
+/// (<c>config."CollectionShares"</c>, data-model §2.1); rows are kept but unused at the other levels.
+/// </summary>
+public sealed class CollectionShare
+{
+    public Guid CollectionId { get; set; }
+    public Guid DepartmentId { get; set; }
+    public required string SharedBy { get; set; }
+    public DateTimeOffset SharedAt { get; set; }
 }
 
 /// <summary>Source types of P1 (data-model §2.1). <c>sharepoint</c> is P2.</summary>
