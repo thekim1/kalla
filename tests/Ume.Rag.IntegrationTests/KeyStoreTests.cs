@@ -38,7 +38,6 @@ public sealed class KeyStoreTests(RagDatabaseFixture database)
         KeyChecks.Refusal(key, plain, DateTimeOffset.UtcNow).ShouldBeNull();
         key.Client!.Name.ShouldBe("Integration test");
 
-        var revoked = Stopwatch.StartNew();
         await AdminWriteAsync(async db =>
         {
             var stored = await db.Keys.SingleAsync(k => k.Id == keyId, Ct);
@@ -46,8 +45,9 @@ public sealed class KeyStoreTests(RagDatabaseFixture database)
             await db.SaveChangesAsync(Ct);
         });
 
-        await WaitUntilAsync(async () => await store.FindAsync(plain, Ct) is { } k && KeyChecks.Refusal(k, plain, DateTimeOffset.UtcNow) == KeyChecks.KeyRevoked);
-        revoked.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(1)); // the 30 s key cache was cleared by the notification
+        // The cache holds keys for 5 minutes here (StartApiAsync), so only the notification can clear it; no timing bound (#297).
+        await WaitUntilAsync(async () => await store.FindAsync(plain, Ct) is { } k && KeyChecks.Refusal(k, plain, DateTimeOffset.UtcNow) == KeyChecks.KeyRevoked,
+            TimeSpan.FromSeconds(30));
     }
 
     [Fact]
@@ -56,11 +56,12 @@ public sealed class KeyStoreTests(RagDatabaseFixture database)
         using var host = await StartApiAsync();
         var store = host.Services.GetRequiredService<KeyStore>();
         var generated = Hasher.Generate();
-        (await store.FindAsync(generated.PlainText, Ct)).ShouldBeNull(); // now remembered as unknown for 30 s
+        (await store.FindAsync(generated.PlainText, Ct)).ShouldBeNull(); // now remembered as unknown for the cache's 5 minutes
 
         await CreateKeyAsync(generated);
 
-        await WaitUntilAsync(async () => await store.FindAsync(generated.PlainText, Ct) is not null, TimeSpan.FromSeconds(1));
+        // Only the notification can clear the unknown-key cache within 30 s (#297: no timing bound).
+        await WaitUntilAsync(async () => await store.FindAsync(generated.PlainText, Ct) is not null, TimeSpan.FromSeconds(30));
     }
 
     [Fact]
@@ -139,6 +140,8 @@ public sealed class KeyStoreTests(RagDatabaseFixture database)
         {
             ["ConnectionStrings:ragdb"] = database.Connection(Api),
             ["Security:KeyPepper"] = Pepper,
+            // The maximum (5 minutes), ten times the 30 s waits below, so a cleared cache proves the notification, not the expiry (#297).
+            [$"{KeyStoreOptions.SectionName}:KeyCacheSeconds"] = "300",
         });
         builder.AddRagDatabase();
         builder.AddRagConfigMonitor();

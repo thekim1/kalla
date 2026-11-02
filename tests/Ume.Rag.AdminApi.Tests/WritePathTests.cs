@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
@@ -9,7 +8,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
-using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.TestKit;
 
 namespace Ume.Rag.AdminApi.Tests;
@@ -200,17 +198,19 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
             await lockRow.ExecuteNonQueryAsync(Ct);
         }
 
-        var watch = Stopwatch.StartNew();
-        using var busy = await admin.PostAsJsonAsync("/api/clients", NewClient("Busy " + Guid.NewGuid()), Ct);
-        watch.Stop();
+        var name = "Busy " + Guid.NewGuid();
+        using var busy = await admin.PostAsJsonAsync("/api/clients", NewClient(name), Ct);
 
+        // The outcome, not the wall clock (#297): the write waited for the lock, gave up with config_busy and left nothing.
         busy.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable, await busy.Content.ReadAsStringAsync(Ct));
         (await busy.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().ShouldBe(AdminErrorCodes.ConfigBusy.Code);
-        // One wait for the lock, not one per retry of the execution strategy: two waits take at least 10 s, so the bound is
-        // just under that, leaving ~5 s for the request on a busy machine (it flaked at 9 s; #188 review).
-        watch.Elapsed.ShouldBeGreaterThanOrEqualTo(TimeSpan.FromSeconds(4.5));
-        watch.Elapsed.ShouldBeLessThan(ConfigWrites.LockTimeout * 2 - TimeSpan.FromMilliseconds(100));
         await transaction.RollbackAsync(Ct);
+        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+        (await db.Clients.AnyAsync(c => c.Name == name, Ct)).ShouldBeFalse();
+
+        // Once the lock is free the same write goes through.
+        using var after = await admin.PostAsJsonAsync("/api/clients", NewClient(name), Ct);
+        after.StatusCode.ShouldBe(HttpStatusCode.Created, await after.Content.ReadAsStringAsync(Ct));
     }
 
     [Fact]

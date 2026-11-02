@@ -314,7 +314,10 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
         }
     }
 
+    // Flaky (#297): the planner's choice over the shared fixture's tables, which parallel test classes write while this
+    // runs; it failed CI twice on 2026-11-01 after #253. It runs locally and in the weekly flake hunt, not in the PR gate.
     [Fact]
+    [Trait(TestCategory.Name, TestCategory.Flaky)]
     public async Task Generic_plans_use_the_partial_gin_the_profiles_hnsw_and_the_collection_btree_as_designed()
     {
         // to-verify #4. Enough rows of the profile for the statistics to mean something; planner shortcuts disabled
