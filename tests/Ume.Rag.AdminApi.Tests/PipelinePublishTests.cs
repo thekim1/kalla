@@ -111,6 +111,24 @@ public sealed class PipelinePublishTests(AdminDatabaseFixture database)
 
         await db.Jobs.Where(j => j.Id == publicationId).ExecuteUpdateAsync(u => u.SetProperty(j => j.State, JobStates.Succeeded)
             .SetProperty(j => j.Result, $$"""{"pipelineVersionId":"{{plan.GetProperty("draftVersionId").GetGuid()}}","documents":1,"sources":[{"sourceId":"{{source.Id}}","documents":1}]}"""), Ct);
+        // #298 review: a second plan (other parameters, the same draft row) makes the first stale, even with a fresh version.
+        var older = publicationId;
+        using (var replanned = await admin.PostAsJsonAsync($"/api/pipelines/{copyId}/publications",
+                   new { parameters = new { }, version = (await admin.GetFromJsonAsync<JsonElement>($"/api/pipelines/{copyId}", Ct)).GetProperty("version").GetString() }, Ct))
+        {
+            replanned.StatusCode.ShouldBe(HttpStatusCode.Accepted, await replanned.Content.ReadAsStringAsync(Ct));
+            publicationId = (await Json(replanned)).GetProperty("publicationId").GetGuid();
+        }
+
+        var olderView = await admin.GetFromJsonAsync<JsonElement>($"/api/publications/{older}", Ct);
+        olderView.GetProperty("superseded").GetBoolean().ShouldBeTrue();
+        using (var stalePlan = await admin.PostAsJsonAsync($"/api/publications/{older}/confirm", new { version = olderView.GetProperty("version").GetString() }, Ct))
+        {
+            (await Json(stalePlan)).GetProperty("code").GetString().ShouldBe("publication_stale");
+        }
+
+        await db.Jobs.Where(j => j.Id == publicationId).ExecuteUpdateAsync(u => u.SetProperty(j => j.State, JobStates.Succeeded), Ct);
+        current = (await admin.GetFromJsonAsync<JsonElement>($"/api/publications/{publicationId}", Ct)).GetProperty("version").GetString();
         using (var stale = await admin.PostAsJsonAsync($"/api/publications/{publicationId}/confirm", new { version = "1" }, Ct))
         {
             stale.StatusCode.ShouldBe(HttpStatusCode.Conflict);
@@ -138,6 +156,6 @@ public sealed class PipelinePublishTests(AdminDatabaseFixture database)
             .ShouldBe([PipelineVersionStates.Published, PipelineVersionStates.Superseded]);
         (await TriggersAsync()).ShouldBe(["publish", "rollback"]);
         (await db.AuditLog.AsNoTracking().Where(a => a.EntityType == "pipeline" && a.EntityId == copyId.ToString()).OrderBy(a => a.Id).Select(a => a.Action).ToListAsync(Ct))
-            .ShouldBe(["plan", "publish", "rollback"]);
+            .ShouldBe(["plan", "plan", "publish", "rollback"]);
     }
 }
