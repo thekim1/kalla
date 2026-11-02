@@ -66,6 +66,15 @@ public sealed class Bgem3TokenCounter : ITokenCounter
 public static class TokenCuts
 {
     /// <summary>
+    /// How far a sum of separately counted whitespace-separated parts may fall short of the exact count of the joined
+    /// string. BGE-M3's vocabulary has no piece with <c>▁</c> after its first character and the normaliser folds every
+    /// whitespace run into one <c>▁</c>, so the Viterbi path breaks at each word start and the sum equals the joined count
+    /// except for float rounding between near-tied paths. The packer allows it per joined unit; <see cref="SuffixStart"/>
+    /// once per suffix, since per word it would exceed the tokens a word adds.
+    /// </summary>
+    public const int JoinSlack = 2;
+
+    /// <summary>
     /// The longest prefix of <paramref name="text"/> ending before a whitespace that fits <paramref name="maxTokens"/>
     /// (a unit larger than the whole budget, rule 2). Falls back to a hard cut inside the first word when even that is too long.
     /// </summary>
@@ -123,17 +132,29 @@ public static class TokenCuts
         return fit;
     }
 
-    /// <summary>The start of the shortest suffix beginning at a word that has at most <paramref name="maxTokens"/> (overlap of one long sentence, rule 3).</summary>
+    /// <summary>
+    /// The start of the longest suffix beginning at a word that has at most <paramref name="maxTokens"/> (overlap of one long
+    /// sentence, rule 3): the first word start from the left whose suffix fits. A start whose suffix has a sum of word counts
+    /// over <paramref name="maxTokens"/> + <see cref="JoinSlack"/> is passed over without counting the suffix.
+    /// </summary>
     public static int SuffixStart(ITokenCounter counter, string text, int maxTokens)
     {
         ArgumentNullException.ThrowIfNull(counter);
         ArgumentNullException.ThrowIfNull(text);
         var starts = Boundaries(text).Select(b => b + 1).Where(s => s < text.Length).Prepend(0).ToList();
-        foreach (var start in starts)
+        var sums = new int[starts.Count + 1];
+        for (var i = starts.Count - 1; i >= 0; i--)
         {
-            if (counter.Count(text.AsSpan(start)) <= maxTokens)
+            var end = i + 1 < starts.Count ? starts[i + 1] : text.Length;
+            // Without the token Bgem3TokenCounter adds for a trailing zero-width space, which falls away inside the suffix.
+            sums[i] = sums[i + 1] + counter.Count(text.AsSpan(starts[i], end - starts[i]).Trim().TrimEnd('\u200B'));
+        }
+
+        for (var i = 0; i < starts.Count; i++)
+        {
+            if (sums[i] - JoinSlack <= maxTokens && counter.Count(text.AsSpan(starts[i])) <= maxTokens)
             {
-                return start;
+                return starts[i];
             }
         }
 
