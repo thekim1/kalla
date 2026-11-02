@@ -81,7 +81,7 @@ Refs: [admin §5.3, §5.8, §7](../admin/design.md)
 - [x] Assistenter: draft, Testa, Publicera, Versioner with restore, Målgrupp, retention, archive
   — #301: list, create, Utkast (model, instructions, collections, warnings), Testa, Publicera, Målgrupp; #304: Versioner with Återställ, Lagring (V10 within the level's policy), Arkivera / Ta fram igen
 - [x] Översikt setup checklist; Granskningslogg; explain access
-  — setup checklist (#313, #316); audit log page (#321); Check access on the assistant's Audience tab (b/12-explain-access)
+  — setup checklist (#313, #316); audit log page (#321); Check access on the assistant's Audience tab (#324)
 - [ ] Generic forms for platform objects (incl. parse rules; data protection `none` only); #146 recorded
   — in part: the main session built the generic forms in #281; #146 not recorded
 - [ ] **Done:** admin §5.4 steps 9–13 work locally
