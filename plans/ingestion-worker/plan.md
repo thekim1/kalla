@@ -183,7 +183,7 @@ child documents.
 ## 7. Evaluation (R6)
 
 - **Evaluation set per collection**, built in layers:
-  1. *Generated* (P1b; built and tested on FakeGateway, not run on the pilot until an on-prem model exists, O1): sample chunks, have an on-prem model write a question the chunk answers plus the expected answer,
+  1. *Generated* (P1b; at the collection's ceiling, `Eu` under M2, processing §13.1): sample chunks, have a model write a question the chunk answers plus the expected answer,
      keyed to the chunk's document; filter out trivial or ambiguous questions with a judge pass. Regenerated as
      content changes.
   2. *Human*: questions from editors, plus questions derived from chat feedback. Feedback never enters a set

@@ -714,7 +714,7 @@ progress flags), which disappears when the collection has a published assistant 
 | 4 | Kontrollera | same drawer | preflight: reachability, robots status, sitemap found, estimated pages, egress, "samma webbplats hämtas redan av X" (shared crawl frontier, P2; weakness review §1), CMS recognised ("Sitevision") | fail blocks save; warn explains |
 | 5 | Förhandsgranska | preview panel | up to 5 URLs or uploaded files; for a crawl source the site profile the worker would apply (P1: the manual Sitevision preset; learned from P2), shown as **Före / Efter** text per sample page (boilerplate removed, breadcrumb, date); each stage's output (text, sections, chunks with token counts) | preview isolated |
 | 6 | Spara och hämta | source page → run page | saves, enqueues the first sync; live counters, failures by reason in plain Swedish | – |
-| 7 | Testfrågor | Testfrågor och kvalitet | generated after the first runs, cost shown before (on the pilot not until an on-prem model exists, O1: there the set is the gold set); own questions with expected documents | – |
+| 7 | Testfrågor | Testfrågor och kvalitet | generated after the first runs, cost shown before (at the collection's ceiling, processing §13.1); own questions with expected documents | – |
 | 8 | Publicera kunskapsbanken | collection page | latest evaluation report shown ("Träffsäkerhet 0,78 · 86 frågor"); **Publicera** | – |
 | 9 | Skapa assistent | assistant drawer → assistant page | pick an **assistant template** ("Allmän rådgivning" preselected; P2, weakness review §1: in P1 the draft starts from `Settings.Chat` defaults); name, description, contact person; collections (the new one preselected; unpublished ones work in Testa only), model picker showing only models servable for the level, not-found texts and contact link from the template; saved as **utkast** | warnings only (V3, V8, V15 at publish) |
 | 10 | Testa | Testa tab | runs the draft; sample questions from the evaluation set as one-click prompts; sources, coverage, raw vs delivered answer; **Spara som testfråga** (P2) turns a tried question into a test question with the expected behaviour typed in | V33 |
@@ -1040,8 +1040,8 @@ demonstrably need custom flows (§16).
 ### 7.1 Testfrågor och kvalitet (per collection)
 
 - Set: size per layer (`generated`, `human`, P2 `skill`/`feedback`), stale and retired counts, last generation (model,
-  cost), **Skapa fler** with the forecast (processing §13.1). Generated sets are built and tested on FakeGateway but
-  not generated on the pilot until an on-prem model exists (O1); until then the pilot's set is the `human` gold set.
+  cost), **Skapa fler** with the forecast (processing §13.1). Generated sets run at the collection's ceiling (processing
+  §13.1); the `human` gold set stays the headline metric.
 - Questions table (keyset): question, layer, expected documents (titles), last rank, state; editors add/edit/retire
   human questions (expected documents picked by title search); generated questions can be edited (become human) or
   retired.

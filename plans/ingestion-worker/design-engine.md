@@ -429,7 +429,7 @@ is charged to that team, and no `x-ume-on-behalf-of` is sent (so no echo is chec
 | Header | Value |
 |---|---|
 | `x-ume-on-behalf-of` | from gateway release 2 (P2): the owning team of the document's collection (`Collections.OwnerTeamId`; gateway design §5.2) |
-| `x-ume-max-residency` | embeddings: the embedding profile's `MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile (`text-embedding-3-large` at 1024 dimensions) until register M2 brings on-prem hardware, then `OnPrem` (R3); evaluation generation and judging: `OnPrem` (generated sets are not run on the pilot until an on-prem model exists, O1); other LLM calls (P2 stages) by the document level: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker has no `External` key) |
+| `x-ume-max-residency` | embeddings: the embedding profile's `MaxResidency`, at most the platform ceiling: `Eu` for the pilot profile (`text-embedding-3-large` at 1024 dimensions) until register M2 brings on-prem hardware, then `OnPrem` (R3); evaluation generation and judging by the collection's level, other LLM calls (P2 stages) by the document level: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker has no `External` key) |
 | `x-ume-run-id`, `x-ume-step` | `RunId` (GUID) and stage **type** (`embed`, `eval-judge`), never names (gateway design §7.1) |
 | `traceparent` | current activity |
 

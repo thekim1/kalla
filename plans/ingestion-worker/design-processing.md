@@ -585,12 +585,12 @@ noisy site would churn its whole index.
 | Step | Rule |
 |---|---|
 | When | after a collection's first sync runs finish; weekly top-up check (scheduler, 6a §9.6); on demand from the admin. `EvalSetTriggers` (dedup `eval-generate:{collectionId}`) enqueues `generate-set` when the collection has no generated question and its first syncs finished (every active source has a `succeeded`, `degraded` or `awaiting-deletion-confirmation` run, none is running, and D > 0; publishing is not required), never again while any `eval-generate` job row of the collection exists; the weekly check runs Sunday 04:30 Europe/Stockholm; no trigger fires without `Settings.EvaluationModel` |
-| Phase | retrieval evaluation over the `human` layer (the gold set, §13.4) runs from P1a; generated sets come in P1b, built and tested on FakeGateway but not run on the pilot until an on-prem model exists (register M2; Decisions table "P1b briefs", O1) |
+| Phase | retrieval evaluation over the `human` layer (the gold set, §13.4) runs from P1a; generated sets come in P1b and run wherever the collection's ceiling has a model (Decisions "Evaluation models at the collection's ceiling"): under M2 every `public` and `internal` collection, a `sensitive` one once an on-prem model exists |
 | Size (answered 20) | target `N = min(100, 3 × D, eligible chunks)` for `D` live documents; over-generate 1.6 × N to survive filtering |
 | Eligible chunks | live sets of the collection; body ≥ 50 tokens; not from PII-flagged sets (keeps personal data out of stored questions); not `quality.largeTable` rows beyond the first group (`Chunks.LargeTable`, true on the second and later row groups of a table over 2,000 rows, is excluded) |
 | Stratification | by document: round-robin over documents in seeded random order, ≤ `⌈N/D⌉ + 1` per document; by document type: proportional to chunk share, each type with ≥ 5 % of chunks gets ≥ 2; by kind (`Chunks.ContentKind` `table`/`list`; `list` = list items are at least half of the body tokens): a minimum of max(⌈share × candidates⌉, min(5, available)) per kind, taken first and inside the per-document cap |
 | Seed | `SHA-256(setId ‖ round)`; the sample is reproducible; the round is `EvaluationSets.Round`, the round the next generation uses: every round that generated writes round + 1, also one that kept nothing (the next round is the larger of `Round` and the newest question's `Origin.round` + 1) |
-| Model | `Settings.EvaluationModel` (on-prem chat model in the gateway catalogue; must be a `GatewayModels` row servable `OnPrem`, admin design §4.10) with ceiling `OnPrem`; `x-ume-step: eval-generate`; temperature 0.3; JSON output. Unset refuses with `eval.model_unset` (no implicit default); the job refuses unless `/v1/models` at ceiling `OnPrem` lists the model, read through its own client (`gateway-eval-models`) with `x-ume-max-residency: OnPrem` and the `OnPrem` key (`ResidencyCeilingHandler` exempts `GET /v1/models` from the answer check, chat §8.1) |
+| Model | `Settings.EvaluationModel` (a chat model in the gateway catalogue) at the **collection's ceiling**: `sensitive` `OnPrem`, `internal` and `public` `Eu` (the worker holds no `External` key), lowered to `Gateway:MaxResidency` when set; `x-ume-step: eval-generate`; no `temperature` (the model's default); JSON output (`response_format` `json_object`; a reply in a code fence is accepted). Unset refuses with `eval.model_unset` (no implicit default); the job refuses with `eval.model_not_at_ceiling` unless `/v1/models` at that ceiling lists the model, read through its own client (`gateway-eval-models`) with `x-ume-max-residency` and the worker's key of that ceiling (`eval.no_key` without one; `ResidencyCeilingHandler` exempts `GET /v1/models` from the answer check, chat §8.1) |
 
 Prompt outline (Swedish, versioned as `PromptVersion`):
 
@@ -609,7 +609,7 @@ Questions are Swedish whatever the document language (BGE-M3 is cross-lingual). 
    English, or if it has ≥ 8 words and is not detected as Swedish (the detector needs 8 words).
 2. **Answer leakage**: the normalised expected answer is not contained in the question (matched on whole
    words); share of the question's content words found verbatim in the chunk ≤ 0.8.
-3. Judge (`Settings.EvaluationJudgeModel`, default the same model, temperature 0, `x-ume-step: eval-judge`): rates
+3. Judge (`Settings.EvaluationJudgeModel`, default the same model, same ceiling, no `temperature`, `x-ume-step: eval-judge`): rates
    *answerable from the text*, *understandable without the text*, *specific to this content* on 1–5; keep only all ≥ 4.
 4. Near-duplicates: cosine ≥ 0.92 between kept questions (the collection's embedding profile) → keep one.
 5. Never filter on whether retrieval finds the document: that would bias the set towards the current pipeline.
@@ -780,8 +780,8 @@ exists.
   `0x5241_4731_0005`. Onyx found an ingestion bug only through poor evaluation scores
   (`../../platforms/onyx.md:322`); this makes that routine.
 - **Later (P2): answers**: nightly per assistant, the evaluation sets of its collections are answered through
-  `Ume.Rag.Answering` with the assistant's settings, and an on-prem judge (`Settings.EvaluationJudgeModel`, ceiling
-  `OnPrem`, `x-ume-step: eval-answer`) rates **faithfulness** (every claim supported by the cited chunks) and
+  `Ume.Rag.Answering` with the assistant's settings, and a judge (`Settings.EvaluationJudgeModel`, at the
+  assistant's ceiling, `x-ume-step: eval-answer`) rates **faithfulness** (every claim supported by the cited chunks) and
   **citation precision** (cited chunks support the claims); results per assistant with counts. The `uncited_answer`
   rate from live chat is shown next to them (chat design). Run kind `answers`; it runs in **`rag-admin`**, which
   already runs `Ume.Rag.Answering` for the test panel and holds the gateway keys of every level. The worker runs only
@@ -902,8 +902,8 @@ applied then and are not repeated.
 - Docling `timings` granularity for per-page milliseconds (range sizing falls back to `docling_ms / pages`).
 - `SwedishDecompounder` output for `SearchText` vs the query side (same parts for the same word), and the P0
   comparison with Postgres `ispell` (simplification pass §3).
-- On-prem LLM through the gateway: JSON output mode, and that judge scores at temperature 0 are stable enough for
-  reproducible filtering; run-to-run variance of nightly runs on an unchanged collection (input to any future gate).
+- The evaluation model through the gateway: JSON output mode, and that judge scores at the model's default temperature
+  are stable enough for the ≥ 4 filter; run-to-run variance of nightly runs on an unchanged collection (input to any future gate).
 - Cost per assistant of the answer-level nightly run in `rag-admin`.
 - All planning numbers of §14.7 and §16, measured in the R1 test.
 
