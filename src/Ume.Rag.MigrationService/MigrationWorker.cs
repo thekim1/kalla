@@ -9,7 +9,8 @@ namespace Ume.Rag.MigrationService;
 /// <summary>
 /// Applies EF Core migrations (expand/contract, backwards compatible), then <c>app-roles.sql</c>
 /// (<c>Migration:RolesSqlPath</c>, set by production compose; dev runs as the bootstrap superuser without the service
-/// roles) and the run-item partition maintenance, then the platform pipelines (<see cref="PipelineTemplateSeeder"/>), the platform embedding profile
+/// roles) and the run-item partition maintenance, in Development the HNSW defaults on the database
+/// (<see cref="DevDatabaseSettings"/>), then the platform pipelines (<see cref="PipelineTemplateSeeder"/>), the platform embedding profile
 /// (<see cref="EmbeddingProfileSeeder"/>), the first settings row (<see cref="SettingsSeeder"/>) and the <see cref="DevSeeder"/> when <c>Seed:Enabled</c> (with the dev Open WebUI
 /// client when <c>Seed:DevKey</c> is set), and exits
 /// (data-model §10, as the gateway's MigrationWorker). The services wait for this to complete, so they never run against
@@ -18,6 +19,7 @@ namespace Ume.Rag.MigrationService;
 public sealed partial class MigrationWorker(
     IServiceProvider services,
     IHostApplicationLifetime lifetime,
+    IHostEnvironment environment,
     IConfiguration configuration,
     ILogger<MigrationWorker> logger) : BackgroundService
 {
@@ -31,6 +33,11 @@ public sealed partial class MigrationWorker(
             await using var scope = services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<RagDbContext>();
             await RagDatabaseMigrator.MigrateAsync(db, configuration["Migration:RolesSqlPath"], stoppingToken);
+            if (environment.IsDevelopment())
+            {
+                await DevDatabaseSettings.ApplyAsync(db, stoppingToken);
+            }
+
             await PipelineTemplateSeeder.SeedAsync(db, [.. TemplateCatalog.BuiltIn.All.Select(t => t.Template)], TimeProvider.System,
                 stoppingToken);
             await EmbeddingProfileSeeder.SeedAsync(db,
