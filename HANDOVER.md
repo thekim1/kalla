@@ -24,8 +24,8 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   **recall@10 0.91, MRR 0.70**. Analysing the misses found a **degraded HNSW index** (exact best 0.246 at rank 1, the
   index's best 0.454; `REINDEX` fixed it). Now the worker checks index recall against exact nightly at 03:00 and after
   large syncs and rebuilds below 0.95 (#330, first live check: recall 1.0); the worker holds `MAINTAIN` and migrations
-  drop invalid `_ccnew` leftovers (#328); the dev database gets the HNSW defaults (#326). The remaining misses are mostly
-  near-duplicate pages (förskola contacts, school pages), not search faults.
+  drop invalid `_ccnew` leftovers (#328); the dev database gets the HNSW defaults (#326). Of the 9 remaining misses only 2 are
+  near-duplicate förskola pages (cosine 0.04); 7 have no near-identical page (0.10–0.31) and are real misses to analyse.
 - `main` = `7002586`. All session-18 PRs were green on their branches; **`main` shows no CI run after `29eb280`**:
   check why push runs stopped (workflow trigger, runner, or GitHub delay) before relying on `main`'s status.
 
@@ -52,13 +52,13 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - Dashboard `https://localhost:17470`; **admin UI `https://localhost:5174`** (user `rag-platform-admin`); admin API
   `https://localhost:7402`; api `https://localhost:7401`; Open WebUI = the `open-webui` resource's port (33747 after the
   last start; check `aspire describe`).
-- **Pilot data:** department DoIT (seed, code `dev-seed-doit`); collection `turkos` (public, published,
+- **Pilot data:** department DoIT (hand-made, code `1000`); collection `turkos` (public, published,
   `coverageMaxDistance` 0.55); crawl source "umea.se" (whole host, `maxPages` 2,500, `**.pdf` excluded, no schedule;
   2,532 documents, 2,324 with content, 10,074 chunks); site profile www.umea.se; clients "Open WebUI", "Pilot retrieval
   (checks)", "Pilot grading"; `GatewayModels` (manual) `claude-opus-5-5`, `gpt-6.1-sol`, `claude-haiku-5-5`; assistant
   `turkos` v3; generated test set of 100 (2 of them from Finnish pages: generated questions can't be retired by hand).
-- The dev login's departments (codes 1000/3000/5000) match no synced department, so the start page shows "Unknown
-  department": fix in the dev data (Keycloak user or seed), not the UI.
+- DoIT's code is `1000` (set by hand, session 18), the first of the dev users' codes (`dev/keycloak/ume-realm.json`:
+  1000/3000/5000), so the start page names it; 3000 and 5000 show as unknown departments.
 - **Logins:** Open WebUI and the admin UI's dev user are in `~/ume-rag-demo-login.txt` (mode 600). Never put passwords
   in a chat; point the user to the file.
 - **Draft gold sets:** `~/ume-rag-gold-draft-{questions,answers}.csv` (40 questions, session 17) and
@@ -136,9 +136,9 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
    to unblock 34–36. Review each PR live. Stream A follows with 37–38 after L13/L14.
 3. **Stream A now:** #319 (platform pages and `GenericForm.spec.ts` in English, search keywords in
    `src/admin-ui/src/platform/nav.ts`).
-4. **Dev data:** give the dev admin user DoIT's code (or seed departments 1000/3000/5000) so the start page names them.
-5. **Evaluation accuracy (needs a design rule):** count near-duplicate pages as correct answers in generated questions
-   (e.g. expected documents = every live document whose chunk has the same text hash or near-identical embedding).
+4. **Dev data:** done locally (DoIT's code is now 1000, the dev users' first code); 3000 and 5000 stay unknown.
+5. **Analyse the 7 real search misses** of the first generated set (statistics tables, document templates, school rules):
+   chunking, question or ranking? Counting near-duplicates as correct would add at most 0.02, so it isn't worth a rule.
 6. **User decides:** the gold set with DoIT and threshold calibration (item 21); P1b item 15 `e2e` (after B's L7); pin
    review and Aspire 13.6.4.
 

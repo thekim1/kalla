@@ -26,7 +26,7 @@ That is close to Eneo's kitchen-sink problem, moved into the admin UI. A departm
 | 4 | **Fewer settings for departments**: a department sees schedule, scope, retention and its contact person; the rest of `Settings.Chat`, `Settings.Retrieval`, `Settings.Crawl` stays on the platform-admin pages | P1b, UI only | fits current rows |
 | 5 | **Unanswered questions to the content owner**: thumbs-down and "the sources don't say" answers reach the knowledge base's contact person as "questions your content couldn't answer", with "add as test question" (human layer). Uses data already stored (feedback metadata, not-found outcomes) | P1b, after item 33 (contact person) | fits current rows; A1 still limits stored text, so the list shows what the feedback import holds |
 | 6 | **"Use this assistant" page** per assistant: OpenAI-client snippet, Knowledge API example, how to request a key | P1b, small | fits current rows |
-| 7 | **Count near-duplicate pages as correct answers in the evaluation**: a generated question's expected documents include live documents with the same chunk text (text hash) as its source chunk | P1b, stream A | needs a rule in processing §13.1 |
+| 7 | **Look into the real search misses** of the first generated set: 7 of its 9 misses have no near-identical page (nearest other page at cosine distance 0.10–0.31), among them statistics tables (population 2014, the 2050 goal), document templates and school rules; only 2 are near-duplicate förskola pages (0.04). Find out per miss whether chunking, the question or ranking is at fault | P1b, main session + stream A | fits current rows |
 
 **After these:** an internal pilot on one department's own documents. Uploads work today; SharePoint is P2 in the
 phase plan (`plans/README.md`, "P2 Broaden"), with no connector yet, so a SharePoint pilot is a phase decision.
@@ -40,9 +40,9 @@ phase plan (`plans/README.md`, "P2 Broaden"), with no connector yet, so a ShareP
   answerable, so they can't place the "the sources don't say" cut-off; that needs off-topic questions too, which is the
   gold-set calibration (P1b item 21). Show the outcome there ("answers 94 % of in-scope questions, refuses 6 of 7
   off-topic ones"), not a number to tune.
-- **Grouping results by page family (first version, item 8)** is not the first fix: the near-duplicate misses are mainly
-  an evaluation artefact (the right content on a sibling page). Item 7 fixes the measurement; grouping can follow if
-  citations show many siblings.
+- **Grouping results by page family (first version, item 8)** would not move the score: measured on the first generated
+  set, only 2 of 9 misses are near-duplicate pages, and none shares exact text with another page. Grouping can still
+  follow if citations show many siblings.
 - **Access changes are not edited in the assistant's draft.** Retention, history mode and allowed origins are on the
   assistant itself (`src/Ume.Rag.Domain/Entities/AssistantEntities.cs:39-41`) and the audience is its own table linked
   to the assistant, not to a version, with its own route (`PUT /api/assistants/{id}/audiences`) and tab.
@@ -73,5 +73,6 @@ the organisation proposal) until a real project asks for it.
 
 1. User: yes or no to items 2–3 (they move assistant templates from P2 into P1b as three fixed presets).
 2. Main session: a Decisions row for items 2–7; rules in admin design §5.4 (guided path, presets), §5.7 (department vs
-   platform settings), §8 (unanswered questions), processing §13.1 (item 7); P1b items with done-when and streams.
-3. Streams: B starts with the organisation schema (item 33), then items 2–6 on top; A takes item 7 and 37–38.
+   platform settings), §8 (unanswered questions); P1b items with done-when and streams.
+3. Streams: B starts with the organisation schema (item 33), then items 2–6 on top; A takes 37–38 and, with the main
+   session, item 7.
