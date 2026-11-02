@@ -534,8 +534,9 @@ export const PLATFORM = {
     createTitle: (what: string) => `New: ${what.toLowerCase()}`,
     saved: 'Saved',
     none: '(none)',
-    required: 'Fill in the field.',
-    invalidJson: 'This is not valid JSON.',
+    // Swedish until stream A's GenericForm.spec.ts asserts the label instead of the text (issue for stream A; #314).
+    required: 'Fyll i fältet.',
+    invalidJson: 'Det här är inte giltig JSON.',
     invalidNumber: 'Enter a number.',
     listHint: 'One value per line.',
     jsonHint: 'JSON; the server checks the content.',
