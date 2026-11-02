@@ -11,7 +11,7 @@ public static class EvalSetsExtensions
 {
     /// <summary>
     /// Set generation (<see cref="IEvalSetHandler"/>, processing design §13.1–§13.3), its gateway client
-    /// <see cref="EvalModelClient.HttpClientName"/> (ceiling <c>OnPrem</c>, so the worker needs <c>Gateway:Keys:OnPrem</c>) and
+    /// <see cref="EvalModelClient.HttpClientName"/> (at the collection's ceiling, so the worker needs its key of that ceiling) and
     /// the catalogue client <see cref="EvalModelClient.CatalogueClientName"/>.
     /// Needs what <c>AddRagWorker</c> (<c>JobDatabase</c>, <c>IJobQueue</c>, <c>WorkerIdentity</c>) and <c>AddRagEngine</c>
     /// (<c>EmbeddingClient</c>, <c>IEmbeddingProfileStore</c>) register.
