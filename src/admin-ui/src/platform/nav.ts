@@ -8,7 +8,7 @@ export const platformNavItems: NavItem[] = [
     label: PAGE.platform.title,
     icon: 'settings',
     description: PAGE.platform.description,
-    keywords: ['klienter', 'nycklar', 'inställningar', 'dataskydd', 'webbplatsprofiler', 'modeller'],
+    keywords: ['clients', 'keys', 'settings', 'data protection', 'site profiles', 'models', 'templates'],
     sections: platformResources.map((r) => ({ label: r.label, to: { name: 'platform-resource', params: { resource: r.id } } })),
     children: ['platform-resource'],
     roles: ['rag-platform-admin'],
