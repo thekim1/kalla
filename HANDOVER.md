@@ -24,8 +24,13 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   **recall@10 0.91, MRR 0.70**. Analysing the misses found a **degraded HNSW index** (exact best 0.246 at rank 1, the
   index's best 0.454; `REINDEX` fixed it). Now the worker checks index recall against exact nightly at 03:00 and after
   large syncs and rebuilds below 0.95 (#330, first live check: recall 1.0); the worker holds `MAINTAIN` and migrations
-  drop invalid `_ccnew` leftovers (#328); the dev database gets the HNSW defaults (#326). Of the 9 remaining misses only 2 are
-  near-duplicate förskola pages (cosine 0.04); 7 have no near-identical page (0.10–0.31) and are real misses to analyse.
+  drop invalid `_ccnew` leftovers (#328); the dev database gets the HNSW defaults (#326). The 9 remaining misses
+  (analysed 2026-11-02): 2 near-duplicate förskola pages; 1 question generated from a Finnish page (the Swedish page
+  ranks 1); 2 answered by other pages that the label doesn't name (the 2050 goal, Word templates); **4 buried by fusion**:
+  vector rank 1–2, absent from the keyword list, so RRF puts them at 16–21 behind pages that are mediocre in both lists.
+  On-demand runs on the same set: hybrid 0.91/0.70, **vector only 0.96/0.79**, keyword weight 0.5 → 0.97/0.74,
+  **0.25 → 0.98/0.77**, 0.1 → 0.97/0.81 (recall@10/MRR). Hybrid still wins on exact names (property designations,
+  named places). Generated questions favour vectors; the human gold set decides (Weakness review 2).
 - **Architecture plan** (`architecture_plans.md`, root, a proposal): Crotalus wrote it, the main session checked it
   against the code and rewrote it as v2 (`5d4387a`, `0525053`), then **Crotalus rewrote it again** (`2eba7de`, 17:25:
   "knowledge, assistants and models", 9 items, model roles, placements, quality). **The main session has not reviewed
@@ -142,8 +147,8 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
    user which items to adopt; with a yes, write the Decisions row, the design rules and P1b items.
 3. **Organisation (#318):** nudge B to start item 33 (schema → L13), or offer the user that the main session builds 33
    to unblock 34–36. Review each PR live. Stream A follows with 37–38 after L13/L14.
-4. **Analyse the 7 real search misses** of the first generated set (statistics tables, document templates, school rules):
-   chunking, question or ranking? Counting near-duplicates as correct would add at most 0.02, so it isn't worth a rule.
+4. **Keyword weight (user decides):** lower `keywordWeight` on `turkos` (proposal 0.25) from the analysis above, and
+   confirm it on the human gold set (item 21) before it becomes the template default.
 5. **User decides:** the gold set with DoIT and threshold calibration (item 21); P1b item 15 `e2e` (after B's L7); pin
    review and Aspire 13.6.4.
 
