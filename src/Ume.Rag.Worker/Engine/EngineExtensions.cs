@@ -112,6 +112,7 @@ public static class EngineExtensions
 
         services.AddHostedService<RunFinalizer>();
         services.AddHostedService<SyncScheduler>();
+        services.AddHostedService<HnswCheckScheduler>();
         services.AddHostedService<DriftSweepService>();
         return builder;
     }

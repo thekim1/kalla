@@ -45,6 +45,8 @@ public sealed class P1bJobContractTests
             new ClearPiiFlagCommand { DocumentId = Id, DecidedBy = "6f1c2d3e-0000-4000-8000-000000000001" },
             new ReprocessDocumentCommand { DocumentId = Id },
             new ReprocessDocumentCommand { DocumentId = Id, FromStage = "fetch" },
+            new CheckHnswIndexCommand { EmbeddingProfileId = Id, Trigger = HnswCheckTrigger.Nightly },
+            new CheckHnswIndexCommand { EmbeddingProfileId = Id, Trigger = HnswCheckTrigger.Sync },
             new StagePreviewResult
             {
                 ExpiresAt = DateTimeOffset.UnixEpoch,
@@ -84,6 +86,8 @@ public sealed class P1bJobContractTests
             new ClearPiiFlagResult { ReleasedChunkSetId = Id },
             new ClearPiiFlagResult(),
             new ReprocessDocumentResult { RunId = Id, ExecutionId = Id },
+            new CheckHnswIndexResult { Scopes = 1, Queries = 200, Recall = 0.62, Rebuilt = true, RecallAfter = 0.99 },
+            new CheckHnswIndexResult(),
         ];
 
         foreach (var sample in samples)
@@ -103,6 +107,7 @@ public sealed class P1bJobContractTests
         [
             "cancel-run", "edit-site-profile", "rollback-site-profile", "edit-eval-question",
             "confirm-deletion", "reject-deletion", "release-hold", "clear-pii-flag", "reprocess-document", "edit-parse-rule", "disable-parse-rule",
+            "check-hnsw-index",
         ]);
         ContractJson.Serialize(new ReprocessDocumentCommand { DocumentId = Id }).ShouldBe($$"""{"kind":"reprocess-document","documentId":"{{G}}","fromStage":"parse"}""");
         ContractJson.Serialize(new StagePreviewPayload { PipelineVersionId = Id, CollectionId = Id, DocumentIds = [Id] })
@@ -122,6 +127,7 @@ public sealed class P1bJobContractTests
     [InlineData(typeof(ReleaseHoldCommand), $$"""{"sourceId":"{{G}}"}""")]
     [InlineData(typeof(ClearPiiFlagCommand), $$"""{"documentId":"{{G}}","decidedBy":"x"}""")]
     [InlineData(typeof(ReprocessDocumentCommand), $$"""{"documentId":"{{G}}"}""")]
+    [InlineData(typeof(CheckHnswIndexCommand), $$"""{"embeddingProfileId":"{{G}}","trigger":"nightly"}""")]
     public void Kind_is_required_and_exact(Type type, string json) =>
         ContractSchemas.Validator(type).Validate(Repository.Json(json)).ShouldNotBeEmpty();
 
@@ -138,6 +144,8 @@ public sealed class P1bJobContractTests
     [InlineData(typeof(ClearPiiFlagCommand), $$"""{"kind":"clear-pii-flag","documentId":"{{G}}"}""")]
     [InlineData(typeof(ReprocessDocumentCommand), """{"kind":"reprocess-document","fromStage":"parse"}""")]
     [InlineData(typeof(ReprocessDocumentCommand), $$"""{"kind":"reprocess-document","documentId":"{{G}}","fromStage":"ocr"}""")]
+    [InlineData(typeof(CheckHnswIndexCommand), $$"""{"kind":"check-hnsw-index","embeddingProfileId":"{{G}}"}""")]
+    [InlineData(typeof(CheckHnswIndexCommand), $$"""{"kind":"check-hnsw-index","embeddingProfileId":"{{G}}","trigger":"weekly"}""")]
     public void A_payload_missing_a_required_member_or_out_of_range_fails(Type type, string json) =>
         ContractSchemas.Validator(type).Validate(Repository.Json(json)).ShouldNotBeEmpty();
 

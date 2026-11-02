@@ -8,7 +8,8 @@ namespace Ume.Rag.Pipelines.Jobs;
 
 /// <summary>
 /// The P1 <c>command</c> kinds (engine design §9.1, admin design §4.7): admin decisions the worker applies, because
-/// the admin only reads <c>content</c>. <c>kind</c> selects the handler. <c>approve-site-profile</c>,
+/// the admin only reads <c>content</c>, and the worker's own <c>check-hnsw-index</c> (knowledge design §6.4). <c>kind</c>
+/// selects the handler. <c>approve-site-profile</c>,
 /// <c>reject-site-profile</c>, <c>approve-profile</c> and <c>reject-profile</c> are P2.
 /// </summary>
 public static class CommandKinds
@@ -24,11 +25,13 @@ public static class CommandKinds
     public const string ReprocessDocument = "reprocess-document";
     public const string EditParseRule = "edit-parse-rule";
     public const string DisableParseRule = "disable-parse-rule";
+    public const string CheckHnswIndex = "check-hnsw-index";
 
     public static IReadOnlyList<string> All { get; } =
     [
         CancelRun, EditSiteProfile, RollbackSiteProfile, EditEvalQuestion,
         ConfirmDeletion, RejectDeletion, ReleaseHold, ClearPiiFlag, ReprocessDocument, EditParseRule, DisableParseRule,
+        CheckHnswIndex,
     ];
 }
 
@@ -339,4 +342,21 @@ public sealed record DisableParseRuleCommand : JobPayload
     [MinLength(1)]
     [MaxLength(200)]
     public string? DecidedBy { get; init; }
+}
+
+/// <summary>
+/// <c>check-hnsw-index</c> (knowledge design §6.4): the worker measures the recall of an embedding profile's HNSW index
+/// against exact search and rebuilds it below <c>Settings.Retrieval.hnswRecallFloor</c>. Enqueued by the worker itself,
+/// nightly and after a run that made more than 10 % of the profile's chunks live. Dedup <see cref="JobDedupKeys.HnswCheck"/>.
+/// </summary>
+[Description("Payload of the command check-hnsw-index (knowledge design §6.4): measures recall@10 of the embedding profile's HNSW index against exact search on sampled live child chunks of each HNSW-searched collection, and rebuilds the index concurrently below Settings.Retrieval.hnswRecallFloor. Dedup hnsw-check:{embeddingProfileId}.")]
+public sealed record CheckHnswIndexCommand : JobPayload
+{
+    [JsonRequired]
+    [SchemaKeyword("const", "\"check-hnsw-index\"")]
+    public string Kind { get; init; } = CommandKinds.CheckHnswIndex;
+
+    public required Guid EmbeddingProfileId { get; init; }
+
+    public required HnswCheckTrigger Trigger { get; init; }
 }

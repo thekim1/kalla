@@ -451,6 +451,29 @@ public sealed record ReleaseHoldResult
     public required int Released { get; init; }
 }
 
+/// <summary>Result of <c>check-hnsw-index</c> (knowledge design §6.4).</summary>
+[Description("Result of the command check-hnsw-index: the HNSW-searched collections and query chunks measured, recall@10 of the index against exact search (absent when no collection of the profile is searched through HNSW or the profile has no index), and, after a rebuild, the recall measured again.")]
+public sealed record CheckHnswIndexResult
+{
+    [Description("HNSW-searched collections of the profile that were measured.")]
+    [Range(0, int.MaxValue)]
+    public int Scopes { get; init; }
+
+    [Description("Sampled live child chunks used as queries.")]
+    [Range(0, int.MaxValue)]
+    public int Queries { get; init; }
+
+    [Range(0.0, 1.0)]
+    public double? Recall { get; init; }
+
+    [Description("Whether the index was rebuilt (REINDEX INDEX CONCURRENTLY) because recall was below the floor.")]
+    public bool Rebuilt { get; init; }
+
+    [Description("Recall measured again after the rebuild.")]
+    [Range(0.0, 1.0)]
+    public double? RecallAfter { get; init; }
+}
+
 [Description("Result of the command clear-pii-flag.")]
 public sealed record ClearPiiFlagResult
 {

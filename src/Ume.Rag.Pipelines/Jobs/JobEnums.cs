@@ -21,6 +21,15 @@ public enum RunTrigger
     ConfigChange,
 }
 
+/// <summary>Why a <c>check-hnsw-index</c> command was enqueued (knowledge design §6.4).</summary>
+public enum HnswCheckTrigger
+{
+    Nightly,
+
+    /// <summary>A finished run made more than 10 % of the profile's live chunks live.</summary>
+    Sync,
+}
+
 /// <summary>The phase a <c>sync</c> job runs (engine design §9.2, connectors design §2.2).</summary>
 public enum SyncPhase
 {

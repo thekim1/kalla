@@ -28,9 +28,9 @@ internal sealed record CommandRun(LeasedJob Job, JobResult Result);
 /// leases it as <c>ume_rag_worker</c> and <see cref="CommandJobHandler"/> runs it with the handlers <c>AddRagCommands</c>
 /// registers. <see cref="StealLeaseAsync"/> makes a leased job stale (as a reclaim does), so the fence can be tested.
 /// </summary>
-internal sealed class CommandRunner(RagDatabaseFixture database) : IAsyncDisposable
+internal sealed class CommandRunner(RagDatabaseFixture database, Action<IServiceCollection>? services = null) : IAsyncDisposable
 {
-    private readonly ServiceProvider _services = Build(database);
+    private readonly ServiceProvider _services = Build(database, services);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -67,7 +67,7 @@ internal sealed class CommandRunner(RagDatabaseFixture database) : IAsyncDisposa
 
     public ValueTask DisposeAsync() => _services.DisposeAsync();
 
-    private static ServiceProvider Build(RagDatabaseFixture database)
+    private static ServiceProvider Build(RagDatabaseFixture database, Action<IServiceCollection>? configure)
     {
         var services = new ServiceCollection();
         services.AddSingleton(database.Database(RagDatabase.Worker));
@@ -76,6 +76,7 @@ internal sealed class CommandRunner(RagDatabaseFixture database) : IAsyncDisposa
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new RunStore(database.Database(RagDatabase.Worker)));
         services.AddRagCommands();
+        configure?.Invoke(services);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
 }

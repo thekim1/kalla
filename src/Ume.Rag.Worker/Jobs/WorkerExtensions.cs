@@ -43,7 +43,8 @@ public static class WorkerExtensions
 
     /// <summary>
     /// The job machinery (engine design §9): options, the Postgres queue, the blob store, instance registration with the stage
-    /// manifest and heartbeat, the dispatcher, the reaper, the nightly maintenance with the engine's sweeps, the <c>command</c> handler with its kinds, and the connectors'
+    /// manifest and heartbeat, the dispatcher, the reaper, the nightly maintenance with the engine's sweeps, the <c>command</c> handler with its kinds (and the
+    /// index-health check behind <c>check-hnsw-index</c>), and the connectors'
     /// shared fetch path (<see cref="ConnectorExtensions.AddRagConnectors"/>). Hosted services stop
     /// in reverse order: the dispatcher drains before the heartbeat removes the instance. Call after <c>AddRagDatabase</c>
     /// (the queue's pool) and with <c>AddRagConfigMonitor</c>, whose listening connection carries <c>rag_jobs</c> to
@@ -84,6 +85,11 @@ public static class WorkerExtensions
         builder.Services.TryAddSingleton<RunStore>();
         builder.Services.TryAddSingleton<IndexWriter>();
         builder.Services.TryAddSingleton<BlobPurgeSweep>();
+        builder.Services.TryAddSingleton<HnswIndexMetrics>();
+        builder.Services.TryAddSingleton(sp => new HnswIndexHealth(sp.GetRequiredService<NpgsqlDataSource>(),
+            builder.Configuration.GetConnectionString(InfrastructureExtensions.DatabaseResourceName)
+                ?? throw new InvalidOperationException($"ConnectionStrings:{InfrastructureExtensions.DatabaseResourceName} is not configured."),
+            sp.GetRequiredService<HnswIndexMetrics>(), sp.GetRequiredService<ILogger<HnswIndexHealth>>()));
 
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, CommandJobHandler>());
         builder.Services.AddRagCommands();
