@@ -624,7 +624,10 @@ query vector with `ts_delete`, since only its `swedish` stemmer knows the query 
 kept per collection (collections of at least 100 chunks, lexemes in at least 10 % of the collection's chunks, read
 with the §6.4 chunk counts); a multi-collection scope sums them as a lower bound, so the list only errs towards keeping
 a term. Scopes under 1,000 chunks get no stop list: K is cheap there and a share says little. A query of stop lexemes
-only gives no candidates, like stop words. No Postgres configuration changes.
+only gives no candidates, like stop words. No Postgres configuration changes. The api reads the counts and statistics
+once at start: readiness waits for that attempt, read or failed, for at most 60 s. With no statistics held, a failed
+read is retried after 1 minute, not by each search, and K runs with every term meanwhile; with statistics held, they
+are kept until the next 10-minute read (#338).
 
 Compared with data-model §3.3: fusion, dedup and the final `LIMIT` move to .NET (§6.5); the `ParentId`/`ParentText`
 join is gone (flat chunks; sections come from §9); `ChunkSetId`, `Ordinal`, `CollectionId` and the document's
