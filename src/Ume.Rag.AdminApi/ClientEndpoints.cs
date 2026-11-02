@@ -127,6 +127,12 @@ public record ClientRequest : AdminRequest, IValidatableObject
         {
             yield return new ValidationResult("Each allowed origin is an https origin without a path.", [nameof(AllowedOrigins)]);
         }
+
+        // Without a value the feedback importer never prunes Open WebUI's feedback copies (chat design §13.3).
+        if (this is ClientUpdateRequest && Kind == ClientKinds.OpenWebUi && ClientRetentionDays is null)
+        {
+            yield return new ValidationResult("An Open WebUI client keeps its feedback for a number of days.", [nameof(ClientRetentionDays)]);
+        }
     }
 
     public void ApplyTo(Client client, AdminContext admin)
@@ -138,7 +144,7 @@ public record ClientRequest : AdminRequest, IValidatableObject
         client.OAuthClientId = string.IsNullOrWhiteSpace(OAuthClientId) ? null : OAuthClientId.Trim();
         client.ClassificationCeiling = ClassificationCeiling;
         client.StoresHistory = StoresHistory;
-        client.ClientRetentionDays = ClientRetentionDays;
+        client.ClientRetentionDays = ClientRetentionDays ?? (Kind == ClientKinds.OpenWebUi ? Client.OpenWebUiFeedbackRetentionDays : null);
         client.AllowedOrigins = [.. AllowedOrigins];
         client.ToolPolicy = ToolPolicy;
         client.PortalUrl = PortalUrl;
