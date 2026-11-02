@@ -38,7 +38,9 @@ var downloadGrantKey = Secret("download-grant-key", 48);
 // the Postgres 18 layout, so the data went to the image's anonymous volume and was lost on restart (#168). The volume is
 // mounted at the image's data path and the cluster lives in pgdata/ below it: a volume from the old layout holds an
 // empty data/ directory, which would make initdb refuse a non-empty PGDATA.
-var postgres = builder.AddPostgres("postgres")
+// Fixed host ports for the containers (7410–7415, beside the services' 7401–7403 and the admin UI's 5174), so local
+// URLs, psql and scripts stay the same across restarts.
+var postgres = builder.AddPostgres("postgres", port: 7412)
     .WithImage(PostgresImage, PostgresTag).WithImageSHA256(PostgresDigest)
     .WithEnvironment("PGDATA", "/var/lib/postgresql/data/pgdata");
 postgres.WithVolume(
@@ -49,13 +51,13 @@ var database = postgres.AddDatabase(DatabaseResourceName);
 // Redis:Enabled=true is the P2 path (first multi-host deployment). Off by default: the pilot shape keeps rate limits and
 // the query-embedding cache in process (simplification pass §14).
 var redis = builder.Configuration.GetValue<bool>("Redis:Enabled")
-    ? builder.AddRedis("redis", password: Secret("redis-password", 48))
+    ? builder.AddRedis("redis", 7415, Secret("redis-password", 48))
     : null;
 
 // Oidc:Authority (AppHost user secrets) points local runs at an existing identity provider instead of the bundled test
 // Keycloak, which is then not started. Its realm is dev/keycloak/ume-realm.json (identity design §11).
 var externalOidc = !string.IsNullOrWhiteSpace(builder.Configuration["Oidc:Authority"]);
-var keycloak = builder.ExecutionContext.IsRunMode && !externalOidc ? builder.AddKeycloak("keycloak")
+var keycloak = builder.ExecutionContext.IsRunMode && !externalOidc ? builder.AddKeycloak("keycloak", 7411)
     .WithImageTag(KeycloakTag).WithImageSHA256(KeycloakDigest)
     .WithRealmImport(Path.Combine("..", "..", "dev", "keycloak"))
     .WithEnvironment("UME_RAG_OIDC_CLIENT_SECRET", oidcSecret)
@@ -114,7 +116,7 @@ switch (parserMode)
 {
     case "container":
         parserEndpoint = builder.AddDockerfile("parser", Path.Combine("..", "parser"))
-            .WithHttpEndpoint(targetPort: ParserPort, name: "http")
+            .WithHttpEndpoint(port: 7413, targetPort: ParserPort, name: "http")
             .WithHttpHealthCheck(HealthEndpoints.ReadyPath, endpointName: "http")
             .GetEndpoint("http");
         break;
@@ -133,7 +135,7 @@ switch (parserMode)
 var clamAv = builder.Configuration.GetValue("ClamAv:Enabled", true)
     ? builder.AddDockerfile("clamav", Path.Combine("..", "..", "images", "clamav"))
         .WithVolume("ume-rag-clamav-db", "/var/lib/clamav")
-        .WithEndpoint(targetPort: 3310, name: "clamd", scheme: "tcp")
+        .WithEndpoint(port: 7414, targetPort: 3310, name: "clamd", scheme: "tcp")
     : null;
 
 var migrations = builder.AddProject<Projects.Ume_Rag_MigrationService>("migrations")
@@ -409,7 +411,7 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
     api.WithEnvironment("OpenWebUi__ClientId", openWebUiClientId is { Length: > 0 } ? openWebUiClientId : DevOpenWebUiClientId)
         .WithEnvironment("OpenWebUi__JwtSecret", openWebUiJwtSecret);
     var openWebUi = builder.AddContainer("open-webui", OpenWebUiImage, OpenWebUiTag).WithImageSHA256(OpenWebUiDigest)
-        .WithHttpEndpoint(targetPort: 8080, name: "http")
+        .WithHttpEndpoint(port: 7410, targetPort: 8080, name: "http")
         .WithVolume("ume-rag-openwebui-data", "/app/backend/data")
         .WithEnvironment("WEBUI_SECRET_KEY", openWebUiSecretKey)
         .WithEnvironment("ENABLE_PERSISTENT_CONFIG", "false")
