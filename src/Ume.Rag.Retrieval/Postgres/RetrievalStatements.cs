@@ -5,7 +5,10 @@ using Ume.Rag.Domain.Retrieval;
 
 namespace Ume.Rag.Retrieval.Postgres;
 
-/// <summary>Which optional filter fragments a statement carries (knowledge design §6.2: appended only when present).</summary>
+/// <summary>
+/// Which optional filter fragments a statement carries (knowledge design §6.2: appended only when present). <see cref="Topics"/>
+/// comes from the scope's collection links, the others from the request's filters.
+/// </summary>
 [Flags]
 public enum FilterFragments
 {
@@ -13,14 +16,16 @@ public enum FilterFragments
     Tags = 1,
     DocumentTypes = 2,
     ModifiedAfter = 4,
-    All = Tags | DocumentTypes | ModifiedAfter,
+    Topics = 8,
+    All = Tags | DocumentTypes | ModifiedAfter | Topics,
 }
 
 /// <summary>
 /// The texts of statements K and V (knowledge design §6.2; data-model §3.3), one per variant: K or V × exact or
-/// approximate × 2³ filter combinations, per profile and candidate depth. Parameters: <c>$1</c> the query search text (K) or the query
+/// approximate × 2⁴ filter combinations, per profile and candidate depth. Parameters: <c>$1</c> the query search text (K) or the query
 /// vector (V), <c>$2 uuid[]</c> the scope, <c>$3 text[]</c> the allowed levels, for K <c>$4 text[]</c> the stop lexemes, then
-/// only the filters present (from <c>$4</c> in V, <c>$5</c> in K) in the order tags, document types, modified after. The profile id, the dimensions and the candidate depth (<c>LIMIT</c>) are inlined literals from config (a
+/// only the filters present (from <c>$4</c> in V, <c>$5</c> in K) in the order tags, document types, modified after, topic
+/// links (two parallel arrays, collection ids and tags). The profile id, the dimensions and the candidate depth (<c>LIMIT</c>) are inlined literals from config (a
 /// <see cref="Guid"/> and an <see cref="int"/>, never user input), so a generic plan still matches the per-profile
 /// partial indexes; the vector is always a parameter. Texts are cached per variant, so each distinct text is one
 /// auto-prepared statement per connection.
@@ -29,10 +34,14 @@ public static class RetrievalStatements
 {
     private static readonly ConcurrentDictionary<(char Kind, Guid Profile, int Dimensions, int Limit, FilterFragments Filters), string> Cache = new();
 
-    public static FilterFragments FragmentsOf(RetrievalFilters? filters) =>
-        (filters?.HasTags == true ? FilterFragments.Tags : 0)
-        | (filters?.HasDocumentTypes == true ? FilterFragments.DocumentTypes : 0)
-        | (filters?.HasModifiedAfter == true ? FilterFragments.ModifiedAfter : 0);
+    public static FilterFragments FragmentsOf(SearchScope scope, RetrievalFilters? filters)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        return (filters?.HasTags == true ? FilterFragments.Tags : 0)
+            | (filters?.HasDocumentTypes == true ? FilterFragments.DocumentTypes : 0)
+            | (filters?.HasModifiedAfter == true ? FilterFragments.ModifiedAfter : 0)
+            | (scope.TopicLinks.Count > 0 ? FilterFragments.Topics : 0);
+    }
 
     /// <summary>
     /// K: chunks matching any lexeme of the query search text (<c>content.rag_or_query</c>, OR semantics), ranked by
@@ -188,7 +197,11 @@ public static class RetrievalStatements
         FROM vec JOIN content."Documents" d ON d."Id" = vec."DocumentId"
         """;
 
-    /// <summary>The optional predicates, numbered from <paramref name="first"/> in the order tags, document types, modified after.</summary>
+    /// <summary>
+    /// The optional predicates, numbered from <paramref name="first"/> in the order tags, document types, modified after,
+    /// topic links. The topic predicate keeps every chunk of a collection linked without topics (its id is in no pair) and,
+    /// of a collection linked with topics, the chunks carrying one of its tags; the scope (<c>$2</c>) is unchanged.
+    /// </summary>
     private static string Filters(FilterFragments filters, int first)
     {
         var sql = new StringBuilder();
@@ -205,7 +218,14 @@ public static class RetrievalStatements
 
         if (filters.HasFlag(FilterFragments.ModifiedAfter))
         {
-            sql.Append(CultureInfo.InvariantCulture, $"\n      AND c.\"SourceModifiedAt\" >= ${next}");
+            sql.Append(CultureInfo.InvariantCulture, $"\n      AND c.\"SourceModifiedAt\" >= ${next++}");
+        }
+
+        if (filters.HasFlag(FilterFragments.Topics))
+        {
+            var (ids, tags) = (next, next + 1);
+            sql.Append(CultureInfo.InvariantCulture,
+                $"\n      AND (c.\"CollectionId\" <> ALL (${ids}::uuid[]) OR EXISTS (SELECT 1 FROM unnest(${ids}::uuid[], ${tags}::text[]) AS l(cid, tag) WHERE l.cid = c.\"CollectionId\" AND l.tag = ANY (c.\"Tags\")))");
         }
 
         return sql.ToString();

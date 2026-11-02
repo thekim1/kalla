@@ -181,6 +181,45 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_link_with_topics_keeps_only_its_tagged_chunks_and_a_link_without_topics_its_whole_collection()
+    {
+        var topical = Guid.NewGuid();
+        var whole = Guid.NewGuid();
+        var avfall = await _writer.AddDocumentAsync(Doc(topical), [new FixtureChunk("Hämtning av avfall") { Embedding = V(1, 0, 0), Tags = ["avfall", "taxa"] }], Ct);
+        var skolaInTopical = await _writer.AddDocumentAsync(Doc(topical), [new FixtureChunk("Hämtning av skolbarn") { Embedding = V(1, 0.1f, 0), Tags = ["skola"] }], Ct);
+        var untaggedInTopical = await _writer.AddDocumentAsync(Doc(topical), [new FixtureChunk("Hämtning av post") { Embedding = V(1, 0.2f, 0) }], Ct);
+        var skola = await _writer.AddDocumentAsync(Doc(whole), [new FixtureChunk("Hämtning från skolan") { Embedding = V(1, 0, 0.1f), Tags = ["skola"] }], Ct);
+        var untagged = await _writer.AddDocumentAsync(Doc(whole), [new FixtureChunk("Hämtning av grovsopor") { Embedding = V(1, 0, 0.2f) }], Ct);
+        var index = new PostgresSearchIndex(_api);
+
+        SearchScope Linked(params (Guid Collection, string[] Topics)[] links) => new(_profile, Dims,
+            [.. links.Select(l => new CollectionInScope(l.Collection, RetrievalSettings.Default) { Topics = l.Topics })], ["public"], RetrievalPlatformSettings.Default);
+
+        async Task ExpectAsync(SearchScope scope, RetrievalFilters? filters, params FixtureDocument[] expected)
+        {
+            var ids = expected.Select(d => d.ChunkIds[0]).ToArray();
+            (await index.KeywordAsync(scope, "hämtning", filters, 100, Ct)).Select(c => c.ChunkId).ShouldBe(ids, ignoreOrder: true);
+            (await index.VectorAsync(scope, V(1, 0, 0), filters, 100, VectorSearch.Exact, Ct)).Select(c => c.ChunkId).ShouldBe(ids, ignoreOrder: true);
+            (await index.VectorAsync(scope, V(1, 0, 0), filters, 100, VectorSearch.Approximate, Ct)).Select(c => c.ChunkId).ShouldBe(ids, ignoreOrder: true);
+        }
+
+        await ExpectAsync(Linked((topical, ["avfall"])), null, avfall);
+        await ExpectAsync(Linked((topical, ["avfall", "skola"])), null, avfall, skolaInTopical);
+        await ExpectAsync(Linked((topical, []), (whole, [])), null, avfall, skolaInTopical, untaggedInTopical, skola, untagged);
+        await ExpectAsync(Linked((topical, ["avfall"]), (whole, [])), null, avfall, skola, untagged);
+
+        // filters.tags narrows a collection linked with topics and a whole one alike.
+        await ExpectAsync(Linked((topical, ["avfall"]), (whole, [])), new RetrievalFilters(Tags: ["skola"]), skola);
+        await ExpectAsync(Linked((topical, ["avfall"]), (whole, [])), new RetrievalFilters(Tags: ["taxa"]), avfall);
+
+        var (engine, _, sizes) = Engine();
+        using var e = engine;
+        using var s = sizes;
+        var result = await engine.SearchAsync(new SearchRequest("hämtning", Linked((topical, ["avfall"]), (whole, [])), Embed: Fixed(V(1, 0, 0))), Ct);
+        result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([avfall.ChunkIds[0], skola.ChunkIds[0], untagged.ChunkIds[0]], ignoreOrder: true);
+    }
+
+    [Fact]
     public async Task Levels_above_the_callers_invisible_sets_and_other_collections_never_come_back()
     {
         var collection = Guid.NewGuid();
@@ -277,12 +316,15 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
         var collection = Guid.NewGuid();
         await _writer.AddDocumentAsync(Doc(collection), [new FixtureChunk("avfallstaxa") { Embedding = V(1, 0, 0), Tags = ["taxa"], DocumentType = "pdf" }], Ct);
         var index = new PostgresSearchIndex(single);
-        var scope = Scope(collection);
+        var whole = Scope(collection);
+        var topical = new SearchScope(_profile, Dims, [new CollectionInScope(collection, RetrievalSettings.Default) { Topics = ["taxa"] }], ["public"],
+            RetrievalPlatformSettings.Default);
 
         for (var round = 0; round < 3; round++)
         {
             for (var mask = FilterFragments.None; mask <= FilterFragments.All; mask++)
             {
+                var scope = mask.HasFlag(FilterFragments.Topics) ? topical : whole;
                 var filters = new RetrievalFilters(
                     mask.HasFlag(FilterFragments.Tags) ? ["taxa"] : null,
                     mask.HasFlag(FilterFragments.DocumentTypes) ? ["pdf"] : null,
@@ -303,7 +345,7 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
             """, connection);
         await using var reader = await prepared.ExecuteReaderAsync(Ct);
         (await reader.ReadAsync(Ct)).ShouldBeTrue();
-        (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetBoolean(3)).ShouldBe((8L, 8L, 8L, true));
+        (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetBoolean(3)).ShouldBe((16L, 16L, 16L, true));
         await reader.DisposeAsync();
 
         // No SET runs: the HNSW settings on this api connection are the role defaults (data-model §1.1).

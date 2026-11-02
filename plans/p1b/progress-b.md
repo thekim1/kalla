@@ -107,9 +107,9 @@ Refs: [data-model §2.1](../platform/data-model.md), Decisions "Organisation" ro
 
 ### 34. Topics in retrieval
 Refs: [knowledge §4.2, §6.2](../knowledge-api/design.md)
-- [ ] Search scope with links; topic predicate in K and V; chat and test panel pass links
+- [x] Search scope with links; topic predicate in K and V; chat and test panel pass links (main session, PR: main-session/34-topics-in-retrieval)
 - [ ] **Hand-off L14:** issue to stream A
-- [ ] **Done:** topic, whole-collection and `filters.tags` retrieval tests
+- [x] **Done:** topic, whole-collection and `filters.tags` retrieval tests (`RetrievalTests`, `KnowledgeServiceTests`)
 
 ### 35. Organisation in the admin API
 Refs: [admin §3.2, §4.5, §4.6](../admin/design.md)

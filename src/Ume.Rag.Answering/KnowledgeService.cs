@@ -98,8 +98,10 @@ public sealed partial class KnowledgeService(
 
         var (platform, settings) = Settings(snapshot);
         var demote = Demote(snapshot);
+        var topics = Topics(request.AssistantId, snapshot);
         var scope = new SearchScope(profile.Id, profile.Dimensions,
-            [.. collections.Select(c => new CollectionInScope(c.Id, settings.GetValueOrDefault(c.Id, platform.Defaults)))], allowedLevels, platform)
+            [.. collections.Select(c => new CollectionInScope(c.Id, settings.GetValueOrDefault(c.Id, platform.Defaults)) { Topics = topics.GetValueOrDefault(c.Id, []) })],
+            allowedLevels, platform)
         {
             // §6.5: the demote patterns of the searched collections' sources.
             Demote = collections.SelectMany(c => snapshot.SourcesByCollection.GetValueOrDefault(c.Id, []))
@@ -403,6 +405,24 @@ public sealed partial class KnowledgeService(
         }
 
         return (collections, assistant.Classification);
+    }
+
+    /// <summary>
+    /// §4.2: the topics of the assistant's published collection links; a direct caller (no assistant) searches whole
+    /// collections.
+    /// </summary>
+    private static Dictionary<Guid, IReadOnlyList<string>> Topics(Guid? assistantId, PolicySnapshot snapshot)
+    {
+        var topics = new Dictionary<Guid, IReadOnlyList<string>>();
+        if (assistantId is { } id && snapshot.Assistants.GetValueOrDefault(id)?.Published is { } published)
+        {
+            foreach (var link in published.CollectionLinks)
+            {
+                topics.TryAdd(link.CollectionId, link.Tags);
+            }
+        }
+
+        return topics;
     }
 
     /// <summary>§4.2 direct callers: each requested collection must be live and allowed (404 naming the first that is not); none = all searchable.</summary>

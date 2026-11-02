@@ -68,16 +68,34 @@ public sealed class RetrievalSettingsTests
             texts.Add(RetrievalStatements.VectorApproximate(Profile, 1024, 100, mask)).ShouldBeTrue();
         }
 
-        texts.Count.ShouldBe(24);
+        texts.Count.ShouldBe(48);
         var all = RetrievalStatements.VectorExact(Profile, 1024, 100, FilterFragments.All);
         all.ShouldContain("""c."Tags" && $4""");
         all.ShouldContain("""c."DocumentType" = ANY ($5)""");
         all.ShouldContain("""c."SourceModifiedAt" >= $6""");
+        all.ShouldContain("""AND (c."CollectionId" <> ALL ($7::uuid[]) OR EXISTS (SELECT 1 FROM unnest($7::uuid[], $8::text[]) AS l(cid, tag) WHERE l.cid = c."CollectionId" AND l.tag = ANY (c."Tags")))""");
+        all.ShouldContain("""c."CollectionId" = ANY ($2)""");
+        RetrievalStatements.Keyword(Profile, 100, FilterFragments.Topics).ShouldContain("unnest($5::uuid[], $6::text[])");
         RetrievalStatements.Keyword(Profile, 100, FilterFragments.ModifiedAfter).ShouldContain("""c."SourceModifiedAt" >= $5"""); // $4: the stop list
         RetrievalStatements.Keyword(Profile, 100, FilterFragments.None).ShouldContain("ts_delete(to_tsvector('swedish', $1), $4::text[])");
         RetrievalStatements.Keyword(Profile, 100, FilterFragments.None).ShouldNotContain("IS NULL OR");
         all.ShouldContain($"""c."EmbeddingProfileId" = '{Profile}'::uuid""");
-        RetrievalStatements.FragmentsOf(new RetrievalFilters(Tags: [], DocumentTypes: ["pdf"])).ShouldBe(FilterFragments.DocumentTypes);
+        RetrievalStatements.FragmentsOf(OneCollection(), new RetrievalFilters(Tags: [], DocumentTypes: ["pdf"])).ShouldBe(FilterFragments.DocumentTypes);
         RetrievalStatements.Keyword(Profile, 100, FilterFragments.None).ShouldBeSameAs(RetrievalStatements.Keyword(Profile, 100, FilterFragments.None));
+    }
+
+    [Fact]
+    public void Only_collections_linked_with_topics_add_topic_pairs_and_the_topics_fragment()
+    {
+        var scope = new SearchScope(Profile, 3,
+        [
+            new CollectionInScope(CollectionA, RetrievalSettings.Default) { Topics = ["avfall", "taxa", "avfall"] },
+            new CollectionInScope(CollectionB, RetrievalSettings.Default),
+        ], ["public"], RetrievalPlatformSettings.Default);
+
+        scope.CollectionIds.ShouldBe([CollectionA, CollectionB]);
+        scope.TopicLinks.ShouldBe([(CollectionA, "avfall"), (CollectionA, "taxa")]);
+        RetrievalStatements.FragmentsOf(scope, null).ShouldBe(FilterFragments.Topics);
+        RetrievalStatements.FragmentsOf(OneCollection(), null).ShouldBe(FilterFragments.None);
     }
 }

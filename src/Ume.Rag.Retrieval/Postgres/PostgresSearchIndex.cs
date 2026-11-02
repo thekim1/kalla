@@ -31,7 +31,7 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
     {
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(querySearchText);
-        var fragments = RetrievalStatements.FragmentsOf(filters);
+        var fragments = RetrievalStatements.FragmentsOf(scope, filters);
         var sql = RetrievalStatements.Keyword(scope.EmbeddingProfileId, limit, fragments);
         var stop = new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text, Value = scope.KeywordStopLexemes.ToArray() };
         return ReadCandidatesAsync(sql, new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = querySearchText }, scope, filters,
@@ -48,7 +48,7 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
             throw new ArgumentException($"The vector has {vector.Length} dimensions; the profile has {scope.Dimensions}.", nameof(vector));
         }
 
-        var fragments = RetrievalStatements.FragmentsOf(filters);
+        var fragments = RetrievalStatements.FragmentsOf(scope, filters);
         var sql = search == VectorSearch.Exact
             ? RetrievalStatements.VectorExact(scope.EmbeddingProfileId, scope.Dimensions, limit, fragments)
             : RetrievalStatements.VectorApproximate(scope.EmbeddingProfileId, scope.Dimensions, limit, fragments);
@@ -88,8 +88,8 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
     }
 
     /// <summary>
-    /// The parameters <c>$2</c>, <c>$3</c>, then <paramref name="afterLevels"/> (K's stop list) and the present filters,
-    /// after <paramref name="first"/>.
+    /// The parameters <c>$2</c>, <c>$3</c>, then <paramref name="afterLevels"/> (K's stop list), the present filters and
+    /// the topic links, after <paramref name="first"/>.
     /// </summary>
     internal static List<NpgsqlParameter> Parameters(
         NpgsqlParameter first, SearchScope scope, RetrievalFilters? filters, FilterFragments fragments, NpgsqlParameter? afterLevels = null)
@@ -118,6 +118,12 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
         if (fragments.HasFlag(FilterFragments.ModifiedAfter))
         {
             parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.TimestampTz, Value = filters!.ModifiedAfter!.Value.ToUniversalTime() });
+        }
+
+        if (fragments.HasFlag(FilterFragments.Topics))
+        {
+            parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Uuid, Value = scope.TopicLinks.Select(l => l.CollectionId).ToArray() });
+            parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text, Value = scope.TopicLinks.Select(l => l.Tag).ToArray() });
         }
 
         return parameters;

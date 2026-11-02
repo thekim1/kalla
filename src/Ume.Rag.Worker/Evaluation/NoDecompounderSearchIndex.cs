@@ -16,7 +16,7 @@ namespace Ume.Rag.Worker.Evaluation;
 /// generated column's own expression over <c>"Text"</c>; it is computed in the statement for the chunks the stored vector
 /// matches, which are a superset (the parts are only appended to the text), so no table is written and nothing is left
 /// behind. Ranking, limits and the candidate columns are statement K's (<see cref="RetrievalStatements.Keyword"/>);
-/// statement V is <paramref name="vectors"/>' unchanged. The evaluator searches without filters (processing design §13.5).
+/// statement V is <paramref name="vectors"/>' unchanged. The evaluator searches whole collections without filters (processing design §13.5).
 /// </summary>
 public sealed class NoDecompounderSearchIndex(NpgsqlDataSource dataSource, ISearchIndex vectors, TimeSpan statementTimeout) : ISearchIndex
 {
@@ -27,9 +27,9 @@ public sealed class NoDecompounderSearchIndex(NpgsqlDataSource dataSource, ISear
     {
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(querySearchText);
-        if (RetrievalStatements.FragmentsOf(filters) != FilterFragments.None)
+        if (RetrievalStatements.FragmentsOf(scope, filters) != FilterFragments.None)
         {
-            throw new NotSupportedException("The evaluation's scratch keyword index searches without filters.");
+            throw new NotSupportedException("The evaluation's scratch keyword index searches whole collections without filters.");
         }
 
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);

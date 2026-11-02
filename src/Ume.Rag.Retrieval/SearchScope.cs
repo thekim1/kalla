@@ -22,6 +22,13 @@ public sealed record SearchScope(
 {
     public IReadOnlyList<Guid> CollectionIds { get; } = [.. Collections.Select(c => c.CollectionId)];
 
+    /// <summary>
+    /// One (collection, tag) pair per topic of a collection linked with topics (knowledge design §6.2); a collection
+    /// without topics adds none and is searched whole.
+    /// </summary>
+    public IReadOnlyList<(Guid CollectionId, string Tag)> TopicLinks { get; } =
+        [.. Collections.SelectMany(c => c.Topics.Distinct(StringComparer.Ordinal).Select(tag => (c.CollectionId, tag)))];
+
     /// <summary>The compiled <c>demote</c> patterns of the scope's sources that have any (<see cref="DemoteAdjuster"/>).</summary>
     public IReadOnlyDictionary<Guid, IReadOnlyList<DemotePattern>> Demote { get; init; } = new Dictionary<Guid, IReadOnlyList<DemotePattern>>();
 
@@ -71,4 +78,11 @@ public sealed record SearchScope(
 }
 
 /// <summary>One searched collection and its resolved <c>RetrievalSettings</c>.</summary>
-public sealed record CollectionInScope(Guid CollectionId, RetrievalSettings Settings);
+public sealed record CollectionInScope(Guid CollectionId, RetrievalSettings Settings)
+{
+    /// <summary>
+    /// The topic tags of the collection's link (knowledge design §4.2): only chunks carrying one of them are searched;
+    /// empty = the whole collection.
+    /// </summary>
+    public IReadOnlyList<string> Topics { get; init; } = [];
+}
