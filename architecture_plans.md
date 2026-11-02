@@ -1,6 +1,7 @@
 # Architecture plans: knowledge, assistants and models
 
-Status: proposal, 2026-11-02. Based on `main` at `0525053`, the current Decisions table and detail documents,
+Status: proposal, 2026-11-02. Based on `main` at `c224551` (including the benchmark findings in #333), the current
+Decisions table and detail documents,
 inspection of the retrieval, assistant and access code, and the references below. This is a design recommendation,
 not a new measurement or an implementation brief. It is not binding until adopted in `01-general-idea.md` §10.
 Rewriting this proposal does not adopt its scope changes. Items marked **changes a decision** need adoption before
@@ -11,6 +12,9 @@ implementation; items marked **fits current decisions** still need a scheduled c
 **Keep the service architecture.** Chat and knowledge share `Ume.Rag.Api`; the admin control plane, ingestion worker
 and parser have useful separate responsibilities. Every model call goes through the gateway with an explicit
 residency ceiling. Postgres remains the search store and job queue until measured scaling triggers justify a change.
+The first hot-path benchmarks (#333) support this: the known limits (exact vector search below `exactScanMaxChunks`,
+the keyword stop-list statistics near 1M chunks per profile) are fixes and triggers inside the knowledge design, not
+reasons for another store. They are placed there, not in this proposal.
 The improvements proposed here do not require new services, another vector database or an orchestration framework.
 
 **Build the product around reusable knowledge and purpose-specific assistants.** Models are execution dependencies;
@@ -28,7 +32,7 @@ access control, and making assistant setup express a purpose rather than expose 
 |---|---|---|---|
 | 1 | **Complete shared knowledge and topics**, P1b items 33–38 (#318): the department running umea.se owns one knowledge base; another department links selected topics without copying content or gaining source-admin access. Show owner and contact; hide teams in create forms; provide the Map as a table. | P1b, first | **Already decided**: Decisions "Organisation …". |
 | 2 | **Diagnose the measured retrieval misses and complete the human gold set.** Record a cause and proposed remedy for each of the seven real misses; compare remedies on the same questions. Calibrate coverage with answerable and unanswerable human questions and complete the existing hand-graded answer gate. | P1b, alongside item 1 | **Fits current decisions**; gold-set calibration is item 21. |
-| 3 | **One guided assistant setup with three fixed presets.** Choose owned or shared knowledge and topics, or add a source; choose a purpose, test and publish. A department can complete the journey without selecting a model or editing pipeline JSON. Presets: Citizen service, Internal policy Q&A, Case-handling support. | Proposed P1b, on the organisation contracts | **Changes a decision**: brings a fixed subset of assistant templates forward from P2. No template editor. |
+| 3 | **One guided assistant setup with three fixed presets.** Choose owned or shared knowledge and topics, or add a source; choose a purpose, test and publish. A department can complete the journey without selecting a model or editing pipeline JSON. Presets: Citizen service, Internal policy Q&A, Case-handling support. | Proposed P1b, on the organisation contracts | **Changes a decision**: brings a fixed subset of assistant templates forward from P2. No template editor and no new right. |
 | 4 | **Reduce department-facing settings.** Show scope, schedule, contact and permitted retention choices where relevant; keep model administration and general retrieval/crawl tuning on platform pages. Existing advanced rights still apply. | P1b, UI | **Fits current decisions**; changes visibility, not policy limits. |
 | 5 | **Complete the W3 access investigation before broader departmental use.** Demonstrate consistent model visibility and invocation decisions for two departments; prove that a direct request cannot bypass a hidden model. Use the existing per-department Open WebUI fallback if necessary. | P1b spike; broader use follows the existing P2 gateway prerequisites | **Already decided**: W3 now, fallback until resolved. This does not bring gateway delegation into P1b. |
 | 6 | **Close the content-maintenance loop.** Give the responsible owner feedback and not-found counts, affected knowledge links and available permitted metadata. Support editor-rewritten, personal-data-free test questions with provenance. Show unavailable question text as unavailable. | P1b after contacts | **Fits current decisions** within A1 and the feedback-rewrite rule; no new raw-chat storage. |
@@ -68,10 +72,15 @@ make them underlying language models. Admin screens should distinguish the two c
 
 A preset supplies suggested instructions, classification and an approved model default for a purpose. It must not
 lower the classification required by linked content or override access, residency or history policy. Departments
-can edit the purpose and wording; model overrides belong to users with the relevant advanced permission.
+can edit the purpose and wording. There is no separate right for choosing a model: anyone with `edit` on the
+assistant may change it, as today, and the existing check (`GatewayModelCheck.EnsureServableAsync`) still limits the
+choice to catalogue models that are servable at the assistant's residency ceiling. The guided setup shows the model
+under "Advanced" instead of as a required step.
 
-For the proposed fixed presets, copy the resolved settings into the draft. Editing a preset later must not silently
-change a published assistant. Reusing existing draft/version storage avoids a new template-management subsystem.
+Applying a preset when an assistant is created writes the instructions and model into its first draft and the
+classification onto the assistant itself (classification, history mode, retention and origins are not versioned).
+Later preset changes do not touch existing assistants. Reusing the existing draft/version storage avoids a new
+template-management subsystem.
 
 ### Knowledge is reusable without creating an assistant for every topic
 
@@ -110,9 +119,10 @@ boundary and make its identity include the model and relevant encoding configura
 must use compatible profiles. Changing embedding space requires re-embedding affected content; changing its
 processing also needs evaluation and coverage recalibration.
 
-Today `KnowledgeService` selects one embedding profile and skips linked collections on other profiles. Before
-supporting mixed profiles or an embedding-model migration, reject unsupported assistant combinations explicitly
-rather than silently searching only part of their knowledge. A future multi-profile search must embed per profile
+Today `KnowledgeService` selects one embedding profile and skips linked collections on other profiles, logging
+`profile_mismatch` (knowledge design §4.3; harmless while P1 has one profile). When a second profile is added, change
+that rule: saving or publishing an assistant whose linked collections span profiles is refused, so it never silently
+searches only part of its knowledge. A future multi-profile search must embed per profile
 and fuse rankings; raw distances from different spaces are not comparable. This is a future design requirement,
 not a request to implement multi-profile retrieval now.
 
