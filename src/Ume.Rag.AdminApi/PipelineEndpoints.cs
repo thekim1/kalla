@@ -63,6 +63,60 @@ public static class PipelineEndpoints
             })
             .RequireAuthorization(AdminPolicies.EditPipelines).WithName("RollbackPipeline").WithSummary("Re-publish an earlier version; its sources are re-processed (§6.7)");
 
+        pipelines.MapPost("/{id:guid}/preview", async (Guid id, PipelinePreviewRequest request, AdminContext admin, CancellationToken ct) =>
+                Results.Accepted(value: await admin.WriteAsync(async attempt =>
+                {
+                    // §6.4, §5.4 step 5: the saved draft (or, without one, the published version a new source would use), on up to
+                    // 5 documents of a source or 5 URLs fetched live; outputs through GET /api/previews/{jobId}/... (24 h).
+                    var pipeline = await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(p => p.Id == id, attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    var collection = await CollectionEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == request.CollectionId, attempt)
+                        ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    var documents = request.DocumentIds.Distinct().ToList();
+                    var urls = request.Urls.Select(u => u.Trim()).Where(u => u.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+                    if ((documents.Count == 0) == (urls.Count == 0) || documents.Count > 5 || urls.Count > 5)
+                    {
+                        throw AdminFaults.Field(documents.Count > 0 ? "documentIds" : "urls", AdminErrorCodes.InvalidValue);
+                    }
+
+                    if (urls.Any(u => !Uri.TryCreate(u, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")))
+                    {
+                        throw AdminFaults.Field("urls", AdminErrorCodes.InvalidValue);
+                    }
+
+                    if (request.SourceId is { } sid)
+                    {
+                        if (!await admin.Db.Sources.AsNoTracking().AnyAsync(s => s.Id == sid && s.CollectionId == collection.Id && s.DeletedAt == null, attempt))
+                        {
+                            throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                        }
+
+                        if (documents.Count > 0 && await admin.Db.Documents.AsNoTracking().CountAsync(d => documents.Contains(d.Id) && d.SourceId == sid, attempt) != documents.Count)
+                        {
+                            throw AdminFaults.Field("documentIds", AdminErrorCodes.InvalidValue);
+                        }
+                    }
+                    else if (documents.Count > 0)
+                    {
+                        throw AdminFaults.Field("sourceId", AdminErrorCodes.InvalidValue);
+                    }
+
+                    var versionId = await admin.Db.PipelineVersions.AsNoTracking().Where(v => v.PipelineId == id && v.State == PipelineVersionStates.Draft)
+                        .Select(v => (Guid?)v.Id).SingleOrDefaultAsync(attempt) ?? pipeline.PublishedVersionId ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    var payload = new StagePreviewPayload
+                    {
+                        PipelineVersionId = versionId, CollectionId = collection.Id, SourceId = request.SourceId,
+                        DocumentIds = documents.Count > 0 ? documents : null, Urls = urls.Count > 0 ? urls : null,
+                    };
+                    var job = new JobRequest(JobClasses.Preview, collection.DepartmentId, collection.Classification, ContractJson.Serialize(payload)) { TeamId = collection.OwnerTeamId };
+                    return new AdminChange<CommandStarted>(new CommandStarted(job.Id), "preview", AuditEntityTypes.Pipeline, id, null,
+                        new { versionId, collectionId = collection.Id, request.SourceId, documents = documents.Count, urls = urls.Count })
+                    {
+                        DepartmentId = collection.DepartmentId, Classification = collection.Classification, Jobs = [job],
+                    };
+                }, ct)))
+            .RequireAuthorization(AdminPolicies.EditOrEditPipelines).WithName("PreviewPipeline")
+            .WithSummary("Preview the draft (or published) version on up to 5 documents or URLs (stage-preview)");
+
         var publications = api.MapGroup("/publications").WithTags("Pipelines");
 
         publications.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) => await PublicationAsync(admin, id, ct))
@@ -351,4 +405,19 @@ public sealed record RollbackRequest : AdminRequest
 
     [Required]
     public string? Version { get; init; }
+}
+
+public sealed record PipelinePreviewRequest : AdminRequest
+{
+    [Required]
+    public Guid CollectionId { get; init; }
+
+    /// <summary>The source whose documents are previewed; absent for a new source's form (URLs only).</summary>
+    public Guid? SourceId { get; init; }
+
+    [MaxLength(5)]
+    public IReadOnlyList<Guid> DocumentIds { get; init; } = [];
+
+    [MaxLength(5)]
+    public IReadOnlyList<string> Urls { get; init; } = [];
 }
