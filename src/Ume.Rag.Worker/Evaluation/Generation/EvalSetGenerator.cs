@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Worker.Connectors.Persistence;
@@ -21,8 +22,8 @@ namespace Ume.Rag.Worker.Evaluation.Generation;
 /// first retires stale questions: an expected document is deleted, or the source document's content changed and the judge
 /// no longer rates the question answerable from that document's best-matching chunk (only changed documents are
 /// re-checked). Both kinds generate only what is missing, so a retried job adds nothing to a full layer. Every model call
-/// runs at the ceiling <c>OnPrem</c>; a model the gateway does not serve there refuses the job with
-/// <see cref="EvalModelClient.ModelNotOnPrem"/> (P1b README §7 O1). Result <see cref="EvalSetResult"/>.
+/// runs at the collection's ceiling (<see cref="EvalModelClient.CeilingFor"/>); a model the gateway does not serve there
+/// refuses the job with <see cref="EvalModelClient.ModelNotAtCeiling"/>. Result <see cref="EvalSetResult"/>.
 /// </summary>
 public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient models, EmbeddingClient embeddings, IEmbeddingProfileStore profiles,
     QuestionFilters filters, ITokenCounter tokens, ILogger<EvalSetGenerator> logger) : IEvalSetHandler
@@ -97,7 +98,8 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
         }
 
         var judgeModel = settings.JudgeModel ?? model;
-        await models.RequireOnPremAsync([model, judgeModel], cancellationToken);
+        var ceiling = models.CeilingFor(collection.Classification);
+        await models.RequireAtCeilingAsync([model, judgeModel], ceiling, cancellationToken);
         if (await profiles.GetAsync(collection.EmbeddingProfileId, cancellationToken) is not { } profile)
         {
             return new JobResult.FatalError(ProfileUnknown);
@@ -109,7 +111,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
         var usage = new Usage();
         var active = await store.ActiveAsync(setId, cancellationToken);
         var (stale, rechecked) = kind == EvalKinds.TopUpSet
-            ? await CheckStaleAsync(job, active, judgeModel, usage, cancellationToken)
+            ? await CheckStaleAsync(job, active, judgeModel, ceiling, usage, cancellationToken)
             : ([], []);
         var remaining = active.Where(q => !stale.Contains(q.Id)).ToList();
 
@@ -117,7 +119,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
         var eligible = await store.EligibleAsync(collection.Id, MinBodyTokens, cancellationToken);
         var target = ChunkSampler.Target(settings.MaxQuestions, liveDocuments, eligible.Count);
         var needed = target - remaining.Count;
-        var origin = new RoundOrigin(model, judgeModel, round, Convert.ToHexStringLower(seed), liveDocuments);
+        var origin = new RoundOrigin(model, judgeModel, ceiling, round, Convert.ToHexStringLower(seed), liveDocuments);
         var added = new List<NewQuestion>();
         var generated = 0;
         if (needed > 0)
@@ -136,7 +138,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
                 }
 
                 generated++;
-                var (candidate, scores, reason) = await CandidateAsync(chunk, model, judgeModel, usage, cancellationToken);
+                var (candidate, scores, reason) = await CandidateAsync(chunk, origin, usage, cancellationToken);
                 if (reason is null)
                 {
                     var vector = (await EmbedAsync(profile, [candidate!.Question], cancellationToken))[0];
@@ -189,10 +191,10 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
     }
 
     /// <summary>Generation, then filters 1–3; the reason is null when the candidate passed them.</summary>
-    private async Task<(GeneratedCandidate? Candidate, JudgeScores? Scores, string? Reason)> CandidateAsync(EvalChunk chunk, string model, string judgeModel,
+    private async Task<(GeneratedCandidate? Candidate, JudgeScores? Scores, string? Reason)> CandidateAsync(EvalChunk chunk, RoundOrigin round,
         Usage usage, CancellationToken cancellationToken)
     {
-        var reply = await models.CompleteAsync(model, EvalModelClient.GenerateStep, EvalPrompts.GenerateTemperature, EvalPrompts.GenerateSystem,
+        var reply = await models.CompleteAsync(round.Model, EvalModelClient.GenerateStep, round.Ceiling, EvalPrompts.GenerateSystem,
             EvalPrompts.GenerateUser(chunk.Title, chunk.HeadingPath, chunk.Text), cancellationToken);
         usage.Tokens += reply.Tokens;
         if (EvalPrompts.ReadCandidate(reply.Content) is not { } candidate)
@@ -205,13 +207,14 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
             return (candidate, null, reason);
         }
 
-        var scores = await JudgeAsync(chunk, candidate.Question, candidate.Answer, judgeModel, usage, cancellationToken);
+        var scores = await JudgeAsync(chunk, candidate.Question, candidate.Answer, round.JudgeModel, round.Ceiling, usage, cancellationToken);
         return scores is not null && QuestionFilters.Passes(scores) ? (candidate, scores, null) : (candidate, scores, FilterReasons.Judge);
     }
 
-    private async Task<JudgeScores?> JudgeAsync(EvalChunk chunk, string question, string answer, string judgeModel, Usage usage, CancellationToken cancellationToken)
+    private async Task<JudgeScores?> JudgeAsync(EvalChunk chunk, string question, string answer, string judgeModel, Residency ceiling, Usage usage,
+        CancellationToken cancellationToken)
     {
-        var reply = await models.CompleteAsync(judgeModel, EvalModelClient.JudgeStep, EvalPrompts.JudgeTemperature, EvalPrompts.JudgeSystem,
+        var reply = await models.CompleteAsync(judgeModel, EvalModelClient.JudgeStep, ceiling, EvalPrompts.JudgeSystem,
             EvalPrompts.JudgeUser(chunk.Title, chunk.HeadingPath, chunk.Text, question, answer), cancellationToken);
         usage.Tokens += reply.Tokens;
         return EvalPrompts.ReadScores(reply.Content);
@@ -223,7 +226,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
     /// best-matching live chunk (most of the question's content words), and then the question takes the new content hash.
     /// </summary>
     private async Task<(HashSet<Guid> Stale, List<(Guid, byte[])> Rechecked)> CheckStaleAsync(LeasedJob job, IReadOnlyList<ActiveQuestion> active,
-        string judgeModel, Usage usage, CancellationToken cancellationToken)
+        string judgeModel, Residency ceiling, Usage usage, CancellationToken cancellationToken)
     {
         var stale = new HashSet<Guid>();
         var rechecked = new List<(Guid, byte[])>();
@@ -244,7 +247,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
             }
 
             var best = (await store.LiveChunksAsync(source, cancellationToken)).MaxBy(c => QuestionFilters.CopiedShare(question.Question, c.Text));
-            var scores = best is null ? null : await JudgeAsync(best, question.Question, question.ExpectedAnswer, judgeModel, usage, cancellationToken);
+            var scores = best is null ? null : await JudgeAsync(best, question.Question, question.ExpectedAnswer, judgeModel, ceiling, usage, cancellationToken);
             if (now.LiveContentHash is { } changed && scores is { Answerable: >= QuestionFilters.MinJudgeScore })
             {
                 rechecked.Add((question.Id, changed));
@@ -296,7 +299,7 @@ public sealed partial class EvalSetGenerator(EvalSetStore store, EvalModelClient
         public int Tokens { get; set; }
     }
 
-    private sealed record RoundOrigin(string Model, string JudgeModel, int Round, string Seed, int Documents);
+    private sealed record RoundOrigin(string Model, string JudgeModel, Residency Ceiling, int Round, string Seed, int Documents);
 
     /// <summary>
     /// <c>EvaluationQuestions.Origin</c> of a generated question (processing design §13.1: model, prompt version, seed, judge

@@ -35,8 +35,8 @@ using FakeContent = fakegateway::Ume.Rag.FakeGateway.FakeContent;
 
 namespace Ume.Rag.Worker.Tests.Evaluation;
 
-/// <summary>One chat call the worker sent to the eval models: its step, model, temperature, output format and ceiling.</summary>
-internal sealed record EvalCall(string Step, string Model, double Temperature, string? ResponseFormat, string Ceiling, string User);
+/// <summary>One chat call the worker sent to the eval models: its step, model, whether it set a temperature, output format, ceiling and key.</summary>
+internal sealed record EvalCall(string Step, string Model, bool HasTemperature, string? ResponseFormat, string Ceiling, string Key, string User);
 
 /// <summary>
 /// The FakeGateway in process, one per test (its chat scripts cycle per step and process, so every test starts at the
@@ -111,8 +111,8 @@ public sealed class EvalGatewayFactory : WebApplicationFactory<fakegateway::Prog
             {
                 var body = JsonNode.Parse(await request.Content.ReadAsStringAsync(cancellationToken)) as JsonObject ?? [];
                 calls.Enqueue(new EvalCall(Header(request, EmbeddingClient.StepHeader), body["model"]?.GetValue<string>() ?? string.Empty,
-                    body["temperature"]?.GetValue<double>() ?? -1, body["response_format"]?["type"]?.GetValue<string>(), Header(request, FakeAccess.MaxResidencyHeader),
-                    FakeContent.LastUserText(body["messages"])));
+                    body.ContainsKey("temperature"), body["response_format"]?["type"]?.GetValue<string>(), Header(request, FakeAccess.MaxResidencyHeader),
+                    request.Headers.Authorization?.Parameter ?? string.Empty, FakeContent.LastUserText(body["messages"])));
             }
 
             return await base.SendAsync(request, cancellationToken);
@@ -142,7 +142,7 @@ internal sealed class EvalRig : IAsyncDisposable
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    public static EvalRig Start(RagDatabaseFixture database, EvalGatewayFactory gateway, bool onPremKey = true)
+    public static EvalRig Start(RagDatabaseFixture database, EvalGatewayFactory gateway, bool onPremKey = true, string? maxResidency = null)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         var settings = new Dictionary<string, string?>
@@ -154,6 +154,11 @@ internal sealed class EvalRig : IAsyncDisposable
         if (onPremKey)
         {
             settings["Gateway:Keys:OnPrem"] = FakeGatewayFactory.OnPremKey;
+        }
+
+        if (maxResidency is not null)
+        {
+            settings["Gateway:MaxResidency"] = maxResidency;
         }
 
         builder.Configuration.AddInMemoryCollection(settings);

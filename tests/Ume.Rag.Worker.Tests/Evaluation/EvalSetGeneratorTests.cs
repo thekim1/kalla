@@ -1,6 +1,7 @@
 extern alias fakegateway;
 
 using System.Text.Json;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Worker.Evaluation.Generation;
@@ -8,6 +9,7 @@ using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing.Pii;
 using Ume.Rag.Worker.Tests.CommandJobs;
 using Ume.Rag.Worker.Tests.Engine;
+using Ume.Rag.Worker.Tests.Processing;
 using FakeChatScripts = fakegateway::Ume.Rag.FakeGateway.FakeChatScripts;
 using FakeContent = fakegateway::Ume.Rag.FakeGateway.FakeContent;
 
@@ -17,7 +19,8 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 /// <c>generate-set</c> and <c>top-up-set</c> (P1b item 7; processing design §13.1–§13.3) from job rows on the test database
 /// and the FakeGateway: a fixture collection gets a generated layer of its target size whose questions pass the filters;
 /// each filtered-out case is dropped; a top-up retires the questions of a changed and a deleted document and regenerates
-/// to size with the next round's seed; a model the gateway does not serve <c>OnPrem</c> refuses the job (O1). The fake answers
+/// to size with the next round's seed; every model call runs at the collection's ceiling, and a model the gateway does not
+/// serve there refuses the job. The fake answers
 /// from its chat scripts: an array is played in call order, and the worker generates and judges one chunk at a time.
 /// </summary>
 [Collection(RagDatabaseGroup3.Name)]
@@ -126,9 +129,9 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncL
             questions.Where(q => q.SourceChunkId != doc1.ChunkIds[0]).ShouldAllBe(q => q.ExpectedDocumentIds.Length == 1);
 
             var calls = _gateway.Calls.ToList();
-            calls.ShouldAllBe(c => c.Ceiling == "OnPrem" && c.Model == Model && c.ResponseFormat == "json_object");
-            calls.Where(c => c.Step == EvalModelClient.GenerateStep).ShouldAllBe(c => c.Temperature == 0.3);
-            calls.Where(c => c.Step == EvalModelClient.JudgeStep).ShouldAllBe(c => c.Temperature == 0);
+            calls.ShouldAllBe(c => c.Ceiling == "Eu" && c.Key == FakeGatewayFactory.EuKey && c.Model == Model && c.ResponseFormat == "json_object",
+                "an internal collection runs at Eu with the Eu key");
+            calls.ShouldAllBe(c => !c.HasTemperature, "no temperature is sent");
             calls.Count(c => c.Step == EvalModelClient.GenerateStep).ShouldBe(6);
             calls.Count(c => c.Step == EvalModelClient.JudgeStep).ShouldBe(6);
 
@@ -353,15 +356,17 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncL
     }
 
     [Theory]
-    [InlineData("ume/chat-eu", null, EvalModelClient.ModelNotOnPrem)]
-    [InlineData(Model, "ume/chat-eu", EvalModelClient.ModelNotOnPrem)]
-    [InlineData("fake-drained", null, EvalModelClient.ModelNotOnPrem)]
-    [InlineData("fake-wrong-residency", null, EvalModelClient.ResidencyAboveCeiling)]
-    [InlineData(null, null, EvalSetGenerator.ModelUnset)]
-    public async Task A_model_that_cannot_run_on_prem_refuses_the_job_and_nothing_is_written(string? model, string? judgeModel, string code)
+    [InlineData(Classification.Sensitive, "ume/chat-eu", null, EvalModelClient.ModelNotAtCeiling)]
+    [InlineData(Classification.Sensitive, Model, "ume/chat-eu", EvalModelClient.ModelNotAtCeiling)]
+    [InlineData(Classification.Public, "ume/chat-advanced", null, EvalModelClient.ModelNotAtCeiling)]
+    [InlineData(Classification.Internal, "fake-drained", null, EvalModelClient.ModelNotAtCeiling)]
+    [InlineData(Classification.Internal, "fake-wrong-residency", null, EvalModelClient.ResidencyAboveCeiling)]
+    [InlineData(Classification.Internal, null, null, EvalSetGenerator.ModelUnset)]
+    public async Task A_model_that_cannot_run_at_the_collections_ceiling_refuses_the_job_and_nothing_is_written(string classification, string? model,
+        string? judgeModel, string code)
     {
         var tag = EvalSeeds.Tag();
-        var seed = await EngineKit.SeedUrlListAsync(database, []);
+        var seed = await EngineKit.SeedUrlListAsync(database, [], classification);
         try
         {
             await EvalSeeds.SetModelsAsync(database, model, judgeModel);
@@ -386,16 +391,47 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncL
         }
     }
 
-    [Fact]
-    public async Task A_worker_without_the_onprem_key_and_a_kind_that_is_not_a_set_kind_are_refused()
+    [Theory]
+    [InlineData(Classification.Public, null, "Eu")]
+    [InlineData(Classification.Internal, null, "Eu")]
+    [InlineData(Classification.Sensitive, null, "OnPrem")]
+    [InlineData(Classification.Sensitive, "Eu", "OnPrem")]
+    [InlineData(Classification.Internal, "OnPrem", "OnPrem")]
+    public async Task Generation_and_judging_run_at_the_collections_ceiling_with_the_key_of_that_ceiling(string classification, string? maxResidency,
+        string ceiling)
     {
-        var seed = await EngineKit.SeedUrlListAsync(database, []);
+        var tag = EvalSeeds.Tag();
+        var seed = await EngineKit.SeedUrlListAsync(database, [], classification);
+        try
+        {
+            await EvalSeeds.DocumentAsync(database, seed, "Ett " + tag, [new(Text(0))]);
+            _gateway.Script(EvalModelClient.GenerateStep, Reply(Ask(0, 0, tag), $"Svar {tag}."));
+
+            await using var rig = EvalRig.Start(database, _gateway, maxResidency: maxResidency);
+            var job = await rig.LeaseAsync(database, new EvalGenerateSetPayload { CollectionId = seed.CollectionId }, seed);
+            (await rig.RunAsync(job)).ShouldBe(new JobResult.Committed(), rig.Logs.Text);
+
+            var key = ceiling == "OnPrem" ? FakeGatewayFactory.OnPremKey : FakeGatewayFactory.EuKey;
+            var calls = _gateway.Calls.ToList();
+            calls.Select(c => c.Step).Order(StringComparer.Ordinal).ShouldBe([EvalModelClient.GenerateStep, EvalModelClient.JudgeStep]);
+            calls.ShouldAllBe(c => c.Ceiling == ceiling && c.Key == key && !c.HasTemperature);
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task A_worker_without_the_key_of_the_ceiling_and_a_kind_that_is_not_a_set_kind_are_refused()
+    {
+        var seed = await EngineKit.SeedUrlListAsync(database, [], Classification.Sensitive);
         try
         {
             await using (var rig = EvalRig.Start(database, _gateway, onPremKey: false))
             {
                 var job = await rig.LeaseAsync(database, new EvalTopUpSetPayload { CollectionId = seed.CollectionId }, seed);
-                (await rig.RunAsync(job)).ShouldBe(new JobResult.FatalError(EvalModelClient.NoOnPremKey));
+                (await rig.RunAsync(job)).ShouldBe(new JobResult.FatalError(EvalModelClient.NoKey));
             }
 
             await using (var rig = EvalRig.Start(database, _gateway))

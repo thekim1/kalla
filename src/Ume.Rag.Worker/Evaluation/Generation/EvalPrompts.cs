@@ -12,8 +12,6 @@ public sealed record GeneratedCandidate(string Question, string Answer, string? 
 public static class EvalPrompts
 {
     public const string PromptVersion = "eval-sv-1";
-    public const double GenerateTemperature = 0.3;
-    public const double JudgeTemperature = 0;
 
     public static IReadOnlyList<string> Types { get; } = ["fakta", "procedur", "definition", "tabell"];
 

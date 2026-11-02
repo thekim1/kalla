@@ -44,11 +44,11 @@ public sealed class EvalStopException : Exception
 
 /// <summary>
 /// The evaluation models through the worker's gateway client <see cref="HttpClientName"/> (<c>AddGatewayClient</c> with its
-/// <see cref="ResidencyCeilingHandler"/>), always at the ceiling <see cref="Ceiling"/> (<c>OnPrem</c>, processing design
-/// §13.1; P1b README §7 O1), so the worker's <c>OnPrem</c> key. <see cref="RequireOnPremAsync"/> refuses the job with
-/// <see cref="ModelNotOnPrem"/> unless the gateway lists every model at that ceiling (<see cref="CatalogueClientName"/>);
-/// a gateway answer of 403
-/// <c>max_residency_not_met</c> is refused the same way, and an answer from above the ceiling is discarded by the handler.
+/// <see cref="ResidencyCeilingHandler"/>), at the collection's ceiling (<see cref="CeilingFor"/>, processing design §13.1)
+/// with the worker's key of that ceiling. <see cref="RequireAtCeilingAsync"/> refuses the job with
+/// <see cref="ModelNotAtCeiling"/> unless the gateway lists every model at that ceiling (<see cref="CatalogueClientName"/>);
+/// a gateway answer of 403 <c>max_residency_not_met</c> is refused the same way, and an answer from above the ceiling is
+/// discarded by the handler.
 /// Other status codes map as the embedding client's (engine design §7.3).
 /// </summary>
 public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<GatewayOptions> gateway, TimeProvider clock)
@@ -63,10 +63,9 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
     public const string CatalogueClientName = "gateway-eval-models";
     public const string GenerateStep = "eval-generate";
     public const string JudgeStep = "eval-judge";
-    public const Residency Ceiling = Residency.OnPrem;
 
-    public const string ModelNotOnPrem = "eval.model_not_onprem";
-    public const string NoOnPremKey = "eval.no_onprem_key";
+    public const string ModelNotAtCeiling = "eval.model_not_at_ceiling";
+    public const string NoKey = "eval.no_key";
     public const string ModelUnknown = "eval.model_unknown";
     public const string RequestRejected = "eval.request_rejected";
     public const string ResidencyAboveCeiling = "gateway.residency_above_ceiling";
@@ -75,16 +74,26 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
     private static readonly Uri ChatPath = new("v1/chat/completions", UriKind.Relative);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    /// <summary>Refuses (<see cref="ModelNotOnPrem"/>) unless <c>GET /v1/models</c> at the ceiling <c>OnPrem</c> lists every model.</summary>
-    public async Task RequireOnPremAsync(IReadOnlyCollection<string> models, CancellationToken cancellationToken)
+    /// <summary>
+    /// The ceiling of a collection's level (<see cref="ResidencyCeiling.ForLevel"/>), at most <c>Eu</c> because the worker
+    /// holds no <c>External</c> key, then lowered by <c>Gateway:MaxResidency</c>.
+    /// </summary>
+    public Residency CeilingFor(string classification)
+    {
+        var level = ResidencyCeiling.ForLevel(classification);
+        return gateway.CurrentValue.Cap(level < Residency.Eu ? level : Residency.Eu);
+    }
+
+    /// <summary>Refuses (<see cref="ModelNotAtCeiling"/>) unless <c>GET /v1/models</c> at <paramref name="ceiling"/> lists every model.</summary>
+    public async Task RequireAtCeilingAsync(IReadOnlyCollection<string> models, Residency ceiling, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(models);
-        if (gateway.CurrentValue.Keys.GetValueOrDefault(Ceiling) is not { Length: > 0 } key)
+        if (gateway.CurrentValue.Keys.GetValueOrDefault(ceiling) is not { Length: > 0 } key)
         {
-            throw new EvalStopException(new JobResult.FatalError(NoOnPremKey));
+            throw new EvalStopException(new JobResult.FatalError(NoKey));
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, ModelsPath).WithMaxResidency(Ceiling);
+        using var request = new HttpRequestMessage(HttpMethod.Get, ModelsPath).WithMaxResidency(ceiling);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
         using var response = await SendAsync(CatalogueClientName, request, cancellationToken);
         ModelList? list;
@@ -100,19 +109,22 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
         var listed = list?.Data?.Select(m => m.Id).OfType<string>().ToHashSet(StringComparer.Ordinal) ?? [];
         if (!models.All(listed.Contains))
         {
-            throw new EvalStopException(new JobResult.FatalError(ModelNotOnPrem));
+            throw new EvalStopException(new JobResult.FatalError(ModelNotAtCeiling));
         }
     }
 
-    /// <summary>One chat completion with JSON output, at the ceiling <c>OnPrem</c>, with <c>x-ume-step</c> <paramref name="step"/>.</summary>
-    public async Task<ChatReply> CompleteAsync(string model, string step, double temperature, string system, string user, CancellationToken cancellationToken)
+    /// <summary>
+    /// One chat completion with JSON output at <paramref name="ceiling"/>, with <c>x-ume-step</c> <paramref name="step"/>. No
+    /// <c>temperature</c> is sent: some models refuse it, and the model's default applies.
+    /// </summary>
+    public async Task<ChatReply> CompleteAsync(string model, string step, Residency ceiling, string system, string user, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, ChatPath)
         {
-            Content = JsonContent.Create(new ChatRequest(model, [new ChatMessage("system", system), new ChatMessage("user", user)], temperature,
+            Content = JsonContent.Create(new ChatRequest(model, [new ChatMessage("system", system), new ChatMessage("user", user)],
                 new ResponseFormat("json_object")), options: Json),
         };
-        request.WithMaxResidency(Ceiling);
+        request.WithMaxResidency(ceiling);
         request.Headers.Add(Processing.Embedding.EmbeddingClient.StepHeader, step);
         using var response = await SendAsync(HttpClientName, request, cancellationToken);
         ChatResponse? body;
@@ -138,8 +150,8 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
         }
         catch (GatewayCallRefusedException)
         {
-            // This worker holds no OnPrem key: the evaluation models cannot be called at their ceiling.
-            throw new EvalStopException(new JobResult.FatalError(NoOnPremKey));
+            // This worker holds no key of the ceiling: the evaluation models cannot be called there.
+            throw new EvalStopException(new JobResult.FatalError(NoKey));
         }
         catch (GatewayResidencyException)
         {
@@ -173,7 +185,7 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
         var status = "gateway.http_" + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture);
         return response.StatusCode switch
         {
-            HttpStatusCode.Forbidden when code == "max_residency_not_met" => new JobResult.FatalError(ModelNotOnPrem),
+            HttpStatusCode.Forbidden when code == "max_residency_not_met" => new JobResult.FatalError(ModelNotAtCeiling),
             HttpStatusCode.Forbidden => new JobResult.FatalError("gateway." + (code ?? "forbidden")),
             HttpStatusCode.NotFound => new JobResult.FatalError(ModelUnknown),
             HttpStatusCode.BadRequest => new JobResult.FatalError(RequestRejected),
@@ -211,7 +223,7 @@ public sealed class EvalModelClient(IHttpClientFactory clients, IOptionsMonitor<
         return null;
     }
 
-    private sealed record ChatRequest(string Model, IReadOnlyList<ChatMessage> Messages, double Temperature,
+    private sealed record ChatRequest(string Model, IReadOnlyList<ChatMessage> Messages,
         [property: JsonPropertyName("response_format")] ResponseFormat ResponseFormat);
 
     private sealed record ChatMessage(string Role, string Content);
