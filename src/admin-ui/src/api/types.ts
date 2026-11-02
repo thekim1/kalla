@@ -164,6 +164,23 @@ export interface Source extends SourceSummary {
   version: string
 }
 
+/** `POST /api/sources/{id}/impact`: what a settings change does; `impactToken` when a scope or identity change needs confirming (V25). */
+export interface SourceImpact {
+  effects: ('identity' | 'scope' | 'behaviour' | 'cosmetic' | string)[]
+  liveDocuments: number
+  usedBy: CollectionUser[]
+  impactToken: string | null
+}
+
+export interface SourceUpdate {
+  name: string
+  classification: Level
+  settings: Record<string, unknown>
+  schedule: string | null
+  impactToken?: string
+  version: string
+}
+
 export interface SourceCreate {
   type: SourceType
   name: string

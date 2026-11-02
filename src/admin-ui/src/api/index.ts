@@ -28,6 +28,8 @@ import type {
   RunSummary,
   Source,
   SourceCreate,
+  SourceImpact,
+  SourceUpdate,
   SourceSummary,
   SyncStarted,
 } from './types'
@@ -56,6 +58,8 @@ export const api = {
   sources: {
     get: (id: string) => http.get<Source>(`/api/sources/${id}`),
     sync: (id: string) => http.post<SyncStarted>(`/api/sources/${id}/sync`),
+    impact: (id: string, body: { settings: Record<string, unknown> }) => http.post<SourceImpact>(`/api/sources/${id}/impact`, body),
+    update: (id: string, body: SourceUpdate) => http.put<Source>(`/api/sources/${id}`, body),
     runs: (id: string, after?: string) => http.get<KeysetPage<RunSummary>>(`/api/sources/${id}/runs`, { after, limit: 20 }),
     piiReport: (id: string) => http.get<PiiReport>(`/api/sources/${id}/pii-report`),
     preflight: (body: { collectionId: string; type: string; settings: Record<string, unknown> }) =>

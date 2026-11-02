@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
-import type { PiiReport, RunSummary, Source } from '@/api/types'
+import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
+import SourceEditDrawer from '@/components/sources/SourceEditDrawer.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
@@ -15,11 +16,11 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime } from '@/utils/format'
-import { LEVEL_LABEL, RUN_STATE_LABEL, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { LEVEL_LABEL, RUN_STATE_LABEL, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
-// Källa (admin design §5.5.3, §5.4 step 6; #278 slice 2): the source's settings, Hämta nu, its runs (each opens the run
-// page with the crawl report) and the personal-data report (§4.5 pii-report).
+// Källa (admin design §5.5.3, §5.4 step 6; #278 slice 2): the source's settings with Ändra (impact confirmation, V25),
+// Hämta nu, its runs (each opens the run page with the crawl report) and the personal-data report (§4.5 pii-report).
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
@@ -30,6 +31,8 @@ const pii = ref<PiiReport | null>(null)
 const next = ref<string | null>(null)
 const syncing = ref(false)
 const syncError = ref<unknown>(null)
+const editing = ref(false)
+const collection = ref<Collection | null>(null)
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 
 const runColumns: Column[] = [
@@ -42,6 +45,19 @@ const addresses = computed(() => {
   const list = (settings.startUrls ?? settings.urls ?? []) as string[]
   return list
 })
+const demoted = computed(() =>
+  ((source.data.value?.settings.demote ?? []) as { pattern: string; factor?: number }[]).map((d) => `${d.pattern} ×${String(d.factor ?? 0.5).replace('.', ',')}`),
+)
+
+async function edit(): Promise<void> {
+  collection.value ??= await api.collections.get(source.data.value!.collectionId).catch(() => null)
+  editing.value = true
+}
+
+function saved(updated: Source): void {
+  source.data.value = updated
+  ui.notify(SOURCE_EDIT.saved)
+}
 
 function stateTone(state: string): 'ok' | 'warn' | 'danger' | 'neutral' {
   return state === 'succeeded' ? 'ok' : state === 'failed' ? 'danger' : state === 'running' ? 'neutral' : 'warn'
@@ -100,7 +116,14 @@ onMounted(load)
         <DetailRow v-if="source.data.value.type === 'crawl'" :label="SOURCE_PAGE.maxPages">
           <span class="tabular">{{ Number(source.data.value.settings.maxPages ?? 10000).toLocaleString('sv-SE') }}</span>
         </DetailRow>
+        <DetailRow v-if="demoted.length" :label="SOURCE_EDIT.demoted">
+          <span class="font-mono text-small" data-test="demoted">{{ demoted.join(', ') }}</span>
+        </DetailRow>
+        <div v-if="canEdit && source.data.value.type !== 'upload'" class="mt-4">
+          <UiButton icon="edit" data-test="edit-source" @click="edit">{{ SOURCE_EDIT.edit }}</UiButton>
+        </div>
       </UiCard>
+      <SourceEditDrawer v-model:open="editing" :source="source.data.value" :collection="collection" @saved="saved" />
 
       <h2 class="mb-3 text-title-3">{{ SOURCE_PAGE.runs }}</h2>
       <AsyncState :loading="runs.loading.value && runs.data.value.length === 0" :error="runs.error.value" :empty="runs.data.value.length === 0" :empty-text="SOURCE_PAGE.noRuns" @retry="loadRuns()">

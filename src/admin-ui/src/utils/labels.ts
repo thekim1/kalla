@@ -332,6 +332,24 @@ export const PREVIEW = {
   expires: (time: string) => `Sparas till ${time}.`,
 } as const
 
+/** Ändra källa (admin design §5.5.3, V25). */
+export const SOURCE_EDIT = {
+  title: 'Ändra källa',
+  edit: 'Ändra',
+  save: 'Spara',
+  saved: 'Källan är sparad. Ändringen gäller från nästa hämtning.',
+  demote: 'Nedprioritera',
+  demoteHint: 'Ett mönster per rad, till exempel www.umea.se/bygga/**/arkiv/**, och efter ett mellanslag en faktor mellan 0 och 1 (utan faktor: 0,5). Träffar från sidorna rankas lägre.',
+  demoteInvalid: 'Skriv ett mönster per rad, eventuellt följt av en faktor mellan 0 och 1, till exempel 0,5.',
+  impactTitle: 'Ändringen påverkar vad som hämtas',
+  scope: (n: number) => `Avgränsningen ändras. Av källans ${n.toLocaleString('sv-SE')} sökbara dokument tas de som hamnar utanför bort vid nästa hämtning.`,
+  identity: 'Adresserna känns igen på ett nytt sätt. Dokument kan hämtas på nytt och gamla tas bort.',
+  usedBy: (names: string) => `Påverkar assistenterna: ${names}.`,
+  draft: 'utkast',
+  saveAnyway: 'Spara ändå',
+  demoted: 'Nedprioriteras',
+} as const
+
 /** The generic forms for platform objects (admin design §5.8). Field labels come from the API's schemas. */
 export const PLATFORM = {
   lead: 'Det plattformsteamet ställer in för hela plattformen. Fälten kommer från API:ets scheman.',
