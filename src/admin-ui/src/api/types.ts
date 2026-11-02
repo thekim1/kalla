@@ -768,3 +768,20 @@ export interface FeedbackSummary {
   totals: { answers: number; notFound: number; thumbsUp: number; thumbsDown: number }
   imports: { clientId: string; clientName: string; lastRunAt: IsoDateTime | null; lastOutcome: string | null; unmapped: number }[]
 }
+
+/** `POST /api/access/explain` (identity design §4.9): the first failing policy step and its stable reason. */
+export interface AccessExplanation {
+  allowed: boolean
+  step: string
+  reason: string
+  status: number
+  effectiveLevel: string | null
+  maxResidency: string | null
+  configVersion: number
+}
+
+export interface ExplainAccessRequest {
+  clientId: string
+  assistantId: string
+  subject: { kind: string; id: string; departments?: string[]; groups?: string[] }
+}

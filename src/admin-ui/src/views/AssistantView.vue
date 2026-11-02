@@ -18,6 +18,7 @@ import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
+import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import { formatDateTime } from '@/utils/format'
 import { ASSISTANT, LEVEL_LABEL } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
@@ -294,6 +295,7 @@ onMounted(load)
           />
         </fieldset>
         <div v-if="canManage && clients.length"><UiButton variant="primary" :loading="busy === 'audience'" data-test="save-audience" @click="saveAudience">{{ ASSISTANT.saveAudience }}</UiButton></div>
+        <ExplainAccess v-if="canManage && clients.length" :assistant-id="id" :clients="clients" class="mt-4" />
       </div>
       <ConfirmDialog
         :open="restoring !== null" :title="ASSISTANT.restoreTitle(restoring ?? 0)" :consequence="ASSISTANT.restoreConsequence(restoring ?? 0)"
