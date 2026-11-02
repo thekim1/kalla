@@ -28,6 +28,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/assistants', name: 'assistants', component: () => import('@/views/AssistantsView.vue'), meta: { title: PAGE.assistants.title, roles: ALL_ROLES } },
   { path: '/assistants/:id', name: 'assistant', component: () => import('@/views/AssistantView.vue'), props: true, meta: { title: PAGE.assistants.title, roles: ALL_ROLES } },
   { path: '/sources/:id', name: 'source', component: () => import('@/views/SourceView.vue'), props: true, meta: { title: PAGE.source.title, roles: ALL_ROLES } },
+  { path: '/publications/:id', name: 'publication', component: () => import('@/views/PublicationView.vue'), props: true, meta: { title: PAGE.publication.title, roles: ALL_ROLES } },
   { path: '/runs/:id', name: 'run', component: () => import('@/views/RunView.vue'), props: true, meta: { title: PAGE.run.title, roles: ALL_ROLES } },
   { path: '/organisation', name: 'organisation', component: () => import('@/views/OrganisationView.vue'), meta: { title: PAGE.organisation.title, roles: ALL_ROLES } },
   ...platformRoutes,

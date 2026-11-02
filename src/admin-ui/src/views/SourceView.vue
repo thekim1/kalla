@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { PiiReport, RunSummary, Source } from '@/api/types'
+import PipelineCard from '@/components/sources/PipelineCard.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
@@ -101,6 +102,7 @@ onMounted(load)
           <span class="tabular">{{ Number(source.data.value.settings.maxPages ?? 10000).toLocaleString('sv-SE') }}</span>
         </DetailRow>
       </UiCard>
+      <PipelineCard :source="source.data.value" class="mb-6" />
 
       <h2 class="mb-3 text-title-3">{{ SOURCE_PAGE.runs }}</h2>
       <AsyncState :loading="runs.loading.value && runs.data.value.length === 0" :error="runs.error.value" :empty="runs.data.value.length === 0" :empty-text="SOURCE_PAGE.noRuns" @retry="loadRuns()">
