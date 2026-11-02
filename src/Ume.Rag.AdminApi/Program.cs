@@ -132,6 +132,7 @@ api.MapExplainAccess();
 api.MapPreviews();
 api.MapTestRetrieval();
 api.MapAssistantTest();
+api.MapPipelines();
 api.MapUploads();
 api.MapKeys();
 api.MapOrganisation();

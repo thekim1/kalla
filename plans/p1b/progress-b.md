@@ -37,7 +37,7 @@ Refs: [knowledge §6.5, §16.1](../knowledge-api/design.md), [weakness review §
 ### 9. Admin API for P1b
 Refs: [admin §4, §6.6, §6.7, §12](../admin/design.md), [identity §4.9](../identity/design.md)
 - [ ] Sources: preflight, preview, impact, runs, deletion decisions, documents with PII view/clear, release hold, template parameters, `demote`
-- [ ] Pipeline publish: plan → confirm (409 on change) → report → keep / roll back
+- [x] Pipeline publish: plan → confirm (409 on change) → report → keep / roll back (this PR; report = the worker's publish-report)
 - [x] Evaluation set and reports (gold set first, threshold proposal as numbers); retrieval settings with the on-demand comparison (#258, #259; retrieval settings and publish in #176)
 - [x] Assistants: draft → publish, versions with restore, archive, description, contact; test panel in `rag-admin`; audiences; retention; impact lines (#260, this PR; draft, publish and audiences earlier in P1a)
 - [x] Audit list; explain access (#257)

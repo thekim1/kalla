@@ -213,6 +213,18 @@ public static class AdminErrorCodes
     /// <summary>The test panel's answer failed at the model (chat design §3.6: <c>{reason}</c>).</summary>
     public static AdminErrorCode TestAnswerFailed { get; } = new("test_answer_failed", 502, "The model could not answer the test question ({reason}). Try again.");
 
+    /// <summary>V24: the pipeline's parameters are not valid for its template version.</summary>
+    public static AdminErrorCode PipelineParamsInvalid { get; } = new("pipeline_params_invalid", 400, "The setting {param} is not valid for this processing: {message}");
+
+    /// <summary>The plan is not ready (still running, failed or cancelled) or was made for another draft.</summary>
+    public static AdminErrorCode PublicationNotReady { get; } = new("publication_not_ready", 409, "The plan is not ready. Wait for it or make a new one.");
+
+    /// <summary>The pipeline changed after the plan was made (admin design §6.6): plan again.</summary>
+    public static AdminErrorCode PublicationStale { get; } = new("publication_stale", 409, "The processing changed after the plan was made. Make a new plan.");
+
+    /// <summary>Rollback takes a superseded version of this pipeline.</summary>
+    public static AdminErrorCode VersionNotRollbackable { get; } = new("version_not_rollbackable", 409, "Only an earlier published version can be restored.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -221,5 +233,5 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable];
 }
