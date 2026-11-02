@@ -83,6 +83,8 @@ internal static class IngestionContentModel
             {
                 ClassificationCheck(t, "CrawlFrontier");
                 ValuesCheck(t, "CrawlFrontier", "State", CrawlFrontierStates.All);
+                // A removal-check row is marked by RemovalCheck, no longer by Depth = -1 (#102).
+                t.HasCheckConstraint("CK_CrawlFrontier_Depth", "\"Depth\" >= 0");
             });
             // P1: one frontier per source (connectors design §6.0).
             e.HasKey(x => new { x.Classification, x.SourceId, x.UrlHash });

@@ -1177,6 +1177,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_CrawlFrontier_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
 
+                            t.HasCheckConstraint("CK_CrawlFrontier_Depth", "\"Depth\" >= 0");
+
                             t.HasCheckConstraint("CK_CrawlFrontier_State", "\"State\" IN ('idle', 'pending', 'released')");
                         });
                 });

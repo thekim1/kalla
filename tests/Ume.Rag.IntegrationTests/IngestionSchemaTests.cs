@@ -304,6 +304,16 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
     }
 
     [Fact]
+    public async Task Frontier_depth_is_never_negative_now_that_removal_checks_have_their_own_flag()
+    {
+        // #102: the removal check is CrawlFrontier.RemovalCheck; the Depth = -1 sentinel is gone, so a CHECK holds the rule.
+        var definition = await Sql.ScalarAsync<string>(database.Connection(null), """
+            SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'content."CrawlFrontier"'::regclass AND conname = 'CK_CrawlFrontier_Depth'
+            """);
+        definition.ShouldBe("""CHECK (("Depth" >= 0))""");
+    }
+
+    [Fact]
     public async Task Hot_crawl_tables_leave_room_for_hot_updates()
     {
         foreach (var table in new[] { "CrawlHosts", "CrawlRuns" })
