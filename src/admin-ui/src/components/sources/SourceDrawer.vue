@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { Collection, Level, PreflightResult, Source, SourceType } from '@/api/types'
+import type { Collection, Level, PreflightResult, Source, SourceType, StagePreviewResult } from '@/api/types'
+import PreviewResult from '@/components/sources/PreviewResult.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
@@ -15,9 +16,10 @@ import { COMMON, LEVEL_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
 
-// Lägg till källa (admin design §5.4 steps 3, 4 and 6): type cards, the template parameters of the type
+// Lägg till källa (admin design §5.4 steps 3 to 6): type cards, the template parameters of the type
 // (contracts/sources/v1/{type}.schema.json, with the schema's defaults), Kontrollera (preflight job, polled as §4.7; a
-// failed check blocks saving), then Spara och hämta: the source is created and its first sync enqueued.
+// failed check blocks saving), Förhandsgranska (stage-preview of up to 5 of the addresses on the pipeline the source would
+// get, §6.4: Före / Efter and each stage's output), then Spara och hämta: the source is created and its first sync enqueued.
 const props = defineProps<{ open: boolean; collection: Collection }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'saved', source: Source, syncing: boolean): void }>()
 
@@ -40,6 +42,11 @@ const piiMode = ref<'hold' | 'report'>('hold')
 const saving = ref(false)
 const checkError = ref<unknown>(null)
 const preflight = useJobPoll<PreflightResult>()
+const preview = useJobPoll<StagePreviewResult>()
+const previewError = ref<string | null>(null)
+const previewStarting = ref(false)
+/** The worker previews at most 5 documents (preview.limit_documents). */
+const PREVIEW_URLS = 5
 const form = useFormErrors({ name: 'source-name', urls: 'source-urls', maxPages: 'source-max-pages', maxDepth: 'source-max-depth' })
 
 const levelOptions = computed(() =>
@@ -49,6 +56,9 @@ const piiOptions = (['hold', 'report'] as const).map((m) => ({ value: m, label: 
 const lines = (text: string) => text.split('\n').map((l) => l.trim()).filter(Boolean)
 const result = computed(() => (preflight.job.value?.state === 'succeeded' ? preflight.job.value.result : null))
 const blocked = computed(() => result.value?.state === 'fail')
+const previewResult = computed(() => (preview.job.value?.state === 'succeeded' ? preview.job.value.result : null))
+const previewProblem = computed(() => previewError.value ?? (preview.error.value ? problemMessage(preview.error.value) : null))
+const previewCapped = computed(() => lines(urls.value).length > PREVIEW_URLS)
 const checkProblem = computed(() => {
   const e = preflight.error.value ?? checkError.value
   return e ? problemMessage(e) : null
@@ -69,14 +79,22 @@ watch(
     piiMode.value = 'hold'
     preflight.stop()
     preflight.job.value = null
+    resetPreview()
     form.clear()
   },
 )
-// A changed address or scope makes the last check stale.
+// A changed address or scope makes the last check stale; a changed address or type the last preview.
 watch([type, urls, include, exclude, maxPages, maxDepth], () => {
   preflight.stop()
   preflight.job.value = null
 })
+watch([type, urls], resetPreview)
+
+function resetPreview(): void {
+  preview.stop()
+  preview.job.value = null
+  previewError.value = null
+}
 
 function settings(): Record<string, unknown> {
   const piiPart = props.collection.classification === 'public' ? { piiMode: piiMode.value } : {}
@@ -106,6 +124,27 @@ async function check(): Promise<void> {
     preflight.start(started.jobId)
   } catch (e) {
     form.applyServerError(e)
+  }
+}
+
+async function runPreview(): Promise<void> {
+  if (!valid(false)) return
+  resetPreview()
+  previewStarting.value = true
+  try {
+    // The pipeline the source would get (the default for its type); the draft's version when it has one (§6.4).
+    const pipelines = await api.pipelines.list({ collectionId: props.collection.id, sourceType: type.value })
+    const pipeline = pipelines.find((p) => p.isDefault) ?? pipelines[0]
+    if (!pipeline) {
+      previewError.value = SOURCE.noPipeline
+      return
+    }
+    const started = await api.pipelines.preview(pipeline.id, { collectionId: props.collection.id, urls: lines(urls.value).slice(0, PREVIEW_URLS) })
+    preview.start(started.jobId)
+  } catch (e) {
+    previewError.value = problemMessage(e)
+  } finally {
+    previewStarting.value = false
   }
 }
 
@@ -180,6 +219,18 @@ async function save(): Promise<void> {
             </div>
             <p v-if="blocked" role="alert" class="text-small text-danger">{{ SOURCE.checkFailed }}</p>
           </div>
+        </section>
+
+        <section :aria-label="SOURCE.previewResult" aria-live="polite">
+          <UiButton icon="preview" :loading="previewStarting || preview.polling.value" data-test="preview" @click="runPreview">{{ SOURCE.preview }}</UiButton>
+          <p class="mt-2 text-small text-fg-2">{{ SOURCE.previewHint }}<template v-if="previewCapped"> {{ SOURCE.previewFirst }}</template></p>
+          <p v-if="preview.polling.value" class="mt-2 text-small text-fg-2">{{ SOURCE.previewing }}</p>
+          <InlineError v-if="previewProblem" :message="previewProblem" class="mt-2" />
+          <InlineError
+            v-if="preview.job.value && preview.job.value.state !== 'succeeded' && preview.job.value.lastError"
+            :message="jobMessage(preview.job.value.lastError)" class="mt-2"
+          />
+          <PreviewResult v-if="previewResult && preview.job.value" :job-id="preview.job.value.id" :result="previewResult" class="mt-3" />
         </section>
       </template>
       <InlineError v-if="form.formError.value" :message="form.formError.value" />

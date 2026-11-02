@@ -200,6 +200,87 @@ export interface PreflightResult {
   cms?: string | null
 }
 
+/** `GET /api/pipelines?collectionId&sourceType`: a pipeline a new source can use; `isDefault` is the one it gets without a choice. */
+export interface PipelineSummary {
+  id: string
+  name: string
+  templateId: string
+  departmentId: string | null
+  publishedVersionId: string | null
+  isDefault: boolean
+}
+
+export type PreviewStage = 'fetch' | 'scan' | 'detect' | 'parse' | 'clean' | 'chunk' | 'personal-data' | 'embed' | 'index'
+
+/** contracts/jobs/v1/preview.stage-preview.result.schema.json */
+export interface PreviewStageResult {
+  stage: PreviewStage
+  state: 'succeeded' | 'failed' | 'skipped'
+  durationMs?: number
+  cacheHit?: boolean
+  facts?: Record<string, unknown> | null
+  estimatedCostUsd?: number | null
+  costUsd?: number | null
+  error?: string | null
+  output?: string | null
+  truncated?: boolean
+}
+
+export interface PreviewSiteProfile {
+  host: string
+  origin: 'manual' | 'preset'
+  siteProfileVersionId?: string | null
+  presetId?: string | null
+  before: string
+  after: string
+}
+
+export interface PreviewDocument {
+  documentId?: string | null
+  url?: string | null
+  uploadId?: string | null
+  stages: PreviewStageResult[]
+  siteProfile?: PreviewSiteProfile | null
+}
+
+export interface StagePreviewResult {
+  documents: PreviewDocument[]
+  expiresAt: IsoDateTime
+}
+
+/** A preview output blob: the stage's value as the worker shows it, cut at 2 MB with `truncated`. */
+export interface PreviewOutput<T> {
+  stage: string
+  truncated: boolean
+  value: T | null
+}
+
+export interface PreviewBlock {
+  kind: string
+  text: string
+  level?: number | null
+  layer?: string
+}
+
+/** The parse and clean outputs (and the site profile's before/after): the extracted blocks and facts. */
+export interface PreviewParsed {
+  title?: string | null
+  blocks: PreviewBlock[]
+  breadcrumb?: string[]
+  visibleDate?: string | null
+  documentDate?: string | null
+}
+
+export interface PreviewChunks {
+  chunks: { ordinal: number; prefix: string; headingPath: string; text: string; tokenCount: number; page?: number | null }[]
+}
+
+export interface PreviewPii {
+  counts: Record<string, number | string | null>
+  typesFired: string[]
+  state: string
+}
+
 export interface RunSummary {
   id: string
   kind: string

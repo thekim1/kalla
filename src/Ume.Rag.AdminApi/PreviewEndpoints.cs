@@ -73,8 +73,10 @@ public static class PreviewEndpoints
             .RequireAuthorization(AdminPolicies.Manage).WithTags("Documents").WithName("PreviewPii")
             .WithSummary("Personal-data highlights of a document (preview up to the personal-data stage; audited pii.view)");
 
-        api.MapGet("/previews/{jobId:guid}/documents/{documentId:guid}/stages/{stage}/output",
-                async (Guid jobId, Guid documentId, string stage, AdminContext admin, IBlobStore blobs, CancellationToken ct) =>
+        // {document}: the document's id, or its index in the result (a URL or upload preview has no document id);
+        // {stage}: a stage name, or before/after for a crawl page's extraction without and with the site profile (§6.4).
+        api.MapGet("/previews/{jobId:guid}/documents/{document}/stages/{stage}/output",
+                async (Guid jobId, string document, string stage, AdminContext admin, IBlobStore blobs, CancellationToken ct) =>
                 {
                     var job = await ScopedJobAsync(admin, jobId, ct);
                     if (job.Class != JobClasses.Preview || job.State != JobStates.Succeeded || job.Result is null)
@@ -82,7 +84,7 @@ public static class PreviewEndpoints
                         throw AdminFaults.Of(AdminErrorCodes.NotFound);
                     }
 
-                    var output = OutputPath(job, documentId, stage) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    var output = OutputPath(job, document, stage) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                     await using var stream = await blobs.ForLevel(job.Classification).OpenReadAsync(new BlobKey(output), null, ct)
                         ?? throw AdminFaults.Of(AdminErrorCodes.NotFound); // expired (24 h)
                     var bytes = await ReadAtMostAsync(stream, MaxOutputBytes, ct);
@@ -114,10 +116,12 @@ public static class PreviewEndpoints
     }
 
     /// <summary>
-    /// The stage's output path from the job's result (<c>preview.stage-preview.result</c>), only when it lies under the
-    /// job's own <c>previews/{jobId}/</c>: the path comes from a result, so it never reaches another job's blobs.
+    /// The output path from the job's result (<c>preview.stage-preview.result</c>) of document <paramref name="document"/> (its id,
+    /// or its index in <c>documents</c>) and <paramref name="stage"/> (a stage, or <c>before</c>/<c>after</c> of its
+    /// <c>siteProfile</c>), only when it lies under the job's own <c>previews/{jobId}/</c>: the path comes from a result, so it
+    /// never reaches another job's blobs.
     /// </summary>
-    internal static string? OutputPath(Job job, Guid documentId, string stage)
+    internal static string? OutputPath(Job job, string document, string stage)
     {
         using var result = JsonDocument.Parse(job.Result!);
         if (!result.RootElement.TryGetProperty("documents", out var documents) || documents.ValueKind != JsonValueKind.Array)
@@ -125,23 +129,49 @@ public static class PreviewEndpoints
             return null;
         }
 
+        var byId = Guid.TryParse(document, out var documentId);
+        var byIndex = !byId && int.TryParse(document, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var index)
+            ? index : -1;
         var prefix = $"previews/{job.Id:D}/";
-        foreach (var document in documents.EnumerateArray())
+        var i = -1;
+        foreach (var item in documents.EnumerateArray())
         {
-            if (!document.TryGetProperty("documentId", out var idElement) || idElement.ValueKind != JsonValueKind.String
-                || !Guid.TryParse(idElement.GetString(), out var id) || id != documentId || !document.TryGetProperty("stages", out var stages))
+            i++;
+            var match = byId
+                ? item.TryGetProperty("documentId", out var idElement) && idElement.ValueKind == JsonValueKind.String
+                    && Guid.TryParse(idElement.GetString(), out var id) && id == documentId
+                : i == byIndex;
+            if (!match)
             {
                 continue;
             }
 
-            foreach (var item in stages.EnumerateArray())
+            var path = stage is "before" or "after"
+                ? item.TryGetProperty("siteProfile", out var profile) && profile.ValueKind == JsonValueKind.Object
+                    && profile.TryGetProperty(stage, out var side) && side.ValueKind == JsonValueKind.String ? side.GetString() : null
+                : StageOutput(item, stage);
+            if (path is not null && path.StartsWith(prefix, StringComparison.Ordinal) && !path.Contains("..", StringComparison.Ordinal))
             {
-                if (item.TryGetProperty("stage", out var name) && name.GetString() == stage
-                    && item.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.String
-                    && output.GetString() is { } path && path.StartsWith(prefix, StringComparison.Ordinal) && !path.Contains("..", StringComparison.Ordinal))
-                {
-                    return path;
-                }
+                return path;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? StageOutput(JsonElement document, string stage)
+    {
+        if (!document.TryGetProperty("stages", out var stages) || stages.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var item in stages.EnumerateArray())
+        {
+            if (item.TryGetProperty("stage", out var name) && name.GetString() == stage
+                && item.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.String)
+            {
+                return output.GetString();
             }
         }
 

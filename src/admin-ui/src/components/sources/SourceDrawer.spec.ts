@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
-import type { Collection, Job, PreflightResult, Source } from '@/api/types'
+import type { Collection, Job, PreflightResult, PreviewOutput, Source, StagePreviewResult } from '@/api/types'
 import SourceDrawer from './SourceDrawer.vue'
 
 const collection: Collection = {
@@ -85,6 +85,87 @@ describe('Lägg till källa (admin design §5.4 steps 3, 4, 6)', () => {
     })
     expect(sync).toHaveBeenCalledWith('s1')
     expect(wrapper.emitted('saved')?.[0]).toEqual([saved, true])
+    wrapper.unmount()
+  })
+
+  it('previews up to 5 addresses on the default pipeline: Före / Efter, the stage strip and a stage\'s output', async () => {
+    const list = vi.spyOn(api.pipelines, 'list').mockResolvedValue([
+      { id: 'p-default', name: 'crawl-default', templateId: 'crawl-default', departmentId: null, publishedVersionId: 'v1', isDefault: true },
+      { id: 'p-own', name: 'crawl-own', templateId: 'crawl-default', departmentId: 'd1', publishedVersionId: 'v2', isDefault: false },
+    ])
+    const preview = vi.spyOn(api.pipelines, 'preview').mockResolvedValue({ jobId: 'pj' })
+    const result: StagePreviewResult = {
+      expiresAt: '2026-11-03T10:00:00Z',
+      documents: [
+        {
+          url: 'https://www.umea.se/bygga/altan', documentId: null,
+          stages: [
+            { stage: 'fetch', state: 'succeeded', durationMs: 120 },
+            { stage: 'parse', state: 'succeeded', durationMs: 40, cacheHit: true, output: 'previews/pj/0/parse.json' },
+            { stage: 'chunk', state: 'succeeded', durationMs: 5, output: 'previews/pj/0/chunk.json' },
+          ],
+          siteProfile: { host: 'www.umea.se', origin: 'preset', presetId: 'sitevision', before: 'previews/pj/0/site-profile-before.json', after: 'previews/pj/0/parse.json' },
+        },
+        { url: 'https://www.umea.se/saknas', stages: [{ stage: 'fetch', state: 'failed', error: 'parse.empty' }] },
+      ],
+    }
+    vi.spyOn(api.jobs, 'get').mockResolvedValue({ ...job({ state: 'pass', checks: [] }), id: 'pj', kind: 'stage-preview', result } as Job<unknown>)
+    const outputs: Record<string, PreviewOutput<unknown>> = {
+      before: { stage: 'parse', truncated: false, value: { blocks: [{ kind: 'paragraph', text: 'Meny Logga in Kontakt' }, { kind: 'paragraph', text: 'Bygga altan' }] } },
+      after: {
+        stage: 'parse', truncated: false,
+        value: { blocks: [{ kind: 'heading', text: 'Bygga altan', level: 1 }, { kind: 'paragraph', text: 'Meny', layer: 'furniture' }], breadcrumb: ['Bygga', 'Altan'], visibleDate: '2026-10-01' },
+      },
+      chunk: { stage: 'chunk', truncated: false, value: { chunks: [{ ordinal: 0, prefix: 'Bygga › Altan', headingPath: 'Bygga altan', text: 'Du behöver bygglov om…', tokenCount: 42 }] } },
+    }
+    const output = vi.spyOn(api.previews, 'output').mockImplementation((_job, _doc, stage) => Promise.resolve(outputs[stage]) as never)
+    const wrapper = await open()
+
+    input('#source-urls', ['a', 'b', 'c', 'd', 'e', 'f'].map((p) => `https://www.umea.se/${p}`).join('\n'))
+    await flushPromises()
+    expect(document.body.textContent).toContain('Bara de 5 första adresserna förhandsgranskas.')
+    click('preview')
+    await flushPromises()
+
+    expect(list).toHaveBeenCalledWith({ collectionId: 'c1', sourceType: 'crawl' })
+    expect(preview).toHaveBeenCalledWith('p-default', { collectionId: 'c1', urls: ['a', 'b', 'c', 'd', 'e'].map((p) => `https://www.umea.se/${p}`) })
+    expect(output).toHaveBeenCalledWith('pj', 0, 'before')
+    expect(output).toHaveBeenCalledWith('pj', 0, 'after')
+    const text = () => document.body.textContent!
+    expect(text()).toContain('Webbplatsprofil för www.umea.se: förinställningen sitevision')
+    expect(document.body.querySelector('[data-test=text-before]')!.textContent).toContain('Meny Logga in Kontakt')
+    const after = document.body.querySelector('[data-test=text-after]')!.textContent!
+    expect(after).toContain('Bygga altan')
+    expect(after).not.toContain('Meny') // furniture is not main text
+    expect(text()).toContain('Bygga › Altan')
+    const strip = document.body.querySelector('[data-test=stage-strip]')!.textContent!
+    expect(strip).toContain('Läs in')
+    expect(strip).toContain('återanvänt')
+
+    const chunkButton = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Textavsnitt')!
+    chunkButton.click()
+    await flushPromises()
+    expect(output).toHaveBeenCalledWith('pj', 0, 'chunk')
+    expect(document.body.querySelector('[data-test=output-chunk]')!.textContent).toContain('1 textavsnitt, 42 token')
+
+    document.body.querySelector<HTMLButtonElement>('#preview-docs-tab-d1')!.click()
+    await flushPromises()
+    expect(text()).toContain('Ingen text blev kvar när sidan hade lästs in och rensats.')
+
+    // A changed address makes the preview stale.
+    input('#source-urls', 'https://www.umea.se/annan')
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=preview-result]')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('says so when no pipeline can process the type', async () => {
+    vi.spyOn(api.pipelines, 'list').mockResolvedValueOnce([])
+    const wrapper = await open()
+    input('#source-urls', 'https://www.umea.se/bygga')
+    click('preview')
+    await flushPromises()
+    expect(document.body.textContent).toContain('Det finns ingen bearbetning för den här källtypen än.')
     wrapper.unmount()
   })
 })
