@@ -101,9 +101,9 @@ Refs: [admin §10.1, §11.4](../admin/design.md)
 
 ### 33. Organisation schema
 Refs: [data-model §2.1](../platform/data-model.md), Decisions "Organisation" row
-- [ ] `Collections.SharedWith`, `ContactName`, `ContactEmail`; `CollectionShares`; `AssistantVersions.CollectionLinks`; view and snapshot
+- [x] `Collections.SharedWith`, `ContactName`, `ContactEmail`; `CollectionShares`; `AssistantVersions.CollectionLinks`; view and snapshot (main session, PR: main-session/33-organisation-schema)
 - [ ] **Hand-off L13:** issue to stream A
-- [ ] **Done:** migrations on an empty and the development database; `DatabaseRoleTests`
+- [x] **Done:** migrations on an empty and the development database; `DatabaseRoleTests` (integration tests; the dev database migrated live, links converted, chat answers)
 
 ### 34. Topics in retrieval
 Refs: [knowledge §4.2, §6.2](../knowledge-api/design.md)
