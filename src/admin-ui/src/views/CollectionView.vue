@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
-import type { Collection, DocumentSummary, Source, SourceSummary } from '@/api/types'
+import type { Collection, CollectionSetup, DocumentSummary, Source, SourceSummary } from '@/api/types'
+import SetupChecklist from '@/components/collections/SetupChecklist.vue'
 import EvaluationTab from '@/components/evaluation/EvaluationTab.vue'
 import RetrievalSettingsForm from '@/components/evaluation/RetrievalSettingsForm.vue'
 import SourceDrawer from '@/components/sources/SourceDrawer.vue'
@@ -30,12 +31,17 @@ const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
 const router = useRouter()
+const route = useRoute()
+const setup = ref<CollectionSetup | null>(null)
 const collection = useLoadable<Collection | null>(null)
 const sources = useLoadable<SourceSummary[]>([])
 const documents = useLoadable<DocumentSummary[]>([])
 const next = ref<string | null>(null)
 const onlyPii = ref(false)
-const tab = ref<Tab>('overview')
+const TABS: Tab[] = ['overview', 'sources', 'documents', 'evaluation', 'retrieval']
+/** `?tab=` opens a tab directly (the setup checklist links to them). */
+const fromQuery = (value: unknown): Tab => (TABS.includes(value as Tab) ? (value as Tab) : 'overview')
+const tab = ref<Tab>(fromQuery(route?.query.tab))
 const publishing = ref(false)
 const publishError = ref<unknown>(null)
 const usedBy = computed(() =>
@@ -82,6 +88,8 @@ async function loadDocuments(append = false): Promise<void> {
 async function load(): Promise<void> {
   await collection.run(() => api.collections.get(props.id))
   await sources.run(() => api.collections.sources(props.id))
+  // Kom igång (§5.4): computed by the API; hidden once done or when it can't be read.
+  setup.value = await api.collections.setup(props.id).catch(() => null)
 }
 
 async function publish(): Promise<void> {
@@ -123,6 +131,9 @@ watch(tab, (t) => {
   if (t === 'documents' && !documents.loaded.value) void loadDocuments()
 })
 watch(onlyPii, () => void loadDocuments())
+watch(() => route?.query.tab, (t) => {
+  if (t !== undefined) tab.value = fromQuery(t)
+})
 onMounted(load)
 </script>
 
@@ -143,7 +154,8 @@ onMounted(load)
       <InlineError v-if="publishError" :message="problemMessage(publishError)" class="mb-4" />
       <UiTabs id="collection" v-model="tab" :tabs="tabs" :label="COLLECTION.tabsLabel" class="mb-6" />
 
-      <div v-if="tab === 'overview'" id="collection-panel-overview" role="tabpanel" aria-labelledby="collection-tab-overview">
+      <div v-if="tab === 'overview'" id="collection-panel-overview" role="tabpanel" aria-labelledby="collection-tab-overview" class="grid gap-6">
+        <SetupChecklist v-if="setup && !setup.done" :setup="setup" />
         <UiCard :title="COLLECTIONS.state">
           <p v-if="!collection.data.value.publishedAt" class="mb-2">{{ COLLECTIONS.notPublishedHint }}</p>
           <DetailRow :label="COLLECTION.usedBy">

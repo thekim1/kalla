@@ -831,6 +831,8 @@ export const RETRIEVAL = {
   savedNoSet: 'Sökinställningarna är sparade.',
   tryWithout: 'Prova utan att spara',
   tryStarted: 'En jämförande utvärdering körs med de nya värdena. Resultatet visas under Testfrågor och kvalitet.',
+} as const
+
 /** The setup checklist "Kom igång" (admin design §5.4, §5.5.2), on the start page and the collection's Översikt. */
 export const SETUP = {
   title: 'Kom igång',
