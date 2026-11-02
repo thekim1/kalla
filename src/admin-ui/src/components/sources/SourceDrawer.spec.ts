@@ -168,4 +168,20 @@ describe('Lägg till källa (admin design §5.4 steps 3, 4, 6)', () => {
     expect(document.body.textContent).toContain('Det finns ingen bearbetning för den här källtypen än.')
     wrapper.unmount()
   })
+
+  it('creates an upload source without a sync: its files are uploaded on its page', async () => {
+    const saved = { id: 's9', name: 'Blanketter' } as Source
+    const create = vi.spyOn(api.collections, 'addSource').mockResolvedValue(saved)
+    const sync = vi.spyOn(api.sources, 'sync')
+    const wrapper = await open()
+    document.body.querySelector<HTMLInputElement>('[data-test=type-upload] input')!.click()
+    await flushPromises()
+    input('#source-name', 'Blanketter')
+    click('save')
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith('c1', { type: 'upload', name: 'Blanketter', classification: 'public', settings: { piiMode: 'hold' } })
+    expect(sync).not.toHaveBeenCalled()
+    expect(wrapper.emitted('saved')?.[0]).toEqual([saved, false])
+    wrapper.unmount()
+  })
 })
