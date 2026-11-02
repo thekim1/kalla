@@ -492,6 +492,18 @@ export const FILES = {
 /** The generic forms for platform objects (admin design §5.8). Field labels come from the API's schemas. */
 export const PLATFORM = {
   lead: 'What the platform team sets up for the whole platform. The fields come from the API’s schemas.',
+  /** Field labels of the generic forms; a field missing here is named from its property name. */
+  fields: {
+    oAuthClientId: 'OAuth client ID',
+    classificationCeiling: 'Highest information class',
+    storesHistory: 'Stores chat history',
+    clientRetentionDays: 'Feedback kept in Open WebUI (days)',
+    allowedOrigins: 'Allowed origins',
+    toolPolicy: 'Tool policy',
+    portalUrl: 'Portal URL',
+    isEnabled: 'Enabled',
+    memberGroups: 'Member groups',
+  } as Record<string, string>,
   resources: {
     clients: { label: 'Clients', description: 'Apps that use the platform: Open WebUI, integrations, internal clients' },
     keys: { label: 'Keys', description: 'API keys per client; create, rotate, show and revoke' },

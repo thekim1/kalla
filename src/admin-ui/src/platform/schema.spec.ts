@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fieldsOf, fromInput, requestSchema, toInput } from './schema'
+import { fieldLabel, fieldsOf, fromInput, requestSchema, toInput } from './schema'
 
 // A cut of the admin API's OpenAPI document with the shapes ASP.NET generates.
 const doc = {
@@ -47,5 +47,13 @@ describe('generic form schema (admin design §5.8, §6.3)', () => {
     expect(fromInput(days!, '')).toBeNull()
     expect(fromInput(name!, '')).toBeUndefined()
     expect(() => fromInput(scopes!, '{nope')).toThrow('json')
+  })
+})
+
+describe('fieldLabel', () => {
+  it('names a field from its property name when no label is set', () => {
+    expect(fieldLabel('clientRetentionDays')).toBe('Client retention days')
+    expect(fieldLabel('portalUrl')).toBe('Portal URL')
+    expect(fieldLabel('name')).toBe('Name')
   })
 })
