@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-01, end of session 17 (second half included). Earlier sessions are in the
+State of the Ume.Rag work for the next session. Rewritten 2026-11-02, session 18. Earlier sessions are in the
 git history (`git log -- HANDOVER.md`).
 Repo `~/git/ume-rag-platform`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
@@ -15,28 +15,23 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 - **The demo runs** (`plans/demo-path.md` "Result"): crawl → retrieve → cited answer in Open WebUI from the `turkos`
   assistant (`claude-haiku-5-5`), over the user's interim gateway at `Eu`. P0 released (`v0.1.0`); P1a code complete;
-  P1b in progress.
-- **Direction (user):** demo first, then details; **more focus on the admin UI** (`plans/demo-path.md` "Next focus",
-  issue #278); no more crawling at this stage. Don't over-engineer tests; merge on green CI.
-- **Admin UI:** Översikt, Organisation, Kunskapsbanker (B, #279), **Plattformsobjekt** = generic forms for clients,
-  keys, settings, data protection, site profiles, gateway models (A, #281; `src/admin-ui/src/platform/**` is stream
-  A's). B builds the journey pages: **#285** (Lägg till källa) approved, B merges; **#288** (source and run page)
-  conflicts, waits for B's rebase.
-- **Stream A's queue is empty:** P1 item 19 (EU-route capacity, #286), P1b item 17's importer settings (#289),
-  `Gateway:MaxResidency` and Open WebUI notes (#290), the evaluator's stop list (#291) are merged. Left for stream A:
-  P1b item 15 `e2e` (after B's L7), the go-live pin review, the live items (17's import run, 21–26).
-- **Design** is in sync with everything merged (design syncs `d0f246b`, `0ee7bc4`, `4adfc63`, `b742f27`): two layers,
-  Decisions table (rows `current` bind) > detail documents. **Gate every docs commit on `scripts/check-doc-refs.py`
-  printing `0 misses`** (one push slipped through with a miss this session).
-- **Decided this session:** Decisions row "Condense on the EU route" (`gpt-6-luna`, `reasoning_effort: none`, no
-  `temperature`, 1,200 ms; B builds it in #287); `temperature` sent only when set (#282, folded); main-session calls on
-  the design sync (either-of policies stay: #283; 5002 `conversation_not_owned` stays: #284; admin reads
-  `PublishedAssistantVersions`; `Gateway:MaxResidency` implements M2); pipeline publish copies on write for departments,
-  publication id = plan job id (admin §6.6, #256).
-- **Measured (P1 item 19):** EU-route embedding 18–20k tokens/s (key-limited), query embedding p95 156 ms, answer TTFT
-  p99 3.1 s; all of umea.se (≈ 15,400 URLs, ≈ 8,100 PDFs) ≈ 2–3 h (fetch-bound) and ≈ $6–22 in embeddings
-  (`plans/p1/results-a.md`).
-- `main` = `6c05377`, CI green.
+  P1b in progress, admin UI first (#278).
+- **Decided in session 18 (user):**
+  - **Admin UI in English**, Swedish later as a translation; every string in `labels.ts`/`messages.ts`, no i18n library
+    yet (Decisions row, `724f1c7`; B: #314).
+  - **Evaluation models at the collection's ceiling**, no `temperature` (`6bfe67d`; worker #317 merged): generation and
+    the judge run at `Eu` under M2. Local settings: `EvaluationModel` `claude-opus-5-5`, judge `gpt-6.1-sol`.
+  - **Organisation** (`5529c65`, proposal `plans/admin/organisation-proposal.md`): department-owned knowledge bases
+    shared with selected departments or the whole municipality, topics from path-rule tags per assistant link
+    (`CollectionLinks`), contact person, teams hidden in forms, Map table in P1b, content owned by the running department,
+    W3 spike now. New V35; P1b items 33–36 (B, #318), 37–38 (A, after L13/L14).
+- **Condense works** on the local stack (`gpt-6-luna`, `none`; follow-ups logged `condense Rewritten`); only the first
+  call after a restart times out on a cold gateway connection.
+- **Reviewed:** #298 (changes requested, B fixed the stale confirm before merging), #299, #303, #313 and its follow-up #316
+  (approved).
+- **Direction (user):** demo first; admin UI focus; the platform should be good and easy to use; no more crawling now;
+  don't over-engineer tests; merge on green CI.
+- Design is in sync with everything merged. **Gate every docs commit on `scripts/check-doc-refs.py` printing `0 misses`.**
 
 ## Local stack (this machine, AppHost running)
 
@@ -137,26 +132,21 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 ## Next step
 
-1. **Check the stack and GitHub:** `aspire describe` (if down: `export Seed__Enabled=false; aspire start --apphost
-   src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj --non-interactive`); open PRs, new issues, CI on `main`.
-2. **Review B's PRs as they come**, against the live admin API as for #279/#285: #288 after its rebase; then whatever B
-   opens for #278 (journey pages), #283, #284, #287, item 9c (pipeline publish, now unblocked by #256's decision).
-   Approve only with the user's OK.
-3. **When #287 lands:** set `Settings.Chat.CondenseModel = gpt-6-luna` and `CondenseReasoningEffort = none` on the local
-   stack (Plattformsobjekt → Inställningar → Chatt) and check a follow-up question is condensed (`rag.chat.condense
-   {outcome=used}`); fold #287 into chat §5 if it deviates.
-4. **Open decision (user + main):** LLM test-question generation and the judge run at ceiling `OnPrem` only
-   (`plans/ingestion-worker/design-processing.md` §13.1, "Model"), so they can't run before on-prem models exist (M2).
-   Allowing `Eu` under M2 is a design change and needs the evaluation client's fixed temperatures (0.3, 0) dropped or
-   made optional (Claude models refuse them). The human gold set needs neither.
-5. Then, user decides: the gold set with DoIT and the three-way evaluation with threshold calibration (item 21; the demo
-   runs with `coverageMaxDistance` 0.55 and a weak hit can still get a soft "the sources don't say" answer; draft
-   questions in `~/ume-rag-gold-draft-*.csv` and `plans/p1/gold-set/`); P1b item 15 `e2e` (after B's L7); pin review
-   and Aspire 13.6.4 (shared/B); more of umea.se only when the user wants it.
+1. **Check the stack and GitHub** (`aspire describe`; open PRs, issues, CI on `main`). Rebuild and restart
+   `migrations`, `api`, `adminapi`, `worker` after merges (`dotnet build UmeRag.slnx`, `aspire resource <r> restart`).
+2. **The first generated test set for `turkos`** (session 18): 104 generated, 100 kept, 121k tokens (Opus writes,
+   GPT-6.1 judges); the questions read like citizens' questions. First on-demand run: **recall@10 0.91, MRR 0.68**
+   (hybrid). Next: look at the 9 misses (wrong chunking, duplicate pages, or a weak question?) and compare with the
+   human gold set (item 21).
+3. **Review B's PRs** against the live stack: #314 (English UI, also renames the eval codes of #317), then
+   items 33–36 (#318). After #314: walk the whole setup journey in the browser in English and note friction.
+4. **Stream A after L13/L14:** items 37 (topics in the worker) and 38 (platform forms), plus the English keywords in
+   `src/admin-ui/src/platform/nav.ts` and `GenericForm.spec.ts`.
+5. Then, user decides: the gold set with DoIT and threshold calibration (item 21; draft questions in
+   `~/ume-rag-gold-draft-*.csv`, `plans/p1/gold-set/`); P1b item 15 `e2e` (after B's L7); pin review and Aspire 13.6.4.
 
-**Open issues to stream B:** #278 (admin UI order), #283 (either-of policies), #284 (5002 `conversation_not_owned`),
-#287 (condense), #256 (decided, B closes it with item 9c), plus the older hand-off issues #52, #75, #80, #90, #102, #129,
-#132, #246. **For stream A:** #48 (H8 on-prem capacity run), #51 (licence notices), #193, #210 (hand-offs received).
+**Open issues to stream B:** #278 (admin UI order), #314 (English UI), #318 (organisation), #297 (timing tests), plus the older hand-off issues #52, #75, #80, #90, #102, #129,
+#132, #246. **For stream A:** #48 (H8 on-prem capacity run), #51 (licence notices), #193, #210, #300 (hand-offs received).
 **For the main session:** #100 (L8). **For the user:** #215 (J8).
 
 **Not folded into the design yet (need a call):** #217's fired-types list in the PII report; `UrlCanonicalizer` →
@@ -167,7 +157,7 @@ code has `/api/organisation/departments` with teams nested.
 seeds until then); the gateway session (release 1 incl. the embedding-batch fix, a 4xx for policy blocks, the shared
 Keycloak realm `ume` with J8 #215, identity §16 Q1–Q4/Q6); handing `docs/gateway-host-setup.md` to Hermes; **O7**
 (go-live host); identity §16 Q5, Q7–Q9; runbook review by the operations owner; U1 with the web editors; names and dates
-for A1, G1, N1, U1, W2, P2 and the gold-set owner (DoIT); DPIA G1; the evaluation-model decision (step 4).
+for A1, G1, N1, U1, W2, P2 and the gold-set owner (DoIT); DPIA G1.
 
 ## Open register items (`plans/postponed-decisions.md`)
 
