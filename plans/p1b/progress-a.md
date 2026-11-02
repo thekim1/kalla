@@ -90,7 +90,7 @@ Refs: [chat §4.3, §13.3, §14.2](../chat-api/design.md), [repo-and-deployment 
 - [x] Open WebUI API keys restricted to the feedback routes; service account; `OpenWebUi__AdminApiKey` secret; importer settings (PR: a/p1b-17-test-host-stack; importer settings `OpenWebUi__BaseUrl` and `OpenWebUi__FeedbackImportInterval` after L6 #273, PR: a/17-importer-settings)
 - [x] Test-host Compose with the pilot caps; test-host run book (PR: a/p1b-17-test-host-stack)
 - [x] Runbook public-records section lists the three candidate routes (PR: a/p1b-17-test-host-stack)
-- [ ] **Done:** `docker compose config` green; local import and pruning work; #49 recorded
+- [x] **Done:** `docker compose config` green; local import and pruning work; #49 recorded (PR #340: the AppHost runs the importer with a local admin key; a rating imported and a 40-day-old one pruned; #49's test-host run stays with L10)
 
 ### 37. Topics in the worker (after L13, L14)
 Refs: [processing §7, §13](../ingestion-worker/design-processing.md), [engine §11](../ingestion-worker/design-engine.md)
