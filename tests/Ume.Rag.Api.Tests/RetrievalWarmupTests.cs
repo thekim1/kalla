@@ -46,6 +46,32 @@ public sealed class RetrievalWarmupTests
         await warmup.StopAsync(Ct);
     }
 
+    [Fact]
+    public async Task Stop_and_dispose_are_safe_in_either_order()
+    {
+        // #338 CI: WebApplicationFactory stopped the host after its services were disposed (ObjectDisposedException).
+        foreach (var disposeFirst in new[] { true, false })
+        {
+            var source = new HeldSource();
+            using var sizes = new ScopeSizeCache(source, new FakeTimeProvider());
+            var warmup = new RetrievalWarmup(sizes, NullLogger<RetrievalWarmup>.Instance, new FakeTimeProvider());
+            await warmup.StartAsync(Ct);
+            if (disposeFirst)
+            {
+                warmup.Dispose();
+                await warmup.StopAsync(Ct);
+            }
+            else
+            {
+                await warmup.StopAsync(Ct);
+                warmup.Dispose();
+            }
+
+            warmup.Dispose(); // twice is fine
+            source.Release.SetResult();
+        }
+    }
+
     private static async Task WaitAsync(Func<bool> condition)
     {
         for (var i = 0; i < 500 && !condition(); i++)

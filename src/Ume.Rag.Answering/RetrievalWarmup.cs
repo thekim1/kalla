@@ -18,6 +18,7 @@ public sealed partial class RetrievalWarmup(ScopeSizeCache sizes, ILogger<Retrie
     public static readonly TimeSpan MaxWait = TimeSpan.FromSeconds(60);
 
     private readonly CancellationTokenSource _stopping = new();
+    private int _disposed;
     private long _started;
     private volatile bool _done;
     private Task? _run;
@@ -29,9 +30,21 @@ public sealed partial class RetrievalWarmup(ScopeSizeCache sizes, ILogger<Retrie
         return Task.CompletedTask;
     }
 
+    /// <summary>Stops the attempt; safe in any order with <see cref="Dispose"/> (a host may stop after its services are disposed).</summary>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await _stopping.CancelAsync();
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            try
+            {
+                await _stopping.CancelAsync();
+            }
+            catch (ObjectDisposedException)
+            {
+                // disposed meanwhile: nothing left to stop
+            }
+        }
+
         if (_run is { } run)
         {
             await run.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
@@ -41,7 +54,14 @@ public sealed partial class RetrievalWarmup(ScopeSizeCache sizes, ILogger<Retrie
     public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
         Task.FromResult(_done || time.GetElapsedTime(_started) >= MaxWait ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy("retrieval_warming"));
 
-    public void Dispose() => _stopping.Dispose();
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            _stopping.Cancel(); // the attempt ends too, so a later StopAsync does not wait for a held read
+            _stopping.Dispose();
+        }
+    }
 
     /// <summary>Whether the attempt has ended (tests).</summary>
     public bool Done => _done;
@@ -62,7 +82,7 @@ public sealed partial class RetrievalWarmup(ScopeSizeCache sizes, ILogger<Retrie
                 LogNoStatistics(logger, (long)watch.Elapsed.TotalMilliseconds);
             }
         }
-        catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+        catch (Exception e) when (e is OperationCanceledException or ObjectDisposedException && Volatile.Read(ref _disposed) == 1 || e is OperationCanceledException && _stopping.IsCancellationRequested)
         {
             // stopping
         }
