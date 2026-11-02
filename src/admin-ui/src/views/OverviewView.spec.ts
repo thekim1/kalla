@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { api } from '@/api'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser } from '@/test/fixtures'
@@ -19,6 +20,7 @@ describe('Översikt: your access (P0 checklist #9)', () => {
       departmentCodes: ['1000', '3000'],
       departmentSources: [{ code: '1000', source: 'claim' }, { code: '3000', source: 'group' }],
     })
+    vi.spyOn(api, 'overview').mockResolvedValue({ hasCollections: true, setup: [] })
     const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
     expect(wrapper.get('[data-test=roles]').text()).toBe('Läsbehörighet')
     const departments = wrapper.get('[data-test=departments]').text()
@@ -32,5 +34,29 @@ describe('Översikt: your access (P0 checklist #9)', () => {
     signIn({ roles: [], departmentCodes: [], departmentSources: [] })
     const wrapper = mount(OverviewView)
     expect(wrapper.text()).toContain('Du har ingen roll i Kunskapsplattformen än.')
+  })
+
+  it('shows Kom igång for each unfinished collection, and the empty state with Skapa kunskapsbank', async () => {
+    signIn({ roles: ['rag-editor'], departmentCodes: ['1000'], departmentSources: [{ code: '1000', source: 'claim' }] })
+    const overview = vi.spyOn(api, 'overview').mockResolvedValue({
+      hasCollections: true,
+      setup: [{
+        collectionId: 'c1', name: 'Bygglov', sources: 1, firstSyncDone: false, syncRunning: true, testQuestions: 0, evaluated: false, evaluating: false,
+        published: false, assistantId: null, assistantPublished: false, available: false, done: false,
+      }],
+    })
+    const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
+    await flushPromises()
+    expect(wrapper.get('[data-test=setup]').text()).toContain('Kom igång: Bygglov')
+    expect(wrapper.get('[data-test=step-source]').attributes('data-state')).toBe('done')
+    expect(wrapper.get('[data-test=step-sync]').attributes('data-state')).toBe('active')
+    expect(wrapper.get('[data-test=step-sync]').text()).toContain('Hämtning pågår')
+    expect(wrapper.get('[data-test=step-available]').attributes('data-state')).toBe('todo')
+
+    overview.mockResolvedValue({ hasCollections: false, setup: [] })
+    const empty = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    expect(empty.get('[data-test=empty]').text()).toContain('Du har inga kunskapsbanker än.')
+    expect(empty.find('[data-test=create]').exists()).toBe(true)
   })
 })

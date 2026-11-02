@@ -104,4 +104,24 @@ describe('Kunskapsbank (admin design §5.5.2)', () => {
     expect(wrapper.find('[data-test=retrieval]').exists()).toBe(true)
     expect((wrapper.get('#rs-coverageMaxDistance').element as HTMLInputElement).value).toBe('0,4')
   })
+
+  it('shows Kom igång on Översikt until the checklist is done', async () => {
+    signIn(['rag-editor'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+    const setup = vi.spyOn(api.collections, 'setup').mockResolvedValue({
+      collectionId: 'c1', name: 'Bygglov', sources: 0, firstSyncDone: false, syncRunning: false, testQuestions: 0, evaluated: false, evaluating: false,
+      published: false, assistantId: null, assistantPublished: false, available: false, done: false,
+    })
+    const stubs = { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } }
+    const wrapper = mount(CollectionView, { props: { id: 'c1' }, ...stubs })
+    await flushPromises()
+    expect(wrapper.get('[data-test=setup]').text()).toContain('Lägg till källa')
+    expect(wrapper.get('[data-test=step-source]').attributes('data-state')).toBe('todo')
+
+    setup.mockResolvedValue({ ...(await setup.mock.results[0]!.value), done: true, available: true })
+    const done = mount(CollectionView, { props: { id: 'c1' }, ...stubs })
+    await flushPromises()
+    expect(done.find('[data-test=setup]').exists()).toBe(false)
+  })
 })
