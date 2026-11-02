@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Domain;
@@ -19,11 +21,11 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private sealed record Seed(string Code, Guid Fresh, Guid Halfway, Guid Ready, Guid Assistant);
+    private sealed record Seed(string Code, Guid Fresh, Guid Halfway, Guid Ready, Guid Assistant, Guid RunningRun);
 
     /// <summary>
     /// Three collections of one department: <c>Fresh</c> (nothing yet); <c>Halfway</c> (a source with a finished and a
-    /// running run, two active questions and a retired one, an evaluation job queued, a draft assistant); <c>Ready</c>
+    /// running run and two documents of which one is deleted, two active questions and a retired one, an evaluation job queued, a draft assistant); <c>Ready</c>
     /// (published, linked by a published assistant with a client audience).
     /// </summary>
     private async Task<Seed> SeedAsync()
@@ -72,10 +74,22 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
             Slug = "setup-c-" + code.ToLowerInvariant(), Name = "Annans " + code, DepartmentId = elsewhere.Id, Classification = Classification.Internal, UpdatedAt = now,
         };
         db.AddRange(department, elsewhere, fresh, halfway, ready, pipeline, source, removed, set, client, draftOnly, live, foreign);
+        var running = new Run { SourceId = source.Id, Classification = Classification.Internal, Kind = "sync", Trigger = "schedule", State = RunStates.Running, StartedAt = now };
         db.AddRange(
             new Run { SourceId = removed.Id, Classification = Classification.Internal, Kind = "sync", Trigger = "manual", State = RunStates.Succeeded, StartedAt = now },
             new Run { SourceId = source.Id, Classification = Classification.Internal, Kind = "sync", Trigger = "manual", State = RunStates.Succeeded, StartedAt = now.AddHours(-1) },
-            new Run { SourceId = source.Id, Classification = Classification.Internal, Kind = "sync", Trigger = "schedule", State = RunStates.Running, StartedAt = now });
+            running);
+        Document Page(string path, DateTimeOffset? deleted = null)
+        {
+            var url = $"https://www.umea.se/{code}/{path}";
+            return new Document
+            {
+                SourceId = source.Id, Classification = Classification.Internal, IdentityKind = "url", CanonicalIdentity = url, Url = url,
+                IdentityHash = SHA256.HashData(Encoding.UTF8.GetBytes(url)), DeletedAt = deleted,
+            };
+        }
+
+        db.AddRange(Page("altan"), Page("borttagen", now));
         db.AddRange(
             new EvaluationQuestion { SetId = set.Id, Classification = Classification.Internal, Layer = EvaluationLayers.Human, Question = "Fråga ett?" },
             new EvaluationQuestion { SetId = set.Id, Classification = Classification.Internal, Layer = EvaluationLayers.Generated, Question = "Fråga två?" },
@@ -112,7 +126,7 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
         live.PublishedVersionId = published.Id;
         foreign.PublishedVersionId = foreignVersion.Id;
         await db.SaveChangesAsync(Ct);
-        return new Seed(code, fresh.Id, halfway.Id, ready.Id, live.Id);
+        return new Seed(code, fresh.Id, halfway.Id, ready.Id, live.Id, running.Id);
     }
 
     [Fact]
@@ -153,5 +167,19 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
         (await stranger.GetAsync($"/api/collections/{seed.Halfway}/setup", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         var other = await stranger.GetFromJsonAsync<JsonElement>("/api/overview", Ct);
         other.GetProperty("setup").EnumerateArray().Select(s => s.GetProperty("collectionId").GetGuid()).ShouldNotContain(seed.Halfway);
+    }
+
+    [Fact]
+    public async Task The_source_list_carries_each_source_s_live_document_count_and_latest_run()
+    {
+        var seed = await SeedAsync();
+        await using var factory = database.HeaderFactory();
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
+
+        var source = (await viewer.GetFromJsonAsync<JsonElement[]>($"/api/collections/{seed.Halfway}/sources", Ct))!.ShouldHaveSingleItem();
+        source.GetProperty("documents").GetInt32().ShouldBe(1);
+        var lastRun = source.GetProperty("lastRun");
+        (lastRun.GetProperty("id").GetGuid(), lastRun.GetProperty("state").GetString()).ShouldBe((seed.RunningRun, RunStates.Running));
+        lastRun.GetProperty("finishedAt").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 }

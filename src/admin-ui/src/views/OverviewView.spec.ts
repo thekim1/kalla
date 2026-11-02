@@ -14,20 +14,25 @@ function signIn(overrides: Parameters<typeof bffUser>[0]) {
 }
 
 describe('Overview: your access (P0 checklist #9)', () => {
-  it('shows the roles in Swedish and where each department came from', () => {
+  it('shows the roles, each department by name, and where each department came from', async () => {
     signIn({
       roles: ['rag-viewer', 'offline_access'],
       departmentCodes: ['1000', '3000'],
       departmentSources: [{ code: '1000', source: 'claim' }, { code: '3000', source: 'group' }],
     })
     vi.spyOn(api, 'overview').mockResolvedValue({ hasCollections: true, setup: [] })
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([
+      { id: 'd1', name: 'Bygg och miljö', costCenterCode: '1000', isActive: true, syncedAt: '2026-11-01T10:00:00Z', teams: [] },
+    ])
     const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
+    await flushPromises()
     expect(wrapper.get('[data-test=roles]').text()).toBe('Read access')
-    const departments = wrapper.get('[data-test=departments]').text()
-    expect(departments).toContain('1000')
-    expect(departments).toContain('From your account')
-    expect(departments).toContain('3000')
-    expect(departments).toContain('Through a member group')
+    const items = wrapper.findAll('[data-test=departments] li').map((li) => li.text())
+    expect(items[0]).toContain('Bygg och miljö')
+    expect(items[0]).toContain('1000')
+    expect(items[0]).toContain('From your account')
+    expect(items[1]).toContain('Unknown department (code 3000)')
+    expect(items[1]).toContain('Through a member group')
   })
 
   it('tells a user without a rag-* role to ask for access', () => {

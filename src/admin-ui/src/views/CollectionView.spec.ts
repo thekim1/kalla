@@ -34,7 +34,7 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     signIn(['rag-editor'])
     vi.spyOn(api.collections, 'get').mockResolvedValue(base)
     vi.spyOn(api.collections, 'sources').mockResolvedValue([
-      { id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se/bygga', classification: 'internal', state: 'active' },
+      { id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se/bygga', classification: 'internal', state: 'active', documents: 0, lastRun: null },
     ])
     const list = vi.spyOn(api.documents, 'list').mockImplementation(async (q) => ({
       items: q.pii === 'flagged' ? [document({ id: 'p', title: 'Protokoll', piiFlagged: true })] : [document({}), document({ id: 'p', title: 'Protokoll', piiFlagged: true })],
@@ -61,6 +61,36 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     await flushPromises()
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ collectionId: 'c1', pii: 'flagged' }))
     expect(wrapper.text()).not.toContain('Altan')
+  })
+
+  it('shows the document count, the last fetch with its result and the latest quality on the overview', async () => {
+    signIn(['rag-viewer'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([
+      {
+        id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se/bygga', classification: 'internal', state: 'active', documents: 2300,
+        lastRun: { id: 'r1', state: 'succeeded', startedAt: '2026-10-30T01:00:00Z', finishedAt: '2026-10-30T01:12:00Z' },
+      },
+      {
+        id: 's2', collectionId: 'c1', type: 'upload', name: 'Blanketter', classification: 'internal', state: 'active', documents: 24,
+        lastRun: { id: 'r2', state: 'failed', startedAt: '2026-10-31T09:00:00Z', finishedAt: '2026-10-31T09:01:00Z' },
+      },
+    ])
+    const run = (id: string, variant: string, recallAtK: number, candidate = false) => ({
+      id, kind: 'nightly', variant, questionCount: 40, k: 10, found: 36, recallAtK, mrr: 0.8, wins: null, losses: null, comparedRunId: null, candidate,
+      thresholdProposal: null, startedAt: '2026-11-01T02:00:00Z', finishedAt: '2026-11-01T02:05:00Z',
+    })
+    vi.spyOn(api.collections, 'evaluation').mockResolvedValue({
+      hasSet: true, questions: [], latestRuns: [run('e3', 'hybrid', 0.95, true), run('e2', 'vector', 0.8), run('e1', 'hybrid', 0.91)],
+    })
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test=document-count]').text().replace(/\s/g, '')).toBe('2324')
+    expect(wrapper.get('[data-test=last-fetch]').text()).toContain('Failed')
+    expect(wrapper.text()).toContain('Latest quality (recall@10)')
+    expect(wrapper.get('[data-test=quality]').text()).toContain('0,91')
   })
 
   it('lets a department admin publish with the version it read', async () => {

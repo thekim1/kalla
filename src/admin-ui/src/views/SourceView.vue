@@ -137,7 +137,9 @@ onMounted(load)
           <template #cell-started="{ row }"><span class="tabular">{{ formatDateTime(row.startedAt) }}</span></template>
           <template #cell-state="{ row }"><UiBadge :tone="stateTone(row.state)" :label="RUN_STATE_LABEL[row.state] ?? row.state" /></template>
           <template #cell-counts="{ row }">
-            <span class="tabular text-small">+{{ row.added }} · ~{{ row.updated }} · −{{ row.deleted }}<span v-if="row.failed" class="text-danger"> · {{ row.failed }} ⚠</span></span>
+            <span class="tabular text-small">{{ SOURCE_PAGE.runCounts(formatNumber(row.added), formatNumber(row.updated), formatNumber(row.deleted)) }}<span
+              v-if="row.failed" class="text-danger"
+            >, {{ SOURCE_PAGE.runFailed(formatNumber(row.failed)) }}</span></span>
           </template>
         </DataTable>
         <UiButton v-if="next" class="mt-4" :loading="runs.loading.value" @click="loadRuns(true)">{{ SOURCE_PAGE.more }}</UiButton>

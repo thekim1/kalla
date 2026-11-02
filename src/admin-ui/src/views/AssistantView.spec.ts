@@ -65,6 +65,32 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.find('[data-test=warnings]').exists()).toBe(false)
   })
 
+  it('with no draft, shows the published version\'s settings and saves them as the new draft', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 3, draft: null })
+    const draftCall = vi.spyOn(api.assistants, 'draft')
+    const version = vi.spyOn(api.assistants, 'version').mockResolvedValue({
+      number: 3, state: 'published', gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', querySteps: {}, notFound: {}, collectionIds: ['c1'],
+      restoredFrom: null, createdAt: '2026-11-01T10:00:00Z', createdBy: 'anna', publishedAt: '2026-11-01T10:00:00Z', publishedBy: 'anna',
+    })
+    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, number: 4, gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionIds: ['c1'], warnings: [], version: 'd1' })
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+
+    expect(version).toHaveBeenCalledWith('a1', 3)
+    expect(draftCall).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-test=draft-from]').text()).toBe('Editing starts a new draft from version 3.')
+    expect((wrapper.get('#assistant-model').element as HTMLSelectElement).value).toBe('ume/chat-eu')
+    expect((wrapper.get('#assistant-prompt').element as HTMLTextAreaElement).value).toBe('Svara kort.')
+    expect((wrapper.findAll('input[type=checkbox]')[0]!.element as HTMLInputElement).checked).toBe(true)
+
+    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await flushPromises()
+    expect(save).toHaveBeenCalledWith('a1', { gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionIds: ['c1'], version: null })
+  })
+
   it('tests the draft, publishes it, and sets the audience', async () => {
     signIn(['rag-department-admin'])
     mocks()

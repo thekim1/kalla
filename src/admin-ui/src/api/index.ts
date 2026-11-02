@@ -5,6 +5,7 @@ import type {
   AssistantDraft,
   AssistantSummary,
   AssistantTestResult,
+  AssistantVersion,
   AssistantVersionSummary,
   BffUser,
   ClientSummary,
@@ -55,7 +56,7 @@ import type {
   UploadFile,
   SourceImpact,
   SourceUpdate,
-  SourceSummary,
+  SourceListItem,
   SyncStarted,
 } from './types'
 
@@ -77,7 +78,7 @@ export const api = {
     get: (id: string) => http.get<Collection>(`/api/collections/${id}`),
     create: (body: CollectionCreate) => http.post<Collection>('/api/collections', body),
     publish: (id: string, version: string) => http.post<Collection>(`/api/collections/${id}/publish`, { version }),
-    sources: (id: string) => http.get<SourceSummary[]>(`/api/collections/${id}/sources`),
+    sources: (id: string) => http.get<SourceListItem[]>(`/api/collections/${id}/sources`),
     evaluation: (id: string) => http.get<EvaluationOverview>(`/api/collections/${id}/evaluation`),
     retrievalSettings: (id: string, settings: Record<string, unknown>, version: string) =>
       http.put<Collection>(`/api/collections/${id}/retrieval-settings`, { settings, version }),
@@ -130,6 +131,7 @@ export const api = {
     audiences: (id: string, body: { clientIds: string[]; version: string }) => http.put<Assistant>(`/api/assistants/${id}/audiences`, body),
     test: (id: string, body: { question: string; target?: 'Draft' | 'Published' }) => http.post<AssistantTestResult>(`/api/assistants/${id}/test`, body),
     versions: (id: string) => http.get<AssistantVersionSummary[]>(`/api/assistants/${id}/versions`),
+    version: (id: string, number: number) => http.get<AssistantVersion>(`/api/assistants/${id}/versions/${number}`),
     restore: (id: string, number: number, version: string) => http.post<Assistant>(`/api/assistants/${id}/versions/${number}/restore`, { version }),
     archive: (id: string, version: string) => http.post<Assistant>(`/api/assistants/${id}/archive`, { version }),
     unarchive: (id: string, version: string) => http.post<Assistant>(`/api/assistants/${id}/unarchive`, { version }),

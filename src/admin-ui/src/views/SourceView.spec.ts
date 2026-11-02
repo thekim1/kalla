@@ -43,7 +43,7 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     expect(wrapper.get('[data-test=addresses]').text()).toBe('https://www.umea.se/bygga')
     expect(wrapper.text()).toMatch(/2\s500/)
     expect(wrapper.text()).toContain('Done')
-    expect(wrapper.text()).toContain('+40 · ~2 · −1')
+    expect(wrapper.text()).toContain('40 added, 2 changed, 1 removed')
     expect(wrapper.get('[data-test=pii]').text()).toContain('Kept out of the search')
 
     await wrapper.get('[data-test=sync]').trigger('click')
