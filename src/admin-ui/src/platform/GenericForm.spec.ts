@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { PLATFORM } from '@/utils/labels'
 import GenericForm from './GenericForm.vue'
 import type { FieldSpec } from './schema'
 
@@ -43,8 +44,8 @@ describe('GenericForm', () => {
     const wrapper = mount(GenericForm, { props: { formId: 'f', fields, initial: {}, method: 'post', url: '/api/clients', submitLabel: 'Skapa' }, attachTo: document.body })
     await wrapper.get('#f-value').setValue('{nope')
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.text()).toContain('Det här är inte giltig JSON.')
-    expect(wrapper.text()).toContain('Fyll i fältet.')
+    expect(wrapper.text()).toContain(PLATFORM.form.invalidJson)
+    expect(wrapper.text()).toContain(PLATFORM.form.required)
     expect(fetch).not.toHaveBeenCalled()
 
     await wrapper.get('#f-value').setValue('')
