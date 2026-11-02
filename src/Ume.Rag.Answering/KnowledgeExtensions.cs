@@ -79,7 +79,14 @@ public static class KnowledgeExtensions
 
         var dataSource = RetrievalDataSource.Create(connectionString);
         var index = new PostgresSearchIndex(dataSource);
-        services.AddSingleton(sp => new RetrievalEngine(index, new ScopeSizeCache(index, TimeProvider.System)));
+        services.AddSingleton<RetrievalMetrics>();
+        services.AddSingleton(sp => new ScopeSizeCache(index, TimeProvider.System, metrics: sp.GetRequiredService<RetrievalMetrics>()));
+        services.AddSingleton(sp => new RetrievalEngine(index, sp.GetRequiredService<ScopeSizeCache>(), metrics: sp.GetRequiredService<RetrievalMetrics>()));
+        // The counts and stop-list statistics read at start; readiness waits for that one attempt (#333).
+        services.AddSingleton(sp => new RetrievalWarmup(sp.GetRequiredService<ScopeSizeCache>(), sp.GetRequiredService<ILogger<RetrievalWarmup>>(), TimeProvider.System));
+        services.AddHostedService(sp => sp.GetRequiredService<RetrievalWarmup>());
+        services.AddHealthChecks().Add(new Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckRegistration(
+            "retrieval-warmup", sp => sp.GetRequiredService<RetrievalWarmup>(), failureStatus: null, tags: null));
         services.AddSingleton(new PostgresHydrator(dataSource));
         services.AddSingleton(sp => new GatewayQueryEmbedder(sp.GetRequiredService<IHttpClientFactory>(), embedding, pepper, TimeProvider.System,
             sp.GetRequiredService<ILogger<GatewayQueryEmbedder>>()));

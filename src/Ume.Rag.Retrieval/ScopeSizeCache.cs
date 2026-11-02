@@ -7,13 +7,19 @@ namespace Ume.Rag.Retrieval;
 /// <para>
 /// Also the keyword stop list (§6.2, §20; Decisions "Keyword stop list before the pilot crawl"): the frequent lexemes
 /// per collection, read with the same interval. Reading them scans the collections' search vectors, so a stale list is
-/// refreshed in the background while searches use the previous one; only the first search waits for it.
+/// refreshed in the background while searches use the previous one; only the first search waits for it, unless
+/// <see cref="WarmAsync"/> read them at start. A failed read keeps the previous statistics until the next interval; with
+/// none yet it is retried after <see cref="FailedReadRetry"/>, not by every search (#333: each search used to wait for
+/// the failing read again, up to the role's statement timeout).
 /// </para>
 /// </summary>
-public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, TimeSpan? refreshInterval = null) : IDisposable
+public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, TimeSpan? refreshInterval = null, RetrievalMetrics? metrics = null) : IDisposable
 {
     /// <summary>A lexeme in more than this share of the scope's chunks is dropped from statement K's query.</summary>
     public const double KeywordStopShare = 0.30;
+
+    /// <summary>With no statistics yet, how long a failed read is not tried again (searches meanwhile run K with every term).</summary>
+    public static readonly TimeSpan FailedReadRetry = TimeSpan.FromMinutes(1);
 
     /// <summary>
     /// Scopes below this many chunks get no stop list: K is cheap there, and in a small collection a share says little
@@ -37,6 +43,7 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
     private LexemeSnapshot? _lexemes;
     private Task<LexemeSnapshot?>? _lexemeRefresh;
     private int _lexemeGeneration;
+    private DateTimeOffset? _lexemeFailedAt;
 
     public TimeSpan RefreshInterval { get; } = refreshInterval ?? TimeSpan.FromMinutes(10);
 
@@ -98,8 +105,39 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
         {
             _lexemes = null;
             _lexemeRefresh = null;
+            _lexemeFailedAt = null;
             _lexemeGeneration++;
         }
+    }
+
+    /// <summary>Whether lexeme statistics are held (K can drop frequent terms).</summary>
+    public bool HasKeywordStatistics
+    {
+        get
+        {
+            lock (_lexemeLock)
+            {
+                return _lexemes is not null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads the chunk counts and the lexeme statistics now, so the first search does not wait for them (the api's
+    /// start, before readiness). Returns whether the statistics could be read; a failure is not thrown.
+    /// </summary>
+    public async Task<bool> WarmAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await CurrentAsync(cancellationToken);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The counts are read again by the first search.
+        }
+
+        return await LexemesAsync(cancellationToken) is not null;
     }
 
     public void Dispose() => _refresh.Dispose();
@@ -176,6 +214,13 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
                 return current;
             }
 
+            // A failed read with nothing to fall back on is not tried again at once: no search waits for it again meanwhile.
+            if (current is null && _lexemeFailedAt is { } failed && time.GetUtcNow() - failed < FailedReadRetry &&
+                _lexemeRefresh is { IsCompleted: true })
+            {
+                return null;
+            }
+
             if (_lexemeRefresh is null || _lexemeRefresh.IsCompleted)
             {
                 _lexemeRefresh = RefreshLexemesAsync(current, _lexemeGeneration);
@@ -213,6 +258,14 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
 #pragma warning restore CA1031
         {
             next = previous is null ? null : previous with { ReadAt = time.GetUtcNow() };
+            metrics?.KeywordStatisticsUnavailable();
+            lock (_lexemeLock)
+            {
+                if (generation == _lexemeGeneration)
+                {
+                    _lexemeFailedAt = time.GetUtcNow();
+                }
+            }
         }
 
         lock (_lexemeLock)
@@ -220,6 +273,7 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
             if (next is not null && generation == _lexemeGeneration)
             {
                 _lexemes = next;
+                _lexemeFailedAt = null;
             }
         }
 
