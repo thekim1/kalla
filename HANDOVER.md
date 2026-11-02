@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-02, end of session 18 (last update after #332 and `2eba7de`). Earlier sessions are in the
+State of the Ume.Rag work for the next session. Rewritten 2026-11-02, end of session 18; updated in session 19 (to #347). Earlier sessions are in the
 git history (`git log -- HANDOVER.md`).
 Repo `~/git/ume-rag-platform`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
@@ -144,15 +144,19 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 ## Next step
 
 1. **Check GitHub and the stack**: open PRs, issues; `docker info`, then `aspire describe` (start it as above if down).
-2. **Review `architecture_plans.md` as of `2eba7de`** against the code and the Decisions table (check its claims as for
-   v2: the Open WebUI JWT has no department codes; access settings live outside the assistant's versions), then ask the
-   user which items to adopt; with a yes, write the Decisions row, the design rules and P1b items.
-3. **Organisation (#318):** nudge B to start item 33 (schema → L13), or offer the user that the main session builds 33
-   to unblock 34–36. Review each PR live. Stream A follows with 37–38 after L13/L14.
-4. **Keyword weight:** `turkos` runs with `keywordWeight` 0.25 (user, 2026-11-02; saved-setting run 0.98/0.77). Confirm
+2. **Stream A, now unblocked:** item 37 (topics in the worker: path-rule parameter "Topics", tags per document in the
+   stage preview; the evaluator on the new scope, `NoDecompounderSearchIndex` needs the topic predicate, #347
+   hand-off) and item 38 (Organisation form: member groups, sharing summary). #336 (chunker) when convenient.
+3. **Stream B:** items 35 (organisation admin API, on L13), 36 (pages, topic picker, admin contract to `collectionLinks`),
+   39 (default prompt). The main session took 33 (#346), 34 (#347), 18 W3 (#345) and #343 (#344) in session 19 (user);
+   review B's 35/36 live.
+4. **Architecture plan:** reviewed and fixed (`2e0ed77`); item 3 (presets) stays P2 (user); its P1b part is item 39.
+   Adopting items 1, 2, 4–7 as design rules is still open with the user.
+5. **Keyword weight:** `turkos` runs with `keywordWeight` 0.25 (user, 2026-11-02; saved-setting run 0.98/0.77). Confirm
    it on the human gold set (item 21) before it becomes the template default (knowledge design).
-5. **User decides:** the gold set with DoIT and threshold calibration (item 21); P1b item 15 `e2e` (after B's L7); pin
-   review.
+6. **User decides:** the gold set with DoIT (waiting, user 2026-11-02); #333 findings 1–2 (exact-scan threshold,
+   stop-list statistics at scale); the W3 grant step if groups are used (register W3); P1b item 15 `e2e` (after L7);
+   pin review; a Git/Markdown connector (asked about docs-as-code knowledge bases; front matter is not parsed yet).
 
 **Open issues — stream B:** #278, #314 (English UI, done in #320; B closes), #318, #52. **Stream A:** #300
 (L4, information), #48, #51, #193, #210. #319 done in #332 (B switches the two form texts, then closes). **Main session:** #100 (L8). **User:** #215 (J8).
