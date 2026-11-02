@@ -227,6 +227,92 @@ export interface PipelineSummary {
   isDefault: boolean
 }
 
+export interface PipelineVersion {
+  id: string
+  number: number
+  state: 'draft' | 'published' | 'superseded' | string
+  definition: { schema?: number; template: string; templateVersion: number; params: Record<string, unknown> }
+  publishedAt: IsoDateTime | null
+}
+
+/** `GET /api/pipelines/{id}`: the pipeline with its versions, newest first. */
+export interface Pipeline {
+  id: string
+  name: string
+  templateId: string
+  departmentId: string | null
+  publishedVersionId: string | null
+  versions: PipelineVersion[]
+  version: string
+}
+
+/** contracts/jobs/v1/preview.publish-plan.result.schema.json */
+export interface PublishPlan {
+  pipelineVersionId: string
+  documents: number
+  sources: { sourceId: string; documents: number }[]
+  fromStage?: string
+  parserPages?: number
+  embeddingTokens?: number
+  estimatedMinutes?: number
+  estimatedCostUsd?: number
+}
+
+/** `GET /api/publications/{id}`: the plan job, its draft and the pipeline version the confirm sends. */
+export interface Publication {
+  id: string
+  state: string
+  plan: PublishPlan | null
+  lastError: string | null
+  pipelineId: string
+  pipelineVersionId: string
+  draftNumber: number | null
+  draftState: string | null
+  version: string
+  published: boolean
+  superseded: boolean
+}
+
+export interface PublicationStarted {
+  publicationId: string
+  pipelineId: string
+  draftVersionId: string
+  draftNumber: number
+  copiedOnWrite: boolean
+}
+
+export interface EvaluationRun {
+  id: string
+  kind: string
+  variant: string
+  questionCount: number | null
+  k: number
+  found: number | null
+  recallAtK: number | null
+  mrr: number | null
+  wins: number | null
+  losses: number | null
+  comparedRunId: string | null
+  candidate: boolean
+  startedAt: IsoDateTime
+  finishedAt: IsoDateTime | null
+}
+
+export interface EvaluationOverview {
+  hasSet: boolean
+  questions: { layer: string; state: string; count: number }[]
+  latestRuns: EvaluationRun[]
+}
+
+export interface TemplateDetail {
+  id: string
+  version: number
+  sourceType: string
+  deprecated: boolean
+  stages: string[]
+  paramsSchema: { properties?: Record<string, Record<string, unknown>> }
+}
+
 export type PreviewStage = 'fetch' | 'scan' | 'detect' | 'parse' | 'clean' | 'chunk' | 'personal-data' | 'embed' | 'index'
 
 /** contracts/jobs/v1/preview.stage-preview.result.schema.json */

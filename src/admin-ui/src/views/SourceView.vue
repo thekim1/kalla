@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
 import SourceEditDrawer from '@/components/sources/SourceEditDrawer.vue'
+import PipelineCard from '@/components/sources/PipelineCard.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
@@ -124,6 +125,7 @@ onMounted(load)
         </div>
       </UiCard>
       <SourceEditDrawer v-model:open="editing" :source="source.data.value" :collection="collection" @saved="saved" />
+      <PipelineCard :source="source.data.value" class="mb-6" />
 
       <h2 class="mb-3 text-title-3">{{ SOURCE_PAGE.runs }}</h2>
       <AsyncState :loading="runs.loading.value && runs.data.value.length === 0" :error="runs.error.value" :empty="runs.data.value.length === 0" :empty-text="SOURCE_PAGE.noRuns" @retry="loadRuns()">
