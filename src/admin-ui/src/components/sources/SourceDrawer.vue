@@ -98,6 +98,7 @@ function resetPreview(): void {
 
 function settings(): Record<string, unknown> {
   const piiPart = props.collection.classification === 'public' ? { piiMode: piiMode.value } : {}
+  if (type.value === 'upload') return { ...piiPart }
   if (type.value === 'url-list') return { urls: lines(urls.value), ...piiPart }
   return {
     startUrls: lines(urls.value), include: lines(include.value), exclude: lines(exclude.value),
@@ -106,6 +107,7 @@ function settings(): Record<string, unknown> {
 }
 
 function valid(forSave: boolean): boolean {
+  if (type.value === 'upload') return form.validate({ name: !name.value.trim() && SOURCE.nameRequired })
   const addresses = lines(urls.value)
   const integer = (v: string) => /^\d+$/.test(v.trim())
   return form.validate({
@@ -155,8 +157,9 @@ async function save(): Promise<void> {
     const source = await api.collections.addSource(props.collection.id, {
       type: type.value, name: name.value.trim(), classification: level.value, settings: settings(),
     })
-    // Step 6: the first sync starts at once; if enqueueing fails the source still exists and Hämta nu is on its page.
-    const syncing = await api.sources.sync(source.id).then(() => true, () => false)
+    // Step 6: the first sync starts at once; if enqueueing fails the source still exists and Hämta nu is on its page. An upload
+    // source has nothing to fetch yet: its files are uploaded on its page, and each upload starts a sync.
+    const syncing = type.value === 'upload' ? false : await api.sources.sync(source.id).then(() => true, () => false)
     emit('saved', source, syncing)
     emit('update:open', false)
   } catch (e) {
@@ -181,10 +184,15 @@ async function save(): Promise<void> {
         </label>
       </fieldset>
 
-      <p v-if="type === 'upload'" class="rounded-card bg-sunken p-4" data-test="upload-later">{{ SOURCE.uploadLater }} {{ SOURCE.notYet }}</p>
+      <TextField id="source-name" v-model="name" :label="SOURCE.name" :error="form.errors.name" autocomplete="off" />
+      <SelectField id="source-level" v-model="level" :label="SOURCE.level" :hint="SOURCE.levelHint" :options="levelOptions" />
+      <template v-if="type === 'upload'">
+        <p class="rounded-card bg-sunken p-4" data-test="upload-later">{{ SOURCE.uploadLater }}</p>
+        <SelectField
+          v-if="collection.classification === 'public'" id="source-pii-upload" v-model="piiMode" :label="SOURCE.piiMode" :options="piiOptions"
+        />
+      </template>
       <template v-else>
-        <TextField id="source-name" v-model="name" :label="SOURCE.name" :error="form.errors.name" autocomplete="off" />
-        <SelectField id="source-level" v-model="level" :label="SOURCE.level" :hint="SOURCE.levelHint" :options="levelOptions" />
         <TextAreaField
           id="source-urls" v-model="urls" :label="type === 'crawl' ? SOURCE.startUrls : SOURCE.urls"
           :hint="type === 'crawl' ? SOURCE.startUrlsHint : SOURCE.urlsHint" :error="form.errors.urls" mono
@@ -236,10 +244,8 @@ async function save(): Promise<void> {
       <InlineError v-if="form.formError.value" :message="form.formError.value" />
     </form>
     <template #footer>
-      <UiButton
-        v-if="type !== 'upload'" variant="primary" type="submit" form="source-create" :loading="saving" :disabled="blocked" data-test="save"
-      >
-        {{ SOURCE.save }}
+      <UiButton variant="primary" type="submit" form="source-create" :loading="saving" :disabled="blocked" data-test="save">
+        {{ type === 'upload' ? SOURCE.saveUpload : SOURCE.save }}
       </UiButton>
       <UiButton variant="quiet" @click="emit('update:open', false)">{{ COMMON.cancel }}</UiButton>
     </template>

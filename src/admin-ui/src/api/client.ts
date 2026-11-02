@@ -106,6 +106,9 @@ async function parseBody(response: Response, method: HttpMethod): Promise<unknow
 export interface RequestOptions {
   query?: Query
   body?: unknown
+  /** A raw body (a file) sent as is, with `headers`; `body` is ignored then. */
+  raw?: Blob
+  headers?: Record<string, string>
   signal?: AbortSignal
 }
 
@@ -117,7 +120,10 @@ export async function request<T>(method: HttpMethod, path: string, options: Requ
     if (token) headers[XSRF_HEADER] = token
   }
   let body: BodyInit | undefined
-  if (options.body !== undefined) {
+  if (options.raw !== undefined) {
+    Object.assign(headers, { 'Content-Type': options.raw.type || 'application/octet-stream' }, options.headers)
+    body = options.raw
+  } else if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
     body = JSON.stringify(options.body)
   }

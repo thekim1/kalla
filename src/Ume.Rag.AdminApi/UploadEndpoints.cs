@@ -63,6 +63,39 @@ public static class UploadEndpoints
             })
             .RequireAuthorization(AdminPolicies.Edit).WithTags("Uploads").WithName("CreateUploadBatch").WithSummary("Start an upload batch");
 
+        // §4.5 "Sources, runs, uploads": the source's upload slots (connectors §9.1, §9.3), deleted ones only with deleted=true
+        // (restorable within the 14-day grace), and its quarantined files (connectors §11: metadata only, never the bytes).
+        api.MapGet("/sources/{id:guid}/files", async (Guid id, bool? deleted, Guid? after, int? limit, AdminContext admin, CancellationToken ct) =>
+            {
+                _ = await SourceEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                var take = Math.Clamp(limit ?? 50, 1, DocumentEndpoints.MaxLimit);
+                var query = admin.Db.Uploads.AsNoTracking().Where(u => u.SourceId == id && (deleted == true ? u.DeletedAt != null : u.DeletedAt == null));
+                if (after is { } last)
+                {
+                    query = query.Where(u => u.Id.CompareTo(last) > 0);
+                }
+
+                var rows = await query.OrderBy(u => u.Id).Take(take + 1).ToListAsync(ct);
+                return new KeysetPage<UploadFileDto, Guid?>([.. rows.Take(take).Select(UploadFileDto.Of)], rows.Count > take ? rows[take - 1].Id : null);
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithTags("Uploads").WithName("ListSourceFiles").WithSummary("A source's upload slots (keyset; deleted=true for deleted ones)");
+
+        api.MapGet("/sources/{id:guid}/quarantine", async (Guid id, Guid? after, int? limit, AdminContext admin, CancellationToken ct) =>
+            {
+                _ = await SourceEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                var take = Math.Clamp(limit ?? 50, 1, DocumentEndpoints.MaxLimit);
+                var query = admin.Db.QuarantinedFiles.AsNoTracking().Where(q => q.SourceId == id);
+                if (after is { } last)
+                {
+                    query = query.Where(q => q.Id.CompareTo(last) > 0);
+                }
+
+                var rows = await query.OrderBy(q => q.Id).Take(take + 1)
+                    .Select(q => new QuarantinedFileDto(q.Id, q.Origin, q.Name, q.Url, q.Signature, q.RunId, q.DetectedAt, q.PurgeAfter)).ToListAsync(ct);
+                return new KeysetPage<QuarantinedFileDto, Guid?>([.. rows.Take(take)], rows.Count > take ? rows[take - 1].Id : null);
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithTags("Uploads").WithName("ListQuarantine").WithSummary("A source's quarantined files: metadata only (keyset)");
+
         var batches = api.MapGroup("/upload-batches").WithTags("Uploads");
 
         batches.MapPut("/{batchId:guid}/files/{n}", async (Guid batchId, string n, HttpContext http, AdminContext admin, IBlobStore blobs, IBlobEnvelope envelope,
@@ -371,6 +404,20 @@ public sealed class FileRequestSizeLimit : IRequestSizeLimitMetadata
 {
     public long? MaxRequestBodySize => UploadEndpoints.FileRequestLimit;
 }
+
+/// <summary>An upload slot as the Filer list shows it: name, size, state with its reason, the document, who and when.</summary>
+public sealed record UploadFileDto(Guid Id, string FileName, long Bytes, string State, string? Reason, Guid? DocumentId, string? UploadedBy, DateTimeOffset UploadedAt,
+    DateTimeOffset? ReplacedAt, DateTimeOffset? DeletedAt)
+{
+    public static UploadFileDto Of(Upload u)
+    {
+        ArgumentNullException.ThrowIfNull(u);
+        return new(u.Id, u.FileName, u.Bytes, u.State, u.Reason, u.DocumentId, u.UploadedBy, u.UploadedAt, u.ReplacedAt, u.DeletedAt);
+    }
+}
+
+/// <summary>A quarantined file (connectors §11): where it came from, the signature, when; never the content or its hash.</summary>
+public sealed record QuarantinedFileDto(Guid Id, string Origin, string? Name, string? Url, string Signature, Guid? RunId, DateTimeOffset DetectedAt, DateTimeOffset PurgeAfter);
 
 public sealed record UploadBatchCreated(Guid BatchId, int MaxFiles, long MaxBytes);
 

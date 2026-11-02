@@ -181,6 +181,47 @@ export interface SourceUpdate {
   version: string
 }
 
+/** `GET /api/sources/{id}/files`: an upload slot. */
+export interface UploadFile {
+  id: string
+  fileName: string
+  bytes: number
+  state: 'received' | 'clean' | 'malware' | 'refused' | 'indexed' | 'deleted' | string
+  reason: string | null
+  documentId: string | null
+  uploadedBy: string | null
+  uploadedAt: IsoDateTime
+  replacedAt: IsoDateTime | null
+  deletedAt: IsoDateTime | null
+}
+
+/** `GET /api/sources/{id}/quarantine`: metadata only (connectors §11). */
+export interface QuarantinedFile {
+  id: string
+  origin: 'upload' | 'crawl' | string
+  name: string | null
+  url: string | null
+  signature: string
+  runId: string | null
+  detectedAt: IsoDateTime
+  purgeAfter: IsoDateTime
+}
+
+export interface UploadBatch {
+  batchId: string
+  maxFiles: number
+  maxBytes: number
+}
+
+export interface UploadedFile {
+  n: number
+  uploadId: string
+  operation: 'add' | 'replace' | string
+  fileName: string
+  bytes: number
+  sha256: string
+}
+
 export interface SourceCreate {
   type: SourceType
   name: string

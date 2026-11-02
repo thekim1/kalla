@@ -5,6 +5,8 @@ import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
 import SourceEditDrawer from '@/components/sources/SourceEditDrawer.vue'
 import PipelineCard from '@/components/sources/PipelineCard.vue'
+import SourceFiles from '@/components/sources/SourceFiles.vue'
+import SourceQuarantine from '@/components/sources/SourceQuarantine.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
@@ -110,7 +112,7 @@ onMounted(load)
       </PageHeader>
       <InlineError v-if="syncError" :message="problemMessage(syncError)" class="mb-4" />
 
-      <UiCard :title="SOURCE_PAGE.settings" class="mb-6">
+      <UiCard v-if="source.data.value.type !== 'upload'" :title="SOURCE_PAGE.settings" class="mb-6">
         <DetailRow :label="source.data.value.type === 'crawl' ? SOURCE_PAGE.startAddresses : SOURCE_PAGE.addresses">
           <span class="font-mono text-small" data-test="addresses">{{ addresses.join(', ') }}</span>
         </DetailRow>
@@ -120,11 +122,12 @@ onMounted(load)
         <DetailRow v-if="demoted.length" :label="SOURCE_EDIT.demoted">
           <span class="font-mono text-small" data-test="demoted">{{ demoted.join(', ') }}</span>
         </DetailRow>
-        <div v-if="canEdit && source.data.value.type !== 'upload'" class="mt-4">
+        <div v-if="canEdit" class="mt-4">
           <UiButton icon="edit" data-test="edit-source" @click="edit">{{ SOURCE_EDIT.edit }}</UiButton>
         </div>
       </UiCard>
       <SourceEditDrawer v-model:open="editing" :source="source.data.value" :collection="collection" @saved="saved" />
+      <SourceFiles v-if="source.data.value.type === 'upload'" :source="source.data.value" :can-edit="canEdit" class="mb-6" @committed="loadRuns()" />
       <PipelineCard :source="source.data.value" class="mb-6" />
 
       <h2 class="mb-3 text-title-3">{{ SOURCE_PAGE.runs }}</h2>
@@ -148,6 +151,8 @@ onMounted(load)
           <span>{{ d.title ?? d.displayName ?? d.url }}</span>
         </li>
       </ul>
+
+      <SourceQuarantine :source-id="source.data.value.id" class="mt-8" />
     </template>
   </AsyncState>
 </template>
