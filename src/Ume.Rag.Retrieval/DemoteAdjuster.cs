@@ -16,6 +16,13 @@ public sealed class DemoteAdjuster : IScoreAdjuster
 {
     private readonly IReadOnlyDictionary<Guid, IReadOnlyList<DemotePattern>> _bySource;
 
+    /// <summary>
+    /// Factors already worked out in this search, by source and URL: every chunk of a document shares them, so the
+    /// patterns run once per document instead of once per chunk (#333 finding 6). One adjuster serves one search
+    /// (<see cref="For"/>), so the memo needs no locking.
+    /// </summary>
+    private readonly Dictionary<(Guid SourceId, string Url), double> _memo = [];
+
     private DemoteAdjuster(IReadOnlyDictionary<Guid, IReadOnlyList<DemotePattern>> bySource) => _bySource = bySource;
 
     /// <summary>The adjuster for <paramref name="scope"/>, or null when no source in it has demote patterns.</summary>
@@ -33,6 +40,11 @@ public sealed class DemoteAdjuster : IScoreAdjuster
             return 1.0;
         }
 
+        if (_memo.TryGetValue((candidate.SourceId, url), out var known))
+        {
+            return known;
+        }
+
         var factor = 1.0;
         foreach (var (pattern, value) in patterns)
         {
@@ -42,6 +54,7 @@ public sealed class DemoteAdjuster : IScoreAdjuster
             }
         }
 
+        _memo[(candidate.SourceId, url)] = factor;
         return factor;
     }
 

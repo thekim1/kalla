@@ -41,6 +41,21 @@ public sealed class DemoteAdjusterTests
     }
 
     [Fact]
+    public void Factors_are_worked_out_once_per_source_and_url_in_a_search()
+    {
+        // #333: the memo is keyed by (source, URL), so a document's chunks share a factor and nothing leaks across.
+        var scope = WithDemote(OneCollection(), """[{"pattern": "www.umea.se/arkiv/**", "factor": 0.5}]""");
+        var adjuster = DemoteAdjuster.For(scope).ShouldNotBeNull();
+        var other = Guid.NewGuid();
+
+        adjuster.Factor(Chunk(1) with { Url = "https://www.umea.se/arkiv/a" }).ShouldBe(0.5);
+        adjuster.Factor(Chunk(2) with { Url = "https://www.umea.se/arkiv/a" }).ShouldBe(0.5); // the same document's next chunk
+        adjuster.Factor(Chunk(3) with { Url = "https://www.umea.se/bygglov" }).ShouldBe(1.0); // same source, other URL
+        adjuster.Factor(Chunk(4) with { Url = "https://www.umea.se/arkiv/a", SourceId = other }).ShouldBe(1.0); // same URL, other source
+        adjuster.Factor(Chunk(5) with { Url = "https://www.umea.se/arkiv/b" }).ShouldBe(0.5);
+    }
+
+    [Fact]
     public async Task The_engine_multiplies_demote_with_decay_and_leaves_coverage_alone()
     {
         var now = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero);

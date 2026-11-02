@@ -9,10 +9,10 @@ namespace Ume.Rag.Retrieval;
 /// </summary>
 public sealed class RecencyAdjuster : IScoreAdjuster
 {
-    private readonly Dictionary<Guid, RecencySettings> _byCollection;
+    private readonly Dictionary<Guid, (RecencySettings Settings, HashSet<string> Kinds)> _byCollection;
     private readonly DateTimeOffset _now;
 
-    private RecencyAdjuster(Dictionary<Guid, RecencySettings> byCollection, DateTimeOffset now)
+    private RecencyAdjuster(Dictionary<Guid, (RecencySettings Settings, HashSet<string> Kinds)> byCollection, DateTimeOffset now)
     {
         _byCollection = byCollection;
         _now = now;
@@ -22,21 +22,22 @@ public sealed class RecencyAdjuster : IScoreAdjuster
     public static RecencyAdjuster? For(SearchScope scope, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(scope);
+        // The kinds as a set, built once per search rather than scanned per candidate (#333 finding 6).
         var byCollection = scope.Collections.Where(c => c.Settings.Recency is not null)
-            .ToDictionary(c => c.CollectionId, c => c.Settings.Recency!);
+            .ToDictionary(c => c.CollectionId, c => (c.Settings.Recency!, new HashSet<string>(c.Settings.Recency!.Kinds, StringComparer.OrdinalIgnoreCase)));
         return byCollection.Count == 0 ? null : new RecencyAdjuster(byCollection, now);
     }
 
     public double Factor(Candidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
-        if (!_byCollection.TryGetValue(candidate.CollectionId, out var recency) || candidate.SourceModifiedAt is not { } modified ||
-            (recency.Kinds.Count > 0 && (candidate.DocumentType is null || !recency.Kinds.Contains(candidate.DocumentType, StringComparer.OrdinalIgnoreCase))))
+        if (!_byCollection.TryGetValue(candidate.CollectionId, out var entry) || candidate.SourceModifiedAt is not { } modified ||
+            (entry.Kinds.Count > 0 && (candidate.DocumentType is null || !entry.Kinds.Contains(candidate.DocumentType))))
         {
             return 1.0;
         }
 
-        return Decay(Math.Max(0, (_now - modified).TotalDays), recency);
+        return Decay(Math.Max(0, (_now - modified).TotalDays), entry.Settings);
     }
 
     /// <summary><c>1 − weight · (1 − 2^(−ageDays / halfLifeDays))</c>.</summary>
@@ -58,5 +59,14 @@ public sealed class CombinedAdjuster(IReadOnlyList<IScoreAdjuster> adjusters) : 
         return present.Count switch { 0 => null, 1 => present[0], _ => new CombinedAdjuster(present) };
     }
 
-    public double Factor(Candidate candidate) => adjusters.Aggregate(1.0, (product, adjuster) => product * adjuster.Factor(candidate));
+    public double Factor(Candidate candidate)
+    {
+        var product = 1.0;
+        foreach (var adjuster in adjusters)
+        {
+            product *= adjuster.Factor(candidate);
+        }
+
+        return product;
+    }
 }
