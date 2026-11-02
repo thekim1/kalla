@@ -1,6 +1,13 @@
 import { buildUrl, http, postLogout } from './client'
 import type {
+  Assistant,
+  AssistantCreate,
+  AssistantDraft,
+  AssistantSummary,
+  AssistantTestResult,
   BffUser,
+  ClientSummary,
+  GatewayModel,
   Collection,
   CollectionCreate,
   CollectionSummary,
@@ -54,6 +61,23 @@ export const api = {
     get: (id: string) => http.get<Run>(`/api/runs/${id}`),
     items: (id: string, query: { outcome?: string; after?: number; limit?: number } = {}) =>
       http.get<KeysetPage<RunItem, number>>(`/api/runs/${id}/items`, query),
+  },
+  assistants: {
+    list: (query: { q?: string; pageSize?: number } = {}) => http.get<Page<AssistantSummary>>('/api/assistants', query),
+    get: (id: string) => http.get<Assistant>(`/api/assistants/${id}`),
+    create: (body: AssistantCreate) => http.post<Assistant>('/api/assistants', body),
+    draft: (id: string) => http.get<AssistantDraft>(`/api/assistants/${id}/draft`),
+    saveDraft: (id: string, body: { gatewayModel: string | null; systemPrompt: string; collectionIds: string[]; version: string | null }) =>
+      http.put<AssistantDraft>(`/api/assistants/${id}/draft`, body),
+    publish: (id: string, body: { version: string; draftVersion: string; confirmBaseChanged?: boolean }) => http.post<Assistant>(`/api/assistants/${id}/publish`, body),
+    audiences: (id: string, body: { clientIds: string[]; version: string }) => http.put<Assistant>(`/api/assistants/${id}/audiences`, body),
+    test: (id: string, body: { question: string; target?: 'Draft' | 'Published' }) => http.post<AssistantTestResult>(`/api/assistants/${id}/test`, body),
+  },
+  clients: {
+    list: () => http.get<ClientSummary[]>('/api/clients'),
+  },
+  gateway: {
+    models: () => http.get<GatewayModel[]>('/api/gateway/models'),
   },
   jobs: {
     get: <T = unknown>(id: string) => http.get<Job<T>>(`/api/jobs/${id}`),
