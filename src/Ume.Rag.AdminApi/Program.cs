@@ -77,6 +77,7 @@ builder.Services.AddOptions<Ume.Rag.Answering.Chat.ChatOptions>().BindConfigurat
 builder.Services.AddSingleton<Ume.Rag.Answering.Chat.GatewayChatClient>();
 builder.Services.AddSingleton<AdminTestPanel>();
 builder.Services.AddHostedService<RetentionService>();
+builder.Services.AddHostedService<PublishReportLinker>();
 builder.Services.AddRateLimiter(o =>
 {
     o.AddPolicy(AdminRateLimits.PerUser, http => RateLimitPartition.GetFixedWindowLimiter(
