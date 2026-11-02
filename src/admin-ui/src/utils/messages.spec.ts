@@ -41,6 +41,8 @@ const WORKER_CODES = [
   'http.body_limit', 'http.unexpected', 'tls.invalid_certificate',
   // Crawl completeness reasons (TraversalCompleteness.cs).
   'crawl.incremental', 'crawl.host_paused', 'crawl.seeds_failed', 'crawl.seeds_unreachable', 'crawl.claims_pending', 'crawl.cancelled',
+  // Preview stage outcomes the preview result shows (PreviewSegment.cs).
+  'parse.empty', 'raw.missing',
 ]
 
 describe('worker messages', () => {

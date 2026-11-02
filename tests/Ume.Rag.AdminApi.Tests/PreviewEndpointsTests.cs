@@ -184,12 +184,16 @@ public sealed class PreviewEndpointsTests(AdminDatabaseFixture database)
         var other = Guid.CreateVersion7();
         var own = $"previews/{jobId:D}/documents/{seed.Document:D}/parse.md";
         var foreign = $"previews/{other:D}/documents/{seed.Document:D}/clean.md";
+        var before = $"previews/{jobId:D}/1/site-profile-before.json";
+        var after = $"previews/{jobId:D}/1/parse.json";
         var blobs = factory.Services.GetRequiredService<IBlobStore>().ForLevel(Classification.Public);
         await blobs.PutAsync(new BlobKey(own), new MemoryStream(Encoding.UTF8.GetBytes("# Kontakt\n\nRing 090-16 10 00.")), null, Ct);
         await blobs.PutAsync(new BlobKey(foreign), new MemoryStream(Encoding.UTF8.GetBytes("någon annans")), null, Ct);
+        await blobs.PutAsync(new BlobKey(before), new MemoryStream("""{"stage":"parse","truncated":false,"value":{"blocks":[]}}"""u8.ToArray()), null, Ct);
+        await blobs.PutAsync(new BlobKey(after), new MemoryStream("""{"stage":"parse","truncated":false,"value":{"blocks":[{"kind":"paragraph","text":"Bygglov"}]}}"""u8.ToArray()), null, Ct);
         var result = JsonSerializer.Serialize(new
         {
-            documents = new[]
+            documents = new object[]
             {
                 new
                 {
@@ -199,6 +203,13 @@ public sealed class PreviewEndpointsTests(AdminDatabaseFixture database)
                         new { stage = "parse", state = "succeeded", output = own },
                         new { stage = "clean", state = "succeeded", output = foreign }, // a path outside the job's prefix
                     },
+                    siteProfile = (object?)null,
+                },
+                new
+                {
+                    documentId = (Guid?)null, // a URL fetched live: addressed by its index
+                    stages = new object[] { new { stage = "parse", state = "succeeded", output = after } },
+                    siteProfile = (object?)new { host = "www.umea.se", origin = "preset", presetId = "sitevision", before, after },
                 },
             },
             expiresAt = DateTimeOffset.UtcNow.AddHours(24),
@@ -224,5 +235,17 @@ public sealed class PreviewEndpointsTests(AdminDatabaseFixture database)
         (await pipelines.GetAsync($"{path}/clean/output", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await pipelines.GetAsync($"{path}/chunk/output", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await pipelines.GetAsync($"/api/previews/{jobId}/documents/{Guid.NewGuid()}/stages/parse/output", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        // §6.4: a URL preview's document by its index; Före / Efter from its siteProfile.
+        var url = $"/api/previews/{jobId}/documents/1/stages";
+        using var afterOutput = await outputEditor.GetAsync($"{url}/after/output", Ct);
+        afterOutput.StatusCode.ShouldBe(HttpStatusCode.OK);
+        afterOutput.Content.Headers.ContentType!.MediaType.ShouldBe("application/json");
+        (await afterOutput.Content.ReadAsStringAsync(Ct)).ShouldContain("Bygglov");
+        (await outputEditor.GetAsync($"{url}/before/output", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await outputEditor.GetAsync($"{url}/parse/output", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await outputEditor.GetAsync($"{path}/before/output", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound); // no site profile
+        (await outputEditor.GetAsync($"/api/previews/{jobId}/documents/2/stages/parse/output", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await outputEditor.GetAsync($"/api/previews/{jobId}/documents/-1/stages/parse/output", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 }

@@ -365,13 +365,25 @@ public static class SourceRules
     {
         ArgumentNullException.ThrowIfNull(admin);
         ArgumentNullException.ThrowIfNull(collection);
-        string[] templates = [.. TemplateCatalog.BuiltIn.All.Where(t => t.Template.SourceType == type).Select(t => t.Template.Name).Distinct()];
-        var candidates = admin.Db.Pipelines.AsNoTracking().Where(p => templates.Contains(p.TemplateId) && p.PublishedVersionId != null);
+        var candidates = Candidates(admin, collection, type);
         var pipeline = requested is { } id
-            ? await candidates.Where(p => p.Id == id && (p.DepartmentId == null || p.DepartmentId == collection.DepartmentId)).Select(p => (Guid?)p.Id).SingleOrDefaultAsync(ct)
-            : await candidates.Where(p => p.DepartmentId == null).OrderBy(p => p.Name).Select(p => (Guid?)p.Id).FirstOrDefaultAsync(ct);
+            ? await candidates.Where(p => p.Id == id).Select(p => (Guid?)p.Id).SingleOrDefaultAsync(ct)
+            : await Default(candidates).Select(p => (Guid?)p.Id).FirstOrDefaultAsync(ct);
         return pipeline ?? throw AdminFaults.Field("pipelineId", AdminErrorCodes.TemplateUnsupported, new Dictionary<string, string> { ["type"] = type });
     }
+
+    /// <summary>The published pipelines a source of <paramref name="type"/> in <paramref name="collection"/> can use: platform ones and the collection department's.</summary>
+    public static IQueryable<Pipeline> Candidates(AdminContext admin, Collection collection, string type)
+    {
+        ArgumentNullException.ThrowIfNull(admin);
+        ArgumentNullException.ThrowIfNull(collection);
+        string[] templates = [.. TemplateCatalog.BuiltIn.All.Where(t => t.Template.SourceType == type).Select(t => t.Template.Name).Distinct()];
+        return admin.Db.Pipelines.AsNoTracking()
+            .Where(p => templates.Contains(p.TemplateId) && p.PublishedVersionId != null && (p.DepartmentId == null || p.DepartmentId == collection.DepartmentId));
+    }
+
+    /// <summary>The pipeline a new source gets when none is named: the first platform pipeline by name.</summary>
+    public static IQueryable<Pipeline> Default(IQueryable<Pipeline> candidates) => candidates.Where(p => p.DepartmentId == null).OrderBy(p => p.Name);
 
     private static void Patterns(string path, IEnumerable<string> patterns)
     {

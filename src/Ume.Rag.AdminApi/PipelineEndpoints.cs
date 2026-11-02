@@ -27,6 +27,20 @@ public static class PipelineEndpoints
         ArgumentNullException.ThrowIfNull(api);
         var pipelines = api.MapGroup("/pipelines").WithTags("Pipelines");
 
+        pipelines.MapGet("", async (Guid collectionId, string sourceType, AdminContext admin, CancellationToken ct) =>
+            {
+                // §5.4 step 5: the pipelines a new source of the type can use in the collection, the default (the one a source
+                // created without pipelineId gets) first; the preview of an unsaved source runs on it.
+                var collection = await CollectionEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == collectionId, ct)
+                    ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                var candidates = SourceRules.Candidates(admin, collection, sourceType);
+                var fallback = await SourceRules.Default(candidates).Select(p => (Guid?)p.Id).FirstOrDefaultAsync(ct);
+                var list = await candidates.OrderBy(p => p.DepartmentId == null).ThenBy(p => p.Name)
+                    .Select(p => new PipelineSummary(p.Id, p.Name, p.TemplateId, p.DepartmentId, p.PublishedVersionId, false)).ToListAsync(ct);
+                return list.Select(p => p with { IsDefault = p.Id == fallback }).OrderByDescending(p => p.IsDefault).ToList();
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("ListPipelines").WithSummary("The pipelines a new source of a type can use in a collection, the default first");
+
         pipelines.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) =>
             {
                 var pipeline = await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(p => p.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
@@ -355,6 +369,9 @@ public static class PipelineEndpoints
             pipeline.Version.ToString(CultureInfo.InvariantCulture), draft?.State == PipelineVersionStates.Published, superseded);
     }
 }
+
+/// <summary>A pipeline a source can use; <see cref="IsDefault"/>: the one a source created without <c>pipelineId</c> gets.</summary>
+public sealed record PipelineSummary(Guid Id, string Name, string TemplateId, Guid? DepartmentId, Guid? PublishedVersionId, bool IsDefault);
 
 public sealed record PipelineVersionDto(Guid Id, int Number, string State, JsonElement Definition, DateTimeOffset? PublishedAt);
 

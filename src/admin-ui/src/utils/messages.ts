@@ -109,6 +109,8 @@ export const JOB_MESSAGES: Record<string, string> = {
   'preview.source_unknown': 'Källan finns inte.',
   'preview.document_unknown': 'Dokumentet finns inte.',
   'preview.upload_unknown': 'Uppladdningen finns inte längre.',
+  'parse.empty': 'Ingen text blev kvar när sidan hade lästs in och rensats.',
+  'raw.missing': 'Innehållet som hämtades finns inte längre. Kör förhandsgranskningen igen.',
   'preview.deadline': 'Förhandsgranskningen tog för lång tid och avbröts. Försök med färre dokument.',
   'preflight.none_reachable': 'Ingen av adresserna svarade. Kontrollera adresserna och att webbplatsen är nåbar.',
   'preflight.deadline': 'Kontrollen tog för lång tid och avbröts. Försök igen.',
