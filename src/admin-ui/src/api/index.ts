@@ -21,6 +21,12 @@ import type {
   OrgSyncStatus,
   Page,
   EvaluationOverview,
+  EvaluationQuestion,
+  EvaluationQuestionInput,
+  EvaluationResult,
+  EvaluationRun,
+  GenerationForecast,
+  DocumentDetail,
   Pipeline,
   Publication,
   PublicationStarted,
@@ -65,6 +71,8 @@ export const api = {
     publish: (id: string, version: string) => http.post<Collection>(`/api/collections/${id}/publish`, { version }),
     sources: (id: string) => http.get<SourceSummary[]>(`/api/collections/${id}/sources`),
     evaluation: (id: string) => http.get<EvaluationOverview>(`/api/collections/${id}/evaluation`),
+    retrievalSettings: (id: string, settings: Record<string, unknown>, version: string) =>
+      http.put<Collection>(`/api/collections/${id}/retrieval-settings`, { settings, version }),
     addSource: (id: string, body: SourceCreate) => http.post<Source>(`/api/collections/${id}/sources`, body),
   },
   sources: {
@@ -148,11 +156,29 @@ export const api = {
     output: <T>(jobId: string, document: string | number, stage: string) =>
       http.get<PreviewOutput<T>>(`/api/previews/${jobId}/documents/${document}/stages/${stage}/output`),
   },
+  evaluation: {
+    questions: (collectionId: string, query: { layer?: string; state?: string; q?: string; after?: string; limit?: number } = {}) =>
+      http.get<KeysetPage<EvaluationQuestion>>(`/api/collections/${collectionId}/evaluation/questions`, query),
+    addQuestion: (collectionId: string, body: EvaluationQuestionInput) =>
+      http.post<{ jobId: string; questionId: string }>(`/api/collections/${collectionId}/evaluation/questions`, body),
+    updateQuestion: (collectionId: string, questionId: string, body: EvaluationQuestionInput) =>
+      http.put<{ jobId: string; questionId: string }>(`/api/collections/${collectionId}/evaluation/questions/${questionId}`, body),
+    retireQuestion: (collectionId: string, questionId: string) =>
+      http.del<{ jobId: string; questionId: string }>(`/api/collections/${collectionId}/evaluation/questions/${questionId}`),
+    run: (collectionId: string, body: { variants?: string[]; candidateSettings?: Record<string, unknown> } = {}) =>
+      http.post<{ jobId: string; alreadyQueued: boolean }>(`/api/collections/${collectionId}/evaluation/run`, body),
+    forecast: (collectionId: string) => http.get<GenerationForecast>(`/api/collections/${collectionId}/evaluation/generate`),
+    generate: (collectionId: string) =>
+      http.post<{ jobId: string; alreadyQueued: boolean; forecast: GenerationForecast }>(`/api/collections/${collectionId}/evaluation/generate`),
+    getRun: (runId: string) => http.get<EvaluationRun>(`/api/evaluation-runs/${runId}`),
+    results: (runId: string) => http.get<EvaluationResult[]>(`/api/evaluation-runs/${runId}/results`),
+  },
   jobs: {
     get: <T = unknown>(id: string) => http.get<Job<T>>(`/api/jobs/${id}`),
   },
   documents: {
     list: (query: { collectionId?: string; sourceId?: string; q?: string; pii?: string; after?: string; limit?: number }) =>
       http.get<KeysetPage<DocumentSummary>>('/api/documents', query),
+    get: (id: string) => http.get<DocumentDetail>(`/api/documents/${id}`),
   },
 }

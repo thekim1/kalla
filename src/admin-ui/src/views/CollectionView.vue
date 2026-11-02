@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, DocumentSummary, Source, SourceSummary } from '@/api/types'
+import EvaluationTab from '@/components/evaluation/EvaluationTab.vue'
+import RetrievalSettingsForm from '@/components/evaluation/RetrievalSettingsForm.vue'
 import SourceDrawer from '@/components/sources/SourceDrawer.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
@@ -18,12 +20,12 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime } from '@/utils/format'
-import { COLLECTION, COLLECTIONS, LEVEL_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { COLLECTION, COLLECTIONS, EVALUATION, LEVEL_LABEL, RETRIEVAL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
 // Kunskapsbank (admin design §5.5.2): Översikt (state, used by), Källor, Dokument with the personal-data filter
-// (§4.5 documents). Testfrågor och kvalitet, Sökinställningar and Delning are item 12.
-type Tab = 'overview' | 'sources' | 'documents'
+// (§4.5 documents), Testfrågor och kvalitet and Sökinställningar (§7.1). Delning is P2.
+type Tab = 'overview' | 'sources' | 'documents' | 'evaluation' | 'retrieval'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
@@ -42,6 +44,7 @@ const usedBy = computed(() =>
 const canPublish = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 const adding = ref(false)
+const proposal = ref<{ coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null>(null)
 let documentsRequest = 0
 
 const tabs = computed(() => [
@@ -49,6 +52,8 @@ const tabs = computed(() => [
   // The count only once loaded (#279 review: no "(0)" while loading).
   { value: 'sources' as const, label: sources.loaded.value ? `${COLLECTION.tabs.sources} (${sources.data.value.length})` : COLLECTION.tabs.sources },
   { value: 'documents' as const, label: COLLECTION.tabs.documents },
+  { value: 'evaluation' as const, label: EVALUATION.tab },
+  { value: 'retrieval' as const, label: RETRIEVAL.tab },
 ])
 const sourceColumns: Column[] = [
   { key: 'name', label: COLLECTION.sourceName },
@@ -97,6 +102,17 @@ function sourceSaved(source: Source, syncing: boolean): void {
   ui.notify(syncing ? SOURCE.saved(source.name) : SOURCE.savedNoSync(source.name))
   // §5.4 step 6: from saving to the source page, where the run shows.
   void router.push({ name: 'source', params: { id: source.id } })
+}
+
+/** The report's coverage-threshold proposal goes to Sökinställningar, filled in for the editor to save (§7.1). */
+function useProposal(values: { coverageMaxDistance?: number; coverageMinKeywordScore?: number }): void {
+  proposal.value = { ...values }
+  tab.value = 'retrieval'
+}
+
+function retrievalSaved(saved: Collection): void {
+  collection.data.value = { ...saved }
+  proposal.value = null
 }
 
 function openSource(source: SourceSummary): void {
@@ -150,6 +166,14 @@ onMounted(load)
             <template #cell-state="{ row }">{{ COLLECTION.sourceStates[row.state] ?? row.state }}</template>
           </DataTable>
         </AsyncState>
+      </div>
+
+      <div v-else-if="tab === 'evaluation'" id="collection-panel-evaluation" role="tabpanel" aria-labelledby="collection-tab-evaluation">
+        <EvaluationTab :collection-id="collection.data.value.id" :can-edit="canEdit" @use-proposal="useProposal" />
+      </div>
+
+      <div v-else-if="tab === 'retrieval'" id="collection-panel-retrieval" role="tabpanel" aria-labelledby="collection-tab-retrieval">
+        <RetrievalSettingsForm :collection="collection.data.value" :can-edit="canEdit" :proposal="proposal" @saved="retrievalSaved" @tried="tab = 'evaluation'" />
       </div>
 
       <div v-else id="collection-panel-documents" role="tabpanel" aria-labelledby="collection-tab-documents">
