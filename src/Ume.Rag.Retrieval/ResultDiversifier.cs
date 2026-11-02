@@ -16,8 +16,8 @@ public static class ResultDiversifier
     public static IReadOnlyList<FusedCandidate> Dedup(IEnumerable<FusedCandidate> fused)
     {
         ArgumentNullException.ThrowIfNull(fused);
-        var texts = new HashSet<string>(StringComparer.Ordinal);
-        var groupOwner = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        var texts = new HashSet<TextKey>();
+        var groupOwner = new Dictionary<IdentityGroupKey, Guid>();
         var kept = new List<FusedCandidate>();
         foreach (var f in fused)
         {
@@ -44,7 +44,7 @@ public static class ResultDiversifier
         ArgumentNullException.ThrowIfNull(ordered);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxChunksPerDocument, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(topK, 1);
-        var perGroup = new Dictionary<string, int>(StringComparer.Ordinal);
+        var perGroup = new Dictionary<IdentityGroupKey, int>();
         var taken = new List<FusedCandidate>(topK);
         foreach (var f in ordered)
         {
