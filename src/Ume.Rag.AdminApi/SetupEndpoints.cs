@@ -23,7 +23,7 @@ public static class SetupEndpoints
         api.MapGet("/collections/{id:guid}/setup", async (Guid id, AdminContext admin, CancellationToken ct) =>
             {
                 var collection = await CollectionEndpoints.Scoped(admin).AsNoTracking().Where(c => c.Id == id)
-                    .Select(c => new CollectionRef(c.Id, c.Name, c.PublishedAt)).SingleOrDefaultAsync(ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                    .Select(c => new CollectionRef(c.Id, c.Name, c.PublishedAt, c.DepartmentId)).SingleOrDefaultAsync(ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                 return (await ComputeAsync(admin, [collection], ct)).Single();
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Collections").WithName("GetCollectionSetup")
@@ -32,7 +32,7 @@ public static class SetupEndpoints
         api.MapGet("/overview", async (AdminContext admin, CancellationToken ct) =>
             {
                 var collections = await CollectionEndpoints.Scoped(admin).AsNoTracking().OrderByDescending(c => c.UpdatedAt).ThenBy(c => c.Id).Take(OverviewCollections)
-                    .Select(c => new CollectionRef(c.Id, c.Name, c.PublishedAt)).ToListAsync(ct);
+                    .Select(c => new CollectionRef(c.Id, c.Name, c.PublishedAt, c.DepartmentId)).ToListAsync(ct);
                 var setups = await ComputeAsync(admin, collections, ct);
                 return new Overview(collections.Count > 0, [.. setups.Where(s => !s.Done)]);
             })
@@ -42,7 +42,7 @@ public static class SetupEndpoints
         return api;
     }
 
-    private sealed record CollectionRef(Guid Id, string Name, DateTimeOffset? PublishedAt);
+    private sealed record CollectionRef(Guid Id, string Name, DateTimeOffset? PublishedAt, Guid DepartmentId);
 
     /// <summary>A handful of grouped queries for all <paramref name="collections"/> at once (no per-collection round trips).</summary>
     private static async Task<List<CollectionSetup>> ComputeAsync(AdminContext admin, IReadOnlyList<CollectionRef> collections, CancellationToken ct)
@@ -85,7 +85,7 @@ public static class SetupEndpoints
                                   && v.CollectionIds.Any(c => ids.Contains(c))
                             select new
                             {
-                                a.Id, v.CollectionIds, Published = a.PublishedVersionId == v.Id,
+                                a.Id, a.DepartmentId, v.CollectionIds, Published = a.PublishedVersionId == v.Id,
                                 Available = a.PublishedVersionId == v.Id && db.AssistantAudiences.Any(x => x.AssistantId == a.Id && x.Kind == AssistantAudienceKinds.Client),
                             }).ToListAsync(ct);
 
@@ -93,7 +93,9 @@ public static class SetupEndpoints
         [
             .. collections.Select(c =>
             {
-                var assistants = linked.Where(l => l.CollectionIds.Contains(c.Id)).OrderByDescending(l => l.Available).ThenByDescending(l => l.Published).ThenBy(l => l.Id).ToList();
+                // Only the collection's own department's assistants (#313 review): another department's link to a shared collection
+                // is not this checklist's step, and its assistant would 404 for the caller.
+                var assistants = linked.Where(l => l.CollectionIds.Contains(c.Id) && l.DepartmentId == c.DepartmentId).OrderByDescending(l => l.Available).ThenByDescending(l => l.Published).ThenBy(l => l.Id).ToList();
                 var run = runs.GetValueOrDefault(c.Id);
                 var available = assistants.Any(a => a.Available);
                 return new CollectionSetup(

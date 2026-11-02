@@ -66,7 +66,12 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
         var client = new Client { Name = "Open WebUI " + code, Kind = ClientKinds.Integration, ClassificationCeiling = Classification.Internal, UpdatedAt = now };
         var draftOnly = new Assistant { Slug = "setup-a-" + code.ToLowerInvariant(), Name = "Utkast " + code, DepartmentId = department.Id, Classification = Classification.Internal, UpdatedAt = now };
         var live = new Assistant { Slug = "setup-b-" + code.ToLowerInvariant(), Name = "Klar " + code, DepartmentId = department.Id, Classification = Classification.Internal, UpdatedAt = now };
-        db.AddRange(department, fresh, halfway, ready, pipeline, source, removed, set, client, draftOnly, live);
+        var elsewhere = new Department { Id = Guid.CreateVersion7(), Name = "Annan " + code, CostCenterCode = "Y" + code, SyncedAt = now };
+        var foreign = new Assistant
+        {
+            Slug = "setup-c-" + code.ToLowerInvariant(), Name = "Annans " + code, DepartmentId = elsewhere.Id, Classification = Classification.Internal, UpdatedAt = now,
+        };
+        db.AddRange(department, elsewhere, fresh, halfway, ready, pipeline, source, removed, set, client, draftOnly, live, foreign);
         db.AddRange(
             new Run { SourceId = removed.Id, Classification = Classification.Internal, Kind = "sync", Trigger = "manual", State = RunStates.Succeeded, StartedAt = now },
             new Run { SourceId = source.Id, Classification = Classification.Internal, Kind = "sync", Trigger = "manual", State = RunStates.Succeeded, StartedAt = now.AddHours(-1) },
@@ -94,10 +99,18 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
             AssistantId = live.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "ume/chat-eu", CollectionIds = [ready.Id],
             PublishedAt = now, PublishedBy = "seed", CreatedAt = now, UpdatedAt = now,
         };
-        db.AddRange(draft, published, new AssistantAudience { AssistantId = live.Id, Kind = AssistantAudienceKinds.Client, SubjectId = client.Id });
+        // Another department's published, available assistant linking Fresh (a shared collection): not this checklist's.
+        var foreignVersion = new AssistantVersion
+        {
+            AssistantId = foreign.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "ume/chat-eu", CollectionIds = [fresh.Id],
+            PublishedAt = now, PublishedBy = "seed", CreatedAt = now, UpdatedAt = now,
+        };
+        db.AddRange(draft, published, foreignVersion, new AssistantAudience { AssistantId = live.Id, Kind = AssistantAudienceKinds.Client, SubjectId = client.Id },
+            new AssistantAudience { AssistantId = foreign.Id, Kind = AssistantAudienceKinds.Client, SubjectId = client.Id });
         await db.SaveChangesAsync(Ct);
         draftOnly.DraftVersionId = draft.Id;
         live.PublishedVersionId = published.Id;
+        foreign.PublishedVersionId = foreignVersion.Id;
         await db.SaveChangesAsync(Ct);
         return new Seed(code, fresh.Id, halfway.Id, ready.Id, live.Id);
     }
@@ -113,6 +126,8 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
         var fresh = await editor.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Fresh}/setup", Ct);
         (fresh.GetProperty("sources").GetInt32(), fresh.GetProperty("firstSyncDone").GetBoolean(), fresh.GetProperty("done").GetBoolean())
             .ShouldBe((0, false, false)); // the deleted source and its run don't count
+        // …nor another department's assistant linking it.
+        (fresh.GetProperty("assistantId").ValueKind, fresh.GetProperty("available").GetBoolean()).ShouldBe((JsonValueKind.Null, false));
 
         var halfway = await editor.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Halfway}/setup", Ct);
         halfway.GetProperty("sources").GetInt32().ShouldBe(1);
