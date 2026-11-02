@@ -9,15 +9,16 @@ item and come back. Code items (§3.1) all come before the live block (§3.2). T
 work and put the PR number after it (`[x] … (#12)`). Record every `to-verify` row in `results-b.md` before ticking it
 here.
 
-## Status (2026-11-02, end of session 17)
+## Status (2026-11-02, session 20)
 
 - Items 1, 3 (Done open: K for 10–30 % terms, question on #248), 9 and 10 are built and merged; their Done boxes wait on
   to-verify rows 23 and 20 (partly, see `results-b.md`). Hand-offs L2 #234, L3 #249, L4 #300, L6 #273 filed.
-- The admin UI is first (user, #278). Built: Kunskapsbanker (#279), Lägg till källa with Kontrollera (#285), source and
-  run pages (#288), Assistenter (#301); generic platform forms by the main session (#281).
-- Next, in order: the preview step (Före / Efter) in the source drawer on `POST /api/pipelines/{id}/preview` (#299);
-  assistant Versioner, retention and archive; the Publicering page (#298); then the rest of items 11–13 and #297
-  (stream-b test flakes). Known: run counters stay 0 until a run ends (#288 review), so the run page polls for the end.
+- The admin UI is first (user, #278). Built: Kunskapsbanker (#279); every part of Källa (#285, #288, #303, #306, #309,
+  #310); Publicering (#305); Assistenter with Versioner, Lagring and Arkivera (#301, #304); generic platform forms by
+  the main session (#281). Item 11's Done (§5.4 steps 1–8 locally on FakeGateway) is still to be checked.
+- Next, in order: item 12's Testfrågor och kvalitet with the evaluation report, then Sökinställningar; item 12's
+  Översikt setup checklist and Granskningslogg; item 13 (Återkoppling); then #297 (stream-b test flakes). Known: run
+  counters stay 0 until a run ends (#288 review), so the run page polls for the end.
 - Merged without waiting for reviewers (user, 2026-11-02); problems go in a `stream-b` issue.
 
 ## Waiting on (tick when it lands)
@@ -78,7 +79,7 @@ Refs: [admin §5.3–§5.5, §6.4–§6.7](../admin/design.md)
 Refs: [admin §5.3, §5.8, §7](../admin/design.md)
 - [ ] Testfrågor och kvalitet and the evaluation report; Sökinställningar
 - [x] Assistenter: draft, Testa, Publicera, Versioner with restore, Målgrupp, retention, archive
-  — #301: list, create, Utkast (model, instructions, collections, warnings), Testa, Publicera, Målgrupp; b/12-assistant-versions: Versioner with Återställ, Lagring (V10 within the level's policy), Arkivera / Ta fram igen
+  — #301: list, create, Utkast (model, instructions, collections, warnings), Testa, Publicera, Målgrupp; #304: Versioner with Återställ, Lagring (V10 within the level's policy), Arkivera / Ta fram igen
 - [ ] Översikt setup checklist; Granskningslogg; explain access
 - [ ] Generic forms for platform objects (incl. parse rules; data protection `none` only); #146 recorded
   — in part: the main session built the generic forms in #281; #146 not recorded
