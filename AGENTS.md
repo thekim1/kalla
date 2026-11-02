@@ -62,8 +62,8 @@ gateway's conventions for names, config keys, claims, key format and security ev
   still lists the change and its hand-offs.
 - **Verify before relying:** check a library, API or site claim against the real source. Download packages into a
   scratch directory and read them there without executing them.
-- **Language:** code, comments, docs and commits are in English. Admin UI text is Swedish and lives only in
-  `labels.ts` and `messages.ts`.
+- **Language:** code, comments, docs and commits are in English. Admin UI text is English and lives only in
+  `labels.ts` and `messages.ts`, so a Swedish translation can be added later (Decisions, "Admin UI in English").
 - **Every model call goes through the gateway** with an explicit residency ceiling. Locally and in tests that means
   `Ume.Rag.FakeGateway`.
 

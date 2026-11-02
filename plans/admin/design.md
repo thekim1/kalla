@@ -35,8 +35,8 @@ gateway counterpart.
 - The gateway admin UI's **texts are English**: `index.html:2` `lang="en"`, labels in `ui/utils/labels.ts` and
   components (nav labels in `ui/router/nav.ts:43-150`); only numbers use `sv-SE` (`ui/utils/format.ts:2-6`), dates
   `en-GB` (`:7-10`), time zone `Europe/Stockholm` (`:1`); Swedish names are marked `lang="sv"`
-  (`ui/views/OrganisationView.vue:150`). "Swedish only, like the gateway" (answered 1) is therefore read as: the gateway's
-  **mechanism** (texts in components and a labels file, no i18n library), with **Swedish** texts and `lang="sv"`.
+  (`ui/views/OrganisationView.vue:150`). The RAG admin UI follows the gateway: **English** texts and `lang="en"`, every
+  string in a labels file (Decisions, "Admin UI in English").
 - No general ETag/If-Match handling: concurrency tokens only on keys (`src/Ume.LlmGateway.Infrastructure/Persistence/
   GatewayDbContext.cs:71-72`); any `DbUpdateConcurrencyException`, unique (23505) or FK (23503) violation becomes a 409
   (`AdminApi/Program.cs:20-27`). The client has `GET/POST/PUT/DELETE` only (`ui/api/client.ts:8`).
@@ -57,13 +57,13 @@ gateway counterpart.
 |---|---|---|
 | 1 | Placement | `Ume.Rag.AdminApi` (`rag-admin`; `rag-admin-b` with the a/b slots of P2) is the BFF, the only writer of `config`, the job producer for the worker, the reader of `content`/`chat`/`audit` and the host of the built UI (`src/admin-ui/dist` as `wwwroot`); copied gateway BFF, CSP, rate limit, validation filter and problem details (§2) |
 | 2 | Answer code in the admin | Library **`Ume.Rag.Answering`** holds the knowledge-role core and the chat answer core, so the **test panel** runs the exact chat path in process, including collections that are not yet published, without an API route that could include them; `rag-admin` and `rag-api` are deployed from the **same release**, so the panel always runs the code chat runs (§2.1, §4.9) |
-| 3 | Language | **Swedish only** for the journey pages (answered 1): `lang="sv"`, texts in components and `ui/utils/labels.ts`, no i18n; API, logs, OpenAPI and docs in English. Server errors carry a stable **`code`**; the UI renders Swedish texts from a code table (§4.2) |
+| 3 | Language | **English** UI (Decisions, "Admin UI in English", 2026-11-02): `lang="en"`, every string in `ui/utils/labels.ts` and `ui/utils/messages.ts`, so Swedish can be added later as a translation; no i18n library until then. API, logs, OpenAPI and docs in English. Server errors carry a stable **`code`**; the UI renders its texts from a code table (§4.2) |
 | 4 | Roles | **`rag-reviewer`** (answered 3): policies `Review`, `FeedbackComments`, `Read`. Feedback **comments**: `rag-reviewer` and `rag-department-admin`. **Full conversations: `rag-reviewer` only.** No administrative role implies conversation content (§3). Roles: **P1** realm roles `rag-*` on the shared Keycloak's client `ume-rag-admin`, audit actor `sub`; **P2** app roles on RAG's own Entra registration `ume-rag-admin`, actor `oid` (fallback `sub`) (identity §1.1, §1.6, 2026-10-31) |
 | 5 | Concurrency | Every editable aggregate carries `version` (Postgres `xmin`); a mismatch is 409 `concurrent_change` (§4.3) |
 | 6 | Write path | One transaction: **`SELECT … FOR UPDATE` on `config."ConfigVersion"` first** (serialises admin config writes) → cross-rules → entity change → outbox trigger (version bump) → audit row with that `ConfigVersion` → optional job rows; `pg_notify` at commit (§4.4) |
 | 7 | Validation | Field rules on request records; **cross-rules** in one `ConfigRules` service: **V1–V34 with V20 and V27 retired (32 rules)** (§4.6), run on save, on dependent changes and again before publish, under the version lock; CHECK violations (23514) answer 400 |
 | 8 | Jobs | The admin inserts `content."Jobs"` rows only (preview, sync, command, eval); every result is read from `Jobs.Result`, `Runs`, `EvaluationRuns` (§4.7) |
-| 9 | Pilot UI | P1 has **dedicated Swedish pages only for the department journey** (collection, source, preview, publish with the evaluation report, assistant, test panel, audience, feedback, limited review), built for non-specialists (answered 2): setup checklist, template parameters with defaults, preflight and preview before saving, impact before scope changes (§5.4) |
+| 9 | Pilot UI | P1 has **dedicated pages only for the department journey** (collection, source, preview, publish with the evaluation report, assistant, test panel, audience, feedback, limited review), built for non-specialists (answered 2): setup checklist, template parameters with defaults, preflight and preview before saving, impact before scope changes (§5.4) |
 | 10 | Pipelines | A pipeline is a **template + parameters**; the source form shows the template's parameters; pipeline editors edit parameters. No node editor, no canvas (dropped from the roadmap) (§6) |
 | 11 | Publish | **Plan → re-process → evaluation report → keep or roll back**; no `gating` state, no blocking gate; previous chunk sets kept 14 days for one-click rollback (§6.6) |
 | 12 | Evaluation | **Advisory reports** (recall@10, MRR with counts, compared with the previous run) on the publish screen and the collection page; no floor, no `building` state, no overrides (§7) |
@@ -213,7 +213,7 @@ R read, W write, – hidden (route guard → `/forbidden`, copied `ui/router/ind
 department admin, PE pipeline editor, RV reviewer, SE skill editor (P2), ED editor (P2), VW viewer. "Generic" = generic
 schema-driven form (§5.8).
 
-| Page (Swedish label) | Phase | PA | DA | PE | RV | SE | ED | VW |
+| Page (Swedish label, §5.7) | Phase | PA | DA | PE | RV | SE | ED | VW |
 |---|---|---|---|---|---|---|---|---|
 | Översikt | P1 | R (all + platform health) | R | R | R | R | R | R |
 | Karta (department map) | P2 (weakness review §1) | R | R | R | R | R | R | R |
@@ -271,12 +271,12 @@ The matrix is data (`PermissionMatrix` in `Ume.Rag.Domain`), used for endpoint a
 | OpenAPI | `/openapi/v1.json` + Scalar for `Admin` (in P1 also the action UI for platform objects without a dedicated page); the error-code list is exported as `contracts/admin/v1/error-codes.json` (CI checks the UI covers every code) | `Program.cs:94-95` (copy) |
 | Data reads | 6007 `rag.admin.data.read` on audit log, keys, feedback lists, access log, conversation views (not explain access: nothing is accessed, identity §4.9) | identity §10 |
 
-### 4.2 Error codes and Swedish texts
+### 4.2 Error codes and UI texts
 
-The gateway UI prints the server's message (`ui/utils/problem.ts:7-8`). Our API speaks English and the UI speaks
-Swedish, so `problem.ts` is adapted: `problemMessage` looks up `problem.code` in `ui/utils/messages.ts` (Swedish
-templates with `{params}`), then a status text, and shows the English `detail` only as a last resort inside
-`<span lang="en">`. `mapFieldErrors` (`:26-36`) prefers `errorCodes[field]`.
+The gateway UI prints the server's message (`ui/utils/problem.ts:7-8`). The API's `detail` is written for logs and
+Scalar, not for department admins, so `problem.ts` is adapted: `problemMessage` looks up `problem.code` in
+`ui/utils/messages.ts` (templates with `{params}`, English now, the place a Swedish translation goes later), then a
+status text, and shows the server's `detail` only as a last resort. `mapFieldErrors` (`:26-36`) prefers `errorCodes[field]`.
 
 ```json
 { "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1", "title": "Check the highlighted fields.", "status": 400,
@@ -287,8 +287,8 @@ templates with `{params}`), then a status text, and shows the English `detail` o
 
 ```ts
 // ui/utils/messages.ts (excerpt)
-assistant_below_collection: 'Assistentens informationsklass är lägre än kunskapsbanken {collection} ({level}). Höj assistentens klass eller ta bort kunskapsbanken.',
-concurrent_change: 'Någon annan har ändrat detta medan du arbetade. Ladda om sidan; dina ändringar finns kvar i formuläret.',
+assistant_below_collection: "The assistant's level is below the knowledge base {collection} ({level}). Raise the assistant's level or remove the knowledge base.",
+concurrent_change: 'Someone else changed this while you were working. Reload the page; your changes are still in the form.',
 ```
 
 ### 4.3 Concurrency
@@ -297,7 +297,7 @@ concurrent_change: 'Någon annan har ändrat detta medan du arbetade. Ladda om s
   Child rows (`AssistantAudiences`, `CollectionShares`, `SkillVersionLinks`, …) are saved through the root, and every
   root save sets `UpdatedAt`/`UpdatedBy`, so `xmin` changes whenever any part of the aggregate does.
 - DTOs carry `version` (string); `PUT`/`DELETE`/state actions require it; mismatch → 409 `concurrent_change` with the
-  current `version`. The form keeps the user's input and offers "Ladda om och jämför".
+  current `version`. The form keeps the user's input and offers "Reload and compare".
 - An assistant's draft (its `AssistantVersions` row with `State = draft`) carries its own `version`, so editing the
   draft and editing the assistant's own fields (audience, level, retention) do not conflict; publish and restore
   require both.
@@ -642,9 +642,9 @@ Overview page (P1).
   `contracts/admin` for the error-code spec;
   `api/client.ts` (constant `RAG-XSRF-TOKEN`), `composables/useFormErrors.ts:8-44`, `useTableView.ts:9-54`,
   `stores/loadable.ts`, `test/*` helpers; charts `components/usage/TimeSeriesChart.vue` for evaluation trends.
-- Adapted: `utils/problem.ts` (§4.2), `utils/format.ts` (dates `sv-SE`), `stores/auth.ts` (RAG roles), `router/nav.ts`
-  + `router/index.ts` (pages below; same `meta.roles` guard and focus handling; title suffix "· Kunskapsplattform",
-  product name N1 open), `index.html` `lang="sv"`.
+- Adapted: `utils/problem.ts` (§4.2), `stores/auth.ts` (RAG roles), `router/nav.ts` + `router/index.ts` (pages below;
+  same `meta.roles` guard and focus handling; title suffix "· Knowledge platform", product name N1 open); `utils/format.ts`
+  and `index.html` (`lang="en"`) as the gateway's.
 - New: `utils/labels.ts`, `utils/messages.ts`, `composables/useJobPoller.ts`, `components/rag/*` (classification badge,
   run state badge, evaluation report card, setup checklist, preview viewer with before/after, test panel),
   `platform/*` (the generic forms of §5.8: resource registry, schema mapper, `GenericForm`, list and form views),
@@ -865,29 +865,34 @@ version, draft-only links are marked "(utkast)". Source: `GET /api/organisation/
 
 ### 5.6 Empty and error states
 
-| Situation | Text (Swedish) and action |
+| Situation | Text and action |
 |---|---|
-| No collection | "Här bygger du kunskapsbanker och assistenter för din förvaltning. Börja med att skapa en kunskapsbank." [Skapa kunskapsbank] |
-| No source | "Kunskapsbanken har inget innehåll än. Lägg till en webbplats, en lista med adresser eller filer." [Lägg till källa] |
-| No run yet | "Ingen hämtning har gjorts. Den första startar när du sparar källan." |
-| Not published | "Ej publicerad: kunskapsbanken syns bara i Testa tills du publicerar den." |
-| No test questions | "Testfrågor skapas automatiskt när den första hämtningen är klar (cirka 10–20 minuter)." |
-| Assistant without test questions (P2) | "Assistenten har inga testfrågor än. Lägg till några frågor som den ska klara, så körs de varje gång du publicerar." [Lägg till testfråga] |
-| No feedback | "Ingen återkoppling ännu. Den kommer när användare ger tummen upp eller ned i Open WebUI." |
-| No role | copied no-access page in Swedish: "Din roll ger inte åtkomst till den här sidan. Kontakta plattformsteamet om du behöver den." |
-| Load failure | copied `AsyncState` with "Försök igen" (`components/ui/AsyncState.vue:14`) |
+| No collection | "Here you build knowledge bases and assistants for your department. Start by creating a knowledge base." [Create knowledge base] |
+| No source | "The knowledge base has no content yet. Add a website, a list of addresses or files." [Add source] |
+| No run yet | "Nothing has been fetched yet. The first fetch starts when you save the source." |
+| Not published | "Not published: the knowledge base is only visible in Test until you publish it." |
+| No test questions | "Test questions are created automatically when the first fetch is done (about 10–20 minutes)." |
+| Assistant without test questions (P2) | "The assistant has no test questions yet. Add a few questions it should handle, and they run every time you publish." [Add test question] |
+| No feedback | "No feedback yet. It arrives when users give a thumbs up or down in Open WebUI." |
+| No role | copied no-access page: "Your role does not give access to this page. Contact the platform team if you need it." |
+| Load failure | copied `AsyncState` with "Try again" (`components/ui/AsyncState.vue:14`) |
 
-### 5.7 Swedish wording conventions
+### 5.7 Wording conventions
 
-- Klarspråk (språklagen 2009:600, 11 §): du-tilltal, short sentences, verbs on buttons ("Publicera", "Hämta nu",
-  "Behåll dokumenten"), sentence case, no English UI words in the journey pages; technical terms that must stay English
-  (`recall@10`, `OCR`, `robots.txt`) are explained once and marked `lang="en"`.
+- Plain English for non-specialists: "you", short sentences, verbs on buttons ("Publish", "Fetch now", "Keep the
+  documents"), sentence case; technical terms (`recall@10`, `OCR`, `robots.txt`) are explained once. Swedish names and
+  content (departments, collections, page titles, chunks) are shown as written and marked `lang="sv"`.
 - Every error says what happened and what to do; destructive confirmations name the object, the count and the
-  consequence, and the button repeats the action ("Ta bort 212 dokument").
-- Numbers `sv-SE`, dates "30 okt. 2026", times 24 h, Europe/Stockholm; money stays USD, shown "0,0012 USD".
-- One glossary, enforced in review (`utils/labels.ts` is the single source of these words):
+  consequence, and the button repeats the action ("Remove 212 documents").
+- Dates, numbers and times as the gateway's `utils/format.ts`, time zone Europe/Stockholm; money stays USD.
+- Every UI string lives in `utils/labels.ts` or `utils/messages.ts`, so a Swedish translation later (Decisions, "Admin UI in
+  English") touches only those files. Swedish page, button and step names quoted elsewhere in this document (Översikt,
+  Lägg till källa, Kom igång, …) are the Swedish terms of that translation; the English UI uses the English term.
+- One glossary, enforced in review (`utils/labels.ts` is the single source of these words). The English UI term is the
+  concept in plain words, except: collection → "knowledge base", chunk → "passage", pipeline → "processing", sync now
+  → "fetch now", PII → "personal data". The Swedish column is the later translation:
 
-| Concept (code) | UI term | Concept (code) | UI term |
+| Concept (code) | Swedish term | Concept (code) | Swedish term |
 |---|---|---|---|
 | collection | kunskapsbank | evaluation set / question | testfrågor / testfråga |
 | source: `url-list`, `crawl`, `upload`, `sharepoint` | källa: adresslista, webbplats, filer, SharePoint | evaluation report | utvärdering |
@@ -920,8 +925,7 @@ gateway models, organisation mirror (read); P2 department settings (owner-team s
   agree; Admin-only, the audience of these forms). Controls follow the table of §6.3; `jsonb` members (e.g. a site
   profile, `Settings.Crawl`) are a JSON text area validated by the server. A new, rotated or revealed key's secret is
   shown once with a copy button.
-- Labels are the schema `title` (Swedish where the record gives one, else the property name) and `description` as help;
-  these pages are for platform admins, so English property names are acceptable (answered 1 applies to the journey).
+- Labels are the schema `title` (else the property name) and `description` as help.
 - Actions that are not CRUD (rotate a key, run a sync, approve or roll back a site profile) are buttons from a small
   per-resource action list; anything rarer is done in Scalar (`/openapi/v1.json`).
 - Site profiles: the list shows host, preset, version, state (applied/proposal), sources using it; the detail shows the
@@ -967,7 +971,7 @@ library and no browser-side validator: the server validates.
 | `array` of objects | repeating `FieldGroup` rows with add/remove/move buttons (no drag) |
 | anything else | a JSON text area for that member, with a note |
 
-Template parameter labels and help come from `x-labels`/`x-help` (Swedish); a missing label fails a CI check of the
+Template parameter labels and help come from `x-labels`/`x-help`; the UI shows their `en` text and `sv` is kept for the later translation (§5.7); a missing label fails a CI check of the
 templates (`Ume.Rag.Pipelines.Tests`).
 
 ### 6.4 Preview
@@ -1251,7 +1255,7 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 
 - `ConfigRules`: one table-driven test per active V-rule (pass, fail, boundary; the re-check triggers of §4.6).
 - `PermissionMatrix` invariants: `Admin` never implies `Review`/`FeedbackComments`; every endpoint has a policy.
-- `FormModel`: every template's `paramsSchema` renders; unsupported constructs fall back to JSON; Swedish labels present
+- `FormModel`: every template's `paramsSchema` renders; unsupported constructs fall back to JSON; labels present
   on templates. The UI's schema mapper: every generic-form operation maps to fields (vitest, against a cut of the
   OpenAPI document).
 - `AccessExplainer`: one case per `IAccessPolicy` step (identity §4.3) returns that step and code.
@@ -1365,9 +1369,8 @@ component axe checks.
 
 User, 2026-10-30 (this step):
 
-1. **UI language**: **Swedish**, with the gateway's mechanism (texts in components and a labels file, no i18n); API,
-   logs and docs in English (§1 row 3, §4.2, §5.7). The gateway's own UI texts are English; the RAG admin deliberately
-   diverges for its non-specialist users. Generic forms for platform admins use schema titles (§5.8).
+1. **UI language**: **English**, as the gateway, every string in `labels.ts`/`messages.ts` so Swedish can follow as a
+   translation (user, 2026-11-02; §1 row 3, §4.2, §5.7). Generic forms for platform admins use schema titles (§5.8).
 2. **Pilot setup**: the pilot department's own admins use the P1 journey pages themselves, with the platform team
    pairing at first (§5.4, §6.1).
 3. **Conversation review**: role `rag-reviewer`, granted per department to named reviewers, reads other users'

@@ -1,7 +1,7 @@
 # Stream B brief: the serving side (P1b)
 
 You harden the serving side for the pilot: the `chat` schema, age decay and `demote` in retrieval, the admin API and
-the Swedish journey pages for sources, publishing and the assistant (drafts, versions, restore, test panel), the
+the journey pages for sources, publishing and the assistant (drafts, versions, restore, test panel), the
 generic forms, history mode `none` with feedback (writer, import, Feedback page), accessibility and the pilot journey
 E2E, the W3 spike and the switch to gateway release 1. Stream A builds the worker side. You start P1b once your P1a
 **code** items are done or blocked on a live hand-off (Decisions table, "Code first, live testing last"); the live
@@ -65,6 +65,6 @@ O2); `/mcp`; department scope from gateway member groups (release 2).
 ## Finished when
 
 Every row above meets its §3 done-when with evidence in its PR, and every listed `to-verify.md` row is recorded in
-`results-b.md`. A department admin can run the whole journey (admin §5.4) through the Swedish pages, an assistant
+`results-b.md`. A department admin can run the whole journey (admin §5.4) through the journey pages, an assistant
 draft can be tested, published and restored, pilot ratings reach the Feedback page, every call runs against gateway
 release 1, and the graded gold-set answers met the go-live gate.
