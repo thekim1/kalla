@@ -13,7 +13,7 @@ function collection(overrides: Partial<Collection> = {}): Collection {
   }
 }
 
-describe('Skapa kunskapsbank (admin design §5.4 step 2)', () => {
+describe('Create knowledge base (admin design §5.4 step 2)', () => {
   it('asks who may read the content, with no level preselected, and creates the collection', async () => {
     setActivePinia(createPinia())
     const create = vi.spyOn(api.collections, 'create').mockResolvedValue(collection())
@@ -25,7 +25,7 @@ describe('Skapa kunskapsbank (admin design §5.4 step 2)', () => {
     await flushPromises()
     const body = document.body
 
-    expect(body.textContent).toContain('Vem får läsa innehållet?')
+    expect(body.textContent).toContain('Who may read the content?')
     const radios = [...body.querySelectorAll<HTMLInputElement>('input[name=classification]')]
     expect(radios.map((r) => r.value)).toEqual(['public', 'internal', 'sensitive'])
     expect(radios.some((r) => r.checked)).toBe(false)
@@ -33,8 +33,8 @@ describe('Skapa kunskapsbank (admin design §5.4 step 2)', () => {
     // Saving without a name or a level says what is missing and sends nothing.
     body.querySelector<HTMLFormElement>('#collection-create')!.dispatchEvent(new Event('submit'))
     await flushPromises()
-    expect(body.textContent).toContain('Skriv ett namn.')
-    expect(body.textContent).toContain('Välj vem som får läsa innehållet.')
+    expect(body.textContent).toContain('Enter a name.')
+    expect(body.textContent).toContain('Choose who may read the content.')
     expect(create).not.toHaveBeenCalled()
 
     const name = body.querySelector<HTMLInputElement>('#collection-name')!

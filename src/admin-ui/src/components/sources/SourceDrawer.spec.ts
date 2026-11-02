@@ -30,8 +30,8 @@ async function open() {
   return wrapper
 }
 
-describe('Lägg till källa (admin design §5.4 steps 3, 4, 6)', () => {
-  it('checks a crawl source; a failed check blocks saving and says why in Swedish', async () => {
+describe('Add source (admin design §5.4 steps 3, 4, 6)', () => {
+  it('checks a crawl source; a failed check blocks saving and says why in plain words', async () => {
     const preflight = vi.spyOn(api.sources, 'preflight').mockResolvedValue({ jobId: 'j1' })
     vi.spyOn(api.jobs, 'get').mockResolvedValue(job({
       state: 'fail', estimatedPages: 1200, cms: null,
@@ -52,9 +52,9 @@ describe('Lägg till källa (admin design §5.4 steps 3, 4, 6)', () => {
       },
     })
     const text = document.body.textContent!
-    expect(text).toContain('Webbplatsens robots.txt förbjuder hämtning av adressen.')
-    expect(text).toContain('Ungefär 1')
-    expect(text).toContain('Kontrollen hittade något som måste rättas innan du sparar.')
+    expect(text).toContain('The website’s robots.txt does not allow fetching the address.')
+    expect(text).toContain('About 1')
+    expect(text).toContain('The check found something you must fix before you save.')
     input('#source-name', 'umea.se/bygga')
     click('save')
     await flushPromises()
@@ -74,7 +74,7 @@ describe('Lägg till källa (admin design §5.4 steps 3, 4, 6)', () => {
     input('#source-urls', 'https://www.umea.se/taxa\nftp://fel')
     click('save')
     await flushPromises()
-    expect(document.body.textContent).toContain('Skriv minst en adress som börjar med http:// eller https://.')
+    expect(document.body.textContent).toContain('Enter at least one address that starts with http:// or https://.')
     expect(create).not.toHaveBeenCalled()
 
     input('#source-urls', 'https://www.umea.se/taxa\n\nhttps://www.umea.se/avgifter ')
@@ -88,7 +88,7 @@ describe('Lägg till källa (admin design §5.4 steps 3, 4, 6)', () => {
     wrapper.unmount()
   })
 
-  it('previews up to 5 addresses on the default pipeline: Före / Efter, the stage strip and a stage\'s output', async () => {
+  it('previews up to 5 addresses on the default pipeline: Before / After, the stage strip and a stage\'s output', async () => {
     const list = vi.spyOn(api.pipelines, 'list').mockResolvedValue([
       { id: 'p-default', name: 'crawl-default', templateId: 'crawl-default', departmentId: null, publishedVersionId: 'v1', isDefault: true },
       { id: 'p-own', name: 'crawl-own', templateId: 'crawl-default', departmentId: 'd1', publishedVersionId: 'v2', isDefault: false },
@@ -123,7 +123,7 @@ describe('Lägg till källa (admin design §5.4 steps 3, 4, 6)', () => {
 
     input('#source-urls', ['a', 'b', 'c', 'd', 'e', 'f'].map((p) => `https://www.umea.se/${p}`).join('\n'))
     await flushPromises()
-    expect(document.body.textContent).toContain('Bara de 5 första adresserna förhandsgranskas.')
+    expect(document.body.textContent).toContain('Only the first 5 addresses are previewed.')
     click('preview')
     await flushPromises()
 
@@ -132,25 +132,25 @@ describe('Lägg till källa (admin design §5.4 steps 3, 4, 6)', () => {
     expect(output).toHaveBeenCalledWith('pj', 0, 'before')
     expect(output).toHaveBeenCalledWith('pj', 0, 'after')
     const text = () => document.body.textContent!
-    expect(text()).toContain('Webbplatsprofil för www.umea.se: förinställningen sitevision')
+    expect(text()).toContain('Site profile for www.umea.se: the preset sitevision')
     expect(document.body.querySelector('[data-test=text-before]')!.textContent).toContain('Meny Logga in Kontakt')
     const after = document.body.querySelector('[data-test=text-after]')!.textContent!
     expect(after).toContain('Bygga altan')
     expect(after).not.toContain('Meny') // furniture is not main text
     expect(text()).toContain('Bygga › Altan')
     const strip = document.body.querySelector('[data-test=stage-strip]')!.textContent!
-    expect(strip).toContain('Läs in')
-    expect(strip).toContain('återanvänt')
+    expect(strip).toContain('Read')
+    expect(strip).toContain('reused')
 
-    const chunkButton = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Textavsnitt')!
+    const chunkButton = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Passages')!
     chunkButton.click()
     await flushPromises()
     expect(output).toHaveBeenCalledWith('pj', 0, 'chunk')
-    expect(document.body.querySelector('[data-test=output-chunk]')!.textContent).toContain('1 textavsnitt, 42 token')
+    expect(document.body.querySelector('[data-test=output-chunk]')!.textContent).toContain('1 passage, 42 tokens')
 
     document.body.querySelector<HTMLButtonElement>('#preview-docs-tab-d1')!.click()
     await flushPromises()
-    expect(text()).toContain('Ingen text blev kvar när sidan hade lästs in och rensats.')
+    expect(text()).toContain('No text was left after the page was read and cleaned.')
 
     // A changed address makes the preview stale.
     input('#source-urls', 'https://www.umea.se/annan')
@@ -165,7 +165,7 @@ describe('Lägg till källa (admin design §5.4 steps 3, 4, 6)', () => {
     input('#source-urls', 'https://www.umea.se/bygga')
     click('preview')
     await flushPromises()
-    expect(document.body.textContent).toContain('Det finns ingen bearbetning för den här källtypen än.')
+    expect(document.body.textContent).toContain('There is no processing for this source type yet.')
     wrapper.unmount()
   })
 

@@ -1,7 +1,7 @@
 import type { RouteLocationRaw } from 'vue-router'
 import { ROLES, type Role } from '@/api/types'
 import { platformNavItems } from '@/platform/nav'
-import { NAV_GROUP, PAGE } from '@/utils/labels'
+import { NAV_GROUP, NAV_KEYWORDS, PAGE } from '@/utils/labels'
 
 /** A place inside a page (a tab or a card) that search can jump straight to. */
 export interface NavSection {
@@ -37,8 +37,8 @@ export const ALL_ROLES: Role[] = [...ROLES]
 export const PLATFORM_ADMIN: Role[] = ['rag-platform-admin']
 
 /**
- * Grouped by the job people come to do (admin design §5.2), filtered by role. The journey pages (Kunskapsbanker,
- * Assistenter, Återkoppling, …) join as they are built (P1).
+ * Grouped by the job people come to do (admin design §5.2), filtered by role. The journey pages (Knowledge bases,
+ * Assistants, Feedback, …) join as they are built (P1).
  */
 export const navGroups: NavGroup[] = [
   {
@@ -50,7 +50,7 @@ export const navGroups: NavGroup[] = [
         label: PAGE.overview.title,
         icon: 'space_dashboard',
         description: PAGE.overview.description,
-        keywords: ['start', 'behörighet', 'roller', 'förvaltning'],
+        keywords: [...NAV_KEYWORDS.overview],
         roles: ALL_ROLES,
       },
     ],
@@ -64,7 +64,7 @@ export const navGroups: NavGroup[] = [
         label: PAGE.collections.title,
         icon: 'library_books',
         description: PAGE.collections.description,
-        keywords: ['kunskapsbank', 'källa', 'webbplats', 'filer', 'dokument', 'personuppgifter'],
+        keywords: [...NAV_KEYWORDS.collections],
         roles: ALL_ROLES,
       },
       {
@@ -72,7 +72,7 @@ export const navGroups: NavGroup[] = [
         label: PAGE.assistants.title,
         icon: 'smart_toy',
         description: PAGE.assistants.description,
-        keywords: ['assistent', 'utkast', 'testa', 'publicera', 'målgrupp', 'open webui', 'modell'],
+        keywords: [...NAV_KEYWORDS.assistants],
         roles: ALL_ROLES,
       },
     ],
@@ -86,7 +86,7 @@ export const navGroups: NavGroup[] = [
         label: PAGE.organisation.title,
         icon: 'account_tree',
         description: PAGE.organisation.description,
-        keywords: ['förvaltning', 'team', 'kostnadsställe', 'synkning', 'gateway'],
+        keywords: [...NAV_KEYWORDS.organisation],
         roles: ALL_ROLES,
       },
       ...platformNavItems,
@@ -94,7 +94,7 @@ export const navGroups: NavGroup[] = [
   },
 ]
 
-/** Bottom bar on phones (admin design §5.2); the rest is under Meny. */
+/** Bottom bar on phones (admin design §5.2); the rest is under Menu. */
 export const mobileTabs: NavItem[] = [
   { name: 'overview', label: PAGE.overview.title, icon: 'space_dashboard', roles: ALL_ROLES },
   { name: 'collections', label: PAGE.collections.title, icon: 'library_books', roles: ALL_ROLES },

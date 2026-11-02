@@ -9,6 +9,7 @@ import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useUiStore } from '@/stores/ui'
+import { formatDecimal } from '@/utils/format'
 import { RETRIEVAL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
@@ -43,16 +44,16 @@ const saving = ref(false)
 const trying = ref(false)
 const proposalFilled = ref(false)
 
-const sv = (n: number) => n.toLocaleString('sv-SE', { maximumFractionDigits: 4 })
+const num = (n: number) => formatDecimal(n, 4)
 const parse = (text: string) => Number(text.replace(/\s/g, '').replace(',', '.'))
 
 function reset(): void {
   const saved = props.collection.retrievalSettings ?? {}
-  for (const k of KEYS) fields[k] = typeof saved[k] === 'number' ? sv(saved[k] as number) : ''
+  for (const k of KEYS) fields[k] = typeof saved[k] === 'number' ? num(saved[k] as number) : ''
   const r = saved.recency as { halfLifeDays?: number; weight?: number; kinds?: string[] } | null | undefined
   recency.on = !!r
-  recency.halfLifeDays = r?.halfLifeDays != null ? sv(r.halfLifeDays) : '730'
-  recency.weight = r?.weight != null ? sv(r.weight) : '0,15'
+  recency.halfLifeDays = r?.halfLifeDays != null ? num(r.halfLifeDays) : '730'
+  recency.weight = r?.weight != null ? num(r.weight) : num(0.15)
   recency.kinds = r?.kinds?.join(', ') ?? 'pdf'
   errors.value = {}
   proposalFilled.value = false
@@ -62,8 +63,8 @@ watch(
   () => props.proposal,
   (p) => {
     if (!p) return
-    if (p.coverageMaxDistance != null) fields.coverageMaxDistance = sv(p.coverageMaxDistance)
-    if (p.coverageMinKeywordScore != null) fields.coverageMinKeywordScore = sv(p.coverageMinKeywordScore)
+    if (p.coverageMaxDistance != null) fields.coverageMaxDistance = num(p.coverageMaxDistance)
+    if (p.coverageMinKeywordScore != null) fields.coverageMinKeywordScore = num(p.coverageMinKeywordScore)
     proposalFilled.value = true
   },
   { immediate: true },
@@ -75,7 +76,7 @@ function check(key: string, text: string, rule: { min: number; max: number; inte
   if (bad) {
     errors.value[key] = rule.positive
       ? RETRIEVAL.invalidPositive
-      : (rule.integer ? RETRIEVAL.invalidInteger : RETRIEVAL.invalidRange)(sv(rule.min), sv(rule.max))
+      : (rule.integer ? RETRIEVAL.invalidInteger : RETRIEVAL.invalidRange)(num(rule.min), num(rule.max))
     return undefined
   }
   return value

@@ -19,7 +19,7 @@ import UiCard from '@/components/ui/UiCard.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-import { formatDateTime } from '@/utils/format'
+import { formatDateTime, formatNumber } from '@/utils/format'
 import { LEVEL_LABEL, RUN_STATE_LABEL, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
@@ -118,7 +118,7 @@ onMounted(load)
           <span class="font-mono text-small" data-test="addresses">{{ addresses.join(', ') }}</span>
         </DetailRow>
         <DetailRow v-if="source.data.value.type === 'crawl'" :label="SOURCE_PAGE.maxPages">
-          <span class="tabular">{{ Number(source.data.value.settings.maxPages ?? 10000).toLocaleString('sv-SE') }}</span>
+          <span class="tabular">{{ formatNumber(Number(source.data.value.settings.maxPages ?? 10000)) }}</span>
         </DetailRow>
         <DetailRow v-if="demoted.length" :label="SOURCE_EDIT.demoted">
           <span class="font-mono text-small" data-test="demoted">{{ demoted.join(', ') }}</span>

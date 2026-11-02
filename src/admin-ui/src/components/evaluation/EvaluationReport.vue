@@ -5,7 +5,7 @@ import type { EvaluationResult, EvaluationRun } from '@/api/types'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
-import { formatDateTime, formatRatio } from '@/utils/format'
+import { formatDateTime, formatDecimal, formatRatio } from '@/utils/format'
 import { EVALUATION } from '@/utils/labels'
 import { layerMetrics, rankChanges, type LayerMetrics } from './metrics'
 
@@ -47,7 +47,7 @@ const proposed = computed(() => ({
 const hasProposal = computed(() => proposed.value.coverageMaxDistance != null || proposed.value.coverageMinKeywordScore != null)
 
 const decimals = (v: number | null | undefined) =>
-  v == null ? '–' : v.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  v == null ? '–' : formatDecimal(v, 2, 2)
 const share = (part: number | undefined, whole: number | undefined) => (whole ? formatRatio((part ?? 0) / whole) : '–')
 function line(now: LayerMetrics, before: LayerMetrics | null, key: 'recall' | 'mrr'): string {
   return before && before.answerable > 0 ? EVALUATION.change(decimals(before[key]), decimals(now[key])) : decimals(now[key])

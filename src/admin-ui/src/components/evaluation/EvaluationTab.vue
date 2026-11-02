@@ -12,7 +12,7 @@ import UiDialog from '@/components/ui/UiDialog.vue'
 import { useJobPoll } from '@/composables/useJobPoll'
 import { useLoadable } from '@/stores/loadable'
 import { useUiStore } from '@/stores/ui'
-import { formatDateTime, formatNumber, formatUsdCost } from '@/utils/format'
+import { formatDateTime, formatDecimal, formatNumber, formatUsdCost } from '@/utils/format'
 import { COMMON, EVALUATION } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import EvaluationQuestions from './EvaluationQuestions.vue'
@@ -56,7 +56,7 @@ const historyColumns: Column[] = [
   { key: 'recall', label: EVALUATION.recall, align: 'right' },
   { key: 'mrr', label: EVALUATION.mrr, align: 'right' },
 ]
-const decimals = (v: number | null) => (v == null ? '–' : v.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+const decimals = (v: number | null) => (v == null ? '–' : formatDecimal(v, 2, 2))
 
 async function load(): Promise<void> {
   await overview.run(() => api.collections.evaluation(props.collectionId))

@@ -13,7 +13,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { pollDelay } from '@/composables/useJobPoll'
 import { useLoadable } from '@/stores/loadable'
-import { formatDateTime } from '@/utils/format'
+import { formatDateTime, formatNumber } from '@/utils/format'
 import { RUN_OUTCOME_LABEL, RUN_PAGE, RUN_STATE_LABEL } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 
@@ -69,11 +69,11 @@ onBeforeUnmount(() => {
         <RouterLink :to="{ name: 'source', params: { id: run.data.value.sourceId } }" class="text-accent-ink underline">{{ RUN_PAGE.back }}</RouterLink>
       </PageHeader>
       <div class="mb-6 grid grid-cols-5 gap-3 max-md:grid-cols-2" data-test="counts">
-        <MetricTile :label="RUN_PAGE.added" :value="summary.added.toLocaleString('sv-SE')" />
-        <MetricTile :label="RUN_PAGE.updated" :value="summary.updated.toLocaleString('sv-SE')" />
-        <MetricTile :label="RUN_PAGE.unchanged" :value="summary.unchanged.toLocaleString('sv-SE')" />
-        <MetricTile :label="RUN_PAGE.deleted" :value="summary.deleted.toLocaleString('sv-SE')" />
-        <MetricTile :label="RUN_PAGE.failed" :value="summary.failed.toLocaleString('sv-SE')" />
+        <MetricTile :label="RUN_PAGE.added" :value="formatNumber(summary.added)" />
+        <MetricTile :label="RUN_PAGE.updated" :value="formatNumber(summary.updated)" />
+        <MetricTile :label="RUN_PAGE.unchanged" :value="formatNumber(summary.unchanged)" />
+        <MetricTile :label="RUN_PAGE.deleted" :value="formatNumber(summary.deleted)" />
+        <MetricTile :label="RUN_PAGE.failed" :value="formatNumber(summary.failed)" />
       </div>
       <DeletionDecision
         v-if="summary.state === 'awaiting-deletion-confirmation'" :run-id="summary.id" :proposed-count="summary.proposedDeletions" class="mb-6"

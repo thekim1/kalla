@@ -1,16 +1,18 @@
 import { RELATIVE } from './labels'
 
-// Adapted from the gateway (admin design §5.7): dates `30 okt. 2026`, 24 h Europe/Stockholm, money `0,0012 USD`.
+// As the gateway's (admin design §5.7): dates `8 Oct 2026, 14:32`, 24 h Europe/Stockholm, money `24,32 US$`. Adapted only
+// in that the relative-time words come from labels.ts, so a translation touches only that file, and in formatDecimal.
 export const TIME_ZONE = 'Europe/Stockholm'
-const NUMBER_LOCALE = 'sv-SE'
+/** The one locale for numbers in the UI (the gateway's); components format numbers through the helpers below. */
+export const NUMBER_LOCALE = 'sv-SE'
 
 const numberFormatter = new Intl.NumberFormat(NUMBER_LOCALE)
 const decimalFormatter = new Intl.NumberFormat(NUMBER_LOCALE, { maximumFractionDigits: 1 })
 const usdFormatter = new Intl.NumberFormat(NUMBER_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-const dayFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: TIME_ZONE, day: 'numeric', month: 'short', year: 'numeric' })
-const shortDayFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: TIME_ZONE, day: 'numeric', month: 'short' })
-const timeFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false })
-const timeSecondsFormatter = new Intl.DateTimeFormat('sv-SE', {
+const dayFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: TIME_ZONE, day: 'numeric', month: 'short', year: 'numeric' })
+const shortDayFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: TIME_ZONE, day: 'numeric', month: 'short' })
+const timeFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false })
+const timeSecondsFormatter = new Intl.DateTimeFormat('en-GB', {
   timeZone: TIME_ZONE,
   hour: '2-digit',
   minute: '2-digit',
@@ -35,13 +37,13 @@ export function formatUsd(value: number | null | undefined): string {
   return nbsp(usdFormatter.format(value))
 }
 
-const usdCostFormatter = new Intl.NumberFormat(NUMBER_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const smallUsdCostFormatter = new Intl.NumberFormat(NUMBER_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+const usdCostFormatter = new Intl.NumberFormat(NUMBER_LOCALE, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const smallUsdCostFormatter = new Intl.NumberFormat(NUMBER_LOCALE, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 })
 
-/** A cost in USD with its currency, e.g. `24,32 USD`; amounts under one dollar keep up to four decimals. */
+/** A cost in USD with its currency, e.g. `24,32 US$`; amounts under one dollar keep up to four decimals. */
 export function formatUsdCost(value: number | null | undefined): string {
   if (isMissing(value)) return DASH
-  return `${nbsp((Math.abs(value) > 0 && Math.abs(value) < 1 ? smallUsdCostFormatter : usdCostFormatter).format(value))}${NBSP}USD`
+  return nbsp((Math.abs(value) > 0 && Math.abs(value) < 1 ? smallUsdCostFormatter : usdCostFormatter).format(value))
 }
 
 /** Tokens per second, e.g. `38,8 tok/s`. */
@@ -53,6 +55,11 @@ export function formatTokensPerSecond(value: number | null | undefined): string 
 export function formatNumber(value: number | null | undefined): string {
   if (isMissing(value)) return DASH
   return nbsp(numberFormatter.format(value))
+}
+
+/** A number with `minDigits` to `maxDigits` decimals, e.g. `0,82` (not in the gateway; keeps the locale in one place). */
+export function formatDecimal(value: number, maxDigits: number, minDigits = 0): string {
+  return nbsp(value.toLocaleString(NUMBER_LOCALE, { minimumFractionDigits: minDigits, maximumFractionDigits: maxDigits }))
 }
 
 /** Compact count, e.g. `1.2M`, for tight spaces. */
@@ -88,16 +95,16 @@ function toDate(value: string | Date | null | undefined): Date | null {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-/** `30 okt. 2026`. */
+/** `8 Oct 2026`. */
 export function formatDate(value: string | Date | null | undefined): string {
   const date = toDate(value)
-  return date ? nbsp(dayFormatter.format(date)) : DASH
+  return date ? dayFormatter.format(date).replace('Sept', 'Sep') : DASH
 }
 
-/** `30 okt.`. */
+/** `8 Oct`. */
 export function formatShortDate(value: string | Date | null | undefined): string {
   const date = toDate(value)
-  return date ? nbsp(shortDayFormatter.format(date)) : DASH
+  return date ? shortDayFormatter.format(date).replace('Sept', 'Sep') : DASH
 }
 
 /** `14:32`, 24 h Europe/Stockholm. */
@@ -106,13 +113,13 @@ export function formatTime(value: string | Date | null | undefined, seconds = fa
   return date ? (seconds ? timeSecondsFormatter : timeFormatter).format(date) : DASH
 }
 
-/** `30 okt. 2026 14:32`. */
+/** `8 Oct 2026, 14:32`. */
 export function formatDateTime(value: string | Date | null | undefined, seconds = false): string {
   const date = toDate(value)
-  return date ? `${formatDate(date)} ${formatTime(date, seconds)}` : DASH
+  return date ? `${formatDate(date)}, ${formatTime(date, seconds)}` : DASH
 }
 
-/** Relative time for anything under 7 days ("för 2 min sedan"), absolute date otherwise. */
+/** Relative time for anything under 7 days ("2 min ago"), absolute date otherwise. */
 export function formatRelative(value: string | Date | null | undefined, now: Date = new Date()): string {
   const date = toDate(value)
   if (!date) return DASH

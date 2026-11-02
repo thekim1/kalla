@@ -196,7 +196,7 @@ onMounted(load)
         >
           <DataTable :columns="documentColumns" :rows="documents.data.value" :row-key="(d) => d.id" :caption="COLLECTION.documents">
             <template #cell-title="{ row }">
-              <span class="font-medium">{{ row.title ?? row.displayName ?? row.url }}</span>
+              <span class="font-medium" lang="sv">{{ row.title ?? row.displayName ?? row.url }}</span>
               <span v-if="row.url" class="block text-small text-fg-3">{{ row.url }}</span>
             </template>
             <template #cell-fetched="{ row }"><span class="tabular text-fg-2">{{ formatDateTime(row.fetchedAt) }}</span></template>

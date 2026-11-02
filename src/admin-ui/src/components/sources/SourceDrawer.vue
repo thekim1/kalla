@@ -12,6 +12,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useJobPoll } from '@/composables/useJobPoll'
+import { formatNumber } from '@/utils/format'
 import { COMMON, LEVEL_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
@@ -220,7 +221,7 @@ async function save(): Promise<void> {
             :message="jobMessage(preflight.job.value.lastError)" class="mt-2"
           />
           <div v-if="result" class="mt-3 grid gap-2" data-test="checks">
-            <p v-if="result.estimatedPages != null" class="text-small">{{ SOURCE.estimatedPages(result.estimatedPages.toLocaleString('sv-SE')) }}</p>
+            <p v-if="result.estimatedPages != null" class="text-small">{{ SOURCE.estimatedPages(formatNumber(result.estimatedPages)) }}</p>
             <div v-for="(c, i) in result.checks" :key="i" class="flex items-start gap-2">
               <UiBadge :tone="c.state === 'pass' ? 'ok' : c.state === 'warn' ? 'warn' : 'danger'" :label="SOURCE.checkStates[c.state]" />
               <span class="text-small">{{ jobMessage(c.code) }}<span v-if="c.target" class="block text-fg-3">{{ c.target }}</span></span>

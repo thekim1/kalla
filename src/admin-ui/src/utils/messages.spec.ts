@@ -6,22 +6,22 @@ import { ERROR_MESSAGES, JOB_MESSAGES, formatMessage, jobMessage } from './messa
 const contract = JSON.parse(raw) as { codes: { code: string; message: string }[] }
 
 describe('error messages', () => {
-  it('has a Swedish text for every error code of the API, and no others', () => {
+  it('has a UI text for every error code of the API, and no others', () => {
     expect(Object.keys(ERROR_MESSAGES).sort()).toEqual(contract.codes.map((c) => c.code).sort())
   })
 
-  it('uses the same placeholders as the English message', () => {
+  it('uses the same placeholders as the contract message', () => {
     const names = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort()
     for (const { code, message } of contract.codes) expect(names(ERROR_MESSAGES[code]!), code).toEqual(names(message))
   })
 
   it('fills placeholders and drops missing ones', () => {
-    expect(formatMessage('Regel ({constraint}).', { constraint: 'CK_X' })).toBe('Regel (CK_X).')
-    expect(formatMessage('Regel ({constraint}).')).toBe('Regel ().')
+    expect(formatMessage('Rule ({constraint}).', { constraint: 'CK_X' })).toBe('Rule (CK_X).')
+    expect(formatMessage('Rule ({constraint}).')).toBe('Rule ().')
   })
 })
 
-// The worker's codes as built (#115, #117, #128, #130; issues #116, #129): every one has a Swedish text.
+// The worker's codes as built (#115, #117, #128, #130; issues #116, #129): every one has a UI text.
 const WORKER_CODES = [
   'site_profile.unknown', 'site_profile.host_mismatch', 'site_profile.version_unknown', 'site_profile.version_conflict',
   'collection.unknown', 'eval_question.unknown', 'eval_question.conflict', 'eval_question.retired',
@@ -46,7 +46,7 @@ const WORKER_CODES = [
 ]
 
 describe('worker messages', () => {
-  it('has a Swedish text for every worker code', () => {
+  it('has a UI text for every worker code', () => {
     expect(Object.keys(JOB_MESSAGES).sort()).toEqual([...WORKER_CODES].sort())
   })
 

@@ -3,8 +3,8 @@ import { ERROR_MESSAGES, STATUS_MESSAGES, formatMessage } from './messages'
 
 /**
  * The user's message for a failed call (adapted from the gateway, admin design §4.2): the problem's `code` through
- * messages.ts, else a text for the status. The API speaks English, so its `detail` is never the message;
- * `englishDetail` offers it as a last resort for the UI to show inside `lang="en"`.
+ * messages.ts, else a text for the status. The API's `detail` is never the message (it is not written for these users);
+ * `englishDetail` offers it as a last resort.
  */
 export function problemMessage(error: unknown): string {
   if (!isApiError(error)) return STATUS_MESSAGES.unknown

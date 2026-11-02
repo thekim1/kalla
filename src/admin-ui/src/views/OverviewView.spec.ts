@@ -13,7 +13,7 @@ function signIn(overrides: Parameters<typeof bffUser>[0]) {
   auth.status = 'authenticated'
 }
 
-describe('Översikt: your access (P0 checklist #9)', () => {
+describe('Overview: your access (P0 checklist #9)', () => {
   it('shows the roles in Swedish and where each department came from', () => {
     signIn({
       roles: ['rag-viewer', 'offline_access'],
@@ -22,21 +22,21 @@ describe('Översikt: your access (P0 checklist #9)', () => {
     })
     vi.spyOn(api, 'overview').mockResolvedValue({ hasCollections: true, setup: [] })
     const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
-    expect(wrapper.get('[data-test=roles]').text()).toBe('Läsbehörighet')
+    expect(wrapper.get('[data-test=roles]').text()).toBe('Read access')
     const departments = wrapper.get('[data-test=departments]').text()
     expect(departments).toContain('1000')
-    expect(departments).toContain('Från ditt konto')
+    expect(departments).toContain('From your account')
     expect(departments).toContain('3000')
-    expect(departments).toContain('Via medlemsgrupp')
+    expect(departments).toContain('Through a member group')
   })
 
   it('tells a user without a rag-* role to ask for access', () => {
     signIn({ roles: [], departmentCodes: [], departmentSources: [] })
     const wrapper = mount(OverviewView)
-    expect(wrapper.text()).toContain('Du har ingen roll i Kunskapsplattformen än.')
+    expect(wrapper.text()).toContain('You have no role in the Knowledge platform yet.')
   })
 
-  it('shows Kom igång for each unfinished collection, and the empty state with Skapa kunskapsbank', async () => {
+  it('shows Get started for each unfinished collection, and the empty state with Create knowledge base', async () => {
     signIn({ roles: ['rag-editor'], departmentCodes: ['1000'], departmentSources: [{ code: '1000', source: 'claim' }] })
     const overview = vi.spyOn(api, 'overview').mockResolvedValue({
       hasCollections: true,
@@ -47,16 +47,16 @@ describe('Översikt: your access (P0 checklist #9)', () => {
     })
     const wrapper = mount(OverviewView, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
     await flushPromises()
-    expect(wrapper.get('[data-test=setup]').text()).toContain('Kom igång: Bygglov')
+    expect(wrapper.get('[data-test=setup]').text()).toContain('Get started: Bygglov')
     expect(wrapper.get('[data-test=step-source]').attributes('data-state')).toBe('done')
     expect(wrapper.get('[data-test=step-sync]').attributes('data-state')).toBe('active')
-    expect(wrapper.get('[data-test=step-sync]').text()).toContain('Hämtning pågår')
+    expect(wrapper.get('[data-test=step-sync]').text()).toContain('Fetching')
     expect(wrapper.get('[data-test=step-available]').attributes('data-state')).toBe('todo')
 
     overview.mockResolvedValue({ hasCollections: false, setup: [] })
     const empty = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
     await flushPromises()
-    expect(empty.get('[data-test=empty]').text()).toContain('Du har inga kunskapsbanker än.')
+    expect(empty.get('[data-test=empty]').text()).toContain('You have no knowledge bases yet.')
     expect(empty.find('[data-test=create]').exists()).toBe(true)
   })
 })

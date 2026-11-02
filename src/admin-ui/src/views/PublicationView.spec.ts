@@ -42,7 +42,7 @@ const confirmButton = (label: string) => [...document.body.querySelectorAll('but
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('Publicering (admin design §6.6, §6.7)', () => {
+describe('Publication (admin design §6.6, §6.7)', () => {
   it('shows the plan and confirms it with the pipeline version; then follows the re-processing', async () => {
     signIn(['rag-department-admin'])
     const get = vi.spyOn(api.publications, 'get').mockResolvedValue(publication)
@@ -58,19 +58,19 @@ describe('Publicering (admin design §6.6, §6.7)', () => {
     await flushPromises()
 
     const plan = wrapper.get('[data-test=plan]').text().replace(/\u00a0/g, ' ')
-    expect(plan).toContain('1 240 dokument i 1 källa bearbetas om.')
-    expect(plan).toContain('cirka 1,4 h')
+    expect(plan).toContain('1 240 documents in 1 source are processed again.')
+    expect(plan).toContain('about 1,4 h')
     expect(wrapper.get('[data-test=affected]').text()).toContain('umea.se/bygga')
     expect(runs).not.toHaveBeenCalled()
 
     await wrapper.get('[data-test=confirm]').trigger('click')
     await flushPromises()
-    confirmButton('Bekräfta').click()
+    confirmButton('Confirm').click()
     await flushPromises()
     expect(confirm).toHaveBeenCalledWith('pub1', '17')
-    expect(wrapper.get('[data-test=state]').text()).toBe('Publicerad')
-    expect(wrapper.get('[data-test=affected]').text()).toContain('Pågår')
-    expect(wrapper.get('[data-test=report]').text()).toContain('Källorna bearbetas om sedan')
+    expect(wrapper.get('[data-test=state]').text()).toBe('Published')
+    expect(wrapper.get('[data-test=affected]').text()).toContain('Running')
+    expect(wrapper.get('[data-test=report]').text()).toContain('The sources have been processing again since')
     wrapper.unmount()
   })
 
@@ -89,14 +89,14 @@ describe('Publicering (admin design §6.6, §6.7)', () => {
     await flushPromises()
 
     const report = wrapper.get('[data-test=report]').text()
-    expect(report).toContain('Träffsäkerhet 0,78 · 86 frågor')
-    expect(report).toContain('Före: 0,72 · 4 bättre, 1 sämre')
+    expect(report).toContain('Accuracy 0,78 · 86 questions')
+    expect(report).toContain('Before: 0,72 · 4 better, 1 worse')
     expect(wrapper.find('[data-test=confirm]').exists()).toBe(false)
 
     await wrapper.get('[data-test=rollback]').trigger('click')
     await flushPromises()
-    expect(document.body.textContent).toContain('Version 2 publiceras igen och källorna bearbetas om.')
-    confirmButton('Återställ').click()
+    expect(document.body.textContent).toContain('Version 2 is published again and the sources are processed again.')
+    confirmButton('Restore').click()
     await flushPromises()
     expect(rollback).toHaveBeenCalledWith('p1', { versionId: 'v2', version: '18' })
     wrapper.unmount()
@@ -109,7 +109,7 @@ describe('Publicering (admin design §6.6, §6.7)', () => {
     vi.spyOn(api.sources, 'get').mockResolvedValue(source)
     const wrapper = mount(PublicationView, { props: { id: 'pub1' } })
     await flushPromises()
-    expect(wrapper.text()).toContain('En nyare plan finns för samma bearbetning.')
+    expect(wrapper.text()).toContain('There is a newer plan for the same processing.')
     expect(wrapper.find('[data-test=confirm]').exists()).toBe(false)
     wrapper.unmount()
   })

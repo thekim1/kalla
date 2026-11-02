@@ -18,7 +18,7 @@ function pick(wrapper: ReturnType<typeof mount>, test: string, files: File[]): P
   return wrapper.get(`[data-test=${test}]`).trigger('change')
 }
 
-describe('Filer (admin design §4.5, connectors §9)', () => {
+describe('Files (admin design §4.5, connectors §9)', () => {
   it('uploads chosen files to one batch, retries a failed one, and commits them as one sync', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.sources, 'files').mockResolvedValue({ items: [slot('u1', 'taxa.pdf', 'indexed')], next: null })
@@ -31,14 +31,14 @@ describe('Filer (admin design §4.5, connectors §9)', () => {
     const wrapper = mount(SourceFiles, { props: { source, canEdit: true } })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Högst 20 MB per fil')
+    expect(wrapper.text()).toContain('At most 20 MB per file')
     expect(wrapper.get('[data-test=file-list]').text()).toContain('taxa.pdf')
     await pick(wrapper, 'file-input', [new File(['a'], 'a.pdf'), new File(['b'], 'b.pdf')])
     await wrapper.get('[data-test=upload]').trigger('click')
     await flushPromises()
     expect(put).toHaveBeenCalledTimes(2)
     expect(commit).not.toHaveBeenCalled()
-    expect(wrapper.get('[data-test=pending]').text()).toContain('Misslyckades')
+    expect(wrapper.get('[data-test=pending]').text()).toContain('Failed')
 
     await wrapper.get('[data-test=upload]').trigger('click') // retries the failed file only, in the same batch
     await flushPromises()
@@ -58,7 +58,7 @@ describe('Filer (admin design §4.5, connectors §9)', () => {
     const wrapper = mount(SourceFiles, { props: { source, canEdit: true }, attachTo: document.body })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Nekad')
+    expect(wrapper.text()).toContain('Refused')
     await wrapper.get('[data-test=replace-u1]').trigger('click')
     const replacement = new File(['new'], 'taxa-2027.pdf')
     await pick(wrapper, 'replace-input', [replacement])
@@ -69,8 +69,8 @@ describe('Filer (admin design §4.5, connectors §9)', () => {
     await wrapper.findAll('input[type=checkbox]')[1]!.setValue(true)
     await wrapper.get('[data-test=delete-files]').trigger('click')
     await flushPromises()
-    expect(document.body.textContent).toContain('Inom 14 dagar kan plattformsteamet ta tillbaka dem.')
-    ;[...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Ta bort 1 fil').at(-1)!.click()
+    expect(document.body.textContent).toContain('Within 14 days the platform team can bring them back.')
+    ;[...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Remove 1 file').at(-1)!.click()
     await flushPromises()
     expect(commit).toHaveBeenLastCalledWith('b3', { files: [], deletes: ['u2'] })
     wrapper.unmount()
