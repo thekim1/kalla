@@ -98,7 +98,11 @@ public sealed class KeywordStopListTests
 
         index.LexemeFailure = null;
         index.Lexemes = [new(Profile, CollectionA, "umeå", 9_000)];
-        (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]); // none yet: the next search reads again
+        // #333: none yet, but the failed read is not repeated by every search: only after FailedReadRetry.
+        (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBeEmpty();
+        index.LexemeReads.ShouldBe(1);
+        time.Advance(ScopeSizeCache.FailedReadRetry);
+        (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]);
 
         index.LexemeFailure = new TimeoutException("ts_stat");
         time.Advance(TimeSpan.FromMinutes(10));
@@ -106,6 +110,26 @@ public sealed class KeywordStopListTests
         await WaitForAsync(() => Task.FromResult(index.LexemeReads == 3));
         (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]); // kept, and not read again until the interval
         index.LexemeReads.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task Warming_reads_counts_and_statistics_so_the_first_search_does_not()
+    {
+        var index = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], Lexemes = [new(Profile, CollectionA, "umeå", 9_000)] };
+        using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
+
+        cache.HasKeywordStatistics.ShouldBeFalse();
+        (await cache.WarmAsync(Ct)).ShouldBeTrue();
+        cache.HasKeywordStatistics.ShouldBeTrue();
+        index.LexemeReads.ShouldBe(1);
+        (await cache.StopLexemesAsync(OneCollection(), Ct)).ShouldBe(["umeå"]);
+        index.LexemeReads.ShouldBe(1);
+
+        var failing = new FakeIndex { Counts = [new(Profile, CollectionA, 10_000)], LexemeFailure = new TimeoutException("ts_stat") };
+        using var cold = new ScopeSizeCache(failing, new FakeTimeProvider());
+        (await cold.WarmAsync(Ct)).ShouldBeFalse(); // reported, not thrown
+        (await cold.StopLexemesAsync(OneCollection(), Ct)).ShouldBeEmpty();
+        failing.LexemeReads.ShouldBe(1); // the first search does not wait for the failing read again
     }
 
     [Fact]
