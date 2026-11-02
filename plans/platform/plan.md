@@ -345,8 +345,8 @@ source is onboarded.
 
 Detail: `../ingestion-worker/design-processing.md` §13–§14.
 
-Every collection has an **evaluation set**: question/answer pairs generated automatically from sampled chunks by an
-on-prem model (judge-filtered), plus human questions and rewritten feedback questions over time. Generation runs at the
+Every collection has an **evaluation set**: question/answer pairs generated automatically from sampled chunks by a
+model at the collection's ceiling (judge-filtered), plus human questions and rewritten feedback questions over time. Generation runs at the
 collection's ceiling, `Eu` under M2 (Decisions "Evaluation models at the collection's ceiling"); the pilot's
 nightly runs use the deployment's own (EU) embedding profile (Decisions "P1b briefs", O1 and O4). The harness is
 **advisory**: it runs on the full collection after each publish and nightly, reports recall@10 and MRR with counts
