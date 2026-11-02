@@ -20,6 +20,11 @@ import type {
   Job,
   OrgSyncStatus,
   Page,
+  EvaluationOverview,
+  Pipeline,
+  Publication,
+  PublicationStarted,
+  TemplateDetail,
   PipelineSummary,
   PreviewOutput,
   PiiReport,
@@ -51,6 +56,7 @@ export const api = {
     create: (body: CollectionCreate) => http.post<Collection>('/api/collections', body),
     publish: (id: string, version: string) => http.post<Collection>(`/api/collections/${id}/publish`, { version }),
     sources: (id: string) => http.get<SourceSummary[]>(`/api/collections/${id}/sources`),
+    evaluation: (id: string) => http.get<EvaluationOverview>(`/api/collections/${id}/evaluation`),
     addSource: (id: string, body: SourceCreate) => http.post<Source>(`/api/collections/${id}/sources`, body),
   },
   sources: {
@@ -92,9 +98,20 @@ export const api = {
     models: () => http.get<GatewayModel[]>('/api/gateway/models'),
   },
   pipelines: {
+    get: (id: string) => http.get<Pipeline>(`/api/pipelines/${id}`),
+    plan: (id: string, body: { parameters: Record<string, unknown>; templateVersion?: number; collectionId?: string; version: string }) =>
+      http.post<PublicationStarted>(`/api/pipelines/${id}/publications`, body),
+    rollback: (id: string, body: { versionId: string; version: string }) => http.post<Pipeline>(`/api/pipelines/${id}/rollback`, body),
     list: (query: { collectionId: string; sourceType: string }) => http.get<PipelineSummary[]>('/api/pipelines', query),
     preview: (id: string, body: { collectionId: string; sourceId?: string; documentIds?: string[]; urls?: string[] }) =>
       http.post<{ jobId: string }>(`/api/pipelines/${id}/preview`, body),
+  },
+  publications: {
+    get: (id: string) => http.get<Publication>(`/api/publications/${id}`),
+    confirm: (id: string, version: string) => http.post<Publication>(`/api/publications/${id}/confirm`, { version }),
+  },
+  templates: {
+    get: (id: string, version: number) => http.get<TemplateDetail>(`/api/templates/${id}/versions/${version}`),
   },
   previews: {
     /** `document`: the document's id or its index in the result; `stage`: a stage, or `before`/`after` of the site profile. */

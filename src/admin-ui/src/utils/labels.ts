@@ -134,6 +134,7 @@ export const PAGE = {
   assistants: { title: 'Assistenter', description: 'Assistenterna som svarar i Open WebUI och andra klienter' },
   source: { title: 'Källa' },
   run: { title: 'Körning' },
+  publication: { title: 'Publicering' },
   forbidden: { title: 'Ingen åtkomst' },
   notFound: { title: 'Sidan finns inte' },
 } as const
@@ -330,6 +331,73 @@ export const PREVIEW = {
   noOutput: 'Steget har ingen utdata att visa.',
   expired: 'Förhandsgranskningen finns inte längre (den sparas i 24 timmar). Kör den igen.',
   expires: (time: string) => `Sparas till ${time}.`,
+} as const
+
+const ratio = (v: number | null) => (v == null ? '–' : v.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+
+/** Publicering (admin design §6.6, §6.7): plan, re-processing, report, Behåll / Återställ. */
+export const PUBLICATION = {
+  title: 'Publicering',
+  lead: (pipeline: string, draft: number) => `Bearbetningen ${pipeline}, version ${draft}`,
+  published: 'Publicerad',
+  rolledBack: 'Återställd',
+  superseded: 'Ersatt av en nyare plan',
+  supersededHint: 'En nyare plan finns för samma bearbetning. Öppna den i stället.',
+  plan: 'Plan',
+  planning: 'Räknar ut vad som behöver bearbetas om',
+  planSummary: (documents: string, sources: number) => `${documents} dokument i ${sources} ${sources === 1 ? 'källa' : 'källor'} bearbetas om.`,
+  planNote: 'Sökningen använder de gamla textavsnitten tills varje dokument är klart. Steg som inte ändrats återanvänds utan kostnad.',
+  estimatedTime: 'Uppskattad tid',
+  minutes: (n: number) => (n < 60 ? `cirka ${n} min` : `cirka ${Math.round(n / 6) / 10} h`.replace('.', ',')),
+  estimatedCost: 'Uppskattad kostnad',
+  parserPages: 'Sidor som tolkas',
+  affected: 'Påverkade källor',
+  documents: (n: string) => `${n} dokument`,
+  waiting: 'Väntar',
+  openRun: 'Visa körning',
+  confirm: 'Bekräfta',
+  confirmTitle: 'Publicera ändringen?',
+  confirmConsequence: 'Källorna bearbetas om med de nya inställningarna. Efteråt körs testfrågorna och resultatet visas här.',
+  publishedDone: 'Ändringen är publicerad. Källorna bearbetas om.',
+  report: 'Resultat',
+  reprocessing: (since: string) => `Källorna bearbetas om sedan ${since}. Resultatet visas när de är klara.`,
+  evaluating: 'Testfrågorna körs.',
+  accuracy: (recall: number | null, questions: number) => `Träffsäkerhet ${ratio(recall)} · ${questions} frågor`,
+  compared: (before: number | null, wins: number, losses: number) => `Före: ${ratio(before)} · ${wins} bättre, ${losses} sämre`,
+  keep: 'Behåll',
+  keptHint: 'Ändringen behålls.',
+  rollback: 'Återställ',
+  rollbackTitle: (n: number) => `Återställ version ${n}?`,
+  rollbackConsequence: (n: number) =>
+    `Version ${n} publiceras igen och källorna bearbetas om. Inom 14 dagar tas de tidigare textavsnitten tillbaka utan ny tolkning.`,
+  rolledBackDone: (n: number) => `Version ${n} är publicerad igen.`,
+  rolledBackHint: 'Ändringen är återställd. En nyare version gäller nu.',
+} as const
+
+/** The source page's Bearbetning card and the parameter drawer (admin design §6.3, §6.6). */
+export const PIPELINE = {
+  title: 'Bearbetning',
+  name: 'Bearbetning',
+  version: 'Publicerad version',
+  draft: (n: number) => `Utkast: version ${n}`,
+  edit: 'Ändra bearbetning',
+  editLead: 'Ändringen gäller alla källor som använder bearbetningen. Du ser planen innan något bearbetas om.',
+  publish: 'Publicera…',
+  platformShared: 'Bearbetningen delas av hela plattformen. När du publicerar skapas en egen kopia för kunskapsbanken.',
+  params: {
+    chunkTokens: 'Textavsnittens längd (token)',
+    overlapPercent: 'Överlapp mellan textavsnitt (procent)',
+    ocr: 'Textigenkänning i skannade dokument',
+    tables: 'Tabeller',
+    pathRules: 'Regler per sökväg',
+  } as Record<string, string>,
+  options: {
+    auto: 'Automatiskt', force: 'Alltid', off: 'Av', fast: 'Snabbt', accurate: 'Noggrant',
+  } as Record<string, string>,
+  range: (min: number, max: number) => `Från ${min} till ${max}.`,
+  json: 'JSON. Lämna som det är om du är osäker.',
+  invalidNumber: 'Skriv ett heltal.',
+  invalidJson: 'Det är inte giltig JSON.',
 } as const
 
 /** The generic forms for platform objects (admin design §5.8). Field labels come from the API's schemas. */

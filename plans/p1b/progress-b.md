@@ -71,7 +71,7 @@ Refs: [admin §5.3–§5.5, §6.4–§6.7](../admin/design.md)
 - [x] Kunskapsbanker (list, Översikt, Källor, Dokument with personuppgifter) (#279)
 - [ ] Källa (forms with template parameters, preflight, preview Före / Efter, impact, runs, crawl report, files, quarantine, deletions, held, Nedprioritera)
   — in part: add-source drawer with crawl/URL-list parameters and Kontrollera (#285), source page with Hämta nu, runs and personal-data report, run page with crawl report (#288), preview step with Före / Efter and stage outputs in the drawer (b/11-source-preview); still missing: edit with impact, files/upload, quarantine, deletions, held, Nedprioritera
-- [ ] Publicering (plan, progress, report, Behåll / Återställ) — API in #298 (plan, confirm, rollback); page not started
+- [x] Publicering (plan, progress, report, Behåll / Återställ) — API in #298 (plan, confirm, rollback); page and the source page's Bearbetning card (parameters → Publicera…) in b/11-publication
 - [ ] **Done:** admin §5.4 steps 1–8 work locally on FakeGateway
 
 ### 12. Journey pages, part 2
