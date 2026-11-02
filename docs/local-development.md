@@ -90,6 +90,8 @@ An earlier manual key in the same place is used as it is.
 
 Service ports (launch profiles): api `https://localhost:7401`, worker `7403`, admin API `7402`, fake gateway `7404`.
 The admin UI will be on `https://localhost:5174`, beside the gateway's 5173, so both stacks can run side by side.
+Container ports are fixed too: Open WebUI `http://localhost:7410`, Keycloak `https://localhost:7411`, Postgres `7412`,
+parser `7413`, ClamAV `7414`, Redis `7415` (when `Redis:Enabled`).
 
 ## Keycloak test realm
 
