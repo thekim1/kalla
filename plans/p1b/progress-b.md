@@ -88,7 +88,7 @@ Refs: [admin §5.3, §5.8, §7](../admin/design.md)
 
 ### 13. Feedback page
 Refs: [admin §8.1](../admin/design.md), [chat §14.4](../chat-api/design.md)
-- [ ] Ratings, reasons' categories, assistant, time, cited documents, outcome, import health; department-scoped
+- [x] Ratings, reasons' categories, assistant, time, cited documents, outcome, import health; department-scoped (b/13-feedback)
 
 ### 14. Accessibility and pilot journey E2E
 Refs: [admin §10.1, §11.4](../admin/design.md)

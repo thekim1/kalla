@@ -133,6 +133,7 @@ export const SESSION = {
 export const NAV_GROUP = {
   overview: 'Overview',
   content: 'Content',
+  followUp: 'Follow-up',
   platform: 'Platform',
 } as const
 
@@ -143,6 +144,7 @@ export const NAV_KEYWORDS = {
   assistants: ['assistant', 'draft', 'test', 'publish', 'audience', 'open webui', 'model'],
   organisation: ['department', 'team', 'cost centre', 'sync', 'gateway'],
   audit: ['log', 'changes', 'events', 'who', 'history', 'traceability'],
+  feedback: ['feedback', 'thumbs', 'rating', 'reason', 'open webui', 'import'],
 } as const
 
 export const PAGE = {
@@ -155,6 +157,7 @@ export const PAGE = {
   run: { title: 'Run' },
   publication: { title: 'Publication' },
   audit: { title: 'Audit log', description: 'Who changed what, and when' },
+  feedback: { title: 'Feedback', description: 'Thumbs up and down on the answers of your assistants' },
   forbidden: { title: 'No access' },
   notFound: { title: 'Page not found' },
 } as const
@@ -917,4 +920,71 @@ export const AUDIT = {
   requestId: 'Request id',
   snapshot: 'Before and after',
   noSnapshot: 'The event has no stored before and after.',
+} as const
+
+/** Feedback (admin design §8.1, chat design §14.4): ratings without content. */
+export const FEEDBACK = {
+  lead: 'Thumbs up and down from the people using your assistants.',
+  noContent: 'Questions, answers and comments are not stored, so only the rating, the reason and the cited documents show here.',
+  filters: 'Filter feedback',
+  from: 'From',
+  to: 'To',
+  assistant: 'Assistant',
+  allAssistants: 'All assistants',
+  rating: 'Rating',
+  allRatings: 'All ratings',
+  up: 'Thumbs up',
+  down: 'Thumbs down',
+  outcome: 'Answer',
+  allOutcomes: 'All answers',
+  outcomes: {
+    answered: 'Answered',
+    'not-found': 'Found nothing',
+    unavailable: 'Unavailable',
+    refused: 'Refused',
+    error: 'Error',
+    cancelled: 'Cancelled',
+  } as Record<string, string>,
+  coverage: { ok: 'Covered', low: 'Low coverage', unknown: 'Coverage unknown', skipped: 'No search' } as Record<string, string>,
+  state: 'State',
+  allStates: 'All states',
+  states: { open: 'Open', reviewed: 'Handled', dismissed: 'Dismissed' } as Record<string, string>,
+  /** Open WebUI's fixed reason keys and the API's own reasons (chat design §3.5, §14.1); anything else is `other`. */
+  reasons: {
+    accurate_information: 'Accurate information',
+    followed_instructions_perfectly: 'Followed instructions',
+    showcased_creativity: 'Creative',
+    positive_attitude: 'Positive attitude',
+    attention_to_detail: 'Attention to detail',
+    thorough_explanation: 'Thorough explanation',
+    dont_like_the_style: "Didn't like the style",
+    too_verbose: 'Too long',
+    not_helpful: 'Not helpful',
+    not_factually_correct: 'Not factually correct',
+    didnt_fully_follow_instructions: "Didn't follow instructions",
+    refused_when_it_shouldnt_have: "Refused when it shouldn't have",
+    being_lazy: 'Lazy answer',
+    incorrect: 'Incorrect',
+    incomplete: 'Incomplete',
+    wrong_sources: 'Wrong sources',
+    not_relevant: 'Not relevant',
+    other: 'Other',
+  } as Record<string, string>,
+  time: 'Time',
+  cited: 'Cited documents',
+  untitled: 'Untitled document',
+  version: (n: number) => `version ${n}`,
+  caption: 'Feedback, newest first',
+  empty: 'No feedback yet. It arrives when users give a thumbs up or down in Open WebUI.',
+  mark: 'Mark as handled',
+  reopen: 'Open again',
+  more: 'Show more',
+  answers: 'Answers',
+  notFoundShare: (share: string) => `${share} found nothing`,
+  ratings: 'Ratings',
+  thumbs: (up: number, down: number) => `${up} up, ${down} down`,
+  imports: 'Import from Open WebUI',
+  noImports: 'No import has run yet.',
+  importOutcome: (outcome: string | null) => (outcome === null ? 'Not run' : outcome === 'ok' ? 'OK' : 'Failed'),
+  importLine: (when: string, unmapped: number) => `Last run ${when} · ${unmapped} could not be matched`,
 } as const

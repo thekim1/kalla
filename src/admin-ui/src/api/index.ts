@@ -10,6 +10,8 @@ import type {
   ClientSummary,
   GatewayModel,
   AuditDetail,
+  FeedbackItem,
+  FeedbackSummary,
   AuditSummary,
   Collection,
   CollectionSetup,
@@ -179,6 +181,14 @@ export const api = {
     results: (runId: string) => http.get<EvaluationResult[]>(`/api/evaluation-runs/${runId}/results`),
   },
   overview: () => http.get<Overview>('/api/overview'),
+  feedback: {
+    list: (query: {
+      from?: string; to?: string; assistantId?: string; rating?: string; outcome?: string; state?: string; after?: string; limit?: number
+    }) => http.get<KeysetPage<FeedbackItem>>('/api/feedback', query),
+    summary: (query: { from?: string; to?: string; assistantId?: string } = {}) => http.get<FeedbackSummary>('/api/feedback/summary', query),
+    setReviewState: (id: string, state: 'open' | 'reviewed' | 'dismissed') =>
+      http.put<{ id: string; reviewState: string }>(`/api/feedback/${id}/review-state`, { state }),
+  },
   audit: {
     list: (query: {
       from?: string; to?: string; actor?: string; action?: string; entityType?: string; entityId?: string; service?: string; after?: number; limit?: number
