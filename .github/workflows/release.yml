@@ -25,6 +25,11 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 env:
+  # Both self-hosted runners share one machine and user: MSBuild's reused worker nodes and build servers would be shared
+  # between concurrent jobs, and the runner's end-of-job cleanup kills them under the other job (MSB4166).
+  MSBUILDDISABLENODEREUSE: "1"
+  DOTNET_CLI_USE_MSBUILD_SERVER: "0"
+  UseSharedCompilation: "false"
   # Syft for the non-.NET images' SBOMs (to-verify #91): v1.55.0 (2026-10-19), sha256 of syft_1.55.0_linux_amd64.tar.gz
   # from the release's syft_1.55.0_checksums.txt.
   SYFT_VERSION: 1.55.0

@@ -30,6 +30,12 @@ permissions:
 concurrency:
   group: perf-${{ inputs.mode || 'dry-run' }}
   cancel-in-progress: false
+env:
+  # Both self-hosted runners share one machine and user: MSBuild's reused worker nodes and build servers would be shared
+  # between concurrent jobs, and the runner's end-of-job cleanup kills them under the other job (MSB4166).
+  MSBUILDDISABLENODEREUSE: "1"
+  DOTNET_CLI_USE_MSBUILD_SERVER: "0"
+  UseSharedCompilation: "false"
 jobs:
   dry-run:
     if: github.event_name == 'schedule' || inputs.mode == 'dry-run'
