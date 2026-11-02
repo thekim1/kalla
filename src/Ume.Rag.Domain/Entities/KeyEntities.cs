@@ -28,6 +28,10 @@ public sealed class Client
     public required string ClassificationCeiling { get; set; }
     public bool StoresHistory { get; set; }
     public int? ClientRetentionDays { get; set; }
+
+    /// <summary>An <c>open-webui</c> client's default (chat design §13.3).</summary>
+    public const int OpenWebUiFeedbackRetentionDays = 90;
+
     public string[] AllowedOrigins { get; set; } = [];
 
     /// <summary><c>none</c> or <c>read</c> (P3 <c>confirm</c>); tools design §5.1.</summary>
