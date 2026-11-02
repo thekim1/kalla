@@ -25,7 +25,14 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
     shared with selected departments or the whole municipality, topics from path-rule tags per assistant link
     (`CollectionLinks`), contact person, teams hidden in forms, Map table in P1b, content owned by the running department,
     W3 spike now. New V35; P1b items 33–36 (B, #318), 37–38 (A, after L13/L14).
-- **Condense works** on the local stack (`gpt-6-luna`, `none`; follow-ups logged `condense Rewritten`); only the first
+- **Search quality fix (session 18):** the pilot's HNSW index had degraded (best approximate distance 0.454 where exact
+  was 0.246; `REINDEX` restored it). Now: the worker checks recall against exact nightly (03:00) and after large syncs
+  and rebuilds below 0.95 (#330); the worker holds `MAINTAIN` and the migration drops invalid `_ccnew` leftovers (#328);
+  the dev database gets the HNSW role defaults (#326). Test questions skip translated pages (#327). First generated set:
+  recall@10 0.91, MRR 0.70; the remaining misses are mostly near-duplicate school pages.
+- **Admin UI fixes (#329):** the Draft tab starts from the published version, department names, knowledge-base facts,
+  run counts in words. #324 (check access) merged.
+- - **Condense works** on the local stack (`gpt-6-luna`, `none`; follow-ups logged `condense Rewritten`); only the first
   call after a restart times out on a cold gateway connection.
 - **Reviewed:** #298 (changes requested, B fixed the stale confirm before merging), #299, #303, #313 and its follow-up #316
   (approved).
@@ -134,10 +141,10 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 1. **Check the stack and GitHub** (`aspire describe`; open PRs, issues, CI on `main`). Rebuild and restart
    `migrations`, `api`, `adminapi`, `worker` after merges (`dotnet build UmeRag.slnx`, `aspire resource <r> restart`).
-2. **The first generated test set for `turkos`** (session 18): 104 generated, 100 kept, 121k tokens (Opus writes,
-   GPT-6.1 judges); the questions read like citizens' questions. First on-demand run: **recall@10 0.91, MRR 0.68**
-   (hybrid). Next: look at the 9 misses (wrong chunking, duplicate pages, or a weak question?) and compare with the
-   human gold set (item 21).
+2. **Docker Desktop was down at the end of session 18.** Start it, then `aspire start` (see Local stack), rebuild and
+   restart every project; check the worker's first `check-hnsw-index` job and `rag.retrieval.hnsw_recall`; retire the
+   one generated question that came from the Finnish composting page (`PUT/DELETE /api/collections/{id}/evaluation/
+   questions/{questionId}`) and run "Create more" to top up.
 3. **Review B's PRs** against the live stack: #314 (English UI, also renames the eval codes of #317), then
    items 33–36 (#318). After #314: walk the whole setup journey in the browser in English and note friction.
 4. **Stream A after L13/L14:** items 37 (topics in the worker) and 38 (platform forms), plus the English keywords in
