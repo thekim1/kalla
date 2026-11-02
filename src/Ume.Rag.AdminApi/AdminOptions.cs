@@ -25,6 +25,9 @@ public sealed class AdminOptions
     /// </summary>
     public bool Retention { get; set; } = true;
 
+    /// <summary>Copies each pipeline version's publish report id from the worker's job result (<see cref="PublishReportLinker"/>); <c>false</c> is an off switch.</summary>
+    public bool PublishReportLinker { get; set; } = true;
+
     /// <summary>How much of an admin's address the audit log and events keep (copied, identity design §1.4): <c>Full</c> by default.</summary>
     public SourceAddressMode AuditSourceAddress { get; set; } = SourceAddressMode.Full;
 }
