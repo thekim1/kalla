@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
 import SourceEditDrawer from '@/components/sources/SourceEditDrawer.vue'
+import HeldDocuments from '@/components/sources/HeldDocuments.vue'
 import PipelineCard from '@/components/sources/PipelineCard.vue'
 import SourceFiles from '@/components/sources/SourceFiles.vue'
 import SourceQuarantine from '@/components/sources/SourceQuarantine.vue'
@@ -152,6 +153,7 @@ onMounted(load)
         </li>
       </ul>
 
+      <HeldDocuments :source-id="source.data.value.id" class="mt-8" />
       <SourceQuarantine :source-id="source.data.value.id" class="mt-8" />
     </template>
   </AsyncState>

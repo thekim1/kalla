@@ -41,4 +41,16 @@ describe('Körning (admin design §5.5.3; #278 slice 2)', () => {
     await flushPromises()
     expect(items).toHaveBeenLastCalledWith('r1', expect.objectContaining({ outcome: 'failed' }))
   })
+
+  it('shows the deletion decision when the guard held deletions back', async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(api.runs, 'get').mockResolvedValue({ ...run, run: { ...run.run, state: 'awaiting-deletion-confirmation', proposedDeletions: 212 } })
+    vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
+    const deletions = vi.spyOn(api.runs, 'deletions').mockResolvedValue({ items: [], next: null })
+
+    const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    expect(wrapper.get('[data-test=deletions]').text()).toContain('212 dokument hittades inte')
+    expect(deletions).toHaveBeenCalledWith('r1', undefined)
+  })
 })

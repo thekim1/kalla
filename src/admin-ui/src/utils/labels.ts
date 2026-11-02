@@ -666,3 +666,31 @@ export const ASSISTANT = {
   storageSaved: 'Lagringen är sparad.',
 } as const
 
+/** The deletion decision on the run page and Behållna on the source page (admin design §5.5.3, connectors §13). */
+export const DELETIONS = {
+  title: 'Borttagning väntar på beslut',
+  summary: (n: string) => `${n} dokument hittades inte vid körningen och har inte tagits bort.`,
+  why: 'Gränsen för hur mycket som får tas bort utan beslut är 20 % av källans dokument (minst 5). Kontrollera om sidorna verkligen är borta.',
+  examples: 'Exempel',
+  lastSeen: 'Senast sedd',
+  reason: 'Orsak',
+  exempt: 'tas bort ändå',
+  csv: 'Ladda ner alla (CSV)',
+  keep: 'Behåll dokumenten',
+  keepTitle: 'Behåll dokumenten?',
+  keepConsequence: 'Dokumenten finns kvar i sökningen och visas under Behållna på källans sida. Där kan du släppa dem senare.',
+  kept: 'Dokumenten behålls.',
+  remove: (n: string) => `Ta bort ${n} dokument`,
+  removeTitle: (n: string) => `Ta bort ${n} dokument?`,
+  removeConsequence: 'Dokumenten tas bort ur sökningen. Inom 14 dagar kan plattformsteamet ta tillbaka dem.',
+  removed: 'Dokumenten tas bort.',
+  more: 'Visa fler',
+  held: 'Behållna',
+  heldLead: 'Dokument som behölls när en borttagning stoppades. De tas inte bort även om de inte hittas.',
+  heldEmpty: 'Inga behållna dokument.',
+  heldAt: (when: string, by: string | null) => (by ? `Behållet ${when} av ${by}` : `Behållet ${when}`),
+  release: 'Släpp alla',
+  releaseTitle: 'Släpp de behållna dokumenten?',
+  releaseConsequence: 'Dokumenten som inte hittas föreslås för borttagning igen vid nästa körning.',
+  released: 'Dokumenten är släppta och prövas vid nästa körning.',
+} as const
