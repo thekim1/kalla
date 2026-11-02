@@ -36,12 +36,15 @@ exists (M2 triggered, user 2026-10-30; `p1/README.md` §1).
 - [x] P1 stream briefs, progress files and prompts written (same A/B seam, [`p0/README.md`](p0/README.md) §6):
       [`p1/stream-a.md`](p1/stream-a.md), [`p1/stream-b.md`](p1/stream-b.md), [`p1/prompts/`](p1/prompts/)
 - [x] J1: `v0.1.0` tagged; P1 ownership rules (`p1/README.md` §2) merged (2026-10-31, #57)
-- [ ] Stream A, the worker side: [`p1/progress-a.md`](p1/progress-a.md)
-- [ ] Stream B, the serving side: [`p1/progress-b.md`](p1/progress-b.md)
+- [ ] Stream A, the worker side: [`p1/progress-a.md`](p1/progress-a.md) (code items done; the open boxes are live
+      items, now P1b item 20)
+- [ ] Stream B, the serving side: [`p1/progress-b.md`](p1/progress-b.md) (code items done; the open boxes are live
+      items, now P1b item 20)
 - [ ] Pilot-start checks: source inventory, JavaScript need (`to-verify.md` #139); W1 answered (Team Turkos's
       `chat.umea.se`; the product owner decides the relation)
 - [x] Sync point after J2/J3: schema and contracts checked; results folded into [`to-verify.md`](to-verify.md) (2026-10-31, `4b0f3a6`; repeated for later results)
-- [ ] Local skeleton: fixture pages answered with a citation in Open WebUI on FakeGateway (`p1/README.md` §5)
+- [x] Local skeleton: fixture pages answered with a citation in Open WebUI on FakeGateway (`p1/README.md` §5)
+      (overtaken by the demo, 2026-11-01: the same path with a real crawl and real models)
 - [x] **Milestone 1** (first live run, 2026-11-01, session 13): five public umea.se pages ingested through the interim
       gateway (`text-embedding-3-large`, 1024 dims via `dimensions`, `Eu`), canary recorded, `/v1/retrieve` answered with
       the right chunk first; run steps and findings in [`../docs/p1a-local-run.md`](../docs/p1a-local-run.md) §4 (#168 for
@@ -70,17 +73,19 @@ Owned by the user, outside the streams ([`p1/README.md`](p1/README.md) §7):
 Briefs, checklist (code and live items) and progress files: [`p1b/`](p1b/README.md) (written early, 2026-10-31).
 
 - [ ] Gateway release 1 shipped; pilot-team per-level keys in use ([`gateway-changes/plan.md`](gateway-changes/plan.md))
-- [ ] Preview, advisory evaluation harness, publish with report and keep/roll back
+- [ ] Preview, advisory evaluation harness, publish with report and keep/roll back (code done: A items 5–7, B items 9,
+      11; live checks open)
       ([`ingestion-worker/design-engine.md`](ingestion-worker/design-engine.md) §12)
 - [ ] Freshness rules: age decay, `demote`, completeness by ratio, removal check, 500-URL `lastmod` sample
       ([`weakness-review.md`](weakness-review.md) §3; `to-verify.md` #170, #171)
 - [ ] Assistant drafts → publish with history and restore; admin journey pages for sources and the assistant
       ([`admin/plan.md`](admin/plan.md))
-- [ ] Feedback (ratings) with Open WebUI import; history mode `none`; banner
+- [ ] Feedback (ratings) with Open WebUI import; history mode `none`; banner (code done: B items 10, 13, A item 17,
+      local import #340; banner and live import open)
       ([`chat-api/plan.md`](chat-api/plan.md), [`weakness-review.md`](weakness-review.md) §4)
 - [ ] DPIA (G1) finished; W2 decided; runbook section for public-records requests
 - [ ] `perf.yml` (R1) and nightly evaluation
-- [ ] E1 and W3 spikes (`to-verify.md` #174, #175)
+- [ ] E1 and W3 spikes (`to-verify.md` #174, #175) (W3 done 2026-11-02, #345; E1 open)
 - [ ] **Go-live gate** met on hand-graded gold-set answers ([`weakness-review.md`](weakness-review.md) §2)
 - [ ] Pilot live; gate re-run monthly; **pilot success** decided at the end with the department
 

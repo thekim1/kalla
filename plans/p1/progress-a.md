@@ -9,11 +9,13 @@ work and put the PR number after it (`[x] … (#12)`). Record every `to-verify` 
 
 ## Waiting on (tick when it lands)
 - [x] **J1** `v0.1.0` tagged, P1 ownership rules and these briefs merged (2026-10-31, `v0.1.0`)
-- [ ] **J2** B's schema part 1 merged (needed for item 7)
-- [ ] **J5** B's `RetrievalEngine` merged (needed for item 9)
-- [ ] **J7** B's admin set-up endpoints in Scalar (needed for item 12)
-- [ ] **J8** B's realm-additions file; **J9** B's chat API (needed for item 10)
-- [ ] **J10** gateway session: gateway reachable with EU embedding, condense and answer routes and the `Eu` key (needed for items 11–13)
+- [x] **J2** B's schema part 1 merged (needed for item 7) (#85)
+- [x] **J5** B's `RetrievalEngine` merged (needed for item 9) (#120)
+- [x] **J7** B's admin set-up endpoints in Scalar (needed for item 12) (#193)
+- [x] **J8** B's realm-additions file; **J9** B's chat API (needed for item 10) (#215, #210; J11, the shared realm, is the
+      gateway session's)
+- [x] **J10** gateway session: gateway reachable with EU embedding, condense and answer routes and the `Eu` key (needed for items 11–13)
+      (the user's interim gateway at `Eu`, 2026-11-01; release 1 is P1b's L9)
 - [ ] **J12** user: U1 done (about page, robots.txt) (needed for the `lastmod` sample and item 12)
 - [ ] **J13** user and pilot department: gold set written (needed for item 13)
 - [x] **J14** user: P1a is shown locally (decided 2026-10-30)
@@ -30,7 +32,7 @@ Refs: [engine §3, §4, §9.1, §13.1](../ingestion-worker/design-engine.md), [c
 - [x] `contracts/jobs/v1/`: payloads and results of `sync`, `fetch`, `parse`, `embed`, `command` (P1a kinds), `eval` `on-demand` (#78)
 - [x] `contracts/site-profiles/v1/` profile schema (#78)
 - [x] JSON Schema 2020-12 validator chosen (to-verify #17); `Ume.Rag.Pipelines` validator and stage keys with tests (#78)
-- [ ] **Hand-off J3:** issue to stream B
+- [x] **Hand-off J3:** issue to stream B (#80)
 
 ## 3. Parser P1 formats (#5)
 Refs: [parser §3, §6–§10, §15, §16](../parser/design.md)
@@ -85,13 +87,13 @@ Refs: [processing §13.4–§13.6](../ingestion-worker/design-processing.md), [e
 - [x] `eval` `on-demand` over the `human` layer: vector, hybrid, hybrid without the decompounder (`reindex-fts` scratch copy) (PR: a/10-eval-on-demand)
 - [x] Per-question coverage and the threshold proposal as numbers (PR: a/10-eval-on-demand)
 - [x] **Done:** reproducibility test; evaluator == `/v1/retrieve` order (PR: a/10-eval-on-demand)
-- [ ] **Hand-off J6:** issue to stream B
+- [x] **Hand-off J6:** issue to stream B (#129)
 
 ## 10. Pilot stack (#18, after J8, J9)
 Refs: [repo-and-deployment §6, §7.1](../platform/repo-and-deployment.md), [chat §4.3](../chat-api/design.md)
-- [ ] Compose: `rag-admin` and Open WebUI OIDC to the shared Keycloak (dev Keycloak until J11); Open WebUI → `rag-api` key and JWT secret; gateway URL and `Eu` key
-- [ ] Run book for the local P1a run; #92 recorded
-- [ ] **Done:** stack healthy locally
+- [x] Compose: `rag-admin` and Open WebUI OIDC to the shared Keycloak (dev Keycloak until J11); Open WebUI → `rag-api` key and JWT secret; gateway URL and `Eu` key (#94)
+- [ ] Run book for the local P1a run; #92 recorded (run book `docs/p1a-local-run.md` in #94; #92 open, live block)
+- [ ] **Done:** stack healthy locally (the AppHost stack runs the demo; the Compose stack's first run is in the live block)
 
 ## 11. EU-route capacity (#19, after J10)
 - [x] `scripts/capacity/` against the EU embedding and chat routes; umea.se initial-load time and cost told to the user
