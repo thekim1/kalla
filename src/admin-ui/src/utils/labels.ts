@@ -142,6 +142,7 @@ export const NAV_KEYWORDS = {
   collections: ['knowledge base', 'source', 'website', 'files', 'documents', 'personal data'],
   assistants: ['assistant', 'draft', 'test', 'publish', 'audience', 'open webui', 'model'],
   organisation: ['department', 'team', 'cost centre', 'sync', 'gateway'],
+  audit: ['log', 'changes', 'events', 'who', 'history', 'traceability'],
 } as const
 
 export const PAGE = {
@@ -153,6 +154,7 @@ export const PAGE = {
   source: { title: 'Source' },
   run: { title: 'Run' },
   publication: { title: 'Publication' },
+  audit: { title: 'Audit log', description: 'Who changed what, and when' },
   forbidden: { title: 'No access' },
   notFound: { title: 'Page not found' },
 } as const
@@ -885,4 +887,34 @@ export const SETUP = {
   empty: 'You have no knowledge bases yet. Start by creating one.',
   create: 'Create knowledge base',
   allDone: 'All knowledge bases are done and available.',
+} as const
+
+/** The audit log (admin design §9.1). */
+export const AUDIT = {
+  lead: 'Who changed what, and when. You see the events of your departments.',
+  filters: 'Filter the audit log',
+  from: 'From',
+  to: 'To',
+  actor: 'Who',
+  actorHint: 'Name or user id',
+  action: 'Event',
+  actionHint: 'For example publish',
+  entityType: 'Type of object',
+  entityTypeHint: 'For example collection, source, assistant',
+  entityId: 'Object id',
+  service: 'Service',
+  serviceHint: 'For example system:retention',
+  clear: 'Clear filters',
+  caption: 'The audit log, newest first',
+  time: 'Time',
+  entity: 'Object',
+  reason: 'Reason',
+  empty: 'No events match the filters.',
+  more: 'Show more',
+  detail: 'Event',
+  roles: 'Roles',
+  classification: 'Classification',
+  requestId: 'Request id',
+  snapshot: 'Before and after',
+  noSnapshot: 'The event has no stored before and after.',
 } as const

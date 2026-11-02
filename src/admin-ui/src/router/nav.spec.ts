@@ -34,7 +34,7 @@ describe('search', () => {
   })
 
   it('lists only pages without a query', () => {
-    expect(filterEntries(entries, '').map((e) => e.id)).toEqual(['overview', 'collections', 'assistants', 'organisation', 'platform'])
+    expect(filterEntries(entries, '').map((e) => e.id)).toEqual(['overview', 'collections', 'assistants', 'organisation', 'platform', 'audit'])
   })
 })
 

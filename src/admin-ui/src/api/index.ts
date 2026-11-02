@@ -9,6 +9,8 @@ import type {
   BffUser,
   ClientSummary,
   GatewayModel,
+  AuditDetail,
+  AuditSummary,
   Collection,
   CollectionSetup,
   Overview,
@@ -177,6 +179,12 @@ export const api = {
     results: (runId: string) => http.get<EvaluationResult[]>(`/api/evaluation-runs/${runId}/results`),
   },
   overview: () => http.get<Overview>('/api/overview'),
+  audit: {
+    list: (query: {
+      from?: string; to?: string; actor?: string; action?: string; entityType?: string; entityId?: string; service?: string; after?: number; limit?: number
+    }) => http.get<KeysetPage<AuditSummary, number>>('/api/audit', query),
+    get: (id: number) => http.get<AuditDetail>(`/api/audit/${id}`),
+  },
   jobs: {
     get: <T = unknown>(id: string) => http.get<Job<T>>(`/api/jobs/${id}`),
   },

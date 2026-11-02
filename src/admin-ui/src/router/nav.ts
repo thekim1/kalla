@@ -35,6 +35,8 @@ export interface NavGroup {
 /** Every rag-* role: the Read policy (admin design §3.1). */
 export const ALL_ROLES: Role[] = [...ROLES]
 export const PLATFORM_ADMIN: Role[] = ['rag-platform-admin']
+/** The Manage policy (admin design §3.1). */
+export const MANAGE_ROLES: Role[] = ['rag-platform-admin', 'rag-department-admin']
 
 /**
  * Grouped by the job people come to do (admin design §5.2), filtered by role. The journey pages (Knowledge bases,
@@ -90,6 +92,14 @@ export const navGroups: NavGroup[] = [
         roles: ALL_ROLES,
       },
       ...platformNavItems,
+      {
+        name: 'audit',
+        label: PAGE.audit.title,
+        icon: 'history',
+        description: PAGE.audit.description,
+        keywords: [...NAV_KEYWORDS.audit],
+        roles: MANAGE_ROLES,
+      },
     ],
   },
 ]

@@ -714,3 +714,30 @@ export interface Overview {
   hasCollections: boolean
   setup: CollectionSetup[]
 }
+
+/** `GET /api/audit`: an entry of the audit log (admin design §9.1). */
+export interface AuditSummary {
+  id: number
+  timestamp: IsoDateTime
+  actor: string
+  actorName: string | null
+  action: string
+  entityType: string
+  entityId: string | null
+  service: string | null
+  departmentId: string | null
+  classification: string | null
+  configVersion: number | null
+  reason: string | null
+}
+
+/** `GET /api/audit/{id}`: the entry with its before/after snapshot as JSON text. */
+export interface AuditDetail extends AuditSummary {
+  recordedAt: IsoDateTime
+  actorRoles: string | null
+  actorDepartments: string | null
+  details: string | null
+  sourceAddress: string | null
+  requestId: string | null
+  userAgent: string | null
+}
