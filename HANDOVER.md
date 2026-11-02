@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-02, end of session 18. Earlier sessions are in the
+State of the Ume.Rag work for the next session. Rewritten 2026-11-02, end of session 18 (last update after #332). Earlier sessions are in the
 git history (`git log -- HANDOVER.md`).
 Repo `~/git/ume-rag-platform`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
@@ -26,8 +26,11 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   large syncs and rebuilds below 0.95 (#330, first live check: recall 1.0); the worker holds `MAINTAIN` and migrations
   drop invalid `_ccnew` leftovers (#328); the dev database gets the HNSW defaults (#326). Of the 9 remaining misses only 2 are
   near-duplicate förskola pages (cosine 0.04); 7 have no near-identical page (0.10–0.31) and are real misses to analyse.
-- `main` = `7002586`. All session-18 PRs were green on their branches; **`main` shows no CI run after `29eb280`**:
-  check why push runs stopped (workflow trigger, runner, or GitHub delay) before relying on `main`'s status.
+- **Architecture plan v2** (`architecture_plans.md`, root; proposal by Crotalus, checked and rewritten by the main
+  session): the concept count is the weak point; items 2–3 (a guided "New assistant" path and three fixed presets in
+  P1b) **change a decision** ("Weakness review 1" put assistant templates in P2) and **wait for the user's yes or no**.
+- `main` = `635a5db`. `verify.yml` runs on pull requests and manual dispatch only, not on push: `main` has no run per
+  merge by design (the listed `main` runs are manual). Every session-18 PR was green before merging.
 
 ## Decided in session 18 (user)
 
@@ -125,25 +128,24 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 | Index health | `src/Ume.Rag.Worker/Engine/HnswIndexHealth.cs`, `HnswCheckScheduler.cs` | nightly + after-sync check, concurrent rebuild, audit `hnsw-reindex` (#330) |
 | Admin API (B) | `src/Ume.Rag.AdminApi/` | item 9 done incl. pipeline publish/preview (#298, #299); setup checklist (#313); sources list carries documents and last run (#329) |
 | Knowledge + chat (B) | `src/Ume.Rag.{Retrieval,Answering,Api}/` | chat with condense on the EU route (#293) |
-| Admin UI | `src/admin-ui/` | English (#320); journey pages, feedback, audit log, check access (B); platform objects `src/platform/` (A) |
+| Admin UI | `src/admin-ui/` | English (#320, platform pages #332); journey pages, feedback, audit log, check access (B); platform objects `src/platform/` (A) |
 | Migration service (B) | `src/Ume.Rag.MigrationService/` | dev HNSW defaults (#326); invalid rebuild indexes dropped (#328, in `RagDatabaseMigrator`) |
 | Deploy | `deploy/` | worker `MAINTAIN` on `content."Chunks"` (#328) |
 
 ## Next step
 
-1. **Check GitHub and the stack**: open PRs, issues, why `main` has no CI runs after `29eb280`; `aspire describe`.
-2. **Organisation (#318):** nudge B to start item 33 (schema → L13), or offer the user that the main session builds 33
+1. **Check GitHub and the stack**: open PRs, issues; `docker info`, then `aspire describe` (start it as above if down).
+2. **Ask the user about architecture plan items 2–3**; with a yes, write the Decisions row, the rules in admin §5.4,
+   §5.7, §8, and P1b items (B, after item 33).
+3. **Organisation (#318):** nudge B to start item 33 (schema → L13), or offer the user that the main session builds 33
    to unblock 34–36. Review each PR live. Stream A follows with 37–38 after L13/L14.
-3. **Stream A now:** #319 (platform pages and `GenericForm.spec.ts` in English, search keywords in
-   `src/admin-ui/src/platform/nav.ts`).
-4. **Dev data:** done locally (DoIT's code is now 1000, the dev users' first code); 3000 and 5000 stay unknown.
-5. **Analyse the 7 real search misses** of the first generated set (statistics tables, document templates, school rules):
+4. **Analyse the 7 real search misses** of the first generated set (statistics tables, document templates, school rules):
    chunking, question or ranking? Counting near-duplicates as correct would add at most 0.02, so it isn't worth a rule.
-6. **User decides:** the gold set with DoIT and threshold calibration (item 21); P1b item 15 `e2e` (after B's L7); pin
+5. **User decides:** the gold set with DoIT and threshold calibration (item 21); P1b item 15 `e2e` (after B's L7); pin
    review and Aspire 13.6.4.
 
-**Open issues — stream B:** #278, #314 (English UI, done in #320; B closes), #318, #52. **Stream A:** #319, #300
-(L4, information), #48, #51, #193, #210. **Main session:** #100 (L8). **User:** #215 (J8).
+**Open issues — stream B:** #278, #314 (English UI, done in #320; B closes), #318, #52. **Stream A:** #300
+(L4, information), #48, #51, #193, #210. #319 done in #332 (B switches the two form texts, then closes). **Main session:** #100 (L8). **User:** #215 (J8).
 
 **Not folded into the design yet (need a call):** #217's fired-types list in the PII report; `UrlCanonicalizer` →
 Pipelines (#178); identity §16 Q2–4, Q8 (gateway session); a connection pooler needs a direct connection for the HNSW
