@@ -408,7 +408,7 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
         : ReferenceExpression.Create($"ume-rag-sk-{devKey}");
     api.WithEnvironment("OpenWebUi__ClientId", openWebUiClientId is { Length: > 0 } ? openWebUiClientId : DevOpenWebUiClientId)
         .WithEnvironment("OpenWebUi__JwtSecret", openWebUiJwtSecret);
-    builder.AddContainer("open-webui", OpenWebUiImage, OpenWebUiTag).WithImageSHA256(OpenWebUiDigest)
+    var openWebUi = builder.AddContainer("open-webui", OpenWebUiImage, OpenWebUiTag).WithImageSHA256(OpenWebUiDigest)
         .WithHttpEndpoint(targetPort: 8080, name: "http")
         .WithVolume("ume-rag-openwebui-data", "/app/backend/data")
         .WithEnvironment("WEBUI_SECRET_KEY", openWebUiSecretKey)
@@ -446,11 +446,25 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
         .WithEnvironment("USER_PERMISSIONS_CHAT_PARAMS", "false")
         .WithEnvironment("ENABLE_ADMIN_CHAT_ACCESS", "false")
         .WithEnvironment("ENABLE_ADMIN_EXPORT", "false")
+        // As deploy/compose.openwebui.yaml: API keys only for the feedback routes the importer uses (chat design §14.2).
+        .WithEnvironment("ENABLE_API_KEYS", "true")
+        .WithEnvironment("ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS", "true")
+        .WithEnvironment("API_KEYS_ALLOWED_ENDPOINTS", "/api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback")
+        .WithEnvironment("USER_PERMISSIONS_FEATURES_API_KEYS", "false")
         .WithEnvironment("BYPASS_MODEL_ACCESS_CONTROL", "true")
         .WithEnvironment("DEFAULT_USER_ROLE", "user")
         .WithEnvironment("ENABLE_SIGNUP", "true")
         .WithEnvironment("ENABLE_LOGIN_FORM", "true")
         .WaitFor(api);
+
+    // The feedback importer and pruning (chat design §13.3, §14.2) run when the user secret Parameters:openwebui-admin-api-key
+    // holds the API key of Open WebUI's admin (the first local account, minted in Settings › Account).
+    if (builder.Configuration["Parameters:openwebui-admin-api-key"] is { Length: > 0 })
+    {
+        api.WithEnvironment("OpenWebUi__BaseUrl", openWebUi.GetEndpoint("http"))
+            .WithEnvironment("OpenWebUi__AdminApiKey", builder.AddParameter("openwebui-admin-api-key", secret: true))
+            .WithEnvironment("OpenWebUi__FeedbackImportInterval", builder.Configuration["OpenWebUi:FeedbackImportInterval"] ?? "00:01:00");
+    }
 }
 
 builder.Build().Run();
