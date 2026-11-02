@@ -920,7 +920,7 @@ at the cited page; label: title, heading path tail, "s. 12–13", modified date.
 Chat TTFT = chat overhead (< 10 ms, chat plan §4) + condense (optional LLM call) + retrieval + the answer model's TTFT
 through the gateway; retrieval should stay below ~15 % of it.
 
-**Measured by**: micro-benchmarks (`benchmarks/Ume.Rag.Benchmarks/RetrievalBenchmarks.cs`, BenchmarkDotNet as the
+**Measured by**: micro-benchmarks (`tests/Ume.Rag.Benchmarks/RetrievalBenchmarks.cs`, BenchmarkDotNet as the
 gateway's `PipelineBenchmarks`: fusion + diversity over 200 candidates, section assembly, citations and grants;
 allocations are the regression gate, `docs/performance-improvement-plan.md:94-101`); an **interaction audit** (copy of
 `benchmarks/Ume.LlmGateway.Benchmarks/InteractionAudit.cs:11-16`): a warm retrieval issues exactly **3 Postgres round
@@ -1182,7 +1182,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | `identity/design.md` §4.3, §4.4 | knowledge routes answer problem details (Data API style) with `code`; the OpenAI shape stays for chat routes; deny reason `client_not_allowed` (§2.3 gate, 403) |
 | `identity/design.md` §5.3 | the proxy exposes `GET /v1/documents/*` and `/content` to the staff network; the rest of `rag-api` stays restricted to the Open WebUI host |
 | `identity/design.md` §7.2, §10 | 5001 reasons `grant_invalid`, `grant_expired` and `Credential` value `grant` |
-| `platform/repo-and-deployment.md` §1, §2.2 | test project `tests/Ume.Rag.Retrieval.Tests`; `benchmarks/Ume.Rag.Benchmarks` (`RetrievalBenchmarks`, `InteractionAudit` copy); `ModelContextProtocol`/`.AspNetCore` **2.3.0** (checked); `PGVECTOR_VERSION` **0.8.7** (stock image tag) |
+| `platform/repo-and-deployment.md` §1, §2.2 | test project `tests/Ume.Rag.Retrieval.Tests`; `tests/Ume.Rag.Benchmarks` (`RetrievalBenchmarks`, `InteractionAudit` copy); `ModelContextProtocol`/`.AspNetCore` **2.3.0** (checked); `PGVECTOR_VERSION` **0.8.7** (stock image tag) |
 | `platform/repo-and-deployment.md` §3, §6.3, §7.1 | `rag-api` mounts the blob container **read-only** and reads the `rag-blob-<level>` master key files of non-`public` levels; secrets `Security__DownloadGrantKeys__<kid>`, `Security__CacheKeyPepper` made by `init-deployment.sh`; settings `Knowledge:*` (`OpenToClientKinds`, `PublicBaseUrl`, `DownloadGrantLifetime`, `DownloadsPerMinutePerAddress`, `PublishApiReference`) and `Retrieval:*` (`EmbeddingTimeout`, `MaxConcurrentSearches` 4, `ExpandNeighbourChunks`); data source pool 12 per instance |
 | `platform/repo-and-deployment.md` §4.3 FakeGateway, §9 | a fake rerank endpoint (P1, for the `IReranker` seam); metrics of §15 and dashboard panels |
 | `platform/repo-and-deployment.md` §4.4 / gateway setup notes | the `OnPrem`-only delegating key used for query embeddings has `RequireMaxResidency`, `ApplyTeamPolicy` false and `PiiPolicy` `Off` or `Allow` (§5.2) |
