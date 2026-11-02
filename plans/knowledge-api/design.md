@@ -555,8 +555,8 @@ allowed levels, in K `$4 text[]` the keyword stop lexemes (empty for none), then
 V and `$5` in K: tags (`text[]`), document types (`text[]`), modified after (`timestamptz`), and the **topic links** as two
 parallel arrays (`uuid[]` collection ids, `text[]` tags; one pair per tag of a link that has topics). The topic predicate
 keeps every chunk of a collection linked without topics and, for a collection linked with topics, only chunks carrying
-one of them: `AND (c."CollectionId" <> ALL ($t) OR EXISTS (SELECT 1 FROM unnest($t, $g) AS l(cid, tag) WHERE l.cid =
-c."CollectionId" AND l.tag = ANY (c."Tags")))`, appended only when some link has topics; `$2` stays every linked
+one of them: `AND (c."CollectionId" <> ALL ($t::uuid[]) OR EXISTS (SELECT 1 FROM unnest($t::uuid[], $g::text[]) AS l(cid, tag)
+WHERE l.cid = c."CollectionId" AND l.tag = ANY (c."Tags")))` (the casts let `PREPARE` type `unnest`), appended only when some link has topics; `$2` stays every linked
 collection, so the collection predicate and the indexes are unchanged. Filter predicates are
 **appended only when the filter is present**, so the planner never sees `($x IS NULL OR …)`; the profile id is an
 inlined literal from config (data-model §3.3), so a generic plan still matches the partial indexes. Each distinct text is one auto-prepared statement (variants: K/V × approximate/exact × 2⁴ filter
