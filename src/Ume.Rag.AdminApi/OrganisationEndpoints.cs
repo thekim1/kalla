@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Domain.Admin;
+using Ume.Rag.Domain.Entities;
 
 namespace Ume.Rag.AdminApi;
 
@@ -12,12 +13,24 @@ public static class OrganisationEndpoints
         ArgumentNullException.ThrowIfNull(api);
         var organisation = api.MapGroup("/organisation").WithTags("Organisation");
 
-        // Departments in the user's scope (every one for a platform admin), active first.
+        // Departments in the user's scope (every one for a platform admin), active first, each with its member groups and how
+        // its knowledge bases are shared (admin design §3.2).
         organisation.MapGet("/departments", async (AdminContext admin, CancellationToken ct) =>
-            await admin.Departments().AsNoTracking().OrderByDescending(d => d.IsActive).ThenBy(d => d.Name)
-                .Select(d => new DepartmentDto(d.Id, d.Name, d.CostCenterCode, d.IsActive, d.SyncedAt,
-                    d.Teams.OrderBy(t => t.Name).Select(t => new TeamDto(t.Id, t.Name, t.Code, t.IsActive)).ToList()))
-                .ToListAsync(ct))
+        {
+            var collections = admin.Db.Collections.Where(c => c.DeletedAt == null);
+            return await admin.Departments().AsNoTracking().OrderByDescending(d => d.IsActive).ThenBy(d => d.Name)
+                .Select(d => new DepartmentDto(d.Id, d.Name, d.CostCenterCode, d.IsActive, d.SyncedAt, d.MemberGroups,
+                    d.Teams.OrderBy(t => t.Name).Select(t => new TeamDto(t.Id, t.Name, t.Code, t.IsActive)).ToList(),
+                    new SharingSummaryDto(
+                        collections.Count(c => c.DepartmentId == d.Id && c.SharedWith == CollectionSharingLevels.Department),
+                        collections.Count(c => c.DepartmentId == d.Id && c.SharedWith == CollectionSharingLevels.Selected),
+                        collections.Count(c => c.DepartmentId == d.Id && c.SharedWith == CollectionSharingLevels.Municipality),
+                        admin.Db.CollectionShares
+                            .Where(s => s.DepartmentId != d.Id && collections.Any(c =>
+                                c.Id == s.CollectionId && c.DepartmentId == d.Id && c.SharedWith == CollectionSharingLevels.Selected))
+                            .Select(s => s.DepartmentId).Distinct().Count())))
+                .ToListAsync(ct);
+        })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListDepartments").WithSummary("Departments and teams in scope");
 
         // Member groups by hand (admin design §4.10, P1a item 14): the group-claim values that place a signed-in admin in the
@@ -48,7 +61,14 @@ public static class OrganisationEndpoints
     }
 }
 
-public sealed record DepartmentDto(Guid Id, string Name, string CostCenterCode, bool IsActive, DateTimeOffset SyncedAt, IReadOnlyList<TeamDto> Teams);
+public sealed record DepartmentDto(Guid Id, string Name, string CostCenterCode, bool IsActive, DateTimeOffset SyncedAt,
+    IReadOnlyList<string> MemberGroups, IReadOnlyList<TeamDto> Teams, SharingSummaryDto Sharing);
+
+/// <summary>
+/// A department's live knowledge bases per sharing level, and how many other departments its <c>selected</c> ones are
+/// shared with.
+/// </summary>
+public sealed record SharingSummaryDto(int Department, int Selected, int Municipality, int SharedWithDepartments);
 
 public sealed record TeamDto(Guid Id, string Name, string? Code, bool IsActive);
 

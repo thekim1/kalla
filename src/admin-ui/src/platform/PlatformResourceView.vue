@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { request } from '@/api/client'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
-import DataTable, { type Column } from '@/components/ui/DataTable.vue'
+import DataTable from '@/components/ui/DataTable.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -15,7 +15,7 @@ import { formatDateTime } from '@/utils/format'
 import { COMMON, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import GenericForm from './GenericForm.vue'
-import { resourceById, rowsOf, urlOf, type Operation, type Row, type RowAction } from './resources'
+import { resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec, type OpenApiDocument } from './schema'
 
 // A platform object's list and its generic form (admin design §5.8): create, edit, and the few non-CRUD actions.
@@ -35,14 +35,16 @@ interface OpenForm {
 }
 const drawerOpen = ref(false)
 const selected = ref<Row | null>(null)
-const openForm = ref<OpenForm | null>(null)
+// Shallow, so `openForm.operation` stays the registry's object and compares equal to `resource.update`.
+const openForm = shallowRef<OpenForm | null>(null)
 const formKey = ref(0)
 const opening = ref(false)
 const openError = ref<unknown>(null)
 const secret = ref<string | null>(null)
 const confirming = ref<RowAction | null>(null)
 
-const columns = computed<Column[]>(() => resource.value?.columns ?? [])
+const columns = computed<ResourceColumn[]>(() => resource.value?.columns ?? [])
+const details = computed(() => (selected.value && resource.value?.details ? resource.value.details(selected.value) : null))
 
 async function load(): Promise<void> {
   if (resource.value) await rows.run(() => rowsOf(resource.value!))
@@ -147,7 +149,7 @@ watch(() => props.resource, () => {
         :columns="columns" :rows="rows.data.value" :row-key="(row) => String(row[resource!.key])" :caption="resource.label"
         :clickable="!!resource.update" @row-click="edit"
       >
-        <template v-for="c in columns" :key="c.key" #[`cell-${c.key}`]="{ row }">{{ cell(row[c.key]) }}</template>
+        <template v-for="c in columns" :key="c.key" #[`cell-${c.key}`]="{ row }">{{ cell(c.value ? c.value(row) : row[c.key]) }}</template>
       </DataTable>
     </AsyncState>
 
@@ -163,6 +165,15 @@ watch(() => props.resource, () => {
       <template v-else>
         <p v-if="opening">{{ COMMON.loading }}</p>
         <InlineError v-if="openError" :message="problemMessage(openError)" class="mb-4" />
+        <section v-if="details && openForm?.operation === resource.update" class="mb-6" data-test="details">
+          <h3 class="mb-2 font-medium">{{ details.title }}</h3>
+          <dl class="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1">
+            <template v-for="item in details.items" :key="item.label">
+              <dt class="text-fg-2">{{ item.label }}</dt>
+              <dd class="tabular">{{ item.value }}</dd>
+            </template>
+          </dl>
+        </section>
         <div v-if="selected && resource.actions?.length && openForm?.operation === resource.update" class="mb-6 flex flex-wrap gap-2">
           <UiButton v-for="action in resource.actions" :key="action.id" :data-test="`action-${action.id}`" @click="runAction(action)">{{ action.label }}</UiButton>
         </div>

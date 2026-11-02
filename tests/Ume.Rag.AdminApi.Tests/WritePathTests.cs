@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.TestKit;
@@ -235,5 +236,62 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
         var all = await platform.GetFromJsonAsync<JsonElement[]>("/api/organisation/departments", Ct);
         all!.Select(d => d.GetProperty("costCenterCode").GetString()).ShouldContain(mine);
         all!.Select(d => d.GetProperty("costCenterCode").GetString()).ShouldContain(other);
+    }
+
+    [Fact]
+    public async Task Department_list_carries_member_groups_and_the_sharing_summary()
+    {
+        var code = "S" + Random.Shared.Next(100_000, 999_999);
+        Department NewDepartment(string suffix, params string[] groups) => new()
+        {
+            Id = Guid.CreateVersion7(), Name = "Sharing " + code + suffix, CostCenterCode = code + suffix, MemberGroups = groups, SyncedAt = DateTimeOffset.UtcNow,
+        };
+        var owner = NewDepartment("O", "Nämnden", "Förvaltningen");
+        var first = NewDepartment("A");
+        var second = NewDepartment("B");
+        var profile = new EmbeddingProfile
+        {
+            Name = "sharing-" + code, GatewayModel = "bge-m3", Dimensions = 1024, MaxInputTokens = 8192, MaxResidency = Residency.Eu,
+            CanaryText = EmbeddingCanaryText.Default, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        Collection NewCollection(string level, Guid? department = null, DateTimeOffset? deletedAt = null) => new()
+        {
+            Slug = $"sharing-{code.ToLowerInvariant()}-{Guid.NewGuid():N}", Name = "Sharing " + level, DepartmentId = department ?? owner.Id,
+            Classification = Classification.Public, EmbeddingProfileId = profile.Id, SharedWith = level, DeletedAt = deletedAt, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        var own = NewCollection(CollectionSharingLevels.Department);
+        var selectedA = NewCollection(CollectionSharingLevels.Selected);
+        var selectedB = NewCollection(CollectionSharingLevels.Selected);
+        var municipality = NewCollection(CollectionSharingLevels.Municipality);
+        var deleted = NewCollection(CollectionSharingLevels.Municipality, deletedAt: DateTimeOffset.UtcNow);
+        var demoted = NewCollection(CollectionSharingLevels.Department);
+        var othersSelected = NewCollection(CollectionSharingLevels.Selected, first.Id);
+        CollectionShare Share(Collection collection, Department department) => new()
+        {
+            CollectionId = collection.Id, DepartmentId = department.Id, SharedBy = "test", SharedAt = DateTimeOffset.UtcNow,
+        };
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            db.AddRange(owner, first, second, profile, own, selectedA, selectedB, municipality, deleted, demoted, othersSelected);
+            await db.SaveChangesAsync(Ct);
+            // Kept rows of a collection no longer at "selected" don't count, nor do another department's shares.
+            db.AddRange(Share(selectedA, first), Share(selectedB, first), Share(selectedB, second), Share(demoted, second), Share(othersSelected, owner));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using var factory = database.HeaderFactory();
+        using var platform = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var all = await platform.GetFromJsonAsync<JsonElement[]>("/api/organisation/departments", Ct);
+        var row = all!.Single(d => d.GetProperty("costCenterCode").GetString() == owner.CostCenterCode);
+        row.GetProperty("memberGroups").EnumerateArray().Select(g => g.GetString()).ShouldBe(["Nämnden", "Förvaltningen"]);
+        var sharing = row.GetProperty("sharing");
+        sharing.GetProperty("department").GetInt32().ShouldBe(2);
+        sharing.GetProperty("selected").GetInt32().ShouldBe(2);
+        sharing.GetProperty("municipality").GetInt32().ShouldBe(1);
+        sharing.GetProperty("sharedWithDepartments").GetInt32().ShouldBe(2);
+
+        var empty = all!.Single(d => d.GetProperty("costCenterCode").GetString() == second.CostCenterCode).GetProperty("sharing");
+        empty.GetProperty("selected").GetInt32().ShouldBe(0);
+        empty.GetProperty("sharedWithDepartments").GetInt32().ShouldBe(0);
     }
 }
