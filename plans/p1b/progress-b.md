@@ -9,6 +9,17 @@ item and come back. Code items (§3.1) all come before the live block (§3.2). T
 work and put the PR number after it (`[x] … (#12)`). Record every `to-verify` row in `results-b.md` before ticking it
 here.
 
+## Status (2026-11-02, end of session 17)
+
+- Items 1, 3 (Done open: K for 10–30 % terms, question on #248), 9 and 10 are built and merged; their Done boxes wait on
+  to-verify rows 23 and 20 (partly, see `results-b.md`). Hand-offs L2 #234, L3 #249, L4 #300, L6 #273 filed.
+- The admin UI is first (user, #278). Built: Kunskapsbanker (#279), Lägg till källa with Kontrollera (#285), source and
+  run pages (#288), Assistenter (#301); generic platform forms by the main session (#281).
+- Next, in order: the preview step (Före / Efter) in the source drawer on `POST /api/pipelines/{id}/preview` (#299);
+  assistant Versioner, retention and archive; the Publicering page (#298); then the rest of items 11–13 and #297
+  (stream-b test flakes). Known: run counters stay 0 until a run ends (#288 review), so the run page polls for the end.
+- Merged without waiting for reviewers (user, 2026-11-02); problems go in a `stream-b` issue.
+
 ## Waiting on (tick when it lands)
 - [ ] P1b ownership rules (README §2) and these briefs merged
 - [ ] **L1** A's contracts part 2 (then validate the new source fields and job payloads against them)
@@ -21,27 +32,28 @@ here.
 
 ### 1. Schema part 3 (first)
 Refs: [data-model §2.3, §8](../platform/data-model.md), [weakness review §3, §4](../weakness-review.md)
-- [x] `chat`: `Conversations`, `Messages`, `MessageSources`, `Feedback`, `FeedbackImportState`, `AssistantDailyTotals`; `DataKeys`, `ToolCalls` created, unused (this PR)
+- [x] `chat`: `Conversations`, `Messages`, `MessageSources`, `Feedback`, `FeedbackImportState`, `AssistantDailyTotals`; `DataKeys`, `ToolCalls` created, unused (#223)
 - [x] Freshness columns P1a's item 2 did not create (`Sources.DemoteRules`, `CrawlRuns.SeedsFailed`/`Complete`) (`DemoteRules`, `Incremental`, `RemovalCheck` in #219; `SeedsFailed`/`Complete` were already in P1a's schema; plus #219's parse-rule key, evaluation and chunk columns)
-- [x] Grants; `DatabaseRoleTests` extended (#219, this PR)
+- [x] Grants; `DatabaseRoleTests` extended (#219, #223)
 - [x] **Hand-off L2:** issue to stream A (#234)
 
 ### 3. Age decay and `demote`
 Refs: [knowledge §6.5, §16.1](../knowledge-api/design.md), [weakness review §3](../weakness-review.md)
-- [x] `recency` multiplier after fusion; `demote` lowest factor; uploads never demoted (#235, this PR)
+- [x] `recency` multiplier after fusion; `demote` lowest factor; uploads never demoted (#235, #241)
 - [x] `website` template default set on a collection's first `website` source (#235)
-- [x] Keyword stop list: lexemes in > 30 % of the scope's chunks dropped from K's query (this PR); K ≤ 30 ms p95 met for frequent terms, not for terms in 10–30 % of the 100k scope (`results-b.md` row 5, flagged to the main session)
+- [x] Keyword stop list: lexemes in > 30 % of the scope's chunks dropped from K's query (#248); K ≤ 30 ms p95 met for frequent terms, not for terms in 10–30 % of the 100k scope (`results-b.md` row 5, flagged to the main session)
 - [ ] **Done:** §16.1 tests green; evaluator order == `/v1/retrieve` order
 - [x] **Hand-off L3:** issue to stream A (#249)
 
 ### 9. Admin API for P1b
 Refs: [admin §4, §6.6, §6.7, §12](../admin/design.md), [identity §4.9](../identity/design.md)
-- [x] Sources: preflight, preview, impact, runs, deletion decisions, documents with PII view/clear, release hold, template parameters, `demote` (#254, #255, this PR; impact, runs, template parameters and `demote` earlier)
-- [x] Pipeline publish: plan → confirm (409 on change) → report → keep / roll back (this PR; report = the worker's publish-report)
+- [x] Sources: preflight, preview, impact, runs, deletion decisions, documents with PII view/clear, release hold, template parameters, `demote` (#254, #255, #299; impact, runs, template parameters and `demote` earlier)
+- [x] Pipeline publish: plan → confirm (409 on change) → report → keep / roll back (#298, preview #299; report = the worker's publish-report)
 - [x] Evaluation set and reports (gold set first, threshold proposal as numbers); retrieval settings with the on-demand comparison (#258, #259; retrieval settings and publish in #176)
-- [x] Assistants: draft → publish, versions with restore, archive, description, contact; test panel in `rag-admin`; audiences; retention; impact lines (#260, this PR; draft, publish and audiences earlier in P1a)
+- [x] Assistants: draft → publish, versions with restore, archive, description, contact; test panel in `rag-admin`; audiences; retention; impact lines (#260, #261; draft, publish and audiences earlier in P1a)
 - [x] Audit list; explain access (#257)
 - [ ] **Done:** audited, config version bumped, `PermissionMatrix` covers each endpoint; #23 recorded
+  — all parts merged and covered by `PermissionMatrixTests`; #23 recorded as partly in `results-b.md` (lock-wait measurement and `rag.admin.config_lock.wait` open)
 - [x] **Hand-off L4:** issue to stream A (#300)
 
 ### 10. Chat: history `none`, feedback
@@ -49,23 +61,27 @@ Refs: [chat §11–§14](../chat-api/design.md)
 - [x] Issued conversation ids; `ConversationWriter` (metadata only, daily totals) (#262; with `chat.rag_retention_chat_step`)
 - [x] Conversation endpoints, user delete, 90-day metadata retention (#263; retention in #262)
 - [x] `/v1/feedback` (ratings; `comment_not_stored`) (#264)
-- [x] `FeedbackImporter` (ratings and reason categories, watermark, advisory lock) and feedback pruning (this PR)
+- [x] `FeedbackImporter` (ratings and reason categories, watermark, advisory lock) and feedback pruning (#267)
 - [ ] **Done:** chat §18 tests for these parts green; #20, #51, #135 recorded
+  — tests green; #51 and #135 recorded; #20 partly (the writer's batch is one transaction, not one `NpgsqlBatch` round trip)
 - [x] **Hand-off L6:** issue to stream A with the configuration names (#273)
 
 ### 11. Journey pages, part 1
 Refs: [admin §5.3–§5.5, §6.4–§6.7](../admin/design.md)
-- [x] Kunskapsbanker (list, Översikt, Källor, Dokument with personuppgifter) (this PR)
+- [x] Kunskapsbanker (list, Översikt, Källor, Dokument with personuppgifter) (#279)
 - [ ] Källa (forms with template parameters, preflight, preview Före / Efter, impact, runs, crawl report, files, quarantine, deletions, held, Nedprioritera)
-- [ ] Publicering (plan, progress, report, Behåll / Återställ)
+  — in part: add-source drawer with crawl/URL-list parameters and Kontrollera (#285), source page with Hämta nu, runs and personal-data report, run page with crawl report (#288); still missing: preview Före / Efter (endpoint in #299), edit with impact, files/upload, quarantine, deletions, held, Nedprioritera
+- [ ] Publicering (plan, progress, report, Behåll / Återställ) — API in #298 (plan, confirm, rollback); page not started
 - [ ] **Done:** admin §5.4 steps 1–8 work locally on FakeGateway
 
 ### 12. Journey pages, part 2
 Refs: [admin §5.3, §5.8, §7](../admin/design.md)
 - [ ] Testfrågor och kvalitet and the evaluation report; Sökinställningar
 - [ ] Assistenter: draft, Testa, Publicera, Versioner with restore, Målgrupp, retention, archive
+  — in part (#301): list, create, Utkast (model, instructions, collections, warnings), Testa, Publicera, Målgrupp; still missing: Versioner with restore, retention, archive (API in #260)
 - [ ] Översikt setup checklist; Granskningslogg; explain access
 - [ ] Generic forms for platform objects (incl. parse rules; data protection `none` only); #146 recorded
+  — in part: the main session built the generic forms in #281; #146 not recorded
 - [ ] **Done:** admin §5.4 steps 9–13 work locally
 
 ### 13. Feedback page
