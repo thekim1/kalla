@@ -44,7 +44,7 @@ onMounted(() => load())
     <template v-else>
       <ul class="grid gap-2">
         <li v-for="d in items" :key="d.id" class="border-b border-border pb-2 text-small">
-          <span class="block break-all font-medium">{{ d.title ?? d.displayName ?? d.url }}</span>
+          <span class="block break-all font-medium" lang="sv">{{ d.title ?? d.displayName ?? d.url }}</span>
           <span class="block text-fg-2">{{ DELETIONS.heldAt(formatDateTime(d.heldAt), d.heldBy) }} · {{ DELETIONS.lastSeen }} {{ formatDateTime(d.lastSeenAt) }}</span>
         </li>
       </ul>

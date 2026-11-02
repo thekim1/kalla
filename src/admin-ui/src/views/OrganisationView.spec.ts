@@ -24,10 +24,10 @@ describe('Organisation: synced departments (P0 checklist #11)', () => {
     const text = wrapper.text()
     expect(text).toContain('Kommunledningskontoret')
     expect(text).toContain('Digitalisering & AI')
-    expect(text).toContain('Inaktiv')
-    expect(text).toContain('Inga team')
+    expect(text).toContain('Inactive')
+    expect(text).toContain('No teams')
     expect(sync).not.toHaveBeenCalled() // the sync's status is for platform admins
-    expect(text).not.toContain('Hämta nu')
+    expect(text).not.toContain('Fetch now')
   })
 
   it('lets a platform admin sync now and says what changed', async () => {
@@ -43,7 +43,7 @@ describe('Organisation: synced departments (P0 checklist #11)', () => {
 
     const wrapper = mount(OrganisationView)
     await flushPromises()
-    await wrapper.findAll('button').find((b) => b.text().includes('Hämta nu'))!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text().includes('Fetch now'))!.trigger('click')
     await flushPromises()
 
     expect(sync).toHaveBeenCalledOnce()

@@ -29,7 +29,7 @@ function signIn(roles: string[]) {
   auth.status = 'authenticated'
 }
 
-describe('Kunskapsbank (admin design §5.5.2)', () => {
+describe('Knowledge base (admin design §5.5.2)', () => {
   it('shows the state, who uses it, its sources, and documents filtered to personal data', async () => {
     signIn(['rag-editor'])
     vi.spyOn(api.collections, 'get').mockResolvedValue(base)
@@ -44,16 +44,16 @@ describe('Kunskapsbank (admin design §5.5.2)', () => {
     const wrapper = mount(CollectionView, { props: { id: 'c1' } })
     await flushPromises()
 
-    expect(wrapper.get('[data-test=state]').text()).toBe('Ej publicerad')
-    expect(wrapper.text()).toContain('Ej publicerad: syns bara i Testa.')
-    expect(wrapper.get('[data-test=used-by]').text()).toBe('Bygglovsassistenten (utkast)')
+    expect(wrapper.get('[data-test=state]').text()).toBe('Not published')
+    expect(wrapper.text()).toContain('Not published: only visible in Test.')
+    expect(wrapper.get('[data-test=used-by]').text()).toBe('Bygglovsassistenten (draft)')
     expect(wrapper.find('[data-test=publish]').exists()).toBe(false) // publishing is Manage
 
-    await button(wrapper, 'Källor (1)').trigger('click')
+    await button(wrapper, 'Sources (1)').trigger('click')
     expect(wrapper.text()).toContain('umea.se/bygga')
-    expect(wrapper.text()).toContain('Webbplats')
+    expect(wrapper.text()).toContain('Website')
 
-    await button(wrapper, 'Dokument').trigger('click')
+    await button(wrapper, 'Documents').trigger('click')
     await flushPromises()
     expect(wrapper.findAll('[data-test=pii]')).toHaveLength(1)
     expect(wrapper.text()).toContain('Altan')
@@ -75,10 +75,10 @@ describe('Kunskapsbank (admin design §5.5.2)', () => {
     await flushPromises()
 
     expect(publish).toHaveBeenCalledWith('c1', '7')
-    expect(wrapper.get('[data-test=state]').text()).toBe('Publicerad')
+    expect(wrapper.get('[data-test=state]').text()).toBe('Published')
   })
 
-  it('takes the evaluation report threshold proposal to Sökinställningar, filled in', async () => {
+  it('takes the evaluation report threshold proposal to Search settings, filled in', async () => {
     signIn(['rag-editor'])
     vi.spyOn(api.collections, 'get').mockResolvedValue(base)
     vi.spyOn(api.collections, 'sources').mockResolvedValue([])
@@ -96,7 +96,7 @@ describe('Kunskapsbank (admin design §5.5.2)', () => {
 
     const wrapper = mount(CollectionView, { props: { id: 'c1' } })
     await flushPromises()
-    await button(wrapper, 'Testfrågor och kvalitet').trigger('click')
+    await button(wrapper, 'Test questions and quality').trigger('click')
     await flushPromises()
     await wrapper.get('[data-test=use-proposal]').trigger('click')
     await flushPromises()
@@ -105,7 +105,7 @@ describe('Kunskapsbank (admin design §5.5.2)', () => {
     expect((wrapper.get('#rs-coverageMaxDistance').element as HTMLInputElement).value).toBe('0,4')
   })
 
-  it('shows Kom igång on Översikt until the checklist is done', async () => {
+  it('shows Get started on Overview until the checklist is done', async () => {
     signIn(['rag-editor'])
     vi.spyOn(api.collections, 'get').mockResolvedValue(base)
     vi.spyOn(api.collections, 'sources').mockResolvedValue([])
@@ -116,7 +116,7 @@ describe('Kunskapsbank (admin design §5.5.2)', () => {
     const stubs = { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } }
     const wrapper = mount(CollectionView, { props: { id: 'c1' }, ...stubs })
     await flushPromises()
-    expect(wrapper.get('[data-test=setup]').text()).toContain('Lägg till källa')
+    expect(wrapper.get('[data-test=setup]').text()).toContain('Add source')
     expect(wrapper.get('[data-test=step-source]').attributes('data-state')).toBe('todo')
 
     setup.mockResolvedValue({ ...(await setup.mock.results[0]!.value), done: true, available: true })

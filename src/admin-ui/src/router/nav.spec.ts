@@ -28,9 +28,9 @@ describe('search', () => {
   const entries = searchEntries(navGroups)
 
   it('finds pages by words people use that are not in the label', () => {
-    expect(filterEntries(entries, 'kostnadsställe').map((e) => e.id)).toEqual(['organisation'])
-    expect(filterEntries(entries, 'behörighet').map((e) => e.id)).toEqual(['overview'])
-    expect(filterEntries(entries, 'personuppgifter').map((e) => e.id)).toEqual(['collections'])
+    expect(filterEntries(entries, 'cost centre').map((e) => e.id)).toEqual(['organisation'])
+    expect(filterEntries(entries, 'permissions').map((e) => e.id)).toEqual(['overview'])
+    expect(filterEntries(entries, 'personal data').map((e) => e.id)).toEqual(['collections'])
   })
 
   it('lists only pages without a query', () => {

@@ -18,7 +18,7 @@ const result: StagePreviewResult = {
   ],
 }
 
-describe('Förhandsgranskning (admin design §6.4)', () => {
+describe('Preview (admin design §6.4)', () => {
   it('shows a document without a site profile at its last stage: the personal-data counts and the state the set would get', async () => {
     const output = vi.spyOn(api.previews, 'output').mockResolvedValue({
       stage: 'personal-data', truncated: false,
@@ -29,18 +29,18 @@ describe('Förhandsgranskning (admin design §6.4)', () => {
 
     expect(output).toHaveBeenCalledWith('j', 0, 'personal-data')
     const text = wrapper.text()
-    expect(text).not.toContain('Före / Efter')
-    expect(text).toContain('Läge i kunskapsbanken: Hålls utanför sökningen')
-    expect(text).toContain('E-postadresser2Gör att dokumentet flaggas')
-    expect(text).toContain('Telefonnummer1')
-    expect(text).not.toContain('Personnummer')
-    expect(text).toContain('USD')
+    expect(text).not.toContain('Before / After')
+    expect(text).toContain('State in the knowledge base: Kept out of the search')
+    expect(text).toContain('Email addresses2Makes the document flagged')
+    expect(text).toContain('Phone numbers1')
+    expect(text).not.toContain('Personal identity numbers')
+    expect(text).toContain('US$')
   })
 
   it('says the preview has expired when its outputs are gone (404 after 24 h)', async () => {
     vi.spyOn(api.previews, 'output').mockRejectedValue(new ApiError(404, 'GET', null))
     const wrapper = mount(PreviewResult, { props: { jobId: 'j', result } })
     await flushPromises()
-    expect(wrapper.text()).toContain('Förhandsgranskningen finns inte längre (den sparas i 24 timmar). Kör den igen.')
+    expect(wrapper.text()).toContain('The preview no longer exists (it is kept for 24 hours). Run it again.')
   })
 })

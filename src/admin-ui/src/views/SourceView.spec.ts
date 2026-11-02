@@ -23,7 +23,7 @@ function run(overrides: Partial<RunSummary>): RunSummary {
   }
 }
 
-describe('Källa (admin design §5.5.3; #278 slice 2)', () => {
+describe('Source (admin design §5.5.3; #278 slice 2)', () => {
   it('shows the settings, runs with their counts, the personal-data report, and starts a sync', async () => {
     setActivePinia(createPinia())
     const auth = useAuthStore()
@@ -42,9 +42,9 @@ describe('Källa (admin design §5.5.3; #278 slice 2)', () => {
 
     expect(wrapper.get('[data-test=addresses]').text()).toBe('https://www.umea.se/bygga')
     expect(wrapper.text()).toMatch(/2\s500/)
-    expect(wrapper.text()).toContain('Klar')
+    expect(wrapper.text()).toContain('Done')
     expect(wrapper.text()).toContain('+40 · ~2 · −1')
-    expect(wrapper.get('[data-test=pii]').text()).toContain('Hålls utanför sökningen')
+    expect(wrapper.get('[data-test=pii]').text()).toContain('Kept out of the search')
 
     await wrapper.get('[data-test=sync]').trigger('click')
     await flushPromises()
@@ -55,7 +55,7 @@ describe('Källa (admin design §5.5.3; #278 slice 2)', () => {
     expect(push).toHaveBeenCalledWith({ name: 'run', params: { id: 'r1' } })
   })
 
-  it('shows the Nedprioritera rules and opens Ändra källa with the collection for its level ceiling', async () => {
+  it('shows the Demote rules and opens Edit source with the collection for its level ceiling', async () => {
     setActivePinia(createPinia())
     const auth = useAuthStore()
     auth.user = bffUser({ roles: ['rag-editor'] })

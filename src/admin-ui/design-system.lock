@@ -2,7 +2,7 @@
   "source": "github.com/thekim1/llmgateway",
   "sourceDirectory": "src/admin-ui",
   "commit": "e25b491dac6edaa28e3b65091f5b6fe7c84aa688",
-  "note": "The design system copied from the gateway admin UI (repo-and-deployment \u00a72.3). sha256 is the gateway file at the commit; an adapted file differs on purpose (Swedish texts through utils/labels.ts, RAG navigation). npm run design-system reports drift as a warning.",
+  "note": "The design system copied from the gateway admin UI (repo-and-deployment \u00a72.3). sha256 is the gateway file at the commit; an adapted file differs on purpose (texts through utils/labels.ts, RAG navigation). npm run design-system reports drift as a warning.",
   "files": [
     {
       "path": "tailwind.config.cjs",

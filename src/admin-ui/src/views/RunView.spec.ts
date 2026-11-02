@@ -17,7 +17,7 @@ const run: Run = {
   },
 }
 
-describe('Körning (admin design §5.5.3; #278 slice 2)', () => {
+describe('Run (admin design §5.5.3; #278 slice 2)', () => {
   it('shows the counters, the crawl report in Swedish and the failed documents with their reason', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.runs, 'get').mockResolvedValue(run)
@@ -29,13 +29,13 @@ describe('Körning (admin design §5.5.3; #278 slice 2)', () => {
     const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
     await flushPromises()
 
-    expect(wrapper.get('[data-test=state]').text()).toBe('Klar med anmärkning')
+    expect(wrapper.get('[data-test=state]').text()).toBe('Done with remarks')
     expect(wrapper.get('[data-test=counts]').text()).toMatch(/9\s800/)
     const report = wrapper.get('[data-test=report]').text()
-    expect(report).toContain('Webbplatsen gicks inte igenom helt:')
-    expect(report).toContain('Webbplatsen har fler sidor än gränsen; bara de första hämtas.')
-    expect(report).toContain('1 av 2 startadresser svarade')
-    expect(wrapper.text()).toContain('Sidan finns inte (404). Kontrollera adressen.')
+    expect(report).toContain('The website was not gone through completely:')
+    expect(report).toContain('The website has more pages than the limit; only the first ones are fetched.')
+    expect(report).toContain('1 of 2 start addresses answered')
+    expect(wrapper.text()).toContain('The page does not exist (404). Check the address.')
 
     await wrapper.get('input[type=checkbox]').setValue(true)
     await flushPromises()
@@ -50,7 +50,7 @@ describe('Körning (admin design §5.5.3; #278 slice 2)', () => {
 
     const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
     await flushPromises()
-    expect(wrapper.get('[data-test=deletions]').text()).toContain('212 dokument hittades inte')
+    expect(wrapper.get('[data-test=deletions]').text()).toContain('212 documents were not found')
     expect(deletions).toHaveBeenCalledWith('r1', undefined)
   })
 })

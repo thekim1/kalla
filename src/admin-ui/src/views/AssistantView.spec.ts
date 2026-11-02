@@ -38,8 +38,8 @@ function mocks() {
   vi.spyOn(api.clients, 'list').mockResolvedValue([{ id: 'k1', name: 'Open WebUI (pilot)', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true }])
 }
 
-describe('Assistent (admin design §5.5.4; #278 slice 3)', () => {
-  it('saves the draft with model, instructions and collections and shows the V-rule warnings in Swedish', async () => {
+describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
+  it('saves the draft with model, instructions and collections and shows the V-rule warnings in plain words', async () => {
     signIn(['rag-editor'])
     mocks()
     const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu', warnings: [], version: 'd8' })
@@ -47,12 +47,12 @@ describe('Assistent (admin design §5.5.4; #278 slice 3)', () => {
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
 
-    expect(wrapper.get('[data-test=warnings]').text()).toContain('Lägg till en beskrivning och en kontakt innan du publicerar.')
-    expect(wrapper.text()).toContain('Modellnamn i Open WebUI: bygglov')
+    expect(wrapper.get('[data-test=warnings]').text()).toContain('Add a description and a contact before you publish.')
+    expect(wrapper.text()).toContain('Model name in Open WebUI: bygglov')
     const options = wrapper.findAll('#assistant-model option').map((o) => o.text())
     expect(options).toContain('ume/chat-eu')
     expect(options).not.toContain('bge-m3') // embedding models are not answer models
-    expect(wrapper.text()).toContain('Bygglov (ej publicerad)')
+    expect(wrapper.text()).toContain('Bygglov (not published)')
     expect(wrapper.text()).not.toContain('Annan förvaltning') // only the assistant's department's collections
 
     await wrapper.get('#assistant-model').setValue('ume/chat-eu')
@@ -80,21 +80,21 @@ describe('Assistent (admin design §5.5.4; #278 slice 3)', () => {
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
 
-    await button(wrapper, 'Testa').trigger('click')
+    await button(wrapper, 'Test').trigger('click')
     await wrapper.get('#assistant-question').setValue('Behöver jag bygglov för en altan?')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(test).toHaveBeenCalledWith('a1', { question: 'Behöver jag bygglov för en altan?' })
     expect(wrapper.get('[data-test=answer]').text()).toContain('Ja [1].')
-    expect(wrapper.text()).toContain('ume/chat-eu · Eu · 812 ms')
-    expect(wrapper.text()).toContain('Citerad')
+    expect(wrapper.text()).toContain('ume/chat-eu · EU · 812 ms')
+    expect(wrapper.text()).toContain('Cited')
 
     await wrapper.get('[data-test=publish]').trigger('click')
     await flushPromises()
     expect(publish).toHaveBeenCalledWith('a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: false })
-    expect(wrapper.get('[data-test=published]').text()).toBe('Publicerad: version 1')
+    expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 1')
 
-    await button(wrapper, 'Målgrupp').trigger('click')
+    await button(wrapper, 'Audience').trigger('click')
     await wrapper.get('input[type=checkbox]').setValue(true)
     await wrapper.get('[data-test=save-audience]').trigger('click')
     await flushPromises()
@@ -114,23 +114,23 @@ describe('Assistent (admin design §5.5.4; #278 slice 3)', () => {
     const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
 
-    await button(wrapper, 'Versioner').trigger('click')
+    await button(wrapper, 'Versions').trigger('click')
     await flushPromises()
     const table = wrapper.get('[data-test=versions]').text()
-    expect(table).toContain('återställd från version 1')
-    expect(table).toContain('Tidigare')
+    expect(table).toContain('restored from version 1')
+    expect(table).toContain('Earlier')
     expect(wrapper.find('[data-test=restore-3]').exists()).toBe(false) // the live version
     expect(wrapper.find('[data-test=restore-4]').exists()).toBe(false) // the draft is published, not restored
 
     await wrapper.get('[data-test=restore-2]').trigger('click')
     await flushPromises()
-    expect(document.body.textContent).toContain('Version 2 publiceras igen som en ny version. Ditt utkast finns kvar.')
-    const confirm = [...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Återställ').at(-1)!
+    expect(document.body.textContent).toContain('Version 2 is published again as a new version. Your draft is kept.')
+    const confirm = [...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Restore').at(-1)!
     confirm.click()
     await flushPromises()
     expect(restore).toHaveBeenCalledWith('a1', 2, 'a3')
     expect(versions).toHaveBeenCalledTimes(2)
-    expect(wrapper.get('[data-test=published]').text()).toBe('Publicerad: version 5')
+    expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 5')
     wrapper.unmount()
   })
 
@@ -148,24 +148,24 @@ describe('Assistent (admin design §5.5.4; #278 slice 3)', () => {
 
     await wrapper.get('[data-test=archive]').trigger('click')
     await flushPromises()
-    expect(document.body.textContent).toContain('Assistenten försvinner från alla klienter.')
-    ;[...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Arkivera').at(-1)!.click()
+    expect(document.body.textContent).toContain('The assistant disappears from all clients.')
+    ;[...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Archive').at(-1)!.click()
     await flushPromises()
     expect(archive).toHaveBeenCalledWith('a1', 'a3')
-    expect(wrapper.get('[data-test=archived]').text()).toBe('Arkiverad')
+    expect(wrapper.get('[data-test=archived]').text()).toBe('Archived')
     await wrapper.get('[data-test=unarchive]').trigger('click')
     await flushPromises()
     expect(unarchive).toHaveBeenCalledWith('a1', 'a4')
     expect(wrapper.find('[data-test=archived]').exists()).toBe(false)
 
-    await button(wrapper, 'Lagring').trigger('click')
+    await button(wrapper, 'Storage').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('Högst 180 dagar för informationsklassen.')
-    expect(wrapper.text()).toContain('Frågor och svar sparas inte')
+    expect(wrapper.text()).toContain('At most 180 days for the information class.')
+    expect(wrapper.text()).toContain('Questions and answers are not saved')
     await wrapper.get('#assistant-retention').setValue('365')
     await wrapper.get('[data-test=save-storage]').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('Skriv ett heltal från 1 till 180.')
+    expect(wrapper.text()).toContain('Enter a whole number from 1 to 180.')
     expect(retention).not.toHaveBeenCalled()
     await wrapper.get('#assistant-retention').setValue('30')
     await wrapper.get('[data-test=save-storage]').trigger('click')

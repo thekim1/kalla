@@ -53,7 +53,7 @@ onMounted(() => load())
     <h3 class="mb-1 mt-4 font-medium">{{ DELETIONS.examples }}</h3>
     <ul class="grid gap-2">
       <li v-for="p in items" :key="p.documentId" class="border-b border-border pb-2 text-small">
-        <span class="block break-all font-medium">{{ p.title ?? p.url }}</span>
+        <span class="block break-all font-medium" lang="sv">{{ p.title ?? p.url }}</span>
         <span v-if="p.title && p.url" class="block break-all text-fg-3">{{ p.url }}</span>
         <span class="block text-fg-2">
           {{ DELETIONS.reason }}: {{ jobMessage(p.reason) }} · {{ DELETIONS.lastSeen }} {{ formatDateTime(p.lastSeenAt) }}<template v-if="p.exempt"> · {{ DELETIONS.exempt }}</template>

@@ -9,7 +9,7 @@ import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { useUiStore } from '@/stores/ui'
-import { formatDateTime } from '@/utils/format'
+import { formatDateTime, formatDecimal } from '@/utils/format'
 import { FILES } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
@@ -45,7 +45,7 @@ const replacing = ref<UploadFile | null>(null)
 
 const maxMb = computed(() => Number(props.source.settings.maxFileSizeMb ?? 50))
 const sendable = computed(() => pending.value.filter((p) => p.state !== 'sent').length)
-const sizeText = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} kB` : `${(bytes / 1024 / 1024).toLocaleString('sv-SE', { maximumFractionDigits: 1 })} MB`)
+const sizeText = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} kB` : `${formatDecimal(bytes / 1024 / 1024, 1)} MB`)
 const stateTone = (state: string) => (state === 'indexed' ? 'ok' : state === 'malware' || state === 'refused' ? 'danger' : 'neutral')
 
 async function load(append = false): Promise<void> {

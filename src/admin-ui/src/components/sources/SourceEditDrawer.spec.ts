@@ -28,8 +28,8 @@ async function open() {
   return wrapper
 }
 
-describe('Ändra källa (admin design §5.5.3, V25)', () => {
-  it('shows the impact of a scope change and saves only with Spara ändå, sending the token and keeping other settings', async () => {
+describe('Edit source (admin design §5.5.3, V25)', () => {
+  it('shows the impact of a scope change and saves only with Save anyway, sending the token and keeping other settings', async () => {
     const impact = vi.spyOn(api.sources, 'impact').mockResolvedValue({
       effects: ['scope'], liveDocuments: 840, impactToken: 'tok',
       usedBy: [{ id: 'a1', name: 'Bygglovsassistenten', classification: 'public', published: true, draft: false }, { id: 'a2', name: 'Kundtjänst bygg', classification: 'public', published: false, draft: true }],
@@ -50,9 +50,9 @@ describe('Ändra källa (admin design §5.5.3, V25)', () => {
     expect(impact).toHaveBeenCalledWith('s1', { settings })
     expect(update).not.toHaveBeenCalled()
     const text = document.body.querySelector('[data-test=impact]')!.textContent!.replace(/\u00a0/g, ' ')
-    expect(text).toContain('Av källans 840 sökbara dokument')
-    expect(text).toContain('Bygglovsassistenten, Kundtjänst bygg (utkast)')
-    expect(document.body.querySelector('[data-test=save-source]')!.textContent).toContain('Spara ändå')
+    expect(text).toContain('Of the source’s 840 searchable documents')
+    expect(text).toContain('Bygglovsassistenten, Kundtjänst bygg (draft)')
+    expect(document.body.querySelector('[data-test=save-source]')!.textContent).toContain('Save anyway')
 
     click('save-source')
     await flushPromises()
@@ -63,7 +63,7 @@ describe('Ändra källa (admin design §5.5.3, V25)', () => {
     wrapper.unmount()
   })
 
-  it('saves a change without scope effect at once, and refuses a bad Nedprioritera line', async () => {
+  it('saves a change without scope effect at once, and refuses a bad Demote line', async () => {
     vi.spyOn(api.sources, 'impact').mockResolvedValue({ effects: ['cosmetic'], liveDocuments: 840, impactToken: null, usedBy: [] })
     const update = vi.spyOn(api.sources, 'update').mockResolvedValue(source)
     const wrapper = await open()
@@ -71,7 +71,7 @@ describe('Ändra källa (admin design §5.5.3, V25)', () => {
     input('#edit-demote', 'www.umea.se/arkiv/** 2')
     click('save-source')
     await flushPromises()
-    expect(document.body.textContent).toContain('eventuellt följt av en faktor mellan 0 och 1')
+    expect(document.body.textContent).toContain('optionally followed by a factor between 0 and 1')
     expect(update).not.toHaveBeenCalled()
 
     input('#edit-demote', '')

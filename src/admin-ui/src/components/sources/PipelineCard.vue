@@ -40,10 +40,10 @@ const copyOnWrite = computed(() => pipeline.value?.departmentId === null && !pla
 const fields = computed(() =>
   Object.entries(template.value?.paramsSchema.properties ?? {}).map(([name, schema]) => {
     const kind = Array.isArray(schema.enum) ? 'select' : schema.type === 'integer' ? 'integer' : 'json'
-    const labels = schema['x-labels'] as { sv?: string } | undefined
+    const labels = schema['x-labels'] as { en?: string; sv?: string } | undefined
     return {
       name, kind, schema,
-      label: PIPELINE.params[name] ?? labels?.sv ?? name,
+      label: PIPELINE.params[name] ?? labels?.en ?? labels?.sv ?? name,
       options: kind === 'select' ? (schema.enum as string[]).map((v) => ({ value: v, label: PIPELINE.options[v] ?? v })) : [],
       hint: kind === 'integer' && typeof schema.minimum === 'number' && typeof schema.maximum === 'number'
         ? PIPELINE.range(schema.minimum, schema.maximum) : kind === 'json' ? PIPELINE.json : undefined,

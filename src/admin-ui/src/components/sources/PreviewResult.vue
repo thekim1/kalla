@@ -13,7 +13,7 @@ import { isApiError } from '@/api/client'
 import { problemMessage } from '@/utils/problem'
 
 // The preview result (admin design §6.4, §5.4 step 5): the documents as tabs, each with its stage strip (state, duration,
-// reuse, cost) and one output at a time: Före / Efter for a crawled page (the extraction without and with the site
+// reuse, cost) and one output at a time: Before / After for a crawled page (the extraction without and with the site
 // profile), or a stage's output (blocks, chunks with heading path and token count, personal-data counts). Outputs are
 // fetched when shown, through GET /api/previews/{jobId}/documents/{index}/stages/{stage}/output.
 const props = defineProps<{ jobId: string; result: StagePreviewResult }>()
@@ -131,7 +131,7 @@ const stateTone = (state: string) => (state === 'succeeded' ? 'ok' : state === '
             </dl>
             <div class="max-h-96 overflow-y-auto text-small" :data-test="`text-${side}`">
               <template v-if="shown(side)">
-                <p v-for="(b, i) in bodyBlocks(parsed(side))" :key="i" class="mb-2 whitespace-pre-wrap" :class="b.kind === 'heading' ? 'font-semibold' : ''">{{ b.text }}</p>
+                <p v-for="(b, i) in bodyBlocks(parsed(side))" :key="i" lang="sv" class="mb-2 whitespace-pre-wrap" :class="b.kind === 'heading' ? 'font-semibold' : ''">{{ b.text }}</p>
                 <p v-if="!bodyBlocks(parsed(side)).length" class="text-fg-2">{{ PREVIEW.noText }}</p>
                 <p v-if="shown(side)!.truncated" class="text-fg-2">{{ PREVIEW.truncated }}</p>
               </template>
@@ -150,7 +150,7 @@ const stateTone = (state: string) => (state === 'succeeded' ? 'ok' : state === '
               <p class="text-fg-2">
                 {{ c.headingPath || c.prefix }} · {{ PREVIEW.tokens(c.tokenCount) }}<span v-if="c.page != null"> · {{ PREVIEW.page(c.page) }}</span>
               </p>
-              <p class="whitespace-pre-wrap">{{ c.text }}</p>
+              <p class="whitespace-pre-wrap" lang="sv">{{ c.text }}</p>
             </article>
           </template>
           <template v-else-if="pii">
@@ -165,8 +165,8 @@ const stateTone = (state: string) => (state === 'succeeded' ? 'ok' : state === '
             </dl>
           </template>
           <template v-else-if="parsed(view)">
-            <p v-if="parsed(view)!.title" class="mb-2"><span class="text-fg-2">{{ PREVIEW.title }}: </span>{{ parsed(view)!.title }}</p>
-            <p v-for="(b, i) in bodyBlocks(parsed(view))" :key="i" class="mb-2 whitespace-pre-wrap" :class="b.kind === 'heading' ? 'font-semibold' : ''">{{ b.text }}</p>
+            <p v-if="parsed(view)!.title" class="mb-2"><span class="text-fg-2">{{ PREVIEW.title }}: </span><span lang="sv">{{ parsed(view)!.title }}</span></p>
+            <p v-for="(b, i) in bodyBlocks(parsed(view))" :key="i" lang="sv" class="mb-2 whitespace-pre-wrap" :class="b.kind === 'heading' ? 'font-semibold' : ''">{{ b.text }}</p>
             <p v-if="!bodyBlocks(parsed(view)).length" class="text-fg-2">{{ PREVIEW.noText }}</p>
           </template>
           <p v-else class="text-fg-2">{{ PREVIEW.noOutput }}</p>

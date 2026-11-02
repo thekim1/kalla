@@ -33,7 +33,7 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-describe('Testfrågor och kvalitet (admin design §7.1, §7.2)', () => {
+describe('Test questions and quality (admin design §7.1, §7.2)', () => {
   it('leads the report with the human layer, compares with the earlier run and offers the threshold proposal', async () => {
     signIn(['rag-editor'])
     const latest = run({
@@ -62,17 +62,17 @@ describe('Testfrågor och kvalitet (admin design §7.1, §7.2)', () => {
     const wrapper = mount(EvaluationTab, { props: { collectionId: 'c1', canEdit: true } })
     await flushPromises()
 
-    expect(wrapper.get('[data-test=layers]').text()).toContain('Från verksamheten3 aktiva')
-    expect(wrapper.get('[data-test=layers]').text()).toContain('2 aktiva · 1 inaktuella')
+    expect(wrapper.get('[data-test=layers]').text()).toContain('From your organisation3 active')
+    expect(wrapper.get('[data-test=layers]').text()).toContain('2 active · 1 out of date')
     const human = wrapper.get('[data-test=human]').text()
-    expect(human).toContain('Testfrågor från verksamheten · 3 frågor')
+    expect(human).toContain('Test questions from your organisation · 3 questions')
     expect(human).toContain('1,00 → 0,50') // recall@10 over the two answerable questions, then and now
-    expect(human).toMatch(/Felaktigt "hittar inget"\s*50\s*%/)
-    expect(human).toMatch(/besvarade "hittar inget"\s*100\s*%/)
+    expect(human).toMatch(/Wrongly “found nothing”\s*50\s*%/)
+    expect(human).toMatch(/answered “found nothing”\s*100\s*%/)
     expect(wrapper.get('[data-test=generated]').text()).toContain('1,00 → 0,50')
-    expect(wrapper.get('[data-test=summary]').text()).toBe('För få frågor för att jämföra.')
+    expect(wrapper.get('[data-test=summary]').text()).toBe('Too few questions to compare.')
     expect(wrapper.get('[data-test=worse]').text()).toContain('Fråga h2')
-    expect(wrapper.get('[data-test=proposal]').text()).toContain('Största avstånd: 0,42 (1 frågor hamnar fel)')
+    expect(wrapper.get('[data-test=proposal]').text()).toContain('Largest distance: 0,42 (1 question ends up wrong)')
     expect(wrapper.find('[data-test=history]').exists()).toBe(true)
 
     await wrapper.get('[data-test=use-proposal]').trigger('click')
@@ -96,7 +96,7 @@ describe('Testfrågor och kvalitet (admin design §7.1, §7.2)', () => {
 
     const wrapper = mount(EvaluationTab, { props: { collectionId: 'c1', canEdit: true }, attachTo: document.body })
     await flushPromises()
-    expect(wrapper.text()).toContain('Ingen utvärdering har körts ännu.')
+    expect(wrapper.text()).toContain('No evaluation has been run yet.')
 
     await wrapper.get('[data-test=run]').trigger('click')
     await flushPromises()
@@ -106,10 +106,10 @@ describe('Testfrågor och kvalitet (admin design §7.1, §7.2)', () => {
     await wrapper.get('[data-test=generate]').trigger('click')
     await flushPromises()
     const forecast = document.body.querySelector('[data-test=forecast]')!.textContent!
-    expect(forecast).toContain('100 nya frågor behövs för att nå 100')
-    expect(forecast).toContain('320 anrop')
-    expect(forecast).toContain('Modell: eval-model')
-    dialogButton('Skapa testfrågor').click()
+    expect(forecast).toContain('100 new questions are needed to reach 100')
+    expect(forecast).toContain('320 calls')
+    expect(forecast).toContain('Model: eval-model')
+    dialogButton('Create test questions').click()
     await flushPromises()
     expect(generate).toHaveBeenCalledWith('c1')
     wrapper.unmount()
@@ -137,7 +137,7 @@ describe('Testfrågor och kvalitet (admin design §7.1, §7.2)', () => {
     const wrapper = mount(EvaluationTab, { props: { collectionId: 'c1', canEdit: true }, attachTo: document.body })
     await flushPromises()
     expect(wrapper.text()).toContain('Behöver jag bygglov för altan?')
-    expect(wrapper.text()).toContain('1 dokument')
+    expect(wrapper.text()).toContain('1 document')
 
     await wrapper.get('[data-test=add-question]').trigger('click')
     await flushPromises()
@@ -149,7 +149,7 @@ describe('Testfrågor och kvalitet (admin design §7.1, §7.2)', () => {
     search.dispatchEvent(new Event('input'))
     await vi.advanceTimersByTimeAsync(300)
     await flushPromises()
-    ;(document.body.querySelector('[aria-label="Lägg till Attefallshus"]') as HTMLButtonElement).click()
+    ;(document.body.querySelector('[aria-label="Add Attefallshus"]') as HTMLButtonElement).click()
     await flushPromises()
     ;(document.body.querySelector('[data-test=save-question]') as HTMLButtonElement).click()
     await flushPromises()
@@ -157,7 +157,7 @@ describe('Testfrågor och kvalitet (admin design §7.1, §7.2)', () => {
 
     await wrapper.get('[data-test=retire-question]').trigger('click')
     await flushPromises()
-    dialogButton('Ta bort').click()
+    dialogButton('Remove').click()
     await flushPromises()
     expect(retire).toHaveBeenCalledWith('c1', 'q1')
     wrapper.unmount()

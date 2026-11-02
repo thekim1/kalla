@@ -33,7 +33,7 @@ function setup(roles: string[]) {
   return router
 }
 
-describe('Bearbetning on the source page (admin design §6.6 step 1)', () => {
+describe('Processing on the source page (admin design §6.6 step 1)', () => {
   it('edits the template parameters and plans a copy-on-write publication for a department user', async () => {
     const router = setup(['rag-department-admin'])
     const plan = vi.spyOn(api.pipelines, 'plan').mockResolvedValue({ publicationId: 'pub1', pipelineId: 'p2', draftVersionId: 'v9', draftNumber: 2, copiedOnWrite: true })
@@ -41,20 +41,20 @@ describe('Bearbetning on the source page (admin design §6.6 step 1)', () => {
     await flushPromises()
 
     const card = wrapper.get('[data-test=pipeline]').text()
-    expect(card).toContain('Textavsnittens längd (token)500')
-    expect(card).toContain('Automatiskt')
+    expect(card).toContain('Passage length (tokens)500')
+    expect(card).toContain('Automatic')
 
     await wrapper.get('[data-test=edit-pipeline]').trigger('click')
     await flushPromises()
     expect(document.body.querySelector('[data-test=copy-on-write]')).not.toBeNull()
-    expect(document.body.textContent).toContain('Från 200 till 800.')
+    expect(document.body.textContent).toContain('From 200 to 800.')
     const tokens = document.body.querySelector<HTMLInputElement>('#param-chunkTokens')!
     expect(tokens.value).toBe('500')
     tokens.value = 'många'
     tokens.dispatchEvent(new Event('input'))
     document.body.querySelector<HTMLButtonElement>('[data-test=plan]')!.click()
     await flushPromises()
-    expect(document.body.textContent).toContain('Skriv ett heltal.')
+    expect(document.body.textContent).toContain('Enter a whole number.')
     expect(plan).not.toHaveBeenCalled()
 
     tokens.value = '600'

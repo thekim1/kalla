@@ -13,7 +13,7 @@ const collection: Collection = {
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('Sökinställningar (admin design §7.1, V16)', () => {
+describe('Search settings (admin design §7.1, V16)', () => {
   it('shows the saved values, checks the ranges and saves only the fields set, with the version read', async () => {
     setActivePinia(createPinia())
     const save = vi.spyOn(api.collections, 'retrievalSettings').mockResolvedValue({ ...collection, version: '8' })
@@ -25,7 +25,7 @@ describe('Sökinställningar (admin design §7.1, V16)', () => {
 
     await wrapper.get('#rs-coverageMaxDistance').setValue('1,5')
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.text()).toContain('Skriv ett tal från 0,05 till 1.')
+    expect(wrapper.text()).toContain('Enter a number from 0,05 to 1.')
     expect(save).not.toHaveBeenCalled()
 
     await wrapper.get('#rs-coverageMaxDistance').setValue('0,42')

@@ -16,7 +16,7 @@ function signIn(roles: string[]) {
 }
 const dialogButton = (label: string) => [...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === label).at(-1)!
 
-describe('Borttagning väntar på beslut and Behållna (admin design §5.5.3, connectors §13)', () => {
+describe('Removal waiting for a decision and Kept documents (admin design §5.5.3, connectors §13)', () => {
   it('lists the proposals and confirms with the count the user saw; a newer run answers deletion_superseded', async () => {
     signIn(['rag-department-admin'])
     vi.spyOn(api.runs, 'deletions').mockResolvedValue({
@@ -29,19 +29,19 @@ describe('Borttagning väntar på beslut and Behållna (admin design §5.5.3, co
     const wrapper = mount(DeletionDecision, { props: { runId: 'r1', proposedCount: 212 }, attachTo: document.body })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('212 dokument hittades inte')
+    expect(wrapper.text()).toContain('212 documents were not found')
     expect(wrapper.text()).toContain('https://www.umea.se/bygga/altan')
     expect(wrapper.get('a[download]').attributes('href')).toBe('/api/runs/r1/deletions?format=csv')
 
     await wrapper.get('[data-test=remove]').trigger('click')
     await flushPromises()
-    dialogButton('Ta bort 212 dokument').click()
+    dialogButton('Remove 212 documents').click()
     await flushPromises()
     expect(confirm).toHaveBeenCalledWith('r1', 212)
-    expect(document.body.textContent).toContain('Förslaget om borttagning gäller inte längre.')
+    expect(document.body.textContent).toContain('The deletion proposal no longer applies.')
     expect(wrapper.emitted('decided')).toBeUndefined()
 
-    dialogButton('Ta bort 212 dokument').click()
+    dialogButton('Remove 212 documents').click()
     await flushPromises()
     expect(wrapper.emitted('decided')).toHaveLength(1)
     wrapper.unmount()
@@ -55,7 +55,7 @@ describe('Borttagning väntar på beslut and Behållna (admin design §5.5.3, co
     await flushPromises()
     await wrapper.get('[data-test=keep]').trigger('click')
     await flushPromises()
-    dialogButton('Behåll dokumenten').click()
+    dialogButton('Keep the documents').click()
     await flushPromises()
     expect(reject).toHaveBeenCalledWith('r1', 7)
     wrapper.unmount()
@@ -76,10 +76,10 @@ describe('Borttagning väntar på beslut and Behållna (admin design §5.5.3, co
     const wrapper = mount(HeldDocuments, { props: { sourceId: 's1' }, attachTo: document.body })
     await flushPromises()
     expect(wrapper.text()).toContain('Altan')
-    expect(wrapper.text()).toContain('av anna')
+    expect(wrapper.text()).toContain('by anna')
     await wrapper.get('[data-test=release]').trigger('click')
     await flushPromises()
-    dialogButton('Släpp alla').click()
+    dialogButton('Release all').click()
     await flushPromises()
     expect(release).toHaveBeenCalledWith('s1')
     wrapper.unmount()
