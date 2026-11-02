@@ -988,3 +988,42 @@ export const FEEDBACK = {
   importOutcome: (outcome: string | null) => (outcome === null ? 'Not run' : outcome === 'ok' ? 'OK' : 'Failed'),
   importLine: (when: string, unmapped: number) => `Last run ${when} · ${unmapped} could not be matched`,
 } as const
+
+/** Explain access on the assistant's Audience tab (admin design §4.5, identity design §4.9). */
+export const EXPLAIN = {
+  title: 'Check access',
+  lead: 'Why a person or an application can or cannot use this assistant through a client. Nothing is opened or logged as access.',
+  client: 'Client',
+  chooseClient: 'Choose a client',
+  kind: 'Who',
+  kinds: { 'owui-user': 'Open WebUI user', 'entra-user': 'Municipal account (Entra)', key: 'Application with a key' } as Record<string, string>,
+  id: 'Id',
+  idLabels: { 'owui-user': 'Open WebUI user id', 'entra-user': 'Object id (oid)', key: 'Key id' } as Record<string, string>,
+  idRequired: 'Enter the id.',
+  departments: 'Department ids',
+  groups: 'Groups',
+  listHint: 'One per line, or separated by commas. Leave empty for none.',
+  run: 'Check access',
+  allowed: 'Allowed',
+  refused: 'Refused',
+  allowedText: (level: string | null, residency: string | null) =>
+    `Allowed${level ? `, at the ${level} level` : ''}${residency ? `, with models running at most ${residency}` : ''}.`,
+  step: (step: string, reason: string, status: number) => `Step ${step} of the access check · ${reason} · HTTP ${status}`,
+  unknownReason: 'Refused for a reason this page does not know yet.',
+  reasons: {
+    config_unconfirmed: 'The configuration is not confirmed yet. Try again in a minute.',
+    client_unknown: 'The client is not registered.',
+    client_disabled: 'The client is turned off.',
+    client_not_allowed: 'The client may not use this assistant.',
+    credential_not_allowed: 'The client may not sign in this way.',
+    subject_not_allowed: 'This kind of user may not use the client.',
+    permission_missing: 'The token lacks a permission the call needs.',
+    not_found: 'The assistant is not published or not offered here.',
+    key_scope: 'The key is limited to other assistants or knowledge bases.',
+    ceiling_exceeded: "The assistant's information class is above what the client may receive.",
+    anonymous_not_allowed: 'Anonymous use is not allowed for this assistant.',
+    client_stores_history: 'The client stores conversations, which the information class does not allow.',
+    audience_mismatch: "The user is not in the assistant's audience for this client.",
+    membership_unavailable: "The user's departments and groups could not be read.",
+  } as Record<string, string>,
+} as const

@@ -9,7 +9,9 @@ import type {
   BffUser,
   ClientSummary,
   GatewayModel,
+  AccessExplanation,
   AuditDetail,
+  ExplainAccessRequest,
   FeedbackItem,
   FeedbackSummary,
   AuditSummary,
@@ -138,6 +140,9 @@ export const api = {
   },
   clients: {
     list: () => http.get<ClientSummary[]>('/api/clients'),
+  },
+  access: {
+    explain: (body: ExplainAccessRequest) => http.post<AccessExplanation>('/api/access/explain', body),
   },
   gateway: {
     models: () => http.get<GatewayModel[]>('/api/gateway/models'),
