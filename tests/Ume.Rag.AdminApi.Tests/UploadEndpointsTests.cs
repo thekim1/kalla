@@ -264,4 +264,51 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
         await using var db = TestPostgres.Context(database.Connection(null));
         (await db.Jobs.AsNoTracking().AnyAsync(j => j.DedupKey == $"sync-upload:{batch}", Ct)).ShouldBeFalse();
     }
+
+    [Fact]
+    public async Task The_files_list_pages_live_and_deleted_slots_and_quarantine_shows_metadata_only()
+    {
+        var (sourceId, code) = await UploadSourceAsync();
+        var now = DateTimeOffset.UtcNow;
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            Upload Slot(string name, string state, DateTimeOffset? deleted) => new()
+            {
+                SourceId = sourceId, Classification = Classification.Internal, BatchId = Guid.CreateVersion7(), FileName = name, Bytes = 1234,
+                Sha256 = RandomNumberGenerator.GetBytes(32), State = state, UploadedBy = "anna", UploadedAt = now, DeletedAt = deleted,
+            };
+            db.Uploads.AddRange(Slot("taxa-2026.pdf", UploadStates.Indexed, null), Slot("avgifter.docx", UploadStates.Refused, null), Slot("gammal.pdf", UploadStates.Deleted, now));
+            db.QuarantinedFiles.Add(new QuarantinedFile
+            {
+                SourceId = sourceId, Classification = Classification.Internal, Sha256 = RandomNumberGenerator.GetBytes(32), Signature = "Win.Test.EICAR_HDB-1",
+                Origin = QuarantineOrigins.Upload, Name = "eicar.pdf", DetectedAt = now, PurgeAfter = now.AddDays(30),
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using var factory = Factory();
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, code);
+        using var stranger = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, "9" + code[1..]);
+
+        var first = await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files?limit=1", Ct));
+        first.GetProperty("items").GetArrayLength().ShouldBe(1);
+        var next = first.GetProperty("next").GetGuid();
+        var second = await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files?limit=1&after={next}", Ct));
+        var live = first.GetProperty("items").EnumerateArray().Concat(second.GetProperty("items").EnumerateArray()).Select(f => f.GetProperty("fileName").GetString()).ToList();
+        live.ShouldBe(["taxa-2026.pdf", "avgifter.docx"], ignoreOrder: true);
+        second.GetProperty("next").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        var deleted = await Json(await viewer.GetAsync($"/api/sources/{sourceId}/files?deleted=true", Ct));
+        deleted.GetProperty("items").EnumerateArray().Single().GetProperty("fileName").GetString().ShouldBe("gammal.pdf");
+
+        using var quarantineResponse = await viewer.GetAsync($"/api/sources/{sourceId}/quarantine", Ct);
+        var quarantine = await Json(quarantineResponse);
+        var row = quarantine.GetProperty("items").EnumerateArray().Single();
+        row.GetProperty("name").GetString().ShouldBe("eicar.pdf");
+        row.GetProperty("signature").GetString().ShouldBe("Win.Test.EICAR_HDB-1");
+        row.TryGetProperty("sha256", out _).ShouldBeFalse(); // metadata only (connectors §11)
+
+        (await stranger.GetAsync($"/api/sources/{sourceId}/files", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await stranger.GetAsync($"/api/sources/{sourceId}/quarantine", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
 }

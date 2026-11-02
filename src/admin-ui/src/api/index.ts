@@ -1,4 +1,4 @@
-import { buildUrl, http, postLogout } from './client'
+import { buildUrl, http, postLogout, request } from './client'
 import type {
   Assistant,
   AssistantCreate,
@@ -35,6 +35,10 @@ import type {
   SourceCreate,
   DeletionProposal,
   HeldDocument,
+  QuarantinedFile,
+  UploadBatch,
+  UploadedFile,
+  UploadFile,
   SourceImpact,
   SourceUpdate,
   SourceSummary,
@@ -71,9 +75,23 @@ export const api = {
     runs: (id: string, after?: string) => http.get<KeysetPage<RunSummary>>(`/api/sources/${id}/runs`, { after, limit: 20 }),
     held: (id: string, after?: string) => http.get<KeysetPage<HeldDocument>>(`/api/sources/${id}/held`, { after, limit: 50 }),
     releaseHeld: (id: string) => http.post<{ jobId: string }>(`/api/sources/${id}/held/release`),
+    files: (id: string, query: { deleted?: boolean; after?: string; limit?: number } = {}) =>
+      http.get<KeysetPage<UploadFile>>(`/api/sources/${id}/files`, query),
+    quarantine: (id: string, after?: string) => http.get<KeysetPage<QuarantinedFile>>(`/api/sources/${id}/quarantine`, { after, limit: 50 }),
+    uploadBatch: (id: string) => http.post<UploadBatch>(`/api/sources/${id}/upload-batches`),
     piiReport: (id: string) => http.get<PiiReport>(`/api/sources/${id}/pii-report`),
     preflight: (body: { collectionId: string; type: string; settings: Record<string, unknown> }) =>
       http.post<{ jobId: string }>('/api/sources/preflight', body),
+  },
+  uploads: {
+    /** One file of a batch, raw body; `replaces` names the slot whose bytes it replaces (same document). */
+    put: (batchId: string, n: number, file: File, replaces?: string) =>
+      request<UploadedFile>('PUT', `/api/upload-batches/${batchId}/files/${n}`, {
+        raw: file, headers: { 'X-File-Name': encodeURIComponent(file.name), ...(replaces ? { 'X-Upload-Id': replaces } : {}) },
+      }),
+    commit: (batchId: string, body: { files: number[]; deletes: string[] }) =>
+      http.post<{ batchId: string; jobId: string; entries: number }>(`/api/upload-batches/${batchId}/commit`, body),
+    discard: (batchId: string) => http.del(`/api/upload-batches/${batchId}`),
   },
   runs: {
     get: (id: string) => http.get<Run>(`/api/runs/${id}`),

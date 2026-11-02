@@ -1,0 +1,90 @@
+import { describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { api } from '@/api'
+import { ApiError } from '@/api/client'
+import type { Source, UploadFile } from '@/api/types'
+import SourceFiles from './SourceFiles.vue'
+import SourceQuarantine from './SourceQuarantine.vue'
+
+const source = { id: 's1', type: 'upload', name: 'Blanketter', settings: { maxFileSizeMb: 20 } } as unknown as Source
+const slot = (id: string, fileName: string, state: string, reason: string | null = null): UploadFile => ({
+  id, fileName, bytes: 2_500_000, state, reason, documentId: null, uploadedBy: 'anna', uploadedAt: '2026-11-01T10:00:00Z', replacedAt: null, deletedAt: null,
+})
+
+function pick(wrapper: ReturnType<typeof mount>, test: string, files: File[]): Promise<void> {
+  const input = wrapper.get(`[data-test=${test}]`).element as HTMLInputElement
+  Object.defineProperty(input, 'files', { value: files, configurable: true })
+  return wrapper.get(`[data-test=${test}]`).trigger('change')
+}
+
+describe('Filer (admin design §4.5, connectors §9)', () => {
+  it('uploads chosen files to one batch, retries a failed one, and commits them as one sync', async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(api.sources, 'files').mockResolvedValue({ items: [slot('u1', 'taxa.pdf', 'indexed')], next: null })
+    vi.spyOn(api.sources, 'uploadBatch').mockResolvedValue({ batchId: 'b1', maxFiles: 100, maxBytes: 500 })
+    const put = vi.spyOn(api.uploads, 'put')
+      .mockResolvedValueOnce({ n: 1, uploadId: 'x', operation: 'add', fileName: 'a.pdf', bytes: 1, sha256: '' })
+      .mockRejectedValueOnce(new ApiError(415, 'PUT', { code: 'upload_type_refused', params: { extension: '.exe' } }))
+      .mockResolvedValueOnce({ n: 2, uploadId: 'y', operation: 'add', fileName: 'b.pdf', bytes: 1, sha256: '' })
+    const commit = vi.spyOn(api.uploads, 'commit').mockResolvedValue({ batchId: 'b1', jobId: 'j', entries: 2 })
+    const wrapper = mount(SourceFiles, { props: { source, canEdit: true } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Högst 20 MB per fil')
+    expect(wrapper.get('[data-test=file-list]').text()).toContain('taxa.pdf')
+    await pick(wrapper, 'file-input', [new File(['a'], 'a.pdf'), new File(['b'], 'b.pdf')])
+    await wrapper.get('[data-test=upload]').trigger('click')
+    await flushPromises()
+    expect(put).toHaveBeenCalledTimes(2)
+    expect(commit).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-test=pending]').text()).toContain('Misslyckades')
+
+    await wrapper.get('[data-test=upload]').trigger('click') // retries the failed file only, in the same batch
+    await flushPromises()
+    expect(put).toHaveBeenCalledTimes(3)
+    expect(put.mock.calls[2]!.slice(0, 2)).toEqual(['b1', 2])
+    expect(commit).toHaveBeenCalledWith('b1', { files: [1, 2], deletes: [] })
+    expect(wrapper.emitted('committed')).toHaveLength(1)
+    expect(wrapper.find('[data-test=pending]').exists()).toBe(false)
+  })
+
+  it('replaces a slot with new bytes and deletes selected slots after a confirmation', async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(api.sources, 'files').mockResolvedValue({ items: [slot('u1', 'taxa.pdf', 'indexed'), slot('u2', 'gammal.doc', 'refused', 'upload.format_deferred')], next: null })
+    vi.spyOn(api.sources, 'uploadBatch').mockResolvedValueOnce({ batchId: 'b2', maxFiles: 100, maxBytes: 500 }).mockResolvedValueOnce({ batchId: 'b3', maxFiles: 100, maxBytes: 500 })
+    const put = vi.spyOn(api.uploads, 'put').mockResolvedValue({ n: 1, uploadId: 'u1', operation: 'replace', fileName: 'taxa.pdf', bytes: 1, sha256: '' })
+    const commit = vi.spyOn(api.uploads, 'commit').mockResolvedValue({ batchId: 'b', jobId: 'j', entries: 1 })
+    const wrapper = mount(SourceFiles, { props: { source, canEdit: true }, attachTo: document.body })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Nekad')
+    await wrapper.get('[data-test=replace-u1]').trigger('click')
+    const replacement = new File(['new'], 'taxa-2027.pdf')
+    await pick(wrapper, 'replace-input', [replacement])
+    await flushPromises()
+    expect(put).toHaveBeenCalledWith('b2', 1, replacement, 'u1')
+    expect(commit).toHaveBeenCalledWith('b2', { files: [1], deletes: [] })
+
+    await wrapper.findAll('input[type=checkbox]')[1]!.setValue(true)
+    await wrapper.get('[data-test=delete-files]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('Inom 14 dagar kan plattformsteamet ta tillbaka dem.')
+    ;[...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Ta bort 1 fil').at(-1)!.click()
+    await flushPromises()
+    expect(commit).toHaveBeenLastCalledWith('b3', { files: [], deletes: ['u2'] })
+    wrapper.unmount()
+  })
+
+  it('shows quarantined files as metadata only', async () => {
+    vi.spyOn(api.sources, 'quarantine').mockResolvedValue({
+      items: [{ id: 'q1', origin: 'upload', name: 'eicar.pdf', url: null, signature: 'Win.Test.EICAR_HDB-1', runId: null, detectedAt: '2026-11-01T10:00:00Z', purgeAfter: '2026-12-01T10:00:00Z' }],
+      next: null,
+    })
+    const wrapper = mount(SourceQuarantine, { props: { sourceId: 's1' } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('eicar.pdf')
+    expect(wrapper.text()).toContain('Win.Test.EICAR_HDB-1')
+    expect(wrapper.find('a').exists()).toBe(false) // never a download
+  })
+})
