@@ -86,7 +86,7 @@ public enum RetrievalPurpose { Chat, Http, Mcp, TestPanel }
 
 public sealed record RetrievalRequest(
     string Query,
-    Guid? AssistantId,                         // chat: the published version's direct collections (§4.2)
+    Guid? AssistantId,                         // chat: the published version's collection links, with topics (§4.2)
     IReadOnlyList<Guid>? CollectionIds,        // optional narrowing; must be visible (404 otherwise)
     int TopK = 10,                             // 1..50
     RetrievalMode Mode = RetrievalMode.Hybrid,
@@ -337,7 +337,7 @@ Steps 0–5 run in memory against one snapshot; nothing touches Postgres or the 
 
 | Caller | Collections searched |
 |---|---|
-| Chat (in process) and `rag-internal` (`assistant_id`) | the `CollectionIds` of the assistant's **published version** from the snapshot (data-model §2.1), and nothing else: skills carry no collections, in either mode; `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
+| Chat (in process) and `rag-internal` (`assistant_id`) | the `CollectionLinks` of the assistant's **published version** from the snapshot (data-model §2.1), and nothing else; a link with topic tags limits that collection to chunks carrying any of them (§6.2); a collection may belong to another department that shares it (admin design §3.2), and its level still has to pass §4.3: skills carry no collections, in either mode; `CollectionIds` in the request may only narrow this set (not a subset → 404 `collection_not_found`) |
 | Integration key (P2) | requested slugs, each in `Keys.Scopes`; no slugs → all collections in the key's scope |
 | Token caller (P2) | requested slugs, each allowed by `CollectionAudiences` (new P2 table, §18) for the client, department or group; no slugs → `Filter` over all |
 | Admin test panel | the collections of the assistant's draft (or a chosen version) or the chosen collections, **including unpublished ones**, checked with the admin's role scope (identity §4.8); runs in the admin process through `KnowledgeService` (`Ume.Rag.Answering`) on `Ume.Rag.Retrieval` |
@@ -552,10 +552,15 @@ document's live pointer as a safety net (§6.3).
 
 Parameters: `$1` query search text (K, §5.1) or `vector(1024)` (V), `$2 uuid[]` scope (collection ids), `$3 text[]`
 allowed levels, in K `$4 text[]` the keyword stop lexemes (empty for none), then only the filters present, from `$4` in
-V and `$5` in K: tags (`text[]`), document types (`text[]`), modified after (`timestamptz`). Filter predicates are
+V and `$5` in K: tags (`text[]`), document types (`text[]`), modified after (`timestamptz`), and the **topic links** as two
+parallel arrays (`uuid[]` collection ids, `text[]` tags; one pair per tag of a link that has topics). The topic predicate
+keeps every chunk of a collection linked without topics and, for a collection linked with topics, only chunks carrying
+one of them: `AND (c."CollectionId" <> ALL ($t) OR EXISTS (SELECT 1 FROM unnest($t, $g) AS l(cid, tag) WHERE l.cid =
+c."CollectionId" AND l.tag = ANY (c."Tags")))`, appended only when some link has topics; `$2` stays every linked
+collection, so the collection predicate and the indexes are unchanged. Filter predicates are
 **appended only when the filter is present**, so the planner never sees `($x IS NULL OR …)`; the profile id is an
-inlined literal from config (data-model §3.3), so a generic plan still matches the partial indexes. Each distinct text is one auto-prepared statement (variants: K/V × approximate/exact × 2³ filter
-combinations). The dimensions and the candidate depth (`LIMIT`) are inlined too (checked ints, never user input), so
+inlined literal from config (data-model §3.3), so a generic plan still matches the partial indexes. Each distinct text is one auto-prepared statement (variants: K/V × approximate/exact × 2⁴ filter
+combinations, topic links included). The dimensions and the candidate depth (`LIMIT`) are inlined too (checked ints, never user input), so
 variants also differ per profile and depth; the vector and every filter stay parameters. K's query CTE `q` is
 `MATERIALIZED`: inlined, a generic plan evaluated `rag_or_query(to_tsvector($1))` once per candidate row, which more
 than doubled K at 100k chunks (to-verify #5).
@@ -921,7 +926,7 @@ change makes it unreachable without invalidation code (identity §4.6 pattern):
 | Map | Content |
 |---|---|
 | collection → | slug, name, level, department, owner team, `EmbeddingProfileId` + its SQL literal and dimensions, published flag, **resolved** `RetrievalSettings` (collection values over `Settings.Retrieval` defaults) |
-| assistant → | the published version's collection ids, level, owner team, `QuerySteps` retrieval part (top-k, filters, expand, mode, rerank) |
+| assistant → | the published version's collection links (ids and topics), level, owner team, `QuerySteps` retrieval part (top-k, filters, expand, mode, rerank) |
 | collection → | visible source ids (for D's `$3`) |
 | source → | compiled `demote` patterns and factors (`Sources.DemoteRules`, §6.5) |
 | slug → | collection id |

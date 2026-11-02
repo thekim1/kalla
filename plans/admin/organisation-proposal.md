@@ -1,7 +1,7 @@
 # Organisation, ownership and sharing: proposal
 
-**Status: proposal (2026-11-02), not binding.** It binds once its Decisions row is added; the open questions in §5 go to
-the user first. Until then the admin design and the data model describe the platform.
+**Status: adopted 2026-11-02** (Decisions "Organisation: department-owned, municipality-shared knowledge bases with topics (user, 2026-11-02)"); the detail documents carry the rules (data-model §2.1, admin §3.2, §4.5, §4.6,
+§5, knowledge §4.2, §6.2) and the work is P1b items 33–38. This document stays for the reasoning.
 
 ## 1. The model as built
 

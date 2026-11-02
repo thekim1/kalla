@@ -29,27 +29,30 @@ items wait for the end block (`README.md` §5 step 4).
 | 3 | 9 | code | Admin API for P1b → **L4** (validate against L1 when it lands) | admin §4, §6.6, §6.7, §12; identity §4.9 | 23 |
 | 4 | 10 | code | Chat: conversation ids, writer in mode `none`, retention, user delete, `/v1/feedback`, `FeedbackImporter` and pruning → **L6** | chat §11–§14 | 20, 51, 135 |
 | 5 | 11 | code | Journey pages part 1: Kunskapsbanker, Källa, Publicering (real results after **L5**) | admin §5.3–§5.5, §6.4–§6.7 | – |
-| 6 | 12 | code | Journey pages part 2: evaluation, Sökinställningar, Assistenter with versions and Testa, Översikt checklist, generic forms, Granskningslogg, explain access (no Delning tab, README §7 O2) | admin §5.3, §5.8, §7 | 146 |
+| 6 | 12 | code | Journey pages part 2: evaluation, Sökinställningar, Assistenter with versions and Testa, Översikt checklist, generic forms, Granskningslogg, explain access (Delning comes with item 36) | admin §5.3, §5.8, §7 | 146 |
 | 7 | 13 | code | Feedback page | admin §8.1; chat §14.4 | – |
 | 8 | 14 | code | Accessibility pass, tillgänglighetsredogörelse, pilot journey E2E → **L7** | admin §10.1, §11.4 | 96 |
 | 9 | 18 | code | W3 spike on the dev Keycloak and a local Open WebUI | weakness review §5; postponed W3 | 174 |
-| 10 | 19 | code | Code complete; your part of the go-live pin review (NuGet, npm; the `sv_SE` list; the realm callback for the Open WebUI pin, README §7 O8) | Decisions "7-day rule in development" | 113 |
-| 11 | 20 | live | P1a's live items, with stream A and the user | `../p1/README.md` §3 | as listed there |
-| 12 | 25 | live | Decay and `demote` on the gold set's temporal questions; HNSW recall vs exact on the pilot collection | weakness review §3, "Lower-ranked findings"; knowledge §6.4 | 117, 171 |
-| 13 | 27 | live | Gateway release 1 switch (**after L9**) | gateway-changes §13.2–§13.4 | 41 (release-1 part) |
-| 14 | 28 | live | Feedback import live, with stream A | chat §14.2 | 49, 135 |
-| 15 | 30 | live | E1 spike, or moved to P2 (README §7 O3) | identity §9.4, §16 | 175 |
-| 16 | 31, 32 | live | Go-live gate and pilot live, with stream A and the user | README §1.1 | – |
+| 10 | 33 | code | Organisation schema → **L13** | data-model §2.1; Decisions "Organisation: department-owned, municipality-shared knowledge bases with topics (user, 2026-11-02)" | – |
+| 11 | 34 | code | Topics in retrieval → **L14** | knowledge §4.2, §6.2 | – |
+| 12 | 35 | code | Organisation in the admin API: sharing, `view=`, topics, Map route, contact, V11, V35 | admin §3.2, §4.5, §4.6 | – |
+| 13 | 36 | code | Organisation pages: menu, Sharing and Topics tabs, knowledge picker with topics, "Who can use it", Map table, no team field (after #314) | admin §5.2–§5.5 | – |
+| 14 | 19 | code | Code complete; your part of the go-live pin review (NuGet, npm; the `sv_SE` list; the realm callback for the Open WebUI pin, README §7 O8) | Decisions "7-day rule in development" | 113 |
+| 15 | 20 | live | P1a's live items, with stream A and the user | `../p1/README.md` §3 | as listed there |
+| 16 | 25 | live | Decay and `demote` on the gold set's temporal questions; HNSW recall vs exact on the pilot collection | weakness review §3, "Lower-ranked findings"; knowledge §6.4 | 117, 171 |
+| 17 | 27 | live | Gateway release 1 switch (**after L9**) | gateway-changes §13.2–§13.4 | 41 (release-1 part) |
+| 18 | 28 | live | Feedback import live, with stream A | chat §14.2 | 49, 135 |
+| 19 | 30 | live | E1 spike, or moved to P2 (README §7 O3) | identity §9.4, §16 | 175 |
+| 20 | 31, 32 | live | Go-live gate and pilot live, with stream A and the user | README §1.1 | – |
 
 If an item is blocked on a hand-off, start the next one and come back later. Answer stream A's table or column
 requests (issues labelled `stream-b`) with a migration, ahead of your other work.
 
 **Not in P1b** (P2 or later; weakness review §1, §4; admin plan §8; chat plan §10): assistant version diff,
-per-assistant test questions and the answer judge, assistant templates and copy, the department map and the
+per-assistant test questions and the answer judge, assistant templates and copy, the Map drawing and the
 unused-assistant attention item, site-profile proposals, effect-tag publish plans, the coverage histogram, parameter
 diff, audit diff viewer, Historik tabs; history modes `stored`/`session`, chat bucket keys, content encryption,
-crypto-shredding, comment reveal, conversation review and the access log (all wait for A1); share lists (README §7
-O2); `/mcp`; department scope from gateway member groups (release 2).
+crypto-shredding, comment reveal, conversation review and the access log (all wait for A1); skill share lists; `/mcp`; department scope from gateway member groups (release 2).
 
 ## You provide, you consume
 

@@ -34,17 +34,19 @@ live hand-off (Decisions table, "Code first, live testing last"); the live items
 | 7 | 16 | code | Gold-set grading script → **L8** | weakness review §2; ingestion plan §7 | – |
 | 8 | 15 | code | `perf.yml` and `benchmarks/release-test/`, `evaluation.yml`, the `e2e` job (**after L7**) | repo-and-deployment §8.1–§8.3; chat §16.2 | – |
 | 9 | 17 | code | Pilot stack for P1b: feedback service account and key restrictions, importer settings (**after L6**), test-host Compose and run book, runbook's public-records routes | chat §4.3, §13.3, §14.2; repo-and-deployment §6.2, §7 | 49 |
-| 10 | 19 | code | Code complete; your part of the go-live pin review (images, PyPI, Compose; Open WebUI pin per README §7 O8) | Decisions "7-day rule in development" | – |
-| 11 | 20 | live | P1a's live items, with stream B and the user | `../p1/README.md` §3 | as listed there |
-| 12 | 21 | live | Test-host deploy and restore drill (**after L10**) | P0 progress-a §5, §12; repo-and-deployment §7.4 | 90, 123, 129 |
-| 13 | 22 | live | R1 on the test host; pilot CPU caps re-set (**after L11** or its stopgap) | repo-and-deployment §6.2, §8.3 | 100, 101, 106 |
-| 14 | 23 | live | Nightly evaluation on the test deployment | processing §14.8 | 44 |
-| 15 | 24 | live | `lastmod` sample result | weakness review §3 | 170 |
-| 16 | 25 | live | With stream B: decay and `demote` on the temporal questions (you run the evaluator) | weakness review §3 | (171 in B's results) |
-| 17 | 26 | live | Personal-data dry run on the full umea.se crawl | weakness review "Lower-ranked findings" | – |
-| 18 | 28 | live | With stream B: feedback import live (Compose and the service account) | chat §14.2 | (49, 135 in B's results) |
-| 19 | 29 | live | Banner and public-records route; runbook section final (**after L12**) | weakness review §4; chat §13.3 | 172, 173 |
-| 20 | 31, 32 | live | Go-live gate and pilot live, with stream B and the user | README §1.1 | – |
+| 10 | 37 | code | Topics in the worker (**after L13, L14**) | processing §7, §13; engine §11 | – |
+| 11 | 38 | code | Platform forms for organisation (`platform/**`) | admin §5.8 | – |
+| 12 | 19 | code | Code complete; your part of the go-live pin review (images, PyPI, Compose; Open WebUI pin per README §7 O8) | Decisions "7-day rule in development" | – |
+| 13 | 20 | live | P1a's live items, with stream B and the user | `../p1/README.md` §3 | as listed there |
+| 14 | 21 | live | Test-host deploy and restore drill (**after L10**) | P0 progress-a §5, §12; repo-and-deployment §7.4 | 90, 123, 129 |
+| 15 | 22 | live | R1 on the test host; pilot CPU caps re-set (**after L11** or its stopgap) | repo-and-deployment §6.2, §8.3 | 100, 101, 106 |
+| 16 | 23 | live | Nightly evaluation on the test deployment | processing §14.8 | 44 |
+| 17 | 24 | live | `lastmod` sample result | weakness review §3 | 170 |
+| 18 | 25 | live | With stream B: decay and `demote` on the temporal questions (you run the evaluator) | weakness review §3 | (171 in B's results) |
+| 19 | 26 | live | Personal-data dry run on the full umea.se crawl | weakness review "Lower-ranked findings" | – |
+| 20 | 28 | live | With stream B: feedback import live (Compose and the service account) | chat §14.2 | (49, 135 in B's results) |
+| 21 | 29 | live | Banner and public-records route; runbook section final (**after L12**) | weakness review §4; chat §13.3 | 172, 173 |
+| 22 | 31, 32 | live | Go-live gate and pilot live, with stream B and the user | README §1.1 | – |
 
 If an item is blocked on a hand-off, start the next one and come back later. Start the `lastmod` sample's first pass
 as soon as U1 is done (README §7 O5).

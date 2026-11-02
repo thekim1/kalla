@@ -61,7 +61,7 @@ gateway counterpart.
 | 4 | Roles | **`rag-reviewer`** (answered 3): policies `Review`, `FeedbackComments`, `Read`. Feedback **comments**: `rag-reviewer` and `rag-department-admin`. **Full conversations: `rag-reviewer` only.** No administrative role implies conversation content (§3). Roles: **P1** realm roles `rag-*` on the shared Keycloak's client `ume-rag-admin`, audit actor `sub`; **P2** app roles on RAG's own Entra registration `ume-rag-admin`, actor `oid` (fallback `sub`) (identity §1.1, §1.6, 2026-10-31) |
 | 5 | Concurrency | Every editable aggregate carries `version` (Postgres `xmin`); a mismatch is 409 `concurrent_change` (§4.3) |
 | 6 | Write path | One transaction: **`SELECT … FOR UPDATE` on `config."ConfigVersion"` first** (serialises admin config writes) → cross-rules → entity change → outbox trigger (version bump) → audit row with that `ConfigVersion` → optional job rows; `pg_notify` at commit (§4.4) |
-| 7 | Validation | Field rules on request records; **cross-rules** in one `ConfigRules` service: **V1–V34 with V20 and V27 retired (32 rules)** (§4.6), run on save, on dependent changes and again before publish, under the version lock; CHECK violations (23514) answer 400 |
+| 7 | Validation | Field rules on request records; **cross-rules** in one `ConfigRules` service: **V1–V35 with V20 and V27 retired (33 rules)** (§4.6), run on save, on dependent changes and again before publish, under the version lock; CHECK violations (23514) answer 400 |
 | 8 | Jobs | The admin inserts `content."Jobs"` rows only (preview, sync, command, eval); every result is read from `Jobs.Result`, `Runs`, `EvaluationRuns` (§4.7) |
 | 9 | Pilot UI | P1 has **dedicated pages only for the department journey** (collection, source, preview, publish with the evaluation report, assistant, test panel, audience, feedback, limited review), built for non-specialists (answered 2): setup checklist, template parameters with defaults, preflight and preview before saving, impact before scope changes (§5.4) |
 | 10 | Pipelines | A pipeline is a **template + parameters**; the source form shows the template's parameters; pipeline editors edit parameters. No node editor, no canvas (dropped from the roadmap) (§6) |
@@ -78,7 +78,8 @@ gateway counterpart.
 | 21 | Explain access | `POST /api/access/explain` returns the stable id of the first failing `IAccessPolicy` step and its reason code for (client, subject, assistant); platform admins, and department admins for their own department's assistants and clients; no security event (§4.5, identity §4.9) |
 | 22 | Assistant versions | **One assistant type**: no `rag`/`agent` choice; an assistant uses the agent loop (P2) exactly when a linked skill carries tools, shown as **Använder verktyg**. Edits go to a **draft** (`AssistantVersions`, `State = draft`); the test panel runs the draft; **Publicera** makes it the published version (`Assistants.PublishedVersionId`), the only one chat reads (data-model view `PublishedAssistantVersions`); history with one-click **Återställ** (= a new version; the version diff is **P2**, weakness review §1). Audience, level, retention, owner team, description and contact belong to the assistant, not to a version, so publishing never changes who may use it (§4.5, §5.5.4) |
 | 23 | Assistant tests (**P2**, weakness review §1) | Each assistant has up to 50 **test questions** (question, expected behaviour as free text, optional expected document and phrase), run by `AssistantTestRunner` in `rag-admin` through `Ume.Rag.Answering` and the on-prem answer judge after every publish and on demand; **advisory**, shown as the §7.2 card with **Behåll** / **Återställ förra versionen** (§7.4) |
-| 24 | Many assistants | An impact line on source and collection saves ("påverkar 3 assistenter"). **P2 (weakness review §1):** platform-owned **assistant templates** (generic form); **copy** an assistant; a **department map** (sources → kunskapsbanker → assistenter → målgrupper); an attention item for assistants unused 90 days. P2: a department may limit writes to the object's **owner team** (§3.2, §5.5.6) |
+| 24 | Many assistants | An impact line on source and collection saves ("påverkar 3 assistenter"). **P2 (weakness review §1):** platform-owned **assistant templates** (generic form); **copy** an assistant; an attention item for assistants unused 90 days. **P1b:** the **Map** as a table (§5.5.6). P2: a department may limit writes to the object's **owner team** (§3.2) |
+| 25 | Organisation | Decisions "Organisation: department-owned, municipality-shared knowledge bases with topics (user, 2026-11-02)": departments own; a knowledge base is shared with *only our department*, *selected departments* or the *whole municipality*, read-only through assistants; assistants link knowledge bases with optional **topics**; knowledge bases have a contact person; teams are hidden in create forms (§3.2, §4.5, §5.2, §5.5) |
 
 ## 2. Placement and interfaces
 
@@ -189,11 +190,18 @@ with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-6
 - Platform objects (templates, site profiles, embedding profiles, clients, `GatewayModels`, tool servers, settings,
   data-protection policies) are readable where a form needs them (pickers show name, kind, level, residency only) and
   writable by `Admin` only.
-- **Share lists (P2**; reasoning: simplification pass §10): the owning department's `Manage` (collections) or
-  `EditSkills` (skills) may share a collection or skill with named departments (`CollectionShares`, `SkillShares`). An
-  assistant links collections and skills of its own department, those shared with its department, and platform skills
-  (V11, V12). In P1 there are no share lists: an assistant links its own department's collections only.
-  Sharing gives read use through assistants only: the other department cannot edit, see sources' settings, or publish.
+- **Sharing** (Decisions "Organisation: department-owned, municipality-shared knowledge bases with topics (user, 2026-11-02)"): the owning department's `Manage` sets a collection's sharing level: *only our
+  department* (default), *selected departments* (`CollectionShares`) or *whole municipality* (every active department in
+  the gateway catalogue). Skills (P2) are shared with named departments (`SkillShares`, `EditSkills`). An assistant links
+  collections of its own department and those shared with it, and skills of its own department, shared with it or
+  platform skills (V11, V12). Sharing gives read use through assistants only: another department sees a shared
+  collection's name, owning department, level, contact and topics (§4.5), never its sources, documents, settings or
+  evaluation, and cannot edit or publish it. Narrowing the sharing is refused while another department's published
+  assistant links the collection (V35).
+- **Topics**: the tags the sources' path rules put on chunks (processing §7). A link from an assistant to a collection
+  may name topics; retrieval then keeps only that collection's chunks carrying one of them (knowledge §4.2, §6.2).
+- **Ownership of shared content**: content used across the municipality is owned by the department that runs it (umea.se:
+  Communications; DoIT until Communications has admins). The platform team owns no content.
   Knowledge reaches an assistant only through its own collection links; skills carry know-how and tools, never
   collections (simplification pass §15).
 - **Owner-team scoping (P2, simplification pass §15)**: assistants, collections (with their sources, pipelines and
@@ -216,8 +224,8 @@ schema-driven form (§5.8).
 | Page (Swedish label, §5.7) | Phase | PA | DA | PE | RV | SE | ED | VW |
 |---|---|---|---|---|---|---|---|---|
 | Översikt | P1 | R (all + platform health) | R | R | R | R | R | R |
-| Karta (department map) | P2 (weakness review §1) | R | R | R | R | R | R | R |
-| Kunskapsbanker (incl. Dokument, Testfrågor och kvalitet, Sökinställningar; Delning P2) | P1 | W | W | R | R | R | W (no sharing) | R |
+| Karta (Map: department map) | P1b, table first (§5.5.6) | R | R | R | R | R | R | R |
+| Kunskapsbanker (incl. Dokument, Testfrågor och kvalitet, Sökinställningar, Ämnen (Topics), Delning (Sharing, `Manage`)) | P1 | W | W | R | R | R | W (no sharing) | R |
 | Källor, körningar, filer, borttagningar (incl. mallinställningar) | P1 | W | W | W (template parameters only) | R | R | W (no deletion decisions) | R |
 | Publicering (plan, rapport, behåll/återställ) | P1 | W | W | W | R | – | W | R |
 | Assistenter (incl. Testa, Versioner; Testfrågor P2, weakness review §1) | P1 | W | W | R | R | R (+ test) | W | R |
@@ -246,7 +254,7 @@ The matrix is data (`PermissionMatrix` in `Ume.Rag.Domain`), used for endpoint a
 | `Edit` | collections (create, edit, retrieval settings, test retrieval, run evaluation), sources (create, edit, pause/resume, sync now, retry failed, upload, delete files), assistants (create, edit the draft, publish, restore a version, archive/unarchive, test panel; P2: create from a template, copy, assistant test questions and runs), human test questions, generate test questions, link served skills (P2); P2 limited to the owner team when the department says so (§3.2) |
 | `EditPipelines` | template parameters of the department's sources (preview, plan, publish, roll back), pipeline test retrieval |
 | `EditSkills` (P2) | skills of own departments: draft, publish, serve, roll back, share list, re-run the gate; skill test panel |
-| `Manage` | collection publish, collection share lists (P2), delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients, audit log (own departments, §9.1), P2 department settings (owner-team scoping) and owner-team changes while it is on |
+| `Manage` | collection publish, collection sharing level and departments, delete collections/sources, deletion confirm/reject, release holds, PII clear (a decision on the document), assistant audiences, retention and history mode within policy, keys of own teams, document reprocess, explain access for own department's assistants and clients, audit log (own departments, §9.1), P2 department settings (owner-team scoping) and owner-team changes while it is on |
 | `FeedbackComments` | reveal one feedback comment (`public`/`internal`) |
 | `Review` | open a conversation with a reason; P2: request/approve `sensitive` access, search conversations |
 | `Admin` (platform) | templates, assistant templates (P2), site profiles (edit, roll back; approve P2), embedding profiles, clients, `GatewayModels` manual rows, settings, data protection, raised agent limits, tool servers, approvals (platform side, incl. pre-registrations), grants, platform skills, parse-profile proposals (P2), audit log (all), organisation sync now, explain access |
@@ -346,7 +354,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `GET /api/gateway/models` | Read | `GatewayModels` with residencies, `SupportsTools`, context window, prices, `Source` |
 | `POST /api/gateway/sync`; `PUT /api/gateway/models/{name}` | Admin | run the model sync now; manual row (aliases, `SupportsTools` until the catalogue has `features`; not built yet) |
 | `GET /api/gateway/status` | Admin | per level key: one `x-ume-max-residency` embedding call and (from gateway release 2, P2) the delegation echo |
-| `GET /api/organisation/departments/{id}/map` (P2, weakness review §1) | Read | department map (§5.5.6): sources → collections (own and shared in) → assistants (published links; draft-only links flagged) → audiences (clients), from the admin's snapshot; no content |
+| `GET /api/organisation/departments/{id}/map` | Read | the Map (§5.5.6) as rows: department → collection (own, and shared in with its owning department) → assistant (published links; draft-only links flagged; the link's topics) → audience (clients), each with its contact; a platform admin may ask for any department; from the admin's snapshot; no content |
 | `GET/PUT /api/organisation/departments/{id}/settings` (P2) | Read / Manage | `DepartmentSettings` (`EditOwnerTeamOnly`, `version`); audited `departmentsettings.update` (§3.2) |
 | `POST /api/access/explain` `{ clientId, subject, assistantId, action? }` | Admin; Manage (own department's assistants and clients) | runs the pure `IAccessPolicy` steps (identity §4.3) against the admin's snapshot for that client, subject (`oid`, key id or Open WebUI user) and assistant; returns `{ allowed, step, reason, status, effectiveLevel, maxResidency, configVersion }` (`step` = the stable step id, `reason` = the stable deny code, identity §4.9); no content; no security event |
 
@@ -355,7 +363,9 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | Method and path | Policy | Notes |
 |---|---|---|
 | `GET/POST /api/collections`, `GET/PUT/DELETE /api/collections/{id}` | Read / Edit / Manage (delete) | create: name, slug (from name, ASCII), department, owner team, classification; profile = default; the detail carries `usedBy[]` (assistants whose published version or draft links it, with `published`/`draft`), which the save drawer shows as "Påverkar 3 assistenter: …"; delete refused while a published version or a draft links it (409 `collection_in_use` with the list; superseded versions do not block, a restore of one fails V34); also refused while it has sources that are not deleted (same code, `sources` in the list), so the worker never writes into a deleted collection: delete the sources first |
-| `PUT /api/collections/{id}/shares` `{ departmentIds, version }` (P2) | Manage | share list (V11); removing a department refused while one of its assistants links the collection |
+| `GET /api/collections?view=mine\|shared\|all` | Read | `mine` (default): the caller's departments' collections; `shared`: collections of other departments shared with one of the caller's departments or with the municipality, as the shared summary (name, owning department, level, contact, document count, topics; no sources); `all`: both. The assistant's collection picker reads `all` |
+| `PUT /api/collections/{id}/sharing` `{ sharedWith, departmentIds, version }` | Manage | `sharedWith` = `department`/`selected`/`municipality`; `departmentIds` only with `selected` (active departments other than the owner); narrowing is refused (V35) with the linking assistants and their departments; audited `collection.share`; the detail's `usedBy[]` lists other departments' assistants too |
+| `GET /api/collections/{id}/topics` | Read (also a department the collection is shared with) | the tags on the collection's live chunks with document counts, and the path rule that sets each one; read from `content`, no text |
 | `PUT /api/collections/{id}/retrieval-settings` | Edit | saved directly within the V16 ranges; enqueues an advisory evaluation run (§4.7) whose report is compared with the previous run (none when the collection has no evaluation set) |
 | `POST /api/collections/{id}/test-retrieval` | Edit, EditPipelines | retrieval-only test panel (§4.9), incl. unpublished |
 | `POST /api/collections/{id}/publish` | Manage | sets `PublishedAt`; the latest evaluation report (if any) is shown before confirm; never blocked |
@@ -471,7 +481,7 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 **Feedback, conversations, audit, overview** — §8, §9; `GET /api/overview` returns the attention items of §5.5.1 for
 the caller's scope.
 
-### 4.6 Cross-rules (V1–V34; V20 and V27 retired)
+### 4.6 Cross-rules (V1–V35; V20 and V27 retired)
 
 Run by `ConfigRules` under the `ConfigVersion` lock (§4.4) on save of the entity, on every change that can break a
 dependant (column *Re-checked when*), and again inside the publish transaction. A failing dependant lists every
@@ -494,7 +504,7 @@ kept so references stay stable.
 | V8 | **residency**: the `GatewayModel` servable at the ladder of max(assistant level, ceiling of every history-resending audience client): `min(GatewayModels.Residencies) ≤ ladder`; unknown model → refused; **on publish and on a level or audience save, the model is listed by the gateway's `/v1/models` called with `x-ume-max-residency` = the level's ceiling** (gateway unreachable → refused, retry; a model whose in-ceiling targets are all drained is not listed either, gateway-changes design §3.4, so the `model_not_listed` text suggests retrying later) | `model_residency`, `model_not_listed` (409), `gateway_unavailable` (503), `gateway_key_missing` (503: the service holds no gateway key for the ceiling, identity §4.7) | publish; level save; audience save; model sync changed residency (warning on Overview; chat checks per call) | chat §8.2, simplification pass §7 |
 | V9 | `sensitive` assistants only for clients with `StoresHistory = false` when `DataProtectionPolicies.ClientsWithoutHistoryOnly` | `client_stores_history` | audience save; policy change | platform §8a |
 | V10 | `HistoryMode` ∈ allowed modes, `RetentionDays` ≤ level max (default ≤ max ≤ 90) | `retention_outside_policy` | assistant save; policy tightened (lists assistants) | data-model §2.1 |
-| V11 | ≤ 20 collections per assistant; each of the assistant's department (from P2 also one shared with it, `CollectionShares`, §3.2) | `too_many_collections`, `collection_not_shared` | publish; share list narrowed | knowledge §4.2, §3.2 here |
+| V11 | ≤ 20 collection links per assistant; each collection of the assistant's department or shared with it (`SharedWith`, `CollectionShares`, §3.2); ≤ 20 topics per link, each in the chunk tag format (processing §7) | `too_many_collections`, `collection_not_shared`, `topic_invalid` | publish; sharing narrowed | knowledge §4.2, §3.2 here |
 | V12 | ≤ 20 skills per assistant, each of its department, shared with it, or a platform skill; for an assistant without tools, skill bodies ≤ 6,000 estimated tokens in total | `too_many_skills`, `skill_not_shared`, `skill_bodies_too_long` | publish; skill serve; share list narrowed | tools §3.4, §3.9 |
 | V13 | lethal trifecta false — a hard refusal, no acceptance in P2 | `lethal_trifecta` | publish; skill serve; tool approval/grant; `ContainsThirdPartyText` changed | tools §5.4 |
 | V14 | assistant that uses tools (a linked skill's served version links a tool): `SupportsTools`, synced price; limits ≤ `AgentDefaults` unless `Admin`, always ≤ `AgentHardCaps` | `model_no_tools`, `price_unknown`, `limit_above_default`, `limit_above_cap` | publish; skill serve (it can switch an assistant to tools); settings change | tools §6.4–§6.5 |
@@ -518,6 +528,7 @@ kept so references stay stable.
 | V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` are `GatewayModels` rows servable at most at the platform ceiling: `Eu` until M2 (on-prem models once the on-prem hardware exists, register M2) (`SkillGateModel` also `SupportsTools`) | `settings_model_residency` | settings save; model sync changed residency (warning on Overview) | processing §13.1, chat §5, tools §3.7 |
 | V33 | assistant test questions: ≤ 30 per assistant; question 1–2,000 characters; expected behaviour 1–2,000; expected phrase ≤ 200; an expected document must belong to a collection the draft or published version links (unlinking it later marks the question in the report, never refuses) | `test_question_invalid`, `test_question_document_unlinked` | test-question save | §7.4 |
 | V34 | publish and restore: the definition resolves (collections not deleted, skills not retired and usable by the department, the model in `GatewayModels`); description and contact are set; a draft created before the current published version (lower `Number`) is published only when confirmed | `version_link_missing`, `assistant_contact_missing`, `draft_base_changed` | publish; restore | §4.5, simplification pass §15 |
+| V35 | narrowing a collection's sharing (to a lower level, or removing a department from `selected`) is refused while a published assistant of a department that loses access links it; the refusal lists the assistants and their departments | `collection_shared_in_use` | sharing save | §3.2, §4.5 |
 
 ### 4.7 Jobs for the worker
 
@@ -680,6 +691,11 @@ Assistenter, Återkoppling, Meny.
 └──────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+The English UI groups the menu as **Home** (Översikt: the selected department's setup checklists, attention items and
+a one-line summary with its contacts) and **Map**; **Knowledge bases** with the tabs *Ours*, *Shared with us* and *All*
+(`view=`, §4.5); **Assistants**; **Feedback**; then **Organisation**, **Platform** and **Audit log**. The department
+picker in the header filters every list; a user with one department never sees it.
+
 Start page: Översikt (a reviewer-only user starts on Återkoppling). Badges: Översikt counts attention items (gateway
 `badge` pattern, `nav.ts:25`). No e-mail: awaiting deletions, worse evaluation reports, site-profile proposals, P2
 drift and pending approvals appear as attention cards and badges, plus SIEM events for the security-relevant ones.
@@ -689,8 +705,8 @@ drift and pending approvals appear as attention cards and badges, plus SIEM even
 | Page | P1 | P2 | P3 |
 |---|---|---|---|
 | Översikt | attention items, setup checklist, sync health per department, queue age, org/model sync | drift, approvals, parse-profile proposals | trends |
-| Karta | – | department map (§5.5.6; moved from P1, weakness review §1), skills and workspaces in the map | – |
-| Kunskapsbanker | list; detail tabs Översikt (checklist, sources, counts, state), Källor, Dokument (incl. personuppgifter), Testfrågor och kvalitet, Sökinställningar | Delning (share lists), Historik tab, coverage-threshold histogram and proposal | analytics |
+| Karta | P1b: the Map as a table (§5.5.6) | the drawing, skills and workspaces in the map | – |
+| Kunskapsbanker | list; detail tabs Översikt (checklist, sources, counts, state, contact), Källor, Dokument (incl. personuppgifter), Ämnen (Topics), Testfrågor och kvalitet, Sökinställningar, Delning (Sharing); the list's *Shared with us* and *All* tabs | Historik tab, coverage-threshold histogram and proposal | analytics |
 | Källa | URL list, crawl, upload forms with template parameters; preflight; preview with site-profile before/after; impact; runs; crawl report; files; quarantine; deletions; held | SharePoint with preflight, crawl hierarchy tree, parameter diff | more connectors |
 | Publicering | plan, re-process progress, evaluation report, keep/roll back | – | – |
 | Assistenter | create, draft form with description and contact, test panel on the draft, Publicera, Versioner (restore), audiences (clients), retention, stats, archive | create from a template, copy, version diff, Testfrågor with the test report, latest answer evaluation (weakness review §1); skills (with **Använder verktyg** when one carries tools), limits, widget audiences | risk acceptance |
@@ -709,7 +725,7 @@ progress flags), which disappears when the collection has a published assistant 
 | # | Step (Swedish UI) | Page | Defaults and guidance | Guard |
 |---|---|---|---|---|
 | 1 | Logga in | Översikt | empty state "Här bygger du kunskapsbanker och assistenter för din förvaltning" + **Skapa kunskapsbank** | role and department from sign-in |
-| 2 | Skapa kunskapsbank | drawer | name → slug; owner team; **informationsklass** as three explained options, none preselected ("Vem får läsa innehållet?") | V1–V2 later |
+| 2 | Skapa kunskapsbank | drawer | name → slug; contact (name, e-mail; the creator by default); no team field (the owner team is the creator's first team in the department, changeable under ⋯); **informationsklass** as three explained options, none preselected ("Vem får läsa innehållet?") | V1–V2 later |
 | 3 | Lägg till källa | source drawer, type cards *Adresslista*, *Webbplats*, *Filer* | crawl: start URL; include `host/**`, default excludes, 10,000 pages, depth 10, incremental by sitemap `lastmod` once the host's site profile marks it reliable (umea.se: weekly full traversals until the 500-URL `lastmod` sample passes, weakness review §3), weekly; optional **Nedprioritera** patterns for archive sections (factor 0.5); the first `website` source of a collection turns on age decay for PDFs (730 days, weight 0.15) unless the collection already has `recency` set, shown in the drawer and editable in Sökinställningar (weakness review §3); URL list nightly; template chosen by type, its parameters under "Avancerat" | V25 |
 | 4 | Kontrollera | same drawer | preflight: reachability, robots status, sitemap found, estimated pages, egress, "samma webbplats hämtas redan av X" (shared crawl frontier, P2; weakness review §1), CMS recognised ("Sitevision") | fail blocks save; warn explains |
 | 5 | Förhandsgranska | preview panel | up to 5 URLs or uploaded files; for a crawl source the site profile the worker would apply (P1: the manual Sitevision preset; learned from P2), shown as **Före / Efter** text per sample page (boilerplate removed, breadcrumb, date); each stage's output (text, sections, chunks with token counts) | preview isolated |
@@ -751,7 +767,7 @@ version with more questions not as expected than the previous version's (P2); P2
 
 ```
 Kunskapsbanker › Bygglov                                       [Intern] [Ej publicerad]   [Publicera] [⋯]
-Översikt  Källor (3)  Dokument (1 204)  Testfrågor och kvalitet  Sökinställningar  Delning
+Översikt  Källor (3)  Dokument (1 204)  Ämnen (4)  Testfrågor och kvalitet  Sökinställningar  Delning
 ┌ Kom igång ──────────────────────────────────────────┐ ┌ Läge ─────────────────────────────────────────────┐
 │ ✓ Källa tillagd           ✓ Första hämtningen klar  │ │ Ej publicerad: syns bara i Testa.                 │
 │ ✓ Testfrågor skapade (86) ◐ Utvärdering pågår       │ │ Senast hämtad 30 okt. 02:14 · 1 204 dokument       │
@@ -762,6 +778,30 @@ Källor                                                                         
 │ umea.se/bygga         │ Webbplats  │ ✓ 30 okt. 01:12        │ 840      │ lör 01:00   │ [Hämta nu] [⋯]       │
 │ Blanketter            │ Filer      │ ⚠ 2 misslyckade        │ 41       │ –           │ [Ladda upp] [⋯]      │
 ```
+
+Sharing and Topics tabs (English UI):
+
+```
+Knowledge bases › umea.se (Communications)                 [Public] [Published]        [Publish] [⋯]
+Overview  Sources (1)  Documents (2 323)  Topics (9)  Quality  Search settings  Sharing
+┌ Sharing ──────────────────────────────────────────────────────────────────────────────────────────┐
+│ Who may use this knowledge base in their assistants?                                              │
+│ ( ) Only Communications   ( ) Selected departments [ … ]   (•) Whole municipality                 │
+│ Shared use is read-only: other departments use the content in their assistants, not the sources.  │
+│ Used by 4 assistants in 3 departments                                                             │
+│ │ Assistant            │ Department              │ Topics                 │ Status     │          │
+│ │ Permits assistant    │ Building & Environment  │ Building and housing   │ Published  │          │
+│ │ Customer service     │ Contact centre          │ all                    │ Draft      │          │
+│                                                                                  [Save sharing]   │
+└───────────────────────────────────────────────────────────────────────────────────────────────────┘
+Topics (set by path rules on the sources, Processing › Topics)
+│ Topic                │ Rule                               │ Documents │
+│ building-and-housing │ www.umea.se/byggaboochmiljo/**     │ 412       │
+│ politics             │ www.umea.se/kommunochpolitik/**    │ 655       │
+```
+
+A department the knowledge base is shared with opens it read-only: Overview (owner, contact, level, document count)
+and Topics, nothing else.
 
 #### 5.5.3 Källa (webbplats) and the deletion decision
 
@@ -811,6 +851,11 @@ Utkast  Testa  Testfrågor (8)  Versioner (3)  Målgrupp  Lagring  Statistik
 └──────────────────────────────────────────────────┘ └────────────────────────────────────────────────────┘
 ```
 
+- **Knowledge** (Kunskapsbanker in the draft): each link shows the knowledge base, its owning department when it is
+  shared ("umea.se (Communications, shared)"), and its topics ("all topics", or chips with **+ topic**); **Add
+  knowledge base** opens a picker with *Ours*, *Shared with us* and *All*, showing level, document count and topics.
+- **Who can use it** (Målgrupp) says in plain words what an audience means: "Open WebUI (pilot): everyone who can sign
+  in to it"; department and group audiences follow the W3 spike and E1.
 - **Badges**: `[Utkast]` alone before the first publish; `[Publicerad: version n]` afterwards, plus `[Utkast ändrat …]`
   while a draft exists; `[Arkiverad]` when archived. **Använder verktyg** is a derived label (P2), never a
   setting: it appears when a linked skill's served version carries tools, and the Färdigheter field explains that such
@@ -844,9 +889,20 @@ The *Statistik* tab shows the date of last use and, from P2 (weakness review §1
 Import från Open WebUI: senast 10:45, lyckad · 2 kunde inte kopplas till ett svar senaste dygnet
 ```
 
-#### 5.5.6 Karta (department map; P2, weakness review §1)
+#### 5.5.6 Karta (department map; P1b as a table)
 
-**Later (P2):** the department map.
+P1b builds the **table**; the drawing below follows later. The table has one row per department → knowledge base →
+assistant → audience path, with the responsible contact of each, and filters for department and object:
+
+```
+Map                                          Department: All ▾   Show: Everything ▾   [Table] [Drawing]
+│ Department      │ Knowledge base     │ Shared       │ Assistant          │ Channel            │ Responsible  │
+│ Communications  │ umea.se            │ municipality │ –                  │ –                  │ K. Lund      │
+│ Building & Env. │ umea.se ↗ (shared) │ –            │ Permits assistant  │ Open WebUI (pilot) │ A. Andersson │
+│ Building & Env. │ Permits forms      │ –            │ Permits assistant  │ Open WebUI (pilot) │ A. Andersson │
+```
+
+The drawing:
 
 ```
 Karta · Stadsbyggnad                                                  Visa: [Allt ▾]  [Tabell]
@@ -909,6 +965,8 @@ version, draft-only links are marked "(utkast)". Source: `GET /api/organisation/
 | assistant version / published version / draft | version / publicerad version / utkast | restore / copy / archive | återställ / kopiera / arkivera |
 | assistant test question / expected behaviour | testfråga / förväntat beteende | uses tools (derived) | använder verktyg |
 | assistant template / department map | assistentmall / karta | owner team | ägarteam |
+| topic | ämne | sharing level: only our department / selected departments / whole municipality | delning: bara vår förvaltning / valda förvaltningar / hela kommunen |
+| responsible (contact) | ansvarig | shared with us | delade med oss |
 | `demote` pattern (weakness review §3) | nedprioritera | age decay `recency` (weakness review §3) | åldersavtagning |
 
 ### 5.8 Generic forms for platform objects (P1)
@@ -1309,8 +1367,9 @@ the admin reads the results through its own endpoints.
 - Role journeys: viewer read-only, pipeline editor (template parameters, preview, publish, roll back), platform admin
   (generic forms for settings, clients, a site-profile edit and rollback; proposal approve from P2), reviewer (comment reveal,
   conversation view, access log), no-role user sees the no-access page, deletion confirmation and rejection, upload with
-  a refused file type; assistant change → Testa on the draft → Publicera → Återställ from Versioner; from P2 the test report, copy
-  an assistant and the department map's table view.
+  a refused file type; assistant change → Testa on the draft → Publicera → Återställ from Versioner; sharing a knowledge base with the
+  municipality and linking it with a topic from another department's assistant; the Map table; from P2 the test
+  report and copying an assistant.
 - Accessibility spec copied and extended (§10.1); CSP violations collected with `page.on('console')` and
   `securitypolicyviolation` listeners must be zero.
 
@@ -1328,7 +1387,8 @@ component axe checks.
 | P1b (1) | collections (incl. documents tab, PII view/clear), sources (URL list, crawl, upload batches), preflight, preview with site-profile before/after, impact, runs and crawl report, deletion decisions, template parameters, publish (plan of every document → re-process → report → keep or roll back), rollback |
 | P1b (2) | evaluation set and reports (led by the gold set; coverage-threshold proposal as numbers, weakness review §2), retrieval settings, collection publish, assistants (draft → publish, versions with restore, archive, description and contact), test panel on the draft (`Ume.Rag.Answering`, same release as `rag-api`), impact lines, V8 `/v1/models` check, audiences (clients), retention, generic forms (settings, data protection, clients, keys, templates, site profiles, embedding profiles, gateway models, organisation), audit list, explain access |
 | P1b (3) | feedback page (ratings, import health; comment reveal, conversation review behind feedback and the access log when A1 allows stored content, weakness review §4); accessibility pass and tillgänglighetsredogörelse; pilot journey E2E green |
-| P2 | from weakness review §1: assistant templates and copy, version diff, assistant test questions and `AssistantTestRunner`, department map, unused-assistant attention item, latest answer evaluation (`AnswerEvaluationService`), site-profile proposals with learning, effect-tag publish plans; collection share lists (Delning); skills (share lists, gate report, serve); tool servers (registration, approvals, pre-registration, grants, drift leader); tool use through skills (the derived **Använder verktyg**, limits, tool calls in the test panel); owner-team scoping; parse-profile proposals; SharePoint; crawl hierarchy tree; parameter diff; coverage histogram and proposal; audit diff viewer and Historik tabs; conversation search and `sensitive` two-person flow; feedback → test question; widget keys; dedicated pages where generic forms prove too thin |
+| P1b (4) | organisation (Decisions "Organisation: department-owned, municipality-shared knowledge bases with topics"): sharing levels and `CollectionShares`, topics on links, contact on knowledge bases, V11 widened and V35, `view=` lists, the Map table, the menu regrouped, teams out of create forms |
+| P2 | from weakness review §1: assistant templates and copy, version diff, assistant test questions and `AssistantTestRunner`, the Map drawing, unused-assistant attention item, latest answer evaluation (`AnswerEvaluationService`), site-profile proposals with learning, effect-tag publish plans; skills (share lists, gate report, serve); tool servers (registration, approvals, pre-registration, grants, drift leader); tool use through skills (the derived **Använder verktyg**, limits, tool calls in the test panel); owner-team scoping; parse-profile proposals; SharePoint; crawl hierarchy tree; parameter diff; coverage histogram and proposal; audit diff viewer and Historik tabs; conversation search and `sensitive` two-person flow; feedback → test question; widget keys; dedicated pages where generic forms prove too thin |
 | P3 | analytics, OBO configuration, risk acceptance, skill import/export, embedding profile changes |
 
 ## 13. Changes to other documents
@@ -1453,7 +1513,7 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 | Interim per-team gateway key links (`/api/gateway/key-links`, `gatewaylink.*`) | Removed (§7) |
 | Clients' task model (`owui-tasks`, `TaskModelResidency` in V21) | Removed (§1) |
 | Shared document store views ("used by another department"), `recompute-membership` | Removed: documents belong to one source (§2) |
-| Own-department-only links | Share lists for collections and skills, P2 (§10; P1 links own-department collections only) |
+| Own-department-only links | Collection sharing in P1b (Decisions "Organisation: department-owned, municipality-shared knowledge bases with topics (user, 2026-11-02)"); skill share lists P2 |
 | Skill MCP exposure and audiences (V20), MAJOR auto-pin preview | P3 / removed (§10) |
 | Risk acceptance (`/risk-acceptance`, `assistant.risk_accept`) | P3 (§10) |
 | "(+ request)" right on tool servers | Removed: platform team's intake (§10) |
@@ -1472,7 +1532,7 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | Assistant version diff (`…/diff`, **Jämför**, the diff in the publish dialog) | P2 |
 | Assistant test questions, `AssistantTestRunner`, test reports, **Spara som testfråga** (§7.4) | P2 |
 | Assistant templates (generic form, `templateId` on create), copy an assistant | P2 |
-| Department map (Karta, §5.5.6, `GET /api/organisation/departments/{id}/map`), unused-assistant attention item | P2; the impact line on saves stays in P1 |
+| Department map (Karta, §5.5.6, `GET /api/organisation/departments/{id}/map`), unused-assistant attention item | the map as a table in P1b (Decisions "Organisation: department-owned, municipality-shared knowledge bases with topics (user, 2026-11-02)"), its drawing and the attention item P2; the impact line on saves stays in P1 |
 | Latest answer evaluation (`AnswerEvaluationService`, nightly `answers` run) | P2 |
 | Learned site profiles, proposals, approve/reject | P2; P1 has manual profile versions (edit, roll back), the umea.se one a hand-checked Sitevision preset |
 | Publish plan split by effect tags | P2; P1 re-processes every document of the collection, still with report and keep or roll back |

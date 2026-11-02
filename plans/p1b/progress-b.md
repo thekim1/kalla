@@ -99,6 +99,30 @@ Refs: [admin §10.1, §11.4](../admin/design.md)
 ### 18. W3 spike
 - [ ] Two users, two groups, interleaved chats on the dev Keycloak and a local Open WebUI; #174 recorded
 
+### 33. Organisation schema
+Refs: [data-model §2.1](../platform/data-model.md), Decisions "Organisation" row
+- [ ] `Collections.SharedWith`, `ContactName`, `ContactEmail`; `CollectionShares`; `AssistantVersions.CollectionLinks`; view and snapshot
+- [ ] **Hand-off L13:** issue to stream A
+- [ ] **Done:** migrations on an empty and the development database; `DatabaseRoleTests`
+
+### 34. Topics in retrieval
+Refs: [knowledge §4.2, §6.2](../knowledge-api/design.md)
+- [ ] Search scope with links; topic predicate in K and V; chat and test panel pass links
+- [ ] **Hand-off L14:** issue to stream A
+- [ ] **Done:** topic, whole-collection and `filters.tags` retrieval tests
+
+### 35. Organisation in the admin API
+Refs: [admin §3.2, §4.5, §4.6](../admin/design.md)
+- [ ] Sharing route, `view=`, topics, Map route, contact fields, owner-team default
+- [ ] V11 widened, V35
+- [ ] **Done:** `PermissionMatrixTests`; shared summary visible, sources 404; V35 refusal lists assistants
+
+### 36. Organisation pages (after #314)
+Refs: [admin §5.2–§5.5](../admin/design.md)
+- [ ] Menu regrouped; Knowledge bases tabs *Ours* / *Shared with us* / *All*
+- [ ] Sharing and Topics tabs; knowledge picker with topics; "Who can use it"; Map table; no team field
+- [ ] **Done:** vitest per page; the E2E shares and links with a topic by keyboard
+
 ### 19. Code complete (your part)
 - [ ] Pin review: NuGet and npm pins under 7 days old reviewed; #113 recorded; realm callback for the Open WebUI pin (README §7 O8)
 - [ ] Condense residency: the chat condense step runs at `Eu` until on-prem hardware exists (#204 design deviation 1, M2); switch it to `OnPrem` before go-live once that route exists
