@@ -691,3 +691,26 @@ export interface AssistantTestResult {
   gateway: { model: string; residency: string; latencyMs: number | null; inputTokens: number | null; outputTokens: number | null }
   durationMs: number
 }
+
+/** `GET /api/collections/{id}/setup`: the setup checklist computed from state (admin design §5.4). */
+export interface CollectionSetup {
+  collectionId: string
+  name: string
+  sources: number
+  firstSyncDone: boolean
+  syncRunning: boolean
+  testQuestions: number
+  evaluated: boolean
+  evaluating: boolean
+  published: boolean
+  assistantId: string | null
+  assistantPublished: boolean
+  available: boolean
+  done: boolean
+}
+
+/** `GET /api/overview`: whether any collection is in scope, and the checklists not done yet. */
+export interface Overview {
+  hasCollections: boolean
+  setup: CollectionSetup[]
+}

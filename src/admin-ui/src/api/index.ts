@@ -10,6 +10,8 @@ import type {
   ClientSummary,
   GatewayModel,
   Collection,
+  CollectionSetup,
+  Overview,
   CollectionCreate,
   CollectionSummary,
   Department,
@@ -73,6 +75,7 @@ export const api = {
     evaluation: (id: string) => http.get<EvaluationOverview>(`/api/collections/${id}/evaluation`),
     retrievalSettings: (id: string, settings: Record<string, unknown>, version: string) =>
       http.put<Collection>(`/api/collections/${id}/retrieval-settings`, { settings, version }),
+    setup: (id: string) => http.get<CollectionSetup>(`/api/collections/${id}/setup`),
     addSource: (id: string, body: SourceCreate) => http.post<Source>(`/api/collections/${id}/sources`, body),
   },
   sources: {
@@ -173,6 +176,7 @@ export const api = {
     getRun: (runId: string) => http.get<EvaluationRun>(`/api/evaluation-runs/${runId}`),
     results: (runId: string) => http.get<EvaluationResult[]>(`/api/evaluation-runs/${runId}/results`),
   },
+  overview: () => http.get<Overview>('/api/overview'),
   jobs: {
     get: <T = unknown>(id: string) => http.get<Job<T>>(`/api/jobs/${id}`),
   },

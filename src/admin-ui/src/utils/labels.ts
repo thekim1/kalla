@@ -152,7 +152,7 @@ export const NOT_FOUND = {
 
 export const OVERVIEW = {
   welcome: (name: string) => `Välkommen, ${name}`,
-  lead: 'Här bygger du kunskapsbanker och assistenter för din förvaltning. Sidorna för det kommer i nästa version.',
+  lead: 'Här bygger du kunskapsbanker och assistenter för din förvaltning.',
   access: 'Din behörighet',
   roles: 'Roller',
   departments: 'Förvaltningar',
@@ -831,4 +831,34 @@ export const RETRIEVAL = {
   savedNoSet: 'Sökinställningarna är sparade.',
   tryWithout: 'Prova utan att spara',
   tryStarted: 'En jämförande utvärdering körs med de nya värdena. Resultatet visas under Testfrågor och kvalitet.',
+/** The setup checklist "Kom igång" (admin design §5.4, §5.5.2), on the start page and the collection's Översikt. */
+export const SETUP = {
+  title: 'Kom igång',
+  titleFor: (name: string) => `Kom igång: ${name}`,
+  listLabel: 'Steg för att komma igång',
+  done: 'klart',
+  inProgress: 'pågår',
+  todo: 'inte gjort',
+  steps: {
+    source: 'Lägg till källa',
+    sourceDone: (n: number) => (n === 1 ? 'Källa tillagd' : `${n} källor tillagda`),
+    sync: 'Första hämtningen',
+    syncRunning: 'Hämtning pågår',
+    syncDone: 'Första hämtningen klar',
+    questions: 'Testfrågor',
+    questionsDone: (n: number) => `Testfrågor skapade (${n})`,
+    evaluation: 'Utvärdering',
+    evaluating: 'Utvärdering pågår',
+    evaluated: 'Utvärdering klar',
+    publish: 'Publicera kunskapsbanken',
+    published: 'Kunskapsbanken publicerad',
+    assistant: 'Skapa assistent',
+    assistantDone: 'Assistent skapad',
+    assistantPublish: 'Publicera assistenten',
+    assistantPublished: 'Assistenten publicerad',
+    available: 'Gör tillgänglig i Open WebUI',
+  },
+  empty: 'Du har inga kunskapsbanker än. Börja med att skapa en.',
+  create: 'Skapa kunskapsbank',
+  allDone: 'Alla kunskapsbanker är klara och tillgängliga.',
 } as const
