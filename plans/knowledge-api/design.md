@@ -694,10 +694,21 @@ walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Itera
 - HNSW runs on the half-precision expression index `("Embedding"::halfvec(1024))` from P1 (column stays `vector`, so
   the exact variant keeps full precision); its recall against exact is measured with the evaluation sets before the
   first large collection (§20).
+- **Index health.** Every chunk enters the index through the swap's `UPDATE` (chunks are written hidden, data-model
+  §3.2), and re-processing leaves dead entries behind; on the pilot (10,074 chunks after re-crawls) the walk at
+  `ef_search` 100 returned a best distance of 0.454 where the exact best was 0.246, and `REINDEX` restored it (measured
+  2026-11-02). So the worker checks each profile's index: nightly, and after a sync run that made more than 10 % of the
+  profile's chunks live, it takes 200 random live child chunks of each HNSW-searched scope as queries (their own
+  embeddings), compares the approximate top 10 with the exact top 10, and records recall as
+  `rag.retrieval.hnsw_recall{profile}`. Below **0.95** it runs `REINDEX INDEX CONCURRENTLY` on that profile's index
+  (one at a time, `command` class, audited as a system action) and measures again. Both bounds are
+  `Settings.Retrieval.hnswRecallFloor` and `hnswCheckSample`.
 
 The HNSW settings are **role defaults** (`ALTER ROLE ume_rag_api IN DATABASE ragdb SET hnsw.ef_search = 100`, same for
 `hnsw.iterative_scan = relaxed_order` and `hnsw.max_scan_tuples = 100000`, and for the worker and admin roles),
 applied by `app-roles.sql` like the timeouts (data-model §1.1), so no `SET` runs per query and V needs no transaction.
+The development stack connects as one superuser, so the migration service sets the same three values on the database
+(`ALTER DATABASE ragdb SET …`) when it runs in Development.
 A walk stops at 100 matching rows, so the higher tuple bound only costs time for scopes near the selectivity floor.
 
 ### 6.5 Fusion (`RrfFusion`, .NET)

@@ -406,6 +406,10 @@ CREATE INDEX "IX_Chunks_Embedding_<profile id, 32 hex digits>" ON content."Chunk
     WHERE "EmbeddingProfileId" = '<profile id>' AND "DeletedAt" IS NULL;
 ```
 
+The swap makes chunks visible by an `UPDATE` of `DeletedAt`, so every entry of the HNSW index comes from an update and
+re-processing leaves dead ones; the worker's index-health check measures each profile index's recall against exact
+search and rebuilds it concurrently below the floor (knowledge design §6.4).
+
 `CollectionId` is a scalar that never changes for a chunk, so the B-tree index costs nothing on membership changes
 (there are none: a source belongs to one collection).
 
