@@ -55,7 +55,7 @@ public sealed class ExplainAccessTests(AdminDatabaseFixture database)
         var version = new AssistantVersion
         {
             AssistantId = assistant.Id, Number = 1, State = AssistantVersionStates.Published, GatewayModel = "ume/chat-eu", SystemPrompt = "Svara kort.",
-            CollectionIds = [collection.Id], PublishedAt = DateTimeOffset.UtcNow, PublishedBy = "o-seed",
+            CollectionLinks = [CollectionLink.Whole(collection.Id)], PublishedAt = DateTimeOffset.UtcNow, PublishedBy = "o-seed",
         };
         db.Add(version);
         db.Add(new AssistantAudience { AssistantId = assistant.Id, Kind = AssistantAudienceKinds.Client, SubjectId = audience.Id });

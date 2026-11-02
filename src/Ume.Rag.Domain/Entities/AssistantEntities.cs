@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Ume.Rag.Domain.Entities;
 
 // The serving tables of config (data-model §2.1; simplification pass §15): assistants with their versions and audiences,
@@ -68,8 +70,8 @@ public static class AssistantVersionStates
 /// A version of an assistant's settings (<c>config."AssistantVersions"</c>, data-model §2.1): at most one open draft and
 /// one published version per assistant; published and superseded rows are immutable. A draft carries its own stamps and
 /// <c>xmin</c> token, so editing it never touches <see cref="Assistant"/>, and its rows do not bump the config version
-/// (data-model §5). Links are id arrays (a self-contained snapshot, §12.24). Deferred and left out: <c>Skills</c> (P2
-/// tools) and <c>TestRunId</c> (P2 <c>assistant-tests</c> runs).
+/// (data-model §5). Collections are linked by id with optional topics (a self-contained snapshot, §12.24). Deferred and
+/// left out: <c>Skills</c> (P2 tools) and <c>TestRunId</c> (P2 <c>assistant-tests</c> runs).
 /// </summary>
 public sealed class AssistantVersion
 {
@@ -93,8 +95,13 @@ public sealed class AssistantVersion
     /// <summary>Not-found texts and contact links (<c>jsonb</c>, chat design §10.1); empty texts fall back to <c>Settings.Chat</c>.</summary>
     public string NotFound { get; set; } = "{}";
 
-    /// <summary>The direct collections (≤ <see cref="MaxCollections"/>), the assistant's only knowledge; no foreign key.</summary>
-    public Guid[] CollectionIds { get; set; } = [];
+    /// <summary>
+    /// The direct collections (≤ <see cref="MaxCollections"/>) with their topics (<c>jsonb</c>), the assistant's only knowledge;
+    /// no foreign key.
+    /// </summary>
+    public IReadOnlyList<CollectionLink> CollectionLinks { get; set; } = [];
+
+    public IReadOnlyList<Guid> LinkedCollectionIds() => CollectionLink.Ids(CollectionLinks);
 
     public Guid? RestoredFromVersionId { get; set; }
     public string? CreatedBy { get; set; }
@@ -106,6 +113,44 @@ public sealed class AssistantVersion
 
     /// <summary>Postgres <c>xmin</c>: the draft's own concurrency token (admin design §4.3).</summary>
     public uint Version { get; set; }
+}
+
+/// <summary>
+/// A collection an assistant version links (<c>AssistantVersions.CollectionLinks</c>, data-model §2.1): retrieval keeps the
+/// collection's chunks that carry any of <see cref="Tags"/> (topics, in the chunk tag format of processing design §7); no
+/// tags = the whole collection.
+/// </summary>
+public sealed record CollectionLink(Guid CollectionId, IReadOnlyList<string> Tags)
+{
+    /// <summary>The most topics a link carries (data-model §2.1; checked by the application).</summary>
+    public const int MaxTags = 20;
+
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    public IReadOnlyList<string> Tags { get; init; } = Tags ?? [];
+
+    public static CollectionLink Whole(Guid collectionId) => new(collectionId, []);
+
+    public static IReadOnlyList<Guid> Ids(IEnumerable<CollectionLink> links) => [.. links.Select(l => l.CollectionId)];
+
+    /// <summary>The stored form: <c>[{ "collectionId": uuid, "tags": [string] }]</c>.</summary>
+    public static string Serialize(IEnumerable<CollectionLink> links) => JsonSerializer.Serialize(links, Json);
+
+    public static IReadOnlyList<CollectionLink> ParseList(string json) => JsonSerializer.Deserialize<CollectionLink[]>(json, Json) ?? [];
+
+    public bool Equals(CollectionLink? other) => other is not null && CollectionId == other.CollectionId && Tags.SequenceEqual(other.Tags);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(CollectionId);
+        foreach (var tag in Tags)
+        {
+            hash.Add(tag);
+        }
+
+        return hash.ToHashCode();
+    }
 }
 
 /// <summary>Audience kinds. P1 uses <c>client</c> only (data-model §2.1); <c>department</c> and <c>group</c> come later.</summary>

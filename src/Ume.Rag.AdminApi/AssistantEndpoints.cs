@@ -149,7 +149,7 @@ public static class AssistantEndpoints
                         draft = new AssistantVersion
                         {
                             AssistantId = id, Number = next + 1, GatewayModel = published?.GatewayModel, SystemPrompt = published?.SystemPrompt ?? "",
-                            QuerySteps = published?.QuerySteps ?? "{}", NotFound = published?.NotFound ?? "{}", CollectionIds = published?.CollectionIds ?? [],
+                            QuerySteps = published?.QuerySteps ?? "{}", NotFound = published?.NotFound ?? "{}", CollectionLinks = published?.CollectionLinks ?? [],
                             CreatedBy = admin.Actor, CreatedAt = admin.Now,
                         };
                         admin.Db.AssistantVersions.Add(draft);
@@ -321,7 +321,7 @@ public static class AssistantEndpoints
                     var restored = new AssistantVersion
                     {
                         AssistantId = id, Number = next, State = AssistantVersionStates.Published, GatewayModel = source.GatewayModel, SystemPrompt = source.SystemPrompt,
-                        QuerySteps = source.QuerySteps, NotFound = source.NotFound, CollectionIds = source.CollectionIds, RestoredFromVersionId = source.Id,
+                        QuerySteps = source.QuerySteps, NotFound = source.NotFound, CollectionLinks = source.CollectionLinks, RestoredFromVersionId = source.Id,
                         CreatedAt = admin.Now, CreatedBy = admin.Actor, UpdatedAt = admin.Now, UpdatedBy = admin.Actor, PublishedAt = admin.Now, PublishedBy = admin.Actor,
                     };
 
@@ -526,7 +526,7 @@ public static class AssistantRules
         }
 
         // V11 and V34: ≤ 20 collections, every one live and of the assistant's department (shares are P2).
-        var ids = version.CollectionIds.Distinct().ToList();
+        var ids = version.LinkedCollectionIds().Distinct().ToList();
         if (ids.Count > AssistantVersion.MaxCollections)
         {
             problems.Add(new(AdminErrorCodes.TooManyCollections, null, []));
@@ -677,7 +677,7 @@ public sealed record DraftDto(int Number, string? GatewayModel, string SystemPro
         ArgumentNullException.ThrowIfNull(v);
         using var steps = JsonDocument.Parse(v.QuerySteps);
         using var notFound = JsonDocument.Parse(v.NotFound);
-        return new(v.Number, v.GatewayModel, v.SystemPrompt, steps.RootElement.Clone(), notFound.RootElement.Clone(), v.CollectionIds,
+        return new(v.Number, v.GatewayModel, v.SystemPrompt, steps.RootElement.Clone(), notFound.RootElement.Clone(), v.LinkedCollectionIds(),
             [.. warnings.Select(w => (object)new { code = w.Code.Code, @params = w.Params, affected = w.Affected })], v.UpdatedAt, v.Version.ToString(CultureInfo.InvariantCulture));
     }
 }
@@ -690,9 +690,10 @@ public sealed record AssistantAudit(
         a.Classification, a.State, a.PublishedVersionId, a.DraftVersionId);
 }
 
-public sealed record DraftAudit(Guid Id, int Number, string State, string? GatewayModel, string SystemPrompt, string QuerySteps, string NotFound, IReadOnlyList<Guid> CollectionIds)
+public sealed record DraftAudit(
+    Guid Id, int Number, string State, string? GatewayModel, string SystemPrompt, string QuerySteps, string NotFound, IReadOnlyList<CollectionLink> CollectionLinks)
 {
-    public static DraftAudit Of(AssistantVersion v) => new(v.Id, v.Number, v.State, v.GatewayModel, v.SystemPrompt, v.QuerySteps, v.NotFound, v.CollectionIds);
+    public static DraftAudit Of(AssistantVersion v) => new(v.Id, v.Number, v.State, v.GatewayModel, v.SystemPrompt, v.QuerySteps, v.NotFound, v.CollectionLinks);
 }
 
 public record AssistantFields : AdminRequest, IValidatableObject
@@ -773,7 +774,9 @@ public sealed record DraftRequest : AdminRequest
         draft.SystemPrompt = SystemPrompt;
         draft.QuerySteps = QuerySteps is { ValueKind: JsonValueKind.Object } steps ? steps.GetRawText() : "{}";
         draft.NotFound = NotFound is { ValueKind: JsonValueKind.Object } notFound ? notFound.GetRawText() : "{}";
-        draft.CollectionIds = [.. CollectionIds.Distinct()];
+        // The request carries ids only: a link already on the draft keeps its topics, a new one links the whole collection.
+        var current = draft.CollectionLinks.DistinctBy(l => l.CollectionId).ToDictionary(l => l.CollectionId);
+        draft.CollectionLinks = [.. CollectionIds.Distinct().Select(id => current.GetValueOrDefault(id) ?? CollectionLink.Whole(id))];
     }
 }
 
@@ -819,7 +822,7 @@ public sealed record VersionDto(
         ArgumentNullException.ThrowIfNull(v);
         using var steps = JsonDocument.Parse(v.QuerySteps);
         using var notFound = JsonDocument.Parse(v.NotFound);
-        return new(v.Number, v.State, v.GatewayModel, v.SystemPrompt, steps.RootElement.Clone(), notFound.RootElement.Clone(), v.CollectionIds, restoredFrom, v.CreatedAt,
+        return new(v.Number, v.State, v.GatewayModel, v.SystemPrompt, steps.RootElement.Clone(), notFound.RootElement.Clone(), v.LinkedCollectionIds(), restoredFrom, v.CreatedAt,
             v.CreatedBy, v.PublishedAt, v.PublishedBy);
     }
 }

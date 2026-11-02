@@ -30,6 +30,9 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
 
         // Ingestion (P1 item 2, data-model §1.2): the admin manages the config, the worker writes the content.
         string[] retrievalConfig = ["config.Settings", "config.DataProtectionPolicies", "config.EmbeddingProfiles", "config.Collections"];
+
+        // Organisation (P1b item 33, data-model §1.2): the admin manages collection shares, the api reads them, the worker never.
+        string[] shares = ["config.CollectionShares"];
         string[] ingestionConfig = [.. retrievalConfig, "config.Sources", "config.Pipelines", "config.PipelineVersions"];
         string[] ingestionContent = [.. IngestionContentTables.Select(t => "content." + t)];
 
@@ -46,15 +49,15 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
             .Select(t => "chat." + t)];
 
         // config.Sources and content.Documents are column grants for the api (below), so they are not table privileges.
-        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. apiServingConfig, "content.ChunkSets", "content.Chunks", .. chat], ignoreOrder: true);
+        (await PrivilegesAsync(Api, "SELECT")).ShouldBe([.. configRead, .. keys, "config.KeyLastUse", .. retrievalConfig, .. shares, .. apiServingConfig, "content.ChunkSets", "content.Chunks", .. chat], ignoreOrder: true);
         (await PrivilegesAsync(Api, "INSERT")).ShouldBe(["config.KeyLastUse", "audit.AuditLog", .. chat], ignoreOrder: true);
         (await PrivilegesAsync(Api, "UPDATE")).ShouldBe(["config.KeyLastUse", .. chat], ignoreOrder: true);
         (await PrivilegesAsync(Api, "DELETE")).ShouldBe(chat, ignoreOrder: true);
 
         (await PrivilegesAsync(Admin, "SELECT")).ShouldBe([.. all, "config.PublishedAssistantVersions"], ignoreOrder: true); // explain access (identity §4.9)
-        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog"], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites], ignoreOrder: true);
-        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. servingConfig, "config.AdminSessions"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "INSERT")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.DataProtectionKeys", "content.Jobs", "content.BlobTombstones", .. evaluationWrites, "audit.AuditLog"], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "UPDATE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions", "config.ConfigVersion", .. evaluationWrites], ignoreOrder: true);
+        (await PrivilegesAsync(Admin, "DELETE")).ShouldBe([.. keys, .. organisation, .. ingestionConfig, .. shares, .. servingConfig, "config.AdminSessions"], ignoreOrder: true);
 
         // The worker also reads the model mirror (the evaluation's residency checks, #130).
         (await PrivilegesAsync(Worker, "SELECT")).ShouldBe([.. configRead, .. ingestionConfig, .. workerTables, .. ingestionContent, .. servingContent, "config.GatewayModels"],
@@ -132,9 +135,9 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
             BEGIN;
             INSERT INTO config."Assistants" ("Id", "Slug", "Name", "DepartmentId", "Classification", "HistoryMode", "RetentionDays", "AllowedOrigins", "State", "UpdatedAt")
             VALUES ('{assistantId}', 'roles-{assistantId:N}', 'Roller', '{Guid.NewGuid()}', 'public', 'none', 90, '{"{}"}', 'active', now());
-            INSERT INTO config."AssistantVersions" ("Id", "AssistantId", "Number", "State", "GatewayModel", "SystemPrompt", "QuerySteps", "NotFound", "CollectionIds", "CreatedAt", "UpdatedAt", "PublishedBy", "PublishedAt")
-            VALUES ('{publishedId}', '{assistantId}', 1, 'published', 'gpt-test', 'publicerad', '{"{}"}', '{"{}"}', '{"{}"}', now(), now(), 'test', now()),
-                   ('{draftId}', '{assistantId}', 2, 'draft', NULL, 'utkast', '{"{}"}', '{"{}"}', '{"{}"}', now(), now(), NULL, NULL);
+            INSERT INTO config."AssistantVersions" ("Id", "AssistantId", "Number", "State", "GatewayModel", "SystemPrompt", "QuerySteps", "NotFound", "CollectionLinks", "CreatedAt", "UpdatedAt", "PublishedBy", "PublishedAt")
+            VALUES ('{publishedId}', '{assistantId}', 1, 'published', 'gpt-test', 'publicerad', '{"{}"}', '{"{}"}', '[]', now(), now(), 'test', now()),
+                   ('{draftId}', '{assistantId}', 2, 'draft', NULL, 'utkast', '{"{}"}', '{"{}"}', '[]', now(), now(), NULL, NULL);
             UPDATE config."Assistants" SET "PublishedVersionId" = '{publishedId}', "DraftVersionId" = '{draftId}' WHERE "Id" = '{assistantId}';
             COMMIT;
             """);
@@ -160,6 +163,37 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         // api decides (identity design §4.9, P1b item 9): the published version, never a draft.
         (await Sql.ScalarAsync<long>(admin, $"""SELECT count(*) FROM config."AssistantVersions" WHERE "AssistantId" = '{assistantId}'""")).ShouldBe(2);
         (await Sql.ScalarAsync<long>(admin, $"""SELECT count(*) FROM config."PublishedAssistantVersions" WHERE "AssistantId" = '{assistantId}'""")).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task The_admin_manages_collection_shares_the_api_reads_them_and_the_worker_has_no_access()
+    {
+        var profileId = Guid.CreateVersion7();
+        var collectionId = Guid.CreateVersion7();
+        var departmentId = Guid.CreateVersion7();
+        var otherDepartmentId = Guid.CreateVersion7();
+        await Sql.ExecuteAsync(database.Connection(null), $"""
+            INSERT INTO config."EmbeddingProfiles" ("Id", "Name", "GatewayModel", "Dimensions", "Distance", "MaxInputTokens", "IsDefault", "State", "MaxResidency", "UpdatedAt")
+            VALUES ('{profileId}', 'shares-{profileId:N}', 'bge-m3', 3, 'cosine', 10, false, 'active', 'Eu', now());
+            INSERT INTO config."Collections" ("Id", "Slug", "Name", "DepartmentId", "Classification", "EmbeddingProfileId", "RetrievalSettings", "UpdatedAt")
+            VALUES ('{collectionId}', 'shares-{collectionId:N}', 'Delad', '{departmentId}', 'public', '{profileId}', '{"{}"}', now());
+            INSERT INTO config."Departments" ("Id", "Name", "CostCenterCode", "MemberGroups", "IsActive", "SyncedAt")
+            VALUES ('{departmentId}', 'Ägare', 'cc-{departmentId:N}', '{"{}"}', true, now()),
+                   ('{otherDepartmentId}', 'Mottagare', 'cc-{otherDepartmentId:N}', '{"{}"}', true, now());
+            """);
+
+        var admin = database.Connection(Admin);
+        await Sql.ExecuteAsync(admin, $"""
+            INSERT INTO config."CollectionShares" ("CollectionId", "DepartmentId", "SharedBy", "SharedAt") VALUES ('{collectionId}', '{otherDepartmentId}', 'admin', now());
+            UPDATE config."CollectionShares" SET "SharedBy" = 'admin2' WHERE "CollectionId" = '{collectionId}';
+            """);
+        var api = database.Connection(Api);
+        (await Sql.ListAsync(api, $"""SELECT "DepartmentId"::text FROM config."CollectionShares" WHERE "CollectionId" = '{collectionId}'""")).ShouldBe([otherDepartmentId.ToString()]);
+        await Sql.ShouldBeDeniedAsync(api, $"""INSERT INTO config."CollectionShares" ("CollectionId", "DepartmentId", "SharedBy", "SharedAt") VALUES ('{collectionId}', '{departmentId}', 'api', now())""");
+        await Sql.ShouldBeDeniedAsync(api, $"""UPDATE config."CollectionShares" SET "SharedBy" = 'api' WHERE "CollectionId" = '{collectionId}'""");
+        await Sql.ShouldBeDeniedAsync(api, $"""DELETE FROM config."CollectionShares" WHERE "CollectionId" = '{collectionId}'""");
+        await Sql.ShouldBeDeniedAsync(database.Connection(Worker), """SELECT count(*) FROM config."CollectionShares" """);
+        await Sql.ExecuteAsync(admin, $"""DELETE FROM config."CollectionShares" WHERE "CollectionId" = '{collectionId}'""");
     }
 
     [Fact]

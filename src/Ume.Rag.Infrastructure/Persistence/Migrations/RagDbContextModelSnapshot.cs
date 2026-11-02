@@ -367,9 +367,11 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AssistantId")
                         .HasColumnType("uuid");
 
-                    b.PrimitiveCollection<Guid[]>("CollectionIds")
+                    b.Property<string>("CollectionLinks")
                         .IsRequired()
-                        .HasColumnType("uuid[]");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -440,7 +442,7 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.ToTable("AssistantVersions", "config", t =>
                         {
-                            t.HasCheckConstraint("CK_AssistantVersions_CollectionIds", "cardinality(\"CollectionIds\") <= 20");
+                            t.HasCheckConstraint("CK_AssistantVersions_CollectionLinks", "jsonb_array_length(\"CollectionLinks\") <= 20");
 
                             t.HasCheckConstraint("CK_AssistantVersions_Number", "\"Number\" >= 1");
 
@@ -863,6 +865,14 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -886,6 +896,13 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<string>("RetrievalSettings")
                         .IsRequired()
                         .HasColumnType("jsonb");
+
+                    b.Property<string>("SharedWith")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("department");
 
                     b.Property<string>("Slug")
                         .IsRequired()
@@ -917,7 +934,32 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("Collections", "config", t =>
                         {
                             t.HasCheckConstraint("CK_Collections_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Collections_SharedWith", "\"SharedWith\" IN ('department', 'selected', 'municipality')");
                         });
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.CollectionShare", b =>
+                {
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("SharedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SharedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("CollectionId", "DepartmentId");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.ToTable("CollectionShares", "config");
                 });
 
             modelBuilder.Entity("Ume.Rag.Domain.Entities.ConfigOutboxEntry", b =>
@@ -3610,6 +3652,21 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.HasOne("Ume.Rag.Domain.Entities.EmbeddingProfile", null)
                         .WithMany()
                         .HasForeignKey("EmbeddingProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.Rag.Domain.Entities.CollectionShare", b =>
+                {
+                    b.HasOne("Ume.Rag.Domain.Entities.Collection", null)
+                        .WithMany()
+                        .HasForeignKey("CollectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ume.Rag.Domain.Entities.Department", null)
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

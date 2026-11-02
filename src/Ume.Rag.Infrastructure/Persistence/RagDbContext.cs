@@ -43,6 +43,7 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<DataProtectionPolicy> DataProtectionPolicies => Set<DataProtectionPolicy>();
     public DbSet<EmbeddingProfile> EmbeddingProfiles => Set<EmbeddingProfile>();
     public DbSet<Collection> Collections => Set<Collection>();
+    public DbSet<CollectionShare> CollectionShares => Set<CollectionShare>();
     public DbSet<Source> Sources => Set<Source>();
     public DbSet<Pipeline> Pipelines => Set<Pipeline>();
     public DbSet<PipelineVersion> PipelineVersions => Set<PipelineVersion>();
@@ -77,6 +78,12 @@ public sealed class RagDbContext(DbContextOptions<RagDbContext> options) : DbCon
     public DbSet<EvaluationRun> EvaluationRuns => Set<EvaluationRun>();
     public DbSet<EvaluationResult> EvaluationResults => Set<EvaluationResult>();
     public DbSet<RetrievalStat> RetrievalStats => Set<RetrievalStat>();
+
+    /// <summary>The assistant versions whose <c>CollectionLinks</c> name any of <paramref name="collectionIds"/>; composable.</summary>
+    public IQueryable<AssistantVersion> AssistantVersionsLinking(Guid[] collectionIds) => AssistantVersions.FromSql($"""
+        SELECT v.*, v.xmin FROM config."AssistantVersions" v
+        WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(v."CollectionLinks") l WHERE (l ->> 'collectionId')::uuid = ANY ({collectionIds}))
+        """);
 
     // Chat, P1b (data-model §2.3): configured in Chat/ChatModel.cs.
     public DbSet<Conversation> Conversations => Set<Conversation>();

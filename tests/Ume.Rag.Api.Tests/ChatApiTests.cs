@@ -335,8 +335,8 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         {
             Assistants = new Dictionary<Guid, AssistantEntry>
             {
-                [db.AssistantId] = bygg with { Published = bygg.Published! with { CollectionIds = [db.DeptACollection, db.DeptBCollection] } },
-                [miljo] = bygg with { Id = miljo, Slug = "miljo", Name = "Miljö", Published = bygg.Published! with { Id = Guid.NewGuid(), CollectionIds = [db.DeptBCollection] } },
+                [db.AssistantId] = bygg with { Published = bygg.Published! with { CollectionLinks = [CollectionLink.Whole(db.DeptACollection), CollectionLink.Whole(db.DeptBCollection)] } },
+                [miljo] = bygg with { Id = miljo, Slug = "miljo", Name = "Miljö", Published = bygg.Published! with { Id = Guid.NewGuid(), CollectionLinks = [CollectionLink.Whole(db.DeptBCollection)] } },
             },
         };
         await using var api = db.ApiHost(snapshot).WithWebHostBuilder(web =>

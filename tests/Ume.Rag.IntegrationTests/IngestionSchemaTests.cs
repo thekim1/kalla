@@ -27,7 +27,7 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
         // data-model §13, §15 and the "(P2)" rows of §2.1, §2.2.
         foreach (var table in new[]
                  {
-                     "content.CrawlClaims", "content.LeaderLeases", "config.CollectionShares", "config.CollectionAudiences",
+                     "content.CrawlClaims", "content.LeaderLeases", "config.CollectionAudiences",
                      "config.DepartmentSettings", "config.AssistantTestQuestions", "config.AssistantTemplates",
                      "config.SkillShares", "config.SkillVersionFiles", "config.ToolDepartmentGrants",
                  })

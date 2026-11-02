@@ -210,9 +210,9 @@ public static class CollectionEndpoints
     public static async Task<List<CollectionUser>> UsedByAsync(AdminContext admin, Guid id, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(admin);
-        var rows = await (from v in admin.Db.AssistantVersions.AsNoTracking()
+        var rows = await (from v in admin.Db.AssistantVersionsLinking([id]).AsNoTracking()
                           join a in admin.Db.Assistants.AsNoTracking() on v.AssistantId equals a.Id
-                          where v.CollectionIds.Contains(id) && (a.PublishedVersionId == v.Id || a.DraftVersionId == v.Id)
+                          where a.PublishedVersionId == v.Id || a.DraftVersionId == v.Id
                           select new { a.Id, a.Name, a.Classification, Published = a.PublishedVersionId == v.Id })
             .ToListAsync(ct);
         return [.. rows.GroupBy(r => r.Id).Select(g => new CollectionUser(g.Key, g.First().Name, g.First().Classification,

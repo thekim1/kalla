@@ -41,7 +41,7 @@ public class AccessBenchmarks
         {
             var id = Guid.NewGuid();
             return new AssistantEntry(id, $"a-{i}", $"Assistent {i}", Classification.Internal, HistoryModes.None, AssistantStates.Active, department, null,
-                new PublishedVersionEntry(Guid.NewGuid(), 1, "ume/chat-eu", [ids[i], ids[(i + 1) % ids.Length]]),
+                new PublishedVersionEntry(Guid.NewGuid(), 1, "ume/chat-eu", [CollectionLink.Whole(ids[i]), CollectionLink.Whole(ids[(i + 1) % ids.Length])]),
                 [new AudienceEntry(AssistantAudienceKinds.Client, i % 2 == 0 ? owui : Guid.NewGuid(), null)]);
         }).ToDictionary(a => a.Id);
         _snapshot = PolicySnapshot.Empty with
