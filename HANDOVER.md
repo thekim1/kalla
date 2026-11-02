@@ -60,8 +60,10 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   --non-interactive` (Docker Desktop must be up and its WSL integration connected: `docker info`). After merges:
   `dotnet build UmeRag.slnx`, then `aspire resource <r> restart` for `migrations`, `api`, `adminapi`, `worker`.
 - Dashboard `https://localhost:17470`; **admin UI `https://localhost:5174`** (user `rag-platform-admin`); admin API
-  `https://localhost:7402`; api `https://localhost:7401`; Open WebUI = the `open-webui` resource's port (41095 after the
-  last start; check `aspire describe`).
+  `https://localhost:7402`; api `https://localhost:7401`; fixed container ports (#341): **Open WebUI
+  `http://localhost:7410`**, Keycloak 7411, Postgres 7412, parser 7413, ClamAV 7414. The feedback importer runs locally
+  (#340, every minute) with the user secret `Parameters:openwebui-admin-api-key` (Open WebUI admin `demo@umea.se`); the
+  Open WebUI client has `clientRetentionDays` 30 (set for the pruning check).
 - **Pilot data:** department DoIT (hand-made, code `1000`); collection `turkos` (public, published,
   `coverageMaxDistance` 0.55, `keywordWeight` 0.25 since 2026-11-02); crawl source "umea.se" (whole host, `maxPages` 2,500, `**.pdf` excluded, no schedule;
   2,532 documents, 2,324 with content, 10,074 chunks); site profile www.umea.se; clients "Open WebUI", "Pilot retrieval
@@ -183,5 +185,6 @@ Every phase-blocking item needs a named person and a date.
   psql -h localhost -U postgres -d ragdb`.
 - Local images: `ume-rag.local/clamav:dev`, `ume-rag.local/parser:ci`, `ume-rag.local/postgres:ci` (Testcontainers needs
   a dotted registry part). `172.30.0.0/16` is taken on this machine.
-- Self-hosted runners `ume-rag` (this machine; needs Docker Desktop up) and `ume-rag2` (the user's other machine); a
-  runner can fail with "MSBuild child node exited prematurely" under load: re-run the job.
+- Self-hosted runners `ume-rag` and `ume-rag2` both run on one machine (`gh-buildagent`, user `kim`, per the job logs).
+  MSB4166 "child node exited prematurely" came from shared MSBuild nodes between concurrent jobs; #342 turns node reuse
+  and build servers off in CI. If it recurs, re-run the job and consider one runner per machine.
