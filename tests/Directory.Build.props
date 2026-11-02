@@ -2,8 +2,11 @@
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
   <PropertyGroup>
     <IsPackable>false</IsPackable>
-    <!-- Every project here is a test project except the shared test kit, a library the test projects reference. -->
-    <IsTestProject Condition="'$(MSBuildProjectName)' != 'Ume.Rag.TestKit'">true</IsTestProject>
+    <!--
+      Every project here is a test project except the shared test kit, a library the test projects reference, and the
+      benchmarks, a console app run by hand (tests/Ume.Rag.Benchmarks/README.md).
+    -->
+    <IsTestProject Condition="'$(MSBuildProjectName)' != 'Ume.Rag.TestKit' and '$(MSBuildProjectName)' != 'Ume.Rag.Benchmarks'">true</IsTestProject>
     <OutputType Condition="'$(IsTestProject)' == 'true'">Exe</OutputType>
     <!-- Test-only suppressions, one reason each (on top of the repository-wide ones). -->
     <!-- Underscores in test names (Does_this_when_that). -->
