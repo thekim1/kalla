@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-02, end of session 18 (last update after #332). Earlier sessions are in the
+State of the Ume.Rag work for the next session. Rewritten 2026-11-02, end of session 18 (last update after #332 and `2eba7de`). Earlier sessions are in the
 git history (`git log -- HANDOVER.md`).
 Repo `~/git/ume-rag-platform`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
@@ -26,9 +26,11 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   large syncs and rebuilds below 0.95 (#330, first live check: recall 1.0); the worker holds `MAINTAIN` and migrations
   drop invalid `_ccnew` leftovers (#328); the dev database gets the HNSW defaults (#326). Of the 9 remaining misses only 2 are
   near-duplicate förskola pages (cosine 0.04); 7 have no near-identical page (0.10–0.31) and are real misses to analyse.
-- **Architecture plan v2** (`architecture_plans.md`, root; proposal by Crotalus, checked and rewritten by the main
-  session): the concept count is the weak point; items 2–3 (a guided "New assistant" path and three fixed presets in
-  P1b) **change a decision** ("Weakness review 1" put assistant templates in P2) and **wait for the user's yes or no**.
+- **Architecture plan** (`architecture_plans.md`, root, a proposal): Crotalus wrote it, the main session checked it
+  against the code and rewrote it as v2 (`5d4387a`, `0525053`), then **Crotalus rewrote it again** (`2eba7de`, 17:25:
+  "knowledge, assistants and models", 9 items, model roles, placements, quality). **The main session has not reviewed
+  that version.** Item 3 (one guided assistant setup with three fixed presets) still **changes a decision** ("Weakness
+  review 1" put assistant templates in P2) and needs the user's yes or no.
 - `main` = `635a5db`. `verify.yml` runs on pull requests and manual dispatch only, not on push: `main` has no run per
   merge by design (the listed `main` runs are manual). Every session-18 PR was green before merging.
 
@@ -135,8 +137,9 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 ## Next step
 
 1. **Check GitHub and the stack**: open PRs, issues; `docker info`, then `aspire describe` (start it as above if down).
-2. **Ask the user about architecture plan items 2–3**; with a yes, write the Decisions row, the rules in admin §5.4,
-   §5.7, §8, and P1b items (B, after item 33).
+2. **Review `architecture_plans.md` as of `2eba7de`** against the code and the Decisions table (check its claims as for
+   v2: the Open WebUI JWT has no department codes; access settings live outside the assistant's versions), then ask the
+   user which items to adopt; with a yes, write the Decisions row, the design rules and P1b items.
 3. **Organisation (#318):** nudge B to start item 33 (schema → L13), or offer the user that the main session builds 33
    to unblock 34–36. Review each PR live. Stream A follows with 37–38 after L13/L14.
 4. **Analyse the 7 real search misses** of the first generated set (statistics tables, document templates, school rules):
