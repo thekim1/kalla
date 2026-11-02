@@ -77,8 +77,8 @@ Refs: [admin §5.3–§5.5, §6.4–§6.7](../admin/design.md)
 ### 12. Journey pages, part 2
 Refs: [admin §5.3, §5.8, §7](../admin/design.md)
 - [ ] Testfrågor och kvalitet and the evaluation report; Sökinställningar
-- [ ] Assistenter: draft, Testa, Publicera, Versioner with restore, Målgrupp, retention, archive
-  — in part (#301): list, create, Utkast (model, instructions, collections, warnings), Testa, Publicera, Målgrupp; still missing: Versioner with restore, retention, archive (API in #260)
+- [x] Assistenter: draft, Testa, Publicera, Versioner with restore, Målgrupp, retention, archive
+  — #301: list, create, Utkast (model, instructions, collections, warnings), Testa, Publicera, Målgrupp; b/12-assistant-versions: Versioner with Återställ, Lagring (V10 within the level's policy), Arkivera / Ta fram igen
 - [ ] Översikt setup checklist; Granskningslogg; explain access
 - [ ] Generic forms for platform objects (incl. parse rules; data protection `none` only); #146 recorded
   — in part: the main session built the generic forms in #281; #146 not recorded

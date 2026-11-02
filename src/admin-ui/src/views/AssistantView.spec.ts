@@ -100,4 +100,77 @@ describe('Assistent (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
     expect(audiences).toHaveBeenCalledWith('a1', { clientIds: ['k1'], version: 'a4' })
   })
+
+  it('restores an earlier version after one confirmation, keeping the draft', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 3 })
+    const versions = vi.spyOn(api.assistants, 'versions').mockResolvedValue([
+      { number: 4, state: 'draft', createdAt: '2026-11-01T12:00:00Z', createdBy: 'anna', publishedAt: null, publishedBy: null, restoredFrom: null },
+      { number: 3, state: 'published', createdAt: '2026-11-01T11:00:00Z', createdBy: 'anna', publishedAt: '2026-11-01T11:00:00Z', publishedBy: 'anna', restoredFrom: 1 },
+      { number: 2, state: 'superseded', createdAt: '2026-10-30T09:00:00Z', createdBy: 'bo', publishedAt: '2026-10-30T09:00:00Z', publishedBy: 'bo', restoredFrom: null },
+    ])
+    const restore = vi.spyOn(api.assistants, 'restore').mockResolvedValue({ ...assistant, publishedVersion: 5, version: 'a9' })
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+
+    await button(wrapper, 'Versioner').trigger('click')
+    await flushPromises()
+    const table = wrapper.get('[data-test=versions]').text()
+    expect(table).toContain('återställd från version 1')
+    expect(table).toContain('Tidigare')
+    expect(wrapper.find('[data-test=restore-3]').exists()).toBe(false) // the live version
+    expect(wrapper.find('[data-test=restore-4]').exists()).toBe(false) // the draft is published, not restored
+
+    await wrapper.get('[data-test=restore-2]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('Version 2 publiceras igen som en ny version. Ditt utkast finns kvar.')
+    const confirm = [...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Återställ').at(-1)!
+    confirm.click()
+    await flushPromises()
+    expect(restore).toHaveBeenCalledWith('a1', 2, 'a3')
+    expect(versions).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-test=published]').text()).toBe('Publicerad: version 5')
+    wrapper.unmount()
+  })
+
+  it('archives and brings back the assistant, and sets retention within the level\'s maximum', async () => {
+    signIn(['rag-department-admin'])
+    mocks()
+    const archive = vi.spyOn(api.assistants, 'archive').mockResolvedValue({ ...assistant, state: 'archived', version: 'a4' })
+    const unarchive = vi.spyOn(api.assistants, 'unarchive').mockResolvedValue({ ...assistant, state: 'active', version: 'a5' })
+    vi.spyOn(api.dataProtection, 'get').mockResolvedValue({
+      classification: 'internal', allowedHistoryModes: ['none'], defaultHistoryMode: 'none', retentionDefaultDays: 90, retentionMaxDays: 180, version: '1',
+    })
+    const retention = vi.spyOn(api.assistants, 'retention').mockResolvedValue({ ...assistant, retentionDays: 30, version: 'a6' })
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+
+    await wrapper.get('[data-test=archive]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('Assistenten försvinner från alla klienter.')
+    ;[...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Arkivera').at(-1)!.click()
+    await flushPromises()
+    expect(archive).toHaveBeenCalledWith('a1', 'a3')
+    expect(wrapper.get('[data-test=archived]').text()).toBe('Arkiverad')
+    await wrapper.get('[data-test=unarchive]').trigger('click')
+    await flushPromises()
+    expect(unarchive).toHaveBeenCalledWith('a1', 'a4')
+    expect(wrapper.find('[data-test=archived]').exists()).toBe(false)
+
+    await button(wrapper, 'Lagring').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Högst 180 dagar för informationsklassen.')
+    expect(wrapper.text()).toContain('Frågor och svar sparas inte')
+    await wrapper.get('#assistant-retention').setValue('365')
+    await wrapper.get('[data-test=save-storage]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Skriv ett heltal från 1 till 180.')
+    expect(retention).not.toHaveBeenCalled()
+    await wrapper.get('#assistant-retention').setValue('30')
+    await wrapper.get('[data-test=save-storage]').trigger('click')
+    await flushPromises()
+    expect(retention).toHaveBeenCalledWith('a1', { historyMode: 'none', retentionDays: 30, version: 'a5' })
+    wrapper.unmount()
+  })
 })
