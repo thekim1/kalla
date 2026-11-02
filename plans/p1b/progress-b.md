@@ -123,6 +123,12 @@ Refs: [admin §5.2–§5.5](../admin/design.md)
 - [ ] Sharing and Topics tabs; knowledge picker with topics; "Who can use it"; Map table; no team field
 - [ ] **Done:** vitest per page; the E2E shares and links with a topic by keyboard
 
+### 39. A new assistant starts from a default
+Refs: [admin §5.5.4](../admin/design.md), [P1b README item 39](README.md)
+- [ ] First draft gets `Settings.Chat.DefaultSystemPrompt` (seeded from the `turkos` prompt)
+- [ ] Draft tab: model and query settings in a collapsed "Advanced" section
+- [ ] **Done:** admin API test for the default prompt; vitest for "Advanced"
+
 ### 19. Code complete (your part)
 - [ ] Pin review: NuGet and npm pins under 7 days old reviewed; #113 recorded; realm callback for the Open WebUI pin (README §7 O8)
 - [ ] Condense residency: the chat condense step runs at `Eu` until on-prem hardware exists (#204 design deviation 1, M2); switch it to `OnPrem` before go-live once that route exists
