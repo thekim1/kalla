@@ -98,7 +98,7 @@ Refs: [processing §7, §13](../ingestion-worker/design-processing.md), [engine 
 - [ ] **Done:** evaluator and generation on the new search scope; worker tests green
 
 ### 38. Platform forms for organisation
-- [ ] Organisation form: member groups and sharing summary; English keywords
+- [x] Organisation form: member groups and sharing summary; English keywords (PR: a/38-organisation-form)
 
 ### 19. Code complete (your part)
 - [ ] Pin review: images, PyPI and Compose pins under 7 days old reviewed; Open WebUI pin per README §7 O8

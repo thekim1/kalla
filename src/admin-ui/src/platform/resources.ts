@@ -21,15 +21,31 @@ export interface RowAction extends Operation {
   confirm?: string
 }
 
+export interface ResourceColumn {
+  key: string
+  label: string
+  /** The cell's value when it is not `row[key]`. */
+  value?: (row: Row) => unknown
+}
+
+export interface Details {
+  title: string
+  items: { label: string; value: string }[]
+}
+
 export interface PlatformResource {
   id: string
   label: string
   description: string
+  /** Extra words search finds the resource by (its section in the platform page's search entry). */
+  keywords?: readonly string[]
   icon: string
   /** The GET that lists the rows (an array or a page `{ items }`). */
   list?: string
   key: string
-  columns: { key: string; label: string }[]
+  columns: ResourceColumn[]
+  /** Read-only facts about the row, shown above its form. */
+  details?: (row: Row) => Details
   create?: Operation
   update?: Operation
   /** The values an edit starts from; the row itself when absent. */
@@ -44,6 +60,17 @@ export function urlOf(path: string, row: Row | null, key: string): string {
 export async function listRows(resource: PlatformResource): Promise<Row[]> {
   const payload = await http.get<Row[] | { items: Row[] }>(resource.list!)
   return Array.isArray(payload) ? payload : payload.items
+}
+
+export interface SharingSummary {
+  department: number
+  selected: number
+  municipality: number
+  sharedWithDepartments: number
+}
+
+function sharingOf(row: Row): SharingSummary {
+  return (row.sharing as SharingSummary | undefined) ?? { department: 0, selected: 0, municipality: 0, sharedWithDepartments: 0 }
 }
 
 const SETTINGS_SECTIONS = ['network', 'retention', 'deletion-guard', 'crawl', 'evaluation', 'retrieval', 'chat', 'pii', 'worker'] as const
@@ -145,6 +172,40 @@ export const platformResources: PlatformResource[] = [
       { key: 'residencies', label: PLATFORM.columns.residencies },
       { key: 'source', label: PLATFORM.columns.source },
     ],
+  },
+  {
+    id: 'organisation',
+    ...L.organisation,
+    icon: 'account_tree',
+    list: '/api/organisation/departments',
+    key: 'id',
+    columns: [
+      { key: 'name', label: PLATFORM.columns.name },
+      { key: 'costCenterCode', label: PLATFORM.columns.costCenter },
+      { key: 'memberGroups', label: PLATFORM.columns.memberGroups },
+      {
+        key: 'sharing',
+        label: PLATFORM.columns.sharing,
+        value: (row) => {
+          const s = sharingOf(row)
+          return PLATFORM.organisation.summary(s.department, s.selected, s.municipality)
+        },
+      },
+    ],
+    details: (row) => {
+      const s = sharingOf(row)
+      const O = PLATFORM.organisation
+      return {
+        title: O.sharing,
+        items: [
+          { label: O.department, value: String(s.department) },
+          { label: O.selected, value: String(s.selected) },
+          { label: O.sharedWith, value: String(s.sharedWithDepartments) },
+          { label: O.municipality, value: String(s.municipality) },
+        ],
+      }
+    },
+    update: { method: 'put', path: '/api/organisation/departments/{id}/member-groups' },
   },
 ]
 

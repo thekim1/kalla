@@ -1,4 +1,5 @@
 import { http } from '@/api/client'
+import { PLATFORM } from '@/utils/labels'
 
 /**
  * The request schemas of the generic forms (admin design §5.8), read from the admin API's OpenAPI document: it is
@@ -81,7 +82,7 @@ function fieldFor(doc: OpenApiDocument, name: string, raw: JsonSchema, required:
     schema = { ...resolve(doc, variants.find((v) => !types(v).includes('null'))), description: schema.description ?? undefined }
   }
   const t = types(schema).filter((x) => x !== 'null')
-  const base = { name, label: schema.title ?? name, help: schema.description, required, nullable }
+  const base = { name, label: PLATFORM.fields[name] ?? schema.title ?? fieldLabel(name), help: schema.description, required, nullable }
   if (schema.enum) return { ...base, kind: 'select', options: schema.enum.map(String) }
   if (t.includes('boolean')) return { ...base, kind: 'switch' }
   // ASP.NET's schemas allow numbers as strings too (`[integer, string]` with a pattern).
@@ -140,4 +141,11 @@ export function fromInput(field: FieldSpec, input: string | boolean): unknown {
     default:
       return text
   }
+}
+
+/** `clientRetentionDays` → "Client retention days"; `portalUrl` → "Portal URL". */
+export function fieldLabel(name: string): string {
+  const words = name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(/[\s_-]+/).filter(Boolean)
+  const text = words.map((w) => (/^(id|url|api|oidc)$/i.test(w) ? w.toUpperCase() : w.toLowerCase())).join(' ')
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }

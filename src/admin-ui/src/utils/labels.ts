@@ -151,7 +151,7 @@ export const PAGE = {
   overview: { title: 'Overview', description: 'Your access and what needs doing' },
   organisation: { title: 'Organisation', description: 'Departments and teams from the AI gateway' },
   collections: { title: 'Knowledge bases', description: 'The content the assistants search' },
-  platform: { title: 'Platform objects', description: 'Clients, keys, settings, data protection, site profiles and models' },
+  platform: { title: 'Platform objects', description: 'Clients, keys, settings, data protection, site profiles, models and organisation' },
   assistants: { title: 'Assistants', description: 'The assistants that answer in Open WebUI and other clients' },
   source: { title: 'Source' },
   run: { title: 'Run' },
@@ -492,6 +492,18 @@ export const FILES = {
 /** The generic forms for platform objects (admin design §5.8). Field labels come from the API's schemas. */
 export const PLATFORM = {
   lead: 'What the platform team sets up for the whole platform. The fields come from the API’s schemas.',
+  /** Field labels of the generic forms; a field missing here is named from its property name. */
+  fields: {
+    oAuthClientId: 'OAuth client ID',
+    classificationCeiling: 'Highest information class',
+    storesHistory: 'Stores chat history',
+    clientRetentionDays: 'Feedback kept in Open WebUI (days)',
+    allowedOrigins: 'Allowed origins',
+    toolPolicy: 'Tool policy',
+    portalUrl: 'Portal URL',
+    isEnabled: 'Enabled',
+    memberGroups: 'Member groups',
+  } as Record<string, string>,
   resources: {
     clients: { label: 'Clients', description: 'Apps that use the platform: Open WebUI, integrations, internal clients' },
     keys: { label: 'Keys', description: 'API keys per client; create, rotate, show and revoke' },
@@ -499,6 +511,11 @@ export const PLATFORM = {
     dataProtection: { label: 'Data protection', description: 'History, retention and encryption per information class' },
     siteProfiles: { label: 'Site profiles', description: 'How a website’s pages are read: content, noise and identity' },
     gatewayModels: { label: 'Gateway models', description: 'The models from the AI gateway’s catalogue' },
+    organisation: {
+      label: 'Organisation',
+      description: 'Departments: their member groups and how their knowledge bases are shared',
+      keywords: ['department', 'member groups', 'groups', 'sharing', 'shared', 'municipality'],
+    },
   },
   settingsSections: {
     network: 'Network',
@@ -530,6 +547,9 @@ export const PLATFORM = {
     appliedAt: 'Applies since',
     residencies: 'Where it runs',
     source: 'Source',
+    costCenter: 'Cost centre',
+    memberGroups: 'Member groups',
+    sharing: 'Knowledge bases shared',
   },
   actions: {
     rotate: 'Rotate',
@@ -537,6 +557,15 @@ export const PLATFORM = {
     revoke: 'Revoke',
     revokeConfirm: 'The key stops working at once. Calls with it are refused.',
     rollback: 'Restore to version',
+  },
+  organisation: {
+    sharing: 'How its knowledge bases are shared',
+    department: 'Only our department',
+    selected: 'Selected departments',
+    municipality: 'Whole municipality',
+    sharedWith: 'Departments shared with',
+    summary: (department: number, selected: number, municipality: number) =>
+      `${department} own · ${selected} selected · ${municipality} municipality`,
   },
   form: {
     create: 'Create',

@@ -348,7 +348,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET /api/organisation/departments` | Read | the mirror: departments in scope (all for a platform admin), active first, each with `SyncedAt` and its teams nested (name, code, active); there is no separate teams route. Member groups are returned by the `PUT` below |
+| `GET /api/organisation/departments` | Read | the mirror: departments in scope (all for a platform admin), active first, each with `SyncedAt`, its teams nested (name, code, active), its member groups and a sharing summary (`sharing`: its live knowledge bases per sharing level, and how many other departments its `selected` ones are shared with); there is no separate teams route |
 | `PUT /api/organisation/departments/{id}/member-groups` `{ memberGroups }` | Admin | member groups by hand until gateway release 2 (§4.10): ≤ 50 values, trimmed, empty ones dropped, de-duplicated and sorted; departments carry no `version`, so the save has no concurrency check (last write wins, audited `member-groups` on the department); the sync never touches the field |
 | `GET /api/organisation/sync`, `POST /api/organisation/sync` | Admin | last runs and outcome (held in memory per instance, §4.10); run now |
 | `GET /api/gateway/models` | Read | `GatewayModels` with residencies, `SupportsTools`, context window, prices, `Source` |
