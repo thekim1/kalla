@@ -88,6 +88,7 @@ public sealed class EvalSetStore(JobDatabase database, IJobQueue queue, WorkerId
         JOIN content."Documents" d ON d."Id" = c."DocumentId" AND d."LiveChunkSetId" = cs."Id"
         WHERE c."CollectionId" = $1 AND c."DeletedAt" IS NULL AND c."Kind" = 'child' AND c."TokenCount" >= $2 AND NOT c."LargeTable"
           AND cs."State" = 'live' AND NOT cs."PiiFlagged" AND d."DeletedAt" IS NULL
+          AND (d."Language" IS NULL OR d."Language" = 'sv')
         """;
 
     private const string ChunkColumns = """
