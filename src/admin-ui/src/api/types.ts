@@ -741,3 +741,30 @@ export interface AuditDetail extends AuditSummary {
   requestId: string | null
   userAgent: string | null
 }
+
+/** `GET /api/feedback`: a rating without content (admin design §8.1). */
+export interface FeedbackItem {
+  id: string
+  createdAt: IsoDateTime
+  rating: number
+  score: number | null
+  reasonCategory: string | null
+  reviewState: 'open' | 'reviewed' | 'dismissed' | string
+  hasComment: boolean
+  source: string
+  assistantId: string
+  assistantName: string
+  assistantVersion: number | null
+  clientId: string
+  clientName: string | null
+  outcome: string
+  coverage: string | null
+  language: string | null
+  citedDocuments: { id: string; title: string | null }[]
+}
+
+/** `GET /api/feedback/summary`: the period's totals and the Open WebUI import health. */
+export interface FeedbackSummary {
+  totals: { answers: number; notFound: number; thumbsUp: number; thumbsDown: number }
+  imports: { clientId: string; clientName: string; lastRunAt: IsoDateTime | null; lastOutcome: string | null; unmapped: number }[]
+}

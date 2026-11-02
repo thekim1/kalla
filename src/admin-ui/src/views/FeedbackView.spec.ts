@@ -1,0 +1,71 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { api } from '@/api'
+import type { FeedbackItem } from '@/api/types'
+import { useAuthStore } from '@/stores/auth'
+import { bffUser } from '@/test/fixtures'
+import FeedbackView from './FeedbackView.vue'
+
+function signIn(roles: string[]) {
+  setActivePinia(createPinia())
+  const auth = useAuthStore()
+  auth.user = bffUser({ roles })
+  auth.status = 'authenticated'
+}
+
+function item(overrides: Partial<FeedbackItem> = {}): FeedbackItem {
+  return {
+    id: 'f1', createdAt: '2026-11-02T09:00:00Z', rating: -1, score: null, reasonCategory: 'not_factually_correct', reviewState: 'open', hasComment: false,
+    source: 'owui-import', assistantId: 'a1', assistantName: 'Bygglovsassistenten', assistantVersion: 3, clientId: 'c1', clientName: 'Open WebUI (pilot)',
+    outcome: 'answered', coverage: 'ok', language: 'sv', citedDocuments: [{ id: 'd1', title: 'Altan och uteplats' }], ...overrides,
+  }
+}
+
+afterEach(() => vi.restoreAllMocks())
+
+describe('Feedback (admin design §8.1)', () => {
+  it('shows ratings without content, the totals and import health, filters, and marks an item handled', async () => {
+    signIn(['rag-department-admin'])
+    const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [item(), item({ id: 'f2', rating: 1, reasonCategory: null, outcome: 'not-found', citedDocuments: [] })], next: null })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({
+      totals: { answers: 200, notFound: 12, thumbsUp: 41, thumbsDown: 9 },
+      imports: [{ clientId: 'c1', clientName: 'Open WebUI (pilot)', lastRunAt: '2026-11-02T09:15:00Z', lastOutcome: 'ok', unmapped: 2 }],
+    })
+    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
+    const mark = vi.spyOn(api.feedback, 'setReviewState').mockResolvedValue({ id: 'f1', reviewState: 'reviewed' })
+
+    const wrapper = mount(FeedbackView)
+    await flushPromises()
+
+    const totals = wrapper.get('[data-test=totals]').text()
+    expect(totals).toContain('200')
+    expect(totals).toMatch(/6\s*%/)
+    expect(totals).toContain('41 up, 9 down')
+    expect(wrapper.get('[data-test=imports]').text()).toContain('2 could not be matched')
+    expect(wrapper.text()).toContain('Not factually correct')
+    expect(wrapper.text()).toContain('version 3')
+    expect(wrapper.text()).toContain('Altan och uteplats')
+    expect(wrapper.text()).toContain('Found nothing')
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ state: 'open' }))
+
+    await wrapper.findAll('select')[1]!.setValue('-1')
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ rating: '-1' }))
+
+    await wrapper.findAll('[data-test=mark]')[0]!.trigger('click')
+    await flushPromises()
+    expect(mark).toHaveBeenCalledWith('f1', 'reviewed')
+    expect(wrapper.text()).toContain('Handled')
+  })
+
+  it('shows no mark buttons to a viewer', async () => {
+    signIn(['rag-viewer'])
+    vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [item()], next: null })
+    vi.spyOn(api.feedback, 'summary').mockResolvedValue({ totals: { answers: 0, notFound: 0, thumbsUp: 0, thumbsDown: 0 }, imports: [] })
+    vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
+    const wrapper = mount(FeedbackView)
+    await flushPromises()
+    expect(wrapper.find('[data-test=mark]').exists()).toBe(false)
+  })
+})

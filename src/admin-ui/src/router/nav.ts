@@ -37,6 +37,8 @@ export const ALL_ROLES: Role[] = [...ROLES]
 export const PLATFORM_ADMIN: Role[] = ['rag-platform-admin']
 /** The Manage policy (admin design §3.1). */
 export const MANAGE_ROLES: Role[] = ['rag-platform-admin', 'rag-department-admin']
+/** Feedback (admin design §3.3): platform and department admins, reviewers and viewers; not the editor roles. */
+export const FEEDBACK_ROLES: Role[] = ['rag-platform-admin', 'rag-department-admin', 'rag-reviewer', 'rag-viewer']
 
 /**
  * Grouped by the job people come to do (admin design §5.2), filtered by role. The journey pages (Knowledge bases,
@@ -76,6 +78,20 @@ export const navGroups: NavGroup[] = [
         description: PAGE.assistants.description,
         keywords: [...NAV_KEYWORDS.assistants],
         roles: ALL_ROLES,
+      },
+    ],
+  },
+  {
+    id: 'follow-up',
+    label: NAV_GROUP.followUp,
+    items: [
+      {
+        name: 'feedback',
+        label: PAGE.feedback.title,
+        icon: 'thumbs_up_down',
+        description: PAGE.feedback.description,
+        keywords: [...NAV_KEYWORDS.feedback],
+        roles: FEEDBACK_ROLES,
       },
     ],
   },

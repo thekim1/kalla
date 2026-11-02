@@ -122,6 +122,7 @@ api.MapGet("/ping", () => Results.Ok(new { ok = true })).RequireAuthorization(Ad
 api.MapClients();
 api.MapCollections();
 api.MapSetup();
+api.MapFeedback();
 api.MapEvaluation();
 api.MapSiteProfiles();
 api.MapAssistants();
