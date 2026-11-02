@@ -461,6 +461,27 @@ export interface Assistant {
   version: string
 }
 
+/** `GET /api/assistants/{id}/versions`, newest first. */
+export interface AssistantVersionSummary {
+  number: number
+  state: 'draft' | 'published' | 'superseded' | string
+  createdAt: IsoDateTime
+  createdBy: string | null
+  publishedAt: IsoDateTime | null
+  publishedBy: string | null
+  restoredFrom: number | null
+}
+
+/** `GET /api/data-protection/{level}`: what a level allows (plan §8a). */
+export interface DataProtectionPolicy {
+  classification: Level
+  allowedHistoryModes: string[]
+  defaultHistoryMode: string
+  retentionDefaultDays: number
+  retentionMaxDays: number
+  version: string
+}
+
 export interface AssistantCreate {
   name: string
   departmentId: string

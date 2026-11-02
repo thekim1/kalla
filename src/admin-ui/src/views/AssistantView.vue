@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { Assistant, AssistantDraft, AssistantTestResult, ClientSummary, CollectionSummary, GatewayModel } from '@/api/types'
+import type { Assistant, AssistantDraft, AssistantTestResult, AssistantVersionSummary, ClientSummary, CollectionSummary, DataProtectionPolicy, GatewayModel } from '@/api/types'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import DataTable, { type Column } from '@/components/ui/DataTable.vue'
+import TextField from '@/components/ui/TextField.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import InlineError from '@/components/ui/InlineError.vue'
@@ -15,14 +18,16 @@ import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
+import { formatDateTime } from '@/utils/format'
 import { ASSISTANT, LEVEL_LABEL } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
 
 // Assistent (admin design §5.5.4, §5.4 steps 9–12; #278 slice 3): the draft (model, instructions, collections) with the
 // V-rule warnings, Testa on the draft (POST /api/assistants/{id}/test, nothing stored), Publicera (V34, V8 at the gateway),
-// and Målgrupp (the clients that offer it).
-type Tab = 'draft' | 'test' | 'audience'
+// Målgrupp (the clients that offer it), Versioner with Återställ (publishes an earlier version again as a new one), Lagring
+// (history mode and retention days within the level's policy, V10) and Arkivera / Ta fram igen.
+type Tab = 'draft' | 'test' | 'versions' | 'audience' | 'storage'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
@@ -38,7 +43,14 @@ const linked = ref<string[]>([])
 const audience = ref<string[]>([])
 const question = ref('')
 const result = ref<AssistantTestResult | null>(null)
-const busy = ref<'' | 'save' | 'publish' | 'test' | 'audience'>('')
+const busy = ref<'' | 'save' | 'publish' | 'test' | 'audience' | 'storage' | 'unarchive'>('')
+const versions = ref<AssistantVersionSummary[] | null>(null)
+const restoring = ref<number | null>(null)
+const archiving = ref(false)
+const policy = ref<DataProtectionPolicy | null>(null)
+const historyMode = ref('none')
+const retentionDays = ref('90')
+const retentionError = ref<string | undefined>(undefined)
 const error = ref<unknown>(null)
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 const canManage = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
@@ -46,8 +58,22 @@ const canManage = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-dep
 const tabs = [
   { value: 'draft' as const, label: ASSISTANT.tabs.draft },
   { value: 'test' as const, label: ASSISTANT.tabs.test },
+  { value: 'versions' as const, label: ASSISTANT.tabs.versions },
   { value: 'audience' as const, label: ASSISTANT.tabs.audience },
+  { value: 'storage' as const, label: ASSISTANT.tabs.storage },
 ]
+const versionColumns: Column[] = [
+  { key: 'number', label: ASSISTANT.version },
+  { key: 'state', label: ASSISTANT.versionState },
+  { key: 'by', label: ASSISTANT.versionBy },
+  { key: 'when', label: ASSISTANT.versionWhen },
+  { key: 'actions', label: ASSISTANT.restore, hideLabel: true, align: 'right' },
+]
+const archived = computed(() => assistant.data.value?.state === 'archived')
+const historyOptions = computed(() =>
+  (policy.value?.allowedHistoryModes ?? [assistant.data.value?.historyMode ?? 'none']).map((m) => ({ value: m, label: ASSISTANT.historyModes[m] ?? m })),
+)
+const restorable = (v: AssistantVersionSummary) => v.state === 'superseded'
 const modelOptions = computed(() => [{ value: '', label: ASSISTANT.noModel }, ...models.value.filter((m) => m.kind !== 'embedding').map((m) => ({ value: m.name, label: m.name }))])
 const departmentCollections = computed(() => collections.value.filter((c) => c.departmentId === assistant.data.value?.departmentId))
 const warnings = computed(() =>
@@ -69,6 +95,8 @@ async function load(): Promise<void> {
   const a = await assistant.run(() => api.assistants.get(props.id))
   if (!a) return
   audience.value = [...a.audienceClientIds]
+  historyMode.value = a.historyMode
+  retentionDays.value = String(a.retentionDays)
   fill(a.draft ? await api.assistants.draft(props.id).catch(() => null) : null)
   ;[models.value, collections.value, clients.value] = await Promise.all([
     api.gateway.models().catch(() => []),
@@ -101,6 +129,7 @@ const publish = () => run('publish', async () => {
   if (baseChanged && !window.confirm(ASSISTANT.baseChanged)) return
   assistant.data.value = await api.assistants.publish(props.id, { version: a.version, draftVersion: a.draft!.version, confirmBaseChanged: baseChanged })
   fill(null)
+  if (versions.value) await loadVersions()
   ui.notify(ASSISTANT.published(assistant.data.value.publishedVersion ?? 0))
 })
 
@@ -113,6 +142,49 @@ const saveAudience = () => run('audience', async () => {
   ui.notify(ASSISTANT.audienceSaved)
 })
 
+async function loadVersions(): Promise<void> {
+  versions.value = await api.assistants.versions(props.id).catch((e) => {
+    error.value = e
+    return []
+  })
+}
+
+async function loadPolicy(): Promise<void> {
+  if (policy.value || !assistant.data.value) return
+  policy.value = await api.dataProtection.get(assistant.data.value.classification).catch(() => null)
+}
+
+watch(tab, (t) => {
+  if (t === 'versions') void loadVersions()
+  if (t === 'storage') void loadPolicy()
+})
+
+async function restore(): Promise<void> {
+  const n = restoring.value!
+  assistant.data.value = await api.assistants.restore(props.id, n, assistant.data.value!.version)
+  ui.notify(ASSISTANT.restored(assistant.data.value.publishedVersion ?? n))
+  await loadVersions()
+}
+
+async function archive(): Promise<void> {
+  assistant.data.value = await api.assistants.archive(props.id, assistant.data.value!.version)
+  ui.notify(ASSISTANT.archivedDone)
+}
+
+const unarchive = () => run('unarchive', async () => {
+  assistant.data.value = await api.assistants.unarchive(props.id, assistant.data.value!.version)
+  ui.notify(ASSISTANT.unarchivedDone)
+})
+
+const saveStorage = () => run('storage', async () => {
+  const max = policy.value?.retentionMaxDays ?? 3650
+  const days = Number(retentionDays.value.trim())
+  retentionError.value = /^\d+$/.test(retentionDays.value.trim()) && days >= 1 && days <= max ? undefined : ASSISTANT.retentionInvalid(max)
+  if (retentionError.value) return
+  assistant.data.value = await api.assistants.retention(props.id, { historyMode: historyMode.value, retentionDays: days, version: assistant.data.value!.version })
+  ui.notify(ASSISTANT.storageSaved)
+})
+
 onMounted(load)
 </script>
 
@@ -122,6 +194,11 @@ onMounted(load)
       <PageHeader :title="assistant.data.value.name" :description="ASSISTANT.modelName(assistant.data.value.slug)">
         <UiBadge :label="LEVEL_LABEL[assistant.data.value.classification]" />
         <UiBadge v-if="assistant.data.value.publishedVersion" tone="ok" :label="ASSISTANT.publishedVersion(assistant.data.value.publishedVersion)" data-test="published" />
+        <UiBadge v-if="archived" tone="warn" :label="ASSISTANT.archived" data-test="archived" />
+        <template v-if="canEdit">
+          <UiButton v-if="archived" :loading="busy === 'unarchive'" data-test="unarchive" @click="unarchive">{{ ASSISTANT.unarchive }}</UiButton>
+          <UiButton v-else icon="archive" data-test="archive" @click="archiving = true">{{ ASSISTANT.archive }}</UiButton>
+        </template>
         <UiButton
           v-if="canEdit && assistant.data.value.draft" variant="primary" :loading="busy === 'publish'" data-test="publish" @click="publish"
         >
@@ -173,6 +250,39 @@ onMounted(load)
         </template>
       </div>
 
+      <div v-else-if="tab === 'versions'" id="assistant-panel-versions" role="tabpanel" aria-labelledby="assistant-tab-versions" class="grid max-w-4xl gap-4">
+        <p class="text-fg-2">{{ ASSISTANT.versionsLead }}</p>
+        <DataTable
+          v-if="versions" :columns="versionColumns" :rows="versions" :row-key="(v) => String(v.number)" :caption="ASSISTANT.tabs.versions"
+          :empty-text="ASSISTANT.noVersions" data-test="versions"
+        >
+          <template #cell-number="{ row }">
+            <span class="font-medium">{{ row.number }}</span>
+            <span v-if="row.restoredFrom" class="block text-small text-fg-3">{{ ASSISTANT.restoredFrom(row.restoredFrom) }}</span>
+          </template>
+          <template #cell-state="{ row }">
+            <UiBadge :tone="row.state === 'published' ? 'ok' : 'neutral'" :label="ASSISTANT.versionStates[row.state] ?? row.state" />
+          </template>
+          <template #cell-by="{ row }">{{ row.publishedBy ?? row.createdBy ?? '' }}</template>
+          <template #cell-when="{ row }"><span class="tabular text-fg-2">{{ formatDateTime(row.publishedAt ?? row.createdAt) }}</span></template>
+          <template #cell-actions="{ row }">
+            <UiButton v-if="canEdit && restorable(row as AssistantVersionSummary)" size="sm" :data-test="`restore-${row.number}`" @click="restoring = row.number">
+              {{ ASSISTANT.restore }}
+            </UiButton>
+          </template>
+        </DataTable>
+      </div>
+
+      <div v-else-if="tab === 'storage'" id="assistant-panel-storage" role="tabpanel" aria-labelledby="assistant-tab-storage" class="grid max-w-3xl gap-5">
+        <p class="text-fg-2">{{ ASSISTANT.storageLead }}</p>
+        <SelectField id="assistant-history" v-model="historyMode" :label="ASSISTANT.historyMode" :options="historyOptions" :disabled="!canManage" />
+        <TextField
+          id="assistant-retention" v-model="retentionDays" :label="ASSISTANT.retentionDays" inputmode="numeric" :disabled="!canManage"
+          :hint="policy ? ASSISTANT.retentionHint(policy.retentionMaxDays) : undefined" :error="retentionError"
+        />
+        <div v-if="canManage"><UiButton variant="primary" :loading="busy === 'storage'" data-test="save-storage" @click="saveStorage">{{ ASSISTANT.saveStorage }}</UiButton></div>
+      </div>
+
       <div v-else id="assistant-panel-audience" role="tabpanel" aria-labelledby="assistant-tab-audience" class="grid max-w-3xl gap-4">
         <p class="text-fg-2">{{ ASSISTANT.audienceHint }}</p>
         <p v-if="clients.length === 0" class="text-fg-3">{{ ASSISTANT.noClients }}</p>
@@ -185,6 +295,14 @@ onMounted(load)
         </fieldset>
         <div v-if="canManage && clients.length"><UiButton variant="primary" :loading="busy === 'audience'" data-test="save-audience" @click="saveAudience">{{ ASSISTANT.saveAudience }}</UiButton></div>
       </div>
+      <ConfirmDialog
+        :open="restoring !== null" :title="ASSISTANT.restoreTitle(restoring ?? 0)" :consequence="ASSISTANT.restoreConsequence(restoring ?? 0)"
+        :confirm-label="ASSISTANT.restore" :action="restore" @update:open="!$event && (restoring = null)"
+      />
+      <ConfirmDialog
+        v-model:open="archiving" :title="ASSISTANT.archiveTitle" :consequence="ASSISTANT.archiveConsequence" :confirm-label="ASSISTANT.archive" danger
+        :action="archive"
+      />
     </template>
   </AsyncState>
 </template>
