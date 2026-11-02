@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Run, RunItem } from '@/api/types'
+import DeletionDecision from '@/components/sources/DeletionDecision.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
@@ -17,7 +18,8 @@ import { RUN_OUTCOME_LABEL, RUN_PAGE, RUN_STATE_LABEL } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 
 // Körning (admin design §5.5.3, §5.4 step 6; #278 slice 2): live counters while it runs (polled as §4.7), the crawl
-// report (completeness and its reasons, the verdict), and the run's documents with their outcome and reason in Swedish.
+// report (completeness and its reasons, the verdict), the deletion decision when the guard held deletions back, and the
+// run's documents with their outcome and reason in Swedish.
 const props = defineProps<{ id: string }>()
 const run = useLoadable<Run | null>(null)
 const items = useLoadable<RunItem[]>([])
@@ -73,6 +75,10 @@ onBeforeUnmount(() => {
         <MetricTile :label="RUN_PAGE.deleted" :value="summary.deleted.toLocaleString('sv-SE')" />
         <MetricTile :label="RUN_PAGE.failed" :value="summary.failed.toLocaleString('sv-SE')" />
       </div>
+      <DeletionDecision
+        v-if="summary.state === 'awaiting-deletion-confirmation'" :run-id="summary.id" :proposed-count="summary.proposedDeletions" class="mb-6"
+        @decided="load"
+      />
       <UiCard v-if="completeness || verdictReasons.length" class="mb-6" data-test="report">
         <p v-if="completeness?.complete">{{ RUN_PAGE.complete }}</p>
         <template v-else-if="completeness">

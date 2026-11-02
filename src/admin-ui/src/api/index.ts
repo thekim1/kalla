@@ -33,6 +33,8 @@ import type {
   RunSummary,
   Source,
   SourceCreate,
+  DeletionProposal,
+  HeldDocument,
   SourceImpact,
   SourceUpdate,
   SourceSummary,
@@ -67,12 +69,18 @@ export const api = {
     impact: (id: string, body: { settings: Record<string, unknown> }) => http.post<SourceImpact>(`/api/sources/${id}/impact`, body),
     update: (id: string, body: SourceUpdate) => http.put<Source>(`/api/sources/${id}`, body),
     runs: (id: string, after?: string) => http.get<KeysetPage<RunSummary>>(`/api/sources/${id}/runs`, { after, limit: 20 }),
+    held: (id: string, after?: string) => http.get<KeysetPage<HeldDocument>>(`/api/sources/${id}/held`, { after, limit: 50 }),
+    releaseHeld: (id: string) => http.post<{ jobId: string }>(`/api/sources/${id}/held/release`),
     piiReport: (id: string) => http.get<PiiReport>(`/api/sources/${id}/pii-report`),
     preflight: (body: { collectionId: string; type: string; settings: Record<string, unknown> }) =>
       http.post<{ jobId: string }>('/api/sources/preflight', body),
   },
   runs: {
     get: (id: string) => http.get<Run>(`/api/runs/${id}`),
+    deletions: (id: string, after?: string) => http.get<KeysetPage<DeletionProposal>>(`/api/runs/${id}/deletions`, { after, limit: 50 }),
+    deletionsCsvUrl: (id: string) => buildUrl(`/api/runs/${id}/deletions`, { format: 'csv' }),
+    confirmDeletions: (id: string, proposedCount: number) => http.post<{ jobId: string }>(`/api/runs/${id}/deletions/confirm`, { proposedCount }),
+    rejectDeletions: (id: string, proposedCount: number) => http.post<{ jobId: string }>(`/api/runs/${id}/deletions/reject`, { proposedCount }),
     items: (id: string, query: { outcome?: string; after?: number; limit?: number } = {}) =>
       http.get<KeysetPage<RunItem, number>>(`/api/runs/${id}/items`, query),
   },

@@ -181,6 +181,28 @@ export interface SourceUpdate {
   version: string
 }
 
+/** `GET /api/runs/{id}/deletions`: a document the run proposes to delete (connectors §13). */
+export interface DeletionProposal {
+  documentId: string
+  title: string | null
+  url: string | null
+  reason: string
+  exempt: boolean
+  decision: string | null
+  lastSeenAt: IsoDateTime
+}
+
+/** `GET /api/sources/{id}/held`: a document kept by a rejected deletion. */
+export interface HeldDocument {
+  id: string
+  title: string | null
+  url: string | null
+  displayName: string | null
+  heldAt: IsoDateTime
+  heldBy: string | null
+  lastSeenAt: IsoDateTime
+}
+
 export interface SourceCreate {
   type: SourceType
   name: string

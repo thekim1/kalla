@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Collection, PiiReport, RunSummary, Source } from '@/api/types'
 import SourceEditDrawer from '@/components/sources/SourceEditDrawer.vue'
+import HeldDocuments from '@/components/sources/HeldDocuments.vue'
 import PipelineCard from '@/components/sources/PipelineCard.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
@@ -148,6 +149,8 @@ onMounted(load)
           <span>{{ d.title ?? d.displayName ?? d.url }}</span>
         </li>
       </ul>
+
+      <HeldDocuments :source-id="source.data.value.id" class="mt-8" />
     </template>
   </AsyncState>
 </template>
