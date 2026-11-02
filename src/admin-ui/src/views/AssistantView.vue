@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { Assistant, AssistantDraft, AssistantTestResult, AssistantVersionSummary, ClientSummary, CollectionSummary, DataProtectionPolicy, GatewayModel } from '@/api/types'
+import type { Assistant, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionSummary, DataProtectionPolicy, GatewayModel } from '@/api/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import TextField from '@/components/ui/TextField.vue'
@@ -81,11 +81,19 @@ const warnings = computed(() =>
   (draft.value?.warnings ?? []).map((w) => formatMessage(ERROR_MESSAGES[w.code] ?? w.code, w.params ?? undefined) + (w.affected.length ? ` (${w.affected.join(', ')})` : '')),
 )
 
-function fill(d: AssistantDraft | null): void {
+type Settings = Pick<AssistantVersion, 'gatewayModel' | 'systemPrompt' | 'collectionIds'>
+
+function fill(d: AssistantDraft | null, base: Settings | null = null): void {
   draft.value = d
-  model.value = d?.gatewayModel ?? ''
-  prompt.value = d?.systemPrompt ?? ''
-  linked.value = [...(d?.collectionIds ?? [])]
+  const s = d ?? base
+  model.value = s?.gatewayModel ?? ''
+  prompt.value = s?.systemPrompt ?? ''
+  linked.value = [...(s?.collectionIds ?? [])]
+}
+
+async function fillFrom(a: Assistant): Promise<void> {
+  if (a.draft) fill(await api.assistants.draft(props.id).catch(() => null))
+  else fill(null, a.publishedVersion ? await api.assistants.version(props.id, a.publishedVersion).catch(() => null) : null)
 }
 
 function toggle(list: string[], id: string, on: boolean): string[] {
@@ -98,7 +106,7 @@ async function load(): Promise<void> {
   audience.value = [...a.audienceClientIds]
   historyMode.value = a.historyMode
   retentionDays.value = String(a.retentionDays)
-  fill(a.draft ? await api.assistants.draft(props.id).catch(() => null) : null)
+  await fillFrom(a)
   ;[models.value, collections.value, clients.value] = await Promise.all([
     api.gateway.models().catch(() => []),
     api.collections.list({ pageSize: 200 }).then((p) => p.items).catch(() => []),
@@ -129,7 +137,7 @@ const publish = () => run('publish', async () => {
   const baseChanged = a.draft?.baseChanged ?? false
   if (baseChanged && !window.confirm(ASSISTANT.baseChanged)) return
   assistant.data.value = await api.assistants.publish(props.id, { version: a.version, draftVersion: a.draft!.version, confirmBaseChanged: baseChanged })
-  fill(null)
+  fill(null, draft.value)
   if (versions.value) await loadVersions()
   ui.notify(ASSISTANT.published(assistant.data.value.publishedVersion ?? 0))
 })
@@ -163,6 +171,7 @@ watch(tab, (t) => {
 async function restore(): Promise<void> {
   const n = restoring.value!
   assistant.data.value = await api.assistants.restore(props.id, n, assistant.data.value!.version)
+  if (!assistant.data.value.draft) await fillFrom(assistant.data.value)
   ui.notify(ASSISTANT.restored(assistant.data.value.publishedVersion ?? n))
   await loadVersions()
 }
@@ -210,6 +219,9 @@ onMounted(load)
       <UiTabs id="assistant" v-model="tab" :tabs="tabs" :label="ASSISTANT.tabsLabel" class="mb-6" />
 
       <div v-if="tab === 'draft'" id="assistant-panel-draft" role="tabpanel" aria-labelledby="assistant-tab-draft" class="grid max-w-3xl gap-5">
+        <p v-if="!assistant.data.value.draft && assistant.data.value.publishedVersion" class="text-fg-2" data-test="draft-from">
+          {{ ASSISTANT.draftFrom(assistant.data.value.publishedVersion) }}
+        </p>
         <UiCard v-if="warnings.length" :title="ASSISTANT.warnings" data-test="warnings">
           <ul class="ml-5 list-disc text-warn"><li v-for="w in warnings" :key="w">{{ w }}</li></ul>
         </UiCard>

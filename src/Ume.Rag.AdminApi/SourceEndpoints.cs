@@ -31,9 +31,14 @@ public static class SourceEndpoints
             {
                 _ = await CollectionEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
                 return await admin.Db.Sources.AsNoTracking().Where(s => s.CollectionId == id && s.DeletedAt == null).OrderBy(s => s.Name)
-                    .Select(s => new SourceSummary(s.Id, s.CollectionId, s.Type, s.Name, s.Classification, s.State)).ToListAsync(ct);
+                    .Select(s => new SourceSummary(s.Id, s.CollectionId, s.Type, s.Name, s.Classification, s.State,
+                        admin.Db.Documents.Count(d => d.SourceId == s.Id && d.DeletedAt == null),
+                        admin.Db.Runs.Where(r => r.SourceId == s.Id).OrderByDescending(r => r.StartedAt).ThenByDescending(r => r.Id)
+                            .Select(r => new SourceLastRun(r.Id, r.State, r.StartedAt, r.FinishedAt)).FirstOrDefault()))
+                    .ToListAsync(ct);
             })
-            .RequireAuthorization(AdminPolicies.Read).WithTags("Sources").WithName("ListSources").WithSummary("A collection's sources");
+            .RequireAuthorization(AdminPolicies.Read).WithTags("Sources").WithName("ListSources")
+            .WithSummary("A collection's sources with their document count and latest run");
 
         api.MapPost("/collections/{id:guid}/sources", async (Guid id, SourceCreateRequest request, AdminContext admin, CancellationToken ct) =>
             {
@@ -410,7 +415,10 @@ public static class SourceRules
             new Dictionary<string, string> { ["field"] = pointer.Length == 0 ? "settings" : pointer.TrimStart('/'), ["problem"] = problem });
 }
 
-public sealed record SourceSummary(Guid Id, Guid CollectionId, string Type, string Name, string Classification, string State);
+public sealed record SourceSummary(
+    Guid Id, Guid CollectionId, string Type, string Name, string Classification, string State, int Documents, SourceLastRun? LastRun);
+
+public sealed record SourceLastRun(Guid Id, string State, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt);
 
 public sealed record SourceDto(
     Guid Id, Guid CollectionId, string Type, string Name, string Classification, JsonElement Settings, string? Schedule, Guid PipelineId,

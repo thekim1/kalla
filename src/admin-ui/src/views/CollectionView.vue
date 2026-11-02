@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
-import type { Collection, CollectionSetup, DocumentSummary, Source, SourceSummary } from '@/api/types'
+import type { Collection, CollectionSetup, DocumentSummary, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
 import SetupChecklist from '@/components/collections/SetupChecklist.vue'
 import EvaluationTab from '@/components/evaluation/EvaluationTab.vue'
 import RetrievalSettingsForm from '@/components/evaluation/RetrievalSettingsForm.vue'
@@ -20,8 +20,8 @@ import UiTabs from '@/components/ui/UiTabs.vue'
 import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-import { formatDateTime } from '@/utils/format'
-import { COLLECTION, COLLECTIONS, EVALUATION, LEVEL_LABEL, RETRIEVAL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
+import { COLLECTION, COLLECTIONS, EVALUATION, LEVEL_LABEL, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
 // Kunskapsbank (admin design §5.5.2): Översikt (state, used by), Källor, Dokument with the personal-data filter
@@ -34,7 +34,8 @@ const router = useRouter()
 const route = useRoute()
 const setup = ref<CollectionSetup | null>(null)
 const collection = useLoadable<Collection | null>(null)
-const sources = useLoadable<SourceSummary[]>([])
+const sources = useLoadable<SourceListItem[]>([])
+const evaluation = ref<EvaluationOverview | null>(null)
 const documents = useLoadable<DocumentSummary[]>([])
 const next = ref<string | null>(null)
 const onlyPii = ref(false)
@@ -47,6 +48,14 @@ const publishError = ref<unknown>(null)
 const usedBy = computed(() =>
   (collection.data.value?.usedBy ?? []).map((u) => (u.published ? u.name : `${u.name} (${COLLECTION.draftOnly})`)).join(', '),
 )
+const documentCount = computed(() => sources.data.value.reduce((sum, s) => sum + s.documents, 0))
+const lastRun = computed(() =>
+  sources.data.value.map((s) => s.lastRun).filter((r) => r !== null).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null,
+)
+const quality = computed(() => {
+  const finished = (evaluation.value?.latestRuns ?? []).filter((r) => r.finishedAt && !r.candidate && r.recallAtK !== null)
+  return finished.find((r) => r.variant === 'hybrid') ?? finished[0] ?? null
+})
 const canPublish = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 const adding = ref(false)
@@ -88,6 +97,7 @@ async function loadDocuments(append = false): Promise<void> {
 async function load(): Promise<void> {
   await collection.run(() => api.collections.get(props.id))
   await sources.run(() => api.collections.sources(props.id))
+  evaluation.value = await api.collections.evaluation(props.id).catch(() => null)
   // Kom igång (§5.4): computed by the API; hidden once done or when it can't be read.
   setup.value = await api.collections.setup(props.id).catch(() => null)
 }
@@ -158,12 +168,30 @@ onMounted(load)
         <SetupChecklist v-if="setup && !setup.done" :setup="setup" />
         <UiCard :title="COLLECTIONS.state">
           <p v-if="!collection.data.value.publishedAt" class="mb-2">{{ COLLECTIONS.notPublishedHint }}</p>
-          <DetailRow :label="COLLECTION.usedBy">
-            <span v-if="collection.data.value.usedBy.length === 0" class="text-fg-3">{{ COLLECTION.notUsed }}</span>
-            <span v-else data-test="used-by">
-              {{ usedBy }}
-            </span>
-          </DetailRow>
+          <dl>
+            <DetailRow :label="COLLECTION.usedBy">
+              <span v-if="collection.data.value.usedBy.length === 0" class="text-fg-3">{{ COLLECTION.notUsed }}</span>
+              <span v-else data-test="used-by">
+                {{ usedBy }}
+              </span>
+            </DetailRow>
+            <template v-if="sources.loaded.value">
+              <DetailRow :label="COLLECTION.documents"><span class="tabular" data-test="document-count">{{ formatNumber(documentCount) }}</span></DetailRow>
+              <DetailRow :label="COLLECTION.lastFetch">
+                <span v-if="lastRun" data-test="last-fetch">
+                  <span class="tabular">{{ formatDateTime(lastRun.finishedAt ?? lastRun.startedAt) }}</span> · {{ RUN_STATE_LABEL[lastRun.state] ?? lastRun.state }}
+                </span>
+                <span v-else class="text-fg-3">{{ COLLECTION.notFetched }}</span>
+              </DetailRow>
+            </template>
+            <DetailRow :label="COLLECTION.quality(quality?.k ?? 10)">
+              <span v-if="quality" data-test="quality">
+                <span class="tabular">{{ formatDecimal(quality.recallAtK!, 2, 2) }}</span>
+                <span class="text-fg-2"> · {{ formatDateTime(quality.finishedAt) }}</span>
+              </span>
+              <span v-else class="text-fg-3">{{ COLLECTION.notMeasured }}</span>
+            </DetailRow>
+          </dl>
         </UiCard>
       </div>
 

@@ -137,6 +137,12 @@ export interface SourceSummary {
   state: string
 }
 
+/** `GET /api/collections/{id}/sources`: a source with its document count and latest run. */
+export interface SourceListItem extends SourceSummary {
+  documents: number
+  lastRun: { id: string; state: string; startedAt: IsoDateTime; finishedAt: IsoDateTime | null } | null
+}
+
 export interface DocumentSummary {
   id: string
   sourceId: string
@@ -649,6 +655,22 @@ export interface RuleWarning {
   code: string
   params: Record<string, string> | null
   affected: string[]
+}
+
+/** `GET /api/assistants/{id}/versions/{n}`: one version's settings. */
+export interface AssistantVersion {
+  number: number
+  state: 'draft' | 'published' | 'superseded' | string
+  gatewayModel: string | null
+  systemPrompt: string
+  querySteps: Record<string, unknown>
+  notFound: Record<string, unknown>
+  collectionIds: string[]
+  restoredFrom: number | null
+  createdAt: IsoDateTime
+  createdBy: string | null
+  publishedAt: IsoDateTime | null
+  publishedBy: string | null
 }
 
 export interface AssistantDraft {
