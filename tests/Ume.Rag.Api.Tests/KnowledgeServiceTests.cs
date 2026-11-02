@@ -82,7 +82,7 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         {
             CollectionId = PublicCollection, EmbeddingProfileId = ProfileId, SourceId = PublicSource, Title = "Altan och uteplats",
             Url = "https://www.umea.se/bygga/altan", MediaType = "text/html", Language = "sv", SourceModifiedAt = new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero),
-        }, [new FixtureChunk("Du behöver bygglov för att bygga en altan som är högre än 1,2 meter.") { HeadingPath = "Bygglov › Altan" }]);
+        }, [new FixtureChunk("Du behöver bygglov för att bygga en altan som är högre än 1,2 meter.") { HeadingPath = "Bygglov › Altan", Tags = ["altan"] }]);
         Upload = await writer.AddDocumentAsync(new FixtureDocumentSpec
         {
             CollectionId = PublicCollection, EmbeddingProfileId = ProfileId, SourceId = PublicSource, IdentityKind = "upload",
@@ -309,6 +309,37 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
             Parameters = { new() { Value = db.Altan.Id } },
         };
         ((string?)await stats.ExecuteScalarAsync(Ct)).ShouldBe("1:1");
+    }
+
+    [Fact]
+    public async Task An_assistants_published_link_topics_limit_its_collection_and_a_direct_caller_searches_it_whole()
+    {
+        // Knowledge design §4.2, §6.2 (P1b item 34): only the chunks carrying one of the link's topics; the upload carries none.
+        var plain = db.Snapshot();
+        var assistant = plain.Assistants[db.AssistantId];
+        var topical = plain with
+        {
+            Assistants = new Dictionary<Guid, AssistantEntry>
+            {
+                [db.AssistantId] = assistant with
+                {
+                    Published = assistant.Published! with { CollectionLinks = [new CollectionLink(db.PublicCollection, ["altan"]), CollectionLink.Whole(db.SectionCollection)] },
+                },
+            },
+        };
+        var (service, _, host) = Build(topical);
+        using var _ = host;
+        var who = db.Who(db.OwuiClient, topical);
+
+        var linked = await service.RetrieveAsync(who, new RetrievalRequest("bygglov altan", db.AssistantId, null), Ct);
+        linked.Results.Where(r => r.CollectionId == db.PublicCollection).Select(r => r.DocumentId).ShouldBe([db.Altan.Id]);
+        linked.Results.ShouldContain(r => r.CollectionId == db.SectionCollection); // linked without topics: the whole collection
+
+        var narrowed = await service.RetrieveAsync(who, new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection]), Ct);
+        narrowed.Results.Select(r => r.DocumentId).ShouldBe([db.Altan.Id]);
+
+        var direct = await service.RetrieveAsync(db.Who(db.InternalClient, topical), Search(db.PublicCollection), Ct);
+        direct.Results.Select(r => r.DocumentId).ShouldBe([db.Altan.Id, db.Upload.Id], ignoreOrder: true);
     }
 
     [Fact]
