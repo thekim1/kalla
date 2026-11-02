@@ -254,7 +254,9 @@ public sealed class RunStore(JobDatabase database)
 /// <c>failed</c> when the sync job failed, every processed item failed or the crawl reached no seed; <c>awaiting-deletion-confirmation</c>
 /// while the guard holds proposals; <c>degraded</c> above <c>Settings.DegradedFailureRatio</c>, on any <c>malware</c>, or
 /// when the crawl hit its page limit or a host was paused (the report's <c>verdict</c>); else <c>succeeded</c>. A finished
-/// <c>reprocess</c> run of a publish or rollback enqueues its <c>eval</c> <c>publish-report</c> in the same transaction.
+/// <c>reprocess</c> run of a publish or rollback enqueues its <c>eval</c> <c>publish-report</c> in the same transaction, and
+/// a run that made more than 10 % of an embedding profile's live chunks live its <c>check-hnsw-index</c>
+/// (<see cref="HnswCheckTriggers.AfterRunAsync"/>, knowledge design §6.4).
 /// </summary>
 public sealed partial class RunFinalizer(
     JobDatabase database,
@@ -401,6 +403,14 @@ public sealed partial class RunFinalizer(
 
             finished++;
             LogFinished(logger, run.Id, state, c.Added, c.Updated, c.Unchanged, c.Deleted, c.Failed);
+            var checks = await HnswCheckTriggers.AfterRunAsync(connection, transaction, run.Id, run.SourceId, run.DepartmentId, run.CollectionClassification,
+                cancellationToken);
+            if (checks.Count > 0)
+            {
+                await queue.EnqueueAsync(checks, transaction, cancellationToken);
+                LogHnswChecks(logger, run.Id, checks.Count);
+            }
+
             if (run is { Kind: RunKinds.Reprocess, Trigger: RunTriggers.Publish or RunTriggers.Rollback, PipelineVersionId: { } versionId })
             {
                 // The publish report (engine design §10.4, §12.1 step 6), in the transaction that finishes the run.
@@ -439,6 +449,9 @@ public sealed partial class RunFinalizer(
 
     [LoggerMessage(LogLevel.Information, "Run {RunId} finished {State}: {Added} added, {Updated} updated, {Unchanged} unchanged, {Deleted} deleted, {Failed} failed")]
     private static partial void LogFinished(ILogger logger, Guid runId, string state, long added, long updated, long unchanged, long deleted, long failed);
+
+    [LoggerMessage(LogLevel.Information, "Run {RunId}: HNSW index check enqueued for {Profiles} embedding profiles")]
+    private static partial void LogHnswChecks(ILogger logger, Guid runId, int profiles);
 
     [LoggerMessage(LogLevel.Information, "Run {RunId}: publish-report enqueued for collection {CollectionId}")]
     private static partial void LogPublishReport(ILogger logger, Guid runId, Guid collectionId);

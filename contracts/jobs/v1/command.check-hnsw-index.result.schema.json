@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.check-hnsw-index.result.schema.json",
+  "title": "check-hnsw-index command result",
+  "type": "object",
+  "properties": {
+    "scopes": {
+      "type": "integer",
+      "description": "HNSW-searched collections of the profile that were measured.",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "queries": {
+      "type": "integer",
+      "description": "Sampled live child chunks used as queries.",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "default": 0
+    },
+    "recall": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "rebuilt": {
+      "type": "boolean",
+      "description": "Whether the index was rebuilt (REINDEX INDEX CONCURRENTLY) because recall was below the floor.",
+      "default": false
+    },
+    "recallAfter": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Recall measured again after the rebuild.",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "description": "Result of the command check-hnsw-index: the HNSW-searched collections and query chunks measured, recall@10 of the index against exact search (absent when no collection of the profile is searched through HNSW or the profile has no index), and, after a rebuild, the recall measured again."
+}

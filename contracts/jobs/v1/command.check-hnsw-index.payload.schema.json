@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ume-rag.local/contracts/jobs/v1/command.check-hnsw-index.payload.schema.json",
+  "title": "check-hnsw-index command payload",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "check-hnsw-index"
+    },
+    "embeddingProfileId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "trigger": {
+      "enum": [
+        "nightly",
+        "sync"
+      ]
+    },
+    "minBuild": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The oldest worker build that may run the job; an older instance requeues it without an attempt (engine design §9.1).",
+      "maxLength": 100
+    },
+    "traceparent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "traceparent of the job that enqueued this continuation; the job's span links to it (engine design §17).",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    }
+  },
+  "required": [
+    "kind",
+    "embeddingProfileId",
+    "trigger"
+  ],
+  "description": "Payload of the command check-hnsw-index (knowledge design §6.4): measures recall@10 of the embedding profile's HNSW index against exact search on sampled live child chunks of each HNSW-searched collection, and rebuilds the index concurrently below Settings.Retrieval.hnswRecallFloor. Dedup hnsw-check:{embeddingProfileId}."
+}

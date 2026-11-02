@@ -73,6 +73,8 @@ public static class ContractSchemas
         new("jobs/v1/command.edit-parse-rule.payload.schema.json", typeof(EditParseRuleCommand), "edit-parse-rule command payload"),
         new("jobs/v1/command.disable-parse-rule.payload.schema.json", typeof(DisableParseRuleCommand), "disable-parse-rule command payload"),
         new("jobs/v1/command.parse-rule.result.schema.json", typeof(ParseRuleCommandResult), "edit-parse-rule and disable-parse-rule command result"),
+        new("jobs/v1/command.check-hnsw-index.payload.schema.json", typeof(CheckHnswIndexCommand), "check-hnsw-index command payload"),
+        new("jobs/v1/command.check-hnsw-index.result.schema.json", typeof(CheckHnswIndexResult), "check-hnsw-index command result"),
         new("jobs/v1/upload-batch.manifest.schema.json", typeof(UploadBatchManifest), "Upload batch manifest"),
     ];
 

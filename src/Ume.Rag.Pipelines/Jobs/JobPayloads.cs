@@ -232,4 +232,7 @@ public static class JobDedupKeys
 
     /// <summary><c>edit-parse-rule</c> and <c>disable-parse-rule</c> of one rule share one key.</summary>
     public static string ParseRule(Guid profileId) => $"parse-rule:{profileId}";
+
+    /// <summary>The nightly and the after-run <c>check-hnsw-index</c> of one embedding profile share one key.</summary>
+    public static string HnswCheck(Guid embeddingProfileId) => $"hnsw-check:{embeddingProfileId}";
 }
