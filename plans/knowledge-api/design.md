@@ -701,7 +701,8 @@ walking until 100 rows match or `hnsw.max_scan_tuples` is reached (README "Itera
   profile's chunks live, it takes 200 random live child chunks of each HNSW-searched scope as queries (their own
   embeddings), compares the approximate top 10 with the exact top 10, and records recall as
   `rag.retrieval.hnsw_recall{profile}`. Below **0.95** it runs `REINDEX INDEX CONCURRENTLY` on that profile's index
-  (one at a time, `command` class, audited as a system action) and measures again. Both bounds are
+  (one at a time, `command` class, audited as a system action; the worker role holds `MAINTAIN` on
+  `content."Chunks"` (Postgres 17) and the statement runs with `statement_timeout = 0`) and measures again. Both bounds are
   `Settings.Retrieval.hnswRecallFloor` and `hnswCheckSample`.
 
 The HNSW settings are **role defaults** (`ALTER ROLE ume_rag_api IN DATABASE ragdb SET hnsw.ef_search = 100`, same for
