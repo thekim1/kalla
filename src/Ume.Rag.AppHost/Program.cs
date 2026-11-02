@@ -453,7 +453,7 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
         .WithEnvironment("ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS", "true")
         .WithEnvironment("API_KEYS_ALLOWED_ENDPOINTS", "/api/v1/evaluations/feedbacks/list,/api/v1/evaluations/feedback")
         .WithEnvironment("USER_PERMISSIONS_FEATURES_API_KEYS", "false")
-        .WithEnvironment("BYPASS_MODEL_ACCESS_CONTROL", "true")
+        .WithEnvironment("BYPASS_MODEL_ACCESS_CONTROL", builder.Configuration.GetValue("OpenWebUi:BypassModelAccessControl", true) ? "true" : "false")
         .WithEnvironment("DEFAULT_USER_ROLE", "user")
         .WithEnvironment("ENABLE_SIGNUP", "true")
         .WithEnvironment("ENABLE_LOGIN_FORM", "true")
