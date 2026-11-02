@@ -60,7 +60,7 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   --non-interactive` (Docker Desktop must be up and its WSL integration connected: `docker info`). After merges:
   `dotnet build UmeRag.slnx`, then `aspire resource <r> restart` for `migrations`, `api`, `adminapi`, `worker`.
 - Dashboard `https://localhost:17470`; **admin UI `https://localhost:5174`** (user `rag-platform-admin`); admin API
-  `https://localhost:7402`; api `https://localhost:7401`; Open WebUI = the `open-webui` resource's port (33747 after the
+  `https://localhost:7402`; api `https://localhost:7401`; Open WebUI = the `open-webui` resource's port (41095 after the
   last start; check `aspire describe`).
 - **Pilot data:** department DoIT (hand-made, code `1000`); collection `turkos` (public, published,
   `coverageMaxDistance` 0.55, `keywordWeight` 0.25 since 2026-11-02); crawl source "umea.se" (whole host, `maxPages` 2,500, `**.pdf` excluded, no schedule;
@@ -150,7 +150,7 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 4. **Keyword weight:** `turkos` runs with `keywordWeight` 0.25 (user, 2026-11-02; saved-setting run 0.98/0.77). Confirm
    it on the human gold set (item 21) before it becomes the template default (knowledge design).
 5. **User decides:** the gold set with DoIT and threshold calibration (item 21); P1b item 15 `e2e` (after B's L7); pin
-   review and Aspire 13.6.4.
+   review.
 
 **Open issues — stream B:** #278, #314 (English UI, done in #320; B closes), #318, #52. **Stream A:** #300
 (L4, information), #48, #51, #193, #210. #319 done in #332 (B switches the two form texts, then closes). **Main session:** #100 (L8). **User:** #215 (J8).
@@ -177,7 +177,8 @@ Every phase-blocking item needs a named person and a date.
 - `rag_key.txt` and `rag_gateway_url.txt` in the repo root hold the interim-gateway key and address (mode 600, excluded
   in `.git/info/exclude`, also in the AppHost user secrets). Never commit, print or move them.
 - **Git over HTTPS:** use `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch|pull|push …`.
-- Aspire CLI: `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH).
+- Aspire CLI: `~/.nuget/packages/aspire.cli.linux-x64/13.6.1/tools/net10.0/linux-x64/aspire` (not on PATH); it runs the
+  13.6.4 AppHost (#339) and only suggests `aspire update`.
 - Postgres in the AppHost: `docker exec -e PGPASSWORD="$(docker exec <postgres-…> printenv POSTGRES_PASSWORD)" <postgres-…>
   psql -h localhost -U postgres -d ragdb`.
 - Local images: `ume-rag.local/clamav:dev`, `ume-rag.local/parser:ci`, `ume-rag.local/postgres:ci` (Testcontainers needs
