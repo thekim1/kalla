@@ -4,6 +4,7 @@ using System.Text.Json;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.TestKit;
 using Ume.Rag.Worker.Evaluation.Generation;
 using Ume.Rag.Worker.Jobs;
 using Ume.Rag.Worker.Processing.Pii;
@@ -316,6 +317,36 @@ public sealed class EvalSetGeneratorTests(RagDatabaseFixture database) : IAsyncL
             questions.ShouldAllBe(q => !largeIds.Contains(q.SourceChunkId));
             _gateway.Calls.Where(c => c.Step == EvalModelClient.GenerateStep)
                 .ShouldAllBe(c => !largeTexts.Any(t => c.User.Contains(t, StringComparison.Ordinal)), "a large table's later row groups are never sampled");
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task Documents_detected_as_another_language_than_Swedish_are_not_eligible()
+    {
+        var tag = EvalSeeds.Tag();
+        var seed = await EngineKit.SeedUrlListAsync(database, []);
+        try
+        {
+            var byLanguage = new Dictionary<string, SeededDocument>();
+            foreach (var language in new[] { "sv", "none", "und", "en" })
+            {
+                var document = await EvalSeeds.DocumentAsync(database, seed, $"Dokument {language} {tag}", [new SeedChunk(Text(1))]);
+                if (language != "none")
+                {
+                    await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."Documents" SET "Language" = $2 WHERE "Id" = $1""", document.DocumentId, language);
+                }
+
+                byLanguage[language] = document;
+            }
+
+            var store = new EvalSetStore(database.Database(RagDatabase.Worker), database.Queue(RagDatabase.Worker), new WorkerIdentity(), TimeProvider.System);
+            var eligible = await store.EligibleAsync(seed.CollectionId, EvalSetGenerator.MinBodyTokens, Ct);
+            eligible.Select(c => c.DocumentId).Distinct().ShouldBe([byLanguage["sv"].DocumentId, byLanguage["none"].DocumentId], ignoreOrder: true,
+                "a translation has a Swedish original; undetected documents stay eligible");
         }
         finally
         {
