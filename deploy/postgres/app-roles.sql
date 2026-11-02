@@ -102,6 +102,8 @@ GRANT UPDATE ("ReviewState") ON chat."Feedback" TO ume_rag_admin;
 
 -- audit: every service appends, only the admin reads; no role deletes (retention runs through step functions).
 GRANT INSERT ON audit."AuditLog" TO ume_rag_api, ume_rag_admin, ume_rag_worker;
+-- The HNSW index-health rebuild (knowledge design §6.4): REINDEX INDEX CONCURRENTLY needs MAINTAIN (Postgres 17).
+GRANT MAINTAIN ON content."Chunks" TO ume_rag_worker;
 GRANT SELECT ON audit."AuditLog" TO ume_rag_admin;
 
 -- Functions (data-model §1.2). The keyword query function calls the aggregate with the caller's rights.
