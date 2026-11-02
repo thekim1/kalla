@@ -43,9 +43,9 @@ phase plan (`plans/README.md`, "P2 Broaden"), with no connector yet, so a ShareP
 - **Grouping results by page family (first version, item 8)** is not the first fix: the near-duplicate misses are mainly
   an evaluation artefact (the right content on a sibling page). Item 7 fixes the measurement; grouping can follow if
   citations show many siblings.
-- **Access changes are not edited in the assistant's draft.** Audience, retention, history mode and allowed origins are
-  on the assistant itself, outside the versioned draft (`src/Ume.Rag.Domain/Entities/AssistantEntities.cs:39-48`), with
-  their own route (`PUT /api/assistants/{id}/audiences`) and tab.
+- **Access changes are not edited in the assistant's draft.** Retention, history mode and allowed origins are on the
+  assistant itself (`src/Ume.Rag.Domain/Entities/AssistantEntities.cs:39-41`) and the audience is its own table linked
+  to the assistant, not to a version, with its own route (`PUT /api/assistants/{id}/audiences`) and tab.
 
 ## 4. Is "Assistant" the right abstraction?
 
