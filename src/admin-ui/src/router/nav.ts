@@ -67,6 +67,14 @@ export const navGroups: NavGroup[] = [
         keywords: ['kunskapsbank', 'källa', 'webbplats', 'filer', 'dokument', 'personuppgifter'],
         roles: ALL_ROLES,
       },
+      {
+        name: 'assistants',
+        label: PAGE.assistants.title,
+        icon: 'smart_toy',
+        description: PAGE.assistants.description,
+        keywords: ['assistent', 'utkast', 'testa', 'publicera', 'målgrupp', 'open webui', 'modell'],
+        roles: ALL_ROLES,
+      },
     ],
   },
   {

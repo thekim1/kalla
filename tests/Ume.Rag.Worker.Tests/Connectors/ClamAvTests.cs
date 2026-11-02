@@ -288,8 +288,9 @@ public sealed class ClamAvTests
             {
                 await _loop;
             }
-            catch (OperationCanceledException)
+            catch (Exception e) when (e is OperationCanceledException or SocketException or ObjectDisposedException)
             {
+                // Cancelling and stopping race: the pending accept ends with either exception.
             }
 
             _stop.Dispose();

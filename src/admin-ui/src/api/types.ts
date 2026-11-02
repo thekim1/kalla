@@ -260,3 +260,92 @@ export interface PiiReport {
   }[]
   truncated: boolean
 }
+
+// ---------- Assistants (admin design §4.5, §4.9) ----------
+export interface AssistantSummary {
+  id: string
+  slug: string
+  name: string
+  departmentId: string
+  classification: Level
+  state: string
+  published: boolean
+  hasDraft: boolean
+}
+
+export interface Assistant {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  contactName: string | null
+  contactEmail: string | null
+  departmentId: string
+  ownerTeamId: string | null
+  classification: Level
+  historyMode: string
+  retentionDays: number
+  state: string
+  publishedVersion: number | null
+  draft: { number: number; updatedAt: IsoDateTime; baseChanged: boolean; version: string } | null
+  audienceClientIds: string[]
+  updatedAt: IsoDateTime
+  updatedBy: string | null
+  version: string
+}
+
+export interface AssistantCreate {
+  name: string
+  departmentId: string
+  classification: Level
+  description: string | null
+  contactName: string | null
+  contactEmail: string | null
+}
+
+export interface RuleWarning {
+  code: string
+  params: Record<string, string> | null
+  affected: string[]
+}
+
+export interface AssistantDraft {
+  number: number
+  gatewayModel: string | null
+  systemPrompt: string
+  querySteps: Record<string, unknown>
+  notFound: Record<string, unknown>
+  collectionIds: string[]
+  warnings: RuleWarning[]
+  updatedAt: IsoDateTime
+  version: string
+}
+
+export interface ClientSummary {
+  id: string
+  name: string
+  kind: string
+  classificationCeiling: Level
+  isEnabled: boolean
+}
+
+export interface GatewayModel {
+  name: string
+  kind: string
+  residencies: string[]
+}
+
+export interface AssistantTestResult {
+  target: string
+  versionNumber: number
+  retrieval: {
+    collections: { id: string; name: string; published: boolean }[]
+    coverage: { status: string } | null
+    degraded: string | null
+    candidates: { rank: number; documentId: string; title: string; urlOrFileName: string | null; headingPath: string; text: string; cited: boolean }[]
+  }
+  condense: { used: boolean; outcome: string | null }
+  answer: { raw: string | null; delivered: string; outcome: string; language: string; citations: { number: number; documentId: string; title: string }[] }
+  gateway: { model: string; residency: string; latencyMs: number | null; inputTokens: number | null; outputTokens: number | null }
+  durationMs: number
+}

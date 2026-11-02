@@ -132,6 +132,12 @@ public static class PipelineEndpoints
                         throw AdminFaults.Of(AdminErrorCodes.PublicationStale);
                     }
 
+                    // A newer plan for the pipeline (another user, other parameters, the same draft row) makes this one stale (#298 review).
+                    if (publication.Superseded)
+                    {
+                        throw AdminFaults.Of(AdminErrorCodes.PublicationStale);
+                    }
+
                     var draft = await admin.Db.PipelineVersions.SingleOrDefaultAsync(v => v.Id == publication.PipelineVersionId, attempt);
                     if (publication.State != JobStates.Succeeded || draft is not { State: PipelineVersionStates.Draft })
                     {
@@ -229,10 +235,8 @@ public static class PipelineEndpoints
         pipeline.UpdatedBy = admin.Actor;
         var (department, level) = await JobScopeAsync(admin, pipeline, collection, ct);
         var job = new JobRequest(JobClasses.Preview, department, level,
-            ContractJson.Serialize(new PublishPlanPayload { PipelineId = pipeline.Id, PipelineVersionId = draft.Id }))
-        {
-            DedupKey = JobDedupKeys.Plan(pipeline.Id),
-        };
+            ContractJson.Serialize(new PublishPlanPayload { PipelineId = pipeline.Id, PipelineVersionId = draft.Id }));
+        // No dedup key: each plan is its own publication; a newer one makes the older stale (GET and confirm, #298 review).
         await admin.Db.SaveChangesAsync(ct);
         return new AdminChange<PublicationStarted>(new PublicationStarted(job.Id, pipeline.Id, draft.Id, draft.Number, copied), "plan", AuditEntityTypes.Pipeline, pipeline.Id,
             null, new { draftVersionId = draft.Id, draft.Number, templateVersion, copiedForCollection = copied ? collection?.Id : null })
@@ -248,6 +252,13 @@ public static class PipelineEndpoints
     private static async Task<Pipeline> CopyOnWriteAsync(AdminContext admin, Pipeline platform, Collection collection, CancellationToken ct)
     {
         var name = $"{platform.Name}-{collection.Slug}";
+        // Only for a collection that uses the platform pipeline, and only from a published version (#298 review).
+        if (platform.PublishedVersionId is null ||
+            !await admin.Db.Sources.AnyAsync(s => s.CollectionId == collection.Id && s.PipelineId == platform.Id && s.DeletedAt == null, ct))
+        {
+            throw AdminFaults.Field("collectionId", AdminErrorCodes.InvalidValue);
+        }
+
         var copy = await admin.Db.Pipelines.SingleOrDefaultAsync(p => p.DepartmentId == collection.DepartmentId && p.Name == name, ct);
         if (copy is null)
         {
@@ -311,7 +322,7 @@ public static class PipelineEndpoints
     {
         var sources = await (from s in admin.Db.Sources.AsNoTracking()
                              join c in admin.Db.Collections.AsNoTracking() on s.CollectionId equals c.Id
-                             where s.PipelineId == pipeline.Id && s.DeletedAt == null
+                             where s.PipelineId == pipeline.Id && s.DeletedAt == null && c.DeletedAt == null
                              select new { s.Classification, c.DepartmentId }).ToListAsync(ct);
         var level = sources.Select(s => s.Classification).Append(Classification.Public).MaxBy(Levels.Rank)!;
         var department = pipeline.DepartmentId ?? collection?.DepartmentId ?? sources.Select(s => (Guid?)s.DepartmentId).FirstOrDefault()
@@ -334,8 +345,14 @@ public static class PipelineEndpoints
         var pipeline = await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(p => p.Id == pipelineId, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
         var draft = await admin.Db.PipelineVersions.AsNoTracking().SingleOrDefaultAsync(v => v.Id == versionId, ct);
         JsonElement? result = job.Result is { } r ? JsonDocument.Parse(r).RootElement.Clone() : null;
+        var pipelineKey = pipelineId.ToString("D");
+        var superseded = await admin.Db.Database.SqlQuery<int>($"""
+            SELECT 1 AS "Value" FROM content."Jobs"
+            WHERE "Class" = 'preview' AND "Payload"::jsonb ->> 'kind' = 'publish-plan' AND "Payload"::jsonb ->> 'pipelineId' = {pipelineKey}
+              AND ("EnqueuedAt", "Id") > ({job.EnqueuedAt}, {id})
+            """).AnyAsync(ct);
         return new PublicationDto(id, job.State, result, job.LastError, pipelineId, versionId, draft?.Number, draft?.State,
-            pipeline.Version.ToString(CultureInfo.InvariantCulture), draft?.State == PipelineVersionStates.Published);
+            pipeline.Version.ToString(CultureInfo.InvariantCulture), draft?.State == PipelineVersionStates.Published, superseded);
     }
 }
 
@@ -357,10 +374,13 @@ public sealed record PipelineDto(Guid Id, string Name, string TemplateId, Guid? 
 /// <summary>The plan started: the publication (= plan job) id, the pipeline it is for (a new department copy when <see cref="CopiedOnWrite"/>) and the draft.</summary>
 public sealed record PublicationStarted(Guid PublicationId, Guid PipelineId, Guid DraftVersionId, int DraftNumber, bool CopiedOnWrite);
 
-/// <summary>A publication: the plan job's state and result, the draft, and the pipeline <see cref="Version"/> the confirm sends.</summary>
+/// <summary>
+/// A publication: the plan job's state and result, the draft, and the pipeline <see cref="Version"/> the confirm sends.
+/// <see cref="Superseded"/>: a newer plan exists for the pipeline, so this one can no longer be confirmed (409 <c>publication_stale</c>).
+/// </summary>
 public sealed record PublicationDto(
     Guid Id, string State, JsonElement? Plan, string? LastError, Guid PipelineId, Guid PipelineVersionId, int? DraftNumber, string? DraftState, string Version,
-    bool Published);
+    bool Published, bool Superseded);
 
 public sealed record PublicationRequest : AdminRequest
 {

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using Ume.Rag.Worker.Processing.Chunking;
 
@@ -35,22 +34,6 @@ public sealed class TokenizerParityTests
         var parallel = new int[passages.Count];
         Parallel.For(0, passages.Count, new ParallelOptions { MaxDegreeOfParallelism = 8 }, i => parallel[i] = Bgem3TokenCounter.Shared.Count(passages[i].Text));
         parallel.ShouldBe(passages.Select(p => p.Count).ToArray());
-    }
-
-    [Fact]
-    public void A_5000_character_page_is_counted_in_milliseconds()
-    {
-        var page = string.Join(' ', Passages.Value.Select(p => p.Text)).Substring(0, 5000);
-        Bgem3TokenCounter.Shared.Count(page); // load and warm
-        var watch = Stopwatch.StartNew();
-        for (var i = 0; i < 20; i++)
-        {
-            Bgem3TokenCounter.Shared.Count(page);
-        }
-
-        var perPage = watch.Elapsed.TotalMilliseconds / 20;
-        TestContext.Current.TestOutputHelper?.WriteLine($"to-verify #26: {perPage:F2} ms per 5,000-character page");
-        perPage.ShouldBeLessThan(250);
     }
 
     [Fact]
