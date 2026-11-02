@@ -5,7 +5,8 @@ namespace Ume.Rag.Infrastructure.Persistence;
 /// <summary>
 /// The migration steps of data-model §10, shared by the migration service and the test kit so tests run exactly them:
 /// EF Core migrations (preceded, when no roles path is given, by <c>CREATE EXTENSION IF NOT EXISTS vector</c>: the dev
-/// superuser path), then <c>app-roles.sql</c> when a path is given, then the run-item partition maintenance.
+/// superuser path), then <c>app-roles.sql</c> when a path is given, then the run-item partition maintenance and the drop of
+/// invalid indexes an interrupted HNSW rebuild left behind (knowledge design §6.4; only the owner can drop them).
 /// </summary>
 public static class RagDatabaseMigrator
 {
@@ -29,5 +30,22 @@ public static class RagDatabaseMigrator
         }
 
         await db.Database.ExecuteSqlRawAsync("SELECT * FROM content.rag_partition_maintain()", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(DropInvalidRebuildIndexesSql, cancellationToken);
     }
+
+    public const string DropInvalidRebuildIndexesSql = """
+        DO $$
+        DECLARE r record;
+        BEGIN
+            FOR r IN
+                SELECT n.nspname AS schema_name, c.relname AS index_name
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indexrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE NOT i.indisvalid AND n.nspname = 'content' AND c.relname LIKE 'IX\_Chunks\_Embedding\_%\_ccnew%'
+            LOOP
+                EXECUTE format('DROP INDEX %I.%I', r.schema_name, r.index_name);
+            END LOOP;
+        END $$
+        """;
 }
