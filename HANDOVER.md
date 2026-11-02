@@ -63,7 +63,7 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   `https://localhost:7402`; api `https://localhost:7401`; Open WebUI = the `open-webui` resource's port (33747 after the
   last start; check `aspire describe`).
 - **Pilot data:** department DoIT (hand-made, code `1000`); collection `turkos` (public, published,
-  `coverageMaxDistance` 0.55); crawl source "umea.se" (whole host, `maxPages` 2,500, `**.pdf` excluded, no schedule;
+  `coverageMaxDistance` 0.55, `keywordWeight` 0.25 since 2026-11-02); crawl source "umea.se" (whole host, `maxPages` 2,500, `**.pdf` excluded, no schedule;
   2,532 documents, 2,324 with content, 10,074 chunks); site profile www.umea.se; clients "Open WebUI", "Pilot retrieval
   (checks)", "Pilot grading"; `GatewayModels` (manual) `claude-opus-5-5`, `gpt-6.1-sol`, `claude-haiku-5-5`; assistant
   `turkos` v3; generated test set of 100 (2 of them from Finnish pages: generated questions can't be retired by hand).
@@ -147,8 +147,8 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
    user which items to adopt; with a yes, write the Decisions row, the design rules and P1b items.
 3. **Organisation (#318):** nudge B to start item 33 (schema → L13), or offer the user that the main session builds 33
    to unblock 34–36. Review each PR live. Stream A follows with 37–38 after L13/L14.
-4. **Keyword weight (user decides):** lower `keywordWeight` on `turkos` (proposal 0.25) from the analysis above, and
-   confirm it on the human gold set (item 21) before it becomes the template default.
+4. **Keyword weight:** `turkos` runs with `keywordWeight` 0.25 (user, 2026-11-02; saved-setting run 0.98/0.77). Confirm
+   it on the human gold set (item 21) before it becomes the template default (knowledge design).
 5. **User decides:** the gold set with DoIT and threshold calibration (item 21); P1b item 15 `e2e` (after B's L7); pin
    review and Aspire 13.6.4.
 
