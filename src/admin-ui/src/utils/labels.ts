@@ -534,7 +534,7 @@ export const PLATFORM = {
     createTitle: (what: string) => `New: ${what.toLowerCase()}`,
     saved: 'Saved',
     none: '(none)',
-    // Swedish until stream A's GenericForm.spec.ts asserts the label instead of the text (issue for stream A; #314).
+    // Swedish until stream A's GenericForm.spec.ts asserts the label instead of the text (#319).
     required: 'Fyll i fältet.',
     invalidJson: 'Det här är inte giltig JSON.',
     invalidNumber: 'Enter a number.',
