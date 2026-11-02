@@ -51,11 +51,43 @@ public sealed record Candidate(
     double? Distance = null,
     double? KeywordScore = null)
 {
-    /// <summary>The identity group (§8): documents of different sources with the same identity are one group.</summary>
-    public string IdentityKey { get; } = IdentityKind + ":" + Convert.ToHexString(IdentityHash);
+    /// <summary>
+    /// The identity group (§8): documents of different sources with the same identity are one group. A value over the
+    /// candidate's own fields, built on access without allocating (#333: the hex strings cost ≈ 1 KB per candidate).
+    /// </summary>
+    public IdentityGroupKey IdentityKey => new(IdentityKind, new HashBytes(IdentityHash));
 
-    /// <summary>The <c>(DocumentId, TextHash)</c> dedup key (§8).</summary>
-    public string TextKey { get; } = DocumentId.ToString("N") + ":" + Convert.ToHexString(TextHash);
+    /// <summary>The <c>(DocumentId, TextHash)</c> dedup key (§8), as <see cref="IdentityKey"/> a value built on access.</summary>
+    public TextKey TextKey => new(DocumentId, new HashBytes(TextHash));
+}
+
+/// <summary>A candidate's identity group: identity kind and identity hash (§8).</summary>
+public readonly record struct IdentityGroupKey(string Kind, HashBytes Hash);
+
+/// <summary>A candidate's dedup key: document and text hash (§8).</summary>
+public readonly record struct TextKey(Guid DocumentId, HashBytes Hash);
+
+/// <summary>A hash compared by its bytes (the array itself is never copied or changed).</summary>
+public readonly struct HashBytes(byte[] bytes) : IEquatable<HashBytes>
+{
+    private readonly byte[] _bytes = bytes ?? [];
+
+    public bool Equals(HashBytes other) => _bytes.AsSpan().SequenceEqual(other._bytes);
+
+    public override bool Equals(object? obj) => obj is HashBytes other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.AddBytes(_bytes);
+        return hash.ToHashCode();
+    }
+
+    public override string ToString() => Convert.ToHexString(_bytes);
+
+    public static bool operator ==(HashBytes left, HashBytes right) => left.Equals(right);
+
+    public static bool operator !=(HashBytes left, HashBytes right) => !left.Equals(right);
 }
 
 /// <summary>

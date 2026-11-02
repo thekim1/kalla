@@ -59,4 +59,22 @@ public sealed class ResultDiversifierTests
         top.Count.ShouldBe(10);
         top.Select(f => f.Candidate.DocumentId).Distinct().Count().ShouldBe(4);
     }
+
+    [Fact]
+    public void Keys_compare_hash_bytes_not_arrays()
+    {
+        // #333: the keys are values over the candidate's bytes; equal hashes in different arrays are one key.
+        var a = Chunk(1, document: 7, text: "Bygglov krävs", identity: "https://www.umea.se/bygglov");
+        var b = Chunk(2, document: 7, text: "Bygglov krävs", identity: "https://www.umea.se/bygglov") with
+        {
+            TextHash = [.. a.TextHash], IdentityHash = [.. a.IdentityHash],
+        };
+
+        b.TextHash.ShouldNotBeSameAs(a.TextHash);
+        b.TextKey.ShouldBe(a.TextKey);
+        b.IdentityKey.ShouldBe(a.IdentityKey);
+        b.TextKey.GetHashCode().ShouldBe(a.TextKey.GetHashCode());
+        (b with { IdentityKind = "upload" }).IdentityKey.ShouldNotBe(a.IdentityKey);
+        (b with { DocumentId = Guid.NewGuid() }).TextKey.ShouldNotBe(a.TextKey);
+    }
 }
