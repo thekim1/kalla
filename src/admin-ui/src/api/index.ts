@@ -20,6 +20,8 @@ import type {
   Job,
   OrgSyncStatus,
   Page,
+  PipelineSummary,
+  PreviewOutput,
   PiiReport,
   Run,
   RunItem,
@@ -88,6 +90,16 @@ export const api = {
   },
   gateway: {
     models: () => http.get<GatewayModel[]>('/api/gateway/models'),
+  },
+  pipelines: {
+    list: (query: { collectionId: string; sourceType: string }) => http.get<PipelineSummary[]>('/api/pipelines', query),
+    preview: (id: string, body: { collectionId: string; sourceId?: string; documentIds?: string[]; urls?: string[] }) =>
+      http.post<{ jobId: string }>(`/api/pipelines/${id}/preview`, body),
+  },
+  previews: {
+    /** `document`: the document's id or its index in the result; `stage`: a stage, or `before`/`after` of the site profile. */
+    output: <T>(jobId: string, document: string | number, stage: string) =>
+      http.get<PreviewOutput<T>>(`/api/previews/${jobId}/documents/${document}/stages/${stage}/output`),
   },
   jobs: {
     get: <T = unknown>(id: string) => http.get<Job<T>>(`/api/jobs/${id}`),

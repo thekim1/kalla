@@ -215,5 +215,22 @@ public sealed class PipelinePublishTests(AdminDatabaseFixture database)
         Ume.Rag.Pipelines.Schemas.ContractSchemas.Validator(typeof(Ume.Rag.Pipelines.Jobs.StagePreviewPayload)).Validate(payload.RootElement).ShouldBeEmpty();
         payload.RootElement.GetProperty("pipelineVersionId").GetGuid().ShouldBe(published.Id);
         payload.RootElement.GetProperty("urls").GetArrayLength().ShouldBe(2);
+
+        // The pipelines a new source of the type can use (the drawer's preview runs on the default): the department's own
+        // is listed; the default, when there is one, is a platform pipeline and comes first.
+        using var listed = await viewer.GetAsync($"/api/pipelines?collectionId={collection.Id}&sourceType={SourceTypes.UrlList}", Ct);
+        listed.StatusCode.ShouldBe(HttpStatusCode.OK, await listed.Content.ReadAsStringAsync(Ct));
+        var list = (await Json(listed)).EnumerateArray().ToList();
+        list.ShouldContain(p => p.GetProperty("id").GetGuid() == pipeline.Id && !p.GetProperty("isDefault").GetBoolean());
+        var defaults = list.Where(p => p.GetProperty("isDefault").GetBoolean()).ToList();
+        defaults.Count.ShouldBeLessThanOrEqualTo(1);
+        if (defaults.Count == 1)
+        {
+            list[0].GetProperty("isDefault").GetBoolean().ShouldBeTrue();
+            list[0].GetProperty("departmentId").ValueKind.ShouldBe(JsonValueKind.Null);
+        }
+
+        (await viewer.GetAsync($"/api/pipelines?collectionId={collection.Id}&sourceType={SourceTypes.Crawl}", Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await viewer.GetAsync($"/api/pipelines?collectionId={Guid.CreateVersion7()}&sourceType={SourceTypes.UrlList}", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 }
