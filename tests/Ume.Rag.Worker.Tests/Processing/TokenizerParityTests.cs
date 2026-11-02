@@ -48,4 +48,19 @@ public sealed class TokenizerParityTests
         Bgem3TokenCounter.Shared.Count(text.AsSpan(start)).ShouldBeLessThanOrEqualTo(6);
         char.IsWhiteSpace(text[start - 1]).ShouldBeTrue();
     }
+
+    [Theory]
+    [InlineData("Ansökan om bygglov görs via e-tjänsten och handläggningstiden är normalt tio veckor från komplett ansökan.", 6)]
+    [InlineData("Ansökan\u200B om\u200B bygglov\u200B görs\u200B via\u200B e-tjänsten\u200B och\u200B handläggningstiden\u200B är\u200B tio veckor.", 9)]
+    [InlineData("Ansökan  om\n\nbygglov \u00A0görs via e-tjänsten och handläggningstiden är normalt tio veckor. ", 7)]
+    [InlineData("Ordningsföreskrifterna gäller.", 1)]
+    public void The_overlap_start_is_the_first_word_start_whose_suffix_fits(string text, int maxTokens)
+    {
+        var counter = Bgem3TokenCounter.Shared;
+        var expected = Enumerable.Range(0, text.Length)
+            .Where(i => i == 0 || char.IsWhiteSpace(text[i - 1]))
+            .FirstOrDefault(i => counter.Count(text.AsSpan(i)) <= maxTokens, text.Length);
+
+        TokenCuts.SuffixStart(counter, text, maxTokens).ShouldBe(expected);
+    }
 }

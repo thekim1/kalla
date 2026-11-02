@@ -321,6 +321,22 @@ public sealed class StageRuleTests
     }
 
     [Fact]
+    public void A_chunk_exactly_at_the_budget_stays_whole_when_its_unit_counts_sum_to_more()
+    {
+        // A list item ending in a zero-width space counts one token more alone than inside the chunk.
+        var items = Enumerable.Range(1, 3).Select(i => new DocBlock(BlockKinds.ListItem, Sentences(4, "punkt " + i) + "\u200B")).ToList();
+        var document = new ParsedDocument { Title = "Lista", Blocks = items };
+        var whole = Chunk(document, new ChunkOptions(ChunkTokens: 2_000)).Chunks.Single();
+        var unitSum = Bgem3TokenCounter.Shared.Count(whole.Prefix) + items.Sum(b => Bgem3TokenCounter.Shared.Count("- " + b.Text));
+        unitSum.ShouldBeGreaterThan(whole.TokenCount);
+
+        var chunks = Chunk(document, new ChunkOptions(ChunkTokens: whole.TokenCount)).Chunks;
+
+        chunks.Single().Text.ShouldBe(whole.Text);
+        Chunk(document, new ChunkOptions(ChunkTokens: whole.TokenCount - 1)).Chunks.Count.ShouldBe(2);
+    }
+
+    [Fact]
     public void A_unit_larger_than_the_budget_is_cut_at_whitespace()
     {
         var huge = string.Join(' ', Enumerable.Repeat("ordningsföreskrifterna", 400));

@@ -332,6 +332,8 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
         private readonly List<Pending> _done = [];
         private List<Unit> _current = [];
         private string? _overlap;
+        private int? _tokens;
+        private int _estimatedJoins;
         private string? _lastSentence;
         private bool _inList;
 
@@ -413,11 +415,39 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
 
         private bool Fits(IReadOnlyList<Unit> units, string? overlap, double factor = 1) => owner.Count(prefix, Body(units, overlap)) <= Budget * factor;
 
+        /// <summary>
+        /// Adds <paramref name="unit"/> to the current chunk when the chunk still fits the budget with it. The chunk's count
+        /// is carried as a running sum of unit counts; the exact count of the embedded string decides whenever the sum
+        /// plus <see cref="TokenCuts.JoinSlack"/> per estimated join comes near the budget.
+        /// </summary>
+        private bool TryAppend(Unit unit)
+        {
+            if (_tokens is { } tokens)
+            {
+                var estimate = tokens + owner.Tokens.Count(unit.Text.Normalize(NormalizationForm.FormC));
+                if (estimate + (_estimatedJoins + 1) * TokenCuts.JoinSlack <= Budget)
+                {
+                    _current.Add(unit);
+                    (_tokens, _estimatedJoins) = (estimate, _estimatedJoins + 1);
+                    return true;
+                }
+            }
+
+            var exact = owner.Count(prefix, Body([.. _current, unit], _overlap));
+            if (exact > Budget)
+            {
+                return false;
+            }
+
+            _current.Add(unit);
+            (_tokens, _estimatedJoins) = (exact, 0);
+            return true;
+        }
+
         private void Place(Unit unit)
         {
-            if (Fits([.. _current, unit], _overlap))
+            if (TryAppend(unit))
             {
-                _current.Add(unit);
                 return;
             }
 
@@ -426,18 +456,16 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
                 var previous = _current;
                 Close();
                 _overlap = OverlapFor(previous, unit);
-                if (_overlap is not null && Fits([unit], _overlap))
+                if (_overlap is not null && TryAppend(unit))
                 {
-                    _current.Add(unit);
                     return;
                 }
 
                 _overlap = null;
             }
 
-            if (Fits([unit], _overlap))
+            if (TryAppend(unit))
             {
-                _current.Add(unit);
                 return;
             }
 
@@ -451,6 +479,7 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
                 rest = rest[cut..].TrimStart();
                 _current = [unit with { Text = piece }];
                 _overlap = null;
+                _tokens = null;
                 if (rest.Length > 0)
                 {
                     Close();
@@ -512,6 +541,7 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
             _overlaps.Add(_overlap);
             _current = [];
             _overlap = null;
+            _tokens = null;
         }
 
         /// <summary>Rule 4 on the section's last chunk, then the pending chunks.</summary>
