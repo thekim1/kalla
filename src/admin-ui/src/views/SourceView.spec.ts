@@ -54,4 +54,25 @@ describe('Källa (admin design §5.5.3; #278 slice 2)', () => {
     await wrapper.findAll('tbody tr')[0]!.find('button').trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'run', params: { id: 'r1' } })
   })
+
+  it('shows the Nedprioritera rules and opens Ändra källa with the collection for its level ceiling', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-editor'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'get').mockResolvedValue({ ...source, settings: { ...source.settings, demote: [{ pattern: 'www.umea.se/bygga/**/arkiv/**', factor: 0.5 }] } })
+    vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.sources, 'piiReport').mockRejectedValue(new Error('x'))
+    const collection = vi.spyOn(api.collections, 'get').mockResolvedValue({ id: 'c1', classification: 'internal' } as never)
+
+    const wrapper = mount(SourceView, { props: { id: 's1' }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.get('[data-test=demoted]').text()).toBe('www.umea.se/bygga/**/arkiv/** ×0,5')
+    await wrapper.get('[data-test=edit-source]').trigger('click')
+    await flushPromises()
+    expect(collection).toHaveBeenCalledWith('c1')
+    expect(document.body.querySelector('#edit-name')).not.toBeNull()
+    expect([...document.body.querySelectorAll<HTMLOptionElement>('#edit-level option')].map((o) => o.value)).toEqual(['public', 'internal'])
+    wrapper.unmount()
+  })
 })
