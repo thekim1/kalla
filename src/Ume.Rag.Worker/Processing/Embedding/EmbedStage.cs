@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
@@ -12,7 +11,7 @@ namespace Ume.Rag.Worker.Processing.Embedding;
 public static class EmbedLimits
 {
     public const int MaxInputs = 64;
-    public const double CanaryMinCosine = 0.999;
+    public const double CanaryMinCosine = EmbeddingCanaryThreshold.MinCosine;
 }
 
 /// <summary>
@@ -31,115 +30,41 @@ public sealed class EmbedOptions
 }
 
 /// <summary>
-/// The canary of processing design §11 per profile: at startup and hourly the worker embeds the profile's canary text and
-/// compares it with <c>EmbeddingProfiles.CanaryEmbedding</c>; below <see cref="EmbedLimits.CanaryMinCosine"/> the profile
-/// is refused on this instance (the gateway alias now serves another model) and health is unhealthy. Until a profile's
-/// canary has passed on this instance it is refused too (fail closed); a profile without a recorded canary is allowed
-/// and reported as degraded (item 13 records the pilot's).
+/// The canary of processing design §11 as the worker sees it: a platform admin runs the check in the admin API, which
+/// stores the result on the profile row; the worker makes no canary calls. A profile whose last check failed is refused
+/// for embedding, preview and evaluation until a later check passes; one never checked, or without a recorded canary,
+/// is allowed.
 /// </summary>
-public sealed partial class EmbeddingCanary(IEmbeddingProfileStore profiles, EmbeddingClient client, ILogger<EmbeddingCanary> logger) : IHealthCheck
+public static class EmbeddingCanary
 {
-    private readonly ConcurrentDictionary<Guid, CanaryResult> _results = new();
+    public static readonly TimeSpan RetryAfter = TimeSpan.FromMinutes(5);
 
-    public enum CanaryState
-    {
-        Passed,
-        Failed,
-        NotRecorded,
-    }
-
-    public sealed record CanaryResult(CanaryState State, double? Similarity);
-
-    /// <summary>The state of a profile on this instance, or null when it was not checked yet.</summary>
-    public CanaryResult? For(Guid profileId) => _results.GetValueOrDefault(profileId);
-
-    /// <summary>Checks every active profile; called at startup and hourly by <see cref="EmbeddingCanaryService"/>.</summary>
-    public async Task CheckAllAsync(CancellationToken cancellationToken)
-    {
-        foreach (var profile in await profiles.ActiveAsync(cancellationToken))
-        {
-            await CheckAsync(profile, cancellationToken);
-        }
-    }
-
-    public async Task<CanaryResult> CheckAsync(EmbeddingProfileRecord profile, CancellationToken cancellationToken)
+    public static bool Failed(EmbeddingProfileRecord profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        if (profile.CanaryText is not { Length: > 0 } text || profile.CanaryEmbedding is not { Count: > 0 } recorded)
-        {
-            return _results[profile.Id] = new CanaryResult(CanaryState.NotRecorded, null);
-        }
-
-        var vector = (await client.EmbedAsync(profile, [text], new EmbeddingCall(null, "embed"), cancellationToken))[0];
-        var similarity = Cosine(vector, recorded);
-        var result = new CanaryResult(similarity >= EmbedLimits.CanaryMinCosine ? CanaryState.Passed : CanaryState.Failed, similarity);
-        if (result.State == CanaryState.Failed)
-        {
-            LogMismatch(logger, profile.Id, similarity);
-        }
-
-        return _results[profile.Id] = result;
+        return profile.CanarySimilarity is { } similarity && similarity < EmbedLimits.CanaryMinCosine;
     }
 
-    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    /// <exception cref="StageTransientException"><c>embed.canary_mismatch</c>, requeued without an attempt.</exception>
+    public static void EnsureNotFailed(EmbeddingProfileRecord profile)
     {
-        var failed = _results.Where(r => r.Value.State == CanaryState.Failed).Select(r => r.Key).ToList();
-        if (failed.Count > 0)
+        if (Failed(profile))
         {
-            return Task.FromResult(HealthCheckResult.Unhealthy($"Embedding canary mismatch for {failed.Count} profile(s); the embed class is stopped here."));
+            throw new StageTransientException("embed.canary_mismatch", RetryAfter, countsAttempt: false);
         }
-
-        return Task.FromResult(_results.Values.Any(r => r.State == CanaryState.NotRecorded)
-            ? HealthCheckResult.Degraded("An embedding profile has no recorded canary.")
-            : HealthCheckResult.Healthy());
     }
-
-    internal static double Cosine(IReadOnlyList<float> a, IReadOnlyList<float> b)
-    {
-        if (a.Count != b.Count)
-        {
-            return 0;
-        }
-
-        double dot = 0, na = 0, nb = 0;
-        for (var i = 0; i < a.Count; i++)
-        {
-            dot += a[i] * (double)b[i];
-            na += a[i] * (double)a[i];
-            nb += b[i] * (double)b[i];
-        }
-
-        return na == 0 || nb == 0 ? 0 : dot / (Math.Sqrt(na) * Math.Sqrt(nb));
-    }
-
-    [LoggerMessage(LogLevel.Critical, "Embedding canary of profile {ProfileId} has cosine {Similarity:F5} < 0.999: the gateway serves another model; embedding is stopped on this instance.")]
-    private static partial void LogMismatch(ILogger logger, Guid profileId, double similarity);
 }
 
-/// <summary>Runs the canary at startup and every hour (<see cref="TimeProvider"/>, so tests drive it with a fake clock).</summary>
-public sealed partial class EmbeddingCanaryService(EmbeddingCanary canary, TimeProvider clock, ILogger<EmbeddingCanaryService> logger) : BackgroundService
+/// <summary>Unhealthy while an active profile's last canary check failed; one read of the profile rows, no gateway call.</summary>
+public sealed class EmbeddingCanaryHealth(IEmbeddingProfileStore profiles) : IHealthCheck
 {
-    public static readonly TimeSpan Interval = TimeSpan.FromHours(1);
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                await canary.CheckAllAsync(stoppingToken);
-            }
-            catch (Exception e) when (e is not OperationCanceledException)
-            {
-                LogFailed(logger, e.GetType().Name);
-            }
-
-            await Task.Delay(Interval, clock, stoppingToken);
-        }
+        var failed = (await profiles.ActiveAsync(cancellationToken)).Count(EmbeddingCanary.Failed);
+        return failed > 0
+            ? HealthCheckResult.Unhealthy($"Embedding canary mismatch for {failed} profile(s); embedding with them is refused.")
+            : HealthCheckResult.Healthy();
     }
-
-    [LoggerMessage(LogLevel.Warning, "The embedding canary check failed ({ExceptionType}); it is retried at the next interval.")]
-    private static partial void LogFailed(ILogger logger, string exceptionType);
 }
 
 /// <summary>The embedded chunks: one vector per chunk in ordinal order, with the cache hits counted.</summary>
@@ -150,10 +75,10 @@ public sealed record EmbeddedChunks(IReadOnlyList<ChunkDraft> Chunks, IReadOnlyL
 /// one cache lookup per document by (level, profile, <c>TextHash</c>), misses deduplicated and embedded in batches of
 /// ≤ 64 inputs and ≤ <see cref="EmbedOptions.MaxTokensPerRequest"/> tokens (at most the profile's <c>MaxInputTokens</c>),
 /// each batch whole or not at all, cached in their own short write. Gateway requests are
-/// bounded per instance by the fixed <c>Worker:Concurrency:embed</c> (AIMD is P2). A profile whose canary failed or has not
-/// passed yet on this instance is refused; the job is requeued without an attempt.
+/// bounded per instance by the fixed <c>Worker:Concurrency:embed</c> (AIMD is P2). A profile whose last canary check failed
+/// is refused; the job is requeued without an attempt.
 /// </summary>
-public sealed class EmbedStage(EmbeddingClient client, IEmbeddingProfileStore profiles, IEmbeddingCache cache, EmbeddingCanary canary,
+public sealed class EmbedStage(EmbeddingClient client, IEmbeddingProfileStore profiles, IEmbeddingCache cache,
     EmbeddingConcurrency concurrency, IOptions<EmbedOptions> options, TimeProvider clock)
 {
     public const int Version = 1;
@@ -163,11 +88,7 @@ public sealed class EmbedStage(EmbeddingClient client, IEmbeddingProfileStore pr
         ArgumentNullException.ThrowIfNull(chunks);
         var profile = await profiles.GetAsync(embeddingProfileId, cancellationToken)
             ?? throw new StageFatalException(Pipelines.Jobs.RunItemOutcome.Failed, "embed.profile_unknown");
-        var state = canary.For(profile.Id)?.State;
-        if (state is null || state == EmbeddingCanary.CanaryState.Failed)
-        {
-            throw new StageTransientException(state is null ? "embed.canary_unchecked" : "embed.canary_mismatch", TimeSpan.FromMinutes(5), countsAttempt: false);
-        }
+        EmbeddingCanary.EnsureNotFailed(profile);
 
         var hashes = chunks.Chunks.Select(c => c.TextHash).Distinct(StringComparer.Ordinal).ToList();
         var hits = await cache.GetAsync(classification, profile.Id, hashes, cancellationToken);

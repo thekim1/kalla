@@ -60,7 +60,7 @@ public sealed class EvaluatorApiContractTests(RagDatabaseFixture database, FakeG
         await using var worker = await StartWorkerAsync();
         var target = (await worker.Services.GetRequiredService<EvaluationStore>().LoadAsync(seed.CollectionId, Ct)).ShouldNotBeNull();
         target.Questions.Count.ShouldBe(30);
-        using var session = await worker.Services.GetRequiredService<RetrievalEvaluator>().OpenAsync(target, Ct);
+        using var session = worker.Services.GetRequiredService<RetrievalEvaluator>().Open(target);
         await using var api = EvaluationSmokeKit.ApiHost(database, gateway, _blobs);
         using var http = await EvaluationSmokeKit.ClientAsync(api, key);
 
@@ -127,14 +127,17 @@ public sealed class EvaluatorApiContractTests(RagDatabaseFixture database, FakeG
         await using var api = EvaluationSmokeKit.ApiHost(database, gateway, _blobs);
         using var http = await EvaluationSmokeKit.ClientAsync(api, key);
 
+        var drifted = target with { Profile = target.Profile with { CanaryCheckedAt = DateTimeOffset.UtcNow, CanarySimilarity = 0.5 } };
+        Should.Throw<Worker.Processing.StageTransientException>(() => evaluator.Open(drifted)).Code.ShouldBe("embed.canary_mismatch");
+
         // Without demote the archive page is first: the fixture reorders.
-        using (var undemoted = await evaluator.OpenAsync(target with { Demote = new Dictionary<Guid, IReadOnlyList<DemotePattern>>() }, Ct))
+        using (var undemoted = evaluator.Open(target with { Demote = new Dictionary<Guid, IReadOnlyList<DemotePattern>>() }))
         {
             (await undemoted.SearchAsync(row, EvaluationVariant.Hybrid, target.Settings, Ct)).Hits[0].Candidate.DocumentId
                 .ShouldBe(archive.Id, "the archive page ranks first without demote");
         }
 
-        using var session = await evaluator.OpenAsync(target, Ct);
+        using var session = evaluator.Open(target);
         var evaluated = (await session.SearchAsync(row, EvaluationVariant.Hybrid, target.Settings, Ct)).Hits.Select(h => h.Candidate).ToList();
         var retrieved = await EvaluationSmokeKit.RetrieveAsync(http, slug, question);
 

@@ -209,7 +209,6 @@ public sealed partial class EmbedJobHandler(
     INodeOutputStore nodeOutputs,
     StageOutputs outputs,
     EmbedStage embed,
-    EmbeddingCanary canary,
     IEmbeddingProfileStore profiles,
     IChunkSetStore chunkSets,
     ChunkSetSwap swaps,
@@ -309,11 +308,6 @@ public sealed partial class EmbedJobHandler(
 
         var profile = await profiles.GetAsync(source.EmbeddingProfileId, cancellationToken)
             ?? throw new StageFatalException(Outcome.Failed, "embed.profile_unknown");
-        if (canary.For(profile.Id) is null)
-        {
-            await canary.CheckAsync(profile, cancellationToken);
-        }
-
         var embedded = await embed.RunAsync(draft, document.Classification, profile.Id, new EmbeddingCall(payload.RunId), cancellationToken);
         await index.EnsureProfileIndexAsync(profile.Id, profile.Dimensions, cancellationToken);
         var values = await settings.GetAsync(cancellationToken);

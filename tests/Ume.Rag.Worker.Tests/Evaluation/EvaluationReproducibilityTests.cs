@@ -130,7 +130,7 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database) 
         // /v1/retrieve's path (as in EvaluationRunTests): the api role's data source, the collection's resolved settings.
         var target = (await worker.Services.GetRequiredService<EvaluationStore>().LoadAsync(corpus.Seed.CollectionId, Ct)).ShouldNotBeNull();
         target.Questions.Count.ShouldBe(9);
-        using var session = await worker.Services.GetRequiredService<RetrievalEvaluator>().OpenAsync(target, Ct);
+        using var session = worker.Services.GetRequiredService<RetrievalEvaluator>().Open(target);
         var platform = RetrievalSettingsResolver.Platform(
             await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Retrieval"::text FROM config."Settings" ORDER BY "Id" LIMIT 1"""));
         var settings = RetrievalSettingsResolver.Collection(platform, await Sql.ScalarAsync<string>(database.Connection(null),

@@ -13,7 +13,7 @@ namespace Ume.Rag.Worker.Processing;
 public static class ProcessingExtensions
 {
     /// <summary>
-    /// The processing stages (processing design §2–§11) and the embedding gateway client with its canary check and health.
+    /// The processing stages (processing design §2–§11) and the embedding gateway client with the canary health (the stored result of the last check).
     /// Needs the persistence ports of <see cref="Persistence"/> (<c>IEmbeddingProfileStore</c>, <c>IEmbeddingCache</c>,
     /// <c>IChunkSetStore</c>), registered by the engine with the SQL implementations once the schema is merged (J2, item 9);
     /// the parser ports (<see cref="IParserConverter"/>, <see cref="IDocumentInspector"/>, <see cref="INerClient"/>) are
@@ -44,10 +44,8 @@ public static class ProcessingExtensions
         builder.AddGatewayClient(EmbeddingClient.HttpClientName);
         services.TryAddSingleton<EmbeddingClient>();
         services.TryAddSingleton<EmbeddingConcurrency>();
-        services.TryAddSingleton<EmbeddingCanary>();
         services.TryAddSingleton<EmbedStage>();
-        services.AddHostedService<EmbeddingCanaryService>();
-        services.AddHealthChecks().AddCheck<EmbeddingCanary>("embedding-canary");
+        services.AddHealthChecks().AddCheck<EmbeddingCanaryHealth>("embedding-canary");
         return builder;
     }
 }

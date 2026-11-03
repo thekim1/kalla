@@ -101,7 +101,7 @@ public sealed class PostgresEmbeddingProfileStore(JobDatabase database) : IEmbed
 {
     private const string Columns = """
         "Id", "Name", "GatewayModel", "Dimensions", "MaxInputTokens", "MaxResidency", "Distance", "CanaryText", "CanaryEmbedding"::real[],
-        "IsDefault", "State", "RequestDimensions"
+        "IsDefault", "State", "RequestDimensions", "CanaryCheckedAt", "CanarySimilarity"
         """;
 
     public async Task<EmbeddingProfileRecord?> GetAsync(Guid profileId, CancellationToken cancellationToken) =>
@@ -136,6 +136,8 @@ public sealed class PostgresEmbeddingProfileStore(JobDatabase database) : IEmbed
                 IsDefault = reader.GetBoolean(9),
                 State = reader.GetString(10),
                 RequestDimensions = reader.GetBoolean(11),
+                CanaryCheckedAt = reader.IsDBNull(12) ? null : reader.GetFieldValue<DateTimeOffset>(12),
+                CanarySimilarity = reader.IsDBNull(13) ? null : reader.GetFloat(13),
             });
         }
 

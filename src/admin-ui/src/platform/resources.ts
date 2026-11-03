@@ -51,6 +51,8 @@ export interface PlatformResource {
   /** The values an edit starts from; the row itself when absent. */
   load?: (row: Row) => Promise<Row>
   actions?: RowAction[]
+  /** A panel shown above the list. */
+  panel?: 'embedding-canary'
 }
 
 export function urlOf(path: string, row: Row | null, key: string): string {
@@ -172,6 +174,7 @@ export const platformResources: PlatformResource[] = [
       { key: 'residencies', label: PLATFORM.columns.residencies },
       { key: 'source', label: PLATFORM.columns.source },
     ],
+    panel: 'embedding-canary',
   },
   {
     id: 'organisation',

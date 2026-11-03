@@ -108,7 +108,7 @@ public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayF
         var fixture = await EvalKit.SeedAsync(database);
         await using var worker = await EvalKit.StartWorkerAsync(database, gateway, _blobs);
         var target = (await worker.Services.GetRequiredService<EvaluationStore>().LoadAsync(fixture.CollectionId, Ct)).ShouldNotBeNull();
-        using var session = await worker.Services.GetRequiredService<RetrievalEvaluator>().OpenAsync(target, Ct);
+        using var session = worker.Services.GetRequiredService<RetrievalEvaluator>().Open(target);
 
         // /v1/retrieve's path (issue #120): the api role's data source, the collection's resolved settings, every level.
         var platform = RetrievalSettingsResolver.Platform(

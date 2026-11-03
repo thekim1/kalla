@@ -4,7 +4,10 @@ using Ume.Rag.Worker.Processing.Persistence;
 
 namespace Ume.Rag.Worker.Tests.Processing;
 
-/// <summary><see cref="PostgresEmbeddingProfileStore"/> reads <c>"RequestDimensions"</c> as <c>ume_rag_worker</c> (U-b, #142).</summary>
+/// <summary>
+/// <see cref="PostgresEmbeddingProfileStore"/> reads <c>"RequestDimensions"</c> (U-b, #142) and the last canary check
+/// (#353) as <c>ume_rag_worker</c>.
+/// </summary>
 [Collection(RagDatabaseGroup4.Name)]
 public sealed class EmbeddingProfileStoreTests(RagDatabaseFixture database) : IAsyncLifetime
 {
@@ -44,6 +47,37 @@ public sealed class EmbeddingProfileStoreTests(RagDatabaseFixture database) : IA
         finally
         {
             await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM config."EmbeddingProfiles" WHERE "Id" IN ($1, $2)""", requesting, plain);
+        }
+    }
+
+    [Fact]
+    public async Task The_store_reads_the_last_canary_check_on_every_call()
+    {
+        var id = Guid.CreateVersion7();
+        await Sql.ExecuteAsync(database.Connection(null), """
+            INSERT INTO config."EmbeddingProfiles" ("Id", "Name", "GatewayModel", "Dimensions", "Distance", "MaxInputTokens", "IsDefault", "State", "MaxResidency", "UpdatedAt")
+            VALUES ($1, $2, 'bge-m3', 1024, 'cosine', 8192, false, 'retired', 'Eu', now())
+            """, id, "canary-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new PostgresEmbeddingProfileStore(database.Database(RagDatabase.Worker));
+            var never = (await store.GetAsync(id, Ct)).ShouldNotBeNull();
+            never.CanaryCheckedAt.ShouldBeNull();
+            never.CanarySimilarity.ShouldBeNull();
+
+            var checkedAt = new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
+            await Sql.ExecuteAsync(database.Connection(null), """
+                UPDATE config."EmbeddingProfiles" SET "CanaryCheckedAt" = $2, "CanarySimilarity" = $3 WHERE "Id" = $1
+                """, id, checkedAt, 0.5f);
+
+            var failed = (await store.GetAsync(id, Ct)).ShouldNotBeNull();
+            failed.CanaryCheckedAt.ShouldBe(checkedAt);
+            failed.CanarySimilarity.ShouldBe(0.5);
+            Worker.Processing.Embedding.EmbeddingCanary.Failed(failed).ShouldBeTrue();
+        }
+        finally
+        {
+            await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM config."EmbeddingProfiles" WHERE "Id" = $1""", id);
         }
     }
 }

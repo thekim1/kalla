@@ -1708,6 +1708,12 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("CanaryCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<float?>("CanarySimilarity")
+                        .HasColumnType("real");
+
                     b.Property<string>("CanaryText")
                         .HasColumnType("text");
 
