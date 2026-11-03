@@ -354,6 +354,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `GET /api/gateway/models` | Read | `GatewayModels` with residencies, `SupportsTools`, context window, prices, `Source` |
 | `POST /api/gateway/sync`; `PUT /api/gateway/models/{name}` | Admin | run the model sync now; manual row (aliases, `SupportsTools` until the catalogue has `features`; not built yet) |
 | `GET /api/gateway/status` | Admin | per level key: one `x-ume-max-residency` embedding call and (from gateway release 2, P2) the delegation echo; each profile's canary: recorded, last check time and similarity |
+| `GET /api/gateway/canary-check` | Admin | each active profile's last canary check from the database (`{ profileId, profile, recorded, similarity, passed, checkedAt }`, `passed` null when never checked); makes **no** gateway call, so opening the page costs nothing |
 | `POST /api/gateway/canary-check` | Admin | the embedding canary on demand (processing §11): for each active profile with a recorded canary, one embedding call at the profile's ceiling; stores `CanaryCheckedAt` and `CanarySimilarity`, audited `check-canary` on the profile; returns per profile `{ profile, similarity, passed, checkedAt }`. Nothing calls it on a timer. The platform's gateway models page has the button (§5.8) |
 | `GET /api/organisation/departments/{id}/map` | Read | the Map (§5.5.6) as rows: department → collection (own, and shared in with its owning department) → assistant (published links; draft-only links flagged; the link's topics) → audience (clients), each with its contact; a platform admin may ask for any department; from the admin's snapshot; no content |
 | `GET/PUT /api/organisation/departments/{id}/settings` (P2) | Read / Manage | `DepartmentSettings` (`EditOwnerTeamOnly`, `version`); audited `departmentsettings.update` (§3.2) |
@@ -991,7 +992,7 @@ gateway models, organisation mirror (read); P2 department settings (owner-team s
   version JSON, the proposal's check results and the preview viewer's before/after texts, with **Godkänn**,
   **Avvisa** and **Återställ till version …**. In P1 (weakness review §1) every version is a manual, hand-checked JSON
   edit (the umea.se Sitevision preset first): no proposals, so only editing and **Återställ**.
-- Gateway models: a **Check embedding canary** button (`POST /api/gateway/canary-check`, processing §11) shows each active profile's similarity, pass or fail and time; the page also shows the last check from `GET /api/gateway/status`. It is the only way the canary runs.
+- Gateway models: a **Check embedding canary** button (`POST /api/gateway/canary-check`, processing §11) shows each active profile's similarity, pass or fail and time; on opening, the page shows the last check from `GET /api/gateway/canary-check` and calls nothing that reaches the gateway. It is the only way the canary runs.
 - The same concurrency (`version`), error codes, audit and accessibility rules apply.
 
 ## 6. Pipelines
