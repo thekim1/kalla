@@ -160,12 +160,26 @@ public sealed class EmbeddingProfile
 
     public int MaxInputTokens { get; set; }
     public string? CanaryText { get; set; }
+
+    /// <summary>When a platform admin last ran the canary check (processing design §11); null = never checked.</summary>
+    public DateTimeOffset? CanaryCheckedAt { get; set; }
+
+    /// <summary>The cosine of the last check against the recorded canary; below 0.999 the worker refuses the profile.</summary>
+    public float? CanarySimilarity { get; set; }
+
     public bool IsDefault { get; set; }
     public string State { get; set; } = EmbeddingProfileStates.Active;
     public Residency MaxResidency { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
     public uint Version { get; set; }
+}
+
+/// <summary>The verdict of an embedding canary check (processing design §11).</summary>
+public static class EmbeddingCanaryThreshold
+{
+    /// <summary>Below this cosine against the recorded canary the gateway serves another model and the profile is refused.</summary>
+    public const double MinCosine = 0.999;
 }
 
 /// <summary>The canary of a profile (processing design §11): a fixed Swedish text whose embedding is recorded once.</summary>

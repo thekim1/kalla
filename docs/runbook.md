@@ -301,6 +301,12 @@ dc up -d --wait rag-worker
 `dc restart rag-worker` also stops it before it starts. The parser and ClamAV can be restarted on their own: the
 worker reports them in its own health and retries.
 
+**After any change to the gateway's models** (a new deployment behind an alias, a provider switch, a gateway upgrade),
+a platform admin runs **Check embedding canary** on Platform → Gateway models. The platform makes no model calls of its
+own to notice a changed embedding model: the check embeds each active profile's canary text once and stores the
+similarity on the profile. Below 0.999 the worker refuses the profile until a later check passes (*Where to look
+first*).
+
 ### Restarting unhealthy containers
 
 Docker restarts a container only when its main process exits. ClamAV's does not, so a hung clamd would stay
@@ -441,6 +447,7 @@ Also for G1 and W2:
 | `install.sh` warns "Docker does not use the systemd cgroup driver" | The ingestion slice caps nothing: set `native.cgroupdriver=systemd` (production-setup.md), restart Docker, then `dc up -d --force-recreate` |
 | `escrow-keys.sh --verify`: "differs from the deployment's key" | A key was rotated after that escrow: escrow again and verify |
 | The parser stays unhealthy for minutes after a start | It warms its slots and runs a self-test first; the worker reports it in its own health and retries |
+| Worker health unhealthy on `embedding-canary`; embed, preview and evaluation jobs wait with `embed.canary_mismatch` | The last embedding canary check of a profile came out below 0.999: the gateway's model alias now answers with another model, which would mix vector spaces. Ask the gateway team what changed; once the profile's model is restored, run **Check embedding canary** again (admin UI, Platform → Gateway models). The jobs continue when a check passes. A new model is a profile migration, not a fix here |
 
 ## Secrets and certificates
 

@@ -62,12 +62,13 @@ builder.Services.AddOptions<OrgSyncOptions>().BindConfiguration(OrgSyncOptions.S
 builder.Services.AddHttpClient(OrganisationSync.HttpClientName).RemoveStandardResilienceHandler();
 builder.Services.AddSingleton<OrganisationSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<OrganisationSync>());
-// The gateway client of item 13: the model mirror, canary embeddings, V8's /v1/models check and the key status.
+// The gateway client of item 13: the model mirror, canary embeddings and checks, V8's /v1/models check and the key status.
 builder.AddGatewayClient(GatewayApi.HttpClientName);
 builder.Services.AddSingleton<GatewayApi>();
 builder.Services.AddSingleton<GatewayModelSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayModelSync>());
 builder.Services.AddScoped<GatewayModelCheck>();
+builder.Services.AddSingleton<EmbeddingCanaryCheck>();
 // The retrieval test (admin design §4.9): the search core on the process's data source, query embeddings on their own gateway client.
 builder.AddGatewayClient(Ume.Rag.Answering.GatewayQueryEmbedder.HttpClientName);
 builder.Services.AddSingleton<AdminRetrieval>();

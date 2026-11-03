@@ -150,7 +150,6 @@ public sealed class PreviewSegment(
     EmbeddingClient embeddings,
     IEmbeddingProfileStore profiles,
     IEmbeddingCache embeddingCache,
-    EmbeddingCanary canary,
     EmbeddingConcurrency concurrency,
     IOptions<EmbedOptions> embedOptions,
     TimeProvider time,
@@ -161,7 +160,7 @@ public sealed class PreviewSegment(
     /// <summary>The pages a preview parses of a paged document (engine design §11).</summary>
     public const int MaxPages = 50;
 
-    private readonly EmbedStage _embed = new(embeddings, profiles, new ReadOnlyEmbeddingCache(embeddingCache), canary, concurrency, embedOptions, time);
+    private readonly EmbedStage _embed = new(embeddings, profiles, new ReadOnlyEmbeddingCache(embeddingCache), concurrency, embedOptions, time);
 
     /// <summary>Runs the stages after <c>fetch</c>; returns the site profile's before/after of an HTML page with a URL.</summary>
     public async Task<PreviewSiteProfile?> RunAsync(PreviewRun run, PreviewContent content, PreviewStageLog log, CancellationToken cancellationToken)
@@ -346,11 +345,6 @@ public sealed class PreviewSegment(
         {
             var embeddingProfile = await profiles.GetAsync(run.Collection.EmbeddingProfileId, cancellationToken)
                 ?? throw new StageFatalException(RunItemOutcome.Failed, "embed.profile_unknown");
-            if (canary.For(embeddingProfile.Id) is null)
-            {
-                await canary.CheckAsync(embeddingProfile, cancellationToken);
-            }
-
             var embedded = await _embed.RunAsync(withPii, level, embeddingProfile.Id, new EmbeddingCall(null), cancellationToken);
             log.Done(embedded.CacheHits == withPii.Chunks.Count, new
             {

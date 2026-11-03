@@ -383,7 +383,7 @@ docker compose --env-file deploy/.env exec -u postgres postgres psql -U postgres
 | The run finished | `SELECT "State", "Added", "Updated", "Unchanged", "Failed" FROM content."Runs" WHERE "Id" = '<sync job id>';` | `succeeded`, `Added` = the number of URLs (a few minutes; first parses are slower) |
 | Live chunks with 1024-dimension vectors | `SELECT count(*), min(vector_dims(c."Embedding")) FROM content."Chunks" c JOIN content."Documents" d ON d."LiveChunkSetId" = c."ChunkSetId" WHERE d."SourceId" = '<source id>' AND c."DeletedAt" IS NULL;` | at least one chunk per page, `1024` |
 | Per-page outcome | `SELECT "Identity", "Outcome", "Reason" FROM content."RunItems" WHERE "RunId" = '<sync job id>' ORDER BY "Id";` | `added` for each page |
-| The canary | `SELECT "Name", "GatewayModel", "Dimensions", "CanaryEmbedding" IS NOT NULL AS recorded FROM config."EmbeddingProfiles";` | `pilot-embedding`, `text-embedding-3-large`, `1024`, `t` (the admin records it after its first catalogue sync) |
+| The canary | `SELECT "Name", "GatewayModel", "Dimensions", "CanaryEmbedding" IS NOT NULL AS recorded, "CanarySimilarity" FROM config."EmbeddingProfiles";` | `pilot-embedding`, `text-embedding-3-large`, `1024`, `t` (the admin records it after its first catalogue sync); the similarity is empty until a platform admin runs **Check embedding canary** (admin UI, Platform → Gateway models), then at least `0.999` |
 
 On the gateway side, its admin UI shows the embedding calls under the worker's key with their cost (a few hundredths of
 a cent for a handful of pages).
@@ -432,7 +432,7 @@ The run book for that step comes with the chat API.
 | `rag-clamav` unhealthy for > 15 min | no signature download (proxy, firewall) | `docker compose logs rag-clamav`; `--freshclam-proxy` in §7 |
 | §8.3 times out | the firewall blocks the gateway (an old firewall script without the `INPUT` exception, or the gateway's name resolves to an address not in the rules) | `sudo iptables -S UME-RAG-INPUT`, `sudo iptables -S UME-RAG-EGRESS \| grep 172.30.3.0`; re-run `sudo systemctl start rag-firewall.service`; compare with §4.5 |
 | Runs fail with `embed.input_rejected` | the gateway refused a batch (`context_length_exceeded`) | §3: clear the deployment's `ContextWindow`; the worker's batch cap is `Worker:Embed:MaxTokensPerRequest` (6000) |
-| Runs fail at the embed step on dimensions, or the canary check fails | 3072 values came back: `RequestDimensions` isn't set or gate #142 isn't in the image | §7's `.env` lines, rebuild after #142 |
+| Runs fail at the embed step on dimensions, or **Check embedding canary** reports the wrong number of dimensions | 3072 values came back: `RequestDimensions` isn't set or gate #142 isn't in the image | §7's `.env` lines, rebuild after #142 |
 | 403 from the gateway in the worker log | the key doesn't allow `Eu`, or the model's provider isn't `Eu` | §4.4 |
 | Pages end `skipped` with `robots.*` | robots.txt disallows the path | pick other pages |
 | Everything else | | collect the output below and report |

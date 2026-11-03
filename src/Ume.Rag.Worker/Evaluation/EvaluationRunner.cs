@@ -69,7 +69,7 @@ public sealed partial class EvaluationRunner(
                 passes.Add((candidate, true));
             }
 
-            using var session = await evaluator.OpenAsync(target, cancellationToken);
+            using var session = evaluator.Open(target);
             var records = new List<EvaluationRunRecord>();
             var refs = new List<EvaluationRunRef>();
             foreach (var variant in payload.Variants)
@@ -116,7 +116,7 @@ public sealed partial class EvaluationRunner(
             var publishedAt = await store.RunStartedAtAsync(payload.RunId, cancellationToken) ?? time.GetUtcNow();
             var compared = await store.LastComparableAsync(setId, publishedAt, cancellationToken);
             var version = await store.VersionNumberAsync(payload.PipelineVersionId, cancellationToken);
-            using var session = await evaluator.OpenAsync(target, cancellationToken);
+            using var session = evaluator.Open(target);
             var (record, outcomes) = await RunAsync(session, EvaluationRunKinds.PublishReport, EvaluationVariant.Hybrid, target.Settings, cancellationToken,
                 compared, payload.PipelineVersionId, version);
             metrics.Runs(EvaluationRunKinds.PublishReport, 1);
@@ -139,7 +139,7 @@ public sealed partial class EvaluationRunner(
             var now = time.GetUtcNow();
             var compared = await store.LastComparableAsync(setId, now, cancellationToken);
             var history = await store.NightlyRecallsAsync(setId, now - EvaluationScoring.AlertWindow, now, cancellationToken);
-            using var session = await evaluator.OpenAsync(target, cancellationToken);
+            using var session = evaluator.Open(target);
             var (record, outcomes) = await RunAsync(session, EvaluationRunKinds.Nightly, EvaluationVariant.Hybrid, target.Settings, cancellationToken, compared);
             var alert = EvaluationScoring.RecallAlert(record.Run.RecallAtK, history);
             if (record.Run.RecallAtK is { } recall)
@@ -207,8 +207,8 @@ public sealed partial class EvaluationRunner(
 
     /// <summary>
     /// Maps the run's failures to the job's outcome: a failed query embedding as the gateway error says (a rate limit
-    /// requeues without an attempt; the residency check is final), a refused or timed-out statement and an unchecked or
-    /// failed canary as transient, settings that do not resolve as final.
+    /// requeues without an attempt; the residency check is final), a refused or timed-out statement and a failed canary
+    /// as transient, settings that do not resolve as final.
     /// </summary>
     private static async Task<JobResult> GuardedAsync(Func<Task<JobResult>> run)
     {

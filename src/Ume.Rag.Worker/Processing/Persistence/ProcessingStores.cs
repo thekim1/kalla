@@ -36,6 +36,11 @@ public sealed record EmbeddingProfileRecord(Guid Id, string Name, string Gateway
     /// <summary>The recorded canary vector (item 13 seeds it from the gateway); null = not recorded.</summary>
     public IReadOnlyList<float>? CanaryEmbedding { get; init; }
 
+    /// <summary>The last on-demand canary check (admin API); null = never checked.</summary>
+    public DateTimeOffset? CanaryCheckedAt { get; init; }
+
+    public double? CanarySimilarity { get; init; }
+
     public bool IsDefault { get; init; }
 
     public string State { get; init; } = "active";
@@ -51,7 +56,7 @@ public interface IEmbeddingProfileStore
 {
     Task<EmbeddingProfileRecord?> GetAsync(Guid profileId, CancellationToken cancellationToken);
 
-    /// <summary>Active profiles with a canary, for the canary check.</summary>
+    /// <summary>Active profiles, for the canary health.</summary>
     Task<IReadOnlyList<EmbeddingProfileRecord>> ActiveAsync(CancellationToken cancellationToken);
 }
 

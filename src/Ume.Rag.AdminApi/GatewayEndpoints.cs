@@ -59,8 +59,9 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOpti
 /// </summary>
 public sealed record GatewayLevelStatus(string Level, string Outcome, string? Residency, int? HttpStatus, string? Code, double? LatencyMs);
 
-/// <summary>A profile's canary state.</summary>
-public sealed record EmbeddingProfileCanaryStatus(Guid Id, string Name, string GatewayModel, int Dimensions, string MaxResidency, bool CanaryRecorded);
+/// <summary>A profile's canary: recorded, and the last on-demand check (null = never checked).</summary>
+public sealed record EmbeddingProfileCanaryStatus(Guid Id, string Name, string GatewayModel, int Dimensions, string MaxResidency, bool CanaryRecorded,
+    DateTimeOffset? CanaryCheckedAt, double? CanarySimilarity);
 
 /// <summary>The gateway as this admin instance sees it.</summary>
 public sealed record GatewayStatus(bool Configured, string? Model, IReadOnlyList<GatewayLevelStatus> Levels, GatewayModelSyncStatus Sync,
@@ -70,7 +71,7 @@ public sealed record GatewayStatus(bool Configured, string? Model, IReadOnlyList
 public sealed record GatewayModelDto(string Name, string Kind, IReadOnlyList<string> Residencies, string Source, bool SupportsTools, int? ContextWindow,
     decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd, DateTimeOffset? SyncedAt);
 
-/// <summary>The gateway area (admin design §4.5): the model mirror, its sync, and the key status per level.</summary>
+/// <summary>The gateway area (admin design §4.5): the model mirror, its sync, the key status per level and the embedding canary check.</summary>
 public static class GatewayEndpoints
 {
     /// <summary>The input of a status call: fixed, carries no content.</summary>
@@ -98,6 +99,14 @@ public static class GatewayEndpoints
         gateway.MapGet("/status", StatusAsync)
             .RequireAuthorization(AdminPolicies.Admin).WithName("GatewayStatus").WithSummary("Per level key: one embedding call at that ceiling; sync and canary state");
 
+        gateway.MapGet("/canary-check", (RagDbContext db, CancellationToken ct) => EmbeddingCanaryCheck.LastAsync(db, ct))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("LastEmbeddingCanaryCheck")
+            .WithSummary("The stored last canary check per active profile; no gateway call");
+
+        gateway.MapPost("/canary-check", (AdminContext admin, EmbeddingCanaryCheck check, CancellationToken ct) => check.RunAsync(admin, ct))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("CheckEmbeddingCanary")
+            .WithSummary("The embedding canary on demand: one embedding per active profile with a recorded canary; the result is stored on the profile");
+
         return api;
     }
 
@@ -116,7 +125,7 @@ public static class GatewayEndpoints
             SELECT "Id" AS "Value" FROM config."EmbeddingProfiles" WHERE "CanaryEmbedding" IS NOT NULL
             """).ToListAsync(ct)).ToHashSet();
         var canaries = profiles.Select(p => new EmbeddingProfileCanaryStatus(p.Id, p.Name, p.GatewayModel, p.Dimensions,
-            ResidencyCeiling.ToHeader(p.MaxResidency), recorded.Contains(p.Id))).ToList();
+            ResidencyCeiling.ToHeader(p.MaxResidency), recorded.Contains(p.Id), p.CanaryCheckedAt, p.CanarySimilarity)).ToList();
         var configured = !string.IsNullOrEmpty(options.Value.BaseUrl);
         var model = profiles.FirstOrDefault()?.GatewayModel;
         var dimensions = profiles.FirstOrDefault() is { RequestDimensions: true } first ? first.Dimensions : (int?)null;

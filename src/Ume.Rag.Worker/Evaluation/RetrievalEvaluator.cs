@@ -11,10 +11,10 @@ namespace Ume.Rag.Worker.Evaluation;
 /// <summary>
 /// Retrieval evaluation as the Knowledge API retrieves (processing design §13.5): <see cref="RetrievalEngine"/> on the
 /// worker's pool over the one collection with every level, <c>k = 10</c>, no filters, <c>AllowDegraded = false</c>, the
-/// variant's mode and decompounding (§13.4). <see cref="OpenAsync"/> gives a session per job: one chunk count for the
+/// variant's mode and decompounding (§13.4). <see cref="Open"/> gives a session per job: one chunk count for the
 /// exact/HNSW rule and one query embedding per question, shared by every variant of the job.
 /// </summary>
-public sealed class RetrievalEvaluator(NpgsqlDataSource dataSource, EvaluationQueryEmbedder embedder, EmbeddingCanary canary, TimeProvider time)
+public sealed class RetrievalEvaluator(NpgsqlDataSource dataSource, EvaluationQueryEmbedder embedder, TimeProvider time)
 {
     /// <summary>
     /// The statements' client-side limit: the API's 2 s (knowledge design §6.6) is too tight beside ingestion on the worker's
@@ -23,19 +23,14 @@ public sealed class RetrievalEvaluator(NpgsqlDataSource dataSource, EvaluationQu
     public static readonly TimeSpan StatementTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// A session for <paramref name="target"/>. The profile's canary must not have failed on this instance (a vector space
-    /// that is not the chunks' gives meaningless numbers, processing design §11); unchecked, it is checked now.
+    /// A session for <paramref name="target"/>. The profile's last canary check must not have failed (a vector space that
+    /// is not the chunks' gives meaningless numbers, processing design §11).
     /// </summary>
-    /// <exception cref="StageTransientException">The canary failed or could not be checked.</exception>
-    public async Task<EvaluationSession> OpenAsync(EvaluationTarget target, CancellationToken cancellationToken)
+    /// <exception cref="StageTransientException">The last canary check failed.</exception>
+    public EvaluationSession Open(EvaluationTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
-        var state = canary.For(target.Profile.Id)?.State ?? (await canary.CheckAsync(target.Profile, cancellationToken)).State;
-        if (state == EmbeddingCanary.CanaryState.Failed)
-        {
-            throw new StageTransientException("embed.canary_mismatch", TimeSpan.FromMinutes(5), countsAttempt: false);
-        }
-
+        EmbeddingCanary.EnsureNotFailed(target.Profile);
         return new EvaluationSession(target, dataSource, embedder.For(target.Profile, target.Classification), time);
     }
 }

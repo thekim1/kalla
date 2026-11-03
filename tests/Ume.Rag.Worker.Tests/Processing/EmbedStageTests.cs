@@ -23,7 +23,7 @@ namespace Ume.Rag.Worker.Tests.Processing;
 /// <summary>
 /// <c>embed</c> against the FakeGateway in process (processing design §11; P1 README §1): the profile's model, dimensions
 /// (1024 until U-b) and ceiling (<c>Eu</c>, the worker's <c>Eu</c> key), the cache, the batch limits, the fixed
-/// concurrency, the canary; and the negative proofs: a canary mismatch refuses embeddings, a call without a ceiling is
+/// concurrency, the stored canary result; and the negative proofs: a failed canary check refuses embeddings, a call without a ceiling is
 /// refused before sending, an answer above the ceiling or with the wrong dimensions is fatal.
 /// </summary>
 public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>
@@ -48,7 +48,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         })],
     };
 
-    private sealed record Rig(IHost Host, EmbedStage Stage, EmbeddingCanary Canary, InMemoryEmbeddingCache Cache, Recording Recorder, InMemoryProfiles Profiles) : IDisposable
+    private sealed record Rig(IHost Host, EmbedStage Stage, InMemoryEmbeddingCache Cache, Recording Recorder, InMemoryProfiles Profiles) : IDisposable
     {
         public void Dispose() => Host.Dispose();
     }
@@ -81,14 +81,13 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
             .ConfigurePrimaryHttpMessageHandler(() => primary ?? gateway.Server.CreateHandler())
             .AddHttpMessageHandler(() => new RecordingHandler(recorder));
         var host = builder.Build();
-        return new Rig(host, host.Services.GetRequiredService<EmbedStage>(), host.Services.GetRequiredService<EmbeddingCanary>(), cache, recorder, store);
+        return new Rig(host, host.Services.GetRequiredService<EmbedStage>(), cache, recorder, store);
     }
 
     [Fact]
     public async Task Chunks_are_embedded_with_the_profiles_model_dimensions_and_ceiling_and_cached()
     {
         using var rig = Build();
-        await rig.Canary.CheckAllAsync(Ct);
 
         var result = await rig.Stage.RunAsync(Chunks(3), Level, Pilot.Id, new EmbeddingCall(Guid.CreateVersion7()), Ct);
 
@@ -116,14 +115,12 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         using var rig = Build();
         rig.Host.Services.GetRequiredService<DocumentProcessor>().ShouldNotBeNull();
         rig.Host.Services.GetRequiredService<Worker.Processing.Pii.PiiLifecycle>().ShouldNotBeNull();
-        rig.Host.Services.GetServices<IHostedService>().ShouldContain(s => s is EmbeddingCanaryService);
     }
 
     [Fact]
     public async Task The_cache_is_per_level_and_profile()
     {
         using var rig = Build();
-        await rig.Canary.CheckAllAsync(Ct);
         await rig.Stage.RunAsync(Chunks(2), Classification.Public, Pilot.Id, new EmbeddingCall(null), Ct);
 
         (await rig.Stage.RunAsync(Chunks(2), Classification.Internal, Pilot.Id, new EmbeddingCall(null), Ct)).CacheHits.ShouldBe(0);
@@ -149,7 +146,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     public async Task With_the_default_cap_no_request_carries_more_than_6000_tokens_or_a_body_estimate_above_the_context_window()
     {
         using var rig = Build();
-        await rig.Canary.CheckAllAsync(Ct);
         var marker = Guid.NewGuid().ToString("N");
         var passages = File.ReadLines(Path.Combine(Fixtures.Processing, "tokenizer", "passages.jsonl"))
             .Select(line => JsonDocument.Parse(line).RootElement.GetProperty("text").GetString()!)
@@ -175,7 +171,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     public async Task Sixty_four_short_chunks_are_one_request()
     {
         using var rig = Build();
-        await rig.Canary.CheckAllAsync(Ct);
         var marker = Guid.NewGuid().ToString("N");
         var draft = new ChunkSetDraft { Chunks = [.. Enumerable.Range(0, 64).Select(i => Swedish(i, $"Sophämtning vecka {i} {marker}."))] };
         var before = rig.Recorder.Requests.Count;
@@ -191,7 +186,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     {
         var small = Pilot with { Id = Guid.Parse("01929b6e-0000-7000-8000-00000000b6e4"), Name = "small", MaxInputTokens = 600, IsDefault = false };
         using var rig = Build(maxTokensPerRequest: "1000", profiles: [Pilot, small]);
-        await rig.Canary.CheckAllAsync(Ct);
         var draft = Chunks(12, tokens: 300);
         var before = rig.Recorder.Requests.Count;
 
@@ -219,7 +213,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     public async Task Duplicate_texts_are_embedded_once()
     {
         using var rig = Build();
-        await rig.Canary.CheckAllAsync(Ct);
         var one = Chunks(1).Chunks[0];
         var draft = new ChunkSetDraft { Chunks = [one, one with { Ordinal = 1 }, one with { Ordinal = 2 }] };
         var before = rig.Recorder.Requests.Count;
@@ -236,7 +229,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     {
         var slow = new SlowHandler(gateway.Server.CreateHandler());
         using var rig = Build(concurrency: 2, primary: slow);
-        await rig.Canary.CheckAllAsync(Ct);
 
         await Task.WhenAll(Enumerable.Range(0, 6).Select(i =>
             rig.Stage.RunAsync(new ChunkSetDraft { Chunks = [Chunks(1).Chunks[0] with { TextHash = $"h{i}", Text = $"dokument {i}" }] },
@@ -247,57 +239,69 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     }
 
     [Fact]
-    public async Task Negative_proof_a_canary_mismatch_refuses_embeddings_and_makes_health_unhealthy()
+    public async Task Negative_proof_a_failed_canary_check_refuses_embeddings_and_makes_health_unhealthy()
     {
-        var changed = Pilot with { CanaryEmbedding = fakegateway::Ume.Rag.FakeGateway.FakeContent.Vector("En helt annan text om något annat.", 1024) };
-        using var rig = Build(profiles: changed);
-        await rig.Canary.CheckAllAsync(Ct);
+        using var rig = Build(profiles: Pilot with { CanaryCheckedAt = ProcessingHarness.Now, CanarySimilarity = 0.42 });
 
-        rig.Canary.For(Pilot.Id)!.State.ShouldBe(EmbeddingCanary.CanaryState.Failed);
-        rig.Canary.For(Pilot.Id)!.Similarity!.Value.ShouldBeLessThan(EmbedLimits.CanaryMinCosine);
-        var requests = rig.Recorder.Requests.Count;
         var error = await Should.ThrowAsync<StageTransientException>(() => rig.Stage.RunAsync(Chunks(2), Level, Pilot.Id, new EmbeddingCall(null), Ct));
         error.Code.ShouldBe("embed.canary_mismatch");
         error.CountsAttempt.ShouldBeFalse();
-        rig.Recorder.Requests.Count.ShouldBe(requests);
-        (await rig.Canary.CheckHealthAsync(new HealthCheckContext(), Ct)).Status.ShouldBe(HealthStatus.Unhealthy);
+        rig.Recorder.Requests.ShouldBeEmpty();
+        (await CanaryHealthAsync(rig)).ShouldBe(HealthStatus.Unhealthy);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0.999)]
+    [InlineData(1.0)]
+    public async Task A_profile_never_checked_or_whose_last_check_passed_is_allowed_and_healthy(double? similarity)
+    {
+        using var rig = Build(profiles: Pilot with { CanaryCheckedAt = similarity is null ? null : ProcessingHarness.Now, CanarySimilarity = similarity });
+
+        (await rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct)).Vectors.Count.ShouldBe(1);
+        (await CanaryHealthAsync(rig)).ShouldBe(HealthStatus.Healthy);
     }
 
     [Fact]
-    public async Task A_profile_whose_canary_has_not_been_checked_is_refused()
+    public async Task A_profile_without_a_recorded_canary_is_allowed()
+    {
+        using var rig = Build(profiles: Pilot with { CanaryText = null, CanaryEmbedding = null });
+
+        (await rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct)).Vectors.Count.ShouldBe(1);
+        rig.Recorder.Requests.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_new_check_result_on_the_profile_row_applies_at_the_next_embed_without_a_restart()
     {
         using var rig = Build();
-        (await Should.ThrowAsync<StageTransientException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct))).Code.ShouldBe("embed.canary_unchecked");
+        await rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct);
+
+        rig.Profiles.Profiles[0] = Pilot with { CanaryCheckedAt = ProcessingHarness.Now, CanarySimilarity = 0.9 };
+        (await Should.ThrowAsync<StageTransientException>(() => rig.Stage.RunAsync(Chunks(2), Level, Pilot.Id, new EmbeddingCall(null), Ct)))
+            .Code.ShouldBe("embed.canary_mismatch");
+        (await CanaryHealthAsync(rig)).ShouldBe(HealthStatus.Unhealthy);
+
+        rig.Profiles.Profiles[0] = Pilot with { CanaryCheckedAt = ProcessingHarness.Now.AddMinutes(5), CanarySimilarity = 0.99995 };
+        (await rig.Stage.RunAsync(Chunks(2), Level, Pilot.Id, new EmbeddingCall(null), Ct)).Vectors.Count.ShouldBe(2);
+        (await CanaryHealthAsync(rig)).ShouldBe(HealthStatus.Healthy);
     }
 
     [Fact]
-    public async Task A_matching_canary_passes_and_a_profile_without_one_is_degraded()
-    {
-        using var rig = Build(profiles: [Pilot, Pilot with { Id = Guid.CreateVersion7(), Name = "no-canary", CanaryEmbedding = null, IsDefault = false }]);
-        await rig.Canary.CheckAllAsync(Ct);
-
-        rig.Canary.For(Pilot.Id)!.State.ShouldBe(EmbeddingCanary.CanaryState.Passed);
-        rig.Canary.For(Pilot.Id)!.Similarity!.Value.ShouldBeGreaterThan(0.9999);
-        (await rig.Canary.CheckHealthAsync(new HealthCheckContext(), Ct)).Status.ShouldBe(HealthStatus.Degraded);
-    }
-
-    [Fact]
-    public async Task The_canary_service_checks_at_start_and_every_hour()
+    public async Task The_worker_makes_no_canary_calls_at_startup_or_over_time()
     {
         using var rig = Build();
         var clock = (FakeTimeProvider)rig.Host.Services.GetRequiredService<TimeProvider>();
         await rig.Host.StartAsync(Ct);
-        await WaitAsync(() => rig.Recorder.Requests.Count >= 1);
-        rig.Recorder.Requests.Count.ShouldBe(1); // at start, then nothing until the hour has passed
-        for (var i = 0; i < 100 && rig.Recorder.Requests.Count < 2; i++)
+        for (var i = 0; i < 5; i++)
         {
-            // The service may not have reached its delay yet when the clock first moves: advance until it fires.
-            clock.Advance(EmbeddingCanaryService.Interval);
+            clock.Advance(TimeSpan.FromHours(1));
             await Task.Delay(20, Ct);
         }
 
+        (await CanaryHealthAsync(rig)).ShouldBe(HealthStatus.Healthy);
         await rig.Host.StopAsync(Ct);
-        rig.Recorder.Requests.Count.ShouldBeGreaterThanOrEqualTo(2);
+        rig.Recorder.Requests.ShouldBeEmpty();
     }
 
     [Fact]
@@ -316,7 +320,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     {
         var wrong = Pilot with { GatewayModel = "fake-wrong-residency-embed", CanaryEmbedding = null };
         using var rig = Build(profiles: wrong);
-        await rig.Canary.CheckAllAsync(Ct);
 
         var error = await Should.ThrowAsync<StageFatalException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct));
         error.Reason.ShouldBe("gateway.residency_above_ceiling");
@@ -328,14 +331,13 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     {
         var other = Pilot with { Dimensions = 768, CanaryEmbedding = null };
         using var rig = Build(profiles: other);
-        await rig.Canary.CheckAllAsync(Ct);
 
         (await Should.ThrowAsync<StageFatalException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct))).Reason.ShouldBe("embed.bad_vector");
         rig.Cache.Rows.ShouldBeEmpty();
     }
 
     /// <summary>
-    /// U-b (#142): a profile with <c>RequestDimensions</c> sends <c>"dimensions"</c> from the embed stage, the canary and the
+    /// U-b (#142): a profile with <c>RequestDimensions</c> sends <c>"dimensions"</c> from the embed stage and the
     /// evaluator's query embedder, all through <see cref="EmbeddingClient"/>; the FakeGateway honours it (else 1024).
     /// </summary>
     [Fact]
@@ -350,8 +352,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         };
         using var rig = Build(profiles: shortened);
 
-        (await rig.Canary.CheckAsync(shortened, Ct)).State.ShouldBe(EmbeddingCanary.CanaryState.Passed);
-        Dimensions(rig.Recorder.Requests[^1].Body).ShouldBe(256);
         var draft = new ChunkSetDraft { Chunks = [Swedish(0, $"Bygglov för altan {marker}."), Swedish(1, $"Bygglov för garage {marker}.")] };
         var result = await rig.Stage.RunAsync(draft, Level, shortened.Id, new EmbeddingCall(null), Ct);
         result.Vectors.Count.ShouldBe(2);
@@ -361,7 +361,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
             .For(shortened, Level);
         (await query($"när töms soptunnan {marker}", Ct)).Length.ShouldBe(256);
         Dimensions(rig.Recorder.Requests[^1].Body).ShouldBe(256);
-        rig.Recorder.Requests.Count.ShouldBe(3);
+        rig.Recorder.Requests.Count.ShouldBe(2);
     }
 
     /// <summary>U-b (#142), the other side: without <c>RequestDimensions</c> no call carries a <c>dimensions</c> member (BGE-M3, gateway-changes §6).</summary>
@@ -371,13 +371,12 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         var marker = Guid.NewGuid().ToString("N");
         using var rig = Build();
 
-        (await rig.Canary.CheckAsync(Pilot, Ct)).State.ShouldBe(EmbeddingCanary.CanaryState.Passed);
         await rig.Stage.RunAsync(new ChunkSetDraft { Chunks = [Swedish(0, $"Bygglov för altan {marker}.")] }, Level, Pilot.Id, new EmbeddingCall(null), Ct);
         var query = new Worker.Evaluation.EvaluationQueryEmbedder(rig.Host.Services.GetRequiredService<EmbeddingClient>(), rig.Cache, TimeProvider.System)
             .For(Pilot, Level);
         (await query($"när töms soptunnan {marker}", Ct)).Length.ShouldBe(1024);
 
-        rig.Recorder.Requests.Count.ShouldBe(3);
+        rig.Recorder.Requests.Count.ShouldBe(2);
         rig.Recorder.Requests.ShouldAllBe(r => Dimensions(r.Body) == null);
         rig.Recorder.Requests.ShouldAllBe(r => !r.Body.Contains("dimensions", StringComparison.Ordinal));
     }
@@ -389,7 +388,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     public async Task Gateway_failures_are_transient_as_engine_design_7_3(HttpStatusCode status, bool countsAttempt, string code)
     {
         using var rig = Build(primary: new StatusHandler(status), profiles: Pilot with { CanaryEmbedding = null });
-        await rig.Canary.CheckAllAsync(Ct);
 
         var error = await Should.ThrowAsync<StageTransientException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct));
         error.Code.ShouldBe(code);
@@ -402,7 +400,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
     public async Task Gateway_refusals_are_fatal(HttpStatusCode status, string reason)
     {
         using var rig = Build(primary: new StatusHandler(status), profiles: Pilot with { CanaryEmbedding = null });
-        await rig.Canary.CheckAllAsync(Ct);
 
         var error = await Should.ThrowAsync<StageFatalException>(() => rig.Stage.RunAsync(Chunks(1), Level, Pilot.Id, new EmbeddingCall(null), Ct));
         error.Reason.ShouldBe(reason);
@@ -434,15 +431,8 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         return json.RootElement.TryGetProperty("dimensions", out var dimensions) ? dimensions.GetInt32() : null;
     }
 
-    private static async Task WaitAsync(Func<bool> condition)
-    {
-        for (var i = 0; i < 500 && !condition(); i++)
-        {
-            await Task.Delay(10, Ct);
-        }
-
-        condition().ShouldBeTrue();
-    }
+    private static async Task<HealthStatus> CanaryHealthAsync(Rig rig) =>
+        (await rig.Host.Services.GetRequiredService<HealthCheckService>().CheckHealthAsync(c => c.Name == "embedding-canary", Ct)).Status;
 
     /// <summary>What left the worker's client, after the ceiling handler.</summary>
     private sealed class Recording

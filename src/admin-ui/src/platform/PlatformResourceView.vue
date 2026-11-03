@@ -14,6 +14,7 @@ import { useUiStore } from '@/stores/ui'
 import { formatDateTime } from '@/utils/format'
 import { COMMON, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
+import EmbeddingCanaryPanel from './EmbeddingCanaryPanel.vue'
 import GenericForm from './GenericForm.vue'
 import { resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec, type OpenApiDocument } from './schema'
@@ -144,6 +145,7 @@ watch(() => props.resource, () => {
     <PageHeader :title="resource.label" :description="resource.description">
       <UiButton v-if="resource.create" variant="primary" icon="add" data-test="create" @click="create">{{ PLATFORM.form.create }}</UiButton>
     </PageHeader>
+    <EmbeddingCanaryPanel v-if="resource.panel === 'embedding-canary'" class="mb-6" />
     <AsyncState :loading="rows.loading.value" :error="rows.error.value" :empty="rows.data.value.length === 0" @retry="load">
       <DataTable
         :columns="columns" :rows="rows.data.value" :row-key="(row) => String(row[resource!.key])" :caption="resource.label"
