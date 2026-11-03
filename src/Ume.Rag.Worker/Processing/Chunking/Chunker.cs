@@ -71,14 +71,19 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
             drafts.AddRange(packer.Finish());
         }
 
-        var chunks = drafts.Select((d, i) => Build(i, d, metadata)).ToList();
-        var facts = new SortedDictionary<string, double>(QualityFacts.ForChunks(chunks, t => tokens.Count(t)).ToDictionary(), StringComparer.Ordinal);
+        var compounds = new CompoundParts(decompounder);
+        var chunks = drafts.Select((d, i) => Build(i, d, metadata, compounds)).ToList();
+        var facts = new SortedDictionary<string, double>(QualityFacts.ForChunks(chunks, BodyTokens).ToDictionary(), StringComparer.Ordinal);
         if (largeTable)
         {
             facts["quality.largeTable"] = 1;
         }
 
         return new ChunkSetDraft { Chunks = chunks, Facts = facts };
+
+        int BodyTokens(int i) => drafts[i].BodyTokens is { } count && string.Equals(drafts[i].Body, chunks[i].Text, StringComparison.Ordinal)
+            ? count
+            : tokens.Count(chunks[i].Text);
     }
 
     /// <summary>Breadcrumb ++ heading path joined with <c> › </c>, ≤ 60 tokens: the first element, <c>…</c>, the last two heading levels.</summary>
@@ -96,15 +101,17 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
         }
 
         var prefix = string.Join(ChunkText.PathSeparator, elements);
-        if (tokens.Count(prefix) <= ChunkOptions.PrefixTokens || elements.Count <= 3)
+        var prefixTokens = tokens.Count(prefix);
+        if (prefixTokens <= ChunkOptions.PrefixTokens || elements.Count <= 3)
         {
-            return Fit(prefix);
+            return Fit(prefix, prefixTokens);
         }
 
         var tail = headingPath.Count >= 2 ? headingPath.Skip(headingPath.Count - 2).ToList() : elements.Skip(elements.Count - 2).ToList();
-        return Fit(string.Join(ChunkText.PathSeparator, new[] { elements[0], "…" }.Concat(tail)));
+        var shortened = string.Join(ChunkText.PathSeparator, new[] { elements[0], "…" }.Concat(tail));
+        return Fit(shortened, tokens.Count(shortened));
 
-        string Fit(string value) => tokens.Count(value) <= ChunkOptions.PrefixTokens
+        string Fit(string value, int count) => count <= ChunkOptions.PrefixTokens
             ? value
             : value[..TokenCuts.PrefixLength(tokens, value, ChunkOptions.PrefixTokens - 1)].TrimEnd() + "…";
     }
@@ -113,11 +120,11 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
 
     private int Count(string prefix, string body) => tokens.Count(ChunkText.Embedded(prefix, body));
 
-    private ChunkDraft Build(int ordinal, Pending draft, DocumentMetadata metadata)
+    private ChunkDraft Build(int ordinal, Pending draft, DocumentMetadata metadata, CompoundParts compounds)
     {
         var text = draft.Body.Normalize(NormalizationForm.FormC);
         var embedded = ChunkText.Embedded(draft.Prefix, text);
-        var parts = decompounder.PartsOf(draft.Prefix + "\n" + text);
+        var parts = compounds.Of(draft.Prefix, text);
         return new ChunkDraft
         {
             Ordinal = ordinal,
@@ -127,7 +134,7 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
             SearchText = parts.Count == 0 ? text : text + "\n" + string.Join(' ', parts),
             OverlapChars = draft.OverlapChars,
             TextHash = ProcessingJson.Sha256Hex(embedded),
-            TokenCount = tokens.Count(embedded),
+            TokenCount = draft.Tokens ?? tokens.Count(embedded),
             Page = draft.Page,
             PageEnd = draft.PageEnd,
             Tags = metadata.Tags,
@@ -144,15 +151,16 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
     {
         var result = new List<Section>();
         var nonEmpty = sections.Where(s => s.Blocks.Count > 0).ToList();
+        var shortness = new bool?[nonEmpty.Count];
         var i = 0;
         while (i < nonEmpty.Count)
         {
             var section = nonEmpty[i];
             var j = i;
-            if (section.Level >= 2 && IsShort(section))
+            if (section.Level >= 2 && IsShort(i))
             {
                 var parent = section.HeadingPath.Take(section.HeadingPath.Count - 1).ToList();
-                while (j + 1 < nonEmpty.Count && nonEmpty[j + 1].Level == section.Level && IsShort(nonEmpty[j + 1])
+                while (j + 1 < nonEmpty.Count && nonEmpty[j + 1].Level == section.Level && IsShort(j + 1)
                     && nonEmpty[j + 1].HeadingPath.Take(nonEmpty[j + 1].HeadingPath.Count - 1).SequenceEqual(parent, StringComparer.Ordinal))
                 {
                     j++;
@@ -176,11 +184,10 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
         }
 
         return result;
-    }
 
-    private bool IsShort(Section section) =>
-        section.Blocks.All(b => b.Kind != BlockKinds.Table)
-        && tokens.Count(string.Join("\n\n", section.Blocks.Select(b => b.Text))) < ChunkOptions.ShortSectionTokens;
+        bool IsShort(int index) => shortness[index] ??= nonEmpty[index].Blocks.All(b => b.Kind != BlockKinds.Table)
+            && tokens.Count(string.Join("\n\n", nonEmpty[index].Blocks.Select(b => b.Text))) < ChunkOptions.ShortSectionTokens;
+    }
 
     /// <summary>Tables as row groups (processing design §6.3): header names repeated in every row, no overlap, ≤ 20 rows per chunk.</summary>
     private IEnumerable<Pending> TableChunks(DocTable table, Section section, IReadOnlyList<string> breadcrumb, ChunkOptions options, DocBlock block)
@@ -320,15 +327,20 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
         public string? LeadIn { get; init; }
     }
 
-    /// <summary>A chunk before its hashes: prefix, path, body, the overlap length and its content kind.</summary>
+    /// <summary>
+    /// A chunk before its hashes: prefix, path, body, the overlap length and its content kind. <see cref="Tokens"/> is the
+    /// count of <c>ChunkText.Embedded(Prefix, Body)</c> and <see cref="BodyTokens"/> the count of <c>Body</c>, when the packer
+    /// already has them.
+    /// </summary>
     private sealed record Pending(string Prefix, IReadOnlyList<string> HeadingPath, string Body, int OverlapChars, int? Page, int? PageEnd,
-        string ContentKind = ChunkContentKinds.Text, bool LargeTable = false);
+        string ContentKind = ChunkContentKinds.Text, bool LargeTable = false, int? Tokens = null, int? BodyTokens = null);
 
     /// <summary>Greedy packing of one section's prose units (rules 2–4).</summary>
     private sealed class Packer(Chunker owner, ChunkOptions options, string prefix, Section section)
     {
         private readonly List<List<Unit>> _closed = [];
         private readonly List<string?> _overlaps = [];
+        private readonly List<int?> _closedTokens = [];
         private readonly List<Pending> _done = [];
         private List<Unit> _current = [];
         private string? _overlap;
@@ -413,7 +425,13 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
             return body.ToString();
         }
 
-        private bool Fits(IReadOnlyList<Unit> units, string? overlap, double factor = 1) => owner.Count(prefix, Body(units, overlap)) <= Budget * factor;
+        private bool Fits(IReadOnlyList<Unit> units, string? overlap, double factor = 1) => Fits(units, overlap, factor, out _);
+
+        private bool Fits(IReadOnlyList<Unit> units, string? overlap, double factor, out int tokens)
+        {
+            tokens = owner.Count(prefix, Body(units, overlap));
+            return tokens <= Budget * factor;
+        }
 
         /// <summary>
         /// Adds <paramref name="unit"/> to the current chunk when the chunk still fits the budget with it. The chunk's count
@@ -539,6 +557,7 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
 
             _closed.Add(_current);
             _overlaps.Add(_overlap);
+            _closedTokens.Add(_estimatedJoins == 0 ? _tokens : null);
             _current = [];
             _overlap = null;
             _tokens = null;
@@ -554,11 +573,13 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
                 if (owner.Tokens.Count(lastBody) < 0.25 * Budget)
                 {
                     var merged = _closed[^2].Concat(lastUnits).ToList();
-                    if (Fits(merged, _overlaps[^2], 1.15))
+                    if (Fits(merged, _overlaps[^2], 1.15, out var mergedTokens))
                     {
                         _closed.RemoveAt(_closed.Count - 1);
                         _overlaps.RemoveAt(_overlaps.Count - 1);
+                        _closedTokens.RemoveAt(_closedTokens.Count - 1);
                         _closed[^1] = merged;
+                        _closedTokens[^1] = mergedTokens;
                     }
                     else
                     {
@@ -573,19 +594,31 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
                 var overlap = _overlaps[i];
                 var body = Body(units, overlap);
                 var pages = units.Where(u => u.Page is not null).ToList();
+                var (kind, bodyTokens) = KindOf(units, body);
                 _done.Add(new Pending(prefix, section.HeadingPath, body, overlap?.Length ?? 0,
-                    pages.Count == 0 ? null : pages.Min(u => u.Page), pages.Count == 0 ? null : pages.Max(u => u.PageEnd), KindOf(units, body)));
+                    pages.Count == 0 ? null : pages.Min(u => u.Page), pages.Count == 0 ? null : pages.Max(u => u.PageEnd), kind,
+                    Tokens: _closedTokens[i], BodyTokens: bodyTokens));
             }
 
             _closed.Clear();
             _overlaps.Clear();
+            _closedTokens.Clear();
         }
 
-        /// <summary><c>list</c> when the list items hold at least half of the body's tokens (#129), else <c>text</c>.</summary>
-        private string KindOf(IReadOnlyList<Unit> units, string body)
+        /// <summary>
+        /// <c>list</c> when the list items hold at least half of the body's tokens (#129), else <c>text</c>; with the body's
+        /// count when it was needed.
+        /// </summary>
+        private (string Kind, int? BodyTokens) KindOf(IReadOnlyList<Unit> units, string body)
         {
             var listTokens = units.Where(u => u.Kind == UnitKind.ListItem).Sum(u => owner.Tokens.Count(u.Text));
-            return listTokens > 0 && 2 * listTokens >= owner.Tokens.Count(body) ? ChunkContentKinds.List : ChunkContentKinds.Text;
+            if (listTokens == 0)
+            {
+                return (ChunkContentKinds.Text, null);
+            }
+
+            var bodyTokens = owner.Tokens.Count(body);
+            return (2 * listTokens >= bodyTokens ? ChunkContentKinds.List : ChunkContentKinds.Text, bodyTokens);
         }
 
         /// <summary>Re-splits the last two chunks evenly at a unit boundary, both within the budget.</summary>
@@ -620,6 +653,8 @@ public sealed class Chunker(ITokenCounter tokens, SwedishDecompounder decompound
             var overlap = OverlapFor(head, tail[0]);
             _closed[^2] = head;
             _closed[^1] = tail;
+            _closedTokens[^2] = null;
+            _closedTokens[^1] = null;
             _overlaps[^1] = overlap is not null && Fits(tail, overlap) ? overlap : null;
         }
     }
