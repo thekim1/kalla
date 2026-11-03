@@ -311,6 +311,45 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     }
 
     [Fact]
+    public async Task The_last_canary_check_is_read_from_the_database_without_a_gateway_request()
+    {
+        await using var gateway = database.Gateway();
+        await using (var recording = database.AdminApi(gateway, Residency.Eu))
+        {
+            await SyncedAsync(recording);
+        }
+
+        var counter = new CountingHandler { InnerHandler = gateway.Server.CreateHandler() };
+        await using var admin = database.AdminApi(gateway, Residency.Eu).WithWebHostBuilder(web => web.ConfigureTestServices(services =>
+            services.AddHttpClient(GatewayApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => counter)));
+        using var platform = await AdminDatabaseFixture.UserAsync(admin, RagRoles.PlatformAdmin);
+        var checkedAt = new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
+        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+        await db.Database.ExecuteSqlAsync($"""
+            UPDATE config."EmbeddingProfiles" SET "CanaryCheckedAt" = {checkedAt}, "CanarySimilarity" = {0.5f} WHERE "Id" = {database.ProfileId}
+            """, Ct);
+        var before = counter.Count;
+
+        var last = await platform.GetFromJsonAsync<EmbeddingCanaryLastResult[]>("/api/gateway/canary-check", Ct);
+
+        counter.Count.ShouldBe(before);
+        var pilot = last!.Single(r => r.ProfileId == database.ProfileId);
+        pilot.Recorded.ShouldBeTrue();
+        pilot.Similarity!.Value.ShouldBe(0.5, 1e-6);
+        pilot.Passed.ShouldBe(false);
+        pilot.CheckedAt.ShouldBe(checkedAt);
+
+        await db.Database.ExecuteSqlAsync($"""
+            UPDATE config."EmbeddingProfiles" SET "CanaryCheckedAt" = NULL, "CanarySimilarity" = NULL WHERE "Id" = {database.ProfileId}
+            """, Ct);
+        var never = (await platform.GetFromJsonAsync<EmbeddingCanaryLastResult[]>("/api/gateway/canary-check", Ct))!.Single(r => r.ProfileId == database.ProfileId);
+        never.Passed.ShouldBeNull();
+        never.Similarity.ShouldBeNull();
+        never.CheckedAt.ShouldBeNull();
+        counter.Count.ShouldBe(before);
+    }
+
+    [Fact]
     public async Task A_canary_check_the_gateway_cannot_answer_reports_the_error_and_stores_nothing()
     {
         await using var gateway = database.Gateway();
@@ -386,6 +425,20 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         levels["Eu"].GetProperty("outcome").GetString().ShouldBe("ok");
         levels["OnPrem"].GetProperty("outcome").GetString().ShouldBe("error");
         levels["OnPrem"].GetProperty("code").GetString().ShouldBe(nameof(JsonException));
+    }
+
+    /// <summary>Counts the requests that reach the gateway.</summary>
+    private sealed class CountingHandler : DelegatingHandler
+    {
+        private int _count;
+
+        public int Count => Volatile.Read(ref _count);
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _count);
+            return base.SendAsync(request, cancellationToken);
+        }
     }
 
     /// <summary>Answers embeddings at ceiling OnPrem with a body that is not JSON; everything else goes to the FakeGateway.</summary>

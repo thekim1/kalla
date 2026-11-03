@@ -7,14 +7,11 @@ import { resetOpenApiCache } from './schema'
 
 const C = PLATFORM.canary
 
-const status = {
-  configured: true,
-  profiles: [
-    { id: 'p1', name: 'pilot-embedding', canaryRecorded: true, canaryCheckedAt: null, canarySimilarity: null },
-    { id: 'p2', name: 'drifted', canaryRecorded: true, canaryCheckedAt: '2026-11-02T08:00:00Z', canarySimilarity: 0.5 },
-    { id: 'p3', name: 'new-profile', canaryRecorded: false, canaryCheckedAt: null, canarySimilarity: null },
-  ],
-}
+const last = [
+  { profileId: 'p1', profile: 'pilot-embedding', recorded: true, similarity: null, passed: null, checkedAt: null },
+  { profileId: 'p2', profile: 'drifted', recorded: true, similarity: 0.5, passed: false, checkedAt: '2026-11-02T08:00:00Z' },
+  { profileId: 'p3', profile: 'new-profile', recorded: false, similarity: null, passed: null, checkedAt: null },
+]
 
 const results = [
   { profileId: 'p1', profile: 'pilot-embedding', similarity: 0.99999, passed: true, checkedAt: '2026-11-03T12:00:00Z', error: null, detail: null },
@@ -36,19 +33,20 @@ function rowOf(wrapper: ReturnType<typeof mount>, name: string) {
 }
 
 describe('Gateway models: embedding canary on demand (admin design §4.5, §5.8)', () => {
-  it('shows the last check per profile and runs the check only when the button is pressed', async () => {
+  it('shows the stored last check per profile without probing the gateway and runs the check only when the button is pressed', async () => {
     setActivePinia(createPinia())
     document.cookie = 'RAG-XSRF-TOKEN=t; path=/'
     const fetch = vi.fn((url: string, init?: RequestInit) => {
       if (url === '/api/gateway/canary-check' && init?.method === 'POST') return Promise.resolve(json(results))
-      if (url === '/api/gateway/status') return Promise.resolve(json(status))
+      if (url === '/api/gateway/canary-check') return Promise.resolve(json(last))
       return Promise.resolve(json([]))
     })
     vi.stubGlobal('fetch', fetch)
     const wrapper = mount(PlatformResourceView, { props: { resource: 'gateway-models' }, attachTo: document.body })
     await flushPromises()
 
-    expect(fetch.mock.calls.some(([url]) => url === '/api/gateway/canary-check')).toBe(false)
+    const posted = () => fetch.mock.calls.filter(([url, init]) => url === '/api/gateway/canary-check' && init?.method === 'POST')
+    expect(posted()).toHaveLength(0)
     expect(rowOf(wrapper, 'pilot-embedding').text()).toContain(C.neverChecked)
     expect(rowOf(wrapper, 'drifted').text()).toContain(C.failed)
     expect(rowOf(wrapper, 'drifted').text()).toContain('0,50000')
@@ -57,8 +55,7 @@ describe('Gateway models: embedding canary on demand (admin design §4.5, §5.8)
     await wrapper.get('[data-test="canary-check"]').trigger('click')
     await flushPromises()
 
-    const posts = fetch.mock.calls.filter(([url, init]) => url === '/api/gateway/canary-check' && init?.method === 'POST')
-    expect(posts).toHaveLength(1)
+    expect(posted()).toHaveLength(1)
     const pilot = rowOf(wrapper, 'pilot-embedding').text()
     expect(pilot).toContain(C.passed)
     expect(pilot).toContain('0,99999')
@@ -67,6 +64,7 @@ describe('Gateway models: embedding canary on demand (admin design §4.5, §5.8)
     expect(drifted).toContain(C.errors.gateway_unavailable)
     expect(drifted).toContain(C.notStored)
     expect(rowOf(wrapper, 'new-profile').text()).toContain(C.notRecorded)
+    expect(fetch.mock.calls.some(([url]) => String(url).startsWith('/api/gateway/status'))).toBe(false)
     wrapper.unmount()
   })
 

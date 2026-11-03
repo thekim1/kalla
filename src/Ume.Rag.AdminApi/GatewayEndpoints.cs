@@ -99,6 +99,10 @@ public static class GatewayEndpoints
         gateway.MapGet("/status", StatusAsync)
             .RequireAuthorization(AdminPolicies.Admin).WithName("GatewayStatus").WithSummary("Per level key: one embedding call at that ceiling; sync and canary state");
 
+        gateway.MapGet("/canary-check", (RagDbContext db, CancellationToken ct) => EmbeddingCanaryCheck.LastAsync(db, ct))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("LastEmbeddingCanaryCheck")
+            .WithSummary("The stored last canary check per active profile; no gateway call");
+
         gateway.MapPost("/canary-check", (AdminContext admin, EmbeddingCanaryCheck check, CancellationToken ct) => check.RunAsync(admin, ct))
             .RequireAuthorization(AdminPolicies.Admin).WithName("CheckEmbeddingCanary")
             .WithSummary("The embedding canary on demand: one embedding per active profile with a recorded canary; the result is stored on the profile");

@@ -11,12 +11,13 @@ import { formatDateTime, formatDecimal } from '@/utils/format'
 import { PLATFORM, type Tone } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
-interface StatusProfile {
-  id: string
-  name: string
-  canaryRecorded: boolean
-  canaryCheckedAt: string | null
-  canarySimilarity: number | null
+interface LastResult {
+  profileId: string
+  profile: string
+  recorded: boolean
+  similarity: number | null
+  passed: boolean | null
+  checkedAt: string | null
 }
 
 interface CheckResult {
@@ -39,7 +40,6 @@ interface CanaryRow {
 }
 
 const C = PLATFORM.canary
-const MIN_COSINE = 0.999
 const ui = useUiStore()
 const rows = ref<CanaryRow[]>([])
 const loadError = ref<unknown>(null)
@@ -54,11 +54,11 @@ const columns = [
 ]
 const empty = computed(() => rows.value.length === 0)
 
-function fromStatus(p: StatusProfile): CanaryRow {
-  const base = { id: p.id, name: p.name, similarity: p.canarySimilarity, checkedAt: p.canaryCheckedAt }
-  if (!p.canaryRecorded) return { ...base, tone: 'neutral', result: C.notRecorded }
-  if (p.canarySimilarity === null) return { ...base, tone: 'neutral', result: C.neverChecked }
-  return p.canarySimilarity >= MIN_COSINE ? { ...base, tone: 'ok', result: C.passed } : { ...base, tone: 'danger', result: C.failed }
+function fromLast(r: LastResult): CanaryRow {
+  const base = { id: r.profileId, name: r.profile, similarity: r.similarity, checkedAt: r.checkedAt }
+  if (!r.recorded) return { ...base, tone: 'neutral', result: C.notRecorded }
+  if (r.passed === null) return { ...base, tone: 'neutral', result: C.neverChecked }
+  return r.passed ? { ...base, tone: 'ok', result: C.passed } : { ...base, tone: 'danger', result: C.failed }
 }
 
 function fromCheck(r: CheckResult): CanaryRow {
@@ -73,8 +73,7 @@ function fromCheck(r: CheckResult): CanaryRow {
 async function load(): Promise<void> {
   loadError.value = null
   try {
-    const status = await http.get<{ profiles: StatusProfile[] }>('/api/gateway/status')
-    rows.value = status.profiles.map(fromStatus)
+    rows.value = (await http.get<LastResult[]>('/api/gateway/canary-check')).map(fromLast)
   } catch (e) {
     loadError.value = e
   }

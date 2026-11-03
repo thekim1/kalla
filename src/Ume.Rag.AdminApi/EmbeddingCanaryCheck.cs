@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Gateway;
+using Ume.Rag.Infrastructure.Persistence;
 
 namespace Ume.Rag.AdminApi;
 
@@ -13,6 +14,9 @@ namespace Ume.Rag.AdminApi;
 /// </summary>
 public sealed record EmbeddingCanaryCheckResult(Guid ProfileId, string Profile, double? Similarity, bool Passed, DateTimeOffset? CheckedAt,
     string? Error = null, string? Detail = null);
+
+/// <summary>A profile's stored last check; <c>Passed</c> is null when it was never checked.</summary>
+public sealed record EmbeddingCanaryLastResult(Guid ProfileId, string Profile, bool Recorded, double? Similarity, bool? Passed, DateTimeOffset? CheckedAt);
 
 /// <summary>
 /// The embedding canary on demand (admin design §4.5 <c>POST /api/gateway/canary-check</c>, processing design §11): for each
@@ -26,6 +30,19 @@ public sealed partial class EmbeddingCanaryCheck(GatewayApi gateway, IOptions<Ga
 {
     private readonly Gauge<double> _similarity = meters.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
         .CreateGauge<double>("rag.embed.canary_similarity", description: "Cosine of the last embedding canary check per profile");
+
+    /// <summary>The last stored check of every active profile, from the database only: no gateway call.</summary>
+    public static async Task<IReadOnlyList<EmbeddingCanaryLastResult>> LastAsync(RagDbContext db, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var recorded = (await db.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM config."EmbeddingProfiles" WHERE "CanaryEmbedding" IS NOT NULL
+            """).ToListAsync(cancellationToken)).ToHashSet();
+        var profiles = await db.EmbeddingProfiles.AsNoTracking().Where(p => p.State == EmbeddingProfileStates.Active)
+            .OrderByDescending(p => p.IsDefault).ThenBy(p => p.Name).ToListAsync(cancellationToken);
+        return [.. profiles.Select(p => new EmbeddingCanaryLastResult(p.Id, p.Name, recorded.Contains(p.Id), p.CanarySimilarity,
+            p.CanarySimilarity is { } similarity ? similarity >= EmbeddingCanaryThreshold.MinCosine : null, p.CanaryCheckedAt))];
+    }
 
     public async Task<IReadOnlyList<EmbeddingCanaryCheckResult>> RunAsync(AdminContext admin, CancellationToken cancellationToken)
     {
