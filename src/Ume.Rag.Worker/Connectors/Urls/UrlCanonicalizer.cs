@@ -129,12 +129,16 @@ public static partial class UrlCanonicalizer
     public const string RefusedPort = "url.port";
     public const string RefusedSyntax = "url.syntax";
 
-    /// <summary>Tracking and session parameters dropped from every query (§3.1, case-insensitive; a trailing * is a prefix).</summary>
+    /// <summary>
+    /// Tracking and session parameters dropped from every query (§3.1, case-insensitive; a trailing * is a prefix). Sitevision's
+    /// portlet state and routing (<c>sv.target</c>, <c>sv.12.&lt;portlet&gt;.route</c>) and menu toggle (<c>open.12.&lt;portlet&gt;</c>)
+    /// are dropped on every host, with or without a site profile (#363).
+    /// </summary>
     public static IReadOnlyList<string> DroppedParameters { get; } =
     [
         "utm_*", "gclid", "gbraid", "wbraid", "dclid", "fbclid", "msclkid", "yclid", "twclid", "igshid", "mc_cid", "mc_eid",
         "_ga", "_gl", "_hsenc", "_hsmi", "hsCtaTracking", "mkt_tok", "jsessionid", "phpsessid", "aspsessionid*", "sessionid",
-        "cfid", "cftoken",
+        "cfid", "cftoken", "sv.*", "open.*",
     ];
 
     private static readonly IdnMapping Idn = new() { UseStd3AsciiRules = true, AllowUnassigned = false };

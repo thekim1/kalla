@@ -93,20 +93,29 @@ public sealed class UrlCanonicalizerTests
     [Fact]
     public void Drops_the_profiles_and_sources_ignore_parameters_case_insensitively()
     {
-        var options = new CanonicalizerOptions { IgnoreQueryParams = ["sv.target", "SV.12.Portlet"] };
+        var options = new CanonicalizerOptions { IgnoreQueryParams = ["state", "Contact.User"] };
 
-        UrlCanonicalizer.Canonicalize("https://www.umea.se/a?sv.target=12&sv.12.portlet=x&page=2", options).Value
+        UrlCanonicalizer.Canonicalize("https://www.umea.se/a?STATE=12&contact.user=x&page=2", options).Value
             .ShouldBe("https://www.umea.se/a?page=2");
     }
 
     [Fact]
     public void A_trailing_star_in_the_ignore_parameters_is_a_prefix()
     {
-        var options = new CanonicalizerOptions { IgnoreQueryParams = ["sv.*", "open.*"] };
+        var options = new CanonicalizerOptions { IgnoreQueryParams = ["contact*"] };
 
-        UrlCanonicalizer.Canonicalize("https://www.umea.se/a?sv.target=12&SV.12.abc.route=%2Fx&open.12.abc=true&svar=ja&page=2", options).Value
-            .ShouldBe("https://www.umea.se/a?page=2&svar=ja");
+        UrlCanonicalizer.Canonicalize("https://www.umea.se/a?contactPage=12&CONTACTUserId=x&cont=ja&page=2", options).Value
+            .ShouldBe("https://www.umea.se/a?cont=ja&page=2");
     }
+
+    [Theory]
+    [InlineData("https://example.org/page.html?open.12.6fa619ad16f3087d4d517be0=true", "https://example.org/page.html")]
+    [InlineData("https://example.org/page.html?sv.target=12&sv.12.abc.route=%2Fx&sv.state=1", "https://example.org/page.html")]
+    [InlineData("https://example.org/page.html?SV.url=x&OPEN.1.a=true", "https://example.org/page.html")]
+    [InlineData("https://example.org/page.html?svar=ja&opening=1&sv=2&open=3", "https://example.org/page.html?open=3&opening=1&sv=2&svar=ja")]
+    [InlineData("https://example.org/page.html?z=1&open.12.abc=true&b=2&sv.target=12&a=3", "https://example.org/page.html?a=3&b=2&z=1")]
+    public void Drops_sitevision_parameters_on_every_host_without_a_profile(string input, string expected) =>
+        UrlCanonicalizer.Canonicalize(input).Value.ShouldBe(expected);
 
     [Fact]
     public void Drops_directory_index_names_only_when_the_source_opts_in()
@@ -121,7 +130,7 @@ public sealed class UrlCanonicalizerTests
     [Theory]
     [InlineData("https://www.umea.se/kommunochpolitik/sidor/forskola.4.88db09b1724ee319ca45d.html", "https://www.umea.se/4.88db09b1724ee319ca45d.html")]
     [InlineData("https://www.umea.se/4.88db09b1724ee319ca45d.html", "https://www.umea.se/4.88db09b1724ee319ca45d.html")]
-    [InlineData("https://www.umea.se/a/sida.4.88db09b1724ee319ca45d.html?sv.x=1&b=2", "https://www.umea.se/4.88db09b1724ee319ca45d.html?b=2&sv.x=1")]
+    [InlineData("https://www.umea.se/a/sida.4.88db09b1724ee319ca45d.html?x=1&b=2", "https://www.umea.se/4.88db09b1724ee319ca45d.html?b=2&x=1")]
     [InlineData("https://www.umea.se/kommunochpolitik/sidor/forskola.html", "https://www.umea.se/kommunochpolitik/sidor/forskola.html")]
     [InlineData("https://www.umea.se/download/18.4c2.1234/file.pdf", "https://www.umea.se/download/18.4c2.1234/file.pdf")]
     public void Maps_Sitevision_pages_to_their_node_id_when_the_rule_is_verified(string input, string expected)

@@ -25,7 +25,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** the runner host set up per `docs/ci-runner.md` (#370).
 - **Read:** repo-and-deployment §8.2.
 
-### [ ] A-3 Sitevision query parameters on hosts without a profile
+### [x] A-3 Sitevision query parameters on hosts without a profile (#382)
 - **Do:** as the user decides on #363 point 3 (today only the Sitevision preset drops `open.*`/`sv.*`).
 - **Paths:** `src/Ume.Rag.Worker/Connectors/**`.
 - **Done when:** the decided rule has a connectors test; the fixture crawl stores no `?open.…` duplicates.

@@ -41,8 +41,8 @@ public sealed class SiteProfileCanonicalRulesTests
             "https://www.umea.se/kommunochpolitik/digitalomstallningochit.4.88db09b1724ee319ca45d.html?sv.target=12.abc&open.12.x=true&State=create&start=10&sort=a",
             options).Value.ShouldBe("https://www.umea.se/4.88db09b1724ee319ca45d.html?start=10");
         // Another host keeps its path and the profile's parameters; the source's own still go.
-        UrlCanonicalizer.Canonicalize("https://other.se/a/b.4.88db09b1724ee319ca45d.html?sv.target=1&sort=a", options).Value
-            .ShouldBe("https://other.se/a/b.4.88db09b1724ee319ca45d.html?sv.target=1");
+        UrlCanonicalizer.Canonicalize("https://other.se/a/b.4.88db09b1724ee319ca45d.html?state=1&sort=a", options).Value
+            .ShouldBe("https://other.se/a/b.4.88db09b1724ee319ca45d.html?state=1");
     }
 
     [Fact]
