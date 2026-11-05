@@ -1,4 +1,4 @@
-"""Checks a pull request's changed paths against .github/stream-ownership.txt (plans/p0/README.md §2).
+"""Checks a pull request's changed paths against .github/stream-ownership.txt (plans/archive/p0/README.md §2).
 
 Usage: python3 scripts/check-ownership.py <branch> [<path> ...]
        git diff --name-only origin/main...HEAD | python3 scripts/check-ownership.py <branch>

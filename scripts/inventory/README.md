@@ -1,6 +1,6 @@
 # Pilot-start source inventory (P1a item 1)
 
-`inventory.py` does the pilot-start checks of P1a item 1 (`plans/p1/README.md` §3; to-verify #139; postponed Z1):
+`inventory.py` does the pilot-start checks of P1a item 1 (`plans/archive/p1/README.md` §3; to-verify #139; postponed Z1):
 what formats a pilot site's sitemaps list, how common the Z1 formats are (legacy Office, RTF, e-mail, deferred in
 P1), how complete and how old the sitemap `lastmod` values are, and whether the site's raw HTML carries its main text
 without JavaScript (connectors design §8.1: the renderer is built in P2 only if a pilot site needs it).

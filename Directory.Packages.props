@@ -1,7 +1,7 @@
 <Project>
   <!--
     7-day rule: exact versions released at least 7 days before they are pinned; the gateway's pin where it has one.
-    Release dates are recorded in plans/to-verify.md #12-#16 and plans/p0/progress-stage-0.md. Append-only (shared).
+    Release dates are recorded in plans/to-verify.md #12-#16 and plans/archive/p0/progress-stage-0.md. Append-only (shared).
   -->
   <PropertyGroup>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>

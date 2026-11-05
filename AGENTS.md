@@ -11,23 +11,18 @@ Two layers, read in this order:
 1. `01-general-idea.md` §10 **Decisions table**. Rows with status `current` bind; a `partly superseded` row binds for
    what its status says; a `superseded` row doesn't bind.
 2. The detail document for your area (`plans/*/design*.md`, `plans/platform/data-model.md`,
-   `plans/platform/repo-and-deployment.md`). `HANDOVER.md` maps areas to documents. It states every rule that
+   `plans/platform/repo-and-deployment.md`). `plans/README.md` maps areas to documents. It states every rule that
    applies, in the present tense; where it and the Decisions table differ, the table wins and the document is a bug
    to report.
 
-`plans/weakness-review.md`, `plans/simplification-pass.md`, `plans/consistency-pass.md` and most of
-`plans/performance-pass.md` are folded into the detail documents and no longer bind; they stay for the reasoning, each
-with a ledger of where every rule went. The capacity model, scaling triggers and scale tests of the performance pass
-remain binding as reference (its header says which sections).
+The cross-cutting passes and the finished phase plans are in `plans/archive/` and no longer bind (each pass ends with a
+ledger of where its rules went), except the performance pass's capacity model, scaling triggers and scale tests, which
+remain binding as reference (`plans/roadmap.md` names the sections).
 
-Your assignment is in `plans/p0/`:
-- the brief for your stream gives your items in order, each item's done-when criterion, and what you hand to the
-  other stream;
-- your progress file (`progress-a.md` or `progress-b.md`) says where you are. Tick its boxes in the PR that does the
-  work.
-
-Phase progress is in `plans/progress.md`. Prompts to start each stream are in `plans/p0/prompts/`. Design sessions
-(not stream work) start from `HANDOVER.md`.
+**Your assignment** is your stream's queue in `plans/work/` (`stream-a.md` or `stream-b.md`): take the first item that
+is not ticked and not waiting, and tick it in the PR that does the work. Each item names its paths, done-when, what it
+waits on and the design sections to read. Where the project stands: `plans/roadmap.md`. Start prompts:
+`plans/work/prompts/`. Design sessions (not stream work) start from `HANDOVER.md`.
 
 The gateway (`~/git/llmgateway`, github.com/thekim1/llmgateway) is the reference implementation. When a design says
 **copy**, take the gateway file unchanged. When it says **adapt**, change only what the design lists. Keep the
@@ -46,9 +41,9 @@ gateway's conventions for names, config keys, claims, key format and security ev
   suite; the image tests and the evaluation smoke run when their paths change or before a release, and the browser
   tests (`e2e.yml`) only before a release or by hand (repo-and-deployment §8.2). Don't dispatch workflows by hand
   unless an item's done-when asks for it; an item whose done-when needs the browser tests is ticked on a green run.
-- **Results.** Record each check from `plans/to-verify.md` in your stream's results file (`plans/p0/results-a.md` or
-  `plans/p0/results-b.md`): row number, result, evidence (command, output, link).
-- **PRs.** One PR per checklist item or smaller. Branch `a/<item>-<slug>` or `b/<item>-<slug>`, rebased on `main`,
+- **Results.** Record each check from `plans/to-verify.md` in your stream's results file (`plans/work/results-a.md` or
+  `plans/work/results-b.md`): row number, result, evidence (command, output, link).
+- **PRs.** One PR per queue item or smaller. Branch `a/<id>-<slug>` or `b/<id>-<slug>`, rebased on `main`,
   `verify.yml` green, squash-merged. The PR body follows the template and shows the done-when evidence.
 
 ## Conventions the code won't tell you

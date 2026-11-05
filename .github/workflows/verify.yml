@@ -4,7 +4,7 @@ name: Verify
 # leaves draft; a newer push cancels the older run of the same pull request. Merge only on a green run (private repo on
 # the free plan: GitHub cannot enforce required checks). Nothing runs on a push to main; main or any branch can be
 # verified from the Actions tab (workflow_dispatch), and release.yml calls this workflow in full.
-# Jobs: ownership and backend (Stage 0), doc-refs (plans/doc-restructure.md), evaluation-smoke (P1 item 17), images (P0 checklist #5), deploy-checks (P0
+# Jobs: ownership and backend (Stage 0), doc-refs (plans/archive/doc-restructure.md), evaluation-smoke (P1 item 17), images (P0 checklist #5), deploy-checks (P0
 # checklist #14), admin-ui (P0 checklist #3, plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract
 # jobs (P0 checklist #13) are in parser.yml, which runs them only when the parser changed. The dependency audits of the
 # backend and admin-ui jobs (scripts/audit/) also run daily against main in audit.yml.

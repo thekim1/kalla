@@ -217,7 +217,7 @@ Repository evidence: [assistant entities](src/Ume.Rag.Domain/Entities/AssistantE
 [access policy](src/Ume.Rag.Domain/Access/AccessPolicy.cs),
 [coverage evaluation](src/Ume.Rag.Retrieval/CoverageEvaluator.cs),
 [result diversity](src/Ume.Rag.Retrieval/ResultDiversifier.cs), and [current handover](HANDOVER.md).
-Binding details remain in the [Decisions table](01-general-idea.md), [organisation proposal](plans/admin/organisation-proposal.md),
+Binding details remain in the [Decisions table](01-general-idea.md), [organisation proposal](plans/archive/organisation-proposal.md),
 [knowledge design](plans/knowledge-api/design.md), [chat design](plans/chat-api/design.md),
 [connector design](plans/ingestion-worker/design-connectors.md), and [phase plan](plans/README.md).
 

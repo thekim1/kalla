@@ -108,7 +108,7 @@ The user runs `all` (or lets the agent run it on the test host) and hands over t
 ## Recording the results
 
 1. Run `all` (or the commands one by one) with `--label "<hardware>, gateway <version>, <date/window>"`.
-2. Record each row of `plans/to-verify.md` in `plans/p0/results-a.md`: #98 and #125 from `embed-throughput` and
+2. Record each row of `plans/to-verify.md` in `plans/archive/p0/results-a.md`: #98 and #125 from `embed-throughput` and
    `query-under-load`, #99 from the `idle` phase of `query-under-load`, #104 from `condense`, #149 from `answer-ttft`.
    Evidence: the command line, the summary lines and the run ids (also visible in the gateway's usage by
    `x-ume-run-id`). Attach the JSON files to the PR or issue; they are not committed.
@@ -116,4 +116,4 @@ The user runs `all` (or lets the agent run it on the test host) and hands over t
    tokens/s), on condense p95 (above 600 ms) or on answer TTFT p99 (15 s or more) is a shortfall: tell the user, so
    register M2 is decided before P1. Query-embedding p95 under load above 2 × the idle p95 is the performance pass §6
    trigger for a query lane; the summary checks it next to the 60 ms budget.
-4. Tick `plans/p0/progress-a.md` §9 boxes 2 and 3.
+4. Tick `plans/archive/p0/progress-a.md` §9 boxes 2 and 3.

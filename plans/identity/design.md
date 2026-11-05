@@ -1,11 +1,11 @@
 # Identity, authentication and authorisation: detailed design
 
-Detail step 3 of the Ume.Rag design. Details [`plan.md`](plan.md) (binding, incl. its answered questions) and the
+Detail step 3 of the Ume.Rag design. Details [`../archive/area-plans/identity.md`](../archive/area-plans/identity.md) (binding, incl. its answered questions) and the
 Decisions table in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consistent with
 [`../platform/data-model.md`](../platform/data-model.md) (step 1) and
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (step 2); deviations are listed in §14.
 The rules of the weakness review and the simplification pass are stated here (reasoning:
-[`../simplification-pass.md`](../simplification-pass.md); its §15 gives assistant versions and owner-team scoping,
+[`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md); its §15 gives assistant versions and owner-team scoping,
 §1.3, §4.3); what the pass removed is listed in §17, what the weakness review deferred in §18.
 
 Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5); Open WebUI citations are in
@@ -216,7 +216,7 @@ may sign in to Open WebUI is open (§5.3, §16).
 
 ## 2. Feature C: department scope from member groups (both systems, claims only)
 
-**Phase** ([weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)): the gateway delivers member groups in its catalogue with **release 2, in P2**. Our resolver
+**Phase** ([weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)): the gateway delivers member groups in its catalogue with **release 2, in P2**. Our resolver
 (§2.3) is built and tested in P0 against the FakeGateway catalogue, but in production our mirror has no member groups
 from the gateway before release 2. So in P1 department scope comes from the `departmentCodes` claim **plus member
 groups entered by hand on our own department record** (`PUT /api/organisation/departments/{id}/member-groups`, admin
@@ -609,7 +609,7 @@ headers (`headers.py:70-86`). The chat id travels unsigned in `X-OpenWebUI-Chat-
 connection key goes in `Authorization: Bearer` (`headers.py:210-228`) unless `auth_type` says otherwise.
 
 Open WebUI has **one connection** (ours, chat design §4.2–§4.3); its title, tag and follow-up generation is switched
-off (`../simplification-pass.md` §1), so there is no gateway connection and the JWT goes only to `rag-api`. The
+off (`../archive/passes/simplification-pass.md` §1), so there is no gateway connection and the JWT goes only to `rag-api`. The
 connection also sends the custom headers `X-Rag-Owui-Message-Id` and `X-Rag-Owui-User-Message-Id` (templated by Open
 WebUI, `headers.py:138-155`). They are **unsigned**: they only map messages and feedback **inside the caller's own
 conversation** (keyed by the JWT `sub`), never grant access.
@@ -1024,7 +1024,7 @@ from the gateway's file; passwords and secrets are import placeholders like `${U
 The pilot's Keycloak is the gateway's (Decisions table "P1 pilot sign-in"; plan §1): the gateway repo defines the
 Compose project, the base realm `ume` (the gateway's clients and roles, without test users) and its operation
 (`../gateway-changes/prompt-gateway-session.md` §2). RAG contributes a **realm-additions file** in `deploy/keycloak/`
-(owned by stream B, `../p1/README.md` §2; P1 item 16 → hand-off J8, through the user to the gateway session; J11 is the
+(owned by stream B, `../archive/p1/README.md` §2; P1 item 16 → hand-off J8, through the user to the gateway session; J11 is the
 shared Keycloak with the additions imported and pilot accounts created). It is derived from §11.1 and differs as
 follows:
 
@@ -1267,13 +1267,13 @@ The step 3 changes were applied in the step 3 review commit (2026-10-29). Needed
    `DepartmentLookup` on 6002; settings `Config:MaxUnconfirmedSeconds` (90), `Gateway:RequireDelegationEcho` (default
    `true`); `Gateway:SendResidencyCeiling` and `Gateway:AttributionMode` removed (the ceiling is always sent, there is
    one attribution mode); §4.2 realm unchanged.
-3. **`../admin/plan.md`, `../admin/design.md`**: explain-access endpoint and page (§4.9); model validation against
+3. **`../archive/area-plans/admin.md`, `../admin/design.md`**: explain-access endpoint and page (§4.9); model validation against
    `/v1/models` on assistant save (§4.7); organisation page shows member groups (entered in the gateway) without a
    lookup banner; roles on `ume-rag-admin`; audit actor `oid`.
-4. **`../chat-api/plan.md`, `../chat-api/design.md`**: same effective level from turn 1 for history-keeping clients;
+4. **`../archive/area-plans/chat-api.md`, `../chat-api/design.md`**: same effective level from turn 1 for history-keeping clients;
    `External` for `public`; `X-Rag-Owui-Task` and `owui-tasks` removed; gateway `503` + `Retry-After` retryable, `403
    max_residency_not_met` not; `Gateway:RequireDelegationEcho` default `true`.
-5. **`../platform/plan.md`** §7: "gateway budgets, policies and usage reports stay per team" → policies are the key's
+5. **`../archive/area-plans/platform.md`** §7: "gateway budgets, policies and usage reports stay per team" → policies are the key's
    for delegated requests (`ApplyTeamPolicy = false`).
 6. **`../to-verify.md`**: row 82 (Graph `checkMemberGroups`) moves to P2; row 84 without `uniqueName` adoption; new
    rows from §16.
@@ -1292,7 +1292,7 @@ Needed for simplification pass §15 (assistant versions, owner-team scoping):
 Needed for the Keycloak pilot (Decisions table "P1 pilot sign-in", 2026-10-30; this pass 2026-10-31), applied by the
 owners of those documents:
 
-11. **`plan.md`**: the opening paragraph ("Keycloak is used for local development and CI") contradicts its own §1;
+11. **`../archive/area-plans/identity.md`**: the opening paragraph ("Keycloak is used for local development and CI") contradicts its own §1;
     §2's table and package 1 ("submitted during P0, approved before the pilot") → package 1 is P2, staff and pilot
     sign-in in P1 is the shared Keycloak; §3 "Roles from Entra" and "Entra group object ids in the department form"
     → P1 realm roles and Keycloak group names (design §2.2), Entra from P2; the `tid`/guest rule takes effect with
@@ -1311,7 +1311,7 @@ owners of those documents:
     import coverage) and for question 7 (Open WebUI account keying on a provider switch).
 17. **`../gateway-changes/prompt-gateway-session.md`** §2 (or the gateway session's follow-up brief): carry §16's P1
     questions 1–4 and 6 to the gateway session, which owns the shared realm.
-18. **`../p1/README.md`** item 16: only if question 3 puts the realm-level settings in the gateway's base
+18. **`../archive/p1/README.md`** item 16: only if question 3 puts the realm-level settings in the gateway's base
     realm, item 16's content and done-when change.
 
 ## 15. Answered questions (2026-10-29, revised 2026-10-30)
@@ -1383,7 +1383,7 @@ J11; the gateway session (`../gateway-changes/prompt-gateway-session.md` §2) or
 
 ## 17. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §1, §6, §7, §9 and §14:
+Per [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) §1, §6, §7, §9 and §14:
 
 | Removed or deferred | Where it went |
 |---|---|
@@ -1402,7 +1402,7 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §1, §6, §7, §9 
 
 ## 18. Deferred or removed (weakness review)
 
-Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+Per [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
 
 | Removed or deferred | Where it went |
 |---|---|

@@ -1,8 +1,9 @@
 # Handover
 
 State of the Ume.Rag work for the next session. Rewritten 2026-11-02, end of session 19 (`main` = `122990d`, after
-#349); updated 2026-11-05, session 20 (general knowledge, P1b order, housekeeping). Earlier sessions are in the git history (`git log -- HANDOVER.md`).
-Repo `~/git/ume-rag-platform`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
+#349); updated 2026-11-05, session 20 (general knowledge, P1b order, housekeeping) and session 21 (reviews of 35, 36,
+39, 40; #360; lean CI). Earlier sessions are in the git history (`git log -- HANDOVER.md`).
+Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
 
 ## What this is
@@ -16,21 +17,23 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - **The demo runs:** crawl → retrieve → cited answer in Open WebUI from the `turkos` assistant (`claude-haiku-5-5`)
   over the user's interim gateway at `Eu`; follow-ups are condensed. P0 released (`v0.1.0`); P1a code complete (its live
   checks moved to P1b item 20); **P1b in progress**.
-- **Organisation (Decisions "Organisation …"):** the foundation is built. Schema (#346: `Collections.SharedWith`,
-  contact, `CollectionShares`, `AssistantVersions.CollectionLinks` replacing `CollectionIds`), topics in retrieval
-  (#347: a link with topics limits K and V, knowledge §6.2), topics in the worker (#349: path rules labelled "Topics",
-  tags per document in the stage preview), the platform Organisation form (#348: member groups, sharing summary).
-  Stream B's queue: **40 → 35 → 14 → 36 → 39** (below); 35 is the admin API (sharing, topics, Map, V35), 36 the pages
-  (topic picker, admin contract to `collectionLinks`). The admin contract still says `collectionIds` (links without tags).
-- **General knowledge per assistant (Decisions row, #355, #357, issue #356):** `QuerySteps.answer.generalKnowledge`
-  `off` (default, today) / `supplement` / `fallback` / `open`; a frame per level; for `fallback`/`open` coverage `Low`
-  calls the model without sources behind a platform caveat line (`answered-general`); `public` assistants always `off`
-  (V36). **P1b item 40, first in B's queue** because a POC needs it soon (#356); its chat and admin-API part may merge
-  before the radio group and badge. Nothing built yet. #356 also notes a possible later rename of "assistant" (e.g.
-  "knowledge scope"), not decided; new names avoid "assistant".
-- **Stream B prompt:** `plans/p1b/prompts/stream-b.md` (session 20); `progress-b.md` Status says where B is. Item 14
-  (accessibility, pilot-journey E2E, L7) comes before 36, because 36's done-when extends 14's E2E and A's `e2e` job
-  waits on L7; there is no `tests/e2e` or Playwright set-up yet. Items 11 and 12 still need the local admin §5.4 walk.
+- **Organisation (Decisions "Organisation …"): built.** Schema #346, topics in retrieval #347 and the worker #349, the
+  platform Organisation form #348, the admin API #361 (item 35: sharing with V35, `view=mine|shared|all`, `/topics`,
+  the Map route, contact on collections, `collectionLinks` in the draft contract) and the pages #366 (item 36: the menu,
+  *Ours / Shared with us / All*, Topics and Sharing tabs, the picker with topics, *Who can use it*, the Map table).
+  All reviewed live in session 21; cross-department access rests on `OrganisationSharingTests` (only DoIT exists
+  locally). Their design deviations are settled in the admin design (`a014e71`, `6d4b3df`). Open: #374 (archived
+  assistants look active on the Map and in *Used by*; two document counts).
+- **General knowledge per assistant: built and checked live** (#358, #359; #356 closed). `fallback` on an off-topic
+  question gives the caveat line and `answered-general`; `off` the not-found text; V36 warns on a `public` draft,
+  refuses its publish and the run time answers `off`. #356 notes a possible later rename of "assistant" ("knowledge
+  scope"), not decided; new names avoid "assistant".
+- **Item 39 built** (#369): a new assistant's draft starts from `Settings.Chat.defaultSystemPrompt` (a citizen-service
+  text in code; paste the `turkos` prompt there if wanted); model and query settings under a collapsed *Advanced*;
+  "Open in <client>" from the client's `PortalUrl`.
+- **Stream B:** P1b code items done; what is left is in `plans/work/stream-b.md` (B-1 `ModelKind`, B-2 #374, records,
+  NVDA pass, item 36's E2E step on the first green `e2e` run, pin review). Next for B: #363 point 1 (`GatewayModels.ModelKind`, design
+  `5f8f8c1`) and #374. Item 14 (browser tests, L7) was done by the main session (#362, #364).
 - **Topics, in one line** (user asked): one owner crawls umea.se once and tags it by path; each assistant links it with
   only the topics it needs; topics narrow search, they are not access control. Uploads have no `pathRules`, so no topics
   (recommended: leave it until a department has a large mixed upload knowledge base).
@@ -52,7 +55,10 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - **Architecture plan** (`architecture_plans.md`, a proposal): reviewed and fixed (`2e0ed77`); item 3 (presets) stays
   **P2** (user); its P1b part is item 39. Adopting items 1, 2, 4–7 as design rules is still open.
 - **Platform/CI:** Aspire 13.6.4 (#339); fixed local ports (#341); MSBuild node reuse off in CI (#342: both runners
-  share one machine). `verify.yml` runs on PRs and manual dispatch only.
+  share one machine). **Lean CI** (user, session 21, repo-and-deployment §8.2): on PRs `images` and `evaluation-smoke`
+  run only when their paths change (#367, conditions fixed in #372); `e2e` only from `release.yml` or by hand (#371,
+  #373), never on PRs. `e2e` reaches the browser step on the runner (#368) but Chromium lacks its system libraries:
+  the runner host needs `docs/ci-runner.md` (#370). Item 15's `e2e` box waits on that.
 
 ## Decided in session 19 (user)
 
@@ -69,37 +75,51 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - **General knowledge per assistant** with the four levels of #356 (Decisions row; replaces the same-day
   `grounding` `strict`/`balanced`/`open` of #355). `public` stays `off`.
 - **Item 40 first** in stream B's queue (POC); another agent runs stream B from the new prompt.
-- Housekeeping: #314, #300, #210 closed; `plans/progress.md` P1b lines annotated with what is code-done.
+- Housekeeping: #314, #300, #210 closed; `plans/archive/progress.md` P1b lines annotated with what is code-done.
+
+## Decided in session 21 (user, 2026-11-05)
+
+- **Lean CI:** path-filtered PR jobs; the full set and `e2e` before a release. Agents run locally only the test
+  projects they touch (AGENTS.md "Tests"); no re-dispatching `verify` on main after merges.
+- **#352 merged without the benchmark** (byte-identical output and tests were enough).
+- #360's cause was the robots.txt cache, not the settings refresh (#365); `GatewayModels.ModelKind` designed for #363.
+- **Plans condensed** (#375, `58bf9e5`): `plans/README.md` (three layers and the design map), `plans/roadmap.md` (done,
+  now, waiting on people, P2/P3) and `plans/work/` (queues `stream-a.md`, `stream-b.md`, `main.md`; items with paths,
+  done-when, waits-on, refs; ticked in the PR that does them; results files; short prompts). Phase plans, passes, area
+  plans and old proposals are history in `plans/archive/`. Stream B told in #376. New work goes in as a queue item in
+  the owning stream's file; keep the roadmap current when a phase step lands.
 
 ## Local stack (this machine)
 
 - Start: `export Seed__Enabled=false; aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj
   --non-interactive` (Docker Desktop up: `docker info`). Stop with `aspire stop --non-interactive` from the directory
   of the running AppHost. After merges: `dotnet build UmeRag.slnx`, then restart (or `aspire resource <r> restart`).
-  **It runs from the main clone at `122990d`, all resources healthy.**
+  **It runs from `~/research/rag` at `6d4b3df`, all resources healthy.** The Aspire CLI here prints its "new version"
+  notice; the stack is fine.
 - Ports: dashboard `https://localhost:17470`; **admin UI `https://localhost:5174`** (user `rag-platform-admin`); api
   7401, admin API 7402, worker 7403; **Open WebUI `http://localhost:7410`**, Keycloak 7411, Postgres 7412, parser 7413,
   ClamAV 7414 (#341).
-- **Pilot data:** department DoIT (code `1000`); collection `turkos` (public, published, `SharedWith` department,
-  `coverageMaxDistance` 0.55, `keywordWeight` 0.25); crawl source "umea.se" (2,532 documents, 10,074 chunks, no
-  schedule, no topics); assistant `turkos` v3 (links migrated to `CollectionLinks`); assistant `w3-spike` **archived**;
-  client "Open WebUI" `clientRetentionDays` 90; generated test set of 100.
+- **Pilot data on this machine** (volume `ume-rag-m1-postgres`) is older than the session-19 machine's: department
+  DoIT; collection `turkos` (public, published, sharing `department`, no `keywordWeight` saved, 1,270 documents of
+  which 1,166 live, 4,990 chunks, one sync on 2026-11-01); assistant `turkos` **v1** on `claude-opus-5-5`; archived
+  test assistants `gk-check`, `review-39`; client "Open WebUI" `PortalUrl` `http://localhost:7410`, retention 90 days
+  (set in session 21). `GatewayModels` holds only `claude-opus-5-5`.
 - The feedback importer runs every minute with the user secret `Parameters:openwebui-admin-api-key` (an API key of
   Open WebUI's local admin `demo@umea.se`; Open WebUI restricts keys to the two feedback routes).
 - The dev stack runs as the Postgres superuser and doesn't apply `deploy/postgres/app-roles.sql`; grants are tested by
   `DatabaseRoleTests`.
 - **Logins:** `~/ume-rag-demo-login.txt` (mode 600; the Open WebUI URL in it is stale: use 7410). Never put passwords
   in a chat.
-- **Draft gold sets:** `~/ume-rag-gold-draft-{questions,answers}.csv` (40) and `plans/p1/gold-set/` (199 rows).
+- **Draft gold sets:** `~/ume-rag-gold-draft-{questions,answers}.csv` (40) and `plans/gold-set/` (199 rows).
 - No more crawling at this stage (user). A source's scope change re-syncs it; cancel with `POST /api/runs/{id}/cancel`.
 
 ## Reading order
 
 1. `01-general-idea.md` §10 **Decisions table** (rows `current` bind).
-2. `plans/p1b/README.md` (items 1–40, hand-offs L1–L14), `plans/p1b/progress-{a,b}.md`. The open boxes left in
-   `plans/progress.md` and `plans/p1/progress-a.md` are live or user items (checked session 20).
-3. `plans/admin/organisation-proposal.md` (adopted); the detail documents (`plans/*/design*.md`; map in
-   `plans/README.md`). The passes don't bind.
+2. `plans/roadmap.md` (one page: done, now, waiting on people, P2/P3) and `plans/work/` (the queues of stream A,
+   stream B and the main session). Plans were condensed in session 21: phase plans, passes and area plans are in
+   `plans/archive/` (history only).
+3. The design for the area at hand (map in `plans/README.md`).
 
 ## How we work (user preferences, binding)
 
@@ -130,7 +150,7 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   Test retrieval: `POST /api/collections/{id}/test-retrieval` `{question, topK, mode}`. Evaluation variants:
   `POST /api/collections/{id}/evaluation/run` `{variants: [hybrid|vector|hybrid-no-decompounder], candidateSettings}`.
 - **Browser checks:** `npm i --ignore-scripts playwright-core` in a scratch folder, `executablePath`
-  `~/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome`; sign in via `https://localhost:5174/bff/login`
+  `~/.cache/ms-playwright/chromium-1247/chrome-linux*/chrome` on this machine (1248 on the other); sign in via `https://localhost:5174/bff/login`
   (`#username`, `#password`, `#kc-login`); platform pages are under `/plattform/<resource>`.
 - **Chat through Open WebUI:** `POST /api/v1/auths/signin`, then `/api/chat/completions`. For feedback mapping, send
   it as the browser does: create the chat (`/api/v1/chats/new`) and pass `chat_id` and the assistant message `id`.
@@ -156,18 +176,17 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 ## Next step
 
-1. **Check GitHub and the stack:** open PRs and issues (`gh pr list`, `gh issue list`); `aspire describe`.
-2. **Review B's items as they come, live:** 40 first (frames per level, the `Low` path, V36; try `fallback` on the
-   `turkos` copy in the test panel), then 35 (sharing rules V11/V35), 14 (E2E, L7), 36 (topic picker,
-   `collectionLinks` contract), 39. After 36: tags in the preview panel, `Department` type fields (#348/#349).
-3. **Stream A:** draft #352 (chunker memoisation, #351, not urgent); P1b item 15 `e2e` waits for B's L7 (item 14).
-   No P1b prompt for stream A yet (little code left).
-4. **User decides:** the gold set with DoIT (waiting) and threshold calibration (item 21); #333 findings 1–2;
-   adopting architecture-plan items 1, 2, 4–7; the W3 grant step before any group audience; a Git/Markdown connector
-   (docs-as-code: today upload or crawl a rendered site; YAML front matter isn't parsed); pin review.
+1. **Check GitHub and the stack:** `gh pr list`, `gh issue list` (has B answered #376?); `aspire describe`.
+2. **Main queue** (`plans/work/main.md`): M-1 run the browser tests locally; M-2 recommendations for the open design
+   calls (list below); review B's next PRs live (B-1 `ModelKind`, B-2 #374) and tick nothing for B.
+3. **Stream A queue** (`plans/work/stream-a.md`): A-1 licence notices (#51) is unblocked; A-2 the first green `e2e`
+   run waits on the runner host (#370, `docs/ci-runner.md`) and then unblocks B-5.
+4. **User decides:** the roadmap's "Waiting on people" table (gold set with DoIT, G1, gateway session, test host, #333
+   findings 1–2, architecture-plan items 1, 2, 4–7, the W3 grant step, Sitevision `open.*`/`sv.*` on hosts without a
+   profile, a Git/Markdown connector).
 
-**Open issues — stream B:** #356 (general knowledge, item 40), #318 (organisation 35/36), #278, #333 (findings 1–2
-with the user), #52. **Stream A:** #351 (PR #352), #48, #51. **Main session:** #100 (L8). **User:** #215 (J8).
+**Open issues — stream B:** #376 (plans restructure, read first), #374, #363 (points 1, 2 done in #369), #318 (item 36's E2E box), #278, #333 (findings 1–2
+with the user), #52. **Stream A:** #370 (runner host), #48, #51. **Main session:** #100 (L8). **User:** #215 (J8).
 
 **Not folded into the design yet (need a call):** topics for uploads (`files` template has no `pathRules`); #217's
 fired-types list; `UrlCanonicalizer` → Pipelines (#178); identity §16 Q2–4, Q8; a connection pooler needs a direct
