@@ -92,7 +92,7 @@ const historyOptions = computed(() =>
   (policy.value?.allowedHistoryModes ?? [assistant.data.value?.historyMode ?? 'none']).map((m) => ({ value: m, label: ASSISTANT.historyModes[m] ?? m })),
 )
 const restorable = (v: AssistantVersionSummary) => v.state === 'superseded'
-const modelOptions = computed(() => [{ value: '', label: ASSISTANT.noModel }, ...models.value.filter((m) => m.kind !== 'embedding').map((m) => ({ value: m.name, label: m.name }))])
+const modelOptions = computed(() => [{ value: '', label: ASSISTANT.noModel }, ...models.value.filter((m) => m.modelKind === 'chat').map((m) => ({ value: m.name, label: m.name }))])
 /** §5.4 step 13: once published, a link to each audience client's own UI (`PortalUrl`), where the model has its slug. */
 const portals = computed(() =>
   assistant.data.value?.publishedVersion && !archived.value

@@ -2171,6 +2171,13 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
 
+                    b.Property<string>("ModelKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("chat");
+
                     b.Property<decimal?>("OutputPerMillionUsd")
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
@@ -2202,6 +2209,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_GatewayModels_ContextWindow", "\"ContextWindow\" IS NULL OR \"ContextWindow\" > 0");
 
                             t.HasCheckConstraint("CK_GatewayModels_Kind", "\"Kind\" IN ('model', 'route')");
+
+                            t.HasCheckConstraint("CK_GatewayModels_ModelKind", "\"ModelKind\" IN ('chat', 'embedding')");
 
                             t.HasCheckConstraint("CK_GatewayModels_Residencies", "cardinality(\"Residencies\") >= 1 AND \"Residencies\" <@ ARRAY['OnPrem', 'Eu', 'External']::varchar(10)[]");
 

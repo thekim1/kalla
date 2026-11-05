@@ -767,7 +767,10 @@ export interface ClientSummary {
 
 export interface GatewayModel {
   name: string
+  /** `model` (a deployment) or `route` (a manual route alias). */
   kind: string
+  /** What the model serves (data-model §2.1); route aliases are `chat`. Only chat models answer. */
+  modelKind: 'chat' | 'embedding'
   residencies: string[]
 }
 

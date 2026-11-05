@@ -30,7 +30,11 @@ function signIn(roles: string[]) {
 function mocks() {
   vi.spyOn(api.assistants, 'get').mockResolvedValue(assistant)
   vi.spyOn(api.assistants, 'draft').mockResolvedValue(draft)
-  vi.spyOn(api.gateway, 'models').mockResolvedValue([{ name: 'ume/chat-eu', kind: 'chat', residencies: ['Eu'] }, { name: 'bge-m3', kind: 'embedding', residencies: ['OnPrem'] }])
+  vi.spyOn(api.gateway, 'models').mockResolvedValue([
+    { name: 'bge-m3', kind: 'model', modelKind: 'embedding', residencies: ['OnPrem'] },
+    { name: 'ume/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'] },
+    { name: 'ume/chat', kind: 'route', modelKind: 'chat', residencies: ['OnPrem', 'Eu'] },
+  ])
   vi.spyOn(api.collections, 'list').mockResolvedValue({ total: 2, items: [
     collectionSummary(),
     collectionSummary({ id: 'c2', slug: 'annan', name: 'Annan förvaltning', departmentId: 'd2', departmentName: 'Annan', shared: false }),
@@ -52,7 +56,8 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.text()).toContain('Model name in Open WebUI: bygglov')
     const options = wrapper.findAll('#assistant-model option').map((o) => o.text())
     expect(options).toContain('ume/chat-eu')
-    expect(options).not.toContain('bge-m3') // embedding models are not answer models
+    expect(options).toContain('ume/chat') // a route alias is a chat model
+    expect(options).not.toContain('bge-m3') // embedding models are not answer models (#363 point 1): the mirror's modelKind, not kind
     // The picker reads every knowledge base the user may see (view=all): Ours is the assistant's department, Shared with us
     // the others, each with level, document count and topics.
     expect(list).toHaveBeenCalledWith({ pageSize: 200, view: 'all' })
