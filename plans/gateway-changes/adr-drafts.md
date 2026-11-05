@@ -1,7 +1,7 @@
 # Gateway ADR drafts 018–020
 
 Drafts of three rows for `docs/adr.md` in the gateway repo (`~/git/llmgateway`, table at `docs/adr.md:3-23`; append the rows right after 017). 018 is
-feature B, 019 feature C, 020 feature A of [`plan.md`](plan.md). Since the [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)
+feature B, 019 feature C, 020 feature A of [`../archive/area-plans/gateway-changes.md`](../archive/area-plans/gateway-changes.md). Since the [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)
 they go in with two releases ([`design.md`](design.md) §13): **018 is accepted with release 1** (before the pilot),
 **019 and 020 with release 2** (P2). Same table and cell style as 013–017: one dense paragraph per
 cell.
@@ -22,14 +22,14 @@ appended and the line ends "018 on YYYY-MM-DD"; release 2 appends 019–020 and 
 
 ## Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §6–§7: one row per release (B → 018, C → 019, A → 020)
+Per [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) §6–§7: one row per release (B → 018, C → 019, A → 020)
 became one combined release; 019 no longer contains the Graph `checkMemberGroups` lookup (P2, with
 `GroupMember.Read.All`, its cache and event 2007); 020 no longer applies the effective team's request policy; 018 now
 answers 503 instead of 403 for drained in-ceiling targets and adds `RequireMaxResidency`.
 
 ## Deferred or removed (weakness review)
 
-Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+Per [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
 the three rows are no longer accepted together. 018 (feature B) is accepted with release 1 before the pilot; 019
 (feature C) and 020 (feature A) with release 2 in P2. The row texts are unchanged: 018 already stands without
 delegation (its `/v1/models` sentence applies to every key).

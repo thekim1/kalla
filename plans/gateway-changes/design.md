@@ -1,6 +1,6 @@
 # Gateway changes: detailed design
 
-Detail step 4 of the Ume.Rag design. Details [`plan.md`](plan.md) (binding, incl. its answered questions) and the
+Detail step 4 of the Ume.Rag design. Details [`../archive/area-plans/gateway-changes.md`](../archive/area-plans/gateway-changes.md) (binding, incl. its answered questions) and the
 gateway side of [`../identity/design.md`](../identity/design.md) §1.4, §1.5, §1.7, §2 and §10 (feature C and the
 tenant/guest refusal are designed there for both systems; this document only turns them into gateway work). The ADR
 rows are in [`adr-drafts.md`](adr-drafts.md). Nothing here is implemented in the gateway yet (`~/git/llmgateway` is at
@@ -12,7 +12,7 @@ Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5). "
 ## 1. Overview
 
 **Two releases**, each rolling-update safe; the gateway's own release practice decides the numbers (reasoning:
-[weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)).
+[weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)).
 **Release 1, in P1b before the Ume.Rag pilot goes live**: feature B and the FakeLlm `dimensions` addition (with the
 tool passthrough tests). **Later (P2): release 2**, before the first second-department or group audience: features C
 and A (with the run grouping headers). Until release 1, P1a runs against the gateway as it is (v0.8.5) on an interim
@@ -704,7 +704,7 @@ effective team is known right after authentication, before the rate-limit call.
 ### 13.1 Contents
 
 Two releases, so the pilot waits only for the smallest change a production gateway that other teams use must take
-(reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)):
+(reasoning: [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)):
 
 - **Release 1, in P1b before go-live** (built in a separate session in the gateway repo): §3 (feature B), §6 (FakeLlm `dimensions`), §7.2 (tool passthrough tests), ADR 018,
   the docs of §12 for B, and the upgrade-guide entry (§13.3).
@@ -793,9 +793,9 @@ What this design needs from the other documents of this repo, and they state:
 
 1. **`../identity/*`**: two releases, claims-only feature C, keys per level, explicit ceiling incl. `External`,
    `Gateway:RequireDelegationEcho` (from release 2).
-2. **`../chat-api/plan.md`, `../chat-api/design.md`**: no attribution modes or linked keys; `External` for `public`;
+2. **`../archive/area-plans/chat-api.md`, `../chat-api/design.md`**: no attribution modes or linked keys; `External` for `public`;
    a `503` with `Retry-After` from the gateway is retryable, `403 max_residency_not_met` is not.
-3. **`../platform/plan.md`** §6–§7: keys per level and deployable (the pilot team's until release 2, delegating
+3. **`../archive/area-plans/platform.md`** §6–§7: keys per level and deployable (the pilot team's until release 2, delegating
    after); no linked keys; two gateway releases.
 4. **`../platform/data-model.md`** §2.1: no `GatewayKeyLinks`; no GIN index on `Departments.MemberGroups`;
    `Teams.Code` from `/v1/catalog/teams` `code` (release 2).
@@ -841,7 +841,7 @@ What this design needs from the other documents of this repo, and they state:
 
 ## 17. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §6–§7:
+Per [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) §6–§7:
 
 | Removed or deferred | Where it went |
 |---|---|
@@ -853,7 +853,7 @@ Per [`../simplification-pass.md`](../simplification-pass.md) §6–§7:
 
 ## 18. Deferred or removed (weakness review)
 
-Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+Per [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
 
 | Removed or deferred | Where it went |
 |---|---|

@@ -1,6 +1,6 @@
 # Local P1a run
 
-P1a is shown on a developer machine with the pilot member present (`plans/p1/README.md` §7, U-a). Until the live block
+P1a is shown on a developer machine with the pilot member present (`plans/archive/p1/README.md` §7, U-a). Until the live block
 at the end of P1a, everything runs against the **dev Keycloak** and **FakeGateway**; the live block points the same
 stack at the **interim gateway** (J10) and the **Keycloak shared with the gateway** (J11). Their addresses, keys and
 secrets go only in the AppHost's user secrets or in `deploy/.env` and the secret files `init-deployment.sh` writes,

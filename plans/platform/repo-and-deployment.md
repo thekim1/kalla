@@ -1,10 +1,10 @@
 # Platform repository, build and deployment: detailed design
 
 Detail round, step 2. Covers the repository, build conventions, projects, local development, images, production
-Compose, release bundle, CI/CD, observability, Kubernetes and the ordered P0 checklist. Builds on [`plan.md`](plan.md)
+Compose, release bundle, CI/CD, observability, Kubernetes and the ordered P0 checklist. Builds on [`../archive/area-plans/platform.md`](../archive/area-plans/platform.md)
 §1, §2, §7, §10, §11 and [`data-model.md`](data-model.md) (roles, `init.sql`/`app-roles.sql`, migration service, Redis
 prefix, partitions, Swedish search). Choices the plans leave open and contradictions found are in §12. Rewritten in the
-simplification pass ([`../simplification-pass.md`](../simplification-pass.md), 2026-10-30); what went is listed in §13.
+simplification pass ([`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md), 2026-10-30); what went is listed in §13.
 
 **Rule**: copy the gateway (`~/git/llmgateway`, commit `e25b491`, release 0.8.5) wherever it fits. Every file below is
 marked **copy** (as-is apart from names), **adapt** (same structure, our content) or **new**. Versions marked
@@ -162,7 +162,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | Pipelines | JSON Schema 2020-12 validator `LateApexEarlySpeed.Json.Schema` | 4.2.2 (BSD-3-Clause; to-verify #17: `JsonSchema.Net` 9.x binaries ship under an Open Source Maintenance Fee Agreement, so they are not used; Corvus' validator was checked first and left out because its analyzers flow into every consuming project) | P1, `Ume.Rag.Pipelines` (template parameter schemas, admin and worker; generic schema-driven admin forms) |
 | Text | `sv_SE` Hunspell word list (LibreOffice dictionaries, pinned commit and SHA-256) | – | embedded resource of `SwedishDecompounder` (data-model §3.1); licence in postponed P2 |
 | MCP | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` | 2.3.0 | NuGet-checked (knowledge design step 7: attribute and transport names); P2 (MCP endpoint group, tool hub, template); recheck at P2 start. No further JSON-Schema, YAML or MSAL package in P2; MSAL in P3 for OBO |
-| Blobs | `AWSSDK.S3` (only dependency `AWSSDK.Core`) | exact pin under the package rule of §2.3 (4.0.104.6 checked 2026-10-30) | `Ume.Rag.Infrastructure` `S3BlobStore` (P1, contract-tested against the chosen server; `Minio` not used) ([`../performance-pass.md`](../performance-pass.md) §3.13) |
+| Blobs | `AWSSDK.S3` (only dependency `AWSSDK.Core`) | exact pin under the package rule of §2.3 (4.0.104.6 checked 2026-10-30) | `Ume.Rag.Infrastructure` `S3BlobStore` (P1, contract-tested against the chosen server; `Minio` not used) ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13) |
 | Keys | `Azure.Security.KeyVault.Keys`, `Azure.Identity` | *to verify* | `IKeyProvider` for Azure; OpenBao via plain `HttpClient` (transit API), no package |
 | Testing | `xunit.v3` 4.0.2, `xunit.runner.visualstudio` 4.0.1, `Microsoft.NET.Test.Sdk` 18.11.0, `Shouldly` 4.3.0, `NSubstitute` 6.2.0, `WireMock.Net` 2.19.0, `Microsoft.AspNetCore.Mvc.Testing` 10.0.13, `Microsoft.Extensions.TimeProvider.Testing` 10.11.0, `Testcontainers.PostgreSql` / `.Redis` 4.16.0 | as listed | gateway (no `EntityFrameworkCore.Sqlite`: every DB test needs pgvector) |
 | Benchmarks | `BenchmarkDotNet` | 0.15.8 | gateway |
@@ -240,10 +240,10 @@ Every service project starts with `if (await WebDefaults.ExitIfHealthProbeAsync(
 |---|---|---|---|
 | `Rag:Roles` (env `Rag__Roles`) on `Ume.Rag.Api` | comma list of `knowledge`, `chat`, `mcp` | unset means `knowledge`; the AppHost and `compose.prod.yaml` set `knowledge,chat,mcp` (the `mcp` endpoint group arrives in P2) | maps only those endpoint groups; health reports the active roles; `/version` lists them |
 | `Retrieval:Mode` | `InProcess`, `Http` | `InProcess` | `chat` without `knowledge` requires `Http` and `Retrieval:BaseUrl`; `IRetriever` is then the HTTP client with a `ume-rag-sk-` service key |
-| `Worker:Classes` on `Ume.Rag.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; per-instance concurrency per class is the deployment setting `Worker:Concurrency:<class>` (defaults = engine design §9.1 table), `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps ([`../performance-pass.md`](../performance-pass.md) §3.4) |
+| `Worker:Classes` on `Ume.Rag.Worker` | job classes (`preview`, `command`, `sync`, `fetch`, `parse`, `embed`, `eval`; P2 `attachment`; crawling is part of `sync`/`fetch`; data-model §4.2) | all | lets a later deployment run e.g. a `parse`-only worker next to the parser host; per-instance concurrency per class is the deployment setting `Worker:Concurrency:<class>` (defaults = engine design §9.1 table), `Settings.WorkerConcurrency` keeps only fleet-wide shares and caps ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.4) |
 | `Worker:HeartbeatSeconds`, `Worker:InstanceTimeoutSeconds`, `Worker:ReaperSeconds`, `Worker:PollSeconds`, `Worker:StopGraceSeconds` on `Ume.Rag.Worker` | seconds | 10, 30, 10, 2, 90 | heartbeat and instance timeout, reaper interval, dispatcher poll, grace for running jobs on stop (engine design §9.1, §9.4). `Worker:Classes` is a comma list. `Worker:FinalizerSeconds` (run finalizer interval, engine design §10.4, default 30) is a `double` in 0.1–600, so tests can go below 1 s |
-| `Worker:Maintenance` | `true`/`false` | `true` | partition maintenance, content retention, blob purge and the drift sweep; `true` on exactly one instance until P2, where several instances may run it, each task as a lease leader (`content."LeaderLeases"`, failover ≤ 30 s, [`../performance-pass.md`](../performance-pass.md) §3.5) |
-| `Admin:Retention` on `Ume.Rag.AdminApi` | `true`/`false` | `true` | runs the config/chat/audit retention steps; each batch is idempotent under `pg_try_advisory_xact_lock(<step>)`, so the P2 a/b slots share or skip work; `false` is an off switch ([`../performance-pass.md`](../performance-pass.md) §3.5) |
+| `Worker:Maintenance` | `true`/`false` | `true` | partition maintenance, content retention, blob purge and the drift sweep; `true` on exactly one instance until P2, where several instances may run it, each task as a lease leader (`content."LeaderLeases"`, failover ≤ 30 s, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5) |
+| `Admin:Retention` on `Ume.Rag.AdminApi` | `true`/`false` | `true` | runs the config/chat/audit retention steps; each batch is idempotent under `pg_try_advisory_xact_lock(<step>)`, so the P2 a/b slots share or skip work; `false` is an off switch ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5) |
 
 Splitting Chat from Knowledge later is a Compose change: a second `rag-api` service with `Rag__Roles=chat`,
 `Retrieval__Mode=Http`; no code change (plan §1).
@@ -296,7 +296,7 @@ Worker settings besides `Worker:*` (connectors design §7, §8): `Crawl:AllowedP
 Platform settings (data-model §5): `Config:MaxUnconfirmedSeconds` (90 s grace window for security-relevant decisions
 on every service).
 
-Scale-out settings ([`../performance-pass.md`](../performance-pass.md) §3.1, §3.4, §3.8, §3.9, §3.13; all deployment
+Scale-out settings ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.1, §3.4, §3.8, §3.9, §3.13; all deployment
 values): `Worker:Concurrency:<class>` (per instance, above); P2 `Embedding:GlobalMaxInFlight` (fleet-wide embedding cap
 via a Redis lease, default 2 × provider replicas; Redis down: per-instance AIMD only, engine design §18); `Parser:Endpoints` (optional multi-endpoint parser list, not used in the
 3- and 5-host topologies); `BlobStore:Root` (the file-system store's container, an absolute path, default
@@ -565,7 +565,7 @@ go-live with the R1 release test (§8.3). Memory limits are unchanged.
 Sum of memory limits (ingestion containers counted at the slice cap, the one-shot migrator included), pilot with one
 slot (six long-running containers, no Redis): 16 GB host ≈ 12 GB (OS and Docker keep ~2 GB; limits are not all
 reached at once); 24 GB host ≈ 18.75 GB, ≈ 20.25 GB with Open WebUI. P2 adds the b slots, Redis (256m,
-[`../performance-pass.md`](../performance-pass.md) §3.12) and 384m per hosted MCP server (`ume-mcp-kommun`): ≈ 14.1 GB on a
+[`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.12) and 384m per hosted MCP server (`ume-mcp-kommun`): ≈ 14.1 GB on a
 16 GB host and ≈ 21.6 GB on a 24 GB host, so P2 uses the 24 GB host **with Open WebUI on its own VM** (decided by the user
 2026-10-30 in the consistency pass); the in-process tool hub may need a larger `rag-api` limit, measured in P2. Under
 CPU contention the data plane (weight 1024) gets about 4× the CPU of each ingestion container; the slice keeps the ingestion zone at 5 cores even when every ingestion container is
@@ -584,7 +584,7 @@ storage parameters of `content."Jobs"` only, data-model §4.1, settled at the H2
 mount paths); it holds the 16 GB profile with the 24 GB values as comments, and the 24 GB profile overrides the three
 memory settings with `-c` options in `compose.host-24g.yaml`, so there is one `postgresql.conf`
 (`init-deployment.sh --host-memory 24` adds the overlay). `DOTNET_GCHeapHardLimitPercent=0x4B` (75 %) is set on
-**every** .NET container (api, worker, admin, migrations), not only the api ([`../performance-pass.md`](../performance-pass.md) §4).
+**every** .NET container (api, worker, admin, migrations), not only the api ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §4).
 GC settings in the environment are **hexadecimal**: `75` would be read as 117 % and ignored (measured, to-verify #124).
 
 **Multi-host database profile** (P2; 64 GB database host D, §6.4; estimate, confirmed by the scale test):
@@ -593,7 +593,7 @@ hosts and 93 at five, performance pass §3.1; a further processing host at five-
 PgBouncer trigger below), `shared_buffers=16GB`, `effective_cache_size=48GB`,
 `autovacuum_work_mem=2GB`, `autovacuum_max_workers=5`, `max_parallel_maintenance_workers=4`, `max_wal_size=16GB`,
 `checkpoint_timeout=15min`, `random_page_cost=1.1`, `effective_io_concurrency=200`; per-table settings on `Chunks`,
-`CrawlHosts`, `CrawlRuns` are in data-model §2.2 ([`../performance-pass.md`](../performance-pass.md) §3.2). When an HNSW
+`CrawlHosts`, `CrawlRuns` are in data-model §2.2 ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.2). When an HNSW
 vacuum on `Chunks` takes more than 6 hours, the index is rebuilt monthly with `REINDEX INDEX CONCURRENTLY` (needs twice
 the index's space). **No connection pooler up to five hosts**: the budget fits, and backends hold no dictionaries
 (stock image, decompounding in .NET), so a backend takes ≈ 10 MB (*estimate*); the Postgres memory limit is sized from
@@ -618,7 +618,7 @@ and `WEBSOCKET_MANAGER=redis` with its own Redis.
 
 Secrets and certificates are files, never environment variables (gateway `compose.prod.yaml`): `${UME_RAG_SECRETS_DIR}/<service>`
 → `/run/app-secrets` (key-per-file: `ConnectionStrings__ragdb`, `ConnectionStrings__redis` (P2, multi-host only; without it the in-memory `IRateLimitStore`/`ISharedCache` are used), `Security__KeyPepper`,
-`Gateway__Keys__OnPrem` / `__Eu` / `__External` (delegating gateway keys per level, plan §6; until gateway release 2 the pilot team's own keys per level, plan §7, weakness review §5: api and admin hold all three, the worker only `OnPrem` and `Eu`, never the open key; its non-on-prem LLM calls send `Eu`), `BlobStore__S3__AccessKey`/`BlobStore__S3__SecretKey` (**per service**, only with `BlobStore:Kind=S3`; bucket policies mirror the mounts above: worker read/write, admin write on `uploads/` and read, api read-only, P2 write on `chat-tmp/`; [`../performance-pass.md`](../performance-pass.md) §3.13), `Security__CrawlKeyPepper` (worker; **from P1** the HMAC key of `HostHash` in security event 5101, generated by `init-deployment.sh`; P2 also: HMAC of host names in the Redis crawl leases, [`../performance-pass.md`](../performance-pass.md) §3.6), `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`,
+`Gateway__Keys__OnPrem` / `__Eu` / `__External` (delegating gateway keys per level, plan §6; until gateway release 2 the pilot team's own keys per level, plan §7, weakness review §5: api and admin hold all three, the worker only `OnPrem` and `Eu`, never the open key; its non-on-prem LLM calls send `Eu`), `BlobStore__S3__AccessKey`/`BlobStore__S3__SecretKey` (**per service**, only with `BlobStore:Kind=S3`; bucket policies mirror the mounts above: worker read/write, admin write on `uploads/` and read, api read-only, P2 write on `chat-tmp/`; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13), `Security__CrawlKeyPepper` (worker; **from P1** the HMAC key of `HostHash` in security event 5101, generated by `init-deployment.sh`; P2 also: HMAC of host names in the Redis crawl leases, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.6), `Oidc__ClientSecret`, `OpenWebUi__JwtSecret`, `OrgSync__DataApiKey` (admin), `KeyProvider__*`,
 `Security__DownloadGrantKeys__<kid>` and `Security__CacheKeyPepper` (api; knowledge design §4.6, §5.4), `Security__ConversationIdKeys__<kid>` and `OpenWebUi__AdminApiKey` (api; chat design §11.1, §14.2), `Security__ToolAuditKey` (api and admin; P2), `Api__ServiceKey` (worker, P2: client `rag-internal`, posts chat-attachment chunks
 to the api's internal route, chat design §15.2; issued in the admin UI)), `${UME_RAG_CERTS_DIR}/<service>` →
 `/run/certs` (service cert/key, `ca.pem`, `data-protection.pfx`; P2: the tool identity's Entra client-credentials certificate for
@@ -712,7 +712,7 @@ password sign-in briefly on and writes `secrets/api/OpenWebUi__AdminApiKey` (cha
 The migrator's embedding profile knobs (`EmbeddingProfile__*`, data-model §2.1) come
 from `deploy/.env` lines `UME_RAG_EMBEDDING_MODEL`, `_DIMENSIONS`, `_REQUEST_DIMENSIONS`, `_MAX_INPUT_TOKENS` and
 `_MAX_RESIDENCY` that the operator appends (empty model: no profile seeded); the script has no options for them yet.
-**Gateway keys per deployable** (plan §6; [`../performance-pass.md`](../performance-pass.md) §3.9): the worker's keys
+**Gateway keys per deployable** (plan §6; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.9): the worker's keys
 are its own and carry the gateway's existing per-key `MaxConcurrentRequests` cap, so a misconfigured worker fleet
 cannot starve chat's query embeddings. A separate query-embedding route/replica follows only when its trigger fires
 (query embedding p95 during ingestion > 2 × idle).
@@ -737,7 +737,7 @@ admin test panel and answer judge run the same `Ume.Rag.Answering` as the api). 
 overlap: its pool would exceed the role's connection limit, and job leases make a short pause harmless) → parser and
 clamav recreated if their image changed (the worker retries the in-flight range).
 
-**Several hosts** (P2, §6.4, [`../performance-pass.md`](../performance-pass.md) §5.4): `rolling-update.sh --role` per
+**Several hosts** (P2, §6.4, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §5.4): `rolling-update.sh --role` per
 host, in order: extensions + migrations once (from D's operator shell) → A1 then A2 (each a/b as above) → admin → F → P
 (worker stop-then-start per host; parser recreated). Mixed versions are safe because migrations are expand/contract and
 jobs that need a newer build carry `MinBuild` in their payload (older instances requeue them without an attempt).
@@ -825,7 +825,7 @@ self-hosted runner for every pull request", "Merge on local evidence, then check
 | `flake-hunt.yml` | P2 | weekly Mon 03:17, dispatch | copy | 5 runs incl. `Category=Flaky` |
 | `parser-robustness.yml` | P2 | weekly, nightly once stable; dispatch | new | Atheris fuzzing of our own parser code (zip pre-check, sniffing, name sanitiser; the attachment splitter with email), 10 minutes each, and the mutation run against the container (parser design §15.4) |
 | `perf.yml` | P1 (before the pilot) | weekly + before each release (dispatch) | new | R1 release test (§8.3) |
-| `scale.yml` | P2 | dispatch (manual) on 3 test hosts: before the P2 multi-host rollout and after changes to the scale decisions; not per release | new | scale test ([`../performance-pass.md`](../performance-pass.md) §7): `tests/scale/Ume.Rag.FakeSites` (synthetic multi-host site), `tests/scale/Ume.Rag.ScaleSeed` (1M/5M/10M-chunk binary-COPY seed), FakeGateway with a GPU throughput model, 300-VU k6 chat; same pass rule as R1 for chat p95 TTFT |
+| `scale.yml` | P2 | dispatch (manual) on 3 test hosts: before the P2 multi-host rollout and after changes to the scale decisions; not per release | new | scale test ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §7): `tests/scale/Ume.Rag.FakeSites` (synthetic multi-host site), `tests/scale/Ume.Rag.ScaleSeed` (1M/5M/10M-chunk binary-COPY seed), FakeGateway with a GPU throughput model, 300-VU k6 chat; same pass rule as R1 for chat p95 TTFT |
 | `evaluation.yml` | P1 (before the pilot) | nightly, dispatch | new | evaluation sets against the **test** deployment with that deployment's own embedding profile (EU-hosted `text-embedding-3-large` in the pilot; on-prem BGE-M3 once it exists; runner on the test host, §12.4) |
 | `entra.yml` | P0 (package 1) | dispatch, PR touching `infra/entra/**` (plan only) | new | `azure/login` with OIDC federation (no stored secret) → `what-if`/plan on PR → apply after approval by the GitHub environment `entra-test` / `entra-prod` (required reviewers = the municipality's approvers, or a link to their change ticket); Bicep with the Microsoft Graph extension (or Terraform `azuread`, §12.5) in `infra/entra/`, which owns **only RAG's own registrations** (`ume-rag-admin` and the API registration; never the gateway's); deployer identity `Application.ReadWrite.OwnedBy` + `Group.Create` only, so admin consent, role assignments and client secrets stay manual steps (identity design §12) |
 
@@ -914,7 +914,7 @@ p50/p95/p99).
   `.gateway.pii` (chat design §17; low-cardinality dimensions only, never assistant slugs on hot histograms); tools add
   `rag.agent.*`, `rag.tools.*`, `rag.mcp.requests`, `rag.skills.loads`, `rag.skills.gate` (tools design §10); the admin
   adds `rag.admin.validation.refusals`, `.jobs.enqueued`, `.sync`, `.test_panel` (+ `.duration`),
-  `.conversation_access`, `.uploads` (+ `.bytes`), `.publish` (admin design §10.3); capacity metrics ([`../performance-pass.md`](../performance-pass.md)
+  `.conversation_access`, `.uploads` (+ `.bytes`), `.publish` (admin design §10.3); capacity metrics ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md)
   §3.14): `rag.jobs.slots.busy` / `.slots.total`, `rag.crawl.host_budget.utilisation`, P2 `rag.crawl.inflight_refusals` and
   `rag.embed.global_refusals`, `rag.embed.tokens_per_second`, `rag.embed.queue_wait` (by lane `ingest`/`query`),
   `rag.parser.slots_busy` / `slots_ready`, `rag.parser.ner.queue`, `rag.db.connections` per role vs limit,
@@ -930,7 +930,7 @@ p50/p95/p99).
   sync health), *Tools* (P2: calls and outcomes per server, p95
   duration, drift observations, approvals pending, agent limit hits, cost per run p95, MCP requests; tools design §10),
   *Capacity* (per-stage saturation, queue age per class, host budget utilisation, embedding tokens/s vs cap, HNSW
-  memory, connections vs budget; [`../performance-pass.md`](../performance-pass.md) §3.14). The Aspire dashboard is used in development only.
+  memory, connections vs budget; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.14). The Aspire dashboard is used in development only.
 
 ## 10. Kubernetes (later; mirrors `docs/kubernetes.md`)
 
@@ -982,13 +982,13 @@ pilot's models are EU-hosted through the gateway.
 | 18 | Gateway **release 1** agreed with the gateway team (weakness review §5): feature B (residency ceiling, key flag `RequireMaxResidency`, the 503/403 split, `/v1/models` filtered by the ceiling) with ADR draft 018 (`../gateway-changes/adr-drafts.md`), and FakeLlm `dimensions` (§12.2); release 2 (features C and A, ADRs 019–020) planned for P2; the pilot team's per-level keys for pilot attribution agreed | design and ADR 018 accepted by the gateway team; release 1 scheduled before the pilot | README P0, gateway-changes plan §4, design §13 |
 | 19 | Docs: `local-development.md`, `production-setup.md` (sizing from §6.2), `runbook.md` (incl. restore and escrow; before go-live also a section on finding and exporting one Open WebUI conversation for the registrar on a public-records request, weakness review §4, plan §8), `upgrade-guide.md`, `security-events.md` | reviewed by the operations owner | plan §10 |
 | 20 | Worker dispatcher skeleton (after #6): `WorkerInstances` heartbeat, leases, reaper (reclaim ≠ attempt; poison suspect after 3 reclaims), `LISTEN rag_jobs`; one `command` kind end to end (admin enqueues, worker applies) | integration test: the command is applied; a killed worker's job is reclaimed within 45 s without using an attempt | engine design §20 (P0) |
-| 21 | Scale seams (after #6, #20): `IBlobStore` write-once contract (`IfAbsent`; `DeleteAsync` is the purge, the tombstone is a database row, data-model §9) with the file-system implementation; `IJobQueue` seam (Postgres implementation); pooler-safe SQL rules + scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` and `Worker:Classes` per instance; `DOTNET_GCHeapHardLimitPercent=0x4B` on every .NET service (the halfvec HNSW index follows in P1) | unit test finds no forbidden session-state SQL; contract tests pass on the file-system store (an overwrite attempt is refused) | [`../performance-pass.md`](../performance-pass.md) §8 (P0) |
-| 22 | When the on-prem model hardware exists (register M2; no P0 or P1b gate): on-prem capacity on the real gateway hardware (weakness review §5): BGE-M3 embedding throughput (tokens/s by batch size, query-embedding p95 under an ingestion load) and the latency of the condense and answer models (p95, TTFT p99 for a full 16k-token prompt), by scripts in `scripts/capacity/` against the gateway with the user's access | numbers recorded against the performance-pass estimates (`to-verify.md` #98, #99, #104, #125, #149); a shortfall raised as register M2 | [`../performance-pass.md`](../performance-pass.md) §2, §3.9; `postponed-decisions.md` M2 |
+| 21 | Scale seams (after #6, #20): `IBlobStore` write-once contract (`IfAbsent`; `DeleteAsync` is the purge, the tombstone is a database row, data-model §9) with the file-system implementation; `IJobQueue` seam (Postgres implementation); pooler-safe SQL rules + scan test; `ConnectionStrings__ragdb-listen`; `Worker:Concurrency:<class>` and `Worker:Classes` per instance; `DOTNET_GCHeapHardLimitPercent=0x4B` on every .NET service (the halfvec HNSW index follows in P1) | unit test finds no forbidden session-state SQL; contract tests pass on the file-system store (an overwrite attempt is refused) | [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §8 (P0) |
+| 22 | When the on-prem model hardware exists (register M2; no P0 or P1b gate): on-prem capacity on the real gateway hardware (weakness review §5): BGE-M3 embedding throughput (tokens/s by batch size, query-embedding p95 under an ingestion load) and the latency of the condense and answer models (p95, TTFT p99 for a full 16k-token prompt), by scripts in `scripts/capacity/` against the gateway with the user's access | numbers recorded against the performance-pass estimates (`to-verify.md` #98, #99, #104, #125, #149); a shortfall raised as register M2 | [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §2, §3.9; `postponed-decisions.md` M2 |
 
 `perf.yml` and the nightly `evaluation.yml` follow in P1, before the pilot (§8.1).
 
 **Who does what (decided 2026-10-30):** the main session runs Stage 0 (#1, #2 and the shared files), then two
-streams build the rest in parallel; the split, file ownership and hand-offs are in [`../p0/`](../p0/). The parts that
+streams build the rest in parallel; the split, file ownership and hand-offs are in [`../archive/p0/`](../archive/p0/). The parts that
 need other people are owned by the user, outside both streams: Entra package 1 (#17; moved to P2, kept but not submitted), agreeing gateway
 release 1 with the gateway team (#18; it is built in P1, before the pilot; release 2 follows in P2, weakness review
 §5), the backup target and key escrow with IT (`to-verify.md` #145), access to the test host (#16) and to the gateway
@@ -1022,7 +1022,7 @@ decided form of the simplification pass (2026-10-30).
 
 ## 13. Deferred or removed (simplification pass)
 
-See [`../simplification-pass.md`](../simplification-pass.md) (section numbers there).
+See [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) (section numbers there).
 
 | Item | Where it went |
 |---|---|

@@ -1,6 +1,6 @@
 # Chat API: detailed design
 
-Detail step 8 of the Ume.Rag design. Details [`plan.md`](plan.md) (binding, incl. its answered questions 1–3 and §21
+Detail step 8 of the Ume.Rag design. Details [`../archive/area-plans/chat-api.md`](../archive/area-plans/chat-api.md) (binding, incl. its answered questions 1–3 and §21
 here) and the Decisions table in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consumes, without
 redesigning: `IRetriever`, `RetrievalResult`, `Coverage`, `MarkCited`, download grants, degraded retrieval, citations and
 the latency budget of [`../knowledge-api/design.md`](../knowledge-api/design.md) (§2.2, §3.6, §4.6, §5, §5.5, §9, §10,
@@ -10,7 +10,7 @@ delegation, residency ceiling, key flags, run headers and the two releases of
 [`../gateway-changes/design.md`](../gateway-changes/design.md) (§3, §5, §7.1, §13); the `chat` tables, config
 versioning, envelope encryption with bucket keys, retention and Redis rules of
 [`../platform/data-model.md`](../platform/data-model.md) (§2.1, §2.3, §5, §7, §8, §11, §12.23) and level policies of
-[`../platform/plan.md`](../platform/plan.md) §8a; projects, roles, FakeGateway, observability and the R1 test of
+[`../archive/area-plans/platform.md`](../archive/area-plans/platform.md) §8a; projects, roles, FakeGateway, observability and the R1 test of
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) (§1, §3, §4.3, §8.3, §9). Changes needed
 elsewhere: §20; questions: §21; unverified facts: §22; removed or deferred: §23.
 
@@ -94,7 +94,7 @@ link's `excludedToolIds` (P2), else `Rag`; there is no mode field to edit.
 `ChatPipeline` (§4) selects the strategy by `AssistantSnapshot.Mode`, feeds its events through `AnswerFilter` and
 `CitationEmitter` (§9) into `ChatStreamWriter` (SSE or JSON per client kind) and hands the finished `ChatTurn` to the
 `ConversationWriter` (§12). The P2 agent strategy reuses everything except the middle: a bounded loop of gateway calls
-with `tools`, tool calls through the tool hub (`../tools/plan.md` §3), `search_knowledge` mapped to `IRetriever`, limits
+with `tools`, tool calls through the tool hub (`../archive/area-plans/tools.md` §3), `search_knowledge` mapped to `IRetriever`, limits
 on calls/time/cost (tools design §6.5), and the effective level **fixed at the start of the run** and never raised:
 every reachable tool server has clearance ≥ and result level ≤ that level (tools design §5.3, identity §4.7). Tool calls
 become `ToolCall` events (`ToolCallState` `started`/`succeeded`/`failed`/`denied`; Open WebUI `status` events; nothing
@@ -502,7 +502,7 @@ traceparent: …
 - `temperature` only when `QuerySteps.answer.temperature` is set (default unset: the model's own default; some models,
   e.g. the Claude models on the gateway, refuse it); no other sampling parameter.
 
-**Keys and ceiling** (gateway design §13). **Until gateway release 2** (P1; reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)) the
+**Keys and ceiling** (gateway design §13). **Until gateway release 2** (P1; reasoning: [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)) the
 three keys are the pilot department's team's own keys per level (`AllowedIpRanges`, `RequireMaxResidency`, no
 delegation, so the gateway also applies that team's request policy, which stays empty), and every call is charged to
 the pilot team. From release 2 (P2) they are delegating keys:
@@ -727,7 +727,7 @@ row under the same id (§13.2).
 Mode = the assistant's `HistoryMode` (within the level policy, identity §4.3 step 9), tightened to `none` for Open
 WebUI temporary chats.
 
-**P1: `none` only** (reasoning: [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant runs history mode `none` until A1 is
+**P1: `none` only** (reasoning: [weakness review §4](../archive/passes/weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant runs history mode `none` until A1 is
 answered; `stored` and `session` (and with them the bucket keys of §12.3, content encryption and crypto-shredding) are
 built when A1 allows stored content. Until then the level policies allow `none` only (admin V29), and Open WebUI's own
 store is the primary copy of every conversation (§13.3).
@@ -783,7 +783,7 @@ mode `none` (all of P1, §11.2) the turn carries no text at all.
 
 1. Group turns by conversation; conversations and every multi-row upsert's keys are processed in **sorted key
    order**, so instances flushing overlapping key sets cannot deadlock
-   (reasoning: [`../performance-pass.md`](../performance-pass.md) §3.2).
+   (reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.2).
 2. **Conversation upsert**: `INSERT … ON CONFLICT (ClientId, SubjectId, ExternalChatId, AssistantId) DO UPDATE SET
    "LastMessageAt" = excluded."LastMessageAt", "ExpiresAt" = … RETURNING "Id"` (issued ids: `ON CONFLICT ("Id")`).
 3. **Bucket key** (§12.3) for each message with content (none in P1, mode `none`).
@@ -859,7 +859,7 @@ our `source` snippets inside them, and feedback with a **full chat snapshot** (`
 - A user deleting a chat in Open WebUI does **not** reach us (no callback); our copy follows our retention. The privacy
   notice of the pilot says so.
 - Client data-handling profile (registry): `StoresHistory = true`, `ClientRetentionDays = 90`.
-- **Primary copy** (reasoning: [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). With the pilot in mode `none`, this store holds the only
+- **Primary copy** (reasoning: [weakness review §4](../archive/passes/weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). With the pilot in mode `none`, this store holds the only
   content of every pilot conversation and feedback comment. The **DPIA** (register G1, the user with the data
   protection officer; started in P0, finished before go-live) covers it: chats, feedback snapshots, the
   `openwebui-data` volume and who holds Open WebUI's admin role; it decides W2. A **public-records request** for a
@@ -1152,10 +1152,10 @@ waits for or depends on it.
 | `platform/data-model.md` §2.3 new | `FeedbackImportState` (§14.2); P2 `Attachments`, `AttachmentChunks` (§15.2) |
 | `platform/data-model.md` §2.3 `AssistantDailyTotals` | add `Unavailable`, `Degraded`, `Errors`, `Cancelled`, `UncitedAnswers` (§18.8) |
 | `platform/data-model.md` §8 | chat retention deletes rows (messages by their own expiry, then empty expired conversations); bucket-key destruction behind a setting switched on only after A1 (§13) |
-| `platform/plan.md` §6 (residency matrix) | `public` sends `External`; history-keeping clients run every turn at max(assistant level, client ceiling) (§8.2) |
+| `archive/area-plans/platform.md` §6 (residency matrix) | `public` sends `External`; history-keeping clients run every turn at max(assistant level, client ceiling) (§8.2) |
 | `identity/design.md` §3 client registry, §5.1, §5.3 | no `TaskModel`/`TaskModelResidency`; Open WebUI has one connection (ours) and no task model; custom connection headers `X-Rag-Owui-Message-Id`, `X-Rag-Owui-User-Message-Id` are unsigned and only used inside the caller's own conversation |
 | `identity/design.md` §3, §10 | P2 caller "worker → API internal attachment route, internal service key"; event 5011 `rag.gateway.delegation_missing`; 5002 reason `conversation_not_owned`; secret `Security__ConversationIdKeys__<kid>` |
-| `gateway-changes/design.md` / `plan.md` | optional later item: `contextWindow` on `/v1/catalog/models` so the admin can prefill `contextTokens`; P2 rerank endpoint (knowledge §18) |
+| `gateway-changes/design.md` / `../archive/area-plans/chat-api.md` | optional later item: `contextWindow` on `/v1/catalog/models` so the admin can prefill `contextTokens`; P2 rerank endpoint (knowledge §18) |
 | `ingestion-worker/design-engine.md` job classes | P2 class `attachment` (high priority, concurrency 2; scan → parse → chunk → PII → embed → post to API) |
 | `ingestion-worker/design-processing.md` §14.8 | answer-level evaluation (§18.8) runs in `rag-admin` (run kind `answers`), judge `Settings.EvaluationJudgeModel`; the worker references neither `Ume.Rag.Answering` nor `Ume.Rag.Tools` |
 | `platform/repo-and-deployment.md` §2.2, §3 | `Microsoft.Extensions.AI.OpenAI` not needed by the chat role; settings `Chat:*` (`PublishApiReference`, `CondenseTimeout` 600 ms, `GatewayHeadersTimeout` 15 s, `StreamIdleTimeout`, `MaxAnswerDuration`, `WriterEnqueueTimeout`, `CharsPerToken`), `Gateway:RequireDelegationEcho`, `OpenWebUi:BaseUrl`, `OpenWebUi:AdminApiKey`; `Gateway:AttributionMode` and `Gateway:SendResidencyCeiling` removed (always on) |
@@ -1163,8 +1163,8 @@ waits for or depends on it.
 | `platform/repo-and-deployment.md` §1, §4.1, §12.8 | `benchmarks/Ume.Rag.Benchmarks/ChatBenchmarks.cs`; overhead run under `benchmarks/release-test`; `compose.openwebui.yaml` env of §4.3; no pruning sidecar |
 | `platform/repo-and-deployment.md` §4.3 FakeGateway | streams with configurable usage chunk, broken stream, stall, missing `[DONE]`; echoes `x-ume-session`; refuses requests without `x-ume-max-residency`; modes `503` + `Retry-After` and `403 max_residency_not_met` |
 | `platform/repo-and-deployment.md` §9 | metrics of §17 |
-| `admin/plan.md` §4–§5 | publish/audience validation: an assistant offered to a history-keeping client needs a gateway model served at max(level, client ceiling) (§8.2); Assistants form: condense toggle, history window, context and output tokens, temperature, language mode, not-found texts sv/en + contact links; answer-level evaluation on the assistant page (§18.8); test panel shows raw vs filtered answer; **Feedback page in P1** (§14.4); Clients page: warning when Open WebUI headers are missing (no task model) |
-| `tools/plan.md` §3 | agent loop behind `IAnswerStrategy` with `AnswerEvent`s (§2.2) |
+| `archive/area-plans/admin.md` §4–§5 | publish/audience validation: an assistant offered to a history-keeping client needs a gateway model served at max(level, client ceiling) (§8.2); Assistants form: condense toggle, history window, context and output tokens, temperature, language mode, not-found texts sv/en + contact links; answer-level evaluation on the assistant page (§18.8); test panel shows raw vs filtered answer; **Feedback page in P1** (§14.4); Clients page: warning when Open WebUI headers are missing (no task model) |
+| `archive/area-plans/tools.md` §3 | agent loop behind `IAnswerStrategy` with `AnswerEvent`s (§2.2) |
 | `postponed-decisions.md` A1, C1 | A1 also gates bucket-key destruction; C1 struck (decided 2026-10-30, §15.2) |
 
 ## 21. Questions
@@ -1278,14 +1278,14 @@ Removed or deferred, with where each went:
 
 ## 24. Deferred or removed (weakness review)
 
-Reasoning: [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+Reasoning: [weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
 
 | Item | Where it went |
 |---|---|
 | Nightly answer-level evaluation (run kind `answers`, §18.8) | P2 |
 | Assistant tests (run kind `assistant-tests`, §18.8) | P2, with the assistant version diff, templates and copy (admin design §17) |
 
-Reasoning: [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
+Reasoning: [weakness review §4](../archive/passes/weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
 
 | Item | Where it went |
 |---|---|
@@ -1293,7 +1293,7 @@ Reasoning: [weakness review §4](../weakness-review.md#4-data-protection-guards-
 | Feedback comments in our store (`/v1/feedback`, import), comment reveal, conversation review | Same; comments are refused (`comment_not_stored`) or dropped on import and stay in Open WebUI (§14) |
 | Chat attachments (§15.2), widget conversations stored for review, server-side history (P2) | Also wait for A1 to allow stored content |
 
-Reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+Reasoning: [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
 
 | Item | Where it went |
 |---|---|

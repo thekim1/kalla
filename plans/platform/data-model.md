@@ -1,10 +1,10 @@
 # Platform data model and storage: detailed design
 
 Detail round, step 1. Covers every table, role, index, queue, key and blob path of Ume.Rag. Builds on
-[`plan.md`](plan.md) §2–4, §6, §8, §8a and §9 and the data parts of every service plan. Where this document had to choose
+[`../archive/area-plans/platform.md`](../archive/area-plans/platform.md) §2–4, §6, §8, §8a and §9 and the data parts of every service plan. Where this document had to choose
 something the plans leave open, or found two plans disagreeing, the choice is listed in §12 with a recommendation.
-Removed or deferred mechanisms are listed once, in §13 (reasoning: [`../simplification-pass.md`](../simplification-pass.md))
-and §15 (reasoning: [`../weakness-review.md`](../weakness-review.md)); the rest of the document does not mention them.
+Removed or deferred mechanisms are listed once, in §13 (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md))
+and §15 (reasoning: [`../archive/passes/weakness-review.md`](../archive/passes/weakness-review.md)); the rest of the document does not mention them.
 Where the schema is built, the EF model and migrations (`src/Ume.Rag.Infrastructure/Persistence`) are the source;
 this document describes them and the parts still to build.
 
@@ -264,8 +264,8 @@ delivered with gateway release 2 in P2 (weakness review §5); until then `Member
 | `NodeManifest` | Registered stage types and their parameter schemas (template forms in the admin, engine design §3.2) | `NodeType varchar(100)`, `TypeVersion int`, `ParamsSchema jsonb`, `Metadata jsonb` (job class, cache class, effect tags, display names, deprecated), `FirstRegisteredAt` | PK (`NodeType`, `TypeVersion`); schema immutable per pair |
 | `WorkerNodeSupport` | Which live instance supports which stage version; publish refused unless a row exists with heartbeat < 60 s | `InstanceId` FK (Cascade), `NodeType`, `TypeVersion` | PK all three |
 | `Jobs` | Queue, unpartitioned (§4) | see §4 | |
-| `CrawlHosts` | Shared politeness budget per host | `Host varchar(253)` PK, `RequestsPerSecond numeric(5,2)`, `MaxConnections`, `NextAllowedAt`, `RobotsBlobPath`, `RobotsFetchedAt`, `Kind` (`municipal`/`external`), `RobotsStatus`, `CrawlDelaySeconds`, `BackoffFactor numeric(6,2)`, `PausedUntil`, `LatencyEwmaMs`, `BlockedAt` (connectors design §6) | `fillfactor = 50` (HOT updates of `NextAllowedAt`), aggressive autovacuum (`autovacuum_vacuum_scale_factor = 0.02`, `autovacuum_vacuum_cost_limit = 2000`; reasoning: [`../performance-pass.md`](../performance-pass.md) §3.2) |
-| `LeaderLeases` (P2) | Lease leaders for singletons once several worker instances run maintenance (partition maintenance, content retention, drift sweep; lease 30 s, renewed every 10 s; [`../performance-pass.md`](../performance-pass.md) §3.5) | `Name varchar(50)` PK, `Owner uuid`, `Until timestamptz NOT NULL`, `Fence bigint NOT NULL DEFAULT 0` (writes carry it), `Checkpoint jsonb` | worker S I U |
+| `CrawlHosts` | Shared politeness budget per host | `Host varchar(253)` PK, `RequestsPerSecond numeric(5,2)`, `MaxConnections`, `NextAllowedAt`, `RobotsBlobPath`, `RobotsFetchedAt`, `Kind` (`municipal`/`external`), `RobotsStatus`, `CrawlDelaySeconds`, `BackoffFactor numeric(6,2)`, `PausedUntil`, `LatencyEwmaMs`, `BlockedAt` (connectors design §6) | `fillfactor = 50` (HOT updates of `NextAllowedAt`), aggressive autovacuum (`autovacuum_vacuum_scale_factor = 0.02`, `autovacuum_vacuum_cost_limit = 2000`; reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.2) |
+| `LeaderLeases` (P2) | Lease leaders for singletons once several worker instances run maintenance (partition maintenance, content retention, drift sweep; lease 30 s, renewed every 10 s; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5) | `Name varchar(50)` PK, `Owner uuid`, `Until timestamptz NOT NULL`, `Fence bigint NOT NULL DEFAULT 0` (writes carry it), `Checkpoint jsonb` | worker S I U |
 | `SiteProfiles` | Site profile per (level, host) (P1: `manual` versions only, umea.se a hand-checked Sitevision preset; learning and `LastLearnedAt`/`NextLearnAfter`, `proposed` versions, `LearnedFromRunId` and `Sample` used from P2, weakness review §1), shared by every source crawling the host (simplification pass §13) | `Id`, `Classification`, `Host varchar(253)`, `PresetId varchar(50) NULL` (built-in CMS preset, e.g. `sitevision`), `AppliedVersionId uuid NULL` (→ `SiteProfileVersions`), `LastLearnedAt`, `NextLearnAfter` (re-learning at most weekly), `UpdatedAt` | U (`Classification`, `Host`) |
 | `SiteProfileVersions` | Immutable profile versions; apply and roll back move `AppliedVersionId` | `Id`, `SiteProfileId` FK, `Number int`, `Profile jsonb` (CMS fingerprint, main-content root, boilerplate selectors and phrases, breadcrumb selector, date pattern, verified identity rule, URL normalisation, excluded URL types, change signal, JavaScript needed, link-list blocks kept for discovery), `Origin` (`learned`/`manual`/`preset`), `State` (`proposed`/`applied`/`superseded`/`rejected`), `LearnedFromRunId uuid NULL`, `Sample jsonb` (sampled URLs and sections, count, check result: largest main-text loss %, empty pages, boilerplate share before/after), `CreatedBy` (`system:worker` or admin `oid`), `CreatedAt`, `AppliedAt`, `AppliedBy` | U (`SiteProfileId`, `Number`); IX (`State`) `WHERE "State" = 'proposed'` |
 | `CrawlFrontier` | Crawl frontier. **P1: one frontier per source**, one row per (level, source, URL) with `SourceId`, `RunId`, `Depth smallint`, `Leaf bool` and `RemovalCheck bool NOT NULL DEFAULT false` (the row is a removal check; connectors design §6.0). **Later (P2):** shared between sources, one row per (level, URL), with the per-source fields moved to `CrawlClaims` (reasoning: weakness review §1) | `Classification`, `UrlHash bytea`, `Url text`, `Host`, `State` (`idle`/`pending`/`released`), `NextFetchAt`, `LastFetchedAt`, `LastStatus smallint`, `RedirectTo`, `ETag`, `LastModified`, `ContentHash`, `SitemapLastMod` (the last response's validators and sitemap `lastmod` per URL, since one request serves every source; connectors design §6.1; `SitemapLastMod` is cleared when the URL leaves the sitemap, which triggers the removal check, weakness review §3) | P1: PK (`Classification`, `SourceId`, `UrlHash`); P2: PK (`Classification`, `UrlHash`); IX (`Host`, `NextFetchAt`) `WHERE "State"='pending'` |
@@ -276,7 +276,7 @@ delivered with gateway release 2 in P2 (weakness review §5); until then `Member
 | `NodeOutputs` | Stage output cache index, content-addressed and shared by every document with the same input (blobs hold the data, §9) | `CacheKey bytea` PK (§9), `Classification`, `NodeType`, `NodeVersion`, `ParamsHash bytea`, `InputHash bytea`, `OutputHash bytea` (next key without loading the blob, engine design §8), `BlobPath` (a prefix for multi-blob outputs such as the parse output: `result.json`, `docling/*.json.gz`), `IsParseOutput bool`, `CreatedAt`, `LastUsedAt` | IX `LastUsedAt` |
 | `ChunkSets` | One chunk-stage output per (document, pipeline version, site-profile version, embedding profile, content version) | `Id`, `DocumentId` FK, `Classification`, `CollectionId`, `PipelineVersionId`, `SiteProfileVersionId uuid NULL`, `EmbeddingProfileId`, `ContentHash`, `InputHash bytea NOT NULL` (the personal-data stage's input, i.e. the chunk output's `OutputHash`; noise-only changes re-key the set, processing design §12), `State` (`writing`/`live`/`held`/`superseded`; only a `live` set's chunks have `DeletedAt` null), `PiiFlagged bool`, `PiiCounts jsonb` (from this set's personal-data stage, preview and re-processing included), `ChunkCount`, `StageKeys jsonb NULL` (the keys and `OutputHash`es of the stage outputs the set was built from, engine design §3.3), `ParseRuleKey varchar(300) NULL` (the key's one salt: NULL \| `rule:{candidates}` \| `force:{executionId}` \| `force:{executionId};rule:{candidates}`; the admin parse rules the parse took and a forced reprocess, engine design §14), `PiiFlaggedAt timestamptz NULL` (the first transition to flagged, kept on a re-flag; processing design §9.5), `CreatedAt`, `LiveAt`, `SupersededAt` (purged 14 days later; one-click rollback until then) | U (`DocumentId`, `PipelineVersionId`, `SiteProfileVersionId`, `EmbeddingProfileId`, `ContentHash`, `ParseRuleKey`) (`IX_ChunkSets_Key`, nulls not distinct); IX (`State`, `CreatedAt`) `WHERE "State" = 'writing'` (orphan sweep); IX `SupersededAt` |
 | `Chunks` | **Collection index**: flat chunks (`Kind = child`) in P1; parents only if parent-child is adopted (processing design §5.3) | `Id`, `ChunkSetId`, `DocumentId`, `CollectionId uuid NOT NULL` (the source's collection), `Classification`, `Kind` (`parent`/`child`), `ParentId`, `Ordinal int`, `HeadingPath text`, `PageEnd int NULL`, `Text text`, `SearchText text` (text plus the compound parts from `SwedishDecompounder`, §3.1), `OverlapChars smallint NOT NULL DEFAULT 0` (leading characters of `Text` repeated from the previous chunk; section expansion strips them, knowledge design §9.3), `TextHash bytea`, `TokenCount int`, `Page int`, `Tags text[]`, `DocumentType varchar(30)`, `ContentKind varchar(16) NOT NULL DEFAULT 'text'` (`text`/`table`/`list`, CHECK `CK_Chunks_ContentKind`) and `LargeTable bool NOT NULL DEFAULT false` (true on the second and later row groups of a table over 2,000 rows; both read by `generate-set`, processing design §13.1), `SourceModifiedAt`, `EmbeddingProfileId uuid` (children only), `Embedding vector` (children only, untyped so profiles may differ in size), `SearchVector tsvector` (generated, §3.2), `DeletedAt` (a chunk is searchable iff null: set while its set is `writing`, `held` or `superseded`, and on soft delete) | PK `Id`; FK `ChunkSetId` → `ChunkSets` Cascade; FK `DocumentId` → `Documents`; **U (`ChunkSetId`, `Ordinal`)** `IX_Chunks_ChunkSetId_Ordinal`; B-tree `IX_Chunks_CollectionId`; IX `ParentId`; HNSW and GIN per §3.2. `Kind`/`ParentId` stay although every P1 row is `child`; dropped if P2 does not adopt parent windows (processing design §5.3) |
-| `EmbeddingCache` | (profile, text hash) → embedding, so re-chunking and every per-source copy after the first embed only new text | `Classification`, `EmbeddingProfileId`, `TextHash bytea`, `Embedding vector`, `LastUsedAt` | PK (`Classification`, `EmbeddingProfileId`, `TextHash`). P2, behind its trigger (cache > 20 % of the database): look up `Chunks` first via `IX_Chunks_Profile_TextHash` on `Chunks` (`EmbeddingProfileId`, `TextHash`) `WHERE "Kind" = 'child'`, cache only texts not in a live set, cache vectors as `halfvec` ([`../performance-pass.md`](../performance-pass.md) §3.2) |
+| `EmbeddingCache` | (profile, text hash) → embedding, so re-chunking and every per-source copy after the first embed only new text | `Classification`, `EmbeddingProfileId`, `TextHash bytea`, `Embedding vector`, `LastUsedAt` | PK (`Classification`, `EmbeddingProfileId`, `TextHash`). P2, behind its trigger (cache > 20 % of the database): look up `Chunks` first via `IX_Chunks_Profile_TextHash` on `Chunks` (`EmbeddingProfileId`, `TextHash`) `WHERE "Kind" = 'child'`, cache only texts not in a live set, cache vectors as `halfvec` ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.2) |
 | `Runs` | One per sync/reprocess | `Id`, `SourceId`, `Classification`, `Kind` (`sync`/`retry-failed`/`reprocess`), `Trigger` (`schedule`/`manual`/`upload`/`publish`/`rollback`/`site-profile` (engine design §10.1)/`retry`/`config-change`; P2 `notification`), `PipelineVersionId`, `ScheduledFor timestamptz NULL`, `Phase varchar(20)` (`list`/`fetch`/`reconcile`/`done`), `Report jsonb`, `SettingsHashes jsonb`, `State` (`running`/`succeeded`/`degraded`/`failed`/`awaiting-deletion-confirmation`/`cancelled`), `Added/Updated/Unchanged/Deleted/Failed int`, `ProposedDeletions int`, `CostUsd numeric(18,8)`, `StartedAt`, `FinishedAt` | IX (`SourceId`, `StartedAt` DESC) |
 | `RunItems` | One per document per run, partitioned by day (§4.4) | `Id bigint identity`, `CreatedAt` (partition key), `RunId`, `Classification`, `DocumentId`, `Identity text`, `Outcome` (engine design §10.2), `Reason varchar(500)`, `Strategy`, `PipelineVersionId uuid`, `ParseProfileId`, `ExecutionId uuid`, `DurationMs`, `CostUsd`, `ParserBuildHash bytea` (parser `/v1/info` build; full info in `content."ParserBuilds"` (`BuildHash` PK, `Info jsonb`, `FirstSeenAt`)) | PK (`CreatedAt`, `Id`); IX (`RunId`) |
 | `ParseObservations` | Parse quality observations (input for P2 profile proposals) | `Id`, `Classification`, `DocumentId`, `Domain`, `PathPattern`, `DocumentType`, `Strategy`, `Score numeric(5,4)`, `Metrics jsonb`, `ObservedAt` | IX (`Domain`, `PathPattern`, `DocumentType`) |
@@ -344,7 +344,7 @@ design §3.3, V26; processing design §9.5), which releases the set by the same 
 | `Attachments` (P2) | Chat-scoped attachment, conversation retention (chat design §15.2) | `Id`, `ConversationId`, `Classification`, `DataKeyId`, **`FileNameCiphertext`**, `MediaType`, `Bytes`, `Sha256`, `State` (`received`/`scanning`/`clean`/`parsed`/`ready`/`malware`/`refused`/`failed`), `Reason`, `PiiTypes text[]`, `ChunkCount`, `CreatedAt` | FK `ConversationId` Cascade |
 | `AttachmentChunks` (P2) | Parsed chunks of an attachment, searched only within the conversation | `Id`, `AttachmentId`, `ConversationId`, `Classification`, `Ordinal`, `Page`, `PageEnd`, `DataKeyId`, **`TextCiphertext`**, **`EmbeddingCiphertext`** (1024 float32), `TokenCount` | FK `AttachmentId` Cascade; FK `ConversationId` Cascade |
 
-**P1: metadata and ratings only** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)).
+**P1: metadata and ratings only** ([weakness review §4](../archive/passes/weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)).
 The pilot assistant runs history mode `none` until A1 is answered, so P1 writes no ciphertext column, no `DataKeyId`
 and no `DataKeys` row. The tables, `DataKeys` and the nullable ciphertext and `DataKeyId` columns exist in the
 schema; they are first written when A1 allows stored content.
@@ -416,7 +416,7 @@ search and rebuilds it concurrently below the floor (knowledge design §6.4).
 A new profile gets its index from `content.rag_ensure_profile_index(profile_id uuid, dims int)` (`SECURITY DEFINER`,
 owner migrator, called by the worker) **before** any row of that profile exists, so the build is instant and needs no
 `CONCURRENTLY`; it builds the `halfvec` form (≈ 2.7 KB per element instead of 4.3–8 KB, so 10M chunks fit a 64 GB
-database host; reasoning: [`../performance-pass.md`](../performance-pass.md) §3.3). The column stays `vector`, so
+database host; reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.3). The column stays `vector`, so
 exact scans, the evaluator and a profile migration use full precision; the fp16 recall cost (HNSW against exact) is
 measured with the evaluation sets before the first large collection (§12.16). A second profile migrated into a large
 corpus gets its index **after** the shadow load (`CREATE INDEX CONCURRENTLY`); partitioning `Chunks` by profile would
@@ -522,7 +522,7 @@ CREATE INDEX "IX_Jobs_RunId" ON content."Jobs" ("RunId") WHERE "State" IN ('queu
   `Worker:Concurrency:<class>` (settings rule: per-process knobs are deployment values), so heterogeneous hosts differ.
   `Settings.WorkerConcurrency` holds fleet-wide run-time values only (shares and caps such as `departmentShare`); the
   P2 fleet-wide embedding cap `Embedding:GlobalMaxInFlight` is a deployment setting too (§11; reasoning:
-  [`../performance-pass.md`](../performance-pass.md) §3.4).
+  [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.4).
 - **Capacity refusals** (parser `busy`/`not_ready`, gateway 429 or 503 with `Retry-After`, unconfirmed config) requeue
   with `Attempts − 1`, so they never use up attempts (engine design §7.3).
 - **Leases**: dequeue sets `LeaseOwner`, `LeaseUntil`, `Attempts + 1`; a reaper (every 10 s) returns expired leases to
@@ -579,7 +579,7 @@ string `ConnectionStrings__ragdb-listen`, so a later pooler never sees it): the 
 (config version), so a missed notification costs seconds. From P2 (first multi-host deployment) a process sends
 `rag_jobs` for a class at most once per 200 ms (none when it handles the job locally), and receivers coalesce
 wake-ups per class (at most one probe per 50 ms, ignored without a free slot; the 2 s poll stays the safety net;
-[`../performance-pass.md`](../performance-pass.md) §3.4).
+[`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.4).
 
 ### 4.4 Partitions and job cleanup
 
@@ -674,7 +674,7 @@ reached over the existing HTTP seam (`Retrieval:Mode=Http`; postponed T1/K2), no
 
 ## 7. Envelope encryption
 
-**Chat: built when A1 allows stored content** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)).
+**Chat: built when A1 allows stored content** ([weakness review §4](../archive/passes/weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)).
 In P1 the pilot assistant runs history mode `none`: no bucket keys, no chat master keys `rag-chat-<level>` (neither
 created nor escrowed), no content encryption, no shredding. `DataProtectionPolicies.AllowedHistoryModes` holds only
 `none` until this is built. The chat design below applies from that point. **Blob encryption** (below) is built: the
@@ -780,7 +780,7 @@ One container (file system: `BlobStore:Root`, default `/data/blobs/rag/`; S3: on
 default `rag`). Paths below the container; ids in `D` format, lower case (below); `internal` objects
 envelope-encrypted per §7, `public` objects not (no SSE; the object store's disks are encrypted).
 
-**Contract** (S3-safe on both implementations, from P0; reasoning: [`../performance-pass.md`](../performance-pass.md)
+**Contract** (S3-safe on both implementations, from P0; reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md)
 §3.13): **write-once**: a key is never overwritten (new content = new key); `PutAsync` is atomic (visible only when complete; FS: a staging file under `{root}/.staging/`, fsync, then a
 no-overwrite POSIX `link(2)` to the key's path, because .NET's `File.Move(overwrite: false)` on Unix checks with
 `lstat` and then `rename`s over a file that appeared in between; S3: PUT or completed multipart) with `IfAbsent`
@@ -894,7 +894,7 @@ Postgres). Every use states its behaviour when Redis is down; rate limits fall b
 |---|---|---|
 | `ume-rag:rl:req:{keyId}:{minute}`, `ume-rag:rl:user:{subjectHash}:{minute}`, `ume-rag:rl:tool:{toolId}:{minute}`, `ume-rag:rl:tooluser:{toolId}:{subjectHash}:{minute}`, `ume-rag:rl:tools:{subjectHash}:{minute}`, `ume-rag:rl:mcp:{subjectHash}:{minute}` (tools design §4.9, §7.6), `ume-rag:rl:ip:{ipHash}:{minute}` (P2 widget, identity design §6.5), `ume-rag:rl:dl:{ipHash}:{minute}` (citation downloads, `Knowledge:DownloadsPerMinutePerAddress`; its own key so the two per-address limits never share a counter) | 120 s (`RateWindowSeconds`, as gateway) | per-instance in-memory limits with the same values |
 | `ume-rag:qemb:{profileId:N}:{queryMac}` (query embedding only, value 1 version byte ‖ 1024 little-endian float32; `queryMac` = hex of the first 16 bytes of HMAC-SHA256(`Security:CacheKeyPepper`, normalised query), never a plain hash; `public`/`internal` effective level only, §12.14; an in-process L1 serves all levels; knowledge design §5.4) | 5 min | L1 only; misses embed through the gateway |
-| `ume-rag:crawl:inflight:{hostMac}` (P2, sorted set of in-flight fetch leases per crawl host, cap `MaxConnections`; `hostMac` = HMAC of the host name with `Security__CrawlKeyPepper`), `ume-rag:embed:inflight` (P2, sorted set, fleet-wide cap `Embedding:GlobalMaxInFlight`, default 2 × provider replicas) ([`../performance-pass.md`](../performance-pass.md) §3.6, §3.9). A refused crawl lease requeues the fetch as `rate_limited`; the lease pattern is the gateway's `RedisStores.cs` | TTL = lease (60 s for fetch) | crawl: ⌈`MaxConnections` ÷ k⌉ per instance, k = live fetch instances (heartbeat < 45 s); embedding: per-instance AIMD; `CrawlHosts.NextAllowedAt` keeps host politeness in Postgres |
+| `ume-rag:crawl:inflight:{hostMac}` (P2, sorted set of in-flight fetch leases per crawl host, cap `MaxConnections`; `hostMac` = HMAC of the host name with `Security__CrawlKeyPepper`), `ume-rag:embed:inflight` (P2, sorted set, fleet-wide cap `Embedding:GlobalMaxInFlight`, default 2 × provider replicas) ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.6, §3.9). A refused crawl lease requeues the fetch as `rate_limited`; the lease pattern is the gateway's `RedisStores.cs` | TTL = lease (60 s for fetch) | crawl: ⌈`MaxConnections` ÷ k⌉ per instance, k = live fetch instances (heartbeat < 45 s); embedding: per-instance AIMD; `CrawlHosts.NextAllowedAt` keeps host politeness in Postgres |
 
 ## 12. Open decisions and contradictions found
 
@@ -920,7 +920,7 @@ Postgres). Every use states its behaviour when Redis is down; rate limits fall b
 | 13 | Cache key "node id" | Pipeline-local node ids would prevent sharing | Stage type id + input hash (§9); stage outputs are content-addressed and shared across documents and sources |
 | 14 | Query-embedding cache | Plan §8a allows embeddings in Redis; embeddings partly reveal text | No Redis cache for `sensitive` queries (in-process only); resolved by knowledge design §5.4 (L1 in process for all levels with an HMAC key; from P2 an L2 in Redis for `public`/`internal` only, §11; no Redis in P1) |
 | 15 | Coverage signal | Knowledge §3 uses "best fused score"; RRF scores are rank-only | Coverage on best cosine distance per collection together with the keyword list (`low` only when the distance is above the threshold and the keyword list is empty or below its floor; knowledge design §7) |
-| 16 | Vector storage | `vector` (4 KB per 1024-dim chunk) vs `halfvec` (2 KB) | **Decided (performance pass, [`../performance-pass.md`](../performance-pass.md) §3.3)**: HNSW index on `("Embedding"::halfvec(1024))` from P1, column stays `vector`; recall measured with the evaluation sets (HNSW vs exact) before the first large collection |
+| 16 | Vector storage | `vector` (4 KB per 1024-dim chunk) vs `halfvec` (2 KB) | **Decided (performance pass, [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.3)**: HNSW index on `("Embedding"::halfvec(1024))` from P1, column stays `vector`; recall measured with the evaluation sets (HNSW vs exact) before the first large collection |
 | 17 | Run items, frontier, profiles placement | Hold URLs and patterns of possibly `sensitive` sources | Carry `Classification`; parse rules and site profiles apply only within their level |
 | 18 | Swedish compounds | Postgres `ispell` per backend costs memory and does not support every Hunspell compound rule | **Decided (simplification pass §3)**: decompound in .NET, built-in `swedish` in Postgres (§3.1); postponed H1 closed |
 | 19 | One context | Alternative: a second context per tier | One context, one database (no tiers) |
@@ -933,7 +933,7 @@ Postgres). Every use states its behaviour when Redis is down; rate limits fall b
 
 ## 13. Deferred or removed (simplification pass)
 
-See [`../simplification-pass.md`](../simplification-pass.md) (section numbers there).
+See [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) (section numbers there).
 
 | Item | Where it went |
 |---|---|
@@ -979,7 +979,7 @@ See [`../simplification-pass.md`](../simplification-pass.md) (section numbers th
 
 ## 15. Deferred or removed (weakness review)
 
-Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer). The schema stays as designed; these tables and columns are built (or first written) in P2:
+Per [weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer). The schema stays as designed; these tables and columns are built (or first written) in P2:
 
 | Item | Where it went |
 |---|---|
@@ -987,7 +987,7 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | `CrawlClaims` and the shared (level, URL) key of `CrawlFrontier` | Built in P2; P1 keys the frontier per source |
 | Learning columns of `SiteProfiles`/`SiteProfileVersions` (`LastLearnedAt`, `NextLearnAfter`, `LearnedFromRunId`, `Sample`, states `proposed`/`rejected`, origin `learned`) | Written from P2; P1 stores `manual` versions only |
 
-Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected). The schema stays as designed; these are built (or first written) when A1 allows stored chat content:
+Per [weakness review §4](../archive/passes/weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected). The schema stays as designed; these are built (or first written) when A1 allows stored chat content:
 
 | Item | Where it went |
 |---|---|
@@ -996,7 +996,7 @@ Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-sec
 | `audit."ConversationAccess"` (conversation review, comment reveals) | Same |
 | `Settings.ChatShreddingEnabled` and shred keys | Same (still also behind A1's answer on deletion) |
 
-Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+Per [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
 
 | Item | Where it went |
 |---|---|

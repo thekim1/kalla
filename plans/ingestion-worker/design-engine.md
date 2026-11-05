@@ -1,12 +1,12 @@
 # Ingestion worker, part A: pipeline engine, stages, jobs, runs, preview and publish
 
-Detail step 6a of the Ume.Rag design. Details [`plan.md`](plan.md) §2, §4 and §8–§10 (binding, incl. answered items
+Detail step 6a of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §2, §4 and §8–§10 (binding, incl. answered items
 1–8) within the limits set by [`../platform/data-model.md`](../platform/data-model.md) §2, §4–§9,
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §3, §6, §9, [`../parser/design.md`](../parser/design.md)
 §7, §8, §10 and [`../gateway-changes/design.md`](../gateway-changes/design.md) §3, §5, §7.1. The engine runs fixed
 linear pipelines, documents and chunk sets per source, per-stage cache keys, short chunk-write transactions and
-advisory evaluation (reasoning: [`../simplification-pass.md`](../simplification-pass.md)). Removed mechanisms are
-listed in §24, items deferred to P2 in §25 (reasoning: [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)).
+advisory evaluation (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)). Removed mechanisms are
+listed in §24, items deferred to P2 in §25 (reasoning: [weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)).
 
 Sibling documents (where they refine this one, they win): [`design-connectors.md`](design-connectors.md) (6b: connector
 internals, crawl frontier, site-profile learning, change detection, deletion guard) and
@@ -406,7 +406,7 @@ UPDATE content."Jobs" SET "State" = 'succeeded', "CompletedAt" = now(), "Result"
 
 | Effect | Where | Why it is safe to repeat |
 |---|---|---|
-| Stage output blobs | written **before** the DB commit, at content-addressed paths (`…/{cacheKey}…`), one atomic `IBlobStore.PutAsync` (file system: staging file, fsync, no-overwrite `link(2)`, data-model §9; S3: one PUT or completed multipart upload; [`../performance-pass.md`](../performance-pass.md) §3.13); blobs are write-once, a new key for new content | same key → same plaintext; orphans (no `NodeOutputs` row after 24 h) removed by the sweeper |
+| Stage output blobs | written **before** the DB commit, at content-addressed paths (`…/{cacheKey}…`), one atomic `IBlobStore.PutAsync` (file system: staging file, fsync, no-overwrite `link(2)`, data-model §9; S3: one PUT or completed multipart upload; [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13); blobs are write-once, a new key for new content | same key → same plaintext; orphans (no `NodeOutputs` row after 24 h) removed by the sweeper |
 | `NodeOutputs` rows | segment commit, `INSERT … ON CONFLICT ("CacheKey") DO NOTHING` | content-addressed |
 | `Documents` facts (media type, language, page count, strategy, parse cache key, site-profile version) | segment commit, fenced | last fenced writer wins; the fence rejects stale executions |
 | Continuation jobs | same transaction, `DedupKey` (`parse:{doc}:{exec}`, `embed:{doc}:{exec}:{pipelineVersion}`) | `INSERT … ON CONFLICT DO NOTHING` on the partial unique `DedupKey` index (data-model §4.2) |
@@ -533,7 +533,7 @@ records in `Ume.Rag.Pipelines/Jobs`. Only P1 kinds exist (no `site-profile` prev
 **Mixed versions during a rolling update** (from the first production deployment; before it, payloads change in one
 step, Decisions "No backward compatibility before production"): payloads are additive (tolerant reader); **Later
 (P2):** a job that needs a newer build carries `MinBuild` in its payload, and an older instance requeues it without an
-attempt (`rag.jobs.requeued{reason=build}`) (reasoning: [`../performance-pass.md`](../performance-pass.md) §3.4).
+attempt (`rag.jobs.requeued{reason=build}`) (reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.4).
 
 ### 9.2 How a sync fans out
 
@@ -776,7 +776,7 @@ versions that produced it, and the run shows progress until every document is cu
 ### 12.2 Re-processing plan
 
 **P1:** publish re-processes **every live document** of the affected sources (reasoning:
-[weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)). `EnsureCurrent`
+[weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)). `EnsureCurrent`
 still recomputes each stage key, so stages whose key did not change are served from the per-stage caches (§8) and cost
 nothing; the forecast is the document count with a conservative time and cost estimate for the full pipeline from
 `parse`, and the run reports how many documents were in fact re-keyed only. The report and keep or roll back (§12.3)
@@ -832,7 +832,7 @@ only on first deploy and on a new template version.
 | `url-list` | URL list | as `website` | as `website` |
 | `files` | upload | fetch → **scan** → detect → parse → … → index | `ocr`, `tables`, `chunkTokens`, `overlapPercent` |
 
-**Collection default** (reasoning: [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)):
+**Collection default** (reasoning: [weakness review §3](../archive/passes/weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)):
 the `website` template also carries a default for its collection's `RetrievalSettings.recency`, age decay for PDFs
 (`{ "halfLifeDays": 730, "weight": 0.15, "kinds": ["pdf"] }`, knowledge design §6.5, §12.1). The admin sets it on the
 collection when the collection's first `website` source is added and `recency` was never set; it is shown in the source
@@ -1043,7 +1043,7 @@ Postgres CPU and pool waits, and the embed limit's behaviour (P2; in P1 the fixe
 
 **Later (P2+), beyond the pilot** (≈ 10×: 100k pages/h checked, 10–20k changed, 5–10M chunks on 3–5 hosts): the
 per-stage capacity table, binding resources (politeness, the gateway's embedding model, HNSW memory), the fleet-wide embedding cap (P2) and the
-scale test are in [`../performance-pass.md`](../performance-pass.md) §2, §3.9, §3.10 and §7.
+scale test are in [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §2, §3.9, §3.10 and §7.
 
 ## 19. Tests
 
@@ -1079,7 +1079,7 @@ Simplification pass (2026-10-30); owners of these documents apply them.
 | `platform/repo-and-deployment.md` §1, §3 | `src/Ume.Rag.Pipelines` holds definition, validator, stage keys and the plan (no Merkle hashes, no canvas); `contracts/pipeline/v2/definition.schema.json`; templates under `src/Ume.Rag.MigrationService/Templates/` |
 | `platform/repo-and-deployment.md` §9 | metrics of §17 (`rag.index.swaps`, `rag.index.orphans_swept`); log scope `Stage` instead of `NodeId`; no `Tier` scope |
 | `identity/design.md` §10 | 5105 reason codes per §17; it is no longer a data-protection bypass signal (personal-data detection cannot be removed), so the SIEM alert on any 5105 can go |
-| `admin/plan.md` §4, `admin/design.md` §6 | Pipelines page: template parameter form (no canvas, no JSON node editor, no `gating` state); publish = plan → confirm → re-process → report → keep or roll back; run views per §10.5 |
+| `archive/area-plans/admin.md` §4, `admin/design.md` §6 | Pipelines page: template parameter form (no canvas, no JSON node editor, no `gating` state); publish = plan → confirm → re-process → report → keep or roll back; run views per §10.5 |
 
 ## 22. Answered questions (2026-10-29)
 
@@ -1107,7 +1107,7 @@ the normal egress guard (§11).
 
 ## 24. Deferred or removed (simplification pass)
 
-See [`../simplification-pass.md`](../simplification-pass.md).
+See [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md).
 
 | Mechanism | Where it went |
 |---|---|
@@ -1128,7 +1128,7 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 
 ## 25. Deferred or removed (weakness review)
 
-Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+Per [weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
 
 | Item | Where it went |
 |---|---|
@@ -1136,7 +1136,7 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | Adaptive embed concurrency (AIMD, §18) | P2; P1 uses the fixed `Worker:Concurrency:embed` from configuration |
 | Shared crawl frontier and site-profile learning (6b) | P2 (6b §24) |
 
-Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+Per [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
 
 | Item | Where it went |
 |---|---|

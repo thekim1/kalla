@@ -1,8 +1,8 @@
 # Admin API and admin UI: detailed design
 
 Detail step 10 of the Ume.Rag design. The rules of the weakness review and the simplification, performance and
-consistency passes are stated here (reasoning: [`../simplification-pass.md`](../simplification-pass.md) §1, §2, §5,
-§7–§10, §13, §15). Details [`plan.md`](plan.md) (binding, incl. its answered questions 1–3 and §14 here) and the Decisions table
+consistency passes are stated here (reasoning: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) §1, §2, §5,
+§7–§10, §13, §15). Details [`../archive/area-plans/admin.md`](../archive/area-plans/admin.md) (binding, incl. its answered questions 1–3 and §14 here) and the Decisions table
 in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consumes, without redesigning: the BFF, claim mapping,
 `RagPrincipal`, internal callers, keys and security events of [`../identity/design.md`](../identity/design.md) (§1–§4,
 §6, §10–§12); tables, grants, the outbox, encryption and retention of
@@ -110,7 +110,7 @@ gateway counterpart.
 |---|---|---|---|
 | `OrganisationSync` | 5 min + on demand | a config write (version lock, data-model §5, since the mirror tables carry outbox triggers), then `pg_try_advisory_xact_lock` per run, as `AdminApi/ModelListSync.cs:148-153`; an unchanged run writes nothing and doesn't bump the version | `Departments`, `Teams` (changed rows only) |
 | `GatewayModelSync` | 5 min + on demand | same pattern | `GatewayModels` (changed rows only) |
-| `RetentionService` | nightly, 03:00 Europe/Stockholm (batches of 5,000 rows; both constants, only `Admin:Retention` is a knob) | pilot: the one slot runs it; from P2 each step batch is idempotent under `pg_try_advisory_xact_lock(<step>)` on both slots (reasoning: [`../performance-pass.md`](../performance-pass.md) §3.5); `Admin:Retention` (default `true`) stays an off switch | chat/audit/config deletions, expired admin sessions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
+| `RetentionService` | nightly, 03:00 Europe/Stockholm (batches of 5,000 rows; both constants, only `Admin:Retention` is a knob) | pilot: the one slot runs it; from P2 each step batch is idempotent under `pg_try_advisory_xact_lock(<step>)` on both slots (reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.5); `Admin:Retention` (default `true`) stays an off switch | chat/audit/config deletions, expired admin sessions; **bucket-key destruction only when the shredding setting is on, which stays off until A1 is answered** (simplification pass §5) |
 | `DefinitionDriftMonitor` (P2) | 15 min | advisory lock (the one drift leader) | `Tools.State`, repins from pre-registrations (tools §4.4) |
 | `ConfigVersionMonitor` | `rag_config` + 2 s poll | every instance | none (keeps the admin's own snapshot for validators and the test panel) |
 | `AnswerEvaluationService` (P2, weakness review §1) | nightly | `pg_try_advisory_xact_lock` per assistant run | `EvaluationRuns` of kind `answers` (faithfulness, citation precision) through `Ume.Rag.Answering` and the on-prem judge (processing §14.8) |
@@ -836,7 +836,7 @@ Borttagning väntar på beslut · körning 30 okt. 01:12
 
 #### 5.5.4 Assistent with test panel
 
-The wireframe shows the P2 page. In P1 ([weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)) the tab Testfrågor, **Jämför** in Versioner, **Kopiera**,
+The wireframe shows the P2 page. In P1 ([weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)) the tab Testfrågor, **Jämför** in Versioner, **Kopiera**,
 **Spara som testfråga**, the test summaries and the answer evaluation on Statistik are absent; Publicera utkastet shows
 the warnings only.
 
@@ -1126,7 +1126,7 @@ demonstrably need custom flows (§16).
   retired.
 - Reports: latest runs (after publish, nightly, after a retrieval-settings change, on demand **Kör utvärdering**), each
   as the §7.2 card; trend of recall@10 and MRR (`TimeSeriesChart`, table view); per-question drill-down (rank per run).
-- **Headline metric** ([weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): the card and the trend lead with the `human` layer (the
+- **Headline metric** ([weakness review §2](../archive/passes/weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)): the card and the trend lead with the `human` layer (the
   pilot gold set: recall@10 on answerable questions, false not-found, unanswerable questions answered "not found");
   the generated layer follows as a regression signal only.
 - **Coverage-threshold proposal** (P1, weakness review §2): the run proposes `coverageMaxDistance` and
@@ -1195,7 +1195,7 @@ Removed (simplification pass): no gate, so no overrides (§16).
 
 ## 8. Feedback, conversation review and access audit
 
-**P1: ratings only** ([weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant runs history mode `none` until A1 is
+**P1: ratings only** ([weakness review §4](../archive/passes/weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected)). The pilot assistant runs history mode `none` until A1 is
 answered, so our store holds no comment and no conversation content: §8.1 shows ratings, reason categories and import
 health, the "has comment" filter is empty, and comments stay in Open WebUI. §8.2–§8.5 (comment reveal, conversation
 review, `sensitive` flow, access log) are built when A1 allows stored content.
@@ -1431,7 +1431,7 @@ component axe checks.
 | `ingestion-worker/design-processing.md` §13–§14 | evaluation reports as consumed in §7.2 (recall@10, MRR with counts, previous run, per-question changes); no gate states, floor or overrides |
 | `chat-api/design.md` §2.1, §14.1–§14.4 | chat answer core in `Ume.Rag.Answering`; importer and `/v1/feedback` fill `ReasonCategory`; comments readable by `rag-reviewer` and `rag-department-admin`, conversations by `rag-reviewer` only; comment decryption with the bucket key |
 | `knowledge-api/design.md` §2.1, §4.5 | `KnowledgeService` core in `Ume.Rag.Answering`; only the admin host passes unpublished collections (replaces `building`); collections shared with a department are in scope for its assistants |
-| `platform/plan.md` §8a | review row: reason by `rag-reviewer`; comments of `public`/`internal` also by department admins after a one-click reason; no data tier configuration |
+| `archive/area-plans/platform.md` §8a | review row: reason by `rag-reviewer`; comments of `public`/`internal` also by department admins after a one-click reason; no data tier configuration |
 | `platform/repo-and-deployment.md` §1, §2.3, §3 | `src/Ume.Rag.Answering` (referenced by Api and AdminApi, never the Worker); `contracts/admin/v1/error-codes.json`; **no Vue Flow packages**; settings `Admin:GatewayAdminUrl`, `OrgSync:*`; `release.yml` deploys `rag-admin` and `rag-api` from the same release |
 | `platform/repo-and-deployment.md` §6.1, §8.2, §9 | proxy `client_max_body_size` 60 MB on the admin upload route; e2e row = pilot journey (mouse and keyboard) + extended accessibility spec + static fixture site container with the umea.se fixtures; admin metrics of §10.3; `rag-admin` on network `mcp` in P2 |
 | `gateway-changes/design.md` | done: §3.4 states today's `/v1/models` filtering (key residencies only) and that the combined release adds `x-ume-max-residency` for every key, delegating keys included (V8 relies on it); optional `GET /v1/catalog/routes` |
@@ -1442,7 +1442,7 @@ component axe checks.
 | `ingestion-worker/design-processing.md` §14.8 | the answer judge's prompt family also judges assistant test questions (expected behaviour as free text) in `rag-admin` (§7.4) |
 | `gateway-changes/design.md` (P2, only if needed) | owner-team scoping reads team membership from `teamCodes`; if IT cannot supply that claim, member groups on teams as feature C does for departments, in both systems (§15) |
 | `identity/design.md` §1.3, §4.3, §4.8 | done in the same pass: owner-team scoping, versions do not change access, test panel on the draft |
-| `tools/design.md`, `tools/plan.md` | done in the same pass: skills without collections, mode derived from tool-bearing skills |
+| `tools/design.md`, `archive/area-plans/tools.md` | done in the same pass: skills without collections, mode derived from tool-bearing skills |
 
 ## 14. Questions
 
@@ -1517,7 +1517,7 @@ None.
 
 ## 16. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md):
+Per [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md):
 
 | Removed or deferred | Where it went |
 |---|---|
@@ -1546,7 +1546,7 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 
 ## 17. Deferred or removed (weakness review)
 
-Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+Per [weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
 
 | Item | Where it went |
 |---|---|
@@ -1559,7 +1559,7 @@ Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-an
 | Publish plan split by effect tags | P2; P1 re-processes every document of the collection, still with report and keep or roll back |
 | Dedicated journey pages before the first answer | P1b; the walking skeleton (P1a) uses Scalar only, generic forms come in P1b |
 
-Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
+Per [weakness review §4](../archive/passes/weakness-review.md#4-data-protection-guards-the-secondary-copy-while-the-primary-stays-unprotected):
 
 | Item | Where it went |
 |---|---|
@@ -1567,7 +1567,7 @@ Per [weakness review §4](../weakness-review.md#4-data-protection-guards-the-sec
 | Chat master keys in the admin (`IKeyProvider` for comment and conversation decryption) | Same; the admin still unwraps `internal` blobs |
 | History modes `stored`/`session` in the data-protection form and the assistant retention form (V10, V29) | Same; P1 allows `none` only |
 
-Per [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
+Per [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control):
 
 | Item | Where it went |
 |---|---|

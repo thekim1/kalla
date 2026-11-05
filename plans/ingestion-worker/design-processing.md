@@ -1,6 +1,6 @@
 # Ingestion worker, part C: processing stages, personal data, embedding and evaluation
 
-Detail step 6c of the Ume.Rag design. Details [`plan.md`](plan.md) §4–§7 (binding, incl. answered items 1–26) and
+Detail step 6c of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §4–§7 (binding, incl. answered items 1–26) and
 specifies the internals of the stages [`design-engine.md`](design-engine.md) (6a) marks "6c" in its stage table
 (`design-engine.md` §6). It consumes, without redesigning: the stage values (6a §2.2), the stage interface and results
 (6a §5, §7.3), segments and job classes (6a §7.4, §9.1), cache classes (6a §8), preview (6a §11), the publish flow
@@ -9,7 +9,7 @@ specifies the internals of the stages [`design-engine.md`](design-engine.md) (6a
 parser contract, signals, ranges and the text-layer fast path from [`../parser/design.md`](../parser/design.md) §3,
 §6–§10; the tables of [`../platform/data-model.md`](../platform/data-model.md) §2.2 and the hybrid query §3.3.
 It states the rules of the simplification pass, the weakness review and the performance pass itself; links to them
-give the reasoning ([`../simplification-pass.md`](../simplification-pass.md)). Changes needed elsewhere: §19;
+give the reasoning ([`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)). Changes needed elsewhere: §19;
 questions: §20; unverified facts: §21; removed mechanisms: §22.
 
 Library and model facts checked for this step (downloaded into the scratchpad, read only): `Microsoft.ML.Tokenizers`
@@ -546,7 +546,7 @@ Swedish pitfalls (fixtures in §17):
 | Response checks | count equals inputs, in input order; each vector of the profile's dimensions, finite floats (else fatal `embed.bad_vector`); `x-ume-residency` ≤ the profile's ceiling (else fatal `gateway.residency_above_ceiling`, 5003); stored as returned (cosine is scale-invariant) |
 | Canary | on demand only: the worker makes no canary calls of its own. A platform admin runs the check from the admin UI (admin design §4.5 `POST /api/gateway/canary-check`): the admin API embeds each active profile's `CanaryText` at the profile's ceiling and compares it with `EmbeddingProfiles.CanaryEmbedding`, storing `CanaryCheckedAt` and `CanarySimilarity`. Cosine < 0.999 means the gateway alias now serves another model, which would silently mix vector spaces: until a later check passes, the worker refuses the profile for embedding, preview and evaluation (`embed.canary_mismatch`, transient) and the worker's health is `unhealthy`. A profile never checked, or without a recorded canary, is allowed. The admin API records `CanaryEmbedding` after each model sync, for every active profile that has none, at the profile's ceiling and checked for dimensions (the migrator holds no gateway keys); a recorded canary is never replaced. Run the check after any change to the gateway's models (Decisions, "Embedding canary on demand") |
 | Concurrency | P1: fixed `Worker:Concurrency:embed` from configuration. **Later (P2):** AIMD of 6a §18: baseline = lowest per-minute p95 of the last 24 h (floor 200 ms); above 2× baseline halve, else +1 per minute up to `Worker:Concurrency:embed` (deployment, 6a §9.1); and, from the first multi-host deployment, a Redis lease `ume-rag:embed:inflight` caps all workers together at `Embedding:GlobalMaxInFlight` (default 2 × provider replicas), with each instance's AIMD as the fallback when Redis is down |
-| Chat protection at the gateway | the worker's own key (the pilot team's key of the profile's level until gateway release 2, then a delegating key) with the gateway's existing `MaxConcurrentRequests` cap (429 + `Retry-After`, honoured: requeued without an attempt), so a misconfigured worker cannot starve chat's query embeddings. A separate query route (`x-ume-step: query-embed`) only when the performance pass's §6 trigger fires ([`../performance-pass.md`](../performance-pass.md) §3.9, §6) |
+| Chat protection at the gateway | the worker's own key (the pilot team's key of the profile's level until gateway release 2, then a delegating key) with the gateway's existing `MaxConcurrentRequests` cap (429 + `Retry-After`, honoured: requeued without an attempt), so a misconfigured worker cannot starve chat's query embeddings. A separate query route (`x-ume-step: query-embed`) only when the performance pass's §6 trigger fires ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.9, §6) |
 | Bulk loads | **Later (P2):** bulk runs (first crawls, re-embeds) at `Priority` −5 in the night window, forecast from the measured tokens/s, and never above `Settings.Ingestion.bulkEmbedShare` (0.75) of the global cap |
 | Failures | 6a §7.3 table; a 400 for one input fails the document (`embed.input_rejected`, a bug: 400 tokens ≪ 8192); partial results of a failed batch are discarded and the batch retried whole |
 
@@ -648,11 +648,11 @@ charged to the collection's owner team; shown before generation.
 
 - **P1**: editors add questions with expected documents and edit or retire generated ones (`edit-eval-question`
   command, 6a §9.1); `Layer = human`. Every run includes all human questions.
-- **Pilot gold set** (P1a, before go-live; reasoning: [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)):
+- **Pilot gold set** (P1a, before go-live; reasoning: [weakness review §2](../archive/passes/weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)):
   about 120–150 answerable real questions (expected source URL(s) as `ExpectedDocumentIds`, the facts a correct answer
   contains as `ExpectedAnswer`), 30–50 unanswerable off-topic and near-miss questions (no expected documents; expected
   outcome "not found") and at least 10 temporal questions where an outdated document competes (they check the age decay
-  and `demote` patterns of [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered):
+  and `demote` patterns of [weakness review §3](../archive/passes/weakness-review.md#3-outdated-or-removed-content-keeps-being-answered):
   the current document ranks above the outdated one). The main session drafts them from the Turkos crawl in residents'
   wording rather than page headings, mixing short and long questions, each marked as a draft; DoIT (the pilot
   department) reviews, edits and approves them, and may add its own (Decisions table "Gold set drafted by the main
@@ -866,9 +866,9 @@ applied then and are not repeated.
 | `platform/repo-and-deployment.md` §1, §2 | `SwedishDecompounder` (in `Ume.Rag.Retrieval` or `Ume.Rag.Text`) used by the worker; the worker references neither `Ume.Rag.Answering` nor `Ume.Rag.Tools` (answer-level run and skill gate in `rag-admin`); `tests/fixtures/umea/` |
 | `ingestion-worker/design-connectors.md` | site profiles: storage, versions, learning, auto-apply check (uses 6c §3.7 extraction in preview mode), commands `approve-site-profile`, `reject-site-profile`, `edit-site-profile`, `rollback-site-profile`, re-learning trigger from `quality.boilerplateShare`/`emptyRoot` (§8); reliability of `lastmod` feeds §7's date order |
 | `knowledge-api/*` | scope by scalar `CollectionId` and live sets only; query side runs `SwedishDecompounder`; citations may show `Documents.Description`; no `building` collections |
-| `admin/plan.md` (step 10) | PII list per chunk set with highlight preview and clear (reason); publish screen with the advisory report (counts, wins/losses, lost questions) and one-click rollback; evaluation page: layers, stale questions, generation cost, answer-level results; parse rules in the generic platform-admin form |
+| `archive/area-plans/admin.md` (step 10) | PII list per chunk set with highlight preview and clear (reason); publish screen with the advisory report (counts, wins/losses, lost questions) and one-click rollback; evaluation page: layers, stale questions, generation cost, answer-level results; parse rules in the generic platform-admin form |
 | `identity/design.md` §10 | 5103 adds `ChunkSetId`; audit action `gate.override` removed |
-| `platform/plan.md` §9 | evaluation advisory; collections go live when published |
+| `archive/area-plans/platform.md` §9 | evaluation advisory; collections go live when published |
 
 ## 20. Answered questions (2026-10-29)
 
@@ -909,7 +909,7 @@ applied then and are not repeated.
 
 ## 22. Deferred or removed (simplification pass)
 
-See [`../simplification-pass.md`](../simplification-pass.md).
+See [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md).
 
 | Mechanism | Where it went |
 |---|---|
@@ -922,13 +922,13 @@ See [`../simplification-pass.md`](../simplification-pass.md).
 | Personal-data state on `Documents`, per-type maximum across pipelines, membership recompute on flag | replaced by state on the chunk set and `held` sets (§9.4, §9.5) |
 | Publish gate (`IPublishGate`), sub-corpus shadow sets, escalation 50 → 100, Wilson/bootstrap/McNemar, decision rule, `building` state and 0.70 floor, platform-admin override | dropped; advisory harness on the full collection (§13.6, §14) |
 | Skill gate details (retrieval and routing layers) | tools design (simplification pass §10) |
-| Fleet-wide Redis embedding cap, scale batching, bulk embed share | P2, first multi-host deployment ([`../performance-pass.md`](../performance-pass.md) §3.9) |
+| Fleet-wide Redis embedding cap, scale batching, bulk embed share | P2, first multi-host deployment ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.9) |
 | Answer faithfulness as a P3 assistant layer | moved earlier: nightly answer-level run in P2 (§14.8, §23) |
 | `ChunkSets` evaluation scope with exact search | dropped with the gate; collection scope only (§13.5) |
 
 ## 23. Deferred or removed (weakness review)
 
-Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+Per [weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
 
 | Mechanism | Where it went |
 |---|---|

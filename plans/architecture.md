@@ -1,9 +1,9 @@
 # Architecture diagrams
 
 Mermaid views of the Ume.Rag design as it stands after the simplification pass
-([`simplification-pass.md`](simplification-pass.md)) and the P1 split of the
-[weakness review §1](weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer), with the two gateway releases of
-[§5](weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control) (the diagrams show release 2; in P1 the keys are the pilot team's and no
+([`archive/passes/simplification-pass.md`](archive/passes/simplification-pass.md)) and the P1 split of the
+[weakness review §1](archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer), with the two gateway releases of
+[§5](archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control) (the diagrams show release 2; in P1 the keys are the pilot team's and no
 `x-ume-on-behalf-of` or echo is sent). Sources: networks and containers
 [`platform/repo-and-deployment.md`](platform/repo-and-deployment.md) §6, data ownership
 [`platform/data-model.md`](platform/data-model.md), request paths [`chat-api/design.md`](chat-api/design.md) §4,
@@ -101,7 +101,7 @@ flowchart LR
 ```
 
 The zones are one host in the pilot, with one slot per service and an announced maintenance window for updates. From
-the first multi-host deployment (P2, [`performance-pass.md`](performance-pass.md) §5) the same images run per host by
+the first multi-host deployment (P2, [`archive/passes/performance-pass.md`](archive/passes/performance-pass.md) §5) the same images run per host by
 role, Compose per host: three hosts in P2 (**D** data: Postgres, Redis, object store; **A** data plane and control;
 **I** ingestion), five in P3 (D; **A1/A2** rag-api and rag-admin; **F** fetch: worker
 `preview,command,sync,fetch,eval`, clamd, small parser, renderer if needed; **P** processing: worker `parse,embed` with
