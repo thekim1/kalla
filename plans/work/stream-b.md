@@ -75,7 +75,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "M-2 open design calls"; knowledge-api §6.4.
 
-### [ ] B-10 Scope size counts topic-filtered chunks (M-2)
+### [x] B-10 Scope size counts topic-filtered chunks (M-2) (#389)
 - **Do:** `ScopeSizeCache` counts the chunks of a (collection, tag) link, so a narrow topic in a large collection gets
   exact search.
 - **Paths:** `src/Ume.Rag.Retrieval/**`.
