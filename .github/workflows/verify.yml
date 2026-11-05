@@ -99,7 +99,7 @@ jobs:
 
   backend:
     needs: changes
-    if: needs.changes.outputs.images == 'true'
+    if: needs.changes.outputs.code == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
@@ -162,7 +162,7 @@ jobs:
     # wal_compression=lz4, TLS, archive-push, backup and restore from inside the image, read-only root, uid 999). The
     # image is pushed to ghcr only by release.yml (§8.1).
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.images == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
