@@ -43,8 +43,9 @@ gateway's conventions for names, config keys, claims, key format and security ev
 - **Design documents are read-only for streams.** If the code has to differ from the design, take the smallest
   sound option and list it under "Design deviations" in the PR. The main session settles it in the design.
 - **Tests.** Run locally the test projects your change touches, and say which in the PR. CI runs the full backend
-  suite; the image tests, the evaluation smoke and the browser tests run when their paths change or before a release
-  (repo-and-deployment §8.2). Don't dispatch workflows by hand unless an item's done-when asks for it.
+  suite; the image tests and the evaluation smoke run when their paths change or before a release, and the browser
+  tests (`e2e.yml`) only before a release (repo-and-deployment §8.2). Don't dispatch workflows by hand unless an item's
+  done-when asks for it; an item whose done-when needs the browser tests is ticked on the first release run.
 - **Results.** Record each check from `plans/to-verify.md` in your stream's results file (`plans/p0/results-a.md` or
   `plans/p0/results-b.md`): row number, result, evidence (command, output, link).
 - **PRs.** One PR per checklist item or smaller. Branch `a/<item>-<slug>` or `b/<item>-<slug>`, rebased on `main`,
