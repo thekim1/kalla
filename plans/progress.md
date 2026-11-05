@@ -58,8 +58,9 @@ exists (M2 triggered, user 2026-10-30; `p1/README.md` §1).
       2026-11-01 (session 17):** 200-page slice of `/kommunochpolitik` (193 added, 0 failed, 2 min 20 s), `/v1/retrieve`
       right page first, `turkos` answered in Open WebUI with `url_citation` annotations to the crawled page, over the
       interim gateway at `Eu` on `gpt-6.1-sol` (`claude-opus-5-5` refuses `temperature`: see `demo-path.md`)
-- [ ] **Admin UI focus** (user, 2026-11-01): the demo's set-up from the browser first, then the rest of P1b items 11–13
-      ([`demo-path.md`](demo-path.md) "Next focus: the admin UI"; stream B)
+- [x] **Admin UI focus** (user, 2026-11-01): the demo's set-up from the browser first, then the rest of P1b items 11–13
+      ([`demo-path.md`](demo-path.md) "Next focus: the admin UI"; stream B) (pages built #279–#324; the local admin §5.4
+      walk that closes items 11 and 12 is in `p1b/progress-b.md`)
 - [ ] **P1a done:** first cited answer in Open WebUI, shown locally with the pilot member present
 
 Owned by the user, outside the streams ([`p1/README.md`](p1/README.md) §7):
@@ -76,9 +77,11 @@ Briefs, checklist (code and live items) and progress files: [`p1b/`](p1b/README.
 - [ ] Preview, advisory evaluation harness, publish with report and keep/roll back (code done: A items 5–7, B items 9,
       11; live checks open)
       ([`ingestion-worker/design-engine.md`](ingestion-worker/design-engine.md) §12)
-- [ ] Freshness rules: age decay, `demote`, completeness by ratio, removal check, 500-URL `lastmod` sample
+- [ ] Freshness rules: age decay, `demote`, completeness by ratio, removal check, 500-URL `lastmod` sample (code done:
+      B item 3, A item 4; the sample and the checks on the pilot collection are live items 24, 25)
       ([`weakness-review.md`](weakness-review.md) §3; `to-verify.md` #170, #171)
-- [ ] Assistant drafts → publish with history and restore; admin journey pages for sources and the assistant
+- [ ] Assistant drafts → publish with history and restore; admin journey pages for sources and the assistant (code
+      done: B items 9, 11, 12; local §5.4 walk open; organisation items 35, 36, then 39, 40 general knowledge, #356)
       ([`admin/plan.md`](admin/plan.md))
 - [ ] Feedback (ratings) with Open WebUI import; history mode `none`; banner (code done: B items 10, 13, A item 17,
       local import #340; banner and live import open)

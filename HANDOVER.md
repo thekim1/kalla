@@ -1,7 +1,7 @@
 # Handover
 
 State of the Ume.Rag work for the next session. Rewritten 2026-11-02, end of session 19 (`main` = `122990d`, after
-#349). Earlier sessions are in the git history (`git log -- HANDOVER.md`).
+#349); updated 2026-11-05, session 20 (general knowledge, P1b order, housekeeping). Earlier sessions are in the git history (`git log -- HANDOVER.md`).
 Repo `~/git/ume-rag-platform`, branch `main`, remote `origin` = https://github.com/thekim1/ume-rag-platform (push after
 every commit).
 
@@ -20,8 +20,17 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   contact, `CollectionShares`, `AssistantVersions.CollectionLinks` replacing `CollectionIds`), topics in retrieval
   (#347: a link with topics limits K and V, knowledge §6.2), topics in the worker (#349: path rules labelled "Topics",
   tags per document in the stage preview), the platform Organisation form (#348: member groups, sharing summary).
-  **Stream B builds 35 (admin API: sharing, topics, Map, V35) and 36 (pages, topic picker, admin contract to
-  `collectionLinks`)**, then 39 (default prompt). The admin contract still says `collectionIds` (links without tags).
+  Stream B's queue: **40 → 35 → 14 → 36 → 39** (below); 35 is the admin API (sharing, topics, Map, V35), 36 the pages
+  (topic picker, admin contract to `collectionLinks`). The admin contract still says `collectionIds` (links without tags).
+- **General knowledge per assistant (Decisions row, #355, #357, issue #356):** `QuerySteps.answer.generalKnowledge`
+  `off` (default, today) / `supplement` / `fallback` / `open`; a frame per level; for `fallback`/`open` coverage `Low`
+  calls the model without sources behind a platform caveat line (`answered-general`); `public` assistants always `off`
+  (V36). **P1b item 40, first in B's queue** because a POC needs it soon (#356); its chat and admin-API part may merge
+  before the radio group and badge. Nothing built yet. #356 also notes a possible later rename of "assistant" (e.g.
+  "knowledge scope"), not decided; new names avoid "assistant".
+- **Stream B prompt:** `plans/p1b/prompts/stream-b.md` (session 20); `progress-b.md` Status says where B is. Item 14
+  (accessibility, pilot-journey E2E, L7) comes before 36, because 36's done-when extends 14's E2E and A's `e2e` job
+  waits on L7; there is no `tests/e2e` or Playwright set-up yet. Items 11 and 12 still need the local admin §5.4 walk.
 - **Topics, in one line** (user asked): one owner crawls umea.se once and tags it by path; each assistant links it with
   only the topics it needs; topics narrow search, they are not access control. Uploads have no `pathRules`, so no topics
   (recommended: leave it until a department has a large mixed upload knowledge base).
@@ -55,6 +64,13 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - **The main session takes B's items** 33, 34, 18 and #343 (done); B keeps 35, 36, 39.
 - Aspire 13.6.4; fixed ports; the gold set waits.
 
+## Decided in session 20 (user, 2026-11-05)
+
+- **General knowledge per assistant** with the four levels of #356 (Decisions row; replaces the same-day
+  `grounding` `strict`/`balanced`/`open` of #355). `public` stays `off`.
+- **Item 40 first** in stream B's queue (POC); another agent runs stream B from the new prompt.
+- Housekeeping: #314, #300, #210 closed; `plans/progress.md` P1b lines annotated with what is code-done.
+
 ## Local stack (this machine)
 
 - Start: `export Seed__Enabled=false; aspire start --apphost src/Ume.Rag.AppHost/Ume.Rag.AppHost.csproj
@@ -80,8 +96,8 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 ## Reading order
 
 1. `01-general-idea.md` §10 **Decisions table** (rows `current` bind).
-2. `plans/p1b/README.md` (items 1–39, hand-offs L1–L14), `plans/p1b/progress-{a,b}.md`. `plans/progress.md` and
-   `plans/p1/progress-a.md` still show some finished P1a work as open (bookkeeping to tidy).
+2. `plans/p1b/README.md` (items 1–40, hand-offs L1–L14), `plans/p1b/progress-{a,b}.md`. The open boxes left in
+   `plans/progress.md` and `plans/p1/progress-a.md` are live or user items (checked session 20).
 3. `plans/admin/organisation-proposal.md` (adopted); the detail documents (`plans/*/design*.md`; map in
    `plans/README.md`). The passes don't bind.
 
@@ -141,24 +157,25 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 ## Next step
 
 1. **Check GitHub and the stack:** open PRs and issues (`gh pr list`, `gh issue list`); `aspire describe`.
-2. **Review B's items 35 and 36 live** as they come (sharing rules V11/V35, topic picker, `collectionLinks` contract;
-   then 39). After 36: tags in the preview panel, `Department` type fields (hand-offs in #348/#349).
-3. **Stream A:** #336 (chunker, not urgent); P1b item 15 `e2e` waits for B's L7 (item 14). Tidy the progress
-   bookkeeping (`plans/progress.md`, `plans/p1/progress-a.md`).
+2. **Review B's items as they come, live:** 40 first (frames per level, the `Low` path, V36; try `fallback` on the
+   `turkos` copy in the test panel), then 35 (sharing rules V11/V35), 14 (E2E, L7), 36 (topic picker,
+   `collectionLinks` contract), 39. After 36: tags in the preview panel, `Department` type fields (#348/#349).
+3. **Stream A:** draft #352 (chunker memoisation, #351, not urgent); P1b item 15 `e2e` waits for B's L7 (item 14).
+   No P1b prompt for stream A yet (little code left).
 4. **User decides:** the gold set with DoIT (waiting) and threshold calibration (item 21); #333 findings 1–2;
    adopting architecture-plan items 1, 2, 4–7; the W3 grant step before any group audience; a Git/Markdown connector
    (docs-as-code: today upload or crawl a rendered site; YAML front matter isn't parsed); pin review.
 
-**Open issues — stream B:** #318 (organisation 35/36), #278, #314 (done in #320; B closes), #333 (findings 1–2 with the
-user), #52. **Stream A:** #336, #300 (L4, information), #48, #51, #193, #210. **Main session:** #100 (L8). **User:**
-#215 (J8).
+**Open issues — stream B:** #356 (general knowledge, item 40), #318 (organisation 35/36), #278, #333 (findings 1–2
+with the user), #52. **Stream A:** #351 (PR #352), #48, #51. **Main session:** #100 (L8). **User:** #215 (J8).
 
 **Not folded into the design yet (need a call):** topics for uploads (`files` template has no `pathRules`); #217's
 fired-types list; `UrlCanonicalizer` → Pipelines (#178); identity §16 Q2–4, Q8; a connection pooler needs a direct
 connection for the HNSW rebuild; multi-collection scopes aren't one index-health scope; a narrow topic in a large
 collection may take HNSW with post-filter recall loss (measure with the §20 recall check).
 
-**Waiting on the user:** a Data API key (`catalog.read`) for the org and model syncs; the gateway session (release 1,
+**Waiting on the user:** a Data API key (`catalog.read`, read-only) for the org and model syncs (admin §4.10; not a
+blocker: departments, teams and `GatewayModels` rows are entered by hand until then); the gateway session (release 1,
 shared Keycloak realm with J8 #215, identity §16); **O7** (go-live host) and L10 (test host, backup target, key escrow);
 L11 (runner, IT security); L12 (DPIA G1); runbook review; U1 with the web editors; names and dates for A1, G1, N1, U1,
 W2, P2 and the gold-set owner.
