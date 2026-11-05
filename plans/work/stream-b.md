@@ -45,7 +45,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** the user (DOS-lagen scope) and a person with NVDA.
 - **Read:** admin §10.1.
 
-### [ ] B-5 Item 36's browser-test step
+### [x] B-5 Item 36's browser-test step (#377; https://github.com/thekim1/ume-rag-platform/actions/runs/42090732503)
 - **Done when:** the first green `e2e` run (A-2) passes step 14 of `tests/e2e/specs/pilot.spec.ts` (share with the
   municipality, link with a topic from another department, by keyboard).
 - **Waits on:** A-2.

@@ -17,7 +17,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** [`archive/licence-review-p2.md`](../archive/licence-review-p2.md); parser §15.
 
-### [ ] A-2 First green `e2e` run
+### [x] A-2 First green `e2e` run (#377; https://github.com/thekim1/ume-rag-platform/actions/runs/42090732503)
 - **Do:** dispatch `e2e.yml` once the runner host has Chromium's libraries; fix what fails in A's paths, file the
   rest for B.
 - **Paths:** `.github/workflows/e2e.yml`, `scripts/Start-E2E.ps1`.
