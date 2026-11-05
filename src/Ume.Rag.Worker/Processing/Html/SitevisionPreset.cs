@@ -40,8 +40,6 @@ public static class SitevisionPreset
             Pattern = @"^/(?:.*/)?(?:[^/]+\.)?(?<id>[0-9]+\.[0-9a-f]{10,})\.html$",
             Replacement = "/${id}.html",
         },
-        // Portlet state and routing (sv.target, sv.url, sv.12.<portlet>.route, sv.state) and the menu toggle (open.12.<portlet>).
-        IgnoreQueryParams = ["sv.*", "open.*"],
     };
 
     public static HtmlPreset Preset { get; } = new(Name, Version, Profile);
