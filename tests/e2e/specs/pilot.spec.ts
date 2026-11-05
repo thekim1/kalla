@@ -216,7 +216,8 @@ function actor(page: Page, mode: 'mouse' | 'keyboard') {
       if (mode === 'mouse') return target.click()
       if (await target.getAttribute('role') === 'tab') {
         // ARIA tabs: Tab reaches the selected tab only; the arrow keys move between the tabs.
-        const tablist = page.getByRole('tablist').filter({ has: target })
+        // The tab's own tab list, whatever the target locator starts from (a `has:` filter would search inside the list).
+        const tablist = target.locator('xpath=ancestor::*[@role="tablist"][1]')
         await focus(tablist.getByRole('tab', { selected: true }))
         for (let i = 0; i < 10 && !await target.evaluate(element => element === document.activeElement); i++) {
           const before = await page.evaluate(() => document.activeElement?.id)
