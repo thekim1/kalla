@@ -5,6 +5,11 @@ namespace Ume.Rag.Retrieval;
 /// exact-versus-HNSW rule built on them. A collection the counts do not know yet (new since the last refresh) counts
 /// as empty, so it is searched exactly. A failed refresh keeps the previous counts; with none yet it throws.
 /// <para>
+/// A collection linked with topics counts only its chunks that carry one of the link's tags (Decisions "M-2 open design
+/// calls"), so a narrow topic in a large collection falls under the exact-search limit. The counts are kept per
+/// (profile, collection, tag set), so the union of a link's topics is exact: a chunk with two of its tags counts once.
+/// </para>
+/// <para>
 /// Also the keyword stop list (§6.2, §20; Decisions "Keyword stop list before the pilot crawl"): the frequent lexemes
 /// per collection, read with the same interval. Reading them scans the collections' search vectors, so a stale list is
 /// refreshed in the background while searches use the previous one; only the first search waits for it, unless
@@ -47,15 +52,19 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
 
     public TimeSpan RefreshInterval { get; } = refreshInterval ?? TimeSpan.FromMinutes(10);
 
-    /// <summary>The chunks in <paramref name="scope"/> and in its profile's whole index.</summary>
+    /// <summary>
+    /// The chunks in <paramref name="scope"/> and in its profile's whole index. A collection linked with topics adds the
+    /// chunks carrying one of its topics (<see cref="CollectionInScope.Topics"/>), one without topics all its chunks.
+    /// </summary>
     public async ValueTask<ScopeSize> SizeAsync(SearchScope scope, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
         var snapshot = await CurrentAsync(cancellationToken);
         long inScope = 0;
-        foreach (var id in scope.CollectionIds)
+        foreach (var collection in scope.Collections)
         {
-            inScope += snapshot.ByCollection.GetValueOrDefault((scope.EmbeddingProfileId, id));
+            var key = (scope.EmbeddingProfileId, collection.CollectionId);
+            inScope += collection.Topics.Count == 0 ? snapshot.ByCollection.GetValueOrDefault(key) : TopicChunks(snapshot, key, collection.Topics);
         }
 
         return new ScopeSize(inScope, snapshot.ByProfile.GetValueOrDefault(scope.EmbeddingProfileId));
@@ -69,8 +78,17 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
     public async ValueTask<IReadOnlyList<string>> StopLexemesAsync(SearchScope scope, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var size = await SizeAsync(scope, cancellationToken);
-        if (size.ScopeChunks < KeywordStopMinChunks)
+
+        // The lexeme statistics are per whole collection, so the shares are taken of the collections' whole counts, also
+        // for a link with topics (a topic's own count would turn a collection-wide count into an inflated share).
+        var snapshot = await CurrentAsync(cancellationToken);
+        long scopeChunks = 0;
+        foreach (var id in scope.CollectionIds)
+        {
+            scopeChunks += snapshot.ByCollection.GetValueOrDefault((scope.EmbeddingProfileId, id));
+        }
+
+        if (scopeChunks < KeywordStopMinChunks)
         {
             return [];
         }
@@ -93,7 +111,7 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
             }
         }
 
-        var limit = KeywordStopShare * size.ScopeChunks;
+        var limit = KeywordStopShare * scopeChunks;
         return [.. chunks.Where(c => c.Value > limit).Select(c => c.Key).Order(StringComparer.Ordinal)];
     }
 
@@ -183,8 +201,11 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
                 var counts = await source.CountChunksAsync(cancellationToken);
                 snapshot = new Snapshot(
                     time.GetUtcNow(),
-                    counts.ToDictionary(c => (c.EmbeddingProfileId, c.CollectionId), c => c.Chunks),
-                    counts.GroupBy(c => c.EmbeddingProfileId).ToDictionary(g => g.Key, g => g.Sum(c => c.Chunks)));
+                    counts.GroupBy(c => (c.EmbeddingProfileId, c.CollectionId)).ToDictionary(g => g.Key, g => g.Sum(c => c.Chunks)),
+                    counts.GroupBy(c => c.EmbeddingProfileId).ToDictionary(g => g.Key, g => g.Sum(c => c.Chunks)),
+                    counts.Where(c => c.Tags.Count > 0)
+                        .GroupBy(c => (c.EmbeddingProfileId, c.CollectionId))
+                        .ToDictionary(g => g.Key, g => (IReadOnlyList<CollectionChunkCount>)[.. g]));
                 _snapshot = snapshot;
                 return snapshot;
             }
@@ -197,6 +218,30 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
         {
             _refresh.Release();
         }
+    }
+
+    /// <summary>The chunks of a collection that carry one of <paramref name="topics"/> (each tag set counted once).</summary>
+    private static long TopicChunks(Snapshot snapshot, (Guid, Guid) key, IReadOnlyList<string> topics)
+    {
+        if (!snapshot.Tagged.TryGetValue(key, out var tagSets))
+        {
+            return 0;
+        }
+
+        long chunks = 0;
+        foreach (var tagSet in tagSets)
+        {
+            foreach (var tag in tagSet.Tags)
+            {
+                if (topics.Contains(tag, StringComparer.Ordinal))
+                {
+                    chunks += tagSet.Chunks;
+                    break;
+                }
+            }
+        }
+
+        return chunks;
     }
 
     /// <summary>
@@ -285,7 +330,8 @@ public sealed class ScopeSizeCache(IScopeSizeSource source, TimeProvider time, T
     private sealed record Snapshot(
         DateTimeOffset ReadAt,
         Dictionary<(Guid Profile, Guid Collection), long> ByCollection,
-        Dictionary<Guid, long> ByProfile);
+        Dictionary<Guid, long> ByProfile,
+        Dictionary<(Guid Profile, Guid Collection), IReadOnlyList<CollectionChunkCount>> Tagged);
 }
 
 public readonly record struct ScopeSize(long ScopeChunks, long ProfileChunks);
