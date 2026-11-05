@@ -370,6 +370,11 @@
       "code": "version_not_rollbackable",
       "status": 409,
       "message": "Only an earlier published version can be restored."
+    },
+    {
+      "code": "settings_model_residency",
+      "status": 409,
+      "message": "The model {model} cannot be used for {setting}: it is not a chat model the gateway serves at {ceiling}."
     }
   ]
 }

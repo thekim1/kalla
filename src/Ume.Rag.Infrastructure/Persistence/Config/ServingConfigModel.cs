@@ -104,6 +104,7 @@ internal static class ServingConfigModel
             e.ToTable("GatewayModels", ConfigSchema, t =>
             {
                 ValuesCheck(t, "GatewayModels", "Kind", GatewayModelKinds.All);
+                ValuesCheck(t, "GatewayModels", "ModelKind", GatewayModelModelKinds.All);
                 ValuesCheck(t, "GatewayModels", "Source", GatewayModelSources.All);
                 ValuesCheck(t, "GatewayModels", "SupportsToolsSource", GatewayModelSources.All);
                 t.HasCheckConstraint("CK_GatewayModels_Residencies",
@@ -113,6 +114,7 @@ internal static class ServingConfigModel
             e.HasKey(x => x.Name);
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Kind).HasMaxLength(10);
+            e.Property(x => x.ModelKind).HasMaxLength(10).HasDefaultValue(GatewayModelModelKinds.Chat); // manual route rows are chat
             e.Property(x => x.Residencies).HasColumnType("varchar(10)[]");
             e.Property(x => x.Source).HasMaxLength(10);
             e.Property(x => x.SupportsToolsSource).HasMaxLength(10);

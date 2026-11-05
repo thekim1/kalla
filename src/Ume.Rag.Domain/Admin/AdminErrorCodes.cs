@@ -235,6 +235,12 @@ public static class AdminErrorCodes
     /// <summary>Rollback takes a superseded version of this pipeline.</summary>
     public static AdminErrorCode VersionNotRollbackable { get; } = new("version_not_rollbackable", 409, "Only an earlier published version can be restored.");
 
+    /// <summary>
+    /// V32: a platform model setting (<c>{setting}</c>) names no <c>chat</c> row of the model mirror servable at the platform
+    /// ceiling <c>{ceiling}</c> (<c>Eu</c> until M2).
+    /// </summary>
+    public static AdminErrorCode SettingsModelResidency { get; } = new("settings_model_residency", 409, "The model {model} cannot be used for {setting}: it is not a chat model the gateway serves at {ceiling}.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -243,5 +249,5 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgeNotAllowedForLevel, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgeNotAllowedForLevel, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency];
 }

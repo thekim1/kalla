@@ -2,9 +2,11 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Services;
+using Ume.Rag.Infrastructure.Persistence;
 using Ume.Rag.Retrieval;
 
 namespace Ume.Rag.AdminApi;
@@ -44,9 +46,11 @@ public static class SettingsEndpoints
             s.EvaluationModel = r.EvaluationModel;
             s.EvaluationJudgeModel = r.EvaluationJudgeModel;
             s.EvaluationMaxQuestions = r.EvaluationMaxQuestions;
-        });
+        }, (r, db, ct) => PlatformModelRules.EnsureAsync(db, [("Settings.EvaluationModel", r.EvaluationModel), ("Settings.EvaluationJudgeModel", r.EvaluationJudgeModel)], ct));
         Section(settings, "retrieval", s => new JsonSectionSettings(Json(s.Retrieval), Version(s)), (RetrievalSectionRequest r, PlatformSettings s) => s.Retrieval = r.Value.ToJsonString());
-        Section(settings, "chat", s => new JsonSectionSettings(Json(s.Chat), Version(s)), (JsonSectionRequest r, PlatformSettings s) => s.Chat = r.Value.ToJsonString());
+        Section(settings, "chat", s => new JsonSectionSettings(Json(s.Chat), Version(s)), (JsonSectionRequest r, PlatformSettings s) => s.Chat = r.Value.ToJsonString(),
+            (r, db, ct) => PlatformModelRules.EnsureAsync(db,
+                [("Settings.Chat.CondenseModel", r.Value["condenseModel"] is JsonValue m && m.TryGetValue<string>(out var model) ? model : null)], ct));
         Section(settings, "pii", PiiSettings.Of, (PiiSettingsRequest r, PlatformSettings s) =>
         {
             s.PiiFlagRules = r.FlagRules.ToJsonString();
@@ -64,8 +68,12 @@ public static class SettingsEndpoints
         return api;
     }
 
-    /// <summary>One section: GET (the row or the defaults) and PUT (version-checked, audited <c>settings.update</c> with the section's before/after).</summary>
-    private static void Section<TDto, TRequest>(RouteGroupBuilder group, string name, Func<PlatformSettings, TDto> read, Action<TRequest, PlatformSettings> apply)
+    /// <summary>
+    /// One section: GET (the row or the defaults) and PUT (version-checked, audited <c>settings.update</c> with the section's
+    /// before/after). <paramref name="check"/> runs the section's database rules (V32) inside the write, before the change.
+    /// </summary>
+    private static void Section<TDto, TRequest>(RouteGroupBuilder group, string name, Func<PlatformSettings, TDto> read, Action<TRequest, PlatformSettings> apply,
+        Func<TRequest, RagDbContext, CancellationToken, Task>? check = null)
         where TRequest : SettingsRequest
     {
         var title = string.Concat(name.Split('-').Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
@@ -93,6 +101,11 @@ public static class SettingsEndpoints
                         admin.ExpectVersion(row, request.Version);
                     }
 
+                    if (check is not null)
+                    {
+                        await check(request, admin.Db, attempt);
+                    }
+
                     var before = row.Version == 0 ? null : (object?)read(row);
                     apply(request, row);
                     row.UpdatedAt = admin.Now;
@@ -109,6 +122,37 @@ public static class SettingsEndpoints
     internal static string Version(PlatformSettings s) => s.Version.ToString(CultureInfo.InvariantCulture);
 
     private static JsonObject Json(string text) => JsonNode.Parse(string.IsNullOrWhiteSpace(text) ? "{}" : text) as JsonObject ?? [];
+}
+
+/// <summary>
+/// V32 (admin design §4.6): a platform model setting names a <c>chat</c> row of <c>GatewayModels</c> servable at the platform
+/// ceiling (<see cref="Ceiling"/>). An empty setting is allowed (unset). The skill-gate model is P2 (tools section not mapped).
+/// </summary>
+public static class PlatformModelRules
+{
+    /// <summary>The platform ceiling of model settings: <c>Eu</c> until on-prem models exist (M2).</summary>
+    public const Residency Ceiling = Residency.Eu;
+
+    public static async Task EnsureAsync(RagDbContext db, IReadOnlyList<(string Setting, string? Model)> settings, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(settings);
+        foreach (var (setting, model) in settings)
+        {
+            if (string.IsNullOrWhiteSpace(model))
+            {
+                continue;
+            }
+
+            var row = await db.GatewayModels.AsNoTracking().SingleOrDefaultAsync(m => m.Name == model, ct);
+            if (row is null || row.ModelKind != GatewayModelModelKinds.Chat ||
+                !row.Residencies.Any(r => ResidencyCeiling.TryParse(r, out var residency) && residency <= Ceiling))
+            {
+                throw AdminFaults.Of(AdminErrorCodes.SettingsModelResidency,
+                    new Dictionary<string, string> { ["model"] = model, ["setting"] = setting, ["ceiling"] = ResidencyCeiling.ToHeader(Ceiling) });
+            }
+        }
+    }
 }
 
 /// <summary>A settings section's body: its fields and the row's <c>version</c> (null or <c>0</c> while no row exists).</summary>

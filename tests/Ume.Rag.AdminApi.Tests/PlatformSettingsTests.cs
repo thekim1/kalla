@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Domain.Admin;
+using Ume.Rag.Domain.Entities;
 using Ume.Rag.TestKit;
 
 namespace Ume.Rag.AdminApi.Tests;
@@ -77,6 +78,51 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
 
         var saved = await Json(await admin.PutAsJsonAsync("/api/settings/network", new { trustedProxies = new[] { " 10.20.0.0/16 ", "192.0.2.10/32" }, version }, Ct));
         saved.GetProperty("trustedProxies").EnumerateArray().Select(p => p.GetString()).ShouldBe(["10.20.0.0/16", "192.0.2.10"]);
+    }
+
+    [Fact]
+    public async Task V32_refuses_a_model_setting_that_is_not_a_chat_model_within_the_platform_ceiling()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        string chat = "v32-chat-" + suffix, embedding = "v32-embed-" + suffix, external = "v32-external-" + suffix;
+        await using (var db = TestPostgres.Context(database.Connection(RagDatabase.Admin)))
+        {
+            db.GatewayModels.AddRange(
+                new GatewayModel { Name = chat, Residencies = ["Eu"], Source = GatewayModelSources.Catalog },
+                new GatewayModel { Name = embedding, ModelKind = GatewayModelModelKinds.Embedding, Residencies = ["OnPrem"], Source = GatewayModelSources.Catalog },
+                new GatewayModel { Name = external, Residencies = ["External"], Source = GatewayModelSources.Catalog });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var evaluation = await Json(await admin.GetAsync("/api/settings/evaluation", Ct));
+        var chatSection = await Json(await admin.GetAsync("/api/settings/chat", Ct));
+        var version = evaluation.GetProperty("version").GetString();
+
+        foreach (var (path, body) in new (string, object)[]
+        {
+            ("/api/settings/evaluation", new { evaluationModel = embedding, evaluationMaxQuestions = 100, version }), // an embedding model (#363 point 1)
+            ("/api/settings/evaluation", new { evaluationModel = chat, evaluationJudgeModel = external, evaluationMaxQuestions = 100, version }), // above Eu
+            ("/api/settings/evaluation", new { evaluationModel = "no-such-model-" + suffix, evaluationMaxQuestions = 100, version }),
+            ("/api/settings/chat", new { value = new { condenseModel = embedding }, version }),
+        })
+        {
+            using var refused = await admin.PutAsJsonAsync(path, body, Ct);
+            refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, $"{path} {JsonSerializer.Serialize(body)}");
+            (await Code(refused)).ShouldBe(AdminErrorCodes.SettingsModelResidency.Code);
+        }
+
+        // A chat model within Eu saves; then the shared database gets its settings back.
+        var saved = await Json(await admin.PutAsJsonAsync("/api/settings/evaluation", new { evaluationModel = chat, evaluationJudgeModel = chat, evaluationMaxQuestions = 100, version }, Ct));
+        saved.GetProperty("evaluationModel").GetString().ShouldBe(chat);
+        saved = await Json(await admin.PutAsJsonAsync("/api/settings/chat", new { value = new { condenseModel = chat }, version = saved.GetProperty("version").GetString() }, Ct));
+        saved = await Json(await admin.PutAsJsonAsync("/api/settings/evaluation", new
+        {
+            evaluationModel = evaluation.GetProperty("evaluationModel").GetString(), evaluationJudgeModel = evaluation.GetProperty("evaluationJudgeModel").GetString(),
+            evaluationMaxQuestions = evaluation.GetProperty("evaluationMaxQuestions").GetInt32(), version = saved.GetProperty("version").GetString(),
+        }, Ct));
+        await Json(await admin.PutAsJsonAsync("/api/settings/chat", new { value = chatSection.GetProperty("value"), version = saved.GetProperty("version").GetString() }, Ct));
     }
 
     [Fact]

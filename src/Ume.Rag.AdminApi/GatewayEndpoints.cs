@@ -68,7 +68,7 @@ public sealed record GatewayStatus(bool Configured, string? Model, IReadOnlyList
     IReadOnlyList<EmbeddingProfileCanaryStatus> Profiles);
 
 /// <summary>A row of the model mirror.</summary>
-public sealed record GatewayModelDto(string Name, string Kind, IReadOnlyList<string> Residencies, string Source, bool SupportsTools, int? ContextWindow,
+public sealed record GatewayModelDto(string Name, string Kind, string ModelKind, IReadOnlyList<string> Residencies, string Source, bool SupportsTools, int? ContextWindow,
     decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd, DateTimeOffset? SyncedAt);
 
 /// <summary>The gateway area (admin design §4.5): the model mirror, its sync, the key status per level and the embedding canary check.</summary>
@@ -84,7 +84,7 @@ public static class GatewayEndpoints
 
         gateway.MapGet("/models", async (RagDbContext db, CancellationToken ct) =>
             (await db.GatewayModels.AsNoTracking().OrderBy(m => m.Name).ToListAsync(ct))
-                .Select(m => new GatewayModelDto(m.Name, m.Kind, m.Residencies, m.Source, m.SupportsTools, m.ContextWindow, m.InputPerMillionUsd,
+                .Select(m => new GatewayModelDto(m.Name, m.Kind, m.ModelKind, m.Residencies, m.Source, m.SupportsTools, m.ContextWindow, m.InputPerMillionUsd,
                     m.CachedInputPerMillionUsd, m.OutputPerMillionUsd, m.SyncedAt)).ToList())
             .RequireAuthorization(AdminPolicies.Read).WithName("ListGatewayModels").WithSummary("The gateway model mirror with residencies and prices");
 

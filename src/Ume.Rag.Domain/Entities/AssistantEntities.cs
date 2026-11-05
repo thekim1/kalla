@@ -188,6 +188,18 @@ public static class GatewayModelKinds
     public static IReadOnlyList<string> All { get; } = [Model, Route];
 }
 
+/// <summary>
+/// What a gateway model row serves (data-model §2.1): the catalogue's <c>ModelKind</c> of the deployment; manual route rows
+/// are <c>chat</c>. Only chat rows may be an assistant's model (V34) or a platform model setting (V32).
+/// </summary>
+public static class GatewayModelModelKinds
+{
+    public const string Chat = "chat";
+    public const string Embedding = "embedding";
+
+    public static IReadOnlyList<string> All { get; } = [Chat, Embedding];
+}
+
 /// <summary>Where a gateway model row or one of its values came from (data-model §2.1).</summary>
 public static class GatewayModelSources
 {
@@ -205,6 +217,9 @@ public sealed class GatewayModel
 {
     public required string Name { get; set; }
     public string Kind { get; set; } = GatewayModelKinds.Model;
+
+    /// <summary><c>chat</c> or <c>embedding</c> (<see cref="GatewayModelModelKinds"/>).</summary>
+    public string ModelKind { get; set; } = GatewayModelModelKinds.Chat;
 
     /// <summary>The <c>x-ume-residency</c> values (<c>OnPrem</c>, <c>Eu</c>, <c>External</c>) the model or route's targets run at.</summary>
     public string[] Residencies { get; set; } = [];

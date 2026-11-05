@@ -390,6 +390,41 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task Publish_refuses_an_embedding_model_as_the_answer_model()
+    {
+        var seed = await SeedAsync();
+        await using var gateway = Gateway();
+        await using var factory = Admin(gateway);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        var embedding = "embed-" + seed.Code.ToLowerInvariant();
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            // Within the ceiling, so only V34's chat-row check can refuse it (#363 point 1).
+            db.GatewayModels.Add(new GatewayModel { Name = embedding, ModelKind = GatewayModelModelKinds.Embedding, Residencies = ["Eu"], Source = GatewayModelSources.Catalog });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        using var created = await admin.PostAsJsonAsync("/api/assistants", new
+        {
+            name = "Inbäddning " + seed.Code, departmentId = seed.Department, classification = "internal", description = "D", contactName = "K", contactEmail = "k@umea.se",
+        }, Ct);
+        var assistant = await Json(created);
+        var id = assistant.GetProperty("id").GetGuid();
+        using var draft = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
+        {
+            gatewayModel = embedding, collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } }, version = assistant.GetProperty("draft").GetProperty("version").GetString(),
+        }, Ct);
+        draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
+        var draftVersion = (await Json(draft)).GetProperty("version").GetString();
+
+        using var refused = await admin.PostAsJsonAsync($"/api/assistants/{id}/publish", new { version = assistant.GetProperty("version").GetString(), draftVersion }, Ct);
+        refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, await refused.Content.ReadAsStringAsync(Ct));
+        var body = await Json(refused);
+        body.GetProperty("code").GetString().ShouldBe(AdminErrorCodes.VersionLinkMissing.Code);
+        body.GetRawText().ShouldContain(embedding);
+    }
+
+    [Fact]
     public async Task Versions_are_listed_restored_as_a_new_published_version_and_archive_and_retention_are_saved()
     {
         var seed = await SeedAsync();

@@ -536,7 +536,7 @@ public static class AssistantRules
         ArgumentNullException.ThrowIfNull(version);
         var problems = new List<RuleProblem>();
 
-        // V34: the definition resolves; description and contact are set.
+        // V34: the definition resolves (the model a chat row of the mirror); description and contact are set.
         if (publishing)
         {
             if (string.IsNullOrWhiteSpace(assistant.Description) || string.IsNullOrWhiteSpace(assistant.ContactName) || string.IsNullOrWhiteSpace(assistant.ContactEmail))
@@ -544,7 +544,8 @@ public static class AssistantRules
                 problems.Add(new(AdminErrorCodes.AssistantContactMissing, null, []));
             }
 
-            if (string.IsNullOrWhiteSpace(version.GatewayModel) || !await admin.Db.GatewayModels.AsNoTracking().AnyAsync(m => m.Name == version.GatewayModel, ct))
+            if (string.IsNullOrWhiteSpace(version.GatewayModel) || !await admin.Db.GatewayModels.AsNoTracking()
+                    .AnyAsync(m => m.Name == version.GatewayModel && m.ModelKind == GatewayModelModelKinds.Chat, ct))
             {
                 problems.Add(new(AdminErrorCodes.VersionLinkMissing, new Dictionary<string, string> { ["link"] = "model " + (version.GatewayModel ?? "(none)") }, []));
             }

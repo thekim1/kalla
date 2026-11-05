@@ -41,7 +41,7 @@ public sealed record GatewayModelSyncStatus(bool Enabled, DateTimeOffset? LastRu
 /// <c>OrgSync:IntervalMinutes</c> and on demand, with the same Data API key and the same pattern as
 /// <see cref="OrganisationSync"/>: one config write under the version lock and an advisory lock, only changed rows written
 /// (data-model §2.1: otherwise every run bumps the config version), one audit entry. A row per enabled chat or embedding
-/// deployment of an enabled provider: <c>Kind = model</c>, <c>Residencies = [provider residency]</c>, the latest price in
+/// deployment of an enabled provider: <c>Kind = model</c>, <c>ModelKind</c> from the catalogue's <c>Kind</c>, <c>Residencies = [provider residency]</c>, the latest price in
 /// effect. A catalogue row whose deployment is gone or disabled is removed; manual rows (route aliases) are never touched.
 /// After each run the canary embedding of every active profile that has none is recorded (<see cref="RecordCanariesAsync"/>).
 /// </summary>
@@ -198,12 +198,13 @@ public sealed partial class GatewayModelSync(
             var residencies = deployments.Select(d => enabledProviders[d.ProviderId].Residency).Distinct().Order()
                 .Select(ResidencyCeiling.ToHeader).ToArray();
             var price = deployments.Select(d => latestPrice.GetValueOrDefault(d.Id)).OfType<CatalogPriceItem>().MaxBy(p => p.EffectiveFrom);
+            var modelKind = ModelKindOf(deployments[0].Kind);
             if (row is null)
             {
                 row = new GatewayModel { Name = name, Source = GatewayModelSources.Catalog };
                 db.GatewayModels.Add(row);
             }
-            else if (row.Kind == GatewayModelKinds.Model && row.Residencies.SequenceEqual(residencies, StringComparer.Ordinal) &&
+            else if (row.Kind == GatewayModelKinds.Model && row.ModelKind == modelKind && row.Residencies.SequenceEqual(residencies, StringComparer.Ordinal) &&
                      row.InputPerMillionUsd == price?.InputPerMillionUsd && row.CachedInputPerMillionUsd == price?.CachedInputPerMillionUsd &&
                      row.OutputPerMillionUsd == price?.OutputPerMillionUsd)
             {
@@ -211,6 +212,7 @@ public sealed partial class GatewayModelSync(
             }
 
             row.Kind = GatewayModelKinds.Model;
+            row.ModelKind = modelKind;
             row.Residencies = residencies;
             row.InputPerMillionUsd = price?.InputPerMillionUsd;
             row.CachedInputPerMillionUsd = price?.CachedInputPerMillionUsd;
@@ -227,6 +229,10 @@ public sealed partial class GatewayModelSync(
 
         return new GatewayModelSyncResult(written, removed, 0);
     }
+
+    /// <summary>The mirror's <c>ModelKind</c> of a catalogue <c>Kind</c> (gateway <c>ModelKind</c>: <c>Chat</c> or <c>Embedding</c>; others are not mirrored).</summary>
+    internal static string ModelKindOf(string catalogKind) =>
+        catalogKind == "Embedding" ? GatewayModelModelKinds.Embedding : GatewayModelModelKinds.Chat;
 
     /// <summary>
     /// Records the canary embedding (processing design §11) of every active profile that has a canary text and no

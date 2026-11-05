@@ -115,11 +115,14 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         var models = (await reader.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.ToDictionary(m => m.Name);
         models["ume/chat-eu"].Residencies.ShouldBe(["Eu"]);
         models["ume/chat-eu"].Kind.ShouldBe(GatewayModelKinds.Model);
+        models["ume/chat-eu"].ModelKind.ShouldBe(GatewayModelModelKinds.Chat); // the catalogue's Kind "Chat" (#363 point 1)
         models["ume/chat-eu"].Source.ShouldBe(GatewayModelSources.Catalog);
         models["ume/chat-eu"].OutputPerMillionUsd.ShouldBe(0.60m);
         models["ume/chat-advanced"].Residencies.ShouldBe(["External"]);
         models["bge-m3"].Residencies.ShouldBe(["OnPrem"]);
         models["bge-m3"].InputPerMillionUsd.ShouldBe(0.02m);
+        models["bge-m3"].Kind.ShouldBe(GatewayModelKinds.Model);
+        models["bge-m3"].ModelKind.ShouldBe(GatewayModelModelKinds.Embedding); // the catalogue's Kind "Embedding"
         // A multi-target name is a route alias (a manual row), and rerank is not a gateway model kind.
         models.ShouldNotContainKey("ume/chat-standard");
         models.ShouldNotContainKey("bge-reranker-v2-m3");
@@ -143,6 +146,9 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
             db.GatewayModels.Add(new GatewayModel { Name = alias, Kind = GatewayModelKinds.Route, Residencies = ["OnPrem", "Eu"], Source = GatewayModelSources.Manual });
             var changed = await db.GatewayModels.SingleAsync(m => m.Name == "ume/chat-eu", Ct);
             changed.OutputPerMillionUsd = 9m;
+            // A row whose ModelKind is wrong (the migration's default 'chat') is corrected by the next run: no compatibility step.
+            var embedding = await db.GatewayModels.SingleAsync(m => m.Name == "bge-m3", Ct);
+            embedding.ModelKind = GatewayModelModelKinds.Chat;
             await db.SaveChangesAsync(Ct);
         }
 
@@ -150,13 +156,16 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         using var response = await platform.PostAsync("/api/gateway/sync", null, Ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
-        (await response.Content.ReadFromJsonAsync<GatewayModelSyncResult>(Ct)).ShouldBe(new GatewayModelSyncResult(1, 1, 0));
+        (await response.Content.ReadFromJsonAsync<GatewayModelSyncResult>(Ct)).ShouldBe(new GatewayModelSyncResult(2, 1, 0));
         var version = await ConfigVersionAsync();
         await using (var db = TestPostgres.Context(database.Connection(RagDatabase.Admin)))
         {
             (await db.GatewayModels.AnyAsync(m => m.Name == gone, Ct)).ShouldBeFalse();
-            (await db.GatewayModels.SingleAsync(m => m.Name == alias, Ct)).Residencies.ShouldBe(["OnPrem", "Eu"]);
+            var kept = await db.GatewayModels.SingleAsync(m => m.Name == alias, Ct);
+            kept.Residencies.ShouldBe(["OnPrem", "Eu"]);
+            kept.ModelKind.ShouldBe(GatewayModelModelKinds.Chat); // manual route rows are chat
             (await db.GatewayModels.SingleAsync(m => m.Name == "ume/chat-eu", Ct)).OutputPerMillionUsd.ShouldBe(0.60m);
+            (await db.GatewayModels.SingleAsync(m => m.Name == "bge-m3", Ct)).ModelKind.ShouldBe(GatewayModelModelKinds.Embedding);
             var audit = await db.AuditLog.Where(a => a.EntityType == "gateway-models" && a.ConfigVersion == version).ToListAsync(Ct);
             audit.ShouldHaveSingleItem().Actor.ShouldBe("test-user");
             db.GatewayModels.Remove(await db.GatewayModels.SingleAsync(m => m.Name == alias, Ct));
