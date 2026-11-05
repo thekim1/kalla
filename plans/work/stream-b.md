@@ -50,7 +50,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   municipality, link with a topic from another department, by keyboard).
 - **Waits on:** A-2.
 
-### [ ] B-7 HNSW rebuild on its own connection string (M-2)
+### [x] B-7 HNSW rebuild on its own connection string (M-2) (#383)
 - **Do:** `ConnectionStrings:ragdb-maintenance` (falls back to `ragdb`) for `HnswIndexHealth.RebuildAsync`; set
   `statement_timeout = 0` with `SET` on the session, not as a startup option (PgBouncer drops `options`); AppHost
   passes it like `ragdb-listen`.
