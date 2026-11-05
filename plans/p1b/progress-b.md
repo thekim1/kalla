@@ -15,7 +15,8 @@ here.
   and 20, see `results-b.md`; leave them unless an item touches them), 11 and 12 (pages built; their Done, admin §5.4
   steps 1–13 walked locally on FakeGateway, is not checked yet; #146 not recorded), 13. The main session did 18, 33
   and 34; stream A did 37 and 38 on L13/L14.
-- **Next, in order: 35 → 14 → 36 → 39 → 40.** Item 14 comes before 36 because 36's done-when extends the pilot-journey
+- **Next, in order: 40 → 35 → 14 → 36 → 39.** Item 40 is first because a POC needs it soon (#356); its chat and
+  admin-API part can merge before the radio group and badge. Item 14 comes before 36 because 36's done-when extends the pilot-journey
   E2E that 14 creates, and because stream A's `e2e` job (item 15) waits on its hand-off L7. Nothing exists yet for
   14: no `tests/e2e`, no Playwright set-up; `e2e.yml` passes with a notice until `tests/e2e/package.json` exists. Its
   NVDA pass needs a person: prepare it and leave the box open with a note.
@@ -112,6 +113,14 @@ Refs: [knowledge §4.2, §6.2](../knowledge-api/design.md)
 - [x] **Hand-off L14:** issue to stream A (not filed; stream A used #347 directly for item 37, PR: a/37-topics-in-worker)
 - [x] **Done:** topic, whole-collection and `filters.tags` retrieval tests (`RetrievalTests`, `KnowledgeServiceTests`)
 
+### 40. General knowledge per assistant (first, #356)
+Refs: [chat §6.2, §7.3, §10.4](../chat-api/design.md), [admin §4.6, §5.5.4](../admin/design.md), [P1b README item 40](README.md)
+- [ ] `QuerySteps.answer.generalKnowledge`; `ChatCore.Frame` per level, with and without sources
+- [ ] Coverage `Low` with `fallback`/`open`: model call without sources, caveat line, contact links, `answered-general`, `GeneralAnswers`
+- [ ] V17 accepts the field; V36 (`public` stays `off`)
+- [ ] "General knowledge" radio group on the Draft tab; `[General knowledge]` badge
+- [ ] **Done:** chat §18.1 general-knowledge tests; V36 refusal test; test panel shows the caveat for a weak question in `fallback`
+
 ### 35. Organisation in the admin API
 Refs: [admin §3.2, §4.5, §4.6](../admin/design.md)
 - [ ] Sharing route, `view=`, topics, Map route, contact fields, owner-team default
@@ -129,14 +138,6 @@ Refs: [admin §5.5.4](../admin/design.md), [P1b README item 39](README.md)
 - [ ] First draft gets `Settings.Chat.DefaultSystemPrompt` (seeded from the `turkos` prompt)
 - [ ] Draft tab: model and query settings in a collapsed "Advanced" section
 - [ ] **Done:** admin API test for the default prompt; vitest for "Advanced"
-
-### 40. Grounding mode per assistant (after 36 and 39)
-Refs: [chat §6.2, §7.3, §10.4](../chat-api/design.md), [admin §4.6, §5.5.4](../admin/design.md), [P1b README item 40](README.md)
-- [ ] `QuerySteps.answer.grounding`; `ChatCore.Frame` per mode, with and without sources
-- [ ] Coverage `Low` with `balanced`/`open`: model call without sources, caveat line, contact links, `answered-general`, `GeneralAnswers`
-- [ ] V17 accepts the field; V36 (`public` stays `strict`)
-- [ ] "Answers from" radio group on the Draft tab; `[General knowledge]` badge
-- [ ] **Done:** chat §18.1 grounding tests; V36 refusal test; test panel shows the caveat for a weak question in `balanced`
 
 ### 19. Code complete (your part)
 - [ ] Pin review: NuGet and npm pins under 7 days old reviewed; #113 recorded; realm callback for the Open WebUI pin (README §7 O8)

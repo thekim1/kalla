@@ -35,10 +35,10 @@ items wait for the end block (`README.md` §5 step 4).
 | 9 | 18 | code | W3 spike on the dev Keycloak and a local Open WebUI | weakness review §5; postponed W3 | 174 |
 | 10 | 33 | code | Organisation schema → **L13** | data-model §2.1; Decisions "Organisation: department-owned, municipality-shared knowledge bases with topics (user, 2026-11-02)" | – |
 | 11 | 34 | code | Topics in retrieval → **L14** | knowledge §4.2, §6.2 | – |
+| 11a | 40 | code | **First (POC, #356).** General knowledge per assistant: frames per level, general-knowledge answers behind the caveat line, `answered-general`, V17, V36; then the "General knowledge" radio group and badge (may be a second PR) | chat §6.2, §7.3, §10.4; admin §4.6, §5.5.4; data-model §2.1, §2.3 | – |
 | 12 | 35 | code | Organisation in the admin API: sharing, `view=`, topics, Map route, contact, V11, V35 | admin §3.2, §4.5, §4.6 | – |
 | 13 | 36 | code | Organisation pages: menu, Sharing and Topics tabs, knowledge picker with topics, "Who can use it", Map table, no team field (after #314) | admin §5.2–§5.5 | – |
 | 13a | 39 | code | A new assistant starts from a default: `Settings.Chat.DefaultSystemPrompt` in the first draft; model and query settings under "Advanced" | admin §5.5.4; chat §5 | – |
-| 13b | 40 | code | Grounding mode per assistant: frames per mode, general-knowledge answers behind the caveat line, `answered-general`, V17, V36, "Answers from" and the badge (after 36 and 39) | chat §6.2, §7.3, §10.4; admin §4.6, §5.5.4; data-model §2.1, §2.3 | – |
 | 14 | 19 | code | Code complete; your part of the go-live pin review (NuGet, npm; the `sv_SE` list; the realm callback for the Open WebUI pin, README §7 O8) | Decisions "7-day rule in development" | 113 |
 | 15 | 20 | live | P1a's live items, with stream A and the user | `../p1/README.md` §3 | as listed there |
 | 16 | 25 | live | Decay and `demote` on the gold set's temporal questions; HNSW recall vs exact on the pilot collection | weakness review §3, "Lower-ranked findings"; knowledge §6.4 | 117, 171 |
