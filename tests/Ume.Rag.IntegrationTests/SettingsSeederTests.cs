@@ -27,4 +27,16 @@ public sealed class SettingsSeederTests
         (await SettingsSeeder.SeedAsync(db, new SettingsSeedOptions { PiiOwnDomains = ["other.se"] }, TimeProvider.System, NullLogger.Instance, Ct)).ShouldBeFalse();
         (await db.Settings.AsNoTracking().SingleAsync(Ct)).PiiOwnDomains.ShouldBe(["umea.se", "umeaenergi.se"]);
     }
+
+    [Fact]
+    public async Task The_first_settings_row_gets_the_seeded_crawl_ports()
+    {
+        await using var database = new RagDatabase();
+        await database.InitializeAsync();
+        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Migrator));
+
+        (await SettingsSeeder.SeedAsync(db, new SettingsSeedOptions { CrawlAllowedPorts = [7416, 7416] }, TimeProvider.System, NullLogger.Instance, Ct)).ShouldBeTrue();
+        var crawl = System.Text.Json.JsonDocument.Parse((await db.Settings.AsNoTracking().SingleAsync(Ct)).Crawl).RootElement;
+        crawl.GetProperty("allowedPorts").EnumerateArray().Select(p => p.GetInt32()).ShouldBe([7416]);
+    }
 }

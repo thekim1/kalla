@@ -125,15 +125,17 @@ onMounted(() => load())
   <UiDrawer v-model:open="detailOpen" :title="AUDIT.detail" :subtitle="selected ? `#${selected.id}` : undefined" wide>
     <InlineError v-if="detailError" :message="problemMessage(detailError)" />
     <div v-else-if="selected" class="grid gap-1" data-test="detail">
-      <DetailRow :label="AUDIT.time">{{ formatDateTime(selected.timestamp, true) }}</DetailRow>
-      <DetailRow :label="AUDIT.actor">{{ selected.actorName ? `${selected.actorName} (${selected.actor})` : selected.actor }}</DetailRow>
-      <DetailRow v-if="selected.actorRoles" :label="AUDIT.roles"><span class="font-mono text-small">{{ selected.actorRoles }}</span></DetailRow>
-      <DetailRow :label="AUDIT.action"><span class="font-mono">{{ selected.entityType }}.{{ selected.action }}</span></DetailRow>
-      <DetailRow v-if="selected.entityId" :label="AUDIT.entityId"><span class="break-all font-mono text-small">{{ selected.entityId }}</span></DetailRow>
-      <DetailRow v-if="selected.service" :label="AUDIT.service"><span class="font-mono">{{ selected.service }}</span></DetailRow>
-      <DetailRow v-if="selected.classification" :label="AUDIT.classification">{{ selected.classification }}</DetailRow>
-      <DetailRow v-if="selected.reason" :label="AUDIT.reason">{{ selected.reason }}</DetailRow>
-      <DetailRow v-if="selected.requestId" :label="AUDIT.requestId"><span class="break-all font-mono text-small">{{ selected.requestId }}</span></DetailRow>
+      <dl class="m-0">
+        <DetailRow :label="AUDIT.time">{{ formatDateTime(selected.timestamp, true) }}</DetailRow>
+        <DetailRow :label="AUDIT.actor">{{ selected.actorName ? `${selected.actorName} (${selected.actor})` : selected.actor }}</DetailRow>
+        <DetailRow v-if="selected.actorRoles" :label="AUDIT.roles"><span class="font-mono text-small">{{ selected.actorRoles }}</span></DetailRow>
+        <DetailRow :label="AUDIT.action"><span class="font-mono">{{ selected.entityType }}.{{ selected.action }}</span></DetailRow>
+        <DetailRow v-if="selected.entityId" :label="AUDIT.entityId"><span class="break-all font-mono text-small">{{ selected.entityId }}</span></DetailRow>
+        <DetailRow v-if="selected.service" :label="AUDIT.service"><span class="font-mono">{{ selected.service }}</span></DetailRow>
+        <DetailRow v-if="selected.classification" :label="AUDIT.classification">{{ selected.classification }}</DetailRow>
+        <DetailRow v-if="selected.reason" :label="AUDIT.reason">{{ selected.reason }}</DetailRow>
+        <DetailRow v-if="selected.requestId" :label="AUDIT.requestId"><span class="break-all font-mono text-small">{{ selected.requestId }}</span></DetailRow>
+      </dl>
       <h3 class="mt-4 font-medium">{{ AUDIT.snapshot }}</h3>
       <pre v-if="details" class="max-h-[60vh] overflow-auto rounded-tile bg-sunken p-3 font-mono text-small" lang="en" data-test="snapshot">{{ details }}</pre>
       <p v-else class="text-fg-2">{{ AUDIT.noSnapshot }}</p>

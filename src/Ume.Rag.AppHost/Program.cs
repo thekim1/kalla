@@ -19,8 +19,15 @@ const string PostgresDigest = "7a7e9f22015b67edb4bef5c59daeebcd7e74bfa570df6ce60
 // Ume.Rag.AdminApi.Tests.KeycloakFixture.Image; update both together.
 const string KeycloakTag = "26.6.4";
 const string KeycloakDigest = "0aae0de7fca85525f727d3354df17896092de8bb26ae4c12d89c77e5df8cbce4";
+const string FixtureSiteImage = "nginxinc/nginx-unprivileged";
+const string FixtureSiteTag = "1.31.6-alpine";
+const string FixtureSiteDigest = "884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434";
 
 var builder = DistributedApplication.CreateBuilder(args);
+// E2E:Enabled=true (scripts/Start-E2E.ps1 only): the browser tests' stack. It adds their fixture website and ignores the
+// user secrets that point at real systems (the pilot embedding profile, a configured Open WebUI client), so a local run
+// starts from the same state as CI.
+var e2e = builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue<bool>("E2E:Enabled");
 builder.AddDockerComposeEnvironment("compose").WithDashboard(false);
 
 var pepper = Secret("key-pepper", 64);
@@ -151,7 +158,7 @@ if (builder.ExecutionContext.IsRunMode)
 
 // EmbeddingProfile:* (AppHost configuration or user secrets) seeds the platform profile in the migrator (P1a item 13,
 // #142): e.g. GatewayModel=text-embedding-3-large, Dimensions=1024, RequestDimensions=true, MaxResidency=Eu.
-foreach (var (key, value) in builder.Configuration.GetSection("EmbeddingProfile").AsEnumerable(makePathsRelative: true))
+foreach (var (key, value) in e2e ? [] : builder.Configuration.GetSection("EmbeddingProfile").AsEnumerable(makePathsRelative: true))
 {
     if (value is not null)
     {
@@ -194,6 +201,17 @@ if (clamAv is not null)
 {
     worker.WithEnvironment("ClamAv__Host", clamAv.GetEndpoint("clamd").Property(EndpointProperty.Host))
         .WithEnvironment("ClamAv__Port", clamAv.GetEndpoint("clamd").Property(EndpointProperty.Port));
+}
+
+// The browser tests' static Swedish website (tests/e2e/fixture-site, admin design §11.4) on 127.0.0.1:7416. The worker may
+// then reach loopback, and the first Settings row allows the port (the worker reads Settings.Crawl at start).
+if (e2e)
+{
+    builder.AddContainer("fixture-site", FixtureSiteImage, FixtureSiteTag).WithImageSHA256(FixtureSiteDigest)
+        .WithBindMount(Path.Combine("..", "..", "tests", "e2e", "fixture-site"), "/usr/share/nginx/html", isReadOnly: true)
+        .WithHttpEndpoint(port: 7416, targetPort: 8080, name: "http");
+    worker.WithEnvironment("Crawl__AllowedPrivateRanges", "127.0.0.1/32,::1/128");
+    migrations.WithEnvironment("SettingsSeed__CrawlAllowedPorts__0", "7416");
 }
 
 var adminApi = builder.AddProject<Projects.Ume_Rag_AdminApi>("adminapi", o => o.LaunchProfileName = "https")
@@ -393,7 +411,7 @@ const string OpenWebUiImage = "ghcr.io/open-webui/open-webui";
 const string OpenWebUiTag = "v0.12.3";
 const string OpenWebUiDigest = "a537bbe1e6b428820f52ed4a029d7fff97062e24d5cf32c365fba36fd0542def";
 const string DevOpenWebUiClientId = "01929b6e-0000-7000-8000-0000000c11e7"; // DevSeeder.DevClientId
-var openWebUiClientId = builder.Configuration["OpenWebUi:ClientId"];
+var openWebUiClientId = e2e ? null : builder.Configuration["OpenWebUi:ClientId"];
 if (openWebUiClientId is { Length: > 0 } && !Guid.TryParse(openWebUiClientId, out _))
 {
     throw new InvalidOperationException("OpenWebUi:ClientId: the id of an open-webui client (POST /api/clients), a uuid.");

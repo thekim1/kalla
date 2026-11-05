@@ -60,7 +60,7 @@ const departments = computed(() =>
         <dd class="mt-2">
           <p v-if="auth.isPlatformAdmin" class="mb-2 text-small text-fg-3">{{ OVERVIEW.allDepartments }}</p>
           <ul v-if="departments.length" class="flex flex-col gap-1.5" data-test="departments">
-            <li v-for="d in departments" :key="d.code" class="flex items-center gap-2">
+            <li v-for="d in departments" :key="d.code" class="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span v-if="d.name" class="font-medium">{{ d.name }} <span class="tabular text-small font-normal text-fg-3">{{ d.code }}</span></span>
               <span v-else-if="d.name === null" class="font-medium">{{ OVERVIEW.unknownDepartment(d.code) }}</span>
               <span v-else class="tabular font-medium">{{ d.code }}</span>
