@@ -172,10 +172,12 @@ problems. Assistant evaluation finds incorrect answers, unsupported claims, poor
 failures over the assistant's actual combined scope. Retrieval recall is useful but does not prove answer quality.
 The existing human go-live gate remains the pilot's acceptance test; automated publish evaluation remains advisory.
 
-The first generated set reports recall@10 0.91 and MRR 0.70. Latest recorded analysis finds seven of nine misses are
-real misses, including statistics tables, document templates and school rules; only two are near-duplicate
-förskola pages. For each miss inspect the extracted text, chunk context, expected document, candidate ranking and
-final context. Do not assume a stronger answer model or page-family grouping will fix missing evidence.
+The first generated set reported recall@10 0.91 and MRR 0.70. The nine misses were analysed (2026-11-02): two
+near-duplicate förskola pages, one question generated from a Finnish page, two answered by pages the label doesn't
+name, and **four buried by fusion** (vector rank 1–2, absent from the keyword list, ranked 16–21 after RRF). Keyword
+weight 0.25 on `turkos` gives 0.98/0.77; rerank is pulled forward to address fusion generally (Decisions "Rerank
+pulled forward"). New misses on the human gold set are diagnosed the same way: inspect the extracted text, chunk
+context, expected document, candidate ranking and final context. Do not assume a stronger answer model or page-family grouping will fix missing evidence.
 
 Check whether chunks preserve title, section, table headers, applicable year and responsible organisation. Heading
 prefixes already exist. Test further enrichment only where a diagnosed failure justifies it, and compare on the
