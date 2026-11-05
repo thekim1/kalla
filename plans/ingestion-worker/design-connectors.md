@@ -177,7 +177,7 @@ reference it (§4).
 
 Dropped query parameters (case-insensitive): `utm_*`, `gclid`, `gbraid`, `wbraid`, `dclid`, `fbclid`, `msclkid`,
 `yclid`, `twclid`, `igshid`, `mc_cid`, `mc_eid`, `_ga`, `_gl`, `_hsenc`, `_hsmi`, `hsCtaTracking`, `mkt_tok`,
-`jsessionid`, `phpsessid`, `aspsessionid*`, `sessionid`, `cfid`, `cftoken`. The list and rules carry a version
+`jsessionid`, `phpsessid`, `aspsessionid*`, `sessionid`, `cfid`, `cftoken`, and Sitevision's `sv.*` and `open.*` on every host (user, 2026-11-05, #363). The list and rules carry a version
 (`Settings.Crawl.IdentityRulesVersion`); changing it is a release-notes item with a one-time identity re-sync of crawl
 and URL-list sources (identity tag, §12.3). A site profile's identity-relevant fields carry the profile version; a
 change is an identity re-sync of the sources on that host.
