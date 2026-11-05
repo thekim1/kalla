@@ -45,11 +45,14 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: tests/e2e/package-lock.json
-      - name: Aspire CLI, development certificate, admin UI packages
+      - name: Aspire CLI, PowerShell, development certificate, admin UI packages
         if: steps.specs.outputs.present == 'true'
-        # Aspire CLI 13.6.1 as docs/local-development.md; npm ci from the locks only (.npmrc), never npm install.
+        # Aspire CLI 13.6.1 as docs/local-development.md; PowerShell for scripts/Start-E2E.ps1 as a .NET tool (the runner
+        # has no pwsh); npm ci from the locks only (.npmrc), never npm install.
         run: |
           dotnet tool install --global Aspire.Cli --version 13.6.1
+          dotnet tool install --global PowerShell --version 7.6.9
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"   # global tools (aspire, pwsh) for the later steps
           dotnet dev-certs https
           if [ -f src/admin-ui/package-lock.json ]; then (cd src/admin-ui && npm ci); fi
       - name: Start the test stack
@@ -60,7 +63,9 @@ jobs:
         working-directory: tests/e2e
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          # Browser only: the self-hosted runner has no sudo, so its system libraries are installed once by the runner's owner
+          # (sudo npx playwright install-deps chromium).
+          npx playwright install chromium
           npx playwright test
       - name: Stop the test stack
         if: always() && steps.specs.outputs.present == 'true'
