@@ -83,6 +83,11 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   projects they touch (AGENTS.md "Tests"); no re-dispatching `verify` on main after merges.
 - **#352 merged without the benchmark** (byte-identical output and tests were enough).
 - #360's cause was the robots.txt cache, not the settings refresh (#365); `GatewayModels.ModelKind` designed for #363.
+- **Plans condensed** (#375, `58bf9e5`): `plans/README.md` (three layers and the design map), `plans/roadmap.md` (done,
+  now, waiting on people, P2/P3) and `plans/work/` (queues `stream-a.md`, `stream-b.md`, `main.md`; items with paths,
+  done-when, waits-on, refs; ticked in the PR that does them; results files; short prompts). Phase plans, passes, area
+  plans and old proposals are history in `plans/archive/`. Stream B told in #376. New work goes in as a queue item in
+  the owning stream's file; keep the roadmap current when a phase step lands.
 
 ## Local stack (this machine)
 
@@ -171,16 +176,16 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 
 ## Next step
 
-1. **Check GitHub and the stack:** `gh pr list`, `gh issue list`; `aspire describe`.
-2. **Review B's next PRs live:** #363 point 1 (`ModelKind`: the picker shows chat models only; V32/V34) and #374.
-3. **Runner:** once the host has Chromium's libraries (#370, `docs/ci-runner.md`), dispatch `e2e.yml` once; green
-   ticks item 15's `e2e` box (A) and item 36's done box (B).
-4. **User decides:** the gold set with DoIT (waiting) and threshold calibration (item 21); #333 findings 1–2;
-   adopting architecture-plan items 1, 2, 4–7; the W3 grant step before any group audience; Sitevision `open.*`/`sv.*`
-   query parameters on hosts without a site profile (#363 point 3: today only the preset drops them); a Git/Markdown
-   connector; the pin review (item 19, before go-live).
+1. **Check GitHub and the stack:** `gh pr list`, `gh issue list` (has B answered #376?); `aspire describe`.
+2. **Main queue** (`plans/work/main.md`): M-1 run the browser tests locally; M-2 recommendations for the open design
+   calls (list below); review B's next PRs live (B-1 `ModelKind`, B-2 #374) and tick nothing for B.
+3. **Stream A queue** (`plans/work/stream-a.md`): A-1 licence notices (#51) is unblocked; A-2 the first green `e2e`
+   run waits on the runner host (#370, `docs/ci-runner.md`) and then unblocks B-5.
+4. **User decides:** the roadmap's "Waiting on people" table (gold set with DoIT, G1, gateway session, test host, #333
+   findings 1–2, architecture-plan items 1, 2, 4–7, the W3 grant step, Sitevision `open.*`/`sv.*` on hosts without a
+   profile, a Git/Markdown connector).
 
-**Open issues — stream B:** #374, #363 (points 1, 2 done in #369), #318 (item 36's E2E box), #278, #333 (findings 1–2
+**Open issues — stream B:** #376 (plans restructure, read first), #374, #363 (points 1, 2 done in #369), #318 (item 36's E2E box), #278, #333 (findings 1–2
 with the user), #52. **Stream A:** #370 (runner host), #48, #51. **Main session:** #100 (L8). **User:** #215 (J8).
 
 **Not folded into the design yet (need a call):** topics for uploads (`files` template has no `pathRules`); #217's
