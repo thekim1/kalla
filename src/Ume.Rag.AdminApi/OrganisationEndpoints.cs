@@ -33,6 +33,15 @@ public static class OrganisationEndpoints
         })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListDepartments").WithSummary("Departments and teams in scope");
 
+        // The Map as a table (admin design §5.5.6, P1b item 35): department → knowledge base → assistant → audience.
+        organisation.MapGet("/departments/{id:guid}/map", async (Guid id, AdminContext admin, CancellationToken ct) =>
+            {
+                var department = await admin.Departments().AsNoTracking().SingleOrDefaultAsync(d => d.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                return await DepartmentMap.BuildAsync(admin.Db, department, ct);
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("GetDepartmentMap")
+            .WithSummary("The department's knowledge bases (own and shared in), the assistants that link them and their audiences, as table rows");
+
         // Member groups by hand (admin design §4.10, P1a item 14): the group-claim values that place a signed-in admin in the
         // department (identity §2), entered until the gateway catalogue carries them (release 2); the sync leaves them alone.
         organisation.MapPut("/departments/{id:guid}/member-groups", async (Guid id, MemberGroupsRequest request, AdminContext admin, CancellationToken ct) =>
@@ -60,6 +69,92 @@ public static class OrganisationEndpoints
         return api;
     }
 }
+
+/// <summary>
+/// The Map's rows (admin design §5.5.6): one per department → knowledge base → assistant → audience path. The
+/// department's own knowledge bases (also when none of its assistants links them) and the shared ones its assistants
+/// link, with their owning department; its assistants with their published version, a link only the draft has marked
+/// <c>draftOnly</c>, and the link's topics; each audience client. No content.
+/// </summary>
+public static class DepartmentMap
+{
+    public static async Task<MapDto> BuildAsync(Ume.Rag.Infrastructure.Persistence.RagDbContext db, Department department, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(department);
+        var assistants = await db.Assistants.AsNoTracking().Where(a => a.DepartmentId == department.Id).OrderBy(a => a.Name).ToListAsync(ct);
+        var versionIds = assistants.SelectMany(a => new[] { a.PublishedVersionId, a.DraftVersionId }).OfType<Guid>().ToList();
+        var versions = await db.AssistantVersions.AsNoTracking().Where(v => versionIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, ct);
+        var assistantIds = assistants.Select(a => a.Id).ToList();
+        var audiences = (await (from x in db.AssistantAudiences.AsNoTracking()
+                                join c in db.Clients.AsNoTracking() on x.SubjectId equals c.Id
+                                where assistantIds.Contains(x.AssistantId) && x.Kind == AssistantAudienceKinds.Client
+                                orderby c.Name
+                                select new { x.AssistantId, Audience = new MapAudienceDto(c.Id, c.Name, c.Kind) }).ToListAsync(ct))
+            .ToLookup(x => x.AssistantId, x => x.Audience);
+
+        // Per assistant: its links, the published version's first and then those only the draft has.
+        var links = assistants.Select(a =>
+        {
+            var published = a.PublishedVersionId is { } p && versions.TryGetValue(p, out var pv) ? pv.CollectionLinks : [];
+            var draft = a.DraftVersionId is { } d && versions.TryGetValue(d, out var dv) ? dv.CollectionLinks : [];
+            var number = a.PublishedVersionId is { } n && versions.TryGetValue(n, out var nv) ? nv.Number : (int?)null;
+            var all = published.Select(l => (Link: l, DraftOnly: false))
+                .Concat(draft.Where(l => published.All(x => x.CollectionId != l.CollectionId)).Select(l => (Link: l, DraftOnly: true)));
+            return (Assistant: a, Number: number, Links: all.ToList());
+        }).ToList();
+
+        var linkedIds = links.SelectMany(l => l.Links.Select(x => x.Link.CollectionId)).Distinct().ToList();
+        var collections = await db.Collections.AsNoTracking()
+            .Where(c => c.DeletedAt == null && (c.DepartmentId == department.Id || linkedIds.Contains(c.Id))).ToDictionaryAsync(c => c.Id, ct);
+        var owners = collections.Values.Select(c => c.DepartmentId).Distinct().ToList();
+        var names = await db.Departments.AsNoTracking().Where(d => owners.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Name, ct);
+
+        MapCollectionDto Collection(Collection c) => new(c.Id, c.Name, c.DepartmentId, names.GetValueOrDefault(c.DepartmentId) ?? "", c.DepartmentId != department.Id,
+            c.SharedWith, c.Classification, c.PublishedAt is not null, c.ContactName, c.ContactEmail);
+
+        var rows = new List<MapRowDto>();
+        foreach (var (assistant, number, assistantLinks) in links)
+        {
+            foreach (var (link, draftOnly) in assistantLinks)
+            {
+                if (!collections.TryGetValue(link.CollectionId, out var collection))
+                {
+                    continue; // deleted since: the publish check (V34) reports it
+                }
+
+                var entry = new MapAssistantDto(assistant.Id, assistant.Name, assistant.State, number, draftOnly, link.Tags, assistant.ContactName, assistant.ContactEmail);
+                var clients = audiences[assistant.Id].ToList();
+                rows.AddRange(clients.Count == 0
+                    ? [new MapRowDto(Collection(collection), entry, null)]
+                    : clients.Select(client => new MapRowDto(Collection(collection), entry, client)));
+            }
+        }
+
+        // The department's own knowledge bases that none of its assistants links.
+        var linkedHere = rows.Select(r => r.Collection.Id).ToHashSet();
+        rows.AddRange(collections.Values.Where(c => c.DepartmentId == department.Id && !linkedHere.Contains(c.Id)).Select(c => new MapRowDto(Collection(c), null, null)));
+        return new MapDto(department.Id, department.Name,
+            [.. rows.OrderBy(r => r.Collection.Shared).ThenBy(r => r.Collection.Name, StringComparer.Ordinal).ThenBy(r => r.Assistant?.Name, StringComparer.Ordinal)
+                .ThenBy(r => r.Audience?.Name, StringComparer.Ordinal)]);
+    }
+}
+
+public sealed record MapDto(Guid DepartmentId, string DepartmentName, IReadOnlyList<MapRowDto> Rows);
+
+/// <summary>A path; <see cref="Assistant"/> and <see cref="Audience"/> are null where the path ends earlier.</summary>
+public sealed record MapRowDto(MapCollectionDto Collection, MapAssistantDto? Assistant, MapAudienceDto? Audience);
+
+/// <summary><see cref="Shared"/>: owned by another department and shared in.</summary>
+public sealed record MapCollectionDto(
+    Guid Id, string Name, Guid DepartmentId, string DepartmentName, bool Shared, string SharedWith, string Classification, bool Published, string? ContactName,
+    string? ContactEmail);
+
+/// <summary><see cref="PublishedVersion"/>: null before the first publish; <see cref="DraftOnly"/>: the link is only in the draft.</summary>
+public sealed record MapAssistantDto(
+    Guid Id, string Name, string State, int? PublishedVersion, bool DraftOnly, IReadOnlyList<string> Topics, string? ContactName, string? ContactEmail);
+
+public sealed record MapAudienceDto(Guid ClientId, string Name, string Kind);
 
 public sealed record DepartmentDto(Guid Id, string Name, string CostCenterCode, bool IsActive, DateTimeOffset SyncedAt,
     IReadOnlyList<string> MemberGroups, IReadOnlyList<TeamDto> Teams, SharingSummaryDto Sharing);

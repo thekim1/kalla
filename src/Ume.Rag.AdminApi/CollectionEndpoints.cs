@@ -15,9 +15,10 @@ using Ume.Rag.Retrieval;
 namespace Ume.Rag.AdminApi;
 
 /// <summary>
-/// Collections (admin design §4.5 "Collections and retrieval", P1a item 14): list, create, read with <c>usedBy</c>, change,
-/// delete, publish and retrieval settings (V16, with an advisory evaluation run). Department-scoped: a collection outside
-/// the caller's departments is 404. Shares (V11) are P2: a collection is its own department's.
+/// Collections (admin design §4.5 "Collections and retrieval", P1a item 14, P1b item 35): list (<c>view=mine|shared|all</c>),
+/// create (with contact and the owner team defaulted), read with <c>usedBy</c>, change, delete, publish and retrieval
+/// settings (V16, with an advisory evaluation run). Department-scoped: a collection outside the caller's departments is
+/// 404; one shared with them is listed as the shared summary only (<see cref="CollectionSharing"/>).
 /// </summary>
 public static class CollectionEndpoints
 {
@@ -26,9 +27,16 @@ public static class CollectionEndpoints
         ArgumentNullException.ThrowIfNull(api);
         var collections = api.MapGroup("/collections").WithTags("Collections");
 
-        collections.MapGet("", async ([AsParameters] PageQuery page, AdminContext admin, CancellationToken ct) =>
+        collections.MapGet("", async ([AsParameters] PageQuery page, string? view, AdminContext admin, CancellationToken ct) =>
             {
-                var query = Scoped(admin);
+                var departments = admin.Departments().Select(d => d.Id);
+                var query = (view ?? "mine") switch
+                {
+                    "mine" => Scoped(admin),
+                    "shared" => CollectionSharing.SharedWith(admin.Db, departments),
+                    "all" => CollectionSharing.Visible(admin),
+                    _ => throw AdminFaults.Field("view", AdminErrorCodes.InvalidValue),
+                };
                 if (!string.IsNullOrWhiteSpace(page.Q))
                 {
                     var q = $"%{Like.Escape(page.Q.Trim())}%";
@@ -36,16 +44,31 @@ public static class CollectionEndpoints
                 }
 
                 var total = await query.CountAsync(ct);
-                var items = await query.OrderBy(c => c.Name).Skip(page.Skip).Take(page.Take)
-                    .Select(c => new CollectionSummary(c.Id, c.Slug, c.Name, c.DepartmentId, c.Classification, c.PublishedAt)).ToListAsync(ct);
+                var rows = await query.OrderBy(c => c.Name).ThenBy(c => c.Id).Skip(page.Skip).Take(page.Take)
+                    .Select(c => new { c.Id, c.Slug, c.Name, c.DepartmentId, c.Classification, c.PublishedAt, c.SharedWith, c.ContactName, c.ContactEmail })
+                    .ToListAsync(ct);
+                var ids = rows.Select(r => r.Id).ToArray();
+                var owners = rows.Select(r => r.DepartmentId).Distinct().ToList();
+                var own = (await departments.ToListAsync(ct)).ToHashSet();
+                var names = await admin.Db.Departments.AsNoTracking().Where(d => owners.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Name, ct);
+                var documents = await (from d in admin.Db.Documents.AsNoTracking()
+                                       join src in admin.Db.Sources.AsNoTracking() on d.SourceId equals src.Id
+                                       where d.DeletedAt == null && d.LiveChunkSetId != null && ids.Contains(src.CollectionId)
+                                       group d by src.CollectionId into g
+                                       select new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
+                var topics = await CollectionSharing.TopicCountsAsync(admin.Db, ids, ct);
+                var items = rows.Select(r => new CollectionSummary(r.Id, r.Slug, r.Name, r.DepartmentId, names.GetValueOrDefault(r.DepartmentId) ?? "", r.Classification,
+                    r.PublishedAt, r.SharedWith, !own.Contains(r.DepartmentId), r.ContactName, r.ContactEmail, documents.GetValueOrDefault(r.Id),
+                    [.. topics.Where(t => t.CollectionId == r.Id).Select(t => t.Tag)])).ToList();
                 return new PageDto<CollectionSummary>(items, total);
             })
-            .RequireAuthorization(AdminPolicies.Read).WithName("ListCollections").WithSummary("Collections of the caller's departments");
+            .RequireAuthorization(AdminPolicies.Read).WithName("ListCollections")
+            .WithSummary("Collections of the caller's departments (view=mine), those shared with them (shared) or both (all)");
 
         collections.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) =>
             {
                 var collection = await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                return CollectionDto.Of(collection, await UsedByAsync(admin, id, ct));
+                return await DetailAsync(admin, collection, ct);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetCollection").WithSummary("One collection with the assistants that link it");
 
@@ -54,6 +77,8 @@ public static class CollectionEndpoints
                 var created = await admin.WriteAsync(async attempt =>
                 {
                     await CheckDepartmentAsync(admin, request.DepartmentId, request.OwnerTeamId, attempt);
+                    // Teams are hidden in create forms: the creator's first team in the department (Decisions "Organisation").
+                    var ownerTeam = request.OwnerTeamId ?? await admin.DefaultOwnerTeamAsync(request.DepartmentId, attempt);
                     var profile = await admin.Db.EmbeddingProfiles.AsNoTracking().Where(p => p.IsDefault && p.State == EmbeddingProfileStates.Active)
                         .Select(p => (Guid?)p.Id).FirstOrDefaultAsync(attempt) ?? throw AdminFaults.Of(AdminErrorCodes.NoEmbeddingProfile);
                     var slug = string.IsNullOrWhiteSpace(request.Slug) ? Slugs.From(request.Name) : request.Slug;
@@ -71,9 +96,11 @@ public static class CollectionEndpoints
                         Slug = slug,
                         Name = request.Name.Trim(),
                         DepartmentId = request.DepartmentId,
-                        OwnerTeamId = request.OwnerTeamId,
+                        OwnerTeamId = ownerTeam,
                         Classification = request.Classification,
                         EmbeddingProfileId = profile,
+                        ContactName = Contact(request.ContactName),
+                        ContactEmail = Contact(request.ContactEmail),
                         UpdatedAt = admin.Now,
                         UpdatedBy = admin.Actor,
                     };
@@ -83,7 +110,7 @@ public static class CollectionEndpoints
                         DepartmentId = collection.DepartmentId, Classification = collection.Classification,
                     };
                 }, ct);
-                return Results.Created($"/api/collections/{created.Id}", CollectionDto.Of(created, []));
+                return Results.Created($"/api/collections/{created.Id}", await DetailAsync(admin, created, ct));
             })
             .RequireAuthorization(AdminPolicies.Edit).WithName("CreateCollection").WithSummary("Create a collection on the default embedding profile");
 
@@ -103,6 +130,8 @@ public static class CollectionEndpoints
                     collection.Name = request.Name.Trim();
                     collection.OwnerTeamId = request.OwnerTeamId;
                     collection.Classification = request.Classification;
+                    collection.ContactName = Contact(request.ContactName);
+                    collection.ContactEmail = Contact(request.ContactEmail);
                     collection.UpdatedAt = admin.Now;
                     collection.UpdatedBy = admin.Actor;
                     return new AdminChange<Collection>(collection, "update", AuditEntityTypes.Collection, collection.Id, before, CollectionAudit.Of(collection))
@@ -110,9 +139,9 @@ public static class CollectionEndpoints
                         DepartmentId = collection.DepartmentId, Classification = collection.Classification,
                     };
                 }, ct);
-                return CollectionDto.Of(saved, await UsedByAsync(admin, id, ct));
+                return await DetailAsync(admin, saved, ct);
             })
-            .RequireAuthorization(AdminPolicies.Edit).WithName("UpdateCollection").WithSummary("Change a collection's name, owner team or level (V2, V3)");
+            .RequireAuthorization(AdminPolicies.Edit).WithName("UpdateCollection").WithSummary("Change a collection's name, owner team, level (V2, V3) or contact");
 
         collections.MapDelete("/{id:guid}", async (Guid id, [Microsoft.AspNetCore.Mvc.FromQuery] string? version, AdminContext admin, CancellationToken ct) =>
             {
@@ -160,7 +189,7 @@ public static class CollectionEndpoints
                         DepartmentId = collection.DepartmentId, Classification = collection.Classification,
                     };
                 }, ct);
-                return CollectionDto.Of(saved, await UsedByAsync(admin, id, ct));
+                return await DetailAsync(admin, saved, ct);
             })
             .RequireAuthorization(AdminPolicies.Manage).WithName("PublishCollection").WithSummary("Publish a collection (visible to retrieval); never blocked");
 
@@ -187,12 +216,25 @@ public static class CollectionEndpoints
                         Jobs = hasSet ? [EvaluationJob(collection)] : [],
                     };
                 }, ct);
-                return CollectionDto.Of(saved, await UsedByAsync(admin, id, ct));
+                return await DetailAsync(admin, saved, ct);
             })
             .RequireAuthorization(AdminPolicies.Edit).WithName("SetRetrievalSettings").WithSummary("Save retrieval settings (V16); starts an advisory evaluation run");
 
         return api;
     }
+
+    /// <summary>The detail: the collection, its share list (when <c>selected</c>) and <c>usedBy</c>.</summary>
+    public static async Task<CollectionDto> DetailAsync(AdminContext admin, Collection collection, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(admin);
+        ArgumentNullException.ThrowIfNull(collection);
+        var shares = collection.SharedWith == CollectionSharingLevels.Selected
+            ? await admin.Db.CollectionShares.AsNoTracking().Where(s => s.CollectionId == collection.Id).Select(s => s.DepartmentId).OrderBy(d => d).ToListAsync(ct)
+            : [];
+        return CollectionDto.Of(collection, shares, await UsedByAsync(admin, collection.Id, ct));
+    }
+
+    private static string? Contact(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>The caller's collections that are not deleted (department scope, admin design §3.2).</summary>
     public static IQueryable<Collection> Scoped(AdminContext admin)
@@ -206,17 +248,21 @@ public static class CollectionEndpoints
     public static async Task<Collection> LoadAsync(AdminContext admin, Guid id, CancellationToken ct) =>
         await Scoped(admin).SingleOrDefaultAsync(c => c.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
 
-    /// <summary>The assistants whose published version or draft links the collection (admin design §4.5).</summary>
+    /// <summary>
+    /// The assistants whose published version or draft links the collection (admin design §4.5), of every department (a
+    /// shared collection's owner sees who uses it).
+    /// </summary>
     public static async Task<List<CollectionUser>> UsedByAsync(AdminContext admin, Guid id, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(admin);
         var rows = await (from v in admin.Db.AssistantVersionsLinking([id]).AsNoTracking()
                           join a in admin.Db.Assistants.AsNoTracking() on v.AssistantId equals a.Id
+                          join d in admin.Db.Departments.AsNoTracking() on a.DepartmentId equals d.Id
                           where a.PublishedVersionId == v.Id || a.DraftVersionId == v.Id
-                          select new { a.Id, a.Name, a.Classification, Published = a.PublishedVersionId == v.Id })
+                          select new { a.Id, a.Name, a.Classification, Published = a.PublishedVersionId == v.Id, a.DepartmentId, Department = d.Name })
             .ToListAsync(ct);
         return [.. rows.GroupBy(r => r.Id).Select(g => new CollectionUser(g.Key, g.First().Name, g.First().Classification,
-            g.Any(r => r.Published), g.Any(r => !r.Published))).OrderBy(u => u.Name, StringComparer.Ordinal)];
+            g.Any(r => r.Published), g.Any(r => !r.Published), g.First().DepartmentId, g.First().Department)).OrderBy(u => u.Name, StringComparer.Ordinal)];
     }
 
     /// <summary>The department must be one of the caller's; the owner team, when given, one of that department's.</summary>
@@ -465,30 +511,38 @@ public sealed record PageQuery(int? Page, int? PageSize, string? Q)
 
 public sealed record PageDto<T>(IReadOnlyList<T> Items, int Total);
 
-public sealed record CollectionSummary(Guid Id, string Slug, string Name, Guid DepartmentId, string Classification, DateTimeOffset? PublishedAt);
+/// <summary>
+/// A list row. For a collection of another department (<see cref="Shared"/>) this is the shared summary of admin design
+/// §4.5: name, owning department, level, contact, document count and topics; never its sources or settings.
+/// </summary>
+public sealed record CollectionSummary(
+    Guid Id, string Slug, string Name, Guid DepartmentId, string DepartmentName, string Classification, DateTimeOffset? PublishedAt, string SharedWith, bool Shared,
+    string? ContactName, string? ContactEmail, int DocumentCount, IReadOnlyList<string> Topics);
 
-/// <summary>An assistant that links a collection: through its published version, its draft, or both.</summary>
-public sealed record CollectionUser(Guid Id, string Name, string Classification, bool Published, bool Draft);
+/// <summary>An assistant that links a collection: through its published version, its draft, or both; with its department.</summary>
+public sealed record CollectionUser(Guid Id, string Name, string Classification, bool Published, bool Draft, Guid DepartmentId, string DepartmentName);
 
+/// <summary><see cref="SharedWithDepartmentIds"/>: the share list, only when <see cref="SharedWith"/> is <c>selected</c>.</summary>
 public sealed record CollectionDto(
     Guid Id, string Slug, string Name, Guid DepartmentId, Guid? OwnerTeamId, string Classification, Guid EmbeddingProfileId, JsonElement RetrievalSettings,
-    DateTimeOffset? PublishedAt, IReadOnlyList<CollectionUser> UsedBy, DateTimeOffset UpdatedAt, string? UpdatedBy, string Version)
+    DateTimeOffset? PublishedAt, string SharedWith, IReadOnlyList<Guid> SharedWithDepartmentIds, string? ContactName, string? ContactEmail,
+    IReadOnlyList<CollectionUser> UsedBy, DateTimeOffset UpdatedAt, string? UpdatedBy, string Version)
 {
-    public static CollectionDto Of(Collection c, IReadOnlyList<CollectionUser> usedBy)
+    public static CollectionDto Of(Collection c, IReadOnlyList<Guid> shares, IReadOnlyList<CollectionUser> usedBy)
     {
         ArgumentNullException.ThrowIfNull(c);
         using var settings = JsonDocument.Parse(c.RetrievalSettings);
         return new(c.Id, c.Slug, c.Name, c.DepartmentId, c.OwnerTeamId, c.Classification, c.EmbeddingProfileId, settings.RootElement.Clone(), c.PublishedAt,
-            usedBy, c.UpdatedAt, c.UpdatedBy, c.Version.ToString(CultureInfo.InvariantCulture));
+            c.SharedWith, shares, c.ContactName, c.ContactEmail, usedBy, c.UpdatedAt, c.UpdatedBy, c.Version.ToString(CultureInfo.InvariantCulture));
     }
 }
 
 public sealed record CollectionAudit(
     Guid Id, string Slug, string Name, Guid DepartmentId, Guid? OwnerTeamId, string Classification, Guid EmbeddingProfileId, string RetrievalSettings,
-    DateTimeOffset? PublishedAt)
+    DateTimeOffset? PublishedAt, string SharedWith, string? ContactName, string? ContactEmail)
 {
     public static CollectionAudit Of(Collection c) => new(c.Id, c.Slug, c.Name, c.DepartmentId, c.OwnerTeamId, c.Classification, c.EmbeddingProfileId,
-        c.RetrievalSettings, c.PublishedAt);
+        c.RetrievalSettings, c.PublishedAt, c.SharedWith, c.ContactName, c.ContactEmail);
 }
 
 public sealed record CollectionCreateRequest : AdminRequest, IValidatableObject
@@ -503,10 +557,17 @@ public sealed record CollectionCreateRequest : AdminRequest, IValidatableObject
     [Required]
     public Guid DepartmentId { get; init; }
 
+    /// <summary>Empty: the creator's first team in the department (Decisions "Organisation": teams are hidden in create forms).</summary>
     public Guid? OwnerTeamId { get; init; }
 
     [Required]
     public string Classification { get; init; } = "";
+
+    [StringLength(200)]
+    public string? ContactName { get; init; }
+
+    [StringLength(254), EmailAddress]
+    public string? ContactEmail { get; init; }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -531,6 +592,12 @@ public sealed record CollectionUpdateRequest : AdminRequest, IValidatableObject
 
     [Required]
     public string Classification { get; init; } = "";
+
+    [StringLength(200)]
+    public string? ContactName { get; init; }
+
+    [StringLength(254), EmailAddress]
+    public string? ContactEmail { get; init; }
 
     [Required]
     public string? Version { get; init; }

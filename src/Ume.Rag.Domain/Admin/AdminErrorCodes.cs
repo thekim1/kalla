@@ -184,8 +184,14 @@ public static class AdminErrorCodes
     /// <summary>V11: at most 20 collections.</summary>
     public static AdminErrorCode TooManyCollections { get; } = new("too_many_collections", 409, "An assistant can use at most 20 knowledge banks.");
 
-    /// <summary>V11: a collection of another department (shares are P2); <c>affected</c> lists them.</summary>
-    public static AdminErrorCode CollectionNotShared { get; } = new("collection_not_shared", 409, "A knowledge bank belongs to another department.");
+    /// <summary>V11: a collection of another department that is not shared with the assistant's; <c>affected</c> lists them.</summary>
+    public static AdminErrorCode CollectionNotShared { get; } = new("collection_not_shared", 409, "A knowledge bank belongs to another department and is not shared with this one.");
+
+    /// <summary>V11: a link names more than 20 topics, or a topic outside the chunk tag format; <c>affected</c> lists the collections.</summary>
+    public static AdminErrorCode TopicInvalid { get; } = new("topic_invalid", 409, "A topic is invalid: at most 20 per knowledge bank, each lower case letters, digits and hyphens, at most 50 characters.");
+
+    /// <summary>V35: narrowing the sharing would cut off published assistants of other departments; <c>affected</c> lists them.</summary>
+    public static AdminErrorCode CollectionSharedInUse { get; } = new("collection_shared_in_use", 409, "Assistants of other departments use the knowledge bank. They lose it if the sharing is narrowed.");
 
     /// <summary>V7: an audience client's ceiling is below the assistant's level <c>{level}</c>; <c>affected</c> lists the clients.</summary>
     public static AdminErrorCode AudienceAboveCeiling { get; } = new("audience_above_ceiling", 409, "A client cannot show an assistant at level {level}.");
@@ -236,6 +242,6 @@ public static class AdminErrorCodes
             NotAnUploadSource, UploadFormatDeferred, UploadTypeRefused, UploadTooLarge, UploadFileExists, UploadFileMissing, UploadBatchTooLarge,
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
-            NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared,
+            NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
             AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgeNotAllowedForLevel, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable];
 }
