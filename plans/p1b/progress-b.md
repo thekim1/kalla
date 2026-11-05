@@ -133,7 +133,7 @@ Refs: [admin §3.2, §4.5, §4.6](../admin/design.md)
 Refs: [admin §5.2–§5.5](../admin/design.md)
 - [x] Menu regrouped; Knowledge bases tabs *Ours* / *Shared with us* / *All* (#366)
 - [x] Sharing and Topics tabs; knowledge picker with topics; "Who can use it"; Map table; no team field (#366)
-- [ ] **Done:** vitest per page; the E2E shares and links with a topic by keyboard
+- [x] **Done:** vitest per page; the E2E shares and links with a topic by keyboard (#366; first green E2E run https://github.com/thekim1/ume-rag-platform/actions/runs/42090732503 after the keyboard-helper fixes in this PR)
   — vitest per page green (#366); the E2E step 14 is written (#366) but not run yet: `e2e.yml` fails until stream A's item 15, so tick this on the first green `e2e` run
 
 ### 39. A new assistant starts from a default
