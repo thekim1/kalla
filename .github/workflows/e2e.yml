@@ -45,11 +45,13 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: tests/e2e/package-lock.json
-      - name: Aspire CLI, development certificate, admin UI packages
+      - name: Aspire CLI, PowerShell, development certificate, admin UI packages
         if: steps.specs.outputs.present == 'true'
-        # Aspire CLI 13.6.1 as docs/local-development.md; npm ci from the locks only (.npmrc), never npm install.
+        # Aspire CLI 13.6.1 as docs/local-development.md; PowerShell for scripts/Start-E2E.ps1 as a .NET tool (the runner
+        # has no pwsh); npm ci from the locks only (.npmrc), never npm install.
         run: |
           dotnet tool install --global Aspire.Cli --version 13.6.1
+          dotnet tool install --global PowerShell --version 7.6.9
           dotnet dev-certs https
           if [ -f src/admin-ui/package-lock.json ]; then (cd src/admin-ui && npm ci); fi
       - name: Start the test stack
