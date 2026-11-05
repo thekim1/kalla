@@ -15,13 +15,11 @@ here.
   and 20, see `results-b.md`; leave them unless an item touches them), 11 and 12 (pages built; their Done, admin §5.4
   steps 1–13 walked locally on FakeGateway, is not checked yet; #146 not recorded), 13. The main session did 18, 33
   and 34; stream A did 37 and 38 on L13/L14.
-- **Item 14 is taken by the main session** (2026-11-05, branch `main-session/14-e2e`, claimed on #278): skip it.
+- **Item 14** was built by the main session: the pilot-journey E2E, axe, target-size and reflow specs in `tests/e2e`
+  (#362), hand-off L7 (#364); its NVDA pass needs a person and stays open.
 - **Item 40 is done:** chat and admin API in #358 (frames, `answered-general`, `GeneralAnswers`, V17, V36, test panel), the radio group and badge in #359.
 - **Item 35 is done** (#361): sharing, `view=`, topics, Map route, contact fields, V11 widened, V35, owner team defaulted.
-- **Next, in order: 36 → 39** (36 waits for 14's E2E to extend it). Item 14 comes before 36 because 36's done-when extends the pilot-journey
-  E2E that 14 creates, and because stream A's `e2e` job (item 15) waits on its hand-off L7. Nothing exists yet for
-  14: no `tests/e2e`, no Playwright set-up; `e2e.yml` passes with a notice until `tests/e2e/package.json` exists. Its
-  NVDA pass needs a person: prepare it and leave the box open with a note.
+- **Next, in order: 36 → 39.** 36's done-when extends item 14's pilot-journey E2E (sharing and a topic link by keyboard).
 - Then walk admin §5.4 locally to close items 11 and 12, and record #146.
 - Merged without waiting for reviewers (user, 2026-11-02); problems go in a `stream-b` issue.
 
