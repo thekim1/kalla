@@ -7,6 +7,7 @@ using NpgsqlTypes;
 using Pgvector;
 using Ume.Rag.Retrieval;
 using Ume.Rag.Retrieval.Postgres;
+using Ume.Rag.Infrastructure;
 using Ume.Rag.Worker.Connectors.Persistence;
 
 namespace Ume.Rag.Worker.Engine;
@@ -57,6 +58,12 @@ public sealed record HnswCheckOutcome(string IndexName, HnswRecall Before, HnswR
 public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string rebuildConnectionString, HnswIndexMetrics metrics, ILogger<HnswIndexHealth> logger)
 {
     public const int K = 10;
+
+    /// <summary>The connection string of the rebuild, when set (<see cref="ConnectionString"/>).</summary>
+    public const string MaintenanceConnectionName = "ragdb-maintenance";
+
+    /// <summary>The rebuild session's first statement (<see cref="RebuildAsync"/>).</summary>
+    public const string NoStatementTimeoutSql = "SET statement_timeout = 0";
 
     /// <summary>
     /// An approximate hit outside the exact top 10 still counts when its distance ties the exact 10th: duplicate texts
@@ -207,17 +214,38 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
     }
 
     /// <summary>
+    /// The connection string the rebuild runs on: <c>ConnectionStrings:ragdb-maintenance</c>, else <c>ragdb</c>
+    /// (Decisions "M-2 open design calls"). Like <c>ragdb-listen</c> it never goes through a pooler: the rebuild sets
+    /// session state, and a transaction-mode PgBouncer would hand that session to the next client.
+    /// </summary>
+    public static string ConnectionString(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var value = configuration.GetConnectionString(MaintenanceConnectionName) is { Length: > 0 } maintenance
+            ? maintenance
+            : configuration.GetConnectionString(InfrastructureExtensions.DatabaseResourceName)
+              ?? throw new InvalidOperationException($"ConnectionStrings:{InfrastructureExtensions.DatabaseResourceName} is not configured.");
+        // A dedicated session: never returned to a pool another component could reuse.
+        return new NpgsqlConnectionStringBuilder(value) { Pooling = false }.ConnectionString;
+    }
+
+    /// <summary>
     /// <c>REINDEX INDEX CONCURRENTLY</c> (the worker role holds <c>MAINTAIN</c> on <c>content."Chunks"</c>, data-model §1.2)
-    /// on a connection of its own: unpooled, with <c>statement_timeout</c> 0 as a startup option, because the statement
-    /// runs outside a transaction and outlasts the role's 60 s default. Rebuilds run one at a time: each holds
-    /// <c>SHARE UPDATE EXCLUSIVE</c> on <c>content."Chunks"</c>, which conflicts with itself.
+    /// on a session of its own from <see cref="ConnectionString"/>, unpooled. The statement runs outside a transaction and
+    /// outlasts the role's 60 s default, so the session first runs <c>SET statement_timeout = 0</c>: a <c>SET</c>, not a
+    /// startup option, because PgBouncer drops the <c>options</c> startup parameter. Rebuilds run one at a time: each
+    /// holds <c>SHARE UPDATE EXCLUSIVE</c> on <c>content."Chunks"</c>, which conflicts with itself.
     /// </summary>
     public async Task RebuildAsync(string indexName, CancellationToken cancellationToken)
     {
         var builder = new NpgsqlConnectionStringBuilder(rebuildConnectionString) { Pooling = false };
-        builder.Options = $"{builder.Options} -c statement_timeout=0".Trim();
         await using var connection = new NpgsqlConnection(builder.ConnectionString);
         await connection.OpenAsync(cancellationToken);
+        await using (var timeout = new NpgsqlCommand(NoStatementTimeoutSql, connection))
+        {
+            await timeout.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         await using var command = new NpgsqlCommand($"REINDEX INDEX CONCURRENTLY content.\"{indexName}\"", connection) { CommandTimeout = 0 };
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -117,6 +119,110 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
     }
 
     [Fact]
+    public void The_rebuild_connection_is_ragdb_maintenance_else_ragdb_and_unpooled()
+    {
+        const string ragdb = "Host=db;Database=ragdb;Username=ume_rag_worker;Application Name=pooled";
+        const string maintenance = "Host=db-direct;Database=ragdb;Username=ume_rag_worker;Application Name=maintenance";
+
+        var both = new NpgsqlConnectionStringBuilder(HnswIndexHealth.ConnectionString(Configuration(ragdb, maintenance)));
+        both.Host.ShouldBe("db-direct");
+        both.ApplicationName.ShouldBe("maintenance");
+        both.Pooling.ShouldBeFalse();
+        both.Options.ShouldBeNull("the timeout is a SET on the session, never a startup option (PgBouncer drops options)");
+
+        var fallback = new NpgsqlConnectionStringBuilder(HnswIndexHealth.ConnectionString(Configuration(ragdb, null)));
+        fallback.Host.ShouldBe("db");
+        fallback.Pooling.ShouldBeFalse();
+        new NpgsqlConnectionStringBuilder(HnswIndexHealth.ConnectionString(Configuration(ragdb, ""))).Host.ShouldBe("db", "an empty value falls back too");
+
+        Should.Throw<InvalidOperationException>(() => HnswIndexHealth.ConnectionString(Configuration(null, null)));
+    }
+
+    /// <summary>
+    /// The rebuild on a real session: the maintenance string's startup option caps statements at 500 ms (standing in for
+    /// the role's 60 s), and a transaction holding <c>SHARE UPDATE EXCLUSIVE</c> on <c>content."Chunks"</c> keeps the
+    /// <c>REINDEX</c> waiting for 1.5 s. It survives only because the session ran <c>SET statement_timeout = 0</c> first;
+    /// the waiting backend carries the maintenance string's application name, not ragdb's.
+    /// </summary>
+    [Fact]
+    public async Task The_rebuild_runs_on_the_maintenance_connection_and_sets_the_timeout_by_SET()
+    {
+        var seed = await EngineKit.SeedUrlListAsync(database, []);
+        var profile = await _writer.AddEmbeddingProfileAsync(Dimensions, Ct);
+        await DocumentsAsync(seed, profile, 30);
+        var index = HnswIndexHealth.IndexName(profile);
+        var tag = profile.ToString("N")[..12];
+        var worker = database.Connection(RagDatabase.Worker);
+        var configuration = Configuration(
+            new NpgsqlConnectionStringBuilder(worker) { ApplicationName = $"pooled-{tag}" }.ConnectionString,
+            new NpgsqlConnectionStringBuilder(worker) { ApplicationName = $"maintenance-{tag}", Options = "-c statement_timeout=500" }.ConnectionString);
+        var health = new HnswIndexHealth(_dataSource, HnswIndexHealth.ConnectionString(configuration),
+            new HnswIndexMetrics(_metrics.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>()), NullLogger<HnswIndexHealth>.Instance);
+
+        using var source = new ActivitySource($"Ume.Rag.Worker.Tests.Rebuild.{tag}");
+        var statements = new List<(ActivityTraceId Trace, string Sql)>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == "Npgsql" || s == source,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = a =>
+            {
+                if (a.Source.Name == "Npgsql" && a.GetTagItem("db.query.text") is string sql)
+                {
+                    lock (statements)
+                    {
+                        statements.Add((a.TraceId, sql));
+                    }
+                }
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        await using var blocker = new NpgsqlConnection(database.Connection(null));
+        await blocker.OpenAsync(Ct);
+        await using var transaction = await blocker.BeginTransactionAsync(Ct);
+        await using (var lockChunks = new NpgsqlCommand("""LOCK TABLE content."Chunks" IN SHARE UPDATE EXCLUSIVE MODE""", blocker, transaction))
+        {
+            await lockChunks.ExecuteNonQueryAsync(Ct);
+        }
+
+        Task rebuild;
+        ActivityTraceId trace;
+        using (var parent = source.StartActivity("rebuild")!)
+        {
+            trace = parent.TraceId;
+            rebuild = health.RebuildAsync(index, Ct);
+        }
+
+        var waiting = Stopwatch.StartNew();
+        while (await Sql.ScalarAsync<long>(database.Connection(null), """
+                   SELECT count(*) FROM pg_stat_activity WHERE application_name = $1 AND wait_event_type = 'Lock' AND query LIKE 'REINDEX%'
+                   """, $"maintenance-{tag}") == 0)
+        {
+            rebuild.IsCompleted.ShouldBeFalse("the rebuild ended before it waited for the lock");
+            waiting.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(20), "no REINDEX waited on the maintenance connection");
+            await Task.Delay(50, Ct);
+        }
+
+        (await Sql.ScalarAsync<long>(database.Connection(null), "SELECT count(*) FROM pg_stat_activity WHERE application_name = $1", $"pooled-{tag}"))
+            .ShouldBe(0, "nothing of the rebuild runs on ragdb");
+        await Task.Delay(TimeSpan.FromMilliseconds(1500), Ct);
+        rebuild.IsCompleted.ShouldBeFalse("the REINDEX outlived the 500 ms startup option, so the session's SET applied");
+
+        await transaction.CommitAsync(Ct);
+        await rebuild.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+        string[] sent;
+        lock (statements)
+        {
+            sent = [.. statements.Where(s => s.Trace == trace).Select(s => s.Sql)];
+        }
+
+        sent.ShouldBe([HnswIndexHealth.NoStatementTimeoutSql, $"REINDEX INDEX CONCURRENTLY content.\"{index}\""]);
+        HnswIndexHealth.NoStatementTimeoutSql.ShouldBe("SET statement_timeout = 0");
+    }
+
+    [Fact]
     public void A_tie_with_the_last_exact_distance_counts_as_a_hit()
     {
         var a = Guid.NewGuid();
@@ -225,6 +331,14 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
         jobs[0].DepartmentId.ShouldBe(synced.DepartmentId);
         jobs[0].Payload.ShouldBe(new CheckHnswIndexCommand { EmbeddingProfileId = profile, Trigger = HnswCheckTrigger.Sync });
     }
+
+    private static IConfiguration Configuration(string? ragdb, string? maintenance) => new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:ragdb"] = ragdb,
+            ["ConnectionStrings:ragdb-maintenance"] = maintenance,
+        })
+        .Build();
 
     private HnswIndexHealth Health() => new(_dataSource, database.Connection(RagDatabase.Worker), new HnswIndexMetrics(_metrics.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>()),
         NullLogger<HnswIndexHealth>.Instance);

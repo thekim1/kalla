@@ -21,6 +21,15 @@ public sealed partial class PoolerSafeSqlTests
         Path.Combine("Ume.Rag.Infrastructure", "Config", "ConfigVersionMonitor.cs"),
     ];
 
+    /// <summary>
+    /// The SQL allowed a session <c>SET</c>: the HNSW rebuild's <c>SET statement_timeout = 0</c>, on its own unpooled
+    /// session from <c>ConnectionStrings:ragdb-maintenance</c> (Decisions "M-2 open design calls").
+    /// </summary>
+    private static readonly (string File, string Sql)[] SessionSetAllowed =
+    [
+        (Path.Combine("Ume.Rag.Worker", "Engine", "HnswIndexHealth.cs"), "SET statement_timeout = 0"),
+    ];
+
     /// <summary>The repository's <c>src</c>, next to <c>UmeRag.slnx</c>.</summary>
     private static string SourceRoot => Path.Combine(Path.GetDirectoryName(TestPostgres.RepositoryFile("UmeRag.slnx"))!, "src");
 
@@ -61,7 +70,9 @@ public sealed partial class PoolerSafeSqlTests
         var findings = new List<string>();
         foreach (var literal in literals)
         {
-            findings.AddRange(Violations(literal).Select(rule => $"{rule}: {Shorten(literal)}"));
+            findings.AddRange(Violations(literal)
+                .Where(rule => !(rule == "session SET" && SessionSetAllowed.Contains((file, literal))))
+                .Select(rule => $"{rule}: {Shorten(literal)}"));
             if (Listen().IsMatch(literal) && !ListenAllowed.Contains(file))
             {
                 findings.Add($"LISTEN outside the ragdb-listen connection: {Shorten(literal)}");
