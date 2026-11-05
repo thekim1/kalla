@@ -122,9 +122,11 @@ onMounted(load)
 
 <template>
   <UiCard v-if="pipeline" :title="PIPELINE.title" data-test="pipeline">
-    <DetailRow :label="PIPELINE.name">{{ pipeline.name }}</DetailRow>
-    <DetailRow v-if="published" :label="PIPELINE.version">{{ published.number }}<span v-if="draft" class="ml-2 text-fg-2">· {{ PIPELINE.draft(draft.number) }}</span></DetailRow>
-    <DetailRow v-for="s in summary" :key="s.label" :label="s.label">{{ s.value }}</DetailRow>
+    <dl class="m-0">
+      <DetailRow :label="PIPELINE.name">{{ pipeline.name }}</DetailRow>
+      <DetailRow v-if="published" :label="PIPELINE.version">{{ published.number }}<span v-if="draft" class="ml-2 text-fg-2">· {{ PIPELINE.draft(draft.number) }}</span></DetailRow>
+      <DetailRow v-for="s in summary" :key="s.label" :label="s.label">{{ s.value }}</DetailRow>
+    </dl>
     <div v-if="canPublish && template" class="mt-4"><UiButton icon="tune" data-test="edit-pipeline" @click="edit">{{ PIPELINE.edit }}</UiButton></div>
 
     <UiDrawer v-model:open="open" :title="PIPELINE.edit" :subtitle="pipeline.name">

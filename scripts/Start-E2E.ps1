@@ -4,7 +4,7 @@
 .DESCRIPTION
   Uses its own Docker volume (ume-rag-e2e-postgres), so your development database is never touched.
   Every start deletes that test volume first and seeds the demo data again, so the tests always begin
-  from the same state. The FakeGateway is always on, whatever the user secrets say. The stack uses the same ports as the dev stack: stop the dev stack first.
+  from the same state. The FakeGateway is always on, whatever the user secrets say, and the fixture website of tests/e2e runs on port 7416. The stack uses the same ports as the dev stack: stop the dev stack first.
   Waits for the admin UI, or for the admin API while src/admin-ui does not exist yet.
   -Stop stops the stack and removes the test volume.
   -Keep starts without resetting the test volume (the demo data is only seeded into an empty database).
@@ -41,6 +41,7 @@ if (-not $Keep) { Remove-TestVolume }
 $env:DevelopmentVolumes__Postgres = $volume
 $env:Seed__Enabled = 'true'
 $env:FakeGateway__Enabled = 'true'   # the tests send real gateway requests; environment variables override user secrets
+$env:E2E__Enabled = 'true'          # the fixture website (port 7416); user secrets for real systems are ignored
 Write-Output "Starting the test stack with demo data on volume $volume."
 aspire start --apphost $apphost --non-interactive
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

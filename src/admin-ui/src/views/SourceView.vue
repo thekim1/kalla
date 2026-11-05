@@ -114,15 +114,17 @@ onMounted(load)
       <InlineError v-if="syncError" :message="problemMessage(syncError)" class="mb-4" />
 
       <UiCard v-if="source.data.value.type !== 'upload'" :title="SOURCE_PAGE.settings" class="mb-6">
-        <DetailRow :label="source.data.value.type === 'crawl' ? SOURCE_PAGE.startAddresses : SOURCE_PAGE.addresses">
-          <span class="font-mono text-small" data-test="addresses">{{ addresses.join(', ') }}</span>
-        </DetailRow>
-        <DetailRow v-if="source.data.value.type === 'crawl'" :label="SOURCE_PAGE.maxPages">
-          <span class="tabular">{{ formatNumber(Number(source.data.value.settings.maxPages ?? 10000)) }}</span>
-        </DetailRow>
-        <DetailRow v-if="demoted.length" :label="SOURCE_EDIT.demoted">
-          <span class="font-mono text-small" data-test="demoted">{{ demoted.join(', ') }}</span>
-        </DetailRow>
+        <dl class="m-0">
+          <DetailRow :label="source.data.value.type === 'crawl' ? SOURCE_PAGE.startAddresses : SOURCE_PAGE.addresses">
+            <span class="font-mono text-small" data-test="addresses">{{ addresses.join(', ') }}</span>
+          </DetailRow>
+          <DetailRow v-if="source.data.value.type === 'crawl'" :label="SOURCE_PAGE.maxPages">
+            <span class="tabular">{{ formatNumber(Number(source.data.value.settings.maxPages ?? 10000)) }}</span>
+          </DetailRow>
+          <DetailRow v-if="demoted.length" :label="SOURCE_EDIT.demoted">
+            <span class="font-mono text-small" data-test="demoted">{{ demoted.join(', ') }}</span>
+          </DetailRow>
+        </dl>
         <div v-if="canEdit" class="mt-4">
           <UiButton icon="edit" data-test="edit-source" @click="edit">{{ SOURCE_EDIT.edit }}</UiButton>
         </div>

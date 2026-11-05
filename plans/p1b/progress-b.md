@@ -96,9 +96,10 @@ Refs: [admin §8.1](../admin/design.md), [chat §14.4](../chat-api/design.md)
 
 ### 14. Accessibility and pilot journey E2E
 Refs: [admin §10.1, §11.4](../admin/design.md)
-- [ ] axe, target-size, reflow specs; keyboard-only pilot journey against a static fixture site in `tests/e2e`
+- [x] axe, target-size, reflow specs; keyboard-only pilot journey against a static fixture site in `tests/e2e` (main session, PR: main-session/14-e2e)
 - [ ] One NVDA pass; `docs/accessibility-statement.md`; #96 recorded
-- [ ] **Hand-off L7:** issue to stream A
+  — statement drafted (main session, PR: main-session/14-e2e); the NVDA pass needs a person and is not done, so #96 stays open
+- [x] **Hand-off L7:** issue to stream A (#364)
 
 ### 18. W3 spike
 - [x] Two users, two groups, interleaved chats on the dev Keycloak and a local Open WebUI; #174 recorded (main session, PR: main-session/18-w3-spike)
