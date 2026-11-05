@@ -23,8 +23,10 @@ public sealed record RobotsEntry(RobotsTxt Rules, RobotsStatus Status, DateTimeO
 /// <summary>
 /// robots.txt per origin (scheme, host, port), fetched through the egress guard and kept for 24 h (connectors design §5.1):
 /// 2xx parsed (the first 500 KiB), 4xx allow all, 5xx, 429 and network failures disallow all; an unreachable answer is
-/// kept for 10 minutes only, so the next run asks again. In memory per worker instance: the <c>CrawlHosts</c> row and the
-/// <c>crawl/{host}/robots.txt</c> blob take over with the database (schema part 1).
+/// kept for 10 minutes only, so the next run asks again. A robots.txt the egress guard refused is not kept at all: the
+/// guard's rules follow <c>Settings.Crawl</c>, so a port allowed or a host unblocked there counts from the next request (#360).
+/// In memory per worker instance: the <c>CrawlHosts</c> row and the <c>crawl/{host}/robots.txt</c> blob take over with the
+/// database (schema part 1).
 /// </summary>
 public sealed class RobotsCache(HttpFetcher fetcher, TimeProvider time)
 {
@@ -61,6 +63,13 @@ public sealed class RobotsCache(HttpFetcher fetcher, TimeProvider time)
                 // Not cached: the next caller fetches again.
                 _entries.TryRemove(new KeyValuePair<string, Lazy<Task<RobotsEntry>>>(origin, lazy));
                 throw;
+            }
+
+            if (entry.EgressRefusal is not null)
+            {
+                // Not cached either: the guard's rules follow Settings.Crawl, so the next caller asks the guard again.
+                _entries.TryRemove(new KeyValuePair<string, Lazy<Task<RobotsEntry>>>(origin, lazy));
+                return entry;
             }
 
             var lifetime = entry.Status == RobotsStatus.Unreachable ? UnreachableLifetime : Lifetime;
