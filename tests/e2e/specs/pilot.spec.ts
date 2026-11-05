@@ -202,6 +202,8 @@ for (const mode of ['mouse', 'keyboard'] as const) {
 function actor(page: Page, mode: 'mouse' | 'keyboard') {
   type Target = ReturnType<Page['getByRole']>
   const focus = async (target: Target) => {
+    // A control that is not on the page fails here, not after hundreds of Tabs that each wait for it.
+    await expect(target).toBeVisible()
     // Tab until the target has focus; a keyboard-only user reaches every control in at most a few hundred steps.
     for (let i = 0; i < 300; i++) {
       if (await target.evaluate(element => element === document.activeElement).catch(() => false)) return
@@ -214,7 +216,8 @@ function actor(page: Page, mode: 'mouse' | 'keyboard') {
       if (mode === 'mouse') return target.click()
       if (await target.getAttribute('role') === 'tab') {
         // ARIA tabs: Tab reaches the selected tab only; the arrow keys move between the tabs.
-        const tablist = page.getByRole('tablist').filter({ has: target })
+        // The tab's own tab list, whatever the target locator starts from (a `has:` filter would search inside the list).
+        const tablist = target.locator('xpath=ancestor::*[@role="tablist"][1]')
         await focus(tablist.getByRole('tab', { selected: true }))
         for (let i = 0; i < 10 && !await target.evaluate(element => element === document.activeElement); i++) {
           const before = await page.evaluate(() => document.activeElement?.id)
@@ -236,8 +239,23 @@ function actor(page: Page, mode: 'mouse' | 'keyboard') {
     },
     async check(target: Target) {
       if (mode === 'mouse') return target.check()
-      await focus(target)
-      await page.keyboard.press('Space')
+      const radioGroup = await target.evaluate(element =>
+        element instanceof HTMLInputElement && element.type === 'radio' ? element.name : null)
+      if (radioGroup) {
+        // Native radio group: Tab reaches the checked radio (the first one while none is checked); the arrow keys move
+        // between the radios and check the one they land on.
+        const group = page.locator(`input[type="radio"][name="${radioGroup}"]`)
+        const checked = group.and(page.locator(':checked'))
+        await focus(await checked.count() > 0 ? checked : group.first())
+        for (let i = 0; i < 10 && !await target.evaluate(element => element === document.activeElement); i++) {
+          await page.keyboard.press('ArrowDown')
+        }
+        await expect(target).toBeFocused()
+        if (!await target.isChecked()) await page.keyboard.press('Space')
+      } else {
+        await focus(target)
+        await page.keyboard.press('Space')
+      }
       await expect(target).toBeChecked()
     },
     async select(target: Target, option: { label: string }) {
