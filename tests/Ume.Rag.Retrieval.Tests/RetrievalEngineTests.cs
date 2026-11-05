@@ -165,6 +165,38 @@ public sealed class RetrievalEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task A_narrow_topic_in_a_collection_over_the_limit_is_searched_exactly()
+    {
+        // B-10 (Decisions "M-2 open design calls", to-verify #180): 20,000 chunks in A, 300 of them on "avfall" (100 also
+        // on "taxa"), 200 on "taxa" alone, 19,500 on other tags or untagged; the profile holds 20,000 chunks in all.
+        _index.Counts =
+        [
+            new(Profile, CollectionA, 200) { Tags = ["avfall"] },
+            new(Profile, CollectionA, 100) { Tags = ["avfall", "taxa"] },
+            new(Profile, CollectionA, 200) { Tags = ["taxa"] },
+            new(Profile, CollectionA, 9_500) { Tags = ["bygglov"] },
+            new(Profile, CollectionA, 10_000),
+        ];
+        using var engine = Engine();
+
+        SearchScope Linked(params string[] topics) =>
+            new(Profile, 3, [new CollectionInScope(CollectionA, RetrievalSettings.Default) { Topics = topics }], ["public"], RetrievalPlatformSettings.Default);
+
+        (await _sizes.SizeAsync(OneCollection(), Ct)).ShouldBe(new ScopeSize(20_000, 20_000));
+        (await _sizes.SizeAsync(Linked("avfall"), Ct)).ShouldBe(new ScopeSize(300, 20_000));
+        (await _sizes.SizeAsync(Linked("avfall", "taxa"), Ct)).ShouldBe(new ScopeSize(500, 20_000)); // the both-tagged 100 count once
+        (await _sizes.SizeAsync(Linked("okänt"), Ct)).ShouldBe(new ScopeSize(0, 20_000));
+
+        (await engine.SearchAsync(new SearchRequest("avfall", Linked("avfall"), Mode: RetrievalMode.Vector, Embed: Embed), Ct))
+            .VectorSearch.ShouldBe(VectorSearch.Exact);
+        (await engine.SearchAsync(new SearchRequest("avfall", OneCollection(), Mode: RetrievalMode.Vector, Embed: Embed), Ct))
+            .VectorSearch.ShouldBe(VectorSearch.Approximate);
+        (await engine.SearchAsync(new SearchRequest("bygglov", Linked("bygglov", "avfall"), Mode: RetrievalMode.Vector, Embed: Embed), Ct))
+            .VectorSearch.ShouldBe(VectorSearch.Exact); // 9,800 chunks: under the limit as well
+        _index.VectorSearches.ShouldBe([VectorSearch.Exact, VectorSearch.Approximate, VectorSearch.Exact]);
+    }
+
+    [Fact]
     public async Task No_free_slot_within_the_wait_is_search_unavailable()
     {
         using var engine = Engine(options: new RetrievalEngineOptions { MaxConcurrentSearches = 1, SlotWait = TimeSpan.FromMilliseconds(50) });

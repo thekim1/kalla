@@ -96,14 +96,16 @@ public static class RetrievalStatements
             Vector(key.Profile, key.Limit, key.Filters, $"""(c."Embedding"::vector({Dims(key.Dimensions)}) <=> $1) + 0""", "distance"));
 
     /// <summary>
-    /// Searchable child chunks per (profile, collection), for the exact/HNSW rule (§6.4; grouped by profile as well, so
-    /// a scope's share of its profile's index is known).
+    /// Searchable child chunks per (profile, collection, tag set), for the exact/HNSW rule (§6.4; summed per collection
+    /// and per profile in .NET, so a scope's share of its profile's index is known, and per link topics, so a link with
+    /// topics counts only its tagged chunks: Decisions "M-2 open design calls"). One row per distinct <c>Tags</c> array of
+    /// a collection; a null array is untagged.
     /// </summary>
     public const string CountChunks = """
-        SELECT "EmbeddingProfileId", "CollectionId", count(*)
+        SELECT "EmbeddingProfileId", "CollectionId", "Tags", count(*)
         FROM content."Chunks"
         WHERE "DeletedAt" IS NULL AND "Kind" = 'child' AND "EmbeddingProfileId" IS NOT NULL
-        GROUP BY 1, 2
+        GROUP BY 1, 2, 3
         """;
 
     /// <summary>

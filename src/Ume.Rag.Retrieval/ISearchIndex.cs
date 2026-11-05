@@ -96,7 +96,10 @@ public readonly struct HashBytes(byte[] bytes) : IEquatable<HashBytes>
 /// </summary>
 public interface IScopeSizeSource
 {
-    /// <summary>Searchable child chunks per (profile, collection).</summary>
+    /// <summary>
+    /// Searchable child chunks per (profile, collection, tag set): a collection's rows add up to its count, and the rows
+    /// whose tags meet a link's topics to that link's count (§6.4; Decisions "M-2 open design calls").
+    /// </summary>
     Task<IReadOnlyList<CollectionChunkCount>> CountChunksAsync(CancellationToken cancellationToken);
 
     /// <summary>
@@ -106,7 +109,11 @@ public interface IScopeSizeSource
     Task<IReadOnlyList<FrequentLexeme>> FrequentLexemesAsync(long minChunks, double minShare, CancellationToken cancellationToken);
 }
 
-public sealed record CollectionChunkCount(Guid EmbeddingProfileId, Guid CollectionId, long Chunks);
+/// <summary>The searchable child chunks of one (profile, collection) that carry exactly <see cref="Tags"/> (empty = untagged).</summary>
+public sealed record CollectionChunkCount(Guid EmbeddingProfileId, Guid CollectionId, long Chunks)
+{
+    public IReadOnlyList<string> Tags { get; init; } = [];
+}
 
 /// <summary>A lexeme and the number of chunks of one (profile, collection) it occurs in.</summary>
 public sealed record FrequentLexeme(Guid EmbeddingProfileId, Guid CollectionId, string Lexeme, long Chunks);

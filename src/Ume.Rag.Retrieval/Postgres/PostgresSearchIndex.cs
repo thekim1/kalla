@@ -63,7 +63,10 @@ public sealed class PostgresSearchIndex(NpgsqlDataSource dataSource, PostgresSea
         {
             while (await reader.ReadAsync(ct))
             {
-                counts.Add(new CollectionChunkCount(reader.GetGuid(0), reader.GetGuid(1), reader.GetInt64(2)));
+                counts.Add(new CollectionChunkCount(reader.GetGuid(0), reader.GetGuid(1), reader.GetInt64(3))
+                {
+                    Tags = reader.IsDBNull(2) ? [] : reader.GetFieldValue<string[]>(2),
+                });
             }
         }, TimeSpan.FromSeconds(30), cancellationToken);
         return counts;

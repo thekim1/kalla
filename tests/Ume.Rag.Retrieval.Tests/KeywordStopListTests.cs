@@ -58,6 +58,23 @@ public sealed class KeywordStopListTests
     }
 
     [Fact]
+    public async Task A_link_with_topics_takes_its_shares_of_the_whole_collection()
+    {
+        // The statistics are per collection: "umeå" in 2,000 of 10,000 chunks is 20 %, not 2,000 of the topic's 1,500.
+        var index = new FakeIndex
+        {
+            Counts = [new(Profile, CollectionA, 1_500) { Tags = ["avfall"] }, new(Profile, CollectionA, 8_500)],
+            Lexemes = [new(Profile, CollectionA, "umeå", 2_000), new(Profile, CollectionA, "kommun", 4_000)],
+        };
+        using var cache = new ScopeSizeCache(index, new FakeTimeProvider());
+        var topical = new SearchScope(Profile, 3, [new CollectionInScope(CollectionA, RetrievalSettings.Default) { Topics = ["avfall"] }], ["public"],
+            RetrievalPlatformSettings.Default);
+
+        (await cache.SizeAsync(topical, Ct)).ScopeChunks.ShouldBe(1_500);
+        (await cache.StopLexemesAsync(topical, Ct)).ShouldBe(["kommun"]);
+    }
+
+    [Fact]
     public async Task Another_profile_s_statistics_do_not_count()
     {
         var other = Guid.Parse("01929b6e-0000-7000-8000-0000000000ff");

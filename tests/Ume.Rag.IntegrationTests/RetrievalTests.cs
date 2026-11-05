@@ -308,6 +308,44 @@ public sealed class RetrievalTests(RagDatabaseFixture database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_narrow_topic_in_a_collection_over_the_exact_limit_is_counted_by_its_tags_and_searched_exactly()
+    {
+        // B-10 (Decisions "M-2 open design calls", to-verify #180) on the real count statement: 7 chunks, over a limit of 4;
+        // "avfall" tags 2 (one also "taxa"), "taxa" 2, then one "skola" chunk and two untagged ones.
+        var collection = Guid.NewGuid();
+        await _writer.AddDocumentAsync(Doc(collection),
+        [
+            new FixtureChunk("Hämtning av avfall") { Embedding = V(1, 0, 0), Tags = ["avfall"] },
+            new FixtureChunk("Avfallstaxa") { Embedding = V(1, 0.1f, 0), Tags = ["avfall", "taxa"] },
+            new FixtureChunk("Taxa för vatten") { Embedding = V(0, 1, 0), Tags = ["taxa"] },
+            new FixtureChunk("Taxa för bygglov") { Embedding = V(0, 1, 0.1f), Tags = ["taxa"] },
+            new FixtureChunk("Skolskjuts") { Embedding = V(0, 0, 1), Tags = ["skola"] },
+            new FixtureChunk("Kontakt") { Embedding = V(0, 0.1f, 1) },
+            new FixtureChunk("Om webbplatsen") { Embedding = V(0.1f, 0, 1) },
+        ], Ct);
+        var (engine, _, sizes) = Engine();
+        using var _ = engine;
+        using var __ = sizes;
+        var platform = RetrievalPlatformSettings.Default with { ExactScanMaxChunks = 4 };
+
+        SearchScope Linked(params string[] topics) =>
+            new(_profile, Dims, [new CollectionInScope(collection, RetrievalSettings.Default) { Topics = topics }], ["public"], platform);
+
+        (await sizes.SizeAsync(Linked(), Ct)).ShouldBe(new ScopeSize(7, 7));
+        (await sizes.SizeAsync(Linked("avfall"), Ct)).ShouldBe(new ScopeSize(2, 7));
+        (await sizes.SizeAsync(Linked("avfall", "taxa"), Ct)).ShouldBe(new ScopeSize(4, 7)); // the both-tagged chunk counts once
+        (await sizes.SizeAsync(Linked("avfall", "taxa", "skola"), Ct)).ShouldBe(new ScopeSize(5, 7));
+
+        var topical = await engine.SearchAsync(new SearchRequest("avfall", Linked("avfall"), Mode: RetrievalMode.Vector, Embed: Fixed(V(1, 0, 0))), Ct);
+        topical.VectorSearch.ShouldBe(VectorSearch.Exact);
+        topical.Hits.Count.ShouldBe(2);
+        (await engine.SearchAsync(new SearchRequest("avfall", Linked(), Mode: RetrievalMode.Vector, Embed: Fixed(V(1, 0, 0))), Ct))
+            .VectorSearch.ShouldBe(VectorSearch.Approximate);
+        (await engine.SearchAsync(new SearchRequest("avfall", Linked("avfall", "taxa", "skola"), Mode: RetrievalMode.Vector, Embed: Fixed(V(1, 0, 0))), Ct))
+            .VectorSearch.ShouldBe(VectorSearch.Approximate);
+    }
+
+    [Fact]
     public async Task Every_statement_variant_runs_and_is_auto_prepared_once_per_connection()
     {
         // to-verify #19: one physical connection, so its pg_prepared_statements shows every variant.
