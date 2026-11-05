@@ -12,7 +12,7 @@ Where the code differs from the design, and why. "None" if none.
 
 ## To-verify results
 
-Rows of `plans/to-verify.md` checked here (also recorded in `plans/p0/results-<stream>.md`). "None" if none.
+Rows of `plans/to-verify.md` checked here (also recorded in `plans/work/results-<stream>.md`). "None" if none.
 
 ## Hand-offs
 

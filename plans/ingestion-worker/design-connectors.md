@@ -1,14 +1,14 @@
 # Ingestion worker, part B: connectors, crawl frontier, change detection, deletion guard
 
-Detail step 6b of the Ume.Rag design. Details [`plan.md`](plan.md) §3 and §8 (binding, incl. answered items 1–14)
+Detail step 6b of the Ume.Rag design. Details [`../archive/area-plans/ingestion-worker.md`](../archive/area-plans/ingestion-worker.md) §3 and §8 (binding, incl. answered items 1–14)
 and consumes the contracts of [`design-engine.md`](design-engine.md) (6a): fetch stages `http-fetch`, `crawl` and
 `upload`, the `sync`/`fetch` jobs and their fan-out (§9.2), dedup keys, `EnsureCurrent` and the drift sweep (§2.3),
 run outcomes (§10.2), the index writer (§14), config rules (§15) and the execution-id fence (§7.5). Limits come from
 [`../platform/data-model.md`](../platform/data-model.md) §2, §4, §7–§9,
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md) §5.5, §6, §9 and
 [`../parser/design.md`](../parser/design.md) §3, §11. The umea.se findings behind the site profile and change
-detection are in [`../simplification-pass.md`](../simplification-pass.md) §13; removed and deferred items are listed in
-§23; items moved to P2 (reasoning: [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer))
+detection are in [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) §13; removed and deferred items are listed in
+§23; items moved to P2 (reasoning: [weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer))
 in §24. The P1 parts are implemented in `src/Ume.Rag.Worker/Connectors` (where a part is not built yet, the section says
 so). Changes needed elsewhere: §20; questions: §21.
 
@@ -346,7 +346,7 @@ with an example pattern in the report.
   sitemap URLs not yet known, expands links only from changed pages, never marks a traversal complete, so it deletes
   only on `Gone`. The `website` template sets a daily `incrementalSchedule` **by default** only when the host's site
   profile marks `lastmod` reliable; the crawl report measures the share of `lastmod` hits that really changed
-  ([`../performance-pass.md`](../performance-pass.md) §2.3), which feeds the profile's reliability flag. An
+  ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §2.3), which feeds the profile's reliability flag. An
   incremental run on a host whose applied profile does not set `lastmodReliable` runs as a full traversal; it is not
   refused.
 - **Removal check**: a URL that **leaves the sitemap** (the listing clears the frontier row's `SitemapLastMod`, which
@@ -404,7 +404,7 @@ are not built yet.
 
 ### 5.6 Site profiles (learned per host)
 
-**P1:** profiles are **manual** (reasoning: [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)). The umea.se profile is a **hand-checked Sitevision preset**: a
+**P1:** profiles are **manual** (reasoning: [weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)). The umea.se profile is a **hand-checked Sitevision preset**: a
 profile JSON with the schema below (every field set by hand and checked against the fixture corpus), stored as a
 `manual` version and versioned like any config (edit and one-click rollback through `edit-site-profile` and
 `rollback-site-profile`). Learning, automatic application, proposals and re-learning below are **P2** and add to
@@ -482,7 +482,7 @@ The fields below are set by hand in P1; the "Derived from the sample" column is 
 
 ### 6.0 P1: one frontier per source
 
-The shared frontier with claims and the releaser (§6.1–§6.3) is **P2** (reasoning: [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)). In P1 each source has
+The shared frontier with claims and the releaser (§6.1–§6.3) is **P2** (reasoning: [weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer)). In P1 each source has
 **its own frontier**: `CrawlFrontier` rows are keyed by (`Classification`, `SourceId`, `UrlHash`) and carry the
 source's `RunId`, `Depth`, `Leaf` and `RemovalCheck` (§5.4), so admission is one upsert per URL and no `CrawlClaims`
 table, freshness-window reuse across sources or `fetch.shared` fact exists. The source's own `sync` traversal enqueues its `fetch` jobs from its
@@ -539,7 +539,7 @@ RETURNING "UrlHash";
 
 Two departments crawling umea.se on the default Saturday schedule therefore cause one request per page (plan §9).
 
-**Nav-link claim cache** ([`../performance-pass.md`](../performance-pass.md) §3.6): per run and instance, an LRU
+**Nav-link claim cache** ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.6): per run and instance, an LRU
 (100k entries) of URL hashes already admitted in this run; site-chrome links (header, footer, menus: most of a page's
 ≈ 100 links) skip the claims upsert after the first page. Exactness is kept because the upsert remains the authority
 for the first sighting on each instance.
@@ -592,7 +592,7 @@ instance allows ⌈`MaxConnections` ÷ k⌉, k = live `fetch` instances (heartbe
 **The crawler rules stay** (answered 4; performance pass answered 7): ≤ 10 req/s per municipal host and the night
 window (§6.5). Higher rates for allow-listed municipal hosts and a **daytime trickle** (e.g. 2 req/s outside the
 window) are per-host settings in `Settings.Crawl.HostOverrides`, **off by default**, enabled only with the web team's
-written consent ([`../performance-pass.md`](../performance-pass.md) §2.3, §10.1).
+written consent ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §2.3, §10.1).
 
 ### 6.4 Back-off and circuit breaker
 
@@ -749,10 +749,10 @@ item Z1; in P1 email files are refused (§9.2), so no connector creates child do
 
 | Topic | Rule |
 |---|---|
-| Placement | clamd has no TLS or authentication on TCP 3310, so it stays **host-local** on the `ingestion` network of every host that runs `sync`/`fetch`, never published on the LAN; each instance updates its signatures through its host's `mirror` network ([`../performance-pass.md`](../performance-pass.md) §3.7) |
+| Placement | clamd has no TLS or authentication on TCP 3310, so it stays **host-local** on the `ingestion` network of every host that runs `sync`/`fetch`, never published on the LAN; each instance updates its signatures through its host's `mirror` network ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.7) |
 | Client | own `IMalwareScanner` over TCP 3310 (`ingestion` network): `zINSTREAM\0`, chunks of 64 KiB as `<uint32 BE length><bytes>`, zero-length terminator; reply `stream: OK`, `stream: <signature> FOUND`, or `… ERROR`. clamd closes the connection on an over-long stream while the client is still sending, so the client reads the reply after a failed send. Any `ERROR` reply other than the size limit, and a `zVERSION` reply it cannot parse, mean `clamav.unavailable`: with no engine (a failed reload), clamd 1.4.5 still answers `zPING` with `PONG`, answers every scan with `… ERROR` and `zVERSION` with `ClamAV 1.4.5/4294967295/invalid timestam`, so `zPING` alone is no health signal. Reply formats measured in P0 (to-verify #81). ~150 lines, no package |
 | What is scanned | every upload and every crawled or listed non-HTML/non-text file (PDF, Office, images) before it is stored as document content or sent to the parser. Fetched HTML, text and CSV, parsed in-process, are not scanned |
-| Streaming | the body (encrypted for `internal`; `public` blobs are not envelope-encrypted) is written to a **local** temp file (`/tmp` tmpfs or a scratch volume, ≤ 60 MB) while hashing, streamed to clamd, and if clean stored with one `IBlobStore.PutAsync` to its content-addressed key (write-once: an existing key is not written again): no `tmp/` object and no rename, which S3 lacks ([`../performance-pass.md`](../performance-pass.md) §3.13); no 50 MB buffers in memory; the local file is deleted in `finally`. Uploads are already blobs (`uploads/…`) and are scanned by the worker reading them |
+| Streaming | the body (encrypted for `internal`; `public` blobs are not envelope-encrypted) is written to a **local** temp file (`/tmp` tmpfs or a scratch volume, ≤ 60 MB) while hashing, streamed to clamd, and if clean stored with one `IBlobStore.PutAsync` to its content-addressed key (write-once: an existing key is not written again): no `tmp/` object and no rename, which S3 lacks ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.13); no 50 MB buffers in memory; the local file is deleted in `finally`. Uploads are already blobs (`uploads/…`) and are scanned by the worker reading them |
 | Limits | `StreamMaxLength 60M`, `MaxFileSize 60M`, `MaxScanSize 200M`, `AlertExceedsMax yes` (repo-and-deployment §5.5, `images/clamav/clamd.conf`); a size-limit reply (`INSTREAM size limit exceeded. ERROR`) and a `Heuristics.Limits.Exceeded.<limit> FOUND` reply → `too-large` `clamav.limit`, never "clean" and never `malware` |
 | Timeouts | connect 5 s, scan 120 s; on timeout transient with attempt, reason `clamav.timeout` |
 | Signature freshness | `zVERSION` → `ClamAV <engine>/<db version>/<db date>` (the daily database's build date in C `asctime` form without a time zone, e.g. `ClamAV 1.4.5/28169/Fri Oct 30 06:26:48 2026`; just `ClamAV <engine>` when only a custom database is loaded), read every 10 minutes: > 48 h old → health `degraded`, > 7 days → `unhealthy` and **no new files** (repo-and-deployment §5.5); `rag.clamav.signature_age_hours` gauge. An undated reply (custom database only) → health `degraded`, scans continue (to-verify #81) |
@@ -1066,11 +1066,11 @@ simplification-pass form; items marked **(SP)** are new with this rewrite and st
 | `platform/data-model.md` §2.1, §4.2, §9 | `Runs.Phase`, `Report`, `SettingsHashes`; `Trigger` adds `config-change`, `notification` (P2); `Settings`: `DeletionGuardMinCount` 5, `DeletionGuardMaxCount` 500, `Crawl jsonb` (§6.3 budgets, overrides, blocked hosts, ports, freshness 12 h, window, limits, caps, redirects, identity rules version), `QuarantineRetentionDays` 30; dedup keys `fetch:{level}:{identityHash}`, `sync-upload:{batchId}`. **(SP)** `Settings.Crawl.IncompleteRunsAlert` 3; raw blobs content-addressed `raw/{level}/{contentHash}` (+ `.links.json.gz`; `internal`: wrapped key in the blob header, no per-upload or per-document keys); the upload blob is the document's raw content; no `:r` suffix, no child raw blobs |
 | `ingestion-worker/design-engine.md` §9–§10 | `sync` phases and checkpoint reference; URL-list and crawl items become claims released by the releaser; reconcile phase and `awaiting-deletion-confirmation`. **(SP)** fetch stages `http-fetch`, `crawl`, `upload` only; `preview` kinds `preflight`, `site-profile`; `command` kinds `approve-site-profile`, `reject-site-profile`, `edit-site-profile`, `rollback-site-profile`; connectors give each source's document its real outcome (fact `fetch.shared`, no `shared` outcome needed) |
 | `ingestion-worker/design-processing.md` **(SP)** | HTML extraction applies the host's site profile (main root, boilerplate, link blocks, breadcrumb, date pattern) in place of `cleanupRules: learned`; breadcrumb into the chunk prefix; email and child documents (§3.2) to P2 |
-| `ingestion-worker/plan.md` §3, §8 | final-URL identity; deletion guard min/max counts and exempt reasons. **(SP)** identity per source and upload slot; verified canonical folding and identity rules; site profiles; renderer P2 conditional; upload types per §9.2 |
+| `archive/area-plans/ingestion-worker.md` §3, §8 | final-URL identity; deletion guard min/max counts and exempt reasons. **(SP)** identity per source and upload slot; verified canonical folding and identity rules; site profiles; renderer P2 conditional; upload types per §9.2 |
 | `platform/repo-and-deployment.md` | ClamAV freshness via `zVERSION`; `UME_RAG_CRAWL_ALLOW` feeds `Crawl__AllowedPrivateRanges`; egress canary; metrics of §16; trace filter removing `url.full`/`server.address`. **(SP)** no `rag-renderer` in P1; Redis crawl lease P2; upload backup copy within 15 minutes |
 | `identity/design.md` §10 | attributes of 5101 (§7) and 5102 (§11); SIEM alert on any 5102. **(SP)** the 5101 `Purpose = Render` alert moves to P2 |
-| `platform/plan.md` §8 | quarantine 30 days (confirm); upload blobs purged 14 days after deletion or replacement |
-| `admin/plan.md` §4 | preflight results, impact count before scope/identity changes, crawl report (§5.5), upload list, quarantine list, deletion confirmation (§13.5), held documents; municipal hosts, host overrides, blocked hosts. **(SP)** no crawl hierarchy tree or two-variant warning; site profile preview in the source form, profile versions, proposals and rollback; upload replace; incomplete-traversal alert |
+| `archive/area-plans/platform.md` §8 | quarantine 30 days (confirm); upload blobs purged 14 days after deletion or replacement |
+| `archive/area-plans/admin.md` §4 | preflight results, impact count before scope/identity changes, crawl report (§5.5), upload list, quarantine list, deletion confirmation (§13.5), held documents; municipal hosts, host overrides, blocked hosts. **(SP)** no crawl hierarchy tree or two-variant warning; site profile preview in the source form, profile versions, proposals and rollback; upload replace; incomplete-traversal alert |
 | `knowledge-api` | upload citations use the document's `DisplayName` **(SP: no "Bilaga … i …" in P1)**; consider de-duplicating chunks by `TextHash` within a collection (§3.1) |
 | `postponed-decisions.md` | the crawler about page (answered 10) needs an owner and URL; SharePoint ACL mirroring if §21 Q2 is answered "later". **(SP)** Z1 joined by legacy Office, RTF and email with child documents |
 | `01-general-idea.md` §10 | "Connectors (step 6b)" row: final-URL identity, canonical trusted only when verified, claims + releaser, site profiles, guard with reconcile phase |
@@ -1126,7 +1126,7 @@ max 500 (§13.2); holds after rejection (§13.3).
 
 ## 23. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md):
+Per [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md):
 
 | Item | Where it went |
 |---|---|
@@ -1145,7 +1145,7 @@ Per [`../simplification-pass.md`](../simplification-pass.md):
 
 ## 24. Deferred or removed (weakness review)
 
-Per [weakness review §1](../weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
+Per [weakness review §1](../archive/passes/weakness-review.md#1-p1-builds-a-platform-before-anyone-sees-one-good-answer):
 
 | Item | Where it went |
 |---|---|

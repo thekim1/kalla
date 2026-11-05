@@ -109,7 +109,7 @@ Ume.Rag is licensed under **EUPL-1.2** (its `LICENSE`, PR #65) and copies gatewa
 
 ## Reporting back
 
-The RAG main session tracks this as an external dependency of its P1 plan (`plans/p1/`). When release 1 is tagged,
+The RAG main session tracks this as an external dependency of its P1 plan (`plans/archive/p1/`). When release 1 is tagged,
 and when the Keycloak project is ready, tell the user, or open an issue labelled `main` in
 github.com/thekim1/ume-rag-platform, with the tag or commit and anything that differs from
 `gateway-changes/design.md`.

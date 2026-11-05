@@ -21,7 +21,7 @@ set, the pilot member, the test host) come as one block at the end. Built so far
 
 Next: the gateway client, the admin set-up endpoints, the chat API for Open WebUI and the Keycloak realm additions.
 Overview for stakeholders (Swedish): [`docs/phase1-guide.html`](docs/phase1-guide.html). Progress:
-[`plans/progress.md`](plans/progress.md).
+[`plans/archive/progress.md`](plans/archive/progress.md).
 
 ## Requirements
 

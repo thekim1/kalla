@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pilot stack checks (plans/p1b/README.md §3 item 17; plans/platform/repo-and-deployment.md §6.2; chat-api/design.md
+# Pilot stack checks (plans/archive/p1b/README.md §3 item 17; plans/platform/repo-and-deployment.md §6.2; chat-api/design.md
 # §4.3, §14.2), offline with `docker compose config` against placeholder settings:
 #
 #   - the base files (compose.prod.yaml + compose.ingestion.yaml) keep every cpus cap at 2 or less (decisions table,

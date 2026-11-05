@@ -15,7 +15,7 @@ first production crawl (the file can change).
 ## Still open for U1
 
 - **The page's URL and owner** (web editors), for example `https://www.umea.se/om-webbplatsen/umeakommunbot`. The user
-  agent then becomes `UmeaKommunBot/1.0 (+<that URL>)` (`ingestion-worker/plan.md` §10).
+  agent then becomes `UmeaKommunBot/1.0 (+<that URL>)` (`archive/area-plans/ingestion-worker.md` §10).
 - **Contact address** for site owners (a function mailbox, not a person).
 - Agreement that the night window and rates below are acceptable to the web team (connectors design §6.3, §6.5).
 

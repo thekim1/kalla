@@ -31,8 +31,8 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - **Item 39 built** (#369): a new assistant's draft starts from `Settings.Chat.defaultSystemPrompt` (a citizen-service
   text in code; paste the `turkos` prompt there if wanted); model and query settings under a collapsed *Advanced*;
   "Open in <client>" from the client's `PortalUrl`.
-- **Stream B:** P1b code items done except the open boxes in `progress-b.md` (live walks of 11/12, NVDA pass, item 36's
-  E2E box on the first green `e2e` run, pin review). Next for B: #363 point 1 (`GatewayModels.ModelKind`, design
+- **Stream B:** P1b code items done; what is left is in `plans/work/stream-b.md` (B-1 `ModelKind`, B-2 #374, records,
+  NVDA pass, item 36's E2E step on the first green `e2e` run, pin review). Next for B: #363 point 1 (`GatewayModels.ModelKind`, design
   `5f8f8c1`) and #374. Item 14 (browser tests, L7) was done by the main session (#362, #364).
 - **Topics, in one line** (user asked): one owner crawls umea.se once and tags it by path; each assistant links it with
   only the topics it needs; topics narrow search, they are not access control. Uploads have no `pathRules`, so no topics
@@ -75,7 +75,7 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - **General knowledge per assistant** with the four levels of #356 (Decisions row; replaces the same-day
   `grounding` `strict`/`balanced`/`open` of #355). `public` stays `off`.
 - **Item 40 first** in stream B's queue (POC); another agent runs stream B from the new prompt.
-- Housekeeping: #314, #300, #210 closed; `plans/progress.md` P1b lines annotated with what is code-done.
+- Housekeeping: #314, #300, #210 closed; `plans/archive/progress.md` P1b lines annotated with what is code-done.
 
 ## Decided in session 21 (user, 2026-11-05)
 
@@ -105,16 +105,16 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
   `DatabaseRoleTests`.
 - **Logins:** `~/ume-rag-demo-login.txt` (mode 600; the Open WebUI URL in it is stale: use 7410). Never put passwords
   in a chat.
-- **Draft gold sets:** `~/ume-rag-gold-draft-{questions,answers}.csv` (40) and `plans/p1/gold-set/` (199 rows).
+- **Draft gold sets:** `~/ume-rag-gold-draft-{questions,answers}.csv` (40) and `plans/gold-set/` (199 rows).
 - No more crawling at this stage (user). A source's scope change re-syncs it; cancel with `POST /api/runs/{id}/cancel`.
 
 ## Reading order
 
 1. `01-general-idea.md` §10 **Decisions table** (rows `current` bind).
-2. `plans/p1b/README.md` (items 1–40, hand-offs L1–L14), `plans/p1b/progress-{a,b}.md`. The open boxes left in
-   `plans/progress.md` and `plans/p1/progress-a.md` are live or user items (checked session 20).
-3. `plans/admin/organisation-proposal.md` (adopted); the detail documents (`plans/*/design*.md`; map in
-   `plans/README.md`). The passes don't bind.
+2. `plans/roadmap.md` (one page: done, now, waiting on people, P2/P3) and `plans/work/` (the queues of stream A,
+   stream B and the main session). Plans were condensed in session 21: phase plans, passes and area plans are in
+   `plans/archive/` (history only).
+3. The design for the area at hand (map in `plans/README.md`).
 
 ## How we work (user preferences, binding)
 

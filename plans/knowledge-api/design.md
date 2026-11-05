@@ -1,6 +1,6 @@
 # Knowledge API: detailed design
 
-Detail step 7 of the Ume.Rag design. Details [`plan.md`](plan.md) (binding, incl. its answered questions 1–3 and §20
+Detail step 7 of the Ume.Rag design. Details [`../archive/area-plans/knowledge-api.md`](../archive/area-plans/knowledge-api.md) (binding, incl. its answered questions 1–3 and §20
 here) and the Decisions table in [`../../01-general-idea.md`](../../01-general-idea.md) §10. Consumes, without
 redesigning: the `content` tables, `SearchText`/`SearchVector`, indexes, outbox and Redis rules of
 [`../platform/data-model.md`](../platform/data-model.md) (§2.2, §3, §5, §11); the chunk rows, `Ume.Rag.Retrieval` and
@@ -747,7 +747,7 @@ order: score desc, distance asc (nulls last), chunk Id asc
   `demote` is applied in retrieval (`DemoteAdjuster`) to `Documents.Url` (#102); on umea.se it matches path-form patterns because the crawl stores and fetches `FetchUrl ?? Url` as the document URL.
 - Both multipliers apply after fusion in every mode and before dedup and the per-document cap; they never change
   coverage (§7 uses distances and keyword scores). A query over several collections uses each chunk's own
-  collection `recency` (reasoning for both: [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)).
+  collection `recency` (reasoning for both: [weakness review §3](../archive/passes/weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)).
 - **Modes**: `vector` = vector list only, order by distance; `keyword` = keyword list only, order by `ts_rank_cd`
   (in both, `rrf` is the one list's term, so without multipliers the order is unchanged); `hybrid` as above. Candidate depth 100 per list (`candidates`, 20–200).
 - **Several profiles** (P3 exception during an embedding-profile migration): each profile contributes one vector list
@@ -758,7 +758,7 @@ order: score desc, distance asc (nulls last), chunk Id asc
 | Setting | Value | Why |
 |---|---|---|
 | Data source | one `NpgsqlDataSource` with `UseVector()` (`Pgvector` 0.3.2), `Maximum Pool Size` **12** per `rag-api` instance (starting value measured in P0), `Max Auto Prepare` 64, `Auto Prepare Min Usages` 2, no `Multiplexing`; multi-statement round trips as one `NpgsqlBatch` (§6.3) | retrieval statements are prepared per connection after first use |
-| Concurrency | `Retrieval:MaxConcurrentSearches` per instance, default **4** = ⌊(pool − 3) ÷ 2⌋: a search may hold two connections (K and V overlap), and 3 stay for chat writes and the stats flush; wait ≤ 200 ms for a slot or a connection, then 503 `search_unavailable`; the value is validated at start-up and measured in P0; more chat throughput comes from more instances, never from a bigger pool (reasoning: [`../performance-pass.md`](../performance-pass.md) §3.1) | retrieval can never take the whole pool from chat writes and the stats flush (R1) |
+| Concurrency | `Retrieval:MaxConcurrentSearches` per instance, default **4** = ⌊(pool − 3) ÷ 2⌋: a search may hold two connections (K and V overlap), and 3 stay for chat writes and the stats flush; wait ≤ 200 ms for a slot or a connection, then 503 `search_unavailable`; the value is validated at start-up and measured in P0; more chat throughput comes from more instances, never from a bigger pool (reasoning: [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.1) | retrieval can never take the whole pool from chat writes and the stats flush (R1) |
 | Read replica | **Later (P3), by trigger:** optional `ConnectionStrings__ragdb-read` on the streaming standby (`hot_standby_feedback = on`, `max_standby_streaming_delay = 30s`, repo-and-deployment §7.4), set only when primary CPU in office hours exceeds 70 % with retrieval over half of it, or retrieval p95 exceeds 250 ms during ingestion: K, V, H+D and the evaluator read from it (a lag of seconds only delays a publish swap); writes (stats flush, writer) stay on the primary. The chat path keeps no session state, so instances need no sticky sessions | spreads retrieval load off the primary |
 | Timeout | `CommandTimeout` 2 s per statement (client cancel); role `statement_timeout` 5 s backstop (data-model §1.1) | a slow plan fails fast instead of queueing |
 | Transactions | none (autocommit, read-only role grants) | fewer round trips |
@@ -798,7 +798,7 @@ order, `degraded: "rerank_unavailable"`.
   `human` evaluation questions, answerable **and** unanswerable together (for the pilot: the gold set, processing
   §13.4). The evaluation report proposes, per side (the histogram of both groups is P2, admin design §16), the value
   that **separates them best** (fewest misclassified questions), not a percentile of answerable questions only; an
-  editor saves it (it does not change ranking) (reasoning: [weakness review §2](../weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)). Generated questions, all answerable by
+  editor saves it (it does not change ranking) (reasoning: [weakness review §2](../archive/passes/weakness-review.md#2-nothing-proves-the-answers-are-good-and-not-found-is-effectively-off-at-launch)). Generated questions, all answerable by
   construction, are not used for the proposal. On real traffic, coverage outcomes and the margin `best(C) −
   threshold` are metrics, and a per-retrieval log event carries collection id, best distance, threshold, best keyword
   score and status, **never the query** (§15). P2 adds generated off-topic control questions next to the human ones.
@@ -1189,10 +1189,10 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 | `platform/repo-and-deployment.md` §3, §6.3, §7.1 | `rag-api` mounts the blob container **read-only** and reads the `rag-blob-<level>` master key files of non-`public` levels; secrets `Security__DownloadGrantKeys__<kid>`, `Security__CacheKeyPepper` made by `init-deployment.sh`; settings `Knowledge:*` (`OpenToClientKinds`, `PublicBaseUrl`, `DownloadGrantLifetime`, `DownloadsPerMinutePerAddress`, `PublishApiReference`) and `Retrieval:*` (`EmbeddingTimeout`, `MaxConcurrentSearches` 4, `ExpandNeighbourChunks`); data source pool 12 per instance |
 | `platform/repo-and-deployment.md` §4.3 FakeGateway, §9 | a fake rerank endpoint (P1, for the `IReranker` seam); metrics of §15 and dashboard panels |
 | `platform/repo-and-deployment.md` §4.4 / gateway setup notes | the `OnPrem`-only delegating key used for query embeddings has `RequireMaxResidency`, `ApplyTeamPolicy` false and `PiiPolicy` `Off` or `Allow` (§5.2) |
-| `gateway-changes/plan.md`, `design.md` | P2 item: a rerank endpoint serving `bge-reranker-v2-m3` on-prem (contract to define), honouring `x-ume-max-residency` |
+| `archive/area-plans/gateway-changes.md`, `design.md` | P2 item: a rerank endpoint serving `bge-reranker-v2-m3` on-prem (contract to define), honouring `x-ume-max-residency` |
 | (capacity) | retrieval concurrency 4 on a pool of 12 per instance (⌊(pool − 3) ÷ 2⌋); `hnsw.max_scan_tuples` is a role default (100,000), no per-query `SET LOCAL` from selectivity; `max_connections = 100` (`deploy/postgres/postgresql.conf`) |
-| `tools/plan.md` §4, `tools/design.md` §7 | `search_knowledge` schema and output shaping of §14; `/mcp` early in P2 with ceiling `public`; `get_document` and `document://` P3; MCP download grants 1 hour |
-| `admin/plan.md` | test panel runs the knowledge core in the admin process (`KnowledgeService` in `Ume.Rag.Answering` over `Ume.Rag.Retrieval`, incl. unpublished collections), so the admin host needs `Gateway:*` for query embeddings; collection page: `RetrievalSettings` form (§12.1), coverage-threshold proposal from the evaluation set (§7) |
+| `archive/area-plans/tools.md` §4, `tools/design.md` §7 | `search_knowledge` schema and output shaping of §14; `/mcp` early in P2 with ceiling `public`; `get_document` and `document://` P3; MCP download grants 1 hour |
+| `archive/area-plans/admin.md` | test panel runs the knowledge core in the admin process (`KnowledgeService` in `Ume.Rag.Answering` over `Ume.Rag.Retrieval`, incl. unpublished collections), so the admin host needs `Gateway:*` for query embeddings; collection page: `RetrievalSettings` form (§12.1), coverage-threshold proposal from the evaluation set (§7) |
 
 ## 19. Questions
 
@@ -1206,7 +1206,7 @@ assertion in CI, the latency targets are reported by the weekly `perf.yml`.
 3. **No query rewriting** in the knowledge API in P1: the query is used as given; condense stays a chat-API step;
    multi-query/HyDE only in P3 behind evaluation (§5.1, §17).
 4. **No recency boost**: relevance only; callers may filter by `modified_after`; citations carry the modified date;
-   revisit with evaluation (§3.1, §10.1). **Replaced** (reasoning: [weakness review §3](../weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)):
+   revisit with evaluation (§3.1, §10.1). **Replaced** (reasoning: [weakness review §3](../archive/passes/weakness-review.md#3-outdated-or-removed-content-keeps-being-answered)):
    per-collection age decay (`RetrievalSettings.recency`, off by default, on for PDFs in the `website` template) and
    source `demote` patterns after fusion (§6.5); the `modified_after` filter and the modified date stay.
 
@@ -1289,7 +1289,7 @@ Removed or deferred, with where each went:
 
 ## 22. Deferred or removed (weakness review)
 
-Removed (reasoning: [weakness review §5](../weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)):
+Removed (reasoning: [weakness review §5](../archive/passes/weakness-review.md#5-the-pilots-critical-path-runs-through-things-the-team-does-not-control)):
 
 | Item | Where it went |
 |---|---|

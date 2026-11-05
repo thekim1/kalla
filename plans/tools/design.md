@@ -4,8 +4,8 @@
 `GatewayModels` sync (admin design §4.10), and its assistants have instructions and directly linked collections, no
 skills or tools.
 
-Detail step 9 of the Ume.Rag design (reasoning for its P2 shape: [`../simplification-pass.md`](../simplification-pass.md)
-§10, §15). Details [`plan.md`](plan.md) (binding, incl. its answered questions 2–4
+Detail step 9 of the Ume.Rag design (reasoning for its P2 shape: [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md)
+§10, §15). Details [`../archive/area-plans/tools.md`](../archive/area-plans/tools.md) (binding, incl. its answered questions 2–4
 and the recommendation of question 1, and §14 here) and the Decisions table in
 [`../../01-general-idea.md`](../../01-general-idea.md) §10. All of it is **P2 scope** unless marked (OBO, write tools,
 external servers P3). Consumes, without redesigning: `IAnswerStrategy`, `AnswerEvent.ToolCall`, the request path, token
@@ -16,7 +16,7 @@ writer and observability of [`../chat-api/design.md`](../chat-api/design.md) (§
 `IAccessPolicy` (step 12), keys, OAuth, MCP protected-resource metadata, OBO and security events of
 [`../identity/design.md`](../identity/design.md) (§3, §4, §6–§10); the `config`, `chat` and `audit` tables, outbox,
 encryption and Redis rules of [`../platform/data-model.md`](../platform/data-model.md); the residency matrix and level
-policies of [`../platform/plan.md`](../platform/plan.md) (§6, §8a); projects, networks, secrets and observability of
+policies of [`../archive/area-plans/platform.md`](../archive/area-plans/platform.md) (§6, §8a); projects, networks, secrets and observability of
 [`../platform/repo-and-deployment.md`](../platform/repo-and-deployment.md); evaluation sets of
 [`../ingestion-worker/design-processing.md`](../ingestion-worker/design-processing.md) (§13–§14); postponed items M1,
 O2, E1 of [`../postponed-decisions.md`](../postponed-decisions.md). Nothing is implemented. What it needs from other
@@ -1161,8 +1161,8 @@ streams).
 | `01-general-idea.md` §10 | row "Tools (step 9)" restated: in-process hub with bulkheads, `hosted` only, one server `ume-mcp-kommun`, served pointer + rollback, static skills ≤ ~4k tokens, advisory skill gate end to end, share lists, lethal trifecta as hard refusal, early `/mcp` with two tools |
 | `postponed-decisions.md` M1 | still open: Entra CIMD, RFC 8414 vs OIDC discovery, RFC 8707 `resource`, pre-authorisable client ids, client support for resources/prompts (P3), SDK recheck at P2 start (§15) |
 | `postponed-decisions.md` O2 | stopgap: `ume-mcp-kommun` with sample tariffs (§8.5) |
-| `platform/plan.md` §1, §2 | `Ume.Rag.Tools` is a library (in-process hub in the chat role, also used by the admin; never the worker); no `rag-tools` container in P2; zone `tools-hosted` for hosted MCP servers |
-| `platform/plan.md` §6 | tool servers: clearance and result level; the agent run's effective level fixed at its start |
+| `archive/area-plans/platform.md` §1, §2 | `Ume.Rag.Tools` is a library (in-process hub in the chat role, also used by the admin; never the worker); no `rag-tools` container in P2; zone `tools-hosted` for hosted MCP servers |
+| `archive/area-plans/platform.md` §6 | tool servers: clearance and result level; the agent run's effective level fixed at its start |
 | `platform/data-model.md` §1.2 | no `ume_rag_tools` role in P2; `api`: S on `SkillVersionFiles`, `SkillShares`, `ToolDepartmentGrants`, `GatewayModels`, `ToolServers` (no encrypted credential column in P2), I on `audit."ToolCallEvents"`, `audit."ToolDefinitionObservations"`; `worker`: no skill or tool tables; `admin`: S I U D on the new config tables, I on `audit."ToolCallEvents"`, S I on `ToolDefinitionObservations` |
 | `platform/data-model.md` §2.1 `Skills`, `SkillVersions` | `Slug` per spec `name` (ASCII, ≤ 64); add `Name`, `CreatedBy`; versions add `License`, `Metadata jsonb`, `ContentHash bytea`, `CreatedBy`, `PublishedBy`, `GateRunId`; `State` `draft`/`published`/`retired` (no `gating`, `gate-failed`); drop `ReferenceBlobPrefix` |
 | `platform/data-model.md` §2.1 new | `SkillVersionFiles` (§3.3); `SkillShares` (`SkillId`, `DepartmentId`, `SharedBy`, `SharedAt`); `ToolDepartmentGrants`; no `SkillAudiences` in P2 |
@@ -1177,13 +1177,13 @@ streams).
 | `identity/design.md` §3, §4.3, §4.7, §8 | no `rag-api`/`rag-admin` → `rag-tools` callers in P2; step 12 = §5.1; effective level fixed at start; `/mcp` only (no per-skill endpoints in P2) |
 | `identity/design.md` §10 | 5002 reasons of §9.3; 5012–5015 emitted by api and admin; SIEM rules |
 | `chat-api/design.md` §2.2, §7.2–§7.4 | agent effective level fixed at start; neutralised tags of §3.8; RAG skills as `<skill_content>` ≤ 6,000 tokens; lethal trifecta → tools §5.4 (hard refusal); agent prefetch of `search_knowledge` |
-| `chat-api/plan.md` §3 | agent: limits 8 / 60 s / $0.05, prefetch with the user question, static skills ≤ ~4k tokens |
+| `archive/area-plans/chat-api.md` §3 | agent: limits 8 / 60 s / $0.05, prefetch with the user question, static skills ≤ ~4k tokens |
 | `knowledge-api/design.md` §2.2, §4.2, §14 | no `RetrievalRequest.SkillVersionIds`: an assistant searches only its published version's collections, whatever its skills; `/mcp` = `search_knowledge` + `list_collections` only, no `document://`, `get_document`, `ask_assistant` or skill endpoints in P2 |
 | `ingestion-worker/design-processing.md` §13.4, §14 | skill gate = end-to-end run on linked models against read-only tools, advisory (no floor, no relative rule, no weekly re-check); `Settings.Tools.SkillGateModel` for first versions |
 | `ingestion-worker/design-engine.md` | no `eval` kind `skill-gate` (the gate runs in `rag-admin`); the worker is not on network `mcp` and holds no tool certificate |
 | `platform/repo-and-deployment.md` §1, §2.2, §3 | `Ume.Rag.Tools` as a library; no `tools/Ume.Rag.McpGen`, no `Microsoft.OpenApi`; `templates/mcp-server/`, `deploy/compose.mcp.yaml`; settings `Tools:*` (`DriftCheckInterval`, `MaxResultChars`, `MaxArgumentBytes`, `MaxPooledClients`, `AllowWrite=false`), `Agent:*`, `Mcp:CallsPerMinutePerUser`; no `ToolHub:*` settings in P2 |
 | `platform/repo-and-deployment.md` §4, §6 | AppHost adds `ume-mcp-kommun`; networks `mcp` (members `rag-api`, `rag-admin`, servers), `mcp-<name>-egress`; no `tools`, `tools-egress` networks in P2; secrets: `ume-rag-tools-entra.pfx` and `Security__ToolAuditKey` for `rag-api` and `rag-admin` |
-| `admin/plan.md`, `admin/design.md` | done in the same pass (Skills: served pointer, share list, gate report and serve; Tool servers: pre-registration, approvals, grants, drift; no request flow); §15: V3, V4, V11, V12, V14, V18 without skill collections and with the derived mode, "Använder verktyg" |
+| `archive/area-plans/admin.md`, `admin/design.md` | done in the same pass (Skills: served pointer, share list, gate report and serve; Tool servers: pre-registration, approvals, grants, drift; no request flow); §15: V3, V4, V11, V12, V14, V18 without skill collections and with the derived mode, "Använder verktyg" |
 | `gateway-changes/design.md` §7.3 | optional item: `features` (incl. `tools`) next to `contextWindow` on `/v1/catalog/models` |
 
 ## 14. Questions
@@ -1242,7 +1242,7 @@ labelling municipal tool results `trust="municipal"` (§4.8).
 
 ## 16. Deferred or removed (simplification pass)
 
-Per [`../simplification-pass.md`](../simplification-pass.md) §10, §14, §15:
+Per [`../archive/passes/simplification-pass.md`](../archive/passes/simplification-pass.md) §10, §14, §15:
 
 | Removed or deferred | Where it went |
 |---|---|
