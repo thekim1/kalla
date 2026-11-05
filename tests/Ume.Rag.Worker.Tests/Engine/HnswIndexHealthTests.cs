@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -67,7 +68,7 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
 
         var recall = await Health().MeasureAsync(profile, Dimensions, EveryCollection, Ct);
 
-        recall.ShouldBe(new HnswRecall(1, 20, 1.0));
+        Numbers(recall).ShouldBe((1, 20, 1.0));
     }
 
     [Fact]
@@ -79,7 +80,7 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
 
         var recall = await Health().MeasureAsync(profile, Dimensions, EveryCollection with { ExactScanMaxChunks = 12 }, Ct);
 
-        recall.ShouldBe(new HnswRecall(0, 0, null), "a collection of at most exactScanMaxChunks chunks is searched exactly");
+        Numbers(recall).ShouldBe((0, 0, null), "a collection of at most exactScanMaxChunks chunks is searched exactly");
     }
 
     [Fact]
@@ -96,7 +97,7 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
         outcome.IndexName.ShouldBe(HnswIndexHealth.IndexName(profile));
         outcome.Before.Recall.ShouldBe(1.0);
         outcome.Rebuilt.ShouldBeTrue();
-        outcome.After.ShouldBe(new HnswRecall(1, 20, 1.0));
+        Numbers(outcome.After!).ShouldBe((1, 20, 1.0));
         (await FileNodeAsync(profile)).ShouldNotBe(before, "REINDEX writes the index anew");
         (await Sql.ScalarAsync<bool>(database.Connection(null), """
             SELECT i.indisvalid FROM pg_index i WHERE i.indexrelid = to_regclass($1)
@@ -116,6 +117,118 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
         outcome.ShouldNotBeNull();
         outcome.Rebuilt.ShouldBeFalse();
         (await FileNodeAsync(profile)).ShouldBe(before);
+    }
+
+    /// <summary>
+    /// B-9 (Decisions "M-2 open design calls"): three collections of 6 chunks are each searched exactly (at most
+    /// exactScanMaxChunks 10), but an assistant linking all three searches 18 chunks with HNSW, so that scope is sampled:
+    /// 18 queries, drawn from all three collections.
+    /// </summary>
+    [Fact]
+    public async Task Small_collections_an_assistant_links_together_are_sampled_as_one_hnsw_scope()
+    {
+        var profile = await _writer.AddEmbeddingProfileAsync(Dimensions, Ct);
+        var seeds = new List<SourceSeed>();
+        for (var i = 0; i < 3; i++)
+        {
+            var seed = await EngineKit.SeedUrlListAsync(database, []);
+            await DocumentsAsync(seed, profile, 6);
+            seeds.Add(seed);
+        }
+
+        var settings = EveryCollection with { ExactScanMaxChunks = 10 };
+        Numbers(await Health().MeasureAsync(profile, Dimensions, settings, Ct)).ShouldBe((0, 0, null), "no collection alone is above the limit, no assistant links them");
+
+        var assistant = await AssistantAsync([.. seeds.Select(s => (s.CollectionId, Array.Empty<string>()))]);
+        var recall = await Health().MeasureAsync(profile, Dimensions, settings, Ct);
+
+        Numbers(recall).ShouldBe((1, 18, 1.0), "the linked scope has 18 chunks, every one a query (sample 20)");
+        var worst = recall.Worst.ShouldNotBeNull();
+        worst.Scope.CollectionIds.ShouldBe([.. seeds.Select(s => s.CollectionId)], ignoreOrder: true);
+        worst.Scope.TopicLinks.ShouldBeEmpty();
+        worst.Scope.Assistants.ShouldBe([assistant]);
+        worst.Queries.ShouldBe(18);
+    }
+
+    [Fact]
+    public async Task An_assistant_scope_has_only_live_collections_of_its_profile_and_an_archived_assistant_none()
+    {
+        var profile = await _writer.AddEmbeddingProfileAsync(Dimensions, Ct);
+        var first = await EngineKit.SeedUrlListAsync(database, []);
+        var second = await EngineKit.SeedUrlListAsync(database, []);
+        var unpublished = await EngineKit.SeedUrlListAsync(database, []);
+        await DocumentsAsync(first, profile, 6);
+        await DocumentsAsync(second, profile, 6);
+        await DocumentsAsync(unpublished, profile, 6);
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Collections" SET "PublishedAt" = NULL WHERE "Id" = $1""", unpublished.CollectionId);
+        var settings = EveryCollection with { ExactScanMaxChunks = 11 };
+
+        var assistant = await AssistantAsync([(first.CollectionId, []), (unpublished.CollectionId, [])]);
+        (await Health().ScopesAsync(profile, settings, Ct)).ShouldBeEmpty("the unpublished collection is not searched, so the scope is 6 chunks");
+
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Assistants" SET "State" = 'archived' WHERE "Id" = $1""", assistant);
+        var archived = await AssistantAsync([(first.CollectionId, []), (second.CollectionId, [])]);
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Assistants" SET "State" = 'archived' WHERE "Id" = $1""", archived);
+        (await Health().ScopesAsync(profile, settings, Ct)).ShouldBeEmpty("an archived assistant is not searched");
+
+        var active = await AssistantAsync([(second.CollectionId, []), (first.CollectionId, [])]);
+        var twin = await AssistantAsync([(first.CollectionId, []), (second.CollectionId, [])]);
+        var scope = (await Health().ScopesAsync(profile, settings, Ct)).ShouldHaveSingleItem("the same collections from two assistants are one scope");
+        scope.CollectionIds.ShouldBe([first.CollectionId, second.CollectionId], ignoreOrder: true);
+        scope.Assistants.ShouldBe([active, twin], ignoreOrder: true);
+
+        await Sql.ExecuteAsync(database.Connection(null), """UPDATE config."Collections" SET "EmbeddingProfileId" = $2 WHERE "Id" = $1""",
+            second.CollectionId, await _writer.AddEmbeddingProfileAsync(Dimensions, Ct));
+        (await Health().ScopesAsync(profile, settings, Ct)).ShouldBeEmpty("the scope is the first live link's profile only (KnowledgeService §4.3)");
+    }
+
+    /// <summary>
+    /// A link with topics: only the collection's chunks with the tag are in the scope, and the sample and both top-10s are
+    /// filtered as statement V is. 6 of 10 chunks of the topic collection carry it, plus 6 of a whole collection: 12 queries.
+    /// </summary>
+    [Fact]
+    public async Task A_topic_link_limits_the_sample_and_the_search_to_its_tagged_chunks()
+    {
+        var profile = await _writer.AddEmbeddingProfileAsync(Dimensions, Ct);
+        var whole = await EngineKit.SeedUrlListAsync(database, []);
+        var topical = await EngineKit.SeedUrlListAsync(database, []);
+        await DocumentsAsync(whole, profile, 6);
+        await DocumentsAsync(topical, profile, 6, tags: ["bygglov"]);
+        await DocumentsAsync(topical, profile, 4, tags: ["skola"]);
+        var assistant = await AssistantAsync([(whole.CollectionId, []), (topical.CollectionId, ["bygglov"])]);
+
+        // Each collection alone (6, 10) is searched exactly; the linked scope is above 11 whether sized by whole
+        // collections (16) or by the topic's chunks (12, B-10).
+        var recall = await Health().MeasureAsync(profile, Dimensions, EveryCollection with { ExactScanMaxChunks = 11 }, Ct);
+
+        Numbers(recall).ShouldBe((1, 12, 1.0));
+        var scope = recall.Worst.ShouldNotBeNull().Scope;
+        scope.TopicLinks.ShouldBe([(topical.CollectionId, "bygglov")]);
+        scope.Assistants.ShouldBe([assistant]);
+    }
+
+    [Fact]
+    public async Task The_worst_scope_is_the_profiles_recall_and_each_scope_below_the_floor_is_logged_by_name()
+    {
+        var profile = await _writer.AddEmbeddingProfileAsync(Dimensions, Ct);
+        var first = await EngineKit.SeedUrlListAsync(database, []);
+        var second = await EngineKit.SeedUrlListAsync(database, []);
+        await DocumentsAsync(first, profile, 8);
+        await DocumentsAsync(second, profile, 8);
+        var assistant = await AssistantAsync([(first.CollectionId, []), (second.CollectionId, [])]);
+        var logs = new CapturingLoggerProvider();
+
+        var outcome = await Health(logs).CheckAsync(profile, Dimensions, EveryCollection with { RecallFloor = 1.01 }, Ct);
+
+        outcome.ShouldNotBeNull();
+        outcome.Before.Scopes.ShouldBe(3, "each collection alone and the assistant's two together");
+        outcome.Before.ByScope.Count.ShouldBe(3);
+        outcome.Before.Recall.ShouldBe(outcome.Before.ByScope.Min(s => s.Recall));
+        var failing = logs.Entries.Where(e => e.Level == LogLevel.Warning && e.Message.Contains("of the scope", StringComparison.Ordinal)).ToList();
+        failing.Count.ShouldBe(6, "three scopes below the floor, before and after the rebuild");
+        failing.ShouldContain(e => e.Message.Contains($"assistants {assistant:D}", StringComparison.Ordinal) &&
+                                   e.Message.Contains(first.CollectionId.ToString("D"), StringComparison.Ordinal) &&
+                                   e.Message.Contains(second.CollectionId.ToString("D"), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -340,13 +453,40 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
         })
         .Build();
 
-    private HnswIndexHealth Health() => new(_dataSource, database.Connection(RagDatabase.Worker), new HnswIndexMetrics(_metrics.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>()),
-        NullLogger<HnswIndexHealth>.Instance);
+    private HnswIndexHealth Health(CapturingLoggerProvider? logs = null) => new(_dataSource, database.Connection(RagDatabase.Worker),
+        new HnswIndexMetrics(_metrics.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>()),
+        logs is null ? NullLogger<HnswIndexHealth>.Instance : new LoggerFactory([logs]).CreateLogger<HnswIndexHealth>());
 
-    /// <summary><paramref name="count"/> live one-chunk documents of the seed's collection, with random embeddings of the profile.</summary>
-    private async Task DocumentsAsync(SourceSeed seed, Guid profile, int count)
+    private static (int Scopes, int Queries, double? Recall) Numbers(HnswRecall recall) => (recall.Scopes, recall.Queries, recall.Recall);
+
+    /// <summary>An active assistant whose published version links <paramref name="links"/> (collection, topics); returns its id.</summary>
+    private async Task<Guid> AssistantAsync(IReadOnlyList<(Guid CollectionId, string[] Tags)> links)
     {
-        var random = new Random(count);
+        var assistantId = Guid.CreateVersion7();
+        var versionId = Guid.CreateVersion7();
+        var json = JsonSerializer.Serialize(links.Select(l => new { collectionId = l.CollectionId, tags = l.Tags }));
+        await Sql.ExecuteAsync(database.Connection(null), $"""
+            BEGIN;
+            INSERT INTO config."Assistants" ("Id", "Slug", "Name", "DepartmentId", "Classification", "HistoryMode", "RetentionDays", "AllowedOrigins", "State", "UpdatedAt")
+            VALUES ('{assistantId}', 'hnsw-{assistantId:N}', 'Index', '{Guid.NewGuid()}', 'internal', 'none', 90, '{"{}"}', 'active', now());
+            INSERT INTO config."AssistantVersions" ("Id", "AssistantId", "Number", "State", "GatewayModel", "SystemPrompt", "QuerySteps", "NotFound", "CollectionLinks", "CreatedAt", "UpdatedAt", "PublishedBy", "PublishedAt")
+            VALUES ('{versionId}', '{assistantId}', 1, 'published', 'gpt-test', 'x', '{"{}"}', '{"{}"}', '{json}', now(), now(), 'test', now());
+            UPDATE config."Assistants" SET "PublishedVersionId" = '{versionId}' WHERE "Id" = '{assistantId}';
+            COMMIT;
+            """);
+        return assistantId;
+    }
+
+    /// <summary>
+    /// <paramref name="count"/> live one-chunk documents of the seed's collection, with random embeddings of the profile;
+    /// the collection is published on the profile (retrieval searches only live collections, of their own profile).
+    /// </summary>
+    private async Task DocumentsAsync(SourceSeed seed, Guid profile, int count, string[]? tags = null)
+    {
+        await Sql.ExecuteAsync(database.Connection(null), """
+            UPDATE config."Collections" SET "PublishedAt" = coalesce("PublishedAt", now()), "EmbeddingProfileId" = $2 WHERE "Id" = $1
+            """, seed.CollectionId, profile);
+        var random = new Random(BitConverter.ToInt32(seed.CollectionId.ToByteArray(), 12) ^ count); // distinct embeddings per collection
         for (var i = 0; i < count; i++)
         {
             var embedding = Enumerable.Range(0, Dimensions).Select(_ => (float)(random.NextDouble() * 2 - 1)).ToArray();
@@ -356,7 +496,7 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
                 EmbeddingProfileId = profile,
                 SourceId = seed.SourceId,
                 Classification = seed.Classification,
-            }, [new FixtureChunk($"Stycke {i} {Guid.NewGuid()}") { Embedding = embedding }], Ct);
+            }, [new FixtureChunk($"Stycke {i} {Guid.NewGuid()}") { Embedding = embedding, Tags = tags }], Ct);
         }
     }
 

@@ -67,7 +67,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "M-2 open design calls"; processing §9.4–§9.5.
 
-### [ ] B-9 Index health for multi-collection scopes (M-2)
+### [x] B-9 Index health for multi-collection scopes (M-2) (#388)
 - **Do:** sample every HNSW-searched scope an assistant link uses, including multi-collection ones; report the worst
   recall per profile and log the failing scope.
 - **Paths:** `src/Ume.Rag.Worker/Engine/HnswIndexHealth.cs`.
