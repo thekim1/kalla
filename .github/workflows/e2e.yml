@@ -1,11 +1,12 @@
 name: E2E
 # Browser tests (plans/platform/repo-and-deployment.md §8.2 e2e; gateway tests/e2e setup): the admin pilot journey with
 # mouse and keyboard only against a static fixture site, the accessibility spec and the role journeys, on the local
-# stack with its own test database and the FakeGateway (scripts/Start-E2E.ps1). Only from release.yml (Decisions "E2E
-# only on release (user, 2026-11-05)"): no pull request, no schedule, no dispatch; the run takes long and loads the
-# runner. The specs are stream B's (tests/e2e, P1b hand-off L7): until tests/e2e/package.json exists the job reports
+# stack with its own test database and the FakeGateway (scripts/Start-E2E.ps1). From release.yml and by hand from the
+# Actions tab (Decisions "E2E only on release or by hand (user, 2026-11-05)"): never on a pull request or push, no
+# schedule; the run takes long and loads the runner. The specs are stream B's (tests/e2e, P1b hand-off L7): until tests/e2e/package.json exists the job reports
 # that and passes without running anything.
 on:
+  workflow_dispatch:
   workflow_call:
 permissions:
   contents: read
