@@ -20,7 +20,8 @@ here.
 - **Item 40 is done:** chat and admin API in #358 (frames, `answered-general`, `GeneralAnswers`, V17, V36, test panel), the radio group and badge in #359.
 - **Item 35 is done** (#361): sharing, `view=`, topics, Map route, contact fields, V11 widened, V35, owner team defaulted.
 - **Item 36 is built** (#366): pages, picker, Map; its Done waits on the first green `e2e` run (stream A's item 15) for E2E step 14.
-- **Next: 39.**
+- **Item 39 is done** (#369), with #363 point 2 (the "Open in …" link).
+- **Next:** walk admin §5.4 locally to close items 11 and 12, and record #146; #363 point 1 (`GatewayModels.ModelKind`, design settled in `5f8f8c1`) is open for stream B.
 - Then walk admin §5.4 locally to close items 11 and 12, and record #146.
 - Merged without waiting for reviewers (user, 2026-11-02); problems go in a `stream-b` issue.
 
@@ -138,9 +139,9 @@ Refs: [admin §5.2–§5.5](../admin/design.md)
 
 ### 39. A new assistant starts from a default
 Refs: [admin §5.5.4](../admin/design.md), [P1b README item 39](README.md)
-- [ ] First draft gets `Settings.Chat.DefaultSystemPrompt` (seeded from the `turkos` prompt)
-- [ ] Draft tab: model and query settings in a collapsed "Advanced" section
-- [ ] **Done:** admin API test for the default prompt; vitest for "Advanced"
+- [x] First draft gets `Settings.Chat.DefaultSystemPrompt` (seeded from the `turkos` prompt) (#369; key `defaultSystemPrompt`, seeded with citizen-service instructions, the `turkos` text to be pasted in, see #369 deviation 1)
+- [x] Draft tab: model and query settings in a collapsed "Advanced" section (#369)
+- [x] **Done:** admin API test for the default prompt; vitest for "Advanced" (#369: `AssistantEndpointsTests.A_new_assistants_first_draft_starts_from_the_default_instructions`, `AssistantView.spec.ts`)
 
 ### 19. Code complete (your part)
 - [ ] Pin review: NuGet and npm pins under 7 days old reviewed; #113 recorded; realm callback for the Open WebUI pin (README §7 O8)
