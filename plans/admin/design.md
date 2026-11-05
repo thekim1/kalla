@@ -61,7 +61,7 @@ gateway counterpart.
 | 4 | Roles | **`rag-reviewer`** (answered 3): policies `Review`, `FeedbackComments`, `Read`. Feedback **comments**: `rag-reviewer` and `rag-department-admin`. **Full conversations: `rag-reviewer` only.** No administrative role implies conversation content (§3). Roles: **P1** realm roles `rag-*` on the shared Keycloak's client `ume-rag-admin`, audit actor `sub`; **P2** app roles on RAG's own Entra registration `ume-rag-admin`, actor `oid` (fallback `sub`) (identity §1.1, §1.6, 2026-10-31) |
 | 5 | Concurrency | Every editable aggregate carries `version` (Postgres `xmin`); a mismatch is 409 `concurrent_change` (§4.3) |
 | 6 | Write path | One transaction: **`SELECT … FOR UPDATE` on `config."ConfigVersion"` first** (serialises admin config writes) → cross-rules → entity change → outbox trigger (version bump) → audit row with that `ConfigVersion` → optional job rows; `pg_notify` at commit (§4.4) |
-| 7 | Validation | Field rules on request records; **cross-rules** in one `ConfigRules` service: **V1–V35 with V20 and V27 retired (33 rules)** (§4.6), run on save, on dependent changes and again before publish, under the version lock; CHECK violations (23514) answer 400 |
+| 7 | Validation | Field rules on request records; **cross-rules** in one `ConfigRules` service: **V1–V36 with V20 and V27 retired (34 rules)** (§4.6), run on save, on dependent changes and again before publish, under the version lock; CHECK violations (23514) answer 400 |
 | 8 | Jobs | The admin inserts `content."Jobs"` rows only (preview, sync, command, eval); every result is read from `Jobs.Result`, `Runs`, `EvaluationRuns` (§4.7) |
 | 9 | Pilot UI | P1 has **dedicated pages only for the department journey** (collection, source, preview, publish with the evaluation report, assistant, test panel, audience, feedback, limited review), built for non-specialists (answered 2): setup checklist, template parameters with defaults, preflight and preview before saving, impact before scope changes (§5.4) |
 | 10 | Pipelines | A pipeline is a **template + parameters**; the source form shows the template's parameters; pipeline editors edit parameters. No node editor, no canvas (dropped from the roadmap) (§6) |
@@ -483,7 +483,7 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 **Feedback, conversations, audit, overview** — §8, §9; `GET /api/overview` returns the attention items of §5.5.1 for
 the caller's scope.
 
-### 4.6 Cross-rules (V1–V35; V20 and V27 retired)
+### 4.6 Cross-rules (V1–V36; V20 and V27 retired)
 
 Run by `ConfigRules` under the `ConfigVersion` lock (§4.4) on save of the entity, on every change that can break a
 dependant (column *Re-checked when*), and again inside the publish transaction. A failing dependant lists every
@@ -512,7 +512,7 @@ kept so references stay stable.
 | V14 | assistant that uses tools (a linked skill's served version links a tool): `SupportsTools`, synced price; limits ≤ `AgentDefaults` unless `Admin`, always ≤ `AgentHardCaps` | `model_no_tools`, `price_unknown`, `limit_above_default`, `limit_above_cap` | publish; skill serve (it can switch an assistant to tools); settings change | tools §6.4–§6.5 |
 | V15 | not-found texts ≤ 1,000 characters each, ≤ 5 links, `https`, host matches `Settings.Chat.allowedLinkHosts` (an empty or missing list refuses every link) | `link_host_not_allowed` | publish; allow-list narrowed | chat §9.4, §10.1 |
 | V16 | `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–200 (the range retrieval accepts, `RetrievalSettings.Validated()`; there is no `efSearch`, knowledge §12.1), `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `coverageMinKeywordScore` null or > 0 (weakness review §2), `recency` null or `halfLifeDays` 30–3,650, `weight` 0–0.5, `kinds` non-empty subset of the document types (weakness review §3), `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows) | `retrieval_settings_invalid` | collection settings save | knowledge §12.1 |
-| V17 | `QuerySteps`: `retrieval.topK` 1–50, `history.maxMessages` 0–20 and `history.maxTokens` ≤ 8,000, `answer.maxOutputTokens` 64–4,096, `answer.temperature` 0–1, `answer.language` `auto`/`sv`; not built yet: `contextTokens` ≤ the model's `ContextWindow` when known, and the condense model within the V32 ceiling | `query_steps_invalid` | publish; model sync | chat §5–§6, §10.3 |
+| V17 | `QuerySteps`: `retrieval.topK` 1–50, `history.maxMessages` 0–20 and `history.maxTokens` ≤ 8,000, `answer.maxOutputTokens` 64–4,096, `answer.temperature` 0–1, `answer.language` `auto`/`sv`, `answer.grounding` `strict`/`balanced`/`open`; not built yet: `contextTokens` ≤ the model's `ContextWindow` when known, and the condense model within the V32 ceiling | `query_steps_invalid` | publish; model sync | chat §5–§6, §10.3 |
 | V18 | skill version label > every existing; **serve** only after the version's gate run finished, and only if V4–V6, V12–V14 and V19 hold for every assistant whose published version links the skill | `version_not_increasing`, `gate_not_finished`, `serve_breaks_assistants` | skill publish/serve/rollback | tools §3.5 |
 | V19 | skill tool links need a `ToolDepartmentGrant` for the skill's department; platform skills only `AllDepartments` tools; sharing never grants: a linking assistant of another department sees a shared skill's tool only with its own grant (warning lists the tools) | `tool_grant_missing` | skill draft; grant revoked (lists skills); share list widened | tools §3.6 |
 | V20 | *retired* (skill MCP exposure vs audience ceilings: per-skill endpoints moved to P3) | – | – | – |
@@ -531,6 +531,7 @@ kept so references stay stable.
 | V33 | assistant test questions: ≤ 30 per assistant; question 1–2,000 characters; expected behaviour 1–2,000; expected phrase ≤ 200; an expected document must belong to a collection the draft or published version links (unlinking it later marks the question in the report, never refuses) | `test_question_invalid`, `test_question_document_unlinked` | test-question save | §7.4 |
 | V34 | publish and restore: the definition resolves (collections not deleted, skills not retired and usable by the department, the model in `GatewayModels`); description and contact are set; a draft created before the current published version (lower `Number`) is published only when confirmed | `version_link_missing`, `assistant_contact_missing`, `draft_base_changed` | publish; restore | §4.5, simplification pass §15 |
 | V35 | narrowing a collection's sharing (to a lower level, or removing a department from `selected`) is refused while a published assistant of a department that loses access links it; the refusal lists the assistants and their departments | `collection_shared_in_use` | sharing save | §3.2, §4.5 |
+| V36 | an assistant of level `public` has `answer.grounding` `strict`; `balanced` and `open` need level `internal` or higher | `grounding_not_allowed_for_level` | publish; restore; level change | chat §7.3, §10.4 |
 
 ### 4.7 Jobs for the worker
 
@@ -856,6 +857,12 @@ Utkast  Testa  Testfrågor (8)  Versioner (3)  Målgrupp  Lagring  Statistik
 - **Knowledge** (Kunskapsbanker in the draft): each link shows the knowledge base, its owning department when it is
   shared ("umea.se (Communications, shared)"), and its topics ("all topics", or chips with **+ topic**); **Add
   knowledge base** opens a picker with *Ours*, *Shared with us* and *All*, showing level, document count and topics.
+- **Answers from** (grounding, in the Utkast tab, not under Avancerat, since it changes what users get): a radio
+  group *Only the knowledge bases* (`strict`, default), *Knowledge bases first, general knowledge for explanations*
+  (`balanced`), *Knowledge bases and general knowledge* (`open`), each with one line of help on what happens when
+  nothing is found. For a `public` assistant the other two are disabled with the V36 reason. A non-strict published
+  version shows the badge `[General knowledge]` on the assistant page and in the assistant list. The test panel runs
+  the chosen mode, so a weak question shows the caveat line.
 - **Who can use it** (Målgrupp) says in plain words what an audience means: "Open WebUI (pilot): everyone who can sign
   in to it"; department and group audiences follow the W3 spike and E1.
 - **Badges**: `[Utkast]` alone before the first publish; `[Publicerad: version n]` afterwards, plus `[Utkast ändrat …]`
