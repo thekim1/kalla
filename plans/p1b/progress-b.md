@@ -16,9 +16,8 @@ here.
   steps 1–13 walked locally on FakeGateway, is not checked yet; #146 not recorded), 13. The main session did 18, 33
   and 34; stream A did 37 and 38 on L13/L14.
 - **Item 14 is taken by the main session** (2026-11-05, branch `main-session/14-e2e`, claimed on #278): skip it.
-- **Item 40:** chat and admin-API part merged (#358: frames, `answered-general`, `GeneralAnswers`, V17, V36, test panel); the radio group and badge follow in a second PR, then its Done box.
-- **Next, in order: 40 → 35 → 36 → 39** (36 waits for 14's E2E to extend it). Item 40 is first because a POC needs it soon (#356); its chat and
-  admin-API part can merge before the radio group and badge. Item 14 comes before 36 because 36's done-when extends the pilot-journey
+- **Item 40 is done:** chat and admin API in #358 (frames, `answered-general`, `GeneralAnswers`, V17, V36, test panel), the radio group and badge in #359.
+- **Next, in order: 35 → 36 → 39** (36 waits for 14's E2E to extend it). Item 14 comes before 36 because 36's done-when extends the pilot-journey
   E2E that 14 creates, and because stream A's `e2e` job (item 15) waits on its hand-off L7. Nothing exists yet for
   14: no `tests/e2e`, no Playwright set-up; `e2e.yml` passes with a notice until `tests/e2e/package.json` exists. Its
   NVDA pass needs a person: prepare it and leave the box open with a note.
@@ -120,8 +119,8 @@ Refs: [chat §6.2, §7.3, §10.4](../chat-api/design.md), [admin §4.6, §5.5.4]
 - [x] `QuerySteps.answer.generalKnowledge`; `ChatCore.Frame` per level, with and without sources (#358)
 - [x] Coverage `Low` with `fallback`/`open`: model call without sources, caveat line, contact links, `answered-general`, `GeneralAnswers` (#358)
 - [x] V17 accepts the field; V36 (`public` stays `off`) (#358)
-- [ ] "General knowledge" radio group on the Draft tab; `[General knowledge]` badge
-- [ ] **Done:** chat §18.1 general-knowledge tests; V36 refusal test; test panel shows the caveat for a weak question in `fallback`
+- [x] "General knowledge" radio group on the Draft tab; `[General knowledge]` badge (#359)
+- [x] **Done:** chat §18.1 general-knowledge tests; V36 refusal test; test panel shows the caveat for a weak question in `fallback` (#358: `GeneralKnowledgePromptTests`, the `ChatApiTests` general-knowledge tests, `AssistantEndpointsTests.General_knowledge_is_a_draft_field_and_a_public_assistant_keeps_it_off`, `AssistantTestPanelTests.A_weak_question_to_a_fallback_draft_shows_the_caveat_line`; UI #359)
 
 ### 35. Organisation in the admin API
 Refs: [admin §3.2, §4.5, §4.6](../admin/design.md)

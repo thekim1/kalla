@@ -54,7 +54,13 @@ onMounted(async () => {
     >
       <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span><span class="block font-mono text-small text-fg-3">{{ row.slug }}</span></template>
       <template #cell-level="{ row }">{{ LEVEL_LABEL[row.classification as AssistantSummary['classification']] }}</template>
-      <template #cell-state="{ row }"><UiBadge :tone="row.published ? 'ok' : 'neutral'" :label="row.published ? ASSISTANTS.published : ASSISTANTS.draftOnly" /></template>
+      <template #cell-state="{ row }">
+        <UiBadge :tone="row.published ? 'ok' : 'neutral'" :label="row.published ? ASSISTANTS.published : ASSISTANTS.draftOnly" />
+        <UiBadge
+          v-if="row.generalKnowledge && row.generalKnowledge !== 'off'" :label="ASSISTANTS.generalKnowledge" class="ml-2"
+          :data-test="`general-knowledge-${row.id}`"
+        />
+      </template>
     </DataTable>
   </AsyncState>
   <AssistantCreateDrawer v-model:open="creating" :departments="departments" @created="created" />

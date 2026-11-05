@@ -32,9 +32,14 @@ public static class AssistantEndpoints
                 }
 
                 var total = await query.CountAsync(ct);
-                var items = await query.OrderBy(a => a.Name).Skip(page.Skip).Take(page.Take)
-                    .Select(a => new AssistantSummary(a.Id, a.Slug, a.Name, a.DepartmentId, a.Classification, a.State, a.PublishedVersionId != null, a.DraftVersionId != null))
+                var rows = await query.OrderBy(a => a.Name).Skip(page.Skip).Take(page.Take)
+                    .Select(a => new { a.Id, a.Slug, a.Name, a.DepartmentId, a.Classification, a.State, a.PublishedVersionId, HasDraft = a.DraftVersionId != null })
                     .ToListAsync(ct);
+                var publishedIds = rows.Where(r => r.PublishedVersionId != null).Select(r => r.PublishedVersionId!.Value).ToList();
+                var steps = await admin.Db.AssistantVersions.AsNoTracking().Where(v => publishedIds.Contains(v.Id)).Select(v => new { v.Id, v.QuerySteps })
+                    .ToDictionaryAsync(v => v.Id, v => v.QuerySteps, ct);
+                var items = rows.Select(a => new AssistantSummary(a.Id, a.Slug, a.Name, a.DepartmentId, a.Classification, a.State, a.PublishedVersionId != null, a.HasDraft,
+                    a.PublishedVersionId is { } v && steps.TryGetValue(v, out var json) ? GeneralKnowledgeOf(json) : null)).ToList();
                 return new PageDto<AssistantSummary>(items, total);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListAssistants").WithSummary("Assistants of the caller's departments");
@@ -470,7 +475,7 @@ public static class AssistantEndpoints
     private static async Task<AssistantDto> DetailAsync(AdminContext admin, Assistant a, CancellationToken ct)
     {
         var versions = await admin.Db.AssistantVersions.AsNoTracking().Where(v => v.Id == a.PublishedVersionId || v.Id == a.DraftVersionId)
-            .Select(v => new { v.Id, v.Number, v.UpdatedAt, v.Version }).ToListAsync(ct);
+            .Select(v => new { v.Id, v.Number, v.UpdatedAt, v.Version, v.QuerySteps }).ToListAsync(ct);
         var published = versions.SingleOrDefault(v => v.Id == a.PublishedVersionId);
         var draft = versions.SingleOrDefault(v => v.Id == a.DraftVersionId);
         var audiences = await admin.Db.AssistantAudiences.AsNoTracking().Where(x => x.AssistantId == a.Id && x.Kind == AssistantAudienceKinds.Client)
@@ -478,8 +483,12 @@ public static class AssistantEndpoints
         return new AssistantDto(a.Id, a.Slug, a.Name, a.Description, a.ContactName, a.ContactEmail, a.DepartmentId, a.OwnerTeamId, a.Classification, a.HistoryMode,
             a.RetentionDays, a.State, published?.Number,
             draft is null ? null : new DraftInfo(draft.Number, draft.UpdatedAt, published is not null && draft.Number < published.Number, draft.Version.ToString(CultureInfo.InvariantCulture)),
-            audiences, a.UpdatedAt, a.UpdatedBy, a.Version.ToString(CultureInfo.InvariantCulture));
+            audiences, a.UpdatedAt, a.UpdatedBy, a.Version.ToString(CultureInfo.InvariantCulture), published is null ? null : GeneralKnowledgeOf(published.QuerySteps));
     }
+
+    /// <summary>A version's <c>answer.generalKnowledge</c> (admin design §5.5.4 badge): the stored value, <c>off</c> when unset or unknown.</summary>
+    public static string GeneralKnowledgeOf(string querySteps) =>
+        Ume.Rag.Answering.Chat.GeneralKnowledgeLevels.ToValue(Ume.Rag.Answering.Chat.AssistantChatSettings.Parse(querySteps).GeneralKnowledge);
 }
 
 /// <summary>A broken rule: its code and template parameters, and the objects it names.</summary>
@@ -681,14 +690,16 @@ public static class AssistantRules
     }
 }
 
-public sealed record AssistantSummary(Guid Id, string Slug, string Name, Guid DepartmentId, string Classification, string State, bool Published, bool HasDraft);
+/// <summary><see cref="GeneralKnowledge"/>: the published version's <c>answer.generalKnowledge</c>, null before the first publish.</summary>
+public sealed record AssistantSummary(Guid Id, string Slug, string Name, Guid DepartmentId, string Classification, string State, bool Published, bool HasDraft,
+    string? GeneralKnowledge);
 
 public sealed record DraftInfo(int Number, DateTimeOffset UpdatedAt, bool BaseChanged, string Version);
 
 public sealed record AssistantDto(
     Guid Id, string Slug, string Name, string? Description, string? ContactName, string? ContactEmail, Guid DepartmentId, Guid? OwnerTeamId, string Classification,
     string HistoryMode, int RetentionDays, string State, int? PublishedVersion, DraftInfo? Draft, IReadOnlyList<Guid> AudienceClientIds, DateTimeOffset UpdatedAt,
-    string? UpdatedBy, string Version);
+    string? UpdatedBy, string Version, string? GeneralKnowledge);
 
 public sealed record DraftDto(int Number, string? GatewayModel, string SystemPrompt, JsonElement QuerySteps, JsonElement NotFound, IReadOnlyList<Guid> CollectionIds,
     IReadOnlyList<object> Warnings, DateTimeOffset UpdatedAt, string Version)

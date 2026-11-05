@@ -690,6 +690,7 @@ export const ASSISTANTS = {
   state: 'State',
   published: 'Published',
   draftOnly: 'Draft only',
+  generalKnowledge: 'General knowledge',
   created: (name: string) => `The assistant ${name} has been created.`,
 } as const
 
@@ -721,7 +722,28 @@ export const ASSISTANT = {
   cited: 'Cited',
   notPublished: 'not published',
   gateway: (model: string, residency: string, ms: string) => `${model} · ${RESIDENCY_LABEL[residency] ?? residency} · ${ms} ms`,
-  outcome: { answered: 'Answered', notfound: 'Found nothing', unavailable: 'The search was not available' } as Record<string, string>,
+  outcome: {
+    answered: 'Answered', answeredgeneral: 'Answered from general knowledge', notfound: 'Found nothing', unavailable: 'The search was not available',
+  } as Record<string, string>,
+  generalKnowledge: 'General knowledge',
+  generalKnowledgeHint: 'How far the assistant may use the language model’s own knowledge besides the knowledge bases.',
+  generalKnowledgeLevels: {
+    off: { label: 'Off: only the knowledge bases', help: 'When nothing is found, the assistant says so and shows the contact links.' },
+    supplement: {
+      label: 'Supplement: knowledge bases first, general knowledge for explanations',
+      help: 'When nothing is found, the assistant says so and shows the contact links.',
+    },
+    fallback: {
+      label: 'Fallback: as Supplement, and answer from general knowledge when nothing is found',
+      help: 'When nothing is found, the answer starts with a note that it is based on general knowledge, and the contact links follow.',
+    },
+    open: {
+      label: 'Open: knowledge bases and general knowledge',
+      help: 'When nothing is found, the answer starts with a note that it is based on general knowledge, and the contact links follow.',
+    },
+  } as Record<string, { label: string; help: string }>,
+  generalKnowledgePublic: 'An assistant with the class Public answers only from its knowledge bases. General knowledge needs the class Internal or higher.',
+  generalKnowledgeBadge: 'General knowledge',
   audience: 'Clients that offer the assistant',
   audienceHint: 'Users see the assistant in the clients you choose.',
   saveAudience: 'Save audience',

@@ -125,7 +125,10 @@ export const api = {
     get: (id: string) => http.get<Assistant>(`/api/assistants/${id}`),
     create: (body: AssistantCreate) => http.post<Assistant>('/api/assistants', body),
     draft: (id: string) => http.get<AssistantDraft>(`/api/assistants/${id}/draft`),
-    saveDraft: (id: string, body: { gatewayModel: string | null; systemPrompt: string; collectionIds: string[]; version: string | null }) =>
+    saveDraft: (id: string, body: {
+      gatewayModel: string | null; systemPrompt: string; collectionIds: string[]; querySteps: Record<string, unknown>; notFound: Record<string, unknown>
+      version: string | null
+    }) =>
       http.put<AssistantDraft>(`/api/assistants/${id}/draft`, body),
     publish: (id: string, body: { version: string; draftVersion: string; confirmBaseChanged?: boolean }) => http.post<Assistant>(`/api/assistants/${id}/publish`, body),
     audiences: (id: string, body: { clientIds: string[]; version: string }) => http.put<Assistant>(`/api/assistants/${id}/audiences`, body),
