@@ -9,7 +9,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 
 ## Code
 
-### [ ] A-1 Licence notices before distribution (#51)
+### [x] A-1 Licence notices before distribution (#51; #381)
 - **Do:** generate `src/parser/LICENSES.md` (docling and its parts, Tesseract, models) and ship it in the parser
   image; add a repository `NOTICE` naming EUPL-1.2; put the model licence texts where the image build copies them.
 - **Paths:** `src/parser/**`, `images/**`, `NOTICE` (new, root).
