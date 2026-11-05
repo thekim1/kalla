@@ -91,6 +91,17 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** admin §5.4 step 13.
 
+### [ ] B-12 `GatewayReranker` behind `IReranker`, per assistant
+- **Do:** `GatewayReranker` on the path the gateway session agrees (until then the FakeGateway's `/v1/rerank`);
+  rerank the top N fused candidates; an assistant setting (Advanced) turns it on; the evaluation harness can run a
+  set with and without rerank; `rerank_unavailable` degrades to the fused order.
+- **Paths:** `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.FakeGateway/**`, assistant settings in the admin API and UI,
+  `scripts/evaluation/**`.
+- **Done when:** retrieval tests for scoring, timeout and degrade; an evaluation run on `turkos`'s generated set
+  reports recall@10/MRR with and without rerank (FakeGateway now, the real endpoint when it exists).
+- **Waits on:** – for the FakeGateway part; the gateway's rerank release for the live run.
+- **Read:** Decisions "Rerank pulled forward"; knowledge-api §6.7; gateway-changes §7.4.
+
 ### [ ] B-6 Go-live pin review, B's part (last code item)
 - **Do:** review every NuGet and npm pin younger than 7 days; the realm callback for the Open WebUI pin bump
   (`/oauth/oidc/login/callback`) matching A-4; condense stays at `Eu` until an on-prem route exists (M2).

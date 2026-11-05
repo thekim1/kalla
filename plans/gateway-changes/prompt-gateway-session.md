@@ -49,8 +49,12 @@ Scope, exactly (`gateway-changes/design.md` §1 table):
   BGE-M3 at `ContextWindow` 8192 most full batches would be refused. Fix in release 1: check embeddings per input (the
   longest input's estimate), or skip the check for the embeddings endpoint. Until then RAG caps its batches below the
   window (worker setting), and an embedding deployment can be left without a `ContextWindow`.
-- **Not in release 1:** feature C (member groups, tenant/guest refusal), feature A (delegation, run grouping headers),
-  the rerank endpoint. Those are release 2, in P2.
+- **Rerank endpoint, pulled forward (user, 2026-11-05):** design §7.4 now, as its own small release that can land after
+  release 1 without blocking it: path and request shape (query plus passages in, one score per passage), the
+  residency ceiling and `x-ume-residency` like every call, and an **EU-hosted reranker until on-prem hardware exists**
+  (M2), `bge-reranker-v2-m3` on-prem later. Say which EU provider and model, and its price.
+- **Not in release 1:** feature C (member groups, tenant/guest refusal), feature A (delegation, run grouping headers).
+  Those are release 2, in P2.
 - Docs: the `docs/admin-api.md` rows for the new headers and codes (§ "Changes to other documents"), and an
   upgrade-guide entry.
 
