@@ -122,14 +122,6 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
 
     private const string IndexExistsSql = "SELECT to_regclass($1) IS NOT NULL";
 
-    private const string ScopesSql = """
-        SELECT "CollectionId", count(*)
-        FROM content."Chunks"
-        WHERE "EmbeddingProfileId" = $1 AND "DeletedAt" IS NULL AND "Kind" = 'child'
-        GROUP BY 1
-        ORDER BY 1
-        """;
-
     /// <summary>The live collections and their configured profile: retrieval searches no other (knowledge design §4.4).</summary>
     private const string LiveCollectionsSql = """
         SELECT "Id", "EmbeddingProfileId" FROM config."Collections" WHERE "PublishedAt" IS NOT NULL AND "DeletedAt" IS NULL
@@ -271,9 +263,10 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
     /// <summary>
     /// The profile's scopes that retrieval searches with HNSW: each live collection on the profile alone, then
     /// each distinct scope of an active assistant's published links (its live linked collections on the profile of the
-    /// first live one, as <c>KnowledgeService</c> resolves them, with the links' topics). Sized as
-    /// <see cref="ScopeSizeCache.SizeAsync"/> sizes them (the collections' live child chunks against the profile's) and
-    /// kept when <see cref="ScopeSizeCache.Choose"/> gives HNSW.
+    /// first live one, as <c>KnowledgeService</c> resolves them, with the links' topics). Sized by
+    /// <see cref="ScopeSizeCache.SizeAsync"/> itself, over a fresh read of its counts (a collection linked with topics
+    /// counts only its chunks carrying one of them, B-10), and kept when <see cref="ScopeSizeCache.Choose"/> gives HNSW:
+    /// the health check and retrieval share one rule and cannot drift apart.
     /// </summary>
     public async Task<IReadOnlyList<HnswScope>> ScopesAsync(Guid profileId, HnswHealthSettings settings, CancellationToken cancellationToken)
     {
@@ -282,19 +275,9 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
         return await ReadScopesAsync(connection, profileId, settings, cancellationToken);
     }
 
-    private static async Task<List<HnswScope>> ReadScopesAsync(NpgsqlConnection connection, Guid profileId, HnswHealthSettings settings,
+    private async Task<List<HnswScope>> ReadScopesAsync(NpgsqlConnection connection, Guid profileId, HnswHealthSettings settings,
         CancellationToken cancellationToken)
     {
-        var counts = new Dictionary<Guid, long>();
-        await using (var command = new NpgsqlCommand(ScopesSql, connection) { Parameters = { Db.P(profileId) } })
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
-        {
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                counts[reader.GetGuid(0)] = reader.GetInt64(1);
-            }
-        }
-
         var live = new Dictionary<Guid, Guid>();
         await using (var command = new NpgsqlCommand(LiveCollectionsSql, connection))
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -316,7 +299,8 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
         }
 
         var candidates = new List<HnswScope>();
-        foreach (var collection in counts.Keys.Where(id => live.TryGetValue(id, out var configured) && configured == profileId).Order())
+        // A live collection without chunks on the profile sizes 0 and is dropped by the rule below.
+        foreach (var collection in live.Where(l => l.Value == profileId).Select(l => l.Key).Order())
         {
             candidates.Add(new HnswScope([collection], []));
         }
@@ -343,10 +327,31 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
         candidates.AddRange(byKey.Values.Where(s => !singles.Contains(s.Key)).OrderBy(s => s.Key, StringComparer.Ordinal));
 
         var platform = new RetrievalPlatformSettings { ExactScanMaxChunks = settings.ExactScanMaxChunks, MinHnswSelectivity = settings.MinHnswSelectivity };
-        var total = counts.Values.Sum();
-        return [.. candidates.Where(s => ScopeSizeCache.Choose(new ScopeSize(s.CollectionIds.Sum(id => counts.GetValueOrDefault(id)), total), platform).Search ==
-                                         VectorSearch.Approximate)];
+        using var sizes = new ScopeSizeCache(new PostgresSearchIndex(dataSource), TimeProvider.System);
+        var searched = new List<HnswScope>();
+        foreach (var candidate in candidates)
+        {
+            if (ScopeSizeCache.Choose(await sizes.SizeAsync(SearchScopeOf(profileId, candidate, platform), cancellationToken), platform).Search ==
+                VectorSearch.Approximate)
+            {
+                searched.Add(candidate);
+            }
+        }
+
+        return searched;
     }
+
+    /// <summary>
+    /// The <see cref="SearchScope"/> retrieval sizes for <paramref name="scope"/>: its collections with their topics. The
+    /// size reads no dimensions or settings, so those are placeholders.
+    /// </summary>
+    private static SearchScope SearchScopeOf(Guid profileId, HnswScope scope, RetrievalPlatformSettings platform) => new(
+        profileId, 1,
+        [.. scope.CollectionIds.Select(id => new CollectionInScope(id, platform.Defaults)
+        {
+            Topics = [.. scope.TopicLinks.Where(l => l.CollectionId == id).Select(l => l.Tag)],
+        })],
+        Domain.Classification.All, platform);
 
     /// <summary>The approximate results that are in the exact top <see cref="K"/>, or tie its last distance.</summary>
     public static int Hits(IReadOnlyList<(Guid Id, double Distance)> exact, IReadOnlyList<(Guid Id, double Distance)> approximate)

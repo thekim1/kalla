@@ -207,6 +207,29 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
         scope.Assistants.ShouldBe([assistant]);
     }
 
+    /// <summary>
+    /// B-10: a narrow topic in a collection over <c>exactScanMaxChunks</c> is searched exactly by retrieval (the scope is
+    /// sized by its tagged chunks, <see cref="Ume.Rag.Retrieval.ScopeSizeCache.SizeAsync"/>), so it is not sampled; the
+    /// collection searched whole still is.
+    /// </summary>
+    [Fact]
+    public async Task A_narrow_topic_link_in_a_collection_over_the_limit_is_searched_exactly_and_not_sampled()
+    {
+        var profile = await _writer.AddEmbeddingProfileAsync(Dimensions, Ct);
+        var large = await EngineKit.SeedUrlListAsync(database, []);
+        await DocumentsAsync(large, profile, 3, tags: ["avfall"]);
+        await DocumentsAsync(large, profile, 7);
+        await AssistantAsync([(large.CollectionId, ["avfall"])]);
+        var settings = EveryCollection with { ExactScanMaxChunks = 5 };
+
+        // The collection alone: 10 chunks, over 5, HNSW. The link's topic: 3 chunks, exact (whole-collection sizing gave 10).
+        var scopes = await Health().ScopesAsync(profile, settings, Ct);
+
+        scopes.Select(s => (s.CollectionIds.Single(), s.TopicLinks.Count)).ShouldBe([(large.CollectionId, 0)]);
+        var recall = await Health().MeasureAsync(profile, Dimensions, settings, Ct);
+        Numbers(recall).ShouldBe((1, 10, 1.0));
+    }
+
     [Fact]
     public async Task The_worst_scope_is_the_profiles_recall_and_each_scope_below_the_floor_is_logged_by_name()
     {
