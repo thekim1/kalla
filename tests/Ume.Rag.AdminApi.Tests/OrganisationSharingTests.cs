@@ -182,10 +182,16 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
         rule.GetProperty("sourceId").GetGuid().ShouldBe(seed.Source);
         ownTopics.GetProperty("topics").EnumerateArray().Single(t => t.GetProperty("tag").GetString() == "altan").GetProperty("rules").GetArrayLength().ShouldBe(0);
 
-        // Never its detail, settings, sources or documents; never a write.
+        // Its detail is the shared summary (no settings, no usedBy); never its sources, documents or evaluation; never a write.
+        var read = await user.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}", Ct);
+        read.GetProperty("shared").GetBoolean().ShouldBeTrue();
+        read.GetProperty("documentCount").GetInt32().ShouldBe(2);
+        read.TryGetProperty("retrievalSettings", out _).ShouldBeFalse();
+        read.TryGetProperty("usedBy", out _).ShouldBeFalse();
+        (await owner.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}", Ct)).GetProperty("shared").GetBoolean().ShouldBeFalse();
         foreach (var path in new[]
                  {
-                     $"/api/collections/{seed.Collection}", $"/api/collections/{seed.Collection}/sources", $"/api/sources/{seed.Source}",
+                     $"/api/collections/{seed.Collection}/sources", $"/api/sources/{seed.Source}",
                      $"/api/documents/{seed.Document}", $"/api/collections/{seed.Collection}/evaluation",
                  })
         {
@@ -318,6 +324,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
         usedBy.GetProperty("id").GetGuid().ShouldBe(id);
         usedBy.GetProperty("departmentId").GetGuid().ShouldBe(seed.User);
         usedBy.GetProperty("draft").GetBoolean().ShouldBeTrue();
+        usedBy.GetProperty("topics").GetArrayLength().ShouldBe(21);
 
         // A third department, not on the list, gets V11 for the same link.
         using var third = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.ThirdCode);

@@ -44,22 +44,7 @@ public static class CollectionEndpoints
                 }
 
                 var total = await query.CountAsync(ct);
-                var rows = await query.OrderBy(c => c.Name).ThenBy(c => c.Id).Skip(page.Skip).Take(page.Take)
-                    .Select(c => new { c.Id, c.Slug, c.Name, c.DepartmentId, c.Classification, c.PublishedAt, c.SharedWith, c.ContactName, c.ContactEmail })
-                    .ToListAsync(ct);
-                var ids = rows.Select(r => r.Id).ToArray();
-                var owners = rows.Select(r => r.DepartmentId).Distinct().ToList();
-                var own = (await departments.ToListAsync(ct)).ToHashSet();
-                var names = await admin.Db.Departments.AsNoTracking().Where(d => owners.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Name, ct);
-                var documents = await (from d in admin.Db.Documents.AsNoTracking()
-                                       join src in admin.Db.Sources.AsNoTracking() on d.SourceId equals src.Id
-                                       where d.DeletedAt == null && d.LiveChunkSetId != null && ids.Contains(src.CollectionId)
-                                       group d by src.CollectionId into g
-                                       select new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
-                var topics = await CollectionSharing.TopicCountsAsync(admin.Db, ids, ct);
-                var items = rows.Select(r => new CollectionSummary(r.Id, r.Slug, r.Name, r.DepartmentId, names.GetValueOrDefault(r.DepartmentId) ?? "", r.Classification,
-                    r.PublishedAt, r.SharedWith, !own.Contains(r.DepartmentId), r.ContactName, r.ContactEmail, documents.GetValueOrDefault(r.Id),
-                    [.. topics.Where(t => t.CollectionId == r.Id).Select(t => t.Tag)])).ToList();
+                var items = await SummariesAsync(admin, query.OrderBy(c => c.Name).ThenBy(c => c.Id).Skip(page.Skip).Take(page.Take), ct);
                 return new PageDto<CollectionSummary>(items, total);
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListCollections")
@@ -67,10 +52,18 @@ public static class CollectionEndpoints
 
         collections.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) =>
             {
-                var collection = await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
-                return await DetailAsync(admin, collection, ct);
+                if (await Scoped(admin).AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct) is { } collection)
+                {
+                    return Results.Ok(await DetailAsync(admin, collection, ct));
+                }
+
+                // A department it is shared with reads it as the shared summary (admin design §3.2, §5.5.2: read-only Overview and Topics).
+                var departments = admin.Departments().Select(d => d.Id);
+                var shared = await SummariesAsync(admin, CollectionSharing.SharedWith(admin.Db, departments).Where(c => c.Id == id), ct);
+                return shared.Count == 1 ? Results.Ok(shared[0]) : throw AdminFaults.Of(AdminErrorCodes.NotFound);
             })
-            .RequireAuthorization(AdminPolicies.Read).WithName("GetCollection").WithSummary("One collection with the assistants that link it");
+            .RequireAuthorization(AdminPolicies.Read).WithName("GetCollection")
+            .WithSummary("One collection with the assistants that link it; for a department it is shared with, the shared summary");
 
         collections.MapPost("", async (CollectionCreateRequest request, AdminContext admin, CancellationToken ct) =>
             {
@@ -234,6 +227,26 @@ public static class CollectionEndpoints
         return CollectionDto.Of(collection, shares, await UsedByAsync(admin, collection.Id, ct));
     }
 
+    /// <summary>The list rows (the shared summary) of <paramref name="query"/>, with owner names, live document counts and topics.</summary>
+    private static async Task<List<CollectionSummary>> SummariesAsync(AdminContext admin, IQueryable<Collection> query, CancellationToken ct)
+    {
+        var rows = await query.Select(c => new { c.Id, c.Slug, c.Name, c.DepartmentId, c.Classification, c.PublishedAt, c.SharedWith, c.ContactName, c.ContactEmail })
+            .ToListAsync(ct);
+        var ids = rows.Select(r => r.Id).ToArray();
+        var owners = rows.Select(r => r.DepartmentId).Distinct().ToList();
+        var own = (await admin.Departments().Select(d => d.Id).ToListAsync(ct)).ToHashSet();
+        var names = await admin.Db.Departments.AsNoTracking().Where(d => owners.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Name, ct);
+        var documents = await (from d in admin.Db.Documents.AsNoTracking()
+                               join src in admin.Db.Sources.AsNoTracking() on d.SourceId equals src.Id
+                               where d.DeletedAt == null && d.LiveChunkSetId != null && ids.Contains(src.CollectionId)
+                               group d by src.CollectionId into g
+                               select new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
+        var topics = await CollectionSharing.TopicCountsAsync(admin.Db, ids, ct);
+        return [.. rows.Select(r => new CollectionSummary(r.Id, r.Slug, r.Name, r.DepartmentId, names.GetValueOrDefault(r.DepartmentId) ?? "", r.Classification,
+            r.PublishedAt, r.SharedWith, !own.Contains(r.DepartmentId), r.ContactName, r.ContactEmail, documents.GetValueOrDefault(r.Id),
+            [.. topics.Where(t => t.CollectionId == r.Id).Select(t => t.Tag)]))];
+    }
+
     private static string? Contact(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>The caller's collections that are not deleted (department scope, admin design §3.2).</summary>
@@ -259,10 +272,13 @@ public static class CollectionEndpoints
                           join a in admin.Db.Assistants.AsNoTracking() on v.AssistantId equals a.Id
                           join d in admin.Db.Departments.AsNoTracking() on a.DepartmentId equals d.Id
                           where a.PublishedVersionId == v.Id || a.DraftVersionId == v.Id
-                          select new { a.Id, a.Name, a.Classification, Published = a.PublishedVersionId == v.Id, a.DepartmentId, Department = d.Name })
+                          select new { a.Id, a.Name, a.Classification, Published = a.PublishedVersionId == v.Id, a.DepartmentId, Department = d.Name, v.CollectionLinks })
             .ToListAsync(ct);
+        // The topics of the published link, else the draft's (empty = the whole collection).
         return [.. rows.GroupBy(r => r.Id).Select(g => new CollectionUser(g.Key, g.First().Name, g.First().Classification,
-            g.Any(r => r.Published), g.Any(r => !r.Published), g.First().DepartmentId, g.First().Department)).OrderBy(u => u.Name, StringComparer.Ordinal)];
+            g.Any(r => r.Published), g.Any(r => !r.Published), g.First().DepartmentId, g.First().Department,
+            g.OrderByDescending(r => r.Published).First().CollectionLinks.FirstOrDefault(l => l.CollectionId == id)?.Tags ?? []))
+            .OrderBy(u => u.Name, StringComparer.Ordinal)];
     }
 
     /// <summary>The department must be one of the caller's; the owner team, when given, one of that department's.</summary>
@@ -519,8 +535,12 @@ public sealed record CollectionSummary(
     Guid Id, string Slug, string Name, Guid DepartmentId, string DepartmentName, string Classification, DateTimeOffset? PublishedAt, string SharedWith, bool Shared,
     string? ContactName, string? ContactEmail, int DocumentCount, IReadOnlyList<string> Topics);
 
-/// <summary>An assistant that links a collection: through its published version, its draft, or both; with its department.</summary>
-public sealed record CollectionUser(Guid Id, string Name, string Classification, bool Published, bool Draft, Guid DepartmentId, string DepartmentName);
+/// <summary>
+/// An assistant that links a collection: through its published version, its draft, or both; with its department and the
+/// link's topics (the published version's, else the draft's; empty = the whole collection).
+/// </summary>
+public sealed record CollectionUser(
+    Guid Id, string Name, string Classification, bool Published, bool Draft, Guid DepartmentId, string DepartmentName, IReadOnlyList<string> Topics);
 
 /// <summary><see cref="SharedWithDepartmentIds"/>: the share list, only when <see cref="SharedWith"/> is <c>selected</c>.</summary>
 public sealed record CollectionDto(
@@ -528,6 +548,9 @@ public sealed record CollectionDto(
     DateTimeOffset? PublishedAt, string SharedWith, IReadOnlyList<Guid> SharedWithDepartmentIds, string? ContactName, string? ContactEmail,
     IReadOnlyList<CollectionUser> UsedBy, DateTimeOffset UpdatedAt, string? UpdatedBy, string Version)
 {
+    /// <summary>Always false: the detail is the owner's; a department it is shared with gets the <see cref="CollectionSummary"/> (<c>shared: true</c>).</summary>
+    public bool Shared => false;
+
     public static CollectionDto Of(Collection c, IReadOnlyList<Guid> shares, IReadOnlyList<CollectionUser> usedBy)
     {
         ArgumentNullException.ThrowIfNull(c);
