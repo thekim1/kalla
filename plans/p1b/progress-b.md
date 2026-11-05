@@ -22,7 +22,6 @@ here.
 - **Item 36 is built** (#366): pages, picker, Map; its Done waits on the first green `e2e` run (stream A's item 15) for E2E step 14.
 - **Item 39 is done** (#369), with #363 point 2 (the "Open in …" link).
 - **Next:** walk admin §5.4 locally to close items 11 and 12, and record #146; #363 point 1 (`GatewayModels.ModelKind`, design settled in `5f8f8c1`) is open for stream B.
-- Then walk admin §5.4 locally to close items 11 and 12, and record #146.
 - Merged without waiting for reviewers (user, 2026-11-02); problems go in a `stream-b` issue.
 
 ## Waiting on (tick when it lands)
