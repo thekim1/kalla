@@ -83,6 +83,8 @@ Keycloak. Two requirements shape how you build it:
     (`departmentCodes`, `teamCodes`), which a standalone realm declares itself.
   - Decide where the realm-wide settings live (Q3 below) so that both a shared and a standalone set-up can use them.
   - Report anything on the gateway side that would make a standalone Ume.Rag harder.
+  - RAG's position on identity §16 Q2–Q4 and Q8 is in the Decisions row "M-2 open design calls"; settle
+    them with it.
 - **Its own Compose project** in this repo (for example `deploy/keycloak/compose.yaml`), run on the gateway's
   production host and operated with the gateway. Its database is `keycloak` in the **gateway's Postgres** (a
   separate database and role), so the gateway's backups cover it.

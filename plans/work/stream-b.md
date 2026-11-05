@@ -50,6 +50,39 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   municipality, link with a topic from another department, by keyboard).
 - **Waits on:** A-2.
 
+### [ ] B-7 HNSW rebuild on its own connection string (M-2)
+- **Do:** `ConnectionStrings:ragdb-maintenance` (falls back to `ragdb`) for `HnswIndexHealth.RebuildAsync`; set
+  `statement_timeout = 0` with `SET` on the session, not as a startup option (PgBouncer drops `options`); AppHost
+  passes it like `ragdb-listen`.
+- **Paths:** `src/Ume.Rag.Worker/Engine/**`, `src/Ume.Rag.Worker/Jobs/**`, AppHost wiring.
+- **Done when:** a Worker test shows the rebuild uses the maintenance string and sets the timeout by `SET`.
+- **Waits on:** –
+- **Read:** Decisions "M-2 open design calls"; knowledge-api §6.4; data-model §1 (`ragdb-listen`).
+
+### [ ] B-8 Fired PII flag types stored and shown (#217, M-2)
+- **Do:** the PII stage stores the fired types next to `PiiCounts`; the PII report and document page show them.
+- **Paths:** `src/Ume.Rag.Worker/Processing/Pii/**`, `src/Ume.Rag.AdminApi/PiiReportEndpoints.cs`,
+  `DocumentEndpoints.cs`, migration, admin UI.
+- **Done when:** a document with fired rules shows their types in the report (test and a look in the browser).
+- **Waits on:** –
+- **Read:** Decisions "M-2 open design calls"; processing §9.4–§9.5.
+
+### [ ] B-9 Index health for multi-collection scopes (M-2)
+- **Do:** sample every HNSW-searched scope an assistant link uses, including multi-collection ones; report the worst
+  recall per profile and log the failing scope.
+- **Paths:** `src/Ume.Rag.Worker/Engine/HnswIndexHealth.cs`.
+- **Done when:** a test with several small collections that together pass the HNSW threshold samples that scope.
+- **Waits on:** –
+- **Read:** Decisions "M-2 open design calls"; knowledge-api §6.4.
+
+### [ ] B-10 Scope size counts topic-filtered chunks (M-2)
+- **Do:** `ScopeSizeCache` counts the chunks of a (collection, tag) link, so a narrow topic in a large collection gets
+  exact search.
+- **Paths:** `src/Ume.Rag.Retrieval/**`.
+- **Done when:** a retrieval test: a topic of a few hundred chunks in a collection over the limit is searched exactly.
+- **Waits on:** –
+- **Read:** Decisions "M-2 open design calls"; knowledge-api §6.4; to-verify #180.
+
 ### [ ] B-6 Go-live pin review, B's part (last code item)
 - **Do:** review every NuGet and npm pin younger than 7 days; the realm callback for the Open WebUI pin bump
   (`/oauth/oidc/login/callback`) matching A-4; condense stays at `Eu` until an on-prem route exists (M2).

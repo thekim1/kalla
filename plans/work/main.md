@@ -18,7 +18,7 @@ settles their design deviations. Start each session from [`../../HANDOVER.md`](.
   locally, or their failures are fixed or filed. This is the local evidence for the old items 11, 12 and 14; B-5 and
   A-2 still need the runner.
 
-### [ ] M-2 Recommendations for the open design calls
+### [x] M-2 Recommendations for the open design calls
 - **Do:** one short proposal each, with a default: topics for uploads; `UrlCanonicalizer` into Pipelines (#178);
   #217's fired-types list; identity §16 Q2–4, Q8; a direct connection for the HNSW rebuild behind a pooler; index
   health for multi-collection scopes; recall for a narrow topic in a large collection.
