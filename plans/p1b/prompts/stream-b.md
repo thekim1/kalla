@@ -31,11 +31,9 @@ The unticked Done boxes of items 3, 9 and 10 are recorded partials: leave them u
    V17 and V36. Merge the chat and admin-API part first; the radio group and badge may follow in a second PR.
 2. **35** Organisation in the admin API (issue #318): sharing route, `view=`, topics, Map route, contact fields,
    V11 widened, V35, owner team defaulted on create.
-3. **14** Accessibility and the pilot-journey E2E → **L7** to stream A. Nothing exists yet: create `tests/e2e`
-   (Playwright TypeScript, the gateway's `tests/e2e` set-up in `~/git/llmgateway`) with its static fixture site;
-   `.github/workflows/e2e.yml` starts running it once `tests/e2e/package.json` exists. The NVDA pass needs a person:
-   prepare it, leave that box open and say so in the PR.
-4. **36** Organisation pages (its done-when extends item 14's E2E).
+3. **14** is taken by the main session (`main-session/14-e2e`, claimed on #278): skip it.
+4. **36** Organisation pages (its done-when extends item 14's E2E; if 14 has not landed yet, build the pages and add
+   the E2E step once it has).
 5. **39** A new assistant starts from a default prompt, with "Advanced" collapsed.
 6. Then walk admin §5.4 steps 1–13 locally on FakeGateway to close items 11 and 12, and record to-verify #146.
 After that, item 19 (your part of the pin review) and the live block wait for the user's hand-offs.

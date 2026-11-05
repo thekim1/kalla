@@ -15,7 +15,8 @@ here.
   and 20, see `results-b.md`; leave them unless an item touches them), 11 and 12 (pages built; their Done, admin §5.4
   steps 1–13 walked locally on FakeGateway, is not checked yet; #146 not recorded), 13. The main session did 18, 33
   and 34; stream A did 37 and 38 on L13/L14.
-- **Next, in order: 40 → 35 → 14 → 36 → 39.** Item 40 is first because a POC needs it soon (#356); its chat and
+- **Item 14 is taken by the main session** (2026-11-05, branch `main-session/14-e2e`, claimed on #278): skip it.
+- **Next, in order: 40 → 35 → 36 → 39** (36 waits for 14's E2E to extend it). Item 40 is first because a POC needs it soon (#356); its chat and
   admin-API part can merge before the radio group and badge. Item 14 comes before 36 because 36's done-when extends the pilot-journey
   E2E that 14 creates, and because stream A's `e2e` job (item 15) waits on its hand-off L7. Nothing exists yet for
   14: no `tests/e2e`, no Playwright set-up; `e2e.yml` passes with a notice until `tests/e2e/package.json` exists. Its
