@@ -50,6 +50,11 @@ const links = ref<CollectionLink[]>([])
 const querySteps = ref<Record<string, unknown>>({})
 const notFound = ref<Record<string, unknown>>({})
 const generalKnowledge = ref<GeneralKnowledge>('off')
+// The query settings under "Advanced" (admin design §5.5.4; chat design §5–§6, V17); empty = the key is left out.
+const advanced = ref({ topK: '', condense: true, maxMessages: '', maxOutputTokens: '', temperature: '', language: '' })
+const advancedErrors = ref<Record<string, string | undefined>>({})
+const LIMITS = { topK: [1, 50], maxMessages: [0, 20], maxOutputTokens: [64, 4096], temperature: [0, 1] } as const
+const languageOptions = ['', 'auto', 'sv'].map((v) => ({ value: v, label: ASSISTANT.languages[v]! }))
 const GENERAL_KNOWLEDGE_LEVELS: GeneralKnowledge[] = ['off', 'supplement', 'fallback', 'open']
 const audience = ref<string[]>([])
 const question = ref('')
@@ -88,6 +93,12 @@ const historyOptions = computed(() =>
 )
 const restorable = (v: AssistantVersionSummary) => v.state === 'superseded'
 const modelOptions = computed(() => [{ value: '', label: ASSISTANT.noModel }, ...models.value.filter((m) => m.kind !== 'embedding').map((m) => ({ value: m.name, label: m.name }))])
+/** §5.4 step 13: once published, a link to each audience client's own UI (`PortalUrl`), where the model has its slug. */
+const portals = computed(() =>
+  assistant.data.value?.publishedVersion && !archived.value
+    ? clients.value.filter((c) => c.portalUrl && assistant.data.value!.audienceClientIds.includes(c.id))
+    : [],
+)
 /** "Who can use it" (admin design §5.5.4): the saved audience in plain words. */
 const whoCanUse = computed(() =>
   clients.value.filter((c) => assistant.data.value?.audienceClientIds.includes(c.id)).map((c) => (ASSISTANT.whoByKind[c.kind] ?? ASSISTANT.whoFallback)(c.name)),
@@ -112,11 +123,55 @@ function fill(d: AssistantDraft | null, base: Settings | null = null): void {
   querySteps.value = { ...(s?.querySteps ?? {}) }
   notFound.value = { ...(s?.notFound ?? {}) }
   generalKnowledge.value = levelOf(s?.querySteps)
+  const steps = (s?.querySteps ?? {}) as Record<string, Record<string, unknown> | undefined>
+  const text = (v: unknown) => (typeof v === 'number' ? String(v) : '')
+  advanced.value = {
+    topK: text(steps.retrieval?.topK), condense: steps.condense?.enabled !== false, maxMessages: text(steps.history?.maxMessages),
+    maxOutputTokens: text(steps.answer?.maxOutputTokens), temperature: text(steps.answer?.temperature),
+    language: typeof steps.answer?.language === 'string' ? steps.answer.language : '',
+  }
+  advancedErrors.value = {}
+}
+
+/** Checks the Advanced fields; true when every one is empty or in range. */
+function checkAdvanced(): boolean {
+  const errors: Record<string, string | undefined> = {}
+  for (const [key, [min, max]] of Object.entries(LIMITS) as [keyof typeof LIMITS, readonly [number, number]][]) {
+    const raw = advanced.value[key].trim().replace(',', '.')
+    const value = Number(raw)
+    const whole = key !== 'temperature'
+    if (raw && (Number.isNaN(value) || value < min || value > max || (whole && !Number.isInteger(value)))) errors[key] = ASSISTANT.rangeInvalid(min, max)
+  }
+  advancedErrors.value = errors
+  return Object.values(errors).every((e) => !e)
 }
 
 function stepsToSave(): Record<string, unknown> {
-  const answer = { ...((querySteps.value.answer as Record<string, unknown> | undefined) ?? {}), generalKnowledge: generalKnowledge.value }
-  return { ...querySteps.value, answer }
+  const part = (name: string) => ({ ...((querySteps.value[name] as Record<string, unknown> | undefined) ?? {}) })
+  const set = (target: Record<string, unknown>, key: string, raw: string) => {
+    const text = raw.trim().replace(',', '.')
+    if (text) target[key] = Number(text)
+    else delete target[key]
+  }
+  const retrieval = part('retrieval')
+  const history = part('history')
+  const answer: Record<string, unknown> = { ...part('answer'), generalKnowledge: generalKnowledge.value }
+  const condense = { ...part('condense'), enabled: advanced.value.condense }
+  set(retrieval, 'topK', advanced.value.topK)
+  set(history, 'maxMessages', advanced.value.maxMessages)
+  set(answer, 'maxOutputTokens', advanced.value.maxOutputTokens)
+  set(answer, 'temperature', advanced.value.temperature)
+  if (advanced.value.language) answer.language = advanced.value.language
+  else delete answer.language
+  const steps: Record<string, unknown> = { ...querySteps.value, answer }
+  for (const [name, value] of [['retrieval', retrieval], ['history', history]] as const) {
+    if (Object.keys(value).length) steps[name] = value
+    else delete steps[name]
+  }
+  // Follow-up rewriting is on unless turned off (chat design §5); only an explicit choice is stored.
+  if (advanced.value.condense && !('condense' in querySteps.value)) delete steps.condense
+  else steps.condense = condense
+  return steps
 }
 
 async function fillFrom(a: Assistant): Promise<void> {
@@ -155,6 +210,7 @@ async function run(kind: typeof busy.value, action: () => Promise<void>): Promis
 }
 
 const saveDraft = () => run('save', async () => {
+  if (!checkAdvanced()) return
   fill(await api.assistants.saveDraft(props.id, {
     gatewayModel: model.value || null, systemPrompt: prompt.value, collectionLinks: links.value, querySteps: stepsToSave(), notFound: notFound.value,
     version: draft.value?.version ?? null,
@@ -240,6 +296,9 @@ onMounted(load)
           v-if="assistant.data.value.generalKnowledge && assistant.data.value.generalKnowledge !== 'off'" :label="ASSISTANT.generalKnowledgeBadge"
           data-test="general-knowledge-badge"
         />
+        <UiButton v-for="c in portals" :key="c.id" :href="c.portalUrl!" target="_blank" rel="noopener" icon="login" data-test="portal">
+          {{ ASSISTANT.openIn(c.name) }}
+        </UiButton>
         <template v-if="canEdit">
           <UiButton v-if="archived" :loading="busy === 'unarchive'" data-test="unarchive" @click="unarchive">{{ ASSISTANT.unarchive }}</UiButton>
           <UiButton v-else icon="archive" data-test="archive" @click="archiving = true">{{ ASSISTANT.archive }}</UiButton>
@@ -260,7 +319,6 @@ onMounted(load)
         <UiCard v-if="warnings.length" :title="ASSISTANT.warnings" data-test="warnings">
           <ul class="ml-5 list-disc text-warn"><li v-for="w in warnings" :key="w">{{ w }}</li></ul>
         </UiCard>
-        <SelectField id="assistant-model" v-model="model" :label="ASSISTANT.model" :hint="ASSISTANT.modelHint" :options="modelOptions" />
         <TextAreaField id="assistant-prompt" v-model="prompt" :label="ASSISTANT.prompt" :hint="ASSISTANT.promptHint" :rows="8" />
         <KnowledgeLinks v-model="links" :collections="collections" :department-id="assistant.data.value.departmentId" :disabled="!canEdit" />
         <fieldset class="grid gap-2" data-test="general-knowledge" aria-describedby="assistant-general-knowledge-hint">
@@ -280,6 +338,19 @@ onMounted(load)
             </span>
           </label>
         </fieldset>
+        <details class="rounded-card border border-border p-4" data-test="advanced">
+          <summary class="cursor-pointer font-medium">{{ ASSISTANT.advanced }}</summary>
+          <div class="mt-4 grid gap-5">
+            <p class="text-small text-fg-2">{{ ASSISTANT.advancedHint }}</p>
+            <SelectField id="assistant-model" v-model="model" :label="ASSISTANT.model" :hint="ASSISTANT.modelHint" :options="modelOptions" />
+            <TextField id="assistant-top-k" v-model="advanced.topK" :label="ASSISTANT.topK" inputmode="numeric" :error="advancedErrors.topK" />
+            <CheckField v-model="advanced.condense" :label="ASSISTANT.condense" data-test="condense" />
+            <TextField id="assistant-history" v-model="advanced.maxMessages" :label="ASSISTANT.historyMessages" inputmode="numeric" :error="advancedErrors.maxMessages" />
+            <TextField id="assistant-max-tokens" v-model="advanced.maxOutputTokens" :label="ASSISTANT.maxOutputTokens" inputmode="numeric" :error="advancedErrors.maxOutputTokens" />
+            <TextField id="assistant-temperature" v-model="advanced.temperature" :label="ASSISTANT.temperature" inputmode="decimal" :error="advancedErrors.temperature" />
+            <SelectField id="assistant-language" v-model="advanced.language" :label="ASSISTANT.language" :options="languageOptions" />
+          </div>
+        </details>
         <div v-if="canEdit"><UiButton variant="primary" :loading="busy === 'save'" data-test="save-draft" @click="saveDraft">{{ ASSISTANT.saveDraft }}</UiButton></div>
       </div>
 

@@ -761,6 +761,8 @@ export interface ClientSummary {
   kind: string
   classificationCeiling: Level
   isEnabled: boolean
+  /** The client's own UI (admin design §5.4 step 13). */
+  portalUrl?: string | null
 }
 
 export interface GatewayModel {

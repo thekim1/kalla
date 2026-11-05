@@ -122,6 +122,9 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await act.press(drawer.getByRole('button', { name: 'Create assistant' }))
     await expect(drawer).toBeHidden()
     await expect(page.locator('#page-title')).toHaveText(assistant)
+    // The first draft starts from the platform's default instructions (item 39); the model is under Advanced.
+    await expect(page.getByRole('textbox', { name: 'Instructions' })).not.toHaveValue('')
+    await act.press(page.getByText('Advanced: model, follow-up questions, history, length'))
     const model = page.getByRole('combobox', { name: 'Language model' })
     await expect(model.locator('option', { hasText: 'ume/chat-eu' })).toHaveCount(1)
     await act.select(model, { label: 'ume/chat-eu' })
