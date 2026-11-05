@@ -57,8 +57,11 @@ public static class QualityFacts
         return Math.Round(Math.Clamp(score, 0, 1), 4);
     }
 
-    /// <summary>The chunk facts: <c>emptyChunkRatio</c> (&lt; 20 body tokens) and <c>duplicateChunkRatio</c> (shared <c>TextHash</c>).</summary>
-    public static IReadOnlyDictionary<string, double> ForChunks(IReadOnlyList<ChunkDraft> chunks, Func<string, int> bodyTokens)
+    /// <summary>
+    /// The chunk facts: <c>emptyChunkRatio</c> (&lt; 20 body tokens) and <c>duplicateChunkRatio</c> (shared <c>TextHash</c>).
+    /// <paramref name="bodyTokens"/> gives the token count of chunk <c>i</c>'s <c>Text</c>.
+    /// </summary>
+    public static IReadOnlyDictionary<string, double> ForChunks(IReadOnlyList<ChunkDraft> chunks, Func<int, int> bodyTokens)
     {
         ArgumentNullException.ThrowIfNull(chunks);
         ArgumentNullException.ThrowIfNull(bodyTokens);
@@ -68,7 +71,7 @@ public static class QualityFacts
             return facts;
         }
 
-        facts["quality.emptyChunkRatio"] = Math.Round(chunks.Count(c => bodyTokens(c.Text) < 20) / (double)chunks.Count, 4);
+        facts["quality.emptyChunkRatio"] = Math.Round(Enumerable.Range(0, chunks.Count).Count(i => bodyTokens(i) < 20) / (double)chunks.Count, 4);
         facts["quality.duplicateChunkRatio"] = Math.Round(
             chunks.GroupBy(c => c.TextHash, StringComparer.Ordinal).Where(g => g.Count() > 1).Sum(g => g.Count()) / (double)chunks.Count, 4);
         return facts;

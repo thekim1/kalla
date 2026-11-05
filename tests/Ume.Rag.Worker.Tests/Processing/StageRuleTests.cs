@@ -286,6 +286,53 @@ public sealed class StageRuleTests
         }
     }
 
+    [Theory]
+    [InlineData("Start › Bygga, bo och miljö", "Bygglovsansökan och bygglovsavgift. BYGGLOVSANSÖKAN igen, bygglovsansökan.")]
+    [InlineData("", "Förskoleklass/förskolebarn 12skolskjuts\u200Bbarnomsorg e-tjänsten ﬁskevatten 𝐛𝐲𝐠𝐠𝐥𝐨𝐯 Ansökan")]
+    [InlineData("Avfall", "Avfallstaxa")]
+    public void Compound_parts_memoised_for_a_run_equal_the_decompounder_parts(string prefix, string text)
+    {
+        var compounds = new CompoundParts(SwedishDecompounder.Default);
+
+        foreach (var _ in Enumerable.Range(0, 2))
+        {
+            compounds.Of(prefix, text).ShouldBe(SwedishDecompounder.Default.PartsOf(prefix + "\n" + text));
+        }
+    }
+
+    [Theory]
+    [InlineData(400, 15)]
+    [InlineData(120, 25)]
+    [InlineData(40, 50)]
+    public void Reused_token_counts_equal_counting_each_chunk_again(int chunkTokens, int overlapPercent)
+    {
+        var counter = Bgem3TokenCounter.Shared;
+        var document = new ParsedDocument
+        {
+            Title = "Bygglov",
+            Breadcrumb = ["Start", "Bo"],
+            Blocks =
+            [
+                new DocBlock(BlockKinds.Paragraph, Sentences(20)),
+                new DocBlock(BlockKinds.Paragraph, "Gör så här."),
+                .. Enumerable.Range(1, 12).Select(i => new DocBlock(BlockKinds.ListItem, $"Steg {i}: fyll i uppgifterna om fastigheten och skicka in blanketten.")),
+                new DocBlock(BlockKinds.Paragraph, Sentences(7, "ansökan").Normalize(NormalizationForm.FormD)),
+                new DocBlock(BlockKinds.ListItem, "Kort."),
+            ],
+        };
+
+        var result = Chunk(document, new ChunkOptions(chunkTokens, overlapPercent));
+
+        foreach (var chunk in result.Chunks)
+        {
+            var parts = SwedishDecompounder.Default.PartsOf(chunk.Prefix + "\n" + chunk.Text);
+            chunk.TokenCount.ShouldBe(counter.Count(chunk.EmbeddedText));
+            chunk.SearchText.ShouldBe(parts.Count == 0 ? chunk.Text : chunk.Text + "\n" + string.Join(' ', parts));
+        }
+
+        result.Facts["quality.emptyChunkRatio"].ShouldBe(Math.Round(result.Chunks.Count(c => counter.Count(c.Text) < 20) / (double)result.Chunks.Count, 4));
+    }
+
     [Fact]
     public void Chunk_rows_carry_the_prefix_hash_tokens_search_text_and_metadata()
     {
