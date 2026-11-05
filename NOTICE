@@ -1,0 +1,21 @@
+Ume.Rag
+Copyright (c) Umeå kommun
+
+Ume.Rag is licensed under the European Union Public Licence v. 1.2 (EUPL-1.2); the full text is in LICENSE.
+
+Ume.Rag includes or uses third-party components under their own licences:
+
+- The parser image (ume-rag/parser): every Python package, Debian package and model it ships, with its licence, is
+  listed in src/parser/LICENSES.md (in the image: /usr/share/doc/ume-rag-parser/LICENSES.md). The model licence texts
+  are in src/parser/licences/models/ (in the image: /opt/models/<model>/LICENSE).
+- Docling, docling-core, docling-parse, docling-ibm-models: MIT, Copyright The Docling Contributors / IBM.
+- Docling layout model "heron": Apache-2.0. TableFormer models: CDLA-Permissive-2.0. (IBM / Docling project)
+- KB BERT NER (KBLab/bert-base-swedish-cased-ner): MIT, National Library of Sweden / KBLab.
+  Fine-tuned on SUC 3.0, Språkbanken Text, University of Gothenburg (doi:10.23695/wy84-ar30).
+- PDFium (via pypdfium2): BSD-3-Clause and Apache-2.0, The PDFium Authors; pypdfium2: Apache-2.0 / BSD-3-Clause.
+- Tesseract OCR and tessdata_fast "swe": Apache-2.0, Google / Hewlett-Packard.
+- Portions of this software are copyright © The FreeType Project (www.freetype.org). All rights reserved.
+- This software is based in part on the work of the Independent JPEG Group.
+- FFmpeg (in opencv-python-headless) and libiconv (in lxml): LGPL-2.1; source: ffmpeg.org, gnu.org/software/libiconv.
+- Swedish word list "Den stora svenska ordlistan" 2.42, Copyright © 2003-19 Göran Andersson: LGPL-3.0-only
+  (src/Ume.Rag.Retrieval/Text/sv_SE/).

@@ -52,6 +52,9 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources \
 
 COPY --from=build /opt/venv /opt/venv
 COPY --from=build /opt/models /opt/models
+# The models' licence texts beside their weights, and the image's third-party notices (scripts/licences.py).
+COPY licences/models/ /opt/models/
+COPY LICENSES.md /usr/share/doc/ume-rag-parser/LICENSES.md
 WORKDIR /app
 COPY pyproject.toml ./
 COPY ume_parser ./ume_parser
@@ -85,11 +88,11 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=10m --retries=3 CMD ["pyt
 ENTRYPOINT ["tini", "--"]
 CMD ["python", "-m", "ume_parser"]
 
-# Runtime plus the dev dependencies and the tests. The tests run during the build with no network at all (BuildKit's
-# `RUN --network=none`: loopback only), test_offline.py included, so a failing test fails the build and
-# a built test image has passed. The tests generate the fixtures with scripts/make_fixtures.py, the same bytes as
+# Runtime plus the dev dependencies and the tests (`test-env`, where scripts/licences.py regenerates LICENSES.md), then
+# the tests run during the build with no network at all (BuildKit's `RUN --network=none`: loopback only),
+# test_offline.py and test_licences.py included, so a failing test fails the build and a built test image has passed. The tests generate the fixtures with scripts/make_fixtures.py, the same bytes as
 # tests/fixtures/parser/ in the repository. `docker run --rm --network none` on the image runs them again.
-FROM runtime AS test
+FROM runtime AS test-env
 USER root
 COPY --from=uv /uv /usr/local/bin/uv
 COPY uv.lock .python-version ./
@@ -98,6 +101,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY scripts ./scripts
 COPY tests ./tests
 USER 10001
+
+FROM test-env AS test
 RUN --network=none python -m pytest -q -p no:cacheprovider
 CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
 
