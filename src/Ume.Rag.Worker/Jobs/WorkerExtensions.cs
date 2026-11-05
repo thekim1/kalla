@@ -87,9 +87,7 @@ public static class WorkerExtensions
         builder.Services.TryAddSingleton<BlobPurgeSweep>();
         builder.Services.TryAddSingleton<HnswIndexMetrics>();
         builder.Services.TryAddSingleton(sp => new HnswIndexHealth(sp.GetRequiredService<NpgsqlDataSource>(),
-            builder.Configuration.GetConnectionString(InfrastructureExtensions.DatabaseResourceName)
-                ?? throw new InvalidOperationException($"ConnectionStrings:{InfrastructureExtensions.DatabaseResourceName} is not configured."),
-            sp.GetRequiredService<HnswIndexMetrics>(), sp.GetRequiredService<ILogger<HnswIndexHealth>>()));
+            HnswIndexHealth.ConnectionString(builder.Configuration), sp.GetRequiredService<HnswIndexMetrics>(), sp.GetRequiredService<ILogger<HnswIndexHealth>>()));
 
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobHandler, CommandJobHandler>());
         builder.Services.AddRagCommands();

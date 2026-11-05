@@ -16,6 +16,8 @@ public sealed partial class PoolerSafeSqlTests
     {
         ["src/Ume.Rag.Infrastructure/Config/ConfigVersionMonitor.cs"] =
             ("LISTEN", "LISTEN rag_config on its own unpooled connection from ConnectionStrings:ragdb-listen"),
+        ["src/Ume.Rag.Worker/Engine/HnswIndexHealth.cs"] =
+            ("session SET", "SET statement_timeout = 0 for the rebuild, on its own unpooled session from ConnectionStrings:ragdb-maintenance"),
     };
 
     private static readonly (string Rule, Regex Pattern)[] Rules =

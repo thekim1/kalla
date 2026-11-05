@@ -186,8 +186,11 @@ var api = builder.AddProject<Projects.Ume_Rag_Api>("api", o => o.LaunchProfileNa
 // /v1/documents/... link would point at Open WebUI instead of rag-api.
 api.WithEnvironment("Knowledge__PublicBaseUrl", api.GetEndpoint("https"));
 
+// ConnectionStrings:ragdb-maintenance: the HNSW rebuild's own unpooled session (Decisions "M-2 open design calls"). Same
+// server and database here; it stays a string of its own so a later pooler in front of ragdb never carries the rebuild.
 var worker = builder.AddProject<Projects.Ume_Rag_Worker>("worker", o => o.LaunchProfileName = "https")
     .WithReference(database)
+    .WithEnvironment("ConnectionStrings__ragdb-maintenance", database)
     .WaitFor(database)
     .WaitForCompletion(migrations)
     .WithHttpHealthCheck(HealthEndpoints.ReadyPath, endpointName: "https");
