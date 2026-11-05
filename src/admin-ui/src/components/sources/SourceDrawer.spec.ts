@@ -2,13 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
+import { collection as collectionFixture } from '@/test/fixtures'
 import type { Collection, Job, PreflightResult, PreviewOutput, Source, StagePreviewResult } from '@/api/types'
 import SourceDrawer from './SourceDrawer.vue'
 
-const collection: Collection = {
-  id: 'c1', slug: 'bygglov', name: 'Bygglov', departmentId: 'd1', classification: 'public', publishedAt: null, ownerTeamId: null,
-  embeddingProfileId: 'p', retrievalSettings: {}, usedBy: [], updatedAt: '2026-11-01T10:00:00Z', updatedBy: null, version: '1',
-}
+const collection: Collection = collectionFixture({ classification: 'public' })
 
 function job(result: PreflightResult): Job<PreflightResult> {
   return { id: 'j1', class: 'preview', kind: 'preflight', state: 'succeeded', enqueuedAt: '', completedAt: '', runId: null, result, lastError: null }

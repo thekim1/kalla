@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import type { Assistant, AssistantDraft } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
-import { bffUser } from '@/test/fixtures'
+import { bffUser, collectionSummary } from '@/test/fixtures'
 import { button } from '@/test/helpers'
 import AssistantView from './AssistantView.vue'
 
@@ -32,19 +32,20 @@ function mocks() {
   vi.spyOn(api.assistants, 'draft').mockResolvedValue(draft)
   vi.spyOn(api.gateway, 'models').mockResolvedValue([{ name: 'ume/chat-eu', kind: 'chat', residencies: ['Eu'] }, { name: 'bge-m3', kind: 'embedding', residencies: ['OnPrem'] }])
   vi.spyOn(api.collections, 'list').mockResolvedValue({ total: 2, items: [
-    { id: 'c1', slug: 'bygglov', name: 'Bygglov', departmentId: 'd1', classification: 'internal', publishedAt: null },
-    { id: 'c2', slug: 'annan', name: 'Annan förvaltning', departmentId: 'd2', classification: 'internal', publishedAt: null },
+    collectionSummary(),
+    collectionSummary({ id: 'c2', slug: 'annan', name: 'Annan förvaltning', departmentId: 'd2', departmentName: 'Annan', shared: false }),
   ] })
   vi.spyOn(api.clients, 'list').mockResolvedValue([{ id: 'k1', name: 'Open WebUI (pilot)', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true }])
 }
 
 describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
-  it('saves the draft with model, instructions and collections and shows the V-rule warnings in plain words', async () => {
+  it('saves the draft with model, instructions and a knowledge base picked with a topic, and shows the V-rule warnings in plain words', async () => {
     signIn(['rag-editor'])
     mocks()
+    const list = vi.spyOn(api.collections, 'list')
     const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu', warnings: [], version: 'd8' })
 
-    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
     await flushPromises()
 
     expect(wrapper.get('[data-test=warnings]').text()).toContain('Add a description and a contact before you publish.')
@@ -52,19 +53,60 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const options = wrapper.findAll('#assistant-model option').map((o) => o.text())
     expect(options).toContain('ume/chat-eu')
     expect(options).not.toContain('bge-m3') // embedding models are not answer models
-    expect(wrapper.text()).toContain('Bygglov (not published)')
-    expect(wrapper.text()).not.toContain('Annan förvaltning') // only the assistant's department's collections
+    // The picker reads every knowledge base the user may see (view=all): Ours is the assistant's department, Shared with us
+    // the others, each with level, document count and topics.
+    expect(list).toHaveBeenCalledWith({ pageSize: 200, view: 'all' })
+    expect(wrapper.text()).toContain('No knowledge base is linked yet.')
+    await wrapper.get('[data-test=add-knowledge]').trigger('click')
+    await flushPromises()
+    const picker = () => document.body.querySelector('[data-test=picker]')!.textContent!
+    expect(picker()).toContain('Bygglov')
+    expect(picker()).toContain('Stadsbyggnad · Internal · 0 documents · not published')
+    expect(picker()).not.toContain('Annan förvaltning')
+    document.body.querySelector<HTMLButtonElement>('[role=tab][id$=-picker-tab-shared]')!.click()
+    await flushPromises()
+    expect(picker()).toContain('Annan förvaltning')
+    expect(picker()).not.toContain('Bygglov')
+    document.body.querySelector<HTMLButtonElement>('[role=tab][id$=-picker-tab-mine]')!.click()
+    await flushPromises()
+    document.body.querySelector<HTMLButtonElement>('[aria-label="Add Bygglov"]')!.click()
+    await flushPromises()
+
+    const link = wrapper.get('[data-test=link-c1]')
+    expect(link.text()).toContain('Bygglov (not published)')
+    expect(link.text()).toContain('All topics')
+    await link.get('input').setValue('bygglov')
+    await link.get('form').trigger('submit')
+    expect(link.text()).not.toContain('All topics')
 
     await wrapper.get('#assistant-model').setValue('ume/chat-eu')
     await wrapper.get('#assistant-prompt').setValue('Svara kort.')
-    await wrapper.findAll('input[type=checkbox]')[0]!.setValue(true)
     await wrapper.get('[data-test=save-draft]').trigger('click')
     await flushPromises()
 
     expect(save).toHaveBeenCalledWith('a1', {
-      gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: [] }], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: 'd7',
+      gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: ['bygglov'] }], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: 'd7',
     })
     expect(wrapper.find('[data-test=warnings]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows a shared knowledge base with its owner, and removes a topic or the link', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, collectionLinks: [{ collectionId: 'c2', tags: ['avfall', 'kompost'] }, { collectionId: 'c1', tags: [] }] })
+    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test=link-c2]').text()).toContain('Annan förvaltning (Annan, shared)')
+    await wrapper.get('[aria-label="Remove the topic avfall"]').trigger('click')
+    await wrapper.get('[aria-label="Remove Bygglov"]').trigger('click')
+    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await flushPromises()
+
+    expect(save.mock.calls[0]![1].collectionLinks).toEqual([{ collectionId: 'c2', tags: ['kompost'] }])
   })
 
   it('sends each link back with the topics it was loaded with', async () => {
@@ -100,7 +142,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.get('[data-test=draft-from]').text()).toBe('Editing starts a new draft from version 3.')
     expect((wrapper.get('#assistant-model').element as HTMLSelectElement).value).toBe('ume/chat-eu')
     expect((wrapper.get('#assistant-prompt').element as HTMLTextAreaElement).value).toBe('Svara kort.')
-    expect((wrapper.findAll('input[type=checkbox]')[0]!.element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.find('[data-test=link-c1]').exists()).toBe(true)
 
     await wrapper.get('[data-test=save-draft]').trigger('click')
     await flushPromises()
@@ -139,10 +181,13 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 1')
 
     await button(wrapper, 'Audience').trigger('click')
+    // "Who can use it" in plain words (admin design §5.5.4), from the saved audience.
+    expect(wrapper.get('[data-test=who-can-use]').text()).toContain('Nobody yet')
     await wrapper.get('input[type=checkbox]').setValue(true)
     await wrapper.get('[data-test=save-audience]').trigger('click')
     await flushPromises()
     expect(audiences).toHaveBeenCalledWith('a1', { clientIds: ['k1'], version: 'a4' })
+    expect(wrapper.get('[data-test=who-can-use]').text()).toContain('Open WebUI (pilot): everyone who can sign in to it.')
   })
 
   it('restores an earlier version after one confirmation, keeping the draft', async () => {

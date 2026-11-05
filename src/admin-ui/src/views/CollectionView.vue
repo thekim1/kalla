@@ -2,7 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
-import type { Collection, CollectionSetup, DocumentSummary, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
+import type { Collection, CollectionRead, CollectionSetup, DocumentSummary, EvaluationOverview, Source, SourceListItem, SourceSummary } from '@/api/types'
+import CollectionSharing from '@/components/collections/CollectionSharing.vue'
+import CollectionTopics from '@/components/collections/CollectionTopics.vue'
 import SetupChecklist from '@/components/collections/SetupChecklist.vue'
 import EvaluationTab from '@/components/evaluation/EvaluationTab.vue'
 import RetrievalSettingsForm from '@/components/evaluation/RetrievalSettingsForm.vue'
@@ -24,29 +26,37 @@ import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
 import { COLLECTION, COLLECTIONS, EVALUATION, LEVEL_LABEL, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
-// Kunskapsbank (admin design §5.5.2): Översikt (state, used by), Källor, Dokument with the personal-data filter
-// (§4.5 documents), Testfrågor och kvalitet and Sökinställningar (§7.1). Delning is P2.
-type Tab = 'overview' | 'sources' | 'documents' | 'evaluation' | 'retrieval'
+// Kunskapsbank (admin design §5.5.2): Översikt (state, contact, used by), Källor, Dokument with the personal-data filter
+// (§4.5 documents), Topics, Testfrågor och kvalitet, Sökinställningar (§7.1) and Sharing (§3.2). A department the
+// knowledge base is shared with opens it read-only: Overview (owner, contact, level, document count) and Topics.
+type Tab = 'overview' | 'sources' | 'documents' | 'topics' | 'evaluation' | 'retrieval' | 'sharing'
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
 const ui = useUiStore()
 const router = useRouter()
 const route = useRoute()
 const setup = ref<CollectionSetup | null>(null)
-const collection = useLoadable<Collection | null>(null)
+const read = useLoadable<CollectionRead | null>(null)
+/** The owner's detail; null for a shared knowledge base. */
+const collection = { data: computed<Collection | null>(() => (read.data.value && !read.data.value.shared ? read.data.value : null)) }
+const shared = computed(() => (read.data.value?.shared ? read.data.value : null))
 const sources = useLoadable<SourceListItem[]>([])
 const evaluation = ref<EvaluationOverview | null>(null)
 const documents = useLoadable<DocumentSummary[]>([])
 const next = ref<string | null>(null)
 const onlyPii = ref(false)
-const TABS: Tab[] = ['overview', 'sources', 'documents', 'evaluation', 'retrieval']
+const TABS: Tab[] = ['overview', 'sources', 'documents', 'topics', 'evaluation', 'retrieval', 'sharing']
 /** `?tab=` opens a tab directly (the setup checklist links to them). */
 const fromQuery = (value: unknown): Tab => (TABS.includes(value as Tab) ? (value as Tab) : 'overview')
 const tab = ref<Tab>(fromQuery(route?.query.tab))
 const publishing = ref(false)
 const publishError = ref<unknown>(null)
 const usedBy = computed(() =>
-  (collection.data.value?.usedBy ?? []).map((u) => (u.published ? u.name : `${u.name} (${COLLECTION.draftOnly})`)).join(', '),
+  (collection.data.value?.usedBy ?? []).map((u) => {
+    // Another department's assistant is named with its department (a shared knowledge base, §3.2).
+    const name = u.departmentId === collection.data.value?.departmentId ? u.name : `${u.name}, ${u.departmentName}`
+    return u.published ? name : `${name} (${COLLECTION.draftOnly})`
+  }).join(', '),
 )
 const documentCount = computed(() => sources.data.value.reduce((sum, s) => sum + s.documents, 0))
 const lastRun = computed(() =>
@@ -62,13 +72,18 @@ const adding = ref(false)
 const proposal = ref<{ coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null>(null)
 let documentsRequest = 0
 
-const tabs = computed(() => [
+const tabs = computed(() => shared.value ? [
+  { value: 'overview' as const, label: COLLECTION.tabs.overview },
+  { value: 'topics' as const, label: COLLECTION.tabs.topics },
+] : [
   { value: 'overview' as const, label: COLLECTION.tabs.overview },
   // The count only once loaded (#279 review: no "(0)" while loading).
   { value: 'sources' as const, label: sources.loaded.value ? `${COLLECTION.tabs.sources} (${sources.data.value.length})` : COLLECTION.tabs.sources },
   { value: 'documents' as const, label: COLLECTION.tabs.documents },
+  { value: 'topics' as const, label: COLLECTION.tabs.topics },
   { value: 'evaluation' as const, label: EVALUATION.tab },
   { value: 'retrieval' as const, label: RETRIEVAL.tab },
+  { value: 'sharing' as const, label: COLLECTION.tabs.sharing },
 ])
 const sourceColumns: Column[] = [
   { key: 'name', label: COLLECTION.sourceName },
@@ -95,7 +110,11 @@ async function loadDocuments(append = false): Promise<void> {
 }
 
 async function load(): Promise<void> {
-  await collection.run(() => api.collections.get(props.id))
+  const loaded = await read.run(() => api.collections.get(props.id))
+  if (!loaded || loaded.shared) {
+    if (loaded?.shared && !tabs.value.some((t) => t.value === tab.value)) tab.value = 'overview'
+    return
+  }
   await sources.run(() => api.collections.sources(props.id))
   evaluation.value = await api.collections.evaluation(props.id).catch(() => null)
   // Kom igång (§5.4): computed by the API; hidden once done or when it can't be read.
@@ -107,8 +126,9 @@ async function publish(): Promise<void> {
   publishing.value = true
   publishError.value = null
   try {
-    collection.data.value = await api.collections.publish(props.id, collection.data.value.version)
-    ui.notify(COLLECTION.published(collection.data.value.name))
+    const saved = await api.collections.publish(props.id, collection.data.value.version)
+    read.data.value = saved
+    ui.notify(COLLECTION.published(saved.name))
   } catch (e) {
     publishError.value = e
   } finally {
@@ -129,8 +149,12 @@ function useProposal(values: { coverageMaxDistance?: number; coverageMinKeywordS
 }
 
 function retrievalSaved(saved: Collection): void {
-  collection.data.value = { ...saved }
+  read.data.value = { ...saved }
   proposal.value = null
+}
+
+function sharingSaved(saved: Collection): void {
+  read.data.value = { ...saved }
 }
 
 function openSource(source: SourceSummary): void {
@@ -148,8 +172,33 @@ onMounted(load)
 </script>
 
 <template>
-  <AsyncState :loading="collection.loading.value && !collection.data.value" :error="collection.error.value" @retry="load">
-    <template v-if="collection.data.value">
+  <AsyncState :loading="read.loading.value && !read.data.value" :error="read.error.value" @retry="load">
+    <template v-if="shared">
+      <PageHeader :title="shared.name" :description="shared.departmentName">
+        <UiBadge :label="LEVEL_LABEL[shared.classification]" />
+        <UiBadge tone="accent" :label="COLLECTIONS.shared" data-test="shared" />
+      </PageHeader>
+      <UiTabs id="collection" v-model="tab" :tabs="tabs" :label="COLLECTION.tabsLabel" class="mb-6" />
+      <div v-if="tab === 'topics'" id="collection-panel-topics" role="tabpanel" aria-labelledby="collection-tab-topics">
+        <CollectionTopics :collection-id="shared.id" />
+      </div>
+      <div v-else id="collection-panel-overview" role="tabpanel" aria-labelledby="collection-tab-overview" class="grid gap-6">
+        <UiCard :title="COLLECTIONS.state">
+          <p class="mb-2" data-test="shared-with-you">{{ COLLECTION.sharedWithYou(shared.departmentName) }}</p>
+          <p v-if="!shared.publishedAt" class="mb-2">{{ COLLECTIONS.notPublishedHint }}</p>
+          <dl>
+            <DetailRow :label="COLLECTION.owner">{{ shared.departmentName }}</DetailRow>
+            <DetailRow :label="COLLECTION.contact">
+              <span v-if="shared.contactName || shared.contactEmail" data-test="contact">{{ [shared.contactName, shared.contactEmail].filter(Boolean).join(', ') }}</span>
+              <span v-else class="text-fg-3">{{ COLLECTION.noContact }}</span>
+            </DetailRow>
+            <DetailRow :label="COLLECTION.level">{{ LEVEL_LABEL[shared.classification] }}</DetailRow>
+            <DetailRow :label="COLLECTION.documents"><span class="tabular" data-test="document-count">{{ formatNumber(shared.documentCount) }}</span></DetailRow>
+          </dl>
+        </UiCard>
+      </div>
+    </template>
+    <template v-else-if="collection.data.value">
       <PageHeader :title="collection.data.value.name">
         <UiBadge :label="LEVEL_LABEL[collection.data.value.classification]" />
         <UiBadge
@@ -169,6 +218,12 @@ onMounted(load)
         <UiCard :title="COLLECTIONS.state">
           <p v-if="!collection.data.value.publishedAt" class="mb-2">{{ COLLECTIONS.notPublishedHint }}</p>
           <dl>
+            <DetailRow :label="COLLECTION.contact">
+              <span v-if="collection.data.value.contactName || collection.data.value.contactEmail" data-test="contact">
+                {{ [collection.data.value.contactName, collection.data.value.contactEmail].filter(Boolean).join(', ') }}
+              </span>
+              <span v-else class="text-fg-3">{{ COLLECTION.noContact }}</span>
+            </DetailRow>
             <DetailRow :label="COLLECTION.usedBy">
               <span v-if="collection.data.value.usedBy.length === 0" class="text-fg-3">{{ COLLECTION.notUsed }}</span>
               <span v-else data-test="used-by">
@@ -206,6 +261,14 @@ onMounted(load)
             <template #cell-state="{ row }">{{ COLLECTION.sourceStates[row.state] ?? row.state }}</template>
           </DataTable>
         </AsyncState>
+      </div>
+
+      <div v-else-if="tab === 'topics'" id="collection-panel-topics" role="tabpanel" aria-labelledby="collection-tab-topics">
+        <CollectionTopics :collection-id="collection.data.value.id" />
+      </div>
+
+      <div v-else-if="tab === 'sharing'" id="collection-panel-sharing" role="tabpanel" aria-labelledby="collection-tab-sharing">
+        <CollectionSharing :collection="collection.data.value" :can-manage="canPublish" @saved="sharingSaved" />
       </div>
 
       <div v-else-if="tab === 'evaluation'" id="collection-panel-evaluation" role="tabpanel" aria-labelledby="collection-tab-evaluation">

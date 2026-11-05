@@ -456,6 +456,25 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task A_department_admin_picks_from_every_active_department_by_name_for_sharing()
+    {
+        var seed = await SeedAsync();
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Departments.Where(d => d.Id == seed.Third).ExecuteUpdateAsync(u => u.SetProperty(d => d.IsActive, false), Ct);
+        }
+
+        await using var factory = database.HeaderFactory();
+        using var owner = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OwnerCode);
+        var names = (await owner.GetFromJsonAsync<JsonElement>("/api/organisation/departments/names", Ct)).EnumerateArray().ToList();
+        var ids = names.Select(n => n.GetProperty("id").GetGuid()).ToList();
+        ids.ShouldContain(seed.User); // outside the admin's scope, still offered for sharing
+        ids.ShouldContain(seed.Owner);
+        ids.ShouldNotContain(seed.Third); // inactive
+        names.Single(n => n.GetProperty("id").GetGuid() == seed.User).EnumerateObject().Select(p => p.Name).ShouldBe(["id", "name"]);
+    }
+
+    [Fact]
     public async Task The_organisation_routes_carry_the_policies_the_permission_matrix_tests_check()
     {
         await using var factory = database.HeaderFactory();
@@ -465,6 +484,7 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
         routes["PUT /api/collections/{id:guid}/sharing"].ShouldContain(AdminPolicies.Manage);
         routes["GET /api/collections/{id:guid}/topics"].ShouldBe(new HashSet<string> { AdminPolicies.Read });
         routes["GET /api/organisation/departments/{id:guid}/map"].ShouldBe(new HashSet<string> { AdminPolicies.Read });
+        routes["GET /api/organisation/departments/names"].ShouldBe(new HashSet<string> { AdminPolicies.Read });
         routes["GET /api/collections"].ShouldBe(new HashSet<string> { AdminPolicies.Read });
     }
 }

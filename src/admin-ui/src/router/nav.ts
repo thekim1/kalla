@@ -41,8 +41,8 @@ export const MANAGE_ROLES: Role[] = ['rag-platform-admin', 'rag-department-admin
 export const FEEDBACK_ROLES: Role[] = ['rag-platform-admin', 'rag-department-admin', 'rag-reviewer', 'rag-viewer']
 
 /**
- * Grouped by the job people come to do (admin design §5.2), filtered by role. The journey pages (Knowledge bases,
- * Assistants, Feedback, …) join as they are built (P1).
+ * Grouped by the job people come to do (admin design §5.2), filtered by role: Home and Map; Knowledge bases and
+ * Assistants; Feedback; then Organisation, the platform objects and the Audit log.
  */
 export const navGroups: NavGroup[] = [
   {
@@ -55,6 +55,14 @@ export const navGroups: NavGroup[] = [
         icon: 'space_dashboard',
         description: PAGE.overview.description,
         keywords: [...NAV_KEYWORDS.overview],
+        roles: ALL_ROLES,
+      },
+      {
+        name: 'map',
+        label: PAGE.map.title,
+        icon: 'hub',
+        description: PAGE.map.description,
+        keywords: [...NAV_KEYWORDS.map],
         roles: ALL_ROLES,
       },
     ],

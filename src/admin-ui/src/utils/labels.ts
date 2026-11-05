@@ -1,4 +1,4 @@
-import type { DepartmentSource, Level, Role, SourceType } from '@/api/types'
+import type { DepartmentSource, Level, Role, SharingLevel, SourceType } from '@/api/types'
 import { formatDecimal, formatNumber } from './format'
 
 /**
@@ -139,7 +139,8 @@ export const NAV_GROUP = {
 
 /** Extra words people search with that are not in a page's label (router/nav.ts). */
 export const NAV_KEYWORDS = {
-  overview: ['start', 'access', 'permissions', 'roles', 'department'],
+  overview: ['start', 'overview', 'access', 'permissions', 'roles', 'department'],
+  map: ['map', 'responsible', 'contact', 'who uses', 'shared', 'channel', 'department'],
   collections: ['knowledge base', 'source', 'website', 'files', 'documents', 'personal data'],
   assistants: ['assistant', 'draft', 'test', 'publish', 'audience', 'open webui', 'model'],
   organisation: ['department', 'team', 'cost centre', 'sync', 'gateway'],
@@ -148,7 +149,8 @@ export const NAV_KEYWORDS = {
 } as const
 
 export const PAGE = {
-  overview: { title: 'Overview', description: 'Your access and what needs doing' },
+  overview: { title: 'Home', description: 'Your access and what needs doing' },
+  map: { title: 'Map', description: 'Which knowledge bases feed which assistants and channels, and who is responsible' },
   organisation: { title: 'Organisation', description: 'Departments and teams from the AI gateway' },
   collections: { title: 'Knowledge bases', description: 'The content the assistants search' },
   platform: { title: 'Platform objects', description: 'Clients, keys, settings, data protection, site profiles, models and organisation' },
@@ -228,19 +230,41 @@ export const COLLECTIONS = {
   nameRequired: 'Enter a name.',
   department: 'Department',
   departmentRequired: 'Choose a department.',
-  ownerTeam: 'Responsible team',
-  noTeam: 'No team',
+  contactName: 'Contact person',
+  contactEmail: 'Contact email',
+  contactHint: 'Shown to the departments that may use the knowledge base. A person or a functional mailbox.',
   state: 'State',
   published: 'Published',
   notPublished: 'Not published',
   notPublishedHint: 'Not published: only visible in Test.',
   created: (name: string) => `The knowledge base ${name} has been created.`,
   list: 'Knowledge bases',
+  views: { mine: 'Ours', shared: 'Shared with us', all: 'All' },
+  viewsLabel: 'Which knowledge bases',
+  emptyShared: 'No other department shares a knowledge base with yours yet.',
+  emptyAll: 'There are no knowledge bases yet.',
+  sharing: 'Sharing',
+  shared: 'Shared',
+  documents: 'Documents',
+  topics: 'Topics',
 } as const
 
+/** Sharing levels in plain words (admin design §3.2, §5.5.2). */
+export const SHARING_LABEL: Record<SharingLevel, string> = {
+  department: 'Only our department',
+  selected: 'Selected departments',
+  municipality: 'Whole municipality',
+}
+
 export const COLLECTION = {
-  tabs: { overview: 'Overview', sources: 'Sources', documents: 'Documents' },
+  tabs: { overview: 'Overview', sources: 'Sources', documents: 'Documents', topics: 'Topics', sharing: 'Sharing' },
   tabsLabel: 'Parts of the knowledge base',
+  owner: 'Owner',
+  contact: 'Contact',
+  noContact: 'No contact yet',
+  level: 'Information class',
+  sharedWithYou: (owner: string) =>
+    `${owner} shares this knowledge base with your department. Your assistants can use it; its sources and settings belong to ${owner}.`,
   usedBy: 'Used by',
   notUsed: 'No assistant uses the knowledge base yet.',
   lastFetch: 'Last fetch',
@@ -268,6 +292,62 @@ export const COLLECTION = {
   live: 'Searchable',
   notLive: 'Not searchable',
   more: 'Show more',
+} as const
+
+/** The Sharing tab (admin design §5.5.2, §3.2, V35). */
+export const SHARING = {
+  question: 'Who may use this knowledge base in their assistants?',
+  only: (department: string) => `Only ${department}`,
+  selected: 'Selected departments',
+  municipality: 'Whole municipality',
+  departments: 'Departments',
+  departmentsRequired: 'Choose at least one department.',
+  readOnly: 'Shared use is read-only: other departments use the content in their assistants, not the sources.',
+  usedBy: (assistants: number, departments: number) =>
+    `Used by ${assistants} ${assistants === 1 ? 'assistant' : 'assistants'} in ${departments} ${departments === 1 ? 'department' : 'departments'}`,
+  notUsed: 'No assistant uses the knowledge base yet.',
+  assistant: 'Assistant',
+  department: 'Department',
+  topics: 'Topics',
+  allTopics: 'all',
+  status: 'Status',
+  published: 'Published',
+  draft: 'Draft',
+  save: 'Save sharing',
+  saved: 'The sharing has been saved.',
+  manageOnly: 'Only a department administrator can change the sharing.',
+} as const
+
+/** The Topics tab (admin design §5.5.2): tags set by the sources' path rules. */
+export const TOPICS = {
+  lead: 'Topics are set by path rules on the sources (processing settings, Topics). Assistants can limit a link to some topics.',
+  topic: 'Topic',
+  rule: 'Rule',
+  documents: 'Documents',
+  none: 'No topics yet. They appear once a source with path rules has been fetched.',
+  noRule: 'No rule any more',
+} as const
+
+/** The Map as a table (admin design §5.5.6). */
+export const MAP = {
+  lead: 'One row per path from a department’s knowledge base to an assistant and the channel that offers it, with who is responsible.',
+  department: 'Department',
+  allDepartments: 'All',
+  show: 'Show',
+  showOptions: { all: 'Everything', shared: 'Shared knowledge bases', unlinked: 'Knowledge bases without an assistant' } as Record<string, string>,
+  knowledgeBase: 'Knowledge base',
+  shared: 'Shared',
+  sharedIn: (owner: string) => `shared by ${owner}`,
+  assistant: 'Assistant',
+  channel: 'Channel',
+  responsible: 'Responsible',
+  draftOnly: 'draft',
+  version: (n: number) => `version ${n}`,
+  notPublished: 'not published',
+  topics: (t: string) => `topics: ${t}`,
+  none: '–',
+  empty: 'Nothing to show for this choice.',
+  caption: 'Map of knowledge bases, assistants and channels',
 } as const
 
 export const SOURCE = {
@@ -706,6 +786,20 @@ export const ASSISTANT = {
   promptHint: 'How the assistant should answer, for example tone and what it should not answer.',
   collections: 'Knowledge bases',
   collectionsHint: 'Knowledge bases that are not published only work in Test.',
+  noCollections: 'No knowledge base is linked yet.',
+  addCollection: 'Add knowledge base',
+  pickerTitle: 'Add a knowledge base',
+  pickerViews: { mine: 'Ours', shared: 'Shared with us', all: 'All' },
+  pickerEmpty: 'No knowledge base to add here.',
+  pickerDocuments: (n: string) => `${n} documents`,
+  pickerAdd: (name: string) => `Add ${name}`,
+  sharedFrom: (owner: string) => `${owner}, shared`,
+  allTopics: 'All topics',
+  topicsOf: (name: string) => `Topics of ${name}`,
+  addTopic: 'Add topic',
+  noTopicChoice: 'Choose a topic',
+  removeTopic: (topic: string) => `Remove the topic ${topic}`,
+  removeCollection: (name: string) => `Remove ${name}`,
   saveDraft: 'Save draft',
   draftFrom: (n: number) => `Editing starts a new draft from version ${n}.`,
   draftSaved: 'The draft has been saved.',
@@ -746,6 +840,15 @@ export const ASSISTANT = {
   generalKnowledgeBadge: 'General knowledge',
   audience: 'Clients that offer the assistant',
   audienceHint: 'Users see the assistant in the clients you choose.',
+  whoCanUse: 'Who can use it',
+  whoCanUseNone: 'Nobody yet: choose a client below and save.',
+  /** "Who can use it" in plain words per client kind (admin design §5.5.4). */
+  whoByKind: {
+    'open-webui': (name: string) => `${name}: everyone who can sign in to it.`,
+    integration: (name: string) => `${name}: the system that uses the client’s key, and the people it serves.`,
+    'mcp-client': (name: string) => `${name}: the tools that connect with the client’s key.`,
+  } as Record<string, (name: string) => string>,
+  whoFallback: (name: string) => `${name}: everyone the client lets in.`,
   saveAudience: 'Save audience',
   audienceSaved: 'The audience has been saved.',
   noClients: 'There are no clients yet. A platform administrator creates them under Platform objects.',

@@ -2,7 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type {
-  Assistant, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionSummary, DataProtectionPolicy, GatewayModel, GeneralKnowledge,
+  Assistant, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionLink, CollectionSummary, DataProtectionPolicy,
+  GatewayModel, GeneralKnowledge,
 } from '@/api/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
@@ -21,6 +22,7 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
+import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
 import { formatDateTime } from '@/utils/format'
 import { ASSISTANT, LEVEL_LABEL } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
@@ -42,9 +44,8 @@ const collections = ref<CollectionSummary[]>([])
 const clients = ref<ClientSummary[]>([])
 const model = ref('')
 const prompt = ref('')
-const linked = ref<string[]>([])
-// Each link's topics as loaded, sent back unchanged (the topic picker comes with the organisation pages, item 36).
-const topics = ref<Record<string, string[]>>({})
+// The knowledge links with their topics (admin design §5.5.4): own and shared knowledge bases.
+const links = ref<CollectionLink[]>([])
 // The versioned query steps and not-found texts are kept as loaded and sent back whole; the form edits only answer.generalKnowledge.
 const querySteps = ref<Record<string, unknown>>({})
 const notFound = ref<Record<string, unknown>>({})
@@ -87,7 +88,10 @@ const historyOptions = computed(() =>
 )
 const restorable = (v: AssistantVersionSummary) => v.state === 'superseded'
 const modelOptions = computed(() => [{ value: '', label: ASSISTANT.noModel }, ...models.value.filter((m) => m.kind !== 'embedding').map((m) => ({ value: m.name, label: m.name }))])
-const departmentCollections = computed(() => collections.value.filter((c) => c.departmentId === assistant.data.value?.departmentId))
+/** "Who can use it" (admin design §5.5.4): the saved audience in plain words. */
+const whoCanUse = computed(() =>
+  clients.value.filter((c) => assistant.data.value?.audienceClientIds.includes(c.id)).map((c) => (ASSISTANT.whoByKind[c.kind] ?? ASSISTANT.whoFallback)(c.name)),
+)
 const warnings = computed(() =>
   (draft.value?.warnings ?? []).map((w) => formatMessage(ERROR_MESSAGES[w.code] ?? w.code, w.params ?? undefined) + (w.affected.length ? ` (${w.affected.join(', ')})` : '')),
 )
@@ -104,8 +108,7 @@ function fill(d: AssistantDraft | null, base: Settings | null = null): void {
   const s = d ?? base
   model.value = s?.gatewayModel ?? ''
   prompt.value = s?.systemPrompt ?? ''
-  linked.value = (s?.collectionLinks ?? []).map((l) => l.collectionId)
-  topics.value = Object.fromEntries((s?.collectionLinks ?? []).map((l) => [l.collectionId, [...l.tags]]))
+  links.value = (s?.collectionLinks ?? []).map((l) => ({ collectionId: l.collectionId, tags: [...l.tags] }))
   querySteps.value = { ...(s?.querySteps ?? {}) }
   notFound.value = { ...(s?.notFound ?? {}) }
   generalKnowledge.value = levelOf(s?.querySteps)
@@ -134,7 +137,7 @@ async function load(): Promise<void> {
   await fillFrom(a)
   ;[models.value, collections.value, clients.value] = await Promise.all([
     api.gateway.models().catch(() => []),
-    api.collections.list({ pageSize: 200 }).then((p) => p.items).catch(() => []),
+    api.collections.list({ pageSize: 200, view: 'all' }).then((p) => p.items).catch(() => []),
     api.clients.list().catch(() => []),
   ])
 }
@@ -153,7 +156,7 @@ async function run(kind: typeof busy.value, action: () => Promise<void>): Promis
 
 const saveDraft = () => run('save', async () => {
   fill(await api.assistants.saveDraft(props.id, {
-    gatewayModel: model.value || null, systemPrompt: prompt.value, collectionLinks: linked.value.map((id) => ({ collectionId: id, tags: topics.value[id] ?? [] })), querySteps: stepsToSave(), notFound: notFound.value,
+    gatewayModel: model.value || null, systemPrompt: prompt.value, collectionLinks: links.value, querySteps: stepsToSave(), notFound: notFound.value,
     version: draft.value?.version ?? null,
   }))
   assistant.data.value = await api.assistants.get(props.id)
@@ -259,14 +262,7 @@ onMounted(load)
         </UiCard>
         <SelectField id="assistant-model" v-model="model" :label="ASSISTANT.model" :hint="ASSISTANT.modelHint" :options="modelOptions" />
         <TextAreaField id="assistant-prompt" v-model="prompt" :label="ASSISTANT.prompt" :hint="ASSISTANT.promptHint" :rows="8" />
-        <fieldset class="grid gap-2">
-          <legend class="mb-1 font-medium">{{ ASSISTANT.collections }}</legend>
-          <p class="text-small text-fg-2">{{ ASSISTANT.collectionsHint }}</p>
-          <CheckField
-            v-for="c in departmentCollections" :key="c.id" :model-value="linked.includes(c.id)"
-            :label="c.publishedAt ? c.name : `${c.name} (${ASSISTANT.notPublished})`" @update:model-value="linked = toggle(linked, c.id, $event)"
-          />
-        </fieldset>
+        <KnowledgeLinks v-model="links" :collections="collections" :department-id="assistant.data.value.departmentId" :disabled="!canEdit" />
         <fieldset class="grid gap-2" data-test="general-knowledge" aria-describedby="assistant-general-knowledge-hint">
           <legend class="mb-1 font-medium">{{ ASSISTANT.generalKnowledge }}</legend>
           <p id="assistant-general-knowledge-hint" class="text-small text-fg-2">{{ publicLevel ? ASSISTANT.generalKnowledgePublic : ASSISTANT.generalKnowledgeHint }}</p>
@@ -346,6 +342,11 @@ onMounted(load)
       </div>
 
       <div v-else id="assistant-panel-audience" role="tabpanel" aria-labelledby="assistant-tab-audience" class="grid max-w-3xl gap-4">
+        <section class="grid gap-1" data-test="who-can-use" aria-labelledby="assistant-who-can-use">
+          <h3 id="assistant-who-can-use" class="font-medium">{{ ASSISTANT.whoCanUse }}</h3>
+          <p v-if="whoCanUse.length === 0" class="text-fg-3">{{ ASSISTANT.whoCanUseNone }}</p>
+          <ul v-else class="ml-5 list-disc"><li v-for="w in whoCanUse" :key="w">{{ w }}</li></ul>
+        </section>
         <p class="text-fg-2">{{ ASSISTANT.audienceHint }}</p>
         <p v-if="clients.length === 0" class="text-fg-3">{{ ASSISTANT.noClients }}</p>
         <fieldset v-else class="grid gap-2">

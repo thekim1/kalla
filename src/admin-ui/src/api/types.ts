@@ -93,14 +93,33 @@ export interface KeysetPage<T, K = string> {
   next: K | null
 }
 
-export interface CollectionSummary {
+/** Who may link a knowledge base besides its own department (admin design §3.2). */
+export type SharingLevel = 'department' | 'selected' | 'municipality'
+
+interface CollectionBase {
   id: string
   slug: string
   name: string
   departmentId: string
   classification: Level
   publishedAt: IsoDateTime | null
+  sharedWith: SharingLevel
+  contactName: string | null
+  contactEmail: string | null
 }
+
+/**
+ * `GET /api/collections?view=` rows. For another department's knowledge base (`shared`) this is all a department it is
+ * shared with sees: name, owner, level, contact, document count and topics (admin design §4.5).
+ */
+export interface CollectionSummary extends CollectionBase {
+  departmentName: string
+  shared: boolean
+  documentCount: number
+  topics: string[]
+}
+
+export type CollectionView = 'mine' | 'shared' | 'all'
 
 /** An assistant that links the collection, through its published version, its draft, or both. */
 export interface CollectionUser {
@@ -109,23 +128,61 @@ export interface CollectionUser {
   classification: Level
   published: boolean
   draft: boolean
+  departmentId: string
+  departmentName: string
+  /** The link's topics; empty = the whole knowledge base. */
+  topics: string[]
 }
 
-export interface Collection extends CollectionSummary {
+/** The owner's detail. */
+export interface Collection extends CollectionBase {
+  shared: false
   ownerTeamId: string | null
   embeddingProfileId: string
   retrievalSettings: Record<string, unknown>
+  /** Only with `selected`. */
+  sharedWithDepartmentIds: string[]
   usedBy: CollectionUser[]
   updatedAt: IsoDateTime
   updatedBy: string | null
   version: string
 }
 
+/** `GET /api/collections/{id}`: the owner's detail, or the shared summary for a department it is shared with. */
+export type CollectionRead = Collection | (CollectionSummary & { shared: true })
+
 export interface CollectionCreate {
   name: string
   departmentId: string
-  ownerTeamId: string | null
   classification: Level
+  contactName: string | null
+  contactEmail: string | null
+}
+
+/** `GET /api/collections/{id}/topics`: `rules` only for the owning department. */
+export interface Topic {
+  tag: string
+  documents: number
+  rules: { sourceId: string; sourceName: string; on: string; match: string }[] | null
+}
+
+/** One row of the Map (admin design §5.5.6): department → knowledge base → assistant → audience. */
+export interface MapRow {
+  collection: {
+    id: string; name: string; departmentId: string; departmentName: string; shared: boolean; sharedWith: SharingLevel; classification: Level
+    published: boolean; contactName: string | null; contactEmail: string | null
+  }
+  assistant: {
+    id: string; name: string; state: string; publishedVersion: number | null; draftOnly: boolean; topics: string[]; contactName: string | null
+    contactEmail: string | null
+  } | null
+  audience: { clientId: string; name: string; kind: string } | null
+}
+
+export interface DepartmentMap {
+  departmentId: string
+  departmentName: string
+  rows: MapRow[]
 }
 
 export interface SourceSummary {

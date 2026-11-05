@@ -17,6 +17,7 @@ declare module 'vue-router' {
 
 export const routes: RouteRecordRaw[] = [
   { path: '/', name: 'overview', component: () => import('@/views/OverviewView.vue'), meta: { title: PAGE.overview.title, roles: ALL_ROLES } },
+  { path: '/map', name: 'map', component: () => import('@/views/MapView.vue'), meta: { title: PAGE.map.title, roles: ALL_ROLES } },
   { path: '/collections', name: 'collections', component: () => import('@/views/CollectionsView.vue'), meta: { title: PAGE.collections.title, roles: ALL_ROLES } },
   {
     path: '/collections/:id',

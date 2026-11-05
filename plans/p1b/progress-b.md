@@ -19,7 +19,8 @@ here.
   (#362), hand-off L7 (#364); its NVDA pass needs a person and stays open.
 - **Item 40 is done:** chat and admin API in #358 (frames, `answered-general`, `GeneralAnswers`, V17, V36, test panel), the radio group and badge in #359.
 - **Item 35 is done** (#361): sharing, `view=`, topics, Map route, contact fields, V11 widened, V35, owner team defaulted.
-- **Next, in order: 36 → 39.** 36's done-when extends item 14's pilot-journey E2E (sharing and a topic link by keyboard).
+- **Item 36 is built** (#366): pages, picker, Map; its Done waits on the first green `e2e` run (stream A's item 15) for E2E step 14.
+- **Next: 39.**
 - Then walk admin §5.4 locally to close items 11 and 12, and record #146.
 - Merged without waiting for reviewers (user, 2026-11-02); problems go in a `stream-b` issue.
 
@@ -130,9 +131,10 @@ Refs: [admin §3.2, §4.5, §4.6](../admin/design.md)
 
 ### 36. Organisation pages (after #314)
 Refs: [admin §5.2–§5.5](../admin/design.md)
-- [ ] Menu regrouped; Knowledge bases tabs *Ours* / *Shared with us* / *All*
-- [ ] Sharing and Topics tabs; knowledge picker with topics; "Who can use it"; Map table; no team field
+- [x] Menu regrouped; Knowledge bases tabs *Ours* / *Shared with us* / *All* (#366)
+- [x] Sharing and Topics tabs; knowledge picker with topics; "Who can use it"; Map table; no team field (#366)
 - [ ] **Done:** vitest per page; the E2E shares and links with a topic by keyboard
+  — vitest per page green (#366); the E2E step 14 is written (#366) but not run yet: `e2e.yml` fails until stream A's item 15, so tick this on the first green `e2e` run
 
 ### 39. A new assistant starts from a default
 Refs: [admin §5.5.4](../admin/design.md), [P1b README item 39](README.md)

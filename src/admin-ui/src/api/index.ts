@@ -1,6 +1,11 @@
 import { buildUrl, http, postLogout, request } from './client'
 import type {
   CollectionLink,
+  CollectionRead,
+  CollectionView,
+  DepartmentMap,
+  SharingLevel,
+  Topic,
   Assistant,
   AssistantCreate,
   AssistantDraft,
@@ -73,10 +78,15 @@ export const api = {
     departments: () => http.get<Department[]>('/api/organisation/departments'),
     syncStatus: () => http.get<OrgSyncStatus>('/api/organisation/sync'),
     sync: () => http.post<OrgSyncResult>('/api/organisation/sync'),
+    departmentNames: () => http.get<{ id: string; name: string }[]>('/api/organisation/departments/names'),
+    map: (id: string) => http.get<DepartmentMap>(`/api/organisation/departments/${id}/map`),
   },
   collections: {
-    list: (query: { q?: string; page?: number; pageSize?: number } = {}) => http.get<Page<CollectionSummary>>('/api/collections', query),
-    get: (id: string) => http.get<Collection>(`/api/collections/${id}`),
+    list: (query: { q?: string; page?: number; pageSize?: number; view?: CollectionView } = {}) => http.get<Page<CollectionSummary>>('/api/collections', query),
+    get: (id: string) => http.get<CollectionRead>(`/api/collections/${id}`),
+    topics: (id: string) => http.get<{ collectionId: string; topics: Topic[] }>(`/api/collections/${id}/topics`),
+    sharing: (id: string, body: { sharedWith: SharingLevel; departmentIds: string[]; version: string }) =>
+      http.put<Collection>(`/api/collections/${id}/sharing`, body),
     create: (body: CollectionCreate) => http.post<Collection>('/api/collections', body),
     publish: (id: string, version: string) => http.post<Collection>(`/api/collections/${id}/publish`, { version }),
     sources: (id: string) => http.get<SourceListItem[]>(`/api/collections/${id}/sources`),

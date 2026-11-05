@@ -33,6 +33,12 @@ public static class OrganisationEndpoints
         })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListDepartments").WithSummary("Departments and teams in scope");
 
+        // Every active department by name, for the sharing picker (admin design §5.5.2: "Selected departments"): a department
+        // admin's scope holds only their own departments, but they share with any other. Names only.
+        organisation.MapGet("/departments/names", async (AdminContext admin, CancellationToken ct) =>
+                await admin.Db.Departments.AsNoTracking().Where(d => d.IsActive).OrderBy(d => d.Name).Select(d => new DepartmentNameDto(d.Id, d.Name)).ToListAsync(ct))
+            .RequireAuthorization(AdminPolicies.Read).WithName("ListDepartmentNames").WithSummary("Every active department's id and name (pickers)");
+
         // The Map as a table (admin design §5.5.6, P1b item 35): department → knowledge base → assistant → audience.
         organisation.MapGet("/departments/{id:guid}/map", async (Guid id, AdminContext admin, CancellationToken ct) =>
             {
@@ -139,6 +145,8 @@ public static class DepartmentMap
                 .ThenBy(r => r.Audience?.Name, StringComparer.Ordinal)]);
     }
 }
+
+public sealed record DepartmentNameDto(Guid Id, string Name);
 
 public sealed record MapDto(Guid DepartmentId, string DepartmentName, IReadOnlyList<MapRowDto> Rows);
 
