@@ -55,10 +55,11 @@ const usedBy = computed(() =>
   (collection.data.value?.usedBy ?? []).map((u) => {
     // Another department's assistant is named with its department (a shared knowledge base, §3.2).
     const name = u.departmentId === collection.data.value?.departmentId ? u.name : `${u.name}, ${u.departmentName}`
+    // An archived one stays listed (it still blocks deletion and can be restored) but says so (#374).
+    if (u.state === 'archived') return `${name} (${COLLECTION.archived})`
     return u.published ? name : `${name} (${COLLECTION.draftOnly})`
   }).join(', '),
 )
-const documentCount = computed(() => sources.data.value.reduce((sum, s) => sum + s.documents, 0))
 const lastRun = computed(() =>
   sources.data.value.map((s) => s.lastRun).filter((r) => r !== null).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null,
 )
@@ -230,8 +231,9 @@ onMounted(load)
                 {{ usedBy }}
               </span>
             </DetailRow>
+            <!-- The live documents, as on the knowledge base list (#374). -->
+            <DetailRow :label="COLLECTION.documents"><span class="tabular" data-test="document-count">{{ formatNumber(collection.data.value.documentCount) }}</span></DetailRow>
             <template v-if="sources.loaded.value">
-              <DetailRow :label="COLLECTION.documents"><span class="tabular" data-test="document-count">{{ formatNumber(documentCount) }}</span></DetailRow>
               <DetailRow :label="COLLECTION.lastFetch">
                 <span v-if="lastRun" data-test="last-fetch">
                   <span class="tabular">{{ formatDateTime(lastRun.finishedAt ?? lastRun.startedAt) }}</span> · {{ RUN_STATE_LABEL[lastRun.state] ?? lastRun.state }}

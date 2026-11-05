@@ -121,11 +121,12 @@ export interface CollectionSummary extends CollectionBase {
 
 export type CollectionView = 'mine' | 'shared' | 'all'
 
-/** An assistant that links the collection, through its published version, its draft, or both. */
+/** An assistant that links the collection, through its published version, its draft, or both; archived ones too. */
 export interface CollectionUser {
   id: string
   name: string
   classification: Level
+  state: 'active' | 'archived' | string
   published: boolean
   draft: boolean
   departmentId: string
@@ -142,6 +143,8 @@ export interface Collection extends CollectionBase {
   retrievalSettings: Record<string, unknown>
   /** Only with `selected`. */
   sharedWithDepartmentIds: string[]
+  /** Live documents (they can be found), the same count as the list row's. */
+  documentCount: number
   usedBy: CollectionUser[]
   updatedAt: IsoDateTime
   updatedBy: string | null

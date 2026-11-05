@@ -456,6 +456,61 @@ public sealed class OrganisationSharingTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task An_archived_assistant_is_off_the_map_and_archived_in_used_by()
+    {
+        var seed = await SeedAsync();
+        await using var factory = database.HeaderFactory();
+        using var owner = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OwnerCode);
+        (await ShareAsync(owner, seed.Collection, CollectionSharingLevels.Municipality)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        var active = await AssistantAsync(seed.User, seed.Collection, ["bygglov"]);
+        var archived = await AssistantAsync(seed.User, seed.Collection, [], published: false);
+        // An archived assistant of the owner links its own knowledge base only through the draft (the #374 case).
+        var ownArchived = await AssistantAsync(seed.Owner, seed.Collection, [], published: false);
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Assistants.Where(a => a.Id == archived || a.Id == ownArchived)
+                .ExecuteUpdateAsync(u => u.SetProperty(a => a.State, AssistantStates.Archived), Ct);
+        }
+
+        // The Map: who uses what now. The user's map has the active assistant only; the owner's knowledge base ends its path.
+        using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.UserCode);
+        var map = await viewer.GetFromJsonAsync<JsonElement>($"/api/organisation/departments/{seed.User}/map", Ct);
+        var assistants = map.GetProperty("rows").EnumerateArray().Where(r => r.GetProperty("assistant").ValueKind != JsonValueKind.Null)
+            .Select(r => r.GetProperty("assistant").GetProperty("id").GetGuid()).ToList();
+        assistants.ShouldBe([active]);
+        var ownerRow = (await owner.GetFromJsonAsync<JsonElement>($"/api/organisation/departments/{seed.Owner}/map", Ct)).GetProperty("rows").EnumerateArray()
+            .ShouldHaveSingleItem();
+        ownerRow.GetProperty("collection").GetProperty("id").GetGuid().ShouldBe(seed.Collection);
+        ownerRow.GetProperty("assistant").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        // Used by keeps the archived ones (they block deletion and can be restored), with their state.
+        var usedBy = (await owner.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}", Ct)).GetProperty("usedBy").EnumerateArray()
+            .ToDictionary(u => u.GetProperty("id").GetGuid(), u => u.GetProperty("state").GetString());
+        usedBy.Count.ShouldBe(3);
+        (usedBy[active], usedBy[archived], usedBy[ownArchived]).ShouldBe((AssistantStates.Active, AssistantStates.Archived, AssistantStates.Archived));
+    }
+
+    [Fact]
+    public async Task The_list_the_detail_and_the_source_list_count_the_same_live_documents()
+    {
+        var seed = await SeedAsync();
+        // One of the two documents loses its live chunk set: it is still a document, but it cannot be found.
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Documents.Where(d => d.Id == seed.Document).ExecuteUpdateAsync(u => u.SetProperty(d => d.LiveChunkSetId, (Guid?)null), Ct);
+        }
+
+        await using var factory = database.HeaderFactory();
+        using var owner = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.OwnerCode);
+        var row = (await owner.GetFromJsonAsync<JsonElement>("/api/collections?pageSize=200", Ct)).GetProperty("items").EnumerateArray()
+            .Single(i => i.GetProperty("id").GetGuid() == seed.Collection);
+        row.GetProperty("documentCount").GetInt32().ShouldBe(1);
+        (await owner.GetFromJsonAsync<JsonElement>($"/api/collections/{seed.Collection}", Ct)).GetProperty("documentCount").GetInt32().ShouldBe(1);
+        var source = (await owner.GetFromJsonAsync<JsonElement[]>($"/api/collections/{seed.Collection}/sources", Ct))!.ShouldHaveSingleItem();
+        source.GetProperty("documents").GetInt32().ShouldBe(1);
+    }
+
+    [Fact]
     public async Task A_department_admin_picks_from_every_active_department_by_name_for_sharing()
     {
         var seed = await SeedAsync();

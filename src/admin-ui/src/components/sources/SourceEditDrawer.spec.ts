@@ -36,6 +36,7 @@ describe('Edit source (admin design §5.5.3, V25)', () => {
       usedBy: [
         collectionUser({ id: 'a1', name: 'Bygglovsassistenten', classification: 'public' }),
         collectionUser({ id: 'a2', name: 'Kundtjänst bygg', classification: 'public', published: false, draft: true }),
+        collectionUser({ id: 'a3', name: 'GK check', classification: 'public', state: 'archived', published: true }),
       ],
     })
     const update = vi.spyOn(api.sources, 'update').mockResolvedValue({ ...source, version: '8' })
@@ -55,7 +56,7 @@ describe('Edit source (admin design §5.5.3, V25)', () => {
     expect(update).not.toHaveBeenCalled()
     const text = document.body.querySelector('[data-test=impact]')!.textContent!.replace(/\u00a0/g, ' ')
     expect(text).toContain('Of the source’s 840 searchable documents')
-    expect(text).toContain('Bygglovsassistenten, Kundtjänst bygg (draft)')
+    expect(text).toContain('Bygglovsassistenten, Kundtjänst bygg (draft), GK check (archived)')
     expect(document.body.querySelector('[data-test=save-source]')!.textContent).toContain('Save anyway')
 
     click('save-source')
