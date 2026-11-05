@@ -58,6 +58,8 @@ public static class AssistantEndpoints
                     }
 
                     await CheckTeamAsync(admin, request.DepartmentId, request.OwnerTeamId, attempt);
+                    // Teams are hidden in create forms: the creator's first team in the department (Decisions "Organisation").
+                    var ownerTeam = request.OwnerTeamId ?? await admin.DefaultOwnerTeamAsync(request.DepartmentId, attempt);
                     var slug = string.IsNullOrWhiteSpace(request.Slug) ? Slugs.From(request.Name) : request.Slug;
                     if (await admin.Db.Assistants.AsNoTracking().AnyAsync(a => a.Slug == slug, attempt))
                     {
@@ -66,7 +68,7 @@ public static class AssistantEndpoints
 
                     var assistant = new Assistant
                     {
-                        Slug = slug, Name = request.Name.Trim(), DepartmentId = request.DepartmentId, OwnerTeamId = request.OwnerTeamId, Classification = request.Classification,
+                        Slug = slug, Name = request.Name.Trim(), DepartmentId = request.DepartmentId, OwnerTeamId = ownerTeam, Classification = request.Classification,
                         UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
                     };
                     request.ApplyTo(assistant);
@@ -497,8 +499,8 @@ public sealed record RuleProblem(AdminErrorCode Code, IReadOnlyDictionary<string
 /// <summary>
 /// The assistant rules of P1a (admin design §4.6): V3 (level ≥ every linked collection), V7 (every audience client's ceiling
 /// ≥ the level), V8's ceiling (the ladder of max(level, ceilings of the audience clients that store history)), V9
-/// (<c>sensitive</c> only for clients without history when the policy says so), V11 (≤ 20 collections, all of the
-/// assistant's department), V15 (not-found texts and links), V17 (query step ranges), V34 (the definition resolves;
+/// (<c>sensitive</c> only for clients without history when the policy says so), V11 (≤ 20 collections, each of the
+/// assistant's department or shared with it, ≤ 20 topics per link in the chunk tag format), V15 (not-found texts and links), V17 (query step ranges), V34 (the definition resolves;
 /// description and contact set) and V36 (a <c>public</c> assistant keeps <c>answer.generalKnowledge</c> <c>off</c>). Returned as problems: refusals on publish, warnings on draft save.
 /// </summary>
 public static class AssistantRules
@@ -534,7 +536,7 @@ public static class AssistantRules
             }
         }
 
-        // V11 and V34: ≤ 20 collections, every one live and of the assistant's department (shares are P2).
+        // V11 and V34: ≤ 20 collections, every one live and of the assistant's department or shared with it (admin design §3.2).
         var ids = version.LinkedCollectionIds().Distinct().ToList();
         if (ids.Count > AssistantVersion.MaxCollections)
         {
@@ -548,10 +550,20 @@ public static class AssistantRules
             problems.Add(new(AdminErrorCodes.VersionLinkMissing, new Dictionary<string, string> { ["link"] = "collection" }, [.. missing.Select(m => m.ToString())]));
         }
 
-        var foreign = collections.Where(c => c.DepartmentId != assistant.DepartmentId).Select(c => c.Name).ToList();
+        var linkable = await CollectionSharing.LinkableAsync(admin.Db, assistant.DepartmentId, ids, ct);
+        var foreign = collections.Where(c => !linkable.Contains(c.Id)).Select(c => c.Name).ToList();
         if (foreign.Count > 0)
         {
             problems.Add(new(AdminErrorCodes.CollectionNotShared, null, foreign));
+        }
+
+        // V11: ≤ 20 topics per link, each in the chunk tag format (processing design §7).
+        var names = collections.ToDictionary(c => c.Id, c => c.Name);
+        var badTopics = version.CollectionLinks.Where(l => l.Tags.Count > CollectionLink.MaxTags || !l.Tags.All(TopicTags.IsValid))
+            .Select(l => names.GetValueOrDefault(l.CollectionId) ?? l.CollectionId.ToString()).Distinct().ToList();
+        if (badTopics.Count > 0)
+        {
+            problems.Add(new(AdminErrorCodes.TopicInvalid, null, badTopics));
         }
 
         if (publishing && ids.Count == 0)
@@ -701,7 +713,7 @@ public sealed record AssistantDto(
     string HistoryMode, int RetentionDays, string State, int? PublishedVersion, DraftInfo? Draft, IReadOnlyList<Guid> AudienceClientIds, DateTimeOffset UpdatedAt,
     string? UpdatedBy, string Version, string? GeneralKnowledge);
 
-public sealed record DraftDto(int Number, string? GatewayModel, string SystemPrompt, JsonElement QuerySteps, JsonElement NotFound, IReadOnlyList<Guid> CollectionIds,
+public sealed record DraftDto(int Number, string? GatewayModel, string SystemPrompt, JsonElement QuerySteps, JsonElement NotFound, IReadOnlyList<CollectionLink> CollectionLinks,
     IReadOnlyList<object> Warnings, DateTimeOffset UpdatedAt, string Version)
 {
     public static DraftDto Of(AssistantVersion v, IReadOnlyList<RuleProblem> warnings)
@@ -709,7 +721,7 @@ public sealed record DraftDto(int Number, string? GatewayModel, string SystemPro
         ArgumentNullException.ThrowIfNull(v);
         using var steps = JsonDocument.Parse(v.QuerySteps);
         using var notFound = JsonDocument.Parse(v.NotFound);
-        return new(v.Number, v.GatewayModel, v.SystemPrompt, steps.RootElement.Clone(), notFound.RootElement.Clone(), v.LinkedCollectionIds(),
+        return new(v.Number, v.GatewayModel, v.SystemPrompt, steps.RootElement.Clone(), notFound.RootElement.Clone(), v.CollectionLinks,
             [.. warnings.Select(w => (object)new { code = w.Code.Code, @params = w.Params, affected = w.Affected })], v.UpdatedAt, v.Version.ToString(CultureInfo.InvariantCulture));
     }
 }
@@ -793,8 +805,9 @@ public sealed record DraftRequest : AdminRequest
     /// <summary>Chat design §10.1: <c>sv</c>, <c>en</c>, <c>links[]{title,url}</c>.</summary>
     public JsonElement? NotFound { get; init; }
 
+    /// <summary>The linked collections with their topics (<c>[{ collectionId, tags[] }]</c>; no tags = the whole collection; V11).</summary>
     [MaxLength(AssistantVersion.MaxCollections)]
-    public IReadOnlyList<Guid> CollectionIds { get; init; } = [];
+    public IReadOnlyList<CollectionLinkRequest> CollectionLinks { get; init; } = [];
 
     /// <summary>The draft's <c>version</c>; required once a draft exists (none for the first edit after a publish).</summary>
     public string? Version { get; init; }
@@ -806,10 +819,20 @@ public sealed record DraftRequest : AdminRequest
         draft.SystemPrompt = SystemPrompt;
         draft.QuerySteps = QuerySteps is { ValueKind: JsonValueKind.Object } steps ? steps.GetRawText() : "{}";
         draft.NotFound = NotFound is { ValueKind: JsonValueKind.Object } notFound ? notFound.GetRawText() : "{}";
-        // The request carries ids only: a link already on the draft keeps its topics, a new one links the whole collection.
-        var current = draft.CollectionLinks.DistinctBy(l => l.CollectionId).ToDictionary(l => l.CollectionId);
-        draft.CollectionLinks = [.. CollectionIds.Distinct().Select(id => current.GetValueOrDefault(id) ?? CollectionLink.Whole(id))];
+        // One link per collection (the first wins); topics trimmed and de-duplicated in order. Their format is V11's, a warning here.
+        draft.CollectionLinks = [.. CollectionLinks.Where(l => l is not null).DistinctBy(l => l.CollectionId).Select(l => new CollectionLink(l.CollectionId,
+            [.. (l.Tags ?? []).Where(t => t is not null).Select(t => t.Trim()).Where(t => t.Length > 0).Distinct(StringComparer.Ordinal)]))];
     }
+}
+
+/// <summary>One collection link of a draft.</summary>
+public sealed record CollectionLinkRequest
+{
+    [Required]
+    public Guid CollectionId { get; init; }
+
+    [MaxLength(100)]
+    public IReadOnlyList<string>? Tags { get; init; }
 }
 
 public sealed record PublishRequest : AdminRequest
@@ -846,7 +869,7 @@ public sealed record VersionSummary(int Number, string State, DateTimeOffset Cre
 
 /// <summary>One version's settings (the draft's fields, admin design §4.5) with its state and history.</summary>
 public sealed record VersionDto(
-    int Number, string State, string? GatewayModel, string SystemPrompt, JsonElement QuerySteps, JsonElement NotFound, IReadOnlyList<Guid> CollectionIds, int? RestoredFrom,
+    int Number, string State, string? GatewayModel, string SystemPrompt, JsonElement QuerySteps, JsonElement NotFound, IReadOnlyList<CollectionLink> CollectionLinks, int? RestoredFrom,
     DateTimeOffset CreatedAt, string? CreatedBy, DateTimeOffset? PublishedAt, string? PublishedBy)
 {
     public static VersionDto Of(AssistantVersion v, int? restoredFrom)
@@ -854,7 +877,7 @@ public sealed record VersionDto(
         ArgumentNullException.ThrowIfNull(v);
         using var steps = JsonDocument.Parse(v.QuerySteps);
         using var notFound = JsonDocument.Parse(v.NotFound);
-        return new(v.Number, v.State, v.GatewayModel, v.SystemPrompt, steps.RootElement.Clone(), notFound.RootElement.Clone(), v.LinkedCollectionIds(), restoredFrom, v.CreatedAt,
+        return new(v.Number, v.State, v.GatewayModel, v.SystemPrompt, steps.RootElement.Clone(), notFound.RootElement.Clone(), v.CollectionLinks, restoredFrom, v.CreatedAt,
             v.CreatedBy, v.PublishedAt, v.PublishedBy);
     }
 }

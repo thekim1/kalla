@@ -43,6 +43,8 @@ const clients = ref<ClientSummary[]>([])
 const model = ref('')
 const prompt = ref('')
 const linked = ref<string[]>([])
+// Each link's topics as loaded, sent back unchanged (the topic picker comes with the organisation pages, item 36).
+const topics = ref<Record<string, string[]>>({})
 // The versioned query steps and not-found texts are kept as loaded and sent back whole; the form edits only answer.generalKnowledge.
 const querySteps = ref<Record<string, unknown>>({})
 const notFound = ref<Record<string, unknown>>({})
@@ -90,7 +92,7 @@ const warnings = computed(() =>
   (draft.value?.warnings ?? []).map((w) => formatMessage(ERROR_MESSAGES[w.code] ?? w.code, w.params ?? undefined) + (w.affected.length ? ` (${w.affected.join(', ')})` : '')),
 )
 
-type Settings = Pick<AssistantVersion, 'gatewayModel' | 'systemPrompt' | 'collectionIds' | 'querySteps' | 'notFound'>
+type Settings = Pick<AssistantVersion, 'gatewayModel' | 'systemPrompt' | 'collectionLinks' | 'querySteps' | 'notFound'>
 
 function levelOf(steps: Record<string, unknown> | undefined): GeneralKnowledge {
   const value = (steps?.answer as Record<string, unknown> | undefined)?.generalKnowledge
@@ -102,7 +104,8 @@ function fill(d: AssistantDraft | null, base: Settings | null = null): void {
   const s = d ?? base
   model.value = s?.gatewayModel ?? ''
   prompt.value = s?.systemPrompt ?? ''
-  linked.value = [...(s?.collectionIds ?? [])]
+  linked.value = (s?.collectionLinks ?? []).map((l) => l.collectionId)
+  topics.value = Object.fromEntries((s?.collectionLinks ?? []).map((l) => [l.collectionId, [...l.tags]]))
   querySteps.value = { ...(s?.querySteps ?? {}) }
   notFound.value = { ...(s?.notFound ?? {}) }
   generalKnowledge.value = levelOf(s?.querySteps)
@@ -150,7 +153,7 @@ async function run(kind: typeof busy.value, action: () => Promise<void>): Promis
 
 const saveDraft = () => run('save', async () => {
   fill(await api.assistants.saveDraft(props.id, {
-    gatewayModel: model.value || null, systemPrompt: prompt.value, collectionIds: linked.value, querySteps: stepsToSave(), notFound: notFound.value,
+    gatewayModel: model.value || null, systemPrompt: prompt.value, collectionLinks: linked.value.map((id) => ({ collectionId: id, tags: topics.value[id] ?? [] })), querySteps: stepsToSave(), notFound: notFound.value,
     version: draft.value?.version ?? null,
   }))
   assistant.data.value = await api.assistants.get(props.id)

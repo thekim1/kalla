@@ -76,6 +76,23 @@ public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider t
     }
 
     /// <summary>
+    /// The owner team a create gives a new collection or assistant when the form names none (Decisions "Organisation":
+    /// teams are hidden in create forms): the creator's first active team in <paramref name="departmentId"/> by name,
+    /// from the <c>teamCodes</c> claim; null when the creator has none there.
+    /// </summary>
+    public async Task<Guid?> DefaultOwnerTeamAsync(Guid departmentId, CancellationToken ct)
+    {
+        string[] codes = [.. User.FindAll(AdminClaims.TeamCodes).Select(c => c.Value)];
+        if (codes.Length == 0)
+        {
+            return null;
+        }
+
+        return await Db.Teams.AsNoTracking().Where(t => t.DepartmentId == departmentId && t.IsActive && t.Code != null && codes.Contains(t.Code))
+            .OrderBy(t => t.Name).ThenBy(t => t.Id).Select(t => (Guid?)t.Id).FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
     /// Runs one config change through the write path (admin design §4.4): the version lock first, then
     /// <paramref name="apply"/> (load, version check, rules, change), save (the triggers write the outbox and bump the
     /// version), then the audit entry with the new version and the change's jobs (<c>pg_notify('rag_jobs')</c> is delivered

@@ -31,15 +31,23 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public void A_draft_save_by_ids_keeps_the_topics_of_links_it_already_has()
+    public void A_draft_save_takes_one_link_per_collection_with_its_topics_trimmed_and_de_duplicated()
     {
-        var kept = Guid.NewGuid();
-        var added = Guid.NewGuid();
-        var draft = new AssistantVersion { CollectionLinks = [new CollectionLink(kept, ["bygglov"]), CollectionLink.Whole(Guid.NewGuid())] };
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var draft = new AssistantVersion { CollectionLinks = [new CollectionLink(first, ["gammal"])] };
 
-        new DraftRequest { CollectionIds = [added, kept, added] }.ApplyTo(draft);
+        new DraftRequest
+        {
+            CollectionLinks =
+            [
+                new CollectionLinkRequest { CollectionId = second, Tags = [" bygglov ", "bygglov", "", "altan"] },
+                new CollectionLinkRequest { CollectionId = first },
+                new CollectionLinkRequest { CollectionId = second, Tags = ["ignored"] },
+            ],
+        }.ApplyTo(draft);
 
-        draft.CollectionLinks.ShouldBe([CollectionLink.Whole(added), new CollectionLink(kept, ["bygglov"])]);
+        draft.CollectionLinks.ShouldBe([new CollectionLink(second, ["bygglov", "altan"]), CollectionLink.Whole(first)]);
     }
 
     private static WebApplicationFactory<FakeGatewayProgram> Gateway() => new WebApplicationFactory<FakeGatewayProgram>().WithWebHostBuilder(web =>
@@ -119,7 +127,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         var draftVersion = assistant.GetProperty("draft").GetProperty("version").GetString();
         using (var draft = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
                {
-                   gatewayModel = Model, systemPrompt = "Svara kort.", collectionIds = new[] { seed.Collection }, querySteps = new { retrieval = new { topK = 99 } }, version = draftVersion,
+                   gatewayModel = Model, systemPrompt = "Svara kort.", collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } }, querySteps = new { retrieval = new { topK = 99 } }, version = draftVersion,
                }, Ct))
         {
             draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
@@ -148,7 +156,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
 
         using (var fixedDraft = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
                {
-                   gatewayModel = Model, systemPrompt = "Svara kort.", collectionIds = new[] { seed.Collection }, querySteps = new { retrieval = new { topK = 10 } }, version = draftVersion,
+                   gatewayModel = Model, systemPrompt = "Svara kort.", collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } }, querySteps = new { retrieval = new { topK = 10 } }, version = draftVersion,
                }, Ct))
         {
             var body = await Json(fixedDraft);
@@ -193,7 +201,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         // A second version: the first edit after a publish copies the published version (no draft version yet).
         using (var second = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
                {
-                   gatewayModel = Model, systemPrompt = "Svara kort och vänligt.", collectionIds = new[] { seed.Collection },
+                   gatewayModel = Model, systemPrompt = "Svara kort och vänligt.", collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } },
                }, Ct))
         {
             second.StatusCode.ShouldBe(HttpStatusCode.OK, await second.Content.ReadAsStringAsync(Ct));
@@ -242,7 +250,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         {
             using var draft = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
             {
-                gatewayModel = Model, systemPrompt = "Svara kort.", collectionIds = new[] { seed.Collection }, querySteps = new { answer = new { generalKnowledge } },
+                gatewayModel = Model, systemPrompt = "Svara kort.", collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } }, querySteps = new { answer = new { generalKnowledge } },
                 version = draftVersion,
             }, Ct);
             draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
@@ -322,7 +330,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         var id = assistant.GetProperty("id").GetGuid();
         using var draft = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
         {
-            gatewayModel = "ume/chat-advanced", collectionIds = new[] { seed.Collection }, version = assistant.GetProperty("draft").GetProperty("version").GetString(),
+            gatewayModel = "ume/chat-advanced", collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } }, version = assistant.GetProperty("draft").GetProperty("version").GetString(),
         }, Ct);
         var draftVersion = (await Json(draft)).GetProperty("version").GetString();
 
@@ -356,7 +364,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         {
             var open = (await admin.GetFromJsonAsync<JsonElement>(path, Ct)).GetProperty("draft");
             var version = open.ValueKind == JsonValueKind.Null ? null : open.GetProperty("version").GetString();
-            using var draft = await admin.PutAsJsonAsync($"{path}/draft", new { gatewayModel = Model, systemPrompt = prompt, collectionIds = new[] { seed.Collection }, version }, Ct);
+            using var draft = await admin.PutAsJsonAsync($"{path}/draft", new { gatewayModel = Model, systemPrompt = prompt, collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } }, version }, Ct);
             draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
             return (await Json(draft)).GetProperty("version").GetString();
         }

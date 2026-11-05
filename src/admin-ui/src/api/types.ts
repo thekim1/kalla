@@ -664,6 +664,12 @@ export interface RuleWarning {
   affected: string[]
 }
 
+/** A collection an assistant version links; no tags = the whole collection (admin design §4.5). */
+export interface CollectionLink {
+  collectionId: string
+  tags: string[]
+}
+
 /** `GET /api/assistants/{id}/versions/{n}`: one version's settings. */
 export interface AssistantVersion {
   number: number
@@ -672,7 +678,7 @@ export interface AssistantVersion {
   systemPrompt: string
   querySteps: Record<string, unknown>
   notFound: Record<string, unknown>
-  collectionIds: string[]
+  collectionLinks: CollectionLink[]
   restoredFrom: number | null
   createdAt: IsoDateTime
   createdBy: string | null
@@ -686,7 +692,7 @@ export interface AssistantDraft {
   systemPrompt: string
   querySteps: Record<string, unknown>
   notFound: Record<string, unknown>
-  collectionIds: string[]
+  collectionLinks: CollectionLink[]
   warnings: RuleWarning[]
   updatedAt: IsoDateTime
   version: string

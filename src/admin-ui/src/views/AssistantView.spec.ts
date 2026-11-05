@@ -16,7 +16,7 @@ const assistant: Assistant = {
 }
 
 const draft: AssistantDraft = {
-  number: 1, gatewayModel: null, systemPrompt: '', querySteps: {}, notFound: {}, collectionIds: [], updatedAt: '', version: 'd7',
+  number: 1, gatewayModel: null, systemPrompt: '', querySteps: {}, notFound: {}, collectionLinks: [], updatedAt: '', version: 'd7',
   warnings: [{ code: 'assistant_contact_missing', params: null, affected: [] }],
 }
 
@@ -62,9 +62,23 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
 
     expect(save).toHaveBeenCalledWith('a1', {
-      gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionIds: ['c1'], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: 'd7',
+      gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: [] }], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: 'd7',
     })
     expect(wrapper.find('[data-test=warnings]').exists()).toBe(false)
+  })
+
+  it('sends each link back with the topics it was loaded with', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, gatewayModel: 'ume/chat-eu', collectionLinks: [{ collectionId: 'c1', tags: ['bygglov', 'altan'] }] })
+    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await flushPromises()
+
+    expect(save.mock.calls[0]![1].collectionLinks).toEqual([{ collectionId: 'c1', tags: ['bygglov', 'altan'] }])
   })
 
   it('with no draft, shows the published version\'s settings and saves them as the new draft', async () => {
@@ -73,10 +87,10 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 3, draft: null })
     const draftCall = vi.spyOn(api.assistants, 'draft')
     const version = vi.spyOn(api.assistants, 'version').mockResolvedValue({
-      number: 3, state: 'published', gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', querySteps: {}, notFound: {}, collectionIds: ['c1'],
+      number: 3, state: 'published', gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', querySteps: {}, notFound: {}, collectionLinks: [{ collectionId: 'c1', tags: [] }],
       restoredFrom: null, createdAt: '2026-11-01T10:00:00Z', createdBy: 'anna', publishedAt: '2026-11-01T10:00:00Z', publishedBy: 'anna',
     })
-    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, number: 4, gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionIds: ['c1'], warnings: [], version: 'd1' })
+    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, number: 4, gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: [] }], warnings: [], version: 'd1' })
 
     const wrapper = mount(AssistantView, { props: { id: 'a1' } })
     await flushPromises()
@@ -91,7 +105,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await wrapper.get('[data-test=save-draft]').trigger('click')
     await flushPromises()
     expect(save).toHaveBeenCalledWith('a1', {
-      gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionIds: ['c1'], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: null,
+      gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionLinks: [{ collectionId: 'c1', tags: [] }], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: null,
     })
   })
 

@@ -1,5 +1,6 @@
 import { buildUrl, http, postLogout, request } from './client'
 import type {
+  CollectionLink,
   Assistant,
   AssistantCreate,
   AssistantDraft,
@@ -126,7 +127,7 @@ export const api = {
     create: (body: AssistantCreate) => http.post<Assistant>('/api/assistants', body),
     draft: (id: string) => http.get<AssistantDraft>(`/api/assistants/${id}/draft`),
     saveDraft: (id: string, body: {
-      gatewayModel: string | null; systemPrompt: string; collectionIds: string[]; querySteps: Record<string, unknown>; notFound: Record<string, unknown>
+      gatewayModel: string | null; systemPrompt: string; collectionLinks: CollectionLink[]; querySteps: Record<string, unknown>; notFound: Record<string, unknown>
       version: string | null
     }) =>
       http.put<AssistantDraft>(`/api/assistants/${id}/draft`, body),

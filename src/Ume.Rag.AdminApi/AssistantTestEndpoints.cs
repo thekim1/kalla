@@ -111,7 +111,7 @@ public sealed class AdminTestPanel(
             _runs.Add(1, new KeyValuePair<string, object?>("outcome", ChatOutcomes.Name(plan.Outcome)));
             var citedChunks = cited.SelectMany(s => s.Chunks.Select(c => c.ChunkId)).ToHashSet();
             var linked = version.LinkedCollectionIds().Where(view.Collections.ContainsKey).Select(c => view.Collections[c])
-                .Select(c => new TestedCollectionRef(c.Id, c.Name, !notPublished.Contains(c.Id))).ToList();
+                .Select(c => new TestedCollectionRef(c.Id, c.Name, !notPublished.Contains(c.Id) && c.PublishedAt is not null)).ToList();
             var result = plan.Retrieval;
             return new AssistantTestResult(
                 request.Target, version.Number,
@@ -161,7 +161,8 @@ public sealed class AdminTestPanel(
         var notPublished = new HashSet<Guid>();
         foreach (var id in version.LinkedCollectionIds())
         {
-            if (collections.TryGetValue(id, out var c) && !c.Deleted && c.PublishedAt is null)
+            // Only the assistant's own department's unpublished collections: a shared one stays invisible until its owner publishes it.
+            if (collections.TryGetValue(id, out var c) && !c.Deleted && c.PublishedAt is null && c.DepartmentId == assistant.DepartmentId)
             {
                 notPublished.Add(id);
                 collections[id] = c with { PublishedAt = DateTimeOffset.UnixEpoch };

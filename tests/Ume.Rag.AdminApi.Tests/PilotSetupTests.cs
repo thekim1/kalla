@@ -172,7 +172,7 @@ public sealed class PilotSetupTests(AdminDatabaseFixture database) : IDisposable
         var assistantId = assistant.GetProperty("id").GetGuid();
         var draft = await Ok(await admin.PutAsJsonAsync($"/api/assistants/{assistantId}/draft", new
         {
-            gatewayModel = "ume/chat-eu", systemPrompt = "Svara kort och hänvisa till källorna.", collectionIds = new[] { collectionId },
+            gatewayModel = "ume/chat-eu", systemPrompt = "Svara kort och hänvisa till källorna.", collectionLinks = new[] { new { collectionId, tags = Array.Empty<string>() } },
             version = assistant.GetProperty("draft").GetProperty("version").GetString(),
         }, Ct));
         draft.GetProperty("warnings").GetArrayLength().ShouldBe(0);
