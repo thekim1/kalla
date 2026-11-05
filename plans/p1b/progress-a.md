@@ -16,7 +16,7 @@ before ticking it here.
 - [x] **L3** B's `RetrievalEngine` with decay and `demote` (needed for item 7's temporal checks and item 25) (#241; evaluator applies source demote in PR: a/l3-eval-demote)
 - [x] **L4** B's P1b admin endpoints (then the jobs run end to end from the admin) (#300)
 - [x] **L6** B's chat writer and importer with their configuration names (needed for item 17) (#273)
-- [ ] **L7** B's pilot-journey E2E specs (needed for item 15's `e2e` job)
+- [x] **L7** B's pilot-journey E2E specs (needed for item 15's `e2e` job) (#362, #364; done by the main session)
 - [ ] **L10** user: test host, backup target, key-escrow location (needed for item 21)
 - [ ] **L11** IT security: self-hosted runner, or the manual stopgap accepted (needed for items 22, 23)
 - [ ] **L12** user: G1 finished (needed for items 29, 32)
@@ -83,7 +83,7 @@ Refs: [weakness review §2](../weakness-review.md), [ingestion plan §7](../inge
 Refs: [repo-and-deployment §8.1–§8.3](../platform/repo-and-deployment.md), [chat §16.2](../chat-api/design.md)
 - [x] `benchmarks/release-test/` (k6 idle and during crawl + OCR; overhead run) and `perf.yml`; local dry run writes the report (#?)
 - [x] `evaluation.yml` (nightly, dispatch) (#?)
-- [ ] `e2e` job, nightly + release (after L7) — `e2e.yml` wired (nightly, dispatch, called by `release.yml`); skips with a notice until `tests/e2e` exists (#?)
+- [ ] `e2e` job, release + by hand (after L7; #368, #371, #373): `e2e.yml` reaches the browser step on the runner; ticks on the first green dispatch once the host has Chromium's libraries (#370, `docs/ci-runner.md`)
 
 ### 17. Pilot stack for P1b
 Refs: [chat §4.3, §13.3, §14.2](../chat-api/design.md), [repo-and-deployment §6.2, §7](../platform/repo-and-deployment.md)
