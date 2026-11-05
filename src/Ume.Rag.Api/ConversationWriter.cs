@@ -30,12 +30,7 @@ public sealed record ChatTurn(
     public string Key => IssuedId is { } id ? "i:" + id.ToString("N") : $"o:{ClientId:N}:{SubjectId}:{ExternalChatId}:{AssistantId:N}";
 
     /// <summary>The <c>Messages.Outcome</c> value of a chat outcome.</summary>
-    public static string OutcomeOf(ChatOutcome outcome) => outcome switch
-    {
-        ChatOutcome.NotFound => "not-found",
-        ChatOutcome.Unavailable => "unavailable",
-        _ => "answered",
-    };
+    public static string OutcomeOf(ChatOutcome outcome) => ChatOutcomes.Name(outcome);
 
     /// <summary>The <c>Messages.Coverage</c> value; <c>skipped</c> when no retrieval ran (a conversational message).</summary>
     public static string CoverageOf(RetrievalResult? retrieval) => retrieval?.Coverage.Status switch
@@ -235,6 +230,7 @@ public sealed partial class ConversationWriter : BackgroundService
         public int Conversations { get; set; }
         public int Messages { get; set; }
         public int NotFound { get; set; }
+        public int GeneralAnswers { get; set; }
         public int Unavailable { get; set; }
         public int Degraded { get; set; }
         public int UncitedAnswers { get; set; }
@@ -311,6 +307,7 @@ public sealed partial class ConversationWriter : BackgroundService
             day.Conversations += inserted ? 1 : 0;
             day.Messages++;
             day.NotFound += turn.Outcome == "not-found" ? 1 : 0;
+            day.GeneralAnswers += turn.Outcome == "answered-general" ? 1 : 0; // §10.4: apart from NotFound, never in UncitedAnswers
             day.Unavailable += turn.Outcome == "unavailable" ? 1 : 0;
             day.Degraded += turn.Degraded is not null ? 1 : 0;
             day.UncitedAnswers += turn.Outcome == "answered" && turn.Sources.Count > 0 && !turn.Sources.Any(s => s.Used) ? 1 : 0;
@@ -323,16 +320,17 @@ public sealed partial class ConversationWriter : BackgroundService
         {
             await ExecuteAsync(connection, transaction, """
                 INSERT INTO chat."AssistantDailyTotals" AS t ("Day", "AssistantId", "ClientId", "Classification", "DepartmentId", "Conversations", "Messages",
-                    "NotFound", "Unavailable", "Degraded", "Errors", "Cancelled", "UncitedAnswers", "ThumbsUp", "ThumbsDown", "ToolCalls", "ToolErrors",
+                    "NotFound", "GeneralAnswers", "Unavailable", "Degraded", "Errors", "Cancelled", "UncitedAnswers", "ThumbsUp", "ThumbsDown", "ToolCalls", "ToolErrors",
                     "AgentLimitHits", "InputTokens", "OutputTokens", "CostUsd")
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, 0, $11, 0, 0, 0, 0, 0, $12, $13, 0)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $14, $9, $10, 0, 0, $11, 0, 0, 0, 0, 0, $12, $13, 0)
                 ON CONFLICT ("Day", "AssistantId", "ClientId", "Classification") DO UPDATE SET
                     "Conversations" = t."Conversations" + excluded."Conversations", "Messages" = t."Messages" + excluded."Messages",
-                    "NotFound" = t."NotFound" + excluded."NotFound", "Unavailable" = t."Unavailable" + excluded."Unavailable",
+                    "NotFound" = t."NotFound" + excluded."NotFound", "GeneralAnswers" = t."GeneralAnswers" + excluded."GeneralAnswers",
+                    "Unavailable" = t."Unavailable" + excluded."Unavailable",
                     "Degraded" = t."Degraded" + excluded."Degraded", "UncitedAnswers" = t."UncitedAnswers" + excluded."UncitedAnswers",
                     "InputTokens" = t."InputTokens" + excluded."InputTokens", "OutputTokens" = t."OutputTokens" + excluded."OutputTokens"
                 """, ct, key.Day, key.AssistantId, key.ClientId, key.Classification, day.DepartmentId, day.Conversations, day.Messages, day.NotFound, day.Unavailable,
-                day.Degraded, day.UncitedAnswers, day.InputTokens, day.OutputTokens);
+                day.Degraded, day.UncitedAnswers, day.InputTokens, day.OutputTokens, day.GeneralAnswers);
         }
 
         await transaction.CommitAsync(ct);

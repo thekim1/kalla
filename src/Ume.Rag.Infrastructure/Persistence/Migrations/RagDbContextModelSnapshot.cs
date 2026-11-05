@@ -321,6 +321,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<int>("Errors")
                         .HasColumnType("integer");
 
+                    b.Property<int>("GeneralAnswers")
+                        .HasColumnType("integer");
+
                     b.Property<long>("InputTokens")
                         .HasColumnType("bigint");
 
@@ -2450,7 +2453,7 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_Messages_NoContentCiphertext", "\"ContentCiphertext\" IS NULL");
 
-                            t.HasCheckConstraint("CK_Messages_Outcome", "\"Outcome\" IN ('answered', 'not-found', 'unavailable', 'refused', 'error', 'cancelled')");
+                            t.HasCheckConstraint("CK_Messages_Outcome", "\"Outcome\" IN ('answered', 'answered-general', 'not-found', 'unavailable', 'refused', 'error', 'cancelled')");
 
                             t.HasCheckConstraint("CK_Messages_Role", "\"Role\" IN ('user', 'assistant')");
                         });

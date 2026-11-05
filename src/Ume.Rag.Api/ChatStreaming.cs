@@ -10,9 +10,9 @@ namespace Ume.Rag.Api;
 
 /// <summary>
 /// A streamed answer (chat design §9.1, §9.3, §9.6): <c>text/event-stream</c>, one flush per event. The role chunk, the
-/// caveat line of a degraded answer, then the model's text through the <see cref="AnswerTransducer"/>: for Open WebUI one
+/// caveat line of a degraded or general-knowledge answer, then the model's text through the <see cref="AnswerTransducer"/>: for Open WebUI one
 /// <c>source</c> event per cited document just before the text that first cites it, for other clients <c>delta.annotations</c>
-/// (<c>url_citation</c>). A fixed text (not found, unavailable) is one content chunk without a model call. After the first
+/// (<c>url_citation</c>), then the contact links of a general-knowledge answer. A fixed text (not found, unavailable) is one content chunk without a model call. After the first
 /// byte an error is one error chunk and <c>[DONE]</c>.
 /// </summary>
 public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatService service, bool openWebUi, bool includeUsage,
@@ -86,6 +86,12 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
                 }
 
                 await PiecesAsync(response, transducer.Flush(), caveat.Length, Chunk, content, id, created, ct);
+                if (plan.Trailer.Length > 0)
+                {
+                    // §10.4: the contact links after a general-knowledge answer, from us, not through the model.
+                    await WriteAsync(response, Chunk(new { content = plan.Trailer }, null), ct);
+                }
+
                 await WriteAsync(response, Chunk(new { }, finish), ct);
                 await UsageAsync(response, id, created, promptTokens, completionTokens, ct);
                 await DoneAsync(response, ct);

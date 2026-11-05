@@ -103,12 +103,12 @@ public sealed class AdminTestPanel(
                 latencyMs = Stopwatch.GetElapsedTime(call).TotalMilliseconds;
                 var transducer = new AnswerTransducer(plan.Prompt.Sources, plan.Platform.AllowedLinkHosts);
                 var pieces = transducer.Feed(answer.Text).Concat(transducer.Flush()).OfType<AnswerPiece.Text>();
-                delivered = (plan.Caveat ?? "") + string.Concat(pieces.Select(p => p.Content));
+                delivered = (plan.Caveat ?? "") + string.Concat(pieces.Select(p => p.Content)) + plan.Trailer;
                 filtered = transducer.Filtered;
                 cited = transducer.Cited;
             }
 
-            _runs.Add(1, new KeyValuePair<string, object?>("outcome", plan.Outcome.ToString().ToLowerInvariant()));
+            _runs.Add(1, new KeyValuePair<string, object?>("outcome", ChatOutcomes.Name(plan.Outcome)));
             var citedChunks = cited.SelectMany(s => s.Chunks.Select(c => c.ChunkId)).ToHashSet();
             var linked = version.LinkedCollectionIds().Where(view.Collections.ContainsKey).Select(c => view.Collections[c])
                 .Select(c => new TestedCollectionRef(c.Id, c.Name, !notPublished.Contains(c.Id))).ToList();
@@ -122,7 +122,7 @@ public sealed class AdminTestPanel(
                     result?.Timings),
                 new TestCondense(plan.Condense is CondenseOutcome.Rewritten, plan.Condense?.ToString()),
                 new TestAnswer(answer?.Text, delivered, filtered, [.. cited.Select(s => new TestCitation(s.Number, s.Citation.Id, s.Citation.Title))],
-                    plan.Outcome.ToString().ToLowerInvariant(), plan.Language),
+                    ChatOutcomes.Name(plan.Outcome), plan.Language),
                 new TestGateway(version.GatewayModel, ResidencyCeiling.ToHeader(plan.Ceiling), latencyMs, answer?.PromptTokens, answer?.CompletionTokens),
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }

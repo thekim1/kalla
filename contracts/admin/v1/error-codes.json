@@ -307,6 +307,11 @@
       "message": "The setting {field} is outside its allowed range."
     },
     {
+      "code": "general_knowledge_not_allowed_for_level",
+      "status": 409,
+      "message": "An assistant at level {level} answers only from its knowledge bases; general knowledge needs level internal or higher."
+    },
+    {
       "code": "link_host_not_allowed",
       "status": 409,
       "message": "A link must be https on an allowed site, at most 5 links."

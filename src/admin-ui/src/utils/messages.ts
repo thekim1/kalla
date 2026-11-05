@@ -65,6 +65,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   audience_above_ceiling: 'A client cannot show an assistant with the information class {level}.',
   client_stores_history: 'An assistant with the class Sensitive cannot be offered in a client that saves chat history.',
   query_steps_invalid: 'The setting {field} is outside the allowed range.',
+  general_knowledge_not_allowed_for_level: 'An assistant with the class {level} answers only from its knowledge bases. General knowledge needs the class Internal or higher.',
   link_host_not_allowed: 'A link must be https to an allowed site, and at most 5 links.',
   evaluation_model_unset: 'No model is chosen for creating test questions. A platform administrator chooses it under Settings.',
   version_not_restorable: 'Version {number} is the draft or the published version and cannot be restored.',

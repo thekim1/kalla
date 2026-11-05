@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http.Metadata;
 using Ume.Rag.Answering.Chat;
@@ -46,7 +48,7 @@ public static class ChatEndpoints
             .WithName("ListModels").WithSummary("The assistants this caller may use, as OpenAI models");
 
         chat.MapPost("/chat/completions", async (HttpContext http, ChatCallers callers, ChatService service, ChatRateLimiter limiter, ConversationIds ids,
-                ConversationWriter writer, IPolicySnapshotSource snapshots, KnowledgeSecurity security, CancellationToken ct) =>
+                ConversationWriter writer, IPolicySnapshotSource snapshots, KnowledgeSecurity security, ChatMetrics metrics, CancellationToken ct) =>
             await OpenAiAsync(http, async () =>
             {
                 var who = await callers.AuthenticateAsync(http.Request, userRequired: true, ct);
@@ -76,8 +78,12 @@ public static class ChatEndpoints
                     throw;
                 }
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
-                ValueTask Enqueue(ChatPlan plan, IReadOnlyList<PromptSource> cited, int prompt, int completion) =>
-                    writer.EnqueueAsync(Turn(http, plan, who, conversation, cited, prompt, completion, (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+                ValueTask Enqueue(ChatPlan plan, IReadOnlyList<PromptSource> cited, int prompt, int completion)
+                {
+                    metrics.Completed(plan, who, parsed.Stream);
+                    return writer.EnqueueAsync(Turn(http, plan, who, conversation, cited, prompt, completion,
+                        (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+                }
                 if (!parsed.Stream)
                 {
                     var answer = await service.CompleteAsync(who, parsed, ct);
@@ -235,5 +241,26 @@ public static class ChatEndpoints
     private sealed class ChatBodyLimit : IRequestSizeLimitMetadata
     {
         public long? MaxRequestBodySize => BodyLimit;
+    }
+}
+
+/// <summary>
+/// <c>rag.chat.requests</c> (chat design §17) for completed turns: <c>outcome</c> (<c>answered</c>, <c>answered-general</c>,
+/// <c>not-found</c>, <c>unavailable</c>), <c>level</c>, <c>client_kind</c>, <c>stream</c>, <c>conversational</c>.
+/// </summary>
+public sealed class ChatMetrics(IMeterFactory meters)
+{
+    private readonly Counter<long> _requests = meters.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
+        .CreateCounter<long>("rag.chat.requests", description: "Chat turns by outcome");
+
+    public void Completed(ChatPlan plan, RagPrincipal who, bool stream)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(who);
+        _requests.Add(1, new TagList
+        {
+            { "outcome", ChatOutcomes.Name(plan.Outcome) }, { "level", plan.Assistant.Classification }, { "client_kind", who.Client.Kind },
+            { "stream", stream }, { "conversational", plan.Retrieval is null },
+        });
     }
 }
