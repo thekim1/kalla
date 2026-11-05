@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { Assistant, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionSummary, DataProtectionPolicy, GatewayModel } from '@/api/types'
+import type {
+  Assistant, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionSummary, DataProtectionPolicy, GatewayModel, GeneralKnowledge,
+} from '@/api/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import TextField from '@/components/ui/TextField.vue'
@@ -41,6 +43,11 @@ const clients = ref<ClientSummary[]>([])
 const model = ref('')
 const prompt = ref('')
 const linked = ref<string[]>([])
+// The versioned query steps and not-found texts are kept as loaded and sent back whole; the form edits only answer.generalKnowledge.
+const querySteps = ref<Record<string, unknown>>({})
+const notFound = ref<Record<string, unknown>>({})
+const generalKnowledge = ref<GeneralKnowledge>('off')
+const GENERAL_KNOWLEDGE_LEVELS: GeneralKnowledge[] = ['off', 'supplement', 'fallback', 'open']
 const audience = ref<string[]>([])
 const question = ref('')
 const result = ref<AssistantTestResult | null>(null)
@@ -71,6 +78,8 @@ const versionColumns: Column[] = [
   { key: 'actions', label: ASSISTANT.restore, hideLabel: true, align: 'right' },
 ]
 const archived = computed(() => assistant.data.value?.state === 'archived')
+// V36: a public assistant answers only from its knowledge bases.
+const publicLevel = computed(() => assistant.data.value?.classification === 'public')
 const historyOptions = computed(() =>
   (policy.value?.allowedHistoryModes ?? [assistant.data.value?.historyMode ?? 'none']).map((m) => ({ value: m, label: ASSISTANT.historyModes[m] ?? m })),
 )
@@ -81,7 +90,12 @@ const warnings = computed(() =>
   (draft.value?.warnings ?? []).map((w) => formatMessage(ERROR_MESSAGES[w.code] ?? w.code, w.params ?? undefined) + (w.affected.length ? ` (${w.affected.join(', ')})` : '')),
 )
 
-type Settings = Pick<AssistantVersion, 'gatewayModel' | 'systemPrompt' | 'collectionIds'>
+type Settings = Pick<AssistantVersion, 'gatewayModel' | 'systemPrompt' | 'collectionIds' | 'querySteps' | 'notFound'>
+
+function levelOf(steps: Record<string, unknown> | undefined): GeneralKnowledge {
+  const value = (steps?.answer as Record<string, unknown> | undefined)?.generalKnowledge
+  return GENERAL_KNOWLEDGE_LEVELS.includes(value as GeneralKnowledge) ? (value as GeneralKnowledge) : 'off'
+}
 
 function fill(d: AssistantDraft | null, base: Settings | null = null): void {
   draft.value = d
@@ -89,6 +103,14 @@ function fill(d: AssistantDraft | null, base: Settings | null = null): void {
   model.value = s?.gatewayModel ?? ''
   prompt.value = s?.systemPrompt ?? ''
   linked.value = [...(s?.collectionIds ?? [])]
+  querySteps.value = { ...(s?.querySteps ?? {}) }
+  notFound.value = { ...(s?.notFound ?? {}) }
+  generalKnowledge.value = levelOf(s?.querySteps)
+}
+
+function stepsToSave(): Record<string, unknown> {
+  const answer = { ...((querySteps.value.answer as Record<string, unknown> | undefined) ?? {}), generalKnowledge: generalKnowledge.value }
+  return { ...querySteps.value, answer }
 }
 
 async function fillFrom(a: Assistant): Promise<void> {
@@ -127,7 +149,10 @@ async function run(kind: typeof busy.value, action: () => Promise<void>): Promis
 }
 
 const saveDraft = () => run('save', async () => {
-  fill(await api.assistants.saveDraft(props.id, { gatewayModel: model.value || null, systemPrompt: prompt.value, collectionIds: linked.value, version: draft.value?.version ?? null }))
+  fill(await api.assistants.saveDraft(props.id, {
+    gatewayModel: model.value || null, systemPrompt: prompt.value, collectionIds: linked.value, querySteps: stepsToSave(), notFound: notFound.value,
+    version: draft.value?.version ?? null,
+  }))
   assistant.data.value = await api.assistants.get(props.id)
   ui.notify(ASSISTANT.draftSaved)
 })
@@ -205,6 +230,10 @@ onMounted(load)
         <UiBadge :label="LEVEL_LABEL[assistant.data.value.classification]" />
         <UiBadge v-if="assistant.data.value.publishedVersion" tone="ok" :label="ASSISTANT.publishedVersion(assistant.data.value.publishedVersion)" data-test="published" />
         <UiBadge v-if="archived" tone="warn" :label="ASSISTANT.archived" data-test="archived" />
+        <UiBadge
+          v-if="assistant.data.value.generalKnowledge && assistant.data.value.generalKnowledge !== 'off'" :label="ASSISTANT.generalKnowledgeBadge"
+          data-test="general-knowledge-badge"
+        />
         <template v-if="canEdit">
           <UiButton v-if="archived" :loading="busy === 'unarchive'" data-test="unarchive" @click="unarchive">{{ ASSISTANT.unarchive }}</UiButton>
           <UiButton v-else icon="archive" data-test="archive" @click="archiving = true">{{ ASSISTANT.archive }}</UiButton>
@@ -234,6 +263,23 @@ onMounted(load)
             v-for="c in departmentCollections" :key="c.id" :model-value="linked.includes(c.id)"
             :label="c.publishedAt ? c.name : `${c.name} (${ASSISTANT.notPublished})`" @update:model-value="linked = toggle(linked, c.id, $event)"
           />
+        </fieldset>
+        <fieldset class="grid gap-2" data-test="general-knowledge" aria-describedby="assistant-general-knowledge-hint">
+          <legend class="mb-1 font-medium">{{ ASSISTANT.generalKnowledge }}</legend>
+          <p id="assistant-general-knowledge-hint" class="text-small text-fg-2">{{ publicLevel ? ASSISTANT.generalKnowledgePublic : ASSISTANT.generalKnowledgeHint }}</p>
+          <label
+            v-for="g in GENERAL_KNOWLEDGE_LEVELS" :key="g" class="flex gap-3 rounded-card border border-border p-3"
+            :class="publicLevel && g !== 'off' ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'"
+          >
+            <input
+              :id="`assistant-general-knowledge-${g}`" v-model="generalKnowledge" type="radio" name="assistant-general-knowledge" :value="g" class="mt-1"
+              :disabled="publicLevel && g !== 'off'"
+            />
+            <span>
+              <span class="block font-medium">{{ ASSISTANT.generalKnowledgeLevels[g]!.label }}</span>
+              <span class="block text-small text-fg-2">{{ ASSISTANT.generalKnowledgeLevels[g]!.help }}</span>
+            </span>
+          </label>
         </fieldset>
         <div v-if="canEdit"><UiButton variant="primary" :loading="busy === 'save'" data-test="save-draft" @click="saveDraft">{{ ASSISTANT.saveDraft }}</UiButton></div>
       </div>

@@ -260,8 +260,14 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         using (var published = await admin.PostAsJsonAsync($"/api/assistants/{inner}/publish", new { version = innerVersion, draftVersion = next }, Ct))
         {
             published.StatusCode.ShouldBe(HttpStatusCode.OK, await published.Content.ReadAsStringAsync(Ct));
-            innerVersion = (await Json(published)).GetProperty("version").GetString();
+            var body = await Json(published);
+            innerVersion = body.GetProperty("version").GetString();
+            body.GetProperty("generalKnowledge").GetString().ShouldBe("fallback"); // the badge's source (admin design §5.5.4)
         }
+
+        var listed = (await admin.GetFromJsonAsync<JsonElement>("/api/assistants?pageSize=200", Ct)).GetProperty("items").EnumerateArray()
+            .Single(a => a.GetProperty("id").GetGuid() == inner);
+        listed.GetProperty("generalKnowledge").GetString().ShouldBe("fallback");
 
         // Lowering its level to public while the published version uses general knowledge is refused (V36, level change).
         using (var lowered = await admin.PutAsJsonAsync($"/api/assistants/{inner}", new
@@ -275,6 +281,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
 
         // A public assistant: supplement saves with the V36 warning, and publishing it is refused.
         var (open, openVersion, openDraft) = await CreateAsync("Publik", Classification.Public);
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{open}", Ct)).GetProperty("generalKnowledge").ValueKind.ShouldBe(JsonValueKind.Null);
         (warnings, next) = await DraftAsync(open, "supplement", openDraft);
         warnings.ShouldBe(["general_knowledge_not_allowed_for_level"]);
         using (var refused = await admin.PostAsJsonAsync($"/api/assistants/{open}/publish", new { version = openVersion, draftVersion = next }, Ct))

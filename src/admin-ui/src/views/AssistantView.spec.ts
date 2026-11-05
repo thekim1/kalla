@@ -10,7 +10,7 @@ import AssistantView from './AssistantView.vue'
 
 const assistant: Assistant = {
   id: 'a1', slug: 'bygglov', name: 'Bygglovsassistenten', description: null, contactName: null, contactEmail: null, departmentId: 'd1', ownerTeamId: null,
-  classification: 'internal', historyMode: 'none', retentionDays: 90, state: 'active', publishedVersion: null,
+  classification: 'internal', historyMode: 'none', retentionDays: 90, state: 'active', publishedVersion: null, generalKnowledge: null,
   draft: { number: 1, updatedAt: '2026-11-01T10:00:00Z', baseChanged: false, version: 'd7' }, audienceClientIds: [], updatedAt: '2026-11-01T10:00:00Z',
   updatedBy: null, version: 'a3',
 }
@@ -61,7 +61,9 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await wrapper.get('[data-test=save-draft]').trigger('click')
     await flushPromises()
 
-    expect(save).toHaveBeenCalledWith('a1', { gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionIds: ['c1'], version: 'd7' })
+    expect(save).toHaveBeenCalledWith('a1', {
+      gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionIds: ['c1'], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: 'd7',
+    })
     expect(wrapper.find('[data-test=warnings]').exists()).toBe(false)
   })
 
@@ -88,7 +90,9 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     await wrapper.get('[data-test=save-draft]').trigger('click')
     await flushPromises()
-    expect(save).toHaveBeenCalledWith('a1', { gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionIds: ['c1'], version: null })
+    expect(save).toHaveBeenCalledWith('a1', {
+      gatewayModel: 'ume/chat-eu', systemPrompt: 'Svara kort.', collectionIds: ['c1'], querySteps: { answer: { generalKnowledge: 'off' } }, notFound: {}, version: null,
+    })
   })
 
   it('tests the draft, publishes it, and sets the audience', async () => {
@@ -198,5 +202,70 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await flushPromises()
     expect(retention).toHaveBeenCalledWith('a1', { historyMode: 'none', retentionDays: 30, version: 'a5' })
     wrapper.unmount()
+  })
+
+  it('sets general knowledge on the draft, keeps the other query steps, and shows the badge (P1b item 40)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 2, generalKnowledge: 'fallback' })
+    vi.spyOn(api.assistants, 'draft').mockResolvedValue({
+      ...draft, querySteps: { retrieval: { topK: 8 }, answer: { language: 'sv' } }, notFound: { sv: 'Inget svar.', links: [] },
+    })
+    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, querySteps: { answer: { generalKnowledge: 'fallback' } }, warnings: [], version: 'd8' })
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test=general-knowledge-badge]').text()).toBe('General knowledge')
+    const group = wrapper.get('[data-test=general-knowledge]')
+    expect(group.get('legend').text()).toBe('General knowledge')
+    expect(group.findAll('input[type=radio]').map((r) => (r.element as HTMLInputElement).value)).toEqual(['off', 'supplement', 'fallback', 'open'])
+    expect((wrapper.get('#assistant-general-knowledge-off').element as HTMLInputElement).checked).toBe(true) // unset reads as off
+    expect(group.text()).toContain('Fallback: as Supplement, and answer from general knowledge when nothing is found')
+
+    await wrapper.get('#assistant-general-knowledge-fallback').setValue(true)
+    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await flushPromises()
+    expect(save).toHaveBeenCalledWith('a1', expect.objectContaining({
+      querySteps: { retrieval: { topK: 8 }, answer: { language: 'sv', generalKnowledge: 'fallback' } }, notFound: { sv: 'Inget svar.', links: [] },
+    }))
+    expect((wrapper.get('#assistant-general-knowledge-fallback').element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('offers only Off for a public assistant, with the reason (V36)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, classification: 'public' })
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+
+    const disabled = ['off', 'supplement', 'fallback', 'open'].map((g) => (wrapper.get(`#assistant-general-knowledge-${g}`).element as HTMLInputElement).disabled)
+    expect(disabled).toEqual([false, true, true, true])
+    expect(wrapper.get('[data-test=general-knowledge]').text()).toContain('General knowledge needs the class Internal or higher.')
+    expect(wrapper.find('[data-test=general-knowledge-badge]').exists()).toBe(false)
+  })
+
+  it('shows a general-knowledge answer of the test panel with its outcome', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    const caveat = '*Jag hittar inget om detta i kommunens källor. Svaret bygger på allmän kunskap och kan vara fel för Umeå kommun.*'
+    vi.spyOn(api.assistants, 'test').mockResolvedValue({
+      target: 'Draft', versionNumber: 1, durationMs: 500, condense: { used: false, outcome: null },
+      retrieval: { collections: [], coverage: null, degraded: null, candidates: [] },
+      answer: { raw: 'Ungefär 384 400 km.', delivered: `${caveat}\n\nUngefär 384 400 km.`, outcome: 'answered-general', language: 'sv', citations: [] },
+      gateway: { model: 'ume/chat-eu', residency: 'Eu', latencyMs: 400, inputTokens: 100, outputTokens: 8 },
+    })
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+    await button(wrapper, 'Test').trigger('click')
+    await wrapper.get('#assistant-question').setValue('Hur långt är det till månen?')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    const answer = wrapper.get('[data-test=answer]').text()
+    expect(answer).toContain('Answered from general knowledge')
+    expect(answer).toContain('Jag hittar inget om detta i kommunens källor.')
   })
 })

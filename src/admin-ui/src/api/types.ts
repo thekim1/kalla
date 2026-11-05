@@ -589,6 +589,9 @@ export interface PiiReport {
 }
 
 // ---------- Assistants (admin design §4.5, §4.9) ----------
+/** `QuerySteps.answer.generalKnowledge` (chat design §7.3, admin design §5.5.4). */
+export type GeneralKnowledge = 'off' | 'supplement' | 'fallback' | 'open'
+
 export interface AssistantSummary {
   id: string
   slug: string
@@ -598,6 +601,8 @@ export interface AssistantSummary {
   state: string
   published: boolean
   hasDraft: boolean
+  /** The published version's level; null before the first publish. */
+  generalKnowledge: GeneralKnowledge | null
 }
 
 export interface Assistant {
@@ -614,6 +619,8 @@ export interface Assistant {
   retentionDays: number
   state: string
   publishedVersion: number | null
+  /** The published version's level; null before the first publish. */
+  generalKnowledge: GeneralKnowledge | null
   draft: { number: number; updatedAt: IsoDateTime; baseChanged: boolean; version: string } | null
   audienceClientIds: string[]
   updatedAt: IsoDateTime
