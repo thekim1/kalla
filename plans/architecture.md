@@ -146,7 +146,7 @@ sequenceDiagram
     K->>P: H+D: hydrate hits, sections, documents, breadcrumbs (one batch)
     K-->>C: results, sections, citations, coverage
     alt coverage low (best distance above threshold and keyword list below its floor)
-        C-->>U: grounding strict: fixed not-found text + contact links (no model call); balanced/open: model answer without sources behind a fixed caveat line
+        C-->>U: generalKnowledge off or supplement: fixed not-found text + contact links (no model call); fallback or open: model answer without sources behind a fixed caveat line
     else coverage ok or degraded, or no content words (gate skipped, no-sources frame)
         C->>G: stream answer (per-level key, x-ume-on-behalf-of from P2, explicit x-ume-max-residency)
         G-->>C: headers: x-ume-residency, delegation echo from P2 (503 + Retry-After when targets are drained)

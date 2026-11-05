@@ -15,7 +15,7 @@ Each item's branch is `b/<item>-<slug>`, made from an up-to-date `main`.
 1. `AGENTS.md`: the rules. They are binding.
 2. `01-general-idea.md` §10, the Decisions rows with status `current`, in particular "Code first, live testing last",
    "Organisation: department-owned, municipality-shared knowledge bases with topics (user, 2026-11-02)", "Admin UI in
-   English (user, 2026-11-02)" and "Grounding mode per assistant (user, 2026-11-05)".
+   English (user, 2026-11-02)" and "General knowledge per assistant (user, 2026-11-05; #356)".
 3. `plans/p1b/README.md`: §1 (code vs live), §2 (ownership), the checklist §3.1 (binding done-when), hand-offs §4,
    sync points §5, open items §7.
 4. `plans/p1b/stream-b.md`: your brief.
@@ -26,15 +26,17 @@ Each item's branch is `b/<item>-<slug>`, made from an up-to-date `main`.
 **Where you are (2026-11-05):** items 1, 3, 9–13 are built; the main session did 18, 33, 34; stream A did 37, 38.
 The unticked Done boxes of items 3, 9 and 10 are recorded partials: leave them unless an item touches them.
 **Next, in this order:**
-1. **35** Organisation in the admin API (issue #318): sharing route, `view=`, topics, Map route, contact fields,
+1. **40** General knowledge per assistant (#356, needed soon for a POC): `QuerySteps.answer.generalKnowledge`
+   `off`/`supplement`/`fallback`/`open`, frames per level, the `Low` path for `fallback`/`open`, `answered-general`,
+   V17 and V36. Merge the chat and admin-API part first; the radio group and badge may follow in a second PR.
+2. **35** Organisation in the admin API (issue #318): sharing route, `view=`, topics, Map route, contact fields,
    V11 widened, V35, owner team defaulted on create.
-2. **14** Accessibility and the pilot-journey E2E → **L7** to stream A. Nothing exists yet: create `tests/e2e`
+3. **14** Accessibility and the pilot-journey E2E → **L7** to stream A. Nothing exists yet: create `tests/e2e`
    (Playwright TypeScript, the gateway's `tests/e2e` set-up in `~/git/llmgateway`) with its static fixture site;
    `.github/workflows/e2e.yml` starts running it once `tests/e2e/package.json` exists. The NVDA pass needs a person:
    prepare it, leave that box open and say so in the PR.
-3. **36** Organisation pages (its done-when extends item 14's E2E).
-4. **39** A new assistant starts from a default prompt, with "Advanced" collapsed.
-5. **40** Grounding mode per assistant.
+4. **36** Organisation pages (its done-when extends item 14's E2E).
+5. **39** A new assistant starts from a default prompt, with "Advanced" collapsed.
 6. Then walk admin §5.4 steps 1–13 locally on FakeGateway to close items 11 and 12, and record to-verify #146.
 After that, item 19 (your part of the pin review) and the live block wait for the user's hand-offs.
 

@@ -512,7 +512,7 @@ kept so references stay stable.
 | V14 | assistant that uses tools (a linked skill's served version links a tool): `SupportsTools`, synced price; limits ≤ `AgentDefaults` unless `Admin`, always ≤ `AgentHardCaps` | `model_no_tools`, `price_unknown`, `limit_above_default`, `limit_above_cap` | publish; skill serve (it can switch an assistant to tools); settings change | tools §6.4–§6.5 |
 | V15 | not-found texts ≤ 1,000 characters each, ≤ 5 links, `https`, host matches `Settings.Chat.allowedLinkHosts` (an empty or missing list refuses every link) | `link_host_not_allowed` | publish; allow-list narrowed | chat §9.4, §10.1 |
 | V16 | `RetrievalSettings` ranges: `vectorWeight`, `keywordWeight` 0–5, `candidates` 20–200 (the range retrieval accepts, `RetrievalSettings.Validated()`; there is no `efSearch`, knowledge §12.1), `maxChunksPerDocument` 1–10, `coverageMaxDistance` 0.05–1.0, `coverageMinKeywordScore` null or > 0 (weakness review §2), `recency` null or `halfLifeDays` 30–3,650, `weight` 0–0.5, `kinds` non-empty subset of the document types (weakness review §3), `expandMaxTokens` 0–4,000; saved directly (an advisory evaluation run follows) | `retrieval_settings_invalid` | collection settings save | knowledge §12.1 |
-| V17 | `QuerySteps`: `retrieval.topK` 1–50, `history.maxMessages` 0–20 and `history.maxTokens` ≤ 8,000, `answer.maxOutputTokens` 64–4,096, `answer.temperature` 0–1, `answer.language` `auto`/`sv`, `answer.grounding` `strict`/`balanced`/`open`; not built yet: `contextTokens` ≤ the model's `ContextWindow` when known, and the condense model within the V32 ceiling | `query_steps_invalid` | publish; model sync | chat §5–§6, §10.3 |
+| V17 | `QuerySteps`: `retrieval.topK` 1–50, `history.maxMessages` 0–20 and `history.maxTokens` ≤ 8,000, `answer.maxOutputTokens` 64–4,096, `answer.temperature` 0–1, `answer.language` `auto`/`sv`, `answer.generalKnowledge` `off`/`supplement`/`fallback`/`open`; not built yet: `contextTokens` ≤ the model's `ContextWindow` when known, and the condense model within the V32 ceiling | `query_steps_invalid` | publish; model sync | chat §5–§6, §10.3 |
 | V18 | skill version label > every existing; **serve** only after the version's gate run finished, and only if V4–V6, V12–V14 and V19 hold for every assistant whose published version links the skill | `version_not_increasing`, `gate_not_finished`, `serve_breaks_assistants` | skill publish/serve/rollback | tools §3.5 |
 | V19 | skill tool links need a `ToolDepartmentGrant` for the skill's department; platform skills only `AllDepartments` tools; sharing never grants: a linking assistant of another department sees a shared skill's tool only with its own grant (warning lists the tools) | `tool_grant_missing` | skill draft; grant revoked (lists skills); share list widened | tools §3.6 |
 | V20 | *retired* (skill MCP exposure vs audience ceilings: per-skill endpoints moved to P3) | – | – | – |
@@ -531,7 +531,7 @@ kept so references stay stable.
 | V33 | assistant test questions: ≤ 30 per assistant; question 1–2,000 characters; expected behaviour 1–2,000; expected phrase ≤ 200; an expected document must belong to a collection the draft or published version links (unlinking it later marks the question in the report, never refuses) | `test_question_invalid`, `test_question_document_unlinked` | test-question save | §7.4 |
 | V34 | publish and restore: the definition resolves (collections not deleted, skills not retired and usable by the department, the model in `GatewayModels`); description and contact are set; a draft created before the current published version (lower `Number`) is published only when confirmed | `version_link_missing`, `assistant_contact_missing`, `draft_base_changed` | publish; restore | §4.5, simplification pass §15 |
 | V35 | narrowing a collection's sharing (to a lower level, or removing a department from `selected`) is refused while a published assistant of a department that loses access links it; the refusal lists the assistants and their departments | `collection_shared_in_use` | sharing save | §3.2, §4.5 |
-| V36 | an assistant of level `public` has `answer.grounding` `strict`; `balanced` and `open` need level `internal` or higher | `grounding_not_allowed_for_level` | publish; restore; level change | chat §7.3, §10.4 |
+| V36 | an assistant of level `public` has `answer.generalKnowledge` `off`; `supplement`, `fallback` and `open` need level `internal` or higher | `general_knowledge_not_allowed_for_level` | publish; restore; level change | chat §7.3, §10.4 |
 
 ### 4.7 Jobs for the worker
 
@@ -857,10 +857,12 @@ Utkast  Testa  Testfrågor (8)  Versioner (3)  Målgrupp  Lagring  Statistik
 - **Knowledge** (Kunskapsbanker in the draft): each link shows the knowledge base, its owning department when it is
   shared ("umea.se (Communications, shared)"), and its topics ("all topics", or chips with **+ topic**); **Add
   knowledge base** opens a picker with *Ours*, *Shared with us* and *All*, showing level, document count and topics.
-- **Answers from** (grounding, in the Utkast tab, not under Avancerat, since it changes what users get): a radio
-  group *Only the knowledge bases* (`strict`, default), *Knowledge bases first, general knowledge for explanations*
-  (`balanced`), *Knowledge bases and general knowledge* (`open`), each with one line of help on what happens when
-  nothing is found. For a `public` assistant the other two are disabled with the V36 reason. A non-strict published
+- **General knowledge** (`answer.generalKnowledge`, in the Utkast tab, not under Avancerat, since it changes what
+  users get): a radio group *Off: only the knowledge bases* (`off`, default), *Supplement: knowledge bases first,
+  general knowledge for explanations* (`supplement`), *Fallback: as Supplement, and answer from general knowledge when
+  nothing is found* (`fallback`), *Open: knowledge bases and general knowledge* (`open`), each with one line of help on
+  what happens when nothing is found. For a `public` assistant the other three are disabled with the V36 reason. A
+  published version with a level other than `off`
   version shows the badge `[General knowledge]` on the assistant page and in the assistant list. The test panel runs
   the chosen mode, so a weak question shows the caveat line.
 - **Who can use it** (Målgrupp) says in plain words what an audience means: "Open WebUI (pilot): everyone who can sign
