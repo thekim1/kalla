@@ -277,7 +277,8 @@ only the headers are read).
   (disallow all), not as a 4xx; a robots.txt request the egress guard refuses is unreachable too, and the URLs behind
   it end `blocked` with the guard's `egress.*` reason. The cache is per origin (scheme, host, port) and in memory per
   worker instance (`RobotsCache`; the `CrawlHosts` row and the blob are not used for it yet); an unreachable answer
-  is kept for 10 minutes only, so the next run asks again.
+  is kept for 10 minutes only, so the next run asks again. A guard-refused robots.txt is not kept at all: the guard
+  follows `Settings.Crawl`, so a port allowed or a host unblocked there counts from the next request (#360).
   robots.txt is always honoured (answered 4, 11), also on municipal hosts; it is re-checked per redirect hop.
 - `Crawl-delay` is honoured only when it **lowers** our rate, capped at 60 s.
 - **Sitemaps**: `XmlReader` with `DtdProcessing.Prohibit` and no resolver; gzip allowed; sitemap index depth ≤ 2;
