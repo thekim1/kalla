@@ -56,12 +56,14 @@ contracts/sources/**                          a
 contracts/jobs/**                             a
 contracts/site-profiles/**                    a
 src/Ume.Rag.MigrationService/Templates/**     a
+src/Ume.Rag.Worker/Engine/HnswIndexHealth.cs  b
 src/Ume.Rag.Worker/**                         a
 src/Ume.Rag.Pipelines/**                      a
 src/Ume.Rag.Domain/Ports/IJobQueue.cs         a
 src/Ume.Rag.Domain/Ports/IBlobStore.cs        a
 src/Ume.Rag.Infrastructure/Jobs/**            a
 src/Ume.Rag.Infrastructure/Blobs/**           a
+tests/Ume.Rag.Worker.Tests/Engine/HnswIndexHealthTests.cs b
 tests/Ume.Rag.Worker.Tests/**                 a
 tests/Ume.Rag.Pipelines.Tests/**              a
 tests/Ume.Rag.ContractTests/**                a
