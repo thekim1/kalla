@@ -9,7 +9,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 
 ## Code
 
-### [ ] B-1 Chat models only in the model picker (#363 point 1)
+### [x] B-1 Chat models only in the model picker (#363 point 1; #379)
 - **Do:** add `GatewayModels.ModelKind` (`chat`/`embedding`) filled by `GatewayModelSync` from the catalogue's `Kind`
   (manual route rows `chat`); return `modelKind` from `GET /api/gateway/models`; the assistant's model picker lists
   chat models only; V34 and V32 refuse an embedding model. No compatibility step: the next sync fills the column.
