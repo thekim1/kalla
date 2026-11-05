@@ -57,8 +57,8 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 - **Platform/CI:** Aspire 13.6.4 (#339); fixed local ports (#341); MSBuild node reuse off in CI (#342: both runners
   share one machine). **Lean CI** (user, session 21, repo-and-deployment §8.2): on PRs `images` and `evaluation-smoke`
   run only when their paths change (#367, conditions fixed in #372); `e2e` only from `release.yml` or by hand (#371,
-  #373), never on PRs. `e2e` reaches the browser step on the runner (#368) but Chromium lacks its system libraries:
-  the runner host needs `docs/ci-runner.md` (#370). Item 15's `e2e` box waits on that.
+  #373), never on PRs. `e2e` is green on the runner (#377, 9/9: both pilot
+  journeys and the accessibility specs; host set up per `docs/ci-runner.md`).
 
 ## Decided in session 19 (user)
 
