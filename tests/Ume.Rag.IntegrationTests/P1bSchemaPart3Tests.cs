@@ -63,11 +63,14 @@ public sealed class P1bSchemaPart3Tests(RagDatabaseFixture database)
     }
 
     [Fact]
-    public async Task The_worker_reads_the_gateway_model_mirror_and_nothing_else_of_assistants()
+    public async Task The_worker_reads_the_gateway_model_mirror_and_of_assistants_only_id_and_state()
     {
         var worker = database.Connection(Worker);
         await Sql.ExecuteAsync(worker, """SELECT count(*) FROM config."GatewayModels" """);
-        await Sql.ShouldBeDeniedAsync(worker, """SELECT count(*) FROM config."Assistants" """);
+        // The index-health check skips archived assistants (knowledge design §6.4; Decisions "M-2 open design calls").
+        await Sql.ExecuteAsync(worker, """SELECT "Id", "State" FROM config."Assistants" """);
+        await Sql.ShouldBeDeniedAsync(worker, """SELECT * FROM config."Assistants" """);
+        await Sql.ShouldBeDeniedAsync(worker, """SELECT "Name" FROM config."Assistants" """);
         await Sql.ShouldBeDeniedAsync(worker, """INSERT INTO config."GatewayModels" DEFAULT VALUES""");
     }
 }

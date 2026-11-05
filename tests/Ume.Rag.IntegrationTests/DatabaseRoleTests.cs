@@ -37,7 +37,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         string[] ingestionContent = [.. IngestionContentTables.Select(t => "content." + t)];
 
         // Serving (P1 item 3, data-model §1.2): the api reads published versions only through the view; the worker reads
-        // no assistant tables; the admin also writes evaluation runs and results (answer-level runs in rag-admin).
+        // no assistant table whole (column grants below); the admin also writes evaluation runs and results (answer-level runs in rag-admin).
         string[] servingConfig = ["config.Assistants", "config.AssistantVersions", "config.AssistantAudiences", "config.GatewayModels"];
         string[] apiServingConfig = ["config.Assistants", "config.AssistantAudiences", "config.PublishedAssistantVersions", "config.GatewayModels"];
         string[] evaluationWrites = ["content.EvaluationRuns", "content.EvaluationResults"];
@@ -69,7 +69,8 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         // Column grants exist only where data-model §1.2 lists columns: the api's reads of Sources and Documents.
         (await ColumnPrivilegesAsync(Api)).ShouldBe([.. ApiSourceColumns.Select(c => "config.Sources." + c), .. ApiDocumentColumns.Select(c => "content.Documents." + c)], ignoreOrder: true);
         (await ColumnPrivilegesAsync(Admin)).ShouldBe(["chat.Feedback.ReviewState:UPDATE"]);
-        (await ColumnPrivilegesAsync(Worker)).ShouldBeEmpty();
+        // The worker: the links of active assistants' published versions, for the index-health check (Decisions "M-2 open design calls").
+        (await ColumnPrivilegesAsync(Worker)).ShouldBe([.. WorkerAssistantColumns], ignoreOrder: true);
     }
 
     /// <summary>The content tables of P1 item 2 (data-model §2.2, issue #34).</summary>
@@ -81,6 +82,10 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
     ];
 
     /// <summary>data-model §1.2: what retrieval reads of a source (knowledge design §6.3, §6.5); never its settings.</summary>
+    /// <summary>The index-health check's scopes (knowledge design §6.4): which collections and topics active assistants link.</summary>
+    private static readonly string[] WorkerAssistantColumns =
+        ["config.PublishedAssistantVersions.AssistantId", "config.PublishedAssistantVersions.CollectionLinks", "config.Assistants.Id", "config.Assistants.State"];
+
     private static readonly string[] ApiSourceColumns = ["Id", "CollectionId", "Type", "Classification", "State", "DeletedAt", "ContainsThirdPartyText", "DemoteRules"];
 
     /// <summary>data-model §1.2: the citation and download columns of a document (knowledge design §3.5).</summary>
@@ -124,7 +129,7 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
     }
 
     [Fact]
-    public async Task The_api_reads_published_versions_only_through_the_view_and_the_worker_no_assistants()
+    public async Task The_api_reads_published_versions_only_through_the_view_and_the_worker_only_their_links()
     {
         // data-model §1.2: never AssistantVersions itself, so a draft cannot reach chat.
         var admin = database.Connection(Admin);
@@ -152,10 +157,19 @@ public sealed class DatabaseRoleTests(RagDatabaseFixture database)
         await Sql.ShouldBeDeniedAsync(api, """INSERT INTO config."GatewayModels" ("Name", "Kind", "Residencies", "Source", "SupportsTools", "SupportsToolsSource") VALUES ('x', 'model', ARRAY['Eu'], 'manual', false, 'manual')""");
 
         var worker = database.Connection(Worker);
-        foreach (var table in new[] { "Assistants", "AssistantVersions", "AssistantAudiences", "PublishedAssistantVersions" })
+        foreach (var table in new[] { "AssistantVersions", "AssistantAudiences" })
         {
             await Sql.ShouldBeDeniedAsync(worker, $"""SELECT count(*) FROM config."{table}" """);
         }
+
+        // The index-health check (knowledge design §6.4): an active assistant's published links, nothing else of it.
+        (await Sql.ListAsync(worker, $"""
+            SELECT v."CollectionLinks"::text FROM config."PublishedAssistantVersions" v JOIN config."Assistants" a ON a."Id" = v."AssistantId"
+            WHERE a."State" = 'active' AND v."AssistantId" = '{assistantId}'
+            """)).ShouldBe(["[]"]);
+        await Sql.ShouldBeDeniedAsync(worker, """SELECT * FROM config."PublishedAssistantVersions" """);
+        await Sql.ShouldBeDeniedAsync(worker, """SELECT "SystemPrompt" FROM config."PublishedAssistantVersions" """);
+        await Sql.ShouldBeDeniedAsync(worker, """SELECT "Name" FROM config."Assistants" """);
 
         await Sql.ExecuteAsync(worker, """SELECT count(*) FROM config."GatewayModels" """); // the model mirror only (#130)
 
