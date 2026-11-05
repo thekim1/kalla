@@ -8,6 +8,8 @@ name: Verify
 # checklist #14), admin-ui (P0 checklist #3, plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract
 # jobs (P0 checklist #13) are in parser.yml, which runs them only when the parser changed. The dependency audits of the
 # backend and admin-ui jobs (scripts/audit/) also run daily against main in audit.yml.
+# Lean pull requests (user, 2026-11-05): images and evaluation-smoke run only when their paths changed; a dispatch and
+# release.yml run every job. The browser tests (e2e.yml) run on dispatch and before a release only.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -60,6 +62,8 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       deploy: ${{ steps.filter.outputs.deploy }}
       adminui: ${{ steps.filter.outputs.adminui }}
+      images: ${{ steps.filter.outputs.images }}
+      smoke: ${{ steps.filter.outputs.smoke }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,7 +79,7 @@ jobs:
           ui=false; [ -f src/admin-ui/package-lock.json ] && ui=true
           if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            printf 'code=true\ndeploy=true\nadminui=%s\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
+            printf 'code=true\ndeploy=true\nadminui=%s\nimages=true\nsmoke=true\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
           fi
           flag() { [ -n "$1" ] && echo true || echo false; }
           code="$(git diff --name-only "$range" | grep -vE '^(plans/|platforms/)|^[^/]+\.md$' || true)"
@@ -85,11 +89,17 @@ jobs:
           # tests, or this workflow.
           adminui="$(git diff --name-only "$range" | grep -E '^(src/admin-ui/|tests/e2e/|contracts/admin/|scripts/admin-ui-size-budget\.mjs$|scripts/audit/|\.github/workflows/verify\.yml$)' || true)"
           [ "$ui" = true ] || adminui=""
-          { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"; } >> "$GITHUB_OUTPUT"
+          # Lean pull requests (repo-and-deployment §8.2): the image tests only when an image or its test changed, the
+          # evaluation smoke only when the code on its path (ingestion, retrieval, answering) or the smoke set changed. A
+          # dispatch and release.yml run everything.
+          images="$(git diff --name-only "$range" | grep -E '^(images/postgres/|images/clamav/|deploy/postgres/|\.github/workflows/verify\.yml$)' || true)"
+          smoke="$(git diff --name-only "$range" | grep -E '^(src/Ume\.Rag\.(Worker|Retrieval|Answering|Api|Infrastructure|Pipelines|Domain)/|tests/evaluation/|tests/Ume\.Rag\.Worker\.Tests/Evaluation|images/postgres/|Directory\.(Packages|Build)\.(props|targets)$|global\.json$|\.github/workflows/verify\.yml$)' || true)"
+          { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"
+            echo "images=$(flag "$images")"; echo "smoke=$(flag "$smoke")"; } >> "$GITHUB_OUTPUT"
 
   backend:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.images == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
@@ -129,7 +139,7 @@ jobs:
     # tests/Ume.Rag.Worker.Tests, trait Category=EvaluationSmoke, which the backend job leaves out). Detailed output
     # prints the recall numbers.
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.smoke == 'true'
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
