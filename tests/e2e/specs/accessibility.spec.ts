@@ -9,7 +9,7 @@ const themes = ['light', 'dark', 'lumen'] as const
 const themeStorageKey = 'ume-theme'
 
 /** Every page of src/admin-ui/src/router (and platform/routes.ts), plus the 404 page. Keep in sync with the router. */
-const listPages = ['/', '/collections', '/assistants', '/feedback', '/audit', '/organisation', '/plattform',
+const listPages = ['/', '/map', '/collections', '/assistants', '/feedback', '/audit', '/organisation', '/plattform',
   '/plattform/clients', '/plattform/keys', '/plattform/settings', '/plattform/data-protection', '/plattform/site-profiles',
   '/plattform/gateway-models', '/plattform/organisation', '/forbidden', '/no-such-page']
 

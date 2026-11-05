@@ -1,8 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
-import { accepted, expectFixturePortAllowed, getJson, devClientKey, eventually, fixtureSiteUrl, listedModels, login, ready, visibleSoon, watchCsp } from '../helpers'
+import {
+  accepted, adminUiUrl, expectFixturePortAllowed, getJson, devClientKey, eventually, fixtureSiteUrl, listedModels, login, ready, visibleSoon, watchCsp,
+} from '../helpers'
 
 // The pilot department admin's journey (admin design §5.4 steps 1–13, §11.4) against the static fixture site, on the
-// FakeGateway with the real worker and parser. Run twice: with the mouse, and with the keyboard only.
+// FakeGateway with the real worker and parser. Run twice: with the mouse, and with the keyboard only. Step 14 (P1b item
+// 36): the knowledge base is shared with the whole municipality and another department's assistant links it with a topic.
 
 test.afterEach(async ({ page }) => { await page.close() })
 
@@ -14,7 +17,7 @@ test.beforeAll(async ({ browser }) => {
 })
 
 for (const mode of ['mouse', 'keyboard'] as const) {
-  test(`pilot journey with the ${mode}`, async ({ page }) => {
+  test(`pilot journey with the ${mode}`, async ({ page, browser }) => {
     const csp = watchCsp(page)
     const suffix = crypto.randomUUID().slice(0, 8)
     const collection = `Pilot ${mode} ${suffix}`
@@ -122,7 +125,10 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     const model = page.getByRole('combobox', { name: 'Language model' })
     await expect(model.locator('option', { hasText: 'ume/chat-eu' })).toHaveCount(1)
     await act.select(model, { label: 'ume/chat-eu' })
-    await act.check(page.getByRole('checkbox', { name: collection }))
+    await act.press(page.getByRole('button', { name: 'Add knowledge base', exact: true }))
+    const picker = page.getByRole('dialog', { name: 'Add a knowledge base' })
+    await act.press(picker.getByRole('button', { name: `Add ${collection}` }))
+    await expect(picker).toBeHidden()
     await act.press(page.getByRole('button', { name: 'Save draft' }))
     await expect(page.getByText('The draft has been saved.')).toBeVisible()
 
@@ -147,6 +153,43 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     // 13 Open WebUI lists it: rag-api offers the assistant's model name to the client's key.
     const slug = (await page.getByText(/^Model name in Open WebUI: /).textContent())!.replace('Model name in Open WebUI: ', '').trim()
     await eventually(async () => (await listedModels(page.request, devClientKey())).includes(slug), 'rag-api lists the assistant', 60_000)
+
+    // 14 Share the knowledge base with the whole municipality (admin design §5.5.2, item 36).
+    await ready(page, collectionPage)
+    await act.press(page.getByRole('tab', { name: 'Sharing' }))
+    await act.check(page.getByRole('radio', { name: 'Whole municipality' }))
+    await act.press(page.getByRole('button', { name: 'Save sharing' }))
+    await expect(page.getByText('The sharing has been saved.')).toBeVisible()
+
+    // An assistant of another department (Fritidsförvaltningen; the platform administrator works in every department)
+    // links it from "Shared with us" with a topic, and V11 has nothing to say.
+    const otherContext = await browser.newContext({ baseURL: adminUiUrl, ignoreHTTPSErrors: true, viewport: { width: 1280, height: 900 } })
+    const other = await otherContext.newPage()
+    const otherAct = actor(other, mode)
+    await login(other, 'rag-platform-admin')
+    await otherAct.press(other.getByRole('navigation', { name: 'Main menu' }).getByRole('link', { name: 'Assistants' }))
+    await otherAct.press(other.getByRole('main').getByRole('button', { name: 'Create assistant' }))
+    const otherDrawer = other.getByRole('dialog', { name: 'Create assistant' })
+    await otherAct.fill(otherDrawer.getByRole('textbox', { name: 'Name', exact: true }), `Fritidsassistent ${mode} ${suffix}`)
+    await otherAct.select(otherDrawer.getByRole('combobox', { name: 'Department' }), { label: 'Fritidsförvaltningen' })
+    await otherAct.check(otherDrawer.getByRole('radio', { name: /^Public/ }))
+    await otherAct.press(otherDrawer.getByRole('button', { name: 'Create assistant' }))
+    await expect(otherDrawer).toBeHidden()
+    await otherAct.press(other.getByRole('button', { name: 'Add knowledge base', exact: true }))
+    const otherPicker = other.getByRole('dialog', { name: 'Add a knowledge base' })
+    await otherAct.press(otherPicker.getByRole('tab', { name: 'Shared with us' }))
+    await otherAct.press(otherPicker.getByRole('button', { name: `Add ${collection}` }))
+    await expect(otherPicker).toBeHidden()
+    const link = other.getByRole('listitem').filter({ hasText: collection })
+    await expect(link.getByText('(Kommunledningskontoret, shared)')).toBeVisible()
+    await otherAct.fill(link.getByRole('combobox', { name: `Topics of ${collection}` }), 'isytor')
+    await otherAct.press(link.getByRole('button', { name: 'Add topic' }))
+    await expect(link.getByText('isytor', { exact: true })).toBeVisible()
+    await otherAct.press(other.getByRole('button', { name: 'Save draft' }))
+    await expect(other.getByText('The draft has been saved.')).toBeVisible()
+    await expect(other.getByText(/is not shared with yours/)).toHaveCount(0)
+    await expect(other.getByText(/A topic is invalid/)).toHaveCount(0)
+    await otherContext.close()
 
     expect(csp, 'Content-Security-Policy violations').toEqual([])
   })

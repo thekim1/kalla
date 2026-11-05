@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { api } from '@/api'
+import { collectionUser } from '@/test/fixtures'
 import type { Collection, Source } from '@/api/types'
 import SourceEditDrawer from './SourceEditDrawer.vue'
 
@@ -32,7 +33,10 @@ describe('Edit source (admin design §5.5.3, V25)', () => {
   it('shows the impact of a scope change and saves only with Save anyway, sending the token and keeping other settings', async () => {
     const impact = vi.spyOn(api.sources, 'impact').mockResolvedValue({
       effects: ['scope'], liveDocuments: 840, impactToken: 'tok',
-      usedBy: [{ id: 'a1', name: 'Bygglovsassistenten', classification: 'public', published: true, draft: false }, { id: 'a2', name: 'Kundtjänst bygg', classification: 'public', published: false, draft: true }],
+      usedBy: [
+        collectionUser({ id: 'a1', name: 'Bygglovsassistenten', classification: 'public' }),
+        collectionUser({ id: 'a2', name: 'Kundtjänst bygg', classification: 'public', published: false, draft: true }),
+      ],
     })
     const update = vi.spyOn(api.sources, 'update').mockResolvedValue({ ...source, version: '8' })
     const wrapper = await open()

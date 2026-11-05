@@ -2,20 +2,15 @@ import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
-import type { Collection } from '@/api/types'
-import { department } from '@/test/fixtures'
+import { useAuthStore } from '@/stores/auth'
+import { bffUser, collection, department } from '@/test/fixtures'
 import CollectionCreateDrawer from './CollectionCreateDrawer.vue'
 
-function collection(overrides: Partial<Collection> = {}): Collection {
-  return {
-    id: 'c1', slug: 'bygglov', name: 'Bygglov', departmentId: 'd1', classification: 'internal', publishedAt: null, ownerTeamId: null,
-    embeddingProfileId: 'p', retrievalSettings: {}, usedBy: [], updatedAt: '2026-11-01T10:00:00Z', updatedBy: null, version: '1', ...overrides,
-  }
-}
 
 describe('Create knowledge base (admin design §5.4 step 2)', () => {
   it('asks who may read the content, with no level preselected, and creates the collection', async () => {
     setActivePinia(createPinia())
+    useAuthStore().user = bffUser()
     const create = vi.spyOn(api.collections, 'create').mockResolvedValue(collection())
     const wrapper = mount(CollectionCreateDrawer, {
       props: { open: false, departments: [department({ id: 'd1', name: 'Stadsbyggnad' })] },
@@ -45,8 +40,12 @@ describe('Create knowledge base (admin design §5.4 step 2)', () => {
     body.querySelector<HTMLFormElement>('#collection-create')!.dispatchEvent(new Event('submit'))
     await flushPromises()
 
-    // One department in scope: it is chosen for the user.
-    expect(create).toHaveBeenCalledWith({ name: 'Bygglov', departmentId: 'd1', ownerTeamId: null, classification: 'internal' })
+    // One department in scope: it is chosen for the user. No team field: the API picks the owner team. The contact is the
+    // creator by default.
+    expect(body.querySelector('#collection-team')).toBeNull()
+    expect(create).toHaveBeenCalledWith({
+      name: 'Bygglov', departmentId: 'd1', classification: 'internal', contactName: 'Anna Andersson', contactEmail: 'anna@example.invalid',
+    })
     expect(wrapper.emitted('created')?.[0]?.[0]).toMatchObject({ id: 'c1' })
     wrapper.unmount()
   })

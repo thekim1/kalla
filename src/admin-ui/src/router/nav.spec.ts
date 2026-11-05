@@ -34,7 +34,14 @@ describe('search', () => {
   })
 
   it('lists only pages without a query', () => {
-    expect(filterEntries(entries, '').map((e) => e.id)).toEqual(['overview', 'collections', 'assistants', 'feedback', 'organisation', 'platform', 'audit'])
+    expect(filterEntries(entries, '').map((e) => e.id)).toEqual(['overview', 'map', 'collections', 'assistants', 'feedback', 'organisation', 'platform', 'audit'])
+  })
+
+  it('groups the menu as Home and Map, Knowledge bases and Assistants, Feedback, then Organisation, Platform and Audit log (admin design §5.2)', () => {
+    expect(navGroups.map((g) => g.items.map((i) => i.label))).toEqual([
+      ['Home', 'Map'], ['Knowledge bases', 'Assistants'], ['Feedback'], ['Organisation', 'Platform objects', 'Audit log'],
+    ])
+    expect(filterEntries(entries, 'responsible').map((e) => e.id)).toEqual(['map'])
   })
 })
 

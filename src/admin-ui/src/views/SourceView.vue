@@ -54,7 +54,8 @@ const demoted = computed(() =>
 )
 
 async function edit(): Promise<void> {
-  collection.value ??= await api.collections.get(source.data.value!.collectionId).catch(() => null)
+  // A source's knowledge base is the caller's own, so this is the owner's detail.
+  collection.value ??= await api.collections.get(source.data.value!.collectionId).then((c) => (c.shared ? null : c)).catch(() => null)
   editing.value = true
 }
 

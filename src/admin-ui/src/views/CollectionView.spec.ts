@@ -2,17 +2,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
+import { ApiError } from '@/api/client'
 import type { Collection, DocumentSummary } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
-import { bffUser } from '@/test/fixtures'
+import { bffUser, collection, collectionSummary, collectionUser } from '@/test/fixtures'
 import { button } from '@/test/helpers'
 import CollectionView from './CollectionView.vue'
 
-const base: Collection = {
-  id: 'c1', slug: 'bygglov', name: 'Bygglov', departmentId: 'd1', classification: 'internal', publishedAt: null, ownerTeamId: null,
-  embeddingProfileId: 'p', retrievalSettings: {}, usedBy: [{ id: 'a1', name: 'Bygglovsassistenten', classification: 'internal', published: false, draft: true }],
-  updatedAt: '2026-11-01T10:00:00Z', updatedBy: null, version: '7',
-}
+const base: Collection = collection({ usedBy: [collectionUser({ published: false, draft: true })], version: '7' })
 
 function document(overrides: Partial<DocumentSummary>): DocumentSummary {
   return {
@@ -153,5 +150,125 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     const done = mount(CollectionView, { props: { id: 'c1' }, ...stubs })
     await flushPromises()
     expect(done.find('[data-test=setup]').exists()).toBe(false)
+  })
+
+  it('opens a knowledge base shared with the department read-only: Overview and Topics, nothing else', async () => {
+    signIn(['rag-department-admin'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue({
+      ...collectionSummary({
+        id: 'c9', name: 'umea.se', departmentId: 'd9', departmentName: 'Kommunikation', classification: 'public', publishedAt: '2026-11-01T10:00:00Z',
+        sharedWith: 'municipality', contactName: 'K. Lund', contactEmail: 'kommunikation@umea.se', documentCount: 2323, topics: ['bygglov'],
+      }),
+      shared: true,
+    })
+    const sources = vi.spyOn(api.collections, 'sources')
+    const topics = vi.spyOn(api.collections, 'topics').mockResolvedValue({ collectionId: 'c9', topics: [{ tag: 'bygglov', documents: 412, rules: null }] })
+
+    const wrapper = mount(CollectionView, { props: { id: 'c9' } })
+    await flushPromises()
+
+    expect(wrapper.findAll('[role=tab]').map((t) => t.text())).toEqual(['Overview', 'Topics'])
+    expect(wrapper.get('[data-test=shared-with-you]').text()).toContain('Kommunikation shares this knowledge base with your department.')
+    expect(wrapper.get('[data-test=contact]').text()).toBe('K. Lund, kommunikation@umea.se')
+    expect(wrapper.get('[data-test=document-count]').text()).toMatch(/^2\s323$/)
+    expect(wrapper.find('[data-test=publish]').exists()).toBe(false)
+    expect(sources).not.toHaveBeenCalled() // its sources are not ours to see
+
+    await button(wrapper, 'Topics').trigger('click')
+    await flushPromises()
+    expect(topics).toHaveBeenCalledWith('c9')
+    const table = wrapper.get('[data-test=topics]')
+    expect(table.text()).toContain('bygglov')
+    expect(table.text()).toContain('412')
+    expect(table.text()).not.toContain('Rule') // the rules are the owner's settings
+  })
+
+  it('shows the owner the topics with the rule that sets each one', async () => {
+    signIn(['rag-editor'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+    vi.spyOn(api.collections, 'topics').mockResolvedValue({ collectionId: 'c1', topics: [
+      { tag: 'bygglov', documents: 412, rules: [{ sourceId: 's1', sourceName: 'umea.se/bygga', on: 'path', match: 'www.umea.se/bygga/**' }] },
+      { tag: 'altan', documents: 3, rules: [] },
+    ] })
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+    await button(wrapper, 'Topics').trigger('click')
+    await flushPromises()
+
+    const table = wrapper.get('[data-test=topics]')
+    expect(table.text()).toContain('Rule')
+    expect(table.text()).toContain('www.umea.se/bygga/** · umea.se/bygga')
+    expect(table.text()).toContain('No rule any more')
+  })
+
+  it('saves the sharing with selected departments, lists who uses it, and names the assistants when a narrowing is refused (V35)', async () => {
+    signIn(['rag-department-admin'])
+    const shared = collection({
+      sharedWith: 'municipality', version: '7',
+      usedBy: [
+        collectionUser({ id: 'a1', name: 'Permits assistant', departmentId: 'd2', departmentName: 'Bygg och miljö', topics: ['bygglov'] }),
+        collectionUser({ id: 'a2', name: 'Kundtjänst', departmentId: 'd3', departmentName: 'Kontaktcenter', published: false, draft: true }),
+      ],
+    })
+    vi.spyOn(api.collections, 'get').mockResolvedValue(shared)
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+    vi.spyOn(api.organisation, 'departmentNames').mockResolvedValue([
+      { id: 'd1', name: 'Kommunikation' }, { id: 'd2', name: 'Bygg och miljö' }, { id: 'd3', name: 'Kontaktcenter' },
+    ])
+    const save = vi.spyOn(api.collections, 'sharing')
+      .mockRejectedValueOnce(new ApiError(409, 'PUT', {
+        status: 409, title: 'Conflict', code: 'collection_shared_in_use', affected: ['Permits assistant (Bygg och miljö)'],
+      } as never))
+      .mockResolvedValueOnce({ ...shared, sharedWith: 'selected', sharedWithDepartmentIds: ['d2'], version: '8' })
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+    await button(wrapper, 'Sharing').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Only Kommunikation')
+    expect((wrapper.get('#sharing-municipality').element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.text()).toContain('Used by 2 assistants in 2 departments')
+    const users = wrapper.get('[data-test=sharing-used-by]').text()
+    expect(users).toContain('Permits assistant')
+    expect(users).toContain('Bygg och miljö')
+    expect(users).toContain('bygglov')
+    expect(users).toContain('all') // a link without topics uses the whole knowledge base
+
+    // Selected without a department says so and sends nothing; with one, the narrowing is refused and names the assistant.
+    await wrapper.get('#sharing-selected').setValue(true)
+    expect(wrapper.get('[data-test=sharing-departments]').text()).not.toContain('Kommunikation') // never the owner
+    await wrapper.get('[data-test=save-sharing]').trigger('click')
+    expect(wrapper.text()).toContain('Choose at least one department.')
+    expect(save).not.toHaveBeenCalled()
+    await wrapper.get('[data-test=sharing-departments] input[type=checkbox]').setValue(true)
+    await wrapper.get('[data-test=save-sharing]').trigger('click')
+    await flushPromises()
+    expect(save).toHaveBeenCalledWith('c1', { sharedWith: 'selected', departmentIds: ['d2'], version: '7' })
+    expect(wrapper.get('[data-test=sharing-error]').text()).toContain('Assistants of other departments use this knowledge base')
+    expect(wrapper.get('[data-test=sharing-error]').text()).toContain('Permits assistant (Bygg och miljö)')
+
+    await wrapper.get('[data-test=save-sharing]').trigger('click')
+    await flushPromises()
+    expect(save).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-test=sharing-error]').exists()).toBe(false)
+  })
+
+  it('shows the sharing to an editor without letting them change it', async () => {
+    signIn(['rag-editor'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+    vi.spyOn(api.organisation, 'departmentNames').mockResolvedValue([{ id: 'd1', name: 'Kommunikation' }])
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+    await button(wrapper, 'Sharing').trigger('click')
+    await flushPromises()
+
+    expect((wrapper.get('#sharing-department').element as HTMLInputElement).disabled).toBe(true)
+    expect(wrapper.find('[data-test=save-sharing]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Only a department administrator can change the sharing.')
   })
 })
