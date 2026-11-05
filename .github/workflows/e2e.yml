@@ -52,6 +52,7 @@ jobs:
         run: |
           dotnet tool install --global Aspire.Cli --version 13.6.1
           dotnet tool install --global PowerShell --version 7.6.9
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"   # global tools (aspire, pwsh) for the later steps
           dotnet dev-certs https
           if [ -f src/admin-ui/package-lock.json ]; then (cd src/admin-ui && npm ci); fi
       - name: Start the test stack
