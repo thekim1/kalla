@@ -30,7 +30,7 @@ function onKey(event: KeyboardEvent, index: number): void {
 </script>
 
 <template>
-  <div role="tablist" :aria-label="label" class="flex gap-1 border-b border-border">
+  <div role="tablist" :aria-label="label" class="flex flex-wrap gap-1 border-b border-border">
     <button
       v-for="(tab, index) in tabs"
       :id="`${id}-tab-${tab.value}`"

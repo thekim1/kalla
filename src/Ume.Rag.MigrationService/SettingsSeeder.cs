@@ -17,6 +17,12 @@ public sealed class SettingsSeedOptions
 
     /// <summary>Unset: <see cref="DefaultOwnDomains"/>.</summary>
     public string[]? PiiOwnDomains { get; set; }
+
+    /// <summary>
+    /// <c>Settings.Crawl.allowedPorts</c> of the first row (connectors §7). Unset: none beyond 80 and 443. The browser tests'
+    /// stack sets the fixture website's port here, so the worker has it from its first read.
+    /// </summary>
+    public int[]? CrawlAllowedPorts { get; set; }
 }
 
 /// <summary>
@@ -44,6 +50,9 @@ public static partial class SettingsSeeder
         db.Settings.Add(new PlatformSettings
         {
             PiiOwnDomains = [.. domains.Select(d => d.Trim()).Where(d => d.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)],
+            Crawl = options.CrawlAllowedPorts is { Length: > 0 } ports
+                ? System.Text.Json.JsonSerializer.Serialize(new { allowedPorts = ports.Distinct().Order().ToArray() })
+                : "{}",
             UpdatedAt = clock.GetUtcNow(),
             UpdatedBy = Actor,
         });

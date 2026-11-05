@@ -81,9 +81,9 @@ jobs:
           code="$(git diff --name-only "$range" | grep -vE '^(plans/|platforms/)|^[^/]+\.md$' || true)"
           # The production Compose files and init-deployment.sh, or this workflow.
           deploy="$(git diff --name-only "$range" | grep -E '^(deploy/|\.github/workflows/verify\.yml$)' || true)"
-          # The admin UI, the error codes its Swedish texts are checked against, its size budget or audit script, or this
-          # workflow.
-          adminui="$(git diff --name-only "$range" | grep -E '^(src/admin-ui/|contracts/admin/|scripts/admin-ui-size-budget\.mjs$|scripts/audit/|\.github/workflows/verify\.yml$)' || true)"
+          # The admin UI, the error codes its Swedish texts are checked against, its size budget or audit script, its browser
+          # tests, or this workflow.
+          adminui="$(git diff --name-only "$range" | grep -E '^(src/admin-ui/|tests/e2e/|contracts/admin/|scripts/admin-ui-size-budget\.mjs$|scripts/audit/|\.github/workflows/verify\.yml$)' || true)"
           [ "$ui" = true ] || adminui=""
           { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"; } >> "$GITHUB_OUTPUT"
 
@@ -334,3 +334,10 @@ jobs:
       - name: Design-system drift (warning only)
         # Without a gateway checkout it compares the copies with design-system.lock only; it always exits 0.
         run: node scripts/design-system-drift.mjs
+      - name: Browser tests (tests/e2e) audit and typecheck
+        # The specs themselves run in e2e.yml against a running stack; here only their packages and types.
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npm audit --audit-level=low
+          npm run typecheck
