@@ -9,7 +9,7 @@ item and come back. Code items (§3.1) all come before the live block (§3.2). T
 work and put the PR number after it (`[x] … (#12)`). Record every `to-verify` row in `results-b.md` before ticking it
 here.
 
-## Status (2026-11-05, main session)
+## Status (2026-11-05, stream B)
 
 - Built and merged: items 1, 3, 9, 10 (their Done boxes are recorded partials: K for 10–30 % terms, to-verify rows 23
   and 20, see `results-b.md`; leave them unless an item touches them), 11 and 12 (pages built; their Done, admin §5.4
@@ -17,7 +17,8 @@ here.
   and 34; stream A did 37 and 38 on L13/L14.
 - **Item 14 is taken by the main session** (2026-11-05, branch `main-session/14-e2e`, claimed on #278): skip it.
 - **Item 40 is done:** chat and admin API in #358 (frames, `answered-general`, `GeneralAnswers`, V17, V36, test panel), the radio group and badge in #359.
-- **Next, in order: 35 → 36 → 39** (36 waits for 14's E2E to extend it). Item 14 comes before 36 because 36's done-when extends the pilot-journey
+- **Item 35 is done** (#361): sharing, `view=`, topics, Map route, contact fields, V11 widened, V35, owner team defaulted.
+- **Next, in order: 36 → 39** (36 waits for 14's E2E to extend it). Item 14 comes before 36 because 36's done-when extends the pilot-journey
   E2E that 14 creates, and because stream A's `e2e` job (item 15) waits on its hand-off L7. Nothing exists yet for
   14: no `tests/e2e`, no Playwright set-up; `e2e.yml` passes with a notice until `tests/e2e/package.json` exists. Its
   NVDA pass needs a person: prepare it and leave the box open with a note.
@@ -124,9 +125,9 @@ Refs: [chat §6.2, §7.3, §10.4](../chat-api/design.md), [admin §4.6, §5.5.4]
 
 ### 35. Organisation in the admin API
 Refs: [admin §3.2, §4.5, §4.6](../admin/design.md)
-- [ ] Sharing route, `view=`, topics, Map route, contact fields, owner-team default
-- [ ] V11 widened, V35
-- [ ] **Done:** `PermissionMatrixTests`; shared summary visible, sources 404; V35 refusal lists assistants
+- [x] Sharing route, `view=`, topics, Map route, contact fields, owner-team default (#361)
+- [x] V11 widened, V35 (#361; the draft contract takes `collectionLinks`)
+- [x] **Done:** `PermissionMatrixTests`; shared summary visible, sources 404; V35 refusal lists assistants (#361: `OrganisationSharingTests`)
 
 ### 36. Organisation pages (after #314)
 Refs: [admin §5.2–§5.5](../admin/design.md)
