@@ -9,22 +9,23 @@ item and come back. Code items (§3.1) all come before the live block (§3.2). T
 work and put the PR number after it (`[x] … (#12)`). Record every `to-verify` row in `results-b.md` before ticking it
 here.
 
-## Status (2026-11-02, session 20)
+## Status (2026-11-05, main session)
 
-- Items 1, 3 (Done open: K for 10–30 % terms, question on #248), 9 and 10 are built and merged; their Done boxes wait on
-  to-verify rows 23 and 20 (partly, see `results-b.md`). Hand-offs L2 #234, L3 #249, L4 #300, L6 #273 filed.
-- The admin UI is first (user, #278). Built: Kunskapsbanker (#279); every part of Källa (#285, #288, #303, #306, #309,
-  #310); Publicering (#305); Assistenter with Versioner, Lagring and Arkivera (#301, #304); generic platform forms by
-  the main session (#281). Item 11's Done (§5.4 steps 1–8 locally on FakeGateway) is still to be checked.
-- Next, in order: item 12's Testfrågor och kvalitet with the evaluation report, then Sökinställningar; item 12's
-  Översikt setup checklist and Granskningslogg; item 13 (Återkoppling); then #297 (stream-b test flakes). Known: run
-  counters stay 0 until a run ends (#288 review), so the run page polls for the end.
+- Built and merged: items 1, 3, 9, 10 (their Done boxes are recorded partials: K for 10–30 % terms, to-verify rows 23
+  and 20, see `results-b.md`; leave them unless an item touches them), 11 and 12 (pages built; their Done, admin §5.4
+  steps 1–13 walked locally on FakeGateway, is not checked yet; #146 not recorded), 13. The main session did 18, 33
+  and 34; stream A did 37 and 38 on L13/L14.
+- **Next, in order: 35 → 14 → 36 → 39 → 40.** Item 14 comes before 36 because 36's done-when extends the pilot-journey
+  E2E that 14 creates, and because stream A's `e2e` job (item 15) waits on its hand-off L7. Nothing exists yet for
+  14: no `tests/e2e`, no Playwright set-up; `e2e.yml` passes with a notice until `tests/e2e/package.json` exists. Its
+  NVDA pass needs a person: prepare it and leave the box open with a note.
+- Then walk admin §5.4 locally to close items 11 and 12, and record #146.
 - Merged without waiting for reviewers (user, 2026-11-02); problems go in a `stream-b` issue.
 
 ## Waiting on (tick when it lands)
-- [ ] P1b ownership rules (README §2) and these briefs merged
-- [ ] **L1** A's contracts part 2 (then validate the new source fields and job payloads against them)
-- [ ] **L5** A's preview, publish, evaluation runs and commands (then the pages show real results)
+- [x] P1b ownership rules (README §2) and these briefs merged (on `main` since 2026-10-31)
+- [x] **L1** A's contracts part 2 (then validate the new source fields and job payloads against them) (#90)
+- [x] **L5** A's preview, publish, evaluation runs and commands (then the pages show real results) (#132)
 - [ ] **L9** gateway session: release 1 deployed for the pilot (needed for item 27)
 - [ ] **L12** user: G1 finished (needed for item 32)
 - [ ] P1a's J10, J11, J13 (live block, `../p1/progress-b.md`)
@@ -102,13 +103,13 @@ Refs: [admin §10.1, §11.4](../admin/design.md)
 ### 33. Organisation schema
 Refs: [data-model §2.1](../platform/data-model.md), Decisions "Organisation" row
 - [x] `Collections.SharedWith`, `ContactName`, `ContactEmail`; `CollectionShares`; `AssistantVersions.CollectionLinks`; view and snapshot (main session, PR: main-session/33-organisation-schema)
-- [ ] **Hand-off L13:** issue to stream A
+- [x] **Hand-off L13:** issue to stream A (not filed; stream A used #346 directly for item 37, PR: a/37-topics-in-worker)
 - [x] **Done:** migrations on an empty and the development database; `DatabaseRoleTests` (integration tests; the dev database migrated live, links converted, chat answers)
 
 ### 34. Topics in retrieval
 Refs: [knowledge §4.2, §6.2](../knowledge-api/design.md)
 - [x] Search scope with links; topic predicate in K and V; chat and test panel pass links (main session, PR: main-session/34-topics-in-retrieval)
-- [ ] **Hand-off L14:** issue to stream A
+- [x] **Hand-off L14:** issue to stream A (not filed; stream A used #347 directly for item 37, PR: a/37-topics-in-worker)
 - [x] **Done:** topic, whole-collection and `filters.tags` retrieval tests (`RetrievalTests`, `KnowledgeServiceTests`)
 
 ### 35. Organisation in the admin API
