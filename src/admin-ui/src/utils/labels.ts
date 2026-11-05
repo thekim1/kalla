@@ -272,6 +272,7 @@ export const COLLECTION = {
   quality: (k: number) => `Latest quality (recall@${k})`,
   notMeasured: 'Not measured yet',
   draftOnly: 'draft',
+  archived: 'archived',
   publish: 'Publish',
   published: (name: string) => `${name} is published.`,
   sources: 'Sources',
@@ -313,6 +314,7 @@ export const SHARING = {
   status: 'Status',
   published: 'Published',
   draft: 'Draft',
+  archived: 'Archived',
   save: 'Save sharing',
   saved: 'The sharing has been saved.',
   manageOnly: 'Only a department administrator can change the sharing.',
@@ -455,6 +457,7 @@ export const SOURCE_EDIT = {
   identity: 'Addresses are recognised in a new way. Documents may be fetched again and old ones removed.',
   usedBy: (names: string) => `Affects the assistants: ${names}.`,
   draft: 'draft',
+  archived: 'archived',
   saveAnyway: 'Save anyway',
   demoted: 'Demoted',
 } as const

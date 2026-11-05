@@ -84,10 +84,49 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     const wrapper = mount(CollectionView, { props: { id: 'c1' } })
     await flushPromises()
 
-    expect(wrapper.get('[data-test=document-count]').text().replace(/\s/g, '')).toBe('2324')
+    expect(wrapper.get('[data-test=document-count]').text().replace(/\s/g, '')).toBe('0') // the detail's live count, not the sources' sum
     expect(wrapper.get('[data-test=last-fetch]').text()).toContain('Failed')
     expect(wrapper.text()).toContain('Latest quality (recall@10)')
     expect(wrapper.get('[data-test=quality]').text()).toContain('0,91')
+  })
+
+  it('shows the live document count of the list, not every document that is not deleted (#374)', async () => {
+    signIn(['rag-viewer'])
+    // The review's case: 1 166 live documents of 1 270; the sources still say 1 270 if they count differently.
+    vi.spyOn(api.collections, 'get').mockResolvedValue({ ...base, documentCount: 1166 })
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([
+      { id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se', classification: 'internal', state: 'active', documents: 1270, lastRun: null },
+    ])
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test=document-count]').text()).toMatch(/^1\s166$/)
+  })
+
+  it('marks an archived assistant in Used by on the overview and the Sharing tab (#374)', async () => {
+    signIn(['rag-department-admin'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(collection({
+      usedBy: [
+        collectionUser({ id: 'a1', name: 'Permits assistant' }),
+        collectionUser({ id: 'a2', name: 'GK check', state: 'archived', published: false, draft: true }),
+      ],
+    }))
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([])
+    vi.spyOn(api.organisation, 'departmentNames').mockResolvedValue([{ id: 'd1', name: 'Kommunikation' }])
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+    expect(wrapper.get('[data-test=used-by]').text()).toBe('Permits assistant, GK check (archived)')
+
+    await button(wrapper, 'Sharing').trigger('click')
+    await flushPromises()
+    const rows = wrapper.get('[data-test=sharing-used-by]').findAll('tbody tr').map((r) => r.text())
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toContain('Published')
+    expect(rows[1]).toContain('GK check')
+    expect(rows[1]).toContain('Archived')
+    expect(rows[1]).not.toContain('Draft')
   })
 
   it('lets a department admin publish with the version it read', async () => {

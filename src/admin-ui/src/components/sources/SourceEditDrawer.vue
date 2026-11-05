@@ -37,7 +37,11 @@ const levelOptions = computed(() => {
   const ceiling = props.collection?.classification ?? 'sensitive'
   return LEVELS.slice(0, LEVELS.indexOf(ceiling) + 1).map((l) => ({ value: l, label: LEVEL_LABEL[l] }))
 })
-const usedByNames = computed(() => (impact.value?.usedBy ?? []).map((a) => (a.published ? a.name : `${a.name} (${SOURCE_EDIT.draft})`)).join(', '))
+const usedByNames = computed(() =>
+  (impact.value?.usedBy ?? [])
+    .map((a) => (a.state === 'archived' ? `${a.name} (${SOURCE_EDIT.archived})` : a.published ? a.name : `${a.name} (${SOURCE_EDIT.draft})`))
+    .join(', '),
+)
 const piiOptions = (['hold', 'report'] as const).map((m) => ({ value: m, label: SOURCE.piiModes[m] }))
 const lines = (text: string) => text.split('\n').map((l) => l.trim()).filter(Boolean)
 const strings = (value: unknown) => (Array.isArray(value) ? value.map(String) : [])

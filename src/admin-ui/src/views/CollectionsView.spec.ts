@@ -46,6 +46,19 @@ describe('Knowledge bases (admin design §5.2, §4.5 view=)', () => {
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'all' }))
   })
 
+  it('shows the live document count, the same one the Overview shows (#374)', async () => {
+    setActivePinia(createPinia())
+    useAuthStore().user = bffUser({ roles: ['rag-viewer'] })
+    vi.spyOn(api.organisation, 'departments').mockResolvedValue([])
+    vi.spyOn(api.collections, 'list').mockResolvedValue({ total: 1, items: [collectionSummary({ name: 'umea.se', documentCount: 1166 })] })
+
+    const wrapper = mount(CollectionsView)
+    await flushPromises()
+
+    const row = wrapper.findAll('tbody tr').find((r) => r.text().includes('umea.se'))!
+    expect(row.text()).toMatch(/1\s166/)
+  })
+
   it('says so when nothing is shared with the department', async () => {
     setActivePinia(createPinia())
     useAuthStore().user = bffUser()

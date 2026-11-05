@@ -94,7 +94,8 @@ onMounted(async () => {
         <template #cell-department="{ row }">{{ row.departmentName }}</template>
         <template #cell-topics="{ row }">{{ row.topics.length ? row.topics.join(', ') : SHARING.allTopics }}</template>
         <template #cell-status="{ row }">
-          <UiBadge :tone="row.published ? 'ok' : 'neutral'" :label="row.published ? SHARING.published : SHARING.draft" />
+          <UiBadge v-if="row.state === 'archived'" tone="neutral" :label="SHARING.archived" />
+          <UiBadge v-else :tone="row.published ? 'ok' : 'neutral'" :label="row.published ? SHARING.published : SHARING.draft" />
         </template>
       </DataTable>
     </div>

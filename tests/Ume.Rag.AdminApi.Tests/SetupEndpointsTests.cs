@@ -177,7 +177,9 @@ public sealed class SetupEndpointsTests(AdminDatabaseFixture database)
         using var viewer = await AdminDatabaseFixture.UserAsync(factory, RagRoles.Viewer, seed.Code);
 
         var source = (await viewer.GetFromJsonAsync<JsonElement[]>($"/api/collections/{seed.Halfway}/sources", Ct))!.ShouldHaveSingleItem();
-        source.GetProperty("documents").GetInt32().ShouldBe(1);
+        // Live documents only (#374): "altan" is not deleted but has no live chunk set, "borttagen" is deleted; neither counts.
+        // OrganisationSharingTests counts a live one.
+        source.GetProperty("documents").GetInt32().ShouldBe(0);
         var lastRun = source.GetProperty("lastRun");
         (lastRun.GetProperty("id").GetGuid(), lastRun.GetProperty("state").GetString()).ShouldBe((seed.RunningRun, RunStates.Running));
         lastRun.GetProperty("finishedAt").ValueKind.ShouldBe(JsonValueKind.Null);

@@ -80,7 +80,8 @@ public static class OrganisationEndpoints
 /// The Map's rows (admin design §5.5.6): one per department → knowledge base → assistant → audience path. The
 /// department's own knowledge bases (also when none of its assistants links them) and the shared ones its assistants
 /// link, with their owning department; its assistants with their published version, a link only the draft has marked
-/// <c>draftOnly</c>, and the link's topics; each audience client. No content.
+/// <c>draftOnly</c>, and the link's topics; each audience client. No content. Archived assistants are left out: the Map
+/// shows who uses what now (#374), so a knowledge base only an archived assistant links ends its path there.
 /// </summary>
 public static class DepartmentMap
 {
@@ -88,7 +89,7 @@ public static class DepartmentMap
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(department);
-        var assistants = await db.Assistants.AsNoTracking().Where(a => a.DepartmentId == department.Id).OrderBy(a => a.Name).ToListAsync(ct);
+        var assistants = await db.Assistants.AsNoTracking().Where(a => a.DepartmentId == department.Id && a.State != AssistantStates.Archived).OrderBy(a => a.Name).ToListAsync(ct);
         var versionIds = assistants.SelectMany(a => new[] { a.PublishedVersionId, a.DraftVersionId }).OfType<Guid>().ToList();
         var versions = await db.AssistantVersions.AsNoTracking().Where(v => versionIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, ct);
         var assistantIds = assistants.Select(a => a.Id).ToList();

@@ -35,7 +35,7 @@ export function department(overrides: Partial<Department> = {}): Department {
 export function collection(overrides: Partial<Collection> = {}): Collection {
   return {
     id: 'c1', slug: 'bygglov', name: 'Bygglov', departmentId: 'd1', classification: 'internal', publishedAt: null, ownerTeamId: null, shared: false,
-    sharedWith: 'department', sharedWithDepartmentIds: [], contactName: null, contactEmail: null, embeddingProfileId: 'p', retrievalSettings: {}, usedBy: [],
+    sharedWith: 'department', sharedWithDepartmentIds: [], contactName: null, contactEmail: null, embeddingProfileId: 'p', retrievalSettings: {}, documentCount: 0, usedBy: [],
     updatedAt: '2026-11-01T10:00:00Z', updatedBy: null, version: '1', ...overrides,
   }
 }
@@ -51,7 +51,7 @@ export function collectionSummary(overrides: Partial<CollectionSummary> = {}): C
 /** An assistant in a knowledge base's `usedBy`. */
 export function collectionUser(overrides: Partial<CollectionUser> = {}): CollectionUser {
   return {
-    id: 'a1', name: 'Bygglovsassistenten', classification: 'internal', published: true, draft: false, departmentId: 'd1', departmentName: 'Stadsbyggnad', topics: [],
+    id: 'a1', name: 'Bygglovsassistenten', classification: 'internal', state: 'active', published: true, draft: false, departmentId: 'd1', departmentName: 'Stadsbyggnad', topics: [],
     ...overrides,
   }
 }

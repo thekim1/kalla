@@ -216,7 +216,7 @@ public static class CollectionEndpoints
         return api;
     }
 
-    /// <summary>The detail: the collection, its share list (when <c>selected</c>) and <c>usedBy</c>.</summary>
+    /// <summary>The detail: the collection, its share list (when <c>selected</c>), its live document count and <c>usedBy</c>.</summary>
     public static async Task<CollectionDto> DetailAsync(AdminContext admin, Collection collection, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(admin);
@@ -224,8 +224,20 @@ public static class CollectionEndpoints
         var shares = collection.SharedWith == CollectionSharingLevels.Selected
             ? await admin.Db.CollectionShares.AsNoTracking().Where(s => s.CollectionId == collection.Id).Select(s => s.DepartmentId).OrderBy(d => d).ToListAsync(ct)
             : [];
-        return CollectionDto.Of(collection, shares, await UsedByAsync(admin, collection.Id, ct));
+        var documents = (await LiveDocumentCountsAsync(admin, [collection.Id], ct)).GetValueOrDefault(collection.Id);
+        return CollectionDto.Of(collection, shares, documents, await UsedByAsync(admin, collection.Id, ct));
     }
+
+    /// <summary>
+    /// The one document count of a knowledge base (list and Overview, #374): its live documents, those not deleted that have
+    /// a live chunk set, so they can be found.
+    /// </summary>
+    private static async Task<Dictionary<Guid, int>> LiveDocumentCountsAsync(AdminContext admin, Guid[] ids, CancellationToken ct) =>
+        await (from d in admin.Db.Documents.AsNoTracking()
+               join src in admin.Db.Sources.AsNoTracking() on d.SourceId equals src.Id
+               where d.DeletedAt == null && d.LiveChunkSetId != null && ids.Contains(src.CollectionId)
+               group d by src.CollectionId into g
+               select new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
 
     /// <summary>The list rows (the shared summary) of <paramref name="query"/>, with owner names, live document counts and topics.</summary>
     private static async Task<List<CollectionSummary>> SummariesAsync(AdminContext admin, IQueryable<Collection> query, CancellationToken ct)
@@ -236,11 +248,7 @@ public static class CollectionEndpoints
         var owners = rows.Select(r => r.DepartmentId).Distinct().ToList();
         var own = (await admin.Departments().Select(d => d.Id).ToListAsync(ct)).ToHashSet();
         var names = await admin.Db.Departments.AsNoTracking().Where(d => owners.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Name, ct);
-        var documents = await (from d in admin.Db.Documents.AsNoTracking()
-                               join src in admin.Db.Sources.AsNoTracking() on d.SourceId equals src.Id
-                               where d.DeletedAt == null && d.LiveChunkSetId != null && ids.Contains(src.CollectionId)
-                               group d by src.CollectionId into g
-                               select new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
+        var documents = await LiveDocumentCountsAsync(admin, ids, ct);
         var topics = await CollectionSharing.TopicCountsAsync(admin.Db, ids, ct);
         return [.. rows.Select(r => new CollectionSummary(r.Id, r.Slug, r.Name, r.DepartmentId, names.GetValueOrDefault(r.DepartmentId) ?? "", r.Classification,
             r.PublishedAt, r.SharedWith, !own.Contains(r.DepartmentId), r.ContactName, r.ContactEmail, documents.GetValueOrDefault(r.Id),
@@ -263,7 +271,8 @@ public static class CollectionEndpoints
 
     /// <summary>
     /// The assistants whose published version or draft links the collection (admin design §4.5), of every department (a
-    /// shared collection's owner sees who uses it).
+    /// shared collection's owner sees who uses it). Archived ones too, with their state: they still block deletion and can
+    /// be restored (#374).
     /// </summary>
     public static async Task<List<CollectionUser>> UsedByAsync(AdminContext admin, Guid id, CancellationToken ct)
     {
@@ -272,10 +281,10 @@ public static class CollectionEndpoints
                           join a in admin.Db.Assistants.AsNoTracking() on v.AssistantId equals a.Id
                           join d in admin.Db.Departments.AsNoTracking() on a.DepartmentId equals d.Id
                           where a.PublishedVersionId == v.Id || a.DraftVersionId == v.Id
-                          select new { a.Id, a.Name, a.Classification, Published = a.PublishedVersionId == v.Id, a.DepartmentId, Department = d.Name, v.CollectionLinks })
+                          select new { a.Id, a.Name, a.Classification, a.State, Published = a.PublishedVersionId == v.Id, a.DepartmentId, Department = d.Name, v.CollectionLinks })
             .ToListAsync(ct);
         // The topics of the published link, else the draft's (empty = the whole collection).
-        return [.. rows.GroupBy(r => r.Id).Select(g => new CollectionUser(g.Key, g.First().Name, g.First().Classification,
+        return [.. rows.GroupBy(r => r.Id).Select(g => new CollectionUser(g.Key, g.First().Name, g.First().Classification, g.First().State,
             g.Any(r => r.Published), g.Any(r => !r.Published), g.First().DepartmentId, g.First().Department,
             g.OrderByDescending(r => r.Published).First().CollectionLinks.FirstOrDefault(l => l.CollectionId == id)?.Tags ?? []))
             .OrderBy(u => u.Name, StringComparer.Ordinal)];
@@ -536,27 +545,31 @@ public sealed record CollectionSummary(
     string? ContactName, string? ContactEmail, int DocumentCount, IReadOnlyList<string> Topics);
 
 /// <summary>
-/// An assistant that links a collection: through its published version, its draft, or both; with its department and the
-/// link's topics (the published version's, else the draft's; empty = the whole collection).
+/// An assistant that links a collection: through its published version, its draft, or both; with its state
+/// (<c>active</c> or <c>archived</c>), its department and the link's topics (the published version's, else the draft's;
+/// empty = the whole collection).
 /// </summary>
 public sealed record CollectionUser(
-    Guid Id, string Name, string Classification, bool Published, bool Draft, Guid DepartmentId, string DepartmentName, IReadOnlyList<string> Topics);
+    Guid Id, string Name, string Classification, string State, bool Published, bool Draft, Guid DepartmentId, string DepartmentName, IReadOnlyList<string> Topics);
 
-/// <summary><see cref="SharedWithDepartmentIds"/>: the share list, only when <see cref="SharedWith"/> is <c>selected</c>.</summary>
+/// <summary>
+/// <see cref="SharedWithDepartmentIds"/>: the share list, only when <see cref="SharedWith"/> is <c>selected</c>;
+/// <see cref="DocumentCount"/>: the live documents, as on the list row.
+/// </summary>
 public sealed record CollectionDto(
     Guid Id, string Slug, string Name, Guid DepartmentId, Guid? OwnerTeamId, string Classification, Guid EmbeddingProfileId, JsonElement RetrievalSettings,
-    DateTimeOffset? PublishedAt, string SharedWith, IReadOnlyList<Guid> SharedWithDepartmentIds, string? ContactName, string? ContactEmail,
+    DateTimeOffset? PublishedAt, string SharedWith, IReadOnlyList<Guid> SharedWithDepartmentIds, string? ContactName, string? ContactEmail, int DocumentCount,
     IReadOnlyList<CollectionUser> UsedBy, DateTimeOffset UpdatedAt, string? UpdatedBy, string Version)
 {
     /// <summary>Always false: the detail is the owner's; a department it is shared with gets the <see cref="CollectionSummary"/> (<c>shared: true</c>).</summary>
     public bool Shared => false;
 
-    public static CollectionDto Of(Collection c, IReadOnlyList<Guid> shares, IReadOnlyList<CollectionUser> usedBy)
+    public static CollectionDto Of(Collection c, IReadOnlyList<Guid> shares, int documentCount, IReadOnlyList<CollectionUser> usedBy)
     {
         ArgumentNullException.ThrowIfNull(c);
         using var settings = JsonDocument.Parse(c.RetrievalSettings);
         return new(c.Id, c.Slug, c.Name, c.DepartmentId, c.OwnerTeamId, c.Classification, c.EmbeddingProfileId, settings.RootElement.Clone(), c.PublishedAt,
-            c.SharedWith, shares, c.ContactName, c.ContactEmail, usedBy, c.UpdatedAt, c.UpdatedBy, c.Version.ToString(CultureInfo.InvariantCulture));
+            c.SharedWith, shares, c.ContactName, c.ContactEmail, documentCount, usedBy, c.UpdatedAt, c.UpdatedBy, c.Version.ToString(CultureInfo.InvariantCulture));
     }
 }
 
