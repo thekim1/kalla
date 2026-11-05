@@ -66,6 +66,10 @@ jobs:
           # (sudo npx playwright install-deps chromium).
           npx playwright install chromium
           npx playwright test
+      - name: Page snapshot of a failed test
+        if: failure() && steps.specs.outputs.present == 'true'
+        working-directory: tests/e2e
+        run: find test-results -name error-context.md -exec sh -c 'echo "::group::$1"; cat "$1"; echo "::endgroup::"' _ {} \; 2>/dev/null || true
       - name: Stop the test stack
         if: always() && steps.specs.outputs.present == 'true'
         run: pwsh scripts/Start-E2E.ps1 -Stop

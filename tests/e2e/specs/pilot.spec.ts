@@ -202,6 +202,8 @@ for (const mode of ['mouse', 'keyboard'] as const) {
 function actor(page: Page, mode: 'mouse' | 'keyboard') {
   type Target = ReturnType<Page['getByRole']>
   const focus = async (target: Target) => {
+    // A control that is not on the page fails here, not after hundreds of Tabs that each wait for it.
+    await expect(target).toBeVisible()
     // Tab until the target has focus; a keyboard-only user reaches every control in at most a few hundred steps.
     for (let i = 0; i < 300; i++) {
       if (await target.evaluate(element => element === document.activeElement).catch(() => false)) return
