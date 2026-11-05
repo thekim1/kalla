@@ -188,7 +188,7 @@ with an implied-roles map as the gateway does (`ui/stores/auth.ts:10-15`, `:60-6
   via teams, evaluation and run data via their collection/source) filters by it. An id outside the scope is **404**,
   never 403.
 - Platform objects (templates, site profiles, embedding profiles, clients, `GatewayModels`, tool servers, settings,
-  data-protection policies) are readable where a form needs them (pickers show name, kind, level, residency only) and
+  data-protection policies) are readable where a form needs them (pickers show name, kind, level, residency only; client rows also carry `portalUrl` for the "Open in <client>" link, §5.4 step 13) and
   writable by `Admin` only.
 - **Sharing** (Decisions "Organisation: department-owned, municipality-shared knowledge bases with topics (user, 2026-11-02)"): the owning department's `Manage` sets a collection's sharing level: *only our
   department* (default), *selected departments* (`CollectionShares`) or *whole municipality* (every active department in
@@ -349,6 +349,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | Method and path | Policy | Notes |
 |---|---|---|
 | `GET /api/organisation/departments` | Read | the mirror: departments in scope (all for a platform admin), active first, each with `SyncedAt`, its teams nested (name, code, active), its member groups and a sharing summary (`sharing`: its live knowledge bases per sharing level, and how many other departments its `selected` ones are shared with); there is no separate teams route |
+| `GET /api/organisation/departments/names` | Read | every active department's id and name, outside the caller's scope too (the *Selected departments* picker of the Sharing tab); names only, as pickers read platform objects (§3.2) |
 | `PUT /api/organisation/departments/{id}/member-groups` `{ memberGroups }` | Admin | member groups by hand until gateway release 2 (§4.10): ≤ 50 values, trimmed, empty ones dropped, de-duplicated and sorted; departments carry no `version`, so the save has no concurrency check (last write wins, audited `member-groups` on the department); the sync never touches the field |
 | `GET /api/organisation/sync`, `POST /api/organisation/sync` | Admin | last runs and outcome (held in memory per instance, §4.10); run now |
 | `GET /api/gateway/models` | Read | `GatewayModels` with `modelKind` (`chat`/`embedding`), residencies, `SupportsTools`, context window, prices, `Source` |
@@ -735,7 +736,11 @@ progress flags), which disappears when the collection has a published assistant 
 | 6 | Spara och hämta | source page → run page | saves, enqueues the first sync; live counters, failures by reason in plain Swedish | – |
 | 7 | Testfrågor | Testfrågor och kvalitet | generated after the first runs, cost shown before (at the collection's ceiling, processing §13.1); own questions with expected documents | – |
 | 8 | Publicera kunskapsbanken | collection page | latest evaluation report shown ("Träffsäkerhet 0,78 · 86 frågor"); **Publicera** | – |
-| 9 | Skapa assistent | assistant drawer → assistant page | pick an **assistant template** ("Allmän rådgivning" preselected; P2, weakness review §1: in P1 the draft starts from `Settings.Chat` defaults); name, description, contact person; collections (the new one preselected; unpublished ones work in Testa only), model picker showing only `chat` models (`GatewayModels.ModelKind`; never embedding models) servable for the level, not-found texts and contact link from the template; saved as **utkast** | warnings only (V3, V8, V15 at publish) |
+| 9 | Skapa assistent | assistant drawer → assistant page | pick an **assistant template** ("Allmän rådgivning" preselected; P2, weakness review §1: in P1 the draft starts from `Settings.Chat` defaults: its instructions are `Settings.Chat.defaultSystemPrompt`, a
+citizen-service text seeded with the first `Settings` row and edited on the Settings platform page; a missing key gives
+the code's text, an emptied one an empty draft; on the Draft tab the model and the query settings sit in a collapsed
+*Advanced* section, collapsed even before a model is chosen, since the missing model shows as a `version_link_missing`
+warning above the form); name, description, contact person; collections (the new one preselected; unpublished ones work in Testa only), model picker showing only `chat` models (`GatewayModels.ModelKind`; never embedding models) servable for the level, not-found texts and contact link from the template; saved as **utkast** | warnings only (V3, V8, V15 at publish) |
 | 10 | Testa | Testa tab | runs the draft; sample questions from the evaluation set as one-click prompts; sources, coverage, raw vs delivered answer; **Spara som testfråga** (P2) turns a tried question into a test question with the expected behaviour typed in | V33 |
 | 11 | Publicera | assistant page | **Publicera**; the model is checked against the gateway (V8); from P2 the test-question report follows on the Testfrågor tab (advisory, §7.4) | V3–V17, V34 |
 | 12 | Gör tillgänglig | Målgrupp | pick client "Open WebUI (pilot)"; residency check explained if refused ("Modellen kör utanför EU; välj en modell inom EU eller kommunens servrar") | V7–V9 |
@@ -856,7 +861,9 @@ Utkast  Testa  Testfrågor (8)  Versioner (3)  Målgrupp  Lagring  Statistik
 
 - **Knowledge** (Kunskapsbanker in the draft): each link shows the knowledge base, its owning department when it is
   shared ("umea.se (Communications, shared)"), and its topics ("all topics", or chips with **+ topic**); **Add
-  knowledge base** opens a picker with *Ours*, *Shared with us* and *All*, showing level, document count and topics.
+  knowledge base** opens a picker with *Ours*, *Shared with us* and *All* (relative to the assistant's department, not
+  the user's), showing level, document count and topics. The topic field is free text with the knowledge base's current
+  topics as suggestions, so a topic a path rule is about to set can be linked; V11 `topic_invalid` checks the format.
 - **General knowledge** (`answer.generalKnowledge`, in the Utkast tab, not under Avancerat, since it changes what
   users get): a radio group *Off: only the knowledge bases* (`off`, default), *Supplement: knowledge bases first,
   general knowledge for explanations* (`supplement`), *Fallback: as Supplement, and answer from general knowledge when
@@ -928,7 +935,9 @@ One column per stage, each item a link to its page; selecting an item highlights
 lines are drawn as plain SVG next to lists that carry the same relations as text ("matar: …", "används av: …"), and
 **Tabell** shows one row per source → collection → assistant → audience path, so nothing depends on the drawing (no
 graph library, §10.2). Shared collections appear with their owning department; assistants show their published
-version, draft-only links are marked "(utkast)". Source: `GET /api/organisation/departments/{id}/map`.
+version, draft-only links are marked "(utkast)". In the table, *Responsible* is the assistant's contact when the row
+has an assistant, else the knowledge base's; *Shared* is the own knowledge base's sharing level, "–" for one shared
+in. Source: `GET /api/organisation/departments/{id}/map`.
 
 ### 5.6 Empty and error states
 
