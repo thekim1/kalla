@@ -5,7 +5,8 @@ runner for every pull request"). This page lists what that machine needs on a fr
 install .NET (`actions/setup-dotnet`), Node (`actions/setup-node`), the Aspire CLI, PowerShell (as a .NET tool) and the
 Playwright browser themselves, so they are not installed by hand.
 
-The browser tests (`e2e.yml`) run only from `release.yml` (Decisions "E2E only on release").
+The browser tests (`e2e.yml`) run from `release.yml` or by hand from the Actions tab (Decisions "E2E only on release or
+by hand").
 
 ## Packages (once, with sudo)
 
@@ -43,7 +44,7 @@ sudo apt-get install -y libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libat
 
 ## Check
 
-As the runner user, after one `e2e.yml` run (or `npx playwright install chromium` in `tests/e2e`):
+As the runner user, after one `e2e.yml` run (dispatch it from the Actions tab) (or `npx playwright install chromium` in `tests/e2e`):
 
 ```bash
 ldd ~/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell | grep 'not found'
