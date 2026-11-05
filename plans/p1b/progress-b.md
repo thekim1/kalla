@@ -129,6 +129,14 @@ Refs: [admin §5.5.4](../admin/design.md), [P1b README item 39](README.md)
 - [ ] Draft tab: model and query settings in a collapsed "Advanced" section
 - [ ] **Done:** admin API test for the default prompt; vitest for "Advanced"
 
+### 40. Grounding mode per assistant (after 36 and 39)
+Refs: [chat §6.2, §7.3, §10.4](../chat-api/design.md), [admin §4.6, §5.5.4](../admin/design.md), [P1b README item 40](README.md)
+- [ ] `QuerySteps.answer.grounding`; `ChatCore.Frame` per mode, with and without sources
+- [ ] Coverage `Low` with `balanced`/`open`: model call without sources, caveat line, contact links, `answered-general`, `GeneralAnswers`
+- [ ] V17 accepts the field; V36 (`public` stays `strict`)
+- [ ] "Answers from" radio group on the Draft tab; `[General knowledge]` badge
+- [ ] **Done:** chat §18.1 grounding tests; V36 refusal test; test panel shows the caveat for a weak question in `balanced`
+
 ### 19. Code complete (your part)
 - [ ] Pin review: NuGet and npm pins under 7 days old reviewed; #113 recorded; realm callback for the Open WebUI pin (README §7 O8)
 - [ ] Condense residency: the chat condense step runs at `Eu` until on-prem hardware exists (#204 design deviation 1, M2); switch it to `OnPrem` before go-live once that route exists
