@@ -170,7 +170,7 @@ reference it (§4).
 | 4 | Empty path → `/`; dot segments removed (RFC 3986 §5.2.4); duplicate slashes kept (servers differ) | `/a/./b/../c` → `/a/c` |
 | 5 | Percent-encoding: decode unreserved (`A–Z a–z 0–9 - . _ ~`), upper-case remaining hex, encode non-ASCII as UTF-8; reserved escapes (`%2F`, `%3F`) kept | `%7e` → `~`; `ö` → `%C3%B6` |
 | 6 | Fragment removed (also `#!`); SPA hash routing is not supported in P1 | `/a#top` → `/a` |
-| 7 | Query: drop the parameters in the list below, the site profile's `ignoreQueryParams` (§5.6) and the source's `ignoreQueryParams`; sort the rest by name (stable for repeated names); drop an empty `?`. An `ignoreQueryParams` entry ending in `*` is a prefix, like `utm_*` in the fixed list (the Sitevision preset drops `sv.*` and `open.*`) | `?b=2&utm_source=x&a=1` → `?a=1&b=2` |
+| 7 | Query: drop the parameters in the list below, the site profile's `ignoreQueryParams` (§5.6) and the source's `ignoreQueryParams`; sort the rest by name (stable for repeated names); drop an empty `?`. An `ignoreQueryParams` entry ending in `*` is a prefix, like `utm_*` in the fixed list | `?b=2&utm_source=x&a=1` → `?a=1&b=2` |
 | 8 | Session tokens in the path removed: `;jsessionid=…`, ASP.NET `/(S(…))/` | `/p;jsessionid=AB` → `/p` |
 | 9 | Trailing slash **not** changed; `index.html` **not** removed (both can be different resources); the source setting `directoryIndexNames` opts in | – |
 | 10 | Site-profile **identity rule** (§5.6), only when verified for the host: the URL maps to the rule's form (Sitevision: the node id, `/{path}.4.88db09b1724ee319ca45d.html` → `/4.88db09b1724ee319ca45d.html`), so a page moved in the tree keeps its identity; `Documents.Url` keeps the URL as fetched for citations | – |
