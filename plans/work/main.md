@@ -11,7 +11,7 @@ settles their design deviations. Start each session from [`../../HANDOVER.md`](.
 
 ## Queue
 
-### [ ] M-1 Run the browser tests locally
+### [x] M-1 Run the browser tests locally (covered by the runner's green run of #377: https://github.com/thekim1/ume-rag-platform/actions/runs/42090732503)
 - **Do:** `scripts/Start-E2E.ps1` (stops the dev stack; own test database), then `npx playwright test` in
   `tests/e2e`.
 - **Done when:** the pilot journey (admin §5.4 steps 1–13, mouse and keyboard) and the accessibility spec pass

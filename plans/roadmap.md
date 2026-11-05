@@ -10,7 +10,7 @@ itself is in [`work/`](work/). Updated by the main session when a phase step lan
 |---|---|---|
 | **P0 Foundation** | Repo, AppHost, schema with config outbox, Postgres image with pgBackRest, Keycloak, FakeGateway, parser contract, worker and admin skeletons, CI; released as `v0.1.0` (2026-10-31) | [`archive/p0/`](archive/p0/README.md) |
 | **P1a Walking skeleton (code)** | Crawl, upload, parse, embed, hybrid retrieval with citations, chat API, one assistant in Open WebUI. **Demo 2026-11-01:** a 200-page slice of umea.se answered with citations in Open WebUI over the interim gateway | [`archive/p1/`](archive/p1/README.md) |
-| **P1b Pilot hardening (code)** | Freshness, preview, publish and rollback, evaluation harness, admin journey pages (English), assistant versions, feedback import, organisation (sharing, topics, Map), general knowledge per assistant, browser tests, lean CI | [`archive/p1b/`](archive/p1b/README.md) |
+| **P1b Pilot hardening (code)** | Freshness, preview, publish and rollback, evaluation harness, admin journey pages (English), assistant versions, feedback import, organisation (sharing, topics, Map), general knowledge per assistant, browser tests (green on the runner, #377), lean CI | [`archive/p1b/`](archive/p1b/README.md) |
 
 ## Now: finish P1b and go live
 
@@ -41,7 +41,6 @@ Three tracks:
 | Gateway session: release 1, pilot keys, shared Keycloak (identity §16 Q1–8) | user (gateway repo) | release-1 switch, pilot accounts |
 | Test host, backup target, key-escrow location; where the pilot runs at go-live (O7) | user | deploy, restore drill, R1 |
 | Self-hosted runner on the test host (R1), or the manual stopgap | IT security | R1 test, nightly evaluation in CI |
-| CI runner host gets Chromium's libraries (`docs/ci-runner.md`, #370) | runner owner | the `e2e` workflow |
 | U1 (crawler about page) with the web editors | user | full umea.se crawl |
 | N1 product name; W1 relation to `chat.umea.se`; owners and dates for G1, W2, N1, U1, R1, A1 | user, product owner | go-live |
 | Product calls: #333 findings 1–2; [`../architecture_plans.md`](../architecture_plans.md) items 1, 2, 4–7; the W3 grant step; Sitevision `open.*`/`sv.*` on hosts without a profile; a Git/Markdown connector; topics for uploads | user | nothing in P1b |
