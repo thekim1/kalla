@@ -21,6 +21,9 @@ public sealed class SettingsSeederTests
         var row = await db.Settings.AsNoTracking().SingleAsync(Ct);
         row.PiiOwnDomains.ShouldBe(["umea.se"]);
         row.UpdatedBy.ShouldBe(SettingsSeeder.Actor);
+        // P1b item 39: a new assistant's first draft starts from these instructions.
+        System.Text.Json.JsonDocument.Parse(row.Chat).RootElement.GetProperty(Ume.Rag.Domain.ChatDefaults.SystemPromptKey).GetString()
+            .ShouldBe(Ume.Rag.Domain.ChatDefaults.SystemPrompt);
 
         // The companies' domains are added later through the admin; a second migration keeps them.
         await db.Settings.ExecuteUpdateAsync(s => s.SetProperty(x => x.PiiOwnDomains, ["umea.se", "umeaenergi.se"]), Ct);

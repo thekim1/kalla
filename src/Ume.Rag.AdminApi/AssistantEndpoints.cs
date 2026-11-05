@@ -74,10 +74,12 @@ public static class AssistantEndpoints
                     request.ApplyTo(assistant);
                     admin.Db.Assistants.Add(assistant);
                     await admin.Db.SaveChangesAsync(attempt);
-                    // Created with only a draft: no published version, so no client lists it (admin design §4.5).
+                    // Created with only a draft: no published version, so no client lists it (admin design §4.5). The draft starts from
+                    // the platform's citizen-service instructions (Settings.Chat.defaultSystemPrompt, P1b item 39).
                     var draft = new AssistantVersion
                     {
-                        AssistantId = assistant.Id, Number = 1, CreatedBy = admin.Actor, CreatedAt = admin.Now, UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
+                        AssistantId = assistant.Id, Number = 1, SystemPrompt = await DefaultSystemPromptAsync(admin, attempt), CreatedBy = admin.Actor, CreatedAt = admin.Now,
+                        UpdatedAt = admin.Now, UpdatedBy = admin.Actor,
                     };
                     admin.Db.AssistantVersions.Add(draft);
                     await admin.Db.SaveChangesAsync(attempt);
@@ -89,7 +91,7 @@ public static class AssistantEndpoints
                 }, ct);
                 return Results.Created($"/api/assistants/{created.Id}", await DetailAsync(admin, created, ct));
             })
-            .RequireAuthorization(AdminPolicies.Edit).WithName("CreateAssistant").WithSummary("Create an assistant with an empty draft");
+            .RequireAuthorization(AdminPolicies.Edit).WithName("CreateAssistant").WithSummary("Create an assistant with a draft that starts from the default instructions");
 
         assistants.MapPut("/{id:guid}", async (Guid id, AssistantUpdateRequest request, AdminContext admin, GatewayModelCheck models, CancellationToken ct) =>
             {
@@ -486,6 +488,18 @@ public static class AssistantEndpoints
             a.RetentionDays, a.State, published?.Number,
             draft is null ? null : new DraftInfo(draft.Number, draft.UpdatedAt, published is not null && draft.Number < published.Number, draft.Version.ToString(CultureInfo.InvariantCulture)),
             audiences, a.UpdatedAt, a.UpdatedBy, a.Version.ToString(CultureInfo.InvariantCulture), published is null ? null : GeneralKnowledgeOf(published.QuerySteps));
+    }
+
+    /// <summary>
+    /// <c>Settings.Chat.defaultSystemPrompt</c> (P1b item 39): the saved text, also when an admin emptied it; the code default
+    /// when the key is missing (a <c>Settings</c> row from before the key existed, or none yet).
+    /// </summary>
+    public static async Task<string> DefaultSystemPromptAsync(AdminContext admin, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(admin);
+        var chat = await admin.Db.Settings.AsNoTracking().Select(s => s.Chat).SingleOrDefaultAsync(ct);
+        var value = (JsonNode.Parse(string.IsNullOrWhiteSpace(chat) ? "{}" : chat) as JsonObject)?[ChatDefaults.SystemPromptKey];
+        return value is JsonValue v && v.GetValueKind() == JsonValueKind.String ? v.GetValue<string>() : ChatDefaults.SystemPrompt;
     }
 
     /// <summary>A version's <c>answer.generalKnowledge</c> (admin design §5.5.4 badge): the stored value, <c>off</c> when unset or unknown.</summary>

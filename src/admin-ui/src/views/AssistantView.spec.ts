@@ -123,6 +123,69 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(save.mock.calls[0]![1].collectionLinks).toEqual([{ collectionId: 'c1', tags: ['bygglov', 'altan'] }])
   })
 
+  it('keeps the model and the query settings in a collapsed Advanced section, and saves from it', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'draft').mockResolvedValue({
+      ...draft, systemPrompt: 'Du svarar invånare.', querySteps: { retrieval: { topK: 8, filters: { tags: ['x'] } }, answer: { generalKnowledge: 'off', language: 'sv' } },
+    })
+    const save = vi.spyOn(api.assistants, 'saveDraft').mockResolvedValue({ ...draft, warnings: [], version: 'd8' })
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+
+    // The first draft's instructions (the platform default) are on the Draft tab; the model is under Advanced.
+    expect((wrapper.get('#assistant-prompt').element as HTMLTextAreaElement).value).toBe('Du svarar invånare.')
+    const advanced = wrapper.get('[data-test=advanced]')
+    expect((advanced.element as HTMLDetailsElement).open).toBe(false)
+    expect(advanced.get('summary').text()).toBe('Advanced: model, follow-up questions, history, length')
+    expect(advanced.find('#assistant-model').exists()).toBe(true)
+    expect((wrapper.get('#assistant-top-k').element as HTMLInputElement).value).toBe('8')
+    expect((wrapper.get('#assistant-language').element as HTMLSelectElement).value).toBe('sv')
+
+    await advanced.get('summary').trigger('click')
+    await wrapper.get('#assistant-model').setValue('ume/chat-eu')
+    await wrapper.get('#assistant-top-k').setValue('99')
+    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await flushPromises()
+    expect(save).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Enter a number from 1 to 50, or leave it empty.')
+
+    await wrapper.get('#assistant-top-k').setValue('12')
+    await wrapper.get('#assistant-max-tokens').setValue('800')
+    await wrapper.get('#assistant-temperature').setValue('0,2')
+    await wrapper.get('[data-test=condense] input').setValue(false)
+    await wrapper.get('#assistant-language').setValue('')
+    await wrapper.get('[data-test=save-draft]').trigger('click')
+    await flushPromises()
+
+    // Other keys of a step are kept (filters); an emptied field drops its key.
+    expect(save).toHaveBeenCalledWith('a1', expect.objectContaining({
+      gatewayModel: 'ume/chat-eu', systemPrompt: 'Du svarar invånare.',
+      querySteps: {
+        retrieval: { topK: 12, filters: { tags: ['x'] } }, answer: { generalKnowledge: 'off', maxOutputTokens: 800, temperature: 0.2 }, condense: { enabled: false },
+      },
+    }))
+  })
+
+  it('links to the audience client\'s own UI once the assistant is published', async () => {
+    signIn(['rag-viewer'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 2, audienceClientIds: ['k1'] })
+    vi.spyOn(api.clients, 'list').mockResolvedValue([
+      { id: 'k1', name: 'Open WebUI (pilot)', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, portalUrl: 'https://chat.example.invalid' },
+      { id: 'k2', name: 'Webb', kind: 'integration', classificationCeiling: 'public', isEnabled: true, portalUrl: 'https://webb.example.invalid' },
+    ])
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+
+    const links = wrapper.findAll('[data-test=portal]')
+    expect(links).toHaveLength(1)
+    expect(links[0]!.text()).toContain('Open in Open WebUI (pilot)')
+    expect(links[0]!.attributes('href')).toBe('https://chat.example.invalid')
+  })
+
   it('with no draft, shows the published version\'s settings and saves them as the new draft', async () => {
     signIn(['rag-editor'])
     mocks()

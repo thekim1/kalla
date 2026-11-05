@@ -27,8 +27,9 @@ public sealed class SettingsSeedOptions
 
 /// <summary>
 /// Seeds <c>Settings.Engine.PiiOwnDomains</c> insert-if-absent (issue #175): when no <c>Settings</c> row exists, one is
-/// created with the code defaults and the seeded own domains. An existing row is never changed, so the municipal
-/// companies' domains added later through <c>PUT /api/settings/…</c> are kept.
+/// created with the code defaults, the seeded own domains and <c>Settings.Chat.defaultSystemPrompt</c> (P1b item 39). An
+/// existing row is never changed, so the municipal companies' domains added later through <c>PUT /api/settings/…</c> are
+/// kept.
 /// </summary>
 public static partial class SettingsSeeder
 {
@@ -53,6 +54,7 @@ public static partial class SettingsSeeder
             Crawl = options.CrawlAllowedPorts is { Length: > 0 } ports
                 ? System.Text.Json.JsonSerializer.Serialize(new { allowedPorts = ports.Distinct().Order().ToArray() })
                 : "{}",
+            Chat = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string> { [Ume.Rag.Domain.ChatDefaults.SystemPromptKey] = Ume.Rag.Domain.ChatDefaults.SystemPrompt }),
             UpdatedAt = clock.GetUtcNow(),
             UpdatedBy = Actor,
         });

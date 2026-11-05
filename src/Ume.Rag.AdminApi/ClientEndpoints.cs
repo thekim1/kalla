@@ -21,7 +21,7 @@ public static class ClientEndpoints
         // Pickers show name, kind and level only.
         clients.MapGet("", async (AdminContext admin, CancellationToken ct) =>
             await admin.Db.Clients.AsNoTracking().OrderBy(c => c.Name)
-                .Select(c => new ClientSummary(c.Id, c.Name, c.Kind, c.ClassificationCeiling, c.IsEnabled)).ToListAsync(ct))
+                .Select(c => new ClientSummary(c.Id, c.Name, c.Kind, c.ClassificationCeiling, c.IsEnabled, c.PortalUrl)).ToListAsync(ct))
             .RequireAuthorization(AdminPolicies.Read).WithName("ListClients").WithSummary("Registered clients (picker fields)");
 
         clients.MapGet("/{id:guid}", async (Guid id, AdminContext admin, CancellationToken ct) =>
@@ -64,7 +64,8 @@ public static class ClientEndpoints
     }
 }
 
-public sealed record ClientSummary(Guid Id, string Name, string Kind, string ClassificationCeiling, bool IsEnabled);
+/// <summary>A picker row; <see cref="PortalUrl"/> is the client's own UI, linked from the assistant page (admin design §5.4 step 13).</summary>
+public sealed record ClientSummary(Guid Id, string Name, string Kind, string ClassificationCeiling, bool IsEnabled, string? PortalUrl);
 
 public sealed record ClientDto(
     Guid Id, string Name, string Kind, string? OAuthClientId, string ClassificationCeiling, bool StoresHistory, int? ClientRetentionDays,

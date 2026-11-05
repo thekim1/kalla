@@ -221,6 +221,55 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task A_new_assistants_first_draft_starts_from_the_default_instructions()
+    {
+        var seed = await SeedAsync();
+        await using var gateway = Gateway();
+        await using var factory = Admin(gateway);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+        await using var db = TestPostgres.Context(database.Connection(null));
+        if (!await db.Settings.AnyAsync(Ct))
+        {
+            db.Settings.Add(new PlatformSettings { UpdatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var saved = await db.Settings.AsNoTracking().Select(x => x.Chat).SingleAsync(Ct);
+        async Task<string> FirstDraftAsync(string name)
+        {
+            using var created = await admin.PostAsJsonAsync("/api/assistants", new { name = $"{name} {seed.Code}", departmentId = seed.Department, classification = "internal" }, Ct);
+            created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+            var id = (await Json(created)).GetProperty("id").GetGuid();
+            return (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{id}/draft", Ct)).GetProperty("systemPrompt").GetString()!;
+        }
+
+        async Task SetChatAsync(System.Text.Json.Nodes.JsonObject chat) =>
+            await db.Settings.ExecuteUpdateAsync(u => u.SetProperty(x => x.Chat, chat.ToJsonString()), Ct);
+
+        try
+        {
+            var chat = System.Text.Json.Nodes.JsonNode.Parse(saved) as System.Text.Json.Nodes.JsonObject ?? [];
+
+            // No key yet (a row from before item 39): the code's citizen-service instructions.
+            chat.Remove(ChatDefaults.SystemPromptKey);
+            await SetChatAsync(chat);
+            (await FirstDraftAsync("Standard")).ShouldBe(ChatDefaults.SystemPrompt);
+
+            // The platform's text, as edited on the Settings page; an emptied one stays empty.
+            chat[ChatDefaults.SystemPromptKey] = "Svara som kommunens kontaktcenter.";
+            await SetChatAsync(chat);
+            (await FirstDraftAsync("Redigerad")).ShouldBe("Svara som kommunens kontaktcenter.");
+            chat[ChatDefaults.SystemPromptKey] = "";
+            await SetChatAsync(chat);
+            (await FirstDraftAsync("Tom")).ShouldBe("");
+        }
+        finally
+        {
+            await db.Settings.ExecuteUpdateAsync(u => u.SetProperty(x => x.Chat, saved), Ct);
+        }
+    }
+
+    [Fact]
     public async Task General_knowledge_is_a_draft_field_and_a_public_assistant_keeps_it_off()
     {
         // P1b item 40: V17 accepts answer.generalKnowledge off/supplement/fallback/open; V36 keeps public assistants off
