@@ -63,7 +63,9 @@ jobs:
         working-directory: tests/e2e
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          # Browser only: the self-hosted runner has no sudo, so its system libraries are installed once by the runner's owner
+          # (sudo npx playwright install-deps chromium).
+          npx playwright install chromium
           npx playwright test
       - name: Stop the test stack
         if: always() && steps.specs.outputs.present == 'true'
