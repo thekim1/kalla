@@ -20,6 +20,7 @@ docs/stakeholder-report.html                  main
 README.md                                     shared
 CHANGELOG.md                                  shared
 LICENSE                                       main
+NOTICE                                        a
 *.md                                          main
 global.json                                   main
 Directory.Build.*                             main
