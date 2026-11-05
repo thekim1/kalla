@@ -20,7 +20,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** data-model §2.1 (`GatewayModels`); admin §4.6 (V32, V34), §4.10.
 
-### [ ] B-2 Archived assistants and one document count (#374)
+### [x] B-2 Archived assistants and one document count (#374; #385)
 - **Do:** show "Archived" for archived assistants in *Used by* and leave them off the Map (or mark them); use one
   document count on the knowledge base list and its Overview (live documents), or label the difference.
 - **Paths:** `src/Ume.Rag.AdminApi/**`, `src/admin-ui/**`.
