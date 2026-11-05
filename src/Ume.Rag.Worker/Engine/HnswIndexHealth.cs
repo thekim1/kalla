@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Npgsql;
 using NpgsqlTypes;
 using Pgvector;
+using Ume.Rag.Domain.Entities;
 using Ume.Rag.Retrieval;
 using Ume.Rag.Retrieval.Postgres;
 using Ume.Rag.Infrastructure;
@@ -37,8 +38,47 @@ public sealed record HnswHealthSettings(double RecallFloor, int CheckSample, int
         json?[name] is JsonValue v && v.GetValueKind() == JsonValueKind.Number ? v.GetValue<double>() : null;
 }
 
-/// <summary>One recall measurement of a profile's index: the HNSW-searched collections, the query chunks, recall@10 (null when nothing was measured).</summary>
-public sealed record HnswRecall(int Scopes, int Queries, double? Recall);
+/// <summary>
+/// One recall measurement of a profile's index: the HNSW-searched scopes, the query chunks over all of them, and the
+/// worst scope's recall@10 (null when nothing was measured); <see cref="ByScope"/> has each measured scope's recall.
+/// </summary>
+public sealed record HnswRecall(int Scopes, int Queries, double? Recall)
+{
+    /// <summary>The recall of each HNSW-searched scope that had queries, worst first.</summary>
+    public IReadOnlyList<HnswScopeRecall> ByScope { get; init; } = [];
+
+    /// <summary>The scope of <see cref="Recall"/>, or null when nothing was measured.</summary>
+    public HnswScopeRecall? Worst => ByScope.Count == 0 ? null : ByScope[0];
+}
+
+/// <summary>
+/// A scope retrieval can search with HNSW (knowledge design §6.4): its collections and, for an assistant's links with
+/// topics, the (collection, tag) pairs (§4.2; a collection without a pair is searched whole). <see cref="Assistants"/>
+/// are the active published assistants whose links make exactly this scope; empty for a single collection searched by
+/// a direct caller.
+/// </summary>
+public sealed record HnswScope(IReadOnlyList<Guid> CollectionIds, IReadOnlyList<(Guid CollectionId, string Tag)> TopicLinks)
+{
+    public IReadOnlyList<Guid> Assistants { get; init; } = [];
+
+    /// <summary>The scope's identity: collections and topic pairs, sorted (the same scope from two assistants is one).</summary>
+    public string Key { get; } = string.Join(',', CollectionIds.Order().Select(id => id.ToString("D"))) + "|" +
+        string.Join(',', TopicLinks.Select(l => l.CollectionId.ToString("D") + ":" + l.Tag).Order(StringComparer.Ordinal));
+
+    public override string ToString()
+    {
+        var text = "collections " + string.Join(", ", CollectionIds.Order().Select(id => id.ToString("D")));
+        if (TopicLinks.Count > 0)
+        {
+            text += "; topics " + string.Join(", ", TopicLinks.Select(l => l.CollectionId.ToString("D") + ":" + l.Tag).Order(StringComparer.Ordinal));
+        }
+
+        return Assistants.Count == 0 ? text : text + "; assistants " + string.Join(", ", Assistants.Select(id => id.ToString("D")));
+    }
+}
+
+/// <summary>The recall@10 of one scope over its <paramref name="Queries"/> sample chunks.</summary>
+public sealed record HnswScopeRecall(HnswScope Scope, int Queries, double Recall);
 
 /// <summary>A check: the first measurement and, when it was below the floor, the measurement after the rebuild.</summary>
 public sealed record HnswCheckOutcome(string IndexName, HnswRecall Before, HnswRecall? After)
@@ -47,13 +87,18 @@ public sealed record HnswCheckOutcome(string IndexName, HnswRecall Before, HnswR
 }
 
 /// <summary>
-/// The index-health check of knowledge design §6.4. For each collection of the profile that retrieval searches through
-/// HNSW (more than <c>exactScanMaxChunks</c> live child chunks and at least <c>minHnswSelectivity</c> of the profile's),
-/// <c>hnswCheckSample</c> random live child chunks are the queries, with their own embeddings: the approximate top 10
+/// The index-health check of knowledge design §6.4. The scopes are those retrieval can search: each live collection on
+/// the profile alone (a direct caller, or a request narrowed to one collection), and the live linked collections of each
+/// active assistant's published version, with the links' topics (Decisions "M-2 open design calls": several small
+/// collections can together be HNSW-searched). A scope is HNSW-searched by retrieval's own rule
+/// (<see cref="ScopeSizeCache.Choose"/>: more than <c>exactScanMaxChunks</c> live child chunks and at least
+/// <c>minHnswSelectivity</c> of the profile's). For each such scope <c>hnswCheckSample</c> random live child chunks of
+/// the scope are the queries, with their own embeddings: the approximate top 10
 /// (<see cref="RetrievalStatements.VectorApproximate"/>, the half-precision HNSW walk with the role's HNSW settings) is
-/// compared with the exact top 10 (<see cref="RetrievalStatements.VectorExact"/>), and recall@10 over all queries is
-/// recorded as <c>rag.retrieval.hnsw_recall{profile}</c>. Below <c>hnswRecallFloor</c> the index is rebuilt with
-/// <c>REINDEX INDEX CONCURRENTLY</c> and measured again.
+/// compared with the exact top 10 (<see cref="RetrievalStatements.VectorExact"/>), both with the scope's topic filter.
+/// The worst scope's recall@10 is recorded as <c>rag.retrieval.hnsw_recall{profile}</c>, and each scope below
+/// <c>hnswRecallFloor</c> is logged by name. Below the floor the index is rebuilt with <c>REINDEX INDEX CONCURRENTLY</c>
+/// and measured again.
 /// </summary>
 public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string rebuildConnectionString, HnswIndexMetrics metrics, ILogger<HnswIndexHealth> logger)
 {
@@ -85,12 +130,34 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
         ORDER BY 1
         """;
 
+    /// <summary>The live collections and their configured profile: retrieval searches no other (knowledge design §4.4).</summary>
+    private const string LiveCollectionsSql = """
+        SELECT "Id", "EmbeddingProfileId" FROM config."Collections" WHERE "PublishedAt" IS NOT NULL AND "DeletedAt" IS NULL
+        """;
+
+    /// <summary>
+    /// The links of every active assistant's published version (the worker's column grants on the view and on
+    /// <c>Assistants</c>, data-model §1.2); an archived assistant is not searched (AccessPolicy).
+    /// </summary>
+    private const string AssistantLinksSql = """
+        SELECT v."AssistantId", v."CollectionLinks"::text
+        FROM config."PublishedAssistantVersions" v JOIN config."Assistants" a ON a."Id" = v."AssistantId"
+        WHERE a."State" = 'active'
+        ORDER BY 1
+        """;
+
+    /// <summary>
+    /// Random live child chunks of the scope: collections <c>$2</c>, limited by the topic pairs <c>$4</c>/<c>$5</c> as
+    /// statement V's topic fragment is (a collection without a pair is taken whole).
+    /// </summary>
     private const string SampleSql = """
         SELECT c."Embedding"
         FROM content."Chunks" c
         WHERE c."Id" IN (SELECT s."Id" FROM content."Chunks" s
-                         WHERE s."EmbeddingProfileId" = $1 AND s."CollectionId" = $2 AND s."DeletedAt" IS NULL AND s."Kind" = 'child'
+                         WHERE s."EmbeddingProfileId" = $1 AND s."CollectionId" = ANY ($2) AND s."DeletedAt" IS NULL AND s."Kind" = 'child'
                            AND s."Embedding" IS NOT NULL
+                           AND (s."CollectionId" <> ALL ($4::uuid[])
+                                OR EXISTS (SELECT 1 FROM unnest($4::uuid[], $5::text[]) AS l(cid, tag) WHERE l.cid = s."CollectionId" AND l.tag = ANY (s."Tags")))
                          ORDER BY random()
                          LIMIT $3)
         """;
@@ -137,6 +204,7 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
         }
 
         metrics.Recall(profileId, recall);
+        LogFailingScopes(profileId, before, settings.RecallFloor);
         if (recall >= settings.RecallFloor)
         {
             LogHealthy(logger, profileId, recall, before.Scopes, before.Queries);
@@ -149,53 +217,135 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
         if (after.Recall is { } again)
         {
             metrics.Recall(profileId, again);
+            LogFailingScopes(profileId, after, settings.RecallFloor);
         }
 
         LogRebuilt(logger, profileId, index, recall, after.Recall);
         return new HnswCheckOutcome(index, before, after);
     }
 
-    /// <summary>recall@<see cref="K"/> of the profile's HNSW-searched collections (knowledge design §6.4).</summary>
+    /// <summary>
+    /// recall@<see cref="K"/> of each of the profile's HNSW-searched scopes (<see cref="ScopesAsync"/>); the worst one is
+    /// <see cref="HnswRecall.Recall"/> (knowledge design §6.4; Decisions "M-2 open design calls").
+    /// </summary>
     public async Task<HnswRecall> MeasureAsync(Guid profileId, int dimensions, HnswHealthSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        var counts = new List<(Guid Collection, long Chunks)>();
-        await using (var command = new NpgsqlCommand(ScopesSql, connection) { Parameters = { Db.P(profileId) } })
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
-        {
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                counts.Add((reader.GetGuid(0), reader.GetInt64(1)));
-            }
-        }
-
-        var total = counts.Sum(c => c.Chunks);
-        var scopes = counts.Where(c => c.Chunks > settings.ExactScanMaxChunks && (double)c.Chunks / total >= settings.MinHnswSelectivity)
-            .Select(c => c.Collection).ToList();
-        var approximateSql = RetrievalStatements.VectorApproximate(profileId, dimensions, K, FilterFragments.None);
-        var exactSql = RetrievalStatements.VectorExact(profileId, dimensions, K, FilterFragments.None);
+        var scopes = await ReadScopesAsync(connection, profileId, settings, cancellationToken);
         var queries = 0;
-        long hits = 0;
-        long expected = 0;
-        foreach (var collection in scopes)
+        var byScope = new List<HnswScopeRecall>();
+        foreach (var scope in scopes)
         {
-            foreach (var query in await SampleAsync(connection, profileId, collection, settings.CheckSample, cancellationToken))
+            var fragments = scope.TopicLinks.Count > 0 ? FilterFragments.Topics : FilterFragments.None;
+            var approximateSql = RetrievalStatements.VectorApproximate(profileId, dimensions, K, fragments);
+            var exactSql = RetrievalStatements.VectorExact(profileId, dimensions, K, fragments);
+            var scopeQueries = 0;
+            long hits = 0;
+            long expected = 0;
+            foreach (var query in await SampleAsync(connection, profileId, scope, settings.CheckSample, cancellationToken))
             {
-                var exact = await TopAsync(connection, exactSql, query, collection, cancellationToken);
+                var exact = await TopAsync(connection, exactSql, query, scope, cancellationToken);
                 if (exact.Count == 0)
                 {
                     continue;
                 }
 
-                var approximate = await TopAsync(connection, approximateSql, query, collection, cancellationToken);
-                queries++;
+                var approximate = await TopAsync(connection, approximateSql, query, scope, cancellationToken);
+                scopeQueries++;
                 expected += exact.Count;
                 hits += Math.Min(exact.Count, Hits(exact, approximate));
             }
+
+            queries += scopeQueries;
+            if (expected > 0)
+            {
+                byScope.Add(new HnswScopeRecall(scope, scopeQueries, (double)hits / expected));
+            }
         }
 
-        return new HnswRecall(scopes.Count, queries, expected == 0 ? null : (double)hits / expected);
+        byScope = [.. byScope.OrderBy(r => r.Recall)];
+        return new HnswRecall(scopes.Count, queries, byScope.Count == 0 ? null : byScope[0].Recall) { ByScope = byScope };
+    }
+
+    /// <summary>
+    /// The profile's scopes that retrieval searches with HNSW: each live collection on the profile alone, then
+    /// each distinct scope of an active assistant's published links (its live linked collections on the profile of the
+    /// first live one, as <c>KnowledgeService</c> resolves them, with the links' topics). Sized as
+    /// <see cref="ScopeSizeCache.SizeAsync"/> sizes them (the collections' live child chunks against the profile's) and
+    /// kept when <see cref="ScopeSizeCache.Choose"/> gives HNSW.
+    /// </summary>
+    public async Task<IReadOnlyList<HnswScope>> ScopesAsync(Guid profileId, HnswHealthSettings settings, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        return await ReadScopesAsync(connection, profileId, settings, cancellationToken);
+    }
+
+    private static async Task<List<HnswScope>> ReadScopesAsync(NpgsqlConnection connection, Guid profileId, HnswHealthSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var counts = new Dictionary<Guid, long>();
+        await using (var command = new NpgsqlCommand(ScopesSql, connection) { Parameters = { Db.P(profileId) } })
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                counts[reader.GetGuid(0)] = reader.GetInt64(1);
+            }
+        }
+
+        var live = new Dictionary<Guid, Guid>();
+        await using (var command = new NpgsqlCommand(LiveCollectionsSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                live[reader.GetGuid(0)] = reader.GetGuid(1);
+            }
+        }
+
+        var assistantLinks = new List<(Guid Assistant, IReadOnlyList<CollectionLink> Links)>();
+        await using (var command = new NpgsqlCommand(AssistantLinksSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                assistantLinks.Add((reader.GetGuid(0), CollectionLink.ParseList(reader.GetString(1))));
+            }
+        }
+
+        var candidates = new List<HnswScope>();
+        foreach (var collection in counts.Keys.Where(id => live.TryGetValue(id, out var configured) && configured == profileId).Order())
+        {
+            candidates.Add(new HnswScope([collection], []));
+        }
+
+        var byKey = new Dictionary<string, HnswScope>(StringComparer.Ordinal);
+        foreach (var (assistant, links) in assistantLinks)
+        {
+            // KnowledgeService: live links only, on the first live link's profile; topics per collection from its first link.
+            var liveLinks = links.Where(l => live.ContainsKey(l.CollectionId)).DistinctBy(l => l.CollectionId).ToList();
+            if (liveLinks.Count == 0 || live[liveLinks[0].CollectionId] != profileId)
+            {
+                continue;
+            }
+
+            liveLinks = [.. liveLinks.Where(l => live[l.CollectionId] == profileId)];
+            var scope = new HnswScope([.. liveLinks.Select(l => l.CollectionId)],
+                [.. liveLinks.SelectMany(l => l.Tags.Distinct(StringComparer.Ordinal).Select(tag => (l.CollectionId, tag)))]);
+            byKey[scope.Key] = byKey.TryGetValue(scope.Key, out var known)
+                ? known with { Assistants = [.. known.Assistants, assistant] }
+                : scope with { Assistants = [assistant] };
+        }
+
+        var singles = candidates.Select(c => c.Key).ToHashSet(StringComparer.Ordinal);
+        candidates.AddRange(byKey.Values.Where(s => !singles.Contains(s.Key)).OrderBy(s => s.Key, StringComparer.Ordinal));
+
+        var platform = new RetrievalPlatformSettings { ExactScanMaxChunks = settings.ExactScanMaxChunks, MinHnswSelectivity = settings.MinHnswSelectivity };
+        var total = counts.Values.Sum();
+        return [.. candidates.Where(s => ScopeSizeCache.Choose(new ScopeSize(s.CollectionIds.Sum(id => counts.GetValueOrDefault(id)), total), platform).Search ==
+                                         VectorSearch.Approximate)];
     }
 
     /// <summary>The approximate results that are in the exact top <see cref="K"/>, or tie its last distance.</summary>
@@ -250,11 +400,30 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static async Task<List<Vector>> SampleAsync(NpgsqlConnection connection, Guid profileId, Guid collectionId, int sample,
+    private void LogFailingScopes(Guid profileId, HnswRecall recall, double floor)
+    {
+        foreach (var scope in recall.ByScope.Where(s => s.Recall < floor))
+        {
+            LogFailingScope(logger, profileId, scope.Recall, floor, scope.Queries, scope.Scope.ToString());
+        }
+    }
+
+    private static NpgsqlParameter Uuids(IEnumerable<Guid> ids) => new() { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Uuid, Value = ids.ToArray() };
+
+    private static NpgsqlParameter Texts(IEnumerable<string> values) => new() { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text, Value = values.ToArray() };
+
+    private static async Task<List<Vector>> SampleAsync(NpgsqlConnection connection, Guid profileId, HnswScope scope, int sample,
         CancellationToken cancellationToken)
     {
         var vectors = new List<Vector>();
-        await using var command = new NpgsqlCommand(SampleSql, connection) { Parameters = { Db.P(profileId), Db.P(collectionId), Db.P(sample) } };
+        await using var command = new NpgsqlCommand(SampleSql, connection)
+        {
+            Parameters =
+            {
+                Db.P(profileId), Uuids(scope.CollectionIds), Db.P(sample),
+                Uuids(scope.TopicLinks.Select(l => l.CollectionId)), Texts(scope.TopicLinks.Select(l => l.Tag)),
+            },
+        };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -264,19 +433,21 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
         return vectors;
     }
 
-    private static async Task<List<(Guid Id, double Distance)>> TopAsync(NpgsqlConnection connection, string sql, Vector query, Guid collectionId,
+    /// <summary>Statement V's parameters (PostgresSearchIndex): vector, collections, every level, then the topic pairs when present.</summary>
+    private static async Task<List<(Guid Id, double Distance)>> TopAsync(NpgsqlConnection connection, string sql, Vector query, HnswScope scope,
         CancellationToken cancellationToken)
     {
         var top = new List<(Guid, double)>(K);
         await using var command = new NpgsqlCommand(sql, connection)
         {
-            Parameters =
-            {
-                new NpgsqlParameter { Value = query },
-                new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Uuid, Value = new[] { collectionId } },
-                new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text, Value = Domain.Classification.All.ToArray() },
-            },
+            Parameters = { new NpgsqlParameter { Value = query }, Uuids(scope.CollectionIds), Texts(Domain.Classification.All) },
         };
+        if (scope.TopicLinks.Count > 0)
+        {
+            command.Parameters.Add(Uuids(scope.TopicLinks.Select(l => l.CollectionId)));
+            command.Parameters.Add(Texts(scope.TopicLinks.Select(l => l.Tag)));
+        }
+
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -286,7 +457,10 @@ public sealed partial class HnswIndexHealth(NpgsqlDataSource dataSource, string 
         return top;
     }
 
-    [LoggerMessage(LogLevel.Information, "HNSW index of profile {ProfileId}: recall@10 {Recall:F3} over {Scopes} collections, {Queries} queries")]
+    [LoggerMessage(LogLevel.Warning, "HNSW index of profile {ProfileId}: recall@10 {Recall:F3} is below {Floor} over {Queries} queries of the scope {Scope}")]
+    private static partial void LogFailingScope(ILogger logger, Guid profileId, double recall, double floor, int queries, string scope);
+
+    [LoggerMessage(LogLevel.Information, "HNSW index of profile {ProfileId}: worst recall@10 {Recall:F3} over {Scopes} scopes, {Queries} queries")]
     private static partial void LogHealthy(ILogger logger, Guid profileId, double recall, int scopes, int queries);
 
     [LoggerMessage(LogLevel.Warning, "HNSW index {Index} of profile {ProfileId}: recall@10 {Recall:F3} is below {Floor}; rebuilding it")]

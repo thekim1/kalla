@@ -52,8 +52,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON config."CollectionShares" TO ume_rag_adm
 GRANT SELECT ON config."CollectionShares" TO ume_rag_api;
 -- Assistants and the gateway model mirror (data-model §1.2): the admin manages them; the api reads assistants,
 -- audiences and models, and versions only through the view of published versions, never AssistantVersions itself, so a
--- draft cannot reach chat. The worker reads no assistant tables, only the model mirror (the evaluation's residency
--- checks, #130).
+-- draft cannot reach chat. The worker reads the model mirror (the evaluation's residency checks, #130) and, for the
+-- index-health check, only which collections and topics active assistants' published versions link (knowledge design
+-- §6.4; Decisions "M-2 open design calls": every HNSW-searched scope an assistant link uses is sampled).
 GRANT SELECT, INSERT, UPDATE, DELETE ON config."Assistants", config."AssistantVersions", config."AssistantAudiences",
   config."GatewayModels" TO ume_rag_admin;
 -- Explain access (identity design 4.9) builds the api's policy snapshot in rag-admin, which reads the published view too.
@@ -61,6 +62,8 @@ GRANT SELECT ON config."PublishedAssistantVersions" TO ume_rag_admin;
 GRANT SELECT ON config."Assistants", config."AssistantAudiences", config."PublishedAssistantVersions",
   config."GatewayModels" TO ume_rag_api;
 GRANT SELECT ON config."GatewayModels" TO ume_rag_worker;
+GRANT SELECT ("AssistantId", "CollectionLinks") ON config."PublishedAssistantVersions" TO ume_rag_worker;
+GRANT SELECT ("Id", "State") ON config."Assistants" TO ume_rag_worker;
 
 -- content: the worker owns it; the admin reads it and enqueues jobs (decisions are command jobs, data-model §12.2).
 GRANT SELECT, INSERT, UPDATE, DELETE ON content."Jobs", content."WorkerInstances", content."RunItems" TO ume_rag_worker;
