@@ -177,16 +177,16 @@ and wants to do better than **Eneo** (`~/git/eneo`), a slow "kitchen sink" monol
 ## Next step
 
 1. **Check GitHub and the stack:** `gh pr list`, `gh issue list` (has B answered #376?); `aspire describe`.
-2. **Main queue** (`plans/work/main.md`): M-1 run the browser tests locally; M-2 recommendations for the open design
+2. **Main queue** (`plans/work/main.md`): M-1 done (e2e green on the runner, #377); M-2 recommendations for the open design
    calls (list below); review B's next PRs live (B-1 `ModelKind`, B-2 #374) and tick nothing for B.
-3. **Stream A queue** (`plans/work/stream-a.md`): A-1 licence notices (#51) is unblocked; A-2 the first green `e2e`
-   run waits on the runner host (#370, `docs/ci-runner.md`) and then unblocks B-5.
+3. **Stream A queue** (`plans/work/stream-a.md`): A-1 licence notices (#51) is unblocked; A-2 done (#377, e2e 9/9 on
+   the runner); `e2e` runs on dispatch and from `release.yml`.
 4. **User decides:** the roadmap's "Waiting on people" table (gold set with DoIT, G1, gateway session, test host, #333
    findings 1–2, architecture-plan items 1, 2, 4–7, the W3 grant step, Sitevision `open.*`/`sv.*` on hosts without a
    profile, a Git/Markdown connector).
 
-**Open issues — stream B:** #376 (plans restructure, read first), #374, #363 (points 1, 2 done in #369), #318 (item 36's E2E box), #278, #333 (findings 1–2
-with the user), #52. **Stream A:** #370 (runner host), #48, #51. **Main session:** #100 (L8). **User:** #215 (J8).
+**Open issues — stream B:** #376 (plans restructure, read first), #374, #363 (points 1, 2 done in #369), #333 (findings 1–2
+with the user), #52. **Stream A:** #51 (A-1), #48. **Main session:** #100 (L8). **User:** #215 (J8).
 
 **Not folded into the design yet (need a call):** topics for uploads (`files` template has no `pathRules`); #217's
 fired-types list; `UrlCanonicalizer` → Pipelines (#178); identity §16 Q2–4, Q8; a connection pooler needs a direct
