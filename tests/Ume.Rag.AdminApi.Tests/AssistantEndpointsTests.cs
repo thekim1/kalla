@@ -213,6 +213,85 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task General_knowledge_is_a_draft_field_and_a_public_assistant_keeps_it_off()
+    {
+        // P1b item 40: V17 accepts answer.generalKnowledge off/supplement/fallback/open; V36 keeps public assistants off
+        // (refused on publish and on a level change, a warning on draft save).
+        var seed = await SeedAsync();
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            await db.Collections.Where(c => c.Id == seed.Collection).ExecuteUpdateAsync(u => u.SetProperty(c => c.Classification, Classification.Public), Ct);
+        }
+
+        await using var gateway = Gateway();
+        await using var factory = Admin(gateway);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+
+        async Task<(Guid Id, string? Version, string? DraftVersion)> CreateAsync(string name, string level)
+        {
+            using var created = await admin.PostAsJsonAsync("/api/assistants", new
+            {
+                name = name + " " + seed.Code, departmentId = seed.Department, classification = level, description = "D", contactName = "K", contactEmail = "k@umea.se",
+            }, Ct);
+            created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+            var body = await Json(created);
+            return (body.GetProperty("id").GetGuid(), body.GetProperty("version").GetString(), body.GetProperty("draft").GetProperty("version").GetString());
+        }
+
+        async Task<(IReadOnlyList<string> Warnings, string? DraftVersion)> DraftAsync(Guid id, string generalKnowledge, string? draftVersion)
+        {
+            using var draft = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
+            {
+                gatewayModel = Model, systemPrompt = "Svara kort.", collectionIds = new[] { seed.Collection }, querySteps = new { answer = new { generalKnowledge } },
+                version = draftVersion,
+            }, Ct);
+            draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
+            var body = await Json(draft);
+            body.GetProperty("querySteps").GetProperty("answer").GetProperty("generalKnowledge").GetString().ShouldBe(generalKnowledge);
+            return ([.. Codes(body.GetProperty("warnings"))], body.GetProperty("version").GetString());
+        }
+
+        // An internal assistant: an unknown value is V17's warning; fallback is accepted and publishes.
+        var (inner, innerVersion, innerDraft) = await CreateAsync("Intern", Classification.Internal);
+        var (warnings, next) = await DraftAsync(inner, "sometimes", innerDraft);
+        warnings.ShouldBe(["query_steps_invalid"]);
+        (warnings, next) = await DraftAsync(inner, "fallback", next);
+        warnings.ShouldBeEmpty();
+        using (var published = await admin.PostAsJsonAsync($"/api/assistants/{inner}/publish", new { version = innerVersion, draftVersion = next }, Ct))
+        {
+            published.StatusCode.ShouldBe(HttpStatusCode.OK, await published.Content.ReadAsStringAsync(Ct));
+            innerVersion = (await Json(published)).GetProperty("version").GetString();
+        }
+
+        // Lowering its level to public while the published version uses general knowledge is refused (V36, level change).
+        using (var lowered = await admin.PutAsJsonAsync($"/api/assistants/{inner}", new
+               {
+                   name = "Intern " + seed.Code, classification = "public", description = "D", contactName = "K", contactEmail = "k@umea.se", version = innerVersion,
+               }, Ct))
+        {
+            lowered.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await Json(lowered)).GetProperty("code").GetString().ShouldBe("general_knowledge_not_allowed_for_level");
+        }
+
+        // A public assistant: supplement saves with the V36 warning, and publishing it is refused.
+        var (open, openVersion, openDraft) = await CreateAsync("Publik", Classification.Public);
+        (warnings, next) = await DraftAsync(open, "supplement", openDraft);
+        warnings.ShouldBe(["general_knowledge_not_allowed_for_level"]);
+        using (var refused = await admin.PostAsJsonAsync($"/api/assistants/{open}/publish", new { version = openVersion, draftVersion = next }, Ct))
+        {
+            refused.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            var problem = await Json(refused);
+            problem.GetProperty("code").GetString().ShouldBe("general_knowledge_not_allowed_for_level");
+            problem.GetProperty("problems").GetArrayLength().ShouldBe(1);
+        }
+
+        // Off publishes.
+        (warnings, next) = await DraftAsync(open, "off", next);
+        warnings.ShouldBeEmpty();
+        (await admin.PostAsJsonAsync($"/api/assistants/{open}/publish", new { version = openVersion, draftVersion = next }, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Publish_refuses_a_model_the_gateway_does_not_serve_at_the_ceiling()
     {
         var seed = await SeedAsync();

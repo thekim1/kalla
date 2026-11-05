@@ -16,6 +16,7 @@ here.
   steps 1–13 walked locally on FakeGateway, is not checked yet; #146 not recorded), 13. The main session did 18, 33
   and 34; stream A did 37 and 38 on L13/L14.
 - **Item 14 is taken by the main session** (2026-11-05, branch `main-session/14-e2e`, claimed on #278): skip it.
+- **Item 40:** chat and admin-API part merged (#358: frames, `answered-general`, `GeneralAnswers`, V17, V36, test panel); the radio group and badge follow in a second PR, then its Done box.
 - **Next, in order: 40 → 35 → 36 → 39** (36 waits for 14's E2E to extend it). Item 40 is first because a POC needs it soon (#356); its chat and
   admin-API part can merge before the radio group and badge. Item 14 comes before 36 because 36's done-when extends the pilot-journey
   E2E that 14 creates, and because stream A's `e2e` job (item 15) waits on its hand-off L7. Nothing exists yet for
@@ -116,9 +117,9 @@ Refs: [knowledge §4.2, §6.2](../knowledge-api/design.md)
 
 ### 40. General knowledge per assistant (first, #356)
 Refs: [chat §6.2, §7.3, §10.4](../chat-api/design.md), [admin §4.6, §5.5.4](../admin/design.md), [P1b README item 40](README.md)
-- [ ] `QuerySteps.answer.generalKnowledge`; `ChatCore.Frame` per level, with and without sources
-- [ ] Coverage `Low` with `fallback`/`open`: model call without sources, caveat line, contact links, `answered-general`, `GeneralAnswers`
-- [ ] V17 accepts the field; V36 (`public` stays `off`)
+- [x] `QuerySteps.answer.generalKnowledge`; `ChatCore.Frame` per level, with and without sources (#358)
+- [x] Coverage `Low` with `fallback`/`open`: model call without sources, caveat line, contact links, `answered-general`, `GeneralAnswers` (#358)
+- [x] V17 accepts the field; V36 (`public` stays `off`) (#358)
 - [ ] "General knowledge" radio group on the Draft tab; `[General knowledge]` badge
 - [ ] **Done:** chat §18.1 general-knowledge tests; V36 refusal test; test panel shows the caveat for a weak question in `fallback`
 

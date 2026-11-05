@@ -550,4 +550,143 @@ public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeF
         events.ShouldAllBe(e => e.Message.Contains(conversationId.ToString("D"), StringComparison.Ordinal));
         string.Join('\n', events.Select(e => e.Message)).ShouldNotContain("plank");
     }
+
+    private const string ContactLinks = "\n\n- [Kontaktcenter](https://www.umea.se/kontakt)";
+
+    /// <summary>The fixture's assistant with <c>answer.generalKnowledge</c> = <paramref name="level"/> and contact links (item 40).</summary>
+    private WebApplicationFactory<Program> GeneralHost(string level, string classification = Domain.Classification.Internal, string embeddingModel = "bge-m3")
+    {
+        var snapshot = Snapshot();
+        var bygg = snapshot.Assistants[db.AssistantId];
+        snapshot = db.Snapshot(embeddingModel) with
+        {
+            Assistants = new Dictionary<Guid, AssistantEntry>
+            {
+                [db.AssistantId] = bygg with
+                {
+                    Classification = classification,
+                    Published = bygg.Published! with
+                    {
+                        QuerySteps = $$$"""{"answer":{"generalKnowledge":"{{{level}}}"}}""",
+                        NotFound = """{"sv":"Inget svar i källorna.","links":[{"title":"Kontaktcenter","url":"https://www.umea.se/kontakt"}]}""",
+                    },
+                },
+            },
+        };
+        return db.ApiHost(snapshot).WithWebHostBuilder(web =>
+        {
+            web.UseSetting("Rag:Roles", "knowledge,chat");
+            web.ConfigureTestServices(services =>
+                services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
+        });
+    }
+
+    /// <summary>The stored outcome of an answer and the day's not-found and general-answer totals of the integration client.</summary>
+    private async Task<(string? Outcome, long NotFound, long General)> WrittenAsync(WebApplicationFactory<Program> api, string? answerId)
+    {
+        await api.Services.GetRequiredService<ConversationWriter>().FlushAsync(Ct);
+        await using var connection = new Npgsql.NpgsqlConnection(db.Connection(RagDatabase.Api));
+        await connection.OpenAsync(Ct);
+        await using var command = new Npgsql.NpgsqlCommand("""
+            SELECT (SELECT "Outcome" FROM chat."Messages" WHERE "Id" = $1),
+                   coalesce(sum("NotFound"), 0), coalesce(sum("GeneralAnswers"), 0)
+            FROM chat."AssistantDailyTotals" WHERE "AssistantId" = $2 AND "ClientId" = $3
+            """, connection)
+        {
+            Parameters =
+            {
+                new() { Value = answerId is null ? Guid.Empty : Guid.ParseExact(answerId["chatcmpl-".Length..], "N") }, new() { Value = db.AssistantId },
+                new() { Value = db.IntegrationClient },
+            },
+        };
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        (await reader.ReadAsync(Ct)).ShouldBeTrue();
+        return (reader.IsDBNull(0) ? null : reader.GetString(0), reader.GetInt64(1), reader.GetInt64(2));
+    }
+
+    [Theory]
+    [InlineData("off")]
+    [InlineData("supplement")]
+    public async Task Coverage_low_with_off_or_supplement_gets_the_not_found_text_without_a_model_call(string level)
+    {
+        await using var api = GeneralHost(level);
+        using var client = Client(api, db.IntegrationKey);
+        var before = await WrittenAsync(api, null);
+
+        using var response = await Ask(client, "Hur långt är det till månen i kilometer?");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString().ShouldBe("Inget svar i källorna." + ContactLinks);
+        body.GetProperty("usage").GetProperty("total_tokens").GetInt32().ShouldBe(0); // no model call
+
+        var after = await WrittenAsync(api, body.GetProperty("id").GetString());
+        (after.Outcome, after.NotFound - before.NotFound, after.General - before.General).ShouldBe(("not-found", 1L, 0L));
+    }
+
+    [Theory]
+    [InlineData("fallback")]
+    [InlineData("open")]
+    public async Task Coverage_low_with_fallback_or_open_answers_without_sources_behind_the_caveat_line(string level)
+    {
+        await using var api = GeneralHost(level);
+        using var client = Client(api, db.IntegrationKey);
+        var before = await WrittenAsync(api, null);
+
+        using var response = await Ask(client, "Hur långt är det till månen i kilometer?");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        var message = body.GetProperty("choices")[0].GetProperty("message");
+        var content = message.GetProperty("content").GetString()!;
+        // Our caveat first; the fake echoes the final user message, which is only the question (no <sources> block); then the links.
+        content.ShouldBe(FixedTexts.GeneralCaveatSv + "\n\nTestsvar på \"Fråga: Hur långt är det till månen i kilometer?\"." + ContactLinks);
+        message.GetProperty("annotations").GetArrayLength().ShouldBe(0); // general knowledge never carries markers
+        body.GetProperty("usage").GetProperty("prompt_tokens").GetInt32().ShouldBeGreaterThan(0); // the model was called
+
+        var after = await WrittenAsync(api, body.GetProperty("id").GetString());
+        (after.Outcome, after.NotFound - before.NotFound, after.General - before.General).ShouldBe(("answered-general", 0L, 1L));
+
+        // Streamed: the caveat is the first content chunk, the links the last, no source events or annotations.
+        var events = await StreamAsync(client, "Hur långt är det till månen i kilometer?");
+        var chunks = events.Where(e => e.TryGetProperty("choices", out var c) && c.GetArrayLength() > 0 && c[0].GetProperty("delta").TryGetProperty("content", out var t) &&
+            t.GetString()!.Length > 0).Select(e => e.GetProperty("choices")[0].GetProperty("delta").GetProperty("content").GetString()).ToList();
+        chunks[0].ShouldBe(FixedTexts.GeneralCaveatSv + "\n\n");
+        chunks[^1].ShouldBe(ContactLinks);
+        events.Any(IsEvent).ShouldBeFalse();
+        events.Any(IsAnnotated).ShouldBeFalse();
+
+        // A question the sources cover is still answered from them, with citations.
+        using var covered = await Ask(client, "Behöver jag bygglov för en altan högre än 1,2 meter?");
+        var coveredContent = (await covered.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()!;
+        coveredContent.ShouldStartWith("Testsvar på \"&lt;sources note=");
+        coveredContent.ShouldNotContain(FixedTexts.GeneralCaveatSv);
+    }
+
+    [Fact]
+    public async Task A_public_assistant_stays_off_at_run_time_whatever_its_query_steps_say()
+    {
+        // V36 refuses publishing it; chat holds the rule too (chat design §7.3).
+        await using var api = GeneralHost("open", Domain.Classification.Public);
+        using var client = Client(api, db.IntegrationKey);
+        using var response = await Ask(client, "Hur långt är det till månen i kilometer?");
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString().ShouldBe("Inget svar i källorna." + ContactLinks);
+        body.GetProperty("usage").GetProperty("total_tokens").GetInt32().ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData("off")]
+    [InlineData("supplement")]
+    [InlineData("fallback")]
+    [InlineData("open")]
+    public async Task Search_unavailable_stays_the_fixed_text_in_every_level(string level)
+    {
+        // The embedding answer is discarded (residency above the profile's ceiling): keyword only; a question no keyword matches has no results.
+        await using var api = GeneralHost(level, embeddingModel: "fake-wrong-residency-embed");
+        using var client = Client(api, db.IntegrationKey);
+        using var response = await Ask(client, "Kvantgravitation xyzzy plutonium?");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString().ShouldBe(FixedTexts.UnavailableSv + ContactLinks);
+        body.GetProperty("usage").GetProperty("total_tokens").GetInt32().ShouldBe(0);
+    }
 }

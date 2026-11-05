@@ -27,13 +27,16 @@ public static class MessageRoles
 public static class MessageOutcomes
 {
     public const string Answered = "answered";
+
+    /// <summary>Coverage <c>Low</c>, answered from general knowledge behind the caveat line (chat design §10.4).</summary>
+    public const string AnsweredGeneral = "answered-general";
     public const string NotFound = "not-found";
     public const string Unavailable = "unavailable";
     public const string Refused = "refused";
     public const string Error = "error";
     public const string Cancelled = "cancelled";
 
-    public static IReadOnlyList<string> All { get; } = [Answered, NotFound, Unavailable, Refused, Error, Cancelled];
+    public static IReadOnlyList<string> All { get; } = [Answered, AnsweredGeneral, NotFound, Unavailable, Refused, Error, Cancelled];
 }
 
 /// <summary>A message's coverage; <c>skipped</c> = a conversational message (chat design §6.2).</summary>
@@ -233,6 +236,9 @@ public sealed class AssistantDailyTotal
     public int Conversations { get; set; }
     public int Messages { get; set; }
     public int NotFound { get; set; }
+
+    /// <summary>General-knowledge answers (<c>answered-general</c>, chat design §10.4), apart from <see cref="NotFound"/>.</summary>
+    public int GeneralAnswers { get; set; }
     public int Unavailable { get; set; }
     public int Degraded { get; set; }
     public int Errors { get; set; }

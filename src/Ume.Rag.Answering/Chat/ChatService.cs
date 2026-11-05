@@ -204,12 +204,28 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
     private static partial void LogRefused(ILogger logger, int status, string code, string requestId);
 }
 
-/// <summary>The outcome of a turn (chat design §6.2): an answer, the fixed not-found text, or the unavailable text.</summary>
+/// <summary>
+/// The outcome of a turn (chat design §6.2): an answer, a general-knowledge answer without sources (§10.4), the fixed
+/// not-found text, or the unavailable text.
+/// </summary>
 public enum ChatOutcome
 {
     Answered,
+    AnsweredGeneral,
     NotFound,
     Unavailable,
+}
+
+/// <summary>The stored and reported names of <see cref="ChatOutcome"/> (<c>Messages.Outcome</c>, <c>rag.chat.requests{outcome}</c>).</summary>
+public static class ChatOutcomes
+{
+    public static string Name(ChatOutcome outcome) => outcome switch
+    {
+        ChatOutcome.AnsweredGeneral => "answered-general",
+        ChatOutcome.NotFound => "not-found",
+        ChatOutcome.Unavailable => "unavailable",
+        _ => "answered",
+    };
 }
 
 /// <summary>A completed turn as the JSON endpoint writes it.</summary>
@@ -228,8 +244,13 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
     int MaxTokens, string Language, string? Fixed, ChatOutcome Outcome, BuiltPrompt? Prompt, RetrievalResult? Retrieval, bool Degraded,
     PlatformChatSettings Platform, CondenseOutcome? Condense = null)
 {
-    /// <summary>The caveat line of a degraded answer (§10.2), or null.</summary>
-    public string? Caveat => Degraded ? (Language == LanguageGuess.English ? FixedTexts.CaveatEn : FixedTexts.CaveatSv) + "\n\n" : null;
+    /// <summary>The caveat line of a degraded answer (§10.2) or of a general-knowledge answer (§10.4), or null; written by us, first.</summary>
+    public string? Caveat => Outcome == ChatOutcome.AnsweredGeneral
+        ? (Language == LanguageGuess.English ? FixedTexts.GeneralCaveatEn : FixedTexts.GeneralCaveatSv) + "\n\n"
+        : Degraded ? (Language == LanguageGuess.English ? FixedTexts.CaveatEn : FixedTexts.CaveatSv) + "\n\n" : null;
+
+    /// <summary>What follows the model's text: the contact links of a general-knowledge answer (§10.4), else empty.</summary>
+    public string Trailer => Outcome == ChatOutcome.AnsweredGeneral ? FixedTexts.ContactLinks(Assistant.Published?.NotFound, Platform.NotFound) : "";
 }
 
 /// <summary>
@@ -260,6 +281,12 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         }
 
         var settings = AssistantChatSettings.Parse(assistant.Published.QuerySteps);
+        if (assistant.Classification == Classification.Public)
+        {
+            // V36 holds at run time too: a public assistant is always off (chat design §7.3).
+            settings = settings with { GeneralKnowledge = GeneralKnowledge.Off };
+        }
+
         var language = settings.AlwaysSwedish ? LanguageGuess.Swedish : LanguageGuess.Detect(chat.Question);
         var ceiling = gatewayOptions.Value.Cap(Ceiling(who, assistant, snapshot)); // Gateway:MaxResidency (M2, #237)
         var messageId = Guid.CreateVersion7();
@@ -294,7 +321,15 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             var condenseFailed = condense is CondenseOutcome.Timeout or CondenseOutcome.Error or CondenseOutcome.Rejected;
             if (retrieval.Coverage.Status == CoverageStatus.Low && !(condenseFailed && retrieval.Results.Count > 0))
             {
-                return Plan(FixedTexts.NotFound(assistant.Published.NotFound, platform.NotFound, language), ChatOutcome.NotFound, null, retrieval, false);
+                if (!GeneralKnowledgeLevels.AnswersWithoutSources(settings.GeneralKnowledge))
+                {
+                    return Plan(FixedTexts.NotFound(assistant.Published.NotFound, platform.NotFound, language), ChatOutcome.NotFound, null, retrieval, false);
+                }
+
+                // §10.4: fallback and open answer from general knowledge, without the weak hits, behind our caveat line.
+                var general = PromptBuilder.Build(assistant.Name, assistant.Published.SystemPrompt, language, settings.AlwaysSwedish, chat.Question, chat.History,
+                    null, settings, general: true);
+                return Plan(null, ChatOutcome.AnsweredGeneral, general, retrieval, false);
             }
 
             if (retrieval.Coverage.Status == CoverageStatus.Unknown && retrieval.Results.Count == 0)
@@ -352,11 +387,11 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var transducer = new AnswerTransducer(plan.Prompt.Sources, plan.Platform.AllowedLinkHosts);
         var caveat = plan.Caveat ?? "";
         var pieces = transducer.Feed(answer.Text).Concat(transducer.Flush()).OfType<AnswerPiece.Text>().ToList();
-        var content = caveat + string.Concat(pieces.Select(p => p.Content));
+        var content = caveat + string.Concat(pieces.Select(p => p.Content)) + plan.Trailer;
         var annotations = pieces.SelectMany(p => p.Annotations).Select(a => a with { StartIndex = a.StartIndex + caveat.Length, EndIndex = a.EndIndex + caveat.Length }).ToList();
         Finish(plan, transducer);
         return new ChatCompletion(plan.MessageId, plan.Model, content, annotations, transducer.Cited, answer.PromptTokens, answer.CompletionTokens, answer.FinishReason,
-            ChatOutcome.Answered, plan.Created) { Plan = plan };
+            plan.Outcome, plan.Created) { Plan = plan };
     }
 
     /// <summary>After the answer (§9.5): the counters with only the cited ranks, and a log line.</summary>

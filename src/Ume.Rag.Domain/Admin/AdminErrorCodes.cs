@@ -196,6 +196,10 @@ public static class AdminErrorCodes
     /// <summary>V17 (and V15's text lengths): <c>{field}</c> is outside its range.</summary>
     public static AdminErrorCode QueryStepsInvalid { get; } = new("query_steps_invalid", 409, "The setting {field} is outside its allowed range.");
 
+    /// <summary>V36: a <c>public</c> assistant answers only from its sources; general knowledge needs level internal or higher.</summary>
+    public static AdminErrorCode GeneralKnowledgeNotAllowedForLevel { get; } = new("general_knowledge_not_allowed_for_level", 409,
+        "An assistant at level {level} answers only from its knowledge bases; general knowledge needs level internal or higher.");
+
     /// <summary>V15: a not-found link is not https on an allowed host, or there are more than 5.</summary>
     public static AdminErrorCode LinkHostNotAllowed { get; } = new("link_host_not_allowed", 409, "A link must be https on an allowed site, at most 5 links.");
 
@@ -233,5 +237,5 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgeNotAllowedForLevel, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable];
 }

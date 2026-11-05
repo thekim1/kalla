@@ -97,6 +97,7 @@ if (chat)
     }
 
     builder.Services.AddSingleton(new ConversationIds(conversationKeys));
+    builder.Services.AddSingleton<ChatMetrics>();
     builder.Services.AddSingleton<ConversationWriter>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<ConversationWriter>());
     // §14.2: the Open WebUI feedback import and pruning (runs only with OpenWebUi:BaseUrl, AdminApiKey and ClientId set).

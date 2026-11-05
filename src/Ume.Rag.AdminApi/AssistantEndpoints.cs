@@ -489,8 +489,8 @@ public sealed record RuleProblem(AdminErrorCode Code, IReadOnlyDictionary<string
 /// The assistant rules of P1a (admin design §4.6): V3 (level ≥ every linked collection), V7 (every audience client's ceiling
 /// ≥ the level), V8's ceiling (the ladder of max(level, ceilings of the audience clients that store history)), V9
 /// (<c>sensitive</c> only for clients without history when the policy says so), V11 (≤ 20 collections, all of the
-/// assistant's department), V15 (not-found texts and links), V17 (query step ranges) and V34 (the definition resolves;
-/// description and contact set). Returned as problems: refusals on publish, warnings on draft save.
+/// assistant's department), V15 (not-found texts and links), V17 (query step ranges), V34 (the definition resolves;
+/// description and contact set) and V36 (a <c>public</c> assistant keeps <c>answer.generalKnowledge</c> <c>off</c>). Returned as problems: refusals on publish, warnings on draft save.
 /// </summary>
 public static class AssistantRules
 {
@@ -560,6 +560,7 @@ public static class AssistantRules
 
         problems.AddRange(await AudienceRulesAsync(admin, assistant, audience, ct));
         problems.AddRange(QuerySteps(version.QuerySteps));
+        problems.AddRange(GeneralKnowledgeForLevel(assistant, version.QuerySteps));
         problems.AddRange(await NotFoundAsync(admin, version.NotFound, ct));
         return problems;
     }
@@ -605,6 +606,12 @@ public static class AssistantRules
             problems.Add("answer.language");
         }
 
+        if (steps["answer"]?["generalKnowledge"] is { } generalKnowledge &&
+            !(generalKnowledge is JsonValue g && g.GetValueKind() == JsonValueKind.String && Ume.Rag.Answering.Chat.GeneralKnowledgeLevels.All.Contains(g.GetValue<string>())))
+        {
+            problems.Add("answer.generalKnowledge");
+        }
+
         return problems.Select(p => new RuleProblem(AdminErrorCodes.QueryStepsInvalid, new Dictionary<string, string> { ["field"] = p }, []));
 
         void Check(JsonNode? node, double min, double max, string name)
@@ -618,6 +625,20 @@ public static class AssistantRules
             {
                 problems.Add(name);
             }
+        }
+    }
+
+    /// <summary>
+    /// V36 (chat design §7.3, §10.4): a <c>public</c> assistant answers only from its sources; <c>supplement</c>,
+    /// <c>fallback</c> and <c>open</c> need level <c>internal</c> or higher.
+    /// </summary>
+    private static IEnumerable<RuleProblem> GeneralKnowledgeForLevel(Assistant assistant, string json)
+    {
+        var value = (JsonNode.Parse(json) as JsonObject)?["answer"]?["generalKnowledge"] is JsonValue g && g.GetValueKind() == JsonValueKind.String ? g.GetValue<string>() : null;
+        if (assistant.Classification == Classification.Public && value is not null && value != Ume.Rag.Answering.Chat.GeneralKnowledgeLevels.Off)
+        {
+            yield return new RuleProblem(AdminErrorCodes.GeneralKnowledgeNotAllowedForLevel,
+                new Dictionary<string, string> { ["level"] = assistant.Classification, ["generalKnowledge"] = value }, []);
         }
     }
 

@@ -37,6 +37,9 @@ public sealed class KnowledgeOptions
 /// <summary>Registration of the knowledge role's core (<see cref="KnowledgeService"/> as <see cref="IRetriever"/>).</summary>
 public static class KnowledgeExtensions
 {
+    /// <summary>The service key of the retrieval data source (<see cref="RetrievalDataSource"/>).</summary>
+    public const string RetrievalPoolKey = "retrieval";
+
     /// <summary>
     /// The snapshot (a config change handler), the policy, the retrieval data source (<see cref="RetrievalDataSource"/>:
     /// pgvector types and auto-prepare, §6.6), engine, hydrator, the query embedder on gateway client
@@ -77,27 +80,31 @@ public static class KnowledgeExtensions
         services.AddSingleton<IPolicySnapshotSource>(sp => sp.GetRequiredService<PolicySnapshotStore>());
         services.AddSingleton<IAccessPolicy>(new AccessPolicy(new HashSet<string>(knowledge.OpenToClientKinds, StringComparer.Ordinal)));
 
-        var dataSource = RetrievalDataSource.Create(connectionString);
-        var index = new PostgresSearchIndex(dataSource);
+        // The retrieval pool is made by the container, so it is disposed with the host (a test host built per test no
+        // longer leaves its connections open until the role's connection limit is reached).
+        services.AddKeyedSingleton(RetrievalPoolKey, (_, _) => RetrievalDataSource.Create(connectionString));
+        static Npgsql.NpgsqlDataSource Pool(IServiceProvider sp) => sp.GetRequiredKeyedService<Npgsql.NpgsqlDataSource>(RetrievalPoolKey);
+        services.AddSingleton(sp => new PostgresSearchIndex(Pool(sp)));
         services.AddSingleton<RetrievalMetrics>();
-        services.AddSingleton(sp => new ScopeSizeCache(index, TimeProvider.System, metrics: sp.GetRequiredService<RetrievalMetrics>()));
-        services.AddSingleton(sp => new RetrievalEngine(index, sp.GetRequiredService<ScopeSizeCache>(), metrics: sp.GetRequiredService<RetrievalMetrics>()));
+        services.AddSingleton(sp => new ScopeSizeCache(sp.GetRequiredService<PostgresSearchIndex>(), TimeProvider.System, metrics: sp.GetRequiredService<RetrievalMetrics>()));
+        services.AddSingleton(sp => new RetrievalEngine(sp.GetRequiredService<PostgresSearchIndex>(), sp.GetRequiredService<ScopeSizeCache>(),
+            metrics: sp.GetRequiredService<RetrievalMetrics>()));
         // The counts and stop-list statistics read at start; readiness waits for that one attempt (#333).
         services.AddSingleton(sp => new RetrievalWarmup(sp.GetRequiredService<ScopeSizeCache>(), sp.GetRequiredService<ILogger<RetrievalWarmup>>(), TimeProvider.System));
         services.AddHostedService(sp => sp.GetRequiredService<RetrievalWarmup>());
         services.AddHealthChecks().Add(new Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckRegistration(
             "retrieval-warmup", sp => sp.GetRequiredService<RetrievalWarmup>(), failureStatus: null, tags: null));
-        services.AddSingleton(new PostgresHydrator(dataSource));
+        services.AddSingleton(sp => new PostgresHydrator(Pool(sp)));
         services.AddSingleton(sp => new GatewayQueryEmbedder(sp.GetRequiredService<IHttpClientFactory>(), embedding, pepper, TimeProvider.System,
             sp.GetRequiredService<ILogger<GatewayQueryEmbedder>>()));
-        services.AddSingleton(sp => new RetrievalCounter(dataSource, TimeProvider.System, sp.GetRequiredService<ILogger<RetrievalCounter>>()));
+        services.AddSingleton(sp => new RetrievalCounter(Pool(sp), TimeProvider.System, sp.GetRequiredService<ILogger<RetrievalCounter>>()));
         services.AddHostedService(sp => sp.GetRequiredService<RetrievalCounter>());
         services.AddSingleton(grants);
         services.AddSingleton<IDownloadLinks>(new GrantDownloadLinks(grants));
         services.AddSingleton<IDocumentContentReader, EnvelopeContentReader>(); // needs IBlobEnvelope (AddRagBlobStore + AddRagBlobEnvelope)
         services.AddSingleton(sp => new KnowledgeService(sp.GetRequiredService<IPolicySnapshotSource>(), sp.GetRequiredService<IAccessPolicy>(),
             sp.GetRequiredService<RetrievalEngine>(), sp.GetRequiredService<PostgresHydrator>(), sp.GetRequiredService<GatewayQueryEmbedder>(),
-            sp.GetRequiredService<RetrievalCounter>(), dataSource, sp.GetRequiredService<IDownloadLinks>(), sp.GetRequiredService<ILogger<KnowledgeService>>(),
+            sp.GetRequiredService<RetrievalCounter>(), Pool(sp), sp.GetRequiredService<IDownloadLinks>(), sp.GetRequiredService<ILogger<KnowledgeService>>(),
             neighbourRadius));
         services.AddSingleton<IRetriever>(sp => sp.GetRequiredService<KnowledgeService>());
         return builder;
