@@ -9,7 +9,7 @@ name: Verify
 # jobs (P0 checklist #13) are in parser.yml, which runs them only when the parser changed. The dependency audits of the
 # backend and admin-ui jobs (scripts/audit/) also run daily against main in audit.yml.
 # Lean pull requests (user, 2026-11-05): images and evaluation-smoke run only when their paths changed; a dispatch and
-# release.yml run every job. The browser tests (e2e.yml) run on dispatch and before a release only.
+# release.yml run every job. The browser tests (e2e.yml) run only before a release (called by release.yml).
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
