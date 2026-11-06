@@ -37,6 +37,9 @@ public sealed record QuestionOutcome(EvaluationQuestionRow Question, SearchResul
     };
 }
 
+/// <summary>A model's prices from the mirror (<c>config."GatewayModels"</c>); either may be unknown.</summary>
+public sealed record ModelPrice(decimal? InputPerMillionUsd, decimal? OutputPerMillionUsd);
+
 /// <summary>recall@k and MRR@k over the answerable questions of a run (processing design §13.6), rounded as the columns hold them.</summary>
 public sealed record EvaluationTotals(int Questions, int Found, decimal? RecallAtK, decimal? Mrr);
 
@@ -199,6 +202,63 @@ public static class EvaluationScoring
             Value = proposed,
             Misclassified = Misclassified(answerable, unanswerable, Oriented, higherCovers ? -proposed : proposed),
         };
+    }
+
+    /// <summary>
+    /// The rerank model a run's stats name: the first that answered, else the platform's <c>rerankModel</c> (which then
+    /// never answered); null for a run without rerank.
+    /// </summary>
+    public static string? RerankModel(IReadOnlyList<QuestionOutcome> outcomes, bool reranked, string? platformModel)
+    {
+        ArgumentNullException.ThrowIfNull(outcomes);
+        return reranked ? outcomes.Select(o => o.Result.RerankUsage?.Model).FirstOrDefault(m => m is not null) ?? platformModel : null;
+    }
+
+    /// <summary>
+    /// How the run's searches went (#399): total and rerank latency (median and 95th percentile, nearest rank, over every
+    /// question), the <c>rerank_unavailable</c> fallbacks, and with <paramref name="reranked"/> the rerank tokens and their cost
+    /// per question at <paramref name="price"/> (absent unless both prices are known). Degraded questions count in the latency
+    /// and in the per-question cost's denominator: they are what a user would get.
+    /// </summary>
+    public static EvaluationSearchStats Search(IReadOnlyList<QuestionOutcome> outcomes, bool reranked, string? rerankModel, ModelPrice? price)
+    {
+        ArgumentNullException.ThrowIfNull(outcomes);
+        var timings = outcomes.Select(o => o.Result.Timings).ToList();
+        var usages = outcomes.Select(o => o.Result.RerankUsage).OfType<RerankUsage>().ToList();
+        var prompt = usages.Sum(u => (long)u.PromptTokens);
+        var completion = usages.Sum(u => (long)u.CompletionTokens);
+        double? cost = reranked && outcomes.Count > 0 && price is { InputPerMillionUsd: { } input, OutputPerMillionUsd: { } output }
+            ? (double)Math.Round((prompt * input + completion * output) / 1_000_000m / outcomes.Count, 6)
+            : null;
+        return new EvaluationSearchStats
+        {
+            Searches = outcomes.Count,
+            TotalP50Ms = Percentile(timings.Select(t => t.TotalMs), 0.50),
+            TotalP95Ms = Percentile(timings.Select(t => t.TotalMs), 0.95),
+            RerankP50Ms = reranked ? Percentile(timings.Select(t => t.RerankMs), 0.50) : null,
+            RerankP95Ms = reranked ? Percentile(timings.Select(t => t.RerankMs), 0.95) : null,
+            RerankUnavailable = outcomes.Count(o => o.Result.Degraded == RetrievalDegradation.RerankUnavailable),
+            RerankModel = reranked ? rerankModel : null,
+            RerankPromptTokens = (int)Math.Min(prompt, int.MaxValue),
+            RerankCompletionTokens = (int)Math.Min(completion, int.MaxValue),
+            RerankCostPerQueryUsd = cost,
+        };
+    }
+
+    /// <summary>The nearest-rank percentile in milliseconds, rounded to 0.1 ms; 0 without values.</summary>
+    public static double Percentile(IEnumerable<double> values, double fraction)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(fraction);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(fraction, 1);
+        var sorted = values.Order().ToList();
+        if (sorted.Count == 0)
+        {
+            return 0;
+        }
+
+        var index = Math.Clamp((int)Math.Ceiling(fraction * sorted.Count) - 1, 0, sorted.Count - 1);
+        return Math.Round(sorted[index], 1, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>recall@k fell <see cref="AlertDrop"/> or more below the median of the earlier nightly runs (processing design §14.8).</summary>

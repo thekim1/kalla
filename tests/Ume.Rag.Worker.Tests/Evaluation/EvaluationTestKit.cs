@@ -84,12 +84,13 @@ internal static class EvalKit
         return new EvalFixture(seed, setId, permit, waste, library, new EvalQuestions(compound, keyword, unreachable, [off1, off2], generated));
     }
 
-    /// <summary>A worker running only the <c>eval</c> class, embedding through the FakeGateway in process.</summary>
+    /// <summary>A worker running only the <c>eval</c> class, embedding and reranking through the FakeGateway in process.</summary>
     public static Task<WorkerHost> StartWorkerAsync(RagDatabaseFixture database, FakeGatewayFactory gateway, DirectoryInfo blobs,
         Action<IServiceCollection>? services = null) =>
         WorkerHost.StartAsync(database, s =>
         {
             s.AddHttpClient(EmbeddingClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
+            s.AddHttpClient(Ume.Rag.Retrieval.ChatModelReranker.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
             services?.Invoke(s);
         }, new Dictionary<string, string?>
         {

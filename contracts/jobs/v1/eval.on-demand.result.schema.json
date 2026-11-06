@@ -13,7 +13,8 @@
             "enum": [
               "hybrid",
               "vector",
-              "hybrid-no-decompounder"
+              "hybrid-no-decompounder",
+              "hybrid-rerank"
             ]
           },
           "evaluationRunId": {
@@ -177,6 +178,112 @@
               "unanswerable"
             ],
             "description": "The coverage-threshold proposal from the human layer's answerable and unanswerable questions (processing design §13.6); absent without human questions."
+          },
+          "recallAtK": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "recall@k over the answerable questions (EvaluationRuns.RecallAtK); absent without answerable questions.",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "mrr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "MRR@k over the answerable questions (EvaluationRuns.Mrr); absent without answerable questions.",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "search": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "searches": {
+                "type": "integer",
+                "description": "Questions searched (answerable and unanswerable).",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "totalP50Ms": {
+                "type": "number",
+                "description": "Median of the questions' total search time (SearchTimings.TotalMs), milliseconds.",
+                "minimum": 0,
+                "maximum": 3600000
+              },
+              "totalP95Ms": {
+                "type": "number",
+                "description": "95th percentile (nearest rank) of the questions' total search time, milliseconds.",
+                "minimum": 0,
+                "maximum": 3600000
+              },
+              "rerankP50Ms": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Median of the questions' rerank time, text read included (SearchTimings.RerankMs); absent for a run without rerank.",
+                "minimum": 0,
+                "maximum": 3600000
+              },
+              "rerankP95Ms": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "95th percentile (nearest rank) of the questions' rerank time; absent for a run without rerank.",
+                "minimum": 0,
+                "maximum": 3600000
+              },
+              "rerankUnavailable": {
+                "type": "integer",
+                "description": "Questions whose rerank fell back to the fused order (degraded rerank_unavailable).",
+                "minimum": 0,
+                "maximum": 2147483647,
+                "default": 0
+              },
+              "rerankModel": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The rerank model that answered (RerankUsage.Model), or Settings.Retrieval.rerankModel when none answered; absent for a run without rerank.",
+                "maxLength": 200
+              },
+              "rerankPromptTokens": {
+                "type": "integer",
+                "description": "Prompt tokens of every rerank call of the run.",
+                "minimum": 0,
+                "maximum": 2147483647,
+                "default": 0
+              },
+              "rerankCompletionTokens": {
+                "type": "integer",
+                "description": "Completion tokens of every rerank call of the run.",
+                "minimum": 0,
+                "maximum": 2147483647,
+                "default": 0
+              },
+              "rerankCostPerQueryUsd": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Rerank cost per question in USD: the tokens at GatewayModels.InputPerMillionUsd and OutputPerMillionUsd, over Searches; absent without rerank or without both prices.",
+                "minimum": 0,
+                "maximum": 1000
+              }
+            },
+            "required": [
+              "searches",
+              "totalP50Ms",
+              "totalP95Ms"
+            ],
+            "description": "Search latency, rerank latency, rerank cost and rerank fallbacks of the run's questions (#399)."
           }
         },
         "required": [

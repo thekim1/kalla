@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Ume.Rag.Infrastructure;
+using Ume.Rag.Retrieval;
 using Ume.Rag.Worker.Jobs;
 
 namespace Ume.Rag.Worker.Evaluation;
@@ -10,12 +12,14 @@ public static class EvaluationExtensions
     /// nightly schedule. Called by <c>AddRagEngine</c>, whose embedding client, profile store and embedding cache
     /// it uses. The search statements bind pgvector values on the worker's one <c>ragdb</c> data source, which
     /// <c>AddRagDatabase</c> maps pgvector on (#110): the evaluator shares the worker's pool and stays within the role's
-    /// connection cap (data-model §1.1).
+    /// connection cap (data-model §1.1). The <c>hybrid-rerank</c> variant (#399) calls the gateway on the reranker's client
+    /// <see cref="ChatModelReranker.HttpClientName"/>.
     /// </summary>
     public static IHostApplicationBuilder AddRagEvaluation(this IHostApplicationBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
         var services = builder.Services;
+        builder.AddGatewayClient(ChatModelReranker.HttpClientName);
         services.TryAddSingleton<EvaluationStore>();
         services.TryAddSingleton<EvaluationQueryEmbedder>();
         services.TryAddSingleton<RetrievalEvaluator>();
