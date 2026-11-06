@@ -763,7 +763,7 @@ order: score desc, distance asc (nulls last), chunk Id asc
 | Timeout | `CommandTimeout` 2 s per statement (client cancel); role `statement_timeout` 5 s backstop (data-model §1.1) | a slow plan fails fast instead of queueing |
 | Transactions | none (autocommit, read-only role grants) | fewer round trips |
 
-The slot count, the slot wait (200 ms), the statement timeout (2 s) and the rerank timeout (500 ms) are configuration
+The slot count, the slot wait (200 ms), the statement timeout (2 s) and the rerank timeouts (§6.7) are configuration
 knobs (`RetrievalEngineOptions`, `PostgresSearchOptions`), with the values above as defaults.
 
 ### 6.7 Rerank (`IReranker`)
@@ -775,7 +775,7 @@ in `Ume.Rag.Retrieval`, routed by `RerankerKind`:
 | Reranker | Call | Model setting | Time limit | Cost |
 |---|---|---|---|---|
 | `ChatModelReranker` (interim) | one `/v1/chat/completions` with the question and the passages, JSON scores 0–10 (an answer scoring at least half the passages counts) | `Settings.Retrieval.rerankModel` (a chat row) | `Retrieval:RerankTimeout`, 3 s | prompt and completion tokens |
-| `GatewayReranker` | Cohere-compatible `POST /v1/rerank` (`results[{index, relevance_score}]`) | `Settings.Retrieval.gatewayRerankModel` (a `rerank` row) | `Retrieval:GatewayRerankTimeout`, 500 ms | input tokens |
+| `GatewayReranker` | Cohere-compatible `POST /v1/rerank` (`results[{index, relevance_score}]`) | `Settings.Retrieval.gatewayRerankModel` (a `rerank` row) | `Retrieval:GatewayRerankTimeout`, 1.5 s (covers the POC model's p95 of 1.4 s, #421) | input tokens |
 
 Both go through the `gateway-rerank` client with the call's residency ceiling (the assistant's turn ceiling) and
 `x-ume-step: rerank`; the 502/504 retry applies. Placement: after fusion and dedup, before the per-document cap,
@@ -1269,8 +1269,8 @@ None.
   `HttpServerTransportOptions.Stateless`) were checked in 2.3.0; recheck the version at P2 start.
 - Minimal APIs: a per-endpoint request body limit for knowledge routes when the role shares the host with chat (else
   rely on the 2,000-character query validation and Kestrel's host limit).
-- P2 rerank: latency of `bge-reranker-v2-m3` over 30 passages on the on-prem hardware (the §6.7 proposed 500 ms
-  timeout) and the gateway endpoint's contract.
+- P2 rerank: latency of `bge-reranker-v2-m3` over 30 passages on the on-prem hardware (the §6.7 limit is 1.5 s for
+  the EU POC model; whether on-prem fits a shorter one) and the gateway endpoint's contract.
 
 ## 21. Deferred or removed (simplification pass)
 

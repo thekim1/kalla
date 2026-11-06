@@ -144,7 +144,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   2026-11-06): with no rerank model set, no rerank call is made, retrieval is plain fused, and there is no
   `rerank_unavailable`, no degraded health and nothing that looks broken in the admin UI; the assistant's rerank
   switch is disabled with a hint while the platform has none. A 404/400 or timeout from the gateway falls back to
-  fused order, logged once, never a failed answer. Timeouts: 500 ms for `GatewayReranker`; `ChatModelReranker` gets
+  fused order, logged once, never a failed answer. Timeouts: 500 ms for `GatewayReranker` (1.5 s since #438); `ChatModelReranker` gets
   its own longer default (3 s, then set from B-12's live p95). The evaluation compares both rerankers.
 - **Paths:** `src/Ume.Rag.Retrieval/**`, assistant and platform settings in the admin API and UI.
 - **Done when:** retrieval tests against the FakeGateway rerank (B-14); the chat path, the test panel and the
