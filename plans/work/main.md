@@ -60,7 +60,7 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Read:** Decisions "Long questions condensed into the search query", "Condense on the EU route"; chat §3.2, §5,
   §5.1, §6.2, §6.3, §7.1, §16.1, §17.
 
-### [ ] M-7 The `ume` extension: outcome and related documents (SA-1, SA-2)
+### [x] M-7 The `ume` extension: outcome and related documents (SA-1, SA-2)
 - **Do:** parse and validate `ume` (§3.8; ignored for `open-webui`); build `related_documents` from the turn's
   retrieval (§9.7); write the `ume` member in the JSON answer and the `ume` chunk in the stream (after the final
   chunk, before usage and `[DONE]`), with `outcome` and `degraded`; metrics `rag.chat.ume` and
