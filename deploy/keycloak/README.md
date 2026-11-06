@@ -1,79 +1,103 @@
-# RAG's realm additions for the shared Keycloak
+# RAG's part of the shared Keycloak realm
 
-RAG's part of the pilot's Keycloak realm `ume`, which is shared with the LLM gateway (identity design §11.2, Decisions
-table "P1 pilot sign-in"). The gateway repo owns the Keycloak project and the base realm. These files add RAG's roles,
-clients and settings to that realm. Hand-off J8 takes them to the gateway session; J11 is the realm with them imported.
+The pilot's Keycloak realm `ume` is shared with the LLM gateway (identity design §11.2, Decisions "Gateway release 1
+and shared Keycloak as built"). The gateway repo owns the Keycloak project (`deploy/keycloak` there, Keycloak 26.8.1)
+and the base realm file `realm/10-gateway.json`. Ume.Rag delivers one additions file. The gateway's `realm-import`
+job (keycloak-config-cli) applies the base file and then every file in the operator's additions directory, in name
+order, on every `docker compose up`. Every resource type is imported with `no-delete`: a file adds and updates, and
+never removes what another file or an administrator made. The gateway's `docs/keycloak.md` (*Realm files*) describes
+the job.
 
-| File | What it holds | Applied as |
+| File | What it holds | Where it goes |
 |---|---|---|
-| `rag-additions.json` | The `rag-*` realm roles; the clients `ume-rag-admin`, `open-webui` and `ume-rag-api`, all with *full scope allowed* off; the role scope mappings of `ume-rag-admin` (so its `roles` claim carries the `rag-*` roles and no gateway role) | One partial import with `ifResourceExists=FAIL`, then the scope mappings |
-| `rag-realm-settings.json` | **Realm-wide, separable:** the user-profile attributes `departmentCodes` and `teamCodes` (shared with the gateway), password policy, brute-force protection, the OTP policy and the browser flow `rag-browser` (OTP required for `rag-platform-admin` and `rag-department-admin`) | Added to the realm; a value that changes is printed |
-| `rag-additions.local.json` | **Test or dev realms only:** the local AppHost redirect URIs, web origins and post-logout URIs of `ume-rag-admin` and `open-webui` (issue #95 part 3) | Merged into the clients with `--include-local-redirects` |
-| `apply-additions.py` | Applies either part or both through the admin REST API (Python standard library only) | `--part additions\|settings\|all`, `--include-local-redirects` |
+| `rag-additions.json` | `"realm": "ume"`; the 7 `rag-*` realm roles; the clients `ume-rag-admin` (confidential, code + PKCE S256), `open-webui` (confidential, code, legacy callback `/oauth/oidc/callback`) and `ume-rag-api` (audience only, no flow), all with *full scope allowed* off; the role scope mappings of `ume-rag-admin`, so its `roles` claim carries the `rag-*` roles and no gateway role | The gateway's additions directory (production and test) |
+| `rag-additions.local.json` | **Test or dev realms only:** the two sign-in clients again, with the pilot URIs plus the local AppHost redirect URIs, web origins and post-logout URIs (issue #95 part 3) | A test realm's additions directory, next to `rag-additions.json`. **Never in production** |
+| `standalone/10-rag-realm.json` | **A standalone Ume.Rag realm only:** the realm itself, with the realm-wide settings the gateway's base file holds in the shared realm (password policy, brute-force protection, no self-registration, the user profile with `departmentCodes` and `teamCodes`) | In place of the gateway's base file, see *Standalone* |
 
-The realm-wide part is a file of its own, so the gateway session can choose whether those settings live here or in
-the gateway's base realm (identity design §16, open questions 2–4). If they move to the base realm, apply only
-`--part additions`.
+The additions declare no realm settings and no `userProfile`. keycloak-config-cli replaces the whole user profile with
+a file's `userProfile`, so declaring one here would wipe the gateway's. `departmentCodes` and `teamCodes` come from the
+base file. **No OTP** is enforced by these files (#390 Q4): sign-in is password policy plus brute-force protection,
+and MFA returns with brokered Entra ID/AD.
 
-## Applying
+## Shared realm (the pilot)
 
-```bash
-export KEYCLOAK_ADMIN_PASSWORD=...                      # an admin of the master realm (or --admin-realm)
-export UME_RAG_ADMIN_PUBLIC_HOST=rag-admin.intern.umea.se
-export UME_RAG_OPENWEBUI_HOST=chat.intern.umea.se
-export UME_RAG_OIDC_CLIENT_SECRET=...                   # = deploy/.env's ume-rag-admin secret file
-export UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=...         # = --openwebui-oidc-client-secret-file
-python3 -I deploy/keycloak/apply-additions.py --url https://keycloak.example --realm ume --admin-user admin
-```
+For the gateway operator, on the gateway host:
 
-The files use `${NAME}` placeholders, as Keycloak's start-up import does. The script fills them from the environment
-and stops before any call if one has no value.
+1. Copy `rag-additions.json` from a tagged Ume.Rag release into the additions directory
+   (`deploy/keycloak/additions/`, or the directory `UME_KEYCLOAK_ADDITIONS_DIR` names). Copy no other file from here.
+2. Put the values of its placeholders in the env file that `UME_KEYCLOAK_IMPORT_ENV` names. Keep it with the
+   gateway's secrets, readable only by the operator:
 
-- **Additions are all or nothing.** If a role or client of the same name exists, the partial import fails and
-  changes nothing. A second run therefore fails with "already exists". To change a client later, edit it in the admin
-  console, or delete it and run again.
-- **Settings:**
-  - A user-profile attribute that is already declared is kept as it is.
-  - If the flow `rag-browser` already exists, the script stops.
-  - Every realm value it changes is printed with its old value (for example `failureFactor: 30 -> 10`).
-  - A failure part-way can leave a half-built `rag-browser` flow. Delete the flow and run `--part settings` again.
+   ```bash
+   UME_RAG_ADMIN_PUBLIC_HOST=rag-admin.intern.umea.se      # the admin UI's host
+   UME_RAG_OPENWEBUI_HOST=chat.intern.umea.se              # Open WebUI's host
+   UME_RAG_OIDC_CLIENT_SECRET=<the admin API's Oidc:ClientSecret>
+   UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET=<Open WebUI's OIDC client secret>
+   ```
 
-**Redirect URIs.** `rag-additions.json` holds only the pilot hosts, from the environment. The local AppHost's URIs are
-in `rag-additions.local.json`:
+   The secrets must equal the ones Ume.Rag's deployment uses (`deploy/.env` and its secret files). Never commit them.
+3. Run `docker compose -f deploy/keycloak/compose.yaml --env-file deploy/keycloak/.env up -d --wait`. Only the import
+   job runs again. A placeholder without a value fails the import at this file; the files before it stay applied.
+
+Placeholders are keycloak-config-cli's `$(env:NAME)`, with `$(env:NAME:-default)` for a default. Keycloak's own
+`${NAME}` would be imported as literal text, so the files use none.
+
+**Changing the file later.** A new release of `rag-additions.json` goes in the same way: copy, check the env file,
+`up`. With `no-delete`, a client, role or scope mapping that a new version drops stays in the realm. Remove it in the
+admin console.
+
+**Redirect URIs.** `rag-additions.json` holds only the pilot hosts. A redirect to whatever runs on a user's localhost
+must not be accepted in production, so `rag-additions.local.json` never goes into the production additions
+directory. In a **test** realm, put it next to `rag-additions.json`. It sorts after it, and keycloak-config-cli
+replaces the two clients' URI lists with its own, which keep the pilot URIs and add these:
 - `ume-rag-admin`: `https://localhost:5174` (admin UI) and `https://localhost:7402` (admin API).
 - `open-webui`: `http://localhost:8080`.
 
-`--include-local-redirects` adds them, so a developer can point an AppHost at a **test or dev** realm. Never use it on
-the production realm: there, a redirect to whatever runs on a user's localhost must not be accepted.
-
 **PKCE on `open-webui`** is not required yet. Requiring it in Keycloak (`pkce.code.challenge.method` `S256`) only works
-once Open WebUI sends a challenge (`OAUTH_CODE_CHALLENGE_METHOD=S256`), so the two are set together and checked in
-item 18's run. `ume-rag-admin` already requires S256.
+once Open WebUI sends a challenge (`OAUTH_CODE_CHALLENGE_METHOD=S256`), so the two are set together. `ume-rag-admin`
+already requires S256.
 
-## OTP for admins
+## Standalone
 
-`rag-browser` is Keycloak's browser flow plus three conditional sub-flows after the password:
+Ume.Rag can later run with its own Keycloak (Decisions "Identity providers: AD and Entra ID through Keycloak, Ume.Rag
+standalone later"). Then `standalone/10-rag-realm.json` takes the place of the gateway's base file and the same
+`rag-additions.json` follows, applied by the same keycloak-config-cli image with the same settings as the gateway's
+`realm-import` job:
 
-1. `rag-browser OTP` asks for the OTP of every account that has set one up (as Keycloak's own *Conditional 2FA*).
-2. `rag-browser OTP platform admin` applies to a `rag-platform-admin` for whom (1) did not run. The OTP form is
-   required, so Keycloak shows the OTP set-up page.
-3. `rag-browser OTP department admin` does the same for `rag-department-admin`.
+```bash
+docker run --rm --network <Keycloak's network> \
+  -e KEYCLOAK_URL=http://keycloak:8080 -e KEYCLOAK_GRANTTYPE=client_credentials -e KEYCLOAK_CLIENTID=<bootstrap admin client> \
+  -e SPRING_CONFIG_IMPORT=configtree:/run/import-secrets/config/ \
+  -v <a directory with the file keycloak.client-secret>:/run/import-secrets/config:ro \
+  -e IMPORT_VARSUBSTITUTION_ENABLED=true \
+  -e IMPORT_FILES_LOCATIONS=file:/config/realm/*.json,file:/config/additions/*.json \
+  -e IMPORT_MANAGED_CLIENT=no-delete -e IMPORT_MANAGED_ROLE=no-delete -e IMPORT_MANAGED_SCOPEMAPPING=no-delete \
+  --env-file <the placeholder values> \
+  -v "$PWD/deploy/keycloak/standalone:/config/realm:ro" -v <a directory with rag-additions.json>:/config/additions:ro \
+  docker.io/adorsys/keycloak-config-cli:6.5.1-26.5.5@sha256:0955d98c8a341898b7aa177477edf8a1e90569ae50bbe7598141c1270b773274
+```
 
-The result:
-- An admin sets up OTP at the first sign-in.
-- After that, (1) asks for the OTP once, even for an account that holds both admin roles.
-- Other accounts sign in with the password alone, unless they set up OTP themselves.
-
-To require OTP for the gateway's admins too, add a sub-flow like (2) with their role.
+Set every other `IMPORT_MANAGED_*` to `no-delete` too, as the gateway's `compose.yaml` does (the full list is
+`RealmImport.ImportSettings` in the tests). Standalone has no Compose project of its own yet: it is a tested realm file,
+ready for one. OTP is not set here either.
 
 ## Tested
 
-`tests/Ume.Rag.AdminApi.Tests/RealmAdditionsTests.cs` runs Keycloak 26.6.4 with a minimal stand-in for the gateway's
-base realm (`tests/Ume.Rag.AdminApi.Tests/Keycloak/ume-realm.json`: a gateway client and roles, `departmentCodes`
-already declared). It applies both parts with this script, then checks:
+`tests/Ume.Rag.AdminApi.Tests/RealmAdditionsTests.cs` starts Keycloak 26.8.1 (the gateway's digest) and runs
+keycloak-config-cli against it as the gateway's `realm-import` job does: the same image and digest, client-credentials
+sign-in with the secret from a config tree, `$(env:...)` substitution and `no-delete`. The base realm is a minimal
+stand-in for `realm/10-gateway.json` (`tests/Ume.Rag.AdminApi.Tests/Keycloak/10-gateway.json`: the realm settings,
+the user profile, the client `ume-admin` and two gateway roles). The tests check:
 
-- A second import is refused.
-- Each client's token carries only its own system's roles.
-- The password policy refuses a short password.
-- An editor signs in through the admin BFF without OTP.
-- An admin sets up OTP at the first sign-in and enters it once at the next.
+- The additions import after the base realm and leave its settings, user profile and browser flow alone.
+- A second import deletes nothing: not a client or role made by hand, not the base file's or RAG's clients, not users
+  or their role grants.
+- A user with `gateway-admin` and two `rag-*` roles gets only the `rag-*` roles plus `departmentCodes` in the
+  `ume-rag-admin` token, only `gateway-admin` in the `ume-admin` token, and no roles in the `open-webui` token.
+- Admins and editors sign in through the admin BFF with the password alone, without OTP.
+- The additions hold only `realm`, `roles`, `clients` and `scopeMappings`, use only `$(env:...)` placeholders, and
+  `rag-additions.json` holds no localhost URI.
+
+`StandaloneRealmTests.cs` imports `standalone/10-rag-realm.json` and `rag-additions.json` into an empty Keycloak and
+checks the password policy, brute-force protection, the user profile, the `ume-rag-admin` token and a clean second
+import.

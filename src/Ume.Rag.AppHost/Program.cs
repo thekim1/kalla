@@ -15,10 +15,10 @@ const string PostgresImage = "pgvector/pgvector";
 const string PostgresTag = "0.8.7-pg17-trixie";
 const string PostgresDigest = "7a7e9f22015b67edb4bef5c59daeebcd7e74bfa570df6ce60ae01237c8648a84";
 
-// The Keycloak version Aspire.Hosting.Keycloak runs (tag 26.6), pinned by digest. Same pin as
-// Ume.Rag.AdminApi.Tests.KeycloakFixture.Image; update both together.
-const string KeycloakTag = "26.6.4";
-const string KeycloakDigest = "0aae0de7fca85525f727d3354df17896092de8bb26ae4c12d89c77e5df8cbce4";
+// The shared Keycloak's version (the gateway's deploy/keycloak/Dockerfile, identity design §11.2), pinned by digest.
+// Same pin as Ume.Rag.AdminApi.Tests.KeycloakFixture.Image; update both together.
+const string KeycloakTag = "26.8.1-1";
+const string KeycloakDigest = "a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b";
 const string FixtureSiteImage = "nginxinc/nginx-unprivileged";
 const string FixtureSiteTag = "1.31.6-alpine";
 const string FixtureSiteDigest = "884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434";
