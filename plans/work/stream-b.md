@@ -102,6 +102,14 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** – for the FakeGateway part; the gateway's rerank release for the live run.
 - **Read:** Decisions "Rerank pulled forward"; knowledge-api §6.7; gateway-changes §7.4.
 
+### [ ] B-13 Config lock wait histogram (#391, to-verify #23)
+- **Do:** emit `rag.admin.config_lock.wait` (histogram, seconds) around the `config."ConfigVersion"` lock wait in the
+  admin's config writes, on the admin's meter; the measurement at the real write rate is A-L6's.
+- **Paths:** `src/Ume.Rag.Infrastructure/Config/**`, `src/Ume.Rag.AdminApi/**`, their tests.
+- **Done when:** a test records one measurement per config write, and a longer one while another write holds the lock.
+- **Waits on:** –
+- **Read:** [`../to-verify.md`](../to-verify.md) #23; results-b #23 (B-3, #393).
+
 ### [ ] B-6 Go-live pin review, B's part (last code item)
 - **Do:** review every NuGet and npm pin younger than 7 days; the realm callback for the Open WebUI pin bump
   (`/oauth/oidc/login/callback`) matching A-4; condense stays at `Eu` until an on-prem route exists (M2).

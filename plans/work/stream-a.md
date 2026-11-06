@@ -77,7 +77,9 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** repo-and-deployment §7.4.
 
 ### [ ] A-L6 R1 performance test on the test host
-- **Do:** `perf.yml` (or the same harness by script); set the pilot CPU caps from the result.
+- **Do:** `perf.yml` (or the same harness by script); set the pilot CPU caps from the result. Also record the p95 of
+  `rag.admin.config_lock.wait` (to-verify #23, after B-13) and whether the chat conversation writer keeps up; only if it
+  falls behind does stream B batch its statements into one round trip (#392, to-verify #20).
 - **Done when:** chat p95 TTFT in phase 2 ≤ 1.10 × phase 1, no errors; caps in `compose.host-24g.yaml` (#100, #101,
   #106).
 - **Waits on:** A-L5; the self-hosted runner or the accepted stopgap.
