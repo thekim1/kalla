@@ -29,8 +29,12 @@ public sealed record RerankPassage(Guid ChunkId, string Text);
 /// </summary>
 public sealed record RerankRequest(string Query, IReadOnlyList<RerankPassage> Passages, string? Model, Residency Ceiling, Guid? RunId);
 
-/// <summary>The scores in the passages' order, and the call's token usage when the reranker reports it (evaluation cost).</summary>
-public sealed record RerankScores(IReadOnlyList<double> Scores, RerankUsage? Usage = null);
+/// <summary>
+/// The scores in the passages' order, and the call's token usage when the reranker reports it (evaluation cost). A null
+/// score is a passage the reranker left unscored: it keeps its fused order below every scored passage (#403); at least
+/// one passage must be scored.
+/// </summary>
+public sealed record RerankScores(IReadOnlyList<double?> Scores, RerankUsage? Usage = null);
 
 /// <summary>Token usage of one rerank call, for cost per query (the price comes from the model mirror).</summary>
 public sealed record RerankUsage(string Model, int PromptTokens, int CompletionTokens);
