@@ -1,6 +1,7 @@
 name: Release
 # Push a tag vX.Y.Z (or vX.Y.Z-pre) to release (plans/platform/repo-and-deployment.md §7.2, §8.1; as the gateway's):
-#   1. verify.yml and parser.yml run in full, and e2e.yml (called);
+#   1. verify.yml and parser.yml run in full; e2e.yml (called) only when asked: the repository variable RELEASE_E2E is
+#      'true' for a tag push, or the dry run's input e2e is ticked (Decisions "E2E optional on release");
 #   2. every image is pushed to ghcr.io/<owner>/ume-rag/<service>:X.Y.Z (and :latest unless X.Y.Z is a pre-release):
 #      api, admin (with the admin UI), worker and migrations by `dotnet publish -t:PublishContainer`, postgres, clamav
 #      and parser from their Dockerfiles; an SPDX SBOM per image (Microsoft.Sbom.DotNetTool for the .NET services, Syft
@@ -19,6 +20,10 @@ on:
         description: Version for the dry run (X.Y.Z or X.Y.Z-pre); nothing is pushed or released
         type: string
         default: 0.0.0-dryrun
+      e2e:
+        description: Run the browser tests (e2e.yml) first; they take about 10 minutes and load the runner
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -46,12 +51,19 @@ jobs:
     uses: ./.github/workflows/parser.yml
 
   e2e:
-    # The browser tests run before every release (repo-and-deployment §8.2); a clean skip until tests/e2e exists.
+    # Optional (Decisions "E2E optional on release (user, 2026-11-06)"): a tag push runs them when the repository
+    # variable RELEASE_E2E is 'true', a dry run when its e2e input is ticked. Skipped otherwise; a failed run still stops
+    # the release.
+    if: (github.event_name == 'push' && vars.RELEASE_E2E == 'true') || (github.event_name == 'workflow_dispatch' && inputs.e2e)
     uses: ./.github/workflows/e2e.yml
 
   build:
     # Images, SBOMs, bundle and smoke test in one job: the dry run's registry lives only as long as the job.
     needs: [verify, parser, e2e]
+    # A skipped e2e (not asked for) lets the build go on; a failed or cancelled one does not.
+    if: >-
+      !cancelled() && needs.verify.result == 'success' && needs.parser.result == 'success' &&
+      (needs.e2e.result == 'success' || needs.e2e.result == 'skipped')
     runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
@@ -229,7 +241,7 @@ jobs:
   publish:
     # Only for a pushed tag; a dry run ends after the smoke test.
     needs: build
-    if: github.event_name == 'push'
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.build.result == 'success' }}
     runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write

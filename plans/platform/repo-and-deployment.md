@@ -834,9 +834,10 @@ self-hosted runner for every pull request", "Merge on local evidence, then check
 Pull requests stay lean (user, 2026-11-05): `images` runs only when `images/postgres/`, `images/clamav/` or
 `deploy/postgres/` changed, `evaluation-smoke` only when the code on its path (worker, retrieval, answering, api,
 infrastructure, pipelines, domain), `tests/evaluation/`, the Postgres image or the package and build files changed, and
-the parser jobs only when the parser changed; `e2e` runs only before a release (`release.yml` calls it) or by hand (dispatch);
-never on a pull request or push, no schedule (Decisions "E2E only on release or by hand"). A dispatch and `release.yml`
-run every job. Locally, a change runs the test projects it touches; the full suite is CI's.
+the parser jobs only when the parser changed; `e2e` runs only by hand (dispatch) or from `release.yml` when asked
+(the repository variable `RELEASE_E2E` is `true` for a tag push, or the dry run's `e2e` input); never on a pull request or
+push, no schedule (Decisions "E2E only on release or by hand", "E2E optional on release"). A dispatch and `release.yml`
+run every other job. Locally, a change runs the test projects it touches; the full suite is CI's.
 
 | Job | Steps | Source of the pattern |
 |---|---|---|
