@@ -91,16 +91,21 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** admin §5.4 step 13.
 
-### [ ] B-12 `GatewayReranker` behind `IReranker`, per assistant
-- **Do:** `GatewayReranker` on the path the gateway session agrees (until then the FakeGateway's `/v1/rerank`);
-  rerank the top N fused candidates; an assistant setting (Advanced) turns it on; the evaluation harness can run a
-  set with and without rerank; `rerank_unavailable` degrades to the fused order.
-- **Paths:** `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.FakeGateway/**`, assistant settings in the admin API and UI,
-  `scripts/evaluation/**`.
-- **Done when:** retrieval tests for scoring, timeout and degrade; an evaluation run on `turkos`'s generated set
-  reports recall@10/MRR with and without rerank (FakeGateway now, the real endpoint when it exists).
-- **Waits on:** – for the FakeGateway part; the gateway's rerank release for the live run.
-- **Read:** Decisions "Rerank pulled forward"; knowledge-api §6.7; gateway-changes §7.4.
+### [ ] B-12 Rerank per assistant: `ChatModelReranker` now, `GatewayReranker` later
+- **Do:** `ChatModelReranker` behind `IReranker`: one chat call through the gateway (`/v1/chat/completions`, the
+  assistant's residency ceiling) with the question and the top 20 fused candidates, asking for JSON scores per
+  passage; invalid output or the timeout degrades to the fused order (`rerank_unavailable`). The model is a platform
+  setting (`Settings.Retrieval.RerankModel`, a chat model from the mirror); no `temperature` for Claude models.
+  An assistant setting (Advanced) turns rerank on, off by default. The evaluation harness runs a set with and
+  without rerank and reports latency and cost per query. FakeGateway answers the rerank prompt deterministically.
+  `GatewayReranker` follows on the gateway's rerank endpoint when it exists.
+- **Paths:** `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.FakeGateway/**`, assistant and platform settings in the admin
+  API and UI, `scripts/evaluation/**`.
+- **Done when:** retrieval tests for scoring, malformed output, timeout and degrade; a live evaluation run on
+  `turkos`'s generated set over the interim gateway reports recall@10/MRR, p50/p95 latency and cost with and without
+  rerank (link it on the PR).
+- **Waits on:** – (`GatewayReranker`: the gateway's rerank release).
+- **Read:** Decisions "Rerank pulled forward"; knowledge-api §6.7.
 
 ### [ ] B-13 Config lock wait histogram (#391, to-verify #23)
 - **Do:** emit `rag.admin.config_lock.wait` (histogram, seconds) around the `config."ConfigVersion"` lock wait in the
