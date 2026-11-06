@@ -318,6 +318,10 @@ public enum PromptKind
     General,
 }
 
+/// <summary>What every prompt of a turn is built from: the assistant, the turn's language, the question and history, the settings.</summary>
+public sealed record PromptContext(string AssistantName, string SystemPrompt, string Language, string Question, IReadOnlyList<ChatMessageIn> History,
+    AssistantChatSettings Settings);
+
 /// <summary>
 /// The prompt (chat design §6.3, §7): the locked Swedish frame, the assistant's prompt and the language line as the system
 /// message; the history window; the final user message with the <c>&lt;sources&gt;</c> block (one number per document in
@@ -331,18 +335,28 @@ public static partial class PromptBuilder
 
     public static int Tokens(string text) => ((text?.Length ?? 0) + CharsPerToken - 1) / CharsPerToken + 4;
 
-    public static BuiltPrompt Build(string assistantName, string systemPrompt, string language, bool alwaysSwedish, string question,
-        IReadOnlyList<ChatMessageIn> history, IReadOnlyList<RetrievedChunk>? results, AssistantChatSettings settings, bool degraded = false,
-        IReadOnlyList<SectionText>? sections = null, bool general = false)
+    /// <summary>
+    /// A prompt of <paramref name="kind"/>: <paramref name="results"/> (required for <see cref="PromptKind.Sources"/>, ignored
+    /// otherwise: §6.2, a general prompt never sends the weak hits), their expanded <paramref name="sections"/> and the degraded
+    /// line belong to the sources.
+    /// </summary>
+    public static BuiltPrompt Build(PromptKind kind, PromptContext context, IReadOnlyList<RetrievedChunk>? results = null, IReadOnlyList<SectionText>? sections = null,
+        bool degraded = false)
     {
-        var sectionText = sections?.ToDictionary(x => x.Id) ?? [];
+        ArgumentNullException.ThrowIfNull(context);
+        var (assistantName, systemPrompt, language, question, history, settings) = context;
         ArgumentNullException.ThrowIfNull(settings);
-        if (general)
+        if (kind == PromptKind.Sources)
         {
-            results = null; // §6.2: the weak hits are not sent
+            ArgumentNullException.ThrowIfNull(results);
+        }
+        else
+        {
+            results = null;
         }
 
-        var kind = general ? PromptKind.General : results is null ? PromptKind.Conversational : PromptKind.Sources;
+        var sectionText = sections?.ToDictionary(x => x.Id) ?? [];
+        var alwaysSwedish = settings.AlwaysSwedish;
         var system = Frame(assistantName, kind, settings.GeneralKnowledge, alwaysSwedish, degraded) +
             (string.IsNullOrWhiteSpace(systemPrompt) ? "" : "\n\n" + systemPrompt.Trim()) +
             "\n\nAnvändarens språk: " + (language == LanguageGuess.English && !alwaysSwedish ? "engelska." : "svenska.");

@@ -299,6 +299,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var messageId = Guid.CreateVersion7();
         var maxTokens = Math.Min(chat.MaxTokens ?? settings.MaxOutputTokens, settings.MaxOutputTokens);
         var platform = resolved.Platform;
+        var context = new PromptContext(assistant.Name, assistant.Published.SystemPrompt, language, chat.Question, chat.History, settings);
         CondenseOutcome? condense = null;
         ChatPlan Plan(string? fixedText, ChatOutcome outcome, BuiltPrompt? prompt, RetrievalResult? retrieval, bool degraded) =>
             new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded, platform, condense);
@@ -336,8 +337,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
                 }
 
                 // §10.4: fallback and open answer from general knowledge, without the weak hits, behind our caveat line.
-                var general = PromptBuilder.Build(assistant.Name, assistant.Published.SystemPrompt, language, settings.AlwaysSwedish, chat.Question, chat.History,
-                    null, settings, general: true);
+                var general = PromptBuilder.Build(PromptKind.General, context);
                 return Plan(null, ChatOutcome.AnsweredGeneral, general, retrieval, false);
             }
 
@@ -348,8 +348,9 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         }
 
         var degraded = retrieval is not null && retrieval.Coverage.Status == CoverageStatus.Unknown;
-        var prompt = PromptBuilder.Build(assistant.Name, assistant.Published.SystemPrompt, language, settings.AlwaysSwedish, chat.Question, chat.History,
-            conversational ? null : retrieval!.Results, settings, degraded, retrieval?.Sections);
+        var prompt = conversational
+            ? PromptBuilder.Build(PromptKind.Conversational, context)
+            : PromptBuilder.Build(PromptKind.Sources, context, retrieval!.Results, retrieval.Sections, degraded);
         return Plan(null, ChatOutcome.Answered, prompt, retrieval, degraded);
     }
 

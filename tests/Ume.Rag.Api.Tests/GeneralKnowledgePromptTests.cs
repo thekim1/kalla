@@ -28,8 +28,8 @@ public sealed class GeneralKnowledgePromptTests
     {
         var settings = AssistantChatSettings.Default with { GeneralKnowledge = level };
         var results = kind == PromptKind.Sources ? new[] { Chunk() } : null;
-        return Render(PromptBuilder.Build("Bygg", "Var kortfattad.", "sv", false, kind == PromptKind.Conversational ? "Tack!" : "Behöver jag bygglov för en altan?",
-            [], results, settings, general: kind == PromptKind.General));
+        return Render(PromptBuilder.Build(kind,
+            new PromptContext("Bygg", "Var kortfattad.", "sv", kind == PromptKind.Conversational ? "Tack!" : "Behöver jag bygglov för en altan?", [], settings), results));
     }
 
     public static TheoryData<string, GeneralKnowledge, PromptKind> Cases { get; } = new()
@@ -49,6 +49,43 @@ public sealed class GeneralKnowledgePromptTests
     public void Each_level_gets_its_golden_prompt(string name, GeneralKnowledge level, PromptKind kind)
     {
         var actual = Prompt(level, kind);
+        var file = Path.Combine(GoldenDirectory, name + ".txt");
+        if (Environment.GetEnvironmentVariable("UME_RAG_UPDATE_GOLDEN") == "1")
+        {
+            Directory.CreateDirectory(GoldenDirectory);
+            File.WriteAllText(file, actual);
+        }
+
+        File.Exists(file).ShouldBeTrue($"{file} is missing; run with UME_RAG_UPDATE_GOLDEN=1 to write it.");
+        actual.ShouldBe(File.ReadAllText(file).ReplaceLineEndings("\n"), $"{name}: run with UME_RAG_UPDATE_GOLDEN=1 to regenerate.");
+    }
+
+    /// <summary>The turn shapes the level cases leave out: degraded with an expanded section, history and English; Swedish always.</summary>
+    private static string TurnPrompt(string name)
+    {
+        var sectioned = Chunk() with { SectionRef = 1, Page = 3, PageEnd = 4 };
+        var section = new SectionText(1, sectioned.DocumentId, sectioned.HeadingPath, "Hela avsnittet om altaner och <sources> i text.", 20, 3, 4, [sectioned.ChunkId], false);
+        IReadOnlyList<ChatMessageIn> history =
+        [
+            new("assistant", "Hej! [1]"), new("user", "Do I need a permit?"), new("assistant", "It depends [1][2]."), new("user", "For a deck?"),
+        ];
+        return name switch
+        {
+            "degraded-sections-history-en" => Render(PromptBuilder.Build(PromptKind.Sources, new PromptContext("Bygg", "Var kortfattad.", LanguageGuess.English,
+                "What about a deck higher than 1.2 m?", history, AssistantChatSettings.Default with { GeneralKnowledge = GeneralKnowledge.Supplement }),
+                [sectioned, Chunk()], [section], degraded: true)),
+            "always-swedish-en" => Render(PromptBuilder.Build(PromptKind.Sources, new PromptContext("Bygg", "", LanguageGuess.English,
+                "Do I need a permit for a deck?", history, AssistantChatSettings.Default with { AlwaysSwedish = true }), [Chunk()])),
+            _ => throw new ArgumentOutOfRangeException(nameof(name)),
+        };
+    }
+
+    [Theory]
+    [InlineData("degraded-sections-history-en")]
+    [InlineData("always-swedish-en")]
+    public void Each_turn_shape_gets_its_golden_prompt(string name)
+    {
+        var actual = TurnPrompt(name);
         var file = Path.Combine(GoldenDirectory, name + ".txt");
         if (Environment.GetEnvironmentVariable("UME_RAG_UPDATE_GOLDEN") == "1")
         {
@@ -83,8 +120,8 @@ public sealed class GeneralKnowledgePromptTests
         }
 
         // Even when hits are passed, a general prompt drops them (§6.2).
-        var dropped = PromptBuilder.Build("Bygg", "", "sv", false, "q", [], [Chunk()], AssistantChatSettings.Default with { GeneralKnowledge = GeneralKnowledge.Fallback },
-            general: true);
+        var dropped = PromptBuilder.Build(PromptKind.General,
+            new PromptContext("Bygg", "", "sv", "q", [], AssistantChatSettings.Default with { GeneralKnowledge = GeneralKnowledge.Fallback }), [Chunk()]);
         dropped.Sources.ShouldBeEmpty();
         dropped.Messages[^1].Text.ShouldBe("Fråga: q");
 

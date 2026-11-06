@@ -78,8 +78,8 @@ public sealed class ChatCoreTests
             Chunk(2, taxa, "Taxan är 5 000 kr.", "Taxa", page: 12, url: "https://www.umea.se/taxa.pdf"),
             Chunk(3, altan, "Under 1,2 meter behövs inget lov.", "Altan"),
         };
-        var prompt = PromptBuilder.Build("Bygg", "Var kortfattad.", "sv", false, "Behöver jag bygglov?",
-            [new("user", "Hej"), new("assistant", "Hej! [2]")], results, AssistantChatSettings.Default);
+        var prompt = PromptBuilder.Build(PromptKind.Sources, new PromptContext("Bygg", "Var kortfattad.", "sv", "Behöver jag bygglov?",
+            [new("user", "Hej"), new("assistant", "Hej! [2]")], AssistantChatSettings.Default), results);
 
         prompt.Sources.Select(s => (s.Number, s.Citation.Title, s.Chunks.Count)).ShouldBe([(1, "Altan", 2), (2, "Taxa", 1)]);
         prompt.Messages[0].Role.ShouldBe("system");
@@ -99,8 +99,8 @@ public sealed class ChatCoreTests
     {
         var altan = Guid.NewGuid();
         var taxa = Guid.NewGuid();
-        var sources = PromptBuilder.Build("Bygg", "", "sv", false, "q", [],
-            [Chunk(1, altan, "a", "Altan"), Chunk(2, taxa, "t", "Taxa", page: 12, url: "https://www.umea.se/taxa.pdf")], AssistantChatSettings.Default).Sources;
+        var sources = PromptBuilder.Build(PromptKind.Sources, new PromptContext("Bygg", "", "sv", "q", [], AssistantChatSettings.Default),
+            [Chunk(1, altan, "a", "Altan"), Chunk(2, taxa, "t", "Taxa", page: 12, url: "https://www.umea.se/taxa.pdf")]).Sources;
 
         var cited = Citations.Apply("Taxan är 5 000 kr [2]. Altan kräver lov [Källa 1][2] och inte [7].", sources);
 
@@ -117,7 +117,7 @@ public sealed class ChatCoreTests
     public void A_question_that_cannot_fit_the_context_is_refused()
     {
         var tiny = AssistantChatSettings.Default with { ContextTokens = 1500, MaxOutputTokens = 1024 };
-        Should.Throw<ChatException>(() => PromptBuilder.Build("Bygg", new string('x', 3000), "sv", false, "q", [], [], tiny)).Code.ShouldBe("context_length_exceeded");
+        Should.Throw<ChatException>(() => PromptBuilder.Build(PromptKind.Sources, new PromptContext("Bygg", new string('x', 3000), "sv", "q", [], tiny), [])).Code.ShouldBe("context_length_exceeded");
     }
 
     [Fact]

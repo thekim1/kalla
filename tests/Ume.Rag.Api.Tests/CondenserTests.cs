@@ -63,8 +63,8 @@ public sealed class CondenserTests
         var citation = new Citation(document, "Altan", null, "https://www.umea.se/altan", null, "web", "page", "text/html", "sv", null);
         RetrievedChunk Chunk(int rank, string text, int? section) => new(rank, Guid.NewGuid(), document, [], text, "Bygglov › Altan", null, null, 1, new ChunkScores(null, null, null, null, null, null),
             section, Guid.Empty, "c", "public", citation);
-        var prompt = PromptBuilder.Build("Bygg", "", "sv", false, "q", [], [Chunk(1, "del ett", 7), Chunk(2, "del två", 7), Chunk(3, "annan del", null)],
-            AssistantChatSettings.Default, sections: [new SectionText(7, document, "Bygglov › Altan", "Hela avsnittet om altaner.", 10, null, null, [], false)]);
+        var prompt = PromptBuilder.Build(PromptKind.Sources, new PromptContext("Bygg", "", "sv", "q", [], AssistantChatSettings.Default),
+            [Chunk(1, "del ett", 7), Chunk(2, "del två", 7), Chunk(3, "annan del", null)], sections: [new SectionText(7, document, "Bygglov › Altan", "Hela avsnittet om altaner.", 10, null, null, [], false)]);
 
         var user = prompt.Messages[^1].Text;
         user.ShouldContain("Hela avsnittet om altaner.\n…\nannan del");
