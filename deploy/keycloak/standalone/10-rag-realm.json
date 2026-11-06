@@ -1,0 +1,68 @@
+{
+  "realm": "ume",
+  "enabled": true,
+  "displayName": "$(env:UME_RAG_REALM_DISPLAY_NAME:-Ume.Rag)",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "passwordPolicy": "length(12) and maxLength(128) and notUsername and notEmail and passwordHistory(5)",
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "quickLoginCheckMilliSeconds": 1000,
+  "minimumQuickLoginWaitSeconds": 60,
+  "attributes": { "userProfileEnabled": "true" },
+  "userProfile": {
+    "attributes": [
+      {
+        "name": "username",
+        "displayName": "${username}",
+        "validations": { "length": { "min": 3, "max": 255 }, "username-prohibited-characters": {}, "up-username-not-idn-homograph": {} },
+        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] },
+        "multivalued": false
+      },
+      {
+        "name": "email",
+        "displayName": "${email}",
+        "validations": { "email": {}, "length": { "max": 255 } },
+        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] },
+        "multivalued": false
+      },
+      {
+        "name": "firstName",
+        "displayName": "${firstName}",
+        "validations": { "length": { "max": 255 }, "person-name-prohibited-characters": {} },
+        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] },
+        "multivalued": false
+      },
+      {
+        "name": "lastName",
+        "displayName": "${lastName}",
+        "validations": { "length": { "max": 255 }, "person-name-prohibited-characters": {} },
+        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] },
+        "multivalued": false
+      },
+      {
+        "name": "departmentCodes",
+        "displayName": "Department codes",
+        "permissions": { "view": ["admin"], "edit": ["admin"] },
+        "multivalued": true
+      },
+      {
+        "name": "teamCodes",
+        "displayName": "Team codes",
+        "permissions": { "view": ["admin"], "edit": ["admin"] },
+        "multivalued": true
+      }
+    ],
+    "groups": [
+      { "name": "user-metadata", "displayHeader": "User metadata", "displayDescription": "Attributes, which refer to user metadata" }
+    ]
+  }
+}

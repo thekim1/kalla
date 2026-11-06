@@ -22,10 +22,10 @@ namespace Ume.Rag.AdminApi.Tests;
 public sealed class KeycloakFixture : IAsyncLifetime
 {
     /// <summary>
-    /// The version <c>Aspire.Hosting.Keycloak</c> runs (tag 26.6), pinned by digest. Same pin as the AppHost's
-    /// <c>KeycloakDigest</c>; update both together.
+    /// The shared Keycloak's version (the gateway's <c>deploy/keycloak/Dockerfile</c>, identity design §11.2), pinned by
+    /// digest. Same pin as the AppHost's <c>KeycloakTag</c> and <c>KeycloakDigest</c>; update all three together.
     /// </summary>
-    public const string Image = "quay.io/keycloak/keycloak:26.6.4@sha256:0aae0de7fca85525f727d3354df17896092de8bb26ae4c12d89c77e5df8cbce4";
+    public const string Image = "quay.io/keycloak/keycloak:26.8.1-1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b";
 
     private const int Port = 8080;
 

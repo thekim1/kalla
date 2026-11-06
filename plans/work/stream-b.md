@@ -127,7 +127,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "Gateway release 1 and shared Keycloak as built"; gateway-changes §3.3, §7.4.
 
-### [ ] B-15 `deploy/keycloak` for the shared realm (#390, #215)
+### [x] B-15 `deploy/keycloak` for the shared realm (#390, #215) (#409)
 - **Do:** `rag-additions.json` gets `"realm": "ume"` and `$(env:NAME)` placeholders (`$(env:NAME:-default)` for
   defaults); drop `rag-realm-settings.json` and the OTP flow for the shared realm (keep a standalone variant only if
   cheap); `apply-additions.py` only for a standalone realm; the Keycloak test pin moves to 26.8.1 by the digest in

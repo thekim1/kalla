@@ -1,29 +1,32 @@
 {
-  "description": "Local AppHost redirect URIs (issue #95 part 3). Only for a test or dev realm: apply-additions.py --include-local-redirects merges them into the clients of rag-additions.json. Never on the production realm.",
-  "clients": {
-    "ume-rag-admin": {
+  "realm": "ume",
+  "clients": [
+    {
+      "clientId": "ume-rag-admin",
       "redirectUris": [
+        "https://$(env:UME_RAG_ADMIN_PUBLIC_HOST)/signin-oidc",
         "https://localhost:5174/signin-oidc",
         "https://localhost:7402/signin-oidc"
       ],
       "webOrigins": [
+        "https://$(env:UME_RAG_ADMIN_PUBLIC_HOST)",
         "https://localhost:5174",
         "https://localhost:7402"
       ],
-      "postLogoutRedirectUris": [
-        "https://localhost:5174/",
-        "https://localhost:5174/signout-callback-oidc",
-        "https://localhost:7402/",
-        "https://localhost:7402/signout-callback-oidc"
-      ]
+      "attributes": {
+        "post.logout.redirect.uris": "https://$(env:UME_RAG_ADMIN_PUBLIC_HOST)/signout-callback-oidc##https://localhost:5174/##https://localhost:5174/signout-callback-oidc##https://localhost:7402/##https://localhost:7402/signout-callback-oidc"
+      }
     },
-    "open-webui": {
+    {
+      "clientId": "open-webui",
       "redirectUris": [
+        "https://$(env:UME_RAG_OPENWEBUI_HOST)/oauth/oidc/callback",
         "http://localhost:8080/oauth/oidc/callback"
       ],
       "webOrigins": [
+        "https://$(env:UME_RAG_OPENWEBUI_HOST)",
         "http://localhost:8080"
       ]
     }
-  }
+  ]
 }
