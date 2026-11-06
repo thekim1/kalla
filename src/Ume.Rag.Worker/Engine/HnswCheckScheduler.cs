@@ -15,8 +15,9 @@ namespace Ume.Rag.Worker.Engine;
 /// <summary>
 /// When the index-health check (knowledge design §6.4) is enqueued: a <c>check-hnsw-index</c> command per embedding
 /// profile, dedup <see cref="JobDedupKeys.HnswCheck"/>, attributed to the department and level of the profile's largest
-/// collection (or the run's collection). Only a profile with a collection of more than <c>exactScanMaxChunks</c> live
-/// chunks can have an HNSW-searched scope, so no other profile is checked. Chunk counts are the live chunk sets'
+/// collection (or the run's collection). Only a profile with more than <c>exactScanMaxChunks</c> live chunks in total
+/// can have an HNSW-searched scope (one large collection or several smaller ones searched together), so no other profile
+/// is checked; <see cref="HnswIndexHealth"/> decides which scopes are HNSW-searched. Chunk counts are the live chunk sets'
 /// <c>ChunkCount</c>.
 /// </summary>
 public static class HnswCheckTriggers
@@ -34,10 +35,12 @@ public static class HnswCheckTriggers
             SELECT cs."EmbeddingProfileId" AS profile, cs."CollectionId" AS collection, sum(cs."ChunkCount") AS chunks
             FROM content."ChunkSets" cs
             WHERE cs."State" = 'live'
-            GROUP BY 1, 2)
+            GROUP BY 1, 2),
+        total AS (
+            SELECT profile, sum(chunks) AS chunks FROM live GROUP BY 1)
         SELECT DISTINCT ON (l.profile) l.profile, c."DepartmentId", c."Classification"
-        FROM live l JOIN config."Collections" c ON c."Id" = l.collection
-        WHERE l.chunks > {ExactScanMaxChunks}
+        FROM live l JOIN total t ON t.profile = l.profile JOIN config."Collections" c ON c."Id" = l.collection
+        WHERE t.chunks > {ExactScanMaxChunks}
           AND NOT EXISTS (SELECT 1 FROM content."Jobs" j
                           WHERE j."Class" = '{JobClasses.Command}' AND j."DedupKey" = 'hnsw-check:' || l.profile::text AND j."EnqueuedAt" >= $2)
         ORDER BY l.profile, l.chunks DESC, l.collection
@@ -54,10 +57,8 @@ public static class HnswCheckTriggers
         FROM made m
         WHERE 100 * m.chunks > {RunPercent.ToString(System.Globalization.CultureInfo.InvariantCulture)} * (SELECT sum(t."ChunkCount") FROM content."ChunkSets" t
                                                WHERE t."EmbeddingProfileId" = m.profile AND t."State" = 'live')
-          AND EXISTS (SELECT 1 FROM content."ChunkSets" t
-                      WHERE t."EmbeddingProfileId" = m.profile AND t."State" = 'live'
-                      GROUP BY t."CollectionId"
-                      HAVING sum(t."ChunkCount") > {ExactScanMaxChunks})
+          AND (SELECT sum(t."ChunkCount") FROM content."ChunkSets" t
+               WHERE t."EmbeddingProfileId" = m.profile AND t."State" = 'live') > {ExactScanMaxChunks}
         ORDER BY m.profile
         """;
 
