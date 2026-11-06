@@ -103,6 +103,20 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
             (await sweep.RunAsync(Ct)).ShouldBe(1);
             (await CountAsync(blobs, prefix)).ShouldBe(0);
             LiveBlobs().ShouldBe(liveBlobs, "the sweep removes preview blobs only");
+
+            // Parity with production (engine design §11): under the live version the preview builds every stage key as the
+            // segment did, inputs and options included, so each cached stage is read from the live cache.
+            var live = await ResultAsync<StagePreviewResult>(await EnqueueAsync(seed, new StagePreviewPayload
+            {
+                PipelineVersionId = seed.VersionId,
+                CollectionId = seed.CollectionId,
+                SourceId = seed.SourceId,
+                DocumentIds = [documentId],
+            }));
+            var liveStages = live.Documents.ShouldHaveSingleItem().Stages;
+            liveStages.Select(s => s.Stage).ShouldBe(["fetch", "detect", "parse", "clean", "chunk", "personal-data"]);
+            liveStages.Where(s => s.Stage != "fetch").ShouldAllBe(s => s.State == PreviewStageState.Succeeded && s.CacheHit,
+                "the live version reads every stage from the live cache");
         }
         finally
         {
