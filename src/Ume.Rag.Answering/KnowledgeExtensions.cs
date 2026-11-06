@@ -42,7 +42,8 @@ public static class KnowledgeExtensions
     /// <summary>
     /// The snapshot (a config change handler), the policy, the retrieval data source (<see cref="RetrievalDataSource"/>:
     /// pgvector types and auto-prepare, §6.6), engine (<c>Retrieval:MaxConcurrentSearches</c>, <c>Retrieval:SlotWait</c>,
-    /// <c>Retrieval:RerankTimeout</c>) with the <see cref="ChatModelReranker"/> on gateway client <see cref="ChatModelReranker.HttpClientName"/>
+    /// <c>Retrieval:RerankTimeout</c>, <c>Retrieval:GatewayRerankTimeout</c>) with the assistant's reranker (<see cref="RerankRouter"/>:
+    /// <see cref="ChatModelReranker"/> or <see cref="GatewayReranker"/>) on gateway client <see cref="ChatModelReranker.HttpClientName"/>
     /// and the hydrator as its text reader (§6.7), hydrator, the query embedder on gateway client
     /// <see cref="GatewayQueryEmbedder.HttpClientName"/> with <c>Security:CacheKeyPepper</c> (≥ 32 bytes), the retrieval counter,
     /// the section window <c>Retrieval:ExpandNeighbourChunks</c> (8), the download grants (<c>Security:DownloadGrantKeys:&lt;kid&gt;</c>,
@@ -90,10 +91,11 @@ public static class KnowledgeExtensions
         services.AddSingleton(sp => new PostgresSearchIndex(Pool(sp)));
         services.AddSingleton<RetrievalMetrics>();
         services.AddSingleton(sp => new ScopeSizeCache(sp.GetRequiredService<PostgresSearchIndex>(), TimeProvider.System, metrics: sp.GetRequiredService<RetrievalMetrics>()));
-        services.AddSingleton(sp => new ChatModelReranker(sp.GetRequiredService<IHttpClientFactory>(), ChatModelReranker.HttpClientName,
-            sp.GetRequiredService<ILogger<ChatModelReranker>>()));
+        services.AddSingleton(sp => new RerankRouter(
+            new ChatModelReranker(sp.GetRequiredService<IHttpClientFactory>(), ChatModelReranker.HttpClientName, sp.GetRequiredService<ILogger<ChatModelReranker>>()),
+            new GatewayReranker(sp.GetRequiredService<IHttpClientFactory>(), ChatModelReranker.HttpClientName, sp.GetRequiredService<ILogger<GatewayReranker>>())));
         services.AddSingleton(sp => new RetrievalEngine(sp.GetRequiredService<PostgresSearchIndex>(), sp.GetRequiredService<ScopeSizeCache>(), engineOptions,
-            sp.GetRequiredService<ChatModelReranker>(), sp.GetRequiredService<PostgresHydrator>(), metrics: sp.GetRequiredService<RetrievalMetrics>()));
+            sp.GetRequiredService<RerankRouter>(), sp.GetRequiredService<PostgresHydrator>(), metrics: sp.GetRequiredService<RetrievalMetrics>()));
         // The counts and stop-list statistics read at start; readiness waits for that one attempt (#333).
         services.AddSingleton(sp => new RetrievalWarmup(sp.GetRequiredService<ScopeSizeCache>(), sp.GetRequiredService<ILogger<RetrievalWarmup>>(), TimeProvider.System));
         services.AddHostedService(sp => sp.GetRequiredService<RetrievalWarmup>());

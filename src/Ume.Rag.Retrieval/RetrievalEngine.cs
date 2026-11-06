@@ -73,8 +73,17 @@ public sealed class RetrievalEngineOptions
     /// <summary>How long a search waits for a slot before <c>search_unavailable</c> (§6.6).</summary>
     public TimeSpan SlotWait { get; set; } = TimeSpan.FromMilliseconds(200);
 
-    /// <summary>The reranker's time limit, text read included (§6.7: 500 ms; <c>Retrieval:RerankTimeout</c>).</summary>
-    public TimeSpan RerankTimeout { get; set; } = TimeSpan.FromMilliseconds(500);
+    /// <summary>
+    /// The <see cref="ChatModelReranker"/>'s time limit, text read included (<c>Retrieval:RerankTimeout</c>; B-16: 3 s until
+    /// B-12's live p95 sets it; a listwise chat call over 20 passages does not fit §6.7's 500 ms).
+    /// </summary>
+    public TimeSpan RerankTimeout { get; set; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>The <see cref="GatewayReranker"/>'s time limit, text read included (§6.7: 500 ms; <c>Retrieval:GatewayRerankTimeout</c>).</summary>
+    public TimeSpan GatewayRerankTimeout { get; set; } = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>The time limit of <paramref name="kind"/>.</summary>
+    public TimeSpan RerankTimeoutFor(RerankerKind kind) => kind == RerankerKind.Gateway ? GatewayRerankTimeout : RerankTimeout;
 }
 
 /// <summary>
@@ -302,9 +311,12 @@ public sealed class RetrievalEngine : IDisposable
     private async Task<(IReadOnlyList<FusedCandidate> Ordered, IReadOnlyDictionary<Guid, double>? Scores, RerankUsage? Usage, string? Degraded)> RerankAsync(
         string query, SearchScope scope, RerankCall call, IReadOnlyList<FusedCandidate> deduped, CancellationToken cancellationToken)
     {
+        // The callers that serve answers ask only when the platform has a model for the reranker (KnowledgeService, B-16); an
+        // explicit request without one (the evaluation's hybrid-rerank) reaches the reranker, which refuses: rerank_unavailable.
+        var model = scope.Platform.RerankModelFor(call.Reranker);
         var top = deduped.Take(scope.Platform.RerankCandidates).ToList();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(_options.RerankTimeout);
+        timeout.CancelAfter(_options.RerankTimeoutFor(call.Reranker));
         try
         {
             IReadOnlyDictionary<Guid, string> texts = _texts is null
@@ -318,7 +330,7 @@ public sealed class RetrievalEngine : IDisposable
                 return (deduped, null, null, null); // nothing left to score: the fused order stands
             }
 
-            var result = await _reranker.ScoreAsync(new RerankRequest(query, passages, scope.Platform.RerankModel, call.Ceiling, call.RunId), timeout.Token);
+            var result = await _reranker.ScoreAsync(new RerankRequest(query, passages, model, call.Ceiling, call.RunId, call.Reranker), timeout.Token);
             if (result is null)
             {
                 return (deduped, null, null, null);

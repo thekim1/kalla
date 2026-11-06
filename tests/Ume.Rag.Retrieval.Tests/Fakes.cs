@@ -104,22 +104,27 @@ internal sealed class FakeIndex : ISearchIndex, IScopeSizeSource
 }
 
 /// <summary>A reranker with fixed scores per chunk id, or one that fails.</summary>
-internal sealed class FakeReranker(IReadOnlyDictionary<Guid, double>? scores, bool fail = false) : IReranker
+internal sealed class FakeReranker(IReadOnlyDictionary<Guid, double>? scores, bool fail = false, TimeSpan? delay = null) : IReranker
 {
     public int Calls { get; private set; }
 
     public RerankRequest? Last { get; private set; }
 
-    public Task<RerankScores?> ScoreAsync(RerankRequest request, CancellationToken cancellationToken)
+    public async Task<RerankScores?> ScoreAsync(RerankRequest request, CancellationToken cancellationToken)
     {
         Calls++;
         Last = request;
+        if (delay is { } wait)
+        {
+            await Task.Delay(wait, cancellationToken);
+        }
+
         if (fail)
         {
             throw new HttpRequestException("rerank endpoint down");
         }
 
-        return Task.FromResult<RerankScores?>(new RerankScores([.. request.Passages.Select(p => scores!.GetValueOrDefault(p.ChunkId))]));
+        return new RerankScores([.. request.Passages.Select(p => (double?)scores!.GetValueOrDefault(p.ChunkId))]);
     }
 }
 

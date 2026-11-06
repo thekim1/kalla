@@ -110,7 +110,10 @@ public sealed partial class KnowledgeService(
         var policyMs = Ms(started);
 
         // §6.7: the caller asks for the rerank (chat: an assistant with retrieval.rerank, off by default) at its model ceiling.
-        var rerank = request.RerankCeiling is { } ceiling ? new RerankCall(ceiling, request.RunId) : null;
+        // Rerank is optional (B-16): while the platform has no model for the reranker there is no call and nothing degraded.
+        var rerank = request.RerankCeiling is { } ceiling && platform.RerankModelFor(request.Reranker) is not null
+            ? new RerankCall(ceiling, request.RunId, request.Reranker)
+            : null;
         SearchResult search;
         try
         {

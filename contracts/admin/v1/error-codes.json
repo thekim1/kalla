@@ -374,7 +374,7 @@
     {
       "code": "settings_model_residency",
       "status": 409,
-      "message": "The model {model} cannot be used for {setting}: it is not a chat model the gateway serves at {ceiling}."
+      "message": "The model {model} cannot be used for {setting}: it is not a {kind} model the gateway serves at {ceiling}."
     }
   ]
 }

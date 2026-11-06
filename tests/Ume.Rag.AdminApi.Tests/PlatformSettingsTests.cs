@@ -84,13 +84,14 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
     public async Task V32_refuses_a_model_setting_that_is_not_a_chat_model_within_the_platform_ceiling()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        string chat = "v32-chat-" + suffix, embedding = "v32-embed-" + suffix, external = "v32-external-" + suffix;
+        string chat = "v32-chat-" + suffix, embedding = "v32-embed-" + suffix, external = "v32-external-" + suffix, rerank = "v32-rerank-" + suffix;
         await using (var db = TestPostgres.Context(database.Connection(RagDatabase.Admin)))
         {
             db.GatewayModels.AddRange(
                 new GatewayModel { Name = chat, Residencies = ["Eu"], Source = GatewayModelSources.Catalog },
                 new GatewayModel { Name = embedding, ModelKind = GatewayModelModelKinds.Embedding, Residencies = ["OnPrem"], Source = GatewayModelSources.Catalog },
-                new GatewayModel { Name = external, Residencies = ["External"], Source = GatewayModelSources.Catalog });
+                new GatewayModel { Name = external, Residencies = ["External"], Source = GatewayModelSources.Catalog },
+                new GatewayModel { Name = rerank, ModelKind = GatewayModelModelKinds.Rerank, Residencies = ["Eu"], Source = GatewayModelSources.Catalog });
             await db.SaveChangesAsync(Ct);
         }
 
@@ -109,6 +110,8 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
             ("/api/settings/chat", new { value = new { condenseModel = embedding }, version }),
             ("/api/settings/retrieval", new { value = new { rerankModel = embedding }, version }), // B-12: the rerank model is V32's too
             ("/api/settings/retrieval", new { value = new { rerankModel = external }, version }),
+            ("/api/settings/retrieval", new { value = new { rerankModel = rerank }, version }), // the chat reranker needs a chat model
+            ("/api/settings/retrieval", new { value = new { gatewayRerankModel = chat }, version }), // B-16: /v1/rerank needs a rerank model
         })
         {
             using var refused = await admin.PutAsJsonAsync(path, body, Ct);
@@ -122,6 +125,8 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
         saved = await Json(await admin.PutAsJsonAsync("/api/settings/chat", new { value = new { condenseModel = chat }, version = saved.GetProperty("version").GetString() }, Ct));
         saved = await Json(await admin.PutAsJsonAsync("/api/settings/retrieval", new { value = new { rerankModel = chat }, version = saved.GetProperty("version").GetString() }, Ct));
         saved.GetProperty("value").GetProperty("rerankModel").GetString().ShouldBe(chat);
+        saved = await Json(await admin.PutAsJsonAsync("/api/settings/retrieval", new { value = new { gatewayRerankModel = rerank }, version = saved.GetProperty("version").GetString() }, Ct));
+        saved.GetProperty("value").GetProperty("gatewayRerankModel").GetString().ShouldBe(rerank);
         saved = await Json(await admin.PutAsJsonAsync("/api/settings/retrieval", new { value = retrievalSection.GetProperty("value"), version = saved.GetProperty("version").GetString() }, Ct));
         saved = await Json(await admin.PutAsJsonAsync("/api/settings/evaluation", new
         {

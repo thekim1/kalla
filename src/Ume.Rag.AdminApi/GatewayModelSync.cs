@@ -182,7 +182,7 @@ public sealed partial class GatewayModelSync(
         var latestPrice = prices.Where(p => p.EffectiveFrom <= now).GroupBy(p => p.ModelId)
             .ToDictionary(g => g.Key, g => g.MaxBy(p => p.EffectiveFrom)!);
         var served = models
-            .Where(m => m.IsEnabled && m.Kind is "Chat" or "Embedding" && enabledProviders.ContainsKey(m.ProviderId))
+            .Where(m => m.IsEnabled && m.Kind is "Chat" or "Embedding" or "Rerank" && enabledProviders.ContainsKey(m.ProviderId))
             .GroupBy(m => m.Name, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
         var stored = await db.GatewayModels.ToDictionaryAsync(m => m.Name, StringComparer.Ordinal, ct);
@@ -230,9 +230,13 @@ public sealed partial class GatewayModelSync(
         return new GatewayModelSyncResult(written, removed, 0);
     }
 
-    /// <summary>The mirror's <c>ModelKind</c> of a catalogue <c>Kind</c> (gateway <c>ModelKind</c>: <c>Chat</c> or <c>Embedding</c>; others are not mirrored).</summary>
-    internal static string ModelKindOf(string catalogKind) =>
-        catalogKind == "Embedding" ? GatewayModelModelKinds.Embedding : GatewayModelModelKinds.Chat;
+    /// <summary>The mirror's <c>ModelKind</c> of a catalogue <c>Kind</c> (gateway <c>ModelKind</c>: <c>Chat</c>, <c>Embedding</c> or <c>Rerank</c>; others are not mirrored).</summary>
+    internal static string ModelKindOf(string catalogKind) => catalogKind switch
+    {
+        "Embedding" => GatewayModelModelKinds.Embedding,
+        "Rerank" => GatewayModelModelKinds.Rerank,
+        _ => GatewayModelModelKinds.Chat,
+    };
 
     /// <summary>
     /// Records the canary embedding (processing design §11) of every active profile that has a canary text and no

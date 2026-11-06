@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Ume.Rag.Domain.Retrieval;
 
 namespace Ume.Rag.Retrieval;
 
@@ -77,9 +78,20 @@ public sealed record RetrievalPlatformSettings
 
     /// <summary>
     /// The chat model of the gateway's mirror that <see cref="ChatModelReranker"/> calls (<c>Settings.Retrieval.rerankModel</c>,
-    /// checked by V32); null until chosen, and an assistant that reranks then keeps the fused order (<c>rerank_unavailable</c>).
+    /// checked by V32); null until chosen. Rerank is optional: while it is null an assistant that reranks with the chat model
+    /// gets the plain fused order, with no call and nothing degraded.
     /// </summary>
     public string? RerankModel { get; init; }
+
+    /// <summary>
+    /// The rerank model (gateway kind <c>Rerank</c>) that <see cref="GatewayReranker"/> calls on <c>/v1/rerank</c>
+    /// (<c>Settings.Retrieval.gatewayRerankModel</c>, checked by V32; B-16); null until the gateway has one (most
+    /// deployments), and an assistant that reranks with the gateway then gets the plain fused order, as above.
+    /// </summary>
+    public string? GatewayRerankModel { get; init; }
+
+    /// <summary>The platform's model for <paramref name="kind"/>; null when unset (no rerank call is made).</summary>
+    public string? RerankModelFor(RerankerKind kind) => kind == RerankerKind.Gateway ? GatewayRerankModel : RerankModel;
 
     public static RetrievalPlatformSettings Default { get; } = new();
 
@@ -91,6 +103,11 @@ public sealed record RetrievalPlatformSettings
         if (RerankModel is { Length: > 200 })
         {
             throw new ArgumentOutOfRangeException(nameof(RerankModel), "rerankModel is at most 200 characters.");
+        }
+
+        if (GatewayRerankModel is { Length: > 200 })
+        {
+            throw new ArgumentOutOfRangeException(nameof(GatewayRerankModel), "gatewayRerankModel is at most 200 characters.");
         }
 
         return this;
@@ -120,6 +137,7 @@ public static class RetrievalSettingsResolver
                 ? Double(json, "coverageMinRerankScore")
                 : builtIn.CoverageMinRerankScore,
             RerankModel = String(json, "rerankModel") is { Length: > 0 } model ? model : null,
+            GatewayRerankModel = String(json, "gatewayRerankModel") is { Length: > 0 } gatewayModel ? gatewayModel : null,
         }.Validated();
     }
 

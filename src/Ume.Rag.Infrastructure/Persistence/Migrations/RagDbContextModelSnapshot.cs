@@ -2210,7 +2210,7 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_GatewayModels_Kind", "\"Kind\" IN ('model', 'route')");
 
-                            t.HasCheckConstraint("CK_GatewayModels_ModelKind", "\"ModelKind\" IN ('chat', 'embedding')");
+                            t.HasCheckConstraint("CK_GatewayModels_ModelKind", "\"ModelKind\" IN ('chat', 'embedding', 'rerank')");
 
                             t.HasCheckConstraint("CK_GatewayModels_Residencies", "cardinality(\"Residencies\") >= 1 AND \"Residencies\" <@ ARRAY['OnPrem', 'Eu', 'External']::varchar(10)[]");
 

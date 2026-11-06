@@ -29,6 +29,9 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
     private const string EuKey = "sk-ume-eu-panel-0000000000000000";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>The rerank calls the panel sent (B-16), on the rerankers' gateway client.</summary>
+    private int _rerankCalls;
+
     private WebApplicationFactory<Program> Admin(WebApplicationFactory<FakeGatewayProgram> gateway) => database.HeaderFactory().WithWebHostBuilder(web =>
     {
         web.UseSetting("Gateway:BaseUrl", "http://fake-gateway/");
@@ -39,8 +42,20 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
             {
                 services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
             }
+
+            services.AddHttpClient(Ume.Rag.Retrieval.ChatModelReranker.HttpClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => new Counting(gateway.Server.CreateHandler(), () => Interlocked.Increment(ref _rerankCalls)));
         });
     });
+
+    private sealed class Counting(HttpMessageHandler inner, Action counted) : DelegatingHandler(inner)
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            counted();
+            return base.SendAsync(request, cancellationToken);
+        }
+    }
 
     [Fact]
     public async Task The_draft_is_answered_over_an_unpublished_collection_and_nothing_is_stored()
@@ -64,6 +79,8 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
         var draft = new AssistantVersion
         {
             AssistantId = assistant.Id, Number = 1, GatewayModel = "ume/chat-eu", SystemPrompt = "Svara kort.", CollectionLinks = [CollectionLink.Whole(collection.Id)],
+            // B-16: set to rerank with the gateway on a platform without a rerank model (the usual setup): plain retrieval.
+            QuerySteps = """{"retrieval": {"rerank": "gateway"}}""",
             CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
         };
         var pipeline = new Pipeline { Name = "panel-" + code, TemplateId = "url-list", UpdatedAt = DateTimeOffset.UtcNow };
@@ -100,6 +117,10 @@ public sealed class AssistantTestPanelTests(AdminDatabaseFixture database)
             response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
             var result = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
             (result.GetProperty("target").GetString(), result.GetProperty("versionNumber").GetInt32()).ShouldBe(("Draft", 1));
+            // Rerank fully unconfigured (B-16): no rerank call and no rerank_unavailable (this fixture's 8-dimension profile
+            // degrades the embedding, which is not the rerank's).
+            result.GetProperty("retrieval").GetProperty("degraded").GetString().ShouldNotBe("rerank_unavailable");
+            _rerankCalls.ShouldBe(0);
             var searched = result.GetProperty("retrieval").GetProperty("collections").EnumerateArray().ShouldHaveSingleItem();
             (searched.GetProperty("id").GetGuid(), searched.GetProperty("published").GetBoolean()).ShouldBe((collection.Id, false));
             var candidate = result.GetProperty("retrieval").GetProperty("candidates").EnumerateArray().ShouldHaveSingleItem();

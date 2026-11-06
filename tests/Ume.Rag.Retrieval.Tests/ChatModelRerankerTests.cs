@@ -13,7 +13,7 @@ namespace Ume.Rag.Retrieval.Tests;
 /// <see cref="ChatModelReranker"/> (B-12; Decisions "Rerank pulled forward"; knowledge design §6.7): one chat call at the
 /// request's ceiling with the question and the fused candidates, JSON scores out, no <c>temperature</c> for Claude models;
 /// in the engine, scoring reorders before the cap, and malformed output, a timeout, a refused call or an unset model keep
-/// the fused order with <c>rerank_unavailable</c>.
+/// the fused order with <c>rerank_unavailable</c> (the answering callers do not ask without a model, B-16).
 /// </summary>
 public sealed partial class ChatModelRerankerTests : IDisposable
 {
@@ -195,6 +195,7 @@ public sealed partial class ChatModelRerankerTests : IDisposable
         var unused = new Gateway(_ => Ok("{}"));
         using (var engine = Engine(unused))
         {
+            // An explicit request without a model (the evaluation's hybrid-rerank); chat and the test panel never ask (B-16).
             var unset = await engine.SearchAsync(Request(model: null), Ct);
             unset.Hits.Select(h => h.Candidate.ChunkId).ShouldBe(FusedOrder);
             unset.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);

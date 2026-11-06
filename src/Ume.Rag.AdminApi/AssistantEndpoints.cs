@@ -487,7 +487,33 @@ public static class AssistantEndpoints
         return new AssistantDto(a.Id, a.Slug, a.Name, a.Description, a.ContactName, a.ContactEmail, a.DepartmentId, a.OwnerTeamId, a.Classification, a.HistoryMode,
             a.RetentionDays, a.State, published?.Number,
             draft is null ? null : new DraftInfo(draft.Number, draft.UpdatedAt, published is not null && draft.Number < published.Number, draft.Version.ToString(CultureInfo.InvariantCulture)),
-            audiences, a.UpdatedAt, a.UpdatedBy, a.Version.ToString(CultureInfo.InvariantCulture), published is null ? null : GeneralKnowledgeOf(published.QuerySteps));
+            audiences, a.UpdatedAt, a.UpdatedBy, a.Version.ToString(CultureInfo.InvariantCulture), published is null ? null : GeneralKnowledgeOf(published.QuerySteps),
+            await RerankersAsync(admin, ct));
+    }
+
+    /// <summary>
+    /// The <c>retrieval.rerank</c> values the platform has a model for (B-16): <c>chat</c> while <c>Settings.Retrieval.rerankModel</c>
+    /// is set, <c>gateway</c> while <c>gatewayRerankModel</c> is. Empty on most deployments (rerank is optional): the
+    /// assistant page then disables the rerank choice with a hint.
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> RerankersAsync(AdminContext admin, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(admin);
+        var retrieval = await admin.Db.Settings.AsNoTracking().Select(s => s.Retrieval).SingleOrDefaultAsync(ct);
+        var json = JsonNode.Parse(string.IsNullOrWhiteSpace(retrieval) ? "{}" : retrieval) as JsonObject;
+        static bool Set(JsonNode? node) => node is JsonValue v && v.GetValueKind() == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetValue<string>());
+        List<string> available = [];
+        if (Set(json?["rerankModel"]))
+        {
+            available.Add(Ume.Rag.Domain.Retrieval.RerankerKinds.ChatModel);
+        }
+
+        if (Set(json?["gatewayRerankModel"]))
+        {
+            available.Add(Ume.Rag.Domain.Retrieval.RerankerKinds.Gateway);
+        }
+
+        return available;
     }
 
     /// <summary>
@@ -642,8 +668,10 @@ public static class AssistantRules
             problems.Add("answer.language");
         }
 
-        // retrieval.rerank (Decisions "Rerank pulled forward"): true or false; absent is off.
-        if (steps["retrieval"]?["rerank"] is { } rerank && rerank.GetValueKind() is not (JsonValueKind.True or JsonValueKind.False))
+        // retrieval.rerank (Decisions "Rerank pulled forward", B-16): off, chat or gateway; absent is off. A reranker the
+        // platform has no model for is not a problem: rerank is optional and such an assistant gets the fused order.
+        if (steps["retrieval"]?["rerank"] is { } rerank &&
+            !(rerank is JsonValue r && r.GetValueKind() == JsonValueKind.String && Ume.Rag.Domain.Retrieval.RerankerKinds.All.Contains(r.GetValue<string>())))
         {
             problems.Add("retrieval.rerank");
         }
@@ -732,7 +760,7 @@ public sealed record DraftInfo(int Number, DateTimeOffset UpdatedAt, bool BaseCh
 public sealed record AssistantDto(
     Guid Id, string Slug, string Name, string? Description, string? ContactName, string? ContactEmail, Guid DepartmentId, Guid? OwnerTeamId, string Classification,
     string HistoryMode, int RetentionDays, string State, int? PublishedVersion, DraftInfo? Draft, IReadOnlyList<Guid> AudienceClientIds, DateTimeOffset UpdatedAt,
-    string? UpdatedBy, string Version, string? GeneralKnowledge);
+    string? UpdatedBy, string Version, string? GeneralKnowledge, IReadOnlyList<string> Rerankers);
 
 public sealed record DraftDto(int Number, string? GatewayModel, string SystemPrompt, JsonElement QuerySteps, JsonElement NotFound, IReadOnlyList<CollectionLink> CollectionLinks,
     IReadOnlyList<object> Warnings, DateTimeOffset UpdatedAt, string Version)

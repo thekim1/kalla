@@ -48,8 +48,12 @@ public static class SettingsEndpoints
             s.EvaluationMaxQuestions = r.EvaluationMaxQuestions;
         }, (r, db, ct) => PlatformModelRules.EnsureAsync(db, [("Settings.EvaluationModel", r.EvaluationModel), ("Settings.EvaluationJudgeModel", r.EvaluationJudgeModel)], ct));
         Section(settings, "retrieval", s => new JsonSectionSettings(Json(s.Retrieval), Version(s)), (RetrievalSectionRequest r, PlatformSettings s) => s.Retrieval = r.Value.ToJsonString(),
-            (r, db, ct) => PlatformModelRules.EnsureAsync(db,
-                [("Settings.Retrieval.RerankModel", r.Value["rerankModel"] is JsonValue m && m.TryGetValue<string>(out var model) ? model : null)], ct));
+            async (r, db, ct) =>
+            {
+                await PlatformModelRules.EnsureAsync(db, [("Settings.Retrieval.RerankModel", StringOf(r.Value["rerankModel"]))], ct);
+                await PlatformModelRules.EnsureAsync(db, [("Settings.Retrieval.GatewayRerankModel", StringOf(r.Value["gatewayRerankModel"]))], ct,
+                    GatewayModelModelKinds.Rerank);
+            });
         Section(settings, "chat", s => new JsonSectionSettings(Json(s.Chat), Version(s)), (JsonSectionRequest r, PlatformSettings s) => s.Chat = r.Value.ToJsonString(),
             (r, db, ct) => PlatformModelRules.EnsureAsync(db,
                 [("Settings.Chat.CondenseModel", r.Value["condenseModel"] is JsonValue m && m.TryGetValue<string>(out var model) ? model : null)], ct));
@@ -121,6 +125,8 @@ public static class SettingsEndpoints
             .RequireAuthorization(AdminPolicies.Admin).WithName($"Update{title}Settings").WithSummary($"Change platform settings: {name}");
     }
 
+    private static string? StringOf(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var text) ? text : null;
+
     internal static string Version(PlatformSettings s) => s.Version.ToString(CultureInfo.InvariantCulture);
 
     private static JsonObject Json(string text) => JsonNode.Parse(string.IsNullOrWhiteSpace(text) ? "{}" : text) as JsonObject ?? [];
@@ -128,15 +134,17 @@ public static class SettingsEndpoints
 
 /// <summary>
 /// V32 (admin design §4.6): a platform model setting names a <c>chat</c> row of <c>GatewayModels</c> servable at the platform
-/// ceiling (<see cref="Ceiling"/>): the evaluation models, the condense model and the rerank model (Decisions "Rerank pulled
-/// forward"). An empty setting is allowed (unset). The skill-gate model is P2 (tools section not mapped).
+/// ceiling (<see cref="Ceiling"/>): the evaluation models, the condense model and the chat rerank model (Decisions "Rerank pulled
+/// forward"); <c>gatewayRerankModel</c> names a <c>rerank</c> row (B-16). An empty setting is allowed (unset): rerank is
+/// optional. The skill-gate model is P2 (tools section not mapped).
 /// </summary>
 public static class PlatformModelRules
 {
     /// <summary>The platform ceiling of model settings: <c>Eu</c> until on-prem models exist (M2).</summary>
     public const Residency Ceiling = Residency.Eu;
 
-    public static async Task EnsureAsync(RagDbContext db, IReadOnlyList<(string Setting, string? Model)> settings, CancellationToken ct)
+    public static async Task EnsureAsync(RagDbContext db, IReadOnlyList<(string Setting, string? Model)> settings, CancellationToken ct,
+        string modelKind = GatewayModelModelKinds.Chat)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(settings);
@@ -148,11 +156,11 @@ public static class PlatformModelRules
             }
 
             var row = await db.GatewayModels.AsNoTracking().SingleOrDefaultAsync(m => m.Name == model, ct);
-            if (row is null || row.ModelKind != GatewayModelModelKinds.Chat ||
+            if (row is null || row.ModelKind != modelKind ||
                 !row.Residencies.Any(r => ResidencyCeiling.TryParse(r, out var residency) && residency <= Ceiling))
             {
                 throw AdminFaults.Of(AdminErrorCodes.SettingsModelResidency,
-                    new Dictionary<string, string> { ["model"] = model, ["setting"] = setting, ["ceiling"] = ResidencyCeiling.ToHeader(Ceiling) });
+                    new Dictionary<string, string> { ["model"] = model, ["setting"] = setting, ["kind"] = modelKind, ["ceiling"] = ResidencyCeiling.ToHeader(Ceiling) });
             }
         }
     }

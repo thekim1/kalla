@@ -39,16 +39,19 @@ public static class TestRetrievalEndpoints
 
 /// <summary>The search core for the admin's retrieval test, on the process's one data source (issue #22).</summary>
 public sealed class AdminRetrieval(NpgsqlDataSource dataSource, IHttpClientFactory clients, TimeProvider time, ILogger<GatewayQueryEmbedder> logger,
-    IConfiguration configuration, ILogger<ChatModelReranker> rerankLogger) : IDisposable
+    IConfiguration configuration, ILogger<ChatModelReranker> rerankLogger, ILogger<GatewayReranker> gatewayRerankLogger) : IDisposable
 {
     private readonly PostgresHydrator _hydrator = new(dataSource);
     private readonly RetrievalEngine _engine = CreateEngine(dataSource, new PostgresHydrator(dataSource),
-        new ChatModelReranker(clients, ChatModelReranker.HttpClientName, rerankLogger),
+        new RerankRouter(new ChatModelReranker(clients, ChatModelReranker.HttpClientName, rerankLogger),
+            new GatewayReranker(clients, ChatModelReranker.HttpClientName, gatewayRerankLogger)),
         configuration.GetSection("Retrieval").Get<RetrievalEngineOptions>() ?? new RetrievalEngineOptions());
 
     /// <summary>
-    /// The search core, shared with the test panel's knowledge service (<see cref="AdminTestPanel"/>): the panel reranks with
-    /// the <see cref="ChatModelReranker"/> when the tested assistant reranks (<c>Retrieval:RerankTimeout</c>, §6.7).
+    /// The search core, shared with the test panel's knowledge service (<see cref="AdminTestPanel"/>): the panel reranks as
+    /// chat does when the tested assistant reranks, with its <see cref="ChatModelReranker"/> or <see cref="GatewayReranker"/>
+    /// (<c>Retrieval:RerankTimeout</c>, <c>Retrieval:GatewayRerankTimeout</c>, §6.7) and not at all while the platform has
+    /// no model for it.
     /// </summary>
     public RetrievalEngine Engine => _engine;
 
