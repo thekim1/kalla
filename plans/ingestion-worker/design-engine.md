@@ -1030,8 +1030,8 @@ Protection of chat:
   same model, so this keeps ingestion from queuing ahead of them; `rag.embed.concurrency_limit` shows it working. A
   fleet-wide in-flight cap (`Embedding:GlobalMaxInFlight`) comes with several worker instances, and with it batches of
   ≤ 32 inputs when the cap is above 4 (performance pass §3.9).
-- Each embedding request carries ≤ 64 inputs and ≤ `Worker:Embed:MaxTokensPerRequest` tokens (default 6,000, at most
-  the profile's `MaxInputTokens`; `EmbedStage`); the embedding cache skips unchanged text (re-chunking embeds only new
+- Each embedding request carries ≤ 64 inputs, with no token cap per request (the gateway checks each input from v0.9.0;
+  `EmbedStage`); the embedding cache skips unchanged text (re-chunking embeds only new
   text, plan §5).
 - An unchanged re-crawl costs at most one GET per page (none for pages whose `lastmod` did not change, 6b) and a
   batched `unchanged` run item: no parse, no embed (plan §9; Eneo re-embeds everything, `../../platforms/eneo.md:234`).

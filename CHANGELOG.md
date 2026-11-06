@@ -43,6 +43,9 @@ P1a code on FakeGateway and fixtures (code first, live testing last); nothing de
 
 ### Changed
 
+- Embedding requests no longer have a token cap: `Worker:Embed:MaxTokensPerRequest` is removed and a request carries up to
+  64 inputs, since gateway v0.9.0 checks each input against the context window (A-5, #429).
+
 - HTML noise rules v2 (Sitevision `data-cid` and `sv_` ids): **HTML documents are re-processed once after the
   upgrade**, because the change-detection hash is version-tagged (#107).
 - CI runs `verify.yml` and `parser.yml` on a pull request only while it carries the label `ci`; the nightly and weekly
