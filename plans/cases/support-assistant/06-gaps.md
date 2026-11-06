@@ -13,16 +13,16 @@ production" (Decisions) none needs a compatibility step.
 
 | ID | Gap | Size | Owner | Blocks the case? |
 |---|---|---|---|---|
-| SA-1 | Related (retrieved, uncited) documents in the chat answer | M | b + main (Decisions row) | blocks requirement 4 only |
+| SA-1 | Related (retrieved, uncited) documents in the chat answer | M | b + main (Decisions row) | **before the pilot** (user, 2026-11-06) |
 | SA-2 | An outcome signal (answered, not found, general, unavailable, degraded) in the answer | S | b + main | no |
-| SA-3 | Suggested follow-up questions | M | b + main (Decisions row) | no (requirement 5 is "maybe") |
-| SA-4 | Tickets longer than 2,000 characters as the question | M | b + main | no (workaround), yes for long tickets in practice |
-| SA-5 | Per-user identity for a non-Open WebUI client (delegated tokens) | L | b + main | no, if a shared key is accepted (question 7) |
-| SA-6 | A rate limit that fits a shared application key | S | b | **yes** beyond a handful of users, unless the platform setting is raised |
+| SA-3 | Suggested follow-up questions | M | b + main (Decisions row) | **before the pilot** (user, 2026-11-06) |
+| SA-4 | Tickets longer than 2,000 characters as the question | M | b + main (Decisions row) | **before the pilot**, by condensing a long ticket into the search query (user, 2026-11-06) |
+| SA-5 | Per-user identity for a non-Open WebUI client (delegated tokens) | L | b + main | no: a shared key is accepted for the pilot (user, 2026-11-06) |
+| SA-6 | A rate limit that fits a shared application key | S | b | **before the pilot** (shared key accepted) |
 | SA-7 | Key IP allow-list (and per-key rate) not enforced in rag-api; filed as #424 | S | b | no (firewall), fix before go-live |
-| SA-8 | Crawling an intranet that needs a login | L | a + main | **yes**, if the intranet needs a login (question 2) |
+| SA-8 | Crawling an intranet that needs a login | L | a + main | no: the intranet is readable without a login (user, 2026-11-06) |
 | SA-9 | Scripted upload API (service credential on the upload routes) | M | b | no |
-| SA-10 | Git/Markdown or file-share connector | M–L | a + main | no (crawl route) |
+| SA-10 | Git/Markdown or file-share connector | M–L | a + main | no: **after the pilot**, when the Markdown moves to a Git repository (user, 2026-11-06) |
 | SA-11 | Replace an upload by file name | S | b | no |
 | SA-12 | A readable view of uploaded non-PDF documents | M | b + main | no |
 | SA-13 | `.markdown` extension refused on upload | S | b | no |

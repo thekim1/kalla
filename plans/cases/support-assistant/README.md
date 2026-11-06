@@ -59,31 +59,26 @@ platform setting.
 6. [`06-gaps.md`](06-gaps.md): what the platform lacks for this case, sized and assigned.
 7. [`07-rollout.md`](07-rollout.md): the order of work from setup to go-live, and what comes later.
 
-## Open questions for the user
+## Decisions (user, 2026-11-06)
 
-1. **Which department and which support?** The knowledge base and assistant need an owning department with admins
-   (Decisions "Organisation …"). Is it the pilot department (DoIT) or a second one? The roadmap puts a second
-   department after gateway release 2 ([`../../roadmap.md`](../../roadmap.md), "Next: P2"); this case uses a client
-   audience only, which needs neither member groups nor delegation. Does it run inside P1b or as the first P2 item?
-2. **Is the intranet reachable without signing in** from the RAG host? If not, the crawl needs SA-8 or the pages
-   must be exported (or come through SharePoint, P2).
-3. **Classification `internal`?** `sensitive` would need on-prem models, which do not exist yet (Decisions "M2 and
-   test hosting").
-4. **Personal data in tickets.** Pasted tickets reach an EU-hosted model through the gateway. Does the DPIA (G1)
-   cover it, and should the api's gateway key redact personal data ([`01-gateway-setup.md`](01-gateway-setup.md) §4)?
-5. **General-knowledge level: `fallback` (recommended) or `supplement`?** `fallback` is the level that meets
-   requirement 6 (a general answer, behind the platform's caveat, where the knowledge base has nothing);
-   `supplement` is the conservative choice if the gold set or support managers find general answers misleading.
-6. **Related documents and follow-up suggestions** (SA-1, SA-3) are new platform features. Build them (each needs a
-   Decisions row), or start the pilot without them?
-7. **Per-user identity.** Is one shared application key acceptable for the pilot, with the frontend deciding who may
-   use it (SA-5)? It means Ume.Rag cannot rate-limit, audit or filter per person.
-8. **Where do the Markdown files live** (a Git repository, a file share, the intranet CMS)? The no-code route is to
-   publish them as intranet pages and crawl them ([`03-updates.md`](03-updates.md) §4); the alternatives are SA-9
-   or SA-10 (the roadmap already lists "a Git/Markdown connector" as an open product call).
-9. **Legacy Office files** (`.doc`, `.xls`, `.ppt`) in the collection? They wait for P2 (postponed item Z1) unless
-   converted first.
-10. **Does the frontend store conversations?** That decides the client's `StoresHistory` and retention and belongs
-    in the DPIA.
-11. **How long are tickets?** Over 2,000 characters the frontend must use the workaround in
-    [`05-frontend-integration.md`](05-frontend-integration.md) §6 until SA-4.
+The open questions of the first draft, answered:
+
+| # | Question | Answer | Consequence |
+|---|---|---|---|
+| 1 | Owning department | **DoIT**, the pilot department | Runs inside P1b; no second department, no gateway release 2 needed |
+| 2 | Intranet readable without a login | **Yes** | The crawl works as is; SA-8 is not needed |
+| 3 | Level | **`internal`** | EU-hosted models; no on-prem requirement |
+| 4 | Personal data in pasted tickets | **Instructions and DPIA**: staff are told not to paste personal data; the DPIA (G1) covers the EU-hosted model; no redaction on the api's gateway key | [`01-gateway-setup.md`](01-gateway-setup.md) §4 stays without redaction; the frontend shows the instruction |
+| 5 | General-knowledge level | **`fallback`** | [`04-assistant.md`](04-assistant.md) §4 |
+| 6 | Related documents and follow-up suggestions | **Both built before the pilot** (SA-1, SA-3) | Each needs a Decisions row and a design section first (main session), then stream B |
+| 7 | Per-user identity | **One shared app key** for the pilot | SA-5 waits; SA-6 (a limit that fits a shared key) is built before the pilot |
+| 8 | Where the Markdown files live | **Local now, a Git repository later** | Upload by hand for the pilot; SA-10 (Git connector) **after the pilot** |
+| 10 | Conversation history | **The frontend keeps it** and sends it each turn; Ume.Rag stores none (`none`, as today) | No A1 dependency; the frontend's store belongs in the DPIA |
+| 11 | Ticket length | **Varies; fix the hard 2,000-character limit before the pilot** (SA-4) by **condensing a long ticket into a search query**: long messages are accepted (up to the chat request's own limit), a task model writes the search query, and the answer model gets the full text | SA-4 needs a design section (chat §5, condense) and a Decisions row |
+
+Before the pilot, therefore: **SA-1, SA-3, SA-4, SA-6** (and SA-7, #424, before go-live).
+
+## Still open
+
+- **Legacy Office files** (`.doc`, `.xls`, `.ppt`) in the collection? They wait for P2 (postponed item Z1); until
+  then they are converted to `.docx`/`.xlsx`/`.pptx` before upload.

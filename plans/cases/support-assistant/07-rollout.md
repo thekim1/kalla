@@ -7,9 +7,9 @@ with the detail. The quality gate is the platform's own: a hand-graded gold set 
 
 | # | Input | Who |
 |---|---|---|
-| 0.1 | Answers to the open questions in [`README.md`](README.md), at least 1 (department), 2 (intranet login), 3 (level), 4 (personal data), 7 (shared key) and 10 (app stores chats) | user |
+| 0.1 | Answers to the open questions: **done** ([`README.md`](README.md), "Decisions (user, 2026-11-06)") | user |
 | 0.2 | DPIA (G1) covers pasted tickets sent to an EU-hosted model and the app's own chat store | user with the data protection officer |
-| 0.3 | Which gaps are built before the pilot. Minimum: SA-6 (or the raised platform setting). Wanted: SA-1, SA-2. Optional: SA-3, SA-4 | user, main session |
+| 0.3 | Gaps built before the pilot: **SA-1, SA-3, SA-4, SA-6** (user, 2026-11-06); each needs a Decisions row and design section (main session), then queue items for stream B | user, main session |
 | 0.4 | Named people: knowledge-base editor (contact), department admin, the frontend team's contact, 3–5 reviewers from support | user, support organisation |
 | 0.5 | An inventory of the sources: intranet sections, file folders, Markdown repositories, file types (legacy Office?) | support organisation |
 
