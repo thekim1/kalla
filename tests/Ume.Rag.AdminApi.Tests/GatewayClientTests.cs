@@ -105,6 +105,30 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     }
 
     [Fact]
+    public async Task A_gateway_rerank_model_is_mirrored_as_kind_rerank_and_goes_when_the_gateway_drops_it()
+    {
+        // B-16: Settings.Retrieval.gatewayRerankModel names a rerank row (V32); the gateway's catalogue Kind "Rerank".
+        await using (var gateway = database.Gateway().WithWebHostBuilder(web => web.UseSetting("FakeGateway:RerankEnabled", "true")))
+        await using (var admin = database.AdminApi(gateway, Residency.Eu))
+        {
+            await SyncedAsync(admin);
+            using var reader = await AdminDatabaseFixture.UserAsync(admin, RagRoles.Reviewer, "1000");
+            var models = (await reader.GetFromJsonAsync<GatewayModelDto[]>("/api/gateway/models", Ct))!.ToDictionary(m => m.Name);
+            models["bge-reranker-v2-m3"].ModelKind.ShouldBe(GatewayModelModelKinds.Rerank);
+            models["bge-reranker-v2-m3"].Residencies.ShouldBe(["Eu"]);
+            models["bge-reranker-v2-m3"].InputPerMillionUsd.ShouldBe(0.10m);
+        }
+
+        await using (var gateway = database.Gateway())
+        await using (var admin = database.AdminApi(gateway, Residency.Eu))
+        {
+            await SyncedAsync(admin);
+            await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+            (await db.GatewayModels.AnyAsync(m => m.Name == "bge-reranker-v2-m3", Ct)).ShouldBeFalse();
+        }
+    }
+
+    [Fact]
     public async Task The_mirror_holds_each_chat_and_embedding_deployment_with_its_residency_and_price_and_a_second_run_writes_nothing()
     {
         await using var gateway = database.Gateway();
@@ -123,7 +147,7 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
         models["bge-m3"].InputPerMillionUsd.ShouldBe(0.02m);
         models["bge-m3"].Kind.ShouldBe(GatewayModelKinds.Model);
         models["bge-m3"].ModelKind.ShouldBe(GatewayModelModelKinds.Embedding); // the catalogue's Kind "Embedding"
-        // A multi-target name is a route alias (a manual row), and rerank is not a gateway model kind.
+        // A multi-target name is a route alias (a manual row), and this gateway has no rerank model (the default, B-16).
         models.ShouldNotContainKey("ume/chat-standard");
         models.ShouldNotContainKey("bge-reranker-v2-m3");
 

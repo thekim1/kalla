@@ -667,6 +667,9 @@ export interface AssistantSummary {
   generalKnowledge: GeneralKnowledge | null
 }
 
+/** An assistant's reranker (`QuerySteps.retrieval.rerank`, B-16); absent is off. */
+export type Reranker = 'chat' | 'gateway'
+
 export interface Assistant {
   id: string
   slug: string
@@ -683,6 +686,8 @@ export interface Assistant {
   publishedVersion: number | null
   /** The published version's level; null before the first publish. */
   generalKnowledge: GeneralKnowledge | null
+  /** The rerankers the platform has a model for (`chat`, `gateway`); empty when it has none, which is the usual setup. */
+  rerankers: Reranker[]
   draft: { number: number; updatedAt: IsoDateTime; baseChanged: boolean; version: string } | null
   audienceClientIds: string[]
   updatedAt: IsoDateTime
@@ -775,7 +780,7 @@ export interface GatewayModel {
   /** `model` (a deployment) or `route` (a manual route alias). */
   kind: string
   /** What the model serves (data-model §2.1); route aliases are `chat`. Only chat models answer. */
-  modelKind: 'chat' | 'embedding'
+  modelKind: 'chat' | 'embedding' | 'rerank'
   residencies: string[]
 }
 

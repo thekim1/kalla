@@ -10,7 +10,8 @@ public enum RetrievalPurpose { Chat, Http, Mcp, TestPanel }
 /// A retrieval (knowledge design §2.2, §3.1). <c>AssistantId</c> (chat, <c>rag-internal</c>) searches the published
 /// version's collections (§4.2); <c>CollectionIds</c> narrows, each must be visible (404 otherwise); <c>RunId</c> is sent
 /// to the gateway as <c>x-ume-run-id</c> (chat: the message id). <c>RerankCeiling</c> asks for the rerank call (knowledge design
-/// §6.7) at that ceiling: chat passes the turn's ceiling when the assistant reranks; null (every other caller) keeps the fused order.
+/// §6.7) at that ceiling with <c>Reranker</c>: chat passes the turn's ceiling and the assistant's reranker when the assistant
+/// reranks; null (every other caller) keeps the fused order.
 /// </summary>
 public sealed record RetrievalRequest(
     string Query,
@@ -23,7 +24,36 @@ public sealed record RetrievalRequest(
     RetrievalPurpose Purpose = RetrievalPurpose.Chat,
     bool AllowDegraded = true,
     Guid? RunId = null,
-    Residency? RerankCeiling = null);
+    Residency? RerankCeiling = null,
+    RerankerKind Reranker = RerankerKind.ChatModel);
+
+/// <summary>
+/// Which reranker a search asks for (B-16; Decisions "Rerank pulled forward", "Gateway release 1 and shared Keycloak as
+/// built"): <see cref="ChatModel"/>, a listwise rerank through the gateway's chat endpoint with
+/// <c>Settings.Retrieval.rerankModel</c>; <see cref="Gateway"/>, the gateway's <c>/v1/rerank</c> with
+/// <c>Settings.Retrieval.gatewayRerankModel</c>. Rerank is optional: with the kind's model unset no call is made.
+/// </summary>
+public enum RerankerKind { ChatModel, Gateway }
+
+/// <summary>The <c>QuerySteps.retrieval.rerank</c> values of an assistant (absent is off).</summary>
+public static class RerankerKinds
+{
+    public const string Off = "off";
+    public const string ChatModel = "chat";
+    public const string Gateway = "gateway";
+
+    public static IReadOnlyList<string> All { get; } = [Off, ChatModel, Gateway];
+
+    /// <summary>The kind of a stored value; null for <c>off</c>, absent or anything else.</summary>
+    public static RerankerKind? Parse(string? value) => value switch
+    {
+        ChatModel => RerankerKind.ChatModel,
+        Gateway => RerankerKind.Gateway,
+        _ => null,
+    };
+
+    public static string ToValue(RerankerKind kind) => kind == RerankerKind.Gateway ? Gateway : ChatModel;
+}
 
 /// <summary>Stage milliseconds, for metrics and the test panel (never in production response headers, §3.2).</summary>
 public sealed record RetrievalTimings(double PolicyMs, double KeywordMs, double EmbeddingMs, double VectorMs, double HydrateMs, double TotalMs);

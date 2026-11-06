@@ -51,7 +51,7 @@ const querySteps = ref<Record<string, unknown>>({})
 const notFound = ref<Record<string, unknown>>({})
 const generalKnowledge = ref<GeneralKnowledge>('off')
 // The query settings under "Advanced" (admin design §5.5.4; chat design §5–§6, V17); empty = the key is left out.
-const advanced = ref({ topK: '', rerank: false, condense: true, maxMessages: '', maxOutputTokens: '', temperature: '', language: '' })
+const advanced = ref({ topK: '', rerank: '', condense: true, maxMessages: '', maxOutputTokens: '', temperature: '', language: '' })
 const advancedErrors = ref<Record<string, string | undefined>>({})
 const LIMITS = { topK: [1, 50], maxMessages: [0, 20], maxOutputTokens: [64, 4096], temperature: [0, 1] } as const
 const languageOptions = ['', 'auto', 'sv'].map((v) => ({ value: v, label: ASSISTANT.languages[v]! }))
@@ -92,6 +92,17 @@ const historyOptions = computed(() =>
   (policy.value?.allowedHistoryModes ?? [assistant.data.value?.historyMode ?? 'none']).map((m) => ({ value: m, label: ASSISTANT.historyModes[m] ?? m })),
 )
 const restorable = (v: AssistantVersionSummary) => v.state === 'superseded'
+// Rerank is optional (B-16): a reranker can be chosen only while the platform has a model for it; with none the choice is
+// disabled with a hint. A stored choice without a model stays visible and selected (answers then use the plain ranking).
+const rerankers = computed<string[]>(() => assistant.data.value?.rerankers ?? [])
+const rerankOptions = computed(() =>
+  ['', 'chat', 'gateway'].map((v) => ({ value: v, label: ASSISTANT.rerankOptions[v]!, disabled: v !== '' && v !== advanced.value.rerank && !rerankers.value.includes(v) })),
+)
+const rerankHint = computed(() => {
+  if (advanced.value.rerank && !rerankers.value.includes(advanced.value.rerank)) return ASSISTANT.rerankMissing
+  return rerankers.value.length === 0 ? ASSISTANT.rerankNone : ASSISTANT.rerankHint
+})
+const rerankOf = (v: unknown): string => (v === 'chat' || v === 'gateway' ? v : '')
 const modelOptions = computed(() => [{ value: '', label: ASSISTANT.noModel }, ...models.value.filter((m) => m.modelKind === 'chat').map((m) => ({ value: m.name, label: m.name }))])
 /** §5.4 step 13: once published, a link to each audience client's own UI (`PortalUrl`), where the model has its slug. */
 const portals = computed(() =>
@@ -126,7 +137,8 @@ function fill(d: AssistantDraft | null, base: Settings | null = null): void {
   const steps = (s?.querySteps ?? {}) as Record<string, Record<string, unknown> | undefined>
   const text = (v: unknown) => (typeof v === 'number' ? String(v) : '')
   advanced.value = {
-    topK: text(steps.retrieval?.topK), rerank: steps.retrieval?.rerank === true, condense: steps.condense?.enabled !== false,
+    topK: text(steps.retrieval?.topK),
+    rerank: rerankOf(steps.retrieval?.rerank), condense: steps.condense?.enabled !== false,
     maxMessages: text(steps.history?.maxMessages),
     maxOutputTokens: text(steps.answer?.maxOutputTokens), temperature: text(steps.answer?.temperature),
     language: typeof steps.answer?.language === 'string' ? steps.answer.language : '',
@@ -159,8 +171,8 @@ function stepsToSave(): Record<string, unknown> {
   const answer: Record<string, unknown> = { ...part('answer'), generalKnowledge: generalKnowledge.value }
   const condense = { ...part('condense'), enabled: advanced.value.condense }
   set(retrieval, 'topK', advanced.value.topK)
-  // Rerank is off unless turned on (Decisions "Rerank pulled forward"); only an explicit choice is stored.
-  if (advanced.value.rerank) retrieval.rerank = true
+  // Rerank is off unless a reranker is chosen (Decisions "Rerank pulled forward", B-16); only an explicit choice is stored.
+  if (advanced.value.rerank) retrieval.rerank = advanced.value.rerank
   else delete retrieval.rerank
   set(history, 'maxMessages', advanced.value.maxMessages)
   set(answer, 'maxOutputTokens', advanced.value.maxOutputTokens)
@@ -348,7 +360,10 @@ onMounted(load)
             <p class="text-small text-fg-2">{{ ASSISTANT.advancedHint }}</p>
             <SelectField id="assistant-model" v-model="model" :label="ASSISTANT.model" :hint="ASSISTANT.modelHint" :options="modelOptions" />
             <TextField id="assistant-top-k" v-model="advanced.topK" :label="ASSISTANT.topK" inputmode="numeric" :error="advancedErrors.topK" />
-            <CheckField v-model="advanced.rerank" :label="ASSISTANT.rerank" :description="ASSISTANT.rerankHint" data-test="rerank" />
+            <SelectField
+              id="assistant-rerank" v-model="advanced.rerank" :label="ASSISTANT.rerank" :hint="rerankHint" :options="rerankOptions"
+              :disabled="rerankers.length === 0 && !advanced.rerank" data-test="rerank"
+            />
             <CheckField v-model="advanced.condense" :label="ASSISTANT.condense" data-test="condense" />
             <TextField id="assistant-history" v-model="advanced.maxMessages" :label="ASSISTANT.historyMessages" inputmode="numeric" :error="advancedErrors.maxMessages" />
             <TextField id="assistant-max-tokens" v-model="advanced.maxOutputTokens" :label="ASSISTANT.maxOutputTokens" inputmode="numeric" :error="advancedErrors.maxOutputTokens" />

@@ -33,6 +33,10 @@ public sealed class RetrievalEngineTests : IDisposable
     private RetrievalEngine Engine(IReranker? reranker = null, RetrievalEngineOptions? options = null) =>
         new(_index, _sizes, options, reranker, new FakeTexts());
 
+    /// <summary>One collection on a platform with a model for both rerankers.</summary>
+    private static SearchScope RerankScope(string? chatModel = "ume/small-eu", string? gatewayModel = "bge-reranker-v2-m3") =>
+        Scope(RetrievalPlatformSettings.Default with { RerankModel = chatModel, GatewayRerankModel = gatewayModel }, (CollectionA, RetrievalSettings.Default));
+
     [Fact]
     public async Task Hybrid_fuses_both_lists_dedups_and_caps_three_per_document()
     {
@@ -113,7 +117,7 @@ public sealed class RetrievalEngineTests : IDisposable
         // Scores favour document 7's chunk 4 (dropped by the cap without reranking) and chunk 6.
         var reranker = new FakeReranker(new Dictionary<Guid, double> { [Id(4)] = 0.99, [Id(6)] = 0.95, [Id(1)] = 0.5 });
         using var engine = Engine(reranker);
-        var result = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct);
+        var result = await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct);
 
         reranker.Calls.ShouldBe(1);
         result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(4), Id(6), Id(1), Id(5), Id(2)]);
@@ -125,7 +129,7 @@ public sealed class RetrievalEngineTests : IDisposable
     public async Task A_failing_reranker_keeps_the_fused_order_and_reports_it()
     {
         using var engine = Engine(new FakeReranker(null, fail: true));
-        var result = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct);
+        var result = await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct);
 
         result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(5), Id(1), Id(2), Id(6), Id(3)]);
         result.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);
@@ -136,7 +140,7 @@ public sealed class RetrievalEngineTests : IDisposable
     public async Task The_noop_reranker_and_a_request_without_rerank_leave_the_fused_order()
     {
         using var engine = Engine(NoopReranker.Instance);
-        var noop = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct);
+        var noop = await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct);
         noop.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(5), Id(1), Id(2), Id(6), Id(3)]);
         noop.Degraded.ShouldBeNull();
 
@@ -144,6 +148,59 @@ public sealed class RetrievalEngineTests : IDisposable
         using var off = Engine(reranker);
         await off.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed), Ct);
         reranker.Calls.ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData(RerankerKind.ChatModel)]
+    [InlineData(RerankerKind.Gateway)]
+    public async Task Each_reranker_is_asked_with_its_own_model_and_none_when_unset(RerankerKind kind)
+    {
+        // The other reranker's model is not used in place of a missing one; the reranker then refuses (rerank_unavailable).
+        var reranker = new FakeReranker(new Dictionary<Guid, double> { [Id(4)] = 0.99 });
+        using var engine = Engine(reranker);
+        var call = new RerankCall(Ume.Rag.Domain.Residency.Eu, Reranker: kind);
+
+        await engine.SearchAsync(new SearchRequest("altan", kind == RerankerKind.Gateway ? RerankScope(gatewayModel: null) : RerankScope(chatModel: null),
+            Embed: Embed, Rerank: call), Ct);
+        (reranker.Last!.Reranker, reranker.Last.Model).ShouldBe((kind, (string?)null));
+        await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed, Rerank: call), Ct);
+        reranker.Last!.Model.ShouldBe(kind == RerankerKind.Gateway ? "bge-reranker-v2-m3" : "ume/small-eu");
+    }
+
+    [Fact]
+    public async Task The_request_names_the_reranker_and_its_model_and_each_has_its_own_time_limit()
+    {
+        // ChatModelReranker 3 s by default, GatewayReranker 500 ms (B-16); here shortened, a reranker taking 300 ms.
+        var options = new RetrievalEngineOptions { RerankTimeout = TimeSpan.FromSeconds(5), GatewayRerankTimeout = TimeSpan.FromMilliseconds(100) };
+        new RetrievalEngineOptions().RerankTimeout.ShouldBe(TimeSpan.FromSeconds(3));
+        new RetrievalEngineOptions().GatewayRerankTimeout.ShouldBe(TimeSpan.FromMilliseconds(500));
+        var slow = new FakeReranker(new Dictionary<Guid, double> { [Id(6)] = 0.9 }, delay: TimeSpan.FromMilliseconds(300));
+        using var engine = Engine(slow, options);
+
+        var chat = await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct);
+        chat.Degraded.ShouldBeNull();
+        chat.Hits[0].Candidate.ChunkId.ShouldBe(Id(6));
+        (slow.Last!.Reranker, slow.Last.Model).ShouldBe((RerankerKind.ChatModel, "ume/small-eu"));
+
+        var gateway = await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed,
+            Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu, Reranker: RerankerKind.Gateway)), Ct);
+        (slow.Last!.Reranker, slow.Last.Model).ShouldBe((RerankerKind.Gateway, "bge-reranker-v2-m3"));
+        gateway.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable); // over the gateway reranker's limit: the fused order, the answer goes on
+        gateway.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(5), Id(1), Id(2), Id(6), Id(3)]);
+    }
+
+    [Fact]
+    public async Task The_router_sends_each_request_to_the_reranker_it_names()
+    {
+        var chat = new FakeReranker(new Dictionary<Guid, double> { [Id(1)] = 0.9 });
+        var gateway = new FakeReranker(new Dictionary<Guid, double> { [Id(6)] = 0.9 });
+        using var engine = Engine(new RerankRouter(chat, gateway));
+
+        (await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct))
+            .Hits[0].Candidate.ChunkId.ShouldBe(Id(1));
+        (await engine.SearchAsync(new SearchRequest("altan", RerankScope(), Embed: Embed,
+            Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu, Reranker: RerankerKind.Gateway)), Ct)).Hits[0].Candidate.ChunkId.ShouldBe(Id(6));
+        (chat.Calls, gateway.Calls).ShouldBe((1, 1));
     }
 
     [Fact]

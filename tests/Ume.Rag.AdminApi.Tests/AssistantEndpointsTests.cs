@@ -325,11 +325,20 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
         var (warnings, next) = await DraftAsync(inner, "sometimes", innerDraft);
         warnings.ShouldBe(["query_steps_invalid"]);
 
-        // retrieval.rerank (B-12, Decisions "Rerank pulled forward") is true or false; anything else is V17's warning too.
+        // retrieval.rerank (B-12, B-16) is off, chat or gateway; anything else is V17's warning too. A reranker the platform has
+        // no model for is no warning: rerank is optional, and the assistant page says why the choice is disabled.
         (warnings, next) = await StepsAsync(inner, new { retrieval = new { rerank = "yes" } }, next);
         warnings.ShouldBe(["query_steps_invalid"]);
         (warnings, next) = await StepsAsync(inner, new { retrieval = new { rerank = true } }, next);
-        warnings.ShouldBeEmpty();
+        warnings.ShouldBe(["query_steps_invalid"]);
+        foreach (var value in new[] { "off", "chat", "gateway" })
+        {
+            (warnings, next) = await StepsAsync(inner, new { retrieval = new { rerank = value } }, next);
+            warnings.ShouldBeEmpty();
+        }
+
+        // The platform's rerankers (B-16): none here, the usual setup, so the page disables the choice.
+        (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{inner}", Ct)).GetProperty("rerankers").GetArrayLength().ShouldBe(0);
         (warnings, next) = await DraftAsync(inner, "fallback", next);
         warnings.ShouldBeEmpty();
         using (var published = await admin.PostAsJsonAsync($"/api/assistants/{inner}/publish", new { version = innerVersion, draftVersion = next }, Ct))

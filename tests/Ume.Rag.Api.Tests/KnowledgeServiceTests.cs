@@ -12,6 +12,7 @@ using Ume.Rag.Domain.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Ume.Rag.Answering;
@@ -236,21 +237,23 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private (KnowledgeService Service, RetrievalCounter Counter, IHost Host) Build(PolicySnapshot snapshot, bool confirmed = true, HttpMessageHandler? gateway = null,
-        IDownloadLinks? links = null, IReranker? reranker = null)
+        IDownloadLinks? links = null, IReranker? reranker = null, RetrievalEngineOptions? options = null)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([
             new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Keys:Eu", FakeGatewayFactory.EuKey),
         ]);
         builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway ?? db.Gateway.Server.CreateHandler());
+        // Made by the container, so disposing the host closes its connections (the api role has a connection limit).
+        builder.Services.AddSingleton(_ => RetrievalDataSource.Create(db.Connection(RagDatabase.Api)));
         var host = builder.Build();
-        var dataSource = RetrievalDataSource.Create(db.Connection(RagDatabase.Api));
+        var dataSource = host.Services.GetRequiredService<NpgsqlDataSource>();
         var index = new PostgresSearchIndex(dataSource);
         var counter = new RetrievalCounter(dataSource, TimeProvider.System, NullLogger<RetrievalCounter>.Instance);
         var embedder = new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), new QueryEmbeddingOptions(), new byte[32],
             TimeProvider.System, NullLogger<GatewayQueryEmbedder>.Instance);
         var service = new KnowledgeService(new KnowledgeFixture.FixedSnapshot(snapshot, confirmed), new AccessPolicy(AccessPolicy.DefaultKnowledgeClientKinds),
-            new RetrievalEngine(index, new ScopeSizeCache(index, TimeProvider.System), null, reranker, new PostgresHydrator(dataSource)), new PostgresHydrator(dataSource),
+            new RetrievalEngine(index, new ScopeSizeCache(index, TimeProvider.System), options, reranker, new PostgresHydrator(dataSource)), new PostgresHydrator(dataSource),
             embedder, counter, dataSource,
             links ?? NoDownloadLinks.Instance, NullLogger<KnowledgeService>.Instance);
         return (service, counter, host);
@@ -292,7 +295,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         {
             Assistants = new Dictionary<Guid, AssistantEntry>
             {
-                [db.AssistantId] = assistant with { Published = assistant.Published! with { QuerySteps = """{"retrieval": {"rerank": true}}""" } },
+                [db.AssistantId] = assistant with { Published = assistant.Published! with { QuerySteps = """{"retrieval": {"rerank": "chat"}}""" } },
             },
         };
         var reranker = new RecordingReranker();
@@ -320,10 +323,128 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         await Chat(service, reranking, host).PlanAsync(who, question, Ct);
         reranker.Requests.Count.ShouldBe(2);
         reranker.Requests[1].Ceiling.ShouldBe(ChatService.Ceiling(who, reranking.Assistants[db.AssistantId], reranking));
+        reranker.Requests[1].Reranker.ShouldBe(RerankerKind.ChatModel);
         var (plainService, _, plainHost) = Build(plain, reranker: reranker);
         using var __ = plainHost;
         await Chat(plainService, plain, plainHost).PlanAsync(db.Who(db.OwuiClient, plain), question, Ct);
         reranker.Requests.Count.ShouldBe(2);
+    }
+
+    /// <summary>The snapshot with the assistant's <c>retrieval.rerank</c> set to <paramref name="rerank"/> and <c>Settings.Retrieval</c> to <paramref name="retrieval"/>.</summary>
+    private PolicySnapshot Reranking(string rerank, string retrieval)
+    {
+        var plain = db.Snapshot() with { RetrievalSettings = retrieval };
+        var assistant = plain.Assistants[db.AssistantId];
+        return plain with
+        {
+            Assistants = new Dictionary<Guid, AssistantEntry>
+            {
+                [db.AssistantId] = assistant with { Published = assistant.Published! with { QuerySteps = $$$"""{"retrieval": {"rerank": "{{{rerank}}}"}}""" } },
+            },
+        };
+    }
+
+    [Theory]
+    [InlineData("chat", RerankerKind.ChatModel)]
+    [InlineData("gateway", RerankerKind.Gateway)]
+    public async Task With_rerank_fully_unconfigured_retrieval_and_chat_make_no_rerank_call_and_degrade_nothing(string rerank, RerankerKind kind)
+    {
+        // B-16, rerank optional everywhere (user, 2026-11-06): an assistant set to rerank on a platform with no rerank model
+        // (the usual setup) gets the plain fused order: no call, no rerank_unavailable, no caveat.
+        var snapshot = Reranking(rerank, "{}");
+        var reranker = new RecordingReranker();
+        var (service, _, host) = Build(snapshot, reranker: reranker);
+        using var _ = host;
+        var who = db.Who(db.OwuiClient, snapshot);
+
+        var fused = await service.RetrieveAsync(who, new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection]), Ct);
+        var asked = await service.RetrieveAsync(who,
+            new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection], RerankCeiling: Residency.Eu, Reranker: kind), Ct);
+        asked.Results.Select(r => r.ChunkId).ShouldBe(fused.Results.Select(r => r.ChunkId));
+        asked.Results.ShouldAllBe(r => r.Scores.RerankScore == null);
+        asked.Degraded.ShouldBeNull();
+
+        var plan = await Chat(service, snapshot, host).PlanAsync(who, new ParsedChat("bygg", "bygglov altan", [], false, false, null), Ct);
+        plan.Settings.Rerank.ShouldBe(kind);
+        plan.Retrieval.ShouldNotBeNull().Degraded.ShouldBeNull();
+        plan.Degraded.ShouldBeFalse();
+        plan.Caveat.ShouldBeNull();
+        reranker.Requests.ShouldBeEmpty();
+    }
+
+    /// <summary>The engine's reranker as the knowledge role builds it, on the services' gateway client to <paramref name="gateway"/>.</summary>
+    private static (RerankRouter Reranker, IHost Host, ListLogger Log) GatewayRerankers(WebApplicationFactory<fakegateway::Program> gateway)
+    {
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
+        builder.Configuration.AddInMemoryCollection([
+            new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Keys:Eu", FakeGatewayFactory.EuKey),
+        ]);
+        builder.AddGatewayClient(ChatModelReranker.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway.Server.CreateHandler());
+        var host = builder.Build();
+        var clients = host.Services.GetRequiredService<IHttpClientFactory>();
+        var log = new ListLogger();
+        return (new RerankRouter(new ChatModelReranker(clients), new GatewayReranker(clients, logger: log)), host, log);
+    }
+
+    [Fact]
+    public async Task GatewayReranker_against_the_FakeGateway_rerank_reorders_and_a_gateway_without_the_model_keeps_the_fused_order()
+    {
+        // B-16 against the FakeGateway's /v1/rerank (B-14): word-overlap scores with FakeGateway:RerankEnabled; 404 without it.
+        var snapshot = Reranking("gateway", """{"gatewayRerankModel": "bge-reranker-v2-m3"}""");
+        var options = new RetrievalEngineOptions { GatewayRerankTimeout = TimeSpan.FromSeconds(10) };
+        await using var enabled = db.Gateway.WithWebHostBuilder(web => web.UseSetting("FakeGateway:RerankEnabled", "true"));
+        var (reranker, rerankHost, _) = GatewayRerankers(enabled);
+        using var __ = rerankHost;
+        var (service, _, host) = Build(snapshot, reranker: reranker, options: options);
+        using var _ = host;
+        var who = db.Who(db.OwuiClient, snapshot);
+        var request = new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection], RunId: Guid.NewGuid(), RerankCeiling: Residency.Eu,
+            Reranker: RerankerKind.Gateway);
+
+        var reranked = await service.RetrieveAsync(who, request, Ct);
+        reranked.Degraded.ShouldBeNull();
+        reranked.Results.ShouldAllBe(r => r.Scores.RerankScore != null);
+        var scores = reranked.Results.Select(r => r.Scores.RerankScore!.Value).ToList();
+        scores.ShouldBe(scores.OrderByDescending(x => x).ToList()); // the rerank order (one document each, no cap at play)
+        reranked.Results[0].Scores.RerankScore!.Value.ShouldBe(FakeContent.Overlap("bygglov altan", reranked.Results[0].Text), 1e-9);
+
+        // The same platform and assistant on a gateway with no rerank model (the default): 404, the fused order, logged once.
+        var (missing, missingHost, log) = GatewayRerankers(db.Gateway);
+        using var ___ = missingHost;
+        var (plainService, _, plainHost) = Build(snapshot, reranker: missing, options: options);
+        using var ____ = plainHost;
+        var fused = await plainService.RetrieveAsync(who, request with { RerankCeiling = null }, Ct);
+        for (var i = 0; i < 2; i++)
+        {
+            var kept = await plainService.RetrieveAsync(who, request, Ct);
+            kept.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);
+            kept.Results.Select(r => r.ChunkId).ShouldBe(fused.Results.Select(r => r.ChunkId));
+            kept.Results.ShouldAllBe(r => r.Scores.RerankScore == null);
+        }
+
+        log.Messages.ShouldHaveSingleItem().ShouldContain("HTTP 404");
+    }
+
+    /// <summary>Collects the formatted log messages of warning level and above.</summary>
+    private sealed class ListLogger : ILogger<GatewayReranker>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= LogLevel.Warning)
+            {
+                lock (Messages)
+                {
+                    Messages.Add(formatter(state, exception));
+                }
+            }
+        }
     }
 
     [Fact]

@@ -1,13 +1,15 @@
 using Ume.Rag.Domain;
+using Ume.Rag.Domain.Retrieval;
 
 namespace Ume.Rag.Retrieval;
 
 /// <summary>
 /// The rerank seam (knowledge design §6.7; Decisions "Rerank pulled forward"). <see cref="RetrievalEngine"/> calls it after
 /// fusion and dedup, before the per-document cap, over the top <c>rerankCandidates</c> results, and only when the request
-/// carries a <see cref="RerankCall"/> (the assistant's <c>QuerySteps.retrieval.rerank</c>, off by default). The interim
-/// implementation is <see cref="ChatModelReranker"/> (a listwise rerank through the gateway's chat endpoint);
-/// <c>GatewayReranker</c> replaces it when the gateway's rerank endpoint exists.
+/// carries a <see cref="RerankCall"/> (the assistant's <c>QuerySteps.retrieval.rerank</c>, off by default) and the platform
+/// has a model for its <see cref="RerankerKind"/>. Two implementations, chosen per assistant (B-16):
+/// <see cref="ChatModelReranker"/> (a listwise rerank through the gateway's chat endpoint) and <see cref="GatewayReranker"/>
+/// (the gateway's optional <c>/v1/rerank</c>); <see cref="RerankRouter"/> sends each request to the one it names.
 /// </summary>
 public interface IReranker
 {
@@ -23,11 +25,13 @@ public interface IReranker
 public sealed record RerankPassage(Guid ChunkId, string Text);
 
 /// <summary>
-/// What a search asks of the reranker: the normalised query, the passages in fused order, the platform's rerank model
-/// (<c>Settings.Retrieval.rerankModel</c>; null while unset), the residency ceiling of the call (the assistant's, as for
-/// its chat answer) and the run id sent as <c>x-ume-run-id</c>.
+/// What a search asks of the reranker: the normalised query, the passages in fused order, the platform's model for
+/// <paramref name="Reranker"/> (<c>Settings.Retrieval.rerankModel</c> or <c>gatewayRerankModel</c>; the engine never asks
+/// while it is unset), the residency ceiling of the call (the assistant's, as for its chat answer), the run id sent as
+/// <c>x-ume-run-id</c> and the reranker to use.
 /// </summary>
-public sealed record RerankRequest(string Query, IReadOnlyList<RerankPassage> Passages, string? Model, Residency Ceiling, Guid? RunId);
+public sealed record RerankRequest(string Query, IReadOnlyList<RerankPassage> Passages, string? Model, Residency Ceiling, Guid? RunId,
+    RerankerKind Reranker = RerankerKind.ChatModel);
 
 /// <summary>
 /// The scores in the passages' order, and the call's token usage when the reranker reports it (evaluation cost). A null
@@ -40,10 +44,10 @@ public sealed record RerankScores(IReadOnlyList<double?> Scores, RerankUsage? Us
 public sealed record RerankUsage(string Model, int PromptTokens, int CompletionTokens);
 
 /// <summary>
-/// A search's request to rerank (<see cref="SearchRequest.Rerank"/>): the ceiling of the rerank call and the run id. Every
-/// model call carries an explicit ceiling (AGENTS.md), so a search cannot ask for a rerank without one.
+/// A search's request to rerank (<see cref="SearchRequest.Rerank"/>): the ceiling of the rerank call, the run id and the
+/// reranker. Every model call carries an explicit ceiling (AGENTS.md), so a search cannot ask for a rerank without one.
 /// </summary>
-public sealed record RerankCall(Residency Ceiling, Guid? RunId = null);
+public sealed record RerankCall(Residency Ceiling, Guid? RunId = null, RerankerKind Reranker = RerankerKind.ChatModel);
 
 /// <summary>A reranker that never reranks (tests and processes without a reranker).</summary>
 public sealed class NoopReranker : IReranker
@@ -51,6 +55,16 @@ public sealed class NoopReranker : IReranker
     public static NoopReranker Instance { get; } = new();
 
     public Task<RerankScores?> ScoreAsync(RerankRequest request, CancellationToken cancellationToken) => Task.FromResult<RerankScores?>(null);
+}
+
+/// <summary>Sends each request to the reranker its <see cref="RerankRequest.Reranker"/> names (chat, admin test panel).</summary>
+public sealed class RerankRouter(IReranker chatModel, IReranker gateway) : IReranker
+{
+    public Task<RerankScores?> ScoreAsync(RerankRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return (request.Reranker == RerankerKind.Gateway ? gateway : chatModel).ScoreAsync(request, cancellationToken);
+    }
 }
 
 /// <summary>Reads the texts the reranker scores (one extra statement, knowledge design §6.7).</summary>

@@ -197,7 +197,10 @@ public static class GatewayModelModelKinds
     public const string Chat = "chat";
     public const string Embedding = "embedding";
 
-    public static IReadOnlyList<string> All { get; } = [Chat, Embedding];
+    /// <summary>A reranker on the gateway's optional <c>/v1/rerank</c> (gateway <c>ModelKind.Rerank</c>; B-16).</summary>
+    public const string Rerank = "rerank";
+
+    public static IReadOnlyList<string> All { get; } = [Chat, Embedding, Rerank];
 }
 
 /// <summary>Where a gateway model row or one of its values came from (data-model §2.1).</summary>
@@ -218,7 +221,7 @@ public sealed class GatewayModel
     public required string Name { get; set; }
     public string Kind { get; set; } = GatewayModelKinds.Model;
 
-    /// <summary><c>chat</c> or <c>embedding</c> (<see cref="GatewayModelModelKinds"/>).</summary>
+    /// <summary><c>chat</c>, <c>embedding</c> or <c>rerank</c> (<see cref="GatewayModelModelKinds"/>).</summary>
     public string ModelKind { get; set; } = GatewayModelModelKinds.Chat;
 
     /// <summary>The <c>x-ume-residency</c> values (<c>OnPrem</c>, <c>Eu</c>, <c>External</c>) the model or route's targets run at.</summary>

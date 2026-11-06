@@ -82,10 +82,12 @@ public sealed class ChatModelRerankerGatewayTests(FakeGatewayFactory fake) : ICl
     [Fact]
     public void Rerank_is_an_explicit_assistant_choice_and_off_by_default()
     {
-        AssistantChatSettings.Parse("{}").Rerank.ShouldBeFalse();
-        AssistantChatSettings.Parse("""{"retrieval":{"topK":8}}""").Rerank.ShouldBeFalse();
-        AssistantChatSettings.Parse("""{"retrieval":{"rerank":"true"}}""").Rerank.ShouldBeFalse();
-        AssistantChatSettings.Parse("""{"retrieval":{"rerank":true}}""").Rerank.ShouldBeTrue();
+        AssistantChatSettings.Parse("{}").Rerank.ShouldBeNull();
+        AssistantChatSettings.Parse("""{"retrieval":{"topK":8}}""").Rerank.ShouldBeNull();
+        AssistantChatSettings.Parse("""{"retrieval":{"rerank":true}}""").Rerank.ShouldBeNull();
+        AssistantChatSettings.Parse("""{"retrieval":{"rerank":"off"}}""").Rerank.ShouldBeNull();
+        AssistantChatSettings.Parse("""{"retrieval":{"rerank":"chat"}}""").Rerank.ShouldBe(Ume.Rag.Domain.Retrieval.RerankerKind.ChatModel);
+        AssistantChatSettings.Parse("""{"retrieval":{"rerank":"gateway"}}""").Rerank.ShouldBe(Ume.Rag.Domain.Retrieval.RerankerKind.Gateway);
     }
 
     [Fact]

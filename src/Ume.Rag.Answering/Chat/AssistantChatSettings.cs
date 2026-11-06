@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Ume.Rag.Domain.Retrieval;
 
 namespace Ume.Rag.Answering.Chat;
 
@@ -48,10 +49,11 @@ public static class GeneralKnowledgeLevels
 /// <summary>An assistant's chat settings from its published <c>QuerySteps</c> (chat design §15.2), with the defaults.</summary>
 /// <remarks>
 /// <see cref="Temperature"/> null (the default) leaves <c>temperature</c> out of the gateway call (#275). <see cref="Rerank"/>
-/// (<c>retrieval.rerank</c>, only an explicit <c>true</c>) reranks the fused candidates (Decisions "Rerank pulled forward"; off by default).
+/// (<c>retrieval.rerank</c>: <c>chat</c> or <c>gateway</c>, B-16) is the reranker of the fused candidates; null (absent,
+/// <c>off</c> or anything else) does not rerank (Decisions "Rerank pulled forward"; off by default).
 /// </remarks>
 public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int HistoryMaxTokens, int ContextTokens, int MaxOutputTokens, double? Temperature,
-    bool AlwaysSwedish, bool CondenseEnabled = true, GeneralKnowledge GeneralKnowledge = GeneralKnowledge.Off, bool Rerank = false)
+    bool AlwaysSwedish, bool CondenseEnabled = true, GeneralKnowledge GeneralKnowledge = GeneralKnowledge.Off, RerankerKind? Rerank = null)
 {
     public static AssistantChatSettings Default { get; } = new(10, 10, 4000, 16_384, 1024, null, false);
 
@@ -69,7 +71,7 @@ public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int
             json?["answer"]?["language"] is JsonValue l && l.GetValueKind() == JsonValueKind.String && l.GetValue<string>() == "sv",
             json?["condense"]?["enabled"] is not JsonValue c || c.GetValueKind() != JsonValueKind.False,
             GeneralKnowledgeLevels.Parse(json?["answer"]?["generalKnowledge"] is JsonValue g && g.GetValueKind() == JsonValueKind.String ? g.GetValue<string>() : null),
-            json?["retrieval"]?["rerank"] is JsonValue r && r.GetValueKind() == JsonValueKind.True);
+            RerankerKinds.Parse(json?["retrieval"]?["rerank"] is JsonValue r && r.GetValueKind() == JsonValueKind.String ? r.GetValue<string>() : null));
     }
 
     private static int? Int(JsonNode? node) => node is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<int>(out var i) ? i : null;

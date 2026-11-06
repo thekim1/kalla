@@ -6,11 +6,12 @@ import type { Assistant, AssistantDraft, ClientSummary } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collectionSummary } from '@/test/fixtures'
 import { button } from '@/test/helpers'
+import { ASSISTANT } from '@/utils/labels'
 import AssistantView from './AssistantView.vue'
 
 const assistant: Assistant = {
   id: 'a1', slug: 'bygglov', name: 'Bygglovsassistenten', description: null, contactName: null, contactEmail: null, departmentId: 'd1', ownerTeamId: null,
-  classification: 'internal', historyMode: 'none', retentionDays: 90, state: 'active', publishedVersion: null, generalKnowledge: null,
+  classification: 'internal', historyMode: 'none', retentionDays: 90, state: 'active', publishedVersion: null, generalKnowledge: null, rerankers: [],
   draft: { number: 1, updatedAt: '2026-11-01T10:00:00Z', baseChanged: false, version: 'd7' }, audienceClientIds: [], updatedAt: '2026-11-01T10:00:00Z',
   updatedBy: null, version: 'a3',
 }
@@ -131,6 +132,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
   it('keeps the model and the query settings in a collapsed Advanced section, and saves from it', async () => {
     signIn(['rag-editor'])
     mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, rerankers: ['gateway'] })
     vi.spyOn(api.assistants, 'draft').mockResolvedValue({
       ...draft, systemPrompt: 'Du svarar invånare.', querySteps: { retrieval: { topK: 8, filters: { tags: ['x'] } }, answer: { generalKnowledge: 'off', language: 'sv' } },
     })
@@ -160,9 +162,12 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await wrapper.get('#assistant-max-tokens').setValue('800')
     await wrapper.get('#assistant-temperature').setValue('0,2')
     await wrapper.get('[data-test=condense] input').setValue(false)
-    // Rerank (B-12) is off by default and stored only when turned on.
-    expect((wrapper.get('[data-test=rerank] input').element as HTMLInputElement).checked).toBe(false)
-    await wrapper.get('[data-test=rerank] input').setValue(true)
+    // Rerank (B-12, B-16) is off by default and stored only when a reranker is chosen; here the platform has the gateway's.
+    const rerank = wrapper.get('#assistant-rerank').element as HTMLSelectElement
+    expect(rerank.value).toBe('')
+    expect(rerank.disabled).toBe(false)
+    expect([...rerank.options].filter((o) => o.disabled).map((o) => o.value)).toEqual(['chat'])
+    await wrapper.get('#assistant-rerank').setValue('gateway')
     await wrapper.get('#assistant-language').setValue('')
     await wrapper.get('[data-test=save-draft]').trigger('click')
     await flushPromises()
@@ -171,9 +176,36 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(save).toHaveBeenCalledWith('a1', expect.objectContaining({
       gatewayModel: 'ume/chat-eu', systemPrompt: 'Du svarar invånare.',
       querySteps: {
-        retrieval: { topK: 12, filters: { tags: ['x'] }, rerank: true }, answer: { generalKnowledge: 'off', maxOutputTokens: 800, temperature: 0.2 }, condense: { enabled: false },
+        retrieval: { topK: 12, filters: { tags: ['x'] }, rerank: 'gateway' }, answer: { generalKnowledge: 'off', maxOutputTokens: 800, temperature: 0.2 }, condense: { enabled: false },
       },
     }))
+  })
+
+  it('disables the rerank choice with a hint while the platform has no rerank model, the usual setup (B-16)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+
+    const rerank = wrapper.get('#assistant-rerank').element as HTMLSelectElement
+    expect(rerank.disabled).toBe(true)
+    expect(rerank.value).toBe('')
+    expect(wrapper.get('[data-test=advanced]').text()).toContain(ASSISTANT.rerankNone)
+    expect(wrapper.get('[data-test=advanced]').text()).not.toContain(ASSISTANT.rerankHint)
+  })
+
+  it('keeps a stored reranker the platform has no model for, with a hint that the plain ranking is used (B-16)', async () => {
+    signIn(['rag-editor'])
+    mocks()
+    vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, querySteps: { retrieval: { rerank: 'chat' } } })
+    const wrapper = mount(AssistantView, { props: { id: 'a1' }, attachTo: document.body })
+    await flushPromises()
+
+    const rerank = wrapper.get('#assistant-rerank').element as HTMLSelectElement
+    expect(rerank.disabled).toBe(false)
+    expect(rerank.value).toBe('chat')
+    expect([...rerank.options].filter((o) => o.disabled).map((o) => o.value)).toEqual(['gateway'])
+    expect(wrapper.get('[data-test=advanced]').text()).toContain(ASSISTANT.rerankMissing)
   })
 
   describe('"Open in <client>" (§5.4 step 13, #363 point 2)', () => {
