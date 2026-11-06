@@ -69,13 +69,26 @@ public sealed partial class ChatApiTests
         WireMatchesAsync(name, stream, usage, openWebUi, question, level, upstream, JsonDocument.Parse(ume).RootElement.Clone(), update: !openWebUi);
 
     /// <summary>
+    /// Follow-up suggestions on the wire (chat design §3.8, §9.8; M-8), with a condense model and FakeGateway's default
+    /// <c>follow-ups</c> answer: the JSON answer's <c>follow_ups</c> after <c>related_documents</c>, and in the stream a second
+    /// <c>ume</c> chunk with <c>follow_ups</c> alone after the first, before usage and <c>[DONE]</c>; a fixed text gets
+    /// <c>[]</c> in its only <c>ume</c> chunk, without a call.
+    /// </summary>
+    [Theory]
+    [InlineData("json-ume-follow-ups", false, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", """{"related_documents":2,"follow_ups":3}""")]
+    [InlineData("sse-ume-follow-ups", true, true, "Behöver jag bygglov för en altan högre än 1,2 meter?", """{"related_documents":2,"follow_ups":3}""")]
+    [InlineData("sse-ume-follow-ups-not-found", true, true, "Hur långt är det till månen i kilometer?", """{"follow_ups":3}""")]
+    public Task The_follow_up_wire_matches_its_golden_file(string name, bool stream, bool usage, string question, string ume) =>
+        WireMatchesAsync(name, stream, usage, false, question, null, Upstream.Fake, JsonDocument.Parse(ume).RootElement.Clone(), update: true, condenseModel: true);
+
+    /// <summary>
     /// One request against <see cref="WireHost"/> compared with its golden file; the request carries <paramref name="ume"/> only
     /// when given, so the files without it pin today's bytes. <paramref name="update"/> lets <c>UME_RAG_UPDATE_GOLDEN=1</c> write the file.
     /// </summary>
     private async Task WireMatchesAsync(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream, JsonElement? ume,
-        bool update)
+        bool update, bool condenseModel = false)
     {
-        await using var api = WireHost(level, openWebUi, upstream);
+        await using var api = WireHost(level, openWebUi, upstream, condenseModel);
         using var client = Client(api, db.IntegrationKey);
         if (openWebUi)
         {
@@ -157,9 +170,11 @@ public sealed partial class ChatApiTests
     [GeneratedRegex("x-rag-conversation-id: \\S+")]
     private static partial Regex ConversationPattern();
 
-    private WebApplicationFactory<Program> WireHost(string? level, bool openWebUi, Upstream upstream)
+    /// <summary>The wire host; with <paramref name="condenseModel"/> <c>Settings.Chat.condenseModel</c> is set, so follow-ups are called (§9.8).</summary>
+    private WebApplicationFactory<Program> WireHost(string? level, bool openWebUi, Upstream upstream, bool condenseModel = false)
     {
         var snapshot = Snapshot();
+
         if (level == "degraded")
         {
             // The embedding answer is discarded (residency above the profile's ceiling): keyword only, coverage unknown.
@@ -190,6 +205,11 @@ public sealed partial class ChatApiTests
             {
                 Clients = snapshot.Clients.ToDictionary(c => c.Key, c => c.Key == db.IntegrationClient ? c.Value with { Kind = ClientKinds.OpenWebUi } : c.Value),
             };
+        }
+
+        if (condenseModel)
+        {
+            snapshot = snapshot with { ChatSettings = """{"condenseModel":"ume/chat-eu","condenseReasoningEffort":"none"}""" };
         }
 
         return db.ApiHost(snapshot).WithWebHostBuilder(web =>

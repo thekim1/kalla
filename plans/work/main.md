@@ -74,7 +74,7 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Read:** Decisions "Related documents and the `ume` chat extension"; chat §3.2, §3.3, §3.6, §3.8, §6.2, §9.2,
   §9.3, §9.7, §17; knowledge §4.6, §10.
 
-### [ ] M-8 Follow-up suggestions (SA-3)
+### [x] M-8 Follow-up suggestions (SA-3)
 - **Do:** after a model answer with `ume.follow_ups`, one call to the condense model at the condense ceiling
   (`x-ume-step: follow-ups`, `Chat:FollowUpTimeout` 2 s, 0 = off), the prompt and accept rule of chat §9.8, delivered
   in the second `ume` chunk or the JSON `ume`; never stored or logged; metrics `rag.chat.follow_ups` and

@@ -28,16 +28,17 @@ public sealed record UmeAnswer(
     [property: JsonPropertyName("follow_ups"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? FollowUps)
 {
     /// <summary>
-    /// The <c>ume</c> member of <paramref name="plan"/>'s answer, once it has ended (<paramref name="cited"/> complete). Follow-up
-    /// suggestions are not made yet (M-8): asked for, they are <c>[]</c>, as §3.8 gives them when skipped before any call.
+    /// The <c>ume</c> member of <paramref name="plan"/>'s answer, once it has ended (<paramref name="cited"/> complete), as the
+    /// first <c>ume</c> chunk carries it (§3.8). Follow-up suggestions asked for are <c>[]</c> here when they are skipped before
+    /// any call; with <paramref name="followUpsPending"/> the call is still to come and <c>follow_ups</c> is left for it.
     /// </summary>
-    public static UmeAnswer For(ChatPlan plan, IReadOnlyList<PromptSource> cited, UmeRequest asked)
+    public static UmeAnswer For(ChatPlan plan, IReadOnlyList<PromptSource> cited, UmeRequest asked, bool followUpsPending)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(asked);
         return new UmeAnswer(ChatOutcomes.Name(plan.Outcome), plan.Degraded,
             asked.RelatedDocuments > 0 ? Chat.RelatedDocuments.For(plan.Outcome, plan.Retrieval, cited, asked.RelatedDocuments) : null,
-            asked.FollowUps > 0 ? [] : null);
+            asked.FollowUps > 0 && !followUpsPending ? [] : null);
     }
 }
 

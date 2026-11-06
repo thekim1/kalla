@@ -71,6 +71,14 @@ public sealed class FakeChatScriptsTests(FakeGatewayFactory fake) : IClassFixtur
         Ume.Rag.Answering.Chat.Condenser.Accept(condensed.Content).ShouldBe(condensed.Content);
         FakeChatScripts.DefaultCondenseLong("Meddelande: " + new string('x', 3000)).Length.ShouldBe(FakeChatScripts.CondenseLongMaxChars);
 
+        // follow-ups (chat design §9.8): questions on the first two titles, then general ones, five lines the accept rule takes.
+        var followUps = await AskAsync(fake, FakeChatScripts.FollowUpsStep, "Fråga: bygglov altan\n\nSvar: Ja.\n\nKällor:\nAltan och uteplats\nTaxa\nPlank");
+        var lines = followUps.Content.Split('\n');
+        lines.ShouldBe(["Vad mer behöver jag veta om Altan och uteplats?", "Vad mer behöver jag veta om Taxa?", "Hur går jag vidare med det här?",
+            "Vem kan jag kontakta om jag har fler frågor?", "Finns det något mer jag behöver tänka på?"]);
+        Ume.Rag.Answering.Chat.FollowUps.Accept(followUps.Content, 5, "bygglov altan").ShouldBe(lines);
+        FakeChatScripts.DefaultFollowUps("Fråga: x\n\nSvar: y").Split('\n').Length.ShouldBe(5); // no sources: general questions only
+
         (await AskAsync(fake, null, "Hur söker jag bygglov?")).Content.ShouldStartWith("Testsvar på");
         (await AskAsync(fake, "eval-dedup", "Hur söker jag bygglov?")).Content.ShouldStartWith("Testsvar på"); // an embedding step: no chat script
     }

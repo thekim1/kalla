@@ -179,7 +179,7 @@ public static partial class Condenser
         var transcript = new StringBuilder();
         foreach (var message in history.TakeLast(6))
         {
-            var text = message.Role == "assistant" ? Links().Replace(PromptBuilder.StripMarkers(message.Text), "$1") : message.Text;
+            var text = message.Role == "assistant" ? WithoutLinks(PromptBuilder.StripMarkers(message.Text)) : message.Text;
             var max = message.Role == "assistant" ? 600 : 500;
             transcript.Append(message.Role == "assistant" ? "Assistent: " : "Användare: ").Append(text.Length > max ? text[..max] : text).Append('\n');
         }
@@ -192,13 +192,19 @@ public static partial class Condenser
     {
         var text = (output ?? "").Trim().Trim('"');
         if (text.Length is < 2 or > 400 || text.Contains('\n', StringComparison.Ordinal) || text.Contains("### Task", StringComparison.OrdinalIgnoreCase) ||
-            Refusal().IsMatch(text))
+            IsRefusal(text))
         {
             return null;
         }
 
         return text;
     }
+
+    /// <summary>The §5 link rule: a Markdown link <c>[text](url)</c> becomes its text.</summary>
+    internal static string WithoutLinks(string text) => Links().Replace(text, "$1");
+
+    /// <summary>Whether <paramref name="text"/> starts with a refusal pattern (§5).</summary>
+    internal static bool IsRefusal(string text) => Refusal().IsMatch(text);
 
     /// <summary>The condense ceiling: <c>Eu</c> in P1a, never above the turn's ceiling.</summary>
     public static Residency Ceiling(Residency turn) => turn < Residency.Eu ? turn : Residency.Eu;

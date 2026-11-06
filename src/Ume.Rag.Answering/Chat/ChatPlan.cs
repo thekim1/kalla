@@ -44,6 +44,12 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
     int MaxTokens, string Language, string? Fixed, ChatOutcome Outcome, BuiltPrompt? Prompt, RetrievalResult? Retrieval, bool Degraded,
     PlatformChatSettings Platform, CondenseOutcome? Condense = null)
 {
+    /// <summary>
+    /// The turn's search query (§5, §5.1): the question's query form or its condensed form; null for a conversational turn
+    /// (no retrieval). The follow-up call reads it (§9.8); it is never stored or logged.
+    /// </summary>
+    public string? Query { get; init; }
+
     /// <summary>The caveat line of a degraded answer (§10.2) or of a general-knowledge answer (§10.4), or null; written by us, first.</summary>
     public string? Caveat => Outcome == ChatOutcome.AnsweredGeneral
         ? (Language == LanguageGuess.English ? FixedTexts.GeneralCaveatEn : FixedTexts.GeneralCaveatSv) + "\n\n"

@@ -4,7 +4,8 @@ namespace Ume.Rag.Answering.Chat;
 /// Chat deployment knobs (chat design §8.3, §9.4, §4.1 step 4): <c>Chat:GatewayHeadersTimeoutSeconds</c> (15),
 /// <c>Chat:StreamIdleTimeoutSeconds</c> (60), <c>Chat:MaxAnswerDurationSeconds</c> (240), <c>Chat:MessagesPerMinutePerUser</c>
 /// (20) and <c>Chat:AllowedLinkHosts</c> (<c>umea.se</c>, <c>*.umea.se</c>). The last two move to <c>Settings.Chat</c> with
-/// part c of item 15. <c>Chat:CondenseTimeout</c> (1,200 ms) and <c>Chat:LongQuestionCondenseTimeout</c> (3 s) bound the condense calls.
+/// part c of item 15. <c>Chat:CondenseTimeout</c> (1,200 ms) and <c>Chat:LongQuestionCondenseTimeout</c> (3 s) bound the condense calls,
+/// <c>Chat:FollowUpTimeout</c> (2 s; 0 = off) the follow-up call (§9.8).
 /// </summary>
 public sealed class ChatOptions
 {
@@ -21,4 +22,10 @@ public sealed class ChatOptions
 
     /// <summary>How long the long-question condense may take before the question's first 2,000 characters are the query (chat design §5.1).</summary>
     public TimeSpan LongQuestionCondenseTimeout { get; set; } = Condenser.DefaultLongTimeout;
+
+    /// <summary>
+    /// How long the follow-up call may take before the suggestions are <c>[]</c> (chat design §9.8): <c>[DONE]</c> waits at
+    /// most this long; zero switches follow-up suggestions off.
+    /// </summary>
+    public TimeSpan FollowUpTimeout { get; set; } = FollowUps.DefaultTimeout;
 }

@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain;
@@ -19,7 +18,8 @@ namespace Ume.Rag.Answering.Chat;
 /// role in process (the assistant's published collections), coverage handling (§6.2), the prompt (§6.3, §7), then the gateway
 /// call (<see cref="OpenAnswerAsync"/>) and one answer path through the <see cref="AnswerTransducer"/> (<see cref="ChatAnswer"/>,
 /// §9.2–§9.4), which the stream writer relays and <see cref="CompleteAsync"/> folds into the JSON answer. Condense is part c of item 15;
-/// the long-question condense is §5.1. Without <paramref name="meters"/> (the admin test panel) the condense calls are not counted.
+/// the long-question condense is §5.1; the follow-up suggestions after the answer are §9.8 (<see cref="FollowUpsAsync"/>). Without
+/// <paramref name="meters"/> (the admin test panel) the condense and follow-up calls are not counted.
 /// </summary>
 public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccessPolicy policy, KnowledgeService knowledge, GatewayChatClient gateway,
     IOptions<ChatOptions> options, IOptions<GatewayOptions> gatewayOptions, TimeProvider time, ILogger<ChatService> logger, IMeterFactory? meters = null)
@@ -35,6 +35,9 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
     private readonly Counter<long>? _tokens = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
         .CreateCounter<long>("rag.chat.tokens", description: "Model tokens of the chat role's gateway calls by direction and step");
+
+    private readonly Counter<long>? _followUps = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
+        .CreateCounter<long>("rag.chat.follow_ups", description: "Follow-up suggestion calls and skips by outcome");
 
     /// <summary><c>Settings.Chat</c> at the current snapshot, over the deployment knobs.</summary>
     public PlatformChatSettings Platform => Resolved(snapshots.Current).Platform;
@@ -70,8 +73,12 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         // §7.1: the answer model reads the question's prompt form, line breaks kept; everything before it reads the query form.
         var context = new PromptContext(assistant.Name, assistant.Published.SystemPrompt, language, chat.PromptQuestion, chat.History, settings);
         CondenseOutcome? condense = null;
+        string? query = null;
         ChatPlan Plan(string? fixedText, ChatOutcome outcome, BuiltPrompt? prompt, RetrievalResult? retrieval, bool degraded) =>
-            new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded, platform, condense);
+            new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded, platform, condense)
+            {
+                Query = query,
+            };
 
         RetrievalResult? retrieval = null;
         var conversational = MessageKind.IsConversational(chat.Question);
@@ -79,7 +86,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         {
             // §5, §5.1: a follow-up that is not self-contained, or any question over 2,000 characters, is rewritten for retrieval
             // only; the prompt keeps the user's question.
-            (var query, condense, var condenseFailed) = await CondenseAsync(chat, settings, platform, ceiling, messageId, ct);
+            (query, condense, var condenseFailed) = await CondenseAsync(chat, settings, platform, ceiling, messageId, ct);
             try
             {
                 // The rerank call (when the assistant reranks) runs at the turn's ceiling, as the answer does (§6.7).
@@ -175,21 +182,39 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     }
 
     /// <summary>
-    /// One condense call (§5 "Call", §5.1 "Model and call"): the platform condense model at the condense ceiling, ≤ 96 tokens, no
-    /// temperature, the reasoning effort when set, a hard <paramref name="budget"/> on <see cref="TimeProvider"/> without retry.
-    /// The accepted one-line rewrite, or null with the outcome.
+    /// One condense call (§5 "Call", §5.1 "Model and call"), ≤ 96 tokens (<see cref="CallTaskModelAsync"/>). The accepted one-line
+    /// rewrite, or null with the outcome.
     /// </summary>
     private async Task<(string? Rewritten, CondenseOutcome Outcome)> CallCondenseAsync(IReadOnlyList<ChatMessageIn> messages, string step, TimeSpan budget,
         PlatformChatSettings platform, Residency ceiling, Guid messageId, CancellationToken ct)
+    {
+        var (answer, failure) = await CallTaskModelAsync(messages, step, Condenser.MaxOutputTokens, budget, platform, ceiling, messageId, ct);
+        if (answer is null)
+        {
+            return (null, failure!.Value);
+        }
+
+        return Condenser.Accept(answer.Text) is { } rewritten ? (rewritten, CondenseOutcome.Rewritten) : (null, CondenseOutcome.Rejected);
+    }
+
+    /// <summary>
+    /// One call to the platform's task model (§5 "Call", §5.1 "Model and call", §9.8 "Model and call"): non-streaming, the condense
+    /// model at the condense ceiling (<see cref="Condenser.Ceiling"/>, never above the turn's <paramref name="ceiling"/>), no
+    /// temperature, the reasoning effort when set, a hard <paramref name="budget"/> on <see cref="TimeProvider"/> without retry;
+    /// its tokens counted under <paramref name="step"/>. The answer, or null with why (<c>timeout</c>, <c>residency</c>, <c>error</c>).
+    /// The caller's own cancellation (a disconnect) is not caught.
+    /// </summary>
+    private async Task<(GatewayAnswer? Answer, CondenseOutcome? Failure)> CallTaskModelAsync(IReadOnlyList<ChatMessageIn> messages, string step, int maxTokens,
+        TimeSpan budget, PlatformChatSettings platform, Residency ceiling, Guid messageId, CancellationToken ct)
     {
         using var timeout = new CancellationTokenSource(budget, time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
         try
         {
-            var answer = await gateway.CompleteAsync(platform.CondenseModel!, Condenser.Ceiling(ceiling), messages, Condenser.MaxOutputTokens, null, messageId, step,
-                linked.Token, platform.CondenseReasoningEffort);
+            var answer = await gateway.CompleteAsync(platform.CondenseModel!, Condenser.Ceiling(ceiling), messages, maxTokens, null, messageId, step, linked.Token,
+                platform.CondenseReasoningEffort);
             CountTokens(step, answer);
-            return Condenser.Accept(answer.Text) is { } rewritten ? (rewritten, CondenseOutcome.Rewritten) : (null, CondenseOutcome.Rejected);
+            return (answer, null);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -199,10 +224,64 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         {
             return (null, CondenseOutcome.Residency);
         }
-        catch (Exception ex) when (ex is ChatException or GatewayCallRefusedException or HttpRequestException or JsonException)
+        catch (Exception) when (!ct.IsCancellationRequested)
         {
+            // Any other failure, a malformed 200 body included: a task-model call never fails the turn (§5.1, §9.8).
             return (null, CondenseOutcome.Error);
         }
+    }
+
+    /// <summary>
+    /// How many follow-up questions the turn's call asks for (§9.8 "When"), 0 for no call: asked for, after a model answer
+    /// (<c>answered</c> or <c>answered-general</c>; not a fixed text, not a conversational turn), with <c>Chat:FollowUpTimeout</c>
+    /// above zero, a <c>Settings.Chat.condenseModel</c>, and a turn ceiling above <c>OnPrem</c> (no condense model until M2, §5).
+    /// </summary>
+    public int FollowUpCount(ChatPlan plan, UmeRequest? asked)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        // A conversational turn has no search query (no retrieval).
+        var answered = plan.Fixed is null && (plan.Outcome is ChatOutcome.Answered or ChatOutcome.AnsweredGeneral) && plan.Query is not null;
+        return asked is { FollowUps: > 0 } && answered && options.Value.FollowUpTimeout > TimeSpan.Zero && plan.Platform.CondenseModel is not null &&
+            plan.Ceiling != Residency.OnPrem
+            ? asked.FollowUps
+            : 0;
+    }
+
+    /// <summary>
+    /// The answer's <c>ume</c> member as the first <c>ume</c> chunk carries it (§3.8): <c>follow_ups</c> is <c>[]</c> there when
+    /// they were asked for and are skipped before any call (counted <c>skipped</c>), and left for the second chunk when a call follows.
+    /// </summary>
+    public UmeAnswer Ume(ChatPlan plan, IReadOnlyList<PromptSource> cited, UmeRequest asked)
+    {
+        ArgumentNullException.ThrowIfNull(asked);
+        var pending = FollowUpCount(plan, asked) > 0;
+        if (asked.FollowUps > 0 && !pending)
+        {
+            _followUps?.Add(1, new KeyValuePair<string, object?>("outcome", FollowUps.Skipped));
+        }
+
+        return UmeAnswer.For(plan, cited, asked, pending);
+    }
+
+    /// <summary>
+    /// The follow-up suggestions (§9.8): one call at the condense ceiling with <c>x-ume-step: follow-ups</c> and <c>max_tokens</c>
+    /// 40 × <paramref name="count"/>, from the turn's search query, the <paramref name="delivered"/> answer and the prompt's titles
+    /// (<paramref name="cited"/> first), bounded by <c>Chat:FollowUpTimeout</c>; then the accept rule against the
+    /// <paramref name="question"/> and the query. Timeout, error, residency refusal or nothing accepted give <c>[]</c>, counted,
+    /// never retried; the suggestions are never logged. The caller's cancellation (a disconnect) cancels the call and is thrown.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> FollowUpsAsync(ChatPlan plan, string question, int count, string delivered, IReadOnlyList<PromptSource> cited,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(cited);
+        var messages = FollowUps.Messages(count, plan.Language, plan.Query!, FollowUps.Answer(plan, delivered), FollowUps.Titles(plan.Prompt?.Sources ?? [], cited));
+        var (answer, failure) = await CallTaskModelAsync(messages, FollowUps.Step, FollowUps.TokensPerQuestion * count, options.Value.FollowUpTimeout,
+            plan.Platform, plan.Ceiling, plan.MessageId, ct);
+        IReadOnlyList<string> suggestions = answer is null ? [] : FollowUps.Accept(answer.Text, count, question, plan.Query);
+        var outcome = answer is null ? Condenser.OutcomeName(failure!.Value) : suggestions.Count > 0 ? FollowUps.Used : FollowUps.Empty;
+        _followUps?.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+        return suggestions;
     }
 
     /// <summary><c>rag.chat.condense{kind, outcome}</c> (§17); for <c>long</c> every outcome but <c>used</c> is the fallback.</summary>
