@@ -175,7 +175,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 
 ## Live (the live block, see the roadmap)
 
-### [ ] B-L1 Status green against the real gateway
+### [x] B-L1 Status green against the real gateway
 - **Done when:** `GET /api/gateway/status` green with the pilot keys; #95, #102, #162 rechecked.
 - **Waits on:** the gateway session (EU routes, pilot keys).
 
