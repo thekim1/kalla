@@ -4,8 +4,8 @@ Playwright tests of the admin UI (admin design §10.1, §11.4; repo-and-deployme
 `tests/e2e` setup.
 
 - `specs/pilot.spec.ts`: the pilot department admin's journey (admin design §5.4 steps 1–13) against the fixture website,
-  with the mouse and with the keyboard only. It ends by finding the assistant in rag-api's `/v1/models` for the seeded
-  Open WebUI (dev) client.
+  with the mouse and with the keyboard only. Step 13 follows the assistant page's "Open in Open WebUI (dev)" link (the
+  seeded client's `PortalUrl`, the stack's Open WebUI) and finds the assistant in rag-api's `/v1/models` for that client.
 - `specs/accessibility.spec.ts`: axe (WCAG 2.2 A/AA) and target size on every page in the three themes, reflow at 320 px
   and 200 % text, keyboard landmarks, skip link and focus, forced colours. The result is summarised in
   `docs/accessibility-statement.md`.

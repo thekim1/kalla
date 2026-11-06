@@ -52,7 +52,8 @@ public sealed partial class MigrationWorker(
                 if (configuration["Seed:DevKey"] is { Length: > 0 } devKey)
                 {
                     var hasher = KeyHasherFactory.Create(new SecurityOptions { KeyPepper = configuration["Security:KeyPepper"] ?? "" });
-                    await DevSeeder.SeedDevClientAsync(db, hasher, devKey, TimeProvider.System, stoppingToken);
+                    await DevSeeder.SeedDevClientAsync(db, hasher, devKey, configuration["Seed:DevClientPortalUrl"], TimeProvider.System,
+                        stoppingToken);
                 }
             }
 

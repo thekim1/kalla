@@ -52,10 +52,12 @@ public static class DevSeeder
     /// <summary>
     /// The client <see cref="DevClientName"/> (<c>open-webui</c>, ceiling <c>internal</c>, no history) with the key
     /// <c>ume-rag-sk-</c> + <paramref name="devKey"/> (the AppHost's <c>dev-key</c> parameter, 43 base62 characters), hashed
-    /// with the deployment's pepper as every key (identity §6.1). Insert-if-absent: an existing client is left as it is, and
-    /// the key is added only when no key of the client has its hash.
+    /// with the deployment's pepper as every key (identity §6.1). <paramref name="portalUrl"/> (<c>Seed:DevClientPortalUrl</c>, the
+    /// AppHost's Open WebUI) is the client's <c>PortalUrl</c>, the assistant page's "Open in" link (admin design §5.4 step 13).
+    /// Insert-if-absent: an existing client is left as it is, and the key is added only when no key of the client has its hash.
     /// </summary>
-    public static async Task SeedDevClientAsync(RagDbContext db, KeyHasher hasher, string devKey, TimeProvider clock, CancellationToken cancellationToken)
+    public static async Task SeedDevClientAsync(
+        RagDbContext db, KeyHasher hasher, string devKey, string? portalUrl, TimeProvider clock, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(hasher);
@@ -75,6 +77,7 @@ public static class DevSeeder
                 Name = DevClientName,
                 Kind = ClientKinds.OpenWebUi,
                 ClassificationCeiling = Classification.Internal,
+                PortalUrl = portalUrl is { Length: > 0 } ? portalUrl : null,
                 UpdatedAt = now,
                 UpdatedBy = EmbeddingProfileSeeder.Actor,
             });

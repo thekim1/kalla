@@ -61,6 +61,8 @@ export const COMMON = {
   no: 'No',
   active: 'Active',
   inactive: 'Inactive',
+  /** Read after a link that opens a new browser tab (WCAG 3.2.5). */
+  opensInNewTab: '(opens in a new tab)',
 } as const
 
 export const PAGINATION = {

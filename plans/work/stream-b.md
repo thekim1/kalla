@@ -83,7 +83,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "M-2 open design calls"; knowledge-api §6.4; to-verify #180.
 
-### [ ] B-11 "Open in Open WebUI" link on the assistant page (#363 point 2)
+### [x] B-11 "Open in Open WebUI" link on the assistant page (#363 point 2) (#395)
 - **Do:** the assistant page links to the client's `PortalUrl` for a published assistant on a client with one.
 - **Paths:** `src/admin-ui/**`, `src/Ume.Rag.AdminApi/AssistantEndpoints.cs`.
 - **Done when:** the link shows on a published `turkos` and opens Open WebUI (look in the browser); the pilot-journey
