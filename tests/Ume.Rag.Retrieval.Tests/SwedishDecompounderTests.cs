@@ -2,7 +2,7 @@ using Ume.Rag.Retrieval.Text;
 
 namespace Ume.Rag.Retrieval.Tests;
 
-/// <summary>The compound cases of data-model §3.1 and simplification pass §3 against the embedded sv_SE word list.</summary>
+/// <summary>The compound cases of data-model §3.1 and simplification pass §3 against the shipped sv_SE word list.</summary>
 public sealed class SwedishDecompounderTests
 {
     private static SwedishDecompounder Decompounder => SwedishDecompounder.Default;
@@ -74,5 +74,63 @@ public sealed class SwedishDecompounderTests
 
         simple.Where(w => Decompounder.Split(w).Count > 0).ShouldBeEmpty();
         compounds.Count(w => Decompounder.Split(w).Count >= 2).ShouldBeGreaterThanOrEqualTo(85);
+    }
+
+    [Fact]
+    public void The_word_list_ships_as_separate_files_with_its_licence_texts_not_inside_the_assembly()
+    {
+        // LGPL-3.0-only (#52, to-verify #113): a user can replace the list, and the notices and licence texts go with it.
+        var directory = Path.Combine(AppContext.BaseDirectory, "dictionaries", "sv_SE");
+        foreach (var file in new[] { "sv_SE.aff", "sv_SE.dic", "LICENSE_en_US.txt", "LICENSE_sv_SE.txt", "COPYING", "COPYING.LESSER", "README.md" })
+        {
+            File.Exists(Path.Combine(directory, file)).ShouldBeTrue(file);
+        }
+
+        File.ReadAllText(Path.Combine(directory, "COPYING.LESSER")).ShouldContain("GNU LESSER GENERAL PUBLIC LICENSE");
+        File.ReadAllText(Path.Combine(directory, "COPYING")).ShouldContain("GNU GENERAL PUBLIC LICENSE");
+        typeof(SwedishDecompounder).Assembly.GetManifestResourceNames().ShouldNotContain(n => n.Contains("sv_SE", StringComparison.Ordinal));
+        SwedishDecompounder.DefaultDirectory.ShouldBe(directory);
+    }
+
+    [Fact]
+    public void A_replacement_list_in_another_directory_is_read_from_there()
+    {
+        var shipped = Path.Combine(AppContext.BaseDirectory, "dictionaries", "sv_SE");
+        var replacement = Directory.CreateTempSubdirectory("sv_SE-");
+        try
+        {
+            File.Copy(Path.Combine(shipped, "sv_SE.aff"), Path.Combine(replacement.FullName, "sv_SE.aff"));
+            // A list with one stem fewer: "bygglov" is gone, so the compound no longer splits on it.
+            var lines = File.ReadAllLines(Path.Combine(shipped, "sv_SE.dic"));
+            var kept = lines.Skip(1).Where(l => !l.StartsWith("bygglov/", StringComparison.Ordinal) && l != "bygglov").ToList();
+            kept.Count.ShouldBeLessThan(lines.Length - 1);
+            File.WriteAllLines(Path.Combine(replacement.FullName, "sv_SE.dic"), [kept.Count.ToString(System.Globalization.CultureInfo.InvariantCulture), .. kept]);
+
+            var replaced = SwedishDecompounder.FromDirectory(replacement.FullName);
+
+            Decompounder.Split("bygglovsansökan").ShouldContain("bygglov");
+            replaced.Split("bygglovsansökan").ShouldNotContain("bygglov");
+        }
+        finally
+        {
+            replacement.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_directory_without_the_list_names_the_directory_and_the_setting()
+    {
+        var empty = Directory.CreateTempSubdirectory("sv_SE-empty-");
+        try
+        {
+            var error = Should.Throw<FileNotFoundException>(() => SwedishDecompounder.FromDirectory(empty.FullName));
+
+            error.Message.ShouldContain(empty.FullName);
+            error.Message.ShouldContain(SwedishDecompounder.DirectoryVariable);
+        }
+        finally
+        {
+            empty.Delete(recursive: true);
+        }
     }
 }

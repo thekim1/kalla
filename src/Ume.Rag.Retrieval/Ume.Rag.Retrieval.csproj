@@ -9,8 +9,9 @@
     <PackageReference Include="Pgvector" />
   </ItemGroup>
   <ItemGroup>
-    <!-- The sv_SE Hunspell word list for SwedishDecompounder (Text/sv_SE/README.md: source, version, licence). -->
-    <EmbeddedResource Include="Text\sv_SE\sv_SE.aff" LogicalName="Ume.Rag.Retrieval.Text.sv_SE.sv_SE.aff" />
-    <EmbeddedResource Include="Text\sv_SE\sv_SE.dic" LogicalName="Ume.Rag.Retrieval.Text.sv_SE.sv_SE.dic" />
+    <!-- The sv_SE Hunspell word list for SwedishDecompounder (Text/sv_SE/README.md: source, version, licence). LGPL-3.0-only:
+         shipped as separate, replaceable files with their notices and the LGPL-3.0 and GPL-3.0 texts (LGPL-3 section 4,
+         #52), in dictionaries/sv_SE/ next to every assembly that uses Ume.Rag.Retrieval, and so in every .NET image. -->
+    <Content Include="Text\sv_SE\*" Link="dictionaries\sv_SE\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

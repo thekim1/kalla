@@ -16,8 +16,14 @@ public sealed class SwedishDecompounder
     /// <summary>Words longer than this are not split (bounds the search; Swedish words of this length are rare).</summary>
     public const int MaxWordLength = 64;
 
-    private const string ResourcePrefix = "Ume.Rag.Retrieval.Text.sv_SE.";
-    private static readonly Lazy<SwedishDecompounder> Embedded = new(LoadEmbedded);
+    /// <summary>
+    /// The environment variable (configuration key <c>Text:SwedishWordListDirectory</c>) that names another directory
+    /// holding <c>sv_SE.aff</c> and <c>sv_SE.dic</c>: the word list is LGPL-3.0 and may be replaced (#52). A changed list
+    /// changes every chunk's <c>SearchText</c>, so the worker command <c>reindex-fts</c> follows.
+    /// </summary>
+    public const string DirectoryVariable = "Text__SwedishWordListDirectory";
+
+    private static readonly Lazy<SwedishDecompounder> Shipped = new(() => FromDirectory(DefaultDirectory));
     private readonly HunspellWordList _dictionary;
 
     public SwedishDecompounder(HunspellWordList dictionary, int minPartLength = 3)
@@ -28,8 +34,17 @@ public sealed class SwedishDecompounder
         MinPartLength = minPartLength;
     }
 
-    /// <summary>The decompounder over the embedded <c>sv_SE</c> word list (loaded once, on first use).</summary>
-    public static SwedishDecompounder Default => Embedded.Value;
+    /// <summary>The decompounder over the <c>sv_SE</c> word list in <see cref="DefaultDirectory"/> (loaded once, on first use).</summary>
+    public static SwedishDecompounder Default => Shipped.Value;
+
+    /// <summary>
+    /// Where <see cref="Default"/> reads the word list: <see cref="DirectoryVariable"/> when set, else
+    /// <c>dictionaries/sv_SE</c> next to the application (the files the build copies there).
+    /// </summary>
+    public static string DefaultDirectory =>
+        Environment.GetEnvironmentVariable(DirectoryVariable) is { Length: > 0 } directory
+            ? directory
+            : Path.Combine(AppContext.BaseDirectory, "dictionaries", "sv_SE");
 
     public int MinPartLength { get; }
 
@@ -156,13 +171,21 @@ public sealed class SwedishDecompounder
         }
     }
 
-    private static SwedishDecompounder LoadEmbedded()
+    /// <summary>The decompounder over <c>sv_SE.aff</c> and <c>sv_SE.dic</c> in <paramref name="directory"/>.</summary>
+    public static SwedishDecompounder FromDirectory(string directory)
     {
-        var assembly = typeof(SwedishDecompounder).Assembly;
-        using var affix = new StreamReader(assembly.GetManifestResourceStream(ResourcePrefix + "sv_SE.aff")
-            ?? throw new InvalidOperationException("Embedded sv_SE.aff not found."), Encoding.UTF8);
-        using var dictionary = new StreamReader(assembly.GetManifestResourceStream(ResourcePrefix + "sv_SE.dic")
-            ?? throw new InvalidOperationException("Embedded sv_SE.dic not found."), Encoding.UTF8);
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        var affixPath = Path.Combine(directory, "sv_SE.aff");
+        var dictionaryPath = Path.Combine(directory, "sv_SE.dic");
+        if (!File.Exists(affixPath) || !File.Exists(dictionaryPath))
+        {
+            throw new FileNotFoundException(
+                $"The sv_SE word list (sv_SE.aff and sv_SE.dic) is not in '{directory}'. It ships in dictionaries/sv_SE next to the application; {DirectoryVariable} names another directory.",
+                File.Exists(affixPath) ? dictionaryPath : affixPath);
+        }
+
+        using var affix = new StreamReader(affixPath, Encoding.UTF8);
+        using var dictionary = new StreamReader(dictionaryPath, Encoding.UTF8);
         return new SwedishDecompounder(HunspellWordList.Load(affix, dictionary));
     }
 }
