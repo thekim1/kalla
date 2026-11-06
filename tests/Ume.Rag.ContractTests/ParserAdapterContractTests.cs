@@ -56,9 +56,15 @@ public sealed class ParserAdapterContractTests(ParserContainer parser)
     {
         await parser.RequireReadyAsync();
         var ner = new ParserNerClient(parser.Client(strict: false));
+        if (!await ner.IsReadyAsync(Ct))
+        {
+            // NER_IDLE_STOP_S: ner-0 starts on the first /v1/ner, which answers not_ready while it warms.
+            await Should.ThrowAsync<ParserException>(() => ner.RecognizeAsync([new NerText("wake", "Möte med Anna.")], 0.5, Ct));
+        }
+
         for (var i = 0; i < 120 && !await ner.IsReadyAsync(Ct); i++)
         {
-            await Task.Delay(TimeSpan.FromSeconds(1), Ct); // ner-0 warms up after the conversion slots
+            await Task.Delay(TimeSpan.FromSeconds(1), Ct);
         }
 
         (await ner.IsReadyAsync(Ct)).ShouldBeTrue("ner-0 did not become ready");

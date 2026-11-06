@@ -128,8 +128,17 @@ public sealed class FakeNer : INerClient
 
     public Task<bool> IsReadyAsync(CancellationToken cancellationToken) => Task.FromResult(Ready);
 
+    /// <summary>Requests answered <c>not_ready</c>: like the parser, a request to a cold <c>ner-0</c> wakes it.</summary>
+    public int Wakes { get; private set; }
+
     public Task<NerAnswer> RecognizeAsync(IReadOnlyList<NerText> texts, double minScore, CancellationToken cancellationToken)
     {
+        if (!Ready)
+        {
+            Wakes++;
+            throw FakeConverter.Error("not_ready", System.Net.HttpStatusCode.ServiceUnavailable);
+        }
+
         if (Fail is { } code)
         {
             throw FakeConverter.Error(code, System.Net.HttpStatusCode.ServiceUnavailable);

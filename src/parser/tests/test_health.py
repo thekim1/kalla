@@ -16,6 +16,7 @@ class FakeSupervisor:
         self.ready = False
         self.convert_slots = 1
         self.slots_ready = 0
+        self.slots_cold = 0
         self.inspect_slots = 1
         self.ner_ready = False
 
@@ -45,7 +46,7 @@ def test_ready_is_503_until_a_slot_is_warm(settings):
         supervisor.ready, supervisor.slots_ready = True, 1
         response = client.get("/health/ready")
         assert response.status_code == 200
-        assert response.json() == {"status": "ready", "slots_ready": 1, "convert_slots": 1}
+        assert response.json() == {"status": "ready", "slots_ready": 1, "slots_cold": 0, "convert_slots": 1}
 
 
 def test_info_hashes_everything_but_capacity(settings):

@@ -72,6 +72,10 @@ def test_app_becomes_ready_and_converts_without_network(monkeypatch, settings):
             assert _convert(client, name) == ("docling", pages), name
         inspected = client.post("/v1/inspect", files={"file": ("input", fixture_bytes("text-layer.pdf"), "x/y")})
         assert inspected.status_code == 200 and inspected.json()["page_count"] == 3
+        assert not app.state.supervisor.ner_ready  # NER_IDLE_STOP_S: ner-0 starts on the first request
+        texts = [{"id": "t1", "text": "Protokollet justerades av Anna Lindqvist."}]
+        woken = client.post("/v1/ner", json={"request_id": "offline-wake", "texts": texts})
+        assert woken.status_code == 503 and woken.json()["error"]["code"] == "not_ready"
         while not app.state.supervisor.ner_ready:
             assert time.monotonic() < deadline, "ner-0 did not warm up"
             assert app.state.supervisor.slots("ner")[0].failures == 0, app.state.supervisor.slots("ner")[0].problems

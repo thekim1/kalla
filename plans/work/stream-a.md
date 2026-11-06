@@ -40,7 +40,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** gateway release 1 tagged and deployed (B-L4).
 - **Read:** Decisions "Gateway release 1 and shared Keycloak as built".
 
-### [ ] A-6 NER loaded on first use, unloaded when idle (resource review)
+### [x] A-6 NER loaded on first use, unloaded when idle (resource review) (#419)
 - **Do:** the parser's `ner-0` process starts on the first `/v1/ner` request (not at container start) and stops after
   `NER_IDLE_STOP_S` (proposed 900) without requests. While it warms, `/v1/ner` answers `not_ready` as today, so the
   worker's existing NER wait (processing §9.6) covers the gap; `/v1/info` reports `ner_ready` honestly.
@@ -50,7 +50,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** parser §7.8, §10.1, §10.2; processing §9.6.
 
-### [ ] A-7 Convert slot goes cold between batches (resource review)
+### [x] A-7 Convert slot goes cold between batches (resource review) (#419)
 - **Do:** a convert slot with no job for `PARSER_IDLE_STOP_S` (proposed 900) stops; the next convert request warms one
   (readiness and the worker's parser-slot gate already handle a warming parser). Inspect stays warm (its 10 s deadline).
   Keep at least the option of "always warm" (`PARSER_IDLE_STOP_S=0`).
