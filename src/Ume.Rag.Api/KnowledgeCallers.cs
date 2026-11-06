@@ -60,12 +60,17 @@ public sealed class KnowledgeCallers(KeyStore keys, IPolicySnapshotSource snapsh
                 : new KnowledgeFaultException(401, KeyChecks.InvalidKey, "The API key is not valid.");
         }
 
-        if (KeyChecks.Refusal(key, presented, time.GetUtcNow()) is { } refusal)
+        // The connection address, as the throttle and the events see it (identity §6.3 step 4).
+        if (KeyChecks.Refusal(key, presented, time.GetUtcNow(), http.Connection.RemoteIpAddress) is { } refusal)
         {
             security.AuthFailed(http, refusal, key.Kind, key.Id, key.Prefix, key.ClientId);
-            throw refusal == KeyChecks.OwnerInactive
-                ? new KnowledgeFaultException(403, refusal, "The key's client is disabled.")
-                : new KnowledgeFaultException(401, refusal, "The API key cannot be used.");
+            throw refusal switch
+            {
+                KeyChecks.OwnerInactive => new KnowledgeFaultException(403, refusal, "The key's client is disabled."),
+                KeyChecks.AddressNotAllowed => new KnowledgeFaultException(403, refusal,
+                    "The API key may not be used from this address. Ask your administrator to add the address to the key."),
+                _ => new KnowledgeFaultException(401, refusal, "The API key cannot be used."),
+            };
         }
 
         if (!snapshots.IsConfirmed)

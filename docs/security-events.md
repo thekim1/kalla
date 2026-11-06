@@ -25,8 +25,9 @@ a structured field.
   Keycloak), session id (random, given at sign-in; never the cookie), and the source address.
 - **Client-supplied text** (paths, query strings, user agents) is logged with control characters replaced by `?`, so it
   cannot start a forged log line. Logs are JSON outside development.
-- **Source address:** the connection's address. Until the admin's trusted-proxy setting arrives (P1), behind the reverse
-  proxy this is the proxy's address.
+- **Source address:** the client's address. When the connection comes from a proxy listed in the admin's trusted
+  proxies (Settings, *Network*), both rag-api and the admin take the right-most untrusted `X-Forwarded-For` entry;
+  otherwise it is the connection's address, so behind a reverse proxy that is not listed it is the proxy's.
 
 ## Events
 

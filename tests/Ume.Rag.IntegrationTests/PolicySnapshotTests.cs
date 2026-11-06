@@ -59,6 +59,25 @@ public sealed class PolicySnapshotTests(RagDatabaseFixture database)
     }
 
     [Fact]
+    public async Task The_snapshot_carries_the_trusted_proxies_parsed()
+    {
+        await using var own = new RagDatabase(); // its own: Settings is one row per database
+        await own.InitializeAsync();
+        await using (var db = TestPostgres.Context(own.Connection(Migrator)))
+        {
+            await Ume.Rag.MigrationService.SettingsSeeder.SeedAsync(db, new Ume.Rag.MigrationService.SettingsSeedOptions(), TimeProvider.System,
+                NullLogger.Instance, Ct);
+            await db.Settings.ExecuteUpdateAsync(s => s.SetProperty(x => x.TrustedProxies, ["192.0.2.0/24", "2001:db8::1", "not-an-address"]), Ct);
+        }
+
+        await using var dataSource = NpgsqlDataSource.Create(own.Connection(Api));
+
+        var snapshot = await Store(dataSource).LoadAsync(1, Ct);
+
+        snapshot.TrustedProxies.Select(n => n.ToString()).ShouldBe(["192.0.2.0/24", "2001:db8::1/128"]); // read with the api's grant; invalid skipped
+    }
+
+    [Fact]
     public void A_level_without_a_saved_row_gets_the_admins_defaults()
     {
         // data-model §2.1 seeds no DataProtectionPolicies rows; the admin shows the code defaults until a row is saved, so

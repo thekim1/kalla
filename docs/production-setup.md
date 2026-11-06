@@ -311,6 +311,9 @@ The listeners default to loopback (`127.0.0.1:8543` and `:9543`). Behind the mun
 another name): the listeners bind to `0.0.0.0`, so restrict those ports to the proxy. The script prints the routes:
 each host name forwarded over HTTPS to its port, preserving the `Host` header; `client_max_body_size 60m` and
 `proxy_request_buffering off` on `PUT /api/upload-batches/{batchId}/files/{n}` of the admin host, 1 MB elsewhere.
+Add the proxy's addresses to the trusted proxies (admin UI, Settings, *Network*) and have it set `X-Forwarded-For`:
+rag-api and the admin then see the client's address (key IP allow-lists, the refused-credential throttle, security
+events); without the entry every request comes from the proxy, and a key allow-list holding a client host refuses it.
 With certificates from your PKI, pass `--api-cert`, `--api-key`, `--admin-cert` and `--admin-key` (and `--ca-file`
 for the chain).
 

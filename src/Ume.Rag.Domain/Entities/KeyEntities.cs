@@ -1,3 +1,6 @@
+using System.Net;
+using Ume.Rag.Domain.Services;
+
 namespace Ume.Rag.Domain.Entities;
 
 /// <summary>Client kinds of the registry (data-model §2.1 <c>Clients</c>, R5).</summary>
@@ -155,6 +158,45 @@ public sealed class ApiKey
     }
 
     public bool IsUsable(DateTimeOffset now) => GetStatus(now) is KeyStatus.Active or KeyStatus.InGracePeriod;
+
+    // Copied from the gateway's VirtualKey (address part): parsed AllowedIpRanges, built once by IndexAllowLists for keys
+    // held in a read-only cache.
+    private IPNetwork[]? _allowedNetworks;
+    private List<string>? _indexedRanges;
+    private int _indexedRangeCount;
+
+    /// <summary>
+    /// Builds the lookup <see cref="IsAddressAllowed"/> uses, so a cached key answers without parsing. Call once the key is
+    /// loaded for read-only use; if the list is replaced or resized afterwards the index is ignored.
+    /// </summary>
+    public void IndexAllowLists()
+    {
+        _allowedNetworks = NetworkRanges.ParseValid(AllowedIpRanges);
+        _indexedRanges = AllowedIpRanges;
+        _indexedRangeCount = AllowedIpRanges.Count;
+    }
+
+    /// <summary>
+    /// The key's address allow-list. Empty = every address. An unknown address (no connection address) is refused when a
+    /// list is set, and so is every address if no entry parses: a broken list must not open the key to everyone.
+    /// </summary>
+    public bool IsAddressAllowed(IPAddress? address)
+    {
+        if (AllowedIpRanges.Count == 0)
+        {
+            return true;
+        }
+
+        if (address is null)
+        {
+            return false;
+        }
+
+        var networks = _allowedNetworks is { } index && ReferenceEquals(_indexedRanges, AllowedIpRanges) && _indexedRangeCount == AllowedIpRanges.Count
+            ? index
+            : NetworkRanges.ParseValid(AllowedIpRanges);
+        return NetworkRanges.Contains(networks, address);
+    }
 }
 
 /// <summary>When a key was last used; split out so key use never bumps the config version (data-model §2.1).</summary>

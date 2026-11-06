@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Net;
 using System.Runtime.CompilerServices;
 using Ume.Rag.Domain.Entities;
 
@@ -76,6 +78,12 @@ public sealed record PolicySnapshot(
     /// (knowledge design §6.5; weakness review §3). Compiled by the knowledge role once per version.
     /// </summary>
     public IReadOnlyDictionary<Guid, string> DemoteRules { get; init; } = new Dictionary<Guid, string>();
+
+    /// <summary>
+    /// <c>Settings.TrustedProxies</c>, parsed (invalid entries skipped): the reverse proxies whose <c>X-Forwarded-For</c> the
+    /// api believes (identity §1.2, as the admin's and the gateway's). Empty = the connection address is the client.
+    /// </summary>
+    public ImmutableArray<IPNetwork> TrustedProxies { get; init; } = [];
 
     /// <summary>An empty snapshot (before the first load; every decision refuses).</summary>
     public static PolicySnapshot Empty { get; } = new(-1, new Dictionary<Guid, ClientEntry>(), new Dictionary<Guid, AssistantEntry>(),

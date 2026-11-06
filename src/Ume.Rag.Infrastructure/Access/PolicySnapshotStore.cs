@@ -3,6 +3,7 @@ using Npgsql;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Access;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Domain.Services;
 using Ume.Rag.Infrastructure.Config;
 
 namespace Ume.Rag.Infrastructure.Access;
@@ -170,14 +171,16 @@ public sealed partial class PolicySnapshotStore(NpgsqlDataSource dataSource, Con
 
         string? retrieval = null;
         string? chat = null;
-        await ReadAsync(connection, transaction, """SELECT "Retrieval"::text, "Chat"::text FROM config."Settings" """,
-            r => (retrieval, chat) = (r.GetString(0), r.GetString(1)), cancellationToken);
+        string[] trustedProxies = [];
+        await ReadAsync(connection, transaction, """SELECT "Retrieval"::text, "Chat"::text, "TrustedProxies" FROM config."Settings" """,
+            r => (retrieval, chat, trustedProxies) = (r.GetString(0), r.GetString(1), r.GetFieldValue<string[]>(2)), cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
         return new PolicySnapshot(version, clients, assistants, collections,
             sources.ToDictionary(s => s.Key, s => (IReadOnlyList<Guid>)s.Value), profiles, levels, departments, retrieval, chat)
         {
             DemoteRules = demote,
+            TrustedProxies = [.. NetworkRanges.ParseValid(trustedProxies)],
         };
     }
 
