@@ -3,13 +3,20 @@
 Paste everything below the line into a new Claude session started in a clone of the gateway repo. Written by the
 Ume.Rag main session, 2026-10-30; updated 2026-11-05 (gateway v0.8.9, identity providers).
 
+**Status (2026-11-06): done.** Release 1 shipped as gateway **v0.9.0** (2026-11-06): residency ceiling (ADR 018),
+embeddings checked per input, the FakeLlm's real-sized embeddings, the optional `POST /v1/rerank`, the optional Keycloak
+project (26.8.1, keycloak-config-cli with `additions/`) and the EUPL-1.2 licence. What remains on the gateway side is
+operations, not code: deploy v0.9.0 and the Keycloak project for the pilot, copy Ume.Rag's
+`deploy/keycloak/rag-additions.json` into `additions/`, pilot keys, and the Berget AI rerank provider. Keep this prompt
+as the record of what was asked; a new gateway session starts from the gateway's `HANDOVER.md`.
+
 ---
 
 You work in the **LLM gateway** repo (github.com/thekim1/llmgateway). The user owns it. A second project, **Ume.Rag**
 (github.com/thekim1/ume-rag-platform), a RAG and chat platform for Umeå kommun, calls this gateway for every model
 call. Its pilot needs the things below from the gateway. The gateway runs only in dev today.
 
-**Start** with `git pull` on `main` (the latest release on `origin` is v0.8.9, 2026-11-03). If this machine has no clone
+**Start** with `git pull` on `main` (the latest release on `origin` was v0.8.9, 2026-11-03, when this was written). If this machine has no clone
 of the RAG repo, clone it into a scratch directory; you only read it. **Read first:** this repo's `HANDOVER.md` and
 `README.md`, `CHANGELOG.md` (release practice), `docs/introduction.md`, `docs/runbook.md`,
 `docs/identity-and-roles.md`, `docs/production-setup.md`, and `docs/upgrade-guide.md`. From the RAG repo (read only;

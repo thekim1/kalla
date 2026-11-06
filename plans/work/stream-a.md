@@ -37,7 +37,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   input (gateway #65 in release 1); embedding deployments may then set `ContextWindow`.
 - **Paths:** `src/Ume.Rag.Worker/Processing/**` (embed stage), worker settings.
 - **Done when:** the cap setting is gone; an embed-stage test sends a full batch whose longest input fits the window.
-- **Waits on:** gateway release 1 tagged and deployed (B-L4).
+- **Waits on:** gateway release 1 (tagged v0.9.0, 2026-11-06) deployed (B-L4).
 - **Read:** Decisions "Gateway release 1 and shared Keycloak as built".
 
 ### [x] A-6 NER loaded on first use, unloaded when idle (resource review) (#419)
