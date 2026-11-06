@@ -717,6 +717,10 @@ export const SOURCE_PAGE = {
   piiHeld: 'Kept out of the search',
   piiLive: 'Searchable',
   piiNotApplies: 'Applies only to public knowledge bases.',
+  piiTypes: PREVIEW.piiTypes,
+  piiFired: (types: string) => `Flagged for: ${types}`,
+  piiCounts: 'Personal data found',
+  piiCount: (type: string, count: string) => `${type}: ${count}`,
 } as const
 
 export const RUN_STATE_LABEL: Record<string, string> = {

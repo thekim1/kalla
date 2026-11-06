@@ -37,6 +37,11 @@ const syncing = ref(false)
 const syncError = ref<unknown>(null)
 const editing = ref(false)
 const collection = ref<Collection | null>(null)
+// The report's numbers and type names (#217): the types whose rule fired and the non-zero counts; never values.
+const piiType = (type: string) => SOURCE_PAGE.piiTypes[type] ?? type
+const piiTypeList = (types: string[]) => types.map(piiType).join(', ')
+const piiCountList = (counts: Record<string, number>) =>
+  Object.entries(counts).map(([type, count]) => SOURCE_PAGE.piiCount(piiType(type), formatNumber(count))).join(', ')
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 
 const runColumns: Column[] = [
@@ -155,6 +160,8 @@ onMounted(load)
         <li v-for="d in pii.documents" :key="d.documentId" class="flex flex-wrap items-center gap-2">
           <UiBadge :tone="d.state === 'held' ? 'warn' : 'neutral'" :label="d.state === 'held' ? SOURCE_PAGE.piiHeld : SOURCE_PAGE.piiLive" />
           <span>{{ d.title ?? d.displayName ?? d.url }}</span>
+          <span v-if="d.typesFired.length" class="text-small text-warn" data-test="pii-fired">{{ SOURCE_PAGE.piiFired(piiTypeList(d.typesFired)) }}</span>
+          <span v-if="Object.keys(d.counts).length" class="tabular text-small text-fg-2" :aria-label="SOURCE_PAGE.piiCounts" data-test="pii-counts">{{ piiCountList(d.counts) }}</span>
         </li>
       </ul>
 

@@ -65,13 +65,13 @@ public sealed class PiiReportEndpointsTests(AdminDatabaseFixture database)
         var holdDoc = NewDocument(hold, "kontakt");
         db.AddRange(flaggedDoc, cleanDoc, heldDoc, holdDoc);
         await db.SaveChangesAsync(Ct);
-        const string Counts = """{"personnummer":0,"samordningsnummer":0,"email":3,"emailExternal":2,"phone":1,"name":0,"ner":"skipped","rules":1}""";
+        const string Counts = """{"personnummer":0,"samordningsnummer":0,"email":3,"emailExternal":2,"phone":1,"name":0,"ner":"skipped","rules":1,"typesFired":["emailExternal"]}""";
         var flaggedSet = NewSet(flaggedDoc, ChunkSetStates.Live, true, Counts);
         var cleanSet = NewSet(cleanDoc, ChunkSetStates.Live, false, """{"email":1,"rules":0}""");
         var heldSet = NewSet(heldDoc, ChunkSetStates.Held, true, Counts);
         var holdSet = NewSet(holdDoc, ChunkSetStates.Live, true, Counts);
         // taxor's next version came back flagged and held; its clean older version stays live.
-        var cleanNextHeld = NewSet(cleanDoc, ChunkSetStates.Held, true, """{"personnummer":1,"rules":1}""");
+        var cleanNextHeld = NewSet(cleanDoc, ChunkSetStates.Held, true, """{"personnummer":1,"rules":1,"typesFired":["personnummer"]}""");
         db.AddRange(flaggedSet, cleanSet, heldSet, holdSet, cleanNextHeld);
         await db.SaveChangesAsync(Ct);
         flaggedDoc.LiveChunkSetId = flaggedSet.Id;
@@ -107,10 +107,17 @@ public sealed class PiiReportEndpointsTests(AdminDatabaseFixture database)
         documents.Select(d => (d.GetProperty("documentId").GetGuid(), d.GetProperty("state").GetString(), d.GetProperty("previousVersionLive").GetBoolean()))
             .ShouldBe([(seed.Held, "held", false), (seed.Clean, "held", true), (seed.Flagged, "live", false)]);
         documents[1].GetProperty("counts").EnumerateObject().Select(p => (p.Name, p.Value.GetInt32())).ShouldBe([("personnummer", 1)]);
+        documents[1].GetProperty("typesFired").EnumerateArray().Select(t => t.GetString()).ShouldBe(["personnummer"]);
         var document = documents[2];
         document.GetProperty("title").GetString().ShouldBe("kontakt");
         document.GetProperty("counts").EnumerateObject().Select(p => (p.Name, p.Value.GetInt32())).ShouldBe([("email", 3), ("emailExternal", 2), ("phone", 1)]);
         document.GetProperty("rulesFired").GetInt32().ShouldBe(1);
+        // The types the worker stored as fired (#217): the external address fired; own-domain e-mail and the phone did not.
+        document.GetProperty("typesFired").EnumerateArray().Select(t => t.GetString()).ShouldBe(["emailExternal"]);
+        // Numbers and type names only: the stored JSON had no values, and nothing in the answer is one.
+        document.EnumerateObject().Select(p => p.Name).ShouldBe(
+            ["documentId", "title", "url", "displayName", "state", "previousVersionLive", "counts", "rulesFired", "typesFired", "liveAt", "lastFlaggedAt", "lastFlaggedRunId"],
+            ignoreOrder: true);
         document.GetProperty("lastFlaggedRunId").GetGuid().ShouldBe(seed.FlagRun);
         document.GetProperty("lastFlaggedAt").GetDateTimeOffset().ShouldBeGreaterThan(DateTimeOffset.UtcNow.AddDays(-1));
 
@@ -125,10 +132,13 @@ public sealed class PiiReportEndpointsTests(AdminDatabaseFixture database)
     [Fact]
     public void Counts_are_numbers_per_type_and_never_values()
     {
-        var counts = PiiReportEndpoints.Counts("""{"personnummer":2,"name":4,"ner":"done","rules":2,"model":"kb-ner@1"}""", out var rules);
+        var counts = PiiReportEndpoints.Counts(
+            """{"personnummer":2,"name":4,"ner":"done","rules":2,"model":"kb-ner@1","typesFired":["name","personnummer","19121212-1212"]}""", out var rules, out var fired);
         counts.ShouldBe(new Dictionary<string, int> { ["personnummer"] = 2, ["name"] = 4 });
         rules.ShouldBe(2);
-        PiiReportEndpoints.Counts(null, out rules).ShouldBeEmpty();
+        fired.ShouldBe(["personnummer", "name"]); // known type names only, in PiiTypes order; anything else is dropped
+        PiiReportEndpoints.Counts(null, out rules, out fired).ShouldBeEmpty();
         rules.ShouldBe(0);
+        fired.ShouldBeEmpty();
     }
 }

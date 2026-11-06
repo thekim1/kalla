@@ -352,6 +352,9 @@
       "name": 5,
       "ner": "done",
       "rules": 1,
+      "typesFired": [
+        "name"
+      ],
       "model": "kb-bert-ner@f3c83af"
     },
     "typesFired": [

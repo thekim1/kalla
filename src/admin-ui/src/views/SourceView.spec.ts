@@ -33,7 +33,13 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     const runs = vi.spyOn(api.sources, 'runs').mockResolvedValue({ items: [run({})], next: null })
     vi.spyOn(api.sources, 'piiReport').mockResolvedValue({
       applies: true, piiMode: 'hold', collectionClassification: 'public', truncated: false,
-      documents: [{ documentId: 'd', title: 'Protokoll', url: null, displayName: null, state: 'held', previousVersionLive: false, counts: {}, rulesFired: 1 }],
+      documents: [
+        {
+          documentId: 'd', title: 'Protokoll', url: null, displayName: null, state: 'held', previousVersionLive: false,
+          counts: { personnummer: 1, email: 3, emailExternal: 2 }, rulesFired: 2, typesFired: ['emailExternal', 'personnummer'],
+        },
+        { documentId: 'e', title: 'Kontakt', url: null, displayName: null, state: 'live', previousVersionLive: false, counts: { phone: 4 }, rulesFired: 0, typesFired: [] },
+      ],
     })
     const sync = vi.spyOn(api.sources, 'sync').mockResolvedValue({ jobId: 'j', runId: null, alreadyRunning: false, kind: 'sync' })
 
@@ -45,6 +51,13 @@ describe('Source (admin design §5.5.3; #278 slice 2)', () => {
     expect(wrapper.text()).toContain('Done')
     expect(wrapper.text()).toContain('40 added, 2 changed, 1 removed')
     expect(wrapper.get('[data-test=pii]').text()).toContain('Kept out of the search')
+    // #217: the stored fired types and the counts, as type names and numbers (never values).
+    const fired = wrapper.findAll('[data-test=pii-fired]')
+    expect(fired.map((f) => f.text())).toEqual(['Flagged for: External email addresses, Personal identity numbers'])
+    expect(wrapper.findAll('[data-test=pii-counts]').map((c) => c.text())).toEqual([
+      'Personal identity numbers: 1, Email addresses: 3, External email addresses: 2',
+      'Phone numbers: 4',
+    ])
 
     await wrapper.get('[data-test=sync]').trigger('click')
     await flushPromises()
