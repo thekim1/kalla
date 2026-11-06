@@ -92,7 +92,7 @@ public static class ChatEndpoints
                         return null;
                     }
 
-                    var ume = UmeAnswer.For(plan, cited, asked);
+                    var ume = service.Ume(plan, cited, asked);
                     metrics.Ume(asked, ume, who);
                     return ume;
                 }
@@ -100,14 +100,23 @@ public static class ChatEndpoints
                 {
                     var answer = await service.CompleteAsync(who, parsed, ct);
                     await Enqueue(answer.Plan!, answer.Cited, answer.PromptTokens, answer.CompletionTokens);
-                    return Json(answer, Ume(answer.Plan!, answer.Cited));
+                    var ume = Ume(answer.Plan!, answer.Cited);
+                    // §3.8, §9.8: the JSON answer is written when the follow-up call has returned or its budget has run out.
+                    if (ume is not null && service.FollowUpCount(answer.Plan!, parsed.Ume) is > 0 and var count)
+                    {
+                        ume = ume with { FollowUps = await service.FollowUpsAsync(answer.Plan!, parsed.Question, count, answer.Content, answer.Cited, ct) };
+                    }
+
+                    return Json(answer, ume);
                 }
 
                 var plan = await service.PlanAsync(who, parsed, ct);
                 // §8.2: status and residency are checked here, before our first byte; a refusal is still a JSON error.
                 var streamed = await service.OpenAnswerAsync(plan, stream: true, ct);
+                var followUps = service.FollowUpCount(plan, parsed.Ume);
                 return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o),
-                    parsed.Ume is null ? null : cited => Ume(plan, cited)!);
+                    parsed.Ume is null ? null : cited => Ume(plan, cited)!,
+                    followUps > 0 ? (cited, delivered, token) => service.FollowUpsAsync(plan, parsed.Question, followUps, delivered, cited, token) : null);
             }))
             .WithMetadata(new ChatBodyLimit())
             .WithName("ChatCompletions").WithSummary("Ask an assistant (OpenAI chat completions, JSON or stream)");

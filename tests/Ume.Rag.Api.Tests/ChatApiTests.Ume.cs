@@ -208,7 +208,7 @@ public sealed partial class ChatApiTests
         await using var api = Host();
         using var client = Client(api, db.IntegrationKey);
 
-        // Follow-ups asked for are skipped before any call (M-8 makes them): [] in the first and only ume chunk (§3.8).
+        // Without a condense model, follow-ups asked for are skipped before any call: [] in the first and only ume chunk (§3.8, §9.8).
         using var response = await AskUme(client, AltanQuestion, """{"related_documents":3,"follow_ups":2}""", stream: true, usage: true);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var lines = (await response.Content.ReadAsStringAsync(Ct)).Split("\n\n", StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).ToList();

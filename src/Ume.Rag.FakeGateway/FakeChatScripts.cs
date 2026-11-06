@@ -5,13 +5,14 @@ using System.Text.RegularExpressions;
 namespace Ume.Rag.FakeGateway;
 
 /// <summary>
-/// Scripted JSON chat answers for the worker's evaluation steps (issue #129, main session's decision), the reranker and the
-/// long-question condense: a chat call with <c>x-ume-step</c> <c>eval-generate</c>, <c>eval-judge</c>, <c>rerank</c> or
-/// <c>condense-long</c> is answered from <c>FakeGateway:ChatScripts:&lt;step&gt;</c> (a string: every call; an array: in order,
-/// cycling per step and process), after the usual key, ceiling and target checks. Without a script, built-in answers keep a
-/// dev run of <c>generate-set</c>, a reranking assistant and a long question working (<see cref="DefaultRerank"/>: word
-/// overlap; <see cref="DefaultCondenseLong"/>: the message's first words; both deterministic). No header carries a script, so
-/// a caller cannot script the fake. Every other chat call stays the echo answer.
+/// Scripted JSON chat answers for the worker's evaluation steps (issue #129, main session's decision), the reranker, the
+/// long-question condense and the follow-up suggestions: a chat call with <c>x-ume-step</c> <c>eval-generate</c>,
+/// <c>eval-judge</c>, <c>rerank</c>, <c>condense-long</c> or <c>follow-ups</c> is answered from
+/// <c>FakeGateway:ChatScripts:&lt;step&gt;</c> (a string: every call; an array: in order, cycling per step and process), after
+/// the usual key, ceiling and target checks. Without a script, built-in answers keep a dev run of <c>generate-set</c>, a
+/// reranking assistant, a long question and follow-up suggestions working (<see cref="DefaultRerank"/>: word overlap;
+/// <see cref="DefaultCondenseLong"/>: the message's first words; <see cref="DefaultFollowUps"/>: questions on the source titles;
+/// all deterministic). No header carries a script, so a caller cannot script the fake. Every other chat call stays the echo answer.
 /// </summary>
 public sealed partial class FakeChatScripts(IConfiguration configuration)
 {
@@ -20,6 +21,7 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
     public const string JudgeStep = "eval-judge";
     public const string RerankStep = "rerank";
     public const string CondenseLongStep = "condense-long";
+    public const string FollowUpsStep = "follow-ups";
 
     /// <summary>How many of the message's words <see cref="DefaultCondenseLong"/> keeps.</summary>
     public const int CondenseLongWords = 12;
@@ -65,6 +67,7 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
             JudgeStep => DefaultJudge,
             RerankStep => DefaultRerank(userText),
             CondenseLongStep => DefaultCondenseLong(userText),
+            FollowUpsStep => DefaultFollowUps(userText),
             _ => null,
         };
     }
@@ -128,6 +131,22 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
         return query.Length == 0 ? "Supportärende" : query.Length > CondenseLongMaxChars ? query[..CondenseLongMaxChars] : query;
     }
 
+    /// <summary>
+    /// The follow-up call's answer (chat design §9.8: <c>Fråga: </c>, <c>Svar: </c>, then <c>Källor:</c> and one title per line):
+    /// one question per line, first on each of the first two titles (cut to 60 characters), then general ones, five lines in all,
+    /// without numbering. Deterministic.
+    /// </summary>
+    public static string DefaultFollowUps(string userText)
+    {
+        ArgumentNullException.ThrowIfNull(userText);
+        var titles = FollowUpTitles().Match(userText) is { Success: true } m
+            ? m.Groups[1].Value.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : [];
+        string[] general = ["Hur går jag vidare med det här?", "Vem kan jag kontakta om jag har fler frågor?", "Finns det något mer jag behöver tänka på?",
+            "Var hittar jag mer information?", "Hur lång tid tar det?"];
+        return string.Join('\n', titles.Take(2).Select(t => $"Vad mer behöver jag veta om {(t.Length > 60 ? t[..60] : t)}?").Concat(general).Take(5));
+    }
+
     [GeneratedRegex(@"<question>\s*(.*?)\s*</question>", RegexOptions.Singleline)]
     private static partial Regex RerankQuestion();
 
@@ -145,4 +164,7 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
 
     [GeneratedRegex(@"\S+")]
     private static partial Regex Token();
+
+    [GeneratedRegex(@"\nKällor:\n(.*)\z", RegexOptions.Singleline)]
+    private static partial Regex FollowUpTitles();
 }
