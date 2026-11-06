@@ -32,7 +32,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** the user's decision.
 - **Read:** connectors §3.1 (rule 7).
 
-### [x] A-5 Embedding batch cap goes after gateway release 1 (#390)
+### [x] A-5 Embedding batch cap goes after gateway release 1 (#390, #429)
 - **Do:** remove the worker's embedding batch cap below the context window once the gateway checks embeddings per
   input (gateway #65 in release 1); embedding deployments may then set `ContextWindow`.
 - **Paths:** `src/Ume.Rag.Worker/Processing/**` (embed stage), worker settings.
