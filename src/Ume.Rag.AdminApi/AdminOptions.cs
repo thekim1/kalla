@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Options;
 using Ume.Rag.Infrastructure.Security;
 
 namespace Ume.Rag.AdminApi;
@@ -57,7 +58,10 @@ public sealed class OidcOptions
     /// <summary>The group claim: role groups (<see cref="RoleGroups"/>) and member groups of departments (identity design §2).</summary>
     public string GroupClaim { get; set; } = "groups";
 
-    /// <summary>Role name (rag-platform-admin, rag-department-admin, …) to the group names that grant it, separated by ';'.</summary>
+    /// <summary>
+    /// Role name (rag-platform-admin, rag-department-admin, …) to the group names that grant it, separated by ';'. Each
+    /// group is a <c>rag-</c> name or an Entra object id (<see cref="OidcOptionsValidator"/>, #413).
+    /// </summary>
     public Dictionary<string, string> RoleGroups { get; set; } = [];
 
     /// <summary>Extra scopes to request, for example "groups".</summary>
@@ -68,4 +72,39 @@ public sealed class OidcOptions
 
     /// <summary>Refuse guests: <c>acct</c> = 1, or an <c>idp</c> from another tenant or IdP (identity design §1.7).</summary>
     public bool RefuseGuests { get; set; } = true;
+}
+
+/// <summary>
+/// The checks data annotations cannot express (#413). In the shared Keycloak realm the group claim carries every group of
+/// the account by its short name, the gateway's included (identity design §2.5), so a role group named like a gateway
+/// group would grant an Ume.Rag role by accident. A role group must therefore be a <c>rag-</c> name (case-insensitive,
+/// as the matching) or an Entra object id (a GUID, unique by nature). Member groups are not checked: they give department
+/// scope only, never a role, and are shared with the gateway on purpose (identity design §2.1).
+/// </summary>
+public sealed class OidcOptionsValidator : IValidateOptions<OidcOptions>
+{
+    public const string RoleGroupPrefix = "rag-";
+
+    public static bool IsRoleGroupName(string group) =>
+        group.StartsWith(RoleGroupPrefix, StringComparison.OrdinalIgnoreCase) && group.Length > RoleGroupPrefix.Length ||
+        Guid.TryParse(group, out _);
+
+    public ValidateOptionsResult Validate(string? name, OidcOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+        foreach (var (role, mapped) in options.RoleGroups)
+        {
+            foreach (var group in mapped.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (!IsRoleGroupName(group))
+                {
+                    failures.Add($"Oidc:RoleGroups:{role} names the group '{group}'. A role group must start with '{RoleGroupPrefix}' " +
+                        "or be an Entra object id, so that a gateway group of the same name in the shared realm grants no role (#413).");
+                }
+            }
+        }
+
+        return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
+    }
 }

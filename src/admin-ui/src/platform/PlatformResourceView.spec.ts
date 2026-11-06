@@ -56,6 +56,8 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
       [PLATFORM.organisation.municipality, '3'],
     ])
     expect((wrapper.get('#platform-organisation-memberGroups').element as HTMLTextAreaElement).value).toBe('Kommunstyrelsen\nKLK-alla')
+    // #413: the field says that group names are shared with the gateway's sign-in.
+    expect(wrapper.text()).toContain(PLATFORM.fieldHints.memberGroups)
     wrapper.unmount()
   })
 

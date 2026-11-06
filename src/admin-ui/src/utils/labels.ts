@@ -589,6 +589,11 @@ export const PLATFORM = {
     isEnabled: 'Enabled',
     memberGroups: 'Member groups',
   } as Record<string, string>,
+  /** Hints under generic form fields, before the API schema's own description. */
+  fieldHints: {
+    memberGroups:
+      'Group names from the sign-in (or Entra object ids). The sign-in shares its groups with the AI gateway: a gateway group with the same name counts too. A member group gives department scope, never a role.',
+  } as Record<string, string>,
   resources: {
     clients: { label: 'Clients', description: 'Apps that use the platform: Open WebUI, integrations, internal clients' },
     keys: { label: 'Keys', description: 'API keys per client; create, rotate, show and revoke' },
