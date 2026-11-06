@@ -38,8 +38,8 @@ public class ChatTurnBenchmarks
     public string Language() => LanguageGuess.Detect(Question);
 
     [Benchmark(Description = "Build prompt (10 chunks, 10 history)")]
-    public BuiltPrompt BuildPrompt() => PromptBuilder.Build("Bygglovsassistenten", "Svara kort och vänligt.", LanguageGuess.Swedish, false, Question,
-        _history, _chunks, AssistantChatSettings.Default);
+    public BuiltPrompt BuildPrompt() => PromptBuilder.Build(PromptKind.Sources,
+        new PromptContext("Bygglovsassistenten", "Svara kort och vänligt.", LanguageGuess.Swedish, Question, _history, AssistantChatSettings.Default), _chunks);
 
     [Benchmark(Description = "Citations on a whole answer (non-streamed)")]
     public CitedAnswer Citations() => Ume.Rag.Answering.Chat.Citations.Apply(_answer, _sources);

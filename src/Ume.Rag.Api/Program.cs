@@ -66,7 +66,7 @@ if (knowledge)
     }
 }
 
-// The chat role (chat design §2.1; P1a item 15): in P1a it runs with the knowledge role in process (IRetriever = KnowledgeService).
+// The chat role (chat design §2.1; P1a item 15): in P1a it runs with the knowledge role in process (KnowledgeService).
 var chat = roles.Contains("chat", StringComparer.Ordinal);
 if (chat)
 {

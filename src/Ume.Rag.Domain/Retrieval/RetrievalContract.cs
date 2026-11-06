@@ -1,23 +1,4 @@
-using Ume.Rag.Domain.Access;
-
 namespace Ume.Rag.Domain.Retrieval;
-
-/// <summary>
-/// The knowledge role in process (knowledge design §2.2): the chat role and the HTTP routes call it with the caller's
-/// principal; the role resolves collections, checks access, searches, hydrates and builds citations.
-/// </summary>
-public interface IRetriever
-{
-    Task<RetrievalResult> RetrieveAsync(RagPrincipal who, RetrievalRequest request, CancellationToken ct);
-
-    /// <summary>A document visible to <paramref name="who"/>; <see cref="RetrievalDeniedException"/> 404 otherwise.</summary>
-    Task<DocumentInfo> GetDocumentAsync(RagPrincipal who, Guid documentId, CancellationToken ct);
-
-    Task<IReadOnlyList<CollectionInfo>> ListCollectionsAsync(RagPrincipal who, CancellationToken ct);
-
-    /// <summary>Counts the ranks actually cited (knowledge §4.7); every returned result is counted as retrieved.</summary>
-    void MarkCited(RetrievalResult result, IReadOnlyCollection<int> citedRanks);
-}
 
 /// <summary>Section expansion (knowledge design §9).</summary>
 public enum ExpandMode { None, Section }
@@ -28,9 +9,8 @@ public enum RetrievalPurpose { Chat, Http, Mcp, TestPanel }
 /// <summary>
 /// A retrieval (knowledge design §2.2, §3.1). <c>AssistantId</c> (chat, <c>rag-internal</c>) searches the published
 /// version's collections (§4.2); <c>CollectionIds</c> narrows, each must be visible (404 otherwise); <c>RunId</c> is sent
-/// to the gateway as <c>x-ume-run-id</c> (chat: the message id). <c>ModelCeiling</c> is the ceiling of the model calls the
-/// retrieval makes besides the query embedding (the rerank call, knowledge design §6.7): chat passes the turn's ceiling; null
-/// (every other caller) keeps the fused order even when the assistant reranks.
+/// to the gateway as <c>x-ume-run-id</c> (chat: the message id). <c>RerankCeiling</c> asks for the rerank call (knowledge design
+/// §6.7) at that ceiling: chat passes the turn's ceiling when the assistant reranks; null (every other caller) keeps the fused order.
 /// </summary>
 public sealed record RetrievalRequest(
     string Query,
@@ -43,7 +23,7 @@ public sealed record RetrievalRequest(
     RetrievalPurpose Purpose = RetrievalPurpose.Chat,
     bool AllowDegraded = true,
     Guid? RunId = null,
-    Residency? ModelCeiling = null);
+    Residency? RerankCeiling = null);
 
 /// <summary>Stage milliseconds, for metrics and the test panel (never in production response headers, §3.2).</summary>
 public sealed record RetrievalTimings(double PolicyMs, double KeywordMs, double EmbeddingMs, double VectorMs, double HydrateMs, double TotalMs);

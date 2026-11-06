@@ -1,7 +1,7 @@
 namespace Ume.Rag.Domain.Retrieval;
 
 // Request and result records of retrieval shared by the search core (Ume.Rag.Retrieval), the knowledge role and the
-// evaluator (knowledge design §2.2). The IRetriever port and its request/result records come with the knowledge role.
+// evaluator (knowledge design §2.2).
 
 /// <summary>Which candidate lists a search uses (knowledge design §6.5).</summary>
 public enum RetrievalMode
