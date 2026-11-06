@@ -1225,7 +1225,7 @@ membership of the pilot groups is maintained by IT, not by IaC.
 ### 13.3 Integration (`Ume.Rag.Api.Tests`, `Ume.Rag.AdminApi.Tests`, `Ume.Rag.IntegrationTests` with Keycloak and Postgres containers)
 
 - Sign in as each Keycloak user; `/bff/user` shows the expected roles, departments and sources (P0 checklist #9).
-- **P1 realm additions** (P1 item 16): the `deploy/keycloak/` file imports into a Keycloak 26.6.4 test container next
+- **P1 realm additions** (P1 item 16): the `deploy/keycloak/` file imports into a Keycloak 26.8.1 test container (the gateway's pin, B-15) next
   to a minimal `ume` realm (standing in for the gateway's base realm) without collisions; a sign-in through `ume-rag-admin`
   shows the `rag-*` roles and `departmentCodes` in `/bff/user`, and its ID token carries no gateway role (full scope
   off); the file contains no users.
@@ -1352,8 +1352,8 @@ owners of those documents:
 - **New (P1)**: with *full scope allowed* off, the `roles` mapper of `ume-rag-admin` still emits the `rag-*` roles once
   they are in the client's role scope mappings, and no gateway role (§11.2; P1 item 16's sign-in test).
 - **New (P1)**: Keycloak's partial import covers users, clients, groups and roles, but not, as far as the admin console
-  shows, client scopes, the user profile, password and brute-force policy or authentication flows; to check on 26.6.4
-  before the import method is chosen (open question 2 below).
+  shows, client scopes, the user profile, password and brute-force policy or authentication flows. Settled: the shared realm uses keycloak-config-cli instead
+  (open question 2 below; Decisions "Gateway release 1 and shared Keycloak as built").
 
 **Answered for P1 (#390, 2026-11-06):** Q1 and Q6: the gateway operator holds realm admin for the pilot and demo
 (accounts, role grants, `departmentCodes`/`teamCodes`, resets; runbook in the gateway's `docs/keycloak.md`); brokered
