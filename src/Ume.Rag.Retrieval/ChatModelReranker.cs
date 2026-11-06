@@ -16,7 +16,8 @@ namespace Ume.Rag.Retrieval;
 /// call's ceiling (<see cref="RerankRequest.Ceiling"/>, sent as <c>x-ume-max-residency</c>; the gateway client's
 /// <see cref="ResidencyCeilingHandler"/> adds the level's key and checks <c>x-ume-residency</c>), the question and the
 /// passages, asking for JSON scores 0–10 per passage (<see cref="Prompt"/>). Scores come back divided by 10 (0–1). No
-/// <c>temperature</c> for Claude models (#275), 0 for every other model. Anything but a score for every passage throws
+/// <c>temperature</c> for Claude models (#275), 0 for every other model. An answer that scores at least half the
+/// passages is used and the rest stay unscored (<see cref="Parse"/>, #403); anything less throws
 /// <see cref="RerankOutputException"/>, a refused or failed call its own exception; the engine then keeps the fused order
 /// with <c>rerank_unavailable</c>. The question and the passages are never logged. Replaced by <c>GatewayReranker</c> when the
 /// gateway's rerank endpoint exists (gateway-changes §7.4).
@@ -93,7 +94,7 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
                       choices[0].TryGetProperty("message", out var m) && m.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String
             ? c.GetString()!
             : "";
-        IReadOnlyList<double> scores;
+        IReadOnlyList<double?> scores;
         try
         {
             scores = Parse(content, request.Passages.Count);
@@ -102,6 +103,12 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
         {
             LogInvalid(_logger, request.Model, content.Length);
             throw;
+        }
+
+        var unscored = scores.Count(s => s is null);
+        if (unscored > 0)
+        {
+            LogPartial(_logger, request.Model, unscored, scores.Count);
         }
 
         var usage = root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object
@@ -131,10 +138,13 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
 
     /// <summary>
     /// The scores (0–1) in passage order from the model's answer: one JSON object (a code fence or text around it is
-    /// allowed) with <c>scores</c>, one entry per passage id 1–<paramref name="count"/>, each a number 0–10. Anything else throws
-    /// <see cref="RerankOutputException"/>.
+    /// allowed) with <c>scores</c>, entries <c>{id, score}</c> with an id 1–<paramref name="count"/> and a number 0–10. An entry
+    /// that is not that, or that scores a passage a second time, is skipped; a passage without a valid entry is null
+    /// (unscored: the engine keeps it in fused order below the scored ones). The answer is accepted when at least half the
+    /// passages are scored (#403: small models leave passages out); no JSON object, invalid JSON, no <c>scores</c> list or
+    /// fewer scored passages throw <see cref="RerankOutputException"/>.
     /// </summary>
-    public static IReadOnlyList<double> Parse(string content, int count)
+    public static IReadOnlyList<double?> Parse(string content, int count)
     {
         ArgumentNullException.ThrowIfNull(content);
         var start = content.IndexOf('{', StringComparison.Ordinal);
@@ -162,27 +172,21 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
         var scores = new double?[count];
         foreach (var entry in entries)
         {
-            if (entry is not JsonObject o || Number(o["id"]) is not { } idValue || Number(o["score"]) is not { } score ||
-                idValue != Math.Floor(idValue) || idValue < 1 || idValue > count || score < 0 || score > MaxScore)
+            if (entry is JsonObject o && Number(o["id"]) is { } idValue && Number(o["score"]) is { } score &&
+                idValue == Math.Floor(idValue) && idValue >= 1 && idValue <= count && score >= 0 && score <= MaxScore &&
+                scores[(int)idValue - 1] is null)
             {
-                throw new RerankOutputException("A rerank entry has no valid id and score.");
+                scores[(int)idValue - 1] = score / MaxScore;
             }
-
-            var id = (int)idValue;
-            if (scores[id - 1] is not null)
-            {
-                throw new RerankOutputException("A passage is scored twice.");
-            }
-
-            scores[id - 1] = score / MaxScore;
         }
 
-        if (scores.Any(s => s is null))
+        var scored = scores.Count(s => s is not null);
+        if (scored == 0 || scored * 2 < count)
         {
-            throw new RerankOutputException("A passage has no score.");
+            throw new RerankOutputException($"The rerank answer scores {scored} of {count} passages; at least half are needed.");
         }
 
-        return [.. scores.Select(s => s!.Value)];
+        return scores;
     }
 
     /// <summary>Claude models refuse <c>temperature</c> through the gateway (#275); every other model gets 0.</summary>
@@ -203,6 +207,9 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The gateway refused a rerank call with {Model}: HTTP {Status}")]
     private static partial void LogRefused(ILogger logger, string model, int status);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "The rerank answer of {Model} left {Unscored} of {Passages} passages unscored; they keep their fused order below the scored ones")]
+    private static partial void LogPartial(ILogger logger, string model, int unscored, int passages);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The rerank answer of {Model} could not be read ({Length} characters); the fused order stands")]
     private static partial void LogInvalid(ILogger logger, string model, int length);

@@ -325,12 +325,15 @@ public sealed class RetrievalEngine : IDisposable
             }
 
             var scores = result.Scores;
-            if (scores.Count != passages.Count || scores.Any(s => !double.IsFinite(s)))
+            if (scores.Count != passages.Count || scores.Any(s => s is { } v && !double.IsFinite(v)) || scores.All(s => s is null))
             {
-                throw new RerankOutputException("The reranker returned a different number of scores than passages, or a score that is not a number.");
+                throw new RerankOutputException("The reranker returned a different number of scores than passages, a score that is not a number, or no score.");
             }
 
-            var byId = passages.Select((p, i) => (p.ChunkId, Score: scores[i])).ToDictionary(x => x.ChunkId, x => x.Score);
+            // Unscored passages (null, #403) stay out of byId, so they keep their fused order below the scored ones.
+            var byId = passages.Select((p, i) => (p.ChunkId, Score: scores[i]))
+                .Where(x => x.Score is not null)
+                .ToDictionary(x => x.ChunkId, x => x.Score!.Value);
             var reordered = top
                 .Select((f, i) => (f, i))
                 .OrderByDescending(x => byId.TryGetValue(x.f.Candidate.ChunkId, out var s) ? s : double.NegativeInfinity)

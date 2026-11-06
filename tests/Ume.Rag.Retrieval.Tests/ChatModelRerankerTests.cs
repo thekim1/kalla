@@ -97,24 +97,57 @@ public sealed partial class ChatModelRerankerTests : IDisposable
 
     [Theory]
     [InlineData("Passage 2 is the best.")]
-    [InlineData("""{"scores": [{"id": 1, "score": 7}""")]
+    [InlineData("""{"scores": [{"id": 1, "score": 7}""")] // cut off: not valid JSON
     [InlineData("""{"ranking": [1, 2]}""")]
-    [InlineData("""{"scores": [{"id": 1, "score": 7}]}""")] // passage 2 missing
-    [InlineData("""{"scores": [{"id": 1, "score": 7}, {"id": 1, "score": 3}]}""")] // passage 1 twice
-    [InlineData("""{"scores": [{"id": 1, "score": 7}, {"id": 3, "score": 3}]}""")] // no passage 3
+    [InlineData("""{"scores": []}""")]
+    [InlineData("""{"scores": [{"id": 1, "score": 7}]}""")] // 1 of 3 scored
+    [InlineData("""{"scores": [{"id": 1, "score": 7}, {"id": 1, "score": 3}]}""")] // passage 1 twice: still 1 of 3
+    [InlineData("""{"scores": [{"id": 1, "score": 7}, {"id": 4, "score": 3}]}""")] // no passage 4
     [InlineData("""{"scores": [{"id": 1, "score": 7}, {"id": 2, "score": 11}]}""")] // above the scale
     [InlineData("""{"scores": [{"id": 1, "score": 7}, {"id": 2, "score": -1}]}""")]
     [InlineData("""{"scores": [{"id": 1, "score": "7"}, {"id": 2, "score": 3}]}""")]
     [InlineData("""{"scores": [{"id": 1.5, "score": 7}, {"id": 2, "score": 3}]}""")]
     [InlineData("")]
-    public void Malformed_output_is_refused(string content) =>
-        Should.Throw<RerankOutputException>(() => ChatModelReranker.Parse(content, 2));
+    public void Malformed_output_or_fewer_than_half_scored_is_refused(string content) =>
+        Should.Throw<RerankOutputException>(() => ChatModelReranker.Parse(content, 3));
 
     [Fact]
     public void Output_in_a_code_fence_or_out_of_order_is_read()
     {
         ChatModelReranker.Parse("```json\n{\"scores\":[{\"id\":2,\"score\":4},{\"id\":1,\"score\":10}]}\n```", 2).ShouldBe([1.0, 0.4]);
         ChatModelReranker.Parse("""{"scores":[{"id":1,"score":2.5}]}""", 1).ShouldBe([0.25]);
+    }
+
+    [Fact]
+    public void An_answer_that_scores_at_least_half_the_passages_is_read_with_the_rest_unscored()
+    {
+        // #403: Haiku leaves passages out. Half is enough; invalid or repeated entries are skipped, not fatal.
+        ChatModelReranker.Parse("""{"scores":[{"id":3,"score":6},{"id":1,"score":2}]}""", 4).ShouldBe([0.2, null, 0.6, null]);
+        ChatModelReranker.Parse("""{"scores":[{"id":1,"score":7},{"id":1,"score":3},{"id":2,"score":99},{"id":9,"score":1}]}""", 2)
+            .ShouldBe([0.7, null]);
+        Should.Throw<RerankOutputException>(() => ChatModelReranker.Parse("""{"scores":[{"id":2,"score":5},{"id":3,"score":4}]}""", 5));
+    }
+
+    [Fact]
+    public async Task Unscored_passages_keep_their_fused_order_below_the_scored_ones_and_the_count_is_logged()
+    {
+        // Six passages in fused order 5, 1, 2, 6, 3, 4; the model scores only 6, 3 and 1 (three of six: half).
+        var logger = new ListLogger();
+        var gateway = new Gateway(prompt =>
+        {
+            var ids = PassageIds(prompt);
+            var entries = new[] { (Id(6), 9), (Id(3), 2), (Id(1), 5) }.Select(x => new { id = ids.IndexOf(x.Item1) + 1, score = x.Item2 });
+            return Ok(JsonSerializer.Serialize(new { scores = entries }));
+        });
+        using var engine = new RetrievalEngine(_index, _sizes, new RetrievalEngineOptions { RerankTimeout = TimeSpan.FromSeconds(5) },
+            new ChatModelReranker(gateway, logger: logger), new FakeTexts());
+        var result = await engine.SearchAsync(Request(), Ct);
+
+        // Scored 6, 1, 3; then the unscored 5, 2 in fused order (4 is cut by top_k; 1, 2, 3 are document 7's cap of 3).
+        result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(6), Id(1), Id(3), Id(5), Id(2)]);
+        result.Hits.Select(h => h.Scores.RerankScore).ShouldBe([0.9, 0.5, 0.2, null, null]);
+        result.Degraded.ShouldBeNull();
+        logger.Messages.ShouldContain(m => m.Contains("left 3 of 6 passages unscored", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -211,6 +244,20 @@ public sealed partial class ChatModelRerankerTests : IDisposable
 
     [GeneratedRegex(@"^<passage id=""(\d+)"">$", RegexOptions.Multiline)]
     private static partial Regex PassageTag();
+
+    /// <summary>Collects the formatted log messages.</summary>
+    private sealed class ListLogger : Microsoft.Extensions.Logging.ILogger<ChatModelReranker>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Messages.Add(formatter(state, exception));
+    }
 
     public sealed record Call(string Path, IReadOnlyDictionary<string, string> Headers, string Body);
 
