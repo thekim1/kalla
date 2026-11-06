@@ -79,8 +79,11 @@ public sealed class RetrievalEngineOptions
     /// </summary>
     public TimeSpan RerankTimeout { get; set; } = TimeSpan.FromSeconds(3);
 
-    /// <summary>The <see cref="GatewayReranker"/>'s time limit, text read included (§6.7: 500 ms; <c>Retrieval:GatewayRerankTimeout</c>).</summary>
-    public TimeSpan GatewayRerankTimeout { get; set; } = TimeSpan.FromMilliseconds(500);
+    /// <summary>
+    /// The <see cref="GatewayReranker"/>'s time limit, text read included (§6.7: 1.5 s, the POC model's p95 with room,
+    /// #438; <c>Retrieval:GatewayRerankTimeout</c>).
+    /// </summary>
+    public TimeSpan GatewayRerankTimeout { get; set; } = TimeSpan.FromMilliseconds(1500);
 
     /// <summary>The time limit of <paramref name="kind"/>.</summary>
     public TimeSpan RerankTimeoutFor(RerankerKind kind) => kind == RerankerKind.Gateway ? GatewayRerankTimeout : RerankTimeout;

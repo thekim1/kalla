@@ -34,8 +34,8 @@ public sealed class RetrievalEvaluator(
 
     /// <summary>
     /// The rerank limit of <c>hybrid-rerank</c> and <c>hybrid-rerank-gateway</c>: the API's limits (3 s for the chat
-    /// reranker, 500 ms for the gateway's) would partly measure the fallback, not the rerank over 20 passages, so the run
-    /// allows the call this long and reports its real latency (#399, #414).
+    /// reranker, 1.5 s for the gateway's) would partly measure the fallback, not the rerank over 20 passages, so the
+    /// run allows the call this long and reports its real latency (#399, #414).
     /// </summary>
     public static readonly TimeSpan RerankTimeout = TimeSpan.FromSeconds(30);
 
