@@ -40,6 +40,35 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** gateway release 1 tagged and deployed (B-L4).
 - **Read:** Decisions "Gateway release 1 and shared Keycloak as built".
 
+### [ ] A-6 NER loaded on first use, unloaded when idle (resource review)
+- **Do:** the parser's `ner-0` process starts on the first `/v1/ner` request (not at container start) and stops after
+  `NER_IDLE_STOP_S` (proposed 900) without requests. While it warms, `/v1/ner` answers `not_ready` as today, so the
+  worker's existing NER wait (processing §9.6) covers the gap; `/v1/info` reports `ner_ready` honestly.
+- **Paths:** `src/parser/**`.
+- **Done when:** a parser test shows no NER process at idle start, one after a request, none after the idle time; the
+  image test passes; idle RSS measured before/after (about 1 GB less expected, resource review 2026-11-06).
+- **Waits on:** –
+- **Read:** parser §7.8, §10.1, §10.2; processing §9.6.
+
+### [ ] A-7 Convert slot goes cold between batches (resource review)
+- **Do:** a convert slot with no job for `PARSER_IDLE_STOP_S` (proposed 900) stops; the next convert request warms one
+  (readiness and the worker's parser-slot gate already handle a warming parser). Inspect stays warm (its 10 s deadline).
+  Keep at least the option of "always warm" (`PARSER_IDLE_STOP_S=0`).
+- **Paths:** `src/parser/**`.
+- **Done when:** a parser test covers stop-on-idle and warm-on-demand; idle RSS measured before/after (about 1.1 GB
+  less expected); the first convert after cold start succeeds within the worker's parse timeout (measured).
+- **Waits on:** –
+- **Read:** parser §10.1, §10.2; processing §3 (parse slots, timeouts).
+
+### [ ] A-8 Slimmer parser image (resource review)
+- **Do:** measure the parser image per layer (2.88 GB today), then remove what the runtime doesn't need (build tools,
+  caches, unused torch parts, docs, test data) without changing behaviour; keep `LICENSES.md` and model licences.
+- **Paths:** `src/parser/Dockerfile`, `src/parser/**`.
+- **Done when:** a before/after layer table in the PR; image tests and the parser test suite pass; the parser answers
+  the golden documents identically.
+- **Waits on:** –
+- **Read:** parser §12; licence review (`archive/licence-review-p2.md`).
+
 ### [ ] A-4 Go-live pin review, A's part (last code item)
 - **Do:** review every image, PyPI and Compose pin younger than 7 days; bump the Open WebUI pin once, with the
   callback change in Compose matching B's realm change (B-6).
