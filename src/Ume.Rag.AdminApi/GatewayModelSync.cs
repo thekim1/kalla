@@ -20,8 +20,11 @@ namespace Ume.Rag.AdminApi;
 /// <summary>A provider account of the gateway catalogue (<c>/v1/catalog/providers</c>).</summary>
 public sealed record CatalogProviderItem(Guid Id, string Name, Residency Residency, bool IsEnabled);
 
-/// <summary>A model deployment of the gateway catalogue (<c>/v1/catalog/models</c>); <see cref="Kind"/> is the gateway's <c>ModelKind</c>.</summary>
-public sealed record CatalogModelItem(Guid Id, string Name, string Kind, Guid ProviderId, bool IsEnabled);
+/// <summary>
+/// A model deployment of the gateway catalogue (<c>/v1/catalog/models</c>); <see cref="Kind"/> is the gateway's <c>ModelKind</c>.
+/// <see cref="Residency"/> is the deployment's own residency (gateway v0.9.1, ADR 019), <c>null</c> for its provider's.
+/// </summary>
+public sealed record CatalogModelItem(Guid Id, string Name, string Kind, Guid ProviderId, bool IsEnabled, Residency? Residency = null);
 
 /// <summary>A price row of the gateway catalogue (<c>/v1/catalog/prices</c>), per million tokens in USD.</summary>
 public sealed record CatalogPriceItem(Guid ModelId, DateTimeOffset EffectiveFrom, decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd);
@@ -41,7 +44,7 @@ public sealed record GatewayModelSyncStatus(bool Enabled, DateTimeOffset? LastRu
 /// <c>OrgSync:IntervalMinutes</c> and on demand, with the same Data API key and the same pattern as
 /// <see cref="OrganisationSync"/>: one config write under the version lock and an advisory lock, only changed rows written
 /// (data-model §2.1: otherwise every run bumps the config version), one audit entry. A row per enabled chat or embedding
-/// deployment of an enabled provider: <c>Kind = model</c>, <c>ModelKind</c> from the catalogue's <c>Kind</c>, <c>Residencies = [provider residency]</c>, the latest price in
+/// deployment of an enabled provider: <c>Kind = model</c>, <c>ModelKind</c> from the catalogue's <c>Kind</c>, <c>Residencies = [deployment residency, else provider residency]</c>, the latest price in
 /// effect. A catalogue row whose deployment is gone or disabled is removed; manual rows (route aliases) are never touched.
 /// After each run the canary embedding of every active profile that has none is recorded (<see cref="RecordCanariesAsync"/>).
 /// </summary>
@@ -195,7 +198,8 @@ public sealed partial class GatewayModelSync(
                 continue; // a manual row (route alias) with the same name wins
             }
 
-            var residencies = deployments.Select(d => enabledProviders[d.ProviderId].Residency).Distinct().Order()
+            // The residency in effect, as the gateway routes and reports it: the deployment's own, else its provider's (v0.9.1).
+            var residencies = deployments.Select(d => d.Residency ?? enabledProviders[d.ProviderId].Residency).Distinct().Order()
                 .Select(ResidencyCeiling.ToHeader).ToArray();
             var price = deployments.Select(d => latestPrice.GetValueOrDefault(d.Id)).OfType<CatalogPriceItem>().MaxBy(p => p.EffectiveFrom);
             var modelKind = ModelKindOf(deployments[0].Kind);

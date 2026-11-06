@@ -157,6 +157,33 @@ public sealed class GatewayClientTests(GatewayClientFixture database) : IClassFi
     }
 
     [Fact]
+    public async Task A_deployments_own_residency_wins_over_its_providers()
+    {
+        // Gateway v0.9.1 (ADR 019): one Foundry provider (Eu) can hold a global deployment (External); the catalogue's
+        // model Residency is the deployment's own, null for the provider's.
+        await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+        var eu = new CatalogProviderItem(Guid.CreateVersion7(), "foundry", Residency.Eu, true);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        string global = $"cohere-global-{suffix}", own = $"chat-provider-{suffix}", mixed = $"chat-mixed-{suffix}";
+        CatalogModelItem[] models =
+        [
+            new(Guid.CreateVersion7(), global, "Rerank", eu.Id, true, Residency.External),
+            new(Guid.CreateVersion7(), own, "Chat", eu.Id, true),
+            new(Guid.CreateVersion7(), mixed, "Chat", eu.Id, true),
+            new(Guid.CreateVersion7(), mixed, "Chat", eu.Id, true, Residency.OnPrem),
+        ];
+
+        // Applied but not saved: every other catalogue row would be removed.
+        await GatewayModelSync.ApplyAsync(db, [eu], models, [], DateTimeOffset.UtcNow, Ct);
+
+        var added = db.ChangeTracker.Entries<GatewayModel>().Select(e => e.Entity).ToDictionary(m => m.Name);
+        added[global].Residencies.ShouldBe(["External"]);
+        added[own].Residencies.ShouldBe(["Eu"]);
+        added[mixed].Residencies.ShouldBe(["OnPrem", "Eu"]); // both in effect, in residency order
+        db.ChangeTracker.Clear();
+    }
+
+    [Fact]
     public async Task Manual_rows_are_kept_and_a_catalogue_row_the_gateway_no_longer_serves_is_removed_with_one_audit_entry()
     {
         await using var gateway = database.Gateway();
