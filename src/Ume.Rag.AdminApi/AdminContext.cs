@@ -40,7 +40,8 @@ public sealed record AuditAlso(string Action, string EntityType, object? EntityI
 /// gateway's <c>AdminContext</c>: no invalidation bus (the outbox is in the transaction, data-model §5), and every config
 /// change runs under the config version lock with its audit entry.
 /// </summary>
-public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider time, ILoggerFactory loggers, IHttpContextAccessor http)
+public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider time, ILoggerFactory loggers, IHttpContextAccessor http,
+    ConfigLockMetrics lockMetrics)
 {
     public const string ServiceName = "rag-admin";
 
@@ -126,7 +127,7 @@ public sealed class AdminContext(RagDbContext db, IJobQueue jobs, TimeProvider t
                 }
 
                 return change.Result;
-            }, ct);
+            }, ct, lockMetrics);
         }
         catch (DbUpdateConcurrencyException ex)
         {

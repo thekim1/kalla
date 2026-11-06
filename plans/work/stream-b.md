@@ -107,7 +107,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** – (`GatewayReranker`: the gateway's rerank release).
 - **Read:** Decisions "Rerank pulled forward"; knowledge-api §6.7.
 
-### [ ] B-13 Config lock wait histogram (#391, to-verify #23)
+### [x] B-13 Config lock wait histogram (#391, to-verify #23; #PRNUM)
 - **Do:** emit `rag.admin.config_lock.wait` (histogram, seconds) around the `config."ConfigVersion"` lock wait in the
   admin's config writes, on the admin's meter; the measurement at the real write rate is A-L6's.
 - **Paths:** `src/Ume.Rag.Infrastructure/Config/**`, `src/Ume.Rag.AdminApi/**`, their tests.

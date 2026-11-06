@@ -52,7 +52,7 @@ public sealed record OrgSyncStatus(bool Enabled, DateTimeOffset? LastRunAt, Date
 /// entered by hand (identity plan §3). A failed run keeps the last mirror.
 /// </summary>
 public sealed partial class OrganisationSync(
-    IServiceScopeFactory scopes, IHttpClientFactory httpClients, IOptions<OrgSyncOptions> options, TimeProvider time, IMeterFactory meters,
+    IServiceScopeFactory scopes, IHttpClientFactory httpClients, IOptions<OrgSyncOptions> options, TimeProvider time, IMeterFactory meters, ConfigLockMetrics lockMetrics,
     ILogger<OrganisationSync> logger) : BackgroundService
 {
     public const string HttpClientName = "org-sync";
@@ -135,7 +135,7 @@ public sealed partial class OrganisationSync(
                 db.AuditLog.Add(audit);
                 await db.SaveChangesAsync(ct);
                 return new RunOutcome(changed, audit);
-            }, cancellationToken);
+            }, cancellationToken, lockMetrics);
 
             if (result.Audit is { } entry)
             {
