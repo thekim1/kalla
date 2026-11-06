@@ -87,6 +87,7 @@ against `UME_HEALTHCHECK_URL` (default `https://localhost:8443/health/ready`).
 - [`docs/p1a-local-run.md`](docs/p1a-local-run.md): the local P1a run, against FakeGateway now and the interim gateway later.
 - [`docs/production-setup.md`](docs/production-setup.md): host sizing, `init-deployment.sh`, Compose files.
 - [`docs/runbook.md`](docs/runbook.md): backups, restore, key escrow, certificates, operations.
+- [`docs/network-and-ports.md`](docs/network-and-ports.md): listeners, outbound destinations and firewall/proxy rules per setup.
 - [`docs/test-host.md`](docs/test-host.md): the pilot test host, its caps, backups and the restore drill.
 - [`docs/security-events.md`](docs/security-events.md): the security event ids.
 - [`docs/upgrade-guide.md`](docs/upgrade-guide.md): upgrading between releases.
