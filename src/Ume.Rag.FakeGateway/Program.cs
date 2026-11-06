@@ -4,10 +4,15 @@ using Microsoft.Extensions.Options;
 using Ume.Rag.FakeGateway;
 
 // OpenAI-compatible fake of the team's LLM gateway for local runs and tests (repo-and-deployment §4.3). Behaves like
-// gateway release 1: per-level dev keys that require x-ume-max-residency, x-ume-residency on every answer, the 403/503
-// split, /v1/models filtered by the ceiling, and the Data API catalogue. Behaviour by model name (appsettings.json):
-//   fake-fail-500 → 500; fake-slow → 3 s delay; fake-wrong-residency → answers with x-ume-residency External;
-//   fake-drained → 503 + Retry-After (its in-ceiling targets are drained);
+// gateway release 1 as built (thekim1/llmgateway#66, #390): per-level dev keys that require x-ume-max-residency (400
+// invalid_request when it is missing, empty, repeated or not one of the three names), x-ume-residency on every answer,
+// 403 max_residency_not_met vs 503 no_eligible_provider + Retry-After, no circuit-open 503 (failing in-ceiling targets end
+// in 502/504 all_providers_failed), /v1/models filtered by the ceiling, the optional Cohere-compatible /v1/rerank
+// (thekim1/llmgateway#68; off unless FakeGateway:RerankEnabled), and the Data API catalogue. Behaviour by model name
+// (appsettings.json):
+//   fake-fail-500 → 502 all_providers_failed; fake-fail-timeout → 504; fake-fail-fallback → its OnPrem target fails, so
+//   OnPrem gets 502 and Eu an answer from Eu; fake-slow → 3 s delay; fake-wrong-residency → answers with x-ume-residency
+//   External; fake-drained → 503 + Retry-After (its in-ceiling targets are drained);
 //   fake-stream-broken | -stall | -no-done | -empty-deltas | -length → streaming edge cases (chat design §18.4).
 // With stream_options.include_usage the last chunk carries usage only, as OpenAI's do. NOT for production.
 if (await WebDefaults.ExitIfHealthProbeAsync(args))
@@ -23,6 +28,12 @@ builder.Services.AddHttpClient("upstream").RemoveStandardResilienceHandler();
 builder.Services.AddSingleton<FakeChatScripts>();
 
 var app = builder.Build();
+app.Use((ctx, next) =>
+{
+    // Every gateway answer carries its request id (the gateway's RequestIdMiddleware), error bodies too.
+    ctx.Response.Headers[FakeAccess.RequestIdHeader] = "fake-" + Guid.NewGuid().ToString("N")[..16];
+    return next(ctx);
+});
 app.MapDefaultEndpoints();
 app.MapGet("/", () => "Ume.Rag fake gateway – endast för test och utveckling.");
 
@@ -34,19 +45,25 @@ app.MapGet("/v1/models", (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> 
         return error!;
     }
 
-    // As the gateway from release 1: only models with an available target within the ceiling (gateway design §3.4).
+    // As the gateway's ModelListEndpoint from release 1: only models with an available target within the ceiling
+    // (gateway design §3.4); a multi-target name is a route alias (ume.residencies), a single-target one a deployment
+    // (ume.residency), and ume.kind is the gateway's ModelKind name.
     return Results.Json(new
     {
         @object = "list",
-        data = o.Models
+        data = o.Served
             .Select(m => (Model: m, Residencies: FakeAccess.ServableResidencies(m, call)))
             .Where(m => m.Residencies.Length > 0)
+            .OrderBy(m => m.Model.Targets.Count == 1).ThenBy(m => m.Model.Name, StringComparer.Ordinal)
             .Select(m => new
             {
                 id = m.Model.Name,
                 @object = "model",
-                owned_by = "ume-fake",
-                ume = new { kind = m.Model.Kind, residencies = m.Residencies.Select(Ume.Rag.Domain.ResidencyCeiling.ToHeader) },
+                created = 0,
+                owned_by = m.Model.Targets.Count == 1 ? FakeCatalog.ProviderName(m.Residencies[0]) : "ume-llm-gateway",
+                ume = m.Model.Targets.Count == 1
+                    ? (object)new { type = "model", kind = FakeCatalog.KindName(m.Model.Kind), residency = Ume.Rag.Domain.ResidencyCeiling.ToHeader(m.Residencies[0]) }
+                    : new { type = "alias", kind = FakeCatalog.KindName(m.Model.Kind), residencies = m.Residencies.Select(Ume.Rag.Domain.ResidencyCeiling.ToHeader) },
             }),
     });
 });
@@ -61,7 +78,7 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
 
     var body = await ReadAsync(ctx);
     var modelName = body["model"]?.GetValue<string>();
-    if (FakeAccess.Route(ctx, o, call, modelName, "chat", out error) is not { } model)
+    if (FakeAccess.Route(ctx, o, call, modelName, FakeModel.Chat, out error) is not { } model)
     {
         return error!;
     }
@@ -163,7 +180,7 @@ app.MapPost("/v1/embeddings", async (HttpContext ctx, IOptionsSnapshot<FakeGatew
 
     var body = await ReadAsync(ctx);
     var modelName = body["model"]?.GetValue<string>();
-    if (FakeAccess.Route(ctx, o, call, modelName, "embedding", out error) is not { } model)
+    if (FakeAccess.Route(ctx, o, call, modelName, FakeModel.Embedding, out error) is not { } model)
     {
         return error!;
     }
@@ -181,7 +198,7 @@ app.MapPost("/v1/embeddings", async (HttpContext ctx, IOptionsSnapshot<FakeGatew
     };
     if (inputs.Length == 0)
     {
-        return FakeAccess.Error(400, "invalid_request", "invalid_request_error", "'input' must be a string or an array of strings.");
+        return FakeAccess.Error(ctx, 400, "invalid_request", "'input' must be a string or an array of strings.");
     }
 
     // Dimensions (gateway design §6): the OpenAI parameter, else a "-<n>" model suffix, else 1024 (BGE-M3).
@@ -191,7 +208,7 @@ app.MapPost("/v1/embeddings", async (HttpContext ctx, IOptionsSnapshot<FakeGatew
         dimensions = d.GetValue<int>();
         if (dimensions is < 1 or > 4096)
         {
-            return FakeAccess.Error(400, "invalid_request", "invalid_request_error", "'dimensions' must be between 1 and 4096.");
+            return FakeAccess.Error(ctx, 400, "invalid_request", "'dimensions' must be between 1 and 4096.");
         }
     }
     else if (model.Name.LastIndexOf('-') is var dash and > 0 && int.TryParse(model.Name.AsSpan(dash + 1), System.Globalization.CultureInfo.InvariantCulture, out var suffix) && suffix is >= 1 and <= 4096)
@@ -217,7 +234,10 @@ app.MapPost("/v1/embeddings", async (HttpContext ctx, IOptionsSnapshot<FakeGatew
     });
 });
 
-// Provisional shape (gateway design §7.4: path and shape are agreed with the gateway team before P2): Cohere/Jina style.
+// Cohere-compatible rerank as the gateway serves it from thekim1/llmgateway#68 (gateway design §7.4): documents as strings
+// or { text }, results[] with index and relevance_score (and document with return_documents), usage in input tokens.
+// Optional: with FakeGateway:RerankEnabled off (the default) no rerank model exists, so the call answers 404 (400 for a
+// model of another kind), as the gateway does without a rerank provider. Scores from word overlap, deterministic.
 app.MapPost("/v1/rerank", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOptions> options) =>
 {
     var o = options.Value;
@@ -227,24 +247,40 @@ app.MapPost("/v1/rerank", async (HttpContext ctx, IOptionsSnapshot<FakeGatewayOp
     }
 
     var body = await ReadAsync(ctx);
-    if (FakeAccess.Route(ctx, o, call, body["model"]?.GetValue<string>(), "rerank", out error) is not { } model)
+    if (FakeAccess.Route(ctx, o, call, body["model"]?.GetValue<string>(), FakeModel.Rerank, out error) is not { } model)
     {
         return error!;
     }
 
-    var query = body["query"]?.GetValue<string>() ?? "";
-    List<string> documents = body["documents"] is JsonArray docs
-        ? [.. docs.Select(x => x is JsonObject obj ? obj["text"]?.GetValue<string>() ?? "" : x?.GetValue<string>() ?? "")]
-        : [];
-    var topN = body["top_n"]?.GetValue<int>() ?? documents.Count;
+    if (await FailureAsync(ctx, model.Name) is { } failure)
+    {
+        return failure;
+    }
+
+    // The provider's refusal, passed on by the gateway with its status and message (the gateway's FakeLlm's text).
+    var query = body["query"] is JsonValue q && q.TryGetValue<string>(out var text) ? text : "";
+    if (string.IsNullOrWhiteSpace(query) || body["documents"] is not JsonArray { Count: > 0 } docs)
+    {
+        return FakeAccess.Error(ctx, 400, "invalid_request", "query and documents are required.");
+    }
+
+    List<string> documents = [.. docs.Select(x => x is JsonObject obj ? obj["text"]?.ToString() ?? "" : x?.ToString() ?? "")];
+    var topN = body["top_n"] is JsonValue n && n.TryGetValue<int>(out var top) && top > 0 ? top : documents.Count;
+    var returnDocuments = body["return_documents"] is JsonValue r && r.TryGetValue<bool>(out var rd) && rd;
+    var tokens = documents.Sum(d => FakeContent.Tokens(query) + FakeContent.Tokens(d));
     return Results.Json(new
     {
+        id = "rerank-" + Guid.NewGuid().ToString("N"),
         model = model.Name,
+        @object = "reranking",
         results = documents
-            .Select((text, index) => new { index, relevance_score = FakeContent.Overlap(query, text) })
-            .OrderByDescending(r => r.relevance_score).ThenBy(r => r.index)
-            .Take(topN),
-        usage = new { total_tokens = FakeContent.Tokens(query) + documents.Sum(FakeContent.Tokens) },
+            .Select((document, index) => (Index: index, Score: FakeContent.Overlap(query, document), Text: document))
+            .OrderByDescending(x => x.Score).ThenBy(x => x.Index)
+            .Take(topN)
+            .Select(x => returnDocuments
+                ? (object)new { index = x.Index, relevance_score = x.Score, document = new { text = x.Text } }
+                : new { index = x.Index, relevance_score = x.Score }),
+        usage = new { prompt_tokens = tokens, total_tokens = tokens },
     });
 });
 
@@ -261,12 +297,12 @@ catalog.AddEndpointFilter(async (context, next) =>
 catalog.MapGet("/departments", () => Results.Json(new { items = FakeCatalog.Departments }, FakeCatalog.Json));
 catalog.MapGet("/teams", () => Results.Json(new { items = FakeCatalog.Teams }, FakeCatalog.Json));
 // The model catalogue as the gateway's DataEndpoints.cs serves it: one provider per residency, one deployment per
-// single-target chat or embedding model (a multi-target name is a route alias, not in the catalogue), and its price.
+// single-target model (a multi-target name is a route alias, not in the catalogue), and its price.
 catalog.MapGet("/providers", () => Results.Json(new { items = FakeCatalog.Providers }, FakeCatalog.Json));
 catalog.MapGet("/models", (IOptionsSnapshot<FakeGatewayOptions> options) =>
-    Results.Json(new { items = FakeCatalog.Models(options.Value.Models) }, FakeCatalog.Json));
+    Results.Json(new { items = FakeCatalog.Models(options.Value.Served) }, FakeCatalog.Json));
 catalog.MapGet("/prices", (IOptionsSnapshot<FakeGatewayOptions> options) =>
-    Results.Json(new { items = FakeCatalog.Prices(options.Value.Models) }, FakeCatalog.Json));
+    Results.Json(new { items = FakeCatalog.Prices(options.Value.Served) }, FakeCatalog.Json));
 
 app.Run();
 
@@ -277,8 +313,6 @@ static async Task<IResult?> FailureAsync(HttpContext ctx, string model)
 {
     switch (model)
     {
-        case "fake-fail-500":
-            return FakeAccess.Error(StatusCodes.Status500InternalServerError, "provider_error", "server_error", "Fake provider failure");
         case "fake-slow":
             await Task.Delay(TimeSpan.FromSeconds(3), ctx.RequestAborted);
             return null;
