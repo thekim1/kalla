@@ -55,6 +55,7 @@ builder.Services.AddSingleton<AdminClientAddresses>();
 // The OpenAPI document and Scalar (admin design §4.1, copied): in P1 also the action UI for platform objects without a page.
 builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<ConfigLockMetrics>();
 builder.Services.AddScoped<AdminContext>();
 builder.Services.AddOptions<OrgSyncOptions>().BindConfiguration(OrgSyncOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 // The sync calls the gateway's Data API (OrgSync:BaseUrl) on its own cadence: no standard resilience handler, whose Polly

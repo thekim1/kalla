@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Ume.Rag.Infrastructure.Persistence;
@@ -28,8 +29,11 @@ public static class ConfigWrites
     /// committing whose outcome is unknown (the connection drops during <c>COMMIT</c>) can still apply a change twice; a
     /// caller that cannot tolerate that uses EF's <c>ExecuteInTransactionAsync</c> overload with a <c>verifySucceeded</c>
     /// check instead.
+    /// <paramref name="lockMetrics"/>, when given, records each attempt's wait for the lock (<c>rag.admin.config_lock.wait</c>),
+    /// a busy one too.
     /// </remarks>
-    public static Task<T> ExecuteConfigWriteAsync<T>(this RagDbContext db, Func<long, CancellationToken, Task<T>> work, CancellationToken cancellationToken)
+    public static Task<T> ExecuteConfigWriteAsync<T>(this RagDbContext db, Func<long, CancellationToken, Task<T>> work, CancellationToken cancellationToken,
+        ConfigLockMetrics? lockMetrics = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(work);
@@ -41,6 +45,7 @@ public static class ConfigWrites
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
             await db.Database.ExecuteSqlRawAsync(SetLockTimeout, ct);
             long version;
+            var lockStart = Stopwatch.GetTimestamp();
             try
             {
                 version = await db.Database
@@ -51,6 +56,10 @@ public static class ConfigWrites
             {
                 // Not retried: the caller answers config_busy at once instead of queueing behind the lock again.
                 throw new ConfigBusyException(ex);
+            }
+            finally
+            {
+                lockMetrics?.Record(lockStart);
             }
 
             var result = await work(version, ct);

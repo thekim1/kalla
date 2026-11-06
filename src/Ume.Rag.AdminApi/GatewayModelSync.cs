@@ -47,7 +47,7 @@ public sealed record GatewayModelSyncStatus(bool Enabled, DateTimeOffset? LastRu
 /// </summary>
 public sealed partial class GatewayModelSync(
     IServiceScopeFactory scopes, IHttpClientFactory httpClients, GatewayApi gateway, IOptions<OrgSyncOptions> options,
-    IOptions<GatewayOptions> gatewayOptions, TimeProvider time, IMeterFactory meters, ILogger<GatewayModelSync> logger) : BackgroundService
+    IOptions<GatewayOptions> gatewayOptions, TimeProvider time, IMeterFactory meters, ConfigLockMetrics lockMetrics, ILogger<GatewayModelSync> logger) : BackgroundService
 {
     /// <summary>The audit actor of a run and of a recorded canary.</summary>
     public const string SystemActor = "system:gateway-sync";
@@ -141,7 +141,7 @@ public sealed partial class GatewayModelSync(
                 db.AuditLog.Add(audit);
                 await db.SaveChangesAsync(ct);
                 return new RunOutcome(changed, audit);
-            }, cancellationToken);
+            }, cancellationToken, lockMetrics);
 
             if (outcome.Audit is { } entry)
             {
@@ -289,7 +289,7 @@ public sealed partial class GatewayModelSync(
                     });
                     await db.SaveChangesAsync(ct);
                     return true;
-                }, cancellationToken);
+                }, cancellationToken, lockMetrics);
                 if (written)
                 {
                     recorded++;
