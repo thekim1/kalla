@@ -82,7 +82,7 @@ function fieldFor(doc: OpenApiDocument, name: string, raw: JsonSchema, required:
     schema = { ...resolve(doc, variants.find((v) => !types(v).includes('null'))), description: schema.description ?? undefined }
   }
   const t = types(schema).filter((x) => x !== 'null')
-  const base = { name, label: PLATFORM.fields[name] ?? schema.title ?? fieldLabel(name), help: schema.description, required, nullable }
+  const base = { name, label: PLATFORM.fields[name] ?? schema.title ?? fieldLabel(name), help: PLATFORM.fieldHints[name] ?? schema.description, required, nullable }
   if (schema.enum) return { ...base, kind: 'select', options: schema.enum.map(String) }
   if (t.includes('boolean')) return { ...base, kind: 'switch' }
   // ASP.NET's schemas allow numbers as strings too (`[integer, string]` with a pattern).

@@ -56,6 +56,7 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
       [PLATFORM.organisation.municipality, '3'],
     ])
     expect((wrapper.get('#platform-organisation-memberGroups').element as HTMLTextAreaElement).value).toBe('Kommunstyrelsen\nKLK-alla')
+    expect(wrapper.text()).toContain(PLATFORM.fieldHints.memberGroups)
     wrapper.unmount()
   })
 
