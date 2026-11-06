@@ -306,7 +306,8 @@ data: [DONE]
   any call (§9.8 When; then `"follow_ups": []` goes in the first chunk), there is one `ume` chunk.
 - A fixed text (not found, unavailable) ends the same way: final chunk, one `ume` chunk, usage, `[DONE]`.
 - After an error chunk (§9.6) or a client disconnect no `ume` chunk is written.
-- Clients that read only `choices` skip the chunk, as they skip the usage chunk (to verify for the OpenAI SDKs, §22).
+- Clients that read only `choices` skip the chunk, as they skip the usage chunk (checked for the OpenAI Python and JS
+  SDKs, §22).
 
 ## 4. Request path
 
@@ -1467,7 +1468,11 @@ Unit (`Ume.Rag.Api.Tests`) and API tests against FakeGateway (scripted answers p
 - Assistant tests (§18.8, P2): judge cost and duration of an `assistant-tests` run (≤ 30 questions × answer + judge call)
   per publish; whether the verdict against free-text expected behaviour agrees with editors on a sample.
 - `ume` chunks (§3.8): the OpenAI Python and .NET SDKs and the frontend team's parser skip a `chat.completion.chunk`
-  with `choices: []` and an unknown top-level member without error, as they skip the usage chunk.
+  with `choices: []` and an unknown top-level member without error, as they skip the usage chunk. **Python and JS
+  checked (2026-11-06)**: the recorded golden answers (`json-ume-*`, `sse-ume-*`) replayed to `openai` 3.46.0 (Python)
+  and 7.53.0 (JS): text, the `ume` member (Python `model_extra["ume"]`, JS `chunk.ume`) and usage read in every case;
+  the mid-stream error chunk raises `APIError` as for OpenAI; both send a request `ume` (Python `extra_body`, JS as
+  a request field). Open: the .NET SDK and the frontend team's parser.
 - Long-question condense (§5.1): p95 latency of the EU condense model (`gpt-6-luna`, reasoning off) for ≈ 7,000 input
   and ≤ 96 output tokens within 3,000 ms, and the retrieval recall of the condensed query against the first 2,000
   characters on real pilot tickets. **First measurement (2026-11-06, interim gateway, #431)**: a 15,990-character
