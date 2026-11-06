@@ -160,6 +160,9 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     await wrapper.get('#assistant-max-tokens').setValue('800')
     await wrapper.get('#assistant-temperature').setValue('0,2')
     await wrapper.get('[data-test=condense] input').setValue(false)
+    // Rerank (B-12) is off by default and stored only when turned on.
+    expect((wrapper.get('[data-test=rerank] input').element as HTMLInputElement).checked).toBe(false)
+    await wrapper.get('[data-test=rerank] input').setValue(true)
     await wrapper.get('#assistant-language').setValue('')
     await wrapper.get('[data-test=save-draft]').trigger('click')
     await flushPromises()
@@ -168,7 +171,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(save).toHaveBeenCalledWith('a1', expect.objectContaining({
       gatewayModel: 'ume/chat-eu', systemPrompt: 'Du svarar invånare.',
       querySteps: {
-        retrieval: { topK: 12, filters: { tags: ['x'] } }, answer: { generalKnowledge: 'off', maxOutputTokens: 800, temperature: 0.2 }, condense: { enabled: false },
+        retrieval: { topK: 12, filters: { tags: ['x'] }, rerank: true }, answer: { generalKnowledge: 'off', maxOutputTokens: 800, temperature: 0.2 }, condense: { enabled: false },
       },
     }))
   })

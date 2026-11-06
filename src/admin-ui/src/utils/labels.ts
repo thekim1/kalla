@@ -789,6 +789,8 @@ export const ASSISTANT = {
   model: 'Language model',
   modelHint: 'The models the AI gateway offers.',
   topK: 'Number of passages the search gives the model',
+  rerank: 'Rerank the search results with a language model',
+  rerankHint: 'Off by default. Turn it on when the evaluation shows better answers; each question then takes longer and costs one more model call.',
   condense: 'Rewrite follow-up questions so that they can be searched on their own',
   historyMessages: 'Earlier messages the model sees',
   maxOutputTokens: 'Longest answer, in tokens',

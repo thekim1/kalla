@@ -234,7 +234,7 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private (KnowledgeService Service, RetrievalCounter Counter, IHost Host) Build(PolicySnapshot snapshot, bool confirmed = true, HttpMessageHandler? gateway = null,
-        IDownloadLinks? links = null)
+        IDownloadLinks? links = null, IReranker? reranker = null)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([
@@ -248,13 +248,68 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         var embedder = new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), new QueryEmbeddingOptions(), new byte[32],
             TimeProvider.System, NullLogger<GatewayQueryEmbedder>.Instance);
         var service = new KnowledgeService(new KnowledgeFixture.FixedSnapshot(snapshot, confirmed), new AccessPolicy(AccessPolicy.DefaultKnowledgeClientKinds),
-            new RetrievalEngine(index, new ScopeSizeCache(index, TimeProvider.System)), new PostgresHydrator(dataSource), embedder, counter, dataSource,
+            new RetrievalEngine(index, new ScopeSizeCache(index, TimeProvider.System), null, reranker, new PostgresHydrator(dataSource)), new PostgresHydrator(dataSource),
+            embedder, counter, dataSource,
             links ?? NoDownloadLinks.Instance, NullLogger<KnowledgeService>.Instance);
         return (service, counter, host);
     }
 
     private static RetrievalRequest Search(params Guid[] collections) =>
         new("Behöver jag bygglov för altan?", null, collections, Purpose: RetrievalPurpose.Http);
+
+    /// <summary>Records each rerank request and scores the passages in reverse fused order (the last one best).</summary>
+    private sealed class RecordingReranker : IReranker
+    {
+        public List<RerankRequest> Requests { get; } = [];
+
+        public Task<RerankScores?> ScoreAsync(RerankRequest request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult<RerankScores?>(new RerankScores([.. request.Passages.Select((_, i) => (double)i)]));
+        }
+    }
+
+    [Fact]
+    public async Task An_assistant_that_reranks_reranks_at_the_callers_model_ceiling_and_no_other_does()
+    {
+        // B-12 (Decisions "Rerank pulled forward"): QuerySteps.retrieval.rerank turns it on, off by default; chat passes its
+        // turn's ceiling as ModelCeiling, and the model is Settings.Retrieval.rerankModel.
+        var plain = db.Snapshot() with { RetrievalSettings = """{"rerankModel": "ume/small-eu"}""" };
+        var assistant = plain.Assistants[db.AssistantId];
+        var reranking = plain with
+        {
+            Assistants = new Dictionary<Guid, AssistantEntry>
+            {
+                [db.AssistantId] = assistant with { Published = assistant.Published! with { QuerySteps = """{"retrieval": {"rerank": true}}""" } },
+            },
+        };
+        var reranker = new RecordingReranker();
+        var (service, _, host) = Build(reranking, reranker: reranker);
+        using var _ = host;
+        var who = db.Who(db.OwuiClient, reranking);
+        var runId = Guid.NewGuid();
+
+        var fused = await service.RetrieveAsync(who, new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection], RunId: runId), Ct);
+        reranker.Requests.ShouldBeEmpty(); // no model ceiling (not chat): the fused order
+        fused.Results.ShouldAllBe(r => r.Scores.RerankScore == null);
+
+        var reranked = await service.RetrieveAsync(who,
+            new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection], RunId: runId, ModelCeiling: Residency.Eu), Ct);
+        var call = reranker.Requests.ShouldHaveSingleItem();
+        (call.Model, call.Ceiling, call.RunId, call.Query).ShouldBe(("ume/small-eu", Residency.Eu, (Guid?)runId, "bygglov altan"));
+        call.Passages.Count.ShouldBeGreaterThan(1);
+        call.Passages.ShouldAllBe(p => p.Text.Length > 0); // the texts come from the hydrator's extra statement
+        reranked.Degraded.ShouldBeNull();
+        reranked.Results[0].ChunkId.ShouldBe(call.Passages[^1].ChunkId);
+        reranked.Results[0].Scores.RerankScore.ShouldBe(call.Passages.Count - 1);
+
+        // The same call to an assistant without the setting never reranks.
+        var (plainService, _, plainHost) = Build(plain, reranker: reranker);
+        using var __ = plainHost;
+        await plainService.RetrieveAsync(db.Who(db.OwuiClient, plain),
+            new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection], ModelCeiling: Residency.Eu), Ct);
+        reranker.Requests.Count.ShouldBe(1);
+    }
 
     [Fact]
     public async Task A_source_demote_pattern_ranks_its_pages_lower_and_never_an_upload()

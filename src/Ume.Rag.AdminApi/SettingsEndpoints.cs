@@ -47,7 +47,9 @@ public static class SettingsEndpoints
             s.EvaluationJudgeModel = r.EvaluationJudgeModel;
             s.EvaluationMaxQuestions = r.EvaluationMaxQuestions;
         }, (r, db, ct) => PlatformModelRules.EnsureAsync(db, [("Settings.EvaluationModel", r.EvaluationModel), ("Settings.EvaluationJudgeModel", r.EvaluationJudgeModel)], ct));
-        Section(settings, "retrieval", s => new JsonSectionSettings(Json(s.Retrieval), Version(s)), (RetrievalSectionRequest r, PlatformSettings s) => s.Retrieval = r.Value.ToJsonString());
+        Section(settings, "retrieval", s => new JsonSectionSettings(Json(s.Retrieval), Version(s)), (RetrievalSectionRequest r, PlatformSettings s) => s.Retrieval = r.Value.ToJsonString(),
+            (r, db, ct) => PlatformModelRules.EnsureAsync(db,
+                [("Settings.Retrieval.RerankModel", r.Value["rerankModel"] is JsonValue m && m.TryGetValue<string>(out var model) ? model : null)], ct));
         Section(settings, "chat", s => new JsonSectionSettings(Json(s.Chat), Version(s)), (JsonSectionRequest r, PlatformSettings s) => s.Chat = r.Value.ToJsonString(),
             (r, db, ct) => PlatformModelRules.EnsureAsync(db,
                 [("Settings.Chat.CondenseModel", r.Value["condenseModel"] is JsonValue m && m.TryGetValue<string>(out var model) ? model : null)], ct));
@@ -126,7 +128,8 @@ public static class SettingsEndpoints
 
 /// <summary>
 /// V32 (admin design §4.6): a platform model setting names a <c>chat</c> row of <c>GatewayModels</c> servable at the platform
-/// ceiling (<see cref="Ceiling"/>). An empty setting is allowed (unset). The skill-gate model is P2 (tools section not mapped).
+/// ceiling (<see cref="Ceiling"/>): the evaluation models, the condense model and the rerank model (Decisions "Rerank pulled
+/// forward"). An empty setting is allowed (unset). The skill-gate model is P2 (tools section not mapped).
 /// </summary>
 public static class PlatformModelRules
 {

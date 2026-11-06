@@ -308,10 +308,28 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
             return ([.. Codes(body.GetProperty("warnings"))], body.GetProperty("version").GetString());
         }
 
+        async Task<(IReadOnlyList<string> Warnings, string? DraftVersion)> StepsAsync(Guid id, object querySteps, string? draftVersion)
+        {
+            using var draft = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
+            {
+                gatewayModel = Model, systemPrompt = "Svara kort.", collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } }, querySteps,
+                version = draftVersion,
+            }, Ct);
+            draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
+            var body = await Json(draft);
+            return ([.. Codes(body.GetProperty("warnings"))], body.GetProperty("version").GetString());
+        }
+
         // An internal assistant: an unknown value is V17's warning; fallback is accepted and publishes.
         var (inner, innerVersion, innerDraft) = await CreateAsync("Intern", Classification.Internal);
         var (warnings, next) = await DraftAsync(inner, "sometimes", innerDraft);
         warnings.ShouldBe(["query_steps_invalid"]);
+
+        // retrieval.rerank (B-12, Decisions "Rerank pulled forward") is true or false; anything else is V17's warning too.
+        (warnings, next) = await StepsAsync(inner, new { retrieval = new { rerank = "yes" } }, next);
+        warnings.ShouldBe(["query_steps_invalid"]);
+        (warnings, next) = await StepsAsync(inner, new { retrieval = new { rerank = true } }, next);
+        warnings.ShouldBeEmpty();
         (warnings, next) = await DraftAsync(inner, "fallback", next);
         warnings.ShouldBeEmpty();
         using (var published = await admin.PostAsJsonAsync($"/api/assistants/{inner}/publish", new { version = innerVersion, draftVersion = next }, Ct))

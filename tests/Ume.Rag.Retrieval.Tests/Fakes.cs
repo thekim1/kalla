@@ -108,15 +108,18 @@ internal sealed class FakeReranker(IReadOnlyDictionary<Guid, double>? scores, bo
 {
     public int Calls { get; private set; }
 
-    public Task<IReadOnlyList<double>?> ScoreAsync(string query, IReadOnlyList<RerankPassage> passages, CancellationToken cancellationToken)
+    public RerankRequest? Last { get; private set; }
+
+    public Task<RerankScores?> ScoreAsync(RerankRequest request, CancellationToken cancellationToken)
     {
         Calls++;
+        Last = request;
         if (fail)
         {
             throw new HttpRequestException("rerank endpoint down");
         }
 
-        return Task.FromResult<IReadOnlyList<double>?>([.. passages.Select(p => scores!.GetValueOrDefault(p.ChunkId))]);
+        return Task.FromResult<RerankScores?>(new RerankScores([.. request.Passages.Select(p => scores!.GetValueOrDefault(p.ChunkId))]));
     }
 }
 

@@ -25,7 +25,10 @@ public delegate Task<ReadOnlyMemory<float>> QueryEmbedder(string normalizedQuery
 /// Append <see cref="SwedishDecompounder"/> parts to the keyword query (§5.1); false for the evaluation's
 /// <c>hybrid-no-decompounder</c> variant.
 /// </param>
-/// <param name="Rerank">Ask the <see cref="IReranker"/> (the assistant's <c>QuerySteps.retrieval.rerank</c>, P2).</param>
+/// <param name="Rerank">
+/// Ask the <see cref="IReranker"/> at this call's ceiling (the assistant's <c>QuerySteps.retrieval.rerank</c>, §6.7); null
+/// keeps the fused order.
+/// </param>
 public sealed record SearchRequest(
     string Query,
     SearchScope Scope,
@@ -35,7 +38,7 @@ public sealed record SearchRequest(
     QueryEmbedder? Embed = null,
     bool AllowDegraded = true,
     bool Decompound = true,
-    bool Rerank = false)
+    RerankCall? Rerank = null)
 {
     public const int MaxTopK = 50;
 }
@@ -47,13 +50,15 @@ public sealed record SearchRequest(
 /// <param name="Degraded">Null, or one of <see cref="RetrievalDegradation"/>.</param>
 /// <param name="VectorSearch">How statement V ran; null when it did not run.</param>
 /// <param name="Timings">Stage milliseconds.</param>
+/// <param name="RerankUsage">The rerank call's token usage when one answered (cost per query in the evaluation); else null.</param>
 public sealed record SearchResult(
     string NormalizedQuery,
     IReadOnlyList<SearchHit> Hits,
     Coverage Coverage,
     string? Degraded,
     VectorSearch? VectorSearch,
-    SearchTimings Timings);
+    SearchTimings Timings,
+    RerankUsage? RerankUsage = null);
 
 /// <summary>One result: 1-based rank, the candidate's ids, the final score and the per-list scores.</summary>
 public sealed record SearchHit(int Rank, Candidate Candidate, double Score, ChunkScores Scores);
@@ -68,7 +73,7 @@ public sealed class RetrievalEngineOptions
     /// <summary>How long a search waits for a slot before <c>search_unavailable</c> (§6.6).</summary>
     public TimeSpan SlotWait { get; set; } = TimeSpan.FromMilliseconds(200);
 
-    /// <summary>The reranker's time limit (§6.7, proposed 500 ms).</summary>
+    /// <summary>The reranker's time limit, text read included (§6.7: 500 ms; <c>Retrieval:RerankTimeout</c>).</summary>
     public TimeSpan RerankTimeout { get; set; } = TimeSpan.FromMilliseconds(500);
 }
 
@@ -247,10 +252,11 @@ public sealed class RetrievalEngine : IDisposable
 
             var rerankTime = 0.0;
             IReadOnlyDictionary<Guid, double>? rerankScores = null;
-            if (request.Rerank && deduped.Count > 0)
+            RerankUsage? rerankUsage = null;
+            if (request.Rerank is { } rerank && deduped.Count > 0)
             {
                 var started = Stopwatch.StartNew();
-                (deduped, rerankScores, var rerankDegraded) = await RerankAsync(normalized, scope, deduped, linked.Token);
+                (deduped, rerankScores, rerankUsage, var rerankDegraded) = await RerankAsync(normalized, scope, rerank, deduped, linked.Token);
                 degraded ??= rerankDegraded;
                 rerankTime = started.Elapsed.TotalMilliseconds;
             }
@@ -274,7 +280,7 @@ public sealed class RetrievalEngine : IDisposable
                 rerankScores is { Count: > 0 } ? rerankScores.Values.Max() : null);
 
             return new SearchResult(normalized, hits, coverage, degraded, vectorSearch,
-                new SearchTimings(keywordTime, embeddingTime, vectorTime, rerankTime, total.Elapsed.TotalMilliseconds));
+                new SearchTimings(keywordTime, embeddingTime, vectorTime, rerankTime, total.Elapsed.TotalMilliseconds), rerankUsage);
         }
         catch
         {
@@ -293,8 +299,8 @@ public sealed class RetrievalEngine : IDisposable
         }
     }
 
-    private async Task<(IReadOnlyList<FusedCandidate> Ordered, IReadOnlyDictionary<Guid, double>? Scores, string? Degraded)> RerankAsync(
-        string query, SearchScope scope, IReadOnlyList<FusedCandidate> deduped, CancellationToken cancellationToken)
+    private async Task<(IReadOnlyList<FusedCandidate> Ordered, IReadOnlyDictionary<Guid, double>? Scores, RerankUsage? Usage, string? Degraded)> RerankAsync(
+        string query, SearchScope scope, RerankCall call, IReadOnlyList<FusedCandidate> deduped, CancellationToken cancellationToken)
     {
         var top = deduped.Take(scope.Platform.RerankCandidates).ToList();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -307,15 +313,21 @@ public sealed class RetrievalEngine : IDisposable
             var passages = top.Where(f => texts.ContainsKey(f.Candidate.ChunkId))
                 .Select(f => new RerankPassage(f.Candidate.ChunkId, texts[f.Candidate.ChunkId]))
                 .ToList();
-            var scores = await _reranker.ScoreAsync(query, passages, timeout.Token);
-            if (scores is null)
+            if (passages.Count == 0)
             {
-                return (deduped, null, null);
+                return (deduped, null, null, null); // nothing left to score: the fused order stands
             }
 
-            if (scores.Count != passages.Count)
+            var result = await _reranker.ScoreAsync(new RerankRequest(query, passages, scope.Platform.RerankModel, call.Ceiling, call.RunId), timeout.Token);
+            if (result is null)
             {
-                throw new InvalidOperationException("The reranker returned a different number of scores than passages.");
+                return (deduped, null, null, null);
+            }
+
+            var scores = result.Scores;
+            if (scores.Count != passages.Count || scores.Any(s => !double.IsFinite(s)))
+            {
+                throw new RerankOutputException("The reranker returned a different number of scores than passages, or a score that is not a number.");
             }
 
             var byId = passages.Select((p, i) => (p.ChunkId, Score: scores[i])).ToDictionary(x => x.ChunkId, x => x.Score);
@@ -326,11 +338,12 @@ public sealed class RetrievalEngine : IDisposable
                 .Select(x => x.f)
                 .Concat(deduped.Skip(top.Count))
                 .ToList();
-            return (reordered, byId, null);
+            return (reordered, byId, result.Usage, null);
         }
-        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception e) when (!cancellationToken.IsCancellationRequested)
         {
-            return (deduped, null, RetrievalDegradation.RerankUnavailable);
+            _metrics?.RerankUnavailable(e is OperationCanceledException && timeout.IsCancellationRequested ? "timeout" : e is RerankOutputException ? "invalid_output" : "error");
+            return (deduped, null, null, RetrievalDegradation.RerankUnavailable);
         }
     }
 

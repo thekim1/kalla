@@ -113,7 +113,7 @@ public sealed class RetrievalEngineTests : IDisposable
         // Scores favour document 7's chunk 4 (dropped by the cap without reranking) and chunk 6.
         var reranker = new FakeReranker(new Dictionary<Guid, double> { [Id(4)] = 0.99, [Id(6)] = 0.95, [Id(1)] = 0.5 });
         using var engine = Engine(reranker);
-        var result = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: true), Ct);
+        var result = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct);
 
         reranker.Calls.ShouldBe(1);
         result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(4), Id(6), Id(1), Id(5), Id(2)]);
@@ -125,7 +125,7 @@ public sealed class RetrievalEngineTests : IDisposable
     public async Task A_failing_reranker_keeps_the_fused_order_and_reports_it()
     {
         using var engine = Engine(new FakeReranker(null, fail: true));
-        var result = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: true), Ct);
+        var result = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct);
 
         result.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(5), Id(1), Id(2), Id(6), Id(3)]);
         result.Degraded.ShouldBe(RetrievalDegradation.RerankUnavailable);
@@ -136,7 +136,7 @@ public sealed class RetrievalEngineTests : IDisposable
     public async Task The_noop_reranker_and_a_request_without_rerank_leave_the_fused_order()
     {
         using var engine = Engine(NoopReranker.Instance);
-        var noop = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: true), Ct);
+        var noop = await engine.SearchAsync(new SearchRequest("altan", OneCollection(), Embed: Embed, Rerank: new RerankCall(Ume.Rag.Domain.Residency.Eu)), Ct);
         noop.Hits.Select(h => h.Candidate.ChunkId).ShouldBe([Id(5), Id(1), Id(2), Id(6), Id(3)]);
         noop.Degraded.ShouldBeNull();
 

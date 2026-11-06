@@ -51,7 +51,7 @@ const querySteps = ref<Record<string, unknown>>({})
 const notFound = ref<Record<string, unknown>>({})
 const generalKnowledge = ref<GeneralKnowledge>('off')
 // The query settings under "Advanced" (admin design §5.5.4; chat design §5–§6, V17); empty = the key is left out.
-const advanced = ref({ topK: '', condense: true, maxMessages: '', maxOutputTokens: '', temperature: '', language: '' })
+const advanced = ref({ topK: '', rerank: false, condense: true, maxMessages: '', maxOutputTokens: '', temperature: '', language: '' })
 const advancedErrors = ref<Record<string, string | undefined>>({})
 const LIMITS = { topK: [1, 50], maxMessages: [0, 20], maxOutputTokens: [64, 4096], temperature: [0, 1] } as const
 const languageOptions = ['', 'auto', 'sv'].map((v) => ({ value: v, label: ASSISTANT.languages[v]! }))
@@ -126,7 +126,8 @@ function fill(d: AssistantDraft | null, base: Settings | null = null): void {
   const steps = (s?.querySteps ?? {}) as Record<string, Record<string, unknown> | undefined>
   const text = (v: unknown) => (typeof v === 'number' ? String(v) : '')
   advanced.value = {
-    topK: text(steps.retrieval?.topK), condense: steps.condense?.enabled !== false, maxMessages: text(steps.history?.maxMessages),
+    topK: text(steps.retrieval?.topK), rerank: steps.retrieval?.rerank === true, condense: steps.condense?.enabled !== false,
+    maxMessages: text(steps.history?.maxMessages),
     maxOutputTokens: text(steps.answer?.maxOutputTokens), temperature: text(steps.answer?.temperature),
     language: typeof steps.answer?.language === 'string' ? steps.answer.language : '',
   }
@@ -158,6 +159,9 @@ function stepsToSave(): Record<string, unknown> {
   const answer: Record<string, unknown> = { ...part('answer'), generalKnowledge: generalKnowledge.value }
   const condense = { ...part('condense'), enabled: advanced.value.condense }
   set(retrieval, 'topK', advanced.value.topK)
+  // Rerank is off unless turned on (Decisions "Rerank pulled forward"); only an explicit choice is stored.
+  if (advanced.value.rerank) retrieval.rerank = true
+  else delete retrieval.rerank
   set(history, 'maxMessages', advanced.value.maxMessages)
   set(answer, 'maxOutputTokens', advanced.value.maxOutputTokens)
   set(answer, 'temperature', advanced.value.temperature)
@@ -344,6 +348,7 @@ onMounted(load)
             <p class="text-small text-fg-2">{{ ASSISTANT.advancedHint }}</p>
             <SelectField id="assistant-model" v-model="model" :label="ASSISTANT.model" :hint="ASSISTANT.modelHint" :options="modelOptions" />
             <TextField id="assistant-top-k" v-model="advanced.topK" :label="ASSISTANT.topK" inputmode="numeric" :error="advancedErrors.topK" />
+            <CheckField v-model="advanced.rerank" :label="ASSISTANT.rerank" :description="ASSISTANT.rerankHint" data-test="rerank" />
             <CheckField v-model="advanced.condense" :label="ASSISTANT.condense" data-test="condense" />
             <TextField id="assistant-history" v-model="advanced.maxMessages" :label="ASSISTANT.historyMessages" inputmode="numeric" :error="advancedErrors.maxMessages" />
             <TextField id="assistant-max-tokens" v-model="advanced.maxOutputTokens" :label="ASSISTANT.maxOutputTokens" inputmode="numeric" :error="advancedErrors.maxOutputTokens" />
