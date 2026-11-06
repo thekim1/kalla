@@ -66,7 +66,7 @@ public static class ChatEndpoints
                 limiter.Check(who, service.Platform.MessagesPerMinutePerUser); // §4.1 step 4: per user and minute, before any model call
                 // §11.1: an issued id is verified before any model call, bound to the asked assistant (#266); an unknown model is
                 // the plan's 404, so Guid.Empty only ever signs or verifies an id that is never used.
-                var assistantId = snapshots.Current.Assistants.Values.FirstOrDefault(a => string.Equals(a.Slug, parsed.Model, StringComparison.Ordinal))?.Id ?? Guid.Empty;
+                var assistantId = service.AssistantId(parsed.Model);
                 (Guid? Issued, string? External) conversation;
                 try
                 {

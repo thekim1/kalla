@@ -109,11 +109,8 @@ public sealed partial class KnowledgeService(
         };
         var policyMs = Ms(started);
 
-        // §6.7: an assistant that reranks (retrieval.rerank, off by default) reranks at the caller's model ceiling.
-        var rerank = request is { AssistantId: { } reranking, ModelCeiling: { } ceiling } &&
-                     Chat.AssistantChatSettings.Parse(snapshot.Assistants[reranking].Published?.QuerySteps).Rerank
-            ? new RerankCall(ceiling, request.RunId)
-            : null;
+        // §6.7: the caller asks for the rerank (chat: an assistant with retrieval.rerank, off by default) at its model ceiling.
+        var rerank = request.RerankCeiling is { } ceiling ? new RerankCall(ceiling, request.RunId) : null;
         SearchResult search;
         try
         {

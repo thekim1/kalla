@@ -15,12 +15,14 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Ume.Rag.Answering;
+using Ume.Rag.Answering.Chat;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Access;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Retrieval;
 using Ume.Rag.Infrastructure;
 using Ume.Rag.Infrastructure.Access;
+using Ume.Rag.Infrastructure.Gateway;
 using Ume.Rag.Retrieval;
 using Ume.Rag.Retrieval.Postgres;
 using Ume.Rag.TestKit;
@@ -254,6 +256,16 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         return (service, counter, host);
     }
 
+    /// <summary>The chat role over <paramref name="knowledge"/>, for the turn plan (no gateway call without history or a fixed answer).</summary>
+    private static ChatService Chat(KnowledgeService knowledge, PolicySnapshot snapshot, IHost host)
+    {
+        var options = Options.Create(new ChatOptions());
+        var clients = host.Services.GetRequiredService<IHttpClientFactory>();
+        return new ChatService(new KnowledgeFixture.FixedSnapshot(snapshot, true), new AccessPolicy(AccessPolicy.DefaultKnowledgeClientKinds),
+            knowledge, new GatewayChatClient(clients, options, NullLogger<GatewayChatClient>.Instance), options,
+            Options.Create(new GatewayOptions()), TimeProvider.System, NullLogger<ChatService>.Instance);
+    }
+
     private static RetrievalRequest Search(params Guid[] collections) =>
         new("Behöver jag bygglov för altan?", null, collections, Purpose: RetrievalPurpose.Http);
 
@@ -272,8 +284,8 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
     [Fact]
     public async Task An_assistant_that_reranks_reranks_at_the_callers_model_ceiling_and_no_other_does()
     {
-        // B-12 (Decisions "Rerank pulled forward"): QuerySteps.retrieval.rerank turns it on, off by default; chat passes its
-        // turn's ceiling as ModelCeiling, and the model is Settings.Retrieval.rerankModel.
+        // B-12 (Decisions "Rerank pulled forward"): QuerySteps.retrieval.rerank turns it on, off by default; chat then passes its
+        // turn's ceiling as RerankCeiling, and the model is Settings.Retrieval.rerankModel.
         var plain = db.Snapshot() with { RetrievalSettings = """{"rerankModel": "ume/small-eu"}""" };
         var assistant = plain.Assistants[db.AssistantId];
         var reranking = plain with
@@ -290,11 +302,11 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         var runId = Guid.NewGuid();
 
         var fused = await service.RetrieveAsync(who, new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection], RunId: runId), Ct);
-        reranker.Requests.ShouldBeEmpty(); // no model ceiling (not chat): the fused order
+        reranker.Requests.ShouldBeEmpty(); // no rerank ceiling (not chat): the fused order
         fused.Results.ShouldAllBe(r => r.Scores.RerankScore == null);
 
         var reranked = await service.RetrieveAsync(who,
-            new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection], RunId: runId, ModelCeiling: Residency.Eu), Ct);
+            new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection], RunId: runId, RerankCeiling: Residency.Eu), Ct);
         var call = reranker.Requests.ShouldHaveSingleItem();
         (call.Model, call.Ceiling, call.RunId, call.Query).ShouldBe(("ume/small-eu", Residency.Eu, (Guid?)runId, "bygglov altan"));
         call.Passages.Count.ShouldBeGreaterThan(1);
@@ -303,12 +315,15 @@ public sealed class KnowledgeServiceTests(KnowledgeFixture db) : IClassFixture<K
         reranked.Results[0].ChunkId.ShouldBe(call.Passages[^1].ChunkId);
         reranked.Results[0].Scores.RerankScore.ShouldBe(call.Passages.Count - 1);
 
-        // The same call to an assistant without the setting never reranks.
+        // Chat asks for the rerank at the turn's ceiling for the assistant with the setting, and never for one without it.
+        var question = new ParsedChat(assistant.Slug, "bygglov altan", [], false, false, null);
+        await Chat(service, reranking, host).PlanAsync(who, question, Ct);
+        reranker.Requests.Count.ShouldBe(2);
+        reranker.Requests[1].Ceiling.ShouldBe(ChatService.Ceiling(who, reranking.Assistants[db.AssistantId], reranking));
         var (plainService, _, plainHost) = Build(plain, reranker: reranker);
         using var __ = plainHost;
-        await plainService.RetrieveAsync(db.Who(db.OwuiClient, plain),
-            new RetrievalRequest("bygglov altan", db.AssistantId, [db.PublicCollection], ModelCeiling: Residency.Eu), Ct);
-        reranker.Requests.Count.ShouldBe(1);
+        await Chat(plainService, plain, plainHost).PlanAsync(db.Who(db.OwuiClient, plain), question, Ct);
+        reranker.Requests.Count.ShouldBe(2);
     }
 
     [Fact]

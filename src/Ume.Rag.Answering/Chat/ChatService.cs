@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -263,10 +264,15 @@ public sealed record ChatPlan(Guid MessageId, string Model, DateTimeOffset Creat
 public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccessPolicy policy, KnowledgeService knowledge, GatewayChatClient gateway,
     IOptions<ChatOptions> options, IOptions<GatewayOptions> gatewayOptions, TimeProvider time, ILogger<ChatService> logger)
 {
+    private SnapshotChat? _resolved;
+
     public GatewayChatClient Gateway => gateway;
 
     /// <summary><c>Settings.Chat</c> at the current snapshot, over the deployment knobs.</summary>
-    public PlatformChatSettings Platform => PlatformChatSettings.Parse(snapshots.Current.ChatSettings, options.Value);
+    public PlatformChatSettings Platform => Resolved(snapshots.Current).Platform;
+
+    /// <summary>The id of the assistant with slug <paramref name="model"/> at the current snapshot, or <see cref="Guid.Empty"/>.</summary>
+    public Guid AssistantId(string model) => Resolved(snapshots.Current).Assistant(model)?.Id ?? Guid.Empty;
 
     public async Task<ChatPlan> PlanAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct)
     {
@@ -274,13 +280,14 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         ArgumentNullException.ThrowIfNull(chat);
         var created = time.GetUtcNow();
         var snapshot = snapshots.Current;
-        var assistant = snapshot.Assistants.Values.FirstOrDefault(a => string.Equals(a.Slug, chat.Model, StringComparison.Ordinal));
+        var resolved = Resolved(snapshot);
+        var assistant = resolved.Assistant(chat.Model);
         if (assistant?.Published is null || !policy.Decide(who, ResourceRef.Assistant(assistant.Id), RagAction.Chat, snapshot, snapshots.IsConfirmed).Allowed)
         {
             throw NotFound(chat.Model);
         }
 
-        var settings = AssistantChatSettings.Parse(assistant.Published.QuerySteps);
+        var settings = resolved.Settings(assistant);
         if (assistant.Classification == Classification.Public)
         {
             // V36 holds at run time too: a public assistant is always off (chat design §7.3).
@@ -291,7 +298,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var ceiling = gatewayOptions.Value.Cap(Ceiling(who, assistant, snapshot)); // Gateway:MaxResidency (M2, #237)
         var messageId = Guid.CreateVersion7();
         var maxTokens = Math.Min(chat.MaxTokens ?? settings.MaxOutputTokens, settings.MaxOutputTokens);
-        var platform = PlatformChatSettings.Parse(snapshot.ChatSettings, options.Value);
+        var platform = resolved.Platform;
         CondenseOutcome? condense = null;
         ChatPlan Plan(string? fixedText, ChatOutcome outcome, BuiltPrompt? prompt, RetrievalResult? retrieval, bool degraded) =>
             new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded, platform, condense);
@@ -307,7 +314,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             {
                 // The rerank call (when the assistant reranks) runs at the turn's ceiling, as the answer does (§6.7).
                 retrieval = await knowledge.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, null, settings.TopK, Expand: ExpandMode.Section,
-                    Purpose: RetrievalPurpose.Chat, AllowDegraded: true, RunId: messageId, ModelCeiling: ceiling), ct);
+                    Purpose: RetrievalPurpose.Chat, AllowDegraded: true, RunId: messageId,
+                    RerankCeiling: settings.Rerank ? ceiling : null), ct);
             }
             catch (RetrievalDeniedException denied) when (denied.Status == 503)
             {
@@ -424,6 +432,49 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         }
 
         return ResidencyCeiling.ForLevel(level);
+    }
+
+    /// <summary>
+    /// The slug index and <c>Settings.Chat</c> of <paramref name="snapshot"/>, built once per snapshot version (the assistants'
+    /// settings are parsed on first use, so an unreadable <c>QuerySteps</c> fails only its own assistant's turns).
+    /// </summary>
+    private SnapshotChat Resolved(PolicySnapshot snapshot)
+    {
+        if (_resolved is { } cached && cached.Version == snapshot.Version)
+        {
+            return cached;
+        }
+
+        var resolved = new SnapshotChat(snapshot, PlatformChatSettings.Parse(snapshot.ChatSettings, options.Value));
+        _resolved = resolved;
+        return resolved;
+    }
+
+    /// <summary>What every turn at one snapshot version reads: the assistants by slug, their parsed settings and the platform's.</summary>
+    private sealed class SnapshotChat
+    {
+        private readonly Dictionary<string, AssistantEntry> _bySlug = new(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<Guid, AssistantChatSettings> _settings = new();
+
+        public SnapshotChat(PolicySnapshot snapshot, PlatformChatSettings platform)
+        {
+            Version = snapshot.Version;
+            Platform = platform;
+            foreach (var assistant in snapshot.Assistants.Values)
+            {
+                _bySlug.TryAdd(assistant.Slug, assistant); // the first of a (never expected) duplicate slug, as a linear search finds it
+            }
+        }
+
+        public long Version { get; }
+
+        public PlatformChatSettings Platform { get; }
+
+        public AssistantEntry? Assistant(string slug) => _bySlug.GetValueOrDefault(slug);
+
+        /// <summary>The published version's settings (<see cref="AssistantChatSettings.Parse"/>), for an assistant of this snapshot.</summary>
+        public AssistantChatSettings Settings(AssistantEntry assistant) =>
+            _settings.GetOrAdd(assistant.Id, static (_, a) => AssistantChatSettings.Parse(a.Published?.QuerySteps), assistant);
     }
 
     private static int Rank(string level) => level switch { Classification.Public => 0, Classification.Internal => 1, _ => 2 };
