@@ -53,6 +53,15 @@ replaces the two clients' URI lists with its own, which keep the pilot URIs and 
 - `ume-rag-admin`: `https://localhost:5174` (admin UI) and `https://localhost:7402` (admin API).
 - `open-webui`: `http://localhost:8080`.
 
+**Group names (#413).** `ume-rag-admin`'s `groups` mapper sends every group of the account by its short name
+(*Full group path* off, identity design §2.5), the gateway's groups included, as the gateway's own mapper does.
+Group names are therefore shared across the realm:
+- **Role groups** (`Oidc:RoleGroups:<role>`) grant an Ume.Rag role. Each one must be named
+  `rag-…` (case-insensitive) or be an Entra object id, and the admin API refuses to start otherwise. A gateway group
+  can't grant an Ume.Rag role by sharing its name. Don't give a gateway group a `rag-` name.
+- **Member groups** on a department (*Organisation* page) give department scope only, never a role. They are meant to
+  be the same groups the gateway uses (identity design §2.1), so a gateway group of that name counts on purpose.
+
 **PKCE on `open-webui`** is not required yet. Requiring it in Keycloak (`pkce.code.challenge.method` `S256`) only works
 once Open WebUI sends a challenge (`OAUTH_CODE_CHALLENGE_METHOD=S256`), so the two are set together. `ume-rag-admin`
 already requires S256.

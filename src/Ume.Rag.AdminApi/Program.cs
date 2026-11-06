@@ -48,6 +48,7 @@ builder.Services.AddSingleton<Ume.Rag.Domain.Access.IAccessPolicy>(new Ume.Rag.D
     builder.Configuration.GetSection("Knowledge:OpenToClientKinds").Get<string[]>() ?? ["internal"], StringComparer.Ordinal)));
 builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<OidcOptions>, OidcOptionsValidator>(); // role groups: rag- names or Entra ids (#413)
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IAdminSessionStore, PostgresAdminSessionStore>();
 builder.Services.AddSingleton<AccessDeniedThrottle>();
