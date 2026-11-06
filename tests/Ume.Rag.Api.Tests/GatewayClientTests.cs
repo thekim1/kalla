@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,7 +18,8 @@ namespace Ume.Rag.Api.Tests;
 /// The <see cref="ResidencyCeilingHandler"/> on a client registered with <c>AddGatewayClient</c> (P0 #8; chat design §8.1,
 /// identity design §4.7): no call leaves without an explicit ceiling and that level's key, and an answer from above the
 /// ceiling is aborted before the caller reads it. The <see cref="GatewayRetryHandler"/> inside it sends a 502/504 once
-/// more with the same ceiling, never a wider one (#390 Feature B point 1).
+/// more with the same ceiling, never a wider one (#390 Feature B point 1), and a connection failure with no response
+/// once more within 300 ms, never after the first byte (chat design §8.3, B-17).
 /// </summary>
 public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<FakeGatewayFactory>
 {
@@ -214,6 +216,114 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         recording.Calls.Count.ShouldBe(1);
     }
 
+    [Fact]
+    public async Task A_connection_failure_is_retried_once_with_the_same_request()
+    {
+        var recording = new RecordingHandler(fake.Server.CreateHandler()) { RefuseFirst = true };
+        using var host = Build(recording);
+
+        using var response = await SendAsync(host, Post("v1/chat/completions", Chat("ume/chat-standard")).WithMaxResidency(Residency.Eu));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.GetValues(GatewayHeaders.Residency).ShouldBe(["Eu"]);
+        recording.Calls.Count.ShouldBe(2);
+        recording.Calls.Select(c => c.Ceiling).ShouldBe(["Eu", "Eu"]); // never wider
+        recording.Calls.Select(c => c.Key).Distinct().ShouldBe([FakeGatewayFactory.Keys["Eu"]]);
+        recording.Calls.Select(c => c.Body).Distinct().Count().ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_refused_tcp_connection_is_retried_once_then_reaches_the_caller()
+    {
+        // A real SocketsHttpHandler against a port nobody listens on: the refusal is classified as a connection failure.
+        var port = ClosedPort();
+        var connects = 0;
+        var sockets = new SocketsHttpHandler
+        {
+            ConnectCallback = async (_, ct) =>
+            {
+                Interlocked.Increment(ref connects);
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                try
+                {
+                    await socket.ConnectAsync(new IPEndPoint(IPAddress.Loopback, port), ct);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            },
+        };
+        using var host = Build(sockets);
+
+        var thrown = await Should.ThrowAsync<HttpRequestException>(() =>
+            SendAsync(host, Post("v1/chat/completions", Chat("ume/chat-standard")).WithMaxResidency(Residency.Eu)));
+
+        thrown.HttpRequestError.ShouldBe(HttpRequestError.ConnectionError);
+        connects.ShouldBe(2); // one retry in all
+    }
+
+    [Fact]
+    public async Task One_retry_in_all_a_connection_failure_then_a_502_reaches_the_caller()
+    {
+        var recording = new RecordingHandler(fake.Server.CreateHandler()) { RefuseFirst = true };
+        using var host = Build(recording);
+
+        using var response = await SendAsync(host, Post("v1/chat/completions", Chat("fake-fail-500")).WithMaxResidency(Residency.OnPrem));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadGateway);
+        recording.Calls.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task A_stream_that_fails_after_its_first_byte_is_never_retried()
+    {
+        var breaking = new BreakingStreamHandler();
+        using var host = Build(breaking);
+
+        using var response = await SendAsync(host, Post("v1/chat/completions", Chat("ume/chat-standard")).WithMaxResidency(Residency.OnPrem));
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var stream = await response.Content.ReadAsStreamAsync(Ct);
+        var buffer = new byte[64];
+        (await stream.ReadAsync(buffer, Ct)).ShouldBeGreaterThan(0);
+        await Should.ThrowAsync<IOException>(async () => (await stream.ReadAsync(buffer, Ct)).ShouldBe(0));
+
+        breaking.Calls.ShouldBe(1);
+    }
+
+    [Theory]
+    [InlineData(HttpRequestError.ConnectionError, true)]
+    [InlineData(HttpRequestError.NameResolutionError, false)]
+    [InlineData(HttpRequestError.SecureConnectionError, false)]
+    [InlineData(HttpRequestError.ResponseEnded, false)] // the gateway may already have begun answering
+    [InlineData(HttpRequestError.InvalidResponse, false)]
+    [InlineData(HttpRequestError.HttpProtocolError, false)]
+    [InlineData(HttpRequestError.Unknown, false)]
+    public void The_shared_retry_decision_on_failures_is_a_connection_error_only(HttpRequestError error, bool retried) =>
+        GatewayRetryHandler.Retries(new HttpRequestException(error, "x")).ShouldBe(retried);
+
+    [Fact]
+    public async Task A_connection_failure_on_a_client_with_its_own_retry_is_not_retried_here()
+    {
+        var recording = new RecordingHandler(fake.Server.CreateHandler()) { RefuseFirst = true };
+        using var host = Build(recording, retryFailed: false);
+
+        await Should.ThrowAsync<HttpRequestException>(() =>
+            SendAsync(host, Post("v1/chat/completions", Chat("ume/chat-standard")).WithMaxResidency(Residency.Eu)));
+        recording.Calls.Count.ShouldBe(1);
+    }
+
+    private static int ClosedPort()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
     private static string Chat(string model) => $$"""{"model":"{{model}}","messages":[{"role":"user","content":"Hej"}]}""";
 
     private static IHost Build(HttpMessageHandler primary, string[]? levels = null, CapturingLoggerProvider? logs = null, bool retryFailed = true)
@@ -245,11 +355,20 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         public List<(string? Ceiling, string? Key, string Body)> Calls { get; } = [];
         public HttpStatusCode? FailFirst { get; init; }
 
+        /// <summary>The first request fails as a refused connection: no response at all.</summary>
+        public bool RefuseFirst { get; init; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var ceiling = request.Headers.TryGetValues(GatewayHeaders.MaxResidency, out var values) ? string.Join(",", values) : null;
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
             Calls.Add((ceiling, request.Headers.Authorization?.Parameter, body));
+            if (Calls.Count == 1 && RefuseFirst)
+            {
+                throw new HttpRequestException(HttpRequestError.ConnectionError, "Connection refused (fake-gateway:80)",
+                    new SocketException((int)SocketError.ConnectionRefused));
+            }
+
             return Calls.Count == 1 && FailFirst is { } status
                 ? new HttpResponseMessage(status) { Content = new StringContent("""{"error":{"code":"all_providers_failed"}}""") }
                 : await base.SendAsync(request, cancellationToken);
@@ -272,6 +391,48 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
             }
 
             return Task.FromResult(response);
+        }
+    }
+
+    /// <summary>Answers 200 within the ceiling with a body that breaks after its first bytes.</summary>
+    private sealed class BreakingStreamHandler : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Calls++;
+            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new BreakingStream()) };
+            response.Headers.Add(GatewayHeaders.Residency, "OnPrem");
+            return Task.FromResult(response);
+        }
+    }
+
+    private sealed class BreakingStream : Stream
+    {
+        private bool _sent;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_sent)
+            {
+                throw new IOException("The connection was reset after the first event.");
+            }
+
+            _sent = true;
+            var first = "data: {\"choices\":[]}\n\n"u8;
+            first.CopyTo(buffer.AsSpan(offset, count));
+            return first.Length;
         }
     }
 }
