@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-06, end of session 22 (`main` after #412). Earlier
+State of the Ume.Rag work for the next session. Rewritten 2026-11-06, end of session 22 (`main` after #419). Earlier
 sessions are in the git history (`git log -- HANDOVER.md`).
 Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote
 `origin` = https://github.com/thekim1/ume-rag-platform (push after every commit).
@@ -21,11 +21,18 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
 
 ## Where we are
 
-- **P0** released (`v0.1.0`), **P1a code** done, **P1b code** almost done. Open code items: **B-4** (accessibility,
-  NVDA), **B-12** (tick pending; live run recorded on #403), **B-16** (`GatewayReranker`, in progress; its evaluation
-  hand-off to stream A is **#414**), **#413** (group-name collision in the shared realm, not a pilot blocker),
-  **#410 items 3–4** (hot-path: one answer stream, one 502/504 retry; after B-16), then the pin reviews **A-4/B-6**,
-  then **M-3** (code complete). **A-5** waits on gateway release 1.
+- **P0** released (`v0.1.0`), **P1a code** done, **P1b code** almost done. **Stream A has no unblocked code item**:
+  **A-5** waits on gateway release 1, **A-4** (pin review) is last. Stream B: **B-4** (accessibility, NVDA), **B-12**
+  (tick pending; live run on #403), **B-16** (code merged #415; live run waits on the gateway's rerank release),
+  **B-17** (chat connection-failure retry, chat-api §8.3), **#413** (group-name collision in the shared realm, not a
+  pilot blocker), then **B-6**. Then **M-3** (code complete).
+- **Done late in session 22:** hot-path tidy complete (#411, #417; golden chat-wire tests in
+  `tests/Ume.Rag.Api.Tests/Golden/chat/` pin the output, regenerate with `UME_RAG_UPDATE_GOLDEN=1`); evaluation
+  variant `hybrid-rerank-gateway`, reranked variants without a model are `skipped` (#416); **parser resource work**:
+  `ner-0` on demand and idle convert slots go cold after 15 min (A-6/A-7, #419: idle 1.8 GiB → ~0.1 GiB; first
+  convert ~12.5 s, first NER ~5 s after idle), image 2.88 → 2.58 GB (A-8, #418). The resource review found the
+  architecture lean in process count (6 containers, as Decisions "Fewer pilot containers"); the rest of its ideas
+  (ClamAV reservation, Postgres limit, GC mode) wait for measurements on the test host (R1).
 - **Gateway release 1 is merged on the gateway's `main` but not tagged** (latest tag v0.8.9): residency ceiling
   (#66), embeddings per input (#65), FakeLlm (#67), rerank endpoint (#68), Keycloak project (#70), EUPL (#69).
   Reviewed from Ume.Rag's side in session 22: header names match, `x-ume-residency` is set on every routed answer
@@ -46,18 +53,24 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
 - **Rerank pulled forward**, interim `ChatModelReranker` then `GatewayReranker`; **rerank optional everywhere**.
 - **Gateway release 1 and shared Keycloak as built** (#390): 502/504 retried with the same ceiling; keycloak-config-cli;
   realm-wide settings in the gateway's base file; **no admin OTP for the pilot** (record in G1); Keycloak 26.8.1.
-- **Hot-path tidy** (#410): items 1, 2, 5, 6 done in #411 (no behaviour change).
+- **Hot-path tidy** (#410, closed): all six items done in #411 and #417, no behaviour change. The embedder keeps its
+  own retry loop (knowledge §5.3); only the 502/504 decision is shared.
+- **Parser idle stop** (resource review): A-6, A-7, A-8 done; parser §10.1/§13 and processing §9.6 describe it.
+- **Images cleaned on this machine** (2026-11-06): kept only the running stack's `parser:`/`clamav:` tags and
+  `ume-rag.local/{clamav:dev,parser:ci,postgres:ci}`; the CI runners were not cleaned.
 - From the other machine's main session (#397): browser tests optional on releases (`RELEASE_E2E` unset). **Ask the
   user to confirm** if not yet done.
 
 ## Next session
 
-1. **GitHub:** `gh pr list`, `gh issue list`. Review B-16's PR (rerank optional: no call, no `rerank_unavailable`,
-   switch disabled without a model) and do **#414** (stream A: evaluation compares both rerankers). Close #403 when
-   B-12 is ticked.
-2. **#410 items 3–4** once B-16 has landed (main-session branch, implementor; check the chat live afterwards).
-3. **User:** tag gateway release 1 (then B-L4, A-5); the roadmap's "Waiting on people" (test host, gold set with
-   DoIT, G1, U1); allow `claude-opus-5-5` on Ume.Rag's interim gateway key again (see Local stack).
+1. **GitHub:** `gh pr list`, `gh issue list`. Review stream B's PRs (B-4, B-17, #413); close #403 when B-12 is
+   ticked. #419 touched B's `PersonalDataStage.cs` (accepted, B told on the PR); watch for B's reply.
+2. **Offered, not started:** a **v0.2.0 release** to freeze this session's work into tested images (runs the full CI
+   set; turn the browser tests on for it with the release's `e2e` input or `RELEASE_E2E`, none ran since #377). Ask
+   the user first: building and pushing images and a tag are outward-facing.
+3. **User:** tag gateway release 1 (then A-5, B-L4, the Berget rerank run for B-16); the roadmap's "Waiting on
+   people" (test host, gold set with DoIT, G1, U1); allow `claude-opus-5-5` on Ume.Rag's interim gateway key again
+   or choose another model for `turkos` (see Local stack); confirm #397 (browser tests optional on releases).
 
 ## Local stack (this machine)
 
@@ -69,6 +82,8 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
 - Ports: dashboard `https://localhost:17470`; **admin UI `https://localhost:5174`** (user `rag-platform-admin`); api
   7401, admin API 7402, worker 7403; **Open WebUI `http://localhost:7410`**, Keycloak 7411, Postgres 7412, parser 7413,
   ClamAV 7414.
+- **Parser** goes cold after 15 idle minutes (convert and NER); the first request after that waits a few seconds.
+  `PARSER_IDLE_STOP_S=0` / `NER_IDLE_STOP_S=0` keep it warm.
 - **Data:** department DoIT; collection `turkos` (1,166 live documents); assistant `turkos` v1 published on
   `claude-opus-5-5`. **The interim gateway key no longer allows Opus** (403 `model_not_allowed`; it lists only
   `claude-haiku-5-5` and `gpt-6-luna`), so turkos fails in Open WebUI until the key allows Opus again or the user
