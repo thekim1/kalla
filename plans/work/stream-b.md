@@ -152,6 +152,17 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-12; the gateway's rerank release for the live run.
 - **Read:** Decisions "Gateway release 1 and shared Keycloak as built", "Rerank pulled forward"; gateway-changes §7.4.
 
+### [ ] B-17 Chat: one retry on a connection failure (chat-api §8.3)
+- **Do:** the chat's gateway call retries once when the connection fails with no response, within 300 ms, same
+  request, same ceiling and key; never after the first byte. Found by the hot-path tidy (#417): today only 502/504
+  are retried (`GatewayRetryHandler`). Decide whether the handler gets the case for every client or only the chat
+  client; the query embedder keeps its own loop (knowledge §5.3).
+- **Paths:** `src/Ume.Rag.Infrastructure/Gateway/**`, `src/Ume.Rag.Answering/Chat/**`.
+- **Done when:** a test with a refused connection then an answer shows one retry, and none after the first byte; the
+  chat golden files (`tests/Ume.Rag.Api.Tests/Golden/chat/`) unchanged.
+- **Waits on:** –
+- **Read:** chat-api §8.3; Decisions "Gateway release 1 and shared Keycloak as built".
+
 ### [ ] B-6 Go-live pin review, B's part (last code item)
 - **Do:** review every NuGet and npm pin younger than 7 days; the realm callback for the Open WebUI pin bump
   (`/oauth/oidc/login/callback`) matching A-4; condense stays at `Eu` until an on-prem route exists (M2).
