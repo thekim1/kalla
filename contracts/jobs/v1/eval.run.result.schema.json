@@ -118,7 +118,7 @@
             "string",
             "null"
           ],
-          "description": "The rerank model that answered (RerankUsage.Model), or Settings.Retrieval.rerankModel when none answered; absent for a run without rerank.",
+          "description": "The rerank model that answered (RerankUsage.Model), or the platform model for the variant's reranker (Settings.Retrieval.rerankModel or gatewayRerankModel) when none answered; absent for a run without rerank.",
           "maxLength": 200
         },
         "rerankPromptTokens": {
@@ -140,7 +140,7 @@
             "number",
             "null"
           ],
-          "description": "Rerank cost per question in USD: the tokens at GatewayModels.InputPerMillionUsd and OutputPerMillionUsd, over Searches; absent without rerank or without both prices.",
+          "description": "Rerank cost per question in USD: the tokens at GatewayModels.InputPerMillionUsd (and OutputPerMillionUsd for completion tokens; a gateway rerank model bills input only), over Searches; absent without rerank or without the prices its tokens need.",
           "minimum": 0,
           "maximum": 1000
         }

@@ -15,7 +15,8 @@ namespace Ume.Rag.Worker.Evaluation;
 /// each once more under <c>candidateSettings</c>), <c>publish-report</c> (compared with the last run before the publish)
 /// and <c>nightly</c> (compared with the previous run, <c>rag.evaluation.recall_at_10</c> and the recall alert). An
 /// <c>on-demand</c> run also stores its <c>Candidate</c> flag and its coverage threshold proposal (<c>ThresholdProposal</c>,
-/// #129); a <c>hybrid-rerank</c> run sets <c>Reranked</c>. Every run reports its search latency, and a reranked run its
+/// #129); a <c>hybrid-rerank</c> or <c>hybrid-rerank-gateway</c> run sets <c>Reranked</c>. Rerank is optional (#414): a
+/// reranked variant whose reranker has no platform model is skipped (<c>no_rerank_model</c>), not run as all fallbacks. Every run reports its search latency, and a reranked run its
 /// rerank latency, cost per question and <c>rerank_unavailable</c> count (<see cref="EvaluationSearchStats"/>, #399). Each job
 /// searches the set as it was at the start, then writes its runs, their per-question results and its completion in one
 /// transaction. A question whose embedding fails fails the run (knowledge design §5.5): the job is retried as the
@@ -73,8 +74,15 @@ public sealed partial class EvaluationRunner(
             using var session = evaluator.Open(target);
             var records = new List<EvaluationRunRecord>();
             var refs = new List<EvaluationRunRef>();
+            var skipped = new List<SkippedVariant>();
             foreach (var variant in payload.Variants)
             {
+                if (EvaluationSession.Reranker(variant) is { } kind && target.Platform.RerankModelFor(kind) is null)
+                {
+                    skipped.Add(new SkippedVariant { Variant = variant, Reason = SkippedVariant.NoRerankModel });
+                    continue;
+                }
+
                 foreach (var (settings, isCandidate) in passes)
                 {
                     var (record, outcomes, search) = await RunAsync(session, EvaluationRunKinds.OnDemand, variant, settings, cancellationToken);
@@ -99,7 +107,7 @@ public sealed partial class EvaluationRunner(
             }
 
             metrics.Runs(EvaluationRunKinds.OnDemand, records.Count);
-            return await store.CompleteAsync(job, queue, identity, records, new EvalOnDemandResult { Runs = refs }, cancellationToken);
+            return await store.CompleteAsync(job, queue, identity, records, new EvalOnDemandResult { Runs = refs, Skipped = skipped.Count > 0 ? skipped : null }, cancellationToken);
         });
 
     /// <summary>The full set after a publish or rollback; nothing to write without questions (no report is shown).</summary>
@@ -159,7 +167,7 @@ public sealed partial class EvaluationRunner(
             return await store.CompleteAsync(job, queue, identity, [record], RunResult(record, outcomes, search, alert), cancellationToken);
         });
 
-    /// <summary>The <c>EvaluationRuns</c> text of a variant; <c>hybrid-rerank</c> is <c>hybrid</c> with <c>Reranked</c> set.</summary>
+    /// <summary>The <c>EvaluationRuns</c> text of a variant; both reranked variants are <c>hybrid</c> with <c>Reranked</c> set.</summary>
     public static string VariantText(EvaluationVariant variant) => variant switch
     {
         EvaluationVariant.Vector => EvaluationVariants.Vector,
@@ -174,9 +182,10 @@ public sealed partial class EvaluationRunner(
         var target = session.Target;
         var started = time.GetUtcNow();
         var runId = Guid.CreateVersion7();
-        var reranked = variant == EvaluationVariant.HybridRerank;
+        var reranker = EvaluationSession.Reranker(variant);
+        var reranked = reranker is not null;
         var outcomes = await session.RunAsync(variant, settings, runId, cancellationToken);
-        var model = EvaluationScoring.RerankModel(outcomes, reranked, target.Platform.RerankModel);
+        var model = EvaluationScoring.RerankModel(outcomes, reranked, reranker is { } rerankerKind ? target.Platform.RerankModelFor(rerankerKind) : null);
         var price = model is null ? null : await store.PriceAsync(model, cancellationToken);
         var search = EvaluationScoring.Search(outcomes, reranked, model, price);
         var totals = EvaluationScoring.Totals(outcomes);

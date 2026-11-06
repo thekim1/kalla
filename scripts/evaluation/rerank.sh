@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
-# Rerank comparison on one collection (issue #399, B-12's live run; Decisions "Rerank pulled forward"), by hand on a
+# Rerank comparison on one collection (issues #399 and #414, B-12's and B-16's live runs; Decisions "Rerank pulled forward"), by hand on a
 # deployment whose worker reaches a gateway (the test host, or the interim gateway).
 #
 #   scripts/evaluation/rerank.sh --deploy-env FILE --collection SLUG --out DIR [--timeout SECONDS] [--poll SECONDS]
 #
 # 1. Enqueues an eval job of kind on-demand (contracts/jobs/v1/eval.on-demand.payload) for the collection's active
-#    evaluation set with the variants hybrid and hybrid-rerank, through the deployment's Postgres as its superuser:
+#    evaluation set with the variants hybrid, hybrid-rerank and hybrid-rerank-gateway, through the deployment's Postgres as its superuser:
 #    dedup key eval:{collectionId} (the admin's), so an on-demand run already queued is waited for instead.
 # 2. Waits until the job ends (exit 1 after --timeout, or when it fails).
 # 3. Writes DIR/report.md from its result (contracts/jobs/v1/eval.on-demand.result): per variant recall@10, MRR, p50/p95
 #    search latency (total and rerank alone), rerank tokens, cost per question at the model mirror's prices, and the
-#    questions whose rerank fell back to the fused order (rerank_unavailable).
-# Needs Settings.Retrieval.rerankModel (a chat model within Eu); unset, every question counts as rerank_unavailable.
+#    questions whose rerank fell back to the fused order (rerank_unavailable), and the variants skipped.
+# hybrid-rerank needs Settings.Retrieval.rerankModel (a chat model within Eu), hybrid-rerank-gateway
+# Settings.Retrieval.gatewayRerankModel (a rerank model within Eu); a variant whose model is unset is skipped
+# (no_rerank_model) and listed under the table.
 set -euo pipefail
 
 deploy_env=""; slug=""; out=""; timeout=3600; poll=10
-usage() { sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --deploy-env) deploy_env="$2"; shift 2;;
@@ -47,7 +49,7 @@ WITH inserted AS (
            substring(int8send(floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint) FROM 3) FROM 1 FOR 6), 52, 1), 53, 1),
            'hex')::uuid,
          'eval', c."DepartmentId", c."OwnerTeamId", c."Classification", 'eval:' || c."Id",
-         jsonb_build_object('kind', 'on-demand', 'collectionId', c."Id", 'variants', jsonb_build_array('hybrid', 'hybrid-rerank')), 2
+         jsonb_build_object('kind', 'on-demand', 'collectionId', c."Id", 'variants', jsonb_build_array('hybrid', 'hybrid-rerank', 'hybrid-rerank-gateway')), 2
   FROM config."Collections" c
   WHERE c."Id" = :'collection'
   ON CONFLICT ("DedupKey") WHERE "State" IN ('queued','running') DO NOTHING
@@ -89,20 +91,31 @@ FROM content."Jobs" j, jsonb_array_elements(j."Result"->'runs') r
 WHERE j."Id" = :'job';
 SQL
 )"
+skipped="$(sql -v job="$job" <<'SQL'
+SELECT string_agg((s->>'variant') || ' (' || (s->>'reason') || ')', ', ')
+FROM content."Jobs" j, jsonb_array_elements(coalesce(j."Result"->'skipped', '[]'::jsonb)) s
+WHERE j."Id" = :'job';
+SQL
+)"
 
 {
   echo "# Rerank comparison, $slug, $(date -u +%FT%TZ)"
   echo
   echo "Eval job $job (kind \`on-demand\`), the collection's active evaluation set, k = 10. hybrid-rerank is hybrid with"
-  echo "the chat-model reranker (rerank timeout 30 s, ceiling the collection level's capped at Eu). Latency is per"
+  echo "the chat-model reranker, hybrid-rerank-gateway hybrid with the gateway's /v1/rerank (both: rerank timeout 30 s,"
+  echo "ceiling the collection level's capped at Eu). Latency is per"
   echo "question in milliseconds (median / 95th percentile, nearest rank); rerank time includes the passage read. Cost"
   echo "per question is the rerank tokens at config.GatewayModels' prices over every question, fallbacks included"
   echo "('–' when the mirror has no price). Fallbacks = questions whose rerank fell back to the fused order."
   echo
   echo "| Variant | Answerable | Found | Recall@10 | MRR | Questions | Total p50 / p95 ms | Rerank p50 / p95 ms | Fallbacks | Rerank model | Tokens in / out | Cost per question (USD) |"
   echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|"
-  while IFS=$'\t' read -r -a f; do
+  [ -z "$rows" ] || while IFS=$'\t' read -r -a f; do
     printf '| %s ' "${f[@]}"; echo '|'
   done <<< "$rows"
+  if [ -n "$skipped" ]; then
+    echo
+    echo "Skipped: $skipped (no_rerank_model: the platform has no model for that reranker)."
+  fi
 } > "$out/report.md"
 cat "$out/report.md"

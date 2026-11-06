@@ -108,11 +108,26 @@ public sealed record EditEvalQuestionResult
 }
 
 /// <summary>Result of <c>eval</c> <c>on-demand</c>: one <c>EvaluationRuns</c> row per variant; the numbers are in the rows.</summary>
-[Description("Result of an eval job of kind on-demand: one EvaluationRuns row per requested variant.")]
+[Description("Result of an eval job of kind on-demand: one EvaluationRuns row per requested variant that ran; a reranked variant without the platform's model for its reranker is listed under skipped instead (#414).")]
 public sealed record EvalOnDemandResult
 {
-    [MinLength(1)]
     public required IReadOnlyList<EvaluationRunRef> Runs { get; init; }
+
+    [Description("Requested variants that did not run, with the reason (no_rerank_model: rerank is optional and the platform has no model for the variant's reranker).")]
+    public IReadOnlyList<SkippedVariant>? Skipped { get; init; }
+}
+
+/// <summary>A requested evaluation variant that did not run (#414).</summary>
+public sealed record SkippedVariant
+{
+    /// <summary>The reason when the platform has no model for the variant's reranker.</summary>
+    public const string NoRerankModel = "no_rerank_model";
+
+    public required EvaluationVariant Variant { get; init; }
+
+    [Description("Why the variant did not run: no_rerank_model.")]
+    [SchemaKeyword("enum", "[\"no_rerank_model\"]")]
+    public required string Reason { get; init; }
 }
 
 public sealed record EvaluationRunRef
@@ -182,7 +197,7 @@ public sealed record EvaluationSearchStats
     [Range(0, int.MaxValue)]
     public int RerankUnavailable { get; init; }
 
-    [Description("The rerank model that answered (RerankUsage.Model), or Settings.Retrieval.rerankModel when none answered; absent for a run without rerank.")]
+    [Description("The rerank model that answered (RerankUsage.Model), or the platform model for the variant's reranker (Settings.Retrieval.rerankModel or gatewayRerankModel) when none answered; absent for a run without rerank.")]
     [MaxLength(200)]
     public string? RerankModel { get; init; }
 
@@ -194,7 +209,7 @@ public sealed record EvaluationSearchStats
     [Range(0, int.MaxValue)]
     public int RerankCompletionTokens { get; init; }
 
-    [Description("Rerank cost per question in USD: the tokens at GatewayModels.InputPerMillionUsd and OutputPerMillionUsd, over Searches; absent without rerank or without both prices.")]
+    [Description("Rerank cost per question in USD: the tokens at GatewayModels.InputPerMillionUsd (and OutputPerMillionUsd for completion tokens; a gateway rerank model bills input only), over Searches; absent without rerank or without the prices its tokens need.")]
     [Range(0.0, 1_000.0)]
     public double? RerankCostPerQueryUsd { get; init; }
 }

@@ -281,6 +281,22 @@ the model's context window (8192 for BGE-M3) with 400 `context_length_exceeded`,
 (`embed.input_rejected`). Swedish text costs about 4.5 body bytes per token in the JSON body, so 6000 stays below
 8192. Lower the value if the gateway's model has a smaller context window.
 
+## Rerank (optional)
+
+Rerank is optional (Decisions "Gateway release 1 and shared Keycloak as built"): while the platform has no model for an
+assistant's reranker, chat, the test panel and `/v1/retrieve` make no rerank call and degrade nothing. Two rerankers
+exist, each with its own platform model (run-time settings, the admin's `PUT /api/settings/retrieval`) and its own time
+limit (deployment knobs, text read included; past the limit the fused order stands, `rerank_unavailable`):
+
+| Reranker | Model (`Settings.Retrieval.*`) | Time limit (`Retrieval:*`, environment `Retrieval__*`) |
+|---|---|---|
+| Chat-model reranker (interim, a chat call that scores the passages) | `rerankModel`: a chat model of the mirror | `RerankTimeout`, default 3 s |
+| Gateway reranker (`POST /v1/rerank`, Cohere-compatible) | `gatewayRerankModel`: a model of kind `rerank` in the mirror (Berget AI `bge-reranker-v2-m3` at `Eu` until on-prem) | `GatewayRerankTimeout`, default 500 ms |
+
+A gateway rerank model is billed per input token: its mirror row has `InputPerMillionUsd` and no `OutputPerMillionUsd`.
+The evaluation's `hybrid-rerank` and `hybrid-rerank-gateway` variants allow either call 30 s and skip a variant whose
+model is unset (`no_rerank_model`); see [`scripts/evaluation/README.md`](../scripts/evaluation/README.md).
+
 ## Internal TLS
 
 Every connection inside the host is TLS with the internal CA: the services to postgres (`SSL Mode=VerifyFull`), the

@@ -14,7 +14,8 @@
               "hybrid",
               "vector",
               "hybrid-no-decompounder",
-              "hybrid-rerank"
+              "hybrid-rerank",
+              "hybrid-rerank-gateway"
             ]
           },
           "evaluationRunId": {
@@ -251,7 +252,7 @@
                   "string",
                   "null"
                 ],
-                "description": "The rerank model that answered (RerankUsage.Model), or Settings.Retrieval.rerankModel when none answered; absent for a run without rerank.",
+                "description": "The rerank model that answered (RerankUsage.Model), or the platform model for the variant's reranker (Settings.Retrieval.rerankModel or gatewayRerankModel) when none answered; absent for a run without rerank.",
                 "maxLength": 200
               },
               "rerankPromptTokens": {
@@ -273,7 +274,7 @@
                   "number",
                   "null"
                 ],
-                "description": "Rerank cost per question in USD: the tokens at GatewayModels.InputPerMillionUsd and OutputPerMillionUsd, over Searches; absent without rerank or without both prices.",
+                "description": "Rerank cost per question in USD: the tokens at GatewayModels.InputPerMillionUsd (and OutputPerMillionUsd for completion tokens; a gateway rerank model bills input only), over Searches; absent without rerank or without the prices its tokens need.",
                 "minimum": 0,
                 "maximum": 1000
               }
@@ -292,12 +293,43 @@
           "questionCount",
           "found"
         ]
+      }
+    },
+    "skipped": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "variant": {
+            "enum": [
+              "hybrid",
+              "vector",
+              "hybrid-no-decompounder",
+              "hybrid-rerank",
+              "hybrid-rerank-gateway"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the variant did not run: no_rerank_model.",
+            "enum": [
+              "no_rerank_model"
+            ]
+          }
+        },
+        "required": [
+          "variant",
+          "reason"
+        ]
       },
-      "minItems": 1
+      "description": "Requested variants that did not run, with the reason (no_rerank_model: rerank is optional and the platform has no model for the variant's reranker)."
     }
   },
   "required": [
     "runs"
   ],
-  "description": "Result of an eval job of kind on-demand: one EvaluationRuns row per requested variant."
+  "description": "Result of an eval job of kind on-demand: one EvaluationRuns row per requested variant that ran; a reranked variant without the platform's model for its reranker is listed under skipped instead (#414)."
 }
