@@ -124,9 +124,25 @@ with `x-ume-residency`. Its three dev keys have the ceilings `OnPrem`, `Eu` and 
 `Gateway__Keys__<level>`, and the worker never gets the `External` one.
 
 Its models are in [`src/Ume.Rag.FakeGateway/appsettings.json`](../src/Ume.Rag.FakeGateway/appsettings.json), including
-fault models for tests: `fake-fail-500`, `fake-slow`, `fake-wrong-residency`, `fake-wrong-residency-embed`,
-`fake-drained` and the stream faults `fake-stream-broken`, `fake-stream-stall`, `fake-stream-no-done`,
-`fake-stream-empty-deltas` and `fake-stream-length`.
+fault models for tests: `fake-fail-500` (502 `all_providers_failed`, as the gateway answers when every target within
+the ceiling fails; there is no circuit-open 503), `fake-fail-timeout` (504 `all_providers_failed`),
+`fake-fail-fallback` (its `OnPrem` target fails: 502 at `OnPrem`, an answer from `Eu` at `Eu`), `fake-slow`,
+`fake-wrong-residency`, `fake-wrong-residency-embed`, `fake-drained` (503 `no_eligible_provider` + `Retry-After`) and
+the stream faults `fake-stream-broken`, `fake-stream-stall`, `fake-stream-no-done`, `fake-stream-empty-deltas` and
+`fake-stream-length`.
+
+Switches:
+- `FakeGateway:RerankEnabled` (default `false`): rerank is optional, so by default `/v1/rerank` answers 404
+  `model_not_found` like a gateway without a rerank model. `true` serves `bge-reranker-v2-m3` as an `Eu` target (like
+  Berget AI).
+- `FakeGateway:RequireMaxResidency` (default `true`): `false` lets a request without `x-ume-max-residency` run with
+  no ceiling.
+- `FakeGateway:StrictKeyLevel` (default `true`): a ceiling other than the dev key's level answers 403
+  `key_level_mismatch` (fake-only), so a client sending the wrong level's key fails loudly.
+
+Every gateway client registered with `AddGatewayClient` sends a 502 or 504 once more with the same request (same
+ceiling, key and body; `GatewayRetryHandler`, `Gateway:RetryDelay` 250 ms) before any job retry. 403, 503 and 404
+are not retried.
 
 By default it answers at once. `FakeGateway:Latency:*` in the AppHost user secrets gives it a real gateway's timing
 (all 0 by default): `FirstTokenMs`, `PrefillMsPer1kInputTokens`, `TokenIntervalMs`, `JitterPercent`, `AnswerWords`,
