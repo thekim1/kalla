@@ -19,7 +19,7 @@ with the detail. The quality gate is the platform's own: a hand-graded gold set 
 | # | Step | Detail |
 |---|---|---|
 | 1.1 | Ume.Rag deployed against the gateway (test host first) | [`../../../docs/gateway-host-setup.md`](../../../docs/gateway-host-setup.md), [`../../../docs/production-setup.md`](../../../docs/production-setup.md) |
-| 1.2 | Gateway models (optional reranker: the Foundry workaround until llmgateway#72), keys, PII policy | [`01-gateway-setup.md`](01-gateway-setup.md) |
+| 1.2 | Gateway models (optional reranker: `Cohere-rerank-v5-fast` under the Foundry provider, gateway v0.9.1), keys, PII policy | [`01-gateway-setup.md`](01-gateway-setup.md) |
 | 1.3 | `--crawl-allow` for the intranet ranges; robots.txt allowance if needed | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
 | 1.4 | Department and admins in Keycloak realm `ume`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
 | 1.5 | `Settings.Chat.allowedLinkHosts` includes the intranet host | [`04-assistant.md`](04-assistant.md) §6 |
@@ -62,7 +62,7 @@ platform; Decisions "Gold set drafted by the main session, reviewed by DoIT" sho
 | 4.2 | Run retrieval evaluation; compare hybrid with rerank (`hybrid-rerank-gateway` with the Foundry `Cohere-rerank-v5-fast` alias, `hybrid-rerank` with the chat-model reranker) if a rerank model is set | processing §14; `scripts/evaluation/rerank.sh` ([`../../../scripts/evaluation/README.md`](../../../scripts/evaluation/README.md)) |
 | 4.3 | Set the not-found thresholds from answerable and unanswerable questions | Decisions "Weakness review 2"; knowledge §7 |
 | 4.4 | Generate answers for the gold set and have the support reviewers grade them | the go-live gate below |
-| 4.5 | Confirm `generalKnowledge` (`fallback`, or `supplement` if general answers mislead) and decide rerank (on only with a gold-set gain) from 4.2–4.4 | [`04-assistant.md`](04-assistant.md) §4–§5 |
+| 4.5 | Confirm `generalKnowledge` (`fallback`, or `supplement` if general answers mislead) and decide rerank (on only with a gold-set gain) from 4.2–4.4. **Decide rerank under serving conditions**: two assistant versions (rerank off, rerank on) graded with `scripts/grading/` through the chat API at their real budgets, not from 4.2's recall@10 alone (the retrieval evaluation allows 30 s per rerank call, the chat path does not) | [`04-assistant.md`](04-assistant.md) §4–§5 |
 
 Per-assistant test-question sets and automatic answer evaluation are P2 (admin §7.4; chat §18.8); in P1 the hand
 grading is the gate.
