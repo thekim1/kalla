@@ -461,6 +461,14 @@ tini (PID 1)
   endpoint full for 2 s after a `busy`; the parser then verifies client certificates (`PARSER_TLS_CLIENT_CA`, uvicorn,
   *to verify*). Not used in the 3- and 5-host topologies.
 
+**Idle stop** (resource review, user 2026-11-06; A-6, A-7): a convert slot idle for `PARSER_IDLE_STOP_S` (900) and
+`ner-0` idle for `NER_IDLE_STOP_S` (900) stop and stay **cold**; the monitor doesn't respawn a cold process. The next
+request for that lane wakes one through the normal spawn and answers `not_ready` with `Retry-After: 5` (or `busy`
+when another process of the lane is warm) until it is warm. `ner-0` starts cold; convert slots start warm, so the
+start-up self-test is unchanged; inspect never goes cold. `0` keeps a lane always warm; `NER_ENABLED=false` still
+starts no NER. Measured: idle 1.81 GiB → about 0.1 GiB with both lanes cold; a cold convert answers in about 12.5 s,
+a cold NER in about 5 s (#419).
+
 ### 10.2 Warm-up and readiness
 
 1. Supervisor starts the API (live = true), wipes `/tmp/jobs`, spawns slots.
@@ -569,7 +577,7 @@ metadata, checked in review), PyTorch BSD-3, pdfium BSD-3/Apache-2.0, Tesseract 
 | Endpoint | Content |
 |---|---|
 | `/health/live` | 200 while the supervisor loop runs (no slot check) |
-| `/health/ready` | 200 when the self-tests of §10.2 passed and ≥ 1 slot is warm; 503 otherwise. Never blocked by conversions |
+| `/health/ready` | 200 when the self-tests of §10.2 passed and ≥ 1 convert slot is warm **or cold and startable** (idle stop, §10.1); 503 otherwise, including a wake whose warm-up failed. The body adds `slots_cold`. Never blocked by conversions |
 | `/v1/info` | `parser` version and git revision; Python; `docling`, `docling-core`, `docling-parse`, `docling-ibm-models`, `torch`, `pypdfium2` (+ pdfium build), Tesseract version and tessdata languages; each model with repository, revision and SHA-256; the NER model block (repository, revision, SHA-256, labels, quantised); `capacity` (`convert_slots`, `slots_ready`, `inspect_slots`, `ner_ready`); `limits` (§11.1); supported and deferred formats; `build_hash` = SHA-256 of the canonical JSON of everything except capacity |
 
 The worker records `build_hash` on every run item and stores the full info JSON once per hash (§17). The release smoke

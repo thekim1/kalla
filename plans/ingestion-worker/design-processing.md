@@ -496,7 +496,10 @@ example page's contact block (3 contact values) is below the name-check threshol
 
 - The `/v1/ner` call runs inside the job that reaches `personal-data` (6a §7.4); there is no separate job class or
   lane sizing. NER `busy`/`not_ready` requeue that job without an attempt; it resumes from the cached chunk output.
-- If NER is not ready for more than 5 minutes (`/v1/info`), the stage completes with patterns only and `ner: pending`:
+- The `/v1/ner` call is its own readiness probe: the parser's `ner-0` starts on demand and stops when idle (parser
+  §10.1), so a `not_ready` answer, or an unreachable parser, wakes it and requeues the job. A `not_ready` more than
+  10 minutes after the previous one starts a new wait.
+- If NER is not ready for more than 5 minutes, the stage completes with patterns only and `ner: pending`:
   the set is swapped in `held` (it can only be pending in a `public` collection, §9.3); the nightly drift sweep (6a
   §2.3) re-runs `personal-data` for `pending` sets once NER is ready. Sets in other collections never wait for NER. A
   `pending` set of a `piiMode: report` source goes in `live`, and the sweep settles its counts and flag without holding
