@@ -1324,7 +1324,7 @@ No new runtime dependency: no Markdown renderer, no chart library (gateway SVG c
 - Metrics (meter `Ume.Rag`, low cardinality): `rag.admin.validation.refusals{code}`, `rag.admin.jobs.enqueued{class,
   kind}`, `rag.admin.sync{kind,outcome}`, `rag.admin.test_panel{outcome}` + `.duration`,
   `rag.admin.conversation_access{scope,level}`, `rag.admin.uploads{outcome}` + `.bytes`, `rag.admin.publish{kind,
-  outcome}`, `rag.admin.config_lock.wait` (histogram, ms), `rag.admin.access_explain{allowed}`, `rag.admin.assistant_publish{kind}` (`publish`/`restore`),
+  outcome}`, `rag.admin.config_lock.wait` (histogram, s; one per config write attempt, the two syncs included), `rag.admin.access_explain{allowed}`, `rag.admin.assistant_publish{kind}` (`publish`/`restore`),
   `rag.admin.assistant_tests{outcome}`.
 - Dashboard *Config & security* gains admin panels (refusals by code, access events, sync health, lock waits).
 
