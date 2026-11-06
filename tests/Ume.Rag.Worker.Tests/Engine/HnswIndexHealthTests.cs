@@ -431,7 +431,7 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
         jobs[0].DedupKey.ShouldBe(JobDedupKeys.HnswCheck(profile));
         jobs[0].DepartmentId.ShouldBe(large.DepartmentId, "the job is the largest collection's");
         jobs[0].Payload.ShouldBe(new CheckHnswIndexCommand { EmbeddingProfileId = profile, Trigger = HnswCheckTrigger.Nightly });
-        (await ChecksAsync(smallProfile)).ShouldBeEmpty("no collection of that profile is above exactScanMaxChunks");
+        (await ChecksAsync(smallProfile)).ShouldBeEmpty("that profile's live chunks in total are not above exactScanMaxChunks");
 
         await Sql.ExecuteAsync(database.Connection(null), """UPDATE content."Jobs" SET "State" = 'succeeded' WHERE "DedupKey" = $1""",
             JobDedupKeys.HnswCheck(profile));
@@ -440,6 +440,55 @@ public sealed class HnswIndexHealthTests(RagDatabaseFixture database) : IAsyncLi
         time.Advance(TimeSpan.FromDays(1));
         await scheduler.TickAsync(Ct);
         (await ChecksAsync(profile)).Count.ShouldBe(2, "the next night enqueues the next check");
+    }
+
+    [Fact]
+    public async Task The_nightly_schedule_checks_a_profile_whose_small_collections_together_exceed_the_limit()
+    {
+        var first = await EngineKit.SeedUrlListAsync(database, []);
+        var second = await EngineKit.SeedUrlListAsync(database, []);
+        var third = await EngineKit.SeedUrlListAsync(database, []);
+        var profile = await _writer.AddEmbeddingProfileAsync(Dimensions, Ct);
+        var belowProfile = await _writer.AddEmbeddingProfileAsync(Dimensions, Ct);
+        await DocumentsAsync(first, profile, 3);
+        await DocumentsAsync(second, profile, 4);
+        await DocumentsAsync(third, profile, 3);
+        await DocumentsAsync(first, belowProfile, 2);
+        await DocumentsAsync(second, belowProfile, 3);
+        await SetRetrievalAsync("""{"exactScanMaxChunks":5}""");
+        var scheduler = new HnswCheckScheduler(database.Database(RagDatabase.Worker), database.Queue(RagDatabase.Worker), Options.Create(new WorkerOptions()),
+            new FakeTimeProvider(DateTimeOffset.UtcNow), NullLogger<HnswCheckScheduler>.Instance);
+
+        await scheduler.TickAsync(Ct);
+
+        var jobs = await ChecksAsync(profile);
+        jobs.Count.ShouldBe(1, "10 live chunks in total are above exactScanMaxChunks though no collection is");
+        jobs[0].DepartmentId.ShouldBe(second.DepartmentId, "the job is the largest collection's");
+        (await ChecksAsync(belowProfile)).ShouldBeEmpty("5 live chunks in total are not above exactScanMaxChunks");
+    }
+
+    [Fact]
+    public async Task A_finished_run_triggers_a_check_when_the_profile_is_above_the_limit_only_in_total()
+    {
+        var other = await EngineKit.SeedUrlListAsync(database, []);
+        var synced = await EngineKit.SeedUrlListAsync(database, []);
+        var profile = await _writer.AddEmbeddingProfileAsync(Dimensions, Ct);
+        var belowProfile = await _writer.AddEmbeddingProfileAsync(Dimensions, Ct);
+        await DocumentsAsync(other, profile, 4);
+        await DocumentsAsync(other, belowProfile, 2);
+        await SetRetrievalAsync("""{"exactScanMaxChunks":5}""");
+        var finalizer = CommandSeeds.Finalizer(database);
+
+        var run = await RunningRunAsync(synced);
+        await DocumentsAsync(synced, profile, 4);
+        await DocumentsAsync(synced, belowProfile, 2);
+        await finalizer.FinalizeAsync(Ct);
+        (await RunStateAsync(run)).ShouldNotBe(RunStates.Running);
+
+        var jobs = await ChecksAsync(profile);
+        jobs.Count.ShouldBe(1, "8 live chunks in total are above exactScanMaxChunks though no collection is");
+        jobs[0].Payload.ShouldBe(new CheckHnswIndexCommand { EmbeddingProfileId = profile, Trigger = HnswCheckTrigger.Sync });
+        (await ChecksAsync(belowProfile)).ShouldBeEmpty("4 live chunks in total are not above exactScanMaxChunks");
     }
 
     [Fact]
