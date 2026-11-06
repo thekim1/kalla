@@ -115,7 +115,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** [`../to-verify.md`](../to-verify.md) #23; results-b #23 (B-3, #393).
 
-### [ ] B-14 FakeGateway matches gateway release 1 and rerank (#390)
+### [x] B-14 FakeGateway matches gateway release 1 and rerank (#390) (#406)
 - **Do:** align `Ume.Rag.FakeGateway` with #390's Feature B points 1–4 and 8 (no circuit-open 503: failing in-ceiling
   targets end in `502`/`504`; 403 vs 503 + `Retry-After` only on the ceiling 503; `400 invalid_request` for a
   malformed, empty, repeated or required-but-missing header; `/v1/models` filtered by the ceiling) and serve
