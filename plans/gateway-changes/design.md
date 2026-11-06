@@ -93,7 +93,7 @@ Constants go into `GatewayHeaders` (`GatewayHeaders.cs:6-40`): `MaxResidency`, `
   i.e. `OnPrem`, `Eu`, `External`. Callers compare case-insensitively. The canonical spelling in the gateway docs and
   the RAG documents is `Eu`.
 - **Key flag `RequireMaxResidency`** (`VirtualKey`, default `false`): a request from such a key without the header is
-  refused in step 1b with `400 invalid_request`, *"This API key requires the x-ume-max-residency header."* A caller
+  refused in step 1b with `400 invalid_request`, *"This API key requires the x-ume-max-residency header (OnPrem, Eu or External)."* A caller
   whose code forgets the header then fails instead of running without a ceiling. Every Ume.Rag key sets it.
 
 ### 3.2 Semantics and placement
@@ -119,9 +119,10 @@ restriction:
 
 | Situation | Status, code | Message |
 |---|---|---|
-| Malformed, empty or repeated header, or missing with `RequireMaxResidency` | `400 invalid_request` | *"x-ume-max-residency must be one of OnPrem, Eu, External."* (whitespace trimmed; no aliases, no numbers) |
+| Malformed, empty or repeated header | `400 invalid_request` | *"x-ume-max-residency must be one of OnPrem, Eu, External."* (whitespace trimmed; no aliases, no numbers) |
+| Header missing with `RequireMaxResidency` | `400 invalid_request` | *"This API key requires the x-ume-max-residency header (OnPrem, Eu or External)."* |
 | Candidates empty, ceiling set, and **no configured target** of the planned models is within the ceiling (after the key's residency and provider lists and the endpoint, whatever the targets' state) | `403 max_residency_not_met` (new code in `GatewayErrorCodes`, `GatewayErrors.cs:10-40`) | *"No provider for '<model>' is configured at or below the residency 'OnPrem' that the request allows."* |
-| Candidates empty, ceiling set, and targets within the ceiling exist but are **drained or disabled** | `503 no_eligible_provider` + `Retry-After` | *"No provider for '<model>' within the residency 'OnPrem' is available right now."* |
+| Candidates empty, ceiling set, and targets within the ceiling exist but are **drained or disabled** | `503 no_eligible_provider` + `Retry-After` | *"No provider for '<model>' within the residency 'OnPrem' is available right now. Try again later."* |
 | Ceiling set, targets within it exist, and every attempt failed (circuit-open targets included) | unchanged `502`/`504 all_providers_failed`: the same failure answers the same with or without a ceiling. Ume.Rag retries with the **same** ceiling, never a wider one | unchanged |
 | Candidates empty for other reasons (PII on-prem restriction, key lists, no ceiling) | unchanged `503 no_eligible_provider` (`GatewayErrors.cs:117-119`) | unchanged; the PII text wins when `restrictTo` is set, since `OnPrem` is inside every ceiling |
 
