@@ -193,7 +193,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-L2.
 - **Read:** knowledge §6.4, §6.5.
 
-### [ ] B-L4 Gateway release 1 switch
+### [x] B-L4 Gateway release 1 switch
 - **Do:** the pilot team's per-level keys with `RequireMaxResidency`; every call sends its ceiling.
   Remove the worker's embedding batch cap below the context window (the gateway checks per input from release 1);
   `502`/`504` retry with the same ceiling, never wider.
