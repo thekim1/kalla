@@ -91,7 +91,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** admin §5.4 step 13.
 
-### [ ] B-12 Rerank per assistant: `ChatModelReranker` now, `GatewayReranker` later
+### [x] B-12 Rerank per assistant: `ChatModelReranker` now, `GatewayReranker` later (live run #421)
 - **Do:** `ChatModelReranker` behind `IReranker`: one chat call through the gateway (`/v1/chat/completions`, the
   assistant's residency ceiling) with the question and the top 20 fused candidates, asking for JSON scores per
   passage; invalid output or the timeout degrades to the fused order (`rerank_unavailable`). The model is a platform
@@ -138,7 +138,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "Gateway release 1 and shared Keycloak as built"; identity §11.2.
 
-### [ ] B-16 `GatewayReranker` on `/v1/rerank`
+### [x] B-16 `GatewayReranker` on `/v1/rerank` (live run #421; timeout #438)
 - **Do:** `GatewayReranker` behind `IReranker` calling `/v1/rerank` (Berget AI `bge-reranker-v2-m3`, `Eu` ceiling
   until on-prem), selectable per assistant next to `ChatModelReranker`. **Rerank is optional everywhere** (user,
   2026-11-06): with no rerank model set, no rerank call is made, retrieval is plain fused, and there is no
