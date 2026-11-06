@@ -59,7 +59,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "M-2 open design calls"; knowledge-api §6.4; data-model §1 (`ragdb-listen`).
 
-### [ ] B-8 Fired PII flag types stored and shown (#217, M-2)
+### [x] B-8 Fired PII flag types stored and shown (#217, M-2) (#404)
 - **Do:** the PII stage stores the fired types next to `PiiCounts`; the PII report and document page show them.
 - **Paths:** `src/Ume.Rag.Worker/Processing/Pii/**`, `src/Ume.Rag.AdminApi/PiiReportEndpoints.cs`,
   `DocumentEndpoints.cs`, migration, admin UI.
