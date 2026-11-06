@@ -501,8 +501,10 @@ Sources come before history because an answer without its sources is useless, wh
 question is ≈ 5,340 estimated tokens, M ≈ 6,000 with a typical frame and assistant prompt, and with the defaults
 (C 16,384, R 1,024) the 400 check passes, sources keep their 8,000 and history gets ≈ 1,360. A long question
 therefore shrinks the history window first. An assistant meant for long tickets sets `contextTokens` (≤
-`Settings.Chat.MaxContextTokens` and the model's window) high enough to keep history, e.g. 24,576; with `contextTokens`
-8,192 such a question gets 400 `context_length_exceeded`, as any question that leaves no room for 1,000 source tokens.
+`Settings.Chat.MaxContextTokens` and the model's window) high enough to keep history, e.g. 24,576. With `contextTokens`
+8,192 a 16,000-character question still fits under the default frame (M + R + 1,000 ≈ 7,600); it gets 400
+`context_length_exceeded` only when M exceeds ≈ 6,168, e.g. with an assistant prompt of ≈ 2,000 characters, as any
+question that leaves no room for 1,000 source tokens.
 The gateway's own context-window filter (`Pipeline/GatewayRequestHandler.Stages.cs:158-205`, margin 1.1) remains the
 backstop; a `context_length_exceeded` from it is mapped through.
 
@@ -1323,7 +1325,7 @@ Unit (`Ume.Rag.Api.Tests`) and API tests against FakeGateway (scripted answers p
   2,000 characters, cut at the last space within the last 200; a 2,500-character run without spaces cut at 2,000),
   counted with its reason, and coverage `Low` with results answers instead of the not-found text; a long follow-up
   makes exactly one condense call; a 16,000-character question with `contextTokens` 16,384 fits the budget (history
-  trimmed), with 8,192 gives 400 `context_length_exceeded`.
+  trimmed), and with 8,192 plus an assistant prompt of ≈ 2,000 characters gives 400 `context_length_exceeded`.
 - **`ume` contract**: absent → no `ume` member, byte-identical to today's answer; `{}` → `outcome` and `degraded`
   only; each outcome (`answered`, `answered-general`, `not-found`, `unavailable`) and a degraded answer; stream order
   final chunk → `ume` chunk(s) → usage → `[DONE]`; no `ume` chunk after an error chunk.
@@ -1468,7 +1470,11 @@ Unit (`Ume.Rag.Api.Tests`) and API tests against FakeGateway (scripted answers p
   with `choices: []` and an unknown top-level member without error, as they skip the usage chunk.
 - Long-question condense (§5.1): p95 latency of the EU condense model (`gpt-6-luna`, reasoning off) for ≈ 7,000 input
   and ≤ 96 output tokens within 3,000 ms, and the retrieval recall of the condensed query against the first 2,000
-  characters on real pilot tickets.
+  characters on real pilot tickets. **First measurement (2026-11-06, interim gateway, #431)**: a 15,990-character
+  Swedish ticket, three runs: `gpt-6-luna` 5,908 prompt tokens, 2.34–2.86 s (tight against 3 s);
+  `claude-haiku-5-5` 8,938 prompt tokens, 1.03–1.12 s. Both kept the error code and named no person. With
+  `gpt-6-luna` as condense model, raise `Chat:LongQuestionCondenseTimeout` to 4 s or use a faster condense model;
+  the recall comparison on real tickets is still open.
 - Follow-up suggestions (§9.8): p95 latency within 2,000 ms on the same model; the share of suggestions dropped by the
   accept rule and the share staff click, in the pilot.
 
