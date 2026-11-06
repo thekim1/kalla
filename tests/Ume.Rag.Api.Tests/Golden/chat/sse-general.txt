@@ -1,0 +1,40 @@
+HTTP 200
+Content-Type: text/event-stream; charset=utf-8
+Cache-Control: no-store, no-cache
+X-Accel-Buffering: no
+x-rag-conversation-id: c1.MASKED
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":"*Jag hittar inget om detta i kommunens k\u00E4llor. Svaret bygger p\u00E5 allm\u00E4n kunskap och kan vara fel f\u00F6r Ume\u00E5 kommun.*\n\n"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":"Testsvar"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":" p\u00E5"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":" \u0022Fr\u00E5ga:"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":" Hur"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":" l\u00E5ngt"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":" \u00E4r"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":" det"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":" till"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":" m\u00E5nen"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":" i"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":" kilometer?\u0022."}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{"content":"\n\n- [Kontaktcenter](https://www.umea.se/kontakt)"}}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion.chunk","created":0,"model":"bygg","choices":[],"usage":{"prompt_tokens":108,"completion_tokens":15,"total_tokens":123}}
+
+data: [DONE]
+

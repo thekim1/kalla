@@ -12,13 +12,16 @@ namespace Ume.Rag.Api;
 /// A streamed answer (chat design §9.1, §9.3, §9.6): <c>text/event-stream</c>, one flush per event. The role chunk, the
 /// caveat line of a degraded or general-knowledge answer, then the model's text through the <see cref="AnswerTransducer"/>: for Open WebUI one
 /// <c>source</c> event per cited document just before the text that first cites it, for other clients <c>delta.annotations</c>
-/// (<c>url_citation</c>), then the contact links of a general-knowledge answer. A fixed text (not found, unavailable) is one content chunk without a model call. After the first
+/// (<c>url_citation</c>), then the contact links of a general-knowledge answer. A fixed text (not found, unavailable) is one content chunk without a model call. The events come from
+/// <see cref="ChatAnswer"/>, the same answer path the JSON answer folds. After the first
 /// byte an error is one error chunk and <c>[DONE]</c>.
 /// </summary>
-public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatService service, bool openWebUi, bool includeUsage,
+public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage,
     Func<IReadOnlyList<PromptSource>, int, int, ValueTask>? finished = null) : IResult
 {
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
+
+    private ChatPlan Plan => answer.Plan;
 
     public async Task ExecuteAsync(HttpContext httpContext)
     {
@@ -32,73 +35,44 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
         response.Headers["X-Accel-Buffering"] = "no";
         await response.StartAsync(ct);
 
-        var id = "chatcmpl-" + plan.MessageId.ToString("N");
-        var created = plan.Created.ToUnixTimeSeconds();
+        var id = "chatcmpl-" + Plan.MessageId.ToString("N");
+        var created = Plan.Created.ToUnixTimeSeconds();
         object Chunk(object delta, string? finish) => new
         {
-            id, @object = "chat.completion.chunk", created, model = plan.Model, choices = new[] { new { index = 0, delta, finish_reason = finish } },
+            id, @object = "chat.completion.chunk", created, model = Plan.Model, choices = new[] { new { index = 0, delta, finish_reason = finish } },
         };
 
         // The per-token content events, written without a string or an object per token (#333 finding 4).
         using var content = new SseChunk();
-        using (gateway)
+        using (answer)
         {
             try
             {
                 await WriteAsync(response, Chunk(new { role = "assistant", content = "" }, null), ct);
-                if (plan.Fixed is { } text)
-                {
-                    await WriteAsync(response, Chunk(new { content = text }, null), ct);
-                    await WriteAsync(response, Chunk(new { }, "stop"), ct);
-                    await UsageAsync(response, id, created, 0, 0, ct);
-                    await DoneAsync(response, ct);
-                    if (finished is not null)
-                    {
-                        await finished([], 0, 0);
-                    }
-
-                    return;
-                }
-
-                var transducer = new AnswerTransducer(plan.Prompt!.Sources, plan.Platform.AllowedLinkHosts);
-                var caveat = plan.Caveat ?? "";
-                if (caveat.Length > 0)
-                {
-                    await WriteAsync(response, Chunk(new { content = caveat }, null), ct);
-                }
-
-                var finish = "stop";
-                var (promptTokens, completionTokens) = (0, 0);
-                await foreach (var item in service.Gateway.ReadAsync(gateway!, ct))
+                AnswerEvent.End end = new("stop", 0, 0);
+                await foreach (var item in answer.ReadAsync(ct))
                 {
                     switch (item)
                     {
-                        case GatewayStreamEvent.Delta delta:
-                            await PiecesAsync(response, transducer.Feed(delta.Text), caveat.Length, Chunk, content, id, created, ct);
+                        case AnswerEvent.Own own:
+                            await WriteAsync(response, Chunk(new { content = own.Text }, null), ct);
                             break;
-                        case GatewayStreamEvent.Finish f:
-                            finish = f.Reason;
+                        case AnswerEvent.Pieces pieces:
+                            await PiecesAsync(response, pieces.Items, pieces.Shift, Chunk, content, id, created, ct);
                             break;
-                        case GatewayStreamEvent.Usage u:
-                            (promptTokens, completionTokens) = (u.PromptTokens, u.CompletionTokens);
+                        case AnswerEvent.End e:
+                            end = e;
                             break;
                     }
                 }
 
-                await PiecesAsync(response, transducer.Flush(), caveat.Length, Chunk, content, id, created, ct);
-                if (plan.Trailer.Length > 0)
-                {
-                    // §10.4: the contact links after a general-knowledge answer, from us, not through the model.
-                    await WriteAsync(response, Chunk(new { content = plan.Trailer }, null), ct);
-                }
-
-                await WriteAsync(response, Chunk(new { }, finish), ct);
-                await UsageAsync(response, id, created, promptTokens, completionTokens, ct);
+                await WriteAsync(response, Chunk(new { }, end.FinishReason), ct);
+                await UsageAsync(response, id, created, end.PromptTokens, end.CompletionTokens, ct);
                 await DoneAsync(response, ct);
-                service.Finish(plan, transducer);
+                answer.Finish();
                 if (finished is not null)
                 {
-                    await finished(transducer.Cited, promptTokens, completionTokens);
+                    await finished(answer.Cited, end.PromptTokens, end.CompletionTokens);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -127,7 +101,7 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
                 case AnswerPiece.Text text when text.Content.Length > 0 || text.Annotations.Count > 0:
                     if (openWebUi || text.Annotations.Count == 0)
                     {
-                        await response.Body.WriteAsync(content.Content(id, created, plan.Model, text.Content), ct);
+                        await response.Body.WriteAsync(content.Content(id, created, Plan.Model, text.Content), ct);
                         await response.Body.FlushAsync(ct);
                         break;
                     }
@@ -175,7 +149,7 @@ public sealed class ChatSse(ChatPlan plan, HttpResponseMessage? gateway, ChatSer
         {
             await WriteAsync(response, new
             {
-                id, @object = "chat.completion.chunk", created, model = plan.Model, choices = Array.Empty<object>(),
+                id, @object = "chat.completion.chunk", created, model = Plan.Model, choices = Array.Empty<object>(),
                 usage = new { prompt_tokens = prompt, completion_tokens = completion, total_tokens = prompt + completion },
             }, ct);
         }

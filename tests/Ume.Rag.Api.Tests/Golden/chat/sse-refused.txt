@@ -1,0 +1,6 @@
+HTTP 502
+Content-Type: application/json; charset=utf-8
+Cache-Control: no-store
+x-rag-conversation-id: c1.MASKED
+
+{"error":{"message":"The model service could not answer.","type":"api_error","code":"upstream_error","param":null,"request_id":"MASKED"}}
