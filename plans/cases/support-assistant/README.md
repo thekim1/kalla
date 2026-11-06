@@ -70,11 +70,11 @@ The open questions of the first draft, answered:
 | 3 | Level | **`internal`** | EU-hosted models; no on-prem requirement |
 | 4 | Personal data in pasted tickets | **Instructions and DPIA**: staff are told not to paste personal data; the DPIA (G1) covers the EU-hosted model; no redaction on the api's gateway key | [`01-gateway-setup.md`](01-gateway-setup.md) §4 stays without redaction; the frontend shows the instruction |
 | 5 | General-knowledge level | **`fallback`** | [`04-assistant.md`](04-assistant.md) §4 |
-| 6 | Related documents and follow-up suggestions | **Both built before the pilot** (SA-1, SA-3) | Each needs a Decisions row and a design section first (main session), then stream B |
-| 7 | Per-user identity | **One shared app key** for the pilot | SA-5 waits; SA-6 (a limit that fits a shared key) is built before the pilot |
+| 6 | Related documents and follow-up suggestions | **Both built before the pilot** (SA-1, SA-3) | Decisions rows and chat design §3.8, §9.7, §9.8 (2026-11-06); built by the main session as M-7, M-8 (`plans/work/main.md`) |
+| 7 | Per-user identity | **One shared app key** for the pilot | SA-5 waits; SA-6 (the per-key limit, `Keys.RequestsPerMinute`) is built before the pilot as M-5 |
 | 8 | Where the Markdown files live | **Local now, a Git repository later** | Upload by hand for the pilot; SA-10 (Git connector) **after the pilot** |
 | 10 | Conversation history | **The frontend keeps it** and sends it each turn; Ume.Rag stores none (`none`, as today) | No A1 dependency; the frontend's store belongs in the DPIA |
-| 11 | Ticket length | **Varies; fix the hard 2,000-character limit before the pilot** (SA-4) by **condensing a long ticket into a search query**: long messages are accepted (up to the chat request's own limit), a task model writes the search query, and the answer model gets the full text | SA-4 needs a design section (chat §5, condense) and a Decisions row |
+| 11 | Ticket length | **Varies; fix the hard 2,000-character limit before the pilot** (SA-4) by **condensing a long ticket into a search query**: long messages are accepted (up to the chat request's own limit), a task model writes the search query, and the answer model gets the full text | Decisions row and chat design §5.1; built as M-6 |
 
 Before the pilot, therefore: **SA-1, SA-3, SA-4, SA-6** (and SA-7, #424, before go-live).
 

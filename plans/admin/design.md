@@ -1004,6 +1004,10 @@ gateway models, organisation mirror (read); P2 department settings (owner-team s
   profile, `Settings.Crawl`) are a JSON text area validated by the server. A new, rotated or revealed key's secret is
   shown once with a copy button.
 - Labels are the schema `title` (else the property name) and `description` as help.
+- A field whose meaning the schema cannot carry gets a hint under it from `PLATFORM.fieldHints` (`labels.ts`). Keys'
+  `requestsPerMinute`: "Chat messages per minute for apps that use this key as one shared user (integration and
+  internal clients). Empty: the platform's per-user limit. Open WebUI users always get the per-user limit." (chat design
+  §4.1 step 4)
 - Actions that are not CRUD (rotate a key, run a sync, approve or roll back a site profile) are buttons from a small
   per-resource action list; anything rarer is done in Scalar (`/openapi/v1.json`).
 - Site profiles: the list shows host, preset, version, state (applied/proposal), sources using it; the detail shows the

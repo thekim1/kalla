@@ -377,6 +377,10 @@ Rules:
 - `SubjectId` is what conversations (`chat."Conversations"."SubjectId"`, data-model §2.3), per-user rate limits
   (`ume-rag:rl:user:{subjectHash}:{minute}`) and `ToolCallEvents` use. It is pseudonymous but personal data, so security
   events carry it only where the gateway carries an actor (§10).
+- When the key itself is the subject (`Application`, e.g. one shared `integration` key behind an app's backend), the
+  chat message limit is that key's `Keys.RequestsPerMinute`, else the platform's per-user value; a user subject (Open
+  WebUI JWT, token) always gets the per-user value (chat design §4.1 step 4; Decisions "Chat rate limit per key"). The
+  P2 widget's per-key limit (§6.5) reads the same field.
 - Conversations are unique per (`ClientId`, `SubjectId`, `ExternalChatId`, `AssistantId`) (data-model §2.3, chat
   design §11.1), so an Open WebUI user id never meets an Entra `oid` in one namespace, and two Open WebUI instances
   never share conversations. Issued conversation ids of other clients are signed (`c1.…`, HMAC over client, subject

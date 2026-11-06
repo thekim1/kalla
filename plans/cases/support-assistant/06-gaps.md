@@ -9,16 +9,20 @@ The sketches are proposals. Each one that changes a contract or a rule needs the
 design (and, where marked, a Decisions row) before a stream builds it. Under "No backward compatibility before
 production" (Decisions) none needs a compatibility step.
 
+SA-1, SA-2, SA-3, SA-4 and SA-6 are settled (2026-11-06): each has a **Settled** line below naming its Decisions row,
+design section and queue item, and that design text, not the sketch, is what gets built. Stream B is inactive, so the
+main session builds them on `main-session/` branches ([`../../work/main.md`](../../work/main.md) M-5 to M-8).
+
 ## Summary
 
 | ID | Gap | Size | Owner | Blocks the case? |
 |---|---|---|---|---|
-| SA-1 | Related (retrieved, uncited) documents in the chat answer | M | b + main (Decisions row) | **before the pilot** (user, 2026-11-06) |
-| SA-2 | An outcome signal (answered, not found, general, unavailable, degraded) in the answer | S | b + main | no |
-| SA-3 | Suggested follow-up questions | M | b + main (Decisions row) | **before the pilot** (user, 2026-11-06) |
-| SA-4 | Tickets longer than 2,000 characters as the question | M | b + main (Decisions row) | **before the pilot**, by condensing a long ticket into the search query (user, 2026-11-06) |
+| SA-1 | Related (retrieved, uncited) documents in the chat answer | M | main session, queue item M-7 (Decisions row added) | **before the pilot** (user, 2026-11-06) |
+| SA-2 | An outcome signal (answered, not found, general, unavailable, degraded) in the answer | S | main session, with SA-1 in M-7 | no (built with SA-1) |
+| SA-3 | Suggested follow-up questions | M | main session, queue item M-8 (Decisions row added) | **before the pilot** (user, 2026-11-06) |
+| SA-4 | Tickets longer than 2,000 characters as the question | M | main session, queue item M-6 (Decisions row added) | **before the pilot**, by condensing a long ticket into the search query (user, 2026-11-06) |
 | SA-5 | Per-user identity for a non-Open WebUI client (delegated tokens) | L | b + main | no: a shared key is accepted for the pilot (user, 2026-11-06) |
-| SA-6 | A rate limit that fits a shared application key | S | b | **before the pilot** (shared key accepted) |
+| SA-6 | A rate limit that fits a shared application key | S | main session, queue item M-5 (Decisions row added) | **before the pilot** (shared key accepted) |
 | SA-7 | Key IP allow-list (and per-key rate) not enforced in rag-api; filed as #424 | S | b | no (firewall), fix before go-live |
 | SA-8 | Crawling an intranet that needs a login | L | a + main | no: the intranet is readable without a login (user, 2026-11-06) |
 | SA-9 | Scripted upload API (service credential on the upload routes) | M | b | no |
@@ -46,6 +50,10 @@ production" (Decisions) none needs a compatibility step.
   embedding and search per turn and can disagree with what the answer used.
 - **Size M** (contract, both answer paths, tests, chat design §3.3/§9.3 update). **Decisions row**: extends the
   OpenAI-compatible contract with an own member.
+- **Settled.** Decisions "Related documents and the `ume` chat extension"; chat §3.8 (the `ume` request and response
+  contract, with `outcome` and `degraded` from SA-2), §9.7 (selection, links, empty on coverage `Low`); queue item
+  M-7. Differences from the sketch: the member is `ume`, the request names a count (`"related_documents": 5`, max
+  10) instead of a flag, entries carry `document_id`, `title`, `url`, `collection`, `rank`, `cited` and `number`.
 
 ## SA-2 Outcome signal
 
@@ -56,6 +64,8 @@ production" (Decisions) none needs a compatibility step.
 - **Sketch.** `outcome` and `coverage` in SA-1's `rag` object, or an `x-rag-outcome` response header: the plan is
   known before the first byte (`ChatEndpoints.cs:94-97`), so a header works for streams too.
 - **Size S**, best built with SA-1.
+- **Settled** with SA-1: `outcome` and `degraded` in every `ume` answer (chat §3.8; Decisions "Related documents and
+  the `ume` chat extension"); queue item M-7. No header.
 
 ## SA-3 Suggested follow-up questions
 
@@ -69,6 +79,10 @@ production" (Decisions) none needs a compatibility step.
   object after the text, so time to first token is unchanged; never stored (history mode `none`). Clarifying questions
   inside the answer need no code ([`04-assistant.md`](04-assistant.md) §3).
 - **Size M.** **Decisions row**: a platform task call per turn, which the simplification pass removed for Open WebUI.
+- **Settled.** Decisions "Follow-up suggestions"; chat §9.8 (call, prompt, accept rule, budget, personal data),
+  §3.8 (delivery); queue item M-8. Opt-in per request (`"ume": {"follow_ups": 3}`, max 5), not a per-assistant
+  setting; budget `Chat:FollowUpTimeout` 2 s; delivered in a second `ume` chunk, so the related documents do not wait
+  for it.
 
 ## SA-4 Long tickets as the question
 
@@ -80,6 +94,11 @@ production" (Decisions) none needs a compatibility step.
   condense timeout) produces the query, falling back to the first 2,000 characters; the full ticket stays in the
   prompt. Interim workaround: [`05-frontend-integration.md`](05-frontend-integration.md) §6.
 - **Size M** (chat §3.2, §5 change; prompt budget check, chat §6.3).
+- **Settled.** Decisions "Long questions condensed into the search query"; chat §3.2 (16,000 characters, prompt and
+  query forms), §5.1 (the long-question condense: every turn, `Chat:LongQuestionCondenseTimeout` 3 s, fallback to the
+  first 2,000 characters at a word boundary), §6.3 (budget), §7.1; queue item M-6. The limit is 16,000, not the 8,000
+  of the sketch; until M-6 is merged the workaround of [`05-frontend-integration.md`](05-frontend-integration.md) §6
+  applies.
 
 ## SA-5 Per-user identity for the app
 
@@ -110,6 +129,9 @@ production" (Decisions) none needs a compatibility step.
 - **Sketch.** For `Application` subjects, use the key's `RequestsPerMinute` (default: the platform value × N) instead
   of the per-user value; keep the per-user limit for user subjects.
 - **Size S.** Interim: raise the platform setting, accepting it for every client.
+- **Settled.** Decisions "Chat rate limit per key"; chat §4.1 step 4, identity §3, data-model `Keys`, admin §5.8 (form
+  hint); queue item M-5. The key's own `RequestsPerMinute` applies when set; there is no "× N" default: an unset value
+  means the per-user value, so the platform admin sets the app key's value (e.g. 200 for twenty staff).
 
 ## SA-7 Key IP allow-list not enforced (#424)
 
@@ -123,6 +145,7 @@ issue #424 (stream b), which also asks about `Keys.RequestsPerMinute` (saved, ne
 - **Why.** A leaked app key should be useless outside the app's backend host.
 - **Sketch.** Copy the gateway's address check into `KeyChecks` with event 5001 reason `address_not_allowed`.
 - **Size S.** Not blocking while the proxy and firewall restrict the routes; fix before go-live.
+- #424's `RequestsPerMinute` question is answered by SA-6: the field is kept and enforced for chat (M-5).
 
 ## SA-8 Authenticated intranet crawl
 

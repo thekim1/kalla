@@ -271,7 +271,7 @@ and admin; unset by default) caps every model-call ceiling at that residency, `m
 design §4.7): `Eu` while register M2 holds, unset (or `External`) once External routes and keys exist.
 
 Chat-role settings (chat design §3.7, §8, §12, §14.2): `Chat:PublishApiReference` (default `true`, off in production
-until P2), `Chat:CondenseTimeout` (600 ms, hard; falls back to the raw question), `Chat:GatewayHeadersTimeout` (15 s, proposed), `Chat:StreamIdleTimeout` (60 s),
+until P2), `Chat:CondenseTimeout` (600 ms, hard; falls back to the raw question), `Chat:LongQuestionCondenseTimeout` (3 s, hard; falls back to the question's first 2,000 characters, chat design §5.1), `Chat:FollowUpTimeout` (2 s, hard; 0 = no follow-up suggestions, chat design §9.8), `Chat:GatewayHeadersTimeout` (15 s, proposed), `Chat:StreamIdleTimeout` (60 s),
 `Chat:MaxAnswerDuration` (240 s), `Chat:WriterEnqueueTimeout` (2 s), `Chat:CharsPerToken` (3); `Gateway:RequireDelegationEcho` (default `true`; decides when a missing delegation echo fails
 closed; used from gateway release 2 in P2, when delegation starts, weakness review §5; the ceiling header is always sent, plan §6); `OpenWebUi:BaseUrl`, `OpenWebUi:AdminApiKey` (feedback import), `OpenWebUi:ClientId`, `OpenWebUi:JwtSecret`,
 `OpenWebUi:MaxLifetimeSeconds` (600) (user JWT, identity design §5.2); one instance's `OpenWebUi:ClientId`/`JwtSecret`
