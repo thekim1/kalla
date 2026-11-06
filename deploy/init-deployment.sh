@@ -31,6 +31,8 @@
 #                           admin get it, and the worker too unless it is External; SERVICE (api, admin, worker) gives
 #                           one deployable its own key and wins over the shared one. The worker never holds External.
 #                           P1a calls every model at Eu.
+#   --org-sync-url URL      the gateway's Data API (HTTPS; its own service and often its own host, without /v1): the admin's
+#                           org sync and model catalogue sync read /v1/catalog/* there; both stay off without it
 #   --org-sync-key-file FILE  the gateway Data API key for the admin's org sync (catalog.read only)
 #   --key-provider file [file] --allow-file-keys
 #                           the file key provider (pilot and test hosts, postponed decision K1) needs --allow-file-keys
@@ -68,7 +70,7 @@ umask 077
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 certs="$here/certs"; secrets="$here/secrets"; env_file="$here/.env"
 oidc_authority=""; oidc_client="ume-rag-admin"; oidc_secret_file=""; api_host=""; admin_host=""
-api_port=8543; admin_port=9543; bind=""; gateway_url=""; ca_file=""; org_sync_file=""
+api_port=8543; admin_port=9543; bind=""; gateway_url=""; ca_file=""; org_sync_file=""; org_sync_url=""
 key_provider="file"; allow_file_keys=0; backup_target=""; s3_credentials=""; s3_region="us-east-1"
 crawl_allow=""; host_memory=16; freshclam_proxy=""; role="all"
 owui_host=""; owui_client="open-webui"; owui_secret_file=""; owui_provider=""; owui_provider_name="Umeå kommun"
@@ -94,6 +96,7 @@ while [ $# -gt 0 ]; do
     --gateway-url) gateway_url="$2"; shift 2;;
     --ca-file) ca_file="$2"; shift 2;;
     --gateway-key-file) gateway_keys+=("$2"); shift 2;;
+    --org-sync-url) org_sync_url="$2"; shift 2;;
     --org-sync-key-file) org_sync_file="$2"; shift 2;;
     --key-provider) key_provider="$2"; shift 2;;
     --allow-file-keys) allow_file_keys=1; shift;;
@@ -136,6 +139,9 @@ case "$key_provider" in
   *) die "--key-provider $key_provider: only the file key provider exists until postponed decision K1 is made";;
 esac
 case "$freshclam_proxy" in ""|*:[0-9]*) ;; *) die "--freshclam-proxy must be HOST:PORT";; esac
+case "$org_sync_url" in ""|https://*) ;; *) die "--org-sync-url must be an https:// URL";; esac
+# The clients append v1/catalog/...: keep the bare root.
+org_sync_url="${org_sync_url%/}"; org_sync_url="${org_sync_url%/v1}"
 
 ask() { # ask VAR "prompt" [default]
   local var="$1" prompt="$2" default="${3:-}" reply
@@ -487,6 +493,8 @@ UME_RAG_SECRETS_DIR=$secrets
 UME_RAG_OIDC_AUTHORITY=$oidc_authority
 UME_RAG_OIDC_CLIENT_ID=$oidc_client
 UME_RAG_GATEWAY_URL=$gateway_url
+# The gateway's Data API (the admin's org sync and model catalogue sync, /v1/catalog/*); empty turns both off.
+UME_RAG_ORG_SYNC_URL=$org_sync_url
 # Register M2: every model call EU-hosted until on-prem hardware exists; empty once External routes and keys exist.
 UME_RAG_GATEWAY_MAX_RESIDENCY=Eu
 UME_RAG_API_PUBLIC_URL=https://$api_host$public_api
@@ -550,9 +558,19 @@ Restrict those ports to the proxy with the host firewall."
 fi
 gateway_note=""
 missing=""
+# With --renew-certs deploy/.env is kept (and was read above).
+sync_url="${org_sync_url:-${UME_RAG_ORG_SYNC_URL:-}}"
+if [ -z "$sync_url" ]; then
+  gateway_note="
+Data API: no --org-sync-url, so the org sync and the model catalogue sync stay off (an empty model mirror
+refuses every model setting). Re-run with --org-sync-url https://<data api host> and --org-sync-key-file FILE."
+elif [ ! -e "$secrets/admin/OrgSync__DataApiKey" ]; then
+  gateway_note="
+Data API: no key for $sync_url. Re-run with --org-sync-key-file FILE (a Data API key, catalog.read)."
+fi
 for svc in api admin worker; do [ -e "$secrets/$svc/Gateway__Keys__Eu" ] || missing="$missing $svc"; done
 if [ -n "$missing" ]; then
-  gateway_note="
+  gateway_note="$gateway_note
 Gateway: no Eu key for${missing}. P1a calls every model at ceiling Eu: re-run with --gateway-key-file Eu=FILE (or
 SERVICE:Eu=FILE, one per deployable)."
 fi

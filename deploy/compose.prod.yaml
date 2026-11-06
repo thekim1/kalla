@@ -210,6 +210,8 @@ services:
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL}
       Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-}
+      # The gateway's Data API (org sync and model catalogue sync, #453); empty binds as unset, so both syncs stay off.
+      OrgSync__BaseUrl: ${UME_RAG_ORG_SYNC_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: rag-admin
       SSL_CERT_FILE: /run/certs/ca.pem

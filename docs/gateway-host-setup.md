@@ -75,6 +75,7 @@ Collect these before you start. Files go in a directory outside the checkout tha
 | Input | Where it comes from | How it is used |
 |---|---|---|
 | `<gateway url>` | the gateway's public HTTPS address (its admin UI is a different host) | `--gateway-url` |
+| `<data api url>` | the gateway's Data API (`/v1/catalog/*`), a service of its own: its public HTTPS address, or `https://<gateway host>:10443` by default. Not the gateway URL | `--org-sync-url` |
 | Three gateway keys, one each for `api`, `admin`, `worker` | gateway admin UI: one key per RAG service, **allowed residency `Eu` only** | files `~/rag-inputs/api-eu.key`, `admin-eu.key`, `worker-eu.key` (the key alone, one line) |
 | A gateway Data API key with `catalog.read` | gateway admin UI (Data API keys) | `~/rag-inputs/org-sync.key`; the admin syncs departments and the model catalogue with it |
 | `<keycloak url>/realms/ume` | the Keycloak on this host (realm `ume`, shared with the gateway) | `--oidc-authority`. If realm `ume` doesn't exist yet, use `https://keycloak.invalid/realms/ume`: the stack runs, only admin sign-in fails |
@@ -240,6 +241,7 @@ sudo ./deploy/init-deployment.sh \
   --gateway-key-file api:Eu="$HOME/rag-inputs/api-eu.key" \
   --gateway-key-file admin:Eu="$HOME/rag-inputs/admin-eu.key" \
   --gateway-key-file worker:Eu="$HOME/rag-inputs/worker-eu.key" \
+  --org-sync-url '<data api url>' \
   --org-sync-key-file "$HOME/rag-inputs/org-sync.key" \
   --backup-target '<backup target>' \
   --host-memory 16 --allow-file-keys --yes

@@ -153,6 +153,7 @@ machine).
 | Network (subnet) | Members | Destination | Port, protocol | Purpose | When | Config key |
 |---|---|---|---|---|---|---|
 | `llm` (172.30.3.0/24) | rag-api, rag-admin (default route); rag-worker is a member but leaves through `crawl` | the gateway, host of `UME_RAG_GATEWAY_URL` | the URL's port (443), HTTPS | every model call: chat, embeddings, rerank, model checks | always | `--gateway-url` → `Gateway__BaseUrl` |
+| `llm` (172.30.3.0/24) | rag-admin | the gateway's Data API, host of `UME_RAG_ORG_SYNC_URL` | the URL's port (often 10443), HTTPS | org and model catalogue sync (`/v1/catalog/*`) | with `--org-sync-url` | `--org-sync-url` → `OrgSync__BaseUrl` |
 | | | the OIDC authority, host of `UME_RAG_OIDC_AUTHORITY` | the URL's port (443), HTTPS | rag-admin's back channel: discovery, JWKS, token endpoint (code + PKCE). rag-api validates no OIDC tokens yet (`RagApi:Authority` is not built, identity design §7.1) | always | `--oidc-authority` → `Oidc__Authority` |
 | | | the Open WebUI host, `UME_RAG_OPENWEBUI_HOST` | 443, HTTPS, through the reverse proxy | rag-api's feedback import (`OpenWebUi__BaseUrl` = `https://<owui host>`) | with Open WebUI | `--openwebui-host` |
 | | | the OTLP endpoint, `UME_RAG_OTEL_ENDPOINT` | the URL's port, HTTP(S) | telemetry | optional | set by hand in `deploy/.env` |
@@ -179,11 +180,11 @@ Sources: `deploy/host/docker-user-firewall.sh` (allow-lists, DNS, `private=`, `I
 `deploy/compose.ingestion.yaml`, `deploy/compose.openwebui.yaml` (members, subnets, `gw_priority`),
 `src/Ume.Rag.Worker/Connectors/Egress/EgressGuard.cs` (schemes and ports of the crawler).
 
-**The Data API is not wired yet.** The admin's organisation and model catalogue sync call the gateway's Data API at
-`OrgSync:BaseUrl` (`src/Ume.Rag.AdminApi/OrganisationSync.cs`; a host of its own, gateway default port 10443,
-[p1a-local-run.md](p1a-local-run.md) §4.2). The production Compose files don't set `OrgSync__BaseUrl` and the firewall
-has no entry for it, so both syncs are off in a Compose deployment. Once it is wired, `llm` needs
-`<data api host>:<port>` (`--allow llm=<data api host>:<port>` until then).
+**The Data API.** The admin's organisation and model catalogue sync call the gateway's Data API at `OrgSync:BaseUrl`
+(`src/Ume.Rag.AdminApi/OrganisationSync.cs`). It is a service of its own, often on a host of its own (gateway default
+port 10443, [p1a-local-run.md](p1a-local-run.md) §4.2). `init-deployment.sh --org-sync-url https://<data api host>[:port]`
+writes `UME_RAG_ORG_SYNC_URL`, Compose passes it to rag-admin as `OrgSync__BaseUrl`, and the firewall adds it to `llm`
+(#453). Without it both syncs stay off, and an empty model mirror refuses every model setting.
 
 ### 3.2 From the host itself
 
@@ -367,7 +368,7 @@ Outbound from <rag host>
   [ ] -> <s3 endpoint>:443/tcp, or the backup share's protocol to <backup host>  always
   [ ] -> <proxy>:443/tcp                                  with Open WebUI (its model connection, the feedback import)
   [ ] -> <otlp collector>:<port>/tcp                      optional
-  [ ] -> <data api host>:<port, 10443>/tcp                once OrgSync:BaseUrl is wired (§3.1)
+  [ ] -> <data api host>:<port, 10443>/tcp                always (the admin's org and model catalogue sync, §3.1)
   [ ] -> ghcr.io:443/tcp                                  image pulls, unless an internal registry is used
 
 Browsers on the municipal network
@@ -407,4 +408,4 @@ of `deploy/.env`: `docker compose --env-file deploy/.env up -d` and `sudo system
 | S3 backup endpoint | `--backup-target s3://...` | `UME_RAG_BACKUP_ENDPOINT`, `secrets/pgbackrest/repo.conf` | pgBackRest, the firewall (`backup`) |
 | Subnets | fixed | the Compose files' `networks` | `docker-user-firewall.sh` (`--subnet` when they differ) |
 | One more destination, other resolvers | `--allow NETWORK=HOST[:PORT]`, `--dns IP` | a drop-in for `rag-firewall.service` (`systemctl edit`, [runbook](runbook.md#host-firewall)) | `docker-user-firewall.sh` |
-| The Data API | not wired (§3.1) | – | – |
+| The Data API | `--org-sync-url` | `UME_RAG_ORG_SYNC_URL` | `OrgSync__BaseUrl` (admin), the firewall (`llm`) |
