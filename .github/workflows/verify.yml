@@ -259,13 +259,14 @@ jobs:
         # belong (never External in the worker); the Open WebUI files render with the generated deploy/.env.
         run: |
           d="$RUNNER_TEMP/init"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"
-          for k in eu worker-eu external owui-key owui-secret; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
+          for k in eu worker-eu external owui-key owui-secret data-api; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
           init() {
             bash "$d/deploy/init-deployment.sh" --oidc-authority https://keycloak.example.se/realms/ume \
               --gateway-url https://llm.example.se --api-host rag-api.example.se --admin-host rag-admin.example.se \
               --gateway-key-file Eu="$d/keys/eu" --gateway-key-file worker:Eu="$d/keys/worker-eu" \
               --gateway-key-file External="$d/keys/external" --openwebui-host chat.example.se \
               --openwebui-api-key-file "$d/keys/owui-key" --openwebui-oidc-client-secret-file "$d/keys/owui-secret" \
+              --org-sync-url https://data.example.se/v1/ --org-sync-key-file "$d/keys/data-api" \
               --backup-target local --allow-file-keys --no-chown --yes "$@"
           }
           generated() {
@@ -289,6 +290,13 @@ jobs:
             echo "worker:External was accepted"; exit 1
           fi
           grep -q 'never holds the External key' <<< "$out"
+          # The Data API (#453): the bare root in .env and the admin's environment, its key a secret.
+          grep -qx 'UME_RAG_ORG_SYNC_URL=https://data.example.se' "$d/deploy/.env"
+          [ "$(cat "$s/admin/OrgSync__DataApiKey")" = data-api-placeholder ]
+          docker compose --env-file "$d/deploy/.env" config --format json \
+            | jq -e '.services["rag-admin"].environment.OrgSync__BaseUrl == "https://data.example.se"' >/dev/null
+          if out="$(init --org-sync-url http://data.example.se 2>&1)"; then echo "an http:// Data API was accepted"; exit 1; fi
+          grep -q 'org-sync-url must be an https:// URL' <<< "$out"
           docker compose -f "$d/deploy/compose.openwebui.yaml" --env-file "$d/deploy/.env" config --quiet
           docker compose --env-file "$d/deploy/.env" config --quiet
       - name: Pilot caps, Open WebUI key restriction and the feedback service account
