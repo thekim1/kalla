@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Ume.Rag.Domain.Access;
-using Ume.Rag.Domain.Retrieval;
 using Ume.Rag.Infrastructure;
 using Ume.Rag.Infrastructure.Access;
 using Ume.Rag.Infrastructure.Config;
@@ -34,7 +33,7 @@ public sealed class KnowledgeOptions
     public bool PublishApiReference { get; set; } = true;
 }
 
-/// <summary>Registration of the knowledge role's core (<see cref="KnowledgeService"/> as <see cref="IRetriever"/>).</summary>
+/// <summary>Registration of the knowledge role's core (<see cref="KnowledgeService"/>).</summary>
 public static class KnowledgeExtensions
 {
     /// <summary>The service key of the retrieval data source (<see cref="RetrievalDataSource"/>).</summary>
@@ -112,7 +111,6 @@ public static class KnowledgeExtensions
             sp.GetRequiredService<RetrievalEngine>(), sp.GetRequiredService<PostgresHydrator>(), sp.GetRequiredService<GatewayQueryEmbedder>(),
             sp.GetRequiredService<RetrievalCounter>(), Pool(sp), sp.GetRequiredService<IDownloadLinks>(), sp.GetRequiredService<ILogger<KnowledgeService>>(),
             neighbourRadius));
-        services.AddSingleton<IRetriever>(sp => sp.GetRequiredService<KnowledgeService>());
         return builder;
     }
 }

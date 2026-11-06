@@ -49,7 +49,7 @@ public sealed partial class KnowledgeService(
     NpgsqlDataSource dataSource,
     IDownloadLinks links,
     ILogger<KnowledgeService> logger,
-    int neighbourRadius = SectionAssembler.DefaultNeighbourRadius) : IRetriever
+    int neighbourRadius = SectionAssembler.DefaultNeighbourRadius)
 {
     /// <summary>At most 20 collections per query (§4.2).</summary>
     public const int MaxCollections = 20;

@@ -1,23 +1,4 @@
-using Ume.Rag.Domain.Access;
-
 namespace Ume.Rag.Domain.Retrieval;
-
-/// <summary>
-/// The knowledge role in process (knowledge design §2.2): the chat role and the HTTP routes call it with the caller's
-/// principal; the role resolves collections, checks access, searches, hydrates and builds citations.
-/// </summary>
-public interface IRetriever
-{
-    Task<RetrievalResult> RetrieveAsync(RagPrincipal who, RetrievalRequest request, CancellationToken ct);
-
-    /// <summary>A document visible to <paramref name="who"/>; <see cref="RetrievalDeniedException"/> 404 otherwise.</summary>
-    Task<DocumentInfo> GetDocumentAsync(RagPrincipal who, Guid documentId, CancellationToken ct);
-
-    Task<IReadOnlyList<CollectionInfo>> ListCollectionsAsync(RagPrincipal who, CancellationToken ct);
-
-    /// <summary>Counts the ranks actually cited (knowledge §4.7); every returned result is counted as retrieved.</summary>
-    void MarkCited(RetrievalResult result, IReadOnlyCollection<int> citedRanks);
-}
 
 /// <summary>Section expansion (knowledge design §9).</summary>
 public enum ExpandMode { None, Section }
