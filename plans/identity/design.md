@@ -146,7 +146,7 @@ with the `UME_RAG_` prefix; for local runs the same keys as `Oidc:<Setting>` in 
 | `UME_RAG_OIDC_DEPARTMENT_CLAIM` | `Oidc:DepartmentClaim` | `departmentCodes` | |
 | `UME_RAG_OIDC_TEAM_CLAIM` | `Oidc:TeamClaim` | `teamCodes` | |
 | `UME_RAG_OIDC_GROUP_CLAIM` | `Oidc:GroupClaim` | `groups` | |
-| `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | `Oidc:RoleGroups:rag-platform-admin` | – | `;`-separated, case-insensitive |
+| `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN` | `Oidc:RoleGroups:rag-platform-admin` | – | `;`-separated, case-insensitive; every group is a `rag-` name or an Entra object id, else the admin API refuses to start (§2.5) |
 | `UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN` | `Oidc:RoleGroups:rag-department-admin` | – | |
 | `UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR` | `Oidc:RoleGroups:rag-pipeline-editor` | – | |
 | `UME_RAG_OIDC_GROUPS_REVIEWER` | `Oidc:RoleGroups:rag-reviewer` | – | P1 (admin design §3.1) |
@@ -288,7 +288,12 @@ token does not show adds nothing.
 - **Keycloak (dev, P1)**: a *Group Membership* mapper on `ume-rag-admin` (claim `groups`, *Full group path* off, *Add
   to ID token* on, `docs/identity-and-roles.md:145-147`; dev realm `dev/keycloak/ume-realm.json:765-842`) and member groups entered
   as names. In the shared realm the claim lists every group of the account, the gateway's included; only names
-  entered as member groups count (§2.3 step 3). No overage limit applies.
+  entered as member groups count (§2.3 step 3). No overage limit applies. Because a role group named like a gateway
+  group would grant an Ume.Rag role by accident, every `Oidc:RoleGroups` group is a `rag-` name (case-insensitive,
+  longer than the prefix) or an Entra object id (a GUID); `OidcOptionsValidator` (`src/Ume.Rag.AdminApi/AdminOptions.cs`)
+  refuses to start otherwise, and the gateway gives none of its groups a `rag-` name (`deploy/keycloak/README.md`,
+  *Group names*). Member groups are not checked: they give department scope only, never a role, and are the
+  gateway's groups on purpose (§2.1). AD FS role groups need `rag-` names too.
 - **AD FS**: group claim `group` with unqualified names (`:199-215`).
 
 ### 2.6 Failure behaviour (decision: claims only, never fail open)
