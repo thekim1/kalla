@@ -70,7 +70,7 @@ public sealed class AccessPolicyTests
         { "5: no published version", Who(OwuiId, CredentialKind.SecretKey, SubjectKind.OwuiUser), ResourceRef.Assistant(Unpublished), RagAction.Chat, false, "5", 404 },
         { "5: an unknown assistant", Who(OwuiId, CredentialKind.SecretKey, SubjectKind.OwuiUser), ResourceRef.Assistant(Guid.NewGuid()), RagAction.Chat, false, "5", 404 },
         { "5: a deleted collection", Who(InternalId, CredentialKind.ServiceKey), ResourceRef.Collection(DeletedCollection), RagAction.Search, false, "5", 404 },
-        { "6: outside the key's assistant scope", Who(IntegrationId, CredentialKind.SecretKey, key: new KeyEntry(Guid.NewGuid(), IntegrationId, "sk", null, [InternalAssistant], [])), ResourceRef.Assistant(PublicAssistant), RagAction.Chat, false, "6", 404 },
+        { "6: outside the key's assistant scope", Who(IntegrationId, CredentialKind.SecretKey, key: new KeyEntry(Guid.NewGuid(), IntegrationId, "sk", null, [InternalAssistant], [], null)), ResourceRef.Assistant(PublicAssistant), RagAction.Chat, false, "6", 404 },
         { "7: above the client ceiling", Who(OwuiId, CredentialKind.SecretKey, SubjectKind.OwuiUser), ResourceRef.Assistant(SensitiveAssistant), RagAction.Chat, false, "7", 404 },
         { "7: a widget (public ceiling) and an internal assistant", Who(WidgetId, CredentialKind.PublicKey, SubjectKind.Anonymous), ResourceRef.Assistant(InternalAssistant), RagAction.Chat, false, "7", 404 },
         { "9: sensitive needs a client without history", Who(InternalId, CredentialKind.ServiceKey), ResourceRef.Assistant(SensitiveAssistant), RagAction.Chat, true, "ok", 200 },
@@ -124,7 +124,7 @@ public sealed class AccessPolicyTests
 
         Policy.Decide(who, ResourceRef.Assistant(PublicAssistant), RagAction.Chat, disabled, true).Reason.ShouldBe(DenyReasons.ClientDisabled);
         Policy.Decide(who, ResourceRef.Assistant(PublicAssistant), RagAction.Chat, bad, true).Reason.ShouldBe(DenyReasons.ClientDisabled);
-        Policy.Decide(who with { Key = new KeyEntry(Guid.NewGuid(), Guid.NewGuid(), "sk", null, [], []) }, ResourceRef.Assistant(PublicAssistant), RagAction.Chat, Config, true)
+        Policy.Decide(who with { Key = new KeyEntry(Guid.NewGuid(), Guid.NewGuid(), "sk", null, [], [], null) }, ResourceRef.Assistant(PublicAssistant), RagAction.Chat, Config, true)
             .Reason.ShouldBe(DenyReasons.ClientUnknown);
     }
 

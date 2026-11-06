@@ -593,6 +593,8 @@ export const PLATFORM = {
   fieldHints: {
     memberGroups:
       'Group names from the sign-in (or Entra object ids). The sign-in shares its groups with the AI gateway: a gateway group with the same name counts too. A member group gives department scope, never a role.',
+    requestsPerMinute:
+      'Chat messages per minute for apps that use this key as one shared user (integration and internal clients). Empty: the platform’s per-user limit. Open WebUI users always get the per-user limit.',
   } as Record<string, string>,
   resources: {
     clients: { label: 'Clients', description: 'Apps that use the platform: Open WebUI, integrations, internal clients' },
