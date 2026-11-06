@@ -39,7 +39,8 @@ public sealed class QueryEmbeddingOptions
 /// the ceiling comes from the profile) on the gateway client <see cref="HttpClientName"/>, whose
 /// <see cref="ResidencyCeilingHandler"/> checks key, ceiling and <c>x-ume-residency</c>. L1 cache keyed by
 /// (profile, HMAC of the query) so no query text is held as a key; concurrent misses share one call; one retry only for
-/// a connection failure or 502/503 without <c>Retry-After</c>; after 5 failures in 30 s the circuit skips the call for 15 s,
+/// a connection failure, a 502/504 (<c>all_providers_failed</c>, with the same ceiling, #390) or a 503 without
+/// <c>Retry-After</c>; after 5 failures in 30 s the circuit skips the call for 15 s,
 /// then one call decides. Every failure is a <see cref="QueryEmbeddingUnavailableException"/> whose reason is the
 /// <c>degraded</c> value (§5.5). The query text is never logged.
 /// </summary>
@@ -169,7 +170,9 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
                     LogRefused(_logger, profile.Name, (int)response.StatusCode); // max_residency_not_met: a configuration fault
                 }
 
-                retryable = response.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable && response.Headers.RetryAfter is null;
+                // 502/504: every target within the ceiling failed; the retry is the same profile, so the same ceiling.
+                retryable = response.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout
+                    || (response.StatusCode == HttpStatusCode.ServiceUnavailable && response.Headers.RetryAfter is null);
                 if (!retryable || attempt == 2)
                 {
                     throw Unavailable($"The gateway answered {(int)response.StatusCode}.");

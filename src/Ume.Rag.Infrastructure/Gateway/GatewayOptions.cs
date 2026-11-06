@@ -25,6 +25,12 @@ public sealed class GatewayOptions
     /// </summary>
     public Residency? MaxResidency { get; set; }
 
+    /// <summary>
+    /// The pause before the one retry of a gateway <c>502</c>/<c>504</c> (<c>Gateway:RetryDelay</c>, <see cref="GatewayRetryHandler"/>):
+    /// the gateway has already tried every target within the ceiling, so the retry waits a moment.
+    /// </summary>
+    public TimeSpan RetryDelay { get; set; } = TimeSpan.FromMilliseconds(250);
+
     /// <summary><paramref name="ceiling"/>, lowered to <see cref="MaxResidency"/> when that is set and lower.</summary>
     public Residency Cap(Residency ceiling) => MaxResidency is { } cap && cap < ceiling ? cap : ceiling;
 }

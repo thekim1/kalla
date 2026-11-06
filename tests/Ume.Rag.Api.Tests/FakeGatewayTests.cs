@@ -1,14 +1,21 @@
+extern alias fakegateway;
+
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 
 namespace Ume.Rag.Api.Tests;
 
 /// <summary>
-/// The FakeGateway behaves like gateway release 1 (repo-and-deployment §4.3, gateway design §3): keys that require a
-/// ceiling, the 400/403/503 split, <c>x-ume-residency</c>, <c>/v1/models</c> by ceiling, 1024-dim embeddings, cited
-/// answers, the stream modes of chat design §18.4, rerank and the catalogue.
+/// The FakeGateway behaves like gateway release 1 as built (repo-and-deployment §4.3, gateway design §3, #390 Feature B
+/// points 1–4 and 8, checked against thekim1/llmgateway#66 and #68): keys that require a ceiling, the 400/403/503 split
+/// with <c>Retry-After</c> only on the ceiling 503, 502/504 instead of a circuit-open 503, <c>x-ume-residency</c>,
+/// <c>/v1/models</c> by ceiling, 1024-dim embeddings, cited answers, the stream modes of chat design §18.4, the optional
+/// Cohere-compatible rerank and the catalogue.
 /// </summary>
 public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<FakeGatewayFactory>
 {
@@ -21,29 +28,77 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     [InlineData("/v1/rerank", """{"model":"bge-reranker-v2-m3","query":"a","documents":["a"]}""")]
     public async Task Every_endpoint_requires_the_ceiling_for_dev_keys(string path, string? body)
     {
-        using var noCeiling = await SendAsync(path, body, FakeGatewayFactory.OnPremKey, ceiling: null);
-        await AssertErrorAsync(noCeiling, HttpStatusCode.BadRequest, "invalid_request");
+        using var rerank = Rerank();
+        using var noCeiling = await SendAsync(path, body, FakeGatewayFactory.EuKey, ceiling: null, rerank);
+        await AssertErrorAsync(noCeiling, HttpStatusCode.BadRequest, "invalid_request", "This API key requires the x-ume-max-residency header (OnPrem, Eu or External).");
 
-        using var noKey = await SendAsync(path, body, key: null, ceiling: "OnPrem");
-        await AssertErrorAsync(noKey, HttpStatusCode.Unauthorized, "missing_key");
+        using var noKey = await SendAsync(path, body, key: null, ceiling: "Eu", rerank);
+        await AssertErrorAsync(noKey, HttpStatusCode.Unauthorized, "invalid_api_key");
 
-        using var unknownKey = await SendAsync(path, body, "made-up", ceiling: "OnPrem");
-        await AssertErrorAsync(unknownKey, HttpStatusCode.Unauthorized, "invalid_key");
+        using var unknownKey = await SendAsync(path, body, "made-up", ceiling: "Eu", rerank);
+        await AssertErrorAsync(unknownKey, HttpStatusCode.Unauthorized, "invalid_api_key");
 
-        using var ok = await SendAsync(path, body, FakeGatewayFactory.OnPremKey, ceiling: "onprem");
+        using var ok = await SendAsync(path, body, FakeGatewayFactory.EuKey, ceiling: " eu ", rerank);
         ok.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Theory]
     [InlineData("Any")]
     [InlineData("0")]
+    [InlineData("1")]
     [InlineData("EU-West")]
     [InlineData(" ")]
     [InlineData("OnPrem, Eu")]
-    public async Task A_malformed_ceiling_is_refused(string ceiling)
+    public async Task A_malformed_or_empty_ceiling_is_refused_on_every_endpoint(string ceiling)
     {
-        using var response = await SendAsync("/v1/models", null, FakeGatewayFactory.OnPremKey, ceiling);
-        await AssertErrorAsync(response, HttpStatusCode.BadRequest, "invalid_request");
+        // #390 Feature B point 4: one message for every malformed value (RequestStages.ReadMaxResidency).
+        foreach (var (path, body) in new[] { ("/v1/models", (string?)null), ("/v1/chat/completions", """{"model":"ume/chat-onprem","messages":[]}""") })
+        {
+            using var response = await SendAsync(path, body, FakeGatewayFactory.OnPremKey, ceiling);
+            await AssertErrorAsync(response, HttpStatusCode.BadRequest, "invalid_request", "x-ume-max-residency must be one of OnPrem, Eu, External.");
+        }
+    }
+
+    [Fact]
+    public async Task An_empty_ceiling_header_is_malformed_not_missing()
+    {
+        // HttpClient drops an empty header value, so the request is built on the server side (Kestrel passes it as "").
+        var context = await fake.Server.SendAsync(c =>
+        {
+            c.Request.Method = "GET";
+            c.Request.Path = "/v1/models";
+            c.Request.Headers.Authorization = "Bearer " + FakeGatewayFactory.OnPremKey;
+            c.Request.Headers["x-ume-max-residency"] = "";
+        }, Ct);
+        context.Response.StatusCode.ShouldBe(400);
+        using var json = await JsonDocument.ParseAsync(context.Response.Body, cancellationToken: Ct);
+        json.RootElement.GetProperty("error").GetProperty("message").GetString().ShouldBe("x-ume-max-residency must be one of OnPrem, Eu, External.");
+    }
+
+    [Fact]
+    public async Task A_repeated_ceiling_header_is_refused_even_with_the_same_value()
+    {
+        using var client = fake.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/v1/models");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.OnPremKey);
+        request.Headers.TryAddWithoutValidation("x-ume-max-residency", ["OnPrem", "OnPrem"]).ShouldBeTrue();
+        using var response = await client.SendAsync(request, Ct);
+        await AssertErrorAsync(response, HttpStatusCode.BadRequest, "invalid_request", "x-ume-max-residency must be one of OnPrem, Eu, External.");
+    }
+
+    [Fact]
+    public async Task Without_RequireMaxResidency_no_header_is_no_ceiling_and_its_503_has_no_retry_after()
+    {
+        // The key's level alone applies; the drained model's 503 is the plain no_eligible_provider, without Retry-After
+        // (gateway: Retry-After only on the ceiling 503).
+        using var optional = fake.WithWebHostBuilder(b => b.ConfigureAppConfiguration(c => c.AddInMemoryCollection([new("FakeGateway:RequireMaxResidency", "false")])));
+        using var answered = await SendAsync("/v1/chat/completions", Chat("ume/chat-standard"), FakeGatewayFactory.EuKey, ceiling: null, optional);
+        answered.StatusCode.ShouldBe(HttpStatusCode.OK);
+        answered.Headers.GetValues("x-ume-residency").ShouldBe(["Eu"]);
+
+        using var drained = await SendAsync("/v1/chat/completions", Chat("fake-drained"), FakeGatewayFactory.OnPremKey, ceiling: null, optional);
+        await AssertErrorAsync(drained, HttpStatusCode.ServiceUnavailable, "no_eligible_provider", "No available provider can handle the request for this alias within the key's restrictions.");
+        drained.Headers.RetryAfter.ShouldBeNull();
     }
 
     [Fact]
@@ -56,6 +111,7 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     [Fact]
     public async Task Models_are_listed_by_ceiling_with_their_residencies()
     {
+        // #390 Feature B point 8: only what the ceiling allows, an alias's residencies narrowed (ModelListEndpoint).
         var onPrem = await ModelsAsync(FakeGatewayFactory.OnPremKey, "OnPrem");
         onPrem.Keys.ShouldContain("bge-m3");
         onPrem.Keys.ShouldContain("ume/chat-onprem");
@@ -64,6 +120,11 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         onPrem.Keys.ShouldNotContain("ume/chat-advanced");
         onPrem.Keys.ShouldNotContain("fake-drained"); // its in-ceiling target is drained
 
+        var eu = await ModelsAsync(FakeGatewayFactory.EuKey, "Eu");
+        eu["ume/chat-standard"].ShouldBe(["OnPrem", "Eu"]);
+        eu["ume/chat-eu"].ShouldBe(["Eu"]);
+        eu.Keys.ShouldNotContain("ume/chat-advanced");
+
         var external = await ModelsAsync(FakeGatewayFactory.ExternalKey, "External");
         external["ume/chat-standard"].ShouldBe(["OnPrem", "Eu"]);
         external["ume/chat-advanced"].ShouldBe(["External"]);
@@ -71,14 +132,74 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     }
 
     [Fact]
+    public async Task The_model_list_has_the_gateways_shape()
+    {
+        using var response = await SendAsync("/v1/models", null, FakeGatewayFactory.EuKey, "Eu");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
+        var models = json.RootElement.GetProperty("data").EnumerateArray().ToDictionary(m => m.GetProperty("id").GetString()!, m => m.Clone());
+
+        var alias = models["ume/chat-standard"].GetProperty("ume");
+        alias.GetProperty("type").GetString().ShouldBe("alias");
+        alias.GetProperty("kind").GetString().ShouldBe("Chat");
+        var deployment = models["bge-m3"];
+        deployment.GetProperty("owned_by").GetString().ShouldBe("fake-onprem");
+        deployment.GetProperty("ume").GetProperty("type").GetString().ShouldBe("model");
+        deployment.GetProperty("ume").GetProperty("kind").GetString().ShouldBe("Embedding");
+        deployment.GetProperty("ume").GetProperty("residency").GetString().ShouldBe("OnPrem");
+    }
+
+    [Fact]
     public async Task No_target_within_the_ceiling_is_403_and_a_drained_one_is_503_with_retry_after()
     {
+        // #390 Feature B point 2, with the gateway's messages (GatewayError.MaxResidencyNotMet, NoProviderWithin).
         using var notMet = await ChatAsync("ume/chat-eu", "Hej");
-        await AssertErrorAsync(notMet, HttpStatusCode.Forbidden, "max_residency_not_met");
+        await AssertErrorAsync(notMet, HttpStatusCode.Forbidden, "max_residency_not_met",
+            "No provider for 'ume/chat-eu' is configured at or below the residency 'OnPrem' that the request allows.");
+        notMet.Headers.RetryAfter.ShouldBeNull();
 
         using var drained = await ChatAsync("fake-drained", "Hej");
-        await AssertErrorAsync(drained, HttpStatusCode.ServiceUnavailable, "no_eligible_provider");
+        await AssertErrorAsync(drained, HttpStatusCode.ServiceUnavailable, "no_eligible_provider",
+            "No provider for 'fake-drained' within the residency 'OnPrem' is available right now. Try again later.");
         drained.Headers.RetryAfter!.Delta.ShouldBe(TimeSpan.FromSeconds(30));
+    }
+
+    [Fact]
+    public async Task Failing_targets_within_the_ceiling_end_in_502_or_504_never_a_circuit_open_503()
+    {
+        // #390 Feature B point 1: the circuit-open 503 is gone; every target within the ceiling is tried, and when all
+        // fail the answer is all_providers_failed, 504 when the last one timed out, with no Retry-After.
+        using var failed = await ChatAsync("fake-fail-500", "Hej");
+        await AssertErrorAsync(failed, HttpStatusCode.BadGateway, "all_providers_failed", "All 1 attempt for 'fake-fail-500' failed. Last error: http_500.");
+        failed.Headers.RetryAfter.ShouldBeNull();
+
+        using var timedOut = await ChatAsync("fake-fail-timeout", "Hej");
+        await AssertErrorAsync(timedOut, HttpStatusCode.GatewayTimeout, "all_providers_failed", "All 1 attempt for 'fake-fail-timeout' failed. Last error: timeout.");
+
+        // Its OnPrem target fails: at OnPrem nothing else is within the ceiling, so 502; at Eu the gateway falls back to Eu.
+        using var onPrem = await ChatAsync("fake-fail-fallback", "Hej");
+        await AssertErrorAsync(onPrem, HttpStatusCode.BadGateway, "all_providers_failed");
+        onPrem.Headers.Contains("x-ume-residency").ShouldBeFalse();
+        using var eu = await ChatAsync("fake-fail-fallback", "Hej", FakeGatewayFactory.EuKey, "Eu");
+        eu.StatusCode.ShouldBe(HttpStatusCode.OK);
+        eu.Headers.GetValues("x-ume-residency").ShouldBe(["Eu"]);
+    }
+
+    [Fact]
+    public async Task Errors_have_the_gateways_body_and_a_request_id()
+    {
+        using var response = await ChatAsync("no-such-model", "Hej");
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        var requestId = response.Headers.GetValues("x-request-id").Single();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
+        var error = json.RootElement.GetProperty("error");
+        error.GetProperty("code").GetString().ShouldBe("model_not_found");
+        error.GetProperty("type").GetString().ShouldBe("not_found_error");
+        error.GetProperty("message").GetString().ShouldBe("The model 'no-such-model' does not exist. See GET /v1/models for the models you can use.");
+        error.GetProperty("request_id").GetString().ShouldBe(requestId);
+        error.GetProperty("param").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        using var wrongKind = await SendAsync("/v1/embeddings", """{"model":"ume/chat-onprem","input":"x"}""", FakeGatewayFactory.OnPremKey, "OnPrem");
+        await AssertErrorAsync(wrongKind, HttpStatusCode.BadRequest, "invalid_request", "The model 'ume/chat-onprem' cannot be used with this endpoint.");
     }
 
     [Fact]
@@ -165,16 +286,76 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
     }
 
     [Fact]
-    public async Task Rerank_scores_by_word_overlap()
+    public async Task Rerank_scores_strings_and_text_objects_in_the_cohere_shape()
     {
+        // gateway design §7.4, thekim1/llmgateway#68: { model, query, documents: (string | { text })[], top_n?,
+        // return_documents? } → results[] with index and relevance_score (document when asked) and usage.
+        using var rerank = Rerank();
         using var response = await SendAsync("/v1/rerank", """
-            {"model":"bge-reranker-v2-m3","query":"bygglov avgift","documents":["Matsedel","Avgift för bygglov","Bygglov"],"top_n":2}
-            """, FakeGatewayFactory.OnPremKey, "OnPrem");
+            {"model":"bge-reranker-v2-m3","query":"bygglov avgift","documents":["Matsedel",{"text":"Avgift för bygglov"},"Bygglov"],"top_n":2}
+            """, FakeGatewayFactory.EuKey, "Eu", rerank);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.GetValues("x-ume-residency").ShouldBe(["Eu"]);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         var results = json.RootElement.GetProperty("results");
         results.GetArrayLength().ShouldBe(2);
         results[0].GetProperty("index").GetInt32().ShouldBe(1);
         results[0].GetProperty("relevance_score").GetDouble().ShouldBe(1);
+        results[1].GetProperty("index").GetInt32().ShouldBe(2);
+        results[0].TryGetProperty("document", out _).ShouldBeFalse();
+        json.RootElement.GetProperty("usage").GetProperty("total_tokens").GetInt32().ShouldBeGreaterThan(0);
+        json.RootElement.GetProperty("usage").GetProperty("prompt_tokens").GetInt32().ShouldBe(json.RootElement.GetProperty("usage").GetProperty("total_tokens").GetInt32());
+
+        using var all = await SendAsync("/v1/rerank", """
+            {"model":"bge-reranker-v2-m3","query":"bygglov","documents":["Matsedel",{"text":"Bygglov"}],"return_documents":true}
+            """, FakeGatewayFactory.EuKey, "Eu", rerank);
+        using var allJson = JsonDocument.Parse(await all.Content.ReadAsStringAsync(Ct));
+        var allResults = allJson.RootElement.GetProperty("results");
+        allResults.GetArrayLength().ShouldBe(2); // no top_n: every document
+        allResults[0].GetProperty("document").GetProperty("text").GetString().ShouldBe("Bygglov");
+    }
+
+    [Fact]
+    public async Task Rerank_refuses_like_the_gateway()
+    {
+        using var rerank = Rerank();
+        using var noDocuments = await SendAsync("/v1/rerank", """{"model":"bge-reranker-v2-m3","query":"bygglov","documents":[]}""", FakeGatewayFactory.EuKey, "Eu", rerank);
+        await AssertErrorAsync(noDocuments, HttpStatusCode.BadRequest, "invalid_request");
+
+        using var chatModel = await SendAsync("/v1/rerank", """{"model":"ume/chat-eu","query":"a","documents":["a"]}""", FakeGatewayFactory.EuKey, "Eu", rerank);
+        await AssertErrorAsync(chatModel, HttpStatusCode.BadRequest, "invalid_request", "The model 'ume/chat-eu' cannot be used with this endpoint.");
+
+        using var onChat = await SendAsync("/v1/chat/completions", Chat("bge-reranker-v2-m3"), FakeGatewayFactory.EuKey, "Eu", rerank);
+        await AssertErrorAsync(onChat, HttpStatusCode.BadRequest, "invalid_request");
+
+        // The reranker is an EU provider (Berget AI): an OnPrem ceiling cannot reach it.
+        using var onPrem = await SendAsync("/v1/rerank", """{"model":"bge-reranker-v2-m3","query":"a","documents":["a"]}""", FakeGatewayFactory.OnPremKey, "OnPrem", rerank);
+        await AssertErrorAsync(onPrem, HttpStatusCode.Forbidden, "max_residency_not_met");
+
+        var models = await ModelsAsync(FakeGatewayFactory.EuKey, "Eu", rerank);
+        models["bge-reranker-v2-m3"].ShouldBe(["Eu"]);
+    }
+
+    [Fact]
+    public async Task By_default_no_rerank_model_is_configured_and_rerank_answers_404()
+    {
+        // Rerank is optional (user, 2026-11-06): the default fake is a gateway without a rerank provider, which answers
+        // 404 for the model (400 for a model of another kind), lists none and has none in its catalogue.
+        using var unknown = await SendAsync("/v1/rerank", """{"model":"bge-reranker-v2-m3","query":"a","documents":["a"]}""", FakeGatewayFactory.EuKey, "Eu");
+        await AssertErrorAsync(unknown, HttpStatusCode.NotFound, "model_not_found");
+
+        using var chatModel = await SendAsync("/v1/rerank", """{"model":"ume/chat-eu","query":"a","documents":["a"]}""", FakeGatewayFactory.EuKey, "Eu");
+        await AssertErrorAsync(chatModel, HttpStatusCode.BadRequest, "invalid_request");
+
+        (await ModelsAsync(FakeGatewayFactory.ExternalKey, "External")).Keys.ShouldNotContain("bge-reranker-v2-m3");
+
+        using var client = fake.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.DataApiKey);
+        (await client.GetStringAsync("/v1/catalog/models", Ct)).ShouldNotContain("Rerank");
+        using var enabled = Rerank();
+        using var enabledClient = enabled.CreateClient();
+        enabledClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", FakeGatewayFactory.DataApiKey);
+        (await enabledClient.GetStringAsync("/v1/catalog/models", Ct)).ShouldContain("\"kind\":\"Rerank\"");
     }
 
     [Fact]
@@ -192,9 +373,16 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         teams.RootElement.GetProperty("items").EnumerateArray().Select(t => t.GetProperty("code").GetString()).ShouldContain("digitalisering-ai");
     }
 
-    private async Task<HttpResponseMessage> SendAsync(string path, string? body, string? key, string? ceiling, string? onBehalfOf = null)
+    /// <summary>The fake with a rerank model (<c>FakeGateway:RerankEnabled</c>).</summary>
+    private WebApplicationFactory<fakegateway::Program> Rerank() =>
+        fake.WithWebHostBuilder(b => b.ConfigureAppConfiguration(c => c.AddInMemoryCollection([new("FakeGateway:RerankEnabled", "true")])));
+
+    private static string Chat(string model) => JsonSerializer.Serialize(new { model, messages = new[] { new { role = "user", content = "Hej" } } });
+
+    private async Task<HttpResponseMessage> SendAsync(string path, string? body, string? key, string? ceiling, WebApplicationFactory<fakegateway::Program>? factory = null,
+        string? onBehalfOf = null)
     {
-        using var client = fake.CreateClient();
+        using var client = (factory ?? fake).CreateClient();
         using var request = new HttpRequestMessage(body is null ? HttpMethod.Get : HttpMethod.Post, path);
         if (body is not null)
         {
@@ -244,14 +432,17 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
         return choices.GetArrayLength() > 0 && choices[0].GetProperty("delta").TryGetProperty("content", out var c) ? c.GetString() ?? "" : "-";
     }
 
-    private async Task<Dictionary<string, string[]>> ModelsAsync(string key, string ceiling)
+    /// <summary>The listed models and their residencies (an alias's <c>ume.residencies</c>, a deployment's <c>ume.residency</c>).</summary>
+    private async Task<Dictionary<string, string[]>> ModelsAsync(string key, string ceiling, WebApplicationFactory<fakegateway::Program>? factory = null)
     {
-        using var response = await SendAsync("/v1/models", null, key, ceiling);
+        using var response = await SendAsync("/v1/models", null, key, ceiling, factory);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         return json.RootElement.GetProperty("data").EnumerateArray().ToDictionary(
             m => m.GetProperty("id").GetString()!,
-            m => m.GetProperty("ume").GetProperty("residencies").EnumerateArray().Select(r => r.GetString()!).ToArray());
+            m => m.GetProperty("ume").TryGetProperty("residencies", out var list)
+                ? list.EnumerateArray().Select(r => r.GetString()!).ToArray()
+                : [m.GetProperty("ume").GetProperty("residency").GetString()!]);
     }
 
     private async Task<List<float[]>> EmbedAsync(string body)
@@ -264,10 +455,14 @@ public sealed class FakeGatewayTests(FakeGatewayFactory fake) : IClassFixture<Fa
 
     private static double Cosine(float[] a, float[] b) => a.Zip(b).Sum(p => (double)p.First * p.Second);
 
-    private static async Task AssertErrorAsync(HttpResponseMessage response, HttpStatusCode status, string code)
+    private static async Task AssertErrorAsync(HttpResponseMessage response, HttpStatusCode status, string code, string? message = null)
     {
         response.StatusCode.ShouldBe(status);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
         json.RootElement.GetProperty("error").GetProperty("code").GetString().ShouldBe(code);
+        if (message is not null)
+        {
+            json.RootElement.GetProperty("error").GetProperty("message").GetString().ShouldBe(message);
+        }
     }
 }

@@ -108,14 +108,17 @@ public static class InfrastructureExtensions
     /// A named gateway <see cref="HttpClient"/> (<c>gateway-chat</c>, <c>gateway-query</c>, …) with the
     /// <see cref="ResidencyCeilingHandler"/>: base address <c>Gateway:BaseUrl</c>, the per-level keys from
     /// <c>Gateway:Keys</c>, and no standard resilience handler (the gateway retries before its first byte; chat design
-    /// §8.3). Every gateway call of the services goes through a client registered here.
+    /// §8.3). Inside it the <see cref="GatewayRetryHandler"/> sends a <c>502</c>/<c>504</c> once more with the same ceiling
+    /// (#390), unless <paramref name="retryFailed"/> is false for a caller with its own retry (the query embedding,
+    /// knowledge §5.3). Every gateway call of the services goes through a client registered here.
     /// </summary>
-    public static IHttpClientBuilder AddGatewayClient(this IHostApplicationBuilder builder, string name)
+    public static IHttpClientBuilder AddGatewayClient(this IHostApplicationBuilder builder, string name, bool retryFailed = true)
     {
         ArgumentNullException.ThrowIfNull(builder);
         builder.Services.AddOptions<GatewayOptions>().BindConfiguration(GatewayOptions.SectionName);
         builder.Services.TryAddTransient<ResidencyCeilingHandler>();
-        return builder.Services.AddHttpClient(name, (sp, client) =>
+        builder.Services.TryAddTransient<GatewayRetryHandler>();
+        var client = builder.Services.AddHttpClient(name, (sp, client) =>
             {
                 if (sp.GetRequiredService<IOptions<GatewayOptions>>().Value.BaseUrl is { Length: > 0 } baseUrl)
                 {
@@ -124,6 +127,7 @@ public static class InfrastructureExtensions
             })
             .RemoveStandardResilienceHandler()
             .AddHttpMessageHandler<ResidencyCeilingHandler>();
+        return retryFailed ? client.AddHttpMessageHandler<GatewayRetryHandler>() : client;
     }
 
     /// <summary>

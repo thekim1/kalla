@@ -43,23 +43,42 @@ public static class FakeCatalog
         new(ProviderId(Residency.External), "fake-external", "Fake external", "OpenAI", Residency.External, true),
     ];
 
-    /// <summary>The deployments (gateway <c>/v1/catalog/models</c>): single-target chat and embedding models.</summary>
+    /// <summary>
+    /// The deployments (gateway <c>/v1/catalog/models</c>): single-target models, with the gateway's <c>ModelKind</c> name
+    /// (a rerank model only while <see cref="FakeGatewayOptions.RerankEnabled"/> is on, as the caller passes the served models).
+    /// </summary>
     public static IReadOnlyList<CatalogModel> Models(IEnumerable<FakeModel> models) =>
     [
-        .. Deployable(models).Select(m => new CatalogModel(ModelId(m.Name), m.Name, m.Name,
-            m.Kind == "embedding" ? "Embedding" : "Chat", ProviderId(m.Targets[0].Residency), true)),
+        .. Deployable(models).Select(m => new CatalogModel(ModelId(m.Name), m.Name, m.Name, KindName(m.Kind), ProviderId(m.Targets[0].Residency), true)),
     ];
 
-    /// <summary>One price per deployment (gateway <c>/v1/catalog/prices</c>): embeddings 0.02, chat 0.15 in and 0.60 out per million.</summary>
+    /// <summary>
+    /// One price per deployment (gateway <c>/v1/catalog/prices</c>), per million tokens: embeddings 0.02, chat 0.15 in and
+    /// 0.60 out, rerank 0.10 in (billed per input token, gateway design §7.4).
+    /// </summary>
     public static IReadOnlyList<CatalogPrice> Prices(IEnumerable<FakeModel> models) =>
     [
-        .. Deployable(models).Select(m => m.Kind == "embedding"
-            ? new CatalogPrice(ModelId(m.Name), Created, 0.02m, null, 0m)
-            : new CatalogPrice(ModelId(m.Name), Created, 0.15m, 0.075m, 0.60m)),
+        .. Deployable(models).Select(m => m.Kind switch
+        {
+            FakeModel.Embedding => new CatalogPrice(ModelId(m.Name), Created, 0.02m, null, 0m),
+            FakeModel.Rerank => new CatalogPrice(ModelId(m.Name), Created, 0.10m, null, 0m),
+            _ => new CatalogPrice(ModelId(m.Name), Created, 0.15m, 0.075m, 0.60m),
+        }),
     ];
 
+    /// <summary>The gateway's <c>ModelKind</c> name of a fake model kind (<c>Chat</c>, <c>Embedding</c>, <c>Rerank</c>).</summary>
+    public static string KindName(string kind) => kind switch
+    {
+        FakeModel.Embedding => "Embedding",
+        FakeModel.Rerank => "Rerank",
+        _ => "Chat",
+    };
+
+    /// <summary>The provider account of a residency (<see cref="Providers"/>), the <c>owned_by</c> of a deployment on <c>/v1/models</c>.</summary>
+    public static string ProviderName(Residency residency) => Providers.Single(p => p.Residency == residency).Name;
+
     private static IEnumerable<FakeModel> Deployable(IEnumerable<FakeModel> models) =>
-        models.Where(m => m.Targets.Count == 1 && m.Kind is "chat" or "embedding").OrderBy(m => m.Name, StringComparer.Ordinal);
+        models.Where(m => m.Targets.Count == 1 && m.Kind is FakeModel.Chat or FakeModel.Embedding or FakeModel.Rerank).OrderBy(m => m.Name, StringComparer.Ordinal);
 
     private static Guid ProviderId(Residency residency) => new($"019a0000-0000-7000-8000-0000000090{(int)residency:D2}");
 
