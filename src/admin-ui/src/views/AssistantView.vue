@@ -24,7 +24,7 @@ import { useUiStore } from '@/stores/ui'
 import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
 import { formatDateTime } from '@/utils/format'
-import { ASSISTANT, LEVEL_LABEL } from '@/utils/labels'
+import { ASSISTANT, COMMON, LEVEL_LABEL } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
 
@@ -296,8 +296,8 @@ onMounted(load)
           v-if="assistant.data.value.generalKnowledge && assistant.data.value.generalKnowledge !== 'off'" :label="ASSISTANT.generalKnowledgeBadge"
           data-test="general-knowledge-badge"
         />
-        <UiButton v-for="c in portals" :key="c.id" :href="c.portalUrl!" target="_blank" rel="noopener" icon="login" data-test="portal">
-          {{ ASSISTANT.openIn(c.name) }}
+        <UiButton v-for="c in portals" :key="c.id" :href="c.portalUrl!" target="_blank" rel="noopener noreferrer" icon="open_in_new" data-test="portal">
+          {{ ASSISTANT.openIn(c.name) }} <span class="sr-only">{{ COMMON.opensInNewTab }}</span>
         </UiButton>
         <template v-if="canEdit">
           <UiButton v-if="archived" :loading="busy === 'unarchive'" data-test="unarchive" @click="unarchive">{{ ASSISTANT.unarchive }}</UiButton>

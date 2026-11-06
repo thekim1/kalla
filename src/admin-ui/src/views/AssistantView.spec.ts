@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
-import type { Assistant, AssistantDraft } from '@/api/types'
+import type { Assistant, AssistantDraft, ClientSummary } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collectionSummary } from '@/test/fixtures'
 import { button } from '@/test/helpers'
@@ -173,22 +173,53 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     }))
   })
 
-  it('links to the audience client\'s own UI once the assistant is published', async () => {
-    signIn(['rag-viewer'])
-    mocks()
-    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, publishedVersion: 2, audienceClientIds: ['k1'] })
-    vi.spyOn(api.clients, 'list').mockResolvedValue([
+  describe('"Open in <client>" (§5.4 step 13, #363 point 2)', () => {
+    const portalClients: ClientSummary[] = [
       { id: 'k1', name: 'Open WebUI (pilot)', kind: 'open-webui', classificationCeiling: 'internal', isEnabled: true, portalUrl: 'https://chat.example.invalid' },
       { id: 'k2', name: 'Webb', kind: 'integration', classificationCeiling: 'public', isEnabled: true, portalUrl: 'https://webb.example.invalid' },
-    ])
+      { id: 'k3', name: 'Integration utan UI', kind: 'integration', classificationCeiling: 'public', isEnabled: true, portalUrl: null },
+    ]
 
-    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
-    await flushPromises()
+    async function mountWith(overrides: Partial<Assistant>) {
+      signIn(['rag-viewer'])
+      mocks()
+      vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, ...overrides })
+      vi.spyOn(api.clients, 'list').mockResolvedValue(portalClients)
+      const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+      await flushPromises()
+      return wrapper
+    }
 
-    const links = wrapper.findAll('[data-test=portal]')
-    expect(links).toHaveLength(1)
-    expect(links[0]!.text()).toContain('Open in Open WebUI (pilot)')
-    expect(links[0]!.attributes('href')).toBe('https://chat.example.invalid')
+    it('links a published assistant to each audience client\'s own UI, in a new tab that the link names', async () => {
+      const wrapper = await mountWith({ publishedVersion: 2, audienceClientIds: ['k1', 'k3'] })
+
+      const links = wrapper.findAll('[data-test=portal]')
+      expect(links).toHaveLength(1) // k2 is not in the audience, k3 has no PortalUrl
+      const link = links[0]!
+      expect(link.element.tagName).toBe('A')
+      expect(link.attributes('href')).toBe('https://chat.example.invalid')
+      expect(link.attributes('target')).toBe('_blank')
+      expect(link.attributes('rel')).toContain('noopener')
+      // The accessible name says where it goes and that it opens a new tab; the icon is decorative.
+      expect(link.get('[aria-hidden=true]').text()).toBe('open_in_new')
+      expect(link.text().replace('open_in_new', '').replace(/\s+/g, ' ').trim()).toBe('Open in Open WebUI (pilot) (opens in a new tab)')
+      expect(link.get('.sr-only').text()).toBe('(opens in a new tab)')
+    })
+
+    it('shows no link while the assistant has only a draft', async () => {
+      const wrapper = await mountWith({ publishedVersion: null, audienceClientIds: ['k1'] })
+      expect(wrapper.find('[data-test=portal]').exists()).toBe(false)
+    })
+
+    it('shows no link when the audience client has no PortalUrl', async () => {
+      const wrapper = await mountWith({ publishedVersion: 2, audienceClientIds: ['k3'] })
+      expect(wrapper.find('[data-test=portal]').exists()).toBe(false)
+    })
+
+    it('shows no link once the assistant is archived', async () => {
+      const wrapper = await mountWith({ publishedVersion: 2, state: 'archived', audienceClientIds: ['k1'] })
+      expect(wrapper.find('[data-test=portal]').exists()).toBe(false)
+    })
   })
 
   it('with no draft, shows the published version\'s settings and saves them as the new draft', async () => {

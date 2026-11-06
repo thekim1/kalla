@@ -153,7 +153,14 @@ for (const mode of ['mouse', 'keyboard'] as const) {
     await act.press(page.getByRole('button', { name: 'Save audience' }))
     await expect(page.getByText('The audience has been saved.')).toBeVisible()
 
-    // 13 Open WebUI lists it: rag-api offers the assistant's model name to the client's key.
+    // 13 Open it in Open WebUI: the assistant page links to the client's PortalUrl (the dev client's is the stack's Open
+    // WebUI) in a new tab, and rag-api offers the assistant's model name to the client's key.
+    const portal = page.getByRole('link', { name: 'Open in Open WebUI (dev) (opens in a new tab)' })
+    const portalUrl = new URL((await portal.getAttribute('href'))!)
+    const [openWebUi] = await Promise.all([page.context().waitForEvent('page'), act.press(portal)])
+    await expect(openWebUi).toHaveURL(url => url.origin === portalUrl.origin)
+    await expect(openWebUi).toHaveTitle(/Open WebUI/, { timeout: 30_000 })
+    await openWebUi.close()
     const slug = (await page.getByText(/^Model name in Open WebUI: /).textContent())!.replace('Model name in Open WebUI: ', '').trim()
     await eventually(async () => (await listedModels(page.request, devClientKey())).includes(slug), 'rag-api lists the assistant', 60_000)
 

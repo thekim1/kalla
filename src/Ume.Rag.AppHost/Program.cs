@@ -480,6 +480,12 @@ if (builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue("OpenWe
         .WithEnvironment("ENABLE_LOGIN_FORM", "true")
         .WaitFor(api);
 
+    // The seeded dev client links the assistant page to this Open WebUI (its PortalUrl, admin design §5.4 step 13).
+    if (openWebUiClientId is not { Length: > 0 })
+    {
+        migrations.WithEnvironment("Seed__DevClientPortalUrl", openWebUi.GetEndpoint("http"));
+    }
+
     // The feedback importer and pruning (chat design §13.3, §14.2) run when the user secret Parameters:openwebui-admin-api-key
     // holds the API key of Open WebUI's admin (the first local account, minted in Settings › Account).
     if (builder.Configuration["Parameters:openwebui-admin-api-key"] is { Length: > 0 })

@@ -348,16 +348,17 @@ public sealed class IngestionSchemaTests(RagDatabaseFixture database)
         await using var db = TestPostgres.Context(database.Connection(Migrator));
         var hasher = new Domain.Services.KeyHasher(System.Text.Encoding.UTF8.GetBytes(new string('p', 32)));
         var devKey = new string('D', 43);
-        await DevSeeder.SeedDevClientAsync(db, hasher, devKey, TimeProvider.System, Ct);
-        await DevSeeder.SeedDevClientAsync(db, hasher, devKey, TimeProvider.System, Ct);
+        await DevSeeder.SeedDevClientAsync(db, hasher, devKey, "http://localhost:7410", TimeProvider.System, Ct);
+        await DevSeeder.SeedDevClientAsync(db, hasher, devKey, "http://elsewhere.invalid", TimeProvider.System, Ct); // insert-if-absent
 
         var client = await db.Clients.AsNoTracking().Include(c => c.Keys).SingleAsync(c => c.Id == DevSeeder.DevClientId, Ct);
         (client.Name, client.Kind, client.ClassificationCeiling, client.StoresHistory).ShouldBe(
             (DevSeeder.DevClientName, ClientKinds.OpenWebUi, Classification.Internal, false));
+        client.PortalUrl.ShouldBe("http://localhost:7410"); // the assistant page's "Open in" link (admin design §5.4 step 13)
         var key = client.Keys.ShouldHaveSingleItem();
         hasher.Verify(Domain.Services.KeyHasher.SecretPrefix + devKey, key.KeyHash).ShouldBeTrue();
         key.Prefix.ShouldBe("ume-rag-sk-DDDD");
-        await Should.ThrowAsync<InvalidOperationException>(() => DevSeeder.SeedDevClientAsync(db, hasher, "too-short", TimeProvider.System, Ct));
+        await Should.ThrowAsync<InvalidOperationException>(() => DevSeeder.SeedDevClientAsync(db, hasher, "too-short", null, TimeProvider.System, Ct));
     }
 
     [Fact]
