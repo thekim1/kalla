@@ -842,6 +842,53 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         ceilings.ShouldBe(["Eu", "Eu"]);
     }
 
+    [Theory]
+    [InlineData(false, 2)] // 503 without Retry-After: one retry (knowledge §5.3, the query embedding only)
+    [InlineData(true, 1)] // 503 with Retry-After: degrade at once
+    public async Task A_503_is_retried_once_only_without_retry_after(bool retryAfter, int calls)
+    {
+        var scripted = new Scripted(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            if (retryAfter)
+            {
+                response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(5));
+            }
+
+            return response;
+        });
+        var (embedder, host) = Build(scripted);
+        using var _ = host;
+        using var __ = embedder;
+
+        await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() => embedder.EmbedAsync(Profile, "bygglov 503 " + retryAfter, null, Ct));
+
+        scripted.Calls.ShouldBe(calls);
+    }
+
+    [Fact]
+    public async Task A_connection_failure_then_a_502_is_one_retry_in_all()
+    {
+        // #410 item 4: the embedder's one retry covers every reason together, and gateway-query has no GatewayRetryHandler
+        // of its own, so no 502 is sent a third time.
+        var scripted = new Scripted(call => call == 1 ? throw new HttpRequestException("refused") : new HttpResponseMessage(HttpStatusCode.BadGateway));
+        var (embedder, host) = Build(scripted);
+        using var _ = host;
+        using var __ = embedder;
+
+        await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() => embedder.EmbedAsync(Profile, "bygglov anslutning", null, Ct));
+
+        scripted.Calls.ShouldBe(2);
+    }
+
+    private sealed class Scripted(Func<int, HttpResponseMessage> answer) : HttpMessageHandler
+    {
+        public int Calls;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(answer(Interlocked.Increment(ref Calls)));
+    }
+
     private sealed class Recording(HttpMessageHandler inner, List<string> ceilings) : DelegatingHandler(inner)
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

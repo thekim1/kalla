@@ -10,10 +10,18 @@ namespace Ume.Rag.Infrastructure.Gateway;
 /// <c>x-ume-max-residency</c>, never a wider one. Nothing else is retried here: <c>403 max_residency_not_met</c> can never
 /// work, a <c>503</c> with <c>Retry-After</c> asks the caller to wait, and a stream that has started is never re-sent (the
 /// gateway answers 502/504 before its first byte). It sits inside <see cref="ResidencyCeilingHandler"/>, which has checked
-/// the ceiling and the key before the first attempt and checks the final answer's residency.
+/// the ceiling and the key before the first attempt and checks the final answer's residency. The query embedding leaves
+/// this handler out and runs its own loop (knowledge §5.3: per-attempt timeout, 50 ms pause, one retry in all, also for
+/// a connection failure and a 503 without <c>Retry-After</c>), deciding on statuses with <see cref="Retries"/>.
 /// </summary>
 public sealed class GatewayRetryHandler(IOptionsMonitor<GatewayOptions> options) : DelegatingHandler
 {
+    /// <summary>
+    /// The one gateway answer every gateway client sends again (#390): <c>502</c>/<c>504 all_providers_failed</c>, with the
+    /// same ceiling. Never <c>403</c>, <c>404</c> or a <c>503</c> with <c>Retry-After</c>.
+    /// </summary>
+    public static bool Retries(HttpStatusCode status) => status is HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout;
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -24,7 +32,7 @@ public sealed class GatewayRetryHandler(IOptionsMonitor<GatewayOptions> options)
         }
 
         var response = await base.SendAsync(request, cancellationToken);
-        if (response.StatusCode is not (HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout))
+        if (!Retries(response.StatusCode))
         {
             return response;
         }

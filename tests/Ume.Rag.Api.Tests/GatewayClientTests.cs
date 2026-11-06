@@ -191,6 +191,17 @@ public sealed class GatewayClientTests(FakeGatewayFactory fake) : IClassFixture<
         recording.Calls.Count.ShouldBe(1);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.BadGateway, true)]
+    [InlineData(HttpStatusCode.GatewayTimeout, true)]
+    [InlineData(HttpStatusCode.Forbidden, false)]
+    [InlineData(HttpStatusCode.NotFound, false)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, false)]
+    [InlineData(HttpStatusCode.TooManyRequests, false)]
+    [InlineData(HttpStatusCode.InternalServerError, false)]
+    public void The_shared_retry_decision_is_502_and_504_only(HttpStatusCode status, bool retried) =>
+        GatewayRetryHandler.Retries(status).ShouldBe(retried);
+
     [Fact]
     public async Task A_client_with_its_own_retry_can_leave_the_handler_out()
     {

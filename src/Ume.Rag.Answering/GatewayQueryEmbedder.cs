@@ -170,8 +170,9 @@ public sealed partial class GatewayQueryEmbedder : IDisposable
                     LogRefused(_logger, profile.Name, (int)response.StatusCode); // max_residency_not_met: a configuration fault
                 }
 
-                // 502/504: every target within the ceiling failed; the retry is the same profile, so the same ceiling.
-                retryable = response.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout
+                // 502/504: every target within the ceiling failed, retried as every gateway client does (the same profile, so the
+                // same ceiling); §5.3 adds a 503 without Retry-After for the query embedding only.
+                retryable = GatewayRetryHandler.Retries(response.StatusCode)
                     || (response.StatusCode == HttpStatusCode.ServiceUnavailable && response.Headers.RetryAfter is null);
                 if (!retryable || attempt == 2)
                 {
