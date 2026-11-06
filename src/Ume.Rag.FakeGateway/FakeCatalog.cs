@@ -93,7 +93,8 @@ public sealed record CatalogTeam(Guid Id, Guid DepartmentId, string Name, bool I
 
 public sealed record CatalogProvider(Guid Id, string Name, string DisplayName, string Type, Residency Residency, bool IsEnabled);
 
-public sealed record CatalogModel(Guid Id, string Name, string UpstreamModel, string Kind, Guid ProviderId, bool IsEnabled);
+/// <summary>A deployment as the gateway's Data API lists it; <see cref="Residency"/> is its own residency (v0.9.1), <c>null</c> for the provider's.</summary>
+public sealed record CatalogModel(Guid Id, string Name, string UpstreamModel, string Kind, Guid ProviderId, bool IsEnabled, Residency? Residency = null);
 
 public sealed record CatalogPrice(Guid ModelId, DateTimeOffset EffectiveFrom, decimal InputPerMillionUsd, decimal? CachedInputPerMillionUsd,
     decimal OutputPerMillionUsd);
