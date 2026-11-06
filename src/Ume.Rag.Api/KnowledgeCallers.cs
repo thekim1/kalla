@@ -88,7 +88,7 @@ public sealed class KnowledgeCallers(KeyStore keys, IPolicySnapshotSource snapsh
             : client.Kind == ClientKinds.Internal ? CredentialKind.ServiceKey
             : CredentialKind.SecretKey;
         var who = new RagPrincipal(SubjectKind.Application, key.Id.ToString("D"), null, null, client, credential,
-            new KeyEntry(key.Id, key.ClientId, key.Kind, key.TeamId, key.Scopes.AssistantIds, key.Scopes.CollectionIds),
+            new KeyEntry(key.Id, key.ClientId, key.Kind, key.TeamId, key.Scopes.AssistantIds, key.Scopes.CollectionIds, key.RequestsPerMinute),
             new HashSet<string>(), MembershipFacts.None, snapshot.Version);
         http.Items[PrincipalItem] = who;
         return who;

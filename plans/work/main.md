@@ -30,7 +30,7 @@ Stream B, which owns these paths, is inactive, so M-5 to M-8 are built on `main-
 ownership check restricts only `a/*` and `b/*` branches), by the main session or a stream A agent, one PR each,
 reviewed and merged by the main session. Case plan: [`../cases/support-assistant/06-gaps.md`](../cases/support-assistant/06-gaps.md).
 
-### [ ] M-5 Chat rate limit per key (SA-6, #424)
+### [x] M-5 Chat rate limit per key (SA-6, #424)
 - **Do:** when the key itself is the subject (`SubjectKind.Application`), `ChatRateLimiter` uses the key's
   `Keys.RequestsPerMinute`, else `Settings.Chat.messagesPerMinutePerUser`; Open WebUI users keep the per-user value.
   Carry the value on the principal's `KeyEntry` (set in `KnowledgeCallers`). Add the admin key form's hint

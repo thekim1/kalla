@@ -73,7 +73,7 @@ public static class ExplainAccessEndpoints
                     : client.Kind == ClientKinds.Internal ? CredentialKind.ServiceKey
                     : CredentialKind.SecretKey;
                 return new RagPrincipal(SubjectKind.Application, key.Id.ToString("D"), null, null, client, credential,
-                    new KeyEntry(key.Id, key.ClientId, key.Kind, key.TeamId, key.Scopes.AssistantIds, key.Scopes.CollectionIds),
+                    new KeyEntry(key.Id, key.ClientId, key.Kind, key.TeamId, key.Scopes.AssistantIds, key.Scopes.CollectionIds, key.RequestsPerMinute),
                     new HashSet<string>(), MembershipFacts.None, version);
             case ExplainSubjectKinds.OpenWebUiUser:
                 // An Open WebUI user arrives on the client's connection key (chat design §4.3): the client's normal credential.

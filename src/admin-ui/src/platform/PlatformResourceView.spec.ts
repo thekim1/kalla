@@ -74,6 +74,21 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
     wrapper.unmount()
   })
 
+  it('shows the per-key chat limit hint under a key\'s requests per minute (chat design §4.1 step 4)', async () => {
+    setActivePinia(createPinia())
+    const keys = [{ id: 'k1', name: 'Support app', prefix: 'rag_ab', status: 'active', assistantIds: [], collectionIds: [], requestsPerMinute: 60 }]
+    const schema = { properties: { name: { type: 'string' }, requestsPerMinute: { type: ['null', 'integer'], format: 'int32', maximum: 100000, minimum: 1 } } }
+    const doc = { paths: { '/api/keys/{id}': { put: { requestBody: { content: { 'application/json': { schema } } } } } } }
+    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(json(url === '/openapi/v1.json' ? doc : keys))))
+    const wrapper = mount(PlatformResourceView, { props: { resource: 'keys' }, attachTo: document.body })
+    await flushPromises()
+    await wrapper.get('tbody tr').trigger('click')
+    await flushPromises()
+    expect((wrapper.get('#platform-keys-requestsPerMinute').element as HTMLInputElement).value).toBe('60')
+    expect(wrapper.text()).toContain(PLATFORM.fieldHints.requestsPerMinute)
+    wrapper.unmount()
+  })
+
   it('is found in search by English words', () => {
     const entries = searchEntries(navGroups)
     for (const query of ['member groups', 'sharing', 'municipality']) {

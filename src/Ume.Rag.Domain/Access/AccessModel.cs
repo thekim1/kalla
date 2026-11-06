@@ -22,8 +22,12 @@ public sealed record ResourceRef(ResourceKind Kind, Guid Id)
 /// <summary>A client of the registry (<c>config."Clients"</c>, identity design §4.1) as the snapshot holds it.</summary>
 public sealed record ClientEntry(Guid Id, string Name, string Kind, string Ceiling, bool StoresHistory, bool IsEnabled);
 
-/// <summary>The key a principal authenticated with: id, client, kind (<c>sk</c>/<c>pk</c>), team and scopes.</summary>
-public sealed record KeyEntry(Guid Id, Guid ClientId, string Kind, Guid? TeamId, IReadOnlyList<Guid> AssistantScopes, IReadOnlyList<Guid> CollectionScopes);
+/// <summary>
+/// The key a principal authenticated with: id, client, kind (<c>sk</c>/<c>pk</c>), team, scopes and
+/// <c>Keys.RequestsPerMinute</c> (the chat message limit when the key itself is the subject; chat design §4.1 step 4).
+/// </summary>
+public sealed record KeyEntry(Guid Id, Guid ClientId, string Kind, Guid? TeamId, IReadOnlyList<Guid> AssistantScopes, IReadOnlyList<Guid> CollectionScopes,
+    int? RequestsPerMinute);
 
 /// <summary>Departments and groups from the token's claims; <see cref="Known"/> is false for an overage token (identity §4.2).</summary>
 public sealed record MembershipFacts(IReadOnlySet<Guid> Departments, IReadOnlySet<string> Groups, bool Known)

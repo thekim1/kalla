@@ -169,19 +169,23 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
 }
 
 /// <summary>
-/// The per-user message limit (chat design §4.1 step 4): <c>Chat:MessagesPerMinutePerUser</c> (20) per client and subject
-/// and minute, in process (P1 runs one slot; Redis from P2). Over the limit: 429 <c>rate_limited</c> with <c>Retry-After</c>.
+/// The message limit (chat design §4.1 step 4) per client and subject and minute, in process (P1 runs one slot; Redis from
+/// P2): the per-user value (<c>Chat:MessagesPerMinutePerUser</c>, 20), or the key's own <c>Keys.RequestsPerMinute</c> when
+/// the key itself is the subject (Decisions "Chat rate limit per key"). Over the limit: 429 <c>rate_limited</c> with
+/// <c>Retry-After</c>.
 /// </summary>
 public sealed class ChatRateLimiter(IOptions<ChatOptions> options, TimeProvider time)
 {
     private const int MaxTracked = 100_000;
     private readonly ConcurrentDictionary<string, Window> _windows = new(StringComparer.Ordinal);
 
-    /// <summary><paramref name="limit"/>: <c>Settings.Chat.messagesPerMinutePerUser</c>, else <c>Chat:MessagesPerMinutePerUser</c>.</summary>
-    public void Check(RagPrincipal who, int? limit = null)
+    /// <summary>
+    /// <paramref name="perUser"/>: <c>Settings.Chat.messagesPerMinutePerUser</c>, else <c>Chat:MessagesPerMinutePerUser</c>.
+    /// </summary>
+    public void Check(RagPrincipal who, int? perUser = null)
     {
         ArgumentNullException.ThrowIfNull(who);
-        limit ??= options.Value.MessagesPerMinutePerUser;
+        var limit = LimitFor(who, perUser ?? options.Value.MessagesPerMinutePerUser);
         if (limit <= 0)
         {
             return;
@@ -208,6 +212,16 @@ public sealed class ChatRateLimiter(IOptions<ChatOptions> options, TimeProvider 
                 throw new ChatException(429, "rate_limited", "Too many messages. Wait a moment and try again.") { RetryAfterSeconds = Math.Max(1, retry) };
             }
         }
+    }
+
+    /// <summary>
+    /// The key's <c>RequestsPerMinute</c> when the key itself is the subject (<see cref="SubjectKind.Application"/>), else
+    /// <paramref name="perUser"/>. A user subject (Open WebUI JWT, token) never gets its connection key's value.
+    /// </summary>
+    public static int LimitFor(RagPrincipal who, int perUser)
+    {
+        ArgumentNullException.ThrowIfNull(who);
+        return who.Kind == SubjectKind.Application && who.Key?.RequestsPerMinute is { } own ? own : perUser;
     }
 
     private sealed class Window
