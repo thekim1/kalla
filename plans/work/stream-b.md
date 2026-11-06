@@ -28,7 +28,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** admin §5.5.2, §5.5.6.
 
-### [ ] B-3 Close the open records of items 3, 9, 10 and 12
+### [x] B-3 Close the open records of items 3, 9, 10 and 12 (#393)
 - **Do:** record what is left of #23 (config lock wait, `rag.admin.config_lock.wait`), #20 (the writer's batch),
   #146 (generic forms for platform objects, data protection `none` only); confirm knowledge §16.1 tests and
   "evaluator order == `/v1/retrieve` order" (the evaluation smoke checks it).
