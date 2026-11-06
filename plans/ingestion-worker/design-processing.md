@@ -440,7 +440,8 @@ count; distinct names are counted after NFC, case folding and joining hyphenated
 ```
 
 `emailExternal` = addresses outside `Settings.PiiOwnDomains` (§9.5). `rules` = the number of flag rules that fired;
-the list of fired types is not stored (it goes only into event 5103, §9.5). `ner` is `done`, `skipped` (not needed,
+`typesFired` = the fired flag types' names (type names only, never values; Decisions "M-2 open design calls", B-8),
+also sent in event 5103 (§9.5). `ner` is `done`, `skipped` (not needed,
 §9.3) or `pending` (§9.6). Spans live only in memory during the stage and in preview blobs (24 h), where the document
 page can show highlights to an editor deciding on a clearance.
 
@@ -470,7 +471,7 @@ example page's contact block (3 contact values) is below the name-check threshol
   `applies: false` with no documents) and lists, numbers only, first the documents whose newest flagged set is `held`
   (with whether an older version is still live), then those whose live set is flagged, ≤ 500 in all (`truncated`
   beyond). Per document: title, URL or display name, state, the **non-zero counts per type** and the **number of fired
-  rules** from `ChunkSets.PiiCounts` (`rules`; the names of the fired rules are not stored, §9.4), `LiveAt`, and the
+  rules** with the **fired types** from `ChunkSets.PiiCounts` (`rules`, `typesFired`, §9.4), `LiveAt`, and the
   time and run of the last `pii.flagged` run item.
 - **Own domains**: `Settings.PiiOwnDomains` is seeded with `SettingsSeed:PiiOwnDomains` (default `["umea.se"]`) when no
   `Settings` row exists; an existing row is never changed. The pilot's list is `umea.se`, `vakin.se`, `umeaenergi.se`,
