@@ -39,7 +39,7 @@ gateway's conventions for names, config keys, claims, key format and security ev
   sound option and list it under "Design deviations" in the PR. The main session settles it in the design.
 - **Tests.** Run locally the test projects your change touches, and say which in the PR. CI runs the full backend
   suite; the image tests and the evaluation smoke run when their paths change or before a release, and the browser
-  tests (`e2e.yml`) only before a release or by hand (repo-and-deployment §8.2). Don't dispatch workflows by hand
+  tests (`e2e.yml`) only by hand or before a release when asked (repo-and-deployment §8.2). Don't dispatch workflows by hand
   unless an item's done-when asks for it; an item whose done-when needs the browser tests is ticked on a green run.
 - **Results.** Record each check from `plans/to-verify.md` in your stream's results file (`plans/work/results-a.md` or
   `plans/work/results-b.md`): row number, result, evidence (command, output, link).

@@ -5,8 +5,9 @@ runner for every pull request"). This page lists what that machine needs on a fr
 install .NET (`actions/setup-dotnet`), Node (`actions/setup-node`), the Aspire CLI, PowerShell (as a .NET tool) and the
 Playwright browser themselves, so they are not installed by hand.
 
-The browser tests (`e2e.yml`) run from `release.yml` or by hand from the Actions tab (Decisions "E2E only on release or
-by hand").
+The browser tests (`e2e.yml`) run by hand from the Actions tab, or from `release.yml` when asked: set the repository
+variable `RELEASE_E2E` to `true` for tag releases, or tick `e2e` on a dry run (Decisions "E2E only on release or by hand",
+"E2E optional on release").
 
 ## Packages (once, with sudo)
 
