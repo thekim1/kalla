@@ -114,7 +114,10 @@
       "phone": 0,
       "name": 0,
       "ner": "skipped",
-      "rules": 1
+      "rules": 1,
+      "typesFired": [
+        "emailExternal"
+      ]
     },
     "typesFired": [
       "emailExternal"

@@ -221,14 +221,14 @@ public sealed record DocumentSummary(
     Guid Id, Guid SourceId, string? Title, string? Url, string? DisplayName, string? MediaType, string? ParseOutcome, bool PiiFlagged, bool PiiCleared,
     bool Held, bool Live, DateTimeOffset? SourceModifiedAt, DateTimeOffset? FetchedAt, DateTimeOffset LastSeenAt);
 
-/// <summary>A chunk set's PII state: flagged, counts per type and fired rules (numbers only, never values).</summary>
-public sealed record PiiState(bool Flagged, DateTimeOffset? FlaggedAt, IReadOnlyDictionary<string, int> Counts, int RulesFired)
+/// <summary>A chunk set's PII state: flagged, counts per type, fired rules and the fired types (numbers and type names only, never values).</summary>
+public sealed record PiiState(bool Flagged, DateTimeOffset? FlaggedAt, IReadOnlyDictionary<string, int> Counts, int RulesFired, IReadOnlyList<string> TypesFired)
 {
     public static PiiState Of(ChunkSet set)
     {
         ArgumentNullException.ThrowIfNull(set);
-        var counts = PiiReportEndpoints.Counts(set.PiiCounts, out var rules);
-        return new PiiState(set.PiiFlagged, set.PiiFlaggedAt, counts, rules);
+        var counts = PiiReportEndpoints.Counts(set.PiiCounts, out var rules, out var fired);
+        return new PiiState(set.PiiFlagged, set.PiiFlaggedAt, counts, rules, fired);
     }
 }
 

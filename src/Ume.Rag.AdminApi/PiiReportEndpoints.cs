@@ -75,7 +75,7 @@ public static class PiiReportEndpoints
                 }
 
                 return new PiiReport(true, modeName, level, [.. shown.Select(r => new PiiReportDocument(
-                    r.Id, r.Title, r.Url, r.DisplayName, r.State, r.PreviousVersionLive, Counts(r.PiiCounts, out var rules), rules, r.LiveAt,
+                    r.Id, r.Title, r.Url, r.DisplayName, r.State, r.PreviousVersionLive, Counts(r.PiiCounts, out var rules, out var fired), rules, fired, r.LiveAt,
                     flagged.TryGetValue(r.Id, out var at) ? at : null, lastRuns.TryGetValue(r.Id, out var run) ? run : null))], rows.Count > MaxDocuments);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Sources").WithName("GetPiiReport")
@@ -87,10 +87,15 @@ public static class PiiReportEndpoints
     private sealed record Row(Guid Id, string? Title, string? Url, string? DisplayName, string? PiiCounts, DateTimeOffset? LiveAt, string State,
         bool PreviousVersionLive);
 
-    /// <summary>The non-zero counts per type (<see cref="PiiTypes"/>) and how many flag rules fired; numbers only.</summary>
-    public static IReadOnlyDictionary<string, int> Counts(string? json, out int rules)
+    /// <summary>
+    /// The non-zero counts per type (<see cref="PiiTypes"/>), how many flag rules fired and which types fired, as the worker
+    /// stored them (<see cref="PiiCounts.TypesFired"/>, #217); numbers and type names only, never values. A stored name that
+    /// is not a <see cref="PiiTypes"/> type is dropped.
+    /// </summary>
+    public static IReadOnlyDictionary<string, int> Counts(string? json, out int rules, out IReadOnlyList<string> typesFired)
     {
         rules = 0;
+        typesFired = [];
         if (string.IsNullOrWhiteSpace(json))
         {
             return new Dictionary<string, int>();
@@ -99,6 +104,7 @@ public static class PiiReportEndpoints
         using var document = JsonDocument.Parse(json);
         var counts = ContractJson.Deserialize<PiiCounts>(document.RootElement);
         rules = counts.Rules;
+        typesFired = [.. PiiTypes.All.Where(t => counts.TypesFired.Contains(t, StringComparer.Ordinal))];
         return PiiTypes.All.Where(t => counts.Count(t) > 0).ToDictionary(t => t, counts.Count, StringComparer.Ordinal);
     }
 }
@@ -109,7 +115,7 @@ public sealed record PiiReport(bool Applies, string PiiMode, string CollectionCl
 /// <summary>
 /// One flagged document: <see cref="State"/> <c>held</c> (the new version is not served until fixed or cleared; with
 /// <see cref="PreviousVersionLive"/> the older version still is) or <c>live</c> (served with its contact details); counts
-/// per type and fired rules (never values), and the last <c>pii.flagged</c> run item.
+/// per type, the number of fired rules and the fired types (never values), and the last <c>pii.flagged</c> run item.
 /// </summary>
 public sealed record PiiReportDocument(
     Guid DocumentId,
@@ -120,6 +126,7 @@ public sealed record PiiReportDocument(
     bool PreviousVersionLive,
     IReadOnlyDictionary<string, int> Counts,
     int RulesFired,
+    IReadOnlyList<string> TypesFired,
     DateTimeOffset? LiveAt,
     DateTimeOffset? LastFlaggedAt,
     Guid? LastFlaggedRunId);

@@ -612,7 +612,8 @@
       "phone": 0,
       "name": 0,
       "ner": "skipped",
-      "rules": 0
+      "rules": 0,
+      "typesFired": []
     },
     "typesFired": [],
     "nerUnits": 0

@@ -73,7 +73,7 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
             EmbeddingProfileId = profile.Id, ContentHash = RandomNumberGenerator.GetBytes(32), InputHash = RandomNumberGenerator.GetBytes(32),
             State = ChunkSetStates.Live, PiiFlagged = piiFlagged, PiiCounts = counts, ChunkCount = 2, CreatedAt = DateTimeOffset.UtcNow, LiveAt = DateTimeOffset.UtcNow,
         };
-        var flaggedSet = NewSet(flagged, true, """{"email":2,"phone":1,"rules":1}""");
+        var flaggedSet = NewSet(flagged, true, """{"email":2,"emailExternal":1,"phone":1,"rules":1,"typesFired":["emailExternal"]}""");
         var cleanSet = NewSet(clean, false, null);
         db.AddRange(flaggedSet, cleanSet);
         await db.SaveChangesAsync(Ct);
@@ -181,8 +181,10 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
         var flagged = await viewer.GetFromJsonAsync<JsonElement>($"/api/documents/{seed.Flagged}", Ct);
         var pii = flagged.GetProperty("livePii");
         pii.GetProperty("flagged").GetBoolean().ShouldBeTrue();
-        pii.GetProperty("counts").EnumerateObject().Select(p => (p.Name, p.Value.GetInt32())).ShouldBe([("email", 2), ("phone", 1)], ignoreOrder: true);
+        pii.GetProperty("counts").EnumerateObject().Select(p => (p.Name, p.Value.GetInt32())).ShouldBe([("email", 2), ("emailExternal", 1), ("phone", 1)], ignoreOrder: true);
+        pii.GetProperty("typesFired").EnumerateArray().Select(t => t.GetString()).ShouldBe(["emailExternal"]); // #217: the stored fired types
         flagged.GetProperty("chunkSets").GetArrayLength().ShouldBe(1);
+        flagged.GetProperty("chunkSets")[0].GetProperty("pii").GetProperty("typesFired").EnumerateArray().Select(t => t.GetString()).ShouldBe(["emailExternal"]);
 
         var clean = await viewer.GetFromJsonAsync<JsonElement>($"/api/documents/{seed.Clean}", Ct);
         clean.GetProperty("runItems").EnumerateArray().Select(i => (i.GetProperty("runId").GetGuid(), i.GetProperty("outcome").GetString()))

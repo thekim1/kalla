@@ -15,7 +15,7 @@ public enum NerStatus
 
 /// <summary>
 /// <c>ChunkSets."PiiCounts"</c> (processing design §9.4; data-model §2.2), serialized with <see cref="Json.ContractJson"/>:
-/// numbers only, never values. Written by the
+/// numbers and fired type names only, never values. Written by the
 /// <c>personal-data</c> stage for every set it produces and read by the admin for the PII list and by the index writer for
 /// the flag and the clearance. <see cref="Name"/> counts distinct names; the others count matches.
 /// </summary>
@@ -39,6 +39,12 @@ public sealed record PiiCounts
 
     /// <summary>How many flag rules fired (§9.4).</summary>
     public int Rules { get; init; }
+
+    /// <summary>
+    /// The types whose rule fired (<see cref="PiiTypes"/> names, ordinal order; the list-like rule as <c>name</c>), as the
+    /// <c>personal-data</c> stage decided them (Decisions table "M-2 open design calls", #217). Type names only, never values.
+    /// </summary>
+    public IReadOnlyList<string> TypesFired { get; init; } = [];
 
     /// <summary>The NER model as <c>name@revision</c> when names were checked.</summary>
     public string? Model { get; init; }

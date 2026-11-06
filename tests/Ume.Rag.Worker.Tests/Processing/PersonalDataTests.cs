@@ -58,6 +58,36 @@ public sealed class PersonalDataTests
         chunks.Pii.ShouldBe(assessment.Counts);
     }
 
+    [Fact]
+    public async Task The_fired_types_are_stored_in_the_counts_as_type_names_and_never_values()
+    {
+        // #217 (Decisions "M-2 open design calls"): the stage stores the types whose rule fired with the counts, so the
+        // set's ChunkSets."PiiCounts" carries them to the PII report; the event 5103 list is the same.
+        var (stage, _, _) = Stage();
+        var context = new PersonalDataContext(Classification.Public) { OwnDomains = ["umea.se"] };
+        var (chunks, assessment) = await stage.RunAsync(Chunks("Sökande 19121212-1212, anna.svensson@gmail.com.", "Ring 070-311 22 33 eller info@umea.se."), context, Ct);
+
+        assessment.Counts.TypesFired.ShouldBe([PiiTypes.EmailExternal, PiiTypes.Personnummer]);
+        assessment.Counts.TypesFired.ShouldBe(assessment.TypesFired);
+        assessment.Counts.Rules.ShouldBe(2);
+        chunks.Pii!.TypesFired.ShouldBe([PiiTypes.EmailExternal, PiiTypes.Personnummer]); // what the index writer stores
+
+        var stored = Pipelines.Json.ContractJson.Serialize(chunks.Pii);
+        stored.ShouldContain("\"typesFired\":[\"emailExternal\",\"personnummer\"]");
+        foreach (var value in new[] { "19121212", "1212", "anna.svensson", "gmail", "070-311", "info@umea.se" })
+        {
+            stored.ShouldNotContain(value);
+        }
+
+        Pipelines.Json.ContractJson.Deserialize<PiiCounts>(System.Text.Json.JsonDocument.Parse(stored).RootElement).TypesFired
+            .ShouldBe([PiiTypes.EmailExternal, PiiTypes.Personnummer]);
+
+        // Nothing fired: an empty list, not a missing one.
+        var (_, clean) = await stage.RunAsync(Chunks("Ring 070-311 22 33 eller info@umea.se."), context, Ct);
+        clean.Counts.TypesFired.ShouldBeEmpty();
+        clean.Counts.Rules.ShouldBe(0);
+    }
+
     [Theory]
     [InlineData(Classification.Internal)]
     [InlineData(Classification.Sensitive)]

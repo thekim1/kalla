@@ -644,6 +644,8 @@ export interface PiiReport {
     previousVersionLive: boolean
     counts: Record<string, number>
     rulesFired: number
+    /** The types whose flag rule fired, as the worker stored them (#217): type names only, never values. */
+    typesFired: string[]
   }[]
   truncated: boolean
 }

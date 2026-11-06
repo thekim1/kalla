@@ -21,7 +21,7 @@ public sealed record PersonalDataContext(string CollectionClassification)
     public double NerMinScore { get; init; } = 0.80;
 }
 
-/// <summary>The stage's result: the counts (stored on the set) and which types fired (event 5103's <c>Types</c>).</summary>
+/// <summary>The stage's result: the counts (stored on the set, with the fired types in <see cref="PiiCounts.TypesFired"/>) and which types fired (event 5103's <c>Types</c>).</summary>
 public sealed record PiiAssessment(PiiCounts Counts, IReadOnlyList<string> TypesFired)
 {
     /// <summary><c>ChunkSets."PiiFlagged"</c>: a rule fired.</summary>
@@ -90,7 +90,7 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
             fired = PiiFlagPolicy.Fired(counts, context.Rules);
         }
 
-        counts = counts with { Rules = fired.Count };
+        counts = counts with { Rules = fired.Count, TypesFired = fired };
         return (chunks with { Pii = counts }, new PiiAssessment(counts, fired));
     }
 
