@@ -104,7 +104,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Done when:** retrieval tests for scoring, malformed output, timeout and degrade; a live evaluation run on
   `turkos`'s generated set over the interim gateway reports recall@10/MRR, p50/p95 latency and cost with and without
   rerank (link it on the PR).
-- **Waits on:** – (`GatewayReranker`: the gateway's rerank release).
+- **Waits on:** – (the live run: the other main session, #403).
 - **Read:** Decisions "Rerank pulled forward"; knowledge-api §6.7.
 
 ### [x] B-13 Config lock wait histogram (#391, to-verify #23; #396)
@@ -149,7 +149,9 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Paths:** `src/Ume.Rag.Retrieval/**`, assistant and platform settings in the admin API and UI.
 - **Done when:** retrieval tests against the FakeGateway rerank (B-14); the chat path, the test panel and the
   evaluation are tested with rerank fully unconfigured; a live evaluation run once the endpoint exists.
-- **Waits on:** B-12; the gateway's rerank release for the live run.
+- **Waits on:** the live run only (the other main session): gateway v0.9.0 (2026-11-06) with Berget AI
+  `BAAI/bge-reranker-v2-m3` as a Rerank model, `Settings.Retrieval.gatewayRerankModel` set, then the evaluation's
+  `hybrid-rerank-gateway` variant (#416).
 - **Read:** Decisions "Gateway release 1 and shared Keycloak as built", "Rerank pulled forward"; gateway-changes §7.4.
 
 ### [ ] B-17 Chat: one retry on a connection failure (chat-api §8.3)
@@ -196,7 +198,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   Remove the worker's embedding batch cap below the context window (the gateway checks per input from release 1);
   `502`/`504` retry with the same ceiling, never wider.
 - **Done when:** status green against release 1; `/v1/models` at a ceiling lists only models within it (#41).
-- **Waits on:** gateway release 1 deployed for the pilot.
+- **Waits on:** gateway release 1 (tagged v0.9.0, 2026-11-06) deployed for the pilot.
 - **Read:** gateway-changes §13.2–§13.4.
 
 ### [ ] B-L5 Feedback import live
