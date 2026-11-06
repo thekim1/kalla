@@ -59,6 +59,9 @@
 #   --proxy                 a reverse proxy terminates public TLS and re-encrypts to this host; needs distinct
 #                           hostnames and binds the listeners to 0.0.0.0 (firewall them to the proxy)
 #   --upstream-host HOST    address the proxy uses to reach this host [hostname]
+#   --proxy-address ADDR[,ADDR]
+#                           the reverse proxy's source addresses (IPv4 or CIDR): the host firewall then accepts new
+#                           connections to the published ports (rag-api, rag-admin, Open WebUI) only from these (#453)
 #   --api-cert/--api-key/--admin-cert/--admin-key FILE
 #                           certificates from your PKI for the public listeners instead of the internal CA
 #   --certs-dir DIR [deploy/certs], --secrets-dir DIR [deploy/secrets]
@@ -75,7 +78,7 @@ key_provider="file"; allow_file_keys=0; backup_target=""; s3_credentials=""; s3_
 crawl_allow=""; host_memory=16; freshclam_proxy=""; role="all"
 owui_host=""; owui_client="open-webui"; owui_secret_file=""; owui_provider=""; owui_provider_name="Umeå kommun"
 owui_key_file=""; owui_rag_client=""; owui_data=""
-proxy=0; upstream_host=""; api_cert=""; api_key=""; adm_cert=""; adm_key=""
+proxy=0; upstream_host=""; proxy_sources=""; api_cert=""; api_key=""; adm_cert=""; adm_key=""
 yes=0; renew=0; renew_ca=0; chown=1
 gateway_keys=()
 
@@ -117,6 +120,7 @@ while [ $# -gt 0 ]; do
     --role) role="$2"; shift 2;;
     --proxy) proxy=1; shift;;
     --upstream-host) upstream_host="$2"; shift 2;;
+    --proxy-address) proxy_sources="$2"; shift 2;;
     --api-cert) api_cert="$2"; shift 2;;
     --api-key) api_key="$2"; shift 2;;
     --admin-cert) adm_cert="$2"; shift 2;;
@@ -140,6 +144,9 @@ case "$key_provider" in
 esac
 case "$freshclam_proxy" in ""|*:[0-9]*) ;; *) die "--freshclam-proxy must be HOST:PORT";; esac
 case "$org_sync_url" in ""|https://*) ;; *) die "--org-sync-url must be an https:// URL";; esac
+for a in ${proxy_sources//,/ }; do
+  [[ "$a" =~ ^[0-9]+(\.[0-9]+){3}(/[0-9]+)?$ ]] || die "--proxy-address takes IPv4 addresses or CIDRs, comma-separated: $a"
+done
 # The clients append v1/catalog/...: keep the bare root.
 org_sync_url="${org_sync_url%/}"; org_sync_url="${org_sync_url%/v1}"
 
@@ -499,7 +506,8 @@ UME_RAG_ORG_SYNC_URL=$org_sync_url
 UME_RAG_GATEWAY_MAX_RESIDENCY=Eu
 UME_RAG_API_PUBLIC_URL=https://$api_host$public_api
 UME_RAG_ADMIN_PUBLIC_HOST=$admin_host
-# Listeners default to loopback (0.0.0.0 with --proxy: firewall them to the proxy only).
+# Listeners default to loopback (0.0.0.0 with --proxy: the host firewall admits only UME_RAG_PROXY_SOURCES to them).
+UME_RAG_PROXY_SOURCES=$proxy_sources
 UME_RAG_API_BIND=$bind
 UME_RAG_API_PORT=$api_port
 UME_RAG_ADMIN_BIND=$bind
@@ -555,6 +563,13 @@ Reverse proxy: forward https://$api_host to https://$upstream_host:$api_port and
 https://$upstream_host:$admin_port, preserving the Host header; client_max_body_size 60m and proxy_request_buffering off
 on PUT /api/upload-batches/{batchId}/files/{n} of the admin host (admin design §2.2), the gateway's 1 MB elsewhere.
 Restrict those ports to the proxy with the host firewall."
+  if [ -z "$proxy_sources" ]; then
+    proxy_note="$proxy_note
+The listeners bind to $bind and nothing on this host limits who reaches them: pass --proxy-address with the
+proxy's source addresses (the host firewall then admits only those), or restrict them in a network firewall."
+  else
+    proxy_note="$proxy_note Installed by deploy/host/install.sh: only $proxy_sources may connect."
+  fi
 fi
 gateway_note=""
 missing=""
@@ -586,7 +601,12 @@ if [ -n "$owui_host" ]; then
   - the secret of its OIDC client: --openwebui-oidc-client-secret-file FILE"
   [ -z "$owui_todo" ] || owui_todo="
 Still missing (re-run with these options; the key and the secret may also be filled in $secrets/openwebui.env):$owui_todo"
-  owui_note="
+  owui_proxy=""
+  [ "$proxy" = 1 ] || owui_proxy="
+Without --proxy, Open WebUI can't reach rag-api: its connection uses rag-api's public URL https://$api_host$public_api,
+which this host serves on $bind only, and https://$owui_host needs the reverse proxy too. Use --proxy for a working
+Open WebUI; without it, these files only render."
+  owui_note="$owui_proxy
 Open WebUI (optional): register the redirect URI https://$owui_host/oauth/oidc/callback (the legacy callback path,
 identity design §5.3) on its OIDC client '$owui_client'.$owui_todo
 Then: docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait

@@ -104,18 +104,21 @@ bind to `0.0.0.0` (`deploy/init-deployment.sh`: "binds the listeners to 0.0.0.0 
 
 **How to restrict them.** Docker publishes these ports with DNAT, so the connections pass the `FORWARD` chain and
 Docker's `DOCKER-USER` chain, not the host's `INPUT` chain: an `INPUT` rule (ufw, firewalld zones) does not restrict
-them. `deploy/host/docker-user-firewall.sh` doesn't either; it handles only traffic that the RAG containers start.
-Restrict the ports in a network firewall in front of the host, or with `DOCKER-USER` rules that match the original
-port, for example:
+them. `init-deployment.sh --proxy-address ADDR[,ADDR]` (the proxy's IPv4 addresses or CIDRs) writes
+`UME_RAG_PROXY_SOURCES`, and `deploy/host/docker-user-firewall.sh` (run by `rag-firewall.service` at boot, when Docker
+restarts and every 15 minutes) then rejects every new DNATed connection to `UME_RAG_API_PORT`, `UME_RAG_ADMIN_PORT`
+and, with Open WebUI, `UME_RAG_OPENWEBUI_PORT` whose source is not one of them (#453):
 
 ```bash
-iptables -I DOCKER-USER -p tcp -m conntrack --ctstate NEW --ctorigdstport 8543 ! -s <proxy address> -j DROP
-iptables -I DOCKER-USER -p tcp -m conntrack --ctstate NEW --ctorigdstport 9543 ! -s <proxy address> -j DROP
-iptables -I DOCKER-USER -p tcp -m conntrack --ctstate NEW --ctorigdstport 3000 ! -s <proxy address> -j DROP
+-A UME-RAG-EGRESS -s <proxy address> -p tcp -m conntrack --ctstate DNAT --ctorigdstport 8543 -j RETURN
+-A UME-RAG-EGRESS -p tcp -m conntrack --ctstate DNAT --ctorigdstport 8543 -j REJECT --reject-with icmp-admin-prohibited
 ```
 
-Ume.Rag ships no such rule and doesn't keep it across reboots: how it is installed is not set by Ume.Rag; agree with
-infra.
+(the same for 9543 and 3000). It matches the original destination port of DNATed connections only, so container egress
+is never affected. Without `--proxy-address`, nothing on the host limits who reaches the listeners, and
+`init-deployment.sh` says so: restrict them in a network firewall in front of the host instead. A network firewall is
+still the better second layer. The rules are checked by `iptables-restore --test` (iptables-nft); they have not run on
+a pilot host yet.
 
 **Proxy routes.** `init-deployment.sh --proxy` prints them: `https://<api host>` to `https://<upstream host>:8543` and
 `https://<admin host>` to `https://<upstream host>:9543`, keeping the `Host` header; `client_max_body_size 60m` and
@@ -155,7 +158,7 @@ machine).
 | `llm` (172.30.3.0/24) | rag-api, rag-admin (default route); rag-worker is a member but leaves through `crawl` | the gateway, host of `UME_RAG_GATEWAY_URL` | the URL's port (443), HTTPS | every model call: chat, embeddings, rerank, model checks | always | `--gateway-url` → `Gateway__BaseUrl` |
 | `llm` (172.30.3.0/24) | rag-admin | the gateway's Data API, host of `UME_RAG_ORG_SYNC_URL` | the URL's port (often 10443), HTTPS | org and model catalogue sync (`/v1/catalog/*`) | with `--org-sync-url` | `--org-sync-url` → `OrgSync__BaseUrl` |
 | | | the OIDC authority, host of `UME_RAG_OIDC_AUTHORITY` | the URL's port (443), HTTPS | rag-admin's back channel: discovery, JWKS, token endpoint (code + PKCE). rag-api validates no OIDC tokens yet (`RagApi:Authority` is not built, identity design §7.1) | always | `--oidc-authority` → `Oidc__Authority` |
-| | | the Open WebUI host, `UME_RAG_OPENWEBUI_HOST` | 443, HTTPS, through the reverse proxy | rag-api's feedback import (`OpenWebUi__BaseUrl` = `https://<owui host>`) | with Open WebUI | `--openwebui-host` |
+| | | Open WebUI as rag-api calls it, host of `UME_RAG_OPENWEBUI_BASE_URL` | the URL's port (443), HTTPS, through the reverse proxy | rag-api's feedback import (`OpenWebUi__BaseUrl`, the same value) | with Open WebUI | `--openwebui-host` |
 | | | the OTLP endpoint, `UME_RAG_OTEL_ENDPOINT` | the URL's port, HTTP(S) | telemetry | optional | set by hand in `deploy/.env` |
 | | | DNS: the host's upstream resolvers | 53, UDP and TCP | name resolution through Docker's embedded DNS | always | `--dns IP` overrides |
 | `crawl` (172.30.6.0/24) | rag-worker (default route) | the gateway | the URL's port (443), HTTPS | embeddings, evaluation models, catalogue | with the ingestion overlay | `--gateway-url` |
@@ -400,7 +403,8 @@ of `deploy/.env`: `docker compose --env-file deploy/.env up -d` and `sudo system
 | OIDC authority | `--oidc-authority` | `UME_RAG_OIDC_AUTHORITY` | `Oidc__Authority` (admin), the firewall (`llm`), Open WebUI's default provider URL |
 | Open WebUI's OIDC provider | `--openwebui-oidc-provider-url` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` | `OPENID_PROVIDER_URL`, the firewall (`openwebui`) |
 | rag-api's public URL | `--api-host`, `--api-port`, `--proxy` | `UME_RAG_API_PUBLIC_URL` | `Knowledge__PublicBaseUrl`, Open WebUI's `OPENAI_API_BASE_URLS`, the firewall (`openwebui`) |
-| Open WebUI host | `--openwebui-host` | `UME_RAG_OPENWEBUI_HOST`, `UME_RAG_OPENWEBUI_BASE_URL` | `OpenWebUi__BaseUrl` (from `..._BASE_URL`), the firewall (`llm`, from `..._HOST` on 443) |
+| Open WebUI host | `--openwebui-host` | `UME_RAG_OPENWEBUI_HOST`, `UME_RAG_OPENWEBUI_BASE_URL` | `OpenWebUi__BaseUrl` and the firewall (`llm`), both from `..._BASE_URL`, so a hand edit moves both (#453) |
+| Reverse proxy sources | `--proxy-address` | `UME_RAG_PROXY_SOURCES` | the firewall: the published ports accept only these |
 | OTLP endpoint | edit `deploy/.env` | `UME_RAG_OTEL_ENDPOINT` | `OTEL_EXPORTER_OTLP_ENDPOINT` (api, admin, worker), the firewall (`llm`, `crawl`) |
 | Municipal crawl ranges | `--crawl-allow` | `UME_RAG_CRAWL_ALLOW` | `Crawl__AllowedPrivateRanges` (worker), the firewall (`crawl`) |
 | Extra crawl ports | admin UI | `Settings.Crawl.AllowedPorts` (database) | the worker's egress guard |

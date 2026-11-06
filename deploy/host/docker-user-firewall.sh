@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Host firewall for the Compose networks (plans/platform/repo-and-deployment.md §6.1): egress per network in Docker's
-# DOCKER-USER chain, and no new connections from any of them to the host itself (except the allow-listed endpoints, when
-# the gateway or Keycloak runs on the same machine). Idempotent: it rebuilds its own two
+# DOCKER-USER chain, no new connections from any of them to the host itself (except the allow-listed endpoints, when
+# the gateway or Keycloak runs on the same machine), and, with UME_RAG_PROXY_SOURCES set, the published ports (rag-api,
+# rag-admin, Open WebUI) only from the reverse proxy: Docker's DNAT bypasses INPUT rules (ufw, firewalld), so they are
+# matched here by their original port (#453). Idempotent: it rebuilds its own two
 # chains in one iptables-restore transaction and jumps to them from DOCKER-USER and INPUT once. rag-firewall.service
 # runs it after Docker starts and every 15 minutes (the allow-lists are host names, resolved when it runs).
 #
@@ -15,8 +17,8 @@
 #   data, ingestion, parser
 #              none (internal networks; dropped here as well)
 #   llm        the gateway (UME_RAG_GATEWAY_URL), its Data API (UME_RAG_ORG_SYNC_URL: the admin's syncs), the OIDC
-#              authority (UME_RAG_OIDC_AUTHORITY), the Open WebUI host (UME_RAG_OPENWEBUI_HOST: the feedback import),
-#              the OTLP endpoint (UME_RAG_OTEL_ENDPOINT), DNS
+#              authority (UME_RAG_OIDC_AUTHORITY), Open WebUI as rag-api calls it (UME_RAG_OPENWEBUI_BASE_URL: the
+#              feedback import), the OTLP endpoint (UME_RAG_OTEL_ENDPOINT), DNS
 #   crawl      the gateway, the OTLP endpoint, DNS and UME_RAG_CRAWL_ALLOW; then nothing private (RFC 1918, CGNAT,
 #              loopback, link-local, documentation, multicast and reserved ranges), the rest of the Internet allowed
 #   mirror     database.clamav.net:443, or only freshclam's proxy (UME_RAG_FRESHCLAM_PROXY); DNS
@@ -54,7 +56,8 @@ declare -A subnet=(
 private=(0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24
   192.168.0.0/16 198.18.0.0/15 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4 240.0.0.0/4)
 
-usage() { sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+# The comment block at the top of this file.
+usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -134,7 +137,7 @@ add() { # add NETWORK URL-OR-HOST[:PORT] — nothing when the value is empty
   allows[$1]+="$(endpoint "$2" 443)"$'\n'
 }
 gateway="$(env_value UME_RAG_GATEWAY_URL)"; otel="$(env_value UME_RAG_OTEL_ENDPOINT)"
-add llm "$gateway"; add llm "$(env_value UME_RAG_ORG_SYNC_URL)"; add llm "$(env_value UME_RAG_OIDC_AUTHORITY)"; add llm "$(env_value UME_RAG_OPENWEBUI_HOST)"
+add llm "$gateway"; add llm "$(env_value UME_RAG_ORG_SYNC_URL)"; add llm "$(env_value UME_RAG_OIDC_AUTHORITY)"; add llm "$(env_value UME_RAG_OPENWEBUI_BASE_URL)"
 add llm "$otel"
 add crawl "$gateway"; add crawl "$otel"
 proxy="$(env_value UME_RAG_FRESHCLAM_PROXY)"
@@ -149,6 +152,21 @@ for spec in ${extra[@]+"${extra[@]}"}; do add "${spec%%=*}" "${spec#*=}"; done
 # host), INPUT traffic to the host's own addresses.
 input_allows=()  # allowed endpoints that may be this host's own addresses (a gateway on the same machine)
 out=("*filter" ":$chain - [0:0]" ":$input_chain - [0:0]" "-A $chain -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN")
+# The published ports, from the reverse proxy only: a new connection Docker has DNATed to one of them (its original
+# destination port) from any other source is rejected. Container egress is never DNATed, so it doesn't match.
+proxy_sources="$(env_value UME_RAG_PROXY_SOURCES)"
+if [ -n "$proxy_sources" ]; then
+  published=("$(env_value UME_RAG_API_PORT)" "$(env_value UME_RAG_ADMIN_PORT)")
+  [ -z "$(env_value UME_RAG_OPENWEBUI_HOST)" ] || published+=("$(env_value UME_RAG_OPENWEBUI_PORT)")
+  out+=("# published ports: the reverse proxy only (UME_RAG_PROXY_SOURCES)")
+  for port in "${published[@]}"; do
+    [[ "$port" =~ ^[0-9]+$ ]] || die "a published port in $env_file is not a number: '$port'"
+    for src in ${proxy_sources//,/ }; do
+      out+=("-A $chain -s $src -p tcp -m conntrack --ctstate DNAT --ctorigdstport $port -j RETURN")
+    done
+    out+=("-A $chain -p tcp -m conntrack --ctstate DNAT --ctorigdstport $port ${reject[*]}")
+  done
+fi
 for n in "${names[@]}"; do
   s="${subnet[$n]}"
   out+=("# $n" "-A $chain -s $s -d $s -j RETURN")
