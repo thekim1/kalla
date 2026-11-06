@@ -38,7 +38,7 @@ Three tracks:
 |---|---|---|
 | Gold set (100–150 answerable, 30–50 unanswerable, ≥ 10 temporal) and the reviewers who grade | user + DoIT | thresholds, go-live gate |
 | G1 DPIA with the data protection officer (EU processor agreement, W2, banner, public-records route) | user | banner/route, go-live |
-| Gateway session: release 1, pilot keys, shared Keycloak (identity §16 Q1–8) | user (gateway repo) | release-1 switch, pilot accounts |
+| Gateway: release 1 and the shared Keycloak are drafted (#390, gateway PRs #65–#70); waiting on the gateway tag, the Keycloak deploy and pilot keys. Admin OTP is off for the pilot (user, 2026-11-06), which G1 records | user (gateway repo) | release-1 switch, pilot accounts, live rerank |
 | Test host, backup target, key-escrow location; where the pilot runs at go-live (O7) | user | deploy, restore drill, R1 |
 | Self-hosted runner on the test host (R1), or the manual stopgap | IT security | R1 test, nightly evaluation in CI |
 | U1 (crawler about page) with the web editors | user | full umea.se crawl |

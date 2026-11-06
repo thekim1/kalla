@@ -6,7 +6,12 @@ tenant/guest refusal are designed there for both systems; this document only tur
 rows are in [`adr-drafts.md`](adr-drafts.md). Nothing here is implemented in the gateway yet (`~/git/llmgateway` is at
 v0.8.5); Ume.Rag's side of feature B is built and runs against v0.8.5 until release 1 (§13.4).
 
-Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5). "Pipeline" means
+**As built (#390, 2026-11-06):** release 1 is implemented in gateway draft PRs thekim1/llmgateway#65 (embeddings per
+input), #66 (feature B, ADR 018) and #67 (FakeLlm, tool passthrough); rerank is #68 and the shared Keycloak #70. Where
+this document and those PRs differ, the PRs win; §3.3, §3.5 and §7.4 below state the built behaviour. Ground rule: the
+gateway never depends on Ume.Rag; every change is a generic gateway feature.
+
+Gateway citations are `path:line` in `~/git/llmgateway` at `e25b491` (v0.8.5), superseded by the PRs above. "Pipeline" means
 `src/Ume.LlmGateway.Gateway/Pipeline/`; "Entities.cs" means `src/Ume.LlmGateway.Domain/Entities/Entities.cs`.
 
 ## 1. Overview
@@ -114,14 +119,15 @@ restriction:
 
 | Situation | Status, code | Message |
 |---|---|---|
-| Malformed header, or missing with `RequireMaxResidency` | `400 invalid_request` | as §3.1 |
+| Malformed, empty or repeated header, or missing with `RequireMaxResidency` | `400 invalid_request` | *"x-ume-max-residency must be one of OnPrem, Eu, External."* (whitespace trimmed; no aliases, no numbers) |
 | Candidates empty, ceiling set, and **no configured target** of the planned models is within the ceiling (after the key's residency and provider lists and the endpoint, whatever the targets' state) | `403 max_residency_not_met` (new code in `GatewayErrorCodes`, `GatewayErrors.cs:10-40`) | *"No provider for '<model>' is configured at or below the residency 'OnPrem' that the request allows."* |
 | Candidates empty, ceiling set, and targets within the ceiling exist but are **drained or disabled** | `503 no_eligible_provider` + `Retry-After` | *"No provider for '<model>' within the residency 'OnPrem' is available right now."* |
-| Ceiling set, and every attempted candidate was **circuit-open or cooling down** at selection (they are not removed, they go last, `RouteResolver.cs:176-180`) and all attempts failed | `503 no_eligible_provider` + `Retry-After`, instead of `502`/`504` from `AllProvidersFailed` (`GatewayErrors.cs:161`) | as above |
+| Ceiling set, targets within it exist, and every attempt failed (circuit-open targets included) | unchanged `502`/`504 all_providers_failed`: the same failure answers the same with or without a ceiling. Ume.Rag retries with the **same** ceiling, never a wider one | unchanged |
 | Candidates empty for other reasons (PII on-prem restriction, key lists, no ceiling) | unchanged `503 no_eligible_provider` (`GatewayErrors.cs:117-119`) | unchanged; the PII text wins when `restrictTo` is set, since `OnPrem` is inside every ceiling |
 
 The 403/503 test runs only on the failure path: `SelectCandidatesAsync` re-checks the plan's targets against the
 ceiling and the key's lists, ignoring enabled/drained state, when the list comes out empty. `Retry-After` is
+added only to the ceiling 503, not to other `no_eligible_provider` answers; it is
 `CircuitBreaker:BreakDuration` in seconds (30 s default, `src/Ume.LlmGateway.Infrastructure/Stores/Stores.cs:203`).
 403 is reserved for "this can never work" and matches the existing "key may not use any provider that offers …"
 (`GatewayErrors.cs:111-112`); a drained or broken in-ceiling provider is temporary, so the caller waits and never
@@ -144,7 +150,8 @@ answer: during the rolling update an older instance ignores the request header.
 | Routing rules | Rules run first and may choose an on-prem model for a ceiling request; conditions see the header like any header (`GatewayRequestHandler.Stages.cs:363-371`), e.g. `headers["x-ume-max-residency"] == "OnPrem"` (value as the client sent it). A matched rule whose targets are all above the ceiling ends in `max_residency_not_met`: no return to the requested model (ADR 013). |
 | PII on-prem restriction | Intersected; `OnPrem` is within every ceiling, so the PII restriction alone decides when both are set. |
 | Key residency list | Intersected. A key limited to `Eu` with ceiling `OnPrem` has no eligible residency → `max_residency_not_met`. |
-| Fallback, retry, circuits | Only filtered candidates are attempted; open circuits still go last (`RouteResolver.cs:176-180`) but never return a removed target; all of them open and failing → 503 with `Retry-After` (§3.3). |
+| Fallback, retry, circuits | Only filtered candidates are attempted; open circuits still go last (`RouteResolver.cs:176-180`) but never return a removed target; all attempts failing → `502`/`504` as without a ceiling (§3.3). |
+| Admission (rate limit and budget in one Redis call before routing, v0.8.9 `IAdmissionStore`) | The ceiling applies there too: a token quota for a residency above the ceiling is not reserved. |
 | Streaming | The streaming filter (`RouteResolver.cs:181`) runs after the ceiling; the decision is made before any byte is sent, so a streamed answer never starts above the ceiling. |
 | Token quotas per residency | Computed from the filtered candidates (`GatewayRequestHandler.cs:224-226`), so quotas follow automatically. |
 | Session affinity | Unchanged; rendezvous runs over the filtered pool. |
@@ -159,6 +166,11 @@ answer: during the rolling update an older instance ignores the request header.
 | `GET /v1/models` | yes | **Today** it lists the routes and deployments allowed for the key (`IsModelAllowed`, `IsAllowedFor`) that have a target eligible under the key's own `AllowedResidencies` and `AllowedProviders` (`EffectiveResidencies(key.AllowedResidencies, null)`, `GatewayRequestHandler.Models.cs:22`) on an enabled deployment of an enabled, not drained provider (`RouteSelector.cs:186-200`, `Entities.cs:276`); `ume.residencies` lists those targets' residencies (`:44`); there is no request-side filter. **The release adds** the request's ceiling to that intersection (the `ceiling` overload at `:22`) for every key, delegating keys included, so a caller can ask "what may I use at `OnPrem`" and `ume.residencies` shows only residencies within the ceiling; `RequireMaxResidency` applies here too; `x-ume-on-behalf-of` is validated but does not change the list (§5.11). A model whose in-ceiling targets are all drained is not listed (as today), whereas a chat call to it answers 503. Ume.Rag validates an assistant's model this way on save (identity design §4.7, admin design §4.6 V8) |
 
 ### 3.5 Code changes
+
+**As built (#66)** the placement differs from the table: no `GatewayRequestHeaders`/`RequestDirectives` struct yet
+(release 2 if needed); `ResidencyCeiling` is in `Domain/Routing`, the header is read by
+`RequestStages.ReadMaxResidency`, the intersection is a 3-argument `RouteSelector.EffectiveResidencies` overload, and
+`requireMaxResidency` is on the admin API key only (not on the Data API feeds). The table is the original plan.
 
 | File | Change |
 |---|---|
@@ -589,15 +601,21 @@ Optional item next to these (admin design §4.10): `GET /v1/catalog/routes` (rou
 so the RAG admin syncs route aliases and their targets' residencies instead of platform admins keeping manual
 `GatewayModels` rows for them. Additive route, `catalog.read` scope.
 
-### 7.4 Rerank endpoint (P2, a separate release)
+### 7.4 Rerank endpoint (its own release after release 1; #390, thekim1/llmgateway#68)
 
-**Later (P2):** not in release 1 or 2 (§13.1). The gateway has no rerank endpoint today. Ume.Rag's `IReranker`
-(`../knowledge-api/design.md` §6.7) needs one in P2 serving `bge-reranker-v2-m3` on-prem: query plus passages in, one
-score per passage out. It goes through the same authentication, step 1b, ceiling, budget and usage path as the other
-endpoints (presumably a new `GatewayEndpoint` value and model kind); `x-ume-max-residency` and
-`RequireMaxResidency` apply, and Ume.Rag calls it with the `OnPrem` ceiling. Path, request shape and the serving
-runtime are agreed with the gateway team before Ume.Rag's FakeGateway rerank fake (P1) is fixed (§16). Designed in
-detail when P2 starts.
+Decided (user, 2026-11-05/06). **Optional and provider-neutral:** `POST /v1/rerank`, Cohere/Jina-compatible, served
+by any provider with the *Rerank* capability and a model of kind *Rerank* (vLLM, TEI, Infinity, Cohere, Jina). Request
+`{ model, query, documents: (string | { text })[], top_n?, return_documents? }`; the provider's answer passes through
+unchanged (`results[]` with `index`, `relevance_score`, `document` when asked; `usage` when reported); only `model` is
+rewritten. Billed per input token (`usage.prompt_tokens`/`total_tokens` or Cohere `meta.billed_units`); no
+context-window check; request policies cannot change `query` or `documents`. Authentication, `x-ume-max-residency`,
+`RequireMaxResidency`, budgets and usage work as on every endpoint. With no rerank model configured the gateway answers
+404/400 like any unknown or wrong-kind model, and Ume.Rag falls back to unreranked retrieval.
+
+**Provider until on-prem hardware exists (M2):** Berget AI (Sweden, EU), `bge-reranker-v2-m3` (the model planned
+on-prem, so the move is a route change), about $0.10 per million input tokens (verify on Berget's price page); its
+processor agreement goes into G1. Ume.Rag calls it with the `Eu` ceiling until on-prem. Berget's exact shape is
+verified when the provider is set up. The FakeGateway serves `/v1/rerank` in this shape.
 
 ## 8. Data model, migrations, Redis
 

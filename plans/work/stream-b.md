@@ -115,6 +115,37 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** [`../to-verify.md`](../to-verify.md) #23; results-b #23 (B-3, #393).
 
+### [ ] B-14 FakeGateway matches gateway release 1 and rerank (#390)
+- **Do:** align `Ume.Rag.FakeGateway` with #390's Feature B points 1–4 and 8 (no circuit-open 503: failing in-ceiling
+  targets end in `502`/`504`; 403 vs 503 + `Retry-After` only on the ceiling 503; `400 invalid_request` for a
+  malformed, empty, repeated or required-but-missing header; `/v1/models` filtered by the ceiling) and serve
+  `/v1/rerank` in the Cohere shape (documents as strings or `{text}`, `results[]` with `index` and
+  `relevance_score`, `usage`). List any remaining difference on #390.
+- **Paths:** `src/Ume.Rag.FakeGateway/**`, its tests.
+- **Done when:** FakeGateway tests cover each point and the rerank shape; #390 has the comparison comment.
+- **Waits on:** –
+- **Read:** Decisions "Gateway release 1 and shared Keycloak as built"; gateway-changes §3.3, §7.4.
+
+### [ ] B-15 `deploy/keycloak` for the shared realm (#390, #215)
+- **Do:** `rag-additions.json` gets `"realm": "ume"` and `$(env:NAME)` placeholders (`$(env:NAME:-default)` for
+  defaults); drop `rag-realm-settings.json` and the OTP flow for the shared realm (keep a standalone variant only if
+  cheap); `apply-additions.py` only for a standalone realm; the Keycloak test pin moves to 26.8.1 by the digest in
+  #390; local redirect URIs stay out of the production file.
+- **Paths:** `deploy/keycloak/**`, its tests.
+- **Done when:** the additions import with keycloak-config-cli after a base realm in a 26.8.1 test container, and the
+  `ume-rag-admin` token carries only `rag-*` roles plus `departmentCodes`; #215 closed.
+- **Waits on:** –
+- **Read:** Decisions "Gateway release 1 and shared Keycloak as built"; identity §11.2.
+
+### [ ] B-16 `GatewayReranker` on `/v1/rerank`
+- **Do:** `GatewayReranker` behind `IReranker` calling `/v1/rerank` (Berget AI `bge-reranker-v2-m3`, `Eu` ceiling
+  until on-prem), selectable per assistant next to `ChatModelReranker`; 404/400 (no rerank model configured) and
+  timeouts fall back to unreranked order (`rerank_unavailable`); the evaluation compares both rerankers.
+- **Paths:** `src/Ume.Rag.Retrieval/**`, assistant and platform settings in the admin API and UI.
+- **Done when:** retrieval tests against the FakeGateway rerank (B-14); a live evaluation run once the endpoint exists.
+- **Waits on:** B-12; the gateway's rerank release for the live run.
+- **Read:** Decisions "Gateway release 1 and shared Keycloak as built", "Rerank pulled forward"; gateway-changes §7.4.
+
 ### [ ] B-6 Go-live pin review, B's part (last code item)
 - **Do:** review every NuGet and npm pin younger than 7 days; the realm callback for the Open WebUI pin bump
   (`/oauth/oidc/login/callback`) matching A-4; condense stays at `Eu` until an on-prem route exists (M2).
@@ -145,6 +176,8 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 
 ### [ ] B-L4 Gateway release 1 switch
 - **Do:** the pilot team's per-level keys with `RequireMaxResidency`; every call sends its ceiling.
+  Remove the worker's embedding batch cap below the context window (the gateway checks per input from release 1);
+  `502`/`504` retry with the same ceiling, never wider.
 - **Done when:** status green against release 1; `/v1/models` at a ceiling lists only models within it (#41).
 - **Waits on:** gateway release 1 deployed for the pilot.
 - **Read:** gateway-changes §13.2–§13.4.

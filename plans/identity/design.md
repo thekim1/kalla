@@ -1036,18 +1036,23 @@ follows:
 | Client `open-webui` | confidential, code flow, redirect `https://<owui host>/oauth/oidc/callback` (legacy path, §5.3), `email` in the ID token, secret as an import placeholder | named `open-webui` (dev: `open-webui-dev`); pilot host; full scope allowed off |
 | Client `ume-rag-api` | the audience of RAG API tokens (`RagApi:Audience`, §7.1); no sign-in flow of its own | dev uses an audience mapper value `ume-rag-api` on `ume-rag-api-dev` and on the scopes `Chat.Use`, `Knowledge.Read`, `Mcp.Use`; whether P1 also carries those scopes, the app permissions `Knowledge.Read.All`/`Chat.Invoke.All` and a client-credentials client is open (§7.1, §16) |
 | *Full scope allowed* | **off on every RAG client**, as on the gateway's, so a token carries only its own system's roles | dev keeps Keycloak's default (on) |
-| Password policy, brute-force protection | **on** (P1 item 16) | dev has neither |
-| OTP | **required for admins** (Decisions table: "admins with OTP") | dev has none |
+| Password policy, brute-force protection, user profile | **in the gateway's base realm file**, not in RAG's additions (Q3); the additions file must not declare `userProfile` (keycloak-config-cli would replace the whole profile) | dev has neither |
+| OTP | **not enforced for the pilot** (Decisions "Gateway release 1 and shared Keycloak as built"): password policy and brute-force protection only; MFA comes with brokered Entra ID/AD; G1 records it | dev has none |
 | Users, groups | **no test users**; pilot accounts are local Keycloak accounts created by hand (J11, user item U-c); member groups for the pilot department are Keycloak groups whose names a platform admin enters on our department record (§2) | §11.1's users and groups stay dev-only |
 | Seed | none: the mirror is filled from the gateway (org sync) and by hand (§2) | – |
 
-The additions are provisional and easy to change until the gateway session decides §16 questions 2–4 and 8 (open): Keycloak 26.6.4's partial import holds only users, clients, groups, roles and identity
-providers (to-verify #177), so the clients and roles are one partial-import file and `apply-additions.py` sets the
-rest (role scope mappings, realm-wide settings) through the admin REST API. Q3: the realm-wide settings sit in RAG's
-file, separable. Q4: "admins" are `rag-platform-admin` and `rag-department-admin`, enforced by a conditional browser
-flow on role. Q8: `ume-rag-api` is the audience client only (no flow, no app permissions, no scopes). The password
-policy values and brute-force numbers are the stream's choice. Local AppHost redirect URIs are added only with
-`--include-local-redirects`.
+**Settled by the gateway session (#390, thekim1/llmgateway#70, 2026-11-06).** Keycloak runs **26.8.1** (the gateway's pin,
+`quay.io/keycloak/keycloak:26.8.1-1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b`).
+**keycloak-config-cli** applies the realm on every `docker compose up` of the gateway's `deploy/keycloak` project: the
+gateway's `realm/10-gateway.json` first, then every `*.json` in the operator's additions directory in name order, each
+resource type with `no-delete` (a file adds and updates, never removes). RAG's `rag-additions.json` starts with
+`"realm": "ume"` and uses `$(env:NAME)` placeholders (`$(env:NAME:-default)` for defaults); the values
+(`UME_RAG_ADMIN_PUBLIC_HOST`, `UME_RAG_OPENWEBUI_HOST`, `UME_RAG_OIDC_CLIENT_SECRET`,
+`UME_RAG_OPENWEBUI_OIDC_CLIENT_SECRET`) are in the gateway operator's env file. A RAG change reaches production when the
+operator pulls a new tagged RAG version of the file. `rag-realm-settings.json`, the OTP flow and `apply-additions.py`
+are not used for the shared realm; a standalone Ume.Rag realm declares password policy, brute-force protection and
+the user profile in its own file. Local redirect URIs stay out of the production additions directory. Q8:
+`ume-rag-api` is the audience client only. Password and brute-force values are the gateway's (the same as RAG's).
 
 **What P1 relies on in the code** (no change needed): the BFF and claim mapping are OIDC-generic
 (`src/Ume.Rag.AdminApi/AdminAuthentication.cs:24-56`, `:203-213`), the audit actor falls back to `sub` (§1.1), the tenant and guest checks
@@ -1349,6 +1354,12 @@ owners of those documents:
 - **New (P1)**: Keycloak's partial import covers users, clients, groups and roles, but not, as far as the admin console
   shows, client scopes, the user profile, password and brute-force policy or authentication flows; to check on 26.6.4
   before the import method is chosen (open question 2 below).
+
+**Answered for P1 (#390, 2026-11-06):** Q1 and Q6: the gateway operator holds realm admin for the pilot and demo
+(accounts, role grants, `departmentCodes`/`teamCodes`, resets; runbook in the gateway's `docs/keycloak.md`); brokered
+organisations manage accounts in their own directory. Q2: keycloak-config-cli, `no-delete`, name order (§11.2). Q3:
+realm-wide settings in the gateway's base file. Q4: OTP not enforced for the pilot (Decisions "Gateway release 1 and
+shared Keycloak as built"). Q8: audience only. The list below keeps the original questions; 5, 7 and 9 are unchanged.
 
 **Open for P1 (shared Keycloak; not decided by the 2026-10-30 decision, 2026-10-31).** Each needs an answer before
 J11; the gateway session (`../gateway-changes/prompt-gateway-session.md` §2) or the user decides, not the streams.
