@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import raw from '../../../../contracts/admin/v1/error-codes.json?raw'
-import { ERROR_MESSAGES, JOB_MESSAGES, formatMessage, jobMessage } from './messages'
+import { ERROR_MESSAGES, JOB_MESSAGES, JOB_MESSAGE_PREFIXES, formatMessage, jobMessage } from './messages'
 
 // The exported list of the admin API's error codes (admin design §4.1); CI fails when the UI misses one.
 const contract = JSON.parse(raw) as { codes: { code: string; message: string }[] }
@@ -53,6 +53,23 @@ const WORKER_CODES = [
   'crawl.incremental', 'crawl.host_paused', 'crawl.seeds_failed', 'crawl.seeds_unreachable', 'crawl.claims_pending', 'crawl.cancelled',
   // Preview stage outcomes the preview result shows (PreviewSegment.cs).
   'parse.empty', 'raw.missing',
+  // Job and run-item reasons of processing, embedding, the gateway, evaluation, the parser, personal data and uploads.
+  'clamav.limit', 'clamav.timeout', 'clamav.unavailable', 'change.noise', 'rule.unaffected', 'version.unaffected',
+  'version.swapped_back', 'execution.superseded', 'pipeline.republished', 'pipeline.refused', 'plan.version_unknown',
+  'document.concurrent_insert', 'job.exception', 'node.fatal', 'node.transient', 'command.unknown_kind',
+  'run.cancelled', 'sync.invalid_payload', 'sync.unsupported', 'sync.run_in_progress', 'parse.invalid_payload',
+  'embed.invalid_payload', 'deletion.rejected', 'deletion.superseded', 'sample.too_small', 'embed.bad_vector',
+  'embed.canary_mismatch', 'embed.input_missing', 'embed.input_rejected', 'embed.profile_unknown', 'gateway.timeout',
+  'gateway.unreachable', 'gateway.unavailable', 'gateway.rate_limited', 'gateway.budget_exhausted',
+  'gateway.residency_above_ceiling', 'gateway.forbidden', 'eval.embedding_profile_unknown',
+  'eval.embedding_unavailable', 'eval.model_not_at_ceiling', 'eval.model_unknown', 'eval.no_key',
+  'eval.request_rejected', 'eval.stopped', 'parser.unavailable', 'parser.not_configured', 'parser.encrypted',
+  'parser.too_large', 'parser.too_many_pages', 'parser.format_deferred', 'parser.unsupported_format',
+  'parser.limit_exceeded', 'parser.timeout', 'parser.worker_crashed', 'parser.resource_limit', 'parser.ocr_failed',
+  'parser.conversion_failed', 'parser.ner_not_ready', 'pii.flagged', 'pii.ner_pending', 'upload.too_large',
+  'upload.manifest_missing', 'upload.blob_missing', 'upload.blob_damaged', 'upload.hash_mismatch', 'upload.deleted',
+  'upload.duplicate', 'upload.unknown_slot', 'upload.slot_in_use', 'upload.format_deferred', 'upload.macro_enabled',
+  'upload.archive', 'upload.type_unknown', 'upload.type_mismatch',
 ]
 
 describe('worker messages', () => {
@@ -63,5 +80,16 @@ describe('worker messages', () => {
   it('falls back to a generic text that names an unknown code', () => {
     expect(jobMessage('robots.ok')).toBe(JOB_MESSAGES['robots.ok'])
     expect(jobMessage('new.code')).toContain('(new.code)')
+  })
+
+  it('gives a code built at run time the text of its longest prefix, naming the code', () => {
+    expect(jobMessage('gateway.http_502')).toBe(`${JOB_MESSAGE_PREFIXES['gateway.http_']} (gateway.http_502)`)
+    expect(jobMessage('gateway.model_not_allowed')).toBe(`${JOB_MESSAGE_PREFIXES['gateway.']} (gateway.model_not_allowed)`)
+    expect(jobMessage('parser.ner_busy')).toBe(`${JOB_MESSAGE_PREFIXES['parser.ner_']} (parser.ner_busy)`)
+    expect(jobMessage('gateway.timeout')).toBe(JOB_MESSAGES['gateway.timeout'])
+  })
+
+  it('tells why a page can come out empty', () => {
+    expect(jobMessage('parse.empty')).toContain('JavaScript')
   })
 })
