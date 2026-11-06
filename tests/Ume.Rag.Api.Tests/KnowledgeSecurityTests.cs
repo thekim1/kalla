@@ -267,26 +267,43 @@ public sealed class KnowledgeSecurityTests(KnowledgeFixture db) : IClassFixture<
         logs.Text.ShouldNotContain(new string('w', 43));
     }
 
+    /// <summary><see cref="Host"/> with the connection address taken from <see cref="RemoteAddressFromHeader"/>.</summary>
+    private (WebApplicationFactory<Program> Api, CapturingLoggerProvider Logs) AddressedHost(PolicySnapshot? snapshot = null,
+        params (string Key, string Value)[] settings)
+    {
+        var (host, logs) = Host(snapshot, true, settings);
+        return (host.WithWebHostBuilder(web => web.ConfigureTestServices(services => services.AddSingleton<IStartupFilter, RemoteAddressFromHeader>())), logs);
+    }
+
+    /// <summary>GET /v1/collections from <paramref name="address"/> (the connection), optionally with <c>X-Forwarded-For</c>.</summary>
+    private static async Task<(HttpStatusCode Status, string? Code)> Collections(HttpClient client, string? address, string? forwardedFor = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("/v1/collections", UriKind.Relative));
+        if (address is not null)
+        {
+            request.Headers.Add(RemoteAddressFromHeader.Header, address);
+        }
+
+        if (forwardedFor is not null)
+        {
+            request.Headers.Add("X-Forwarded-For", forwardedFor);
+        }
+
+        using var response = await client.SendAsync(request, Ct);
+        var code = response.IsSuccessStatusCode ? null : JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["code"]!.GetValue<string>();
+        return (response.StatusCode, code);
+    }
+
+    /// <summary>The snapshot with the reverse proxy 192.0.2.0/24 trusted (<c>Settings.TrustedProxies</c>).</summary>
+    private PolicySnapshot BehindProxy() => db.Snapshot() with { TrustedProxies = [IPNetwork.Parse("192.0.2.0/24")] };
+
     [Fact]
     public async Task A_key_with_address_ranges_works_only_from_inside_them_and_a_revoked_one_is_reported_as_revoked()
     {
-        var (host, logs) = Host();
-        using var api = host.WithWebHostBuilder(web => web.ConfigureTestServices(services => services.AddSingleton<IStartupFilter, RemoteAddressFromHeader>()));
+        var (api, logs) = AddressedHost();
+        using var _ = api;
         using var restricted = Client(api, db.RestrictedKey);
         using var revoked = Client(api, db.RevokedRestrictedKey);
-
-        async Task<(HttpStatusCode Status, string? Code)> Collections(HttpClient client, string? address)
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("/v1/collections", UriKind.Relative));
-            if (address is not null)
-            {
-                request.Headers.Add(RemoteAddressFromHeader.Header, address);
-            }
-
-            using var response = await client.SendAsync(request, Ct);
-            var code = response.IsSuccessStatusCode ? null : JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["code"]!.GetValue<string>();
-            return (response.StatusCode, code);
-        }
 
         foreach (var inside in new[] { "203.0.113.7", "::ffff:203.0.113.8", "2001:db8:0:1::5" })
         {
@@ -305,6 +322,65 @@ public sealed class KnowledgeSecurityTests(KnowledgeFixture db) : IClassFixture<
         failed.ShouldContain(m => m.Contains("address_not_allowed (sk)", StringComparison.Ordinal) && m.Contains("198.51.100.0", StringComparison.Ordinal));
         failed.ShouldContain(m => m.Contains("key_revoked (sk)", StringComparison.Ordinal));
         failed.ShouldNotContain(m => m.Contains("203.0.113.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Behind_a_trusted_proxy_the_allow_list_and_the_events_see_the_forwarded_address()
+    {
+        var (api, logs) = AddressedHost(BehindProxy());
+        using var _ = api;
+        using var restricted = Client(api, db.RestrictedKey);
+
+        // The right-most untrusted hop is the client: a prepended entry is never believed.
+        (await Collections(restricted, "192.0.2.10", "203.0.113.7")).ShouldBe((HttpStatusCode.OK, null));
+        (await Collections(restricted, "192.0.2.10", "203.0.113.7, 192.0.2.11")).ShouldBe((HttpStatusCode.OK, null));
+        (await Collections(restricted, "192.0.2.10", "2001:db8::5")).ShouldBe((HttpStatusCode.OK, null));
+        (await Collections(restricted, "192.0.2.10", "203.0.113.7, 198.51.100.1")).ShouldBe((HttpStatusCode.Forbidden, "address_not_allowed"));
+
+        var failed = Events(logs, 5001).ShouldHaveSingleItem().Message;
+        failed.ShouldContain("address_not_allowed (sk)");
+        failed.ShouldContain("from 198.51.100.0"); // the forwarded client, truncated; not the proxy
+    }
+
+    [Fact]
+    public async Task X_forwarded_for_from_an_untrusted_connection_or_with_no_trusted_proxies_is_ignored()
+    {
+        foreach (var snapshot in new[] { BehindProxy(), db.Snapshot() })
+        {
+            var (api, _) = AddressedHost(snapshot);
+            using var __ = api;
+            using var restricted = Client(api, db.RestrictedKey);
+
+            (await Collections(restricted, "198.51.100.1", "203.0.113.7")).ShouldBe((HttpStatusCode.Forbidden, "address_not_allowed"));
+            (await Collections(restricted, "203.0.113.7", "198.51.100.1")).ShouldBe((HttpStatusCode.OK, null));
+        }
+
+        // No trusted proxies: even the proxy's own connection is taken as the client.
+        var (direct, _) = AddressedHost();
+        using var ___ = direct;
+        using var client = Client(direct, db.RestrictedKey);
+        (await Collections(client, "192.0.2.10", "203.0.113.7")).ShouldBe((HttpStatusCode.Forbidden, "address_not_allowed"));
+    }
+
+    [Fact]
+    public async Task Behind_a_trusted_proxy_the_throttle_counts_each_forwarded_client_on_its_own()
+    {
+        var (api, logs) = AddressedHost(BehindProxy(), ("Api:AuthFailuresPerMinute", "2"));
+        using var _ = api;
+        using var wrong = Client(api, "ume-rag-sk-" + new string('w', 43));
+
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 4; i++)
+        {
+            statuses.Add((await Collections(wrong, "192.0.2.10", "198.51.100.1")).Status);
+        }
+
+        statuses.ShouldBe([HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.TooManyRequests]);
+        // Another client behind the same proxy is not throttled.
+        (await Collections(wrong, "192.0.2.10", "198.51.200.1")).Status.ShouldBe(HttpStatusCode.Unauthorized);
+        var throttled = Events(logs, 5006).ShouldHaveSingleItem().Message;
+        throttled.ShouldContain("198.51.100.0");
+        throttled.ShouldNotContain("192.0.2.");
     }
 
     /// <summary>The test server has no connection address; this sets it from a test header, before the app's pipeline.</summary>

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 using Ume.Rag.Answering;
@@ -24,6 +25,9 @@ builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamin
 builder.AddRagDatabase();
 builder.AddRagConfigMonitor();
 builder.AddRagKeys();
+// Client addresses come only from the trusted proxies set in the admin UI (ClientAddressMiddleware, as the gateway's).
+// ASPNETCORE_FORWARDEDHEADERS_ENABLED would believe X-Forwarded-For from any caller, so it is switched off here.
+builder.Services.PostConfigure<ForwardedHeadersOptions>(o => o.ForwardedHeaders = ForwardedHeaders.None);
 
 // Rag:Roles (repo-and-deployment §3): a comma-separated list; the knowledge routes exist only with "knowledge".
 var roles = (builder.Configuration["Rag:Roles"] ?? "knowledge").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -108,6 +112,14 @@ if (chat)
 
 var app = builder.Build();
 app.UseUmeWebDefaults();
+if (knowledge)
+{
+    // Before anything reads the client address (key allow-lists, the auth-failure throttle, events, the downloads limiter);
+    // only the client API, so health probes are untouched. The trusted proxies come with the access snapshot.
+    app.UseWhen(http => http.Request.Path.StartsWithSegments("/v1", StringComparison.OrdinalIgnoreCase),
+        branch => branch.UseMiddleware<ClientAddressMiddleware>());
+}
+
 app.UseUmeSecurityHeaders(o => o.NoStorePrefixes.Add("/v1"));
 app.UseProblemDetailsForEmptyErrors("The request could not be completed");
 app.MapDefaultEndpoints();
