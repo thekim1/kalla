@@ -3,6 +3,7 @@ extern alias fakegateway;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -218,6 +219,63 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
             .ShouldBe([AssistantVersionStates.Superseded, AssistantVersionStates.Published]);
         (await db.AuditLog.AsNoTracking().Where(a => a.EntityType == "assistant" && a.EntityId == id.ToString()).OrderBy(a => a.Id).Select(a => a.Action).ToListAsync(Ct))
             .ShouldBe(["create", "draft", "update", "draft", "publish", "audiences", "draft", "publish"]);
+    }
+
+    [Fact]
+    public async Task Publish_refuses_query_steps_the_runtime_would_replace_by_its_default()
+    {
+        // V17 (admin design §4.6): the integer fields are integers exactly as AssistantChatSettings.Parse reads them (a
+        // fraction, a string or 10.0 would silently become the default there), contextTokens is 4,096-131,072 and
+        // condense.enabled is a boolean. The steps go as raw JSON text so 10.0 reaches the database as written.
+        var seed = await SeedAsync();
+        await using var gateway = Gateway();
+        await using var factory = Admin(gateway);
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, seed.Code);
+
+        using var created = await admin.PostAsJsonAsync("/api/assistants", new
+        {
+            name = "Typer " + seed.Code, departmentId = seed.Department, classification = Classification.Internal, description = "D", contactName = "K", contactEmail = "k@umea.se",
+        }, Ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+        var assistant = await Json(created);
+        var id = assistant.GetProperty("id").GetGuid();
+        var draftVersion = assistant.GetProperty("draft").GetProperty("version").GetString();
+
+        async Task<HttpResponseMessage> PublishAsync(string querySteps)
+        {
+            using (var draft = await admin.PutAsJsonAsync($"/api/assistants/{id}/draft", new
+                   {
+                       gatewayModel = Model, systemPrompt = "Svara kort.", collectionLinks = new[] { new { collectionId = seed.Collection, tags = Array.Empty<string>() } },
+                       querySteps = JsonNode.Parse(querySteps), version = draftVersion,
+                   }, Ct))
+            {
+                draft.StatusCode.ShouldBe(HttpStatusCode.OK, await draft.Content.ReadAsStringAsync(Ct));
+                draftVersion = (await Json(draft)).GetProperty("version").GetString();
+            }
+
+            var version = (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{id}", Ct)).GetProperty("version").GetString();
+            return await admin.PostAsJsonAsync($"/api/assistants/{id}/publish", new { version, draftVersion }, Ct);
+        }
+
+        foreach (var (steps, field) in new[]
+                 {
+                     ("""{"retrieval":{"topK":10.5}}""", "retrieval.topK"),
+                     ("""{"retrieval":{"topK":"10"}}""", "retrieval.topK"),
+                     ("""{"retrieval":{"topK":10.0}}""", "retrieval.topK"),
+                     ("""{"condense":{"enabled":"false"}}""", "condense.enabled"),
+                     ("""{"answer":{"contextTokens":1000}}""", "answer.contextTokens"),
+                     ("""{"answer":{"contextTokens":200000}}""", "answer.contextTokens"),
+                 })
+        {
+            using var refused = await PublishAsync(steps);
+            refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, steps);
+            var problem = await Json(refused);
+            problem.GetProperty("code").GetString().ShouldBe("query_steps_invalid", steps);
+            problem.GetProperty("params").GetProperty("field").GetString().ShouldBe(field, steps);
+        }
+
+        using var published = await PublishAsync("""{"answer":{"contextTokens":24576},"condense":{"enabled":false}}""");
+        published.StatusCode.ShouldBe(HttpStatusCode.OK, await published.Content.ReadAsStringAsync(Ct));
     }
 
     [Fact]

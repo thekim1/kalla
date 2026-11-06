@@ -62,11 +62,11 @@ public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int
         var json = string.IsNullOrWhiteSpace(querySteps) ? null : JsonNode.Parse(querySteps) as JsonObject;
         var d = Default;
         return new AssistantChatSettings(
-            Int(json?["retrieval"]?["topK"]) ?? d.TopK,
-            Int(json?["history"]?["maxMessages"]) ?? d.HistoryMaxMessages,
-            Int(json?["history"]?["maxTokens"]) ?? d.HistoryMaxTokens,
-            Int(json?["answer"]?["contextTokens"]) ?? d.ContextTokens,
-            Int(json?["answer"]?["maxOutputTokens"]) ?? d.MaxOutputTokens,
+            TryInt(json?["retrieval"]?["topK"]) ?? d.TopK,
+            TryInt(json?["history"]?["maxMessages"]) ?? d.HistoryMaxMessages,
+            TryInt(json?["history"]?["maxTokens"]) ?? d.HistoryMaxTokens,
+            TryInt(json?["answer"]?["contextTokens"]) ?? d.ContextTokens,
+            TryInt(json?["answer"]?["maxOutputTokens"]) ?? d.MaxOutputTokens,
             json?["answer"]?["temperature"] is JsonValue t && t.GetValueKind() == JsonValueKind.Number ? t.GetValue<double>() : d.Temperature,
             json?["answer"]?["language"] is JsonValue l && l.GetValueKind() == JsonValueKind.String && l.GetValue<string>() == "sv",
             json?["condense"]?["enabled"] is not JsonValue c || c.GetValueKind() != JsonValueKind.False,
@@ -74,5 +74,10 @@ public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int
             RerankerKinds.Parse(json?["retrieval"]?["rerank"] is JsonValue r && r.GetValueKind() == JsonValueKind.String ? r.GetValue<string>() : null));
     }
 
-    private static int? Int(JsonNode? node) => node is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<int>(out var i) ? i : null;
+    /// <summary>
+    /// The integer this parser reads from a <c>QuerySteps</c> value, or null when it would use the default: a JSON number
+    /// written as an integer (<c>10</c>; not <c>10.5</c>, <c>10.0</c> or <c>1e1</c>) in the <see cref="int"/> range. Admin
+    /// rule V17 refuses what this does not read (admin design §4.6).
+    /// </summary>
+    public static int? TryInt(JsonNode? node) => node is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<int>(out var i) ? i : null;
 }
