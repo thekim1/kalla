@@ -48,7 +48,7 @@ materialised CTE); NuGet **`Pgvector` 0.3.2** (depends on `Npgsql` ≥ 8.0.5; co
 | 16 | Latency | p95 retrieval ≤ 90 ms on an embedding miss, ≤ 40 ms on a hit, at 100k chunks; alert at 250 ms (§11) |
 | 17 | Result cache | None; config snapshot and embeddings are cached, results are not (§12) |
 | 18 | OpenSearch seam | `ISearchIndex` replaces candidate generation only; hydration, access defence and citations stay in Postgres, which re-checks every hit (§13) |
-| 19 | Rerank | **Optional**, off by default, per assistant (`QuerySteps.retrieval.rerank`: `chat-model` or `gateway`), behind `IReranker` (§6.7): `ChatModelReranker` (interim, a chat model) and `GatewayReranker` (`/v1/rerank`, Berget `bge-reranker-v2-m3` at `Eu` until on-prem); enabled when the evaluation shows a gain (Decisions "Rerank pulled forward", "Gateway release 1 and shared Keycloak as built") |
+| 19 | Rerank | **Optional**, off by default, per assistant (`QuerySteps.retrieval.rerank`: `chat` or `gateway`, absent or `off` = none), behind `IReranker` (§6.7): `ChatModelReranker` (interim, a chat model) and `GatewayReranker` (`/v1/rerank`, Berget `bge-reranker-v2-m3` at `Eu` until on-prem); enabled when the evaluation shows a gain (Decisions "Rerank pulled forward", "Gateway release 1 and shared Keycloak as built") |
 
 ## 2. Placement and interfaces
 
