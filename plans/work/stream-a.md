@@ -60,7 +60,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** parser §10.1, §10.2; processing §3 (parse slots, timeouts).
 
-### [ ] A-8 Slimmer parser image (resource review)
+### [x] A-8 Slimmer parser image (resource review) (#418)
 - **Do:** measure the parser image per layer (2.88 GB today), then remove what the runtime doesn't need (build tools,
   caches, unused torch parts, docs, test data) without changing behaviour; keep `LICENSES.md` and model licences.
 - **Paths:** `src/parser/Dockerfile`, `src/parser/**`.

@@ -19,6 +19,14 @@ WORKDIR /src
 COPY pyproject.toml uv.lock .python-version ./
 # Locked wheels only (`no-build = true`, CPU torch), hashes checked by uv.
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
+# Drop what the runtime never loads (A-8): torch's C++ test binaries, protoc and C++ headers, and the packages' own
+# test suites (`tests`/`test` directories). Package metadata (dist-info, licence files) stays, so scripts/licences.py
+# renders the same LICENSES.md; torch_shm_manager stays (torch.multiprocessing's file_system sharing). The test stage
+# runs the parser suite on this pruned venv.
+RUN SP=/opt/venv/lib/python3.12/site-packages \
+    && rm -rf "$SP/torch/test" "$SP/torch/include" "$SP/torch/lib/libtorchbind_test.so" \
+    && find "$SP/torch/bin" -mindepth 1 ! -name torch_shm_manager -exec rm -rf {} + \
+    && find "$SP" -depth -type d \( -name tests -o -name test \) ! -path '*.dist-info*' -exec rm -rf {} +
 # Pinned commits and SHA-256 per file (ume_parser/model_manifest.json); a mismatch fails the build.
 COPY ume_parser/model_manifest.json ume_parser/
 COPY scripts/download_models.py scripts/
