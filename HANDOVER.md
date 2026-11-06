@@ -1,6 +1,6 @@
 # Handover
 
-State of the Ume.Rag work for the next session. Rewritten 2026-11-06, end of session 22 (`main` after #419). Earlier
+State of the Ume.Rag work for the next session. Rewritten 2026-11-06, end of session 23 (`main` at `ec03525`). Earlier
 sessions are in the git history (`git log -- HANDOVER.md`).
 Repo `~/research/rag` on this machine (`~/git/ume-rag-platform` on the session-19 machine), branch `main`, remote
 `origin` = https://github.com/thekim1/ume-rag-platform (push after every commit).
@@ -18,59 +18,66 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
 3. **`plans/work/`**: the queues `stream-a.md`, `stream-b.md`, `main.md` (each item: do, paths, done-when, waits on,
    read). Items are ticked in the PR that does them. Start prompts in `plans/work/prompts/`.
 4. The design for the area at hand (map in `plans/README.md`). History is in `plans/archive/` and does not bind.
+5. **`plans/cases/support-assistant/`**: the first case plan (non-binding): an internal support assistant for ticket
+   handling with a frontend built by another team. README has the user's decisions; `05-frontend-integration.md` is
+   the contract for that team.
 
 ## Where we are
 
-- **P0** released (`v0.1.0`), **P1a code** done, **P1b code** almost done. **Stream A has no unblocked code item**:
-  **A-5** waits on gateway release 1, **A-4** (pin review) is last. Stream B: **B-4** (accessibility, NVDA), **B-12**
-  (tick pending; live run on #403), **B-16** (code merged #415; live run waits on the gateway's rerank release),
-  **B-17** (chat connection-failure retry, chat-api §8.3), **#413** (group-name collision in the shared realm, not a
-  pilot blocker), then **B-6**. Then **M-3** (code complete).
-- **Done late in session 22:** hot-path tidy complete (#411, #417; golden chat-wire tests in
-  `tests/Ume.Rag.Api.Tests/Golden/chat/` pin the output, regenerate with `UME_RAG_UPDATE_GOLDEN=1`); evaluation
-  variant `hybrid-rerank-gateway`, reranked variants without a model are `skipped` (#416); **parser resource work**:
-  `ner-0` on demand and idle convert slots go cold after 15 min (A-6/A-7, #419: idle 1.8 GiB → ~0.1 GiB; first
-  convert ~12.5 s, first NER ~5 s after idle), image 2.88 → 2.58 GB (A-8, #418). The resource review found the
-  architecture lean in process count (6 containers, as Decisions "Fewer pilot containers"); the rest of its ideas
-  (ClamAV reservation, Postgres limit, GC mode) wait for measurements on the test host (R1).
-- **Gateway release 1 is merged on the gateway's `main` but not tagged** (latest tag v0.8.9): residency ceiling
-  (#66), embeddings per input (#65), FakeLlm (#67), rerank endpoint (#68), Keycloak project (#70), EUPL (#69).
-  Reviewed from Ume.Rag's side in session 22: header names match, `x-ume-residency` is set on every routed answer
-  (streaming and realtime too), rerank goes through the same pipeline. Draft #71 adds LDAP/sign-in tests.
-- **Rerank (measured, session 22, `turkos`, 100 generated questions, Haiku as `ChatModelReranker`):** paired per
-  question 4 better, 0 worse, 96 same; MRR 0.786 → 0.808; +1.1 s and ~3k input tokens per question. 57 of 100 fell
-  back, mostly the interim proxy's 502s. Hybrid is already strong on generated questions; the gold set and B-16
-  (Berget `bge-reranker-v2-m3`) decide. Rerank is optional everywhere and off by default.
-- **Keyword weight 0.25 on this machine's set:** recall 0.91 → 0.91, MRR 0.786 → 0.796. The session-19 machine's
-  0.98 came from its easier set. Don't save 0.25 on `turkos` until the gold set.
+- **P0** released (`v0.1.0`), **P1a/P1b code** done apart from M-3 (code complete) and the pin reviews (A-4, B-6).
+  **Stream B is inactive** (user, 2026-11-06): the main session builds B's paths on `main-session/<slug>` branches.
+- **Gateway v0.9.0 and v0.9.1 are released** (thekim1/llmgateway): residency ceiling, per-input embedding check,
+  `/v1/rerank`, Keycloak project, EUPL (0.9.0); **rerankers under the Foundry provider and a residency per model**
+  (0.9.1, gateway #72/#73, from our issue). The interim gateway runs ≥ 0.9.0 (it answers a bad
+  `x-ume-max-residency` with 400).
+- **Merged in session 23** (all CI green):
+  - A-5 #429: no token cap per embedding request (live: 64 inputs, 59,584 tokens, one request).
+  - #423/#426: role groups must be `rag-` names or Entra ids (identity §1.4/§2.5); member-groups hint.
+  - Support-assistant gaps, designed (Decisions rows "Related documents and the `ume` chat extension", "Follow-up
+    suggestions", "Long questions condensed into the search query", "Chat rate limit per key"; chat §3.8, §5.1,
+    §9.7, §9.8) and built: **M-5** #430 per-key chat limit (`Keys.RequestsPerMinute`), **M-6** #431 questions up to
+    16,000 characters (long ones condensed into the search query, full text with line breaks to the answer model),
+    **M-7** #433 the `ume` extension (`outcome`, `degraded`, `related_documents`), **M-8** #434 follow-up
+    suggestions (second `ume` chunk; a task-model call never fails the turn).
+  - #432 (closes #424): key `AllowedIpRanges` enforced (identity §6.3 step 4); rag-api takes the client address from
+    `X-Forwarded-For` only via `Settings.TrustedProxies` (gateway `ClientAddressMiddleware`).
+  - Architecture review (external, assessed by a subagent): #437 V17 accepts exactly what the runtime reads
+    (integer `QuerySteps`, `contextTokens` 4,096–131,072, boolean `condense.enabled`); #436 preview/production
+    parity guard; **#435 filed** (chunk dates: HTTP `Last-Modified` and reliable `lastmod` never reach production);
+    the rest (typed-settings generator, lifecycle services, assistant evaluation, presets) is P2.
+- **`ume` checked with the OpenAI SDKs** (Python 3.46.0, JS 7.53.0; chat §22): send via `extra_body` / request
+  field, read `model_extra["ume"]` / `.ume`. .NET SDK not checked.
+- **Measured on the interim gateway** (chat §22): long condense of a 16,000-character ticket `gpt-6-luna` 2.3–2.9 s,
+  `claude-haiku-5-5` ~1.1 s; follow-ups luna 1.4–2.6 s, haiku 1.1–1.3 s.
 
-## Decided this session (user, 2026-11-05/06)
+## Decided this session (user, 2026-11-06)
 
-- **M-2 answered** (Decisions "M-2 open design calls"): uploads need no topics; `UrlCanonicalizer` stays in the
-  Worker; fired PII types stored (B-8 done); HNSW rebuild on its own connection (B-7 done); index health for
-  multi-collection scopes (B-9, #401 done); scope size counts topic-filtered chunks (B-10 done).
-- **Sitevision `open.*`/`sv.*` dropped on every host** (A-3, #382).
-- **Rerank pulled forward**, interim `ChatModelReranker` then `GatewayReranker`; **rerank optional everywhere**.
-- **Gateway release 1 and shared Keycloak as built** (#390): 502/504 retried with the same ceiling; keycloak-config-cli;
-  realm-wide settings in the gateway's base file; **no admin OTP for the pilot** (record in G1); Keycloak 26.8.1.
-- **Hot-path tidy** (#410, closed): all six items done in #411 and #417, no behaviour change. The embedder keeps its
-  own retry loop (knowledge §5.3); only the 502/504 decision is shared.
-- **Parser idle stop** (resource review): A-6, A-7, A-8 done; parser §10.1/§13 and processing §9.6 describe it.
-- **Images cleaned on this machine** (2026-11-06): kept only the running stack's `parser:`/`clamav:` tags and
-  `ume-rag.local/{clamav:dev,parser:ci,postgres:ci}`; the CI runners were not cleaned.
-- From the other machine's main session (#397): browser tests optional on releases (`RELEASE_E2E` unset). **Ask the
-  user to confirm** if not yet done.
+- **Support-assistant case:** DoIT owns it; level `internal`; intranet readable without login; `fallback` general
+  knowledge; one shared app key; frontend keeps history; Markdown uploaded by hand now, Git connector (SA-10) after the
+  pilot; build SA-1, SA-3, SA-4, SA-6 before the pilot (done); personal data by instructions + DPIA, no redaction.
+- **Reranker for the POC: `Cohere-rerank-v5-fast` on Azure AI Foundry (EU)** instead of Berget; models and their
+  location are configuration in the gateway admin UI, never a code change (gateway #72).
+- **Condense model stays `gpt-6-luna`**; for the support case set `Chat:LongQuestionCondenseTimeout` 4 s and
+  `Chat:FollowUpTimeout` 3 s (case `04-assistant.md` §2). The defaults in code are still 3 s and 2 s; no Decisions
+  row changed (the user approved only the case-plan recommendation).
+- **The `ume` name and placement** kept (namespaced extension object, opt-in, top level).
 
 ## Next session
 
-1. **GitHub:** `gh pr list`, `gh issue list`. Review stream B's PRs (B-4, B-17, #413); close #403 when B-12 is
-   ticked. #419 touched B's `PersonalDataStage.cs` (accepted, B told on the PR); watch for B's reply.
-2. **Offered, not started:** a **v0.2.0 release** to freeze this session's work into tested images (runs the full CI
-   set; turn the browser tests on for it with the release's `e2e` input or `RELEASE_E2E`, none ran since #377). Ask
-   the user first: building and pushing images and a tag are outward-facing.
-3. **User:** tag gateway release 1 (then A-5, B-L4, the Berget rerank run for B-16); the roadmap's "Waiting on
-   people" (test host, gold set with DoIT, G1, U1); allow `claude-opus-5-5` on Ume.Rag's interim gateway key again
-   or choose another model for `turkos` (see Local stack); confirm #397 (browser tests optional on releases).
+1. **GitHub:** `gh pr list`, `gh issue list`. Stream B is inactive; check whether it resumed.
+2. **#421 live rerank run** (B-12, B-16) waits on the **user**: add `Cohere-rerank-v5-fast` under the Foundry provider
+   on the interim gateway (v0.9.1: kind Rerank, publisher `cohere`, residency Eu) and allow it on Ume.Rag's key.
+   Last probe still gave 503/403. Then: model sync, `Settings.Retrieval.gatewayRerankModel`, evaluation
+   `{"variants":["hybrid","hybrid-rerank","hybrid-rerank-gateway"]}` on `turkos`, report on #421, tick B-12/B-16.
+3. **#435 (stream A):** carry `Last-Modified`/reliable `lastmod` into production `SegmentInput`s and take out the shared
+   stage-input builder for production, preview and `DocumentProcessor`. Needed before any host gets
+   `lastmodReliable` (to-verify #170); not a pilot blocker.
+4. **Optional, ask first:** whether to raise the code defaults of the two budgets for `gpt-6-luna` (Decisions row);
+   the v0.2.0 release (images and tag are outward-facing; turn the browser tests on); M-3 code complete.
+5. **User:** the roadmap's "Waiting on people" (test host, gold set with DoIT, G1, U1); allow `claude-opus-5-5` on the
+   interim key again or publish `turkos` on another model; confirm #397 (browser tests optional on releases).
+6. **Stale worktrees** from earlier sessions: `../rag-a1`, `../rag-a3`, `../rag-a4`, `../rag-main`, `../rag-review`.
+   Check for unpushed work before removing them.
 
 ## Local stack (this machine)
 
@@ -105,7 +112,7 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
   depend on timing ("wait until X, fail after 60 s" is fine).
 - **Approve and merge without asking** when a PR is ready (reviewed, checked live where relevant, CI green with the
   tests actually run); tell the user afterwards. Design, scope and destructive actions go to the user.
-- **Stream B** is a remote agent (GitHub `thekim1`), with its own coordinating main session on the other machine;
+- **Stream B** (currently inactive; the main session takes its items on `main-session/` branches) is a remote agent (GitHub `thekim1`), with its own coordinating main session on the other machine;
   talk only through GitHub (labels `stream-b`, `stream-a`, `main`). B merges its own PRs; review its
   security-relevant parts. `gh` acts as `ume-nichlas`.
 - **Main session** owns `plans/**`, root `*.md` and `.github/stream-ownership.txt` (commit to `main`). Stream-A work
@@ -135,6 +142,14 @@ and wants to do better than **Eneo**, a slow "kitchen sink" monolith. Design and
 - Read the first real failure; don't overlap two Worker.Tests runs. Admin UI tests: `npx vitest run --pool=threads`;
   a worktree needs `node_modules` (symlink, remove before commit).
 - When editing a stream's queue on `main`, `pull --rebase` first: stream B edits queues too.
+- The `implementor` agent refuses git writes: review its diff, commit yourself, and never `git add -A` in a worktree
+  (the `src/admin-ui/node_modules` symlink is not ignored by `node_modules/`). Remove the symlink before
+  `git worktree remove`.
+- Tests that listen to process-wide `ActivitySource`s or meters must filter to their own trace or host scope; tests
+  run in parallel (#431).
+- Live latency checks: build the exact request body in a scratch script and `curl` the interim gateway with the
+  key from `rag_key.txt` and the base URL from the AppHost secrets; never print either.
+- `Chat:*Timeout` knobs are TimeSpans (`00:00:03`); a bare `3` means three days.
 
 ## Environment notes
 
