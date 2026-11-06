@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
@@ -9,6 +11,7 @@ using Npgsql;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Infrastructure.Config;
 using Ume.Rag.TestKit;
 
 namespace Ume.Rag.AdminApi.Tests;
@@ -186,6 +189,106 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
         (await db.ConfigOutbox.AnyAsync(o => o.Version > before, Ct)).ShouldBeFalse();
     }
 
+    /// <summary>Collects the <c>rag.admin.config_lock.wait</c> measurements (seconds) of <paramref name="factory"/>'s meters only.</summary>
+    private static MeterListener LockWaits(Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> factory, List<double> waits)
+    {
+        var meters = factory.Services.GetRequiredService<IMeterFactory>();
+        var listener = new MeterListener
+        {
+            InstrumentPublished = (instrument, l) =>
+            {
+                if (instrument.Name == ConfigLockMetrics.WaitName && ReferenceEquals(instrument.Meter.Scope, meters))
+                {
+                    instrument.Unit.ShouldBe("s");
+                    l.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+        listener.SetMeasurementEventCallback<double>((_, value, _, _) =>
+        {
+            lock (waits)
+            {
+                waits.Add(value);
+            }
+        });
+        listener.Start();
+        return listener;
+    }
+
+    /// <summary>Holds the config version lock on its own connection until disposed (rolled back).</summary>
+    private async Task<(NpgsqlConnection Connection, NpgsqlTransaction Transaction)> HoldLockAsync()
+    {
+        var holder = new NpgsqlConnection(database.Connection(RagDatabase.Admin, pooling: false));
+        await holder.OpenAsync(Ct);
+        var transaction = await holder.BeginTransactionAsync(Ct);
+        await using var lockRow = new NpgsqlCommand("""SELECT 1 FROM config."ConfigVersion" WHERE "Id" = 1 FOR UPDATE""", holder, transaction);
+        await lockRow.ExecuteNonQueryAsync(Ct);
+        return (holder, transaction);
+    }
+
+    /// <summary>Waits until another backend waits for a lock on the config version row (the admin's write is queued).</summary>
+    private async Task UntilAWriteWaitsForTheLockAsync()
+    {
+        await using var probe = new NpgsqlConnection(database.Connection(RagDatabase.Admin, pooling: false));
+        await probe.OpenAsync(Ct);
+        await using var waiting = new NpgsqlCommand("""
+            SELECT count(*) FROM pg_stat_activity
+            WHERE wait_event_type = 'Lock' AND query LIKE '%config."ConfigVersion"%FOR UPDATE%' AND pid <> pg_backend_pid()
+            """, probe);
+        var deadline = DateTime.UtcNow.AddSeconds(4);
+        while ((long)(await waiting.ExecuteScalarAsync(Ct))! == 0)
+        {
+            DateTime.UtcNow.ShouldBeLessThan(deadline, "no config write queued behind the lock");
+            await Task.Delay(20, Ct);
+        }
+    }
+
+    [Fact]
+    public async Task Every_config_write_records_its_lock_wait_and_a_held_lock_a_longer_one()
+    {
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        List<double> waits = [];
+        using var listener = LockWaits(factory, waits);
+
+        // Uncontended: one measurement per write.
+        using (var first = await admin.PostAsJsonAsync("/api/clients", NewClient("Lock wait " + Guid.NewGuid()), Ct))
+        {
+            first.StatusCode.ShouldBe(HttpStatusCode.Created, await first.Content.ReadAsStringAsync(Ct));
+        }
+
+        lock (waits) { waits.Count.ShouldBe(1); }
+        using (var second = await admin.PostAsJsonAsync("/api/clients", NewClient("Lock wait " + Guid.NewGuid()), Ct))
+        {
+            second.StatusCode.ShouldBe(HttpStatusCode.Created, await second.Content.ReadAsStringAsync(Ct));
+        }
+
+        double[] uncontended;
+        lock (waits) { uncontended = [.. waits]; }
+        uncontended.Length.ShouldBe(2);
+
+        // Contended: another transaction holds the lock while the write waits; the release comes after a known hold.
+        var (holder, transaction) = await HoldLockAsync();
+        await using (holder)
+        await using (transaction)
+        {
+            var write = admin.PostAsJsonAsync("/api/clients", NewClient("Lock wait " + Guid.NewGuid()), Ct);
+            await UntilAWriteWaitsForTheLockAsync();
+            var held = Stopwatch.StartNew();
+            await Task.Delay(TimeSpan.FromSeconds(1), Ct);
+            await transaction.RollbackAsync(Ct);
+            held.Stop();
+            using var contended = await write;
+            contended.StatusCode.ShouldBe(HttpStatusCode.Created, await contended.Content.ReadAsStringAsync(Ct));
+
+            double[] all;
+            lock (waits) { all = [.. waits]; }
+            all.Length.ShouldBe(3);
+            all[2].ShouldBeGreaterThanOrEqualTo(held.Elapsed.TotalSeconds);
+            all[2].ShouldBeGreaterThan(uncontended.Max());
+        }
+    }
+
     [Fact]
     public async Task A_lock_held_longer_than_5_seconds_is_503_config_busy()
     {
@@ -199,12 +302,17 @@ public sealed class WritePathTests(AdminDatabaseFixture database)
             await lockRow.ExecuteNonQueryAsync(Ct);
         }
 
+        List<double> waits = [];
+        using var listener = LockWaits(factory, waits);
+
         var name = "Busy " + Guid.NewGuid();
         using var busy = await admin.PostAsJsonAsync("/api/clients", NewClient(name), Ct);
 
         // The outcome, not the wall clock (#297): the write waited for the lock, gave up with config_busy and left nothing.
         busy.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable, await busy.Content.ReadAsStringAsync(Ct));
         (await busy.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().ShouldBe(AdminErrorCodes.ConfigBusy.Code);
+        // The busy wait is measured too: lock_timeout runs on the server, so the client-side wait covers it.
+        lock (waits) { waits.ShouldHaveSingleItem().ShouldBeGreaterThanOrEqualTo(ConfigWrites.LockTimeout.TotalSeconds); }
         await transaction.RollbackAsync(Ct);
         await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
         (await db.Clients.AnyAsync(c => c.Name == name, Ct)).ShouldBeFalse();
