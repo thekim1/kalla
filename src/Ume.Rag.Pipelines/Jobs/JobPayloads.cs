@@ -165,9 +165,9 @@ public sealed record EvalOnDemandPayload : JobPayload
 
     public required Guid CollectionId { get; init; }
 
-    [Description("One EvaluationRuns row per variant, run against the same index; the P1a three-way gold-set run lists hybrid, vector and hybrid-no-decompounder, the rerank comparison (#399) hybrid and hybrid-rerank.")]
+    [Description("One EvaluationRuns row per variant, run against the same index; the P1a three-way gold-set run lists hybrid, vector and hybrid-no-decompounder, the rerank comparison (#399, #414) hybrid, hybrid-rerank and hybrid-rerank-gateway.")]
     [MinLength(1)]
-    [MaxLength(4)]
+    [MaxLength(5)]
     [SchemaKeyword("uniqueItems", "true")]
     public IReadOnlyList<EvaluationVariant> Variants { get; init; } = [EvaluationVariant.Hybrid];
 

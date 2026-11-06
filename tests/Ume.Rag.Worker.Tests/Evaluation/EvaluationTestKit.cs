@@ -85,7 +85,8 @@ internal static class EvalKit
     }
 
     /// <summary>A worker running only the <c>eval</c> class, embedding and reranking through the FakeGateway in process.</summary>
-    public static Task<WorkerHost> StartWorkerAsync(RagDatabaseFixture database, FakeGatewayFactory gateway, DirectoryInfo blobs,
+    public static Task<WorkerHost> StartWorkerAsync(RagDatabaseFixture database,
+        Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<fakegateway::Program> gateway, DirectoryInfo blobs,
         Action<IServiceCollection>? services = null) =>
         WorkerHost.StartAsync(database, s =>
         {

@@ -110,7 +110,13 @@ public sealed class EvaluationScoringTests
         plain.ShouldBe(new EvaluationSearchStats { Searches = 1, TotalP50Ms = 40, TotalP95Ms = 40 }, "no rerank model, latency, tokens or cost");
 
         var unpriced = EvaluationScoring.Search(outcomes, reranked: true, "ume/chat-eu", new ModelPrice(2m, null));
-        unpriced.RerankCostPerQueryUsd.ShouldBeNull("cost needs both prices");
+        unpriced.RerankCostPerQueryUsd.ShouldBe(0, "no tokens at all: the input price suffices");
+        QuestionOutcome[] completions = [Outcome(total: 40, rerank: 30, new RerankUsage("ume/chat-eu", 1_000, 50))];
+        EvaluationScoring.Search(completions, reranked: true, "ume/chat-eu", new ModelPrice(2m, null)).RerankCostPerQueryUsd
+            .ShouldBeNull("completion tokens need the output price");
+        QuestionOutcome[] gateway = [Outcome(total: 40, rerank: 30, new RerankUsage("bge-reranker-v2-m3", 2_000, 0))];
+        EvaluationScoring.Search(gateway, reranked: true, "bge-reranker-v2-m3", new ModelPrice(0.1m, null)).RerankCostPerQueryUsd
+            .ShouldBe(0.0002, "a gateway rerank model bills input tokens only (#414)");
         EvaluationScoring.RerankModel(outcomes, reranked: true, "ume/chat-eu").ShouldBe("ume/chat-eu", "none answered: the platform's model");
     }
 

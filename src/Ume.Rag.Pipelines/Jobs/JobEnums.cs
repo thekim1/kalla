@@ -75,7 +75,8 @@ public enum SwapKind
 /// <summary>
 /// Retrieval variant of an evaluation run (<c>EvaluationRuns.Variant</c>; processing design §13.4). <c>hybrid-rerank</c> is
 /// <c>hybrid</c> with the interim chat-model reranker (#399, Decisions "Rerank pulled forward"): its row is <c>Variant</c>
-/// <c>hybrid</c> with <c>Reranked</c> set.
+/// <c>hybrid</c> with <c>Reranked</c> set. <c>hybrid-rerank-gateway</c> is the same with the gateway's <c>/v1/rerank</c>
+/// reranker (#414, B-16).
 /// </summary>
 public enum EvaluationVariant
 {
@@ -83,6 +84,7 @@ public enum EvaluationVariant
     Vector,
     HybridNoDecompounder,
     HybridRerank,
+    HybridRerankGateway,
 }
 
 /// <summary>Question layer of an evaluation set (<c>EvaluationQuestions.Layer</c>; processing design §13.4).</summary>

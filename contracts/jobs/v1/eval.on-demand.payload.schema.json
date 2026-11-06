@@ -19,12 +19,13 @@
           "hybrid",
           "vector",
           "hybrid-no-decompounder",
-          "hybrid-rerank"
+          "hybrid-rerank",
+          "hybrid-rerank-gateway"
         ]
       },
-      "description": "One EvaluationRuns row per variant, run against the same index; the P1a three-way gold-set run lists hybrid, vector and hybrid-no-decompounder, the rerank comparison (#399) hybrid and hybrid-rerank.",
+      "description": "One EvaluationRuns row per variant, run against the same index; the P1a three-way gold-set run lists hybrid, vector and hybrid-no-decompounder, the rerank comparison (#399, #414) hybrid, hybrid-rerank and hybrid-rerank-gateway.",
       "minItems": 1,
-      "maxItems": 4,
+      "maxItems": 5,
       "uniqueItems": true,
       "default": [
         "hybrid"

@@ -205,7 +205,7 @@ public static class EvaluationScoring
     }
 
     /// <summary>
-    /// The rerank model a run's stats name: the first that answered, else the platform's <c>rerankModel</c> (which then
+    /// The rerank model a run's stats name: the first that answered, else the platform's model for the reranker (which then
     /// never answered); null for a run without rerank.
     /// </summary>
     public static string? RerankModel(IReadOnlyList<QuestionOutcome> outcomes, bool reranked, string? platformModel)
@@ -217,7 +217,8 @@ public static class EvaluationScoring
     /// <summary>
     /// How the run's searches went (#399): total and rerank latency (median and 95th percentile, nearest rank, over every
     /// question), the <c>rerank_unavailable</c> fallbacks, and with <paramref name="reranked"/> the rerank tokens and their cost
-    /// per question at <paramref name="price"/> (absent unless both prices are known). Degraded questions count in the latency
+    /// per question at <paramref name="price"/> (absent unless the input price is known, and the output price too when there are
+    /// completion tokens: a gateway rerank model bills input tokens only and has no output price, #414). Degraded questions count in the latency
     /// and in the per-question cost's denominator: they are what a user would get.
     /// </summary>
     public static EvaluationSearchStats Search(IReadOnlyList<QuestionOutcome> outcomes, bool reranked, string? rerankModel, ModelPrice? price)
@@ -227,8 +228,8 @@ public static class EvaluationScoring
         var usages = outcomes.Select(o => o.Result.RerankUsage).OfType<RerankUsage>().ToList();
         var prompt = usages.Sum(u => (long)u.PromptTokens);
         var completion = usages.Sum(u => (long)u.CompletionTokens);
-        double? cost = reranked && outcomes.Count > 0 && price is { InputPerMillionUsd: { } input, OutputPerMillionUsd: { } output }
-            ? (double)Math.Round((prompt * input + completion * output) / 1_000_000m / outcomes.Count, 6)
+        double? cost = reranked && outcomes.Count > 0 && price is { InputPerMillionUsd: { } input } && (completion == 0 || price.OutputPerMillionUsd is not null)
+            ? (double)Math.Round((prompt * input + completion * (price.OutputPerMillionUsd ?? 0m)) / 1_000_000m / outcomes.Count, 6)
             : null;
         return new EvaluationSearchStats
         {

@@ -22,7 +22,8 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 /// <see cref="RetrievalEngine.SearchAsync"/> with the same request returns, a re-run reproducing every number,
 /// candidate settings, <c>publish-report</c> against the last run before the publish, <c>nightly</c> with the recall
 /// alert on fake history, the nightly schedule, the kinds left to the set handler, and <c>hybrid</c> beside
-/// <c>hybrid-rerank</c> with latency, cost per question and rerank fallbacks (#399).
+/// <c>hybrid-rerank</c> and <c>hybrid-rerank-gateway</c> with latency, cost per question and rerank fallbacks (#399, #414),
+/// and a reranked variant without its model skipped.
 /// </summary>
 [Collection(RagDatabaseGroup1.Name)]
 public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -191,19 +192,73 @@ public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayF
     }
 
     [Fact]
-    public async Task Hybrid_rerank_without_a_rerank_model_counts_every_question_as_rerank_unavailable()
+    public async Task Hybrid_rerank_gateway_reranks_on_v1_rerank_and_prices_input_tokens_only()
+    {
+        const string model = "bge-reranker-v2-m3"; // the FakeGateway's rerank model (Eu) with FakeGateway:RerankEnabled
+        var fixture = await EvalKit.SeedAsync(database);
+        var restore = await SetRetrievalAsync($$"""{"gatewayRerankModel":"{{model}}"}""");
+        try
+        {
+            await Sql.ExecuteAsync(database.Connection(null), """
+                INSERT INTO config."GatewayModels" ("Name", "Kind", "ModelKind", "Residencies", "Source", "SupportsTools", "SupportsToolsSource",
+                                                    "InputPerMillionUsd", "OutputPerMillionUsd")
+                VALUES ($1, 'model', 'rerank', ARRAY['Eu'], 'manual', false, 'manual', 0.1, NULL)
+                ON CONFLICT ("Name") DO UPDATE SET "ModelKind" = 'rerank', "InputPerMillionUsd" = 0.1, "OutputPerMillionUsd" = NULL
+                """, model);
+            await using var rerankGateway = gateway.WithWebHostBuilder(web => web.UseSetting("FakeGateway:RerankEnabled", "true"));
+            await using var worker = await EvalKit.StartWorkerAsync(database, rerankGateway, _blobs);
+            var result = EvalKit.Result<EvalOnDemandResult>(await EvalKit.RunJobAsync(database, fixture,
+                new EvalOnDemandPayload
+                {
+                    CollectionId = fixture.CollectionId,
+                    Variants = [EvaluationVariant.Hybrid, EvaluationVariant.HybridRerank, EvaluationVariant.HybridRerankGateway],
+                },
+                JobDedupKeys.Eval(fixture.CollectionId)));
+
+            result.Runs.Select(r => r.Variant).ShouldBe([EvaluationVariant.Hybrid, EvaluationVariant.HybridRerankGateway]);
+            result.Skipped.ShouldNotBeNull().ShouldHaveSingleItem().ShouldBe(
+                new SkippedVariant { Variant = EvaluationVariant.HybridRerank, Reason = SkippedVariant.NoRerankModel }, "rerankModel is unset: skipped, not all fallbacks");
+            var run = result.Runs[1];
+            run.RecallAtK.ShouldBe(0.75);
+            run.Mrr.ShouldNotBeNull();
+            (await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Variant" || '|' || "Reranked"::text FROM content."EvaluationRuns" WHERE "Id" = $1""",
+                run.EvaluationRunId)).ShouldBe("hybrid|true", "hybrid-rerank-gateway is stored as hybrid with Reranked set");
+            var search = run.Search.ShouldNotBeNull();
+            search.Searches.ShouldBe(6);
+            search.RerankUnavailable.ShouldBe(0, "the 30 s limit measures the call, not the fallback");
+            search.RerankModel.ShouldBe(model);
+            search.RerankP50Ms.ShouldNotBeNull();
+            search.RerankP95Ms.ShouldNotBeNull().ShouldBeGreaterThanOrEqualTo(search.RerankP50Ms!.Value);
+            search.RerankPromptTokens.ShouldBeGreaterThan(0, "the FakeGateway bills input tokens for every rerank call");
+            search.RerankCompletionTokens.ShouldBe(0);
+            search.RerankCostPerQueryUsd.ShouldBe((double)Math.Round(search.RerankPromptTokens * 0.1m / 1_000_000m / 6, 6), "input tokens at the mirror's price, per question");
+        }
+        finally
+        {
+            await restore();
+            await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM config."GatewayModels" WHERE "Name" = $1""", model);
+        }
+    }
+
+    [Fact]
+    public async Task A_reranked_variant_without_a_model_for_its_reranker_is_skipped_as_no_rerank_model()
     {
         var fixture = await EvalKit.SeedAsync(database);
         await using var worker = await EvalKit.StartWorkerAsync(database, gateway, _blobs);
 
         var result = EvalKit.Result<EvalOnDemandResult>(await EvalKit.RunJobAsync(database, fixture,
-            new EvalOnDemandPayload { CollectionId = fixture.CollectionId, Variants = [EvaluationVariant.HybridRerank] }, JobDedupKeys.Eval(fixture.CollectionId)));
+            new EvalOnDemandPayload
+            {
+                CollectionId = fixture.CollectionId,
+                Variants = [EvaluationVariant.Hybrid, EvaluationVariant.HybridRerank, EvaluationVariant.HybridRerankGateway],
+            },
+            JobDedupKeys.Eval(fixture.CollectionId)));
 
-        var run = result.Runs.ShouldHaveSingleItem();
-        run.RecallAtK.ShouldBe(0.75, "the fused order stands");
-        var search = run.Search.ShouldNotBeNull();
-        search.RerankUnavailable.ShouldBe(6, "Settings.Retrieval.rerankModel is unset: every rerank falls back, and the report says so");
-        (search.RerankModel, search.RerankCostPerQueryUsd, search.RerankPromptTokens).ShouldBe(((string?)null, (double?)null, 0));
+        result.Runs.ShouldHaveSingleItem().Variant.ShouldBe(EvaluationVariant.Hybrid, "rerank is optional: no run of all fallbacks");
+        result.Skipped.ShouldNotBeNull().Select(s => (s.Variant, s.Reason)).ShouldBe(
+            [(EvaluationVariant.HybridRerank, SkippedVariant.NoRerankModel), (EvaluationVariant.HybridRerankGateway, SkippedVariant.NoRerankModel)]);
+        (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."EvaluationRuns" WHERE "SetId" = $1 AND "Reranked" """, fixture.SetId))
+            .ShouldBe(0);
     }
 
     [Fact]

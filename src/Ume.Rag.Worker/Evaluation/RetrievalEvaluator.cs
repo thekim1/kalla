@@ -14,14 +14,16 @@ namespace Ume.Rag.Worker.Evaluation;
 /// worker's pool over the one collection with every level, <c>k = 10</c>, no filters, <c>AllowDegraded = false</c>, the
 /// variant's mode and decompounding (§13.4). <see cref="Open"/> gives a session per job: one chunk count for the
 /// exact/HNSW rule and one query embedding per question, shared by every variant of the job. <c>hybrid-rerank</c> (#399)
-/// reranks through <see cref="ChatModelReranker"/> on its gateway client, with the passages read by
-/// <see cref="PostgresHydrator"/> on the same pool.
+/// reranks through <see cref="ChatModelReranker"/> and <c>hybrid-rerank-gateway</c> (#414) through
+/// <see cref="GatewayReranker"/> (<c>/v1/rerank</c>), both on the <c>gateway-rerank</c> client behind a
+/// <see cref="RerankRouter"/>, with the passages read by <see cref="PostgresHydrator"/> on the same pool.
 /// </summary>
 public sealed class RetrievalEvaluator(
     NpgsqlDataSource dataSource,
     EvaluationQueryEmbedder embedder,
     IHttpClientFactory clients,
     ILogger<ChatModelReranker> rerankLogger,
+    ILogger<GatewayReranker> gatewayRerankLogger,
     TimeProvider time)
 {
     /// <summary>
@@ -31,8 +33,9 @@ public sealed class RetrievalEvaluator(
     public static readonly TimeSpan StatementTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// The rerank limit of <c>hybrid-rerank</c>: the API's 500 ms (knowledge design §6.7) would measure the fallback, not a
-    /// chat-model rerank over 20 passages, so the run allows the call this long and reports its real latency (#399).
+    /// The rerank limit of <c>hybrid-rerank</c> and <c>hybrid-rerank-gateway</c>: the API's limits (3 s for the chat
+    /// reranker, 500 ms for the gateway's) would partly measure the fallback, not the rerank over 20 passages, so the run
+    /// allows the call this long and reports its real latency (#399, #414).
     /// </summary>
     public static readonly TimeSpan RerankTimeout = TimeSpan.FromSeconds(30);
 
@@ -46,13 +49,14 @@ public sealed class RetrievalEvaluator(
         ArgumentNullException.ThrowIfNull(target);
         EmbeddingCanary.EnsureNotFailed(target.Profile);
         return new EvaluationSession(target, dataSource, embedder.For(target.Profile, target.Classification),
-            new ChatModelReranker(clients, ChatModelReranker.HttpClientName, rerankLogger), time);
+            new RerankRouter(new ChatModelReranker(clients, ChatModelReranker.HttpClientName, rerankLogger),
+                new GatewayReranker(clients, ChatModelReranker.HttpClientName, gatewayRerankLogger)), time);
     }
 }
 
 /// <summary>
 /// The engines of one evaluation job: the collection's index, the scratch keyword copy for <c>hybrid-no-decompounder</c>,
-/// and the index with the reranker and its passage reader for <c>hybrid-rerank</c>.
+/// and the index with the reranker and its passage reader for <c>hybrid-rerank</c> and <c>hybrid-rerank-gateway</c>.
 /// </summary>
 public sealed class EvaluationSession : IDisposable
 {
@@ -73,7 +77,12 @@ public sealed class EvaluationSession : IDisposable
         var options = new RetrievalEngineOptions { MaxConcurrentSearches = 1 };
         _engine = new RetrievalEngine(index, _sizes, options);
         _withoutDecompounder = new RetrievalEngine(new NoDecompounderSearchIndex(dataSource, index, RetrievalEvaluator.StatementTimeout), _sizes, options);
-        _reranked = new RetrievalEngine(index, _sizes, new RetrievalEngineOptions { MaxConcurrentSearches = 1, RerankTimeout = RetrievalEvaluator.RerankTimeout },
+        _reranked = new RetrievalEngine(index, _sizes, new RetrievalEngineOptions
+            {
+                MaxConcurrentSearches = 1,
+                RerankTimeout = RetrievalEvaluator.RerankTimeout,
+                GatewayRerankTimeout = RetrievalEvaluator.RerankTimeout,
+            },
             reranker, new PostgresHydrator(dataSource, statements));
         _embed = embed;
     }
@@ -81,7 +90,18 @@ public sealed class EvaluationSession : IDisposable
     public EvaluationTarget Target { get; }
 
     /// <summary>
-    /// The ceiling of a <c>hybrid-rerank</c> call: the collection level's (identity design §4.7) capped at <c>Eu</c>, since
+    /// The reranker of a variant: <see cref="RerankerKind.ChatModel"/> for <c>hybrid-rerank</c>,
+    /// <see cref="RerankerKind.Gateway"/> for <c>hybrid-rerank-gateway</c>; null for a variant without rerank.
+    /// </summary>
+    public static RerankerKind? Reranker(EvaluationVariant variant) => variant switch
+    {
+        EvaluationVariant.HybridRerank => RerankerKind.ChatModel,
+        EvaluationVariant.HybridRerankGateway => RerankerKind.Gateway,
+        _ => null,
+    };
+
+    /// <summary>
+    /// The ceiling of a reranked call: the collection level's (identity design §4.7) capped at <c>Eu</c>, since
     /// the worker holds no <c>External</c> key (#399).
     /// </summary>
     public Residency RerankCeiling
@@ -95,8 +115,8 @@ public sealed class EvaluationSession : IDisposable
 
     /// <summary>
     /// The request a question is searched with: the same <see cref="SearchRequest"/> <c>POST /v1/retrieve</c> builds for
-    /// this scope (issue #120), with the variant's mode and decompounding and <c>AllowDegraded = false</c>; <c>hybrid-rerank</c>
-    /// adds the rerank call at <see cref="RerankCeiling"/> with <paramref name="runId"/> as <c>x-ume-run-id</c>.
+    /// this scope (issue #120), with the variant's mode and decompounding and <c>AllowDegraded = false</c>; a reranked
+    /// variant adds the rerank call with its reranker at <see cref="RerankCeiling"/> with <paramref name="runId"/> as <c>x-ume-run-id</c>.
     /// </summary>
     public SearchRequest Request(EvaluationQuestionRow question, EvaluationVariant variant, RetrievalSettings settings, Guid? runId = null)
     {
@@ -109,7 +129,7 @@ public sealed class EvaluationSession : IDisposable
             Embed: EmbedOnceAsync,
             AllowDegraded: false,
             Decompound: variant != EvaluationVariant.HybridNoDecompounder,
-            Rerank: variant == EvaluationVariant.HybridRerank ? new RerankCall(RerankCeiling, runId) : null);
+            Rerank: Reranker(variant) is { } reranker ? new RerankCall(RerankCeiling, runId, reranker) : null);
     }
 
     /// <summary>Searches one question without a run id.</summary>
@@ -117,8 +137,8 @@ public sealed class EvaluationSession : IDisposable
         SearchAsync(question, variant, settings, null, cancellationToken);
 
     /// <summary>
-    /// Searches one question; <c>hybrid-no-decompounder</c> goes to the scratch keyword copy, <c>hybrid-rerank</c> to the
-    /// engine with the reranker.
+    /// Searches one question; <c>hybrid-no-decompounder</c> goes to the scratch keyword copy, a reranked variant to
+    /// the engine with the reranker.
     /// </summary>
     public Task<SearchResult> SearchAsync(EvaluationQuestionRow question, EvaluationVariant variant, RetrievalSettings settings, Guid? runId,
         CancellationToken cancellationToken)
@@ -126,7 +146,7 @@ public sealed class EvaluationSession : IDisposable
         var engine = variant switch
         {
             EvaluationVariant.HybridNoDecompounder => _withoutDecompounder,
-            EvaluationVariant.HybridRerank => _reranked,
+            EvaluationVariant.HybridRerank or EvaluationVariant.HybridRerankGateway => _reranked,
             _ => _engine,
         };
         return engine.SearchAsync(Request(question, variant, settings, runId), cancellationToken);
