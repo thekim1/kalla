@@ -25,7 +25,6 @@ public static class ProcessingExtensions
         ArgumentNullException.ThrowIfNull(builder);
         var services = builder.Services;
         services.AddOptions<ParseOptions>().BindConfiguration(ParseOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
-        services.AddOptions<EmbedOptions>().BindConfiguration(EmbedOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<ITokenCounter>(_ => Bgem3TokenCounter.Shared);
         services.TryAddSingleton(_ => SwedishDecompounder.Default);

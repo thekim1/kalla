@@ -85,8 +85,8 @@ Collect these before you start. Files go in a directory outside the checkout tha
 
 Two settings on the gateway side (a person with gateway admin rights):
 
-- **The embedding deployment's `ContextWindow` stays empty.** The gateway currently checks a whole batch of inputs
-  against it, and would refuse RAG's batched requests at 8191. (Fixing that is in the gateway session prompt.)
+- **The embedding deployment's `ContextWindow` may be set** (8191 for `text-embedding-3-large`). From v0.9.0 the
+  gateway checks each embedding input against it, not the whole batch.
 - **Each RAG key allows residency `Eu` only.** The platform also sends a ceiling with every call, but the key is the
   second guard.
 
@@ -162,7 +162,7 @@ Expected: `HTTP 200`, `dims=1024`, `x-ume-residency: Eu`. Repeat with `api-eu.ke
 |---|---|---|
 | 401 | the key is wrong, disabled or expired | ask the gateway admin |
 | 403 `max_residency_not_met` | the model's provider is not marked `Eu`, or the key doesn't allow `Eu` | ask the gateway admin; the pilot may only use EU-hosted models |
-| 400 `context_length_exceeded` | the deployment has a `ContextWindow` | ask for it to be cleared (§3) |
+| 400 `context_length_exceeded` | the gateway is older than v0.9.0 and checks the whole batch against the deployment's `ContextWindow` | ask for the gateway to be upgraded, or the `ContextWindow` cleared until then (§3) |
 | `dims=3072` | the gateway didn't pass `dimensions` | report; the gateway should forward the body unchanged |
 | a TLS error | the certificate isn't publicly trusted | §7 needs `--ca-file` with the gateway's CA chain |
 
@@ -431,7 +431,7 @@ The run book for that step comes with the chat API.
 | `up --wait` times out on `rag-worker`, `rag-parser` or `rag-clamav` | the slice isn't installed, or cgroup driver isn't `systemd` | `systemctl status rag-ingestion.slice`, `docker info`; §6 and §8.1 |
 | `rag-clamav` unhealthy for > 15 min | no signature download (proxy, firewall) | `docker compose logs rag-clamav`; `--freshclam-proxy` in §7 |
 | §8.3 times out | the firewall blocks the gateway (an old firewall script without the `INPUT` exception, or the gateway's name resolves to an address not in the rules) | `sudo iptables -S UME-RAG-INPUT`, `sudo iptables -S UME-RAG-EGRESS \| grep 172.30.3.0`; re-run `sudo systemctl start rag-firewall.service`; compare with §4.5 |
-| Runs fail with `embed.input_rejected` | the gateway refused a batch (`context_length_exceeded`) | §3: clear the deployment's `ContextWindow`; the worker's batch cap is `Worker:Embed:MaxTokensPerRequest` (6000) |
+| Runs fail with `embed.input_rejected` | the gateway refused a batch (`context_length_exceeded`) | a gateway older than v0.9.0 checks the whole batch: §3, upgrade it or clear the deployment's `ContextWindow`; on v0.9.0 or later, report it (a chunk is far below the window) |
 | Runs fail at the embed step on dimensions, or **Check embedding canary** reports the wrong number of dimensions | 3072 values came back: `RequestDimensions` isn't set or gate #142 isn't in the image | §7's `.env` lines, rebuild after #142 |
 | 403 from the gateway in the worker log | the key doesn't allow `Eu`, or the model's provider isn't `Eu` | §4.4 |
 | Pages end `skipped` with `robots.*` | robots.txt disallows the path | pick other pages |

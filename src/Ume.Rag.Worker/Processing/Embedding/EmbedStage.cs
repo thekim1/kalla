@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain.Entities;
@@ -12,21 +11,6 @@ public static class EmbedLimits
 {
     public const int MaxInputs = 64;
     public const double CanaryMinCosine = EmbeddingCanaryThreshold.MinCosine;
-}
-
-/// <summary>
-/// <c>Worker:Embed:*</c>, deployment knobs of the embed stage. The gateway estimates a request's tokens as its body bytes / 4
-/// and refuses one above the model's context window with 400 <c>context_length_exceeded</c> (to-verify #43); the JSON
-/// body escapes å/ä/ö (about 4.5 bytes per token on Swedish text), so the default of 6,000 tokens stays below BGE-M3's
-/// 8,192. The profile's <c>MaxInputTokens</c> caps it further.
-/// </summary>
-public sealed class EmbedOptions
-{
-    public const string SectionName = "Worker:Embed";
-
-    /// <summary>Tokens (sum of <c>TokenCount</c>) per embedding request (<c>Worker:Embed:MaxTokensPerRequest</c>).</summary>
-    [Range(512, 8_192)]
-    public int MaxTokensPerRequest { get; set; } = 6_000;
 }
 
 /// <summary>
@@ -73,13 +57,14 @@ public sealed record EmbeddedChunks(IReadOnlyList<ChunkDraft> Chunks, IReadOnlyL
 /// <summary>
 /// <c>embed</c> (processing design §11): the collection's embedding profile (model, dimensions and ceiling from its row),
 /// one cache lookup per document by (level, profile, <c>TextHash</c>), misses deduplicated and embedded in batches of
-/// ≤ 64 inputs and ≤ <see cref="EmbedOptions.MaxTokensPerRequest"/> tokens (at most the profile's <c>MaxInputTokens</c>),
-/// each batch whole or not at all, cached in their own short write. Gateway requests are
+/// ≤ 64 inputs, each batch whole or not at all, cached in their own short write. A batch has no token cap: the gateway
+/// checks each input against the model's context window (gateway v0.9.0), and the chunker keeps every chunk far below the
+/// profile's <c>MaxInputTokens</c> (template <c>chunkTokens</c> ≤ 800, processing design §6.2). Gateway requests are
 /// bounded per instance by the fixed <c>Worker:Concurrency:embed</c> (AIMD is P2). A profile whose last canary check failed
 /// is refused; the job is requeued without an attempt.
 /// </summary>
 public sealed class EmbedStage(EmbeddingClient client, IEmbeddingProfileStore profiles, IEmbeddingCache cache,
-    EmbeddingConcurrency concurrency, IOptions<EmbedOptions> options, TimeProvider clock)
+    EmbeddingConcurrency concurrency, TimeProvider clock)
 {
     public const int Version = 1;
 
@@ -100,7 +85,7 @@ public sealed class EmbedStage(EmbeddingClient client, IEmbeddingProfileStore pr
 
         var misses = chunks.Chunks.Where(c => !vectors.ContainsKey(c.TextHash)).DistinctBy(c => c.TextHash, StringComparer.Ordinal).ToList();
         long tokens = 0;
-        foreach (var batch in Batches(misses, Math.Min(options.Value.MaxTokensPerRequest, profile.MaxInputTokens)))
+        foreach (var batch in misses.Chunk(EmbedLimits.MaxInputs))
         {
             IReadOnlyList<float[]> embedded;
             await concurrency.WaitAsync(cancellationToken);
@@ -124,33 +109,6 @@ public sealed class EmbedStage(EmbeddingClient client, IEmbeddingProfileStore pr
         }
 
         return new EmbeddedChunks(chunks.Chunks, [.. chunks.Chunks.Select(c => vectors[c.TextHash])], profile.Id, chunks.Chunks.Count - misses.Count, tokens);
-    }
-
-    /// <summary>
-    /// ≤ 64 inputs and ≤ <paramref name="maxTokens"/> tokens (sum of <c>TokenCount</c>) per request; a single chunk above
-    /// the cap goes alone.
-    /// </summary>
-    internal static IEnumerable<List<ChunkDraft>> Batches(IReadOnlyList<ChunkDraft> chunks, int maxTokens)
-    {
-        var batch = new List<ChunkDraft>();
-        var tokens = 0;
-        foreach (var chunk in chunks)
-        {
-            if (batch.Count > 0 && (batch.Count == EmbedLimits.MaxInputs || tokens + chunk.TokenCount > maxTokens))
-            {
-                yield return batch;
-                batch = [];
-                tokens = 0;
-            }
-
-            batch.Add(chunk);
-            tokens += chunk.TokenCount;
-        }
-
-        if (batch.Count > 0)
-        {
-            yield return batch;
-        }
     }
 }
 
