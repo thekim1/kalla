@@ -154,7 +154,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   `hybrid-rerank-gateway` variant (#416).
 - **Read:** Decisions "Gateway release 1 and shared Keycloak as built", "Rerank pulled forward"; gateway-changes §7.4.
 
-### [ ] B-17 Chat: one retry on a connection failure (chat-api §8.3)
+### [x] B-17 Chat: one retry on a connection failure (chat-api §8.3) (#422)
 - **Do:** the chat's gateway call retries once when the connection fails with no response, within 300 ms, same
   request, same ceiling and key; never after the first byte. Found by the hot-path tidy (#417): today only 502/504
   are retried (`GatewayRetryHandler`). Decide whether the handler gets the case for every client or only the chat
