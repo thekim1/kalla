@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Ume.Rag.Retrieval;
 
 namespace Ume.Rag.Answering.Chat;
@@ -12,23 +14,37 @@ public sealed class ChatException(int status, string code, string message, strin
 
     /// <summary><c>Retry-After</c> seconds to pass on (gateway 429/503).</summary>
     public int? RetryAfterSeconds { get; init; }
+
+    /// <summary>The gateway answered from a residency above the call's ceiling (event 5003 raised); the answer was discarded.</summary>
+    public bool ResidencyRefused { get; init; }
 }
 
 /// <summary>One message of the client's conversation as plain text (content parts concatenated).</summary>
 public sealed record ChatMessageIn(string Role, string Text);
 
-/// <summary>A parsed <c>POST /v1/chat/completions</c> body (chat design §3.2).</summary>
-public sealed record ParsedChat(string Model, string Question, IReadOnlyList<ChatMessageIn> History, bool Stream, bool IncludeUsage, int? MaxTokens);
+/// <summary>
+/// A parsed <c>POST /v1/chat/completions</c> body (chat design §3.2). <see cref="Question"/> is the question's query form
+/// (whitespace collapsed, up to <see cref="ChatRequestParser.MaxQuestionChars"/>): message kind, language, condense and
+/// retrieval read it. <see cref="PromptQuestion"/> is its prompt form (line breaks kept), what the answer model reads (§7.1);
+/// it defaults to <see cref="Question"/>.
+/// </summary>
+public sealed record ParsedChat(string Model, string Question, IReadOnlyList<ChatMessageIn> History, bool Stream, bool IncludeUsage, int? MaxTokens)
+{
+    public string PromptQuestion { get; init; } = Question;
+}
 
 /// <summary>
 /// Parses and checks the request body (chat design §3.2): unknown members are ignored; a fixed list of members is refused;
 /// text content parts only; the last message must be <c>user</c>; <c>system</c>/<c>developer</c>/<c>tool</c> messages are
-/// ignored; the question is normalised as the knowledge API normalises queries.
+/// ignored; the question gets its query form (normalised as the knowledge API normalises queries) and its prompt form.
 /// </summary>
-public static class ChatRequestParser
+public static partial class ChatRequestParser
 {
     public const int MaxMessages = 1000;
     public const int MaxMessageChars = 32_000;
+
+    /// <summary>The longest question, in characters of its query form (chat design §3.2, §5.1); longer than 2,000 is condensed for retrieval.</summary>
+    public const int MaxQuestionChars = 16_000;
 
     private static readonly string[] RefusedMembers = ["logprobs", "top_logprobs", "audio", "modalities", "prediction"];
     private static readonly HashSet<string> Roles = new(StringComparer.Ordinal) { "system", "developer", "user", "assistant", "tool" };
@@ -102,15 +118,11 @@ public static class ChatRequestParser
             throw Invalid("The last message must be from the user.", "messages");
         }
 
-        string question;
-        try
+        var question = QueryNormalizer.Normalize(last.Text);
+        if (question.Length == 0 || QueryNormalizer.Length(question) > MaxQuestionChars)
         {
-            question = QueryNormalizer.NormalizeAndValidate(last.Text);
-        }
-        catch (ArgumentException)
-        {
-            throw new ChatException(400, last.Text.Length > QueryNormalizer.MaxLength ? "question_too_long" : "invalid_request",
-                $"The question must be 1–{QueryNormalizer.MaxLength} characters.", "messages");
+            throw new ChatException(400, question.Length == 0 ? "invalid_request" : "question_too_long", $"The question must be 1–{MaxQuestionChars} characters.",
+                "messages");
         }
 
         var history = parsed.Take(parsed.Count - 1).Where(x => x.Role is "user" or "assistant").ToList();
@@ -127,7 +139,43 @@ public static class ChatRequestParser
             }
         }
 
-        return new ParsedChat(model, question, history, stream, usage, maxTokens);
+        return new ParsedChat(model, question, history, stream, usage, maxTokens) { PromptQuestion = PromptForm(last.Text) };
+    }
+
+    /// <summary>
+    /// The question's prompt form (§3.2): line breaks (<c>\r\n</c> and <c>\r</c> read as <c>\n</c>) and tabs kept, other control
+    /// characters become spaces, Unicode NFC, runs of more than two blank lines collapsed to two, trimmed.
+    /// </summary>
+    public static string PromptForm(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var cleaned = new StringBuilder(text.Length);
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (char.IsHighSurrogate(c) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            {
+                cleaned.Append(c).Append(text[++i]);
+            }
+            else if (char.IsSurrogate(c))
+            {
+                cleaned.Append('\uFFFD'); // a lone surrogate: NFC would throw on it (as QueryNormalizer)
+            }
+            else if (c == '\r')
+            {
+                cleaned.Append('\n');
+                if (i + 1 < text.Length && text[i + 1] == '\n')
+                {
+                    i++;
+                }
+            }
+            else
+            {
+                cleaned.Append(c is '\n' or '\t' || !char.IsControl(c) ? c : ' ');
+            }
+        }
+
+        return BlankLines().Replace(cleaned.ToString().Normalize(NormalizationForm.FormC), "\n\n\n").Trim();
     }
 
     /// <summary>A string, or text parts joined with a newline; any other part is refused (answered 6).</summary>
@@ -164,4 +212,8 @@ public static class ChatRequestParser
     }
 
     private static ChatException Invalid(string message, string? param = null) => new(400, "invalid_request", message, param);
+
+    /// <summary>More than two blank lines (lines of spaces and tabs count as blank).</summary>
+    [GeneratedRegex(@"\n(?:[ \t]*\n){3,}")]
+    private static partial Regex BlankLines();
 }

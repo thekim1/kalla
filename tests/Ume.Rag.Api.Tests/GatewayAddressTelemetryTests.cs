@@ -12,6 +12,8 @@ namespace Ume.Rag.Api.Tests;
 /// </summary>
 public sealed class GatewayAddressTelemetryTests
 {
+    private const string ScopeSourceName = "Ume.Rag.Api.Tests.GatewayAddressTelemetry";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Theory]
@@ -47,14 +49,19 @@ public sealed class GatewayAddressTelemetryTests
         var finished = new List<Activity>();
         using var listener = new ActivityListener
         {
-            ShouldListenTo = source => source.Name == "System.Net.Http",
+            ShouldListenTo = source => source.Name is "System.Net.Http" or ScopeSourceName,
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity => { lock (finished) { finished.Add(activity); } },
         };
         ActivitySource.AddActivityListener(listener);
 
+        // Other tests in the process make failing HTTP calls in parallel: only spans of this test's own trace count.
+        using var scopeSource = new ActivitySource(ScopeSourceName);
+        ActivityTraceId trace;
+        using (var scope = scopeSource.StartActivity("test")!)
         using (var client = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient("gateway"))
         {
+            trace = scope.TraceId;
             client.Timeout = TimeSpan.FromSeconds(10);
             await Should.ThrowAsync<HttpRequestException>(() => client.PostAsync(url, null, Ct));
         }
@@ -63,7 +70,7 @@ public sealed class GatewayAddressTelemetryTests
         Activity span;
         lock (finished)
         {
-            span = finished.Where(a => a.Status == ActivityStatusCode.Error).ShouldHaveSingleItem();
+            span = finished.Where(a => a.TraceId == trace && a.Source.Name == "System.Net.Http" && a.Status == ActivityStatusCode.Error).ShouldHaveSingleItem();
         }
 
         var tags = span.TagObjects.ToDictionary(t => t.Key, t => t.Value?.ToString());

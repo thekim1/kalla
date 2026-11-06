@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -7,6 +9,7 @@ using Ume.Rag.Domain.Access;
 using Ume.Rag.Domain.Retrieval;
 using Ume.Rag.Infrastructure.Access;
 using Ume.Rag.Infrastructure.Gateway;
+using Ume.Rag.Retrieval;
 
 namespace Ume.Rag.Answering.Chat;
 
@@ -15,12 +18,23 @@ namespace Ume.Rag.Answering.Chat;
 /// anything not allowed), effective level and ceiling, language, the conversational check, retrieval through the knowledge
 /// role in process (the assistant's published collections), coverage handling (§6.2), the prompt (§6.3, §7), then the gateway
 /// call (<see cref="OpenAnswerAsync"/>) and one answer path through the <see cref="AnswerTransducer"/> (<see cref="ChatAnswer"/>,
-/// §9.2–§9.4), which the stream writer relays and <see cref="CompleteAsync"/> folds into the JSON answer. Condense is part c of item 15.
+/// §9.2–§9.4), which the stream writer relays and <see cref="CompleteAsync"/> folds into the JSON answer. Condense is part c of item 15;
+/// the long-question condense is §5.1. Without <paramref name="meters"/> (the admin test panel) the condense calls are not counted.
 /// </summary>
 public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccessPolicy policy, KnowledgeService knowledge, GatewayChatClient gateway,
-    IOptions<ChatOptions> options, IOptions<GatewayOptions> gatewayOptions, TimeProvider time, ILogger<ChatService> logger)
+    IOptions<ChatOptions> options, IOptions<GatewayOptions> gatewayOptions, TimeProvider time, ILogger<ChatService> logger, IMeterFactory? meters = null)
 {
+    /// <summary>The <c>kind</c> of <c>rag.chat.condense</c> (§17).</summary>
+    private const string FollowUpKind = "follow-up";
+    private const string LongKind = "long";
+
     private SnapshotChat? _resolved;
+
+    private readonly Counter<long>? _condense = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
+        .CreateCounter<long>("rag.chat.condense", description: "Condense calls and skips by kind and outcome");
+
+    private readonly Counter<long>? _tokens = meters?.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
+        .CreateCounter<long>("rag.chat.tokens", description: "Model tokens of the chat role's gateway calls by direction and step");
 
     /// <summary><c>Settings.Chat</c> at the current snapshot, over the deployment knobs.</summary>
     public PlatformChatSettings Platform => Resolved(snapshots.Current).Platform;
@@ -53,7 +67,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var messageId = Guid.CreateVersion7();
         var maxTokens = Math.Min(chat.MaxTokens ?? settings.MaxOutputTokens, settings.MaxOutputTokens);
         var platform = resolved.Platform;
-        var context = new PromptContext(assistant.Name, assistant.Published.SystemPrompt, language, chat.Question, chat.History, settings);
+        // §7.1: the answer model reads the question's prompt form, line breaks kept; everything before it reads the query form.
+        var context = new PromptContext(assistant.Name, assistant.Published.SystemPrompt, language, chat.PromptQuestion, chat.History, settings);
         CondenseOutcome? condense = null;
         ChatPlan Plan(string? fixedText, ChatOutcome outcome, BuiltPrompt? prompt, RetrievalResult? retrieval, bool degraded) =>
             new(messageId, chat.Model, created, assistant, ceiling, settings, maxTokens, language, fixedText, outcome, prompt, retrieval, degraded, platform, condense);
@@ -62,9 +77,9 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         var conversational = MessageKind.IsConversational(chat.Question);
         if (!conversational)
         {
-            // §5: follow-ups that are not self-contained are rewritten for retrieval only; the prompt keeps the user's question.
-            var query = chat.Question;
-            (query, condense) = await CondenseAsync(chat, settings, platform, ceiling, messageId, ct);
+            // §5, §5.1: a follow-up that is not self-contained, or any question over 2,000 characters, is rewritten for retrieval
+            // only; the prompt keeps the user's question.
+            (var query, condense, var condenseFailed) = await CondenseAsync(chat, settings, platform, ceiling, messageId, ct);
             try
             {
                 // The rerank call (when the assistant reranks) runs at the turn's ceiling, as the answer does (§6.7).
@@ -81,8 +96,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
                 throw NotFound(chat.Model);
             }
 
-            // A failed rewrite of a follow-up must not turn into "not found": then the answer comes from what was found (§6.2).
-            var condenseFailed = condense is CondenseOutcome.Timeout or CondenseOutcome.Error or CondenseOutcome.Rejected;
+            // A failed rewrite must not turn into "not found": then the answer comes from what was found (§6.2, §5.1).
             if (retrieval.Coverage.Status == CoverageStatus.Low && !(condenseFailed && retrieval.Results.Count > 0))
             {
                 if (!GeneralKnowledgeLevels.AnswersWithoutSources(settings.GeneralKnowledge))
@@ -109,33 +123,97 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
     }
 
     /// <summary>
-    /// §5: rewrites a follow-up on the platform condense model at <c>Eu</c> (never above the turn's ceiling), ≤ 96 tokens,
-    /// 600 ms; anything but an accepted rewrite keeps the raw question.
+    /// The retrieval query (§5, §5.1), whether it comes from a failed condense (§6.2), and the outcome. A question whose query
+    /// form is over 2,000 characters takes the long-question condense; otherwise a follow-up that is not self-contained is
+    /// rewritten, and anything but an accepted rewrite keeps the question.
     /// </summary>
-    private async Task<(string Query, CondenseOutcome Outcome)> CondenseAsync(ParsedChat chat, AssistantChatSettings settings, PlatformChatSettings platform,
-        Residency ceiling, Guid messageId, CancellationToken ct)
+    private async Task<(string Query, CondenseOutcome Outcome, bool Failed)> CondenseAsync(ParsedChat chat, AssistantChatSettings settings,
+        PlatformChatSettings platform, Residency ceiling, Guid messageId, CancellationToken ct)
     {
-        if (Condenser.Skip(settings.CondenseEnabled && platform.CondenseModel is not null, chat.History, chat.Question) is { } skipped)
+        if (QueryNormalizer.Length(chat.Question) > QueryNormalizer.MaxLength)
         {
-            return (chat.Question, skipped);
+            var (longQuery, longOutcome) = await CondenseLongAsync(chat, settings, platform, ceiling, messageId, ct);
+            return (longQuery, longOutcome, longOutcome != CondenseOutcome.Rewritten);
         }
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(options.Value.CondenseTimeout);
+        if (Condenser.Skip(settings.CondenseEnabled && platform.CondenseModel is not null, chat.History, chat.Question) is { } skipped)
+        {
+            Count(FollowUpKind, skipped);
+            return (chat.Question, skipped, false);
+        }
+
+        var (rewritten, outcome) = await CallCondenseAsync(Condenser.Messages(chat.History, chat.Question), Condenser.Step, options.Value.CondenseTimeout, platform,
+            ceiling, messageId, ct);
+        Count(FollowUpKind, outcome);
+        return (rewritten ?? chat.Question, outcome, rewritten is null);
+    }
+
+    /// <summary>
+    /// §5.1: the long question's search query from the condense model, or its first 2,000 characters cut at a word
+    /// (<see cref="Condenser.Fallback"/>) when condense is off (no model, turned off, an <c>OnPrem</c> turn: no condense model
+    /// until M2), times out, fails or is rejected; a fallback is logged with its reason, never the text.
+    /// </summary>
+    private async Task<(string Query, CondenseOutcome Outcome)> CondenseLongAsync(ParsedChat chat, AssistantChatSettings settings, PlatformChatSettings platform,
+        Residency ceiling, Guid messageId, CancellationToken ct)
+    {
+        string? rewritten = null;
+        var outcome = CondenseOutcome.Disabled;
+        if (settings.CondenseEnabled && platform.CondenseModel is not null && ceiling != Residency.OnPrem)
+        {
+            (rewritten, outcome) = await CallCondenseAsync(Condenser.LongMessages(chat.History, chat.Question), Condenser.LongStep,
+                options.Value.LongQuestionCondenseTimeout, platform, ceiling, messageId, ct);
+        }
+
+        Count(LongKind, outcome);
+        if (rewritten is not null)
+        {
+            return (QueryNormalizer.Normalize(rewritten), outcome);
+        }
+
+        LogLongQuestionFallback(logger, messageId, Condenser.OutcomeName(outcome));
+        return (Condenser.Fallback(chat.Question), outcome);
+    }
+
+    /// <summary>
+    /// One condense call (§5 "Call", §5.1 "Model and call"): the platform condense model at the condense ceiling, ≤ 96 tokens, no
+    /// temperature, the reasoning effort when set, a hard <paramref name="budget"/> on <see cref="TimeProvider"/> without retry.
+    /// The accepted one-line rewrite, or null with the outcome.
+    /// </summary>
+    private async Task<(string? Rewritten, CondenseOutcome Outcome)> CallCondenseAsync(IReadOnlyList<ChatMessageIn> messages, string step, TimeSpan budget,
+        PlatformChatSettings platform, Residency ceiling, Guid messageId, CancellationToken ct)
+    {
+        using var timeout = new CancellationTokenSource(budget, time);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
         try
         {
-            var answer = await gateway.CompleteAsync(platform.CondenseModel!, Condenser.Ceiling(ceiling), Condenser.Messages(chat.History, chat.Question),
-                Condenser.MaxOutputTokens, null, messageId, "condense", timeout.Token, platform.CondenseReasoningEffort);
-            return Condenser.Accept(answer.Text) is { } rewritten ? (rewritten, CondenseOutcome.Rewritten) : (chat.Question, CondenseOutcome.Rejected);
+            var answer = await gateway.CompleteAsync(platform.CondenseModel!, Condenser.Ceiling(ceiling), messages, Condenser.MaxOutputTokens, null, messageId, step,
+                linked.Token, platform.CondenseReasoningEffort);
+            CountTokens(step, answer);
+            return Condenser.Accept(answer.Text) is { } rewritten ? (rewritten, CondenseOutcome.Rewritten) : (null, CondenseOutcome.Rejected);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return (chat.Question, CondenseOutcome.Timeout);
+            return (null, CondenseOutcome.Timeout);
+        }
+        catch (ChatException ex) when (ex.ResidencyRefused)
+        {
+            return (null, CondenseOutcome.Residency);
         }
         catch (Exception ex) when (ex is ChatException or GatewayCallRefusedException or HttpRequestException or JsonException)
         {
-            return (chat.Question, CondenseOutcome.Error);
+            return (null, CondenseOutcome.Error);
         }
+    }
+
+    /// <summary><c>rag.chat.condense{kind, outcome}</c> (§17); for <c>long</c> every outcome but <c>used</c> is the fallback.</summary>
+    private void Count(string kind, CondenseOutcome outcome) =>
+        _condense?.Add(1, new TagList { { "kind", kind }, { "outcome", Condenser.OutcomeName(outcome) } });
+
+    /// <summary><c>rag.chat.tokens{direction, step}</c> (§17) of a condense call; never in the response's usage (§3.2).</summary>
+    private void CountTokens(string step, GatewayAnswer answer)
+    {
+        _tokens?.Add(answer.PromptTokens, new TagList { { "direction", "input" }, { "step", step } });
+        _tokens?.Add(answer.CompletionTokens, new TagList { { "direction", "output" }, { "step", step } });
     }
 
     /// <summary>
@@ -276,4 +354,7 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
 
     [LoggerMessage(LogLevel.Information, "Chat answer for {Assistant}, message {MessageId}: {Sources} sources in the prompt, {Cited} cited, condense {Condense}")]
     private static partial void LogAnswered(ILogger logger, string assistant, Guid messageId, int sources, int cited, string condense);
+
+    [LoggerMessage(LogLevel.Information, "Long question of message {MessageId} searched by its first 2,000 characters: condense {Reason}")]
+    private static partial void LogLongQuestionFallback(ILogger logger, Guid messageId, string reason);
 }

@@ -28,6 +28,7 @@ public sealed class ChatCoreTests
 
         parsed.Model.ShouldBe("bygg");
         parsed.Question.ShouldBe("Behöver jag bygglov för en altan?");
+        parsed.PromptQuestion.ShouldBe("Behöver jag\nbygglov  för en altan?"); // §3.2: the prompt form keeps the line break
         parsed.History.Select(h => h.Role).ShouldBe(["user", "assistant"]);
         (parsed.Stream, parsed.IncludeUsage, parsed.MaxTokens).ShouldBe((true, true, 300));
     }
@@ -43,7 +44,8 @@ public sealed class ChatCoreTests
         Refused(new { model = "bygg", messages = new object[] { new { role = "user", content = new object[] { new { type = "image_url", image_url = new { url = "x" } } } } } })
             .Code.ShouldBe("attachments_not_supported");
         Refused(new { model = "bygg", messages = new object[] { new { role = "user", content = "q" }, new { role = "assistant", content = "a" } } }).Code.ShouldBe("continue_not_supported");
-        Refused(new { model = "bygg", messages = new object[] { new { role = "user", content = new string('x', 2001) } } }).Code.ShouldBe("question_too_long");
+        Refused(new { model = "bygg", messages = new object[] { new { role = "user", content = new string('x', ChatRequestParser.MaxQuestionChars + 1) } } })
+            .Code.ShouldBe("question_too_long");
         Refused(new { model = "bygg", messages = Array.Empty<object>() }).Code.ShouldBe("invalid_request");
         Refused(new { messages = user }).Code.ShouldBe("invalid_request");
     }
