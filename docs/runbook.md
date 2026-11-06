@@ -4,7 +4,7 @@ For the pilot host set up as in [production-setup.md](production-setup.md). Comm
 `deploy/`, as root or a member of the `docker` group; `dc` below stands for `docker compose --env-file deploy/.env`.
 The design behind this page is [`plans/platform/repo-and-deployment.md`](../plans/platform/repo-and-deployment.md)
 §6 and §7.4. Upgrades are in the [upgrade guide](upgrade-guide.md), security events in
-[security-events.md](security-events.md), the test host's deployment and drill in [test-host.md](test-host.md).
+[security-events.md](security-events.md), the test host's deployment and drill in [test-host.md](test-host.md). Every port and outbound destination, per setup: [network-and-ports.md](network-and-ports.md).
 
 ## Ownership and targets
 

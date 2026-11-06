@@ -8,7 +8,7 @@ so every command below is `docker compose --env-file deploy/.env ...` without `-
 that holds `deploy/`.
 
 Day-to-day operation (backups, restore, key escrow, the firewall, troubleshooting) is in the [runbook](runbook.md);
-upgrades in the [upgrade guide](upgrade-guide.md); the test host's choices and checks in [test-host.md](test-host.md). The design behind this page is
+upgrades in the [upgrade guide](upgrade-guide.md); the test host's choices and checks in [test-host.md](test-host.md). Ports, firewall and proxy rules per setup are in [network-and-ports.md](network-and-ports.md). The design behind this page is
 [`plans/platform/repo-and-deployment.md`](../plans/platform/repo-and-deployment.md) §6 and §7.
 
 ## Host prerequisites
