@@ -39,6 +39,16 @@ const WORKER_CODES = [
   'robots.disallow', 'robots.unreachable', 'robots.noindex', 'sitemap.unavailable', 'sitemap.invalid', 'sitemap.too_large',
   'sitemap.truncated', 'http.200', 'http.301', 'http.404', 'http.410', 'http.5xx', 'http.moved_out_of_scope', 'http.content_type',
   'http.body_limit', 'http.unexpected', 'tls.invalid_certificate',
+  // Fetch and crawl run-item reasons (HttpFetcher, UrlCanonicalizer, EgressGuard as egress.*, CrawlScope, TrapDetector,
+  // HostBudget, CrawlTraversal, SitemapParser).
+  'redirect.downgrade', 'redirect.invalid', 'redirect.limit', 'redirect.out_of_scope', 'url.syntax', 'url.scheme',
+  'url.userinfo', 'url.host', 'url.port', 'net.dns', 'net.connect', 'net.timeout', 'net.body', 'fetch.abandoned',
+  'fetch.invalid_payload', 'http.format_deferred', 'robots.noindex_ignored', 'robots.nofollow_ignored',
+  'scope.excluded', 'scope.not_included', 'scope.off_site', 'scope.type', 'trap.endless_path', 'trap.query_variants',
+  'trap.calendar', 'crawl.host_blocked', 'crawl.breaker', 'crawl.retry_after', 'crawl.lastmod_skip',
+  'crawl.removal_check', 'sitemap.depth', 'sitemap.dtd', 'identity.folded', 'egress.private_address',
+  'egress.embedded_address', 'egress.scheme', 'egress.port', 'egress.userinfo', 'egress.blocked_host',
+  'egress.redirect_downgrade',
   // Crawl completeness reasons (TraversalCompleteness.cs).
   'crawl.incremental', 'crawl.host_paused', 'crawl.seeds_failed', 'crawl.seeds_unreachable', 'crawl.claims_pending', 'crawl.cancelled',
   // Preview stage outcomes the preview result shows (PreviewSegment.cs).
