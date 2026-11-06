@@ -126,11 +126,13 @@ public sealed partial class DriftSweep(
             while (await reader.ReadAsync(cancellationToken))
             {
                 var document = DocumentStore.Read(reader);
-                ChunkSetRow? live = reader.IsDBNull(15)
+                ChunkSetRow? live = reader.IsDBNull(17)
                     ? null
-                    : new ChunkSetRow(reader.GetGuid(15), new ChunkSetKey(document.Id, reader.GetGuid(16), Db.Nullable<Guid>(reader, 17), reader.GetGuid(18),
-                        reader.GetFieldValue<byte[]>(19), Db.String(reader, 25)), reader.GetString(20), reader.GetFieldValue<byte[]>(21), reader.GetInt32(22));
-                rows.Add(new Row(document, Db.String(reader, 14), live, reader.GetBoolean(23), reader.GetBoolean(24)));
+                    : new ChunkSetRow(reader.GetGuid(17),
+                        new ChunkSetKey(document.Id, reader.GetGuid(18), Db.Nullable<Guid>(reader, 19),
+                            reader.GetGuid(20), reader.GetFieldValue<byte[]>(21), Db.String(reader, 27)),
+                        reader.GetString(22), reader.GetFieldValue<byte[]>(23), reader.GetInt32(24));
+                rows.Add(new Row(document, Db.String(reader, 16), live, reader.GetBoolean(25), reader.GetBoolean(26)));
             }
         }
 

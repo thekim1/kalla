@@ -266,6 +266,7 @@ public sealed class CrawlSourceRunner(
                 {
                     Frontier = Completion(source, run, done.Frontier),
                     UnchangedReason = done.Facts.Contains(CrawlTraversal.LastmodSkip) ? CrawlTraversal.LastmodSkip : null,
+                    SitemapLastMod = fetched.SitemapLastMod,
                 };
                 var result = await ingest.HandleAsync(fetch, outcome, cancellationToken);
                 if (result is JobResult.Committed)

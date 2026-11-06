@@ -125,6 +125,71 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
     }
 
     [Fact]
+    public async Task A_preview_dates_the_chunks_as_production_does_from_a_reliable_lastmod_with_the_same_keys()
+    {
+        // Issue #435 (processing design §7): /p/a is in the sitemap (lastmod 2026-01-15), the root is not; both pages
+        // send Last-Modified.
+        await using var site = await TestSite.StartAsync(app =>
+        {
+            app.MapGet("/robots.txt", (HttpContext context) => Results.Text(
+                $"User-agent: *\nAllow: /\nSitemap: http://{TestSite.Host}:{context.Request.Host.Port}/sitemap.xml\n",
+                "text/plain"));
+            app.MapGet("/sitemap.xml", (HttpContext context) => Results.Content(
+                """<?xml version="1.0" encoding="UTF-8"?>""" +
+                """<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">""" +
+                $"<url><loc>http://{TestSite.Host}:{context.Request.Host.Port}/p/a</loc>" +
+                "<lastmod>2026-01-15</lastmod></url></urlset>", "application/xml"));
+            app.MapGet("/", (HttpContext context) => DatedPage(context, "startsida"));
+            app.MapGet("/p/{name}", (string name, HttpContext context) => DatedPage(context, "bygglov " + name));
+        });
+        var seed = await EngineKit.SeedCrawlAsync(database, new { startUrls = new[] { site.Url("/").AbsoluteUri } });
+        await ApplySiteProfileAsync(seed,
+            new Pipelines.SiteProfiles.SiteProfile { MainRoot = "main", LastmodReliable = true });
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
+        try
+        {
+            (await EngineKit.WaitForRunAsync(database, await EngineKit.SyncNowAsync(database, seed))).Added.ShouldBe(2);
+            var documentId = await Sql.ScalarAsync<Guid>(database.Connection(null), """
+                SELECT "Id" FROM content."Documents" WHERE "SourceId" = $1 AND "Url" LIKE '%/p/a'
+                """, seed.SourceId);
+            (await Sql.ScalarAsync<string>(database.Connection(null), """
+                SELECT to_char("SitemapLastMod" AT TIME ZONE 'UTC', 'YYYY-MM-DD') || ' ' ||
+                       to_char("HttpLastModified" AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI')
+                FROM content."Documents" WHERE "Id" = $1
+                """, documentId)).ShouldBe("2026-01-15 2026-03-01 08:00", "the fetch stores both dates");
+            (await Sql.ScalarAsync<string>(database.Connection(null), """
+                SELECT string_agg(DISTINCT (d."Id" = $2)::text || ' ' ||
+                                  to_char(c."SourceModifiedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD'), ',')
+                FROM content."Chunks" c JOIN content."Documents" d ON d."LiveChunkSetId" = c."ChunkSetId"
+                WHERE d."SourceId" = $1 AND c."DeletedAt" IS NULL
+                """, seed.SourceId, documentId)).ShouldBe("false 2026-03-01,true 2026-01-15",
+                "the reliable lastmod dates /p/a; the root, not in the sitemap, falls back to Last-Modified");
+
+            var result = await ResultAsync<StagePreviewResult>(await EnqueueAsync(seed, new StagePreviewPayload
+            {
+                PipelineVersionId = seed.VersionId,
+                CollectionId = seed.CollectionId,
+                SourceId = seed.SourceId,
+                DocumentIds = [documentId],
+            }));
+            var stages = result.Documents.ShouldHaveSingleItem().Stages;
+            stages.Select(s => s.Stage).ShouldBe(["fetch", "detect", "parse", "clean", "chunk", "personal-data"]);
+            stages.Where(s => s.Stage != "fetch").ShouldAllBe(s => s.State == PreviewStageState.Succeeded && s.CacheHit,
+                "the preview builds the chunk stage's metadata input, dates included, as the segment did");
+            var blobs = worker.Services.GetRequiredService<IBlobStore>().ForLevel(seed.Classification);
+            (await TextAsync(blobs, stages.Single(s => s.Stage == "chunk").Output!))
+                .ShouldContain("\"sourceModifiedAt\":\"2026-01-15\"");
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+            await Sql.ExecuteAsync(database.Connection(null), """
+                DELETE FROM content."SiteProfiles" WHERE "Classification" = $1 AND "Host" = $2
+                """, seed.Classification, TestSite.Host);
+        }
+    }
+
+    [Fact]
     public async Task A_preview_with_a_base_preview_reuses_its_fetch_and_runs_only_the_stages_whose_key_changed()
     {
         var requests = new ConcurrentDictionary<string, int>(StringComparer.Ordinal);
@@ -389,6 +454,32 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
             VALUES ($1, $2, (SELECT coalesce(max("Number"), 0) + 1 FROM config."PipelineVersions" WHERE "PipelineId" = $2), 'draft', $3::jsonb)
             """, id, seed.PipelineId, $$"""{"schema":"pipeline/v2","template":"url-list","templateVersion":1,"params":{{parameters}}}""");
         return id;
+    }
+
+    /// <summary>A page that sends <c>Last-Modified: Sun, 01 Mar 2026 08:00:00 GMT</c>.</summary>
+    private static IResult DatedPage(HttpContext context, string title)
+    {
+        context.Response.Headers.LastModified = "Sun, 01 Mar 2026 08:00:00 GMT";
+        return EngineKit.Html(EngineKit.Page(title));
+    }
+
+    /// <summary>Applies <paramref name="profile"/> to the test site's host at the seed's level.</summary>
+    private async Task ApplySiteProfileAsync(SourceSeed seed, Pipelines.SiteProfiles.SiteProfile profile)
+    {
+        var profileId = Guid.CreateVersion7();
+        var version = Guid.CreateVersion7();
+        await Sql.ExecuteAsync(database.Connection(null), """
+            INSERT INTO content."SiteProfiles" ("Id", "Classification", "Host", "PresetId", "UpdatedAt")
+            VALUES ($1, $2, $3, NULL, now())
+            """, profileId, seed.Classification, TestSite.Host);
+        await Sql.ExecuteAsync(database.Connection(null), """
+            INSERT INTO content."SiteProfileVersions" ("Id", "SiteProfileId", "Number", "Profile", "Origin", "State",
+                                                       "CreatedBy", "CreatedAt", "AppliedAt", "AppliedBy")
+            VALUES ($1, $2, 1, $3::jsonb, 'manual', 'applied', 'test', now(), now(), 'test')
+            """, version, profileId, ContractJson.Serialize(profile));
+        await Sql.ExecuteAsync(database.Connection(null), """
+            UPDATE content."SiteProfiles" SET "AppliedVersionId" = $1 WHERE "Id" = $2
+            """, version, profileId);
     }
 
     /// <summary>A preview job as the admin enqueues it (no dedup).</summary>
