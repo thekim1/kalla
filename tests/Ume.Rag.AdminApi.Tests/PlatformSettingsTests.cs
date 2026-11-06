@@ -98,6 +98,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var evaluation = await Json(await admin.GetAsync("/api/settings/evaluation", Ct));
         var chatSection = await Json(await admin.GetAsync("/api/settings/chat", Ct));
+        var retrievalSection = await Json(await admin.GetAsync("/api/settings/retrieval", Ct));
         var version = evaluation.GetProperty("version").GetString();
 
         foreach (var (path, body) in new (string, object)[]
@@ -106,6 +107,8 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
             ("/api/settings/evaluation", new { evaluationModel = chat, evaluationJudgeModel = external, evaluationMaxQuestions = 100, version }), // above Eu
             ("/api/settings/evaluation", new { evaluationModel = "no-such-model-" + suffix, evaluationMaxQuestions = 100, version }),
             ("/api/settings/chat", new { value = new { condenseModel = embedding }, version }),
+            ("/api/settings/retrieval", new { value = new { rerankModel = embedding }, version }), // B-12: the rerank model is V32's too
+            ("/api/settings/retrieval", new { value = new { rerankModel = external }, version }),
         })
         {
             using var refused = await admin.PutAsJsonAsync(path, body, Ct);
@@ -117,6 +120,9 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
         var saved = await Json(await admin.PutAsJsonAsync("/api/settings/evaluation", new { evaluationModel = chat, evaluationJudgeModel = chat, evaluationMaxQuestions = 100, version }, Ct));
         saved.GetProperty("evaluationModel").GetString().ShouldBe(chat);
         saved = await Json(await admin.PutAsJsonAsync("/api/settings/chat", new { value = new { condenseModel = chat }, version = saved.GetProperty("version").GetString() }, Ct));
+        saved = await Json(await admin.PutAsJsonAsync("/api/settings/retrieval", new { value = new { rerankModel = chat }, version = saved.GetProperty("version").GetString() }, Ct));
+        saved.GetProperty("value").GetProperty("rerankModel").GetString().ShouldBe(chat);
+        saved = await Json(await admin.PutAsJsonAsync("/api/settings/retrieval", new { value = retrievalSection.GetProperty("value"), version = saved.GetProperty("version").GetString() }, Ct));
         saved = await Json(await admin.PutAsJsonAsync("/api/settings/evaluation", new
         {
             evaluationModel = evaluation.GetProperty("evaluationModel").GetString(), evaluationJudgeModel = evaluation.GetProperty("evaluationJudgeModel").GetString(),

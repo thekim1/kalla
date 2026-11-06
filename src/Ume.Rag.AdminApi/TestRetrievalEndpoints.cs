@@ -38,12 +38,18 @@ public static class TestRetrievalEndpoints
 }
 
 /// <summary>The search core for the admin's retrieval test, on the process's one data source (issue #22).</summary>
-public sealed class AdminRetrieval(NpgsqlDataSource dataSource, IHttpClientFactory clients, TimeProvider time, ILogger<GatewayQueryEmbedder> logger) : IDisposable
+public sealed class AdminRetrieval(NpgsqlDataSource dataSource, IHttpClientFactory clients, TimeProvider time, ILogger<GatewayQueryEmbedder> logger,
+    IConfiguration configuration, ILogger<ChatModelReranker> rerankLogger) : IDisposable
 {
-    private readonly RetrievalEngine _engine = CreateEngine(dataSource);
     private readonly PostgresHydrator _hydrator = new(dataSource);
+    private readonly RetrievalEngine _engine = CreateEngine(dataSource, new PostgresHydrator(dataSource),
+        new ChatModelReranker(clients, ChatModelReranker.HttpClientName, rerankLogger),
+        configuration.GetSection("Retrieval").Get<RetrievalEngineOptions>() ?? new RetrievalEngineOptions());
 
-    /// <summary>The search core, shared with the test panel's knowledge service (<see cref="AdminTestPanel"/>).</summary>
+    /// <summary>
+    /// The search core, shared with the test panel's knowledge service (<see cref="AdminTestPanel"/>): the panel reranks with
+    /// the <see cref="ChatModelReranker"/> when the tested assistant reranks (<c>Retrieval:RerankTimeout</c>, §6.7).
+    /// </summary>
     public RetrievalEngine Engine => _engine;
 
     public PostgresHydrator Hydrator => _hydrator;
@@ -53,10 +59,10 @@ public sealed class AdminRetrieval(NpgsqlDataSource dataSource, IHttpClientFacto
     // §4.9: query embeddings use the in-process cache only, keyed with a per-process random key.
     private readonly GatewayQueryEmbedder _embedder = new(clients, new QueryEmbeddingOptions(), RandomNumberGenerator.GetBytes(32), time, logger);
 
-    private static RetrievalEngine CreateEngine(NpgsqlDataSource dataSource)
+    private static RetrievalEngine CreateEngine(NpgsqlDataSource dataSource, PostgresHydrator texts, IReranker reranker, RetrievalEngineOptions options)
     {
         var index = new PostgresSearchIndex(dataSource);
-        return new RetrievalEngine(index, new ScopeSizeCache(index, TimeProvider.System));
+        return new RetrievalEngine(index, new ScopeSizeCache(index, TimeProvider.System), options, reranker, texts);
     }
 
     public async Task<TestRetrievalResult> RunAsync(AdminContext admin, Guid id, TestRetrievalRequest request, CancellationToken ct)

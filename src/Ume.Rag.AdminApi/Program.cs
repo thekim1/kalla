@@ -72,6 +72,8 @@ builder.Services.AddScoped<GatewayModelCheck>();
 builder.Services.AddSingleton<EmbeddingCanaryCheck>();
 // The retrieval test (admin design §4.9): the search core on the process's data source, query embeddings on their own gateway client.
 builder.AddGatewayClient(Ume.Rag.Answering.GatewayQueryEmbedder.HttpClientName);
+// The assistant test panel reranks as chat does when the assistant reranks (knowledge design §6.7), on its own gateway client.
+builder.AddGatewayClient(Ume.Rag.Retrieval.ChatModelReranker.HttpClientName);
 builder.Services.AddSingleton<AdminRetrieval>();
 // The test panel (admin design §4.9): chat's gateway client and options, the panel over Ume.Rag.Answering's chat pipeline.
 builder.AddGatewayClient(Ume.Rag.Answering.Chat.GatewayChatClient.HttpClientName);

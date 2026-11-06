@@ -642,6 +642,12 @@ public static class AssistantRules
             problems.Add("answer.language");
         }
 
+        // retrieval.rerank (Decisions "Rerank pulled forward"): true or false; absent is off.
+        if (steps["retrieval"]?["rerank"] is { } rerank && rerank.GetValueKind() is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            problems.Add("retrieval.rerank");
+        }
+
         if (steps["answer"]?["generalKnowledge"] is { } generalKnowledge &&
             !(generalKnowledge is JsonValue g && g.GetValueKind() == JsonValueKind.String && Ume.Rag.Answering.Chat.GeneralKnowledgeLevels.All.Contains(g.GetValue<string>())))
         {

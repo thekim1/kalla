@@ -305,8 +305,9 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             (query, condense) = await CondenseAsync(chat, settings, platform, ceiling, messageId, ct);
             try
             {
+                // The rerank call (when the assistant reranks) runs at the turn's ceiling, as the answer does (§6.7).
                 retrieval = await knowledge.RetrieveAsync(who, new RetrievalRequest(query, assistant.Id, null, settings.TopK, Expand: ExpandMode.Section,
-                    Purpose: RetrievalPurpose.Chat, AllowDegraded: true, RunId: messageId), ct);
+                    Purpose: RetrievalPurpose.Chat, AllowDegraded: true, RunId: messageId, ModelCeiling: ceiling), ct);
             }
             catch (RetrievalDeniedException denied) when (denied.Status == 503)
             {

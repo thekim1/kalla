@@ -72,7 +72,7 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx, IOptionsSnapshot<Fak
     }
 
     var question = FakeContent.LastUserText(body["messages"]);
-    // The worker's evaluation steps get scripted JSON answers (#129); every other call the echo.
+    // The worker's evaluation steps and the reranker get scripted JSON answers (#129, B-12); every other call the echo.
     var answer = scripts.Answer(ctx.Request.Headers[FakeChatScripts.StepHeader].ToString(), question)
                  ?? latency.Pad(FakeContent.Answer(question, FakeContent.AllText(body["messages"])));
     var promptTokens = FakeContent.Tokens(FakeContent.AllText(body["messages"]));

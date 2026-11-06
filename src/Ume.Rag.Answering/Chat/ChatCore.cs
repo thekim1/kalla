@@ -214,9 +214,12 @@ public static class GeneralKnowledgeLevels
 }
 
 /// <summary>An assistant's chat settings from its published <c>QuerySteps</c> (chat design §15.2), with the defaults.</summary>
-/// <remarks><see cref="Temperature"/> null (the default) leaves <c>temperature</c> out of the gateway call (#275).</remarks>
+/// <remarks>
+/// <see cref="Temperature"/> null (the default) leaves <c>temperature</c> out of the gateway call (#275). <see cref="Rerank"/>
+/// (<c>retrieval.rerank</c>, only an explicit <c>true</c>) reranks the fused candidates (Decisions "Rerank pulled forward"; off by default).
+/// </remarks>
 public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int HistoryMaxTokens, int ContextTokens, int MaxOutputTokens, double? Temperature,
-    bool AlwaysSwedish, bool CondenseEnabled = true, GeneralKnowledge GeneralKnowledge = GeneralKnowledge.Off)
+    bool AlwaysSwedish, bool CondenseEnabled = true, GeneralKnowledge GeneralKnowledge = GeneralKnowledge.Off, bool Rerank = false)
 {
     public static AssistantChatSettings Default { get; } = new(10, 10, 4000, 16_384, 1024, null, false);
 
@@ -233,7 +236,8 @@ public sealed record AssistantChatSettings(int TopK, int HistoryMaxMessages, int
             json?["answer"]?["temperature"] is JsonValue t && t.GetValueKind() == JsonValueKind.Number ? t.GetValue<double>() : d.Temperature,
             json?["answer"]?["language"] is JsonValue l && l.GetValueKind() == JsonValueKind.String && l.GetValue<string>() == "sv",
             json?["condense"]?["enabled"] is not JsonValue c || c.GetValueKind() != JsonValueKind.False,
-            GeneralKnowledgeLevels.Parse(json?["answer"]?["generalKnowledge"] is JsonValue g && g.GetValueKind() == JsonValueKind.String ? g.GetValue<string>() : null));
+            GeneralKnowledgeLevels.Parse(json?["answer"]?["generalKnowledge"] is JsonValue g && g.GetValueKind() == JsonValueKind.String ? g.GetValue<string>() : null),
+            json?["retrieval"]?["rerank"] is JsonValue r && r.GetValueKind() == JsonValueKind.True);
     }
 
     private static int? Int(JsonNode? node) => node is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<int>(out var i) ? i : null;

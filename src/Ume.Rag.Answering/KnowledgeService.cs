@@ -109,12 +109,17 @@ public sealed partial class KnowledgeService(
         };
         var policyMs = Ms(started);
 
+        // §6.7: an assistant that reranks (retrieval.rerank, off by default) reranks at the caller's model ceiling.
+        var rerank = request is { AssistantId: { } reranking, ModelCeiling: { } ceiling } &&
+                     Chat.AssistantChatSettings.Parse(snapshot.Assistants[reranking].Published?.QuerySteps).Rerank
+            ? new RerankCall(ceiling, request.RunId)
+            : null;
         SearchResult search;
         try
         {
             search = await engine.SearchAsync(new SearchRequest(request.Query, scope, request.TopK, request.Mode, request.Filters,
                 request.Mode == RetrievalMode.Keyword ? null : (query, token) => embedder.EmbedAsync(profile, query, request.RunId, token),
-                request.AllowDegraded), ct);
+                request.AllowDegraded, Rerank: rerank), ct);
         }
         catch (SearchUnavailableException)
         {

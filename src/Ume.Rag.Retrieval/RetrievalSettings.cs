@@ -66,13 +66,35 @@ public sealed record RetrievalPlatformSettings
 
     public int ExpandTotalMaxTokens { get; init; } = 8000;
 
-    /// <summary>How many fused results the reranker scores (§6.7, P2).</summary>
-    public int RerankCandidates { get; init; } = 30;
+    /// <summary>
+    /// How many fused results the reranker scores (§6.7), 1–50: 20, the top 20 of Decisions "Rerank pulled forward" (the
+    /// <see cref="ChatModelReranker"/> scores them in one chat call).
+    /// </summary>
+    public int RerankCandidates { get; init; } = 20;
 
-    /// <summary>The rerank floor that replaces the vector side of coverage when a search reranks (§6.7, §7; P2).</summary>
+    /// <summary>The rerank floor that replaces the vector side of coverage when a search reranks (§6.7, §7); null: off.</summary>
     public double? CoverageMinRerankScore { get; init; }
 
+    /// <summary>
+    /// The chat model of the gateway's mirror that <see cref="ChatModelReranker"/> calls (<c>Settings.Retrieval.rerankModel</c>,
+    /// checked by V32); null until chosen, and an assistant that reranks then keeps the fused order (<c>rerank_unavailable</c>).
+    /// </summary>
+    public string? RerankModel { get; init; }
+
     public static RetrievalPlatformSettings Default { get; } = new();
+
+    /// <summary>Throws <see cref="ArgumentOutOfRangeException"/> for a value outside its range.</summary>
+    public RetrievalPlatformSettings Validated()
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(RerankCandidates, 1, nameof(RerankCandidates));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(RerankCandidates, 50, nameof(RerankCandidates));
+        if (RerankModel is { Length: > 200 })
+        {
+            throw new ArgumentOutOfRangeException(nameof(RerankModel), "rerankModel is at most 200 characters.");
+        }
+
+        return this;
+    }
 }
 
 /// <summary>
@@ -97,7 +119,8 @@ public static class RetrievalSettingsResolver
             CoverageMinRerankScore = json.ContainsKey("coverageMinRerankScore")
                 ? Double(json, "coverageMinRerankScore")
                 : builtIn.CoverageMinRerankScore,
-        };
+            RerankModel = String(json, "rerankModel") is { Length: > 0 } model ? model : null,
+        }.Validated();
     }
 
     /// <summary>A collection's settings: its <c>RetrievalSettings</c> jsonb over <paramref name="platform"/>'s defaults.</summary>
@@ -144,6 +167,13 @@ public static class RetrievalSettingsResolver
 
     private static double? Double(JsonObject json, string name) =>
         json[name] is JsonValue v ? v.GetValueKind() == JsonValueKind.Number ? v.GetValue<double>() : throw new FormatException($"{name} must be a number.") : null;
+
+    private static string? String(JsonObject json, string name) => json[name] switch
+    {
+        null => null,
+        JsonValue v when v.GetValueKind() == JsonValueKind.String => v.GetValue<string>().Trim(),
+        _ => throw new FormatException($"{name} must be a string or null."),
+    };
 
     private static int? Int(JsonObject json, string name) =>
         json[name] is JsonValue v ? v.GetValueKind() == JsonValueKind.Number ? v.GetValue<int>() : throw new FormatException($"{name} must be a number.") : null;

@@ -28,7 +28,9 @@ public enum RetrievalPurpose { Chat, Http, Mcp, TestPanel }
 /// <summary>
 /// A retrieval (knowledge design §2.2, §3.1). <c>AssistantId</c> (chat, <c>rag-internal</c>) searches the published
 /// version's collections (§4.2); <c>CollectionIds</c> narrows, each must be visible (404 otherwise); <c>RunId</c> is sent
-/// to the gateway as <c>x-ume-run-id</c> (chat: the message id).
+/// to the gateway as <c>x-ume-run-id</c> (chat: the message id). <c>ModelCeiling</c> is the ceiling of the model calls the
+/// retrieval makes besides the query embedding (the rerank call, knowledge design §6.7): chat passes the turn's ceiling; null
+/// (every other caller) keeps the fused order even when the assistant reranks.
 /// </summary>
 public sealed record RetrievalRequest(
     string Query,
@@ -40,7 +42,8 @@ public sealed record RetrievalRequest(
     ExpandMode Expand = ExpandMode.None,
     RetrievalPurpose Purpose = RetrievalPurpose.Chat,
     bool AllowDegraded = true,
-    Guid? RunId = null);
+    Guid? RunId = null,
+    Residency? ModelCeiling = null);
 
 /// <summary>Stage milliseconds, for metrics and the test panel (never in production response headers, §3.2).</summary>
 public sealed record RetrievalTimings(double PolicyMs, double KeywordMs, double EmbeddingMs, double VectorMs, double HydrateMs, double TotalMs);
