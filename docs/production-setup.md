@@ -274,12 +274,11 @@ copies) to `COMPOSE_FILE`. In a clone the source is `images/clamav/`; in a relea
 
 ## Embedding request size
 
-The worker sends at most 64 chunks and at most `Worker:Embed:MaxTokensPerRequest` tokens (default 6000, range
-512–8192; environment `Worker__Embed__MaxTokensPerRequest`) per embedding request, and never more than the embedding
-profile's `MaxInputTokens`. The gateway estimates a request's tokens as its body bytes / 4 and refuses a request above
-the model's context window (8192 for BGE-M3) with 400 `context_length_exceeded`, which fails the document
-(`embed.input_rejected`). Swedish text costs about 4.5 body bytes per token in the JSON body, so 6000 stays below
-8192. Lower the value if the gateway's model has a smaller context window.
+The worker sends at most 64 chunks per embedding request, with no cap on the request's total tokens. From v0.9.0 the
+gateway checks each input of an embedding request against the model's context window (its longest input, estimated at
+about 4 bytes per token), so the embedding deployment may have a `ContextWindow`. A chunk holds at most about 920
+tokens (template `chunkTokens` ≤ 800, plus the tail merge), far below the embedding profile's `MaxInputTokens`; a
+refused input fails the document (`embed.input_rejected`) and is a bug to report.
 
 ## Rerank (optional)
 

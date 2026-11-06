@@ -1,14 +1,12 @@
 extern alias fakegateway;
 
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Domain;
 using Ume.Rag.Infrastructure.Gateway;
@@ -53,7 +51,7 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         public void Dispose() => Host.Dispose();
     }
 
-    private Rig Build(int concurrency = 4, HttpMessageHandler? primary = null, string? maxTokensPerRequest = null, params EmbeddingProfileRecord[] profiles)
+    private Rig Build(int concurrency = 4, HttpMessageHandler? primary = null, params EmbeddingProfileRecord[] profiles)
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([
@@ -62,11 +60,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
             new("Gateway:Keys:Eu", FakeGatewayFactory.EuKey),
             new("Worker:Concurrency:embed", concurrency.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         ]);
-        if (maxTokensPerRequest is not null)
-        {
-            builder.Configuration.AddInMemoryCollection([new("Worker:Embed:MaxTokensPerRequest", maxTokensPerRequest)]);
-        }
-
         builder.Logging.ClearProviders();
         var recorder = new Recording();
         var store = new InMemoryProfiles(profiles.Length == 0 ? [Pilot] : profiles);
@@ -126,45 +119,39 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
         (await rig.Stage.RunAsync(Chunks(2), Classification.Internal, Pilot.Id, new EmbeddingCall(null), Ct)).CacheHits.ShouldBe(0);
     }
 
-    [Fact]
-    public void Batches_hold_at_most_64_inputs_and_the_token_cap()
-    {
-        var cap = new EmbedOptions().MaxTokensPerRequest;
-        cap.ShouldBe(6_000);
-        EmbedStage.Batches(Chunks(130).Chunks, cap).Select(b => b.Count).ShouldBe([64, 64, 2]);
-        var batches = EmbedStage.Batches(Chunks(10, tokens: 2_500).Chunks, cap).ToList();
-        batches.Select(b => b.Count).ShouldBe([2, 2, 2, 2, 2]);
-        batches.ShouldAllBe(b => b.Sum(c => c.TokenCount) <= cap);
-        EmbedStage.Batches(Chunks(2, tokens: 7_000).Chunks, cap).Select(b => b.Count).ShouldBe([1, 1], "a chunk above the cap goes alone");
-    }
-
     /// <summary>
-    /// To-verify #43: the gateway estimates a request's tokens as body bytes / 4 against BGE-M3's context window (8,192).
-    /// Real Swedish chunks (four parity-corpus passages each, counted with the BGE-M3 counter) under the default cap.
+    /// Gateway v0.9.0 checks each embedding input against the model's context window, not the whole request, so a batch has
+    /// no token cap: 64 real Swedish inputs, each just below the profile's <c>MaxInputTokens</c> (counted with the BGE-M3
+    /// counter), go in one request.
     /// </summary>
     [Fact]
-    public async Task With_the_default_cap_no_request_carries_more_than_6000_tokens_or_a_body_estimate_above_the_context_window()
+    public async Task A_full_batch_of_inputs_near_the_context_window_is_one_request()
     {
         using var rig = Build();
         var marker = Guid.NewGuid().ToString("N");
-        var passages = File.ReadLines(Path.Combine(Fixtures.Processing, "tokenizer", "passages.jsonl"))
-            .Select(line => JsonDocument.Parse(line).RootElement.GetProperty("text").GetString()!)
-            .Take(240)
-            .ToList();
-        var draft = new ChunkSetDraft { Chunks = [.. passages.Chunk(4).Select((group, i) => Swedish(i, $"{string.Join(' ', group)} {marker}"))] };
-        draft.Chunks.Sum(c => c.TokenCount).ShouldBeGreaterThan(2 * 6_000);
+        var passages = string.Join(' ', File.ReadLines(Path.Combine(Fixtures.Processing, "tokenizer", "passages.jsonl"))
+            .Select(line => JsonDocument.Parse(line).RootElement.GetProperty("text").GetString()!));
+        var body = passages[..TokenCuts.PrefixLength(Bgem3TokenCounter.Shared, passages, Pilot.MaxInputTokens - 100)];
+        var draft = new ChunkSetDraft { Chunks = [.. Enumerable.Range(0, EmbedLimits.MaxInputs).Select(i => Swedish(i, $"{i} {marker} {body}"))] };
+        draft.Chunks.ShouldAllBe(c => c.TokenCount > Pilot.MaxInputTokens - 200 && c.TokenCount <= Pilot.MaxInputTokens);
+        draft.Chunks.Sum(c => c.TokenCount).ShouldBeGreaterThan(50 * 6_000);
         var before = rig.Recorder.Requests.Count;
 
-        (await rig.Stage.RunAsync(draft, Level, Pilot.Id, new EmbeddingCall(null), Ct)).Vectors.Count.ShouldBe(draft.Chunks.Count);
+        (await rig.Stage.RunAsync(draft, Level, Pilot.Id, new EmbeddingCall(null), Ct)).Vectors.Count.ShouldBe(EmbedLimits.MaxInputs);
 
-        var requests = rig.Recorder.Requests.Skip(before).Select(r => r.Body).ToList();
-        requests.Count.ShouldBeGreaterThan(2);
-        requests.Sum(body => Inputs(body).Count).ShouldBe(draft.Chunks.Count);
-        foreach (var body in requests)
-        {
-            Inputs(body).Sum(input => Bgem3TokenCounter.Shared.Count(input)).ShouldBeLessThanOrEqualTo(6_000);
-            (Encoding.UTF8.GetByteCount(body) / 4).ShouldBeLessThan(8_192);
-        }
+        rig.Recorder.Requests.Count.ShouldBe(before + 1);
+        Inputs(rig.Recorder.Requests[^1].Body).Count.ShouldBe(EmbedLimits.MaxInputs);
+    }
+
+    [Fact]
+    public async Task More_than_64_inputs_are_split_by_count_only()
+    {
+        using var rig = Build();
+        var before = rig.Recorder.Requests.Count;
+
+        await rig.Stage.RunAsync(Chunks(130, tokens: Pilot.MaxInputTokens), Level, Pilot.Id, new EmbeddingCall(null), Ct);
+
+        rig.Recorder.Requests.Skip(before).Select(r => Inputs(r.Body).Count).ShouldBe([64, 64, 2]);
     }
 
     [Fact]
@@ -179,34 +166,6 @@ public sealed class EmbedStageTests(FakeGatewayFactory gateway) : IClassFixture<
 
         rig.Recorder.Requests.Count.ShouldBe(before + 1);
         Inputs(rig.Recorder.Requests[^1].Body).Count.ShouldBe(64);
-    }
-
-    [Fact]
-    public async Task The_cap_is_a_deployment_knob_and_the_profiles_input_limit_caps_it_further()
-    {
-        var small = Pilot with { Id = Guid.Parse("01929b6e-0000-7000-8000-00000000b6e4"), Name = "small", MaxInputTokens = 600, IsDefault = false };
-        using var rig = Build(maxTokensPerRequest: "1000", profiles: [Pilot, small]);
-        var draft = Chunks(12, tokens: 300);
-        var before = rig.Recorder.Requests.Count;
-
-        await rig.Stage.RunAsync(draft, Level, Pilot.Id, new EmbeddingCall(null), Ct);
-
-        rig.Recorder.Requests.Skip(before).Select(r => Inputs(r.Body).Count).ShouldBe([3, 3, 3, 3]);
-        before = rig.Recorder.Requests.Count;
-        await rig.Stage.RunAsync(draft, Level, small.Id, new EmbeddingCall(null), Ct);
-
-        rig.Recorder.Requests.Skip(before).Select(r => Inputs(r.Body).Count).ShouldBe([2, 2, 2, 2, 2, 2]);
-    }
-
-    [Theory]
-    [InlineData("511")]
-    [InlineData("8193")]
-    public void An_invalid_cap_fails_options_validation(string value)
-    {
-        using var rig = Build(maxTokensPerRequest: value);
-
-        Should.Throw<OptionsValidationException>(() => rig.Host.Services.GetRequiredService<IOptions<EmbedOptions>>().Value)
-            .Message.ShouldContain(nameof(EmbedOptions.MaxTokensPerRequest));
     }
 
     [Fact]

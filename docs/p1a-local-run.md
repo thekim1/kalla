@@ -116,7 +116,7 @@ issue). Until the admin's set-up endpoints (J7) exist, the source comes from a d
 | The AppHost passes `EmbeddingProfile:*` to the `migrations` resource (without it the pilot profile is not seeded) | now (#159) |
 | `KnowledgeService`, query embedding and `/v1/retrieve` | now (#127) |
 | An API key for `/v1/retrieve`: `POST /api/keys` in the admin API (#185), or the dev seed's `--api-key` offline (§4.4) | now |
-| On the gateway: a key restricted to residency `Eu`; the `text-embedding-3-large` deployment's `ContextWindow` empty; a Data API key with `catalog.read` for the org and model syncs | now (the gateway session) |
+| On the gateway: a key restricted to residency `Eu`; a gateway at v0.9.0 or later (it checks each embedding input against the deployment's `ContextWindow`), or the `text-embedding-3-large` deployment's `ContextWindow` empty; a Data API key with `catalog.read` for the org and model syncs | now (the gateway session) |
 | `psql` on your machine, or the AppHost's Postgres container (`--docker` below); Python 3.12 | now |
 
 ### 4.2 User secrets
