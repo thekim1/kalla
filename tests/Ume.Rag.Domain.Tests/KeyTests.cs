@@ -1,3 +1,4 @@
+using System.Net;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Services;
 
@@ -199,7 +200,7 @@ public class KeyChecksTests
     public void An_active_key_of_an_enabled_client_is_accepted()
     {
         var (key, plain) = NewKey();
-        KeyChecks.Refusal(key, plain, Now).ShouldBeNull();
+        KeyChecks.Refusal(key, plain, Now, null).ShouldBeNull();
     }
 
     [Fact]
@@ -207,7 +208,7 @@ public class KeyChecksTests
     {
         var (key, plain) = NewKey(KeyKinds.Public);
         key.Kind = KeyKinds.Secret;
-        KeyChecks.Refusal(key, plain, Now).ShouldBe(KeyChecks.InvalidKey);
+        KeyChecks.Refusal(key, plain, Now, null).ShouldBe(KeyChecks.InvalidKey);
     }
 
     [Fact]
@@ -215,11 +216,11 @@ public class KeyChecksTests
     {
         var (key, plain) = NewKey();
         key.ExpiresAt = Now.AddDays(-1);
-        KeyChecks.Refusal(key, plain, Now).ShouldBe(KeyChecks.KeyExpired);
+        KeyChecks.Refusal(key, plain, Now, null).ShouldBe(KeyChecks.KeyExpired);
         key.IsEnabled = false;
-        KeyChecks.Refusal(key, plain, Now).ShouldBe(KeyChecks.KeyDisabled);
+        KeyChecks.Refusal(key, plain, Now, null).ShouldBe(KeyChecks.KeyDisabled);
         key.RevokedAt = Now;
-        KeyChecks.Refusal(key, plain, Now).ShouldBe(KeyChecks.KeyRevoked);
+        KeyChecks.Refusal(key, plain, Now, null).ShouldBe(KeyChecks.KeyRevoked);
     }
 
     [Fact]
@@ -227,8 +228,19 @@ public class KeyChecksTests
     {
         var (key, plain) = NewKey();
         key.Client!.IsEnabled = false;
-        KeyChecks.Refusal(key, plain, Now).ShouldBe(KeyChecks.OwnerInactive);
+        KeyChecks.Refusal(key, plain, Now, null).ShouldBe(KeyChecks.OwnerInactive);
         key.Client = null;
-        KeyChecks.Refusal(key, plain, Now).ShouldBe(KeyChecks.OwnerInactive);
+        KeyChecks.Refusal(key, plain, Now, null).ShouldBe(KeyChecks.OwnerInactive);
+    }
+
+    [Fact]
+    public void An_address_outside_the_allow_list_is_refused_after_the_status_checks()
+    {
+        var (key, plain) = NewKey();
+        key.AllowedIpRanges = ["203.0.113.0/24"];
+        KeyChecks.Refusal(key, plain, Now, IPAddress.Parse("203.0.113.7")).ShouldBeNull();
+        KeyChecks.Refusal(key, plain, Now, IPAddress.Parse("198.51.100.1")).ShouldBe(KeyChecks.AddressNotAllowed);
+        key.RevokedAt = Now;
+        KeyChecks.Refusal(key, plain, Now, IPAddress.Parse("198.51.100.1")).ShouldBe(KeyChecks.KeyRevoked);
     }
 }

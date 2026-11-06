@@ -35,7 +35,7 @@ public sealed class KeyStoreTests(RagDatabaseFixture database)
 
         var key = await store.FindAsync(plain, Ct);
         key.ShouldNotBeNull();
-        KeyChecks.Refusal(key, plain, DateTimeOffset.UtcNow).ShouldBeNull();
+        KeyChecks.Refusal(key, plain, DateTimeOffset.UtcNow, null).ShouldBeNull();
         key.Client!.Name.ShouldBe("Integration test");
 
         await AdminWriteAsync(async db =>
@@ -46,7 +46,7 @@ public sealed class KeyStoreTests(RagDatabaseFixture database)
         });
 
         // The cache holds keys for 5 minutes here (StartApiAsync), so only the notification can clear it; no timing bound (#297).
-        await WaitUntilAsync(async () => await store.FindAsync(plain, Ct) is { } k && KeyChecks.Refusal(k, plain, DateTimeOffset.UtcNow) == KeyChecks.KeyRevoked,
+        await WaitUntilAsync(async () => await store.FindAsync(plain, Ct) is { } k && KeyChecks.Refusal(k, plain, DateTimeOffset.UtcNow, null) == KeyChecks.KeyRevoked,
             TimeSpan.FromSeconds(30));
     }
 
@@ -79,7 +79,7 @@ public sealed class KeyStoreTests(RagDatabaseFixture database)
             await db.SaveChangesAsync(Ct);
         });
 
-        await WaitUntilAsync(async () => await store.FindAsync(plain, Ct) is { } k && KeyChecks.Refusal(k, plain, DateTimeOffset.UtcNow) == KeyChecks.OwnerInactive);
+        await WaitUntilAsync(async () => await store.FindAsync(plain, Ct) is { } k && KeyChecks.Refusal(k, plain, DateTimeOffset.UtcNow, null) == KeyChecks.OwnerInactive);
     }
 
     [Fact]

@@ -3,8 +3,10 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Answering;
@@ -263,6 +265,66 @@ public sealed class KnowledgeSecurityTests(KnowledgeFixture db) : IClassFixture<
         Events(logs, 5006).ShouldHaveSingleItem();
         Events(logs, 5001).Count(e => e.Message.Contains("invalid_key", StringComparison.Ordinal)).ShouldBe(1); // one bucket per minute
         logs.Text.ShouldNotContain(new string('w', 43));
+    }
+
+    [Fact]
+    public async Task A_key_with_address_ranges_works_only_from_inside_them_and_a_revoked_one_is_reported_as_revoked()
+    {
+        var (host, logs) = Host();
+        using var api = host.WithWebHostBuilder(web => web.ConfigureTestServices(services => services.AddSingleton<IStartupFilter, RemoteAddressFromHeader>()));
+        using var restricted = Client(api, db.RestrictedKey);
+        using var revoked = Client(api, db.RevokedRestrictedKey);
+
+        async Task<(HttpStatusCode Status, string? Code)> Collections(HttpClient client, string? address)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("/v1/collections", UriKind.Relative));
+            if (address is not null)
+            {
+                request.Headers.Add(RemoteAddressFromHeader.Header, address);
+            }
+
+            using var response = await client.SendAsync(request, Ct);
+            var code = response.IsSuccessStatusCode ? null : JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["code"]!.GetValue<string>();
+            return (response.StatusCode, code);
+        }
+
+        foreach (var inside in new[] { "203.0.113.7", "::ffff:203.0.113.8", "2001:db8:0:1::5" })
+        {
+            (await Collections(restricted, inside)).ShouldBe((HttpStatusCode.OK, null), inside);
+        }
+
+        foreach (var outside in new[] { "198.51.100.1", "2001:db9::5" })
+        {
+            (await Collections(restricted, outside)).ShouldBe((HttpStatusCode.Forbidden, "address_not_allowed"), outside);
+        }
+
+        (await Collections(restricted, null)).ShouldBe((HttpStatusCode.Forbidden, "address_not_allowed")); // no address is refused too
+        (await Collections(revoked, "198.51.100.1")).ShouldBe((HttpStatusCode.Unauthorized, "key_revoked"));
+
+        var failed = Events(logs, 5001).Select(e => e.Message).ToList();
+        failed.ShouldContain(m => m.Contains("address_not_allowed (sk)", StringComparison.Ordinal) && m.Contains("198.51.100.0", StringComparison.Ordinal));
+        failed.ShouldContain(m => m.Contains("key_revoked (sk)", StringComparison.Ordinal));
+        failed.ShouldNotContain(m => m.Contains("203.0.113.", StringComparison.Ordinal));
+    }
+
+    /// <summary>The test server has no connection address; this sets it from a test header, before the app's pipeline.</summary>
+    private sealed class RemoteAddressFromHeader : IStartupFilter
+    {
+        public const string Header = "X-Test-Remote-Address";
+
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use((http, nextMiddleware) =>
+            {
+                if (IPAddress.TryParse(http.Request.Headers[Header].ToString(), out var address))
+                {
+                    http.Connection.RemoteIpAddress = address;
+                }
+
+                return nextMiddleware(http);
+            });
+            next(app);
+        };
     }
 
     [Fact]

@@ -64,6 +64,11 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
     public string InternalKey { get; private set; } = null!;
     public string OwuiKey { get; private set; } = null!;
     public string IntegrationKey { get; private set; } = null!;
+
+    /// <summary>rag-internal keys allowed only from <see cref="AllowedRanges"/> (identity §6.3 step 4); the second is revoked.</summary>
+    public string RestrictedKey { get; private set; } = null!;
+    public string RevokedRestrictedKey { get; private set; } = null!;
+    public static readonly string[] AllowedRanges = ["203.0.113.0/24", "2001:db8::/48"];
     public Guid AssistantId { get; } = Guid.CreateVersion7();
     public Guid InternalClient { get; } = Guid.CreateVersion7();
     public Guid OwuiClient { get; } = Guid.CreateVersion7();
@@ -98,6 +103,12 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
         InternalKey = await AddKeyAsync(InternalClient, "rag-internal", ClientKinds.Internal, Classification.Sensitive);
         OwuiKey = await AddKeyAsync(OwuiClient, "Open WebUI", ClientKinds.OpenWebUi, Classification.Internal);
         IntegrationKey = await AddKeyAsync(IntegrationClient, "Integration", ClientKinds.Integration, Classification.Internal);
+        RestrictedKey = await AddKeyToAsync(InternalClient, "restricted", key => key.AllowedIpRanges = [.. AllowedRanges]);
+        RevokedRestrictedKey = await AddKeyToAsync(InternalClient, "restricted, revoked", key =>
+        {
+            key.AllowedIpRanges = [.. AllowedRanges];
+            key.RevokedAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        });
 
         // §16.6: the same file uploaded by two departments under different names is two documents, each cited by its own name.
         foreach (var (collection, source, name) in new[] { (DeptACollection, DeptASource, "tomtkarta-bygg.pdf"), (DeptBCollection, DeptBSource, "karta-miljo.pdf") })
@@ -143,6 +154,25 @@ public sealed class KnowledgeFixture : RagDatabase, IAsyncLifetime
             {
                 Client = client, Name = name, Prefix = generated.Prefix, KeyHash = generated.Hash, CreatedAt = DateTimeOffset.UtcNow, CreatedBy = "test",
             });
+            await context.SaveChangesAsync(ct);
+            return 0;
+        }, TestContext.Current.CancellationToken);
+        return generated.PlainText;
+    }
+
+    /// <summary>Another key of the existing client <paramref name="clientId"/>, shaped by <paramref name="configure"/>.</summary>
+    private async Task<string> AddKeyToAsync(Guid clientId, string name, Action<ApiKey> configure)
+    {
+        var generated = new KeyHasher(System.Text.Encoding.UTF8.GetBytes(KeyPepper)).Generate();
+        await using var context = TestPostgres.Context(Connection(Admin));
+        await context.ExecuteConfigWriteAsync(async (_, ct) =>
+        {
+            var key = new ApiKey
+            {
+                ClientId = clientId, Name = name, Prefix = generated.Prefix, KeyHash = generated.Hash, CreatedAt = DateTimeOffset.UtcNow, CreatedBy = "test",
+            };
+            configure(key);
+            context.Add(key);
             await context.SaveChangesAsync(ct);
             return 0;
         }, TestContext.Current.CancellationToken);

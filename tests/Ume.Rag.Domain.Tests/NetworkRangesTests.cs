@@ -1,4 +1,5 @@
 using System.Net;
+using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Services;
 
 namespace Ume.Rag.Domain.Tests;
@@ -62,5 +63,65 @@ public class NetworkRangesTests
     {
         IPNetwork[] networks = [IPNetwork.Parse("10.20.0.0/16"), IPNetwork.Parse("2001:db8::/32")];
         NetworkRanges.Contains(networks, IPAddress.Parse(address)).ShouldBe(expected);
+    }
+}
+
+/// <summary>Copied from the gateway's <c>KeyAddressAllowListTests</c> (same file), on <see cref="ApiKey"/>; plus IPv4-mapped IPv6.</summary>
+public class KeyAddressAllowListTests
+{
+    private static ApiKey Key(params string[] ranges) => new() { Name = "k", Prefix = "p", KeyHash = "h", AllowedIpRanges = [.. ranges] };
+
+    [Fact]
+    public void Empty_list_allows_every_address_including_none()
+    {
+        Key().IsAddressAllowed(IPAddress.Parse("198.51.100.1")).ShouldBeTrue();
+        Key().IsAddressAllowed(IPAddress.Parse("2001:db8::1")).ShouldBeTrue();
+        Key().IsAddressAllowed(null).ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Restricted_key_allows_only_listed_addresses_with_or_without_the_index(bool indexed)
+    {
+        var key = Key("203.0.113.0/24", "2001:db8::/48");
+        if (indexed)
+        {
+            key.IndexAllowLists();
+        }
+
+        key.IsAddressAllowed(IPAddress.Parse("203.0.113.200")).ShouldBeTrue();
+        key.IsAddressAllowed(IPAddress.Parse("198.51.100.1")).ShouldBeFalse();
+        key.IsAddressAllowed(IPAddress.Parse("2001:db8:0:5::1")).ShouldBeTrue();
+        key.IsAddressAllowed(IPAddress.Parse("2001:db9::1")).ShouldBeFalse();
+        key.IsAddressAllowed(null).ShouldBeFalse();
+    }
+
+    [Theory]
+    [InlineData("::ffff:203.0.113.9", true)]
+    [InlineData("::ffff:198.51.100.1", false)]
+    public void An_ipv4_mapped_ipv6_address_is_matched_as_its_ipv4_address(string address, bool expected)
+    {
+        var key = Key("203.0.113.0/24");
+        key.IndexAllowLists();
+        key.IsAddressAllowed(IPAddress.Parse(address)).ShouldBe(expected);
+    }
+
+    [Fact]
+    public void A_list_with_no_valid_entry_refuses_everyone()
+    {
+        var key = Key("not-an-address");
+        key.IndexAllowLists();
+        key.IsAddressAllowed(IPAddress.Parse("198.51.100.1")).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Index_is_ignored_once_the_list_is_replaced()
+    {
+        var key = Key("203.0.113.0/24");
+        key.IndexAllowLists();
+        key.AllowedIpRanges = ["198.51.100.0/24"];
+        key.IsAddressAllowed(IPAddress.Parse("198.51.100.1")).ShouldBeTrue();
+        key.IsAddressAllowed(IPAddress.Parse("203.0.113.1")).ShouldBeFalse();
     }
 }

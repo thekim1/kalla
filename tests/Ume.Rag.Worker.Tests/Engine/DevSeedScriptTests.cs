@@ -206,7 +206,7 @@ public sealed class DevSeedScriptTests(RagDatabaseFixture database, FakeGatewayF
             var found = (await api.Services.GetRequiredService<KeyStore>().FindAsync(key.PlainText, Ct)).ShouldNotBeNull();
             found.ClientId.ShouldBe(clientId);
             found.Scopes.CollectionIds.ShouldBe(new[] { seed.CollectionId });
-            KeyChecks.Refusal(found, key.PlainText, DateTimeOffset.UtcNow).ShouldBeNull();
+            KeyChecks.Refusal(found, key.PlainText, DateTimeOffset.UtcNow, null).ShouldBeNull();
             // The same key under another pepper is not a key of this platform.
             (await OtherPepperKeyStore(api).FindAsync(key.PlainText, Ct)).ShouldBeNull();
 

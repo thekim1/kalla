@@ -72,7 +72,7 @@ public sealed class KeyStore : IConfigChangeHandler, IDisposable
 
     /// <summary>
     /// The key with its client, or null when it is not shaped like a Ume.Rag key or unknown. The caller then applies
-    /// <see cref="KeyChecks.Refusal"/> (status, client) after <see cref="ConfigVersionState.EnsureConfirmed"/>.
+    /// <see cref="KeyChecks.Refusal"/> (status, client, address) after <see cref="ConfigVersionState.EnsureConfirmed"/>.
     /// </summary>
     public async Task<ApiKey?> FindAsync(string? presentedKey, CancellationToken cancellationToken)
     {
@@ -187,6 +187,7 @@ public sealed class KeyStore : IConfigChangeHandler, IDisposable
             return null;
         }
 
+        key.IndexAllowLists();
         if (ttl > TimeSpan.Zero && !generation.IsCancellationRequested)
         {
             using var entry = _cache.CreateEntry(hash);
