@@ -32,6 +32,14 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** the user's decision.
 - **Read:** connectors §3.1 (rule 7).
 
+### [ ] A-5 Embedding batch cap goes after gateway release 1 (#390)
+- **Do:** remove the worker's embedding batch cap below the context window once the gateway checks embeddings per
+  input (gateway #65 in release 1); embedding deployments may then set `ContextWindow`.
+- **Paths:** `src/Ume.Rag.Worker/Processing/**` (embed stage), worker settings.
+- **Done when:** the cap setting is gone; an embed-stage test sends a full batch whose longest input fits the window.
+- **Waits on:** gateway release 1 tagged and deployed (B-L4).
+- **Read:** Decisions "Gateway release 1 and shared Keycloak as built".
+
 ### [ ] A-4 Go-live pin review, A's part (last code item)
 - **Do:** review every image, PyPI and Compose pin younger than 7 days; bump the Open WebUI pin once, with the
   callback change in Compose matching B's realm change (B-6).

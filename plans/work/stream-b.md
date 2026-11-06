@@ -120,8 +120,9 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
   targets end in `502`/`504`; 403 vs 503 + `Retry-After` only on the ceiling 503; `400 invalid_request` for a
   malformed, empty, repeated or required-but-missing header; `/v1/models` filtered by the ceiling) and serve
   `/v1/rerank` in the Cohere shape (documents as strings or `{text}`, `results[]` with `index` and
-  `relevance_score`, `usage`). List any remaining difference on #390.
-- **Paths:** `src/Ume.Rag.FakeGateway/**`, its tests.
+  `relevance_score`, `usage`), with a **no-rerank-model mode** that answers 404/400 as the gateway does. List any
+  remaining difference on #390. Ume.Rag's gateway clients retry 502/504 with the same ceiling, never a wider one.
+- **Paths:** `src/Ume.Rag.FakeGateway/**`, its tests; the retry policy where the gateway clients live.
 - **Done when:** FakeGateway tests cover each point and the rerank shape; #390 has the comparison comment.
 - **Waits on:** –
 - **Read:** Decisions "Gateway release 1 and shared Keycloak as built"; gateway-changes §3.3, §7.4.
@@ -139,10 +140,15 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 
 ### [ ] B-16 `GatewayReranker` on `/v1/rerank`
 - **Do:** `GatewayReranker` behind `IReranker` calling `/v1/rerank` (Berget AI `bge-reranker-v2-m3`, `Eu` ceiling
-  until on-prem), selectable per assistant next to `ChatModelReranker`; 404/400 (no rerank model configured) and
-  timeouts fall back to unreranked order (`rerank_unavailable`); the evaluation compares both rerankers.
+  until on-prem), selectable per assistant next to `ChatModelReranker`. **Rerank is optional everywhere** (user,
+  2026-11-06): with no rerank model set, no rerank call is made, retrieval is plain fused, and there is no
+  `rerank_unavailable`, no degraded health and nothing that looks broken in the admin UI; the assistant's rerank
+  switch is disabled with a hint while the platform has none. A 404/400 or timeout from the gateway falls back to
+  fused order, logged once, never a failed answer. Timeouts: 500 ms for `GatewayReranker`; `ChatModelReranker` gets
+  its own longer default (3 s, then set from B-12's live p95). The evaluation compares both rerankers.
 - **Paths:** `src/Ume.Rag.Retrieval/**`, assistant and platform settings in the admin API and UI.
-- **Done when:** retrieval tests against the FakeGateway rerank (B-14); a live evaluation run once the endpoint exists.
+- **Done when:** retrieval tests against the FakeGateway rerank (B-14); the chat path, the test panel and the
+  evaluation are tested with rerank fully unconfigured; a live evaluation run once the endpoint exists.
 - **Waits on:** B-12; the gateway's rerank release for the live run.
 - **Read:** Decisions "Gateway release 1 and shared Keycloak as built", "Rerank pulled forward"; gateway-changes §7.4.
 
