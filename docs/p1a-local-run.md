@@ -72,7 +72,7 @@ Nothing in the repository changes. You set values in one of two places:
 |---|---|---|
 | The interim gateway (J10) | `FakeGateway:Enabled=false`, `Gateway:BaseUrl=https://<gateway host>` | `--gateway-url https://<gateway host>` (a publicly trusted certificate: no `--ca-file`) |
 | Its `Eu` keys, one per deployable | `Gateway:Services:api:Keys:Eu=<key>`, `Gateway:Services:admin:Keys:Eu=<key>`, `Gateway:Services:worker:Keys:Eu=<key>`; a shared `Gateway:Keys:Eu=<key>` goes to all three, and a service's own key wins over it. The AppHost stops on `Gateway:Services:worker:Keys:External`, an unknown service or a level other than `OnPrem`, `Eu`, `External` | `--gateway-key-file api:Eu=api-eu.key --gateway-key-file admin:Eu=admin-eu.key --gateway-key-file worker:Eu=worker-eu.key` |
-| The org sync's Data API key (`catalog.read`) | `OrgSync:BaseUrl=https://<gateway host>`, `OrgSync:DataApiKey=<key>` (passed to the admin API only) | `--org-sync-key-file org-sync.key` |
+| The org sync's Data API key (`catalog.read`) | `OrgSync:BaseUrl=https://<Data API host>` (no `/v1`; the address the gateway admin UI shows under *Access → Data API access*), `OrgSync:DataApiKey=<key>` (a Data API key with `catalog.read`; passed to the admin API only) | `--org-sync-key-file org-sync.key` |
 | The shared Keycloak (J11) for the admin | `Oidc:Authority=https://<keycloak host>/realms/ume`, `Oidc:ClientSecret=<secret of ume-rag-admin>`; the bundled Keycloak then does not start | `--oidc-authority https://<keycloak host>/realms/ume --oidc-client-secret-file ume-rag-admin.secret` |
 | The shared Keycloak for Open WebUI | stream B's `open-webui` resource (J9) | `--openwebui-oidc-client-secret-file open-webui.secret`; client id `open-webui` and the provider URL (`<authority>/.well-known/openid-configuration`) are the defaults; `--openwebui-oidc-provider-name` sets the sign-in button's label (default *Umeå kommun*) |
 | Open WebUI's client in rag-api | created by the AppHost seed (with J9) | create it in the admin API (Scalar): kind `open-webui`, its ceiling, `AllowedIpRanges` = the Open WebUI host (identity design §5.3); then `--openwebui-api-key-file open-webui.key --openwebui-rag-client-id <its id>` |
@@ -133,7 +133,7 @@ dotnet user-secrets --project $p set Gateway:MaxResidency Eu                    
 dotnet user-secrets --project $p set Gateway:Services:api:Keys:Eu <the api's Eu key>      # now
 dotnet user-secrets --project $p set Gateway:Services:admin:Keys:Eu <the admin's Eu key>  # now
 dotnet user-secrets --project $p set Gateway:Services:worker:Keys:Eu <the worker's Eu key>  # now
-dotnet user-secrets --project $p set OrgSync:BaseUrl https://<gateway host>              # now
+dotnet user-secrets --project $p set OrgSync:BaseUrl https://<Data API host>             # now (not the gateway's host)
 dotnet user-secrets --project $p set OrgSync:DataApiKey <the catalog.read key>           # now
 dotnet user-secrets --project $p set EmbeddingProfile:GatewayModel text-embedding-3-large  # now
 dotnet user-secrets --project $p set EmbeddingProfile:Dimensions 1024                    # now
@@ -151,10 +151,17 @@ migrator seeds the profile as `pilot-embedding` (#123's default `EmbeddingProfil
 exists: a different model, dimension count or `RequestDimensions` needs a new volume (the migrator only logs that the
 profile differs from `EmbeddingProfile:*`).
 
+`OrgSync:BaseUrl` is the **Data API's** address, not the gateway's: on a deployed gateway the Data API
+(`/v1/catalog/*`) runs as its own service on its own host (gateway runbook, *Data API (optional)*). Give the address
+without `/v1`, as the gateway admin UI shows it under *Access → Data API access*, with a Data API key that has
+`catalog.read`. With the gateway's host both the model sync and the org sync fail with HTTP 404, the model mirror stays
+empty, and every model setting is refused (V32) (#440).
+
 ### 4.3 Start
 
-**Now** (#123, #159, #162). Start without the demo data, so the FakeGateway's `dev-embedding`
-profile is not seeded next to the pilot profile:
+**Now** (#123, #159, #162). Start without the demo data, **even on the first start**, so the FakeGateway's
+`dev-embedding` profile is not seeded next to the pilot profile (it would land in the live database, and its canary
+fails with `model_not_found`; #440):
 
 ```powershell
 .\scripts\Start-Dev.ps1 -Empty
