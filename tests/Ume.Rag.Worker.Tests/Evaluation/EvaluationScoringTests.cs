@@ -1,8 +1,14 @@
+using Ume.Rag.Domain.Retrieval;
+using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.Retrieval;
 using Ume.Rag.Worker.Evaluation;
 
 namespace Ume.Rag.Worker.Tests.Evaluation;
 
-/// <summary>The threshold proposal, the recall alert and the nightly occurrence (processing design §13.6, §14.8; knowledge design §7).</summary>
+/// <summary>
+/// The threshold proposal, the recall alert, the nightly occurrence and the search stats (processing design §13.6, §14.8;
+/// knowledge design §7; #399).
+/// </summary>
 public sealed class EvaluationScoringTests
 {
     [Fact]
@@ -54,4 +60,62 @@ public sealed class EvaluationScoringTests
         EvalScheduler.LatestOccurrence(now).ShouldBe(new DateTimeOffset(2026, 10, 31, 2, 30, 0, TimeSpan.Zero).AddDays(-1));
         EvalScheduler.LatestOccurrence(now.AddHours(1)).ShouldBe(new DateTimeOffset(2026, 10, 31, 2, 30, 0, TimeSpan.Zero));
     }
+
+    [Fact]
+    public void Percentiles_are_nearest_rank_over_every_question()
+    {
+        double[] values = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+        EvaluationScoring.Percentile(values, 0.50).ShouldBe(50);
+        EvaluationScoring.Percentile(values, 0.95).ShouldBe(100);
+        EvaluationScoring.Percentile([7.25], 0.95).ShouldBe(7.3);
+        EvaluationScoring.Percentile([], 0.5).ShouldBe(0);
+    }
+
+    [Fact]
+    public void A_reranked_run_reports_rerank_latency_tokens_cost_per_question_and_fallbacks()
+    {
+        QuestionOutcome[] outcomes =
+        [
+            Outcome(total: 900, rerank: 800, new RerankUsage("ume/chat-eu", 1_000, 50)),
+            Outcome(total: 1_100, rerank: 1_000, new RerankUsage("ume/chat-eu", 3_000, 150)),
+            Outcome(total: 30_100, rerank: 30_000, null, RetrievalDegradation.RerankUnavailable),
+        ];
+
+        var model = EvaluationScoring.RerankModel(outcomes, reranked: true, platformModel: "other");
+        model.ShouldBe("ume/chat-eu", "the model that answered");
+        var stats = EvaluationScoring.Search(outcomes, reranked: true, model, new ModelPrice(2m, 8m));
+
+        stats.ShouldBe(new EvaluationSearchStats
+        {
+            Searches = 3,
+            TotalP50Ms = 1_100,
+            TotalP95Ms = 30_100,
+            RerankP50Ms = 1_000,
+            RerankP95Ms = 30_000,
+            RerankUnavailable = 1,
+            RerankModel = "ume/chat-eu",
+            RerankPromptTokens = 4_000,
+            RerankCompletionTokens = 200,
+            // (4,000 x 2 + 200 x 8) / 1,000,000 / 3 questions, the fallback included.
+            RerankCostPerQueryUsd = 0.0032,
+        });
+    }
+
+    [Fact]
+    public void A_run_without_rerank_or_without_prices_reports_no_cost()
+    {
+        QuestionOutcome[] outcomes = [Outcome(total: 40, rerank: 0, null)];
+
+        var plain = EvaluationScoring.Search(outcomes, reranked: false, EvaluationScoring.RerankModel(outcomes, reranked: false, "ume/chat-eu"), null);
+        plain.ShouldBe(new EvaluationSearchStats { Searches = 1, TotalP50Ms = 40, TotalP95Ms = 40 }, "no rerank model, latency, tokens or cost");
+
+        var unpriced = EvaluationScoring.Search(outcomes, reranked: true, "ume/chat-eu", new ModelPrice(2m, null));
+        unpriced.RerankCostPerQueryUsd.ShouldBeNull("cost needs both prices");
+        EvaluationScoring.RerankModel(outcomes, reranked: true, "ume/chat-eu").ShouldBe("ume/chat-eu", "none answered: the platform's model");
+    }
+
+    private static QuestionOutcome Outcome(double total, double rerank, RerankUsage? usage, string? degraded = null) => new(
+        new EvaluationQuestionRow(Guid.NewGuid(), EvaluationLayer.Generated, "q", [Guid.NewGuid()]),
+        new SearchResult("q", [], new Coverage(CoverageStatus.Low, null, null, null, null), degraded, null, new SearchTimings(0, 0, 0, rerank, total), usage),
+        null);
 }

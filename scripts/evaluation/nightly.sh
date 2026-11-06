@@ -75,7 +75,8 @@ WITH runs AS (
          (j."Result"->>'questionCount')::int AS questions, (j."Result"->>'found')::int AS found,
          CASE WHEN j."Result" IS NOT NULL THEN coalesce((j."Result"->>'wins')::int, 0) END AS wins,
          CASE WHEN j."Result" IS NOT NULL THEN coalesce((j."Result"->>'losses')::int, 0) END AS losses,
-         coalesce((j."Result"->>'recallAlert')::boolean, false) AS alert
+         coalesce((j."Result"->>'recallAlert')::boolean, false) AS alert,
+         (j."Result"->'search'->>'totalP50Ms') || ' / ' || (j."Result"->'search'->>'totalP95Ms') AS latency
   FROM content."Jobs" j
   WHERE j."Class" = 'eval' AND j."Payload"->>'kind' = 'nightly' AND j."CompletedAt" IS NOT NULL),
 tonight AS (
@@ -90,6 +91,7 @@ SELECT c."Slug", e."Name" || ' (' || e."GatewayModel" || ', ' || e."MaxResidency
        coalesce(to_char(100.0 * t.found / nullif(t.questions, 0), 'FM990.0') || ' %', '–'),
        coalesce(t.wins || ' / ' || t.losses, '–'),
        CASE WHEN t.alert THEN '**yes**' WHEN t.questions IS NULL THEN '–' ELSE 'no' END,
+       coalesce(t.latency, '–'),
        coalesce(s.n, 0), coalesce(to_char(100 * s.lo, 'FM990.0') || '–' || to_char(100 * s.hi, 'FM990.0') || ' %', '–'),
        coalesce(to_char(100 * s.sd, 'FM990.00') || ' points', '–'),
        coalesce(replace(left(t."LastError", 120), '|', '/'), '–')
@@ -108,12 +110,13 @@ SQL
   echo "Test deployment, every published collection's full evaluation set, kind \`nightly\` (processing design §14.8)."
   echo "Advisory: no gate. Found = answerable questions with an expected document in the top 10. Spread = the"
   echo "succeeded nightly runs still in the job table (up to 7 days): range and standard deviation of the found share."
-  echo "The run-to-run variance of an unchanged collection is what P1b live item 23 records."
+  echo "The run-to-run variance of an unchanged collection is what P1b live item 23 records. Latency = the questions'"
+  echo "total search time in milliseconds, median / 95th percentile (eval.run.result search)."
   echo
-  echo "| Collection | Embedding profile | Tonight | Questions | Found | Share | Wins / losses | Recall alert | Runs kept | Spread | Std dev | Error |"
-  echo "|---|---|---|---:|---:|---:|---:|---|---:|---|---:|---|"
+  echo "| Collection | Embedding profile | Tonight | Questions | Found | Share | Wins / losses | Recall alert | Latency p50 / p95 ms | Runs kept | Spread | Std dev | Error |"
+  echo "|---|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---|"
   if [ -z "$rows" ]; then
-    echo "| (no published collection) | | | | | | | | | | | |"
+    echo "| (no published collection) | | | | | | | | | | | | |"
   else
     while IFS=$'\t' read -r -a f; do
       printf '| %s ' "${f[@]}"; echo '|'

@@ -102,7 +102,10 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
           AND "RecallAtK" IS NOT NULL AND "StartedAt" >= $2 AND "StartedAt" < $3
         """;
 
-    private const string RunStartedSql = """SELECT "StartedAt" FROM content."Runs" WHERE "Id" = $1""";
+    // The rerank model's prices for cost per query (#399); the worker reads the model mirror (data-model §1.1).
+    private const string PriceSql = """SELECT "InputPerMillionUsd", "OutputPerMillionUsd" FROM config."GatewayModels" WHERE "Name" = $1""";
+
+    private const string RunStartedSql ="""SELECT "StartedAt" FROM content."Runs" WHERE "Id" = $1""";
 
     private const string VersionNumberSql = """SELECT "Number" FROM config."PipelineVersions" WHERE "Id" = $1""";
 
@@ -209,6 +212,16 @@ public sealed class EvaluationStore(JobDatabase database, IEmbeddingProfileStore
         }
 
         return recalls;
+    }
+
+    /// <summary>The mirror's prices of <paramref name="model"/>; null when the mirror does not list it.</summary>
+    public async Task<ModelPrice?> PriceAsync(string model, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(PriceSql, connection) { Parameters = { Db.P(model) } };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? new ModelPrice(Db.Nullable<decimal>(reader, 0), Db.Nullable<decimal>(reader, 1)) : null;
     }
 
     /// <summary>When the <c>reprocess</c> run of a publish started (<c>content."Runs"</c>); null when it is not there.</summary>

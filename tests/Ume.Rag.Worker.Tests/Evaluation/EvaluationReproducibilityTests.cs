@@ -303,9 +303,11 @@ public sealed class EvaluationReproducibilityTests(RagDatabaseFixture database) 
         [.. questions.OrderBy(q => q.SourceChunkId).Select(q =>
             $"{q.SourceChunkId}|{q.Question}|{q.ExpectedAnswer}|{string.Join(',', q.ExpectedDocumentIds)}|{Convert.ToHexStringLower(q.SourceContentHash)}|{q.State}|{q.Origin.ToJsonString()}")];
 
-    private static string Numbers(EvalOnDemandResult result) => ContractJson.Serialize(result.Runs.Select(r => r with { EvaluationRunId = Guid.Empty }).ToList());
+    // Latency is measured, not reproduced (#399): the search stats are left out.
+    private static string Numbers(EvalOnDemandResult result) =>
+        ContractJson.Serialize(result.Runs.Select(r => r with { EvaluationRunId = Guid.Empty, Search = null }).ToList());
 
-    private static string Numbers(EvalRunResult result) => ContractJson.Serialize(result with { EvaluationRunId = Guid.Empty });
+    private static string Numbers(EvalRunResult result) => ContractJson.Serialize(result with { EvaluationRunId = Guid.Empty, Search = null });
 
     private sealed record Corpus(SourceSeed Seed, IReadOnlyList<Guid> DocumentIds, string Tag);
 }

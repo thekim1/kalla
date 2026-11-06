@@ -18,12 +18,13 @@
         "enum": [
           "hybrid",
           "vector",
-          "hybrid-no-decompounder"
+          "hybrid-no-decompounder",
+          "hybrid-rerank"
         ]
       },
-      "description": "One EvaluationRuns row per variant, run against the same index; the P1a three-way gold-set run lists all three.",
+      "description": "One EvaluationRuns row per variant, run against the same index; the P1a three-way gold-set run lists hybrid, vector and hybrid-no-decompounder, the rerank comparison (#399) hybrid and hybrid-rerank.",
       "minItems": 1,
-      "maxItems": 3,
+      "maxItems": 4,
       "uniqueItems": true,
       "default": [
         "hybrid"

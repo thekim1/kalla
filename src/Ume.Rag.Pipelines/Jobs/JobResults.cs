@@ -138,6 +138,65 @@ public sealed record EvaluationRunRef
 
     [Description("The coverage-threshold proposal from the human layer's answerable and unanswerable questions (processing design §13.6); absent without human questions.")]
     public CoverageProposal? Coverage { get; init; }
+
+    [Description("recall@k over the answerable questions (EvaluationRuns.RecallAtK); absent without answerable questions.")]
+    [Range(0.0, 1.0)]
+    public double? RecallAtK { get; init; }
+
+    [Description("MRR@k over the answerable questions (EvaluationRuns.Mrr); absent without answerable questions.")]
+    [Range(0.0, 1.0)]
+    public double? Mrr { get; init; }
+
+    [Description("Search latency, rerank latency, rerank cost and rerank fallbacks of the run's questions (#399).")]
+    public EvaluationSearchStats? Search { get; init; }
+}
+
+/// <summary>
+/// How a run's searches went (#399, the rerank comparison of B-12): latency per question (total and rerank alone), the
+/// rerank calls' tokens and cost per question at the model mirror's prices, and the questions whose rerank fell back to
+/// the fused order (<c>rerank_unavailable</c>).
+/// </summary>
+public sealed record EvaluationSearchStats
+{
+    [Description("Questions searched (answerable and unanswerable).")]
+    [Range(0, int.MaxValue)]
+    public required int Searches { get; init; }
+
+    [Description("Median of the questions' total search time (SearchTimings.TotalMs), milliseconds.")]
+    [Range(0.0, 3_600_000.0)]
+    public required double TotalP50Ms { get; init; }
+
+    [Description("95th percentile (nearest rank) of the questions' total search time, milliseconds.")]
+    [Range(0.0, 3_600_000.0)]
+    public required double TotalP95Ms { get; init; }
+
+    [Description("Median of the questions' rerank time, text read included (SearchTimings.RerankMs); absent for a run without rerank.")]
+    [Range(0.0, 3_600_000.0)]
+    public double? RerankP50Ms { get; init; }
+
+    [Description("95th percentile (nearest rank) of the questions' rerank time; absent for a run without rerank.")]
+    [Range(0.0, 3_600_000.0)]
+    public double? RerankP95Ms { get; init; }
+
+    [Description("Questions whose rerank fell back to the fused order (degraded rerank_unavailable).")]
+    [Range(0, int.MaxValue)]
+    public int RerankUnavailable { get; init; }
+
+    [Description("The rerank model that answered (RerankUsage.Model), or Settings.Retrieval.rerankModel when none answered; absent for a run without rerank.")]
+    [MaxLength(200)]
+    public string? RerankModel { get; init; }
+
+    [Description("Prompt tokens of every rerank call of the run.")]
+    [Range(0, int.MaxValue)]
+    public int RerankPromptTokens { get; init; }
+
+    [Description("Completion tokens of every rerank call of the run.")]
+    [Range(0, int.MaxValue)]
+    public int RerankCompletionTokens { get; init; }
+
+    [Description("Rerank cost per question in USD: the tokens at GatewayModels.InputPerMillionUsd and OutputPerMillionUsd, over Searches; absent without rerank or without both prices.")]
+    [Range(0.0, 1_000.0)]
+    public double? RerankCostPerQueryUsd { get; init; }
 }
 
 /// <summary>One question layer of a run: recall@k and MRR@k over its answerable questions (processing design §13.6).</summary>
@@ -402,6 +461,17 @@ public sealed record EvalRunResult
 
     [Description("nightly: recall@10 fell 5 points or more below the 4-week median (processing design §14.8).")]
     public bool RecallAlert { get; init; }
+
+    [Description("recall@k over the answerable questions (EvaluationRuns.RecallAtK); absent without answerable questions.")]
+    [Range(0.0, 1.0)]
+    public double? RecallAtK { get; init; }
+
+    [Description("MRR@k over the answerable questions (EvaluationRuns.Mrr); absent without answerable questions.")]
+    [Range(0.0, 1.0)]
+    public double? Mrr { get; init; }
+
+    [Description("Search latency of the run's questions (#399).")]
+    public EvaluationSearchStats? Search { get; init; }
 
     [Description("The run per question layer, human (the gold set) first (processing design §13.4, weakness review §2).")]
     [MaxLength(2)]

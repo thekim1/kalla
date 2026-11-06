@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
@@ -20,7 +21,8 @@ namespace Ume.Rag.Worker.Tests.Evaluation;
 /// telling the decompounder apart on a compound-only question, the evaluator returning what a direct
 /// <see cref="RetrievalEngine.SearchAsync"/> with the same request returns, a re-run reproducing every number,
 /// candidate settings, <c>publish-report</c> against the last run before the publish, <c>nightly</c> with the recall
-/// alert on fake history, the nightly schedule and the kinds left to the set handler.
+/// alert on fake history, the nightly schedule, the kinds left to the set handler, and <c>hybrid</c> beside
+/// <c>hybrid-rerank</c> with latency, cost per question and rerank fallbacks (#399).
 /// </summary>
 [Collection(RagDatabaseGroup1.Name)]
 public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -138,6 +140,73 @@ public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayF
     }
 
     [Fact]
+    public async Task Hybrid_and_hybrid_rerank_report_recall_latency_cost_per_question_and_fallbacks_side_by_side()
+    {
+        const string model = "ume/chat-eu"; // Eu in the FakeGateway's catalogue: within an internal collection's ceiling
+        var fixture = await EvalKit.SeedAsync(database);
+        var restore = await SetRetrievalAsync($$"""{"rerankModel":"{{model}}"}""");
+        await Sql.ExecuteAsync(database.Connection(null), """
+            INSERT INTO config."GatewayModels" ("Name", "Kind", "Residencies", "Source", "SupportsTools", "SupportsToolsSource", "InputPerMillionUsd", "OutputPerMillionUsd")
+            VALUES ($1, 'model', ARRAY['Eu'], 'manual', false, 'manual', 2.5, 10)
+            ON CONFLICT ("Name") DO UPDATE SET "InputPerMillionUsd" = 2.5, "OutputPerMillionUsd" = 10
+            """, model);
+        try
+        {
+            await using var worker = await EvalKit.StartWorkerAsync(database, gateway, _blobs);
+            var result = EvalKit.Result<EvalOnDemandResult>(await EvalKit.RunJobAsync(database, fixture,
+                new EvalOnDemandPayload { CollectionId = fixture.CollectionId, Variants = [EvaluationVariant.Hybrid, EvaluationVariant.HybridRerank] },
+                JobDedupKeys.Eval(fixture.CollectionId)));
+
+            result.Runs.Select(r => r.Variant).ShouldBe([EvaluationVariant.Hybrid, EvaluationVariant.HybridRerank]);
+            var (hybrid, reranked) = (result.Runs[0], result.Runs[1]);
+            foreach (var run in result.Runs)
+            {
+                run.RecallAtK.ShouldBe(0.75, "the unreachable question is never found, reranked or not");
+                run.Mrr.ShouldNotBeNull();
+                var search = run.Search.ShouldNotBeNull();
+                search.Searches.ShouldBe(6, "every question, unanswerable ones included");
+                search.TotalP95Ms.ShouldBeGreaterThanOrEqualTo(search.TotalP50Ms);
+                search.RerankUnavailable.ShouldBe(0);
+                (await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Variant" || '|' || "Reranked"::text FROM content."EvaluationRuns" WHERE "Id" = $1""",
+                    run.EvaluationRunId)).ShouldBe(run == reranked ? "hybrid|true" : "hybrid|false", "hybrid-rerank is stored as hybrid with Reranked set");
+            }
+
+            var plain = hybrid.Search!;
+            (plain.RerankModel, plain.RerankP50Ms, plain.RerankCostPerQueryUsd, plain.RerankPromptTokens).ShouldBe(((string?)null, (double?)null, (double?)null, 0));
+
+            var rerank = reranked.Search!;
+            rerank.RerankModel.ShouldBe(model);
+            rerank.RerankP50Ms.ShouldNotBeNull();
+            rerank.RerankP95Ms.ShouldNotBeNull().ShouldBeGreaterThanOrEqualTo(rerank.RerankP50Ms!.Value);
+            rerank.RerankPromptTokens.ShouldBeGreaterThan(0, "the FakeGateway reports usage for every rerank call");
+            rerank.RerankCompletionTokens.ShouldBeGreaterThan(0);
+            rerank.RerankCostPerQueryUsd.ShouldBe(
+                (double)Math.Round((rerank.RerankPromptTokens * 2.5m + rerank.RerankCompletionTokens * 10m) / 1_000_000m / 6, 6), "tokens at the mirror's prices, per question");
+        }
+        finally
+        {
+            await restore();
+            await Sql.ExecuteAsync(database.Connection(null), """DELETE FROM config."GatewayModels" WHERE "Name" = $1""", model);
+        }
+    }
+
+    [Fact]
+    public async Task Hybrid_rerank_without_a_rerank_model_counts_every_question_as_rerank_unavailable()
+    {
+        var fixture = await EvalKit.SeedAsync(database);
+        await using var worker = await EvalKit.StartWorkerAsync(database, gateway, _blobs);
+
+        var result = EvalKit.Result<EvalOnDemandResult>(await EvalKit.RunJobAsync(database, fixture,
+            new EvalOnDemandPayload { CollectionId = fixture.CollectionId, Variants = [EvaluationVariant.HybridRerank] }, JobDedupKeys.Eval(fixture.CollectionId)));
+
+        var run = result.Runs.ShouldHaveSingleItem();
+        run.RecallAtK.ShouldBe(0.75, "the fused order stands");
+        var search = run.Search.ShouldNotBeNull();
+        search.RerankUnavailable.ShouldBe(6, "Settings.Retrieval.rerankModel is unset: every rerank falls back, and the report says so");
+        (search.RerankModel, search.RerankCostPerQueryUsd, search.RerankPromptTokens).ShouldBe(((string?)null, (double?)null, 0));
+    }
+
+    [Fact]
     public async Task The_same_set_settings_and_index_give_identical_results_twice()
     {
         var fixture = await EvalKit.SeedAsync(database);
@@ -148,7 +217,7 @@ public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayF
         var second = EvalKit.Result<EvalOnDemandResult>(await EvalKit.RunJobAsync(database, fixture, payload, JobDedupKeys.Eval(fixture.CollectionId)));
 
         second.Runs.Select(r => r.EvaluationRunId).ShouldNotBe(first.Runs.Select(r => r.EvaluationRunId));
-        static string Numbers(EvalOnDemandResult result) => Pipelines.Json.ContractJson.Serialize(result.Runs.Select(r => r with { EvaluationRunId = Guid.Empty }).ToList());
+        static string Numbers(EvalOnDemandResult result) => Pipelines.Json.ContractJson.Serialize(result.Runs.Select(r => r with { EvaluationRunId = Guid.Empty, Search = null }).ToList());
         Numbers(second).ShouldBe(Numbers(first), "counts, layers and the proposal reproduce");
         for (var i = 0; i < first.Runs.Count; i++)
         {
@@ -293,6 +362,37 @@ public sealed class EvaluationRunTests(RagDatabaseFixture database, FakeGatewayF
                 JobDedupKeys.EvalGenerate(fixture.CollectionId));
             sets.Kinds.ShouldBe([EvalKinds.TopUpSet]);
         }
+    }
+
+    /// <summary>Sets <c>Settings.Retrieval</c> (creating the row when there is none); the returned callback puts it back.</summary>
+    private async Task<Func<Task>> SetRetrievalAsync(string json)
+    {
+        await using var db = TestPostgres.Context(database.Connection(null));
+        var row = await db.Settings.FirstOrDefaultAsync(Ct);
+        var (hadRow, before) = (row is not null, row?.Retrieval ?? "{}");
+        if (row is null)
+        {
+            row = new PlatformSettings { UpdatedAt = DateTimeOffset.UtcNow };
+            db.Settings.Add(row);
+        }
+
+        row.Retrieval = json;
+        await db.SaveChangesAsync(Ct);
+        return async () =>
+        {
+            await using var restore = TestPostgres.Context(database.Connection(null));
+            var current = await restore.Settings.FirstAsync(Ct);
+            if (hadRow)
+            {
+                current.Retrieval = before;
+            }
+            else
+            {
+                restore.Settings.Remove(current);
+            }
+
+            await restore.SaveChangesAsync(Ct);
+        };
     }
 
     private sealed class RecordingSetHandler : IEvalSetHandler
