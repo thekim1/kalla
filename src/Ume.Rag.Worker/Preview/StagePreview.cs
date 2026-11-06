@@ -182,6 +182,8 @@ public sealed partial class StagePreview(
                 MediaType = document.MediaType,
                 Url = document.Url,
                 DisplayName = document.DisplayName,
+                HttpLastModified = document.HttpLastModified,
+                SitemapLastMod = document.SitemapLastMod,
                 DocumentId = document.Id,
                 SourceId = document.SourceId,
             };
@@ -199,7 +201,13 @@ public sealed partial class StagePreview(
             reused = false;
         }
 
-        log.Done(reused, new { contentHash = Convert.ToHexStringLower(content.ContentHash), content.MediaType });
+        // Last-Modified is a chunk date candidate: a preview on top of this one reads it back with the content.
+        log.Done(reused, new
+        {
+            contentHash = Convert.ToHexStringLower(content.ContentHash),
+            content.MediaType,
+            lastModified = content.HttpLastModified,
+        });
         if (log.Wants(StageNames.Scan))
         {
             // The connectors scan files before they are stored; an existing document was scanned when it was fetched.
@@ -242,6 +250,8 @@ public sealed partial class StagePreview(
         {
             MediaType = facts.TryGetProperty("mediaType", out var media) ? media.GetString() : null,
             Url = earlier.Url,
+            HttpLastModified = facts.TryGetProperty("lastModified", out var modified)
+                && modified.TryGetDateTimeOffset(out var at) ? at : null,
         };
     }
 
@@ -292,6 +302,7 @@ public sealed partial class StagePreview(
             MediaType = content.Raw.MediaType,
             Url = content.Facts.FinalUrl?.AbsoluteUri ?? url,
             DisplayName = displayName,
+            HttpLastModified = content.Validators.LastModifiedDate,
         },
         FetchOutcome.NotModified => throw new StageFatalException(Outcome.Failed, "http.304"),
         FetchOutcome.Gone gone => throw new StageFatalException(Outcome.Failed, gone.Reason),

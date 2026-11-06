@@ -26,11 +26,20 @@ public sealed record DocumentRow(
     string? ParseStrategy,
     Guid? LiveChunkSetId,
     Guid? CurrentExecutionId,
-    DateTimeOffset? DeletedAt);
+    DateTimeOffset? DeletedAt,
+    DateTimeOffset? HttpLastModified,
+    DateTimeOffset? SitemapLastMod);
 
 /// <summary>A fetched document as the fetch stage reports it (connectors design §3, §12).</summary>
 public sealed record FetchedDocument(Guid SourceId, string Classification, string IdentityKind, string CanonicalIdentity, byte[] ContentHash,
-    short ContentHashVersion, string? Url, string? DisplayName, string? CanonicalHint);
+    short ContentHashVersion, string? Url, string? DisplayName, string? CanonicalHint)
+{
+    /// <summary>The response's <c>Last-Modified</c> as a date (<see cref="DocumentRow.HttpLastModified"/>).</summary>
+    public DateTimeOffset? HttpLastModified { get; init; }
+
+    /// <summary>The frontier row's sitemap <c>lastmod</c> (<see cref="DocumentRow.SitemapLastMod"/>).</summary>
+    public DateTimeOffset? SitemapLastMod { get; init; }
+}
 
 /// <param name="Document">The row after the upsert.</param>
 /// <param name="ContentChanged">New or changed content: a new execution id was set (engine design §7.5).</param>
@@ -95,7 +104,8 @@ public sealed class DocumentStore(JobDatabase database)
 {
     internal const string Columns = """
         "Id", "SourceId", "Classification", "IdentityKind", "CanonicalIdentity", "ContentHash", "Url", "MediaType", "DisplayName",
-        "SiteProfileVersionId", "ParseStrategy", "LiveChunkSetId", "CurrentExecutionId", "DeletedAt"
+        "SiteProfileVersionId", "ParseStrategy", "LiveChunkSetId", "CurrentExecutionId", "DeletedAt",
+        "HttpLastModified", "SitemapLastMod"
         """;
 
     private const string FindSql = $"""
@@ -107,21 +117,22 @@ public sealed class DocumentStore(JobDatabase database)
     private const string InsertSql = $"""
         INSERT INTO content."Documents" ("Id", "SourceId", "Classification", "IdentityKind", "CanonicalIdentity", "IdentityHash", "ContentHash",
                                         "ContentHashVersion", "Url", "DisplayName", "CanonicalHint", "FetchedAt", "CurrentExecutionId", "LastRunId",
-                                        "FirstSeenAt", "LastSeenAt")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $12, $12)
+                                        "FirstSeenAt", "LastSeenAt", "HttpLastModified", "SitemapLastMod")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $12, $12, $15, $16)
         ON CONFLICT ("SourceId", "IdentityKind", "IdentityHash") DO NOTHING
         RETURNING {Columns}
         """;
 
     // Seen in the run: a hold cleared, the failure count reset, a soft-deleted document revived (its live set's chunks with
     // it; the unique identity index allows no second document, so a revival past the grace re-processes as new content).
+    // The dates are the response's: a later re-processing without a fetch reads the last 200's (processing §7).
     private const string UpdateSql = $"""
         UPDATE content."Documents"
            SET "LastSeenAt" = $2, "LastRunId" = $3, "FetchedAt" = $2, "Url" = coalesce($4, "Url"), "DisplayName" = coalesce($5, "DisplayName"),
                "CanonicalHint" = $6, "HeldAt" = NULL, "HeldBy" = NULL, "ConsecutiveFailures" = 0,
                "CurrentExecutionId" = CASE WHEN $9 THEN $7 ELSE "CurrentExecutionId" END,
                "ContentHash" = CASE WHEN $9 THEN $8 ELSE "ContentHash" END,
-               "ContentHashVersion" = $10,
+               "ContentHashVersion" = $10, "HttpLastModified" = $11, "SitemapLastMod" = $12,
                "DeletedAt" = NULL, "PurgeAfter" = NULL
          WHERE "Id" = $1
         RETURNING {Columns}
@@ -214,6 +225,7 @@ public sealed class DocumentStore(JobDatabase database)
                     Db.P(Guid.CreateVersion7()), Db.P(fetched.SourceId), Db.P(fetched.Classification), Db.P(fetched.IdentityKind),
                     Db.P(fetched.CanonicalIdentity), Db.P(identityHash), Db.P(fetched.ContentHash), Db.P(fetched.ContentHashVersion), Db.P(fetched.Url),
                     Db.P(fetched.DisplayName), Db.P(fetched.CanonicalHint), Db.P(at), Db.P(Guid.CreateVersion7()), Db.P(runId),
+                    Db.P(Db.Utc(fetched.HttpLastModified)), Db.P(Db.Utc(fetched.SitemapLastMod)),
                 },
             };
             await using var reader = await insert.ExecuteReaderAsync(cancellationToken);
@@ -233,6 +245,7 @@ public sealed class DocumentStore(JobDatabase database)
                 {
                     Db.P(id.Value), Db.P(at), Db.P(runId), Db.P(fetched.Url), Db.P(fetched.DisplayName), Db.P(fetched.CanonicalHint),
                     Db.P(Guid.CreateVersion7()), Db.P(fetched.ContentHash), Db.P(changed), Db.P(fetched.ContentHashVersion),
+                    Db.P(Db.Utc(fetched.HttpLastModified)), Db.P(Db.Utc(fetched.SitemapLastMod)),
                 },
             };
             await using (var reader = await update.ExecuteReaderAsync(cancellationToken))
@@ -318,7 +331,8 @@ public sealed class DocumentStore(JobDatabase database)
         new(reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
             reader.IsDBNull(5) ? null : reader.GetFieldValue<byte[]>(5), Db.String(reader, 6), Db.String(reader, 7), Db.String(reader, 8),
             Db.Nullable<Guid>(reader, 9), Db.String(reader, 10), Db.Nullable<Guid>(reader, 11), Db.Nullable<Guid>(reader, 12),
-            Db.Nullable<DateTimeOffset>(reader, 13));
+            Db.Nullable<DateTimeOffset>(reader, 13), Db.Nullable<DateTimeOffset>(reader, 14),
+            Db.Nullable<DateTimeOffset>(reader, 15));
 
     private async Task<DocumentRow?> ReadOneAsync(string sql, CancellationToken cancellationToken, params NpgsqlParameter[] parameters)
     {

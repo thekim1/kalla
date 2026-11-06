@@ -18,7 +18,6 @@ using Ume.Rag.Worker.Processing.Html;
 using Ume.Rag.Worker.Processing.Parse;
 using Ume.Rag.Worker.Processing.Persistence;
 using Ume.Rag.Worker.Processing.Pii;
-using Ume.Rag.Worker.Processing.Text;
 
 namespace Ume.Rag.Worker.Preview;
 
@@ -38,6 +37,12 @@ public sealed record PreviewContent(int Index, string Level, byte[] ContentHash,
     public string? Url { get; init; }
 
     public string? DisplayName { get; init; }
+
+    /// <summary>HTTP <c>Last-Modified</c> of the fetch, or the existing document's stored one.</summary>
+    public DateTimeOffset? HttpLastModified { get; init; }
+
+    /// <summary>An existing document's stored sitemap <c>lastmod</c>.</summary>
+    public DateTimeOffset? SitemapLastMod { get; init; }
 
     /// <summary>An existing document (its PII clearance applies to the state shown).</summary>
     public Guid? DocumentId { get; init; }
@@ -160,6 +165,7 @@ public sealed class PreviewSegment(
     public const int MaxPages = 50;
 
     private readonly EmbedStage _embed = new(embeddings, profiles, new ReadOnlyEmbeddingCache(embeddingCache), concurrency, time);
+    private readonly StageParser _parser = new(html, planner, parseOptions, converter);
 
     /// <summary>Runs the stages after <c>fetch</c>; returns the site profile's before/after of an HTML page with a URL.</summary>
     public async Task<PreviewSiteProfile?> RunAsync(PreviewRun run, PreviewContent content, PreviewStageLog log, CancellationToken cancellationToken)
@@ -213,7 +219,12 @@ public sealed class PreviewSegment(
 
         // parse, and for an HTML page the extraction without and with the site profile
         log.Begin(StageNames.Parse);
-        var profile = detected.Route == ParseRoute.Html ? await siteProfiles.AppliedAsync(level, content.Url, cancellationToken) : null;
+        // The host's applied profile: the HTML parse applies it, and its lastmodReliable admits a stored sitemap
+        // lastmod as the chunk date of any route, as in the live segment (processing design §7).
+        var applied = detected.Route == ParseRoute.Html || content.SitemapLastMod is not null
+            ? await siteProfiles.AppliedAsync(level, content.Url, cancellationToken)
+            : null;
+        var profile = detected.Route == ParseRoute.Html ? applied : null;
         // The same key as the live segment (incl. the parser build), so a preview reuses live parses read-only.
         string? parserBuildHash = null;
         if (detected.Route == ParseRoute.Parser)
@@ -239,7 +250,8 @@ public sealed class PreviewSegment(
         }
         else
         {
-            parsed = await ParseAsync(await RawAsync(), limited, profile?.Profile, pipeline, rules, cancellationToken);
+            parsed = await _parser.ParseAsync(await RawAsync(), limited, profile?.Profile, StageInputs.Parse(pipeline),
+                Guid.CreateVersion7().ToString("N"), cancellationToken, rules: rules);
             parsedHash = await store.PutAsync(StageNames.Parse, parseKey, parsed, cancellationToken);
         }
 
@@ -279,21 +291,12 @@ public sealed class PreviewSegment(
 
         // chunk (with metadata)
         log.Begin(StageNames.Chunk);
-        var metadataInput = new MetadataInput(detected.MediaType)
-        {
-            Url = url,
-            DisplayName = content.DisplayName,
-            Title = cleaned.Title,
-            VisibleDate = cleaned.VisibleDate,
-            DocumentDate = cleaned.DocumentDate,
-        };
+        var metadataInput = StageInputs.Metadata(detected.MediaType, cleaned, url, content.DisplayName,
+            StageInputs.ReliableLastmod(content.SitemapLastMod, applied?.Profile.Profile), content.HttpLastModified);
         var chunkInputs = new Dictionary<string, string>(StringComparer.Ordinal) { ["metadata"] = StageKeys.ToHex(ProcessingJson.OutputHash(metadataInput)) };
-        var metadata = Metadata.Apply(Param<IReadOnlyList<PathRule>>(pipeline, "pathRules") ?? [], metadataInput);
-        var (chunks, chunksHash, chunkHit) = await StageAsync(store, pipeline, StageNames.Chunk, cleanedHash, chunkInputs, () =>
-        {
-            var options = new ChunkOptions(Param<int?>(pipeline, "chunkTokens") ?? 400, Param<int?>(pipeline, "overlapPercent") ?? 15);
-            return chunker.Chunk(cleaned, options, metadata);
-        }, cancellationToken);
+        var metadata = Metadata.Apply(StageInputs.PathRules(pipeline), metadataInput);
+        var (chunks, chunksHash, chunkHit) = await StageAsync(store, pipeline, StageNames.Chunk, cleanedHash,
+            chunkInputs, () => chunker.Chunk(cleaned, StageInputs.Chunk(pipeline), metadata), cancellationToken);
         var shownChunks = await store.ShowAsync(content.Index, StageNames.Chunk, StageNames.Chunk, chunks, chunks.Chunks.Count, CutChunks, cancellationToken);
         log.Done(chunkHit, new { chunks = chunks.Chunks.Count, tokens = chunks.Chunks.Sum(c => c.TokenCount) }, shownChunks.Path, shownChunks.Truncated);
         log.Tagged(metadata.Tags);
@@ -421,29 +424,12 @@ public sealed class PreviewSegment(
             ? catalog.CandidatesAsync(content.Level, sourceId, content.Url, mediaType, cancellationToken)
             : catalog.CandidatesForDepartmentAsync(content.Level, run.Collection.DepartmentId, content.Url, mediaType, cancellationToken);
 
-    private async Task<ParsedDocument> ParseAsync(ReadOnlyMemory<byte> bytes, DetectResult detected, HtmlProfileVersion? profile, ResolvedPipeline pipeline,
-        IReadOnlyList<ParseRule> rules, CancellationToken cancellationToken) =>
-        detected.Route switch
-        {
-            ParseRoute.Html => html.Extract(bytes, profile).Document,
-            ParseRoute.Text => PlainTextParser.Parse(bytes.Span, markdown: detected.MediaType == ProcessingMediaTypes.Markdown),
-            ParseRoute.Csv => CsvTableParser.Parse(bytes.Span),
-            ParseRoute.Parser when converter is not null => await new ParserRoute(converter, planner, parseOptions).ParseAsync(bytes, detected,
-                new ParseParams(Param<string>(pipeline, "ocr") ?? "auto", Param<string>(pipeline, "tables") ?? "accurate"),
-                Guid.CreateVersion7().ToString("N"), cancellationToken, rules: rules),
-            ParseRoute.Parser => throw new StageFatalException(RunItemOutcome.Failed, "parser.not_configured"),
-            _ => throw new StageFatalException(RunItemOutcome.Unsupported, "parser.unsupported_format"),
-        };
-
     private static ParsedDocument CutBlocks(ParsedDocument document, int count) => document with { Blocks = [.. document.Blocks.Take(count)] };
 
     private static ChunkSetDraft CutChunks(ChunkSetDraft chunks, int count) => chunks with { Chunks = [.. chunks.Chunks.Take(count)] };
 
     private static int StageVersion(ResolvedPipeline pipeline, string stage) =>
         pipeline.Template.Template.Stages.TryGetValue(stage, out var version) ? version : StageManifest.P1Version;
-
-    private static T? Param<T>(ResolvedPipeline pipeline, string name) =>
-        pipeline.Params[name] is { } node ? node.Deserialize<T>(ContractJson.Options) : default;
 
     private static string RouteName(ParseRoute route) => route switch
     {

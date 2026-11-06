@@ -29,6 +29,9 @@ public sealed record FetchCase(SourceContext Source, RunRow Run, PipelineRun Pip
 
     /// <summary>The reason of an <c>unchanged</c> item (<c>crawl.lastmod_skip</c>), when the fetch says why.</summary>
     public string? UnchangedReason { get; init; }
+
+    /// <summary>The crawl frontier row's sitemap <c>lastmod</c>, stored on the document with a 200.</summary>
+    public DateTimeOffset? SitemapLastMod { get; init; }
 }
 
 /// <summary>What <see cref="DocumentIngest.EnsureCurrentAsync"/> did with a document.</summary>
@@ -80,7 +83,11 @@ public sealed partial class DocumentIngest(
             case FetchOutcome.Content content:
                 var fetched = new FetchedDocument(fetch.Source.SourceId, fetch.Source.Classification, fetch.IdentityKind, content.Facts.CanonicalIdentity,
                     Convert.FromHexString(content.Raw.ContentHash), (short)content.Raw.ContentHashVersion, content.Facts.FinalUrl?.AbsoluteUri,
-                    fetch.DisplayName, content.Facts.CanonicalHint);
+                    fetch.DisplayName, content.Facts.CanonicalHint)
+                {
+                    HttpLastModified = content.Validators.LastModifiedDate,
+                    SitemapLastMod = fetch.SitemapLastMod,
+                };
                 var upsert = await documents.UpsertFetchedAsync(fetched, fetch.Run.Id, now, cancellationToken);
                 var frontier = Frontier(fetch, 200, content.Validators, fetched.ContentHash);
                 return await ProcessAsync(fetch, upsert.Document, content.Raw.Key, content.Raw.MediaType, upsert.ContentChanged, frontier, cancellationToken);

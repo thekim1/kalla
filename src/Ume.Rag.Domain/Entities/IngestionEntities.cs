@@ -356,6 +356,19 @@ public sealed class Document
     public string? Description { get; set; }
     public string[]? Keywords { get; set; }
     public DateTimeOffset? SourceModifiedAt { get; set; }
+
+    /// <summary>
+    /// HTTP <c>Last-Modified</c> of the last 200 response, as a date: the last chunk date candidate (processing
+    /// design §7).
+    /// </summary>
+    public DateTimeOffset? HttpLastModified { get; set; }
+
+    /// <summary>
+    /// The URL's sitemap <c>lastmod</c> at the last 200 response (its frontier row's); a chunk date only while the
+    /// host's site profile marks <c>lastmod</c> reliable (processing design §7).
+    /// </summary>
+    public DateTimeOffset? SitemapLastMod { get; set; }
+
     public DateTimeOffset? FetchedAt { get; set; }
     public string? CanonicalHint { get; set; }
     public Guid? SiteProfileVersionId { get; set; }

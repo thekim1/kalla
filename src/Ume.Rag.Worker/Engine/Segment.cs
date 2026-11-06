@@ -19,7 +19,6 @@ using Ume.Rag.Worker.Processing.Html;
 using Ume.Rag.Worker.Processing.Parse;
 using Ume.Rag.Worker.Processing.Persistence;
 using Ume.Rag.Worker.Processing.Pii;
-using Ume.Rag.Worker.Processing.Text;
 using Outcome = Ume.Rag.Pipelines.Jobs.RunItemOutcome;
 
 namespace Ume.Rag.Worker.Engine;
@@ -100,10 +99,19 @@ public sealed record SegmentInput(DocumentRow Document, PipelineRun Pipeline, st
 {
     public string? DeclaredMediaType { get; init; }
 
-    public DateTimeOffset? HttpLastModified { get; init; }
-
-    /// <summary>The applied site profile of the document's host (HTML), with its version id; null applies a preset.</summary>
+    /// <summary>
+    /// The applied site profile of the document's host (URL documents), with its version id; null applies a preset.
+    /// The HTML parse applies it; its <c>lastmodReliable</c> admits the sitemap <c>lastmod</c> as a date
+    /// (<see cref="ReliableLastmod"/>).
+    /// </summary>
     public (Guid Id, HtmlProfileVersion Profile)? SiteProfile { get; init; }
+
+    /// <summary>The document's HTTP <c>Last-Modified</c>, stored with its last 200 (processing design §7).</summary>
+    public DateTimeOffset? HttpLastModified => Document.HttpLastModified;
+
+    /// <summary>The document's sitemap <c>lastmod</c> when its host's profile marks it reliable.</summary>
+    public DateTimeOffset? ReliableLastmod =>
+        StageInputs.ReliableLastmod(Document.SitemapLastMod, SiteProfile?.Profile.Profile);
 
     /// <summary>A <c>parse</c> job's slice budget (engine design §9.5); null never yields.</summary>
     public ParseSliceClock? Slice { get; init; }
@@ -191,6 +199,8 @@ public sealed class ProcessingSegment(
     IParserBuild? parserBuild = null,
     ParseRuleCatalog? parseRules = null)
 {
+    private readonly StageParser _parser = new(html, planner, parseOptions, converter);
+
     public async Task<SegmentResult> RunAsync(SegmentInput input, string jobClass, byte[]? detectKey, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -288,7 +298,9 @@ public sealed class ProcessingSegment(
         else
         {
             var progress = jobClass == Domain.Entities.JobClasses.Parse ? new ParseProgress(new BlobParseRanges(blobs, level, parseKey), input.Slice) : null;
-            parsed = await ParseAsync(await RawAsync(), detected, input, pipeline, progress, rules, cancellationToken);
+            var requestId = document.CurrentExecutionId?.ToString("N") ?? Guid.CreateVersion7().ToString("N");
+            parsed = await _parser.ParseAsync(await RawAsync(), detected, input.SiteProfile?.Profile,
+                StageInputs.Parse(pipeline), requestId, cancellationToken, progress, rules);
             var row = await outputs.PutAsync(level, StageNames.Parse, parseKey, parseSettings, contentHash, parsed, cancellationToken);
             written.Add(row);
             parsedHash = row.OutputHash;
@@ -303,22 +315,15 @@ public sealed class ProcessingSegment(
         }
 
         // chunk (with metadata)
-        var metadataInput = new MetadataInput(detected.MediaType)
-        {
-            Url = document.Url is { } address ? new Uri(address) : null,
-            DisplayName = document.DisplayName,
-            Title = cleaned.Title,
-            VisibleDate = cleaned.VisibleDate,
-            DocumentDate = cleaned.DocumentDate,
-            HttpLastModified = input.HttpLastModified,
-        };
+        var metadataInput = StageInputs.Metadata(detected.MediaType, cleaned,
+            document.Url is { } address ? new Uri(address) : null, document.DisplayName, input.ReliableLastmod,
+            input.HttpLastModified);
         var chunkInputs = Bypassed(new Dictionary<string, string>(StringComparer.Ordinal) { ["metadata"] = StageKeys.ToHex(ProcessingJson.OutputHash(metadataInput)) },
             Salt(StageNames.Chunk));
         var (chunks, chunksHash) = await StageAsync(level, pipeline, StageNames.Chunk, cleanedHash, chunkInputs, written, () =>
         {
-            var metadata = Metadata.Apply(Param<IReadOnlyList<PathRule>>(pipeline, "pathRules") ?? [], metadataInput);
-            var options = new ChunkOptions(Param<int?>(pipeline, "chunkTokens") ?? 400, Param<int?>(pipeline, "overlapPercent") ?? 15);
-            return Task.FromResult(chunker.Chunk(cleaned, options, metadata));
+            var metadata = Metadata.Apply(StageInputs.PathRules(pipeline), metadataInput);
+            return Task.FromResult(chunker.Chunk(cleaned, StageInputs.Chunk(pipeline), metadata));
         }, cancellationToken);
 
         // personal-data
@@ -354,20 +359,6 @@ public sealed class ProcessingSegment(
         written.Add(row);
         return (value, row.OutputHash);
     }
-
-    private async Task<ParsedDocument> ParseAsync(ReadOnlyMemory<byte> bytes, DetectResult detected, SegmentInput input, ResolvedPipeline pipeline,
-        ParseProgress? progress, IReadOnlyList<ParseRule> rules, CancellationToken cancellationToken) =>
-        detected.Route switch
-        {
-            ParseRoute.Html => html.Extract(bytes, input.SiteProfile?.Profile).Document,
-            ParseRoute.Text => PlainTextParser.Parse(bytes.Span, markdown: detected.MediaType == ProcessingMediaTypes.Markdown),
-            ParseRoute.Csv => CsvTableParser.Parse(bytes.Span),
-            ParseRoute.Parser when converter is not null => await new ParserRoute(converter, planner, parseOptions).ParseAsync(bytes, detected,
-                new ParseParams(Param<string>(pipeline, "ocr") ?? "auto", Param<string>(pipeline, "tables") ?? "accurate"),
-                input.Document.CurrentExecutionId?.ToString("N") ?? Guid.CreateVersion7().ToString("N"), cancellationToken, progress, rules),
-            ParseRoute.Parser => throw new StageTransientException("parser.not_configured", TimeSpan.FromMinutes(1), countsAttempt: false),
-            _ => throw new StageFatalException(Pipelines.Jobs.RunItemOutcome.Unsupported, "parser.unsupported_format"),
-        };
 
     private async Task<string> ParserBuildAsync(CancellationToken cancellationToken) =>
         parserBuild is null || converter is null
@@ -424,9 +415,6 @@ public sealed class ProcessingSegment(
 
     private static int StageVersion(ResolvedPipeline pipeline, string stage) =>
         pipeline.Template.Template.Stages.TryGetValue(stage, out var version) ? version : StageManifest.P1Version;
-
-    private static T? Param<T>(ResolvedPipeline pipeline, string name) =>
-        pipeline.Params[name] is { } node ? node.Deserialize<T>(ContractJson.Options) : default;
 
     private static string RouteName(ParseRoute route) => route switch
     {

@@ -131,6 +131,15 @@ public sealed record Validators(string? ETag, string? LastModified)
     public static Validators None { get; } = new(null, null);
 
     public bool IsEmpty => ETag is null && LastModified is null;
+
+    /// <summary>
+    /// <see cref="LastModified"/> as a date (an HTTP-date, RFC 9110 §5.6.7, in any form <c>HttpClient</c> reads),
+    /// or null when absent or unreadable: the last chunk date candidate (processing design §7).
+    /// </summary>
+    public DateTimeOffset? LastModifiedDate =>
+        LastModified is { } text && System.Net.Http.Headers.RangeConditionHeaderValue.TryParse(text, out var value)
+            ? value.Date
+            : null;
 }
 
 /// <summary>Where the source and its level are; settings are the source's JSON (<c>Sources.Settings</c>).</summary>

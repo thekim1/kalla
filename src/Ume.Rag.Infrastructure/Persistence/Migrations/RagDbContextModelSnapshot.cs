@@ -1585,6 +1585,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<DateTimeOffset?>("HttpLastModified")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<byte[]>("IdentityHash")
                         .IsRequired()
                         .HasColumnType("bytea");
@@ -1649,6 +1652,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("SiteProfileVersionId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("SitemapLastMod")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("SourceId")
                         .HasColumnType("uuid");
