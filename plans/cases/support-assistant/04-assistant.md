@@ -22,9 +22,10 @@ made available to the frontend's client only. Everything here is configuration i
 | `GatewayModel` | a chat model the gateway lists within `Eu`, chosen by quality on the gold set ([`07-rollout.md`](07-rollout.md) §4). The picker shows only chat models servable at the level |
 | Condense | on (default). The platform's `Settings.Chat.condenseModel` rewrites follow-up turns into a standalone search query (chat §5), writes the search query for a ticket over 2,000 characters on every turn (chat §5.1), and writes the follow-up suggestions (chat §9.8). With condense off, a long ticket is searched by its first 2,000 characters |
 
-**Condense model: `claude-haiku-5-5` recommended** (the user's call; the setting is platform-wide). Measured on the
-interim gateway (chat §22, 2026-11-06): a 16,000-character ticket condensed in about 1.1 s against 2.3–2.9 s for
-`gpt-6-luna`, and follow-ups in 1.1–1.3 s against 1.4–2.6 s. Details in [`01-gateway-setup.md`](01-gateway-setup.md) §1.
+**Condense model: `gpt-6-luna`** (user, 2026-11-06; Decisions "Condense on the EU route"). Measured on the interim
+gateway (chat §22, 2026-11-06): a 16,000-character ticket condensed in 2.3–2.9 s and follow-ups in 1.4–2.6 s, so this
+case raises two budgets below. `claude-haiku-5-5` was faster (about 1.1 s and 1.1–1.3 s) and stays the alternative.
+Details in [`01-gateway-setup.md`](01-gateway-setup.md) §1.
 
 The budgets are deployment knobs (`Chat:` in configuration or the environment, e.g. `Chat__FollowUpTimeout`),
 TimeSpan values (`src/Ume.Rag.Answering/Chat/ChatOptions.cs:19-30`):
@@ -32,8 +33,8 @@ TimeSpan values (`src/Ume.Rag.Answering/Chat/ChatOptions.cs:19-30`):
 | Knob | Default | Case advice |
 |---|---|---|
 | `Chat:CondenseTimeout` | `00:00:01.2` | keep |
-| `Chat:LongQuestionCondenseTimeout` | `00:00:03` | keep with `claude-haiku-5-5`; `00:00:04` with `gpt-6-luna` |
-| `Chat:FollowUpTimeout` | `00:00:02` (`00:00:00` switches suggestions off) | keep; it delays `[DONE]` by at most this, not the first token |
+| `Chat:LongQuestionCondenseTimeout` | `00:00:03` | **`00:00:04`** with `gpt-6-luna` (worst case measured 2.9 s) |
+| `Chat:FollowUpTimeout` | `00:00:02` (`00:00:00` switches suggestions off) | **`00:00:03`** with `gpt-6-luna` (one of three runs took 2.6 s); it delays `[DONE]` by at most this, not the first token |
 
 ## 3. Instructions
 

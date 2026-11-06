@@ -12,7 +12,7 @@ with the detail. The quality gate is the platform's own: a hand-graded gold set 
 | 0.3 | Gaps built before the pilot: **done**. SA-1 and SA-2 (#433), SA-3 (#434), SA-4 (#431), SA-6 (#430) and SA-7 (#432) are on `main` ([`06-gaps.md`](06-gaps.md)) | main session |
 | 0.4 | Named people: knowledge-base editor (contact), department admin, the frontend team's contact, 3–5 reviewers from support | user, support organisation |
 | 0.5 | An inventory of the sources: intranet sections, file folders, Markdown repositories, file types (legacy Office?) | support organisation |
-| 0.6 | Confirm the condense model: `claude-haiku-5-5` recommended for the long-ticket condense and the follow-ups ([`01-gateway-setup.md`](01-gateway-setup.md) §1) | user |
+| 0.6 | Condense model: **`gpt-6-luna`** (user, 2026-11-06), with `Chat:LongQuestionCondenseTimeout` 4 s and `Chat:FollowUpTimeout` 3 s ([`01-gateway-setup.md`](01-gateway-setup.md) §1) | done |
 
 ## 1. Platform readiness
 

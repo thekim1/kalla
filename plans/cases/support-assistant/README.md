@@ -83,8 +83,8 @@ The gaps chosen before the pilot are built. What remains is configuration and pe
 
 - **Configuration:** the app's `integration` client and key with `requestsPerMinute` (e.g. 200) and `allowedIpRanges`
   = the app backend's addresses; `Settings.TrustedProxies` = the reverse proxy's addresses; the proxy route with a
-  2 MB chat body (SA-15); `Settings.Chat.condenseModel` (`claude-haiku-5-5` recommended, user's call,
-  [`04-assistant.md`](04-assistant.md) §2); the knowledge base, the assistant and its audience.
+  2 MB chat body (SA-15); `Settings.Chat.condenseModel` `gpt-6-luna` with `Chat:LongQuestionCondenseTimeout` 4 s and
+  `Chat:FollowUpTimeout` 3 s ([`04-assistant.md`](04-assistant.md) §2); the knowledge base, the assistant and its audience.
 - **People:** the DPIA (G1) for pasted tickets and the app's store; the named editor, department admin, frontend
   contact and reviewers; the gold set from real tickets; the frontend team's build against
   [`05-frontend-integration.md`](05-frontend-integration.md).
