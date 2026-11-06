@@ -1,0 +1,6 @@
+HTTP 200
+Content-Type: application/json; charset=utf-8
+Cache-Control: no-store
+x-rag-conversation-id: c1.MASKED
+
+{"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion","created":0,"model":"bygg","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Inget svar i källorna.","annotations":[]}}],"usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}

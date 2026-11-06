@@ -20,7 +20,7 @@ namespace Ume.Rag.Api.Tests;
 /// by the caller's access, a cited answer with url_citation annotations, the not-found text without a model call, and the
 /// OpenAI error shape.
 /// </summary>
-public sealed class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
+public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

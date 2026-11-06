@@ -92,15 +92,9 @@ public static class ChatEndpoints
                 }
 
                 var plan = await service.PlanAsync(who, parsed, ct);
-                if (plan.Fixed is not null)
-                {
-                    return new ChatSse(plan, null, service, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o));
-                }
-
                 // §8.2: status and residency are checked here, before our first byte; a refusal is still a JSON error.
-                var response = await service.Gateway.OpenStreamAsync(plan.Assistant.Published!.GatewayModel, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens,
-                    plan.Settings.Temperature, plan.MessageId, ct);
-                return new ChatSse(plan, response, service, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o));
+                var streamed = await service.OpenAnswerAsync(plan, stream: true, ct);
+                return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o));
             }))
             .WithMetadata(new ChatBodyLimit())
             .WithName("ChatCompletions").WithSummary("Ask an assistant (OpenAI chat completions, JSON or stream)");

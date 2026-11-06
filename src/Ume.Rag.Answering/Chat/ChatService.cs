@@ -14,15 +14,13 @@ namespace Ume.Rag.Answering.Chat;
 /// One chat turn of a RAG assistant (chat design §4.1): policy decision on the assistant (404 <c>model_not_found</c> for
 /// anything not allowed), effective level and ceiling, language, the conversational check, retrieval through the knowledge
 /// role in process (the assistant's published collections), coverage handling (§6.2), the prompt (§6.3, §7), then the gateway
-/// call as JSON (<see cref="CompleteAsync"/>) or a stream the endpoint relays (<see cref="PlanAsync"/> + <see cref="GatewayChatClient"/>),
-/// through the <see cref="AnswerTransducer"/> (§9.2–§9.4). Condense is part c of item 15.
+/// call (<see cref="OpenAnswerAsync"/>) and one answer path through the <see cref="AnswerTransducer"/> (<see cref="ChatAnswer"/>,
+/// §9.2–§9.4), which the stream writer relays and <see cref="CompleteAsync"/> folds into the JSON answer. Condense is part c of item 15.
 /// </summary>
 public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccessPolicy policy, KnowledgeService knowledge, GatewayChatClient gateway,
     IOptions<ChatOptions> options, IOptions<GatewayOptions> gatewayOptions, TimeProvider time, ILogger<ChatService> logger)
 {
     private SnapshotChat? _resolved;
-
-    public GatewayChatClient Gateway => gateway;
 
     /// <summary><c>Settings.Chat</c> at the current snapshot, over the deployment knobs.</summary>
     public PlatformChatSettings Platform => Resolved(snapshots.Current).Platform;
@@ -140,28 +138,66 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
         }
     }
 
+    /// <summary>
+    /// Opens the answer of <paramref name="plan"/>: no call for a fixed text, else the gateway call at the plan's model,
+    /// ceiling, max tokens and temperature, as a stream (§8.2: status and residency checked when this returns, before the
+    /// caller's first byte) or as one JSON answer.
+    /// </summary>
+    public async Task<ChatAnswer> OpenAnswerAsync(ChatPlan plan, bool stream, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (plan.Fixed is not null)
+        {
+            return new ChatAnswer(plan, this, gateway, null, null);
+        }
+
+        var model = plan.Assistant.Published!.GatewayModel;
+        if (stream)
+        {
+            var response = await gateway.OpenStreamAsync(model, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens, plan.Settings.Temperature, plan.MessageId, ct);
+            return new ChatAnswer(plan, this, gateway, response, null);
+        }
+
+        var answer = await gateway.CompleteAsync(model, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens, plan.Settings.Temperature, plan.MessageId, "chat-answer", ct);
+        return new ChatAnswer(plan, this, gateway, null, answer);
+    }
+
+    /// <summary>The turn as one JSON answer: the events of <see cref="ChatAnswer.ReadAsync"/> folded into the content and its annotations.</summary>
     public async Task<ChatCompletion> CompleteAsync(RagPrincipal who, ParsedChat chat, CancellationToken ct)
     {
         var plan = await PlanAsync(who, chat, ct);
-        if (plan.Fixed is { } text)
+        using var answer = await OpenAnswerAsync(plan, stream: false, ct);
+        var content = new System.Text.StringBuilder();
+        var annotations = new List<UrlCitation>();
+        AnswerEvent.End end = new("stop", 0, 0);
+        await foreach (var item in answer.ReadAsync(ct))
         {
-            return new ChatCompletion(plan.MessageId, plan.Model, text, [], [], 0, 0, "stop", plan.Outcome, plan.Created) { Plan = plan };
+            switch (item)
+            {
+                case AnswerEvent.Own own:
+                    content.Append(own.Text);
+                    break;
+                case AnswerEvent.Pieces pieces:
+                    foreach (var text in pieces.Items.OfType<AnswerPiece.Text>())
+                    {
+                        content.Append(text.Content);
+                        annotations.AddRange(text.Annotations.Select(a => a with { StartIndex = a.StartIndex + pieces.Shift, EndIndex = a.EndIndex + pieces.Shift }));
+                    }
+
+                    break;
+                case AnswerEvent.End e:
+                    end = e;
+                    break;
+            }
         }
 
-        var answer = await gateway.CompleteAsync(plan.Assistant.Published!.GatewayModel, plan.Ceiling, plan.Prompt!.Messages, plan.MaxTokens,
-            plan.Settings.Temperature, plan.MessageId, "chat-answer", ct);
-        var transducer = new AnswerTransducer(plan.Prompt.Sources, plan.Platform.AllowedLinkHosts);
-        var caveat = plan.Caveat ?? "";
-        var pieces = transducer.Feed(answer.Text).Concat(transducer.Flush()).OfType<AnswerPiece.Text>().ToList();
-        var content = caveat + string.Concat(pieces.Select(p => p.Content)) + plan.Trailer;
-        var annotations = pieces.SelectMany(p => p.Annotations).Select(a => a with { StartIndex = a.StartIndex + caveat.Length, EndIndex = a.EndIndex + caveat.Length }).ToList();
-        Finish(plan, transducer);
-        return new ChatCompletion(plan.MessageId, plan.Model, content, annotations, transducer.Cited, answer.PromptTokens, answer.CompletionTokens, answer.FinishReason,
+        answer.Finish();
+        return new ChatCompletion(plan.MessageId, plan.Model, content.ToString(), annotations, answer.Cited, end.PromptTokens, end.CompletionTokens, end.FinishReason,
             plan.Outcome, plan.Created) { Plan = plan };
     }
 
     /// <summary>After the answer (§9.5): the counters with only the cited ranks, and a log line.</summary>
-    public void Finish(ChatPlan plan, AnswerTransducer transducer)
+    internal void Finish(ChatPlan plan, AnswerTransducer transducer)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(transducer);
