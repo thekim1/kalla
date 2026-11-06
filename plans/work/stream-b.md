@@ -37,7 +37,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** [`../to-verify.md`](../to-verify.md).
 
-### [ ] B-4 Accessibility statement and one NVDA pass (#96)
+### [x] B-4 Accessibility statement and one NVDA pass (#96) (#PRNUM; approved by the user 2026-11-06 without the NVDA pass, which follows soon)
 - **Do:** finish `docs/accessibility-statement.md` once the DOS-lagen scope is known; one screen-reader pass through
   the pilot journey with NVDA.
 - **Paths:** `docs/accessibility-statement.md`, `src/admin-ui/**` for fixes.

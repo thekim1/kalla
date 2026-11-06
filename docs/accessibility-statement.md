@@ -29,14 +29,14 @@ Verified automatically (Playwright against a running stack, `tests/e2e`, admin d
 
 Language: English, with Swedish names marked `lang="sv"`. **No screen reader (NVDA, VoiceOver) has been run against the
 admin UI yet**; nothing in this document should be read as saying such a check was made. The NVDA pass of the pilot
-journey is planned before the pilot (P1b item 14, `plans/to-verify.md` #96). The sign-in provider (Keycloak, later
-Entra ID) needs its own review.
+journey follows soon after the pilot starts: the statement was approved for the pilot on 2026-11-06 with this check
+still open (`plans/to-verify.md` #96). The sign-in provider (Keycloak, later Entra ID) needs its own review.
 
 ## Remaining manual checklist
 
 | Check | Status |
 |---|---|
-| NVDA with Firefox or Chrome | Pilot journey: headings, landmarks, tables, live regions (job progress, "the answer is ready"), dialogs and focus return: **not done yet**, planned before the pilot |
+| NVDA with Firefox or Chrome | Pilot journey: headings, landmarks, tables, live regions (job progress, "the answer is ready"), dialogs and focus return: **not done yet**; approved for the pilot without it (2026-11-06), to be run soon |
 | Keyboard only | The pilot journey is automated; the other role journeys (pipeline editor, platform administrator) remain a manual check |
 | Focus appearance, focus not obscured | All focus targets in drawers, dialogs and scrolled states (2.4.11, 2.4.13): manual check remains |
 | Zoom and text spacing | 200 % text and 320 px are automated; real browser zoom to 400 % and 1.4.12 spacing remain |
