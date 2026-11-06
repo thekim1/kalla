@@ -653,16 +653,26 @@ public static class AssistantRules
         return problems;
     }
 
-    /// <summary>V17 (chat design §5–§6, §10.3): the ranges of the query steps that exist in P1a.</summary>
+    /// <summary>
+    /// V17 (chat design §5–§6, §10.3): the types and ranges of the query steps that exist in P1a. The integer fields are
+    /// checked with <see cref="Ume.Rag.Answering.Chat.AssistantChatSettings.TryInt"/>, the runtime's own reader, so a value
+    /// the runtime would replace by its default (a fraction, a string, <c>10.0</c>) is refused here.
+    /// </summary>
     private static IEnumerable<RuleProblem> QuerySteps(string json)
     {
         var steps = JsonNode.Parse(json) as JsonObject ?? [];
         var problems = new List<string>();
-        Check(steps["retrieval"]?["topK"], 1, 50, "retrieval.topK");
-        Check(steps["history"]?["maxMessages"], 0, 20, "history.maxMessages");
-        Check(steps["history"]?["maxTokens"], 0, 8000, "history.maxTokens");
-        Check(steps["answer"]?["maxOutputTokens"], 64, 4096, "answer.maxOutputTokens");
+        CheckInt(steps["retrieval"]?["topK"], 1, 50, "retrieval.topK");
+        CheckInt(steps["history"]?["maxMessages"], 0, 20, "history.maxMessages");
+        CheckInt(steps["history"]?["maxTokens"], 0, 8000, "history.maxTokens");
+        CheckInt(steps["answer"]?["maxOutputTokens"], 64, 4096, "answer.maxOutputTokens");
+        CheckInt(steps["answer"]?["contextTokens"], 4096, 131_072, "answer.contextTokens");
         Check(steps["answer"]?["temperature"], 0, 1, "answer.temperature");
+        if (steps["condense"]?["enabled"] is { } condense && !(condense is JsonValue c && c.GetValueKind() is JsonValueKind.True or JsonValueKind.False))
+        {
+            problems.Add("condense.enabled");
+        }
+
         if (steps["answer"]?["language"] is JsonValue language && language.GetValueKind() == JsonValueKind.String && language.GetValue<string>() is not ("auto" or "sv"))
         {
             problems.Add("answer.language");
@@ -692,6 +702,19 @@ public static class AssistantRules
             }
 
             if (node is not JsonValue v || v.GetValueKind() != JsonValueKind.Number || v.GetValue<double>() < min || v.GetValue<double>() > max)
+            {
+                problems.Add(name);
+            }
+        }
+
+        void CheckInt(JsonNode? node, int min, int max, string name)
+        {
+            if (node is null)
+            {
+                return;
+            }
+
+            if (Ume.Rag.Answering.Chat.AssistantChatSettings.TryInt(node) is not { } value || value < min || value > max)
             {
                 problems.Add(name);
             }

@@ -66,7 +66,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   collection_shared_in_use: 'Assistants of other departments use this knowledge base. They would lose it, so the sharing cannot be narrowed.',
   audience_above_ceiling: 'A client cannot show an assistant with the information class {level}.',
   client_stores_history: 'An assistant with the class Sensitive cannot be offered in a client that saves chat history.',
-  query_steps_invalid: 'The setting {field} is outside the allowed range.',
+  query_steps_invalid: 'The setting {field} has an invalid value: use a whole number within the allowed range, or true/false for a switch.',
   general_knowledge_not_allowed_for_level: 'An assistant with the class {level} answers only from its knowledge bases. General knowledge needs the class Internal or higher.',
   link_host_not_allowed: 'A link must be https to an allowed site, and at most 5 links.',
   settings_model_residency: 'The model {model} cannot be used for {setting}: it is not a {kind} model the AI gateway offers at {ceiling}.',
