@@ -37,7 +37,7 @@ scripts/evaluation/rerank.sh --deploy-env /path/to/deploy.env --collection turko
 `/tmp/rerank-turkos/report.md`; link it (or paste its table) where B-12's live run is recorded. Each question of
 `hybrid-rerank` makes one chat call through the gateway and each of `hybrid-rerank-gateway` one `POST /v1/rerank`
 (`x-ume-step: rerank`, `x-ume-run-id` = the evaluation run's id). Both variants allow the call 30 s instead of the API's
-limits (`Retrieval:RerankTimeout` 3 s, `Retrieval:GatewayRerankTimeout` 500 ms), so their latency is the reranker's
+limits (`Retrieval:RerankTimeout` 3 s, `Retrieval:GatewayRerankTimeout` 1.5 s), so their latency is the reranker's
 real one, not the fallback.
 
 The same comparison can be asked for without the script: an `on-demand` job whose payload lists

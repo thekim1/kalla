@@ -11,8 +11,8 @@ namespace Ume.Rag.Retrieval;
 /// <summary>
 /// The reranker on the gateway's optional rerank endpoint (B-16; Decisions "Gateway release 1 and shared Keycloak as
 /// built"; gateway-changes §7.4): one Cohere-compatible <c>POST /v1/rerank</c> with the platform's rerank model
-/// (<c>Settings.Retrieval.gatewayRerankModel</c>; Berget AI <c>bge-reranker-v2-m3</c> until on-prem) at the call's ceiling
-/// (<see cref="RerankRequest.Ceiling"/>, sent as <c>x-ume-max-residency</c>; the gateway client's
+/// (<c>Settings.Retrieval.gatewayRerankModel</c>; <c>Cohere-rerank-v5-fast</c> on Azure AI Foundry (EU) for the POC,
+/// on-prem later) at the call's ceiling (<see cref="RerankRequest.Ceiling"/>, sent as <c>x-ume-max-residency</c>; the gateway client's
 /// <see cref="ResidencyCeilingHandler"/> adds the level's key and checks <c>x-ume-residency</c>), the query and the passages as
 /// strings. The answer's <c>results[]</c> (<c>index</c>, <c>relevance_score</c>) are the scores; a passage without a result
 /// stays unscored. Usage is billed per input token (<c>usage.prompt_tokens</c>, <c>usage.total_tokens</c> or Cohere's

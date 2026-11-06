@@ -170,10 +170,10 @@ public sealed class RetrievalEngineTests : IDisposable
     [Fact]
     public async Task The_request_names_the_reranker_and_its_model_and_each_has_its_own_time_limit()
     {
-        // ChatModelReranker 3 s by default, GatewayReranker 500 ms (B-16); here shortened, a reranker taking 300 ms.
+        // ChatModelReranker 3 s by default, GatewayReranker 1.5 s (#438); here shortened, a reranker taking 300 ms.
         var options = new RetrievalEngineOptions { RerankTimeout = TimeSpan.FromSeconds(5), GatewayRerankTimeout = TimeSpan.FromMilliseconds(100) };
         new RetrievalEngineOptions().RerankTimeout.ShouldBe(TimeSpan.FromSeconds(3));
-        new RetrievalEngineOptions().GatewayRerankTimeout.ShouldBe(TimeSpan.FromMilliseconds(500));
+        new RetrievalEngineOptions().GatewayRerankTimeout.ShouldBe(TimeSpan.FromMilliseconds(1500));
         var slow = new FakeReranker(new Dictionary<Guid, double> { [Id(6)] = 0.9 }, delay: TimeSpan.FromMilliseconds(300));
         using var engine = Engine(slow, options);
 

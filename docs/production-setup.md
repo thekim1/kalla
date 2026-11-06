@@ -290,7 +290,7 @@ limit (deployment knobs, text read included; past the limit the fused order stan
 | Reranker | Model (`Settings.Retrieval.*`) | Time limit (`Retrieval:*`, environment `Retrieval__*`) |
 |---|---|---|
 | Chat-model reranker (interim, a chat call that scores the passages) | `rerankModel`: a chat model of the mirror | `RerankTimeout`, default 3 s |
-| Gateway reranker (`POST /v1/rerank`, Cohere-compatible) | `gatewayRerankModel`: a model of kind `rerank` in the mirror (Berget AI `bge-reranker-v2-m3` at `Eu` until on-prem) | `GatewayRerankTimeout`, default 500 ms |
+| Gateway reranker (`POST /v1/rerank`, Cohere-compatible) | `gatewayRerankModel`: a model of kind `rerank` in the mirror (`Cohere-rerank-v5-fast` on Azure AI Foundry at `Eu` for the POC; on-prem later) | `GatewayRerankTimeout`, default 1.5 s |
 
 A gateway rerank model is billed per input token: its mirror row has `InputPerMillionUsd` and no `OutputPerMillionUsd`.
 The evaluation's `hybrid-rerank` and `hybrid-rerank-gateway` variants allow either call 30 s and skip a variant whose
