@@ -13,11 +13,12 @@ namespace Ume.Rag.Api;
 /// caveat line of a degraded or general-knowledge answer, then the model's text through the <see cref="AnswerTransducer"/>: for Open WebUI one
 /// <c>source</c> event per cited document just before the text that first cites it, for other clients <c>delta.annotations</c>
 /// (<c>url_citation</c>), then the contact links of a general-knowledge answer. A fixed text (not found, unavailable) is one content chunk without a model call. The events come from
-/// <see cref="ChatAnswer"/>, the same answer path the JSON answer folds. After the first
-/// byte an error is one error chunk and <c>[DONE]</c>.
+/// <see cref="ChatAnswer"/>, the same answer path the JSON answer folds. With <paramref name="ume"/> (§3.8) the <c>ume</c> chunk
+/// follows the final chunk, made from the documents the answer cited, before the usage chunk and <c>[DONE]</c>. After the first
+/// byte an error is one error chunk and <c>[DONE]</c>, and no <c>ume</c> chunk.
 /// </summary>
 public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage,
-    Func<IReadOnlyList<PromptSource>, int, int, ValueTask>? finished = null) : IResult
+    Func<IReadOnlyList<PromptSource>, int, int, ValueTask>? finished = null, Func<IReadOnlyList<PromptSource>, UmeAnswer>? ume = null) : IResult
 {
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
@@ -67,6 +68,11 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
                 }
 
                 await WriteAsync(response, Chunk(new { }, end.FinishReason), ct);
+                if (ume is not null)
+                {
+                    await UmeAsync(response, id, created, ume(answer.Cited), ct);
+                }
+
                 await UsageAsync(response, id, created, end.PromptTokens, end.CompletionTokens, ct);
                 await DoneAsync(response, ct);
                 answer.Finish();
@@ -142,6 +148,13 @@ public sealed class ChatSse(ChatAnswer answer, bool openWebUi, bool includeUsage
             },
         };
     }
+
+    /// <summary>
+    /// A <c>ume</c> chunk (§3.8): a <c>chat.completion.chunk</c> with <c>choices: []</c> and the <c>ume</c> member, the usage
+    /// chunk's shape. <paramref name="value"/> holds the members this chunk delivers; each member goes in exactly one chunk.
+    /// </summary>
+    private Task UmeAsync(HttpResponse response, string id, long created, object value, CancellationToken ct) =>
+        WriteAsync(response, new { id, @object = "chat.completion.chunk", created, model = Plan.Model, choices = Array.Empty<object>(), ume = value }, ct);
 
     private async Task UsageAsync(HttpResponse response, string id, long created, int prompt, int completion, CancellationToken ct)
     {

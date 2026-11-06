@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -45,24 +46,48 @@ public sealed partial class ChatApiTests
     [InlineData("json-refused", false, false, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Refused)]
     [InlineData("sse-refused", true, false, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Refused)]
     [InlineData("sse-mid-stream-error", true, false, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.MidStreamError)]
-    public async Task The_chat_wire_matches_its_golden_file(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream)
+    public Task The_chat_wire_matches_its_golden_file(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream) =>
+        WireMatchesAsync(name, stream, usage, openWebUi, question, level, upstream, null, update: true);
+
+    /// <summary>
+    /// The <c>ume</c> extension on the wire (chat design §3.8, §18.9; M-7): the JSON answer's top-level <c>ume</c> and the
+    /// stream's <c>ume</c> chunk after the final chunk and before usage and <c>[DONE]</c>, for each outcome, a degraded answer,
+    /// and no chunk after an error. An Open WebUI client's request with an invalid <c>ume</c> streams byte for byte as the one
+    /// without (the recorded <c>sse-cited-owui</c>, never rewritten from here).
+    /// </summary>
+    [Theory]
+    [InlineData("json-ume-cited", false, false, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Fake, """{"related_documents":5}""")]
+    [InlineData("sse-ume-cited", true, true, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Fake, """{"related_documents":5}""")]
+    [InlineData("json-ume-not-found", false, false, false, "Hur långt är det till månen i kilometer?", null, Upstream.Fake, """{"related_documents":5}""")]
+    [InlineData("sse-ume-not-found", true, true, false, "Hur långt är det till månen i kilometer?", null, Upstream.Fake, """{}""")]
+    [InlineData("json-ume-general", false, false, false, "Hur långt är det till månen i kilometer?", "open", Upstream.Fake, """{"related_documents":5}""")]
+    [InlineData("sse-ume-degraded", true, true, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", "degraded", Upstream.Fake, """{"related_documents":5}""")]
+    [InlineData("sse-ume-mid-stream-error", true, true, false, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.MidStreamError,
+        """{"related_documents":5}""")]
+    [InlineData("sse-cited-owui", true, false, true, "Behöver jag bygglov för en altan högre än 1,2 meter?", null, Upstream.Fake, """{"foo":1,"related_documents":99}""")]
+    public Task The_ume_wire_matches_its_golden_file(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream, string ume) =>
+        WireMatchesAsync(name, stream, usage, openWebUi, question, level, upstream, JsonDocument.Parse(ume).RootElement.Clone(), update: !openWebUi);
+
+    /// <summary>
+    /// One request against <see cref="WireHost"/> compared with its golden file; the request carries <paramref name="ume"/> only
+    /// when given, so the files without it pin today's bytes. <paramref name="update"/> lets <c>UME_RAG_UPDATE_GOLDEN=1</c> write the file.
+    /// </summary>
+    private async Task WireMatchesAsync(string name, bool stream, bool usage, bool openWebUi, string question, string? level, Upstream upstream, JsonElement? ume,
+        bool update)
     {
         await using var api = WireHost(level, openWebUi, upstream);
         using var client = Client(api, db.IntegrationKey);
         if (openWebUi)
         {
-            var now = DateTimeOffset.UtcNow;
-            client.DefaultRequestHeaders.Add("X-OpenWebUI-User-Jwt", OpenWebUiUserJwtTests.Jwt(new
-            {
-                sub = "u-1", role = "user", iss = "open-webui", iat = now.ToUnixTimeSeconds(), exp = now.AddMinutes(5).ToUnixTimeSeconds(),
-            }));
-            client.DefaultRequestHeaders.Add("X-OpenWebUI-Chat-Id", "owui-chat-" + Guid.CreateVersion7().ToString("N"));
+            AsOpenWebUiUser(client);
         }
 
-        using var response = await client.PostAsJsonAsync("/v1/chat/completions", new
-        {
-            model = "bygg", stream, stream_options = usage ? new { include_usage = true } : null, messages = new[] { new { role = "user", content = question } },
-        }, Ct);
+        var streamOptions = usage ? new { include_usage = true } : null;
+        var messages = new[] { new { role = "user", content = question } };
+        object request = ume is { } extension
+            ? new { model = "bygg", stream, stream_options = streamOptions, messages, ume = extension }
+            : new { model = "bygg", stream, stream_options = streamOptions, messages };
+        using var response = await client.PostAsJsonAsync("/v1/chat/completions", request, Ct);
         var wire = new StringBuilder();
         wire.Append("HTTP ").Append((int)response.StatusCode).Append('\n');
         foreach (var header in new[] { "Content-Type", "Cache-Control", "X-Accel-Buffering", "Retry-After", "x-rag-conversation-id" })
@@ -78,7 +103,7 @@ public sealed partial class ChatApiTests
         var actual = Mask(wire.ToString());
 
         var file = Path.Combine(ChatGoldenDirectory, name + ".txt");
-        if (Environment.GetEnvironmentVariable("UME_RAG_UPDATE_GOLDEN") == "1")
+        if (update && Environment.GetEnvironmentVariable("UME_RAG_UPDATE_GOLDEN") == "1")
         {
             Directory.CreateDirectory(ChatGoldenDirectory);
             await File.WriteAllTextAsync(file, actual, Ct);
@@ -88,13 +113,37 @@ public sealed partial class ChatApiTests
         actual.ShouldBe((await File.ReadAllTextAsync(file, Ct)).ReplaceLineEndings("\n"), $"{name}: run with UME_RAG_UPDATE_GOLDEN=1 to regenerate.");
     }
 
+    /// <summary>Open WebUI's user headers (a signed user JWT and a chat id) on a client of a <see cref="WireHost"/> with <c>openWebUi</c>.</summary>
+    private static void AsOpenWebUiUser(HttpClient client)
+    {
+        var now = DateTimeOffset.UtcNow;
+        client.DefaultRequestHeaders.Add("X-OpenWebUI-User-Jwt", OpenWebUiUserJwtTests.Jwt(new
+        {
+            sub = "u-1", role = "user", iss = "open-webui", iat = now.ToUnixTimeSeconds(), exp = now.AddMinutes(5).ToUnixTimeSeconds(),
+        }));
+        client.DefaultRequestHeaders.Add("X-OpenWebUI-Chat-Id", "owui-chat-" + Guid.CreateVersion7().ToString("N"));
+    }
+
     private static string Mask(string wire)
     {
         wire = ChatIdPattern().Replace(wire, "chatcmpl-00000000000000000000000000000000");
         wire = CreatedPattern().Replace(wire, "\"created\":0");
         wire = RequestIdPattern().Replace(wire, "\"request_id\":\"MASKED\"");
+        // The fixture's document ids, collection slugs and download grants (the ume related documents) change per run.
+        wire = UuidPattern().Replace(wire, "00000000-0000-0000-0000-000000000000");
+        wire = SlugPattern().Replace(wire, "\"c-MASKED\"");
+        wire = GrantPattern().Replace(wire, "grant=g1.MASKED");
         return ConversationPattern().Replace(wire, "x-rag-conversation-id: c1.MASKED");
     }
+
+    [GeneratedRegex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")]
+    private static partial Regex UuidPattern();
+
+    [GeneratedRegex("\"c-[0-9a-f]{32}\"")]
+    private static partial Regex SlugPattern();
+
+    [GeneratedRegex("grant=g1\\.[A-Za-z0-9_.-]+")]
+    private static partial Regex GrantPattern();
 
     [GeneratedRegex("chatcmpl-[0-9a-f]{32}")]
     private static partial Regex ChatIdPattern();

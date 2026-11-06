@@ -62,7 +62,8 @@ public static class ChatEndpoints
                     throw new ChatException(400, "invalid_request", "The body is not valid JSON.");
                 }
 
-                var parsed = ChatRequestParser.Parse(body);
+                // §3.8: Open WebUI renders no ume chunk, so its requests ignore the member without validating it.
+                var parsed = ChatRequestParser.Parse(body, readUme: who.Client.Kind != "open-webui");
                 limiter.Check(who, service.Platform.MessagesPerMinutePerUser); // §4.1 step 4: per user (or per key, when the key is the subject) and minute, before any model call
                 // §11.1: an issued id is verified before any model call, bound to the asked assistant (#266); an unknown model is
                 // the plan's 404, so Guid.Empty only ever signs or verifies an id that is never used.
@@ -84,17 +85,29 @@ public static class ChatEndpoints
                     return writer.EnqueueAsync(Turn(http, plan, who, conversation, cited, prompt, completion,
                         (int)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
                 }
+                UmeAnswer? Ume(ChatPlan plan, IReadOnlyList<PromptSource> cited)
+                {
+                    if (parsed.Ume is not { } asked)
+                    {
+                        return null;
+                    }
+
+                    var ume = UmeAnswer.For(plan, cited, asked);
+                    metrics.Ume(asked, ume, who);
+                    return ume;
+                }
                 if (!parsed.Stream)
                 {
                     var answer = await service.CompleteAsync(who, parsed, ct);
                     await Enqueue(answer.Plan!, answer.Cited, answer.PromptTokens, answer.CompletionTokens);
-                    return Json(answer);
+                    return Json(answer, Ume(answer.Plan!, answer.Cited));
                 }
 
                 var plan = await service.PlanAsync(who, parsed, ct);
                 // §8.2: status and residency are checked here, before our first byte; a refusal is still a JSON error.
                 var streamed = await service.OpenAnswerAsync(plan, stream: true, ct);
-                return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o));
+                return new ChatSse(streamed, who.Client.Kind == "open-webui", parsed.IncludeUsage, (c, p, o) => Enqueue(plan, c, p, o),
+                    parsed.Ume is null ? null : cited => Ume(plan, cited)!);
             }))
             .WithMetadata(new ChatBodyLimit())
             .WithName("ChatCompletions").WithSummary("Ask an assistant (OpenAI chat completions, JSON or stream)");
@@ -157,29 +170,34 @@ public static class ChatEndpoints
         };
     }
 
-    private static IResult Json(ChatCompletion answer) => Results.Json(new
+    /// <summary>The <c>chat.completion</c> object (§3.3); with <paramref name="ume"/> (§3.8) a top-level <c>ume</c> member after <c>usage</c>.</summary>
+    private static IResult Json(ChatCompletion answer, UmeAnswer? ume)
     {
-        id = "chatcmpl-" + answer.MessageId.ToString("N"),
-        @object = "chat.completion",
-        created = answer.Created.ToUnixTimeSeconds(),
-        model = answer.Model,
-        choices = new[]
+        var body = new
         {
-            new
+            id = "chatcmpl-" + answer.MessageId.ToString("N"),
+            @object = "chat.completion",
+            created = answer.Created.ToUnixTimeSeconds(),
+            model = answer.Model,
+            choices = new[]
             {
-                index = 0, finish_reason = answer.FinishReason,
-                message = new
+                new
                 {
-                    role = "assistant", content = answer.Content,
-                    annotations = answer.Annotations.Select(a => new
+                    index = 0, finish_reason = answer.FinishReason,
+                    message = new
                     {
-                        type = "url_citation", url_citation = new { url = a.Url, title = a.Title, start_index = a.StartIndex, end_index = a.EndIndex },
-                    }),
+                        role = "assistant", content = answer.Content,
+                        annotations = answer.Annotations.Select(a => new
+                        {
+                            type = "url_citation", url_citation = new { url = a.Url, title = a.Title, start_index = a.StartIndex, end_index = a.EndIndex },
+                        }),
+                    },
                 },
             },
-        },
-        usage = new { prompt_tokens = answer.PromptTokens, completion_tokens = answer.CompletionTokens, total_tokens = answer.PromptTokens + answer.CompletionTokens },
-    });
+            usage = new { prompt_tokens = answer.PromptTokens, completion_tokens = answer.CompletionTokens, total_tokens = answer.PromptTokens + answer.CompletionTokens },
+        };
+        return ume is null ? Results.Json(body) : Results.Json(new { body.id, body.@object, body.created, body.model, body.choices, body.usage, ume });
+    }
 
     /// <summary>The description Open WebUI shows (§3.1): the assistant's description and its contact.</summary>
     private static string? Description(AssistantEntry assistant)
@@ -240,12 +258,24 @@ public static class ChatEndpoints
 
 /// <summary>
 /// <c>rag.chat.requests</c> (chat design §17) for completed turns: <c>outcome</c> (<c>answered</c>, <c>answered-general</c>,
-/// <c>not-found</c>, <c>unavailable</c>), <c>level</c>, <c>client_kind</c>, <c>stream</c>, <c>conversational</c>.
+/// <c>not-found</c>, <c>unavailable</c>), <c>level</c>, <c>client_kind</c>, <c>stream</c>, <c>conversational</c>; for answers
+/// with the <c>ume</c> extension (§3.8) <c>rag.chat.ume</c> (<c>members</c>, <c>client_kind</c>) and
+/// <c>rag.chat.related_documents</c> (entries per answer that asked for the list, §9.7).
 /// </summary>
-public sealed class ChatMetrics(IMeterFactory meters)
+public sealed class ChatMetrics
 {
-    private readonly Counter<long> _requests = meters.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName)
-        .CreateCounter<long>("rag.chat.requests", description: "Chat turns by outcome");
+    private readonly Counter<long> _requests;
+    private readonly Counter<long> _ume;
+    private readonly Histogram<int> _related;
+
+    public ChatMetrics(IMeterFactory meters)
+    {
+        ArgumentNullException.ThrowIfNull(meters);
+        var meter = meters.Create(Microsoft.Extensions.Hosting.Extensions.TelemetryName);
+        _requests = meter.CreateCounter<long>("rag.chat.requests", description: "Chat turns by outcome");
+        _ume = meter.CreateCounter<long>("rag.chat.ume", description: "Chat answers with the ume extension by the members asked for");
+        _related = meter.CreateHistogram<int>("rag.chat.related_documents", description: "Related documents listed per answer that asked for them");
+    }
 
     public void Completed(ChatPlan plan, RagPrincipal who, bool stream)
     {
@@ -256,5 +286,25 @@ public sealed class ChatMetrics(IMeterFactory meters)
             { "outcome", ChatOutcomes.Name(plan.Outcome) }, { "level", plan.Assistant.Classification }, { "client_kind", who.Client.Kind },
             { "stream", stream }, { "conversational", plan.Retrieval is null },
         });
+    }
+
+    /// <summary>One answer with a <c>ume</c> member: <c>members</c> is <c>outcome</c> (only), <c>related</c>, <c>follow_ups</c> or <c>both</c>.</summary>
+    public void Ume(UmeRequest asked, UmeAnswer answer, RagPrincipal who)
+    {
+        ArgumentNullException.ThrowIfNull(asked);
+        ArgumentNullException.ThrowIfNull(answer);
+        ArgumentNullException.ThrowIfNull(who);
+        var members = (asked.RelatedDocuments > 0, asked.FollowUps > 0) switch
+        {
+            (true, true) => "both",
+            (true, false) => "related",
+            (false, true) => "follow_ups",
+            _ => "outcome",
+        };
+        _ume.Add(1, new TagList { { "members", members }, { "client_kind", who.Client.Kind } });
+        if (answer.RelatedDocuments is { } related)
+        {
+            _related.Record(related.Count);
+        }
     }
 }

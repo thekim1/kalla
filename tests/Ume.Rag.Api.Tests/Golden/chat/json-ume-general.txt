@@ -1,0 +1,6 @@
+HTTP 200
+Content-Type: application/json; charset=utf-8
+Cache-Control: no-store
+x-rag-conversation-id: c1.MASKED
+
+{"id":"chatcmpl-00000000000000000000000000000000","object":"chat.completion","created":0,"model":"bygg","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"*Jag hittar inget om detta i kommunens källor. Svaret bygger på allmän kunskap och kan vara fel för Umeå kommun.*\n\nTestsvar på \"Fråga: Hur långt är det till månen i kilometer?\".\n\n- [Kontaktcenter](https://www.umea.se/kontakt)","annotations":[]}}],"usage":{"prompt_tokens":108,"completion_tokens":15,"total_tokens":123},"ume":{"outcome":"answered-general","degraded":false,"related_documents":[]}}

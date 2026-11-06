@@ -31,10 +31,23 @@ public sealed record ChatMessageIn(string Role, string Text);
 public sealed record ParsedChat(string Model, string Question, IReadOnlyList<ChatMessageIn> History, bool Stream, bool IncludeUsage, int? MaxTokens)
 {
     public string PromptQuestion { get; init; } = Question;
+
+    /// <summary>The request's <c>ume</c> object (§3.8), or null: absent, <c>null</c>, or a client that does not read it (Open WebUI).</summary>
+    public UmeRequest? Ume { get; init; }
 }
 
 /// <summary>
-/// Parses and checks the request body (chat design §3.2): unknown members are ignored; a fixed list of members is refused;
+/// The <c>ume</c> extension asked for (chat design §3.8): how many related documents to list (§9.7) and the most follow-up
+/// questions to suggest (§9.8); 0 is none. Any object, <c>{}</c> included, gives the answer's <c>ume</c> with its outcome.
+/// </summary>
+public sealed record UmeRequest(int RelatedDocuments, int FollowUps)
+{
+    public const int MaxRelatedDocuments = 10;
+    public const int MaxFollowUps = 5;
+}
+
+/// <summary>
+/// Parses and checks the request body (chat design §3.2): unknown members are ignored, except inside <c>ume</c> (§3.8); a fixed list of members is refused;
 /// text content parts only; the last message must be <c>user</c>; <c>system</c>/<c>developer</c>/<c>tool</c> messages are
 /// ignored; the question gets its query form (normalised as the knowledge API normalises queries) and its prompt form.
 /// </summary>
@@ -49,7 +62,10 @@ public static partial class ChatRequestParser
     private static readonly string[] RefusedMembers = ["logprobs", "top_logprobs", "audio", "modalities", "prediction"];
     private static readonly HashSet<string> Roles = new(StringComparer.Ordinal) { "system", "developer", "user", "assistant", "tool" };
 
-    public static ParsedChat Parse(JsonElement body)
+    /// <summary>
+    /// The parsed body. <paramref name="readUme"/> false (an Open WebUI client, §3.8) ignores <c>ume</c> without validating it.
+    /// </summary>
+    public static ParsedChat Parse(JsonElement body, bool readUme = true)
     {
         if (body.ValueKind != JsonValueKind.Object)
         {
@@ -83,6 +99,8 @@ public static partial class ChatRequestParser
         {
             throw new ChatException(400, "unsupported_parameter", "Only the text response format is supported.", "response_format");
         }
+
+        var ume = readUme && body.TryGetProperty("ume", out var u) ? Ume(u) : null;
 
         if (!body.TryGetProperty("messages", out var messages) || messages.ValueKind != JsonValueKind.Array || messages.GetArrayLength() is < 1 or > MaxMessages)
         {
@@ -139,7 +157,7 @@ public static partial class ChatRequestParser
             }
         }
 
-        return new ParsedChat(model, question, history, stream, usage, maxTokens) { PromptQuestion = PromptForm(last.Text) };
+        return new ParsedChat(model, question, history, stream, usage, maxTokens) { PromptQuestion = PromptForm(last.Text), Ume = ume };
     }
 
     /// <summary>
@@ -177,6 +195,47 @@ public static partial class ChatRequestParser
 
         return BlankLines().Replace(cleaned.ToString().Normalize(NormalizationForm.FormC), "\n\n\n").Trim();
     }
+
+    /// <summary>
+    /// The <c>ume</c> object (§3.8): <c>null</c> is none; not an object is 400 <c>invalid_request</c>; <c>related_documents</c>
+    /// 0–10 and <c>follow_ups</c> 0–5 as integers, else 400 <c>invalid_request</c>; any other member is 400
+    /// <c>unsupported_parameter</c> (the namespace is ours, so a typo fails instead of doing nothing).
+    /// </summary>
+    private static UmeRequest? Ume(JsonElement ume)
+    {
+        if (ume.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (ume.ValueKind != JsonValueKind.Object)
+        {
+            throw Invalid("ume must be an object.", "ume");
+        }
+
+        var (related, followUps) = (0, 0);
+        foreach (var member in ume.EnumerateObject())
+        {
+            switch (member.Name)
+            {
+                case "related_documents":
+                    related = UmeCount(member, UmeRequest.MaxRelatedDocuments);
+                    break;
+                case "follow_ups":
+                    followUps = UmeCount(member, UmeRequest.MaxFollowUps);
+                    break;
+                default:
+                    throw new ChatException(400, "unsupported_parameter", $"ume.{member.Name} is not supported.", "ume." + member.Name);
+            }
+        }
+
+        return new UmeRequest(related, followUps);
+    }
+
+    private static int UmeCount(JsonProperty member, int max) =>
+        member.Value.ValueKind == JsonValueKind.Number && member.Value.TryGetInt32(out var count) && count >= 0 && count <= max
+            ? count
+            : throw Invalid($"ume.{member.Name} must be an integer from 0 to {max}.", "ume." + member.Name);
 
     /// <summary>A string, or text parts joined with a newline; any other part is refused (answered 6).</summary>
     private static string Content(JsonElement message)
