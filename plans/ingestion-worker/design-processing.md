@@ -707,6 +707,14 @@ values that separate answerable from unanswerable questions best. These are retr
 `candidate` flag are kept in `Jobs.Result` and, for `on-demand` runs, in `EvaluationRuns.Candidate` and
 `EvaluationRuns.ThresholdProposal`. An `on-demand` run is never a comparison baseline.
 
+**Rerank variants** (`on-demand` only; Decisions "Rerank pulled forward", knowledge design §6.7): `hybrid-rerank`
+(chat-model reranker) and `hybrid-rerank-gateway` (`/v1/rerank`) run with a generous rerank time limit (30 s) so they
+measure the call, not the fallback, and report per run p50/p95 search and rerank latency, rerank tokens, cost per
+question at the mirror's prices (input tokens only for a rerank model) and the `rerank_unavailable` count. Rerank is
+optional: a reranked variant whose reranker has no platform model is **skipped**, with no `EvaluationRuns` row, and
+listed in the result's `skipped` (`{variant, reason: "no_rerank_model"}`); `runs` can then be empty. A model that is
+set but fails counts as `rerank_unavailable`.
+
 ## 14. Evaluation runs (advisory)
 
 ```csharp
