@@ -125,7 +125,7 @@ public sealed partial class GatewayChatClient(IHttpClientFactory clients, IOptio
         }
         catch (GatewayResidencyException)
         {
-            throw new ChatException(502, "upstream_error", "The model service answered in a way that could not be accepted.");
+            throw new ChatException(502, "upstream_error", "The model service answered in a way that could not be accepted.") { ResidencyRefused = true };
         }
         catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {

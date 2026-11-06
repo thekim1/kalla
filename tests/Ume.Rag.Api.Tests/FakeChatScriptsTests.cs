@@ -64,6 +64,13 @@ public sealed class FakeChatScriptsTests(FakeGatewayFactory fake) : IClassFixtur
         json.RootElement.GetProperty("svar").GetString().ShouldBe("Altaner högre än 1,2 meter kräver bygglov.");
         json.RootElement.GetProperty("typ").GetString().ShouldBe("fakta");
 
+        // condense-long (chat design §5.1): the message's first words on one line, a query the condense acceptance rule takes.
+        var condensed = await AskAsync(fake, FakeChatScripts.CondenseLongStep,
+            "Användare: Hej\n\nMeddelande: Ärende 114233: Procapita\nFel 0x80070005 vid inloggning, " + string.Join(' ', Enumerable.Repeat("logg", 2000)));
+        condensed.Content.ShouldBe("Ärende 114233: Procapita Fel 0x80070005 vid inloggning, logg logg logg logg logg");
+        Ume.Rag.Answering.Chat.Condenser.Accept(condensed.Content).ShouldBe(condensed.Content);
+        FakeChatScripts.DefaultCondenseLong("Meddelande: " + new string('x', 3000)).Length.ShouldBe(FakeChatScripts.CondenseLongMaxChars);
+
         (await AskAsync(fake, null, "Hur söker jag bygglov?")).Content.ShouldStartWith("Testsvar på");
         (await AskAsync(fake, "eval-dedup", "Hur söker jag bygglov?")).Content.ShouldStartWith("Testsvar på"); // an embedding step: no chat script
     }

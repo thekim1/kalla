@@ -44,7 +44,7 @@ reviewed and merged by the main session. Case plan: [`../cases/support-assistant
 - **Waits on:** –
 - **Read:** Decisions "Chat rate limit per key"; chat §4.1 step 4; identity §3, §6.3; data-model `Keys`; admin §5.8.
 
-### [ ] M-6 Long questions condensed into the search query (SA-4)
+### [x] M-6 Long questions condensed into the search query (SA-4)
 - **Do:** accept a question up to 16,000 characters (`ChatRequestParser.MaxQuestionChars`); keep its prompt form
   (line breaks) for the answer and its query form for kind, language, condense and retrieval; over 2,000 characters
   run the long-question condense (`x-ume-step: condense-long`, `Chat:LongQuestionCondenseTimeout` 3 s) on every turn,

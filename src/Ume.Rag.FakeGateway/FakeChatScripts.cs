@@ -5,12 +5,13 @@ using System.Text.RegularExpressions;
 namespace Ume.Rag.FakeGateway;
 
 /// <summary>
-/// Scripted JSON chat answers for the worker's evaluation steps (issue #129, main session's decision) and the reranker: a
-/// chat call with <c>x-ume-step</c> <c>eval-generate</c>, <c>eval-judge</c> or <c>rerank</c> is answered from
-/// <c>FakeGateway:ChatScripts:&lt;step&gt;</c> (a string: every call; an array: in order, cycling per step and process), after
-/// the usual key, ceiling and target checks. Without a script, built-in answers keep a dev run of <c>generate-set</c> and a
-/// reranking assistant working (<see cref="DefaultRerank"/>: word overlap, deterministic). No header carries a script, so a
-/// caller cannot script the fake. Every other chat call stays the echo answer.
+/// Scripted JSON chat answers for the worker's evaluation steps (issue #129, main session's decision), the reranker and the
+/// long-question condense: a chat call with <c>x-ume-step</c> <c>eval-generate</c>, <c>eval-judge</c>, <c>rerank</c> or
+/// <c>condense-long</c> is answered from <c>FakeGateway:ChatScripts:&lt;step&gt;</c> (a string: every call; an array: in order,
+/// cycling per step and process), after the usual key, ceiling and target checks. Without a script, built-in answers keep a
+/// dev run of <c>generate-set</c>, a reranking assistant and a long question working (<see cref="DefaultRerank"/>: word
+/// overlap; <see cref="DefaultCondenseLong"/>: the message's first words; both deterministic). No header carries a script, so
+/// a caller cannot script the fake. Every other chat call stays the echo answer.
 /// </summary>
 public sealed partial class FakeChatScripts(IConfiguration configuration)
 {
@@ -18,6 +19,13 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
     public const string GenerateStep = "eval-generate";
     public const string JudgeStep = "eval-judge";
     public const string RerankStep = "rerank";
+    public const string CondenseLongStep = "condense-long";
+
+    /// <summary>How many of the message's words <see cref="DefaultCondenseLong"/> keeps.</summary>
+    public const int CondenseLongWords = 12;
+
+    /// <summary>Its longest answer (a log line may be one long word), within the condense acceptance rule's 400.</summary>
+    public const int CondenseLongMaxChars = 200;
     public const string SectionName = FakeGatewayOptions.SectionName + ":ChatScripts";
 
     /// <summary>The judge's default: every score 5 (passes the worker's minimum of 4).</summary>
@@ -56,6 +64,7 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
             GenerateStep => DefaultGeneration(userText),
             JudgeStep => DefaultJudge,
             RerankStep => DefaultRerank(userText),
+            CondenseLongStep => DefaultCondenseLong(userText),
             _ => null,
         };
     }
@@ -106,6 +115,19 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
         return JsonSerializer.Serialize(new Dictionary<string, object> { ["scores"] = scores });
     }
 
+    /// <summary>
+    /// The long-question condense's answer (chat design §5.1: the transcript, then <c>Meddelande: </c> and the message): the
+    /// message's first <see cref="CondenseLongWords"/> words on one line (at most <see cref="CondenseLongMaxChars"/> characters), as a
+    /// search query is. Deterministic.
+    /// </summary>
+    public static string DefaultCondenseLong(string userText)
+    {
+        ArgumentNullException.ThrowIfNull(userText);
+        var message = CondenseLongMessage().Match(userText) is { Success: true } m ? m.Groups[1].Value : userText;
+        var query = string.Join(' ', Token().Matches(message).Take(CondenseLongWords).Select(t => t.Value));
+        return query.Length == 0 ? "Supportärende" : query.Length > CondenseLongMaxChars ? query[..CondenseLongMaxChars] : query;
+    }
+
     [GeneratedRegex(@"<question>\s*(.*?)\s*</question>", RegexOptions.Singleline)]
     private static partial Regex RerankQuestion();
 
@@ -117,4 +139,10 @@ public sealed partial class FakeChatScripts(IConfiguration configuration)
 
     [GeneratedRegex(@"\p{L}+")]
     private static partial Regex Word();
+
+    [GeneratedRegex(@"Meddelande: (.*)\z", RegexOptions.Singleline)]
+    private static partial Regex CondenseLongMessage();
+
+    [GeneratedRegex(@"\S+")]
+    private static partial Regex Token();
 }
