@@ -620,7 +620,7 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = Environments.Development });
         builder.Configuration.AddInMemoryCollection([new("Gateway:BaseUrl", "http://fake-gateway"), new("Gateway:Keys:Eu", FakeGatewayFactory.EuKey)]);
-        builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => handler);
+        builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName, retryFailed: false).ConfigurePrimaryHttpMessageHandler(() => handler);
         var host = builder.Build();
         return (new GatewayQueryEmbedder(host.Services.GetRequiredService<IHttpClientFactory>(), options ?? new QueryEmbeddingOptions(), new byte[32], TimeProvider.System,
             NullLogger<GatewayQueryEmbedder>.Instance), host);
@@ -685,6 +685,34 @@ public sealed class QueryEmbedderTests(FakeGatewayFactory fake) : IClassFixture<
         await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() =>
             embedder.EmbedAsync(requesting with { Id = Guid.NewGuid(), RequestDimensions = false }, "bygglov plank", null, Ct));
         (await embedder.EmbedAsync(Profile, "bygglov plank", null, Ct)).Length.ShouldBe(1024);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.GatewayTimeout)]
+    public async Task A_502_or_504_is_retried_once_with_the_profiles_ceiling(HttpStatusCode status)
+    {
+        // #390: all_providers_failed is retried with the same ceiling, never a wider one; the client's own retry handler
+        // is left out (production registers gateway-query with retryFailed: false), so exactly two calls.
+        var ceilings = new List<string>();
+        var failing = new Counting(fake.Server.CreateHandler(), status);
+        var (embedder, host) = Build(new Recording(failing, ceilings));
+        using var _ = host;
+        using var __ = embedder;
+
+        await Should.ThrowAsync<QueryEmbeddingUnavailableException>(() => embedder.EmbedAsync(Profile, "bygglov " + status, null, Ct));
+
+        failing.Calls.ShouldBe(2);
+        ceilings.ShouldBe(["Eu", "Eu"]);
+    }
+
+    private sealed class Recording(HttpMessageHandler inner, List<string> ceilings) : DelegatingHandler(inner)
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            ceilings.Add(string.Join(",", request.Headers.GetValues("x-ume-max-residency")));
+            return base.SendAsync(request, cancellationToken);
+        }
     }
 
     [Fact]

@@ -74,7 +74,7 @@ public static class KnowledgeExtensions
             throw new InvalidOperationException("Retrieval:ExpandNeighbourChunks must be between 0 and 32.");
         }
 
-        builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName);
+        builder.AddGatewayClient(GatewayQueryEmbedder.HttpClientName, retryFailed: false); // its own retry (knowledge §5.3)
         builder.AddGatewayClient(ChatModelReranker.HttpClientName);
         var services = builder.Services;
         services.AddOptions<KnowledgeOptions>().BindConfiguration(KnowledgeOptions.SectionName);

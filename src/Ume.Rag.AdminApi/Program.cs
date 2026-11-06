@@ -71,7 +71,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayModelSync>(
 builder.Services.AddScoped<GatewayModelCheck>();
 builder.Services.AddSingleton<EmbeddingCanaryCheck>();
 // The retrieval test (admin design §4.9): the search core on the process's data source, query embeddings on their own gateway client.
-builder.AddGatewayClient(Ume.Rag.Answering.GatewayQueryEmbedder.HttpClientName);
+builder.AddGatewayClient(Ume.Rag.Answering.GatewayQueryEmbedder.HttpClientName, retryFailed: false); // its own retry (knowledge §5.3)
 // The assistant test panel reranks as chat does when the assistant reranks (knowledge design §6.7), on its own gateway client.
 builder.AddGatewayClient(Ume.Rag.Retrieval.ChatModelReranker.HttpClientName);
 builder.Services.AddSingleton<AdminRetrieval>();
