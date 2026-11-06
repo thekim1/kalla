@@ -9,9 +9,10 @@ with the detail. The quality gate is the platform's own: a hand-graded gold set 
 |---|---|---|
 | 0.1 | Answers to the open questions: **done** ([`README.md`](README.md), "Decisions (user, 2026-11-06)") | user |
 | 0.2 | DPIA (G1) covers pasted tickets sent to an EU-hosted model and the app's own chat store | user with the data protection officer |
-| 0.3 | Gaps built before the pilot: **SA-1, SA-3, SA-4, SA-6** (user, 2026-11-06); each needs a Decisions row and design section (main session), then queue items for stream B | user, main session |
+| 0.3 | Gaps built before the pilot: **done**. SA-1 and SA-2 (#433), SA-3 (#434), SA-4 (#431), SA-6 (#430) and SA-7 (#432) are on `main` ([`06-gaps.md`](06-gaps.md)) | main session |
 | 0.4 | Named people: knowledge-base editor (contact), department admin, the frontend team's contact, 3–5 reviewers from support | user, support organisation |
 | 0.5 | An inventory of the sources: intranet sections, file folders, Markdown repositories, file types (legacy Office?) | support organisation |
+| 0.6 | Confirm the condense model: `claude-haiku-5-5` recommended for the long-ticket condense and the follow-ups ([`01-gateway-setup.md`](01-gateway-setup.md) §1) | user |
 
 ## 1. Platform readiness
 
@@ -22,6 +23,8 @@ with the detail. The quality gate is the platform's own: a hand-graded gold set 
 | 1.3 | `--crawl-allow` for the intranet ranges; robots.txt allowance if needed | [`02-knowledge-base.md`](02-knowledge-base.md) §2 |
 | 1.4 | Department and admins in Keycloak realm `ume`; organisation sync | [`02-knowledge-base.md`](02-knowledge-base.md) §5 |
 | 1.5 | `Settings.Chat.allowedLinkHosts` includes the intranet host | [`04-assistant.md`](04-assistant.md) §6 |
+| 1.6 | `Settings.Chat.condenseModel` set (0.6); `Chat:LongQuestionCondenseTimeout` raised to 4 s only if `gpt-6-luna` stays | [`04-assistant.md`](04-assistant.md) §2 |
+| 1.7 | `Settings.TrustedProxies` = the reverse proxy's addresses, so key allow-lists and the download limit see the client | [`05-frontend-integration.md`](05-frontend-integration.md) §2 |
 
 ## 2. Knowledge base
 
@@ -69,9 +72,8 @@ grading is the gate.
 | # | Step | Who | Detail |
 |---|---|---|---|
 | 5.1 | The frontend team builds against a local Ume.Rag with the FakeGateway | frontend team | [`05-frontend-integration.md`](05-frontend-integration.md) §8 |
-| 5.2 | Client, key, audience, proxy routes, `Knowledge:PublicBaseUrl` on the test host | Ume.Rag admins, operator | [`05-frontend-integration.md`](05-frontend-integration.md) §2, §9 |
-| 5.3 | Contract check: a cited answer (stream and JSON), a not-found, an uploaded-file download, a crawled-page link, a feedback rating, a long ticket | both teams | [`05-frontend-integration.md`](05-frontend-integration.md) §9 step 8 |
-| 5.4 | Gap work chosen in 0.3, each as its own queue item in `plans/work/` | streams a/b, main | [`06-gaps.md`](06-gaps.md) |
+| 5.2 | Client, key (with `requestsPerMinute` and `allowedIpRanges`), audience, proxy routes, `Knowledge:PublicBaseUrl` on the test host | Ume.Rag admins, operator | [`05-frontend-integration.md`](05-frontend-integration.md) §2, §9 |
+| 5.3 | Contract check: a cited answer with related documents and follow-ups (stream and JSON), a not-found, an uploaded-file download, a crawled-page link, a feedback rating, a long ticket, a call from outside the allow-list | both teams | [`05-frontend-integration.md`](05-frontend-integration.md) §9 step 7 |
 
 ## 6. Pilot
 
@@ -90,7 +92,8 @@ grading is the gate.
       not-found ≤ 10 %, off-topic not-found ≥ 80 % (Decisions "Weakness review 2").
 - [ ] DPIA (G1) signed for pasted tickets and the app's store; the app shows the same warning against confidential
       input that Open WebUI shows (Decisions "Weakness review 4": banner).
-- [ ] SA-6 fixed or the platform rate setting raised and recorded; SA-7 fixed or the proxy restriction verified.
+- [ ] The app key's `RequestsPerMinute` set and recorded; its `AllowedIpRanges` and `Settings.TrustedProxies` set, and
+      a call from another address refused with 403 `address_not_allowed`.
 - [ ] Key expiry and rotation owner named; key stored only in the app's secret store.
 - [ ] Daily crawl runs complete; no deletion proposal left waiting.
 - [ ] Escalation links in the not-found text work from the app.

@@ -9,21 +9,21 @@ The sketches are proposals. Each one that changes a contract or a rule needs the
 design (and, where marked, a Decisions row) before a stream builds it. Under "No backward compatibility before
 production" (Decisions) none needs a compatibility step.
 
-SA-1, SA-2, SA-3, SA-4 and SA-6 are settled (2026-11-06): each has a **Settled** line below naming its Decisions row,
-design section and queue item, and that design text, not the sketch, is what gets built. Stream B is inactive, so the
-main session builds them on `main-session/` branches ([`../../work/main.md`](../../work/main.md) M-5 to M-8).
+SA-1, SA-2, SA-3, SA-4, SA-6 and SA-7 are **done** on `main` (2026-11-06): each has a **Done** line below naming its
+PR and the code, and the design sections it names are the contract ([`../../work/main.md`](../../work/main.md) M-5 to
+M-8; issue #424). Their sections keep only what was asked and what was built.
 
 ## Summary
 
 | ID | Gap | Size | Owner | Blocks the case? |
 |---|---|---|---|---|
-| SA-1 | Related (retrieved, uncited) documents in the chat answer | M | main session, queue item M-7 (Decisions row added) | **before the pilot** (user, 2026-11-06) |
-| SA-2 | An outcome signal (answered, not found, general, unavailable, degraded) in the answer | S | main session, with SA-1 in M-7 | no (built with SA-1) |
-| SA-3 | Suggested follow-up questions | M | main session, queue item M-8 (Decisions row added) | **before the pilot** (user, 2026-11-06) |
-| SA-4 | Tickets longer than 2,000 characters as the question | M | main session, queue item M-6 (Decisions row added) | **before the pilot**, by condensing a long ticket into the search query (user, 2026-11-06) |
+| SA-1 | Related (retrieved, uncited) documents in the chat answer | M | main session, M-7 | **done**, #433 |
+| SA-2 | An outcome signal (answered, not found, general, unavailable, degraded) in the answer | S | main session, M-7 | **done**, #433 |
+| SA-3 | Suggested follow-up questions | M | main session, M-8 | **done**, #434 |
+| SA-4 | Tickets longer than 2,000 characters as the question | M | main session, M-6 | **done**, #431 |
 | SA-5 | Per-user identity for a non-Open WebUI client (delegated tokens) | L | b + main | no: a shared key is accepted for the pilot (user, 2026-11-06) |
-| SA-6 | A rate limit that fits a shared application key | S | main session, queue item M-5 (Decisions row added) | **before the pilot** (shared key accepted) |
-| SA-7 | Key IP allow-list (and per-key rate) not enforced in rag-api; filed as #424 | S | b | no (firewall), fix before go-live |
+| SA-6 | A rate limit that fits a shared application key | S | main session, M-5 | **done**, #430 |
+| SA-7 | Key IP allow-list not enforced in rag-api (#424) | S | main session, #424 | **done**, #432 |
 | SA-8 | Crawling an intranet that needs a login | L | a + main | no: the intranet is readable without a login (user, 2026-11-06) |
 | SA-9 | Scripted upload API (service credential on the upload routes) | M | b | no |
 | SA-10 | Git/Markdown or file-share connector | M–L | a + main | no: **after the pilot**, when the Markdown moves to a Git repository (user, 2026-11-06) |
@@ -35,70 +35,38 @@ main session builds them on `main-session/` branches ([`../../work/main.md`](../
 
 ## SA-1 Related documents in the chat answer
 
-- **Missing.** For clients other than Open WebUI the answer carries only `url_citation` annotations for cited
-  documents (`src/Ume.Rag.Api/ChatStreaming.cs:91-122`, `src/Ume.Rag.Api/ChatEndpoints.cs:160-182`). The retrieval
-  result the answer was built from (`ChatPlan.Retrieval`, `src/Ume.Rag.Answering/Chat/ChatPlan.cs`) never leaves the
-  service. `/v1/retrieve` is closed to non-internal clients (knowledge §2.3; `src/Ume.Rag.Api/KnowledgeEndpoints.cs:251-254`;
-  `src/Ume.Rag.Domain/Access/AccessPolicy.cs:170-172`).
-- **Why.** Requirement 4: staff want the next-best articles even when the answer cites one.
-- **Sketch.** An opt-in extension: the request carries a member such as `"rag": { "include_sources": true }`
-  (unknown members are already ignored, chat §3.2); the answer adds a `rag` object (JSON: top level; stream: one
-  extra chunk before the final one) with `sources: [{ document_id, title, label, url, source_type, media_type,
-  modified, cited, display_number, rank }]`, grouped by document from the retrieval already done, links built as for
-  citations (grants for uploads). No extra search or model call. Open WebUI keeps its `source` events and ignores the
-  member. The alternative, opening `/v1/retrieve` to integration keys (knowledge §2.3's P2 row), costs a second
-  embedding and search per turn and can disagree with what the answer used.
-- **Size M** (contract, both answer paths, tests, chat design §3.3/§9.3 update). **Decisions row**: extends the
-  OpenAI-compatible contract with an own member.
-- **Settled.** Decisions "Related documents and the `ume` chat extension"; chat §3.8 (the `ume` request and response
-  contract, with `outcome` and `degraded` from SA-2), §9.7 (selection, links, empty on coverage `Low`); queue item
-  M-7. Differences from the sketch: the member is `ume`, the request names a count (`"related_documents": 5`, max
-  10) instead of a flag, entries carry `document_id`, `title`, `url`, `collection`, `rank`, `cited` and `number`.
+- **Asked.** Requirement 4: the next-best articles next to the answer, for a client other than Open WebUI, which got
+  only the cited documents while `/v1/retrieve` stays closed to it (knowledge §2.3).
+- **Done** in #433 (M-7): `ume.related_documents` (request 0–10), from the answer's own retrieval, one entry per
+  document with `document_id`, `title`, `url`, `collection`, `rank`, `cited` and `number`; `[]` unless the outcome is
+  `answered` (chat §3.8, §9.7; `src/Ume.Rag.Answering/Chat/RelatedDocuments.cs`). How the app reads it:
+  [`05-frontend-integration.md`](05-frontend-integration.md) §5.
 
 ## SA-2 Outcome signal
 
-- **Missing.** Not-found, unavailable and general-knowledge answers are ordinary completions
-  (`src/Ume.Rag.Answering/Chat/ChatService.cs:86-101`); the outcome is recorded (`rag.chat.requests{outcome}`,
-  `ChatEndpoints.cs:241-260`) but not returned.
-- **Why.** The app should style "not found" (offer escalation) and "general knowledge" (warn) differently.
-- **Sketch.** `outcome` and `coverage` in SA-1's `rag` object, or an `x-rag-outcome` response header: the plan is
-  known before the first byte (`ChatEndpoints.cs:94-97`), so a header works for streams too.
-- **Size S**, best built with SA-1.
-- **Settled** with SA-1: `outcome` and `degraded` in every `ume` answer (chat §3.8; Decisions "Related documents and
-  the `ume` chat extension"); queue item M-7. No header.
+- **Asked.** Not-found, unavailable and general-knowledge answers were ordinary completions; the app should style them.
+- **Done** in #433 with SA-1: `ume.outcome` (`answered`, `answered-general`, `not-found`, `unavailable`) and
+  `ume.degraded` in every answer that sent `ume` (chat §3.8; `src/Ume.Rag.Answering/Chat/RelatedDocuments.cs:25-26`,
+  names in `src/Ume.Rag.Answering/Chat/ChatPlan.cs:22-28`). No header.
 
 ## SA-3 Suggested follow-up questions
 
-- **Missing.** No code generates suggestions (nothing under `src/Ume.Rag.Answering/Chat/` does); Open WebUI's
-  follow-up generation is off and there is no task model (chat §4.2; Decisions "Simplification pass": "Open WebUI
-  title/tag/follow-up generation off, no `owui-tasks`").
-- **Why.** Requirement 5 ("maybe"): one-click next questions when a ticket is vague.
-- **Sketch.** `QuerySteps.answer.suggestFollowUps` (off by default, versioned like `generalKnowledge`); after a
-  sourced answer, one call on the platform condense model at the turn's ceiling with the question, the answer and the
-  source titles; ≤ 3 questions as JSON, ~1 s budget, skipped on fixed texts and on failure; delivered in SA-1's `rag`
-  object after the text, so time to first token is unchanged; never stored (history mode `none`). Clarifying questions
-  inside the answer need no code ([`04-assistant.md`](04-assistant.md) §3).
-- **Size M.** **Decisions row**: a platform task call per turn, which the simplification pass removed for Open WebUI.
-- **Settled.** Decisions "Follow-up suggestions"; chat §9.8 (call, prompt, accept rule, budget, personal data),
-  §3.8 (delivery); queue item M-8. Opt-in per request (`"ume": {"follow_ups": 3}`, max 5), not a per-assistant
-  setting; budget `Chat:FollowUpTimeout` 2 s; delivered in a second `ume` chunk, so the related documents do not wait
-  for it.
+- **Asked.** Requirement 5: one-click next questions when a ticket is vague.
+- **Done** in #434 (M-8): `ume.follow_ups` (request 0–5), one call on `Settings.Chat.condenseModel` after an
+  `answered` or `answered-general` answer, budget `Chat:FollowUpTimeout` 2 s, `[]` on failure, never stored; in a
+  second streamed `ume` chunk, so time to first token and the related documents do not wait (chat §9.8, §3.8;
+  `src/Ume.Rag.Answering/Chat/FollowUps.cs`, `src/Ume.Rag.Api/ChatStreaming.cs:84-93`). Measured 1.1–1.3 s on
+  `claude-haiku-5-5`, 1.4–2.6 s on `gpt-6-luna` (chat §22; [`04-assistant.md`](04-assistant.md) §2).
 
 ## SA-4 Long tickets as the question
 
-- **Missing.** The last user message must be 1–2,000 characters, because it is also the retrieval query
-  (`src/Ume.Rag.Answering/Chat/ChatRequest.cs:112`, `src/Ume.Rag.Retrieval/QueryNormalizer.cs:14`; chat §3.2).
-- **Why.** Pasted tickets with mail threads and logs exceed it.
-- **Sketch.** Separate the question from the query: accept a question up to chat §3.2's 8,000 characters; above
-  2,000, a query-extraction call on the condense model ("state the problem as a search query", ≤ 96 tokens, the
-  condense timeout) produces the query, falling back to the first 2,000 characters; the full ticket stays in the
-  prompt. Interim workaround: [`05-frontend-integration.md`](05-frontend-integration.md) §6.
-- **Size M** (chat §3.2, §5 change; prompt budget check, chat §6.3).
-- **Settled.** Decisions "Long questions condensed into the search query"; chat §3.2 (16,000 characters, prompt and
-  query forms), §5.1 (the long-question condense: every turn, `Chat:LongQuestionCondenseTimeout` 3 s, fallback to the
-  first 2,000 characters at a word boundary), §6.3 (budget), §7.1; queue item M-6. The limit is 16,000, not the 8,000
-  of the sketch; until M-6 is merged the workaround of [`05-frontend-integration.md`](05-frontend-integration.md) §6
-  applies.
+- **Asked.** Pasted tickets with mail threads and logs exceeded the 2,000-character question.
+- **Done** in #431 (M-6): the question may be 1–16,000 characters (`src/Ume.Rag.Answering/Chat/ChatRequest.cs:60`);
+  over 2,000 the condense model writes the search query (`x-ume-step: condense-long`, `Chat:LongQuestionCondenseTimeout`
+  3 s), with a fallback to the first 2,000 characters cut at a word boundary
+  (`src/Ume.Rag.Answering/Chat/Condenser.cs:150-171`); the answer model reads the full text with its line breaks
+  (chat §3.2, §5.1). Measured on a 16,000-character ticket: `gpt-6-luna` 2.3–2.9 s, `claude-haiku-5-5` about 1.1 s
+  (chat §22).
 
 ## SA-5 Per-user identity for the app
 
@@ -114,38 +82,22 @@ main session builds them on `main-session/` branches ([`../../work/main.md`](../
 
 ## SA-6 Rate limit for a shared application key
 
-- **Missing.** The chat limit is per (client, subject) per minute (`src/Ume.Rag.Api/ChatStreaming.cs:170-200`,
-  window key `{ClientId}|{SubjectId}`). For an integration key the subject is **the key**: `SubjectId` is the key's
-  id, set in `src/Ume.Rag.Api/KnowledgeCallers.cs:90` (bare id; identity §3 writes it `key:{keyId}`), and
-  `ChatCallers` returns that principal unchanged for every client kind but `open-webui`
-  (`src/Ume.Rag.Api/ChatCallers.cs:19-23`). No header lets a caller set it: the only end-user channel is Open WebUI's
-  signed `X-OpenWebUI-User-Jwt`, accepted only for the `open-webui` client named by `OpenWebUi:ClientId`
-  (`ChatCallers.cs:25-45`), and the OpenAI `user` field is ignored (chat §3.2). A supported way for a trusted backend
-  to pass the end user is **missing**; it is SA-5 (delegated tokens). So every staff member is the same subject and
-  the app gets 20 messages a minute in total. The only knob,
-  `Settings.Chat.messagesPerMinutePerUser`, is platform-wide. `Keys.RequestsPerMinute` is saved
-  (`src/Ume.Rag.AdminApi/KeyEndpoints.cs:245`) but not read by rag-api.
-- **Why.** Twenty support staff at peak exceed 20 messages a minute.
-- **Sketch.** For `Application` subjects, use the key's `RequestsPerMinute` (default: the platform value × N) instead
-  of the per-user value; keep the per-user limit for user subjects.
-- **Size S.** Interim: raise the platform setting, accepting it for every client.
-- **Settled.** Decisions "Chat rate limit per key"; chat §4.1 step 4, identity §3, data-model `Keys`, admin §5.8 (form
-  hint); queue item M-5. The key's own `RequestsPerMinute` applies when set; there is no "× N" default: an unset value
-  means the per-user value, so the platform admin sets the app key's value (e.g. 200 for twenty staff).
+- **Asked.** The chat limit was per (client, subject), and for an integration key the subject is the key, so the
+  whole app shared `Settings.Chat.messagesPerMinutePerUser` (20); twenty staff at peak exceed it.
+- **Done** in #430 (M-5): for a key subject the limit is the key's `Keys.RequestsPerMinute` when set, else
+  `Settings.Chat.messagesPerMinutePerUser`; Open WebUI users keep the per-user value (chat §4.1 step 4;
+  `ChatRateLimiter.LimitFor`, `src/Ume.Rag.Api/ChatStreaming.cs:250-257`). The platform admin sets the app key's
+  value (e.g. 200; [`05-frontend-integration.md`](05-frontend-integration.md) §2).
 
 ## SA-7 Key IP allow-list not enforced (#424)
 
-A platform bug against identity §6.3 step 4 (`address_not_allowed`), not a case-specific gap; filed as Ume.Rag
-issue #424 (stream b), which also asks about `Keys.RequestsPerMinute` (saved, never read; see SA-6).
-
-- **Missing.** `Keys.AllowedIpRanges` is saved and normalised (`src/Ume.Rag.AdminApi/KeyEndpoints.cs:205-208`), but no
-  check in rag-api reads it (`src/Ume.Rag.Domain/Services/KeyChecks.cs:18-34` checks kind, status and owner;
-  no other reference under `src/Ume.Rag.Api` or `src/Ume.Rag.Infrastructure/Keys`). Identity §5.3 assumes the gateway
-  pattern (`address_not_allowed`).
-- **Why.** A leaked app key should be useless outside the app's backend host.
-- **Sketch.** Copy the gateway's address check into `KeyChecks` with event 5001 reason `address_not_allowed`.
-- **Size S.** Not blocking while the proxy and firewall restrict the routes; fix before go-live.
-- #424's `RequestsPerMinute` question is answered by SA-6: the field is kept and enforced for chat (M-5).
+- **Asked.** A platform bug against identity §6.3 step 4: `Keys.AllowedIpRanges` was saved but not checked, so a
+  leaked app key worked from anywhere.
+- **Done** in #432: `KeyChecks.Refusal` refuses an address outside the ranges with 403 `address_not_allowed`
+  (`src/Ume.Rag.Domain/Services/KeyChecks.cs:38`, `src/Ume.Rag.Api/KnowledgeCallers.cs:64-71`), and rag-api takes the
+  client address from `X-Forwarded-For` when the connection comes from `Settings.TrustedProxies`
+  (`src/Ume.Rag.Api/ClientAddressMiddleware.cs`). The operator sets the trusted proxies
+  ([`05-frontend-integration.md`](05-frontend-integration.md) §2).
 
 ## SA-8 Authenticated intranet crawl
 

@@ -20,7 +20,20 @@ made available to the frontend's client only. Everything here is configuration i
 | Setting | Choice |
 |---|---|
 | `GatewayModel` | a chat model the gateway lists within `Eu`, chosen by quality on the gold set ([`07-rollout.md`](07-rollout.md) §4). The picker shows only chat models servable at the level |
-| Condense | on (default); the platform's `Settings.Chat.condenseModel` rewrites follow-up turns into a standalone search query, 600 ms budget (chat §5) |
+| Condense | on (default). The platform's `Settings.Chat.condenseModel` rewrites follow-up turns into a standalone search query (chat §5), writes the search query for a ticket over 2,000 characters on every turn (chat §5.1), and writes the follow-up suggestions (chat §9.8). With condense off, a long ticket is searched by its first 2,000 characters |
+
+**Condense model: `claude-haiku-5-5` recommended** (the user's call; the setting is platform-wide). Measured on the
+interim gateway (chat §22, 2026-11-06): a 16,000-character ticket condensed in about 1.1 s against 2.3–2.9 s for
+`gpt-6-luna`, and follow-ups in 1.1–1.3 s against 1.4–2.6 s. Details in [`01-gateway-setup.md`](01-gateway-setup.md) §1.
+
+The budgets are deployment knobs (`Chat:` in configuration or the environment, e.g. `Chat__FollowUpTimeout`),
+TimeSpan values (`src/Ume.Rag.Answering/Chat/ChatOptions.cs:19-30`):
+
+| Knob | Default | Case advice |
+|---|---|---|
+| `Chat:CondenseTimeout` | `00:00:01.2` | keep |
+| `Chat:LongQuestionCondenseTimeout` | `00:00:03` | keep with `claude-haiku-5-5`; `00:00:04` with `gpt-6-luna` |
+| `Chat:FollowUpTimeout` | `00:00:02` (`00:00:00` switches suggestions off) | keep; it delays `[DONE]` by at most this, not the first token |
 
 ## 3. Instructions
 
@@ -81,7 +94,8 @@ assistant changes the level as a versioned draft field.
 |---|---|---|
 | `retrieval.topK` | 10, 1–50 | keep 10; at most 3 chunks per document and one variant per URL reach the prompt (Decisions "Knowledge API (step 7)") |
 | `retrieval.rerank` | absent = off; `chat` or `gateway` | off by default; turn on only if the gold-set comparison shows a gain (Decisions "Rerank pulled forward"; `scripts/evaluation/rerank.sh`). `gateway` uses the platform's `Settings.Retrieval.gatewayRerankModel`, for this case the Foundry `Cohere-rerank-v5-fast` alias ([`01-gateway-setup.md`](01-gateway-setup.md) §1); `chat` (the chat-model reranker) stays the interim option |
-| `history.maxMessages`, `maxTokens` | 10 (0–20), 4,000 (0–8,000) | raise `maxTokens` to 8,000 if the frontend sends the ticket as an earlier message ([`05-frontend-integration.md`](05-frontend-integration.md) §6) |
+| `history.maxMessages`, `maxTokens` | 10 (0–20), 4,000 (0–8,000) | keep; the ticket is the question itself, and the history is trimmed first when a long ticket needs the room (chat §6.3) |
+| `answer.contextTokens` | 16,384 | keep: a 16,000-character ticket fits with its history trimmed; a smaller value plus long instructions can refuse it with 400 `context_length_exceeded` (chat §18.9) |
 | `answer.maxOutputTokens` | 1,024 (64–4,096) | 1,500 for step-by-step answers |
 | `answer.temperature` | unset (not sent) | leave unset (#275; Claude models refuse `temperature`, Decisions "Evaluation models at the collection's ceiling") |
 | `answer.language` | `auto` or `sv` | `auto` |
@@ -104,7 +118,7 @@ to `allowedLinkHosts`** if it is not under `umea.se`, or the escalation links ar
 |---|---|
 | Follow-up turns ("and if that does not work?") | work: the frontend sends the whole conversation, condense rewrites the last turn for search (chat §5, §11.3) |
 | Clarifying questions when the ticket is unclear | by instructions (§3); the model asks in its answer text |
-| Suggested follow-up questions as clickable chips | **missing** (gap SA-3). Open WebUI's own follow-up generation is off (chat §4.2), and nothing in the chat API generates suggestions (no match for follow-up suggestions in `src/Ume.Rag.Answering/Chat/`) |
+| Suggested follow-up questions as clickable chips | **built** (#434, SA-3): the frontend asks with `"ume": {"follow_ups": 3}` and gets them in `ume.follow_ups` after the answer (chat §9.8; `src/Ume.Rag.Answering/Chat/FollowUps.cs`; [`05-frontend-integration.md`](05-frontend-integration.md) §5). Not a per-assistant setting; the condense model writes them (§2) |
 
 ## 8. Test and publish
 

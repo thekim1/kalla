@@ -12,10 +12,22 @@ If Ume.Rag is already deployed against the gateway for the pilot ([`../../../doc
 | Use | What | Residency | Binding rule |
 |---|---|---|---|
 | Answer | a chat model the gateway lists within `Eu` | `Eu` | `internal` = on-prem or EU (Decisions "Residency per level"); no on-prem models yet, so everything runs EU-hosted (Decisions "M2 and test hosting") |
-| Condense (rewrites follow-up turns into a search query) | a small chat model in `Settings.Chat.condenseModel` | `Eu` | Decisions "Condense on the EU route"; chat §5 |
+| Condense (rewrites follow-up turns and long tickets into a search query; writes the follow-up suggestions) | a small chat model in `Settings.Chat.condenseModel`; **`claude-haiku-5-5` recommended** for this case (below) | `Eu` | Decisions "Condense on the EU route"; chat §5, §5.1, §9.8 |
 | Embedding | `text-embedding-3-large` at 1024 dimensions, the platform's pilot embedding profile | `Eu` | Decisions "Pilot embedding model, U-b". The knowledge base uses the platform profile; a different model would re-embed everything |
 | Evaluation (question generation, judge) | any chat model in `Settings.EvaluationModel` / `EvaluationJudgeModel` | the collection's ceiling, `Eu` today | Decisions "Evaluation models at the collection's ceiling" |
 | Rerank (optional) | `Cohere-rerank-v5-fast` on Azure AI Foundry (EU), chosen by the user instead of Berget AI `bge-reranker-v2-m3` (2026-11-06; Ume.Rag #421); or a small chat model for the interim chat-model reranker | `Eu` | Decisions "Rerank pulled forward", "Gateway release 1 …": optional everywhere, off by default |
+
+**The condense model.** It makes up to two calls per turn for this case: the long-ticket condense (budget 3 s) and
+the follow-up suggestions (budget 2 s). Measured on the interim gateway (chat §22, 2026-11-06, three runs each):
+
+| Call | `gpt-6-luna` | `claude-haiku-5-5` |
+|---|---|---|
+| Long condense of a 16,000-character ticket | 2.3–2.9 s (tight against 3 s) | about 1.1 s |
+| Follow-ups (N = 3) | 1.4–2.6 s (one run over 2 s) | 1.1–1.3 s |
+
+The recommendation is `claude-haiku-5-5` as `Settings.Chat.condenseModel`; the choice is the user's to confirm. The
+setting is platform-wide, so it changes the follow-up condense of every assistant too. Keeping `gpt-6-luna` means
+raising `Chat:LongQuestionCondenseTimeout` to 4 s ([`04-assistant.md`](04-assistant.md) §2).
 
 Gateway side: providers and models are added as in `~/git/llmgateway/docs/providers-and-models.md` (rerank:
 section "Reranking (optional)"). Ume.Rag side, after any model change: a platform admin runs the model sync
@@ -81,7 +93,8 @@ Trade-offs to bring to it:
 
 ## 5. Gateway-side checklist
 
-- [ ] Answer and condense models within `Eu` listed by the gateway; prices set (the model mirror shows cost).
+- [ ] Answer and condense models within `Eu` listed by the gateway (condense: `claude-haiku-5-5` recommended, §1);
+      prices set (the model mirror shows cost).
 - [ ] `text-embedding-3-large` within `Eu`; the platform embedding profile's canary passes.
 - [ ] `api`, `admin`, `worker` keys with residency `Eu` only; Data API key with `catalog.read`.
 - [ ] PII policy on the api key decided in the DPIA.
