@@ -188,8 +188,11 @@ public sealed partial class ChatModelReranker(IHttpClientFactory clients, string
     /// <summary>Claude models refuse <c>temperature</c> through the gateway (#275); every other model gets 0.</summary>
     public static bool SendsTemperature(string model) => !model.Contains("claude", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>About 12 tokens per entry and the frame: 20 passages → 272.</summary>
-    public static int MaxTokens(int passages) => 32 + (12 * passages);
+    /// <summary>
+    /// Room for the answer: about 24 tokens per entry and the frame, 20 passages → 512. Measured on the interim gateway
+    /// (#403): <c>claude-haiku-5-5</c> needs 230–350 completion tokens for 20 scores, and 272 cut answers off.
+    /// </summary>
+    public static int MaxTokens(int passages) => 32 + (24 * passages);
 
     private static string Neutralise(string text) => text.Replace('<', '‹').Replace('>', '›');
 

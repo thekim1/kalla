@@ -72,6 +72,7 @@ public sealed partial class ChatModelRerankerTests : IDisposable
         body.RootElement.GetProperty("temperature").GetDouble().ShouldBe(0);
         body.RootElement.GetProperty("stream").GetBoolean().ShouldBeFalse();
         body.RootElement.GetProperty("max_tokens").GetInt32().ShouldBe(ChatModelReranker.MaxTokens(6));
+        ChatModelReranker.MaxTokens(20).ShouldBe(512);
         var messages = body.RootElement.GetProperty("messages");
         messages[0].GetProperty("role").GetString().ShouldBe("system");
         messages[0].GetProperty("content").GetString().ShouldBe(ChatModelReranker.Instructions);
