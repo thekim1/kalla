@@ -129,11 +129,13 @@ export PARSER_MODELS_DIR="$PWD/.models"
 | `PARSER_SLOT_MAX_RSS_MB` | 2800 | RSS watchdog: a slot above it (with Tesseract) is killed, its request answers `resource_limit` |
 | `PARSER_RECYCLE_JOBS` | 50 | a slot is restarted after this many conversions |
 | `PARSER_RECYCLE_RSS_GROWTH` | 0.4 | a slot is restarted when idle and its RSS exceeds its warm RSS by this share |
+| `PARSER_IDLE_STOP_S` | 900 | a convert slot without a job this long stops (`cold`); the next convert gets `not_ready` and warms it; 0 = always warm |
 | `PARSER_PIPELINE_CACHE` | 3 | Docling option sets kept warm per slot |
 | `NER_ENABLED` | true | start `ner-0`; when false `/v1/ner` answers `not_ready` and `/v1/info` has `ner: null` |
 | `NER_THREADS`, `NER_QUANTIZE`, `NER_QUEUE` | 2, true, 4 | `ner-0`'s torch threads, int8 quantisation, requests that may wait for it |
 | `NER_PERSON_LABELS` | `PER,PRS` | model labels counted as `person` (mixed labels with them are `person_ambiguous`) |
 | `NER_RECYCLE_REQUESTS` | 5000 | `ner-0` is restarted after this many requests |
+| `NER_IDLE_STOP_S` | 900 | `ner-0` starts on the first `/v1/ner` (answered `not_ready` while it warms) and stops after this long without one; 0 = warm from start |
 | `UME_HEALTHCHECK_URL` | own listener | URL the health check probes |
 
 ## Updating pins

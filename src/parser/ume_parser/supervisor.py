@@ -14,7 +14,14 @@ process that died, failed its self-test or did not warm up in time, and runs the
 (with its children, Tesseract included) above `PARSER_SLOT_MAX_RSS_MB` is killed, and the request it was serving
 answers `resource_limit`. An idle process due for recycling (job count, or RSS grown beyond its warm RSS) is stopped
 and started again at once, without the respawn back-off. Readiness follows §10.2 on the convert lane only: ready once
-every slot passed its self-test at start, then while at least one is warm.
+every slot passed its self-test at start, then while at least one is warm or cold.
+
+**Cold processes** (resource review 2026-11-06): a process of a lane with an idle stop (`PARSER_IDLE_STOP_S`,
+`NER_IDLE_STOP_S`; 0 = never) that served no request for that long is stopped and left `cold`: the monitor does not
+respawn it. A request that finds no free warm process wakes one cold process of its lane (spawned at once, without the
+back-off) and is answered `not_ready` (or `busy` while another process of the lane is warm); the caller retries after
+`Retry-After`. `ner-0` with an idle stop starts cold, so NER loads on the first `/v1/ner`; the convert slots start
+warm, so the start-up self-test and readiness stay as they are.
 
 A request takes a free warm process of its lane at once or is refused with `busy` (or `not_ready`): there is no
 queue (§10.1), except that up to `NER_QUEUE` NER requests may wait for `ner-0`. While a process works, the request's
@@ -69,6 +76,7 @@ class SlotState(enum.StrEnum):
     STARTING = "starting"
     READY = "ready"
     DOWN = "down"
+    COLD = "cold"  # stopped while idle; started again by the next request of its lane
 
 
 @dataclass(frozen=True)
@@ -83,6 +91,8 @@ class Lane:
     max_rss_bytes: int | None = None
     rss_growth: float | None = None
     queue: int = 0
+    idle_stop_s: float = 0.0  # 0: never stopped when idle
+    starts_cold: bool = False
 
 
 @dataclass
@@ -103,6 +113,8 @@ class Slot:
     warm_rss: int | None = None
     recycle: str | None = None  # the reason, once the process is due for recycling
     killed_for: str | None = None  # set by the watchdog when it kills a busy process
+    used_at: float = 0.0  # the last time it became warm or finished a request
+    woken: bool = False  # spawned from cold by a request, not yet warm
 
     @property
     def name(self) -> str:
@@ -151,6 +163,7 @@ class Supervisor:
                 KILL_GRACE_S,
                 max_rss_bytes=settings.slot_max_rss_mb * MB,
                 rss_growth=settings.recycle_rss_growth,
+                idle_stop_s=settings.idle_stop_s,
             ),
             INSPECT: Lane(INSPECT, 1, entry[INSPECT], 1, INSPECT_WARMUP_TIMEOUT_S, INSPECT_RECYCLE_JOBS, 0.0),
             NER: Lane(
@@ -163,6 +176,8 @@ class Supervisor:
                 0.0,
                 rss_growth=NER_RSS_GROWTH,
                 queue=ner_settings.queue,
+                idle_stop_s=ner_settings.idle_stop_s,
+                starts_cold=ner_settings.idle_stop_s > 0,
             ),
         }
         self._context = multiprocessing.get_context("spawn")
@@ -200,17 +215,28 @@ class Supervisor:
         return self._task is not None and not self._task.done()
 
     @property
+    def slots_cold(self) -> int:
+        return sum(1 for s in self.slots(CONVERT) if s.state is SlotState.COLD or s.woken)
+
+    @property
     def ready(self) -> bool:
-        return self.live and self._all_warmed_once and self.slots_ready >= 1
+        """§10.2 on the convert lane; a cold slot (or one warming after a wake) counts, since a request starts it."""
+        return self.live and self._all_warmed_once and self.slots_ready + self.slots_cold >= 1
 
     def check_capacity(self, lane: str = CONVERT) -> None:
         """Refuses at once when no process of `lane` could take a request (`not_ready`, `busy`), before its body is
-        read."""
-        warm = self.ready if lane == CONVERT else self.live and self._ready_in(lane) > 0
-        if not warm:
+        read. Without a free warm process it wakes a cold one of the lane first."""
+        slots = self.slots(lane)
+        if not self.live or (lane == CONVERT and not self.ready):
             raise ParserError("not_ready", retry_after_s=NOT_READY_RETRY_AFTER_S)
-        if not any(s.state is SlotState.READY and not s.busy for s in self.slots(lane)):
+        if any(s.state is SlotState.READY and not s.busy for s in slots):
+            return
+        cold = next((s for s in slots if s.state is SlotState.COLD), None)
+        if cold is not None:
+            self._wake(cold)
+        if any(s.state is SlotState.READY for s in slots):
             raise ParserError("busy", retry_after_s=BUSY_RETRY_AFTER_S)
+        raise ParserError("not_ready", retry_after_s=NOT_READY_RETRY_AFTER_S)
 
     def reserve(self, request_id: str, lane: str = CONVERT) -> Slot:
         """Takes a free warm process of `lane` for `request_id`, or refuses at once (`not_ready`, `busy`,
@@ -247,6 +273,7 @@ class Supervisor:
 
     def release(self, s: Slot, request_id: str) -> None:
         s.busy = False
+        s.used_at = time.monotonic()
         self._in_flight.discard((s.lane.name, request_id))
         s.jobs += 1
         if s.jobs >= s.lane.max_jobs and s.recycle is None:
@@ -305,7 +332,10 @@ class Supervisor:
         shutil.rmtree(jobs_dir, ignore_errors=True)
         jobs_dir.mkdir(parents=True, exist_ok=True)
         for s in self._slots:
-            self._spawn(s)
+            if s.lane.starts_cold:
+                s.state = SlotState.COLD
+            else:
+                self._spawn(s)
         self._task = asyncio.create_task(self._monitor(), name="parser-supervisor")
 
     async def stop(self) -> None:
@@ -349,6 +379,7 @@ class Supervisor:
         if s.process is not None and s.process.is_alive():
             s.process.kill()
         self._terminate(s)
+        s.woken = False
         delay = 0.0
         if failure:
             delay = RESPAWN_BACKOFF_S[min(s.failures, len(RESPAWN_BACKOFF_S) - 1)]
@@ -357,6 +388,18 @@ class Supervisor:
             self.recycles[reason] += 1
         s.respawn_at = time.monotonic() + delay
         log.warning("%s: down (%s), respawn in %.0f s", s.name, reason, delay)
+
+    def _wake(self, s: Slot) -> None:
+        """Starts a cold process for a request; it counts as startable for readiness until warm or down."""
+        log.info("%s: waking (cold)", s.name)
+        s.woken = True
+        self._spawn(s)
+
+    def _sleep(self, s: Slot, now: float) -> None:
+        """Stops an idle process and leaves it cold; the monitor does not respawn it."""
+        log.info("%s: stopping after %.0f s idle at %d MB", s.name, now - s.used_at, s.rss // MB)
+        self._terminate(s)
+        s.state = SlotState.COLD
 
     def _recycle(self, s: Slot, reason: str) -> None:
         """Stops an idle process and starts it again at once."""
@@ -372,7 +415,8 @@ class Supervisor:
             return
         s.warmup_ms, s.problems = report["warmup_ms"], report["problems"]
         if kind == "ready":
-            s.state, s.failures = SlotState.READY, 0
+            s.state, s.failures, s.woken = SlotState.READY, 0, False
+            s.used_at = time.monotonic()
             s.warm_rss = _rss(s.process) if s.process is not None else None
             if s.lane.name == CONVERT:
                 self._all_warmed_once = self._all_warmed_once or all(
@@ -403,6 +447,8 @@ class Supervisor:
         if s.busy:
             return  # the request's task owns the pipe while the process works
         process, conn = s.process, s.conn
+        if s.state is SlotState.COLD:
+            return
         if process is None or conn is None:
             if now >= s.respawn_at:
                 self._spawn(s)
@@ -418,6 +464,8 @@ class Supervisor:
         elif s.state is SlotState.READY:
             if s.recycle is not None:
                 self._recycle(s, s.recycle)
+            elif s.lane.idle_stop_s > 0 and now - s.used_at >= s.lane.idle_stop_s:
+                self._sleep(s, now)
             elif s.lane.rss_growth is not None and s.warm_rss and s.rss > s.warm_rss * (1 + s.lane.rss_growth):
                 self._recycle(s, "rss_growth")
 

@@ -33,7 +33,9 @@ public sealed record PiiAssessment(PiiCounts Counts, IReadOnlyList<string> Types
 /// counted once; table row groups as they are), then names through the parser's NER only when they can change the flag
 /// (§9.3: a <c>public</c> collection, no other rule fired, ≥ 5 distinct contact values), then the counts and the flag
 /// (§9.4). NER <c>busy</c>/<c>not_ready</c> requeue the job without an attempt; NER not ready for more than
-/// <see cref="NerWait"/> completes with patterns only and <c>ner: pending</c> (§9.6). Values never leave the stage.
+/// <see cref="NerWait"/> completes with patterns only and <c>ner: pending</c> (§9.6). Readiness is the <c>/v1/ner</c>
+/// answer itself, not <c>/v1/info</c>: the parser starts a cold <c>ner-0</c> on a request (<c>NER_IDLE_STOP_S</c>).
+/// Values never leave the stage.
 /// </summary>
 public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? ner, IFirstNameGazetteer gazetteer, TimeProvider clock)
 {
@@ -42,9 +44,11 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
     public const int MaxTextChars = 4_000;
     public const int MaxRequestChars = 100_000;
     public static readonly TimeSpan NerWait = TimeSpan.FromMinutes(5);
+    public static readonly TimeSpan NerGap = TimeSpan.FromMinutes(10);
 
     private readonly Lock _readinessLock = new();
     private DateTimeOffset? _notReadySince;
+    private DateTimeOffset? _lastNotReady;
 
     public async Task<(ChunkSetDraft Chunks, PiiAssessment Assessment)> RunAsync(ChunkSetDraft chunks, PersonalDataContext context, CancellationToken cancellationToken)
     {
@@ -96,7 +100,7 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
 
     private async Task<PiiCounts> NamesAsync(IReadOnlyList<ChunkDraft> chunks, List<string> bodies, PiiCounts counts, PersonalDataContext context, CancellationToken cancellationToken)
     {
-        if (ner is null || !await ReadyAsync(cancellationToken))
+        if (ner is null)
         {
             return counts with { Ner = NerStatus.Pending };
         }
@@ -111,9 +115,24 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
             {
                 answer = await ner.RecognizeAsync(batch, context.NerMinScore, cancellationToken);
             }
-            catch (ParserException e) when (e.Error?.Error.Code is "busy" or "not_ready" || e.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable)
+            catch (Exception e) when (e is HttpRequestException || (e is ParserException p && p.Error?.Error.Code == "not_ready"))
+            {
+                // The request itself is the readiness probe: it wakes a cold ner-0 (parser NER_IDLE_STOP_S).
+                if (NotReadyTooLong())
+                {
+                    return counts with { Ner = NerStatus.Pending };
+                }
+
+                throw new StageTransientException("parser.ner_not_ready", (e as ParserException)?.RetryAfter ?? TimeSpan.FromSeconds(5), countsAttempt: false);
+            }
+            catch (ParserException e) when (e.Error?.Error.Code is "busy" || e.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable)
             {
                 throw new StageTransientException("parser.ner_" + (e.Error?.Error.Code ?? "unavailable"), e.RetryAfter ?? TimeSpan.FromSeconds(5), countsAttempt: false);
+            }
+
+            lock (_readinessLock)
+            {
+                _notReadySince = null;
             }
 
             model = answer.Model;
@@ -132,27 +151,24 @@ public sealed partial class PersonalDataStage(PiiPatterns patterns, INerClient? 
         return counts with { Name = distinct, Ner = NerStatus.Done, Model = model };
     }
 
-    /// <summary>Readiness from <c>/v1/info</c>; not ready for up to <see cref="NerWait"/> requeues the job without an attempt.</summary>
-    private async Task<bool> ReadyAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Records a <c>not_ready</c> (or unreachable) answer; true once NER has answered so for more than <see cref="NerWait"/>.
+    /// An answer more than <see cref="NerGap"/> after the previous one starts a new wait, so the first request after a long
+    /// quiet spell (which wakes a cold <c>ner-0</c>) requeues instead of settling for <c>pending</c> at once.
+    /// </summary>
+    private bool NotReadyTooLong()
     {
-        var ready = await ner!.IsReadyAsync(cancellationToken);
         var now = clock.GetUtcNow();
         lock (_readinessLock)
         {
-            if (ready)
+            if (_notReadySince is null || _lastNotReady is null || now - _lastNotReady.Value > NerGap)
             {
-                _notReadySince = null;
-                return true;
+                _notReadySince = now;
             }
 
-            _notReadySince ??= now;
-            if (now - _notReadySince.Value > NerWait)
-            {
-                return false;
-            }
+            _lastNotReady = now;
+            return now - _notReadySince.Value > NerWait;
         }
-
-        throw new StageTransientException("parser.ner_not_ready", TimeSpan.FromSeconds(30), countsAttempt: false);
     }
 
     /// <summary>Text units (§9.3): sentences of prose bodies and rows of tables, after the prefilter.</summary>

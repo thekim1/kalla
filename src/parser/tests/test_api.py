@@ -18,6 +18,7 @@ from ume_parser.settings import NerSettings
 from ume_parser.supervisor import Supervisor
 
 PDF = fixture_bytes("text-layer.pdf")
+WARM_NER = NerSettings(idle_stop_s=0)  # ner-0 warm from start, as before NER_IDLE_STOP_S
 
 
 def _wait_ready(client, ner: bool = True) -> None:
@@ -33,7 +34,7 @@ def _wait_ready(client, ner: bool = True) -> None:
 
 @pytest.fixture
 def client(settings):
-    app = create_app(settings, Supervisor(settings, targets=fake_slot.FAKE))
+    app = create_app(settings, Supervisor(settings, WARM_NER, targets=fake_slot.FAKE))
     with TestClient(app) as client:
         _wait_ready(client)
         yield client
@@ -253,7 +254,7 @@ def test_ner_refuses_requests_outside_its_limits(client, overrides):
 
 
 def test_ner_waits_in_its_queue_then_is_busy(settings):
-    ner = NerSettings(queue=1)
+    ner = NerSettings(queue=1, idle_stop_s=0)
     app = create_app(settings, Supervisor(settings, ner, targets=fake_slot.FAKE), ner)
     with TestClient(app) as client:
         _wait_ready(client)

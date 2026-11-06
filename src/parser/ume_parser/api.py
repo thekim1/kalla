@@ -380,7 +380,7 @@ async def ner(request: Request) -> Response:
         except ValidationError:
             raise ParserError("invalid_request") from None
         request_id = ner_request.request_id
-        if state.static_info.ner is None or not state.supervisor.ner_ready:
+        if state.static_info.ner is None:  # NER_ENABLED=false; a cold ner-0 is woken by the lane's capacity check
             raise ParserError("not_ready", retry_after_s=NOT_READY_RETRY_AFTER_S)
         job = {"request_id": request_id, **ner_request.model_dump(mode="json")}
         payload, wait_ms = await _run(request, NER, request_id, "ner", job, ner_request.deadline_ms / 1000)

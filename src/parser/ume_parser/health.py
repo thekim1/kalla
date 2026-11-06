@@ -1,7 +1,8 @@
 """Probes (parser design §13.1) and the container health check `python -m ume_parser.health`.
 
 `/health/live` answers 200 while the supervisor's monitor runs; it checks no slot. `/health/ready` answers 200 once
-every slot passed its warm-up self-test and while at least one slot is warm, else 503. Neither waits on a slot, so a
+every slot passed its warm-up self-test and while at least one slot is warm or cold (stopped while idle, started by
+the next request, `PARSER_IDLE_STOP_S`), else 503. Neither waits on a slot, so a
 busy parser still answers its probes.
 
 The health check exits 0 when `/health/ready` answers 200 and 1 otherwise (the .NET images' `--health-check`
@@ -36,7 +37,11 @@ def live(request: Request) -> JSONResponse:
 @router.get(READY_PATH, include_in_schema=False)
 def ready(request: Request) -> JSONResponse:
     supervisor = request.app.state.supervisor
-    body = {"slots_ready": supervisor.slots_ready, "convert_slots": supervisor.convert_slots}
+    body = {
+        "slots_ready": supervisor.slots_ready,
+        "slots_cold": supervisor.slots_cold,
+        "convert_slots": supervisor.convert_slots,
+    }
     if supervisor.ready:
         return JSONResponse({"status": "ready", **body})
     return JSONResponse(
