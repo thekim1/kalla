@@ -1481,7 +1481,10 @@ Unit (`Ume.Rag.Api.Tests`) and API tests against FakeGateway (scripted answers p
   `gpt-6-luna` as condense model, raise `Chat:LongQuestionCondenseTimeout` to 4 s or use a faster condense model;
   the recall comparison on real tickets is still open.
 - Follow-up suggestions (§9.8): p95 latency within 2,000 ms on the same model; the share of suggestions dropped by the
-  accept rule and the share staff click, in the pilot.
+  accept rule and the share staff click, in the pilot. **First measurement (2026-11-06, interim gateway, #434)**: N = 3,
+  a 3,000-character Swedish support answer and 3 titles, three runs: `gpt-6-luna` 672 prompt tokens, 1.42–2.62 s (one
+  run over budget); `claude-haiku-5-5` 1,028 prompt tokens, 1.11–1.28 s; both general questions without personal
+  data. With the long-condense numbers above, `claude-haiku-5-5` is the better condense model for these steps.
 
 ## 23. Deferred or removed (simplification pass)
 
