@@ -48,7 +48,7 @@ materialised CTE); NuGet **`Pgvector` 0.3.2** (depends on `Npgsql` ≥ 8.0.5; co
 | 16 | Latency | p95 retrieval ≤ 90 ms on an embedding miss, ≤ 40 ms on a hit, at 100k chunks; alert at 250 ms (§11) |
 | 17 | Result cache | None; config snapshot and embeddings are cached, results are not (§12) |
 | 18 | OpenSearch seam | `ISearchIndex` replaces candidate generation only; hydration, access defence and citations stay in Postgres, which re-checks every hit (§13) |
-| 19 | Rerank | `IReranker` seam in P1 (no-op by default, FakeGateway implementation for tests); gateway rerank endpoint (`bge-reranker-v2-m3` on-prem) in P2, enabled per assistant when the evaluation shows a gain; coverage then uses the reranker score (§6.7) |
+| 19 | Rerank | **Optional**, off by default, per assistant (`QuerySteps.retrieval.rerank`: `chat-model` or `gateway`), behind `IReranker` (§6.7): `ChatModelReranker` (interim, a chat model) and `GatewayReranker` (`/v1/rerank`, Berget `bge-reranker-v2-m3` at `Eu` until on-prem); enabled when the evaluation shows a gain (Decisions "Rerank pulled forward", "Gateway release 1 and shared Keycloak as built") |
 
 ## 2. Placement and interfaces
 
@@ -766,16 +766,26 @@ order: score desc, distance asc (nulls last), chunk Id asc
 The slot count, the slot wait (200 ms), the statement timeout (2 s) and the rerank timeout (500 ms) are configuration
 knobs (`RetrievalEngineOptions`, `PostgresSearchOptions`), with the values above as defaults.
 
-### 6.7 Rerank seam (`IReranker`)
+### 6.7 Rerank (`IReranker`)
 
-`IReranker.ScoreAsync(query, passages, ct) → scores` in `Ume.Rag.Retrieval`. **P1**: seam only, `NoopReranker` for
-every assistant, a FakeGateway-backed implementation for tests. **P2**: `GatewayReranker` over a gateway rerank
-endpoint serving `bge-reranker-v2-m3` on-prem (a gateway change, §18), called with the `OnPrem` ceiling and its key
-(§5.2); the evaluator compares with and without as soon as it exists, and an assistant enables it
-(`QuerySteps.retrieval.rerank`) when the evaluation shows a gain. Placement: after fusion and dedup, before the
-per-document cap, over the top `rerankCandidates` (proposed 30) whose texts are read in one extra statement; coverage
-then uses the best reranker score against `coverageMinRerankScore` (§7). Timeout (proposed 500 ms) or error → fused
-order, `degraded: "rerank_unavailable"`.
+Rerank is **optional everywhere**: with no model configured for an assistant's reranker there is no call, no
+`rerank_unavailable` and nothing degraded, and the assistant's switch is disabled with a hint. `IReranker.ScoreAsync`
+in `Ume.Rag.Retrieval`, routed by `RerankerKind`:
+
+| Reranker | Call | Model setting | Time limit | Cost |
+|---|---|---|---|---|
+| `ChatModelReranker` (interim) | one `/v1/chat/completions` with the question and the passages, JSON scores 0–10 (an answer scoring at least half the passages counts) | `Settings.Retrieval.rerankModel` (a chat row) | `Retrieval:RerankTimeout`, 3 s | prompt and completion tokens |
+| `GatewayReranker` | Cohere-compatible `POST /v1/rerank` (`results[{index, relevance_score}]`) | `Settings.Retrieval.gatewayRerankModel` (a `rerank` row) | `Retrieval:GatewayRerankTimeout`, 500 ms | input tokens |
+
+Both go through the `gateway-rerank` client with the call's residency ceiling (the assistant's turn ceiling) and
+`x-ume-step: rerank`; the 502/504 retry applies. Placement: after fusion and dedup, before the per-document cap,
+over the top `rerankCandidates` (20) whose texts are read in one extra statement. Unscored passages keep their fused
+order below the scored ones. Timeout or error → fused order, `degraded: "rerank_unavailable"`, logged once per model
+and reason. The evaluation's `hybrid-rerank` variants compare with and without (§13 of the processing design).
+
+Coverage uses the best rerank score against `coverageMinRerankScore` (§7) only when that floor is set. The two
+rerankers' scores are **not on one scale**, so the floor is set per reranker from the gold set, never carried over
+from the other.
 
 ## 7. Coverage signal
 
