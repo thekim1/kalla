@@ -62,7 +62,8 @@ work split is written when P1b is live.
   copy; unused-assistant attention items; the drawn Map.
 - **Ingestion:** site-profile learning and re-learning, a crawl frontier shared between sources, SharePoint, the
   renderer's replay check and path rules (after measurement), legacy Office/RTF/e-mail/archives (Z1), parse-profile
-  proposals, adaptive embedding concurrency.
+  proposals, adaptive embedding concurrency; for external single-page apps a per-page burst of the page's own
+  subrequests and a renderer asset cache kept across runs (A-13, user 2026-11-07).
 - **Answer quality:** nightly answer judge, publish plans from effect tags, rerank (a separate gateway release with an
   on-prem reranker), on-prem models when hardware exists (M2).
 - **Tools and skills:** skills with know-how and tools, the in-process tool hub (`hosted` servers, read-only tools),

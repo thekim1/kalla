@@ -177,6 +177,36 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "M-2 open design calls"; processing §7.
 
+### [ ] A-17 Render follow-ups from A-13 (preflight hint, report count)
+- **Do:** (1) the preflight's render check: a `browser` render whose main text has fewer than `MinRenderedWords` while
+  the raw page has fewer still is a `warn` with a new code `render.empty` ("the rendered page has no main text: name
+  the loaded content in `readySelector`"), not `render.compared` *pass*; the admin UI shows the code's message
+  (`messages.ts`). (2) The run report's `render.rendered` counts every ready render, including pages whose main text
+  was empty (A-13 saw 3 empty renders reported as 0); add `render.empty` for those.
+- **Paths:** `src/Ume.Rag.Worker/Preview/**`, `src/Ume.Rag.Worker/Connectors/**`, `src/Ume.Rag.Worker/Engine/**`,
+  `src/admin-ui/src/**/messages.ts` (on a `main-session/` branch if CI's ownership check refuses it), their tests.
+- **Done when:** worker tests: a fake render with an empty `<main>` gives `render.empty` *warn* in the preflight and
+  counts in `render.rendered` and `render.empty` of the run report; vitest for the message if the UI changes.
+- **Waits on:** –
+- **Read:** connectors §8.1, §8.4, §8.8; `plans/work/results-a.md` "item A-13 (live sites)".
+
+### [ ] A-18 Crawl concurrency probe (local, many hosts)
+- **Do:** a test in `Ume.Rag.Worker.Tests` with trait `Category=Scale` (excluded from CI and the default run) that
+  starts the worker through `EngineKit` against one test site answering many virtual hosts (the test resolver maps
+  `h01.scale.test` … `hNN.scale.test` to it; deterministic Swedish pages with links, configurable latency, a share of
+  `browser` pages on a fake renderer with a configurable render time) and the FakeGateway, crawls N sources at once,
+  and prints pages/s, max in-flight requests per host (counted by the site), fetch-lane utilisation and render-slot
+  waits (`render.busy`). Run it at 10, 50 and 100 hosts with the `polite` (1 req/s) and `fast` (10 req/s) profiles and
+  with 5 % `browser` pages; record the numbers.
+- **Paths:** `tests/Ume.Rag.Worker.Tests/Scale/**` (new), `tests/Ume.Rag.Worker.Tests/Engine/EngineTestKit.cs` and the
+  connector test kit if they need a multi-host resolver, `plans/work/results-a.md`.
+- **Done when:** results row: pages/s and the binding limit (host pacing, `Worker:Concurrency:fetch` 8,
+  `Render:MaxConcurrent` 2) per scenario; never more than a host's `MaxConnections` in flight; a proposal for the
+  `Worker:Concurrency:fetch` and `Render:MaxConcurrent` defaults if the numbers say so (a follow-up, not this item).
+- **Waits on:** –
+- **Read:** performance pass §2.3, §4, §7 (the FakeSites row, for shape only; `scale.yml` stays P2); connectors §6.0,
+  §6.3, §8.3.
+
 ## Live (the live block, see the roadmap)
 
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass
