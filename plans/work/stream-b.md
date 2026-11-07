@@ -165,7 +165,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** chat-api §8.3; Decisions "Gateway release 1 and shared Keycloak as built".
 
-### [ ] B-6 Go-live pin review, B's part (last code item)
+### [x] B-6 Go-live pin review, B's part (last code item)
 - **Do:** review every NuGet and npm pin younger than 7 days; the realm callback for the Open WebUI pin bump
   (`/oauth/oidc/login/callback`) matching A-4; condense stays at `Eu` until an on-prem route exists (M2).
 - **Paths:** `Directory.Packages.props` (shared), `src/admin-ui/package*.json`, `deploy/keycloak/**`.

@@ -18,7 +18,7 @@ public static class FeedbackEndpoints
     public static IReadOnlySet<string> Reasons { get; } = new HashSet<string>(["incorrect", "incomplete", "wrong_sources", "not_relevant", "other"], StringComparer.Ordinal);
 
     /// <summary>
-    /// Open WebUI's fixed reason keys (v0.12.3 <c>src/lib/components/chat/Messages/RateComment.svelte:17-35</c>, read from the
+    /// Open WebUI's fixed reason keys (v0.12.5, unchanged since v0.12.3: <c>src/lib/components/chat/Messages/RateComment.svelte:17-35</c>, read from the
     /// source): <c>LIKE_REASONS</c> and <c>DISLIKE_REASONS</c>.
     /// </summary>
     public static IReadOnlySet<string> OpenWebUiReasons { get; } = new HashSet<string>(

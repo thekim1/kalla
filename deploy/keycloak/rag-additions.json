@@ -120,7 +120,7 @@
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
       "redirectUris": [
-        "https://$(env:UME_RAG_OPENWEBUI_HOST)/oauth/oidc/callback"
+        "https://$(env:UME_RAG_OPENWEBUI_HOST)/oauth/oidc/login/callback"
       ],
       "webOrigins": [
         "https://$(env:UME_RAG_OPENWEBUI_HOST)"

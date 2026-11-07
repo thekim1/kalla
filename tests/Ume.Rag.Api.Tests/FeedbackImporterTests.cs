@@ -13,7 +13,7 @@ namespace Ume.Rag.Api.Tests;
 
 /// <summary>
 /// The Open WebUI feedback import (chat design §14.2–§14.3, §13.3) against a recorded <c>/api/v1/evaluations/feedbacks/list</c>
-/// page in Open WebUI v0.12.3's shape (<c>FeedbackListResponse</c> of <c>FeedbackUserResponse</c>, <c>models/feedbacks.py</c>):
+/// page in Open WebUI v0.12.5's shape (unchanged since v0.12.3) (<c>FeedbackListResponse</c> of <c>FeedbackUserResponse</c>, <c>models/feedbacks.py</c>):
 /// the rating maps to the right message, the comment and the user's details are dropped, a foreign model is skipped, a
 /// young unmapped item holds the watermark back, and feedback older than the client's retention is deleted.
 /// </summary>

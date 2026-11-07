@@ -925,7 +925,7 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "http://localhost:8080/oauth/oidc/callback"
+        "http://localhost:8080/oauth/oidc/login/callback"
       ],
       "webOrigins": [
         "http://localhost:8080"
