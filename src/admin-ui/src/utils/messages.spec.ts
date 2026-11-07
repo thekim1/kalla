@@ -32,7 +32,7 @@ const WORKER_CODES = [
   'preview.upload_unknown', 'preview.deadline', 'preflight.none_reachable', 'preflight.deadline', 'pages.within_limit',
   'crawl.limit_pages', 'sitemap.found', 'sitemap.none', 'robots.ok', 'robots.missing', 'robots.ignored', 'cms.sitevision', 'cms.unknown',
   // The renderer (RenderReasons, connectors design §8) and the preflight's raw-vs-rendered comparison (Preflight.cs).
-  'render.suggested', 'render.compared', 'render.not_configured', 'render.busy', 'render.timeout', 'render.unavailable',
+  'render.suggested', 'render.compared', 'render.empty', 'render.not_configured', 'render.busy', 'render.timeout', 'render.unavailable',
   // The eval class (#128, #130; issue #129).
   'eval.unsupported', 'eval.invalid_payload', 'eval.no_questions', 'eval.invalid_candidate_settings', 'eval.invalid_settings',
   'eval.embedding_residency', 'eval.search_unavailable', 'eval.model_unset', 'eval.model_not_onprem', 'eval.no_onprem_key',

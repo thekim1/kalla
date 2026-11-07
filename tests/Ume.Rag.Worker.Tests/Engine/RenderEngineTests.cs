@@ -16,7 +16,7 @@ namespace Ume.Rag.Worker.Tests.Engine;
 /// <summary>
 /// <c>browser</c> sources through the engine on a fake renderer (connectors design §8, §12.3; data-model §2.2): a document's
 /// <c>FetchMode</c> says how its content was fetched, a <c>fetchMode</c> change makes the scheduler start a sync that fetches
-/// every listed URL again in the new mode, and a crawl's report counts its rendered pages.
+/// every listed URL again in the new mode, and a crawl's report counts its rendered pages, those with an empty main text among them.
 /// </summary>
 [Collection(RagDatabaseGroup3.Name)]
 public sealed class RenderEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -102,8 +102,48 @@ public sealed class RenderEngineTests(RagDatabaseFixture database, FakeGatewayFa
             (await FetchModesAsync(seed)).ShouldBe([FetchModes.Browser, FetchModes.Browser]);
             using var report = JsonDocument.Parse(await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Report"::text FROM content."Runs" WHERE "Id" = $1""", runId));
             var render = report.RootElement.GetProperty("render");
-            (render.GetProperty("rendered").GetInt32(), render.GetProperty("failures").GetInt32(), render.GetProperty("keptFromLastGood").GetInt32())
-                .ShouldBe((2, 0, 0));
+            (render.GetProperty("rendered").GetInt32(), render.GetProperty("empty").GetInt32(), render.GetProperty("failures").GetInt32(),
+                    render.GetProperty("keptFromLastGood").GetInt32())
+                .ShouldBe((2, 0, 0, 0));
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task A_browser_crawl_counts_a_ready_render_with_an_empty_main_text_as_rendered_and_empty()
+    {
+        // A-13: a single-page app declared ready before its data arrived stored an empty <main> (skipped parse.empty), and
+        // render.rendered left it out.
+        _renderer.Render = (request, _) => Task.FromResult(FakeRenderer.Page(request.Url.AbsolutePath == "/p/b"
+            ? "<!doctype html><html lang=\"sv\"><head><title>Företag</title></head><body><main></main></body></html>"
+            : EngineKit.Page($"renderad {request.Url.AbsolutePath} {_tag}")));
+        await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page($"skal {name} {_tag}"))));
+        var seed = await EngineKit.SeedCrawlAsync(database, new
+        {
+            startUrls = new[] { site.Url("/p/a").AbsoluteUri, site.Url("/p/b").AbsoluteUri },
+            exclude = Array.Empty<string>(),
+            crawlWindow = "00:00-00:00",
+            fetchMode = "browser",
+        });
+        await EngineKit.PauseOtherSourcesAsync(database, seed);
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, settings: Renderer,
+            services: s => s.AddSingleton<IRenderer>(_renderer));
+        try
+        {
+            var runId = await EngineKit.SyncNowAsync(database, seed);
+            (await EngineKit.WaitForRunAsync(database, runId)).Added.ShouldBe(1);
+
+            (await Sql.ScalarAsync<string>(database.Connection(null), """
+                SELECT "Outcome" || ' ' || "Reason" FROM content."RunItems" WHERE "RunId" = $1 AND "Identity" LIKE '%/p/b'
+                """, runId)).ShouldBe("skipped parse.empty");
+            using var report = JsonDocument.Parse(await Sql.ScalarAsync<string>(database.Connection(null), """SELECT "Report"::text FROM content."Runs" WHERE "Id" = $1""", runId));
+            var render = report.RootElement.GetProperty("render");
+            (render.GetProperty("rendered").GetInt32(), render.GetProperty("empty").GetInt32(), render.GetProperty("failures").GetInt32(),
+                    render.GetProperty("keptFromLastGood").GetInt32())
+                .ShouldBe((2, 1, 0, 0));
         }
         finally
         {

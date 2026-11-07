@@ -196,6 +196,8 @@ export const JOB_MESSAGES: Record<string, string> = {
   'cms.unknown': 'The publishing system is not recognised; a profile has to be made by hand.',
   'render.suggested': 'The page holds much less text without JavaScript than with it.',
   'render.compared': 'The page holds most of its text without JavaScript.',
+  'render.empty':
+    'The rendered page has little or no main text. It was probably ready before its content loaded: name the element that holds the loaded content under “Content is ready when this element has text”.',
   'render.not_configured': 'No browser for rendering pages is set up on the platform, so pages cannot be fetched with JavaScript. Contact the platform team.',
   'render.busy': 'All browsers that render pages were busy, so the page was not rendered this time.',
   'render.timeout': 'The page did not finish loading in the browser in time. The last content found is kept and the page is tried again later. If the page shows a loading text, name the element that holds the content.',

@@ -41,7 +41,9 @@ namespace Ume.Rag.Worker.Preview;
 /// counted by the HTML extraction with the host's site profile (its <c>mainRoot</c>, else the preset's landmarks, else
 /// <c>body</c>). Each page is a <c>render</c> entry with facts <c>rawWords</c> and <c>renderedWords</c>: code
 /// <c>render.suggested</c> when the raw count is under half the rendered one and the rendered one is at least
-/// <see cref="MinRenderedWords"/> (a <c>warn</c> while the form fetches with <c>http</c>), else <c>render.compared</c>.
+/// <see cref="MinRenderedWords"/> (a <c>warn</c> while the form fetches with <c>http</c>); <c>render.empty</c>, a <c>warn</c>,
+/// when the rendered one is under <see cref="MinRenderedWords"/> and either none or fewer than the raw one (the page was
+/// probably ready before its content loaded: name the loaded content in <c>readySelector</c>); else <c>render.compared</c>.
 /// Without a renderer one <c>render.not_configured</c> entry and no counts; a failed render is its reason
 /// (<c>render.timeout</c>, <c>render.unavailable</c>). These entries are information and never <c>fail</c>.</item>
 /// </list>
@@ -90,6 +92,9 @@ public sealed partial class Preflight(
 
     /// <summary>The raw page holds at least half the rendered page's main text.</summary>
     public const string RenderCompared = "render.compared";
+
+    /// <summary>The rendered page holds under <see cref="MinRenderedWords"/> main-text words, none or fewer than the raw page: it was probably ready before its content loaded.</summary>
+    public const string RenderEmpty = "render.empty";
 
     public const string NoneReachable = "preflight.none_reachable";
     public const string DeadlineReached = "preflight.deadline";
@@ -401,9 +406,12 @@ public sealed partial class Preflight(
             else if (page.Outcome is FetchOutcome.Content { Facts.FetchMode: Domain.Entities.FetchModes.Browser } content
                      && await RenderedWordsAsync(store, content, level, cancellationToken) is { } rendered)
             {
-                var suggested = rendered >= MinRenderedWords && sample.RawWords * 2 < rendered;
-                checks.Add(Check(Render, suggested && plan.Mode == FetchMode.Http ? PreflightState.Warn : PreflightState.Pass,
-                    suggested ? RenderSuggested : RenderCompared, sample.Target, new { rawWords = sample.RawWords, renderedWords = rendered }));
+                var (state, code) = rendered >= MinRenderedWords && sample.RawWords * 2 < rendered
+                    ? (plan.Mode == FetchMode.Http ? PreflightState.Warn : PreflightState.Pass, RenderSuggested)
+                    : rendered < MinRenderedWords && (rendered == 0 || rendered < sample.RawWords)
+                        ? (PreflightState.Warn, RenderEmpty)
+                        : (PreflightState.Pass, RenderCompared);
+                checks.Add(Check(Render, state, code, sample.Target, new { rawWords = sample.RawWords, renderedWords = rendered }));
             }
         }
 

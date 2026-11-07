@@ -177,7 +177,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "M-2 open design calls"; processing §7.
 
-### [ ] A-17 Render follow-ups from A-13 (preflight hint, report count)
+### [x] A-17 Render follow-ups from A-13 (preflight hint, report count)
 - **Do:** (1) the preflight's render check: a `browser` render whose main text has fewer than `MinRenderedWords` while
   the raw page has fewer still is a `warn` with a new code `render.empty` ("the rendered page has no main text: name
   the loaded content in `readySelector`"), not `render.compared` *pass*; the admin UI shows the code's message

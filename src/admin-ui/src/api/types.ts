@@ -662,6 +662,7 @@ export interface PolitenessReportEntry {
 /** The crawl report's renderer counts of a `browser` source (worker `RenderSection`, connectors design §8.6). */
 export interface RenderReport {
   rendered: number
+  empty: number
   failures: number
   keptFromLastGood: number
 }

@@ -21,8 +21,9 @@ import { jobMessage } from '@/utils/messages'
 
 // Körning (admin design §5.5.3, §5.4 step 6; #278 slice 2): live counters while it runs (polled as §4.7), the crawl
 // report (completeness and its reasons, the verdict, the websites fetched with their own politeness, connectors design
-// §6.6, and for a browser source the rendered pages, render failures and pages kept from their last good content, §8.6),
-// the deletion decision when the guard held deletions back, and the run's documents with their outcome and reason.
+// §6.6, and for a browser source the rendered pages, those with no main text, render failures and pages kept from their
+// last good content, §8.6), the deletion decision when the guard held deletions back, and the run's documents with their
+// outcome and reason.
 const props = defineProps<{ id: string }>()
 const run = useLoadable<Run | null>(null)
 const items = useLoadable<RunItem[]>([])
@@ -109,6 +110,7 @@ onBeforeUnmount(() => {
         <h2 class="mb-2 font-medium">{{ RUN_PAGE.render }}</h2>
         <dl class="m-0">
           <DetailRow :label="RUN_PAGE.rendered"><span class="tabular">{{ formatNumber(render.rendered) }}</span></DetailRow>
+          <DetailRow :label="RUN_PAGE.renderedEmpty"><span class="tabular">{{ formatNumber(render.empty) }}</span></DetailRow>
           <DetailRow :label="RUN_PAGE.renderFailures"><span class="tabular">{{ formatNumber(render.failures) }}</span></DetailRow>
           <DetailRow :label="RUN_PAGE.keptFromLastGood"><span class="tabular">{{ formatNumber(render.keptFromLastGood) }}</span></DetailRow>
         </dl>

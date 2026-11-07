@@ -865,6 +865,7 @@ export const RUN_PAGE = {
   politeness: 'Websites fetched with their own politeness',
   render: 'Pages fetched with a browser',
   rendered: 'Rendered',
+  renderedEmpty: 'Rendered with no main text',
   renderFailures: 'Render failures',
   keptFromLastGood: 'Kept from their last good content',
   robotsIgnored: (reason: string) => `robots.txt ignored: ${reason}`,
