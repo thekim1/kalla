@@ -4,11 +4,12 @@ name: Verify
 # leaves draft; a newer push cancels the older run of the same pull request. Merge only on a green run (private repo on
 # the free plan: GitHub cannot enforce required checks). Nothing runs on a push to main; main or any branch can be
 # verified from the Actions tab (workflow_dispatch), and release.yml calls this workflow in full.
-# Jobs: ownership and backend (Stage 0), doc-refs (plans/archive/doc-restructure.md), evaluation-smoke (P1 item 17), images (P0 checklist #5), deploy-checks (P0
-# checklist #14), admin-ui (P0 checklist #3, plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract
+# Jobs: ownership and backend (Stage 0), doc-refs (plans/archive/doc-restructure.md), evaluation-smoke (P1 item 17), images (P0 checklist #5), renderer
+# (connectors design §8.3), deploy-checks (P0 checklist #14), admin-ui (P0 checklist #3,
+# plans/platform/repo-and-deployment.md §2.3, §8.2). The parser and contract
 # jobs (P0 checklist #13) are in parser.yml, which runs them only when the parser changed. The dependency audits of the
 # backend and admin-ui jobs (scripts/audit/) also run daily against main in audit.yml.
-# Lean pull requests (user, 2026-11-05): images and evaluation-smoke run only when their paths changed; a dispatch and
+# Lean pull requests (user, 2026-11-05): images, renderer and evaluation-smoke run only when their paths changed; a dispatch and
 # release.yml run every job. The browser tests (e2e.yml) run only before a release (called by release.yml) or by hand.
 on:
   pull_request:
@@ -63,6 +64,7 @@ jobs:
       deploy: ${{ steps.filter.outputs.deploy }}
       adminui: ${{ steps.filter.outputs.adminui }}
       images: ${{ steps.filter.outputs.images }}
+      renderer: ${{ steps.filter.outputs.renderer }}
       smoke: ${{ steps.filter.outputs.smoke }}
     steps:
       - uses: actions/checkout@v4
@@ -79,7 +81,7 @@ jobs:
           ui=false; [ -f src/admin-ui/package-lock.json ] && ui=true
           if [ "${{ github.event_name }}" != pull_request ] && [ "${{ github.event_name }}" != push ] \
             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            printf 'code=true\ndeploy=true\nadminui=%s\nimages=true\nsmoke=true\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
+            printf 'code=true\ndeploy=true\nadminui=%s\nimages=true\nrenderer=true\nsmoke=true\n' "$ui" >> "$GITHUB_OUTPUT"; exit 0
           fi
           flag() { [ -n "$1" ] && echo true || echo false; }
           code="$(git diff --name-only "$range" | grep -vE '^(plans/|platforms/)|^[^/]+\.md$' || true)"
@@ -90,12 +92,14 @@ jobs:
           adminui="$(git diff --name-only "$range" | grep -E '^(src/admin-ui/|tests/e2e/|contracts/admin/|scripts/admin-ui-size-budget\.mjs$|scripts/audit/|\.github/workflows/verify\.yml$)' || true)"
           [ "$ui" = true ] || adminui=""
           # Lean pull requests (repo-and-deployment §8.2): the image tests only when an image or its test changed, the
-          # evaluation smoke only when the code on its path (ingestion, retrieval, answering) or the smoke set changed. A
-          # dispatch and release.yml run everything.
-          images="$(git diff --name-only "$range" | grep -E '^(images/postgres/|images/clamav/|images/renderer/|deploy/postgres/|\.github/workflows/verify\.yml$)' || true)"
+          # renderer's image and container tests when the image, the worker's render code (or the Playwright pin, which
+          # moves with the image) or the container test changed, the evaluation smoke only when the code on its path
+          # (ingestion, retrieval, answering) or the smoke set changed. A dispatch and release.yml run everything.
+          images="$(git diff --name-only "$range" | grep -E '^(images/postgres/|images/clamav/|deploy/postgres/|\.github/workflows/verify\.yml$)' || true)"
+          renderer="$(git diff --name-only "$range" | grep -E '^(images/renderer/|src/Ume\.Rag\.Worker/Connectors/Render/|src/Ume\.Rag\.Worker/Connectors/Http/PageFetcher\.cs$|tests/Ume\.Rag\.Worker\.Tests/Connectors/RendererContainerTests\.cs$|Directory\.Packages\.props$|\.github/workflows/verify\.yml$)' || true)"
           smoke="$(git diff --name-only "$range" | grep -E '^(src/Ume\.Rag\.(Worker|Retrieval|Answering|Api|Infrastructure|Pipelines|Domain)/|tests/evaluation/|tests/Ume\.Rag\.Worker\.Tests/Evaluation|images/postgres/|Directory\.(Packages|Build)\.(props|targets)$|global\.json$|\.github/workflows/verify\.yml$)' || true)"
           { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"
-            echo "images=$(flag "$images")"; echo "smoke=$(flag "$smoke")"; } >> "$GITHUB_OUTPUT"
+            echo "images=$(flag "$images")"; echo "renderer=$(flag "$renderer")"; echo "smoke=$(flag "$smoke")"; } >> "$GITHUB_OUTPUT"
 
   backend:
     needs: changes
@@ -160,8 +164,8 @@ jobs:
   images:
     # ume-rag/postgres: the image test of repo-and-deployment §5.2 (pgvector version, HNSW build, pg_stat_statements,
     # wal_compression=lz4, TLS, archive-push, backup and restore from inside the image, read-only root, uid 999);
-    # ume-rag/clamav (§5.5) and ume-rag/renderer (§5.4) with their own tests. The images are pushed to ghcr only by
-    # release.yml (§8.1).
+    # ume-rag/clamav (§5.5) with its own test; ume-rag/renderer (§5.4) is in the renderer job. The images are pushed to
+    # ghcr only by release.yml (§8.1).
     needs: changes
     if: needs.changes.outputs.images == 'true'
     runs-on: [self-hosted, linux, x64]
@@ -181,15 +185,39 @@ jobs:
         # Offline: a one-line EICAR test signature in a fresh volume, no download from database.clamav.net
         # (images/clamav/test.sh --online exercises freshclam locally).
         run: bash images/clamav/test.sh ume-rag/clamav:ci
+
+  renderer:
+    # ume-rag/renderer (repo-and-deployment §5.4) with its image test, then the worker rendering a fixture SPA through
+    # that image (RendererContainerTests in tests/Ume.Rag.Worker.Tests, connectors design §8.3), which the backend job
+    # skips because it does not set UME_RAG_TEST_RENDERER_IMAGE.
+    needs: changes
+    if: needs.changes.outputs.renderer == 'true'
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.401
       - name: Build ume-rag/renderer
+        # The dotted registry part keeps Testcontainers on the local image (as the backend job's images).
         run: |
-          docker build -t ume-rag/renderer:ci --build-arg REVISION=${{ github.sha }} images/renderer
+          docker build -t ume-rag/renderer:ci -t ume-rag.local/renderer:ci --build-arg REVISION=${{ github.sha }} images/renderer
           docker image ls ume-rag/renderer:ci
       - name: Renderer image test
         # Hardened as in Compose with images/renderer/seccomp.json on an internal network of its own: refuses to start
         # without its secret path, Chromium's sandbox on, a routed page renders, no WebRTC candidate, and nothing outside
         # the network resolves or connects from inside the renderer (connectors design §8.3).
         run: bash images/renderer/test.sh ume-rag/renderer:ci
+      - name: Worker renders through the image
+        # The image as Compose runs it, on a network of its own (10.215.0.0/24). --fail-skips and
+        # --minimum-expected-tests turn a skip (no image variable) or a filter that matches nothing into a failure.
+        env:
+          TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
+          UME_RAG_TEST_RENDERER_IMAGE: ume-rag.local/renderer:ci
+        run: |
+          dotnet build tests/Ume.Rag.Worker.Tests -c Release --nologo
+          dotnet test --project tests/Ume.Rag.Worker.Tests -c Release --no-build \
+            --filter-class "Ume.Rag.Worker.Tests.Connectors.RendererContainerTests" --fail-skips on --minimum-expected-tests 1
 
   deploy-checks:
     # Production Compose (P0 checklist #14, repo-and-deployment §8.2): every supported combination of the files renders
