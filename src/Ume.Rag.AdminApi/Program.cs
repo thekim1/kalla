@@ -74,6 +74,7 @@ builder.Services.AddSingleton<GatewayApi>();
 builder.Services.AddSingleton<GatewayModelSync>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayModelSync>());
 builder.Services.AddScoped<GatewayModelCheck>();
+builder.Services.AddSingleton<GatewayModelAvailability>(); // the pickers' availability flag, 5 minutes per ceiling (#447)
 builder.Services.AddSingleton<EmbeddingCanaryCheck>();
 // The retrieval test (admin design §4.9): the search core on the process's data source, query embeddings on their own gateway client.
 builder.AddGatewayClient(Ume.Rag.Answering.GatewayQueryEmbedder.HttpClientName, retryFailed: false); // its own retry (knowledge §5.3)
