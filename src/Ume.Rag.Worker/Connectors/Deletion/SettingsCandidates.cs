@@ -49,7 +49,7 @@ public static class SettingsCandidates
     /// <param name="documents">The source's documents.</param>
     /// <param name="traversal">The run's completeness.</param>
     /// <param name="explicitGone">Reasons of this run's explicit answers, by document.</param>
-    /// <param name="failedSeeds">Documents whose URL is a seed that failed in this run.</param>
+    /// <param name="failedInRun">Documents whose URL failed in this run (a failed seed, or a failed URL at any depth): never <c>not-seen</c>.</param>
     /// <param name="now">The reconcile time.</param>
     /// <param name="source">The source's current scope and canonicaliser, with its hosts' applied site profiles.</param>
     /// <param name="mediaTypes">The live documents' stored media types, by document.</param>
@@ -60,7 +60,7 @@ public static class SettingsCandidates
         IReadOnlyList<SourceDocument> documents,
         TraversalVerdict traversal,
         IReadOnlyDictionary<Guid, string> explicitGone,
-        IReadOnlySet<Guid> failedSeeds,
+        IReadOnlySet<Guid> failedInRun,
         DateTimeOffset now,
         CrawlSource source,
         IReadOnlyDictionary<Guid, string> mediaTypes,
@@ -77,7 +77,7 @@ public static class SettingsCandidates
             .ToList();
         var removed = narrowed.Select(c => c.DocumentId).ToHashSet();
         var byId = documents.ToDictionary(d => d.Id);
-        var rest = DeletionCandidates.FromTraversal(runId, [.. documents.Where(d => !removed.Contains(d.Id))], traversal, explicitGone, failedSeeds, now);
+        var rest = DeletionCandidates.FromTraversal(runId, [.. documents.Where(d => !removed.Contains(d.Id))], traversal, explicitGone, failedInRun, now);
         foreach (var candidate in rest)
         {
             if (candidate.Reason != DeletionReasons.NotSeen)

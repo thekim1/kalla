@@ -1,5 +1,6 @@
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Hosts;
+using Ume.Rag.Worker.Connectors.Http;
 
 namespace Ume.Rag.Worker.Preview;
 
@@ -34,7 +35,7 @@ internal static class PreviewHosts
     public static HostResponse Response(FetchOutcome outcome, TimeSpan latency) => outcome switch
     {
         FetchOutcome.Content or FetchOutcome.NotModified => new HostResponse(HostResponseKind.Success, latency),
-        FetchOutcome.Transient { Reason: "rate_limited", RetryAfter: var retryAfter } => new HostResponse(HostResponseKind.RateLimited, latency, retryAfter),
+        FetchOutcome.Transient { Reason: "rate_limited" or FetchOutcomes.Challenge, RetryAfter: var retryAfter } => new HostResponse(HostResponseKind.RateLimited, latency, retryAfter),
         FetchOutcome.Transient { Reason: "http.5xx" or "net.timeout" } or FetchOutcome.Gone { Reason: "http.404" } => new HostResponse(HostResponseKind.Failure, latency),
         _ => new HostResponse(HostResponseKind.Neutral, latency),
     };

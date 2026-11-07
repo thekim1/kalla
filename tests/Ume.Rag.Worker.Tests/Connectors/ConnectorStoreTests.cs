@@ -347,7 +347,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         var row = (await store.ReleaseAsync(context.Run, $"{TestSite.Host}:{_site.Port}", 1, Ct)).Single();
 
         // The first attempt fetched and wrote the raw blob, then the worker died before the frontier commit.
-        var crashed = await rig.Connector.FetchPageAsync(context.FetchContext, Item(_site.Url("/")), Ct);
+        var crashed = await rig.Connector.FetchPageAsync(context.FetchContext, Item(_site.Url("/")), null, Ct);
         var key = crashed.Outcome.ShouldBeOfType<FetchOutcome.Content>().Raw.Key;
 
         var retried = (await rig.Traversal.ProcessAsync(context, row.UrlHash, Ct)).ShouldBeOfType<CrawlFetchResult.Done>();

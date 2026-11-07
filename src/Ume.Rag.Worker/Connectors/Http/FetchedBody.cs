@@ -41,8 +41,16 @@ public sealed class FetchedBody : IAsyncDisposable
     /// Copies <paramref name="source"/> to a new temp file, at most <paramref name="maxBytes"/>. A longer body returns null
     /// (the file is removed), or with <paramref name="truncate"/> its first <paramref name="maxBytes"/> bytes.
     /// </summary>
+    public static Task<FetchedBody?> CaptureAsync(
+        Stream source, long maxBytes, bool truncate, string mediaType, string? charset, CancellationToken cancellationToken) =>
+        CaptureAsync(ReadOnlyMemory<byte>.Empty, source, maxBytes, truncate, mediaType, charset, cancellationToken);
+
+    /// <summary>
+    /// As <see cref="CaptureAsync(Stream, long, bool, string, string?, CancellationToken)"/>, the body starting with
+    /// <paramref name="head"/>: bytes already read from <paramref name="source"/> (to sniff the type, §4).
+    /// </summary>
     public static async Task<FetchedBody?> CaptureAsync(
-        Stream source, long maxBytes, bool truncate, string mediaType, string? charset, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> head, Stream source, long maxBytes, bool truncate, string mediaType, string? charset, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
         var path = Path.Combine(Path.GetTempPath(), "ume-rag-fetch-" + Guid.NewGuid().ToString("N"));
@@ -52,11 +60,27 @@ public sealed class FetchedBody : IAsyncDisposable
         {
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = new byte[BufferSize];
+            var pending = head;
             long total = 0;
-            int read;
-            while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
+            while (true)
             {
-                if (total + read > maxBytes)
+                ReadOnlyMemory<byte> chunk;
+                if (!pending.IsEmpty)
+                {
+                    (chunk, pending) = (pending, ReadOnlyMemory<byte>.Empty);
+                }
+                else
+                {
+                    var read = await source.ReadAsync(buffer, cancellationToken);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    chunk = buffer.AsMemory(0, read);
+                }
+
+                if (total + chunk.Length > maxBytes)
                 {
                     if (!truncate)
                     {
@@ -64,12 +88,12 @@ public sealed class FetchedBody : IAsyncDisposable
                         return null;
                     }
 
-                    read = (int)(maxBytes - total);
+                    chunk = chunk[..(int)(maxBytes - total)];
                 }
 
-                total += read;
-                hash.AppendData(buffer, 0, read);
-                await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                total += chunk.Length;
+                hash.AppendData(chunk.Span);
+                await file.WriteAsync(chunk, cancellationToken);
                 if (total == maxBytes && truncate)
                 {
                     break;

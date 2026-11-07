@@ -41,7 +41,8 @@ const WORKER_CODES = [
   'http.body_limit', 'http.unexpected', 'tls.invalid_certificate',
   // Fetch and crawl run-item reasons (HttpFetcher, UrlCanonicalizer, EgressGuard as egress.*, CrawlScope, TrapDetector,
   // HostBudget, CrawlTraversal, SitemapParser).
-  'redirect.downgrade', 'redirect.invalid', 'redirect.limit', 'redirect.out_of_scope', 'url.syntax', 'url.scheme',
+  'redirect.downgrade', 'redirect.invalid', 'redirect.limit', 'redirect.cookie_required', 'redirect.out_of_scope',
+  'http.soft_404', 'http.challenge', 'url.syntax', 'url.scheme',
   'url.userinfo', 'url.host', 'url.port', 'net.dns', 'net.connect', 'net.timeout', 'net.body', 'fetch.abandoned',
   'fetch.invalid_payload', 'http.format_deferred', 'robots.noindex_ignored', 'robots.nofollow_ignored',
   'scope.excluded', 'scope.not_included', 'scope.off_site', 'scope.type', 'trap.endless_path', 'trap.query_variants',

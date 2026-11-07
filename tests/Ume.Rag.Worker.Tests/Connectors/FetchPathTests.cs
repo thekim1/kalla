@@ -12,9 +12,10 @@ using Ume.Rag.Worker.Connectors.Urls;
 namespace Ume.Rag.Worker.Tests.Connectors;
 
 /// <summary>
-/// The URL-list fetch path end to end against an in-process Kestrel site (connectors design §3.2, §4, §7, §11, §12, §18):
-/// conditional GET, redirects re-checked per hop, robots, limits counted after decompression, cookies, the malware scan
-/// before storage, and the egress guard's pinned connect.
+/// The URL-list fetch path end to end against an in-process Kestrel site (connectors design §3.2, §4, §5.3, §7, §11, §12,
+/// §18): conditional GET, redirects re-checked per hop (meta refresh among them), robots, limits counted after
+/// decompression, cookies, a missing or generic type sniffed, challenge pages, the malware scan before storage, and the
+/// egress guard's pinned connect.
 /// </summary>
 public sealed class FetchPathTests : IAsyncLifetime
 {
@@ -98,6 +99,84 @@ public sealed class FetchPathTests : IAsyncLifetime
         (await FetchAsync(_site.Url("/redirect/4"))).ShouldBeOfType<FetchOutcome.Content>();
         (await FetchAsync(_site.Url("/redirect/5"))).ShouldBe(new FetchOutcome.Failed("redirect.limit"));
         (await FetchAsync(_site.Url("/loop-a"))).ShouldBe(new FetchOutcome.Failed("redirect.limit"));
+    }
+
+    [Fact]
+    public async Task A_meta_refresh_within_five_seconds_is_a_redirect_hop()
+    {
+        var outcome = (await FetchAsync(_site.Url("/refresh/a"))).ShouldBeOfType<FetchOutcome.Content>();
+
+        outcome.Facts.CanonicalIdentity.ShouldBe(_site.Url("/page").AbsoluteUri);
+        outcome.Facts.Redirects.Select(u => u.AbsolutePath).ShouldBe(["/refresh/a", "/refresh/b"]);
+        // Counted with the 302s: four 302s and a refresh are five hops, a refresh more is the sixth.
+        (await FetchAsync(_site.Url("/refresh/hops/5"))).ShouldBeOfType<FetchOutcome.Content>();
+        (await FetchAsync(_site.Url("/refresh/hops/6"))).ShouldBe(new FetchOutcome.Failed(HttpFetcher.RedirectLimit));
+        // Re-checked like a 302: robots.txt on the target.
+        (await FetchAsync(_site.Url("/refresh/private"))).ShouldBe(new FetchOutcome.Refused(RunItemOutcome.Blocked, "robots.disallow"));
+    }
+
+    [Theory]
+    [InlineData("/refresh/slow")]
+    [InlineData("/refresh/self")]
+    [InlineData("/refresh/reload")]
+    public async Task A_slower_refresh_or_one_to_the_page_itself_is_content(string path)
+    {
+        var outcome = (await FetchAsync(_site.Url(path))).ShouldBeOfType<FetchOutcome.Content>();
+
+        outcome.Facts.CanonicalIdentity.ShouldBe(_site.Url(path).AbsoluteUri);
+        outcome.Facts.Redirects.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_redirect_loop_that_sets_cookies_says_a_cookie_is_required()
+    {
+        (await FetchAsync(_site.Url("/session-a"))).ShouldBe(new FetchOutcome.Failed(HttpFetcher.RedirectCookieRequired));
+        // A loop without cookies stays a plain limit.
+        (await FetchAsync(_site.Url("/loop-a"))).ShouldBe(new FetchOutcome.Failed(HttpFetcher.RedirectLimit));
+    }
+
+    [Fact]
+    public async Task A_file_without_a_usable_content_type_is_sniffed_then_named_by_its_url_or_disposition()
+    {
+        var scanner = new ScriptedScanner(ScanResult.Clean);
+        await using var path = _site.Fetch(scanner);
+        async Task<FetchOutcome> Fetch(string pathAndQuery) =>
+            await path.Connector.FetchAsync(Context(), Item(_site.Url(pathAndQuery)), TestContext.Current.CancellationToken);
+
+        // A PDF as application/octet-stream behind a download script: the bytes say PDF, and it is scanned like any file.
+        var pdf = (await Fetch("/getfile.aspx?id=7")).ShouldBeOfType<FetchOutcome.Content>();
+        pdf.Raw.MediaType.ShouldBe("application/pdf");
+        pdf.Raw.ContentHash.ShouldBe(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(PdfBytes)));
+        scanner.Scans.ShouldBe(1);
+        // A ZIP container the first bytes cannot place: the Content-Disposition file name says .docx (the .aspx names no type).
+        (await Fetch("/getfile.aspx?id=8")).ShouldBeOfType<FetchOutcome.Content>().Raw.MediaType
+            .ShouldBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        // No Content-Type at all, HTML by its bytes; then the URL's extension.
+        (await Fetch("/untyped")).ShouldBeOfType<FetchOutcome.Content>().Raw.MediaType.ShouldBe("text/html");
+        (await Fetch("/files/lista.csv")).ShouldBeOfType<FetchOutcome.Content>().Raw.MediaType.ShouldBe("text/csv");
+        // Nothing names an allowed type: refused as before, and a deferred one says so.
+        (await Fetch("/getfile.aspx?id=9")).ShouldBe(new FetchOutcome.Refused(RunItemOutcome.Unsupported, "http.content_type"));
+        (await Fetch("/getfile.aspx?id=10")).ShouldBe(new FetchOutcome.Refused(RunItemOutcome.Unsupported, "http.format_deferred"));
+        scanner.Scans.ShouldBe(2);
+    }
+
+    [Theory]
+    [InlineData("/challenge/header", 60)]
+    [InlineData("/challenge/cloudflare", 5)]
+    [InlineData("/challenge/incapsula", 60)]
+    [InlineData("/challenge/turnstile-403", 60)]
+    public async Task A_challenge_or_block_page_is_transient_and_never_stored(string pathAndQuery, int retryAfterSeconds)
+    {
+        var outcome = await FetchAsync(_site.Url(pathAndQuery));
+
+        outcome.ShouldBe(new FetchOutcome.Transient(FetchOutcomes.Challenge, TimeSpan.FromSeconds(retryAfterSeconds), CountsAttempt: true));
+        Directory.EnumerateFiles(_path.BlobRoot.FullName, "*", SearchOption.AllDirectories).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_turnstile_widget_on_an_ordinary_page_is_content()
+    {
+        (await FetchAsync(_site.Url("/challenge/turnstile-form"))).ShouldBeOfType<FetchOutcome.Content>();
     }
 
     [Fact]
@@ -335,6 +414,9 @@ public sealed class FetchPathTests : IAsyncLifetime
         _ => outcome.ToString(),
     };
 
+    private static IResult Refresh(string content, string body = "") =>
+        Results.Content($"<html><head><meta http-equiv=\"Refresh\" content=\"{content}\"></head><body><main><p>Vidare{body}</p></main></body></html>", "text/html");
+
     private void Map(WebApplication app)
     {
         app.MapGet("/robots.txt", () => Results.Text("User-agent: *\nDisallow: /private\n"));
@@ -407,6 +489,59 @@ public sealed class FetchPathTests : IAsyncLifetime
             return Results.Redirect("/cookie-check");
         });
         app.MapGet("/cookie-check", () => Results.Content(Html, "text/html"));
+        app.MapGet("/session-a", (HttpContext context) =>
+        {
+            context.Response.Headers.SetCookie = "JSESSIONID=a; Path=/";
+            return Results.Redirect("/session-b");
+        });
+        app.MapGet("/session-b", (HttpContext context) =>
+        {
+            context.Response.Headers.SetCookie = "JSESSIONID=b; Path=/";
+            return Results.Redirect("/session-a");
+        });
+        app.MapGet("/refresh/a", () => Refresh("0; URL='/refresh/b'"));
+        app.MapGet("/refresh/b", () => Refresh("5;url=/page?utm_source=refresh"));
+        app.MapGet("/refresh/slow", () => Refresh("30;url=/page"));
+        app.MapGet("/refresh/self", () => Refresh("0;url=/refresh/self?utm_source=x"));
+        app.MapGet("/refresh/reload", () => Refresh("2"));
+        app.MapGet("/refresh/private", () => Refresh("1,/private/x"));
+        // n hops: n - 1 redirects, then a refresh to the page.
+        app.MapGet("/refresh/hops/{n:int}", (int n) => n == 1 ? Refresh("0;url=/page") : Results.Redirect($"/refresh/hops/{n - 1}"));
+        app.MapGet("/getfile.aspx", (HttpContext context, int id) =>
+        {
+            context.Response.Headers.ContentDisposition = id switch
+            {
+                7 => "attachment; filename=\"rapport.pdf\"",
+                8 => "attachment; filename=beslut.docx",
+                10 => "attachment; filename=\"gammal.doc\"",
+                _ => "attachment",
+            };
+            byte[] bytes = id switch
+            {
+                7 => PdfBytes,
+                8 or 9 => [.. "PK\u0003\u0004"u8, .. new byte[64]],
+                _ => [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0, 0],
+            };
+            return Results.Bytes(bytes, "application/octet-stream");
+        });
+        app.MapGet("/untyped", async (HttpContext context) => await context.Response.Body.WriteAsync(Encoding.UTF8.GetBytes("<!DOCTYPE html>" + Html), context.RequestAborted));
+        app.MapGet("/files/lista.csv", () => Results.Bytes("namn;telefon\nAnna;090-16 10 00\n"u8.ToArray(), "application/octet-stream"));
+        app.MapGet("/challenge/header", (HttpContext context) =>
+        {
+            context.Response.Headers["cf-mitigated"] = "challenge";
+            return Results.Content("<html><body>Just a moment...</body></html>", "text/html", statusCode: 403);
+        });
+        app.MapGet("/challenge/cloudflare", (HttpContext context) =>
+        {
+            context.Response.Headers.RetryAfter = "5";
+            return Results.Content("<html><head><title>Just a moment...</title><script>window._cf_chl_opt={cvId: '3'};</script></head><body></body></html>", "text/html");
+        });
+        app.MapGet("/challenge/incapsula", () => Results.Content(
+            "<html><body><iframe src=\"/_Incapsula_Resource?CWUDNSAI=1\">Request unsuccessful. Incapsula incident ID: 123-456</iframe></body></html>", "text/html"));
+        app.MapGet("/challenge/turnstile-403", () => Results.Content(
+            "<html><head><script src=\"https://challenges.cloudflare.com/turnstile/v0/api.js\"></script></head><body></body></html>", "text/html", statusCode: 403));
+        app.MapGet("/challenge/turnstile-form", () => Results.Content(
+            "<html><head><script src=\"https://challenges.cloudflare.com/turnstile/v0/api.js\"></script></head><body><main><p>Kontakta oss</p><form></form></main></body></html>", "text/html"));
         app.MapGet("/file.pdf", () => Results.Bytes(PdfBytes, "application/pdf"));
         app.MapGet("/eicar.pdf", () => Results.Bytes(
             Encoding.ASCII.GetBytes(@"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"), "application/pdf"));

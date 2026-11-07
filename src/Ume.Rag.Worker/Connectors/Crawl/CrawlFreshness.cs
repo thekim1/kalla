@@ -43,7 +43,10 @@ public enum RemovalResult
 /// <param name="SeedsResolved">Seeds fetched, 304, skipped by <c>lastmod</c> or <c>Gone</c>.</param>
 /// <param name="SeedsFailed">Seeds not resolved.</param>
 /// <param name="ResolvedShare">Resolved seeds over seeds (0 without seeds).</param>
-/// <param name="FailedSeedsProtected">Live documents of failed seeds kept from <c>not-seen</c> in this run.</param>
+/// <param name="FailedProtected">
+/// Live documents kept from <c>not-seen</c> in this run because their URL failed in it: a failed seed, or a failed URL at
+/// any depth (§5.4, §13.1).
+/// </param>
 /// <param name="PausedHosts">Hosts paused for the run, with the last reason (shown in the admin only, never in telemetry).</param>
 /// <param name="ConsecutiveIncomplete">Incomplete traversals in a row, this one included.</param>
 /// <param name="Alert">The incomplete-traversal alert is raised.</param>
@@ -56,7 +59,7 @@ public sealed record CompletenessSection(
     int SeedsResolved,
     int SeedsFailed,
     double ResolvedShare,
-    int FailedSeedsProtected,
+    int FailedProtected,
     IReadOnlyDictionary<string, string> PausedHosts,
     int ConsecutiveIncomplete,
     bool Alert);
@@ -124,11 +127,11 @@ public static class CrawlReportSections
     /// <param name="verdict">The run's completeness (<see cref="CrawlTraversal.EvaluateAsync"/>).</param>
     /// <param name="rule">The seed rule used.</param>
     /// <param name="incremental">The run was incremental.</param>
-    /// <param name="failedSeedsProtected">Live documents of failed seeds (<see cref="DeletionCandidates.FromTraversal"/>'s protected set).</param>
+    /// <param name="failedProtected">Live documents whose URL failed in the run (<see cref="DeletionCandidates.FromTraversal"/>'s protected set).</param>
     /// <param name="earlierNewestFirst">The source's earlier crawl runs, newest first.</param>
     /// <param name="alertThreshold"><c>Settings.Crawl.IncompleteRunsAlert</c>.</param>
     public static CompletenessSection Completeness(
-        CrawlRunRecord run, TraversalVerdict verdict, CompletenessRule rule, bool incremental, int failedSeedsProtected,
+        CrawlRunRecord run, TraversalVerdict verdict, CompletenessRule rule, bool incremental, int failedProtected,
         IEnumerable<TraversalHistoryEntry> earlierNewestFirst, int alertThreshold)
     {
         ArgumentNullException.ThrowIfNull(run);
@@ -145,7 +148,7 @@ public static class CrawlReportSections
             resolved,
             run.SeedsFailed,
             run.Seeds == 0 ? 0 : Math.Round((double)resolved / run.Seeds, 4),
-            failedSeedsProtected,
+            failedProtected,
             run.PausedHosts.ToDictionary(p => p.Key, p => p.Value.Reason, StringComparer.Ordinal),
             consecutive,
             TraversalCompleteness.ShouldAlert(consecutive, alertThreshold));

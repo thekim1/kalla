@@ -68,12 +68,19 @@ public sealed class CrawlSourceRunner(
         WHERE "Classification" = $1 AND "SourceId" = $2 AND "RunId" = $3 AND "State" = 'released'
         """;
 
-    // Seeds of the run whose document the run did not see: they failed, so they are never not-seen candidates (§5.4).
-    private const string FailedSeedsSql = """
+    // URLs of the run whose document the run did not see because they failed: a seed (whatever its outcome), or a URL at
+    // any depth whose latest item of the run is failed (401/403, TLS, 5xx after retries, http.soft_404). They are never
+    // not-seen candidates; their failures count toward persistent-failure (§5.4, §13.1). A URL skipped by a trap or the
+    // page limit has no failed item and stays a candidate.
+    private const string FailedInRunSql = """
         SELECT d."Id" FROM content."CrawlFrontier" f
         JOIN content."Documents" d ON d."SourceId" = f."SourceId" AND d."IdentityKind" = 'url' AND d."IdentityHash" = f."UrlHash"
-        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3 AND f."Depth" = 0 AND NOT f."RemovalCheck"
+        WHERE f."Classification" = $1 AND f."SourceId" = $2 AND f."RunId" = $3 AND NOT f."RemovalCheck"
           AND d."DeletedAt" IS NULL AND d."LastRunId" IS DISTINCT FROM $3
+          AND (f."Depth" = 0 OR (
+              SELECT i."Outcome" FROM content."RunItems" i
+              WHERE i."RunId" = $3 AND i."Identity" = f."Url" AND i."Outcome" <> 'superseded'
+              ORDER BY i."CreatedAt" DESC, i."Id" DESC LIMIT 1) = 'failed')
         """;
 
     private const string MediaTypesSql = """
@@ -282,8 +289,8 @@ public sealed class CrawlSourceRunner(
 
     /// <summary>
     /// Before the reconcile: the traversal's completeness (stored on <c>CrawlRuns</c>), the candidates (explicit answers
-    /// in any run, <c>persistent-failure</c>, <c>not-seen</c> only after a complete traversal and never for a failed seed,
-    /// and the settings-change effects of <see cref="SettingsCandidates"/>: <c>scope-narrowed</c>, <c>identity-changed</c>,
+    /// in any run, <c>persistent-failure</c>, <c>not-seen</c> only after a complete traversal and never for a URL that
+    /// failed in the run, and the settings-change effects of <see cref="SettingsCandidates"/>: <c>scope-narrowed</c>, <c>identity-changed</c>,
     /// nothing beyond a lowered <c>maxDepth</c>), and the report's sections: completeness with the incomplete-traversal
     /// count and alert, the run's verdict, the removal checks and the <c>demote</c> patterns with the live documents they match.
     /// </summary>
@@ -295,14 +302,14 @@ public sealed class CrawlSourceRunner(
         ArgumentNullException.ThrowIfNull(all);
         var context = await ContextAsync(source, run, cancellationToken);
         var verdict = await traversal.EvaluateAsync(context, cancelled: false, cancellationToken);
-        var failedSeeds = await FailedSeedsAsync(source, run.Id, cancellationToken);
+        var failedInRun = await FailedInRunAsync(source, run.Id, cancellationToken);
         var crawl = await connector.SourceAsync(source.SourceId, source.Classification, source.Settings, fresh: true, cancellationToken);
         var change = await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken);
-        var candidates = SettingsCandidates.Crawl(run.Id, all, verdict, explicitGone, failedSeeds, time.GetUtcNow(), crawl,
+        var candidates = SettingsCandidates.Crawl(run.Id, all, verdict, explicitGone, failedInRun, time.GetUtcNow(), crawl,
             await MediaTypesAsync(source.SourceId, cancellationToken), await BeyondDepthAsync(source, crawl.Settings.MaxDepth, cancellationToken), change.Identity);
         var record = await crawlRuns.GetAsync(run.Id, cancellationToken) ?? throw new InvalidOperationException("The crawl run has no CrawlRuns row.");
         var history = (await runs.CrawlHistoryAsync(source.SourceId, run.Id, cancellationToken)).Select(h => new TraversalHistoryEntry(h.Complete, h.Incremental));
-        var completeness = CrawlReportSections.Completeness(record, verdict, options.Value.CompletenessRule, context.Incremental, failedSeeds.Count, history,
+        var completeness = CrawlReportSections.Completeness(record, verdict, options.Value.CompletenessRule, context.Incremental, failedInRun.Count, history,
             policy.Current.IncompleteRunsAlert);
         var settings = crawl.Settings;
         // Demote counts over Documents.Url, the URL retrieval matches demote on (the path form on an identity-rule host, #228).
@@ -377,18 +384,18 @@ public sealed class CrawlSourceRunner(
         return released.Count;
     }
 
-    private async Task<IReadOnlySet<Guid>> FailedSeedsAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)
+    private async Task<IReadOnlySet<Guid>> FailedInRunAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)
     {
-        var seeds = new HashSet<Guid>();
+        var documents = new HashSet<Guid>();
         await using var connection = await database.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(FailedSeedsSql, connection) { Parameters = { Db.P(source.Classification), Db.P(source.SourceId), Db.P(runId) } };
+        await using var command = new NpgsqlCommand(FailedInRunSql, connection) { Parameters = { Db.P(source.Classification), Db.P(source.SourceId), Db.P(runId) } };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            seeds.Add(reader.GetGuid(0));
+            documents.Add(reader.GetGuid(0));
         }
 
-        return seeds;
+        return documents;
     }
 
     private async Task<IReadOnlyDictionary<Guid, string>> MediaTypesAsync(Guid sourceId, CancellationToken cancellationToken)

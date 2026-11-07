@@ -22,7 +22,10 @@ public sealed record CrawlCheckpoint : ConnectorCheckpoint
     /// <summary>0: start URLs; 1: sitemaps.</summary>
     public int Phase { get; init; }
 
-    /// <summary>The next sitemap root (settings, then per origin the robots.txt <c>Sitemap:</c> lines and <c>/sitemap.xml</c>).</summary>
+    /// <summary>
+    /// The next sitemap root (settings, then per origin the robots.txt <c>Sitemap:</c> lines, <c>/sitemap.xml</c> and
+    /// <c>/sitemap_index.xml</c>).
+    /// </summary>
     public int Root { get; init; }
 
     /// <summary>Entries of <see cref="Root"/> already listed (a resumed listing re-reads the file and skips them).</summary>
@@ -38,7 +41,8 @@ public sealed record CrawlPage(FetchOutcome Outcome, PageLinks? Links);
 /// <summary>
 /// The <c>crawl</c> source (connectors design §5): listing yields the seeds at depth 0 (start URLs and every sitemap URL
 /// in scope, from the source's <c>sitemaps</c>, each scope origin's robots.txt <c>Sitemap:</c> lines and its
-/// <c>/sitemap.xml</c>; sitemap index depth ≤ 2; at most <c>maxPages</c>), and fetching returns the page with its links.
+/// <c>/sitemap.xml</c> and <c>/sitemap_index.xml</c>; XML or plain text; sitemap index depth ≤ 2; at most
+/// <c>maxPages</c>; a transient sitemap failure retried twice, §5.1), and fetching returns the page with its links.
 /// Every URL is requested (conditionally when validators are stored) unless the traversal skips it by <c>lastmod</c>
 /// (<see cref="CrawlTraversal"/>, only on hosts whose site profile marks <c>lastmod</c> reliable); a URL that left the
 /// sitemap is probed by <see cref="ProbeAsync"/> (the removal check, §5.4).
@@ -67,6 +71,18 @@ public sealed class CrawlConnector(
     public const string SitemapTruncated = "sitemap.truncated";
     public const string SitemapTooDeep = "sitemap.depth";
     public const string LimitPages = "crawl.limit_pages";
+
+    /// <summary>A sitemap that fails transiently is asked this many more times before it is <c>sitemap.unavailable</c> (§5.1).</summary>
+    public const int SitemapRetries = 2;
+
+    /// <summary>The wait before the first retry of a 5xx or network failure; the second waits twice as long.</summary>
+    public static readonly TimeSpan SitemapRetryDelay = TimeSpan.FromSeconds(1);
+
+    /// <summary>A 429 or 503 is retried only when its <c>Retry-After</c> is at most this (§5.1).</summary>
+    public static readonly TimeSpan MaxSitemapRetryAfter = TimeSpan.FromSeconds(60);
+
+    /// <summary>The probed sitemap paths of every scope origin, in order; their absence is no failure (§5.1).</summary>
+    private static readonly string[] GuessedSitemaps = ["/sitemap.xml", "/sitemap_index.xml"];
 
     private readonly RawContentWriter _writer = new(scanner, blobs, time);
     private readonly ConcurrentDictionary<Guid, (string Raw, CrawlSource Source)> _sources = new();
@@ -214,13 +230,14 @@ public sealed class CrawlConnector(
     }
 
     public async ValueTask<FetchOutcome> FetchAsync(FetchContext context, WorkItem item, CancellationToken cancellationToken) =>
-        (await FetchPageAsync(context, item, cancellationToken)).Outcome;
+        (await FetchPageAsync(context, item, null, cancellationToken)).Outcome;
 
     /// <summary>
     /// One GET (conditional when validators are stored and the run does not revalidate), redirects re-checked against the
-    /// scope (§3.2), the content stored with its outlinks; a 304 returns the stored outlinks of the last content.
+    /// scope (§3.2), the content stored with its outlinks; a 304 returns the stored outlinks of the last content. An HTML
+    /// page whose main text matches <paramref name="softNotFound"/> (the host's fingerprint, §5.3) ends <c>http.soft_404</c>.
     /// </summary>
-    public async Task<CrawlPage> FetchPageAsync(FetchContext context, WorkItem item, CancellationToken cancellationToken)
+    public async Task<CrawlPage> FetchPageAsync(FetchContext context, WorkItem item, string? softNotFound, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(item);
@@ -235,7 +252,8 @@ public sealed class CrawlConnector(
             case HttpFetchResult.Ok ok:
                 await using (ok.Body)
                 {
-                    var stored = await _writer.StoreAsync(context, ok, source.Settings.NoiseSelectors, source.Canonicalizer, extractLinks: true, cancellationToken);
+                    var stored = await _writer.StoreAsync(context, ok, source.Settings.NoiseSelectors, source.Canonicalizer, extractLinks: true, softNotFound,
+                        cancellationToken);
                     return new CrawlPage(stored.Outcome, stored.Links);
                 }
 
@@ -251,9 +269,9 @@ public sealed class CrawlConnector(
     /// The removal check of a URL that left the sitemap (§5.4, weakness review §3): <c>HEAD</c>, and the full
     /// <see cref="FetchPageAsync"/> when the server refuses <c>HEAD</c> (405, 501). Null when the <c>HEAD</c> answered 2xx
     /// (the URL is still there); otherwise the page whose outcome follows §4 (404/410 <c>Gone</c>, a permanent redirect out
-    /// of scope <c>http.moved_out_of_scope</c>).
+    /// of scope <c>http.moved_out_of_scope</c>). <paramref name="softNotFound"/> is passed to the GET.
     /// </summary>
-    public async Task<CrawlPage?> ProbeAsync(FetchContext context, WorkItem item, CancellationToken cancellationToken)
+    public async Task<CrawlPage?> ProbeAsync(FetchContext context, WorkItem item, string? softNotFound, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(item);
@@ -265,10 +283,35 @@ public sealed class CrawlConnector(
         var result = await fetcher.FetchAsync(request, cancellationToken);
         return result switch
         {
-            HttpFetchResult.Status { Code: HttpStatusCode.MethodNotAllowed or HttpStatusCode.NotImplemented } => await FetchPageAsync(context, item, cancellationToken),
+            HttpFetchResult.Status { Code: HttpStatusCode.MethodNotAllowed or HttpStatusCode.NotImplemented } => await FetchPageAsync(context, item, softNotFound, cancellationToken),
             HttpFetchResult.Status { Code: var code } when (int)code is >= 200 and <= 299 => null,
             _ => new CrawlPage(FetchOutcomes.From(result), null),
         };
+    }
+
+    /// <summary>
+    /// The soft-404 probe of the host of <paramref name="url"/> (§5.3): a GET of <see cref="SoftNotFound.ProbeUrl"/> through
+    /// the guard and robots.txt, redirects not followed. Returns the host's fingerprint when the answer is an HTML 200
+    /// without redirects (a redirect target may be a real page, such as the start page), and the outcome of any other
+    /// answer for the host budget (null for a 200).
+    /// </summary>
+    public async Task<(string? Fingerprint, FetchOutcome? Outcome)> ProbeNotFoundAsync(FetchContext context, Uri url, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(url);
+        var source = await SourceAsync(context.SourceId, context.Classification, context.Settings, cancellationToken);
+        var request = new HttpFetchRequest(SoftNotFound.ProbeUrl(url), EgressPurpose.Fetch, null, MediaTypes.Html, source.Canonicalizer, robots.CheckAsync,
+            InScope: _ => false);
+        var result = await fetcher.FetchAsync(request, cancellationToken);
+        if (result is not HttpFetchResult.Ok ok)
+        {
+            return (null, FetchOutcomes.From(result));
+        }
+
+        await using (ok.Body)
+        {
+            return (await _writer.FingerprintAsync(ok.Body, source.Settings.NoiseSelectors, cancellationToken), null);
+        }
     }
 
     /// <summary>A redirect target, in its path form (<see cref="HttpFetchRequest.InScope"/>), against the source scope (§3.2).</summary>
@@ -349,9 +392,12 @@ public sealed class CrawlConnector(
                 }
             }
 
-            if (UrlCanonicalizer.Canonicalize(origin + "/sitemap.xml").Value is { } fallback && seen.Add(fallback))
+            foreach (var guess in GuessedSitemaps)
             {
-                yield return new SitemapRoot(new Uri(fallback), true, null);
+                if (UrlCanonicalizer.Canonicalize(origin + guess).Value is { } fallback && seen.Add(fallback))
+                {
+                    yield return new SitemapRoot(new Uri(fallback), true, null);
+                }
             }
         }
     }
@@ -360,10 +406,10 @@ public sealed class CrawlConnector(
     private async IAsyncEnumerable<SitemapRead> ReadAsync(Uri url, bool optional, int depth, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var request = new HttpFetchRequest(url, EgressPurpose.Sitemap, null, null, CanonicalizerOptions.Default, robots.CheckAsync, SitemapParser.MaxUncompressedBytes);
-        var result = await fetcher.FetchAsync(request, cancellationToken);
+        var result = await FetchSitemapAsync(request, cancellationToken);
         if (result is not HttpFetchResult.Ok ok)
         {
-            // /sitemap.xml is a guess: its absence is no failure; a declared sitemap that does not answer is.
+            // /sitemap.xml and /sitemap_index.xml are guesses: their absence is no failure; a declared sitemap that does not answer is.
             if (!(optional && result is HttpFetchResult.Status { Code: var code } && (int)code is >= 400 and < 500 && code != HttpStatusCode.TooManyRequests))
             {
                 yield return SitemapRead.Failed(url, SitemapUnavailable);
@@ -372,11 +418,20 @@ public sealed class CrawlConnector(
             yield break;
         }
 
-        SitemapDocument document;
+        SitemapDocument? document = null;
         await using (ok.Body)
         {
-            await using var stream = ok.Body.OpenRead();
-            document = await SitemapParser.ParseAsync(stream, cancellationToken);
+            // A guess answered with a web page (a host that serves every path, §5.3) has no sitemap there either.
+            if (!(optional && MediaTypes.IsHtml(ok.Body.MediaType)))
+            {
+                await using var stream = ok.Body.OpenRead();
+                document = await SitemapParser.ParseAsync(stream, cancellationToken);
+            }
+        }
+
+        if (document is null)
+        {
+            yield break;
         }
 
         if (document.Error is { } error)
@@ -418,6 +473,35 @@ public sealed class CrawlConnector(
             }
         }
     }
+
+    /// <summary>
+    /// A sitemap fetch with up to <see cref="SitemapRetries"/> retries of a transient failure (§5.1): a 5xx, a timeout or
+    /// another network failure after <see cref="SitemapRetryDelay"/> (then twice that), a 429 or 503 after its
+    /// <c>Retry-After</c> when that is at most <see cref="MaxSitemapRetryAfter"/>.
+    /// </summary>
+    private async Task<HttpFetchResult> FetchSitemapAsync(HttpFetchRequest request, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            var result = await fetcher.FetchAsync(request, cancellationToken);
+            if (attempt == SitemapRetries || RetryDelay(result, attempt) is not { } delay)
+            {
+                return result;
+            }
+
+            await Task.Delay(delay, time, cancellationToken);
+        }
+    }
+
+    private static TimeSpan? RetryDelay(HttpFetchResult result, int attempt) => result switch
+    {
+        HttpFetchResult.Status { Code: HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable, RetryAfter: { } retryAfter } =>
+            retryAfter <= MaxSitemapRetryAfter ? retryAfter : null,
+        HttpFetchResult.Status { Code: HttpStatusCode.TooManyRequests } => null,
+        HttpFetchResult.Status { Code: var code } when (int)code >= 500 => SitemapRetryDelay * (attempt + 1),
+        HttpFetchResult.Error { Transient: true } => SitemapRetryDelay * (attempt + 1),
+        _ => null,
+    };
 
     private sealed record SitemapRoot(Uri Url, bool Optional, ListingEvent<CrawlCheckpoint>.Failure? Failure);
 

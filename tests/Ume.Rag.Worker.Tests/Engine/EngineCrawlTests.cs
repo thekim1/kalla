@@ -34,8 +34,12 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
     private readonly DirectoryInfo _blobs = Directory.CreateTempSubdirectory("ume-rag-engine-blobs-");
     private readonly ConcurrentDictionary<string, int> _hits = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, int> _status = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, bool> _softMissing = new(StringComparer.Ordinal);
     private volatile bool _sitemapListsB = true;
     private volatile bool _withText;
+    private volatile bool _linksDE;
+    private volatile bool _linksE = true;
+    private volatile bool _softNotFound;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -124,6 +128,51 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
             (await Sql.ScalarAsync<long>(database.Connection(null), """
                 SELECT count(*) FROM content."CrawlFrontier" WHERE "SourceId" = $1 AND "RunId" = $2 AND "RemovalCheck" AND "Depth" = 0
                 """, seed.SourceId, runId)).ShouldBe(1, "the removal check is flagged at depth 0");
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task A_linked_page_that_fails_keeps_its_document_while_one_no_longer_reached_is_not_seen()
+    {
+        _linksDE = true;
+        _softNotFound = true;
+        await using var site = await SiteAsync();
+        var seed = await EngineKit.SeedCrawlAsync(database, Settings(site));
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs);
+        try
+        {
+            // Seeds /, /p/a, /p/b; linked only from the start page: /p/c, /p/d, /p/e.
+            (await EngineKit.WaitForRunAsync(database, await EngineKit.SyncNowAsync(database, seed))).Added.ShouldBe(6);
+            _status["/p/c"] = StatusCodes.Status403Forbidden;
+            _softMissing["/p/d"] = true;
+            _linksE = false;
+
+            var runId = await EngineKit.SyncNowAsync(database, seed);
+            var run = await EngineKit.WaitForRunAsync(database, runId);
+
+            run.Failed.ShouldBe(2);
+            (await Sql.ScalarAsync<string>(database.Connection(null), """
+                SELECT string_agg("Identity" || ' ' || "Reason", E'\n' ORDER BY "Identity") FROM content."RunItems" WHERE "RunId" = $1 AND "Outcome" = 'failed'
+                """, runId)).ShouldBe($"{site.Url("/p/c").AbsoluteUri} http.403\n{site.Url("/p/d").AbsoluteUri} http.soft_404");
+            using (var report = await ReportAsync(runId))
+            {
+                report.RootElement.GetProperty("completeness").GetProperty("complete").GetBoolean().ShouldBeTrue();
+                report.RootElement.GetProperty("completeness").GetProperty("failedProtected").GetInt32().ShouldBe(2);
+            }
+
+            // The failed pages keep their documents and content; the page no longer linked is the only not-seen candidate.
+            (await Sql.ScalarAsync<string>(database.Connection(null), """
+                SELECT string_agg(d."CanonicalIdentity" || ' ' || p."Reason", E'\n') FROM content."DeletionProposals" p
+                JOIN content."Documents" d ON d."Id" = p."DocumentId" WHERE p."RunId" = $1
+                """, runId)).ShouldBe($"{site.Url("/p/e").AbsoluteUri} not-seen");
+            (await Sql.ScalarAsync<long>(database.Connection(null), """
+                SELECT count(*) FROM content."Documents"
+                WHERE "SourceId" = $1 AND "CanonicalIdentity" = ANY($2) AND "DeletedAt" IS NULL AND "LiveChunkSetId" IS NOT NULL
+                """, seed.SourceId, new[] { site.Url("/p/c").AbsoluteUri, site.Url("/p/d").AbsoluteUri })).ShouldBe(2);
         }
         finally
         {
@@ -501,18 +550,29 @@ public sealed class EngineCrawlTests(RagDatabaseFixture database, FakeGatewayFac
         app.MapGet("/robots.txt", (HttpContext context) =>
             Results.Text($"User-agent: *\nAllow: /\nSitemap: http://{TestSite.Host}:{context.Request.Host.Port}/sitemap.xml\n", "text/plain"));
         app.MapGet("/sitemap.xml", (HttpContext context) => Results.Content(Sitemap(context.Request.Host.Port), "application/xml"));
-        app.MapGet("/", () => Page("/", "startsida", """<a href="/p/c">Mer om bygglov</a>""" + (_withText ? """ <a href="/filer/regler.txt">Regler</a>""" : string.Empty)));
+        app.MapGet("/", () => Page("/", "startsida", """<a href="/p/c">Mer om bygglov</a>""" + (_withText ? """ <a href="/filer/regler.txt">Regler</a>""" : string.Empty)
+            + (_linksDE ? """ <a href="/p/d">Avgifter</a>""" + (_linksE ? """ <a href="/p/e">Blanketter</a>""" : string.Empty) : string.Empty)));
         app.MapGet("/p/{name}", (string name) => Page("/p/" + name, "bygglov " + name, string.Empty));
         app.MapGet("/filer/regler.txt", () =>
         {
             _hits.AddOrUpdate("/filer/regler.txt", 1, (_, n) => n + 1);
             return Results.Text("Regler för bygglov\n\n" + LongText, "text/plain; charset=utf-8");
         });
+        // Every other path: the "page not found" page, with a 200 on a soft-404 host (the crawl's probe reads it).
+        app.MapFallback(() => NotFound(_softNotFound ? StatusCodes.Status200OK : StatusCodes.Status404NotFound));
     });
+
+    private static IResult NotFound(int status) =>
+        Results.Content(EngineKit.Page("Sidan hittades inte"), "text/html; charset=utf-8", statusCode: status);
 
     private IResult Page(string path, string title, string links)
     {
         _hits.AddOrUpdate(path, 1, (_, n) => n + 1);
+        if (_softMissing.ContainsKey(path))
+        {
+            return NotFound(StatusCodes.Status200OK);
+        }
+
         return _status.TryGetValue(path, out var status)
             ? Results.StatusCode(status)
             : EngineKit.Html(EngineKit.Page(title, links + """ <span class="kontakt">Kontakta oss på telefon 090-16 10 00.</span> """ + LongText));
