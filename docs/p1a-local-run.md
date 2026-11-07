@@ -59,7 +59,7 @@ What the script generated for P1a: the Open WebUI JWT secret, once, as `secrets/
 them.
 
 **Open WebUI in Compose on one machine.** `compose.openwebui.yaml` calls `rag-api` at `UME_RAG_API_PUBLIC_URL` and
-sends the browser back to `https://UME_RAG_OPENWEBUI_HOST/oauth/oidc/callback`: on the pilot host the reverse proxy
+sends the browser back to `https://UME_RAG_OPENWEBUI_HOST/oauth/oidc/login/callback`: on the pilot host the reverse proxy
 serves both with a trusted certificate. On a developer machine neither exists (`https://localhost:8543` is the Open
 WebUI container itself, and it does not trust the internal CA), so the demo's Open WebUI is the AppHost's. Check the
 Compose project with `docker compose -f compose.openwebui.yaml --env-file .env config --quiet`.
@@ -85,7 +85,7 @@ you added by hand, such as `UME_RAG_INGESTION_SLICE=`). Then recreate the servic
 
 The redirect URIs the script prints must be registered on the shared realm's clients: `ume-rag-admin`
 (`https://<admin host>[:<port>]/signin-oidc`, `/signout-callback-oidc`) and `open-webui`
-(`https://<owui host>/oauth/oidc/callback`, the legacy path). The realm additions (`deploy/keycloak/`, stream B, J8)
+(`https://<owui host>/oauth/oidc/login/callback`). The realm additions (`deploy/keycloak/`, stream B, J8)
 carry the pilot hosts; a demo on a developer machine needs that machine's URIs on the clients too (the AppHost's admin
 port, `https://localhost:5174`). Ask the gateway session for them with J11.
 

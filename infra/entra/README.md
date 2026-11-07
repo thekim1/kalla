@@ -11,7 +11,7 @@ registration, and it requests no Graph application permission for RAG.
 |---|---|---|
 | `ume-rag-admin` registration | `admin.bicep` | single tenant; Web redirect URIs `https://<rag admin host>/signin-oidc` and `/signout-callback-oidc`; app roles `rag-platform-admin`, `rag-department-admin`, `rag-pipeline-editor`, `rag-reviewer`, `rag-viewer`, `rag-editor` (P2), `rag-skill-editor` (P2) for users and groups; `groupMembershipClaims = SecurityGroup`; optional ID-token claims `email`, `acct`; `acceptMappedClaims` for the `departmentCodes` claim (parameter, default on, as the gateway's Entra step 4); delegated Microsoft Graph `openid profile email` |
 | its service principal | `admin.bicep` | `appRoleAssignmentRequired = true` |
-| `ume-rag-open-webui` registration | `open-webui.bicep` | single tenant; Web redirect URI `https://<open webui host>/oauth/oidc/callback`; optional ID-token claims `email`, `acct`; delegated Microsoft Graph `openid profile email` |
+| `ume-rag-open-webui` registration | `open-webui.bicep` | single tenant; Web redirect URI `https://<open webui host>/oauth/oidc/login/callback`; optional ID-token claims `email`, `acct`; delegated Microsoft Graph `openid profile email` |
 | its service principal | `open-webui.bicep` | `appRoleAssignmentRequired = true` |
 | security groups | `main.bicep` | `Ume.Rag pilot users`, `Ume.Rag platform admins`, `Ume.Rag department admins – <pilot department>` (names to agree with IT) |
 

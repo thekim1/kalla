@@ -369,21 +369,21 @@ route that works today is the user's own export. Which route the registrar uses 
 with W2; to-verify #173) before go-live; direct SQL against Open WebUI's database is ruled out. This section gets the
 procedure once G1 has decided it.
 
-What the pinned Open WebUI (v0.12.3) does, read from its source at tag `v0.12.3` (paths below `backend/open_webui/`
+What the pinned Open WebUI (v0.12.5) does, read from its source at tag `v0.12.5` (paths below `backend/open_webui/`
 unless they start with `src/`):
 
-| Setting or route | Effect at v0.12.3 | Source |
+| Setting or route | Effect at v0.12.5 | Source |
 |---|---|---|
 | `ENABLE_ADMIN_CHAT_ACCESS` | read once from the environment at start (default `True`; we set `false`), not a persistent setting: changing it means recreating the container | `env.py:371` |
-| An admin lists a user's chats: `GET /api/v1/chats/list/user/{user_id}`, the *Chats* button in *Admin > Users* | refused (401) with the flag off; the button is hidden (and never shown for admin-role users) | `routers/chats.py:783-796`; `src/lib/components/admin/Users/UserList.svelte:429` |
-| An admin opens a chat by id: `GET /api/v1/chats/{id}`, and the admin fallback of `GET /api/v1/chats/share/{id}` | only the owner can read it with the flag off | `routers/chats.py:1412-1422`, `:1308-1310`; `models/chats.py:1924-1929` |
-| `ENABLE_ADMIN_EXPORT` | read once from the environment (default `True`; we set `false`) | `config.py:2127` |
-| All chats of all users `GET /api/v1/chats/all/db`, the raw database `GET /api/v1/utils/db/download`, the export section of *Admin > Settings > Database* | refused (401) with the flag off; the section is hidden | `routers/chats.py:1113-1117`; `routers/utils.py:74-78`; `src/lib/components/admin/Settings/Database.svelte:123` |
-| The user's own export: `GET /api/v1/chats/all` (only the caller's chats), the chat export under *Data Controls* in the user's settings, and *Download > Export chat (.json)* in a chat's menu | works; the menu entry needs `permissions.chat.export`, default `True` (`USER_PERMISSIONS_CHAT_EXPORT`, which we do not set) | `routers/chats.py:1072-1077`; `src/lib/components/chat/Settings/DataControls.svelte:93-97`, `:182-192`; `src/lib/components/layout/Navbar/Menu.svelte:424-443`; `config.py:1913`, `:2024` |
+| An admin lists a user's chats: `GET /api/v1/chats/list/user/{user_id}`, the *Chats* button in *Admin > Users* | refused (401) with the flag off; the button is hidden (and never shown for admin-role users) | `routers/chats.py:751-764`; `src/lib/components/admin/Users/UserList.svelte:438` |
+| An admin opens a chat by id: `GET /api/v1/chats/{id}`, and the admin fallback of `GET /api/v1/chats/share/{id}` | only the owner can read it with the flag off | `routers/chats.py:1380-1390`, `:1276-1278`; `models/chats.py:2001-2006` |
+| `ENABLE_ADMIN_EXPORT` | read once from the environment (default `True`; we set `false`) | `config.py:2150` |
+| All chats of all users `GET /api/v1/chats/all/db`, the raw database `GET /api/v1/utils/db/download`, the export section of *Admin > Settings > Database* | refused (401) with the flag off; the section is hidden | `routers/chats.py:1081-1085`; `routers/utils.py:74-78`; `src/lib/components/admin/Settings/Database.svelte:127` |
+| The user's own export: `GET /api/v1/chats/all` (only the caller's chats), the chat export under *Data Controls* in the user's settings, and *Download > Export chat (.json)* in a chat's menu | works; the menu entry needs `permissions.chat.export`, default `True` (`USER_PERMISSIONS_CHAT_EXPORT`, which we do not set) | `routers/chats.py:1040-1045`; `src/lib/components/chat/Settings/DataControls.svelte:93-97`, `:185-196`; `src/lib/components/layout/Navbar/Menu.svelte:427-446`; `config.py:1933`, `:2045` |
 | Feedback snapshots: an admin reads any feedback with its `snapshot.chat` (`GET /api/v1/evaluations/feedback/{id}`, `GET /api/v1/evaluations/feedbacks/all/export`) | works, but only for rated messages, and only the chat as it was when rated | `routers/evaluations.py:449-459`, `:354-364`; `models/feedbacks.py:92-93` |
 | The feedback service account's API key | reaches only the allow-listed paths (prefix match), so it cannot read chats | `utils/auth.py:538-546` |
-| The feedback service account itself | created as the store's first user, so as admin, from `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` when Open WebUI starts with no users; with `ENABLE_PASSWORD_AUTH=false` (our default) it cannot sign in, and `ENABLE_LOGIN_FORM=false` only hides the form | `main.py:399-403`; `utils/auth.py:631-662`; `routers/auths.py:656-667`; `config.py:1694-1698` |
-| A chat the user deletes | is removed from the database (rows deleted, not flagged) | `models/chats.py:2736-2744` |
+| The feedback service account itself | created as the store's first user, so as admin, from `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` when Open WebUI starts with no users; with `ENABLE_PASSWORD_AUTH=false` (our default) it cannot sign in, and `ENABLE_LOGIN_FORM=false` only hides the form | `main.py:399-403`; `utils/auth.py:631-662`; `routers/auths.py:663-674`; `config.py:1704-1708` |
+| A chat the user deletes | is removed from the database (rows deleted, not flagged) | `models/chats.py:2824-2832` |
 
 **Until G1 decides, a request is handled like this** (it depends on the user):
 

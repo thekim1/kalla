@@ -210,7 +210,7 @@ Two kinds of traffic reach the identity provider, from different places:
 |---|---|---|---|---|
 | Admin sign-in (browser) | the admin's browser | the IdP's authorization endpoint (host of `UME_RAG_OIDC_AUTHORITY`), then back to `https://<admin host>/signin-oidc` | 443 | code + PKCE; the IdP must be reachable from the admins' network |
 | Admin sign-in (back channel) | rag-admin, network `llm` | the IdP's discovery, JWKS and token endpoints | the authority URL's port | firewall `llm` rule |
-| Open WebUI sign-in (browser) | the user's browser | the IdP, then `https://<owui host>/oauth/oidc/callback` | 443 | |
+| Open WebUI sign-in (browser) | the user's browser | the IdP, then `https://<owui host>/oauth/oidc/login/callback` | 443 | |
 | Open WebUI sign-in (back channel) | open-webui, network `openwebui` | the provider URL's host: discovery, token, JWKS | the provider URL's port | firewall `openwebui` rule |
 | Citation downloads (browser) | the user's browser | `https://<api host>/v1/documents/...` (absolute links from `Knowledge__PublicBaseUrl`) | 443 | through the proxy |
 

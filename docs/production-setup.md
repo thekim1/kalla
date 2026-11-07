@@ -187,7 +187,7 @@ clients `ume-rag-admin`, `open-webui` and `ume-rag-api`, the `rag-*` roles and t
 
 Give the admin's client the two redirect URIs the script prints (code + PKCE):
 `https://<admin host>[:<admin port>]/signin-oidc` and `/signout-callback-oidc`, and Open WebUI's client
-`https://<owui host>/oauth/oidc/callback`. The client secrets go to `--oidc-client-secret-file` and
+`https://<owui host>/oauth/oidc/login/callback`. The client secrets go to `--oidc-client-secret-file` and
 `--openwebui-oidc-client-secret-file`, never into the repository.
 
 **Entra ID from P2:** RAG's own registrations (`ume-rag-admin`, `ume-rag-open-webui`), their app roles and groups are

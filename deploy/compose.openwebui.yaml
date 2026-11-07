@@ -22,8 +22,8 @@ name: ume-rag-openwebui
 
 services:
   open-webui:
-    # v0.12.3, pushed 2026-10-16 (the design was written against v0.12.5, which is under 7 days old).
-    image: ${OPENWEBUI_IMAGE:-ghcr.io/open-webui/open-webui:v0.12.3@sha256:a537bbe1e6b428820f52ed4a029d7fff97062e24d5cf32c365fba36fd0542def}
+    # v0.12.5, built 2026-10-29 (go-live pin review A-4, 2026-11-07: v0.13.0 is under 7 days old). The index digest.
+    image: ${OPENWEBUI_IMAGE:-ghcr.io/open-webui/open-webui:v0.12.5@sha256:03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded}
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -107,8 +107,9 @@ services:
       OAUTH_PROVIDER_NAME: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_NAME:-Umeå kommun}
       OAUTH_CLIENT_ID: ${UME_RAG_OPENWEBUI_OIDC_CLIENT_ID:?Set UME_RAG_OPENWEBUI_OIDC_CLIENT_ID in deploy/.env}
       OPENID_PROVIDER_URL: ${UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL:?Set UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL in deploy/.env}
-      # The legacy callback path, as the realm additions register it (identity design §5.3, to-verify #46).
-      OPENID_REDIRECT_URI: https://${UME_RAG_OPENWEBUI_HOST}/oauth/oidc/callback
+      # The current callback path, as the realm additions and the Entra registration register it (identity design
+      # §5.3: moved from the legacy /oauth/oidc/callback at the go-live pin bump, A-4/B-6, #452).
+      OPENID_REDIRECT_URI: https://${UME_RAG_OPENWEBUI_HOST}/oauth/oidc/login/callback
     volumes:
       # Its own SQLite store, on the host's encrypted disk (§12 #8): never ragdb.
       - ${UME_RAG_OPENWEBUI_DATA_DIR:?Set UME_RAG_OPENWEBUI_DATA_DIR in deploy/.env}:/data

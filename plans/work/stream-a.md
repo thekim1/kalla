@@ -69,7 +69,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** parser §12; licence review (`archive/licence-review-p2.md`).
 
-### [ ] A-4 Go-live pin review, A's part (last code item)
+### [x] A-4 Go-live pin review, A's part (last code item)
 - **Do:** review every image, PyPI and Compose pin younger than 7 days; bump the Open WebUI pin once, with the
   callback change in Compose matching B's realm change (B-6).
 - **Paths:** `images/**`, `src/parser/**`, `deploy/**`.
