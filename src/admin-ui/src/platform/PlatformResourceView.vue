@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from 'vue'
+import { api } from '@/api'
 import { request } from '@/api/client'
+import type { GatewayModel } from '@/api/types'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -17,6 +19,7 @@ import { problemMessage } from '@/utils/problem'
 import CrawlSettingsForm from './CrawlSettingsForm.vue'
 import EmbeddingCanaryPanel from './EmbeddingCanaryPanel.vue'
 import GenericForm from './GenericForm.vue'
+import { withModelFields } from './modelFields'
 import { resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
 import { fieldsOf, loadOpenApi, requestSchema, type FieldSpec, type OpenApiDocument } from './schema'
 
@@ -34,6 +37,8 @@ interface OpenForm {
   url: string
   fields: FieldSpec[]
   initial: Row
+  /** The gateway mirror with the platform key's availability, for the model fields' pickers (#466). */
+  models: GatewayModel[]
 }
 const drawerOpen = ref(false)
 const selected = ref<Row | null>(null)
@@ -75,13 +80,17 @@ async function show(title: string, submitLabel: string, operation: Operation, ro
   try {
     const doc = await loadOpenApi()
     const url = urlOf(operation.path, row, r.key)
+    const modelFields = (row && operation === r.update ? r.modelFields?.(row) : undefined) ?? []
+    // Without `level`: availability at the platform ceiling, where V32 checks the settings' models.
+    const [start, models] = await Promise.all([initial(), modelFields.length ? api.gateway.models() : []])
     openForm.value = {
       title,
       submitLabel,
       operation,
       url,
-      fields: fieldsOf(doc, schemaOf(doc, operation, url)),
-      initial: await initial(),
+      fields: withModelFields(fieldsOf(doc, schemaOf(doc, operation, url)), modelFields),
+      initial: start,
+      models,
     }
     formKey.value++
   } catch (e) {
@@ -187,7 +196,7 @@ watch(() => props.resource, () => {
         />
         <GenericForm
           v-else-if="openForm" :key="formKey" :form-id="`platform-${resource.id}`" :fields="openForm.fields" :initial="openForm.initial"
-          :method="openForm.operation.method" :url="openForm.url" :submit-label="openForm.submitLabel" @saved="saved" @cancel="drawerOpen = false"
+          :method="openForm.operation.method" :url="openForm.url" :submit-label="openForm.submitLabel" :models="openForm.models" @saved="saved" @cancel="drawerOpen = false"
         />
       </template>
     </UiDrawer>
