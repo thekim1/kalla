@@ -630,7 +630,7 @@ the deployment's ceilings (§6.6; Decisions "Configurable politeness per host", 
 - **Circuit breaker**: ≥ 50 of the last 100 responses from a host are 5xx, timeouts or 404 → host paused for 30
   minutes and recorded in `CrawlRuns.PausedHosts`; three pauses in a run end the host's part of the run (incomplete).
   This stops a broken CMS from being hammered and keeps a 404 storm from becoming deletions (§13).
-- Slow servers lower our rate through `LatencyEwmaMs` (Scrapy's autothrottle idea).
+- Slow servers lower our rate through `LatencyEwmaMs` (Scrapy's autothrottle idea). Each response's own time feeds it: a rendered page adds no sample of its own (its render holds every subrequest, their pacing and the ready rule), only its subrequests do; fed with render time on an external host it lengthened the next page's subrequests until every page ran past `Render:PageTimeout` (A-13).
 
 ### 6.5 Night window
 
@@ -781,7 +781,8 @@ Checked in the spike (A-9, results-a row 29, 2026-11-07; Playwright 1.64.1, Chro
   the only one. Measured on a fixture SPA: 6.3 requests fetched, 5.7 from the cache and 5 blocked per page, against 18
   fetched without them; p50 519 ms against 778 ms.
 - **Ready:** the worker knows every open request: a page is ready when `load` has fired and no routed request has
-  been open for `Render:QuietPeriod` (100 ms), or when `readySelector` names the **loaded content** and it holds text
+  been open for `Render:QuietPeriod` (500 ms; at 100 ms a module-heavy app was ready between its last module and its first
+  API request and was stored empty, A-13), or when `readySelector` names the **loaded content** and it holds text
   (a selector on a container that shows a "Loading…" placeholder is ready too early, 0 of 5 in the spike; the default
   is the quiet rule, not the profile's `mainRoot`); hard limit `Render:PageTimeout` (20 s). No network-idle wait (it
   added ≈ 400 ms per page).
