@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Net;
 using Microsoft.Extensions.Options;
+using Ume.Rag.Pipelines.Crawl;
 using Ume.Rag.Worker.Connectors.Deletion;
 
 namespace Ume.Rag.Worker.Connectors.Egress;
@@ -30,6 +32,18 @@ public sealed class CrawlOptions
     /// </summary>
     public CompletenessRule CompletenessRule { get; set; } = CompletenessRule.Ratio;
 
+    /// <summary>
+    /// The highest rate a host's politeness profile may set (<c>Crawl:MaxHostRate</c>, req/s, connectors design §6.6): the
+    /// admin refuses more (V37) and the worker clamps to it, so a typo cannot turn the crawler into a load test.
+    /// </summary>
+    public double MaxHostRate { get; set; } = PolitenessCeilings.DefaultMaxHostRate;
+
+    /// <summary>The most connections a host's politeness profile may set (<c>Crawl:MaxHostConnections</c>, §6.6).</summary>
+    public int MaxHostConnections { get; set; } = PolitenessCeilings.DefaultMaxHostConnections;
+
+    /// <summary>The ceilings the worker clamps host profiles to; <c>renderPerHost</c> keeps the default <c>Render:MaxConcurrent</c> until the renderer has options.</summary>
+    public PolitenessCeilings Ceilings() => new(MaxHostRate, MaxHostConnections, PolitenessCeilings.DefaultMaxRenderPerHost);
+
     public IReadOnlyList<IPNetwork> AllowedNetworks() =>
         [.. (AllowedPrivateRanges ?? string.Empty)
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
@@ -40,6 +54,11 @@ public sealed class CrawlOptions
 public sealed class CrawlOptionsValidator : IValidateOptions<CrawlOptions>
 {
     public const int MaxFetchBatchPerHost = 100;
+
+    /// <summary><c>CrawlHosts.RequestsPerSecond</c> is <c>numeric(5,2)</c>.</summary>
+    public const double MaxHostRateLimit = 999;
+
+    public const int MaxHostConnectionsLimit = 256;
 
     public ValidateOptionsResult Validate(string? name, CrawlOptions options)
     {
@@ -52,6 +71,16 @@ public sealed class CrawlOptionsValidator : IValidateOptions<CrawlOptions>
         if (options.FetchBatchPerHost is < 1 or > MaxFetchBatchPerHost)
         {
             failures.Add($"Crawl:FetchBatchPerHost must be between 1 and {MaxFetchBatchPerHost}.");
+        }
+
+        if (!(options.MaxHostRate >= HostPolitenessRules.MinRequestsPerSecond && options.MaxHostRate <= MaxHostRateLimit))
+        {
+            failures.Add(string.Create(CultureInfo.InvariantCulture, $"Crawl:MaxHostRate must be between {HostPolitenessRules.MinRequestsPerSecond} and {MaxHostRateLimit}."));
+        }
+
+        if (options.MaxHostConnections is < 1 or > MaxHostConnectionsLimit)
+        {
+            failures.Add($"Crawl:MaxHostConnections must be between 1 and {MaxHostConnectionsLimit}.");
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);

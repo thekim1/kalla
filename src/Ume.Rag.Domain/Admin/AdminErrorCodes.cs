@@ -241,6 +241,13 @@ public static class AdminErrorCodes
     /// </summary>
     public static AdminErrorCode SettingsModelResidency { get; } = new("settings_model_residency", 409, "The model {model} cannot be used for {setting}: it is not a {kind} model the gateway serves at {ceiling}.");
 
+    /// <summary>
+    /// V37: a host's politeness profile in <c>Settings.Crawl.HostOverrides</c> (connectors design §6.6) has an unknown member,
+    /// a value outside its range or the deployment's ceilings, <c>robots: ignore</c> without a reason, a bad User-Agent, or a
+    /// host key that is not a canonical host without a port.
+    /// </summary>
+    public static AdminErrorCode CrawlPolitenessInvalid { get; } = new("crawl_politeness_invalid", 400, "The politeness setting {field} for {host} is invalid: {problem}");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -249,5 +256,5 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgeNotAllowedForLevel, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgeNotAllowedForLevel, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid];
 }

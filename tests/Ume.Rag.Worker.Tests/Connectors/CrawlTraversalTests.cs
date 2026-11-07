@@ -2,13 +2,16 @@ using System.IO.Compression;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Ume.Rag.Pipelines.Crawl;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Deletion;
-using Ume.Rag.Worker.Connectors.Hosts;
+using Ume.Rag.Worker.Connectors.Egress;
+using Ume.Rag.Worker.Connectors.Http;
+using Ume.Rag.Worker.Connectors.Urls;
 
 namespace Ume.Rag.Worker.Tests.Connectors;
 
@@ -70,7 +73,7 @@ public sealed class CrawlTraversalTests : IAsyncLifetime
     public async Task A_municipal_host_ignores_noindex_and_nofollow_and_records_them()
     {
         var policy = new FixedCrawlPolicy(TestSite.Host);
-        policy.Overrides[$"{TestSite.Host}:{_site.Port}"] = new HostOverride(1000, 4);
+        policy.Overrides[TestSite.Host] = FixedCrawlPolicy.Budget(1000);
         await using var rig = CrawlRig.Create(_site, policy);
         var context = Context(Settings());
 
@@ -176,6 +179,91 @@ public sealed class CrawlTraversalTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_host_whose_profile_says_crawl_window_any_is_released_outside_the_night_window()
+    {
+        var policy = new FixedCrawlPolicy();
+        policy.Overrides[TestSite.Host] = FixedCrawlPolicy.Budget(500) with { CrawlWindow = "any" };
+        await using var rig = CrawlRig.Create(_site, policy);
+        var local = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm"));
+        var window = $"{local.AddHours(1):HH:mm}-{local.AddHours(1).AddMinutes(1):HH:mm}";
+        var context = Context(Settings(window: window)) with { Trigger = RunTrigger.Schedule };
+        await rig.Traversal.StartAsync(context, Ct);
+        var events = new List<ListingEvent<CrawlCheckpoint>>();
+        await foreach (var e in rig.Connector.ListAsync(Listing(context), new CrawlCheckpoint(), Ct))
+        {
+            events.Add(e);
+        }
+
+        await rig.Traversal.AdmitSeedsAsync(context, events, Ct);
+        var result = await rig.TopUp.TopUpAsync(context, null, null, Ct);
+
+        result.Enqueued.ShouldBe(3);
+        result.WindowOpensAt.ShouldBeNull();
+        var results = await rig.DrainAsync(context);
+        Done(results, "/b").Outcome.ShouldBeOfType<FetchOutcome.Content>();
+        (await rig.Traversal.EvaluateAsync(context, false, Ct)).Complete.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_host_whose_profile_ignores_robots_txt_is_fetched_where_robots_disallows_and_its_sitemap_lines_are_still_read()
+    {
+        var policy = new FixedCrawlPolicy();
+        policy.Overrides[TestSite.Host] = FixedCrawlPolicy.Budget(500) with { Robots = new HostRobots { Mode = "ignore", Reason = "own site, web team consent" } };
+        await using var rig = CrawlRig.Create(_site, policy);
+        var context = Context(Settings());
+
+        var results = await rig.CrawlAsync(context);
+
+        Done(results, "/privat/x").Outcome.ShouldBeOfType<FetchOutcome.Content>();
+        // The seeds from robots.txt's Sitemap: line.
+        rig.Store.Rows(context.Run.SourceId).Where(r => r.Depth == 0).Select(r => r.Url).ShouldBe([Url("/"), Url("/a"), Url("/b")], ignoreOrder: true);
+        // A redirect hop is not asked either; with robots.txt respected the same hop is refused.
+        var hop = new HttpFetchRequest(_site.Url("/to-privat"), EgressPurpose.Fetch, null, null, CanonicalizerOptions.Default, rig.Path.Robots.CheckAsync);
+        var ok = (await rig.Path.Fetcher.FetchAsync(hop, Ct)).ShouldBeOfType<HttpFetchResult.Ok>();
+        await ok.Body.DisposeAsync();
+        ok.FinalUrl.ShouldBe(_site.Url("/privat/x"));
+        await using var respecting = CrawlRig.Create(_site);
+        (await respecting.Path.Fetcher.FetchAsync(hop with { Robots = respecting.Path.Robots.CheckAsync }, Ct))
+            .ShouldBeOfType<HttpFetchResult.Refused>().Reason.ShouldBe("robots.disallow");
+    }
+
+    [Fact]
+    public async Task An_unreachable_robots_txt_pauses_nothing_on_a_host_whose_profile_ignores_it()
+    {
+        _robotsStatus = 503;
+        var policy = new FixedCrawlPolicy();
+        policy.Overrides[TestSite.Host] = FixedCrawlPolicy.Budget(500) with { Robots = new HostRobots { Mode = "ignore", Reason = "own site" } };
+        await using var rig = CrawlRig.Create(_site, policy);
+        var context = Context(Settings());
+
+        var results = await rig.CrawlAsync(context);
+
+        Done(results, "/").Outcome.ShouldBeOfType<FetchOutcome.Content>();
+        Done(results, "/privat/x").Outcome.ShouldBeOfType<FetchOutcome.Content>();
+        (await rig.Store.GetAsync(context.Run.RunId, Ct))!.PausedHosts.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_host_profile_s_user_agent_is_sent_on_every_request_and_robots_groups_still_apply()
+    {
+        const string browser = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0";
+        var policy = new FixedCrawlPolicy();
+        policy.Overrides[TestSite.Host] = FixedCrawlPolicy.Budget(500) with { UserAgent = browser };
+        await using var rig = CrawlRig.Create(_site, policy);
+        var context = Context(Settings());
+
+        var results = await rig.CrawlAsync(context);
+
+        foreach (var path in new[] { "/robots.txt", "/sitemapindex.xml", "/sitemap1.xml.gz", "/", "/a" })
+        {
+            _site.Requests[path]["User-Agent"].ToString().ShouldBe(browser, path);
+        }
+
+        // robots.txt is still honoured with another User-Agent.
+        Done(results, "/privat/x").Outcome.ShouldBe(new FetchOutcome.Skipped("robots.disallow"));
+    }
+
+    [Fact]
     public async Task An_unreachable_robots_txt_pauses_the_host_and_fails_its_seeds()
     {
         _robotsStatus = 503;
@@ -254,6 +342,7 @@ public sealed class CrawlTraversalTests : IAsyncLifetime
         app.MapGet("/c", () => Html("<p>C</p>", "<link rel=\"canonical\" href=\"/\">"));
         app.MapGet("/d", () => Html("<p>D</p>"));
         app.MapGet("/privat/x", () => Html("<p>Privat</p>"));
+        app.MapGet("/to-privat", () => Results.Redirect("/privat/x"));
         app.MapGet("/redirect-out", (HttpContext http) => Results.Redirect($"http://other.test:{http.Request.Host.Port}/login"));
         app.MapGet("/moved", (HttpContext http) => Results.Redirect($"http://other.test:{http.Request.Host.Port}/new", permanent: true));
         app.MapGet("/noindex", () => Html("<p>Noindex</p><a href=\"/from-noindex\">x</a>", "<meta name=\"robots\" content=\"noindex\">"));

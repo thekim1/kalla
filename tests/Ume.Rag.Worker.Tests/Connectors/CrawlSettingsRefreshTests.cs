@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Jobs;
@@ -91,8 +92,8 @@ public sealed class CrawlSettingsRefreshTests(RagDatabaseFixture database) : IAs
         var worker = await WorkerHost.StartAsync(database, services =>
         {
             services.AddSingleton<IDnsResolver>(_site.Resolver());
-            services.Replace(ServiceDescriptor.Singleton(sp => new PlatformCrawlSettingsSource(sp.GetRequiredService<JobDatabase>(), _clock,
-                sp.GetRequiredService<ILogger<PlatformCrawlSettingsSource>>())));
+            services.Replace(ServiceDescriptor.Singleton(sp => new PlatformCrawlSettingsSource(sp.GetRequiredService<JobDatabase>(),
+                sp.GetRequiredService<IOptions<CrawlOptions>>(), _clock, sp.GetRequiredService<ILogger<PlatformCrawlSettingsSource>>())));
         }, new Dictionary<string, string?> { ["Crawl:AllowedPrivateRanges"] = "127.0.0.1/32" }, _logs, engine: true);
         var guard = worker.Services.GetRequiredService<IEgressGuard>();
         await Commands.WaitUntilAsync(() => Task.FromResult(Allows(guard, new Uri($"http://{TestSite.Host}:{SentinelPort}/"))), TimeSpan.FromSeconds(60));

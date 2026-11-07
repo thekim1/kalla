@@ -234,9 +234,10 @@ public sealed class CrawlTraversal(
         var url = new Uri(row.RequestUrl);
         var robotsEntry = await robots.GetAsync(url, cancellationToken);
         await budget.RecordRobotsAsync(row.Host, robotsEntry, cancellationToken);
-        if (robotsEntry.Status == RobotsStatus.Unreachable)
+        if (robotsEntry.Status == RobotsStatus.Unreachable && !robotsEntry.Ignored)
         {
             // An unreachable robots.txt pauses the host for the run (weakness review §3): its seeds fail, nothing is not-seen.
+            // Not on a host whose profile ignores robots.txt (§6.6).
             await runs.PauseHostAsync(run.RunId, row.Host, CrawlConnector.RobotsUnreachable, null, cancellationToken);
             return await NotReachedAsync(context, row, CrawlConnector.RobotsUnreachable, cancellationToken);
         }

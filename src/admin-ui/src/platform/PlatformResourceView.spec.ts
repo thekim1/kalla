@@ -89,6 +89,23 @@ describe('Platform objects: organisation (admin design §5.8)', () => {
     wrapper.unmount()
   })
 
+  it('edits the crawl section with the host politeness table instead of its JSON (admin design §5.8)', async () => {
+    setActivePinia(createPinia())
+    const crawl = { version: '3', value: { allowedPorts: [8443], hostOverrides: { 'www.umea.se': { preset: 'fast' } } } }
+    const doc = { paths: { '/api/settings/{section}': { put: { requestBody: { content: { 'application/json': { schema: { properties: { value: { type: 'object' } } } } } } } } } }
+    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(json(url === '/openapi/v1.json' ? doc : crawl))))
+    const wrapper = mount(PlatformResourceView, { props: { resource: 'settings' }, attachTo: document.body })
+    await flushPromises()
+
+    const row = wrapper.findAll('tbody tr').find((r) => r.text().includes(PLATFORM.settingsSections.crawl))!
+    await row.trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('[data-test=crawl-settings]')).not.toBeNull()
+    expect(document.body.querySelector('[data-test=host-politeness]')!.textContent).toContain('www.umea.se')
+    expect(document.body.querySelector('#platform-settings-value')).toBeNull()
+    wrapper.unmount()
+  })
+
   it('is found in search by English words', () => {
     const entries = searchEntries(navGroups)
     for (const query of ['member groups', 'sharing', 'municipality']) {

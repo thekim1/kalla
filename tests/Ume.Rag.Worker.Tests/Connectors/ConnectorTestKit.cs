@@ -162,15 +162,16 @@ internal sealed class TestSite : IAsyncDisposable
 
     public FakeDnsResolver Resolver() => new FakeDnsResolver().Add(Host, "127.0.0.1").Add(SecureHost, "127.0.0.1");
 
-    /// <summary>The production fetch path, wired to this site.</summary>
-    public FetchPath Fetch(IMalwareScanner? scanner = null, FakeDnsResolver? dns = null, string? allowedPrivateRanges = "127.0.0.1/32")
+    /// <summary>The production fetch path, wired to this site; <paramref name="policy"/> gives the hosts' politeness profiles (User-Agent, robots.txt).</summary>
+    public FetchPath Fetch(IMalwareScanner? scanner = null, FakeDnsResolver? dns = null, string? allowedPrivateRanges = "127.0.0.1/32", FixedCrawlPolicy? policy = null)
     {
+        policy ??= new FixedCrawlPolicy();
         var guard = ConnectorTestKit.Guard(dns ?? Resolver(), new FixedEgressPolicy(Port, SecurePort), allowedPrivateRanges);
         var client = new CrawlHttpClient(guard, (_, certificate, _, _) => certificate?.GetCertHashString() == _certificate.GetCertHashString());
-        var fetcher = new HttpFetcher(client, guard, TimeProvider.System);
+        var fetcher = new HttpFetcher(client, guard, policy, TimeProvider.System);
         var blobRoot = Directory.CreateTempSubdirectory("ume-rag-connector-blobs-");
         var blobs = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = blobRoot.FullName }), TimeProvider.System);
-        var robots = new RobotsCache(fetcher, TimeProvider.System);
+        var robots = new RobotsCache(fetcher, policy, TimeProvider.System);
         var connector = new UrlListConnector(fetcher, robots, scanner ?? new ScriptedScanner(ScanResult.Clean), blobs, TimeProvider.System);
         return new FetchPath(client, fetcher, robots, connector, blobs, blobRoot);
     }

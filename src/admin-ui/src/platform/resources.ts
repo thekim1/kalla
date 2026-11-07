@@ -53,6 +53,8 @@ export interface PlatformResource {
   actions?: RowAction[]
   /** A panel shown above the list. */
   panel?: 'embedding-canary'
+  /** A row whose edit is a form of its own instead of the generic one. */
+  form?: (row: Row) => 'crawl-settings' | undefined
 }
 
 export function urlOf(path: string, row: Row | null, key: string): string {
@@ -126,6 +128,8 @@ export const platformResources: PlatformResource[] = [
     columns: [{ key: 'label', label: PLATFORM.columns.section }],
     update: { method: 'put', path: '/api/settings/{section}' },
     load: (row) => http.get<Row>(`/api/settings/${String(row.section)}`),
+    // The crawl section's host politeness is a table with a drawer per host, not JSON (admin design §5.8).
+    form: (row) => (row.section === 'crawl' ? 'crawl-settings' : undefined),
   },
   {
     id: 'data-protection',

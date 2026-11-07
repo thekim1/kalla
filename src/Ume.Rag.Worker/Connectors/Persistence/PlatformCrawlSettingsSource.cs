@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Npgsql;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Worker.Connectors.Egress;
@@ -8,16 +9,17 @@ namespace Ume.Rag.Worker.Connectors.Persistence;
 /// <summary>
 /// The egress and crawl policies from <c>config."Settings"."Crawl"</c> (<see cref="PlatformCrawlSettings"/>), read at start
 /// and every <see cref="RefreshInterval"/>. A failed read keeps the last good policy (at start: the defaults, every host
-/// external at 1 req/s, no extra ports), so a database hiccup never widens the egress rules.
+/// external at 1 req/s, no extra ports), so a database hiccup never widens the egress rules. Host politeness profiles are
+/// clamped to the deployment's ceilings (<c>Crawl:MaxHostRate</c>, <c>Crawl:MaxHostConnections</c>).
 /// </summary>
-public sealed partial class PlatformCrawlSettingsSource(JobDatabase database, TimeProvider time, ILogger<PlatformCrawlSettingsSource> logger)
+public sealed partial class PlatformCrawlSettingsSource(JobDatabase database, IOptions<CrawlOptions> options, TimeProvider time, ILogger<PlatformCrawlSettingsSource> logger)
     : BackgroundService, IEgressPolicySource, ICrawlPolicySource
 {
     public static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(60);
 
     private const string ReadSql = """SELECT "Crawl"::text FROM config."Settings" ORDER BY "Id" LIMIT 1""";
 
-    private volatile Policies _current = new(EgressPolicy.Default, CrawlPolicy.Default);
+    private volatile Policies _current = new(EgressPolicy.Default, CrawlPolicy.Default with { Ceilings = options.Value.Ceilings() });
 
     EgressPolicy IEgressPolicySource.Current => _current.Egress;
 
@@ -31,7 +33,7 @@ public sealed partial class PlatformCrawlSettingsSource(JobDatabase database, Ti
             await using var connection = await database.OpenAsync(cancellationToken);
             await using var command = new NpgsqlCommand(ReadSql, connection);
             var json = await command.ExecuteScalarAsync(cancellationToken) as string;
-            var (egress, crawl) = PlatformCrawlSettings.Parse(json);
+            var (egress, crawl) = PlatformCrawlSettings.Parse(json, options.Value.Ceilings());
             _current = new Policies(egress, crawl);
             return true;
         }

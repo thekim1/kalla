@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Pipelines.Crawl;
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Egress;
@@ -421,11 +422,17 @@ internal sealed class RecordingJobQueue : IJobQueue
     public Task<int> CancelRunAsync(Guid runId, string reason, Guid? exceptJobId, CancellationToken cancellationToken) => throw new NotSupportedException();
 }
 
+/// <summary>Municipal hosts and politeness profiles by host name, set by the test; the ceilings let the test sites run at up to 1,000 req/s.</summary>
 internal sealed class FixedCrawlPolicy(params string[] municipalHosts) : ICrawlPolicySource
 {
-    public Dictionary<string, HostOverride> Overrides { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, HostPoliteness> Overrides { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public CrawlPolicy Current => new(municipalHosts, Overrides);
+    public PolitenessCeilings Ceilings { get; set; } = new(1000, PolitenessCeilings.DefaultMaxHostConnections, PolitenessCeilings.DefaultMaxRenderPerHost);
+
+    public CrawlPolicy Current => new(municipalHosts, Overrides) { Ceilings = Ceilings };
+
+    /// <summary>A fast budget for a test host: <paramref name="rate"/> req/s and <paramref name="connections"/> connections.</summary>
+    public static HostPoliteness Budget(double rate, int connections = 4) => new() { RequestsPerSecond = rate, MaxConnections = connections };
 }
 
 /// <summary>Applied site profiles by (level, host), set by the test.</summary>
@@ -511,7 +518,7 @@ internal sealed class CrawlRig : IAsyncDisposable
     public FakeTimeProvider ProfileClock { get; }
 
     /// <param name="site">The test site.</param>
-    /// <param name="policy">Municipal hosts and overrides; the default makes the test hosts fast (500 req/s, within numeric(5,2); 4 connections).</param>
+    /// <param name="policy">Municipal hosts and politeness profiles; the default makes the test hosts fast (500 req/s, within numeric(5,2); 4 connections).</param>
     /// <param name="batch"><c>Crawl:FetchBatchPerHost</c>.</param>
     /// <param name="dns">Extra host names.</param>
     /// <param name="hosts">The <c>CrawlHosts</c> store; in memory when null.</param>
@@ -521,15 +528,16 @@ internal sealed class CrawlRig : IAsyncDisposable
         TestSite site, FixedCrawlPolicy? policy = null, int batch = 10, FakeDnsResolver? dns = null, ICrawlHostStore? hosts = null,
         (ICrawlFrontierStore Frontier, ICrawlRunStore Runs)? store = null, Worker.Connectors.Deletion.CompletenessRule rule = Worker.Connectors.Deletion.CompletenessRule.Ratio)
     {
-        var path = site.Fetch(dns: dns);
         if (policy is null)
         {
             policy = new FixedCrawlPolicy();
             foreach (var host in new[] { TestSite.Host, "kommun.test", "other.test" })
             {
-                policy.Overrides[$"{host}:{site.Port}"] = new HostOverride(500, 4);
+                policy.Overrides[host] = FixedCrawlPolicy.Budget(500);
             }
         }
+
+        var path = site.Fetch(dns: dns, policy: policy);
 
         var profiles = new InMemorySiteProfiles();
         var profileClock = new FakeTimeProvider();
@@ -540,7 +548,7 @@ internal sealed class CrawlRig : IAsyncDisposable
         var queue = new RecordingJobQueue();
         var budget = new HostBudget(hosts ?? new InMemoryCrawlHostStore(TimeProvider.System), policy, TimeProvider.System);
         var options = Options.Create(new CrawlOptions { FetchBatchPerHost = batch, CompletenessRule = rule });
-        var topUp = new FetchTopUp(frontier, runs, queue, options, TimeProvider.System);
+        var topUp = new FetchTopUp(frontier, runs, queue, policy, options, TimeProvider.System);
         var traversal = new CrawlTraversal(connector, path.Robots, budget, policy, frontier, runs, topUp, path.Blobs, queue,
             new LastmodReliability(profiles, profileClock), options, TimeProvider.System);
         return new CrawlRig(path, connector, traversal, frontier, runs, memory, queue, topUp, profiles, profileClock);

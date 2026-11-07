@@ -2,11 +2,13 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Services;
 using Ume.Rag.Infrastructure.Persistence;
+using Ume.Rag.Pipelines.Crawl;
 using Ume.Rag.Retrieval;
 
 namespace Ume.Rag.AdminApi;
@@ -40,7 +42,13 @@ public static class SettingsEndpoints
             s.DeletionGuardMinCount = r.MinCount;
             s.DeletionGuardMaxCount = r.MaxCount;
         });
-        Section(settings, "crawl", s => new JsonSectionSettings(Json(s.Crawl), Version(s)), (JsonSectionRequest r, PlatformSettings s) => s.Crawl = r.Value.ToJsonString());
+        var ceilings = ((IEndpointRouteBuilder)api).ServiceProvider.GetRequiredService<IOptions<CrawlCeilingOptions>>();
+        Section(settings, "crawl", s => new JsonSectionSettings(Json(s.Crawl), Version(s)), (JsonSectionRequest r, PlatformSettings s) => s.Crawl = r.Value.ToJsonString(),
+            (r, _, _) =>
+            {
+                CrawlPolitenessRule.Ensure(r.Value, ceilings.Value.Ceilings());
+                return Task.CompletedTask;
+            });
         Section(settings, "evaluation", EvaluationSettings.Of, (EvaluationSettingsRequest r, PlatformSettings s) =>
         {
             s.EvaluationModel = r.EvaluationModel;
@@ -130,6 +138,24 @@ public static class SettingsEndpoints
     internal static string Version(PlatformSettings s) => s.Version.ToString(CultureInfo.InvariantCulture);
 
     private static JsonObject Json(string text) => JsonNode.Parse(string.IsNullOrWhiteSpace(text) ? "{}" : text) as JsonObject ?? [];
+}
+
+/// <summary>
+/// V37 (admin design §4.6; connectors design §6.6): every host's politeness profile in the crawl section's
+/// <c>hostOverrides</c> is valid and within the deployment's ceilings (<see cref="HostPolitenessRules"/>, shared with the
+/// worker); the first problem answers 400 <c>crawl_politeness_invalid</c> with the host, the member and what is wrong.
+/// </summary>
+public static class CrawlPolitenessRule
+{
+    public static void Ensure(JsonObject crawl, PolitenessCeilings ceilings)
+    {
+        ArgumentNullException.ThrowIfNull(crawl);
+        if (HostPolitenessRules.Check(crawl["hostOverrides"], ceilings) is { } problem)
+        {
+            throw AdminFaults.Of(AdminErrorCodes.CrawlPolitenessInvalid,
+                new Dictionary<string, string> { ["host"] = problem.Host, ["field"] = problem.Field, ["problem"] = problem.Problem });
+        }
+    }
 }
 
 /// <summary>

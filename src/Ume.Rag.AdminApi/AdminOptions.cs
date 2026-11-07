@@ -1,8 +1,32 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Infrastructure.Security;
+using Ume.Rag.Pipelines.Crawl;
 
 namespace Ume.Rag.AdminApi;
+
+/// <summary>
+/// The deployment's ceilings of a host's politeness profile (connectors design §6.6), checked on save (V37): bound from the
+/// <c>Crawl</c> section the worker reads too (<c>Crawl:MaxHostRate</c>, <c>Crawl:MaxHostConnections</c>; set them alike on
+/// both), and <see cref="MaxRenderPerHost"/> from <c>Render:MaxConcurrent</c>.
+/// </summary>
+public sealed class CrawlCeilingOptions
+{
+    public const string SectionName = "Crawl";
+
+    /// <summary>Requests per second; <c>CrawlHosts.RequestsPerSecond</c> is <c>numeric(5,2)</c>.</summary>
+    [Range(HostPolitenessRules.MinRequestsPerSecond, 999)]
+    public double MaxHostRate { get; set; } = PolitenessCeilings.DefaultMaxHostRate;
+
+    [Range(1, 256)]
+    public int MaxHostConnections { get; set; } = PolitenessCeilings.DefaultMaxHostConnections;
+
+    /// <summary><c>Render:MaxConcurrent</c>: the most pages a host's <c>renderPerHost</c> may render at once.</summary>
+    [Range(1, 64)]
+    public int MaxRenderPerHost { get; set; } = PolitenessCeilings.DefaultMaxRenderPerHost;
+
+    public PolitenessCeilings Ceilings() => new(MaxHostRate, MaxHostConnections, MaxRenderPerHost);
+}
 
 /// <summary>Bound from the <c>Admin</c> configuration section (adapted from the gateway's; identity design §1.4).</summary>
 public sealed class AdminOptions

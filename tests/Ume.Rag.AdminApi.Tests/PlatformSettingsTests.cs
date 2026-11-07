@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Domain.Admin;
 using Ume.Rag.Domain.Entities;
@@ -134,6 +135,94 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
             evaluationMaxQuestions = evaluation.GetProperty("evaluationMaxQuestions").GetInt32(), version = saved.GetProperty("version").GetString(),
         }, Ct));
         await Json(await admin.PutAsJsonAsync("/api/settings/chat", new { value = chatSection.GetProperty("value"), version = saved.GetProperty("version").GetString() }, Ct));
+    }
+
+    [Fact]
+    public async Task V37_refuses_a_host_politeness_profile_outside_its_ranges_or_ceilings_and_saves_a_valid_one_audited()
+    {
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
+        var before = await Json(await admin.GetAsync("/api/settings/crawl", Ct));
+        var version = before.GetProperty("version").GetString();
+
+        async Task RefusedAsync(object hostOverrides, string host, string field)
+        {
+            using var response = await admin.PutAsJsonAsync("/api/settings/crawl", new { value = new { allowedPorts = new[] { 8443 }, hostOverrides }, version }, Ct);
+            response.StatusCode.ShouldBe(HttpStatusCode.BadRequest, $"{host} {field}");
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+            problem.GetProperty("code").GetString().ShouldBe(AdminErrorCodes.CrawlPolitenessInvalid.Code);
+            problem.GetProperty("params").GetProperty("host").GetString().ShouldBe(host);
+            problem.GetProperty("params").GetProperty("field").GetString().ShouldBe(field);
+        }
+
+        foreach (var (profile, field) in new (object, string)[]
+        {
+            // The deployment's ceilings (Crawl:MaxHostRate 50, Crawl:MaxHostConnections 16 by default).
+            (new { requestsPerSecond = 51 }, "requestsPerSecond"),
+            (new { requestsPerSecond = 0.05 }, "requestsPerSecond"),
+            (new { maxConnections = 17 }, "maxConnections"),
+            (new { maxConnections = 2.5 }, "maxConnections"),
+            // robots.txt is ignored only with a reason.
+            (new { robots = new { mode = "ignore" } }, "robots.reason"),
+            (new { robots = new { mode = "ignore", reason = "  " } }, "robots.reason"),
+            (new { robots = new { mode = "skip", reason = "x" } }, "robots.mode"),
+            (new { userAgent = "UmeåBot/1.0" }, "userAgent"),
+            (new { userAgent = new string('x', 257) }, "userAgent"),
+            (new { userAgent = "" }, "userAgent"),
+            (new { preset = "turbo" }, "preset"),
+            (new { crawlDelay = "never" }, "crawlDelay"),
+            (new { crawlWindow = "day" }, "crawlWindow"),
+            (new { backoff = new { maxRetryAfterSeconds = 7200 } }, "backoff.maxRetryAfterSeconds"),
+            (new { backoff = new { maxFactor = 32 } }, "backoff.maxFactor"),
+            (new { circuitBreaker = new { threshold = 0.1 } }, "circuitBreaker.threshold"),
+            (new { circuitBreaker = new { pauseMinutes = 121 } }, "circuitBreaker.pauseMinutes"),
+            (new { circuitBreaker = "on" }, "circuitBreaker"),
+            (new { renderPerHost = 3 }, "renderPerHost"),
+            // A typo is no silent default.
+            (new { requestPerSecond = 5 }, "requestPerSecond"),
+            (new { backoff = new { maxWait = 5 } }, "backoff.maxWait"),
+        })
+        {
+            await RefusedAsync(new Dictionary<string, object> { ["www.example.org"] = profile }, "www.example.org", field);
+        }
+
+        foreach (var host in new[] { "www.example.org:8443", "WWW.example.org", "https://www.example.org", "*.example.org", "www.example.org/", "rådhus.example.org" })
+        {
+            await RefusedAsync(new Dictionary<string, object> { [host] = new { requestsPerSecond = 2 } }, host, "host");
+        }
+
+        await RefusedAsync(new[] { "www.example.org" }, "", "hostOverrides");
+
+        var value = JsonNode.Parse("""
+            {
+              "municipalHosts": ["*.umea.se"],
+              "hostOverrides": {
+                "www.umea.se": { "preset": "fast", "requestsPerSecond": 50, "maxConnections": 16, "circuitBreaker": "off",
+                                 "robots": { "mode": "ignore", "reason": "own site, web team consent 2026-11-10" },
+                                 "userAgent": "Mozilla/5.0 (X11; Linux x86_64)", "renderPerHost": 2 },
+                "xn--rdhus-mra.example.org": { "preset": "custom", "crawlDelay": "ignore", "adaptToLatency": false, "crawlWindow": "any",
+                                               "backoff": { "maxRetryAfterSeconds": 600, "maxFactor": 4 }, "circuitBreaker": { "threshold": 0.8, "pauseMinutes": 10 },
+                                               "robots": { "mode": "respect" } }
+              }
+            }
+            """)!.AsObject();
+        try
+        {
+            var saved = await Json(await admin.PutAsJsonAsync("/api/settings/crawl", new { value, version }, Ct));
+            JsonNode.DeepEquals(JsonNode.Parse(saved.GetProperty("value").GetRawText()), value).ShouldBeTrue();
+
+            await using var db = TestPostgres.Context(database.Connection(RagDatabase.Admin));
+            var audit = await db.AuditLog.Where(a => a.EntityType == AuditEntityTypes.Settings && a.EntityId == "crawl").OrderByDescending(a => a.Id).FirstAsync(Ct);
+            audit.Action.ShouldBe("update");
+            audit.Details!.ShouldContain("own site, web team consent 2026-11-10");
+        }
+        finally
+        {
+            var current = await Json(await admin.GetAsync("/api/settings/crawl", Ct));
+            using var restored = await admin.PutAsJsonAsync("/api/settings/crawl",
+                new { value = JsonNode.Parse(before.GetProperty("value").GetRawText()), version = current.GetProperty("version").GetString() }, Ct);
+            restored.IsSuccessStatusCode.ShouldBeTrue(await restored.Content.ReadAsStringAsync(Ct));
+        }
     }
 
     [Fact]

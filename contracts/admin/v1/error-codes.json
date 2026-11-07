@@ -375,6 +375,11 @@
       "code": "settings_model_residency",
       "status": 409,
       "message": "The model {model} cannot be used for {setting}: it is not a {kind} model the gateway serves at {ceiling}."
+    },
+    {
+      "code": "crawl_politeness_invalid",
+      "status": 400,
+      "message": "The politeness setting {field} for {host} is invalid: {problem}"
     }
   ]
 }

@@ -359,6 +359,32 @@ ExecStart=/opt/ume-rag/deploy/host/docker-user-firewall.sh --env-file /opt/ume-r
 
 (with your deployment's path). `install.sh` leaves that override in place.
 
+## Crawl politeness per host
+
+By default the crawler is polite: 1 request a second and 1 connection per external host (10 and 4 on the municipal
+hosts in `Settings.Crawl.MunicipalHosts`), robots.txt and its `Crawl-delay` respected, slower when the site is slow,
+back-off on 429/503, a 30-minute pause when half of the last 100 answers fail, and scheduled crawls only in the source's
+night window (connectors design §5.1, §6.3–§6.6). A platform admin can change that **per host** in the admin UI:
+*Platform objects → Settings → Website fetching → Host politeness*. Each row is one host name (no scheme or port) with a
+preset (`polite`, `municipal`, `fast`, `custom`) and the settings that override it; it is stored in
+`Settings.Crawl.HostOverrides`, checked on save (V37, `crawl_politeness_invalid`) and audited as `settings.update`.
+
+```json
+"hostOverrides": {
+  "www.umea.se": { "preset": "fast", "requestsPerSecond": 20, "circuitBreaker": "off",
+                   "robots": { "mode": "ignore", "reason": "own site, web team consent 2026-11-10" },
+                   "userAgent": "Mozilla/5.0 (X11; Linux x86_64)" }
+}
+```
+
+- `fast` = 10 requests a second, 4 connections, `Crawl-delay` and latency ignored, any time of day.
+- robots.txt can only be ignored per host and with a reason; its `Sitemap:` lines are still read. The User-Agent is
+  free per host; robots.txt rules are still matched against `UmeaKommunBot`.
+- The deployment caps every host at `Crawl:MaxHostRate` (50 requests a second) and `Crawl:MaxHostConnections` (16).
+  Set them alike on `rag-admin` (which refuses more) and `rag-worker` (which clamps to them), e.g.
+  `Crawl__MaxHostRate=20` in both services' environment. `renderPerHost` is capped at `Render:MaxConcurrent` (2).
+- A crawl run's page lists the hosts it fetched with their own politeness and the robots.txt reason.
+
 ## Public-records requests (allmän handling)
 
 **Status: open; there is no admin procedure yet.** In the pilot our database holds no chat content (history mode

@@ -30,7 +30,7 @@ const WORKER_CODES = [
   'command.invalid_payload', 'preview.limit_documents', 'preview.invalid_payload', 'preview.unknown_kind',
   'preview.unsupported', 'preview.collection_unknown', 'preview.source_unknown', 'preview.document_unknown',
   'preview.upload_unknown', 'preview.deadline', 'preflight.none_reachable', 'preflight.deadline', 'pages.within_limit',
-  'crawl.limit_pages', 'sitemap.found', 'sitemap.none', 'robots.ok', 'robots.missing', 'cms.sitevision', 'cms.unknown',
+  'crawl.limit_pages', 'sitemap.found', 'sitemap.none', 'robots.ok', 'robots.missing', 'robots.ignored', 'cms.sitevision', 'cms.unknown',
   // The eval class (#128, #130; issue #129).
   'eval.unsupported', 'eval.invalid_payload', 'eval.no_questions', 'eval.invalid_candidate_settings', 'eval.invalid_settings',
   'eval.embedding_residency', 'eval.search_unavailable', 'eval.model_unset', 'eval.model_not_onprem', 'eval.no_onprem_key',

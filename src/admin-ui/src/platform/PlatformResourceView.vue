@@ -14,6 +14,7 @@ import { useUiStore } from '@/stores/ui'
 import { formatDateTime } from '@/utils/format'
 import { COMMON, PLATFORM } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
+import CrawlSettingsForm from './CrawlSettingsForm.vue'
 import EmbeddingCanaryPanel from './EmbeddingCanaryPanel.vue'
 import GenericForm from './GenericForm.vue'
 import { resourceById, rowsOf, urlOf, type Operation, type ResourceColumn, type Row, type RowAction } from './resources'
@@ -46,6 +47,7 @@ const confirming = ref<RowAction | null>(null)
 
 const columns = computed<ResourceColumn[]>(() => resource.value?.columns ?? [])
 const details = computed(() => (selected.value && resource.value?.details ? resource.value.details(selected.value) : null))
+const ownForm = computed(() => (selected.value && openForm.value?.operation === resource.value?.update ? resource.value?.form?.(selected.value) : undefined))
 
 async function load(): Promise<void> {
   if (resource.value) await rows.run(() => rowsOf(resource.value!))
@@ -179,8 +181,12 @@ watch(() => props.resource, () => {
         <div v-if="selected && resource.actions?.length && openForm?.operation === resource.update" class="mb-6 flex flex-wrap gap-2">
           <UiButton v-for="action in resource.actions" :key="action.id" :data-test="`action-${action.id}`" @click="runAction(action)">{{ action.label }}</UiButton>
         </div>
+        <CrawlSettingsForm
+          v-if="openForm && ownForm === 'crawl-settings'" :key="formKey" :initial="openForm.initial" :url="openForm.url" :submit-label="openForm.submitLabel"
+          @saved="saved" @cancel="drawerOpen = false"
+        />
         <GenericForm
-          v-if="openForm" :key="formKey" :form-id="`platform-${resource.id}`" :fields="openForm.fields" :initial="openForm.initial"
+          v-else-if="openForm" :key="formKey" :form-id="`platform-${resource.id}`" :fields="openForm.fields" :initial="openForm.initial"
           :method="openForm.operation.method" :url="openForm.url" :submit-label="openForm.submitLabel" @saved="saved" @cancel="drawerOpen = false"
         />
       </template>

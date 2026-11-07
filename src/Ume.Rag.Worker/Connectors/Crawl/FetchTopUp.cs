@@ -6,6 +6,7 @@ using Ume.Rag.Domain.Ports;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Worker.Connectors.Egress;
+using Ume.Rag.Worker.Connectors.Hosts;
 
 namespace Ume.Rag.Worker.Connectors.Crawl;
 
@@ -31,8 +32,10 @@ public sealed record CrawlRunContext(CrawlRunKey Run, Guid DepartmentId, SyncKin
 
 /// <param name="Enqueued">The <c>fetch</c> jobs enqueued.</param>
 /// <param name="WindowOpensAt">
-/// Set when the night window is closed: nothing was released, and the run's <c>sync</c> continuation (phase <c>fetch</c>,
-/// <see cref="FetchTopUp.Continuation"/>) must wait until then so the run stays <c>running</c> (§6.5).
+/// Set when the closed night window holds back pending rows (or the one host asked for keeps to the window): nothing was
+/// released for the hosts that keep to it, and the run's <c>sync</c> continuation (phase <c>fetch</c>,
+/// <see cref="FetchTopUp.Continuation"/>) must wait until then so the run stays <c>running</c> (§6.5). Hosts whose
+/// politeness profile says <c>crawlWindow: any</c> were topped up all the same.
 /// </param>
 public sealed record TopUpResult(int Enqueued, DateTimeOffset? WindowOpensAt);
 
@@ -40,10 +43,12 @@ public sealed record TopUpResult(int Enqueued, DateTimeOffset? WindowOpensAt);
 /// P1's release of a source's frontier (connectors design §6.0): each host keeps at most <c>Crawl:FetchBatchPerHost</c>
 /// <c>fetch</c> jobs queued or running, topped up from its <c>pending</c> rows after the listing and whenever one of its
 /// fetches finishes; dedup <c>fetch:{sourceId}:{urlHash}</c>. A scheduled traversal releases only inside the source's
-/// night window; a host the run paused three times (§6.4) gets no more fetches, so its rows stay pending and the
-/// traversal is incomplete. The slot each fetch takes (§6.3) still paces the requests.
+/// night window, except to hosts whose politeness profile says <c>crawlWindow: any</c> (§6.6); a host the run paused three
+/// times (§6.4) gets no more fetches, so its rows stay pending and the traversal is incomplete. The slot each fetch takes
+/// (§6.3) still paces the requests.
 /// </summary>
-public sealed class FetchTopUp(ICrawlFrontierStore frontier, ICrawlRunStore runs, IJobQueue queue, IOptions<CrawlOptions> options, TimeProvider time)
+public sealed class FetchTopUp(
+    ICrawlFrontierStore frontier, ICrawlRunStore runs, IJobQueue queue, ICrawlPolicySource policy, IOptions<CrawlOptions> options, TimeProvider time)
 {
     /// <summary>Pauses after which a host's part of the run ends (§6.4).</summary>
     public const int MaxPausesPerRun = 3;
@@ -58,7 +63,9 @@ public sealed class FetchTopUp(ICrawlFrontierStore frontier, ICrawlRunStore runs
         var settings = ContractJson.Deserialize<Pipelines.Sources.CrawlSettings>(context.Settings);
         var now = time.GetUtcNow();
         var window = CrawlWindow.Parse(settings.CrawlWindow);
-        if (context.Trigger != RunTrigger.Manual && !window.IsOpen(now))
+        var closed = context.Trigger != RunTrigger.Manual && !window.IsOpen(now);
+        var current = policy.Current;
+        if (closed && host is not null && !current.ProfileOf(host).AnyTime)
         {
             return new TopUpResult(0, window.NextOpening(now));
         }
@@ -67,10 +74,17 @@ public sealed class FetchTopUp(ICrawlFrontierStore frontier, ICrawlRunStore runs
         var ended = run?.PausedHosts.Where(p => p.Value.Count >= MaxPausesPerRun).Select(p => p.Key).ToHashSet(StringComparer.Ordinal) ?? [];
         var batch = options.Value.FetchBatchPerHost;
         var jobs = new List<JobRequest>();
+        var waiting = false;
         foreach (var load in await frontier.HostLoadAsync(context.Run, cancellationToken))
         {
             if ((host is not null && !string.Equals(load.Host, host, StringComparison.Ordinal)) || ended.Contains(load.Host) || load.Pending == 0)
             {
+                continue;
+            }
+
+            if (closed && !current.ProfileOf(load.Host).AnyTime)
+            {
+                waiting = true;
                 continue;
             }
 
@@ -96,7 +110,7 @@ public sealed class FetchTopUp(ICrawlFrontierStore frontier, ICrawlRunStore runs
             await queue.EnqueueAsync(jobs, transaction, cancellationToken);
         }
 
-        return new TopUpResult(jobs.Count, null);
+        return new TopUpResult(jobs.Count, waiting ? window.NextOpening(now) : null);
     }
 
     /// <summary>The run's <c>sync</c> continuation in phase <c>fetch</c>, ready at <paramref name="at"/> (the window's opening).</summary>
