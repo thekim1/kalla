@@ -328,7 +328,7 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
     }
 
     [Fact]
-    public async Task General_knowledge_is_a_draft_field_and_a_public_assistant_keeps_it_off()
+    public async Task General_knowledge_is_a_draft_field_and_a_public_assistant_needs_a_confirmation()
     {
         // P1b item 40: V17 accepts answer.generalKnowledge off/supplement/fallback/open; V36 keeps public assistants off
         // (refused on publish and on a level change, a warning on draft save).
@@ -411,33 +411,86 @@ public sealed class AssistantEndpointsTests(AdminDatabaseFixture database)
             .Single(a => a.GetProperty("id").GetGuid() == inner);
         listed.GetProperty("generalKnowledge").GetString().ShouldBe("fallback");
 
-        // Lowering its level to public while the published version uses general knowledge is refused (V36, level change).
-        using (var lowered = await admin.PutAsJsonAsync($"/api/assistants/{inner}", new
-               {
-                   name = "Intern " + seed.Code, classification = "public", description = "D", contactName = "K", contactEmail = "k@umea.se", version = innerVersion,
-               }, Ct))
+        async Task<string?> AuditConfirmedAsync(Guid id, string action)
         {
-            lowered.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-            (await Json(lowered)).GetProperty("code").GetString().ShouldBe("general_knowledge_not_allowed_for_level");
+            await using var db = TestPostgres.Context(database.Connection(null));
+            var details = await db.AuditLog.AsNoTracking().Where(a => a.EntityType == "assistant" && a.EntityId == id.ToString() && a.Action == action)
+                .OrderByDescending(a => a.Id).Select(a => a.Details).FirstAsync(Ct);
+            using var doc = JsonDocument.Parse(details!);
+            return doc.RootElement.GetProperty("after").TryGetProperty("generalKnowledgeConfirmed", out var flag) && flag.ValueKind == JsonValueKind.True ? "true" : null;
         }
 
-        // A public assistant: supplement saves with the V36 warning, and publishing it is refused.
+        // V36 is a confirmed warning (#445). Lowering the level to public while the published version uses general knowledge
+        // answers 409 until the request confirms it; the confirmed change is audited.
+        object Lower(bool confirm) => new
+        {
+            name = "Intern " + seed.Code, classification = "public", description = "D", contactName = "K", contactEmail = "k@umea.se", version = innerVersion,
+            confirmGeneralKnowledge = confirm,
+        };
+        using (var lowered = await admin.PutAsJsonAsync($"/api/assistants/{inner}", Lower(false), Ct))
+        {
+            lowered.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await Json(lowered)).GetProperty("code").GetString().ShouldBe("general_knowledge_public_unconfirmed");
+        }
+
+        using (var lowered = await admin.PutAsJsonAsync($"/api/assistants/{inner}", Lower(true), Ct))
+        {
+            lowered.StatusCode.ShouldBe(HttpStatusCode.OK, await lowered.Content.ReadAsStringAsync(Ct));
+            var body = await Json(lowered);
+            body.GetProperty("classification").GetString().ShouldBe("public");
+            body.GetProperty("generalKnowledge").GetString().ShouldBe("fallback");
+        }
+
+        (await AuditConfirmedAsync(inner, "update")).ShouldBe("true");
+
+        // A public assistant: supplement saves with the V36 warning; publish answers 409 until confirmed.
         var (open, openVersion, openDraft) = await CreateAsync("Publik", Classification.Public);
         (await admin.GetFromJsonAsync<JsonElement>($"/api/assistants/{open}", Ct)).GetProperty("generalKnowledge").ValueKind.ShouldBe(JsonValueKind.Null);
         (warnings, next) = await DraftAsync(open, "supplement", openDraft);
-        warnings.ShouldBe(["general_knowledge_not_allowed_for_level"]);
+        warnings.ShouldBe(["general_knowledge_public_unconfirmed"]);
         using (var refused = await admin.PostAsJsonAsync($"/api/assistants/{open}/publish", new { version = openVersion, draftVersion = next }, Ct))
         {
             refused.StatusCode.ShouldBe(HttpStatusCode.Conflict);
             var problem = await Json(refused);
-            problem.GetProperty("code").GetString().ShouldBe("general_knowledge_not_allowed_for_level");
+            problem.GetProperty("code").GetString().ShouldBe("general_knowledge_public_unconfirmed");
             problem.GetProperty("problems").GetArrayLength().ShouldBe(1);
         }
 
-        // Off publishes.
-        (warnings, next) = await DraftAsync(open, "off", next);
+        using (var confirmed = await admin.PostAsJsonAsync($"/api/assistants/{open}/publish", new { version = openVersion, draftVersion = next, confirmGeneralKnowledge = true }, Ct))
+        {
+            confirmed.StatusCode.ShouldBe(HttpStatusCode.OK, await confirmed.Content.ReadAsStringAsync(Ct));
+            var body = await Json(confirmed);
+            openVersion = body.GetProperty("version").GetString();
+            body.GetProperty("generalKnowledge").GetString().ShouldBe("supplement");
+        }
+
+        (await AuditConfirmedAsync(open, "publish")).ShouldBe("true");
+
+        // Off publishes without a confirmation, and the audit records none.
+        (warnings, next) = await DraftAsync(open, "off", null); // the first edit after a publish starts a new draft
         warnings.ShouldBeEmpty();
-        (await admin.PostAsJsonAsync($"/api/assistants/{open}/publish", new { version = openVersion, draftVersion = next }, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        using (var off = await admin.PostAsJsonAsync($"/api/assistants/{open}/publish", new { version = openVersion, draftVersion = next }, Ct))
+        {
+            off.StatusCode.ShouldBe(HttpStatusCode.OK, await off.Content.ReadAsStringAsync(Ct));
+            openVersion = (await Json(off)).GetProperty("version").GetString();
+        }
+
+        (await AuditConfirmedAsync(open, "publish")).ShouldBeNull();
+
+        // Restoring version 1 (supplement) answers 409 until confirmed, like publish.
+        using (var refused = await admin.PostAsJsonAsync($"/api/assistants/{open}/versions/1/restore", new { version = openVersion }, Ct))
+        {
+            refused.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await Json(refused)).GetProperty("code").GetString().ShouldBe("general_knowledge_public_unconfirmed");
+        }
+
+        using (var restored = await admin.PostAsJsonAsync($"/api/assistants/{open}/versions/1/restore", new { version = openVersion, confirmGeneralKnowledge = true }, Ct))
+        {
+            restored.StatusCode.ShouldBe(HttpStatusCode.OK, await restored.Content.ReadAsStringAsync(Ct));
+            (await Json(restored)).GetProperty("generalKnowledge").GetString().ShouldBe("supplement");
+        }
+
+        (await AuditConfirmedAsync(open, "restore")).ShouldBe("true");
     }
 
     [Fact]

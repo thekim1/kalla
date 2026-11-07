@@ -67,7 +67,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   audience_above_ceiling: 'A client cannot show an assistant with the information class {level}.',
   client_stores_history: 'An assistant with the class Sensitive cannot be offered in a client that saves chat history.',
   query_steps_invalid: 'The setting {field} has an invalid value: use a whole number within the allowed range, or true/false for a switch.',
-  general_knowledge_not_allowed_for_level: 'An assistant with the class {level} answers only from its knowledge bases. General knowledge needs the class Internal or higher.',
+  general_knowledge_public_unconfirmed: 'General knowledge ({generalKnowledge}) on a public assistant is not recommended: citizens may get general answers that are wrong for Umeå kommun. Confirm to go ahead.',
   link_host_not_allowed: 'A link must be https to an allowed site, and at most 5 links.',
   settings_model_residency: 'The model {model} cannot be used for {setting}: it is not a {kind} model the AI gateway offers at {ceiling}.',
   crawl_politeness_invalid: 'The politeness setting {field} for {host} is not valid: {problem}',

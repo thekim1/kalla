@@ -576,6 +576,12 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
         return db.ApiHost(snapshot).WithWebHostBuilder(web =>
         {
             web.UseSetting("Rag:Roles", "knowledge,chat");
+            if (classification == Domain.Classification.Public)
+            {
+                // A public assistant's model call runs at its level's ceiling (External), so the api needs that key.
+                web.UseSetting("Gateway:Keys:External", FakeGatewayFactory.ExternalKey);
+            }
+
             web.ConfigureTestServices(services =>
                 services.AddHttpClient(GatewayChatClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => db.Gateway.Server.CreateHandler()));
         });
@@ -662,15 +668,19 @@ public sealed partial class ChatApiTests(KnowledgeFixture db) : IClassFixture<Kn
     }
 
     [Fact]
-    public async Task A_public_assistant_stays_off_at_run_time_whatever_its_query_steps_say()
+    public async Task A_public_assistant_runs_its_published_level_behind_the_caveat_line()
     {
-        // V36 refuses publishing it; chat holds the rule too (chat design §7.3).
-        await using var api = GeneralHost("open", Domain.Classification.Public);
+        // V36 is a confirmed warning at publish (#445): the published level runs on a public assistant too, and coverage Low
+        // with fallback gets the fixed caveat line first (chat design §7.3, §10.4).
+        await using var api = GeneralHost("fallback", Domain.Classification.Public);
         using var client = Client(api, db.IntegrationKey);
         using var response = await Ask(client, "Hur långt är det till månen i kilometer?");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
-        body.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString().ShouldBe("Inget svar i källorna." + ContactLinks);
-        body.GetProperty("usage").GetProperty("total_tokens").GetInt32().ShouldBe(0);
+        var message = body.GetProperty("choices")[0].GetProperty("message");
+        message.GetProperty("content").GetString().ShouldBe(FixedTexts.GeneralCaveatSv + "\n\nTestsvar på \"Fråga: Hur långt är det till månen i kilometer?\"." + ContactLinks);
+        message.GetProperty("annotations").GetArrayLength().ShouldBe(0);
+        body.GetProperty("usage").GetProperty("prompt_tokens").GetInt32().ShouldBeGreaterThan(0);
     }
 
     [Theory]

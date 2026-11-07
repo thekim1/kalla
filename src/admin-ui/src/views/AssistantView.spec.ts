@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
+import { ApiError } from '@/api/client'
 import type { Assistant, AssistantDraft, ClientSummary } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collectionSummary } from '@/test/fixtures'
@@ -285,6 +286,54 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     })
   })
 
+  it('offers every general knowledge level on a public assistant with a warning, and publishes after one extra confirmation (V36, #445)', async () => {
+    signIn(['rag-department-admin'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, classification: 'public' })
+    vi.spyOn(api.assistants, 'draft').mockResolvedValue({ ...draft, querySteps: { answer: { generalKnowledge: 'supplement' } } })
+    const unconfirmed = new ApiError(409, 'POST', { status: 409, code: 'general_knowledge_public_unconfirmed', params: { generalKnowledge: 'supplement' } })
+    const publish = vi.spyOn(api.assistants, 'publish')
+      .mockRejectedValueOnce(unconfirmed)
+      .mockResolvedValueOnce({ ...assistant, classification: 'public', publishedVersion: 1, draft: null, version: 'a4' })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+
+    const radios = wrapper.findAll<HTMLInputElement>('[data-test=general-knowledge] input[type=radio]')
+    expect(radios.map((r) => r.element.disabled)).toEqual([false, false, false, false])
+    expect(wrapper.get('[data-test=general-knowledge-public-warning]').text()).toBe(ASSISTANT.generalKnowledgePublicWarning)
+    await wrapper.get('#assistant-general-knowledge-off').setValue(true)
+    expect(wrapper.find('[data-test=general-knowledge-public-warning]').exists()).toBe(false)
+    await wrapper.get('#assistant-general-knowledge-fallback').setValue(true)
+    expect(wrapper.find('[data-test=general-knowledge-public-warning]').exists()).toBe(true)
+
+    await wrapper.get('[data-test=publish]').trigger('click')
+    await flushPromises()
+    expect(confirm).toHaveBeenCalledWith(ASSISTANT.generalKnowledgeConfirm)
+    expect(publish).toHaveBeenNthCalledWith(1, 'a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: false, confirmGeneralKnowledge: false })
+    expect(publish).toHaveBeenNthCalledWith(2, 'a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: false, confirmGeneralKnowledge: true })
+    expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 1')
+    confirm.mockRestore()
+  })
+
+  it('does not publish a public assistant with general knowledge when the extra confirmation is declined', async () => {
+    signIn(['rag-department-admin'])
+    mocks()
+    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, classification: 'public' })
+    const publish = vi.spyOn(api.assistants, 'publish')
+      .mockRejectedValueOnce(new ApiError(409, 'POST', { status: 409, code: 'general_knowledge_public_unconfirmed' }))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+    await wrapper.get('[data-test=publish]').trigger('click')
+    await flushPromises()
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-test=published]').exists()).toBe(false)
+    confirm.mockRestore()
+  })
+
   it('tests the draft, publishes it, and sets the audience', async () => {
     signIn(['rag-department-admin'])
     mocks()
@@ -311,7 +360,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
 
     await wrapper.get('[data-test=publish]').trigger('click')
     await flushPromises()
-    expect(publish).toHaveBeenCalledWith('a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: false })
+    expect(publish).toHaveBeenCalledWith('a1', { version: 'a3', draftVersion: 'd7', confirmBaseChanged: false, confirmGeneralKnowledge: false })
     expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 1')
 
     await button(wrapper, 'Audience').trigger('click')
@@ -351,7 +400,7 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     const confirm = [...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Restore').at(-1)!
     confirm.click()
     await flushPromises()
-    expect(restore).toHaveBeenCalledWith('a1', 2, 'a3')
+    expect(restore).toHaveBeenCalledWith('a1', 2, 'a3', false)
     expect(versions).toHaveBeenCalledTimes(2)
     expect(wrapper.get('[data-test=published]').text()).toBe('Published: version 5')
     wrapper.unmount()
@@ -423,20 +472,6 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
       querySteps: { retrieval: { topK: 8 }, answer: { language: 'sv', generalKnowledge: 'fallback' } }, notFound: { sv: 'Inget svar.', links: [] },
     }))
     expect((wrapper.get('#assistant-general-knowledge-fallback').element as HTMLInputElement).checked).toBe(true)
-  })
-
-  it('offers only Off for a public assistant, with the reason (V36)', async () => {
-    signIn(['rag-editor'])
-    mocks()
-    vi.spyOn(api.assistants, 'get').mockResolvedValue({ ...assistant, classification: 'public' })
-
-    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
-    await flushPromises()
-
-    const disabled = ['off', 'supplement', 'fallback', 'open'].map((g) => (wrapper.get(`#assistant-general-knowledge-${g}`).element as HTMLInputElement).disabled)
-    expect(disabled).toEqual([false, true, true, true])
-    expect(wrapper.get('[data-test=general-knowledge]').text()).toContain('General knowledge needs the class Internal or higher.')
-    expect(wrapper.find('[data-test=general-knowledge-badge]').exists()).toBe(false)
   })
 
   it('shows a general-knowledge answer of the test panel with its outcome', async () => {

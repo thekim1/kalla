@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
+import { ApiError } from '@/api/client'
 import type {
   Assistant, AssistantDraft, AssistantTestResult, AssistantVersion, AssistantVersionSummary, ClientSummary, CollectionLink, CollectionSummary, DataProtectionPolicy,
   GatewayModel, GeneralKnowledge,
@@ -86,7 +87,7 @@ const versionColumns: Column[] = [
   { key: 'actions', label: ASSISTANT.restore, hideLabel: true, align: 'right' },
 ]
 const archived = computed(() => assistant.data.value?.state === 'archived')
-// V36: a public assistant answers only from its knowledge bases.
+// V36 (#445): general knowledge on a public assistant shows a warning and needs one extra confirmation to publish.
 const publicLevel = computed(() => assistant.data.value?.classification === 'public')
 const historyOptions = computed(() =>
   (policy.value?.allowedHistoryModes ?? [assistant.data.value?.historyMode ?? 'none']).map((m) => ({ value: m, label: ASSISTANT.historyModes[m] ?? m })),
@@ -235,11 +236,28 @@ const saveDraft = () => run('save', async () => {
   ui.notify(ASSISTANT.draftSaved)
 })
 
+/**
+ * V36 (#445): general knowledge on a public assistant needs an explicit confirmation. The API answers 409
+ * general_knowledge_public_unconfirmed; ask once and resend with the flag (false: the user declined).
+ */
+async function withGeneralKnowledgeConfirmation<T>(send: (confirm: boolean) => Promise<T>): Promise<T | null> {
+  try {
+    return await send(false)
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.problem?.code !== 'general_knowledge_public_unconfirmed') throw e
+    if (!window.confirm(ASSISTANT.generalKnowledgeConfirm)) return null
+    return await send(true)
+  }
+}
+
 const publish = () => run('publish', async () => {
   const a = assistant.data.value!
   const baseChanged = a.draft?.baseChanged ?? false
   if (baseChanged && !window.confirm(ASSISTANT.baseChanged)) return
-  assistant.data.value = await api.assistants.publish(props.id, { version: a.version, draftVersion: a.draft!.version, confirmBaseChanged: baseChanged })
+  const published = await withGeneralKnowledgeConfirmation((confirmGeneralKnowledge) =>
+    api.assistants.publish(props.id, { version: a.version, draftVersion: a.draft!.version, confirmBaseChanged: baseChanged, confirmGeneralKnowledge }))
+  if (!published) return
+  assistant.data.value = published
   fill(null, draft.value)
   if (versions.value) await loadVersions()
   ui.notify(ASSISTANT.published(assistant.data.value.publishedVersion ?? 0))
@@ -273,7 +291,10 @@ watch(tab, (t) => {
 
 async function restore(): Promise<void> {
   const n = restoring.value!
-  assistant.data.value = await api.assistants.restore(props.id, n, assistant.data.value!.version)
+  const version = assistant.data.value!.version
+  const restored = await withGeneralKnowledgeConfirmation((confirm) => api.assistants.restore(props.id, n, version, confirm))
+  if (!restored) return
+  assistant.data.value = restored
   if (!assistant.data.value.draft) await fillFrom(assistant.data.value)
   ui.notify(ASSISTANT.restored(assistant.data.value.publishedVersion ?? n))
   await loadVersions()
@@ -339,20 +360,19 @@ onMounted(load)
         <KnowledgeLinks v-model="links" :collections="collections" :department-id="assistant.data.value.departmentId" :disabled="!canEdit" />
         <fieldset class="grid gap-2" data-test="general-knowledge" aria-describedby="assistant-general-knowledge-hint">
           <legend class="mb-1 font-medium">{{ ASSISTANT.generalKnowledge }}</legend>
-          <p id="assistant-general-knowledge-hint" class="text-small text-fg-2">{{ publicLevel ? ASSISTANT.generalKnowledgePublic : ASSISTANT.generalKnowledgeHint }}</p>
-          <label
-            v-for="g in GENERAL_KNOWLEDGE_LEVELS" :key="g" class="flex gap-3 rounded-card border border-border p-3"
-            :class="publicLevel && g !== 'off' ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'"
-          >
+          <p id="assistant-general-knowledge-hint" class="text-small text-fg-2">{{ ASSISTANT.generalKnowledgeHint }}</p>
+          <label v-for="g in GENERAL_KNOWLEDGE_LEVELS" :key="g" class="flex cursor-pointer gap-3 rounded-card border border-border p-3">
             <input
               :id="`assistant-general-knowledge-${g}`" v-model="generalKnowledge" type="radio" name="assistant-general-knowledge" :value="g" class="mt-1"
-              :disabled="publicLevel && g !== 'off'"
             />
             <span>
               <span class="block font-medium">{{ ASSISTANT.generalKnowledgeLevels[g]!.label }}</span>
               <span class="block text-small text-fg-2">{{ ASSISTANT.generalKnowledgeLevels[g]!.help }}</span>
             </span>
           </label>
+          <p v-if="publicLevel && generalKnowledge !== 'off'" class="text-small text-warn" role="status" data-test="general-knowledge-public-warning">
+            {{ ASSISTANT.generalKnowledgePublicWarning }}
+          </p>
         </fieldset>
         <details class="rounded-card border border-border p-4" data-test="advanced">
           <summary class="cursor-pointer font-medium">{{ ASSISTANT.advanced }}</summary>
