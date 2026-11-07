@@ -1,0 +1,3 @@
+<!doctype html><html><body><p id="f">FRAME-TEXT</p>
+<script>fetch('http://api.test/api/page/99').then(r => r.json()).then(d => { document.getElementById('f').textContent = 'FRAME-' + d.title; });</script>
+</body></html>

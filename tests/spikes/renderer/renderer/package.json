@@ -1,0 +1,8 @@
+{
+  "name": "rag-renderer-spike",
+  "private": true,
+  "description": "playwright-core for run-server, pinned to the worker's Microsoft.Playwright version",
+  "dependencies": {
+    "playwright-core": "1.64.1"
+  }
+}

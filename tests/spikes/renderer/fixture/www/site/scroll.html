@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="sv"><head><meta charset="utf-8"><title>Scroll</title>
+<style>.spacer { height: 3000px; } li { height: 120px; }</style></head>
+<body>
+<main>
+<h1>SCROLL-PAGE</h1>
+<div class="spacer">top filler</div>
+<section id="lazy" data-src="http://api.test/api/page/42">LAZY-PLACEHOLDER</section>
+<ul id="list"></ul>
+<div id="sentinel">sentinel</div>
+</main>
+<script>
+const lazy = document.getElementById('lazy');
+new IntersectionObserver((entries, obs) => {
+  if (!entries.some(e => e.isIntersecting)) return;
+  obs.disconnect();
+  fetch(lazy.dataset.src).then(r => r.json()).then(d => { lazy.textContent = 'LAZY-' + d.title; });
+}).observe(lazy);
+let page = 0, loading = false, more = true;
+const list = document.getElementById('list');
+const io = new IntersectionObserver(entries => {
+  if (!entries.some(e => e.isIntersecting) || loading || !more) return;
+  loading = true; page++;
+  fetch('http://api.test/api/items?page=' + page).then(r => r.json()).then(d => {
+    for (const t of d.items) { const li = document.createElement('li'); li.textContent = t; list.appendChild(li); }
+    more = d.more; loading = false;
+    // Re-arm: if the sentinel is still visible after growth, observe again.
+    io.unobserve(sentinel); io.observe(sentinel);
+  });
+});
+const sentinel = document.getElementById('sentinel');
+io.observe(sentinel);
+</script>
+</body></html>

@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="sv"><head><meta charset="utf-8"><title>News</title></head>
+<body><main id="news">Laddar…</main>
+<script>
+fetch('http://api.test/api/news').then(r => r.json()).then(d => {
+  document.getElementById('news').innerHTML = '<ul>' + d.items.map(i => '<li>' + i + '</li>').join('') + '</ul>';
+});
+</script></body></html>

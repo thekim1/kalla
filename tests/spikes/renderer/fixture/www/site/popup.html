@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Popup and download</title></head>
+<body><p>POPUP-PAGE-TEXT</p>
+<a id="dl" href="/files/report.pdf" download>Rapport</a>
+<script>
+window.addEventListener('load', () => {
+  window.open('http://site.test/static/3.html', '_blank');
+  document.getElementById('dl').click();
+});
+</script></body></html>

@@ -1,0 +1,9 @@
+<Project>
+  <!-- Standalone: the spike does not import the repository's props (analyzers, warnings as errors); it is throwaway. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>
