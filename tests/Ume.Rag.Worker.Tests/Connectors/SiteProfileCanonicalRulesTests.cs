@@ -71,9 +71,23 @@ public sealed class SiteProfileCanonicalRulesTests
 
         hosts.Canonical.Keys.ShouldBe(["www.umea.se"]);
         hosts.ExcludedTypes.Keys.ShouldBe(["www.umea.se"]);
+        (await rules.ForHostsAsync("public", ["www.umea.se"], Ct)).Canonical["www.umea.se"].ShouldBeSameAs(hosts.Canonical["www.umea.se"],
+            "the rules are built once per profile read, so the identity rule's expression is not compiled per fetch");
         var other = await rules.ForHostsAsync("internal", ["www.umea.se"], Ct);
         other.Canonical.ShouldBeEmpty("the profile belongs to its level");
         other.ExcludedTypes.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void An_identity_rule_matches_without_a_timeout_so_load_never_keeps_the_path()
+    {
+        // #471: a backtracking match of this expression runs far past the old 50 ms timeout, which kept the path, as a
+        // descheduled thread or a GC pause under CPU load could for any rule; the non-backtracking engine maps it.
+        var rule = PathIdentityRule.Create(@"^/(?:(?:a|aa)+x|a+)(?<id>y)\.html$", "/${id}.html")!;
+
+        rule.Apply("/" + new string('a', 40) + "y.html").ShouldBe("/y.html");
+        rule.Matches("/" + new string('a', 40) + "y.html").ShouldBeTrue();
+        PathIdentityRule.Create(@"^/(?=a)(?<id>a)\.html$", "/${id}.html").ShouldBeNull("a construct the non-backtracking engine lacks is no rule, as an invalid expression");
     }
 
     [Fact]

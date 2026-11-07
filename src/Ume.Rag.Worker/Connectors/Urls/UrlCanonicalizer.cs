@@ -45,12 +45,12 @@ public sealed record HostCanonicalRules(IReadOnlyCollection<string> IgnoreQueryP
 
 /// <summary>
 /// A site profile's identity rule (<c>identityRule</c>): a .NET regular expression over the URL path and its replacement
-/// with <c>${name}</c> groups. A path it does not match, or one whose match times out (50 ms), is kept.
+/// with <c>${name}</c> groups; a path it does not match is kept. The expression is non-backtracking and matched without a
+/// timeout, as <c>include</c>/<c>exclude</c> patterns are (<c>UrlPattern</c>): linear-time matching is the bound, and a
+/// timeout under CPU load kept the path, so one node got a second identity in a run (#471).
 /// </summary>
 public sealed class PathIdentityRule
 {
-    private static readonly TimeSpan Timeout = TimeSpan.FromMilliseconds(50);
-
     private readonly Regex _pattern;
     private readonly string _replacement;
 
@@ -60,16 +60,16 @@ public sealed class PathIdentityRule
         _replacement = replacement;
     }
 
-    /// <summary>The rule, or null when <paramref name="pattern"/> is not a valid expression.</summary>
+    /// <summary>The rule, or null when <paramref name="pattern"/> is not a valid expression or uses a construct the non-backtracking engine lacks (lookarounds, backreferences, atomic groups).</summary>
     public static PathIdentityRule? Create(string pattern, string replacement)
     {
         ArgumentNullException.ThrowIfNull(pattern);
         ArgumentNullException.ThrowIfNull(replacement);
         try
         {
-            return new PathIdentityRule(new Regex(pattern, RegexOptions.CultureInvariant, Timeout), replacement);
+            return new PathIdentityRule(new Regex(pattern, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant, Regex.InfiniteMatchTimeout), replacement);
         }
-        catch (ArgumentException)
+        catch (Exception e) when (e is ArgumentException or NotSupportedException)
         {
             return null;
         }
@@ -78,29 +78,15 @@ public sealed class PathIdentityRule
     public string Apply(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
-        try
-        {
-            var match = _pattern.Match(path);
-            return match.Success ? match.Result(_replacement) : path;
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            return path;
-        }
+        var match = _pattern.Match(path);
+        return match.Success ? match.Result(_replacement) : path;
     }
 
-    /// <summary>Whether the rule maps <paramref name="path"/>; false when the match times out, as <see cref="Apply"/> keeps it then.</summary>
+    /// <summary>Whether the rule maps <paramref name="path"/>.</summary>
     public bool Matches(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
-        try
-        {
-            return _pattern.IsMatch(path);
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            return false;
-        }
+        return _pattern.IsMatch(path);
     }
 }
 
