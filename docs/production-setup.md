@@ -200,6 +200,14 @@ Give the admin's client the two redirect URIs the script prints (code + PKCE):
 `https://<owui host>/oauth/oidc/login/callback`. The client secrets go to `--oidc-client-secret-file` and
 `--openwebui-oidc-client-secret-file`, never into the repository.
 
+**Roles from groups, as the gateway does** (#468). RAG reads the same claims as the gateway and maps groups to its roles
+by configuration, as the gateway's `UME_OIDC_GROUPS_*` do: `UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN`, `_DEPARTMENT_ADMIN`,
+`_PIPELINE_EDITOR`, `_REVIEWER` and `_VIEWER` in `deploy/.env` (each `;`-separated, a `rag-` name or an Entra object id,
+#413). The claim names default to `roles`, `groups`, `departmentCodes` and `teamCodes`
+(`UME_RAG_OIDC_ROLE_CLAIM`, `_GROUP_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM`), the gateway's defaults too. Users
+keep one account and one set of groups in the shared Keycloak for both products. Whether gateway groups may also grant
+RAG roles is open in #468.
+
 **Entra ID from P2:** RAG's own registrations (`ume-rag-admin`, `ume-rag-open-webui`), their app roles and groups are
 Bicep in `infra/entra/`, applied by a GitHub workflow after IT's approval: see
 [`infra/entra/README.md`](../infra/entra/README.md). Switching is configuration (`Oidc:*`), not code.

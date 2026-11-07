@@ -207,6 +207,20 @@ services:
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/admin.key
       Oidc__Authority: ${UME_RAG_OIDC_AUTHORITY:?Set the HTTPS OIDC authority in deploy/.env}
       Oidc__ClientId: ${UME_RAG_OIDC_CLIENT_ID:-ume-rag-admin}
+      # Claims and role groups as the gateway's compose.prod.yaml passes them (identity design §1.5 env table, #468): the
+      # same identity provider and the same group names can drive both products. Empty role groups grant nothing.
+      Oidc__RoleClaim: ${UME_RAG_OIDC_ROLE_CLAIM:-roles}
+      Oidc__DepartmentClaim: ${UME_RAG_OIDC_DEPARTMENT_CLAIM:-departmentCodes}
+      Oidc__TeamClaim: ${UME_RAG_OIDC_TEAM_CLAIM:-teamCodes}
+      Oidc__GroupClaim: ${UME_RAG_OIDC_GROUP_CLAIM:-groups}
+      Oidc__ExtraScopes__0: ${UME_RAG_OIDC_EXTRA_SCOPE:-email}
+      Oidc__RoleGroups__rag-platform-admin: ${UME_RAG_OIDC_GROUPS_PLATFORM_ADMIN:-}
+      Oidc__RoleGroups__rag-department-admin: ${UME_RAG_OIDC_GROUPS_DEPARTMENT_ADMIN:-}
+      Oidc__RoleGroups__rag-pipeline-editor: ${UME_RAG_OIDC_GROUPS_PIPELINE_EDITOR:-}
+      Oidc__RoleGroups__rag-reviewer: ${UME_RAG_OIDC_GROUPS_REVIEWER:-}
+      Oidc__RoleGroups__rag-viewer: ${UME_RAG_OIDC_GROUPS_VIEWER:-}
+      Oidc__TenantId: ${UME_RAG_OIDC_TENANT_ID:-}
+      Oidc__RefuseGuests: ${UME_RAG_OIDC_REFUSE_GUESTS:-true}
       BlobStore__Root: /data/blobs/rag
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL}
       Gateway__MaxResidency: ${UME_RAG_GATEWAY_MAX_RESIDENCY:-}
