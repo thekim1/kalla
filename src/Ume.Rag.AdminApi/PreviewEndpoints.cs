@@ -48,7 +48,7 @@ public static class PreviewEndpoints
                     };
                 }, ct))
             .RequireAuthorization(AdminPolicies.Edit).WithTags("Sources").WithName("PreflightSource")
-            .WithSummary("Check unsaved source settings: robots, reachability, CMS, estimated pages (preview preflight)");
+            .WithSummary("Check unsaved source settings: robots, reachability, CMS, estimated pages, raw vs rendered words (preview preflight)");
 
         api.MapPost("/documents/{id:guid}/pii-preview", async (Guid id, AdminContext admin, CancellationToken ct) =>
                 await admin.WriteAsync(async attempt =>

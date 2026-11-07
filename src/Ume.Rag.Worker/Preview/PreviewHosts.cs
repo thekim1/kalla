@@ -1,6 +1,7 @@
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Http;
+using Ume.Rag.Worker.Connectors.Render;
 
 namespace Ume.Rag.Worker.Preview;
 
@@ -27,6 +28,30 @@ internal static class PreviewHosts
                     return (null, refused.Reason);
                 default:
                     throw new InvalidOperationException("Unexpected host slot.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A render slot for a page of <paramref name="host"/> (connectors design §8.3), waited for in the job while every slot
+    /// is busy; the refusal (<c>render.not_configured</c>) when there is no renderer.
+    /// </summary>
+    public static async Task<(RenderLease? Lease, string? Refusal)> RenderSlotAsync(RenderSlots renders, string host, TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            switch (renders.TryAcquire(host))
+            {
+                case RenderSlot.Granted granted:
+                    return (granted.Lease, null);
+                case RenderSlot.Refused { Reason: RenderReasons.Busy, Delay: var delay }:
+                    await Task.Delay(delay, time, cancellationToken);
+                    break;
+                case RenderSlot.Refused refused:
+                    return (null, refused.Reason);
+                default:
+                    throw new InvalidOperationException("Unexpected render slot.");
             }
         }
     }

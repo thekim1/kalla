@@ -117,6 +117,8 @@ public sealed class DocumentStore(JobDatabase database)
 
     private const string GetSql = $"""SELECT {Columns} FROM content."Documents" WHERE "Id" = $1""";
 
+    private const string FetchModeSql = """SELECT "FetchMode" FROM content."Documents" WHERE "Id" = $1""";
+
     private const string InsertSql = $"""
         INSERT INTO content."Documents" ("Id", "SourceId", "Classification", "IdentityKind", "CanonicalIdentity", "IdentityHash", "ContentHash",
                                         "ContentHashVersion", "Url", "DisplayName", "CanonicalHint", "FetchedAt", "CurrentExecutionId", "LastRunId",
@@ -182,6 +184,14 @@ public sealed class DocumentStore(JobDatabase database)
 
     public async Task<DocumentRow?> GetAsync(Guid documentId, CancellationToken cancellationToken) =>
         await ReadOneAsync(GetSql, cancellationToken, Db.P(documentId));
+
+    /// <summary><c>Documents.FetchMode</c> of a document: how its current content was fetched; null when there is no such document.</summary>
+    public async Task<string?> FetchModeAsync(Guid documentId, CancellationToken cancellationToken)
+    {
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(FetchModeSql, connection) { Parameters = { Db.P(documentId) } };
+        return await command.ExecuteScalarAsync(cancellationToken) as string;
+    }
 
     public async Task<DocumentRow?> FindAsync(Guid sourceId, string identityKind, string canonicalIdentity, CancellationToken cancellationToken) =>
         await ReadOneAsync(FindSql, cancellationToken, Db.P(sourceId), Db.P(identityKind), Db.P(EngineText.IdentityHash(canonicalIdentity)));

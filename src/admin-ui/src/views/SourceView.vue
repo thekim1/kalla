@@ -20,7 +20,7 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatNumber } from '@/utils/format'
-import { LEVEL_LABEL, RUN_STATE_LABEL, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { LEVEL_LABEL, RUN_STATE_LABEL, SOURCE, SOURCE_EDIT, SOURCE_PAGE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
 // Källa (admin design §5.5.3, §5.4 step 6; #278 slice 2): the source's settings with Ändra (impact confirmation, V25),
@@ -123,6 +123,9 @@ onMounted(load)
         <dl class="m-0">
           <DetailRow :label="source.data.value.type === 'crawl' ? SOURCE_PAGE.startAddresses : SOURCE_PAGE.addresses">
             <span class="font-mono text-small" data-test="addresses">{{ addresses.join(', ') }}</span>
+          </DetailRow>
+          <DetailRow :label="SOURCE.fetchMode">
+            <span data-test="fetch-mode">{{ SOURCE.fetchModes[source.data.value.settings.fetchMode === 'browser' ? 'browser' : 'http'] }}</span>
           </DetailRow>
           <DetailRow v-if="source.data.value.type === 'crawl'" :label="SOURCE_PAGE.maxPages">
             <span class="tabular">{{ formatNumber(Number(source.data.value.settings.maxPages ?? 10000)) }}</span>

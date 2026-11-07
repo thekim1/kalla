@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { Collection, Level, PreflightResult, Source, SourceType, StagePreviewResult } from '@/api/types'
+import type { CheckState, Collection, Level, PreflightResult, Source, SourceType, StagePreviewResult } from '@/api/types'
+import FetchModeFields from '@/components/sources/FetchModeFields.vue'
 import PreviewResult from '@/components/sources/PreviewResult.vue'
+import { type FetchMode, READY_SELECTOR_MAX, withFetchSettings } from '@/components/sources/fetchMode'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
@@ -19,8 +21,10 @@ import { problemMessage } from '@/utils/problem'
 
 // Lägg till källa (admin design §5.4 steps 3 to 6): type cards, the template parameters of the type
 // (contracts/sources/v1/{type}.schema.json, with the schema's defaults), Kontrollera (preflight job, polled as §4.7; a
-// failed check blocks saving), Förhandsgranska (stage-preview of up to 5 of the addresses on the pipeline the source would
-// get, §6.4: Före / Efter and each stage's output), then Spara och hämta: the source is created and its first sync enqueued.
+// failed check blocks saving; per rendered page the raw and rendered word counts and, when the raw page holds under half
+// the text, "This site seems to need JavaScript" with a button that sets Fetch pages with to a browser, §5.5.3),
+// Förhandsgranska (stage-preview of up to 5 of the addresses on the pipeline the source would get, §6.4: Före / Efter and
+// each stage's output), then Spara och hämta: the source is created and its first sync enqueued.
 const props = defineProps<{ open: boolean; collection: Collection }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'saved', source: Source, syncing: boolean): void }>()
 
@@ -40,6 +44,9 @@ const FIRST_CRAWL_PAGES = '500'
 const maxPages = ref(FIRST_CRAWL_PAGES)
 const maxDepth = ref('10')
 const piiMode = ref<'hold' | 'report'>('hold')
+const fetchMode = ref<FetchMode>('http')
+const readySelector = ref('')
+const scrollToLoad = ref(false)
 const saving = ref(false)
 const checkError = ref<unknown>(null)
 const preflight = useJobPoll<PreflightResult>()
@@ -48,7 +55,9 @@ const previewError = ref<string | null>(null)
 const previewStarting = ref(false)
 /** The worker previews at most 5 documents (preview.limit_documents). */
 const PREVIEW_URLS = 5
-const form = useFormErrors({ name: 'source-name', urls: 'source-urls', maxPages: 'source-max-pages', maxDepth: 'source-max-depth' })
+const form = useFormErrors({
+  name: 'source-name', urls: 'source-urls', maxPages: 'source-max-pages', maxDepth: 'source-max-depth', readySelector: 'source-ready-selector',
+})
 
 const levelOptions = computed(() =>
   LEVELS.slice(0, LEVELS.indexOf(props.collection.classification) + 1).map((l) => ({ value: l, label: LEVEL_LABEL[l] })),
@@ -57,6 +66,8 @@ const piiOptions = (['hold', 'report'] as const).map((m) => ({ value: m, label: 
 const lines = (text: string) => text.split('\n').map((l) => l.trim()).filter(Boolean)
 const result = computed(() => (preflight.job.value?.state === 'succeeded' ? preflight.job.value.result : null))
 const blocked = computed(() => result.value?.state === 'fail')
+// The comparison is a hint (connectors design §8.1): shown while the form fetches with HTTP.
+const needsJavaScript = computed(() => fetchMode.value === 'http' && !!result.value?.checks.some((c) => c.code === 'render.suggested'))
 const previewResult = computed(() => (preview.job.value?.state === 'succeeded' ? preview.job.value.result : null))
 const previewProblem = computed(() => previewError.value ?? (preview.error.value ? problemMessage(preview.error.value) : null))
 const previewCapped = computed(() => lines(urls.value).length > PREVIEW_URLS)
@@ -78,6 +89,9 @@ watch(
     maxPages.value = FIRST_CRAWL_PAGES
     maxDepth.value = '10'
     piiMode.value = 'hold'
+    fetchMode.value = 'http'
+    readySelector.value = ''
+    scrollToLoad.value = false
     preflight.stop()
     preflight.job.value = null
     resetPreview()
@@ -100,11 +114,19 @@ function resetPreview(): void {
 function settings(): Record<string, unknown> {
   const piiPart = props.collection.classification === 'public' ? { piiMode: piiMode.value } : {}
   if (type.value === 'upload') return { ...piiPart }
-  if (type.value === 'url-list') return { urls: lines(urls.value), ...piiPart }
-  return {
+  const fetch = { fetchMode: fetchMode.value, readySelector: readySelector.value, scrollToLoad: scrollToLoad.value }
+  if (type.value === 'url-list') return withFetchSettings({ urls: lines(urls.value), ...piiPart }, fetch)
+  return withFetchSettings({
     startUrls: lines(urls.value), include: lines(include.value), exclude: lines(exclude.value),
     maxPages: Number(maxPages.value), maxDepth: Number(maxDepth.value), ...piiPart,
-  }
+  }, fetch)
+}
+
+/** A `render` entry is information (the comparison never blocks); the other checks show their state. */
+function checkTone(check: string, state: CheckState): 'ok' | 'warn' | 'danger' | 'neutral' {
+  if (state === 'warn') return 'warn'
+  if (state === 'fail') return 'danger'
+  return check === 'render' ? 'neutral' : 'ok'
 }
 
 function valid(forSave: boolean): boolean {
@@ -116,6 +138,7 @@ function valid(forSave: boolean): boolean {
     urls: (addresses.length === 0 || addresses.some((u) => !/^https?:\/\//.test(u))) && SOURCE.urlsRequired,
     maxPages: type.value === 'crawl' && !integer(maxPages.value) && SOURCE.numberInvalid,
     maxDepth: type.value === 'crawl' && !integer(maxDepth.value) && SOURCE.numberInvalid,
+    readySelector: fetchMode.value === 'browser' && readySelector.value.trim().length > READY_SELECTOR_MAX && SOURCE.readySelectorInvalid,
   })
 }
 
@@ -198,6 +221,10 @@ async function save(): Promise<void> {
           id="source-urls" v-model="urls" :label="type === 'crawl' ? SOURCE.startUrls : SOURCE.urls"
           :hint="type === 'crawl' ? SOURCE.startUrlsHint : SOURCE.urlsHint" :error="form.errors.urls" mono
         />
+        <FetchModeFields
+          v-model:fetch-mode="fetchMode" v-model:ready-selector="readySelector" v-model:scroll-to-load="scrollToLoad" id-prefix="source"
+          :ready-selector-error="form.errors.readySelector"
+        />
         <details v-if="type === 'crawl'" class="rounded-card border border-border p-4">
           <summary class="cursor-pointer font-medium">{{ SOURCE.advanced }}</summary>
           <div class="mt-4 grid gap-5">
@@ -223,8 +250,20 @@ async function save(): Promise<void> {
           <div v-if="result" class="mt-3 grid gap-2" data-test="checks">
             <p v-if="result.estimatedPages != null" class="text-small">{{ SOURCE.estimatedPages(formatNumber(result.estimatedPages)) }}</p>
             <div v-for="(c, i) in result.checks" :key="i" class="flex items-start gap-2">
-              <UiBadge :tone="c.state === 'pass' ? 'ok' : c.state === 'warn' ? 'warn' : 'danger'" :label="SOURCE.checkStates[c.state]" />
-              <span class="text-small">{{ jobMessage(c.code) }}<span v-if="c.target" class="block text-fg-3">{{ c.target }}</span></span>
+              <UiBadge
+                :tone="checkTone(c.check, c.state)" :label="c.check === 'render' && c.state === 'pass' ? SOURCE.checkInfo : SOURCE.checkStates[c.state]"
+              />
+              <span class="text-small">
+                {{ jobMessage(c.code) }}
+                <span v-if="c.facts?.rawWords != null && c.facts?.renderedWords != null" class="block" data-test="render-words">
+                  {{ SOURCE.renderWords(formatNumber(c.facts.rawWords), formatNumber(c.facts.renderedWords)) }}
+                </span>
+                <span v-if="c.target" class="block text-fg-3">{{ c.target }}</span>
+              </span>
+            </div>
+            <div v-if="needsJavaScript" class="flex flex-wrap items-center gap-3 rounded-card border border-warn p-3" data-test="needs-javascript">
+              <p class="font-medium">{{ SOURCE.needsJavaScript }}</p>
+              <UiButton data-test="use-browser" @click="fetchMode = 'browser'">{{ SOURCE.useBrowser }}</UiButton>
             </div>
             <p v-if="blocked" role="alert" class="text-small text-danger">{{ SOURCE.checkFailed }}</p>
           </div>

@@ -157,6 +157,87 @@ describe('Add source (admin design §5.4 steps 3, 4, 6)', () => {
     wrapper.unmount()
   })
 
+  it('shows the browser settings only with a browser and saves them with a URL list (admin design §5.5.3)', async () => {
+    const create = vi.spyOn(api.collections, 'addSource').mockResolvedValue({ id: 's2', name: 'Appen' } as Source)
+    vi.spyOn(api.sources, 'sync').mockResolvedValue({ jobId: 'j', runId: null, alreadyRunning: false, kind: 'sync' })
+    const wrapper = await open()
+
+    document.body.querySelector<HTMLInputElement>('[data-test=type-url-list] input')!.click()
+    await flushPromises()
+    const mode = document.body.querySelector<HTMLSelectElement>('#source-fetch-mode')!
+    expect(mode.value).toBe('http')
+    expect(document.body.querySelector('#source-ready-selector')).toBeNull()
+    expect(document.body.querySelector('[data-test=scroll-to-load]')).toBeNull()
+
+    mode.value = 'browser'
+    mode.dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(document.body.textContent).toContain('Content is ready when this element has text')
+    expect(document.body.textContent).toContain('not a container that shows “Loading…”')
+    expect(document.body.textContent).toContain('For pages that load more content as you scroll. Slower.')
+    input('#source-ready-selector', ' #app h1 ')
+    document.body.querySelector<HTMLInputElement>('[data-test=scroll-to-load] input')!.click()
+    input('#source-name', 'Appen')
+    input('#source-urls', 'https://app.example.se/')
+    click('save')
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith('c1', {
+      type: 'url-list', name: 'Appen', classification: 'public',
+      settings: { urls: ['https://app.example.se/'], piiMode: 'hold', fetchMode: 'browser', readySelector: '#app h1', scrollToLoad: true },
+    })
+    wrapper.unmount()
+  })
+
+  it('shows the raw and rendered words per page and switches to a browser when the site seems to need JavaScript', async () => {
+    const preflight = vi.spyOn(api.sources, 'preflight').mockResolvedValue({ jobId: 'j1' })
+    vi.spyOn(api.jobs, 'get').mockResolvedValue(job({
+      state: 'warn', estimatedPages: 12, cms: null,
+      checks: [
+        { check: 'reachability', state: 'pass', code: 'http.200', target: 'https://app.example.se/' },
+        { check: 'render', state: 'warn', code: 'render.suggested', target: 'https://app.example.se/', facts: { rawWords: 3, renderedWords: 1240 } },
+        { check: 'render', state: 'pass', code: 'render.compared', target: 'https://app.example.se/om', facts: { rawWords: 400, renderedWords: 410 } },
+      ],
+    }) as Job<unknown>)
+    const wrapper = await open()
+
+    input('#source-urls', 'https://app.example.se/')
+    click('check')
+    await flushPromises()
+
+    const checks = document.body.querySelector('[data-test=checks]')!.textContent!.replace(/\u00a0/g, ' ')
+    expect(checks).toContain('The page holds much less text without JavaScript than with it.')
+    expect(checks).toContain('3 words without JavaScript, 1 240 with JavaScript')
+    expect(checks).toContain('400 words without JavaScript, 410 with JavaScript')
+    expect(checks).toContain('Info')
+    expect(document.body.querySelector('[data-test=needs-javascript]')!.textContent).toContain('This site seems to need JavaScript.')
+
+    click('use-browser')
+    await flushPromises()
+    expect(document.body.querySelector<HTMLSelectElement>('#source-fetch-mode')!.value).toBe('browser')
+    expect(document.body.querySelector('#source-ready-selector')).not.toBeNull()
+    expect(document.body.querySelector('[data-test=needs-javascript]')).toBeNull()
+
+    click('check')
+    await flushPromises()
+    expect(preflight).toHaveBeenLastCalledWith(expect.objectContaining({ settings: expect.objectContaining({ startUrls: ['https://app.example.se/'], fetchMode: 'browser' }) }))
+    wrapper.unmount()
+  })
+
+  it('says once that no renderer is set up, as information', async () => {
+    vi.spyOn(api.sources, 'preflight').mockResolvedValue({ jobId: 'j1' })
+    vi.spyOn(api.jobs, 'get').mockResolvedValue(job({ state: 'pass', checks: [{ check: 'render', state: 'pass', code: 'render.not_configured' }] }) as Job<unknown>)
+    const wrapper = await open()
+    input('#source-urls', 'https://app.example.se/')
+    click('check')
+    await flushPromises()
+    const checks = document.body.querySelector('[data-test=checks]')!.textContent!
+    expect(checks).toContain('No browser for rendering pages is set up on the platform')
+    expect(checks).toContain('Info')
+    expect(document.body.querySelector('[data-test=render-words]')).toBeNull()
+    expect(document.body.querySelector('[data-test=needs-javascript]')).toBeNull()
+    wrapper.unmount()
+  })
+
   it('says so when no pipeline can process the type', async () => {
     vi.spyOn(api.pipelines, 'list').mockResolvedValueOnce([])
     const wrapper = await open()

@@ -6,6 +6,7 @@ import DeletionDecision from '@/components/sources/DeletionDecision.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
+import DetailRow from '@/components/ui/DetailRow.vue'
 import MetricTile from '@/components/ui/MetricTile.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
@@ -20,7 +21,8 @@ import { jobMessage } from '@/utils/messages'
 
 // Körning (admin design §5.5.3, §5.4 step 6; #278 slice 2): live counters while it runs (polled as §4.7), the crawl
 // report (completeness and its reasons, the verdict, the websites fetched with their own politeness, connectors design
-// §6.6), the deletion decision when the guard held deletions back, and the run's documents with their outcome and reason.
+// §6.6, and for a browser source the rendered pages, render failures and pages kept from their last good content, §8.6),
+// the deletion decision when the guard held deletions back, and the run's documents with their outcome and reason.
 const props = defineProps<{ id: string }>()
 const run = useLoadable<Run | null>(null)
 const items = useLoadable<RunItem[]>([])
@@ -47,6 +49,7 @@ const politeness = computed(() =>
     ].join(' · '),
   })),
 )
+const render = computed(() => run.data.value?.report?.render)
 const verdictReasons = computed(() =>
   [run.data.value?.report?.verdict?.runFailure, run.data.value?.report?.verdict?.runDegradation].filter((r): r is string => !!r),
 )
@@ -101,6 +104,14 @@ onBeforeUnmount(() => {
         </template>
         <p v-if="completeness" class="mt-2 text-small text-fg-2">{{ RUN_PAGE.seeds(completeness.seedsResolved, completeness.seeds) }}</p>
         <p v-for="r in verdictReasons" :key="r" class="mt-2 text-warn">{{ jobMessage(r) }}</p>
+      </UiCard>
+      <UiCard v-if="render" class="mb-6" data-test="render">
+        <h2 class="mb-2 font-medium">{{ RUN_PAGE.render }}</h2>
+        <dl class="m-0">
+          <DetailRow :label="RUN_PAGE.rendered"><span class="tabular">{{ formatNumber(render.rendered) }}</span></DetailRow>
+          <DetailRow :label="RUN_PAGE.renderFailures"><span class="tabular">{{ formatNumber(render.failures) }}</span></DetailRow>
+          <DetailRow :label="RUN_PAGE.keptFromLastGood"><span class="tabular">{{ formatNumber(render.keptFromLastGood) }}</span></DetailRow>
+        </dl>
       </UiCard>
       <UiCard v-if="politeness.length" class="mb-6" data-test="politeness">
         <h2 class="mb-2 font-medium">{{ RUN_PAGE.politeness }}</h2>

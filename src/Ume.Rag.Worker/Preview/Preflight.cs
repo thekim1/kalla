@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Blobs;
@@ -11,9 +12,12 @@ using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Http;
+using Ume.Rag.Worker.Connectors.Render;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Urls;
+using Ume.Rag.Worker.Engine;
 using Ume.Rag.Worker.Jobs;
+using Ume.Rag.Worker.Processing;
 using Ume.Rag.Worker.Processing.Html;
 
 namespace Ume.Rag.Worker.Preview;
@@ -30,6 +34,16 @@ namespace Ume.Rag.Worker.Preview;
 /// (unreachable is a <c>fail</c>: the host is paused for the run, connectors design §5.1), the sitemaps and the pages they
 /// list in scope (the crawl's own listing) against <c>maxPages</c>.</item>
 /// <item>Both: the CMS preset the first HTML page's fingerprint selects.</item>
+/// <item>Both, last (connectors design §8.1, a hint only): the first <see cref="MaxRenders"/> start URLs or listed URLs that
+/// answered HTML are fetched again and rendered through the production path (<see cref="PageFetcher"/> in <c>browser</c>
+/// mode with the form's <c>readySelector</c> and <c>scrollToLoad</c>, after a render slot waited for up to
+/// <see cref="RenderSlotWait"/>, else <c>render.busy</c>), and the main-text words of the raw and the rendered page are
+/// counted by the HTML extraction with the host's site profile (its <c>mainRoot</c>, else the preset's landmarks, else
+/// <c>body</c>). Each page is a <c>render</c> entry with facts <c>rawWords</c> and <c>renderedWords</c>: code
+/// <c>render.suggested</c> when the raw count is under half the rendered one and the rendered one is at least
+/// <see cref="MinRenderedWords"/> (a <c>warn</c> while the form fetches with <c>http</c>), else <c>render.compared</c>.
+/// Without a renderer one <c>render.not_configured</c> entry and no counts; a failed render is its reason
+/// (<c>render.timeout</c>, <c>render.unavailable</c>). These entries are information and never <c>fail</c>.</item>
 /// </list>
 /// </summary>
 public sealed partial class Preflight(
@@ -39,6 +53,9 @@ public sealed partial class Preflight(
     RobotsCache robots,
     IBlobStore blobs,
     HostBudget budget,
+    RenderSlots renders,
+    SiteProfiles siteProfiles,
+    HtmlExtractor extractor,
     TimeProvider time,
     ILogger<Preflight> logger)
 {
@@ -54,6 +71,25 @@ public sealed partial class Preflight(
     public const string Sitemaps = "sitemaps";
     public const string Pages = "pages";
     public const string Cms = "cms";
+    public const string Render = "render";
+
+    /// <summary>Pages rendered for the raw-vs-rendered comparison, at most, to keep the preflight fast.</summary>
+    public const int MaxRenders = 3;
+
+    /// <summary>A rendered page with fewer main-text words than this never suggests the browser.</summary>
+    public const int MinRenderedWords = 50;
+
+    /// <summary>How long a comparison waits for a free render slot before it reports <c>render.busy</c>.</summary>
+    public static readonly TimeSpan RenderSlotWait = TimeSpan.FromSeconds(20);
+
+    /// <summary>The comparison stops this long before the preview deadline, so it never turns the preflight into a deadline failure.</summary>
+    public static readonly TimeSpan RenderMargin = TimeSpan.FromSeconds(5);
+
+    /// <summary>The raw page holds under half the rendered page's main text: the site seems to need JavaScript.</summary>
+    public const string RenderSuggested = "render.suggested";
+
+    /// <summary>The raw page holds at least half the rendered page's main text.</summary>
+    public const string RenderCompared = "render.compared";
 
     public const string NoneReachable = "preflight.none_reachable";
     public const string DeadlineReached = "preflight.deadline";
@@ -69,6 +105,7 @@ public sealed partial class Preflight(
 
         var checks = new List<PreflightCheckResult>();
         var found = new Findings();
+        var started = time.GetTimestamp();
         using var deadline = new CancellationTokenSource(StagePreview.Deadline, time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
         try
@@ -81,7 +118,10 @@ public sealed partial class Preflight(
                         return new JobResult.FatalError(PreviewJobHandler.InvalidPayload);
                     }
 
-                    await UrlListAsync(list, checks, found, linked.Token);
+                    await UrlListAsync(collection.Classification, list, checks, found, linked.Token);
+                    await CompareAsync(job.Id, collection.Classification, Plan(list.FetchMode, list.ReadySelector, list.ScrollToLoad, list.NoiseSelectors,
+                        new CanonicalizerOptions { IgnoreQueryParams = list.IgnoreQueryParams, DirectoryIndexNames = list.DirectoryIndexNames }, payload.Settings),
+                        found.Samples, checks, started, linked.Token);
                     break;
                 case SourceTypes.Crawl:
                     if (Bind<CrawlSettings>(payload.Settings) is not { } crawl)
@@ -90,6 +130,9 @@ public sealed partial class Preflight(
                     }
 
                     await CrawlAsync(job.Id, collection.Classification, crawl, checks, found, linked.Token);
+                    await CompareAsync(job.Id, collection.Classification, Plan(crawl.FetchMode, crawl.ReadySelector, crawl.ScrollToLoad, crawl.NoiseSelectors,
+                        new CanonicalizerOptions { IgnoreQueryParams = crawl.IgnoreQueryParams, DirectoryIndexNames = crawl.DirectoryIndexNames }, payload.Settings),
+                        found.Samples, checks, started, linked.Token);
                     break;
                 default:
                     return new JobResult.FatalError(PreviewJobHandler.InvalidPayload);
@@ -112,14 +155,14 @@ public sealed partial class Preflight(
         return new JobResult.Success(ContractJson.Serialize(result));
     }
 
-    private async Task UrlListAsync(UrlListSettings settings, List<PreflightCheckResult> checks, Findings found, CancellationToken cancellationToken)
+    private async Task UrlListAsync(string level, UrlListSettings settings, List<PreflightCheckResult> checks, Findings found, CancellationToken cancellationToken)
     {
         var canonicalizer = new CanonicalizerOptions { IgnoreQueryParams = settings.IgnoreQueryParams, DirectoryIndexNames = settings.DirectoryIndexNames };
         var reachable = 0;
         var origins = new List<Uri>();
         foreach (var url in settings.Urls.Take(MaxUrls))
         {
-            var (check, code, asked) = await ProbeAsync(url, canonicalizer, found, cancellationToken);
+            var (check, code, asked) = await ProbeAsync(url, level, canonicalizer, found, cancellationToken);
             if (check is null)
             {
                 reachable++;
@@ -149,7 +192,7 @@ public sealed partial class Preflight(
         var origins = new List<Uri>();
         foreach (var url in settings.StartUrls.Take(MaxUrls))
         {
-            var (check, code, asked) = await ProbeAsync(url, canonicalizer, found, cancellationToken);
+            var (check, code, asked) = await ProbeAsync(url, level, canonicalizer, found, cancellationToken);
             checks.Add(check is null ? Check(Reachability, PreflightState.Pass, "http.200", url) : Check(check, PreflightState.Fail, code!, url));
             AddOrigin(origins, asked);
         }
@@ -193,9 +236,10 @@ public sealed partial class Preflight(
 
     /// <summary>
     /// One GET of <paramref name="url"/>: the check and code it failed (both null when it answered 2xx), and the URL whose
-    /// robots.txt was asked (null when the guard refused it first).
+    /// robots.txt was asked (null when the guard refused it first). While fewer than <see cref="MaxRenders"/> pages are
+    /// sampled, an HTML answer's main-text words are counted and the page becomes a sample of the comparison.
     /// </summary>
-    private async Task<(string? Check, string? Code, Uri? Asked)> ProbeAsync(string url, CanonicalizerOptions canonicalizer, Findings found,
+    private async Task<(string? Check, string? Code, Uri? Asked)> ProbeAsync(string url, string level, CanonicalizerOptions canonicalizer, Findings found,
         CancellationToken cancellationToken)
     {
         var canonical = UrlCanonicalizer.Canonicalize(url, canonicalizer);
@@ -228,13 +272,19 @@ public sealed partial class Preflight(
             case HttpFetchResult.Ok ok:
                 await using (ok.Body)
                 {
-                    if (found.Cms is null && MediaTypes.IsHtml(ok.Body.MediaType))
+                    var sample = found.Samples.Count < MaxRenders;
+                    if ((found.Cms is null || sample) && MediaTypes.IsHtml(ok.Body.MediaType))
                     {
                         await using var stream = ok.Body.OpenRead();
                         using var document = await new HtmlParser().ParseDocumentAsync(stream, cancellationToken);
-                        if (SitevisionPreset.Recognises(document))
+                        if (found.Cms is null && SitevisionPreset.Recognises(document))
                         {
                             (found.Cms, found.CmsHost) = (SitevisionPreset.Name, target.IdnHost);
+                        }
+
+                        if (sample)
+                        {
+                            found.Samples.Add(new RenderSample(url, target, await WordsAsync(document, level, ok.FinalUrl, cancellationToken)));
                         }
                     }
                 }
@@ -260,6 +310,152 @@ public sealed partial class Preflight(
                 }, target);
         }
     }
+
+    /// <summary>
+    /// The raw-vs-rendered comparison of the samples (connectors design §8.1), within what the preview deadline leaves less
+    /// <see cref="RenderMargin"/>: past that, one <c>preflight.deadline</c> entry for the comparison and the checks stand.
+    /// </summary>
+    private async Task CompareAsync(Guid jobId, string level, RenderPlan plan, IReadOnlyList<RenderSample> samples, List<PreflightCheckResult> checks,
+        long started, CancellationToken cancellationToken)
+    {
+        if (samples.Count == 0)
+        {
+            return;
+        }
+
+        var left = StagePreview.Deadline - RenderMargin - time.GetElapsedTime(started);
+        if (left <= TimeSpan.Zero)
+        {
+            checks.Add(Check(Render, PreflightState.Pass, DeadlineReached, null));
+            return;
+        }
+
+        using var remaining = new CancellationTokenSource(left, time);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, remaining.Token);
+        var store = new PreviewBlobs(blobs.ForLevel(level), jobId);
+        try
+        {
+            foreach (var sample in samples)
+            {
+                if (!await CompareAsync(jobId, level, plan, store, sample, checks, linked.Token))
+                {
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (remaining.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            checks.Add(Check(Render, PreflightState.Pass, DeadlineReached, null));
+        }
+    }
+
+    /// <summary>One sample rendered and compared; false when there is no renderer (one <c>render.not_configured</c> entry, no more samples).</summary>
+    private async Task<bool> CompareAsync(Guid jobId, string level, RenderPlan plan, PreviewBlobs store, RenderSample sample, List<PreflightCheckResult> checks,
+        CancellationToken cancellationToken)
+    {
+        var host = sample.Url.Authority;
+        RenderLease? render;
+        string? refusal;
+        using (var wait = new CancellationTokenSource(RenderSlotWait, time))
+        using (var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, wait.Token))
+        {
+            try
+            {
+                (render, refusal) = await PreviewHosts.RenderSlotAsync(renders, host, time, waiting.Token);
+            }
+            catch (OperationCanceledException) when (wait.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                checks.Add(Check(Render, PreflightState.Pass, RenderReasons.Busy, sample.Target));
+                return true;
+            }
+        }
+
+        if (render is null)
+        {
+            checks.Add(Check(Render, PreflightState.Pass, refusal!, null));
+            return false;
+        }
+
+        using (render)
+        {
+            var (lease, _) = await PreviewHosts.SlotAsync(budget, host, time, cancellationToken);
+            if (lease is null)
+            {
+                return true; // the probe already reported the host's refusal
+            }
+
+            PageResult page;
+            using (lease)
+            {
+                var request = new HttpFetchRequest(sample.Url, EgressPurpose.Preflight, null, MediaTypes.DocumentFormats, plan.Canonicalizer, robots.CheckAsync);
+                var context = new FetchContext(Guid.Empty, level, jobId, plan.Settings, Revalidate: true);
+                var fetchStarted = time.GetTimestamp();
+                page = await pages.FetchAsync(new PageRequest(context, request, store, plan.Browser), cancellationToken);
+                await lease.CompleteAsync(PreviewHosts.Response(page.Outcome, time.GetElapsedTime(fetchStarted)), cancellationToken);
+            }
+
+            if (page.Outcome is FetchOutcome.Transient { Reason: var reason } && reason.StartsWith(RenderReasons.Prefix, StringComparison.Ordinal))
+            {
+                checks.Add(Check(Render, PreflightState.Pass, reason, sample.Target));
+            }
+            else if (page.Outcome is FetchOutcome.Content { Facts.FetchMode: Domain.Entities.FetchModes.Browser } content
+                     && await RenderedWordsAsync(store, content, level, cancellationToken) is { } rendered)
+            {
+                var suggested = rendered >= MinRenderedWords && sample.RawWords * 2 < rendered;
+                checks.Add(Check(Render, suggested && plan.Mode == FetchMode.Http ? PreflightState.Warn : PreflightState.Pass,
+                    suggested ? RenderSuggested : RenderCompared, sample.Target, new { rawWords = sample.RawWords, renderedWords = rendered }));
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>The main-text words of the rendered DOM the fetch stored in the preview's blobs; null when it is gone.</summary>
+    private async Task<int?> RenderedWordsAsync(PreviewBlobs store, FetchOutcome.Content content, string level, CancellationToken cancellationToken)
+    {
+        await using var stream = await store.OpenReadAsync(content.Raw.Key, null, cancellationToken);
+        if (stream is null)
+        {
+            return null;
+        }
+
+        using var document = await new HtmlParser().ParseDocumentAsync(stream, cancellationToken);
+        return await WordsAsync(document, level, content.Facts.FinalUrl!, cancellationToken);
+    }
+
+    /// <summary>The words of a page's main text as the HTML extraction keeps it with the host's applied site profile (else a preset).</summary>
+    private async Task<int> WordsAsync(IHtmlDocument document, string level, Uri url, CancellationToken cancellationToken)
+    {
+        var profile = await siteProfiles.AppliedAsync(level, url.AbsoluteUri, cancellationToken);
+        return Words(extractor.Extract(document, profile?.Profile).Document.Blocks);
+    }
+
+    /// <summary>Runs of letters and digits in the blocks' text.</summary>
+    private static int Words(IEnumerable<DocBlock> blocks)
+    {
+        var count = 0;
+        foreach (var block in blocks)
+        {
+            var inWord = false;
+            foreach (var c in block.Text)
+            {
+                var letter = char.IsLetterOrDigit(c);
+                if (letter && !inWord)
+                {
+                    count++;
+                }
+
+                inWord = letter;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>How the comparison fetches: the form's settings with <c>fetchMode</c> <c>browser</c>; <paramref name="mode"/> is the form's own.</summary>
+    private static RenderPlan Plan(FetchMode mode, string? readySelector, bool scrollToLoad, IReadOnlyList<string> noiseSelectors,
+        CanonicalizerOptions canonicalizer, JsonElement settings) =>
+        new(new PageSettings(FetchMode.Browser, readySelector, scrollToLoad, noiseSelectors), mode, canonicalizer, settings);
 
     private static void AddOrigin(List<Uri> origins, Uri? asked)
     {
@@ -313,7 +509,17 @@ public sealed partial class Preflight(
         public string? CmsHost { get; set; }
 
         public int? EstimatedPages { get; set; }
+
+        /// <summary>The HTML pages the comparison renders, with their raw main-text words.</summary>
+        public List<RenderSample> Samples { get; } = [];
     }
+
+    /// <param name="Target">The URL as the form gave it (the entry's target).</param>
+    /// <param name="Url">The canonical URL fetched.</param>
+    /// <param name="RawWords">The raw page's main-text words.</param>
+    private sealed record RenderSample(string Target, Uri Url, int RawWords);
+
+    private sealed record RenderPlan(PageSettings Browser, FetchMode Mode, CanonicalizerOptions Canonicalizer, JsonElement Settings);
 
     [LoggerMessage(LogLevel.Information, "Preflight {JobId} ({SourceType}): {State}")]
     private static partial void LogPreflight(ILogger logger, Guid jobId, string sourceType, string state);

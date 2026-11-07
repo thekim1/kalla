@@ -37,6 +37,23 @@ describe('Preview (admin design §6.4)', () => {
     expect(text).toContain('US$')
   })
 
+  it('shows in the stage strip how the page was fetched (connectors design §8.1)', async () => {
+    vi.spyOn(api.previews, 'output').mockResolvedValue({ stage: 'parse', truncated: false, value: { blocks: [] } })
+    const fetched = (fetchMode: string): StagePreviewResult => ({
+      ...result,
+      documents: [{ url: 'https://app.example.se/', stages: [{ stage: 'fetch', state: 'succeeded', facts: { fetchMode } }, result.documents[0]!.stages[0]!] }],
+    })
+    const browser = mount(PreviewResult, { props: { jobId: 'j', result: fetched('browser') } })
+    await flushPromises()
+    expect(browser.get('[data-test=fetch-mode]').text()).toBe('· in a browser')
+    const http = mount(PreviewResult, { props: { jobId: 'j', result: fetched('http') } })
+    await flushPromises()
+    expect(http.get('[data-test=fetch-mode]').text()).toBe('· over HTTP')
+    const upload = mount(PreviewResult, { props: { jobId: 'j', result } })
+    await flushPromises()
+    expect(upload.find('[data-test=fetch-mode]').exists()).toBe(false)
+  })
+
   it('says the preview has expired when its outputs are gone (404 after 24 h)', async () => {
     vi.spyOn(api.previews, 'output').mockRejectedValue(new ApiError(404, 'GET', null))
     const wrapper = mount(PreviewResult, { props: { jobId: 'j', result } })

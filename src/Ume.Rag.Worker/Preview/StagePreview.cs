@@ -183,6 +183,7 @@ public sealed partial class StagePreview(
             content = new PreviewContent(index, document.Classification, hash, RawContentKeys.Of(document))
             {
                 MediaType = document.MediaType,
+                FetchMode = document.IdentityKind == Domain.Entities.IdentityKinds.Upload ? null : await documents.FetchModeAsync(document.Id, cancellationToken),
                 Url = document.Url,
                 DisplayName = document.DisplayName,
                 HttpLastModified = document.HttpLastModified,
@@ -204,12 +205,14 @@ public sealed partial class StagePreview(
             reused = false;
         }
 
-        // Last-Modified is a chunk date candidate: a preview on top of this one reads it back with the content.
+        // Last-Modified is a chunk date candidate: a preview on top of this one reads it back with the content. The fetch mode
+        // (http, or browser for a rendered DOM; none for an upload) is shown with the fetch stage.
         log.Done(reused, new
         {
             contentHash = Convert.ToHexStringLower(content.ContentHash),
             content.MediaType,
             lastModified = content.HttpLastModified,
+            fetchMode = content.FetchMode,
         });
         if (log.Wants(StageNames.Scan))
         {
@@ -255,6 +258,7 @@ public sealed partial class StagePreview(
             Url = earlier.Url,
             HttpLastModified = facts.TryGetProperty("lastModified", out var modified)
                 && modified.TryGetDateTimeOffset(out var at) ? at : null,
+            FetchMode = facts.TryGetProperty("fetchMode", out var mode) && mode.ValueKind == JsonValueKind.String ? mode.GetString() : null,
         };
     }
 
@@ -291,21 +295,8 @@ public sealed partial class StagePreview(
     /// <summary>A render slot for a page of <paramref name="host"/>, waited for within the preview's deadline; no renderer fails the fetch stage.</summary>
     private async Task<RenderLease> RenderSlotAsync(string host, CancellationToken cancellationToken)
     {
-        while (true)
-        {
-            switch (renders.TryAcquire(host))
-            {
-                case RenderSlot.Granted granted:
-                    return granted.Lease;
-                case RenderSlot.Refused { Reason: RenderReasons.Busy, Delay: var delay }:
-                    await Task.Delay(delay, time, cancellationToken);
-                    break;
-                case RenderSlot.Refused refused:
-                    throw new StageFatalException(Outcome.Failed, refused.Reason);
-                default:
-                    throw new InvalidOperationException("Unexpected render slot.");
-            }
-        }
+        var (lease, refusal) = await PreviewHosts.RenderSlotAsync(renders, host, time, cancellationToken);
+        return lease ?? throw new StageFatalException(Outcome.Failed, refusal!);
     }
 
     private async Task<PreviewContent> FetchUploadAsync(PreviewStore store, SourceContext source, Guid uploadId, int index, CancellationToken cancellationToken)
@@ -328,6 +319,7 @@ public sealed partial class StagePreview(
             Url = content.Facts.FinalUrl?.AbsoluteUri ?? url,
             DisplayName = displayName,
             HttpLastModified = content.Validators.LastModifiedDate,
+            FetchMode = url is null ? null : content.Facts.FetchMode,
         },
         FetchOutcome.NotModified => throw new StageFatalException(Outcome.Failed, "http.304"),
         FetchOutcome.Gone gone => throw new StageFatalException(Outcome.Failed, gone.Reason),

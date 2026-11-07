@@ -72,5 +72,5 @@
       }
     }
   ],
-  "description": "Payload of a preview job of kind preflight (connectors design §2.2; admin design §4.7, §5.4 step 4): reachability, robots, sitemaps, estimated pages against maxPages, egress and CMS of an unsaved URL-list or crawl configuration. No dedup."
+  "description": "Payload of a preview job of kind preflight (connectors design §2.2; admin design §4.7, §5.4 step 4): reachability, robots, sitemaps, estimated pages against maxPages, egress, CMS and the raw vs rendered main-text words of an unsaved URL-list or crawl configuration. No dedup."
 }

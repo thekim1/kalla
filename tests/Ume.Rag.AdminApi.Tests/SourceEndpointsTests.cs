@@ -205,6 +205,47 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
     }
 
     [Fact]
+    public async Task A_fetch_mode_change_reports_refetch_on_the_impact_and_saves_without_a_token()
+    {
+        var (collection, code) = await CollectionAsync();
+        await using var factory = database.HeaderFactory();
+        using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
+        using var created = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources",
+            new { type = "url-list", name = "Appen", classification = "internal", settings = UrlList("https://a.se/app") }, Ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
+        var source = await Json(created);
+        var id = source.GetProperty("id").GetGuid();
+        var version = source.GetProperty("version").GetString();
+
+        async Task<string?[]> EffectsAsync(object settings)
+        {
+            using var impact = await admin.PostAsJsonAsync($"/api/sources/{id}/impact", new { settings }, Ct);
+            impact.StatusCode.ShouldBe(HttpStatusCode.OK, await impact.Content.ReadAsStringAsync(Ct));
+            var report = await Json(impact);
+            report.GetProperty("impactToken").ValueKind.ShouldBe(JsonValueKind.Null);
+            return [.. report.GetProperty("effects").EnumerateArray().Select(e => e.GetString())];
+        }
+
+        var browser = new { urls = new[] { "https://a.se/app" }, fetchMode = "browser", readySelector = "#app h1", scrollToLoad = true };
+        (await EffectsAsync(browser)).ShouldBe(["behaviour", "refetch"]);
+        (await EffectsAsync(new { urls = new[] { "https://a.se/app" }, timeoutSeconds = 60 })).ShouldBe(["behaviour"], "other behaviour changes fetch nothing again");
+        (await EffectsAsync(new { urls = new[] { "https://a.se/app" }, fetchMode = "http" })).ShouldBeEmpty("the default written out is no change");
+
+        using (var saved = await admin.PutAsJsonAsync($"/api/sources/{id}", new { name = "Appen", classification = "internal", settings = browser, version }, Ct))
+        {
+            saved.StatusCode.ShouldBe(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync(Ct));
+            var settings = (await Json(saved)).GetProperty("settings");
+            (settings.GetProperty("fetchMode").GetString(), settings.GetProperty("readySelector").GetString(), settings.GetProperty("scrollToLoad").GetBoolean())
+                .ShouldBe(("browser", "#app h1", true));
+        }
+
+        using var refused = await admin.PostAsJsonAsync($"/api/collections/{collection}/sources",
+            new { type = "url-list", name = "Fel", classification = "internal", settings = new { urls = new[] { "https://a.se/x" }, fetchMode = "chrome" } }, Ct);
+        refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await Json(refused)).GetProperty("errorCodes").GetProperty("settings.fetchMode")[0].GetProperty("code").GetString().ShouldBe("source_settings_invalid");
+    }
+
+    [Fact]
     public async Task Sync_now_enqueues_once_answers_the_running_run_and_runs_are_listed_and_cancelled()
     {
         var (collection, code) = await CollectionAsync();
