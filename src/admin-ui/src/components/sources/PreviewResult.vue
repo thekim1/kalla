@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { PreviewChunks, PreviewDocument, PreviewOutput, PreviewParsed, PreviewPii, StagePreviewResult } from '@/api/types'
+import type { PreviewChunks, PreviewDocument, PreviewOutput, PreviewParsed, PreviewPii, PreviewStageResult, StagePreviewResult } from '@/api/types'
 import InlineError from '@/components/ui/InlineError.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
@@ -13,7 +13,7 @@ import { isApiError } from '@/api/client'
 import { problemMessage } from '@/utils/problem'
 
 // The preview result (admin design §6.4, §5.4 step 5): the documents as tabs, each with its stage strip (state, duration,
-// reuse, cost) and one output at a time: Before / After for a crawled page (the extraction without and with the site
+// reuse, cost; the fetch stage says whether the page was fetched over HTTP or rendered in a browser) and one output at a time: Before / After for a crawled page (the extraction without and with the site
 // profile), or a stage's output (blocks, chunks with heading path and token count, personal-data counts). Outputs are
 // fetched when shown, through GET /api/previews/{jobId}/documents/{index}/stages/{stage}/output.
 const props = defineProps<{ jobId: string; result: StagePreviewResult }>()
@@ -95,6 +95,7 @@ const piiCounts = computed(() =>
   Object.entries(pii.value?.counts ?? {}).filter((e): e is [string, number] => typeof e[1] === 'number' && e[1] > 0 && e[0] in PREVIEW.piiTypes),
 )
 const bodyBlocks = (p: PreviewParsed | null | undefined) => (p?.blocks ?? []).filter((b) => (b.layer ?? 'body') === 'body' && b.text.trim())
+const fetchMode = (s: PreviewStageResult) => (s.stage === 'fetch' && typeof s.facts?.fetchMode === 'string' ? s.facts.fetchMode : null)
 const stateTone = (state: string) => (state === 'succeeded' ? 'ok' : state === 'failed' ? 'danger' : 'neutral')
 </script>
 
@@ -111,6 +112,7 @@ const stateTone = (state: string) => (state === 'succeeded' ? 'ok' : state === '
           <span class="font-medium">{{ PREVIEW.stageLabel[s.stage] ?? s.stage }}</span>
           <UiBadge class="ml-1" :tone="stateTone(s.state)" :label="PREVIEW.stageState[s.state] ?? s.state" />
           <span class="ml-1 text-fg-3">{{ formatMs(s.durationMs ?? 0) }}</span>
+          <span v-if="fetchMode(s)" class="ml-1 text-fg-3" data-test="fetch-mode">· {{ PREVIEW.fetchModes[fetchMode(s)!] ?? fetchMode(s) }}</span>
           <span v-if="s.cacheHit" class="ml-1 text-fg-3">· {{ PREVIEW.reused }}</span>
           <span v-if="s.costUsd ?? s.estimatedCostUsd" class="ml-1 text-fg-3">· {{ formatUsdCost(s.costUsd ?? s.estimatedCostUsd) }}</span>
           <span v-if="s.error" class="block text-danger">{{ jobMessage(s.error) }}</span>

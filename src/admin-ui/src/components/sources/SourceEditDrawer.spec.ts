@@ -68,6 +68,40 @@ describe('Edit source (admin design §5.5.3, V25)', () => {
     wrapper.unmount()
   })
 
+  it('shows that a fetch change fetches every page again and saves it with Save anyway, without a token (connectors design §12.3)', async () => {
+    const browserSource: Source = {
+      ...source, type: 'url-list', settings: { urls: ['https://app.example.se/'], fetchMode: 'browser', readySelector: '#app h1', scrollToLoad: true, piiMode: 'hold' },
+    }
+    const impact = vi.spyOn(api.sources, 'impact').mockResolvedValue({ effects: ['behaviour', 'refetch'], liveDocuments: 12, impactToken: null, usedBy: [] })
+    const update = vi.spyOn(api.sources, 'update').mockResolvedValue(browserSource)
+    const wrapper = mount(SourceEditDrawer, { props: { open: false, source: browserSource, collection }, attachTo: document.body })
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+
+    expect(document.body.querySelector<HTMLSelectElement>('#edit-fetch-mode')!.value).toBe('browser')
+    expect(document.body.querySelector<HTMLInputElement>('#edit-ready-selector')!.value).toBe('#app h1')
+    expect(document.body.querySelector<HTMLInputElement>('[data-test=scroll-to-load] input')!.checked).toBe(true)
+
+    const mode = document.body.querySelector<HTMLSelectElement>('#edit-fetch-mode')!
+    mode.value = 'http'
+    mode.dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(document.body.querySelector('#edit-ready-selector')).toBeNull()
+    click('save-source')
+    await flushPromises()
+
+    const settings = { urls: ['https://app.example.se/'], piiMode: 'hold' }
+    expect(impact).toHaveBeenCalledWith('s1', { settings })
+    expect(update).not.toHaveBeenCalled()
+    expect(document.body.querySelector('[data-test=impact-refetch]')!.textContent).toContain('every page of the source is fetched again now')
+    expect(document.body.querySelector('[data-test=save-source]')!.textContent).toContain('Save anyway')
+
+    click('save-source')
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('s1', { name: 'umea.se/bygga', classification: 'public', settings, schedule: '0 1 * * 6', version: '7' })
+    wrapper.unmount()
+  })
+
   it('saves a change without scope effect at once, and refuses a bad Demote line', async () => {
     vi.spyOn(api.sources, 'impact').mockResolvedValue({ effects: ['cosmetic'], liveDocuments: 840, impactToken: null, usedBy: [] })
     const update = vi.spyOn(api.sources, 'update').mockResolvedValue(source)

@@ -162,8 +162,10 @@ switch (renderMode)
         var wsEndpoint = builder.AddDockerfile("renderer", Path.Combine("..", "..", "images", "renderer"))
             .WithEndpoint(port: 7417, targetPort: RendererPort, name: "ws", scheme: "tcp")
             .WithEnvironment("UME_RAG_RENDER_WS_PATH", ReferenceExpression.Create($"/{renderPath}"))
+            // No --read-only here: DCP copies files into a container before it starts, which a read-only root refuses
+            // ("container rootfs is marked read-only"). Compose keeps the read-only root (repo-and-deployment §5.4).
             .WithContainerRuntimeArgs(
-                "--read-only", "--tmpfs", "/tmp:size=512m", "--cap-drop", "ALL", "--init",
+                "--tmpfs", "/tmp:size=512m", "--cap-drop", "ALL", "--init",
                 "--security-opt", "no-new-privileges", "--security-opt", $"seccomp={seccompProfile}",
                 "--memory", "2g", "--cpus", "2", "--pids-limit", "512")
             .GetEndpoint("ws");

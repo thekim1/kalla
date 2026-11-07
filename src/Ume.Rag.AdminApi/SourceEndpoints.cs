@@ -99,7 +99,8 @@ public static class SourceEndpoints
                 var effects = SourceRules.Effects(source, settings);
                 var documents = await admin.Db.Documents.AsNoTracking().CountAsync(d => d.SourceId == id && d.DeletedAt == null, ct);
                 var usedBy = await CollectionEndpoints.UsedByAsync(admin, source.CollectionId, ct);
-                return new SourceImpact([.. effects.Select(e => JsonNamingPolicy.KebabCaseLower.ConvertName(e.ToString())).Order(StringComparer.Ordinal)],
+                string[] refetch = SourceRules.Refetches(source, settings) ? [SourceRules.Refetch] : [];
+                return new SourceImpact([.. effects.Select(e => JsonNamingPolicy.KebabCaseLower.ConvertName(e.ToString())).Concat(refetch).Order(StringComparer.Ordinal)],
                     documents, usedBy, SourceRules.NeedsToken(effects) ? SourceRules.ImpactToken(source, settings) : null);
             })
             .RequireAuthorization(AdminPolicies.Edit).WithName("SourceImpact").WithSummary("What a settings change does; the token a scope or identity change needs");
@@ -349,6 +350,22 @@ public static class SourceRules
         return SourceSettings.Changed(source.Type, before.RootElement, after.RootElement);
     }
 
+    /// <summary>The impact's effect for a change that fetches every page again (<see cref="Refetches"/>).</summary>
+    public const string Refetch = "refetch";
+
+    /// <summary>
+    /// The change starts a sync that fetches every page again in the new mode (connectors design §12.3: <c>fetchMode</c>,
+    /// <c>readySelector</c>, <c>scrollToLoad</c>): a <c>behaviour</c> change that needs no token, shown on save.
+    /// </summary>
+    public static bool Refetches(Source source, string settings)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        using var before = JsonDocument.Parse(source.Settings);
+        using var after = JsonDocument.Parse(settings);
+        return !string.Equals(SourceSettings.Hashes(source.Type, before.RootElement).Fetch, SourceSettings.Hashes(source.Type, after.RootElement).Fetch,
+            StringComparison.Ordinal);
+    }
+
     public static bool NeedsToken(IReadOnlySet<SettingEffect> effects) => effects.Contains(SettingEffect.Scope) || effects.Contains(SettingEffect.Identity);
 
     /// <summary>
@@ -442,7 +459,10 @@ public sealed record SourceAudit(
         s.ContainsThirdPartyText, s.State);
 }
 
-/// <summary>The effect tags of a change (kebab-case), the source's live documents, the collection's assistants, and the token when needed.</summary>
+/// <summary>
+/// The effect tags of a change (kebab-case; plus <c>refetch</c> when every page is fetched again, <see cref="SourceRules.Refetches"/>), the source's
+/// live documents, the collection's assistants, and the token when needed.
+/// </summary>
 public sealed record SourceImpact(IReadOnlyList<string> Effects, int LiveDocuments, IReadOnlyList<CollectionUser> UsedBy, string? ImpactToken);
 
 /// <summary>

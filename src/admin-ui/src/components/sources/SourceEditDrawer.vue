@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Collection, Level, Source, SourceImpact } from '@/api/types'
+import FetchModeFields from '@/components/sources/FetchModeFields.vue'
+import { type FetchMode, READY_SELECTOR_MAX, fetchForm, withFetchSettings } from '@/components/sources/fetchMode'
 import InlineError from '@/components/ui/InlineError.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextAreaField from '@/components/ui/TextAreaField.vue'
@@ -11,10 +13,12 @@ import UiDrawer from '@/components/ui/UiDrawer.vue'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { COMMON, LEVEL_LABEL, SOURCE, SOURCE_EDIT } from '@/utils/labels'
 
-// Ändra källa (admin design §5.5.3, V25): name, level, addresses and scope, Nedprioritera (demote patterns with a factor)
-// and the personal-data mode. Saving first asks POST /api/sources/{id}/impact; a scope or identity change shows what it
-// does (documents may leave the index, the assistants that use the collection) and saves only with Spara ändå, sending
-// the impact token. Settings the form does not show are kept as they are.
+// Ändra källa (admin design §5.5.3, V25): name, level, addresses and scope, Fetch pages with (and for a browser its ready
+// element and scrolling), Nedprioritera (demote patterns with a factor) and the personal-data mode. Saving first asks
+// POST /api/sources/{id}/impact; a scope or identity change shows what it does (documents may leave the index, the
+// assistants that use the collection) and saves only with Spara ändå, sending the impact token; a fetch change
+// (refetch: every page fetched again in the new way) is shown the same way and needs no token. Settings the form does not
+// show are kept as they are.
 const props = defineProps<{ open: boolean; source: Source; collection: Collection | null }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'saved', source: Source): void }>()
 
@@ -28,9 +32,14 @@ const demote = ref('')
 const maxPages = ref('')
 const maxDepth = ref('')
 const piiMode = ref<'hold' | 'report'>('hold')
+const fetchMode = ref<FetchMode>('http')
+const readySelector = ref('')
+const scrollToLoad = ref(false)
 const impact = ref<SourceImpact | null>(null)
 const saving = ref(false)
-const form = useFormErrors({ name: 'edit-name', urls: 'edit-urls', demote: 'edit-demote', maxPages: 'edit-max-pages', maxDepth: 'edit-max-depth' })
+const form = useFormErrors({
+  name: 'edit-name', urls: 'edit-urls', demote: 'edit-demote', maxPages: 'edit-max-pages', maxDepth: 'edit-max-depth', readySelector: 'edit-ready-selector',
+})
 
 const crawl = computed(() => props.source.type === 'crawl')
 const levelOptions = computed(() => {
@@ -61,12 +70,16 @@ watch(
     maxPages.value = String(s.maxPages ?? 10000)
     maxDepth.value = String(s.maxDepth ?? 10)
     piiMode.value = s.piiMode === 'report' ? 'report' : 'hold'
+    const fetch = fetchForm(s)
+    fetchMode.value = fetch.fetchMode
+    readySelector.value = fetch.readySelector
+    scrollToLoad.value = fetch.scrollToLoad
     impact.value = null
     form.clear()
   },
 )
 // A changed field makes a shown impact stale.
-watch([name, level, urls, include, exclude, demote, maxPages, maxDepth, piiMode], () => {
+watch([name, level, urls, include, exclude, demote, maxPages, maxDepth, piiMode, fetchMode, readySelector, scrollToLoad], () => {
   impact.value = null
 })
 
@@ -84,7 +97,7 @@ function demoteRules(): { pattern: string; factor: number }[] | null {
 }
 
 function settings(): Record<string, unknown> {
-  const base = { ...props.source.settings }
+  const base = withFetchSettings(props.source.settings, { fetchMode: fetchMode.value, readySelector: readySelector.value, scrollToLoad: scrollToLoad.value })
   if (props.collection?.classification === 'public') base.piiMode = piiMode.value
   if (!crawl.value) return { ...base, urls: lines(urls.value) }
   return {
@@ -102,6 +115,7 @@ function valid(): boolean {
     demote: crawl.value && demoteRules() === null && SOURCE_EDIT.demoteInvalid,
     maxPages: crawl.value && !integer(maxPages.value) && SOURCE.numberInvalid,
     maxDepth: crawl.value && !integer(maxDepth.value) && SOURCE.numberInvalid,
+    readySelector: fetchMode.value === 'browser' && readySelector.value.trim().length > READY_SELECTOR_MAX && SOURCE.readySelectorInvalid,
   })
 }
 
@@ -118,12 +132,12 @@ async function save(): Promise<void> {
   if (!valid()) return
   saving.value = true
   try {
-    if (impact.value?.impactToken) {
+    if (impact.value) {
       await put(impact.value.impactToken)
       return
     }
     const checked = await api.sources.impact(props.source.id, { settings: settings() })
-    if (checked.impactToken) impact.value = checked
+    if (checked.impactToken || checked.effects.includes('refetch')) impact.value = checked
     else await put(null)
   } catch (e) {
     form.applyServerError(e)
@@ -142,6 +156,10 @@ async function save(): Promise<void> {
         id="edit-urls" v-model="urls" :label="crawl ? SOURCE.startUrls : SOURCE.urls" :hint="crawl ? SOURCE.startUrlsHint : SOURCE.urlsHint"
         :error="form.errors.urls" mono
       />
+      <FetchModeFields
+        v-model:fetch-mode="fetchMode" v-model:ready-selector="readySelector" v-model:scroll-to-load="scrollToLoad" id-prefix="edit"
+        :ready-selector-error="form.errors.readySelector"
+      />
       <template v-if="crawl">
         <TextAreaField id="edit-include" v-model="include" :label="SOURCE.include" :hint="SOURCE.includeHint" mono />
         <TextAreaField id="edit-exclude" v-model="exclude" :label="SOURCE.exclude" :hint="SOURCE.excludeHint" mono />
@@ -155,6 +173,7 @@ async function save(): Promise<void> {
         <p class="font-medium">{{ SOURCE_EDIT.impactTitle }}</p>
         <p v-if="impact.effects.includes('scope')" class="mt-1">{{ SOURCE_EDIT.scope(impact.liveDocuments) }}</p>
         <p v-if="impact.effects.includes('identity')" class="mt-1">{{ SOURCE_EDIT.identity }}</p>
+        <p v-if="impact.effects.includes('refetch')" class="mt-1" data-test="impact-refetch">{{ SOURCE_EDIT.refetch }}</p>
         <p v-if="impact.usedBy.length" class="mt-1">
           {{ SOURCE_EDIT.usedBy(usedByNames) }}
         </p>

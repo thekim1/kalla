@@ -65,6 +65,30 @@ describe('Run (admin design §5.5.3; #278 slice 2)', () => {
     )
   })
 
+  it('counts the rendered pages, render failures and pages kept from their last good content of a browser crawl (connectors design §8.6)', async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(api.runs, 'get').mockResolvedValue({ ...run, report: { ...run.report, render: { rendered: 1240, failures: 3, keptFromLastGood: 2 } } })
+    vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
+
+    const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+
+    const card = wrapper.get('[data-test=render]').text().replace(/\s+/g, ' ')
+    expect(card).toContain('Pages fetched with a browser')
+    expect(card).toContain('Rendered1 240')
+    expect(card).toContain('Render failures3')
+    expect(card).toContain('Kept from their last good content2')
+  })
+
+  it('has no renderer card for an HTTP crawl', async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(api.runs, 'get').mockResolvedValue(run)
+    vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
+    const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    expect(wrapper.find('[data-test=render]').exists()).toBe(false)
+  })
+
   it('shows the deletion decision when the guard held deletions back', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.runs, 'get').mockResolvedValue({ ...run, run: { ...run.run, state: 'awaiting-deletion-confirmation', proposedDeletions: 212 } })

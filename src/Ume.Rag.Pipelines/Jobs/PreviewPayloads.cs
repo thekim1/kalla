@@ -84,7 +84,7 @@ public sealed record StagePreviewPayload : JobPayload
 /// <c>preflight</c> (connectors design §2.2, §19; admin design §4.7, §5.4 step 4): checks of an unsaved URL-list or crawl
 /// configuration. A URL-list preflight samples the first 20 URLs. No dedup.
 /// </summary>
-[Description("Payload of a preview job of kind preflight (connectors design §2.2; admin design §4.7, §5.4 step 4): reachability, robots, sitemaps, estimated pages against maxPages, egress and CMS of an unsaved URL-list or crawl configuration. No dedup.")]
+[Description("Payload of a preview job of kind preflight (connectors design §2.2; admin design §4.7, §5.4 step 4): reachability, robots, sitemaps, estimated pages against maxPages, egress, CMS and the raw vs rendered main-text words of an unsaved URL-list or crawl configuration. No dedup.")]
 [SchemaKeyword("allOf", """
     [
       { "if": { "properties": { "sourceType": { "const": "url-list" } }, "required": ["sourceType"] },

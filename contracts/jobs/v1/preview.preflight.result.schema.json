@@ -19,7 +19,7 @@
         "properties": {
           "check": {
             "type": "string",
-            "description": "The check: reachability, robots, sitemaps, pages, egress or cms (new names may be added).",
+            "description": "The check: reachability, robots, sitemaps, pages, egress, cms or render (new names may be added). A render entry is information (pass, or warn for render.suggested while the settings fetch with http): render.suggested or render.compared with the counts, render.not_configured (once, no counts), render.busy, render.timeout or render.unavailable.",
             "pattern": "^[a-z][a-z0-9-]{0,49}$"
           },
           "state": {
@@ -44,7 +44,7 @@
             "maxLength": 2048
           },
           "facts": {
-            "description": "Small facts for the text (counts, status codes); never page content.",
+            "description": "Small facts for the text (counts, status codes; a render entry's rawWords and renderedWords: the main-text words of the page as fetched and as rendered); never page content.",
             "type": [
               "object",
               "null"
@@ -81,5 +81,5 @@
     "state",
     "checks"
   ],
-  "description": "Result of a preview job of kind preflight (connectors design §2.2; admin design §5.4 step 4): the worst state and one entry per check. A fail blocks the save, a warn explains."
+  "description": "Result of a preview job of kind preflight (connectors design §2.2, §8.1; admin design §4.7, §5.4 step 4): the worst state and one entry per check. A fail blocks the save, a warn explains. Up to 3 HTML start URLs or listed URLs are also rendered: a render entry per page with the raw and rendered main-text word counts."
 }

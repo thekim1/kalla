@@ -82,6 +82,7 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
             document.Stages.ShouldAllBe(s => s.State == PreviewStageState.Succeeded);
             document.Stages.Where(s => s.Stage is "detect" or "parse" or "clean").ShouldAllBe(s => s.CacheHit, "read from the live cache");
             document.Stages.Single(s => s.Stage == "chunk").CacheHit.ShouldBeFalse("the draft's chunk size gives a new key");
+            document.Stages.Single(s => s.Stage == "fetch").Facts!.Value.GetProperty("fetchMode").GetString().ShouldBe(FetchModes.Http);
             // The preview's outputs are encrypted by the source's level (data-model §7); the admin reads them with it.
             var blobs = worker.Services.GetRequiredService<IBlobStore>().ForLevel(seed.Classification);
             (await TextAsync(blobs, document.Stages.Single(s => s.Stage == "parse").Output!)).ShouldContain("bygglov a");
@@ -221,6 +222,8 @@ public sealed class PreviewTests(RagDatabaseFixture database, FakeGatewayFactory
             var stages = (await ResultAsync<StagePreviewResult>(second)).Documents.ShouldHaveSingleItem().Stages;
 
             requests["new"].ShouldBe(1, "the base preview's raw content is reused");
+            firstResult.Documents[0].Stages.Single(s => s.Stage == "fetch").Facts!.Value.GetProperty("fetchMode").GetString().ShouldBe(FetchModes.Http);
+            stages.Single(s => s.Stage == "fetch").Facts!.Value.GetProperty("fetchMode").GetString().ShouldBe(FetchModes.Http, "read back with the reused content");
             stages.Select(s => s.Stage).ShouldBe(["fetch", "detect", "parse", "clean", "chunk", "personal-data", "embed", "index"]);
             stages.Where(s => s.Stage is "fetch" or "detect" or "parse" or "clean").ShouldAllBe(s => s.CacheHit && s.State == PreviewStageState.Succeeded);
             stages.Single(s => s.Stage == "chunk").CacheHit.ShouldBeFalse("the draft's chunk size gives the chunk stage a new key");

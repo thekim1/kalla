@@ -373,7 +373,7 @@ public sealed record PreviewSiteProfile
 }
 
 /// <summary>Result of <c>preflight</c>: one entry per check; the admin maps each code to its Swedish text (labels.ts, messages.ts).</summary>
-[Description("Result of a preview job of kind preflight (connectors design §2.2; admin design §5.4 step 4): the worst state and one entry per check. A fail blocks the save, a warn explains.")]
+[Description("Result of a preview job of kind preflight (connectors design §2.2, §8.1; admin design §4.7, §5.4 step 4): the worst state and one entry per check. A fail blocks the save, a warn explains. Up to 3 HTML start URLs or listed URLs are also rendered: a render entry per page with the raw and rendered main-text word counts.")]
 public sealed record PreflightResult
 {
     [Description("The worst state of the checks.")]
@@ -393,7 +393,7 @@ public sealed record PreflightResult
 
 public sealed record PreflightCheckResult
 {
-    [Description("The check: reachability, robots, sitemaps, pages, egress or cms (new names may be added).")]
+    [Description("The check: reachability, robots, sitemaps, pages, egress, cms or render (new names may be added). A render entry is information (pass, or warn for render.suggested while the settings fetch with http): render.suggested or render.compared with the counts, render.not_configured (once, no counts), render.busy, render.timeout or render.unavailable.")]
     [RegularExpression("^[a-z][a-z0-9-]{0,49}$")]
     public required string Check { get; init; }
 
@@ -408,7 +408,7 @@ public sealed record PreflightCheckResult
     [MaxLength(2048)]
     public string? Target { get; init; }
 
-    [Description("Small facts for the text (counts, status codes); never page content.")]
+    [Description("Small facts for the text (counts, status codes; a render entry's rawWords and renderedWords: the main-text words of the page as fetched and as rendered); never page content.")]
     [SchemaKeyword("type", "[\"object\", \"null\"]")]
     public JsonElement? Facts { get; init; }
 }

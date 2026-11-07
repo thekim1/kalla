@@ -252,9 +252,12 @@ export interface Source extends SourceSummary {
   version: string
 }
 
-/** `POST /api/sources/{id}/impact`: what a settings change does; `impactToken` when a scope or identity change needs confirming (V25). */
+/**
+ * `POST /api/sources/{id}/impact`: what a settings change does (`refetch`: every page is fetched again, a `fetchMode`,
+ * `readySelector` or `scrollToLoad` change); `impactToken` when a scope or identity change needs confirming (V25).
+ */
 export interface SourceImpact {
-  effects: ('identity' | 'scope' | 'behaviour' | 'cosmetic' | string)[]
+  effects: ('identity' | 'scope' | 'behaviour' | 'cosmetic' | 'refetch' | string)[]
   liveDocuments: number
   usedBy: CollectionUser[]
   impactToken: string | null
@@ -361,9 +364,17 @@ export interface Job<TResult = unknown> {
 
 export type CheckState = 'pass' | 'warn' | 'fail'
 
+/** A preflight entry's facts; a `render` entry has the page's main-text words as fetched and as rendered (connectors design §8.1). */
+export interface PreflightFacts {
+  rawWords?: number
+  renderedWords?: number
+  [fact: string]: unknown
+}
+
+/** contracts/jobs/v1/preview.preflight.result.schema.json */
 export interface PreflightResult {
   state: CheckState
-  checks: { check: string; state: CheckState; code: string; target?: string | null }[]
+  checks: { check: string; state: CheckState; code: string; target?: string | null; facts?: PreflightFacts | null }[]
   estimatedPages?: number | null
   cms?: string | null
 }
@@ -648,11 +659,22 @@ export interface PolitenessReportEntry {
   renderPerHost: number | null
 }
 
-/** A crawl run's report (worker `CrawlSourceRunner`): completeness, the verdict, removal checks, demote counts and non-default politeness. */
+/** The crawl report's renderer counts of a `browser` source (worker `RenderSection`, connectors design §8.6). */
+export interface RenderReport {
+  rendered: number
+  failures: number
+  keptFromLastGood: number
+}
+
+/**
+ * A crawl run's report (worker `CrawlSourceRunner`): completeness, the verdict, removal checks, demote counts, non-default
+ * politeness and, for a `browser` source, the renderer counts.
+ */
 export interface CrawlReport {
   completeness?: { complete: boolean; reasons: string[]; seeds: number; seedsResolved: number; seedsFailed: number; incremental: boolean }
   verdict?: { runFailure: string | null; runDegradation: string | null }
   politeness?: PolitenessReportEntry[]
+  render?: RenderReport
   [section: string]: unknown
 }
 

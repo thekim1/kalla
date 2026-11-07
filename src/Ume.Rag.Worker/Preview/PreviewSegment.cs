@@ -41,6 +41,9 @@ public sealed record PreviewContent(int Index, string Level, byte[] ContentHash,
     /// <summary>HTTP <c>Last-Modified</c> of the fetch, or the existing document's stored one.</summary>
     public DateTimeOffset? HttpLastModified { get; init; }
 
+    /// <summary>How the content was fetched (<c>Documents.FetchMode</c>: <c>http</c>, or <c>browser</c> for a rendered DOM); null for an upload.</summary>
+    public string? FetchMode { get; init; }
+
     /// <summary>An existing document's stored sitemap <c>lastmod</c>.</summary>
     public DateTimeOffset? SitemapLastMod { get; init; }
 
