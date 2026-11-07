@@ -189,7 +189,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** Decisions "General knowledge on a public assistant"; admin §4.5 (publish, restore, assistants), §4.6 V36,
   §5.5.4; chat §7.3, §10.4.
 
-### [ ] B-19 Level change in the edit drawer (#446)
+### [x] B-19 Level change in the edit drawer (#446)
 - **Do:** add the level to the collection's *Edit* drawer (in the `⋯` menu; create the drawer with name, contact and
   level if the page has none) and to the assistant's *Ändra* drawer, `edit` right, saved with the other fields through
   the existing `PUT`s. Show the API's refusals (`collection_level_conflict`, `assistant_below_collection`, V3/V7/V8/V9)

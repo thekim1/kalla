@@ -24,8 +24,9 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
+import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
 import { formatDateTime } from '@/utils/format'
-import { ASSISTANT, COMMON, LEVEL_LABEL } from '@/utils/labels'
+import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
 
@@ -64,6 +65,8 @@ const busy = ref<'' | 'save' | 'publish' | 'test' | 'audience' | 'storage' | 'un
 const versions = ref<AssistantVersionSummary[] | null>(null)
 const restoring = ref<number | null>(null)
 const archiving = ref(false)
+// Edit (§5.5.4, #446): the own fields, the level included.
+const editing = ref(false)
 const policy = ref<DataProtectionPolicy | null>(null)
 const historyMode = ref('none')
 const retentionDays = ref('90')
@@ -300,6 +303,11 @@ async function restore(): Promise<void> {
   await loadVersions()
 }
 
+function edited(saved: Assistant): void {
+  assistant.data.value = saved
+  ui.notify(EDIT_DRAWER.saved)
+}
+
 async function archive(): Promise<void> {
   assistant.data.value = await api.assistants.archive(props.id, assistant.data.value!.version)
   ui.notify(ASSISTANT.archivedDone)
@@ -337,6 +345,7 @@ onMounted(load)
           {{ ASSISTANT.openIn(c.name) }} <span class="sr-only">{{ COMMON.opensInNewTab }}</span>
         </UiButton>
         <template v-if="canEdit">
+          <UiButton icon="edit" data-test="edit" @click="editing = true">{{ EDIT_DRAWER.edit }}</UiButton>
           <UiButton v-if="archived" :loading="busy === 'unarchive'" data-test="unarchive" @click="unarchive">{{ ASSISTANT.unarchive }}</UiButton>
           <UiButton v-else icon="archive" data-test="archive" @click="archiving = true">{{ ASSISTANT.archive }}</UiButton>
         </template>
@@ -473,6 +482,10 @@ onMounted(load)
       <ConfirmDialog
         :open="restoring !== null" :title="ASSISTANT.restoreTitle(restoring ?? 0)" :consequence="ASSISTANT.restoreConsequence(restoring ?? 0)"
         :confirm-label="ASSISTANT.restore" :action="restore" @update:open="!$event && (restoring = null)"
+      />
+      <AssistantEditDrawer
+        v-if="canEdit" v-model:open="editing" :assistant="assistant.data.value"
+        @saved="edited"
       />
       <ConfirmDialog
         v-model:open="archiving" :title="ASSISTANT.archiveTitle" :consequence="ASSISTANT.archiveConsequence" :confirm-label="ASSISTANT.archive" danger

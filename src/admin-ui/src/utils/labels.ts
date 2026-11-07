@@ -1334,3 +1334,14 @@ export const EXPLAIN = {
     membership_unavailable: "The user's departments and groups could not be read.",
   } as Record<string, string>,
 } as const
+
+/** The edit drawers of a knowledge base and an assistant: their own fields, the level included (#446). */
+export const EDIT_DRAWER = {
+  edit: 'Edit',
+  collectionTitle: 'Edit knowledge base',
+  assistantTitle: 'Edit assistant',
+  save: 'Save',
+  saved: 'Saved.',
+  levelHint: 'Changing the information class is checked against the sources, the knowledge bases and the assistants it affects. If something stops it, it is listed here.',
+  refused: 'Not saved:',
+} as const

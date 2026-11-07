@@ -154,6 +154,28 @@ export interface Collection extends CollectionBase {
 /** `GET /api/collections/{id}`: the owner's detail, or the shared summary for a department it is shared with. */
 export type CollectionRead = Collection | (CollectionSummary & { shared: true })
 
+/** `PUT /api/collections/{id}`: the collection's own fields, the level included (#446). */
+export interface CollectionUpdate {
+  name: string
+  ownerTeamId: string | null
+  classification: Level
+  contactName: string | null
+  contactEmail: string | null
+  version: string
+}
+
+/** `PUT /api/assistants/{id}`: the assistant's own fields, the level included (#446); V36's confirmation (#445). */
+export interface AssistantUpdate {
+  name: string
+  ownerTeamId: string | null
+  classification: Level
+  description: string | null
+  contactName: string | null
+  contactEmail: string | null
+  version: string
+  confirmGeneralKnowledge?: boolean
+}
+
 export interface CollectionCreate {
   name: string
   departmentId: string

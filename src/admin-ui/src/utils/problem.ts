@@ -48,6 +48,25 @@ export function mapFieldErrors(error: unknown, fields: readonly string[]): Recor
   return result
 }
 
+/**
+ * Every refusal of a rule check, each with the objects it names (`affected[]`, admin design §4.6): the problem's
+ * `problems[]` when the API lists them, else the one problem. Used where a save can break several rules at once (a
+ * level change, #446).
+ */
+export function problemLines(error: unknown): string[] {
+  if (!isApiError(error)) return [problemMessage(error)]
+  const named = (message: string, affected: unknown) =>
+    Array.isArray(affected) && affected.length ? `${message} (${affected.join(', ')})` : message
+  const problems = error.problem?.problems
+  if (Array.isArray(problems) && problems.length) {
+    return problems.map((p: { code?: string; params?: Record<string, string>; affected?: unknown }) => {
+      const template = codeMessage(p.code)
+      return named(template ? formatMessage(template, p.params ?? undefined) : problemMessage(error), p.affected)
+    })
+  }
+  return [named(problemMessage(error), error.problem?.affected)]
+}
+
 /** Seconds from a 429 Retry-After value stored in the problem extensions, if any. Copied. */
 export function retryAfterSeconds(error: unknown): number | null {
   if (!isApiError(error) || error.status !== 429) return null
