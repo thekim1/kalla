@@ -420,6 +420,18 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
         File.ReadAllText(TestPostgres.RepositoryFile(Path.Combine("deploy", "keycloak", "rag-additions.local.json"))).ShouldContain("https://localhost:5174/signin-oidc");
     }
 
+    [Fact]
+    public void The_open_webui_client_describes_the_callback_it_redirects_to()
+    {
+        // B-23: Open WebUI moved to /oauth/oidc/login/callback at v0.12.5 (identity design 5.3); the description followed.
+        using var json = JsonDocument.Parse(File.ReadAllText(TestPostgres.RepositoryFile(Path.Combine("deploy", "keycloak", "rag-additions.json"))));
+        var client = json.RootElement.GetProperty("clients").EnumerateArray().Single(c => c.GetProperty("clientId").GetString() == "open-webui");
+        var redirect = new Uri(client.GetProperty("redirectUris").EnumerateArray().Single().GetString()!.Replace("$(env:UME_RAG_OPENWEBUI_HOST)", "owui.test", StringComparison.Ordinal));
+        var description = client.GetProperty("description").GetString()!;
+        description.ShouldContain(redirect.AbsolutePath);
+        description.ShouldNotContain("legacy", Case.Insensitive);
+    }
+
     [Theory]
     [InlineData("rag-admin-user", new[] { "rag-platform-admin", "rag-department-admin" })]
     [InlineData("rag-department-admin-user", new[] { "rag-department-admin" })]

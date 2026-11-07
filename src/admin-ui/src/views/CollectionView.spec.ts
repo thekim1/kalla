@@ -90,6 +90,30 @@ describe('Knowledge base (admin design §5.5.2)', () => {
     expect(wrapper.get('[data-test=quality]').text()).toContain('0,91')
   })
 
+  it('lists each source with its last run and document count on the Sources tab (§5.5.2)', async () => {
+    signIn(['rag-viewer'])
+    vi.spyOn(api.collections, 'get').mockResolvedValue(base)
+    vi.spyOn(api.collections, 'sources').mockResolvedValue([
+      {
+        id: 's1', collectionId: 'c1', type: 'crawl', name: 'umea.se/bygga', classification: 'internal', state: 'active', documents: 2300,
+        lastRun: { id: 'r1', state: 'failed', startedAt: '2026-10-30T01:00:00Z', finishedAt: '2026-10-30T01:12:00Z' },
+      },
+      { id: 's2', collectionId: 'c1', type: 'upload', name: 'Blanketter', classification: 'internal', state: 'active', documents: 0, lastRun: null },
+    ])
+    vi.spyOn(api.collections, 'evaluation').mockResolvedValue({ hasSet: false, questions: [], latestRuns: [] })
+
+    const wrapper = mount(CollectionView, { props: { id: 'c1' } })
+    await flushPromises()
+    await button(wrapper, 'Sources (2)').trigger('click')
+
+    const headers = wrapper.findAll('th').map((h) => h.text())
+    expect(headers).toEqual(expect.arrayContaining(['Last run', 'Documents']))
+    const [crawl, upload] = wrapper.findAll('tbody tr').map((r) => r.text())
+    expect(crawl).toContain('Failed')
+    expect(crawl?.replace(/\s/g, '')).toContain('2300')
+    expect(upload).toContain('Not run yet')
+  })
+
   it('shows the live document count of the list, not every document that is not deleted (#374)', async () => {
     signIn(['rag-viewer'])
     // The review's case: 1 166 live documents of 1 270; the sources still say 1 270 if they count differently.

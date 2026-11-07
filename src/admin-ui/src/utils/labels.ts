@@ -282,6 +282,9 @@ export const COLLECTION = {
   sourceName: 'Name',
   sourceType: 'Type',
   sourceState: 'State',
+  sourceLastRun: 'Last run',
+  sourceDocuments: 'Documents',
+  sourceNoRun: 'Not run yet',
   sourceStates: { active: 'Active', paused: 'Paused' } as Record<string, string>,
   documents: 'Documents',
   noDocuments: 'No documents yet. They arrive when a source has been fetched.',
@@ -1030,7 +1033,8 @@ export const ASSISTANT = {
 export const DELETIONS = {
   title: 'Removal waiting for a decision',
   summary: (n: string) => `${n} documents were not found in the run and have not been removed.`,
-  why: 'The deletion guard allows at most 20 % of the source’s documents (at least 5) to be removed without a decision. Check whether the pages really are gone.',
+  why: (g: { percent: number; minCount: number; maxCount: number }) =>
+    `The deletion guard waits for a decision before removing more than ${g.percent} % of the source’s documents (from ${g.minCount} documents) or more than ${g.maxCount} documents. Check whether the pages really are gone.`,
   examples: 'Examples',
   lastSeen: 'Last seen',
   reason: 'Reason',
@@ -1320,6 +1324,7 @@ export const FEEDBACK = {
   noImports: 'No import has run yet.',
   importOutcome: (outcome: string | null) => (outcome === null ? 'Not run' : outcome === 'ok' ? 'OK' : 'Failed'),
   importLine: (when: string, unmapped: number) => `Last run ${when} · ${unmapped} could not be matched`,
+  importAlert: (runs: number) => `The last ${runs} imports failed, so no ratings arrive. Check the Open WebUI address and admin key.`,
 } as const
 
 /** Explain access on the assistant's Audience tab (admin design §4.5, identity design §4.9). */

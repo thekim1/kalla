@@ -264,4 +264,10 @@ public sealed class FeedbackImportState
     public DateTimeOffset? LastRunAt { get; set; }
     public string? LastOutcome { get; set; }
     public int Unmapped { get; set; }
+
+    /// <summary>Failed import runs in a row (Open WebUI unreachable, 401/403); 0 after a run that imported (chat §14.3).</summary>
+    public int FailedRuns { get; set; }
+
+    /// <summary>The import alerts from this many failed runs in a row (chat §14.3).</summary>
+    public const int AlertAfterFailedRuns = 4;
 }

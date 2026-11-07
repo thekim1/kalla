@@ -56,7 +56,7 @@ import type {
   RunSummary,
   Source,
   SourceCreate,
-  DeletionProposal,
+  DeletionProposalPage,
   HeldDocument,
   QuarantinedFile,
   UploadBatch,
@@ -127,7 +127,7 @@ export const api = {
   },
   runs: {
     get: (id: string) => http.get<Run>(`/api/runs/${id}`),
-    deletions: (id: string, after?: string) => http.get<KeysetPage<DeletionProposal>>(`/api/runs/${id}/deletions`, { after, limit: 50 }),
+    deletions: (id: string, after?: string) => http.get<DeletionProposalPage>(`/api/runs/${id}/deletions`, { after, limit: 50 }),
     deletionsCsvUrl: (id: string) => buildUrl(`/api/runs/${id}/deletions`, { format: 'csv' }),
     confirmDeletions: (id: string, proposedCount: number) => http.post<{ jobId: string }>(`/api/runs/${id}/deletions/confirm`, { proposedCount }),
     rejectDeletions: (id: string, proposedCount: number) => http.post<{ jobId: string }>(`/api/runs/${id}/deletions/reject`, { proposedCount }),

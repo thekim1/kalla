@@ -128,14 +128,23 @@ public sealed partial class FeedbackImporter(
             }
         }
 
-        // §14.3: a failed import does not move the watermark.
-        var next = !outcome.StartsWith("failed", StringComparison.Ordinal) ? Math.Min(newest, holdBack == long.MaxValue ? newest : holdBack) : watermark;
-        await ExecuteAsync(connection, """
-            INSERT INTO chat."FeedbackImportState" ("ClientId", "WatermarkUpdatedAt", "LastRunAt", "LastOutcome", "Unmapped") VALUES ($1, $2, $3, $4, $5)
+        // §14.3: a failed import does not move the watermark, counts as a failed run, and alerts from the 4th in a row.
+        var failed = outcome.StartsWith("failed", StringComparison.Ordinal);
+        var next = !failed ? Math.Min(newest, holdBack == long.MaxValue ? newest : holdBack) : watermark;
+        var failedRuns = await ScalarAsync<int>(connection, """
+            INSERT INTO chat."FeedbackImportState" ("ClientId", "WatermarkUpdatedAt", "LastRunAt", "LastOutcome", "Unmapped", "FailedRuns")
+            VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN 1 ELSE 0 END)
             ON CONFLICT ("ClientId") DO UPDATE SET "WatermarkUpdatedAt" = excluded."WatermarkUpdatedAt", "LastRunAt" = excluded."LastRunAt",
-                "LastOutcome" = excluded."LastOutcome", "Unmapped" = chat."FeedbackImportState"."Unmapped" + excluded."Unmapped"
-            """, ct, clientId, next, now, outcome, unmapped);
-        return !outcome.StartsWith("failed", StringComparison.Ordinal);
+                "LastOutcome" = excluded."LastOutcome", "Unmapped" = chat."FeedbackImportState"."Unmapped" + excluded."Unmapped",
+                "FailedRuns" = CASE WHEN $6 THEN chat."FeedbackImportState"."FailedRuns" + 1 ELSE 0 END
+            RETURNING "FailedRuns"
+            """, ct, clientId, next, now, outcome, unmapped, failed);
+        if (failedRuns >= Domain.Entities.FeedbackImportState.AlertAfterFailedRuns)
+        {
+            LogAlert(logger, failedRuns, outcome);
+        }
+
+        return !failed;
     }
 
     /// <summary>Maps and upserts one item: <c>imported</c>, <c>foreign</c> (not our model), <c>unrated</c> or <c>unmapped</c>.</summary>
@@ -338,4 +347,7 @@ public sealed partial class FeedbackImporter(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Open WebUI feedback import failed ({Outcome}); the watermark stays")]
     private static partial void LogFailed(ILogger logger, string outcome);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Open WebUI feedback import alert: {FailedRuns} failed runs in a row (last {Outcome}); no feedback is imported")]
+    private static partial void LogAlert(ILogger logger, int failedRuns, string outcome);
 }

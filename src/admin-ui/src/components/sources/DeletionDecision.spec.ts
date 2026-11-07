@@ -22,6 +22,7 @@ describe('Removal waiting for a decision and Kept documents (admin design §5.5.
     vi.spyOn(api.runs, 'deletions').mockResolvedValue({
       items: [{ documentId: 'd1', title: 'Altan', url: 'https://www.umea.se/bygga/altan', reason: 'http.404', exempt: false, decision: null, lastSeenAt: '2026-10-23T10:00:00Z' }],
       next: null,
+      guard: { percent: 10, minCount: 3, maxCount: 200 },
     })
     const confirm = vi.spyOn(api.runs, 'confirmDeletions')
       .mockRejectedValueOnce(new ApiError(409, 'POST', { code: 'deletion_superseded' }))
@@ -30,6 +31,8 @@ describe('Removal waiting for a decision and Kept documents (admin design §5.5.
     await flushPromises()
 
     expect(wrapper.text()).toContain('212 documents were not found')
+    // The configured guard, not the defaults (B-23).
+    expect(wrapper.get('[data-test=guard]').text()).toContain('more than 10 % of the source’s documents (from 3 documents) or more than 200 documents')
     expect(wrapper.text()).toContain('https://www.umea.se/bygga/altan')
     expect(wrapper.get('a[download]').attributes('href')).toBe('/api/runs/r1/deletions?format=csv')
 
@@ -49,7 +52,7 @@ describe('Removal waiting for a decision and Kept documents (admin design §5.5.
 
   it('keeps the documents (reject), and an editor sees no decision buttons', async () => {
     signIn(['rag-department-admin'])
-    vi.spyOn(api.runs, 'deletions').mockResolvedValue({ items: [], next: null })
+    vi.spyOn(api.runs, 'deletions').mockResolvedValue({ items: [], next: null, guard: { percent: 20, minCount: 5, maxCount: 500 } })
     const reject = vi.spyOn(api.runs, 'rejectDeletions').mockResolvedValue({ jobId: 'j' })
     const wrapper = mount(DeletionDecision, { props: { runId: 'r1', proposedCount: 7 }, attachTo: document.body })
     await flushPromises()

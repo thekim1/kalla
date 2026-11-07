@@ -267,6 +267,15 @@ public sealed class DocumentEndpointsTests(AdminDatabaseFixture database)
         var proposals = await editor.GetFromJsonAsync<JsonElement>($"/api/runs/{seed.Awaiting}/deletions", Ct);
         proposals.GetProperty("items").EnumerateArray().Select(p => (p.GetProperty("documentId").GetGuid(), p.GetProperty("reason").GetString()))
             .ShouldBe([(seed.Held, "not-found"), (seed.Clean, "gone")], ignoreOrder: true);
+        // The configured guard for the card's text, readable by an editor (B-23; Settings itself is platform admin only).
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            var settings = await db.Settings.AsNoTracking().SingleOrDefaultAsync(Ct) ?? new PlatformSettings();
+            var guard = proposals.GetProperty("guard");
+            (guard.GetProperty("percent").GetInt32(), guard.GetProperty("minCount").GetInt32(), guard.GetProperty("maxCount").GetInt32())
+                .ShouldBe((settings.DeletionGuardPercent, settings.DeletionGuardMinCount, settings.DeletionGuardMaxCount));
+        }
+
         var csv = await editor.GetStringAsync($"/api/runs/{seed.Awaiting}/deletions?format=csv", Ct);
         csv.ShouldStartWith("documentId,title,url,reason,exempt,decision,lastSeenAt\r\n");
         csv.ShouldContain("\"'=HYPERLINK(\"\"x\"\")\""); // quoted, and the formula prefixed with '
