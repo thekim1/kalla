@@ -92,7 +92,7 @@ jobs:
           # Lean pull requests (repo-and-deployment §8.2): the image tests only when an image or its test changed, the
           # evaluation smoke only when the code on its path (ingestion, retrieval, answering) or the smoke set changed. A
           # dispatch and release.yml run everything.
-          images="$(git diff --name-only "$range" | grep -E '^(images/postgres/|images/clamav/|deploy/postgres/|\.github/workflows/verify\.yml$)' || true)"
+          images="$(git diff --name-only "$range" | grep -E '^(images/postgres/|images/clamav/|images/renderer/|deploy/postgres/|\.github/workflows/verify\.yml$)' || true)"
           smoke="$(git diff --name-only "$range" | grep -E '^(src/Ume\.Rag\.(Worker|Retrieval|Answering|Api|Infrastructure|Pipelines|Domain)/|tests/evaluation/|tests/Ume\.Rag\.Worker\.Tests/Evaluation|images/postgres/|Directory\.(Packages|Build)\.(props|targets)$|global\.json$|\.github/workflows/verify\.yml$)' || true)"
           { echo "code=$(flag "$code")"; echo "deploy=$(flag "$deploy")"; echo "adminui=$(flag "$adminui")"
             echo "images=$(flag "$images")"; echo "smoke=$(flag "$smoke")"; } >> "$GITHUB_OUTPUT"
@@ -159,8 +159,9 @@ jobs:
 
   images:
     # ume-rag/postgres: the image test of repo-and-deployment §5.2 (pgvector version, HNSW build, pg_stat_statements,
-    # wal_compression=lz4, TLS, archive-push, backup and restore from inside the image, read-only root, uid 999). The
-    # image is pushed to ghcr only by release.yml (§8.1).
+    # wal_compression=lz4, TLS, archive-push, backup and restore from inside the image, read-only root, uid 999);
+    # ume-rag/clamav (§5.5) and ume-rag/renderer (§5.4) with their own tests. The images are pushed to ghcr only by
+    # release.yml (§8.1).
     needs: changes
     if: needs.changes.outputs.images == 'true'
     runs-on: [self-hosted, linux, x64]
@@ -180,6 +181,15 @@ jobs:
         # Offline: a one-line EICAR test signature in a fresh volume, no download from database.clamav.net
         # (images/clamav/test.sh --online exercises freshclam locally).
         run: bash images/clamav/test.sh ume-rag/clamav:ci
+      - name: Build ume-rag/renderer
+        run: |
+          docker build -t ume-rag/renderer:ci --build-arg REVISION=${{ github.sha }} images/renderer
+          docker image ls ume-rag/renderer:ci
+      - name: Renderer image test
+        # Hardened as in Compose with images/renderer/seccomp.json on an internal network of its own: refuses to start
+        # without its secret path, Chromium's sandbox on, a routed page renders, no WebRTC candidate, and nothing outside
+        # the network resolves or connects from inside the renderer (connectors design §8.3).
+        run: bash images/renderer/test.sh ume-rag/renderer:ci
 
   deploy-checks:
     # Production Compose (P0 checklist #14, repo-and-deployment §8.2): every supported combination of the files renders
@@ -226,6 +236,10 @@ jobs:
             docker compose -f deploy/compose.openwebui.yaml config --format json; } \
             | jq -r '.networks | to_entries[] | "\(.key) \(.value.ipam.config[0].subnet)"' | sort > "$RUNNER_TEMP/subnets"
           bash deploy/host/docker-user-firewall.sh --print-subnets | sort | diff -u "$RUNNER_TEMP/subnets" -
+          # The renderer is on the internal render network only, which it shares with the worker (§5.4, §6.1).
+          docker compose -f deploy/compose.prod.yaml -f deploy/compose.ingestion.yaml config --format json | jq -e '
+            (.services["rag-renderer"].networks | keys) == ["render"] and .networks.render.internal == true
+            and ([.services | to_entries[] | select(.value.networks | has("render")) | .key] | sort) == ["rag-renderer", "rag-worker"]' >/dev/null
       - name: Release bundle pins every image
         # deploy/build-release-bundle.sh (§7.2) with placeholder digests: every image of the bundled Compose files is
         # pinned by digest and they render; an unpinned image is refused. release.yml runs it with the pushed digests.
@@ -237,7 +251,7 @@ jobs:
           UME_RAG_API_PUBLIC_URL: https://rag-api.example.se
         run: |
           digest="sha256:$(printf '0%.0s' $(seq 64))"
-          for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV POSTGRES; do
+          for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do
             export "${v}_IMAGE=ghcr.io/example/ume-rag/${v,,}:0.0.0@$digest"
           done
           if out="$(PARSER_IMAGE=ume-rag/parser:latest bash deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/unpinned" 2>&1)"; then
@@ -249,14 +263,15 @@ jobs:
           tar -xzf "$RUNNER_TEMP/bundle/ume-rag-0.0.0.tar.gz" -C "$RUNNER_TEMP/bundle"
           b="$RUNNER_TEMP/bundle/ume-rag-0.0.0/deploy"
           # The bundle's defaults, not these variables, must carry the pins.
-          for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV POSTGRES; do unset "${v}_IMAGE"; done
+          for v in API ADMIN WORKER MIGRATIONS PARSER CLAMAV RENDERER POSTGRES; do unset "${v}_IMAGE"; done
           images="$(docker compose -f "$b/compose.prod.yaml" -f "$b/compose.ingestion.yaml" --profile backup config --images)"
           echo "$images"
           if echo "$images" | grep -vE '@sha256:[0-9a-f]{64}$'; then echo "unpinned images in the bundle"; exit 1; fi
       - name: init-deployment.sh keeps its secrets on a re-run
         # Two non-interactive runs into a copy of deploy/ (it writes next to itself): every generated secret, the worker's
-        # crawl key pepper among them, is unchanged by the second run; the per-deployable gateway keys land where they
-        # belong (never External in the worker); the Open WebUI files render with the generated deploy/.env.
+        # crawl key pepper and the renderer's WebSocket path among them, is unchanged by the second run; the
+        # per-deployable gateway keys land where they belong (never External in the worker); the Open WebUI files render
+        # with the generated deploy/.env.
         run: |
           d="$RUNNER_TEMP/init"; mkdir -p "$d/keys"; cp -r deploy "$d/deploy"
           for k in eu worker-eu external owui-key owui-secret data-api; do printf '%s-placeholder\n' "$k" > "$d/keys/$k"; done
@@ -272,7 +287,8 @@ jobs:
           generated() {
             s="$d/deploy/secrets"
             sha256sum "$s"/.pepper "$s"/.openwebui-jwt-secret "$s"/postgres/*_password "$s"/api/Security__* \
-              "$s"/worker/Security__CrawlKeyPepper "$s"/keys/rag-blob-internal "$s"/pgbackrest/cipher-pass \
+              "$s"/worker/Security__CrawlKeyPepper "$s"/.render-ws-path "$s"/worker/Render__Endpoint "$s"/renderer.env \
+              "$s"/keys/rag-blob-internal "$s"/pgbackrest/cipher-pass \
               "$s"/openwebui/webui_secret_key "$d"/deploy/certs/data-protection.pfx
           }
           init > "$d/init.log"; generated > "$d/first"
@@ -280,6 +296,9 @@ jobs:
           diff -u "$d/first" "$d/second"
           s="$d/deploy/secrets"
           [ "$(wc -c < "$s/worker/Security__CrawlKeyPepper")" = 64 ]
+          # The renderer's secret path: the same in the worker's endpoint and the renderer's environment.
+          grep -qxE 'UME_RAG_RENDER_WS_PATH=/[0-9a-f]{64}' "$s/renderer.env"
+          [ "$(cat "$s/worker/Render__Endpoint")" = "ws://rag-renderer:3000$(sed -n 's/^UME_RAG_RENDER_WS_PATH=//p' "$s/renderer.env")" ]
           [ "$(cat "$s/worker/Gateway__Keys__Eu")" = worker-eu-placeholder ]
           [ "$(cat "$s/api/Gateway__Keys__Eu")" = eu-placeholder ] && [ -e "$s/admin/Gateway__Keys__External" ]
           [ ! -e "$s/worker/Gateway__Keys__External" ]

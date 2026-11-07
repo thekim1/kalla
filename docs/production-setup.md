@@ -1,7 +1,7 @@
 # Production setup
 
-The pilot runs on one Linux host with Docker Compose: six long-running containers (`postgres` with pgBackRest inside,
-`rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`) and the one-shot `rag-migrate`, all in the Compose
+The pilot runs on one Linux host with Docker Compose: seven long-running containers (`postgres` with pgBackRest inside,
+`rag-api`, `rag-admin`, `rag-worker`, `rag-parser`, `rag-clamav`, `rag-renderer`) and the one-shot `rag-migrate`, all in the Compose
 project `ume-rag`. `deploy/compose.prod.yaml` holds the data plane and control zone, `deploy/compose.ingestion.yaml` the
 ingestion zone; `init-deployment.sh` lists both (and the overlays your options need) in `COMPOSE_FILE` in `deploy/.env`,
 so every command below is `docker compose --env-file deploy/.env ...` without `-f`. Run the commands from the directory
@@ -19,11 +19,15 @@ upgrades in the [upgrade guide](upgrade-guide.md); the test host's choices and c
   (`cgroup_parent`), which caps the whole zone; with the `cgroupfs` driver the slice caps nothing. `docker info` must
   show `Cgroup Driver: systemd` and `Cgroup Version: 2`.
 - **`172.30.0.0/16` stays out of Docker's `default-address-pools`.** The Compose networks use fixed subnets there
-  (`edge` 172.30.1.0/24 to `mirror` 172.30.7.0/24, `backup` 172.30.16.0/24, `openwebui` 172.30.17.0/24), so the host
+  (`edge` 172.30.1.0/24 to `mirror` 172.30.7.0/24, `backup` 172.30.16.0/24, `openwebui` 172.30.17.0/24, `render`
+  172.30.18.0/24), so the host
   firewall can give each its own egress rule. If Docker hands out a pool from that range to another network first,
   `up` fails. `deploy/host/docker-user-firewall.sh --print-subnets` lists them.
 - **Docker's iptables integration** (the default), so the `DOCKER-USER` chain exists; not the nftables firewall
   backend. The firewall is IPv4 only (the networks have no IPv6).
+- **Unprivileged user namespaces** for the renderer's Chromium sandbox (`rag-renderer`, below). On Ubuntu 23.10 and
+  later AppArmor may restrict them (`sysctl kernel.apparmor_restrict_unprivileged_userns`): check that the renderer
+  becomes healthy after the first `up` (*Renderer*, below).
 - **An encrypted disk** for the Docker volumes (`postgres-data`, `rag-blobs`, `clamav-db`) and `deploy/secrets`.
 - **The backup target**, agreed with IT: a share mounted on the host, or an S3-compatible store (below).
 - **Escrow media** for the long-lived keys (runbook, *Key escrow*).
@@ -53,6 +57,7 @@ picks the profile; 16 is the default.
 | `rag-worker` | ingestion | 1.5 | 512m | 1.5g | 2g |
 | `rag-parser` | ingestion | 4.0 | 2g | 3.5g (1 slot × 4 threads) | 6g (2 slots × 2 threads) |
 | `rag-clamav` | ingestion | 1.0 | 1.2g | 1.5g | 3g |
+| `rag-renderer` | ingestion | 2.0 | 256m | 2g | 2g |
 | `rag-ingestion.slice` (zone cap) | ingestion | `CPUQuota=500%` | – | `MemoryMax=7G` | `MemoryMax=11G` |
 | `open-webui` (optional) | – | 1.0 | 512m | not on a 16 GB host | 1.5g |
 
@@ -82,8 +87,9 @@ sha256sum -c --ignore-missing SHA256SUMS
 tar -xzf ume-rag-X.Y.Z.tar.gz && cd ume-rag-X.Y.Z
 ```
 
-The release also carries an SPDX SBOM per image. The bundle holds `deploy/` and the operator docs (this guide, the
-runbook, the upgrade guide).
+The release also carries an SPDX SBOM per image. The bundle holds `deploy/`, the operator docs (this guide, the
+runbook, the upgrade guide) and `images/renderer/seccomp.json`, the renderer's seccomp profile, at the path the Compose
+file names.
 
 **From a clone (between releases, or to build the images yourself):** check out the commit and build the images on the
 host. The admin UI is built first and published into the admin image with `-p:PublishAdminUi=true`, as `release.yml`
@@ -92,6 +98,7 @@ does:
 ```bash
 docker build -f images/postgres/Dockerfile -t ume-rag/postgres:latest .
 docker build -t ume-rag/clamav:latest images/clamav
+docker build -t ume-rag/renderer:latest images/renderer
 docker build -t ume-rag/parser:latest src/parser
 (cd src/admin-ui && npm ci && npm run build)
 for p in Api Worker MigrationService; do dotnet publish src/Ume.Rag.$p -c Release -t:PublishContainer; done
@@ -100,7 +107,7 @@ dotnet publish src/Ume.Rag.AdminApi -c Release -t:PublishContainer -p:PublishAdm
 
 Images built elsewhere and pushed to a registry are set in `deploy/.env` by digest, for example
 `API_IMAGE=ghcr.io/<owner>/ume-rag/api@sha256:...`. The variables are `POSTGRES_IMAGE`, `MIGRATIONS_IMAGE`,
-`API_IMAGE`, `ADMIN_IMAGE`, `WORKER_IMAGE`, `PARSER_IMAGE`, `CLAMAV_IMAGE` and, for the optional stack,
+`API_IMAGE`, `ADMIN_IMAGE`, `WORKER_IMAGE`, `PARSER_IMAGE`, `CLAMAV_IMAGE`, `RENDERER_IMAGE` and, for the optional stack,
 `OPENWEBUI_IMAGE`.
 
 ### 2. `init-deployment.sh`
@@ -120,10 +127,12 @@ Without `--yes` it prompts for what is missing. It generates, under `deploy/cert
 and certificates for postgres, the worker, the parser and the two public listeners; the Data Protection certificate;
 the database passwords and connection strings; the key pepper; the api's download-grant, cache-key and
 conversation-id keys; the Open WebUI JWT secret; the worker's crawl key pepper (`Security__CrawlKeyPepper`, the HMAC key
-of the host hash in security event 5101); the blob master key `keys/rag-blob-internal`; the pgBackRest
-passphrase and `pgbackrest/repo.conf`; and `deploy/.env` (non-secret settings only). Secrets and certificates reach the
-RAG services as read-only files, never as environment variables (Open WebUI is the exception: it reads its secrets only
-from its environment, so they come from `secrets/openwebui.env`).
+of the host hash in security event 5101); the renderer's secret WebSocket path (`.render-ws-path`, written for the
+worker as `worker/Render__Endpoint` and for the renderer as `renderer.env`); the blob master key `keys/rag-blob-internal`;
+the pgBackRest passphrase and `pgbackrest/repo.conf`; and `deploy/.env` (non-secret settings only). Secrets and
+certificates reach the RAG services as read-only files, never as environment variables (Open WebUI and the renderer are
+the exceptions: they read their secrets only from their environment, so they come from `secrets/openwebui.env` and
+`secrets/renderer.env`, which `docker compose` reads).
 
 It is safe to re-run: existing secrets, keys and the Data Protection certificate are never overwritten (a new one would
 break existing data or backups). Connection strings and other derived files are written again, and a re-run without
@@ -174,7 +183,8 @@ added by hand. After the first run the files belong to the containers' users, so
 providers, and an nginx file for `--proxy` (the script prints the proxy routes instead).
 
 When it is done the script prints the next steps. If it did not run as root, step 0 lists the `chown` commands to run
-(the containers run as uid 999, 1654, 10001 and 1000 and must read their own files). The order below is the
+(the containers run as uid 999, 1654, 10001 and 1000 and must read their own files; the renderer, uid 10002, has no
+files). The order below is the
 script's: the host units come **before** the first `up`, because the ingestion containers run below the slice they
 install.
 
@@ -274,6 +284,23 @@ The ClamAV image's own confs are used unless a setting differs. `--host-memory 2
 `init-deployment.sh` copy them to `secrets/clamav/`, change them, and add `compose.clamav-conf.yaml` (which mounts the
 copies) to `COMPOSE_FILE`. In a clone the source is `images/clamav/`; in a release bundle, `deploy/clamav/`.
 
+## Renderer
+
+`rag-renderer` renders the pages of sources with fetch mode `browser`: Chromium behind Playwright's `launch-server`
+(`images/renderer/`, its README holds the contract), driven by the worker over WebSocket on port 3000. It sits only on
+the internal `render` network, so the page scripts it runs reach nothing but the worker, which fetches every request
+itself with the crawler's guard (connectors design §8.3). The worker finds it through `Render__Endpoint`
+(`ws://rag-renderer:3000/<secret path>`, the secret file `secrets/worker/Render__Endpoint`); without that file `browser`
+sources wait with `render.not_configured`. Rotate the path by deleting `secrets/.render-ws-path`, re-running
+`init-deployment.sh` and restarting `rag-renderer` and `rag-worker`.
+
+It runs hardened like the others, plus a seccomp profile of its own (`images/renderer/seccomp.json`: Docker's default
+with `clone`, `unshare` and `chroot` allowed), so Chromium's own sandbox can create its user namespaces. Without them
+Chromium refuses to start ("No usable sandbox") and the renderer restarts in a loop: `docker compose --env-file
+deploy/.env logs rag-renderer` shows it. On Ubuntu 23.10 and later, if AppArmor restricts unprivileged user namespaces,
+that is what happens; do not turn the sandbox off, agree a fix with IT (an AppArmor profile for the renderer, or the
+sysctl). One browser serves every render; launch-server exits when Chromium does and Docker restarts it.
+
 ## Embedding request size
 
 The worker sends at most 64 chunks per embedding request, with no cap on the request's total tokens. From v0.9.0 the
@@ -303,7 +330,8 @@ model is unset (`no_rerank_model`); see [`scripts/evaluation/README.md`](../scri
 Every connection inside the host is TLS with the internal CA: the services to postgres (`SSL Mode=VerifyFull`), the
 worker to the parser (`https://rag-parser:8000`, certificate `certs/parser/` with the name `rag-parser`, set through
 `PARSER_TLS_CERT_FILE` and `PARSER_TLS_KEY_FILE`), and the health probes. Only clamd (TCP 3310) has no TLS, so it stays
-on the internal `ingestion` network. Internal certificates last 825 days: re-issue them with
+on the internal `ingestion` network, and the renderer's WebSocket (port 3000) is plain, with a secret path, on the
+internal `render` network. Internal certificates last 825 days: re-issue them with
 `./deploy/init-deployment.sh --renew-certs`, which needs `ca.key` back on the host.
 
 ## Reverse proxy and PKI

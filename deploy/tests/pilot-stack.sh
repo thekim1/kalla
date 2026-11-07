@@ -69,7 +69,8 @@ rag-admin   1   512  256m 512m 256
 rag-migrate 1   512  -    512m 128
 rag-worker  1.5 256  512m 1.5g 512
 rag-parser  2   128  2g   3.5g 256
-rag-clamav  1   128  1.2g 1.5g 128'
+rag-clamav  1   128  1.2g 1.5g 128
+rag-renderer 2  128  256m 2g   512'
 over="$(jq -r '.services | to_entries[] | select((.value.cpus // 0) > 2) | .key' <<< "$base")"
 if [ -z "$over" ]; then ok "base files: every cpus cap is 2 or less"; else fail "base files: cpus above 2: $over"; fi
 env_is "$base" rag-parser PARSER_WORKERS 1
@@ -88,7 +89,8 @@ rag-admin   1   512  256m 768m 256
 rag-migrate 1   512  -    512m 128
 rag-worker  1.5 256  512m 2g   512
 rag-parser  4   128  2g   6g   256
-rag-clamav  1   128  1.2g 3g   128'
+rag-clamav  1   128  1.2g 3g   128
+rag-renderer 2  128  256m 2g   512'
 env_is "$pilot" rag-parser PARSER_WORKERS 2
 env_is "$pilot" rag-parser PARSER_THREADS 2
 env_is "$pilot" rag-parser PARSER_SLOT_MAX_RSS_MB 2600

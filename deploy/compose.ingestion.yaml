@@ -1,11 +1,13 @@
-# Production Compose, ingestion zone (plans/platform/repo-and-deployment.md §6.2, §6.4): rag-worker, rag-parser and
-# rag-clamav. On the pilot host it runs together with compose.prod.yaml (one project, see there); from P2 a separate
-# ingestion host adds compose.ingestion-remote.yaml instead. The three containers share the rag-ingestion.slice cgroup,
-# which caps the whole zone (installed from deploy/host/; cgroup v2 with the systemd driver). Where the slice is not
-# installed (a developer machine), set UME_RAG_INGESTION_SLICE to an empty value.
+# Production Compose, ingestion zone (plans/platform/repo-and-deployment.md §6.2, §6.4): rag-worker, rag-parser,
+# rag-clamav and rag-renderer. On the pilot host it runs together with compose.prod.yaml (one project, see there); from
+# P2 a separate ingestion host adds compose.ingestion-remote.yaml instead. The four containers share the
+# rag-ingestion.slice cgroup, which caps the whole zone (installed from deploy/host/; cgroup v2 with the systemd driver).
+# Where the slice is not installed (a developer machine), set UME_RAG_INGESTION_SLICE to an empty value.
 #
 # The parser listens with TLS on 8000 with a certificate from the internal CA (init-deployment.sh); the worker trusts
 # that CA through SSL_CERT_FILE. clamd has no TLS or authentication, so it stays on the internal ingestion network.
+# The renderer (Chromium behind Playwright's launch-server, §5.4) has plain WebSocket on 3000 with a secret path, on
+# the internal render network only: the worker fetches every request the browser makes (connectors design §8.3).
 
 x-hardened: &hardened
   read_only: true
@@ -39,7 +41,8 @@ services:
       ClamAv__Host: rag-clamav
       ClamAv__Port: "3310"
       BlobStore__Root: /data/blobs/rag
-      # Its gateway keys (OnPrem and Eu, never External) and Security__CrawlKeyPepper are secret files.
+      # Its gateway keys (OnPrem and Eu, never External), Security__CrawlKeyPepper and Render__Endpoint (the renderer's
+      # ws://rag-renderer:3000/<secret path>) are secret files.
       Gateway__BaseUrl: ${UME_RAG_GATEWAY_URL:?Set the gateway URL in deploy/.env}
       Crawl__AllowedPrivateRanges: ${UME_RAG_CRAWL_ALLOW:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_RAG_OTEL_ENDPOINT:-}
@@ -58,6 +61,7 @@ services:
       # reports them in its own health and retries.
       rag-parser: {condition: service_started}
       rag-clamav: {condition: service_started}
+      rag-renderer: {condition: service_started}
     # crawl: the only network with Internet egress, filtered by the host firewall (§6.1). All egress leaves through the
     # network that holds the default route, so gw_priority pins it to crawl, whose allow-list also has the gateway.
     networks:
@@ -65,6 +69,7 @@ services:
       llm: {}
       ingestion: {}
       parser: {}
+      render: {}
       crawl: {gw_priority: 1}
     healthcheck:
       test: [CMD, dotnet, Ume.Rag.Worker.dll, --health-check]
@@ -125,11 +130,49 @@ services:
     networks: [ingestion, mirror]
     # Health check: the image's own (a real scan through clamd).
 
+  rag-renderer:
+    <<: *hardened
+    image: ${RENDERER_IMAGE:-ume-rag/renderer:latest}
+    user: "10002:10002"
+    restart: unless-stopped
+    cgroup_parent: ${UME_RAG_INGESTION_SLICE-rag-ingestion.slice}
+    # Chromium's own sandbox needs user namespaces: Moby's default seccomp profile plus clone, unshare and chroot
+    # (images/renderer/seccomp.json; the release bundle carries it at the same relative path). Under Docker's default
+    # profile Chromium refuses to start, so the renderer fails closed.
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=../images/renderer/seccomp.json
+    # Reaps Chromium's exited children (the image's entrypoint execs node).
+    init: true
+    # Chromium's profile and shared memory (Playwright passes --disable-dev-shm-usage) live on /tmp; tmpfs counts
+    # against mem_limit.
+    tmpfs: ["/tmp:size=512m"]
+    cpus: 2.0
+    cpu_shares: 128
+    mem_reservation: 256m
+    mem_limit: 2g
+    pids_limit: 512
+    # UME_RAG_RENDER_WS_PATH, the secret WebSocket path (init-deployment.sh). The image reads it only from its
+    # environment, so it comes from a file read by `docker compose`, as Open WebUI's secrets. Without it the renderer
+    # refuses to start and `up --wait` fails.
+    env_file:
+      - path: ${UME_RAG_SECRETS_DIR}/renderer.env
+        required: false
+    # One shared browser: launch-server exits when Chromium does, and Docker restarts it (the recycle). The host's
+    # restart-unhealthy timer restarts it when its port stops answering (deploy/host/).
+    labels:
+      ume-rag.restart-unhealthy: "true"
+    # The render network is internal and the renderer is on no other: no route out and no DNS beyond it; the host
+    # firewall also rejects the subnet at the host (§6.1).
+    networks: [render]
+    # Health check: the image's own (port 3000 answers; the secret path is not needed).
+
 networks:
   data: {driver: bridge, internal: true, ipam: {config: [{subnet: 172.30.2.0/24}]}}
   llm: {driver: bridge, ipam: {config: [{subnet: 172.30.3.0/24}]}}
   ingestion: {driver: bridge, internal: true, ipam: {config: [{subnet: 172.30.4.0/24}]}}
   parser: {driver: bridge, internal: true, ipam: {config: [{subnet: 172.30.5.0/24}]}}
+  render: {driver: bridge, internal: true, ipam: {config: [{subnet: 172.30.18.0/24}]}}
   crawl: {driver: bridge, ipam: {config: [{subnet: 172.30.6.0/24}]}}
   mirror: {driver: bridge, ipam: {config: [{subnet: 172.30.7.0/24}]}}
 

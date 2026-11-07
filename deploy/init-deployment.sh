@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # First-run setup for the production Compose files (plans/platform/repo-and-deployment.md §6, §7.1): generates an
 # internal CA, service certificates, the Data Protection certificate, the database passwords, the key pepper, the api's
-# keys, the worker's crawl key pepper, the blob master key, the pgBackRest repository settings and deploy/.env. Safe to
+# keys, the worker's crawl key pepper, the renderer's WebSocket path, the blob master key, the pgBackRest repository
+# settings and deploy/.env. Safe to
 # re-run: existing secrets are never overwritten (a new pepper, key, passphrase or Data Protection certificate would
 # break existing data or backups); connection strings and other derived files are written again.
 #
@@ -316,6 +317,13 @@ tr -d '\n' < "$secrets/.openwebui-jwt-secret" > "$secrets/api/OpenWebUi__JwtSecr
 if new_file "$secrets/worker/Security__CrawlKeyPepper"; then
   openssl rand -hex 32 | tr -d '\n' > "$secrets/worker/Security__CrawlKeyPepper"
 fi
+# The renderer's secret WebSocket path (connectors design §8.3): a page's own WebSocket could otherwise reach
+# launch-server's port. The worker gets the whole endpoint as a secret file; the renderer reads the path only from its
+# environment, so renderer.env is read by `docker compose` and stays owned by you. Delete .render-ws-path to rotate it.
+new_file "$secrets/.render-ws-path" && rand > "$secrets/.render-ws-path"
+render_path="/$(tr -d '\r\n' < "$secrets/.render-ws-path")"
+printf 'ws://rag-renderer:3000%s' "$render_path" > "$secrets/worker/Render__Endpoint"
+printf 'UME_RAG_RENDER_WS_PATH=%s\n' "$render_path" > "$secrets/renderer.env"
 
 # Shared keys first, then each deployable's own (the gateway team issues one key per deployable), which win.
 for pass in shared own; do

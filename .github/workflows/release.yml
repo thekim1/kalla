@@ -3,9 +3,9 @@ name: Release
 #   1. verify.yml and parser.yml run in full; e2e.yml (called) only when asked: the repository variable RELEASE_E2E is
 #      'true' for a tag push, or the dry run's input e2e is ticked (Decisions "E2E optional on release");
 #   2. every image is pushed to ghcr.io/<owner>/ume-rag/<service>:X.Y.Z (and :latest unless X.Y.Z is a pre-release):
-#      api, admin (with the admin UI), worker and migrations by `dotnet publish -t:PublishContainer`, postgres, clamav
-#      and parser from their Dockerfiles; an SPDX SBOM per image (Microsoft.Sbom.DotNetTool for the .NET services, Syft
-#      for the other three);
+#      api, admin (with the admin UI), worker and migrations by `dotnet publish -t:PublishContainer`, postgres, clamav,
+#      renderer and parser from their Dockerfiles; an SPDX SBOM per image (Microsoft.Sbom.DotNetTool for the .NET
+#      services, Syft for the other four);
 #   3. deploy/build-release-bundle.sh pins the bundle's Compose defaults to those digests, and
 #      deploy/tests/release-smoke.sh boots the bundle and runs the smoke test;
 #   4. a GitHub release is created with the bundle, the SBOMs and SHA256SUMS.
@@ -183,6 +183,17 @@ jobs:
           tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/clamav:${{ steps.version.outputs.version }}
           push: true
           provenance: false
+      - name: Build and push ume-rag/renderer
+        id: renderer
+        uses: docker/build-push-action@v7
+        with:
+          context: images/renderer
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          tags: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}/renderer:${{ steps.version.outputs.version }}
+          push: true
+          provenance: false
       - name: Build and push ume-rag/parser
         id: parser
         # The layers parser.yml's contract job built from this commit (same REVISION), from the Actions cache.
@@ -204,11 +215,12 @@ jobs:
           PREFIX: ${{ steps.version.outputs.registry_host }}/${{ steps.version.outputs.repository }}
           POSTGRES_DIGEST: ${{ steps.postgres.outputs.digest }}
           CLAMAV_DIGEST: ${{ steps.clamav.outputs.digest }}
+          RENDERER_DIGEST: ${{ steps.renderer.outputs.digest }}
           PARSER_DIGEST: ${{ steps.parser.outputs.digest }}
           # The dry run's registry speaks plain HTTP.
           SYFT_REGISTRY_INSECURE_USE_HTTP: ${{ github.event_name != 'push' }}
         run: |
-          for name in postgres clamav parser; do
+          for name in postgres clamav renderer parser; do
             digest_var="${name^^}_DIGEST"; ref="$PREFIX/$name:$VERSION@${!digest_var}"
             echo "${name^^}_IMAGE=$ref" | tee -a images.env
             syft scan "registry:$ref" -o "spdx-json=sbom/ume-rag-$name-$VERSION.spdx.json" -q

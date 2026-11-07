@@ -14,8 +14,9 @@
 # (rag-api and rag-admin: llm; rag-worker: crawl; postgres, rag-clamav and Open WebUI have one non-internal network),
 # so each allow-list below is everything the members of that network call.
 #   edge       none: it carries the published ports only (replies pass as established connections)
-#   data, ingestion, parser
-#              none (internal networks; dropped here as well)
+#   data, ingestion, parser, render
+#              none (internal networks; dropped here as well). render holds the renderer's Chromium, which runs
+#              untrusted page scripts, and its bridge gateway answers at the IP level: the INPUT rule rejects it there
 #   llm        the gateway (UME_RAG_GATEWAY_URL), its Data API (UME_RAG_ORG_SYNC_URL: the admin's syncs), the OIDC
 #              authority (UME_RAG_OIDC_AUTHORITY), Open WebUI as rag-api calls it (UME_RAG_OPENWEBUI_BASE_URL: the
 #              feedback import), the OTLP endpoint (UME_RAG_OTEL_ENDPOINT), DNS
@@ -48,10 +49,11 @@ reject=(-j REJECT --reject-with icmp-admin-prohibited)
 
 # Networks in the order the rules are written, with the subnets of compose.prod.yaml, compose.ingestion.yaml and
 # compose.openwebui.yaml.
-names=(edge data llm ingestion parser crawl mirror backup openwebui)
+names=(edge data llm ingestion parser render crawl mirror backup openwebui)
 declare -A subnet=(
   [edge]=172.30.1.0/24 [data]=172.30.2.0/24 [llm]=172.30.3.0/24 [ingestion]=172.30.4.0/24 [parser]=172.30.5.0/24
-  [crawl]=172.30.6.0/24 [mirror]=172.30.7.0/24 [backup]=172.30.16.0/24 [openwebui]=172.30.17.0/24
+  [render]=172.30.18.0/24 [crawl]=172.30.6.0/24 [mirror]=172.30.7.0/24 [backup]=172.30.16.0/24
+  [openwebui]=172.30.17.0/24
 )
 private=(0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24
   192.168.0.0/16 198.18.0.0/15 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4 240.0.0.0/4)

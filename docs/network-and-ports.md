@@ -16,7 +16,7 @@ Everything is IPv4: the Compose networks have no IPv6 (`deploy/host/docker-user-
 
 | Component | Where | What it is to Ume.Rag |
 |---|---|---|
-| **RAG host** | one Linux host, Docker Compose project `ume-rag` | `postgres`, `rag-api`, `rag-admin` (`deploy/compose.prod.yaml`); `rag-worker`, `rag-parser`, `rag-clamav` (`deploy/compose.ingestion.yaml`); optionally `open-webui` (`deploy/compose.openwebui.yaml`, its own project `ume-rag-openwebui`) |
+| **RAG host** | one Linux host, Docker Compose project `ume-rag` | `postgres`, `rag-api`, `rag-admin` (`deploy/compose.prod.yaml`); `rag-worker`, `rag-parser`, `rag-clamav`, `rag-renderer` (`deploy/compose.ingestion.yaml`); optionally `open-webui` (`deploy/compose.openwebui.yaml`, its own project `ume-rag-openwebui`) |
 | **Gateway host** | the LLM gateway's host, run by the gateway team | the gateway (every model call), its Data API (catalogue for the admin's sync), and in the pilot the **shared Keycloak** (realm `ume`). Ume.Rag reaches each by URL only |
 | **Municipal reverse proxy** | in front of the RAG host (and the gateway host) | terminates public TLS and re-encrypts to the RAG listeners (`init-deployment.sh --proxy`) |
 | **Identity provider** | the shared Keycloak (pilot), a standalone Keycloak, or Entra ID / AD FS directly | OIDC for the admin UI and Open WebUI |
@@ -46,6 +46,7 @@ flowchart LR
     worker[rag-worker]
     parser[rag-parser :8000 internal]
     clam[rag-clamav :3310 internal]
+    render[rag-renderer :3000 internal]
     pg[postgres :5432 internal]
   end
   subgraph gwhost[Gateway host]
@@ -77,6 +78,7 @@ flowchart LR
   worker --> sites
   worker --> parser
   worker --> clam
+  worker --> render
   api --> pg
   adm --> pg
   worker --> pg
@@ -177,7 +179,7 @@ machine).
 | | | the OIDC provider, `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` | its port (443), HTTPS | Open WebUI's back channel: discovery, token, JWKS | with Open WebUI | `--openwebui-oidc-provider-url` (default: the authority's discovery document) |
 | | | DNS | 53 | | with Open WebUI | |
 | `edge` (172.30.1.0/24) | rag-api, rag-admin | nothing | – | carries the published ports only | – | – |
-| `data` (172.30.2.0/24), `ingestion` (172.30.4.0/24), `parser` (172.30.5.0/24) | see §4 | nothing (Docker `internal: true`, and rejected) | – | – | – | – |
+| `data` (172.30.2.0/24), `ingestion` (172.30.4.0/24), `parser` (172.30.5.0/24), `render` (172.30.18.0/24) | see §4 | nothing (Docker `internal: true`, and rejected) | – | – | – | – |
 
 Sources: `deploy/host/docker-user-firewall.sh` (allow-lists, DNS, `private=`, `INPUT`), `deploy/compose.prod.yaml`,
 `deploy/compose.ingestion.yaml`, `deploy/compose.openwebui.yaml` (members, subnets, `gw_priority`),
@@ -229,15 +231,19 @@ listeners of §2) and `ss -ltnp`.
 | `rag-parser` | 8000 | HTTPS (internal CA, name `rag-parser`) | `parser` (internal; its only network) | rag-worker (`Parser__BaseUrl: https://rag-parser:8000`) | `deploy/compose.ingestion.yaml`, `src/parser/Dockerfile` |
 | NER (`ner-0`) | – | runs inside the parser container (`/v1/ner` on port 8000), not a container of its own | – | rag-worker | `src/parser/ume_parser/api.py` |
 | `rag-clamav` (clamd) | 3310 | TCP, **no TLS and no authentication** | `ingestion` (internal) | rag-worker (`ClamAv__Host: rag-clamav`, `ClamAv__Port: 3310`, INSTREAM) | `images/clamav/clamd.conf` (`TCPSocket 3310`), `deploy/compose.ingestion.yaml` |
+| `rag-renderer` (Playwright `launch-server`, Chromium) | 3000 | WebSocket, **plain** (`ws://`), a secret path instead of TLS | `render` (internal; its only network) | rag-worker (`Render__Endpoint`, a secret file: `ws://rag-renderer:3000/<path>`) | `images/renderer/launch-server.json`, `deploy/compose.ingestion.yaml`, `deploy/init-deployment.sh` |
 | `rag-api`, `rag-admin` | 8443 | HTTPS | `edge`, `data`, `llm` | only through the published host ports of §2 | `deploy/compose.prod.yaml` (`Kestrel__Endpoints__Https__Url`) |
-| `rag-worker` | 8443 | HTTPS | `data`, `llm`, `ingestion`, `parser`, `crawl` | none: not published; its health check runs inside the container | `deploy/compose.ingestion.yaml` |
+| `rag-worker` | 8443 | HTTPS | `data`, `llm`, `ingestion`, `parser`, `render`, `crawl` | none: not published; its health check runs inside the container | `deploy/compose.ingestion.yaml` |
 | `open-webui` | 8080 | HTTP | `openwebui` | only through the published host port of §2 | `deploy/compose.openwebui.yaml` |
 | `rag-migrate` | – | one-shot client of postgres | `data` | – | `deploy/compose.prod.yaml` |
 | `rag-blobs-init`, `rag-upload-backup` | – | no network (`network_mode: none`) | – | – | `deploy/compose.prod.yaml` |
 | Redis | – | none in the production Compose files (P2; the dev AppHost starts one only with `Redis:Enabled`) | – | – | `src/Ume.Rag.AppHost/Program.cs` |
 
 Docker keeps the bridge networks apart, and members of one network reach each other on it (the firewall returns
-traffic within a subnet). `data`, `ingestion` and `parser` are `internal: true`, so they have no route out at all.
+traffic within a subnet). `data`, `ingestion`, `parser` and `render` are `internal: true`, so they have no route out at all.
+The renderer's Chromium runs the scripts of crawled pages: it is on `render` only, every request it makes goes to the
+worker (which fetches it with the crawler's guard, from `crawl`), and the host firewall's `UME-RAG-INPUT` chain rejects
+the `render` subnet, because the bridge's gateway address (the host) answers at the IP level (connectors design §8.3).
 
 ## 5. Per setup
 
@@ -311,9 +317,9 @@ the proxy, rag-api sees that address only when the proxy is in the trusted proxi
 `init-deployment.sh` always lists `compose.prod.yaml` and `compose.ingestion.yaml` in `COMPOSE_FILE`; the pilot runs
 both.
 
-- **With it:** the `crawl`, `mirror`, `ingestion` and `parser` rules of §3 and §4 apply: egress to crawled sites, to
+- **With it:** the `crawl`, `mirror`, `ingestion`, `parser` and `render` rules of §3 and §4 apply: egress to crawled sites, to
   `database.clamav.net` (or the proxy) and to the gateway from `crawl`.
-- **Without it** (`docker compose -f deploy/compose.prod.yaml ...`): no rag-worker, parser or ClamAV, so no egress to
+- **Without it** (`docker compose -f deploy/compose.prod.yaml ...`): no rag-worker, parser, ClamAV or renderer, so no egress to
   crawled sites or ClamAV, and nothing is ingested. The firewall still writes rules for the unused subnets; they match
   nothing.
 - **Ingestion on its own host** (P2, repo-and-deployment §6.4): planned, not built (`compose.ingestion-remote.yaml`
@@ -379,7 +385,7 @@ Browsers on the municipal network
   [ ] -> <oidc authority host>:443                    sign-in
 
 Never opened
-  [ ] 5432 (postgres), 8000 (parser), 3310 (clamd), 8443 (container ports)
+  [ ] 5432 (postgres), 8000 (parser), 3310 (clamd), 3000 (renderer), 8443 (container ports)
 ```
 
 ## 7. Where each port and destination is configured
@@ -399,6 +405,7 @@ of `deploy/.env`: `docker compose --env-file deploy/.env up -d` and `sudo system
 | Postgres 5432 | fixed (image default) | connection strings `Host=postgres` (`deploy/init-deployment.sh`) | the services |
 | Parser 8000 | fixed | `Parser__BaseUrl` in `deploy/compose.ingestion.yaml` | rag-worker |
 | clamd 3310 | fixed | `images/clamav/clamd.conf` (`TCPSocket`), `ClamAv__Port` in `deploy/compose.ingestion.yaml` | rag-worker |
+| Renderer 3000 and its secret path | fixed port; the path generated once (`secrets/.render-ws-path`) | `images/renderer/launch-server.json` (`port`), `secrets/renderer.env` (`UME_RAG_RENDER_WS_PATH`), `secrets/worker/Render__Endpoint` | rag-renderer, rag-worker |
 | Gateway URL | `--gateway-url` | `UME_RAG_GATEWAY_URL` | `Gateway__BaseUrl` (api, admin, worker), the firewall (`llm`, `crawl`) |
 | OIDC authority | `--oidc-authority` | `UME_RAG_OIDC_AUTHORITY` | `Oidc__Authority` (admin), the firewall (`llm`), Open WebUI's default provider URL |
 | Open WebUI's OIDC provider | `--openwebui-oidc-provider-url` | `UME_RAG_OPENWEBUI_OIDC_PROVIDER_URL` | `OPENID_PROVIDER_URL`, the firewall (`openwebui`) |
