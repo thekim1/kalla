@@ -9,6 +9,7 @@ import SetupChecklist from '@/components/collections/SetupChecklist.vue'
 import EvaluationTab from '@/components/evaluation/EvaluationTab.vue'
 import RetrievalSettingsForm from '@/components/evaluation/RetrievalSettingsForm.vue'
 import SourceDrawer from '@/components/sources/SourceDrawer.vue'
+import CollectionEditDrawer from '@/components/collections/CollectionEditDrawer.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
@@ -23,7 +24,7 @@ import { useLoadable } from '@/stores/loadable'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatDecimal, formatNumber } from '@/utils/format'
-import { COLLECTION, COLLECTIONS, EVALUATION, LEVEL_LABEL, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
+import { COLLECTION, COLLECTIONS, EDIT_DRAWER, EVALUATION, LEVEL_LABEL, RETRIEVAL, RUN_STATE_LABEL, SOURCE, SOURCE_TYPE_LABEL } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 
 // Kunskapsbank (admin design §5.5.2): Översikt (state, contact, used by), Källor, Dokument with the personal-data filter
@@ -70,6 +71,8 @@ const quality = computed(() => {
 const canPublish = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
 const canEdit = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin', 'rag-editor']))
 const adding = ref(false)
+// Edit (§5.5.2, #446): the own fields, the level included.
+const editing = ref(false)
 const proposal = ref<{ coverageMaxDistance?: number; coverageMinKeywordScore?: number } | null>(null)
 let documentsRequest = 0
 
@@ -120,6 +123,11 @@ async function load(): Promise<void> {
   evaluation.value = await api.collections.evaluation(props.id).catch(() => null)
   // Kom igång (§5.4): computed by the API; hidden once done or when it can't be read.
   setup.value = await api.collections.setup(props.id).catch(() => null)
+}
+
+function edited(saved: Collection): void {
+  read.data.value = saved
+  ui.notify(EDIT_DRAWER.saved)
 }
 
 async function publish(): Promise<void> {
@@ -207,6 +215,7 @@ onMounted(load)
           :label="collection.data.value.publishedAt ? COLLECTIONS.published : COLLECTIONS.notPublished"
           data-test="state"
         />
+        <UiButton v-if="canEdit" icon="edit" data-test="edit" @click="editing = true">{{ EDIT_DRAWER.edit }}</UiButton>
         <UiButton v-if="canPublish && !collection.data.value.publishedAt" variant="primary" :loading="publishing" data-test="publish" @click="publish">
           {{ COLLECTION.publish }}
         </UiButton>
@@ -306,6 +315,7 @@ onMounted(load)
         </AsyncState>
       </div>
       <SourceDrawer v-model:open="adding" :collection="collection.data.value" @saved="sourceSaved" />
+      <CollectionEditDrawer v-if="canEdit" v-model:open="editing" :collection="collection.data.value" @saved="edited" />
     </template>
   </AsyncState>
 </template>

@@ -1,6 +1,8 @@
 import { buildUrl, http, postLogout, request } from './client'
 import type {
   CollectionLink,
+  CollectionUpdate,
+  AssistantUpdate,
   CollectionRead,
   CollectionView,
   DepartmentMap,
@@ -89,6 +91,7 @@ export const api = {
       http.put<Collection>(`/api/collections/${id}/sharing`, body),
     create: (body: CollectionCreate) => http.post<Collection>('/api/collections', body),
     publish: (id: string, version: string) => http.post<Collection>(`/api/collections/${id}/publish`, { version }),
+    update: (id: string, body: CollectionUpdate) => http.put<Collection>(`/api/collections/${id}`, body),
     sources: (id: string) => http.get<SourceListItem[]>(`/api/collections/${id}/sources`),
     evaluation: (id: string) => http.get<EvaluationOverview>(`/api/collections/${id}/evaluation`),
     retrievalSettings: (id: string, settings: Record<string, unknown>, version: string) =>
@@ -141,6 +144,7 @@ export const api = {
       version: string | null
     }) =>
       http.put<AssistantDraft>(`/api/assistants/${id}/draft`, body),
+    update: (id: string, body: AssistantUpdate) => http.put<Assistant>(`/api/assistants/${id}`, body),
     publish: (id: string, body: { version: string; draftVersion: string; confirmBaseChanged?: boolean; confirmGeneralKnowledge?: boolean }) =>
       http.post<Assistant>(`/api/assistants/${id}/publish`, body),
     audiences: (id: string, body: { clientIds: string[]; version: string }) => http.put<Assistant>(`/api/assistants/${id}/audiences`, body),
