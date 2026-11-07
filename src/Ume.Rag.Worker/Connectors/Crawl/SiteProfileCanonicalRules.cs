@@ -13,13 +13,14 @@ public sealed record HostCrawlRules(IReadOnlyDictionary<string, HostCanonicalRul
 /// The crawl's per-host inputs from the hosts' applied site profiles (connectors design §3.1 rules 7 and 10, §5.2, §5.6):
 /// the canonicaliser's <c>ignoreQueryParams</c> (a trailing <c>*</c> is a prefix) and identity rule when <c>verified</c>,
 /// and the scope's <c>excludedTypes</c>. A host's profile is kept for <see cref="CacheFor"/> per level, as
-/// <see cref="LastmodReliability"/> does, so an applied profile version reaches the crawl within a minute.
+/// <see cref="LastmodReliability"/> does, so an applied profile version reaches the crawl within a minute; its rules are
+/// built once per read, so the identity rule's expression is compiled once, not per fetch.
 /// </summary>
 public sealed class SiteProfileCanonicalRules(ISiteProfileReader profiles, TimeProvider time)
 {
     public static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(60);
 
-    private readonly ConcurrentDictionary<(string, string), (SiteProfile? Profile, DateTimeOffset At)> _cache = new();
+    private readonly ConcurrentDictionary<(string, string), (SiteProfile? Profile, HostCanonicalRules? Rules, DateTimeOffset At)> _cache = new();
 
     /// <summary>The rules of a profile: null when it neither drops parameters nor has a verified identity rule.</summary>
     public static HostCanonicalRules? From(SiteProfile profile)
@@ -49,7 +50,8 @@ public sealed class SiteProfileCanonicalRules(ISiteProfileReader profiles, TimeP
             var key = (classification, host);
             if (fresh || !_cache.TryGetValue(key, out var cached) || now - cached.At >= CacheFor)
             {
-                cached = ((await profiles.GetAppliedAsync(classification, host, cancellationToken))?.Profile, now);
+                var read = (await profiles.GetAppliedAsync(classification, host, cancellationToken))?.Profile;
+                cached = (read, read is null ? null : From(read), now);
                 _cache[key] = cached;
             }
 
@@ -59,7 +61,7 @@ public sealed class SiteProfileCanonicalRules(ISiteProfileReader profiles, TimeP
             }
 
             excluded[host] = profile.ExcludedTypes;
-            if (From(profile) is { } found)
+            if (cached.Rules is { } found)
             {
                 canonical[host] = found;
             }

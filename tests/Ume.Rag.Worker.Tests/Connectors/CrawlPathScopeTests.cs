@@ -38,13 +38,15 @@ public sealed class CrawlPathScopeTests : IAsyncLifetime
         var results = await rig.CrawlAsync(context);
 
         // Links (two paths to one node: one row), a link from a node page, a sitemap entry and a redirect target in the section.
-        rig.Store.Rows(context.Run.SourceId).Select(r => r.Url).Order(StringComparer.Ordinal).ShouldBe(
-            [
-                Url("/4.10000000000a.html"), Url("/4.20000000000b.html"), Url("/4.40000000000d.html"), Url("/4.50000000000e.html"),
-                Url("/4.60000000000f.html"), Url("/section"), Url("/section/go-in"), Url("/section/go-out"),
-            ],
-            ignoreOrder: false,
-            "a path include admits the section's node-id pages under their identity, and no page of another section");
+        string[] expected =
+        [
+            Url("/4.10000000000a.html"), Url("/4.20000000000b.html"), Url("/4.40000000000d.html"), Url("/4.50000000000e.html"),
+            Url("/4.60000000000f.html"), Url("/section"), Url("/section/go-in"), Url("/section/go-out"),
+        ];
+        var rows = rig.Store.Rows(context.Run.SourceId).Select(r => r.Url).Order(StringComparer.Ordinal).ToList();
+        rows.ShouldBe(expected, ignoreOrder: false,
+            "a path include admits the section's node-id pages under their identity, and no page of another section; "
+            + $"missing [{string.Join(", ", expected.Except(rows, StringComparer.Ordinal))}], extra [{string.Join(", ", rows.Except(expected, StringComparer.Ordinal))}]");
         Content(results, "/4.10000000000a.html").Facts.CanonicalIdentity.ShouldBe(Url("/4.10000000000a.html"));
         Content(results, "/section/go-in").Facts.CanonicalIdentity.ShouldBe(Url("/4.60000000000f.html"));
         // #228: each node row keeps the path it was first found under in the run and is fetched there; a redirect target keeps none.
