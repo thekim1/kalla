@@ -201,7 +201,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** B-18 for the confirmation (the rest can go first).
 - **Read:** Decisions "Level change in the edit drawer"; admin §4.5, §5.5.2, §5.5.4.
 
-### [ ] B-20 Model pickers show what the key may use (#447)
+### [x] B-20 Model pickers show what the key may use (#447)
 - **Do:** `GET /api/gateway/models?level=` adds `available` (`true`/`false`/`null`) per row from the gateway's
   `/v1/models` called with the platform's key at the level's ceiling (no `level`: the platform ceiling), cached 5
   minutes per ceiling; `null` when the gateway can't be asked. Every model picker (assistant model; Settings:
