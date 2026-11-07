@@ -68,6 +68,7 @@ dotnet user-secrets --project src/Ume.Rag.AppHost set Parser:Mode off
 |---|---|---|
 | `Parser:Mode` | `container` | `container` builds `src/parser/Dockerfile`; `local` runs `uvicorn ume_parser.app:app` from `src/parser` with hot reload (see [the parser's README](../src/parser/README.md) for the models it then needs); `off` starts no parser |
 | `ClamAv:Enabled` | `true` | `false` starts no ClamAV (the worker's EICAR-only fake scanner comes with its scan step, P1) |
+| `Render:Mode` | `container` | `container` builds `images/renderer` (Chromium behind Playwright's `launch-server`, hardened as in Compose with `images/renderer/seccomp.json`) and gives the worker `Render__Endpoint` with a generated secret path (parameter `render-ws-path`); `off` starts no renderer, and `browser` sources wait with `render.not_configured`. Unlike production the renderer is on Aspire's network, not an internal one |
 | `FakeGateway:Enabled` | `true` | `false` runs against a real gateway (below) |
 | `FakeGateway:Latency:*` | 0 (off) | a real gateway's timing on the fake (below) |
 | `Ollama:Enabled` | `false` | real BGE-M3 embeddings from Ollama behind the fake gateway (development only: the AppHost refuses it outside run mode) |
@@ -91,7 +92,7 @@ An earlier manual key in the same place is used as it is.
 Service ports (launch profiles): api `https://localhost:7401`, worker `7403`, admin API `7402`, fake gateway `7404`.
 The admin UI will be on `https://localhost:5174`, beside the gateway's 5173, so both stacks can run side by side.
 Container ports are fixed too: Open WebUI `http://localhost:7410`, Keycloak `https://localhost:7411`, Postgres `7412`,
-parser `7413`, ClamAV `7414`, Redis `7415` (when `Redis:Enabled`).
+parser `7413`, ClamAV `7414`, Redis `7415` (when `Redis:Enabled`), renderer `7417` (WebSocket, the path is secret).
 
 ## Keycloak test realm
 
@@ -198,7 +199,12 @@ bash deploy/postgres/test.sh ume-rag/postgres:latest      # pgvector, HNSW, TLS,
 docker build -t ume-rag/clamav:dev images/clamav
 bash images/clamav/test.sh ume-rag/clamav:dev             # offline: a one-line EICAR signature
 bash images/clamav/test.sh --online ume-rag/clamav:dev    # downloads the real signatures (about 115 MB)
+docker build -t ume-rag/renderer:dev images/renderer
+bash images/renderer/test.sh ume-rag/renderer:dev         # sandbox, a rendered page, nothing outside its network
 ```
+
+The renderer test uses the subnets `10.214.0.0/24` and `10.214.1.0/24`; set `RENDER_TEST_SUBNET` and
+`RENDER_TEST_OUTSIDE_SUBNET` where they are taken.
 
 **Browser tests.** `Start-E2E.ps1` starts the stack on its own Postgres volume (`ume-rag-e2e-postgres`), reset on every
 start, with demo data and the fake gateway forced on. It uses the dev stack's ports, so stop the dev stack first. The
@@ -230,19 +236,22 @@ commit `contracts/parser/v1/`; CI fails when they differ.
 ## Production Compose on your machine
 
 To try the production files locally, build the images, then run `init-deployment.sh` in a scratch copy of `deploy/`
-(not in the clone: it writes `.env`, `certs/`, `secrets/` and, with `--backup-target local`, `upload-backup/` next to
-itself) with a local backup target:
+and the renderer's seccomp profile (not in the clone: it writes `.env`, `certs/`, `secrets/` and, with
+`--backup-target local`, `upload-backup/` next to itself) with a local backup target:
 
 ```bash
 docker build -f images/postgres/Dockerfile -t ume-rag/postgres:latest .
 docker build -t ume-rag/clamav:latest images/clamav
 docker build -t ume-rag/parser:latest src/parser
+docker build -t ume-rag/renderer:latest images/renderer
 for p in Api AdminApi Worker MigrationService; do dotnet publish src/Ume.Rag.$p -c Release -t:PublishContainer; done
-cp -r deploy ~/rag-deploy-test
-~/rag-deploy-test/init-deployment.sh --backup-target local --allow-file-keys \
+# The layout of a release bundle: compose.ingestion.yaml names the renderer's seccomp profile ../images/renderer/seccomp.json.
+mkdir -p ~/rag-deploy-test/images/renderer
+cp -r deploy ~/rag-deploy-test/ && cp images/renderer/seccomp.json ~/rag-deploy-test/images/renderer/
+~/rag-deploy-test/deploy/init-deployment.sh --backup-target local --allow-file-keys \
   --oidc-authority https://<keycloak host>/realms/ume --gateway-url https://<a gateway> --api-host localhost --yes
-echo 'UME_RAG_INGESTION_SLICE=' >> ~/rag-deploy-test/.env    # no rag-ingestion.slice on a developer machine
-docker compose --env-file ~/rag-deploy-test/.env up -d --wait
+echo 'UME_RAG_INGESTION_SLICE=' >> ~/rag-deploy-test/deploy/.env    # no rag-ingestion.slice on a developer machine
+docker compose --env-file ~/rag-deploy-test/deploy/.env up -d --wait
 ```
 
 Run the `chown` commands the script prints first, unless it ran as root. The .NET images are tagged

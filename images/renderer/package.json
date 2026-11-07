@@ -1,0 +1,8 @@
+{
+  "name": "ume-rag-renderer",
+  "private": true,
+  "description": "playwright-core for launch-server, the same exact version as the worker's Microsoft.Playwright NuGet",
+  "dependencies": {
+    "playwright-core": "1.64.1"
+  }
+}

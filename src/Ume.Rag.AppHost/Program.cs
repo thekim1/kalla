@@ -45,7 +45,7 @@ var downloadGrantKey = Secret("download-grant-key", 48);
 // the Postgres 18 layout, so the data went to the image's anonymous volume and was lost on restart (#168). The volume is
 // mounted at the image's data path and the cluster lives in pgdata/ below it: a volume from the old layout holds an
 // empty data/ directory, which would make initdb refuse a non-empty PGDATA.
-// Fixed host ports for the containers (7410–7415, beside the services' 7401–7403 and the admin UI's 5174), so local
+// Fixed host ports for the containers (7410–7417, beside the services' 7401–7403 and the admin UI's 5174), so local
 // URLs, psql and scripts stay the same across restarts.
 var postgres = builder.AddPostgres("postgres", port: 7412)
     .WithImage(PostgresImage, PostgresTag).WithImageSHA256(PostgresDigest)
@@ -145,6 +145,37 @@ var clamAv = builder.Configuration.GetValue("ClamAv:Enabled", true)
         .WithEndpoint(port: 7414, targetPort: 3310, name: "clamd", scheme: "tcp")
     : null;
 
+// Render:Mode = container (default) | off: the renderer for `browser` sources (images/renderer, repo-and-deployment §5.4;
+// connectors design §8.3), hardened as in Compose, with Chromium's sandbox and the seccomp profile it needs. Off: no
+// Render:Endpoint, so `browser` sources wait with render.not_configured. Unlike production it sits on Aspire's network
+// with a published port, because the worker runs on the host: what the worker's route doesn't see (a popup's first
+// navigation, a download) could leave the container here, never in production.
+const int RendererPort = 3000;
+var renderMode = builder.Configuration["Render:Mode"] ?? "container";
+ReferenceExpression? renderEndpoint = null;
+switch (renderMode)
+{
+    case "container":
+        // The secret WebSocket path (UME_RAG_RENDER_WS_PATH: "/" and at least 16 of [A-Za-z0-9_-]).
+        var renderPath = Secret("render-ws-path", 32);
+        var seccompProfile = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", "images", "renderer", "seccomp.json"));
+        var wsEndpoint = builder.AddDockerfile("renderer", Path.Combine("..", "..", "images", "renderer"))
+            .WithEndpoint(port: 7417, targetPort: RendererPort, name: "ws", scheme: "tcp")
+            .WithEnvironment("UME_RAG_RENDER_WS_PATH", ReferenceExpression.Create($"/{renderPath}"))
+            .WithContainerRuntimeArgs(
+                "--read-only", "--tmpfs", "/tmp:size=512m", "--cap-drop", "ALL", "--init",
+                "--security-opt", "no-new-privileges", "--security-opt", $"seccomp={seccompProfile}",
+                "--memory", "2g", "--cpus", "2", "--pids-limit", "512")
+            .GetEndpoint("ws");
+        renderEndpoint = ReferenceExpression.Create(
+            $"ws://{wsEndpoint.Property(EndpointProperty.Host)}:{wsEndpoint.Property(EndpointProperty.Port)}/{renderPath}");
+        break;
+    case "off":
+        break;
+    default:
+        throw new InvalidOperationException($"Render:Mode must be container or off, not '{renderMode}'.");
+}
+
 var migrations = builder.AddProject<Projects.Ume_Rag_MigrationService>("migrations")
     .WithReference(database)
     .WithEnvironment("Security__KeyPepper", pepper)
@@ -204,6 +235,11 @@ if (clamAv is not null)
 {
     worker.WithEnvironment("ClamAv__Host", clamAv.GetEndpoint("clamd").Property(EndpointProperty.Host))
         .WithEnvironment("ClamAv__Port", clamAv.GetEndpoint("clamd").Property(EndpointProperty.Port));
+}
+
+if (renderEndpoint is not null)
+{
+    worker.WithEnvironment("Render__Endpoint", renderEndpoint);
 }
 
 // The browser tests' static Swedish website (tests/e2e/fixture-site, admin design §11.4) on 127.0.0.1:7416. The worker may

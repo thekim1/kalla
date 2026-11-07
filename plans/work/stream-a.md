@@ -91,7 +91,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** the user's list of JavaScript sites for the real-site measurements (the fixture SPA can go first).
 - **Read:** Decisions "JavaScript rendering"; connectors §8, §22; repo-and-deployment §5.4.
 
-### [ ] A-10 Renderer image and deployment
+### [x] A-10 Renderer image and deployment
 - **Do:** `images/renderer/Dockerfile` (official Playwright image by digest, `run-server` only, user 10002); Compose
   service `rag-renderer` on a new internal `render` network (172.30.18.0/24) with the hardening and limits of
   repo-and-deployment §5.4; `rag-worker` joins `render` and gets `Render__Endpoint`; the AppHost adds the container

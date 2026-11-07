@@ -298,8 +298,9 @@ dc stop rag-worker              # it gets its stop grace period (120 s) before i
 dc up -d --wait rag-worker
 ```
 
-`dc restart rag-worker` also stops it before it starts. The parser and ClamAV can be restarted on their own: the
-worker reports them in its own health and retries.
+`dc restart rag-worker` also stops it before it starts. The parser, ClamAV and the renderer can be restarted on their
+own: the worker reports them in its own health and retries (a render that loses the renderer fails as
+`render.unavailable` and keeps the page's last good content).
 
 **After any change to the gateway's models** (a new deployment behind an alias, a provider switch, a gateway upgrade),
 a platform admin runs **Check embedding canary** on Platform → Gateway models. The platform makes no model calls of its
@@ -311,7 +312,8 @@ first*).
 
 Docker restarts a container only when its main process exits. ClamAV's does not, so a hung clamd would stay
 unhealthy. `rag-restart-unhealthy.timer` runs `deploy/host/restart-unhealthy.sh` every minute: it restarts every
-container labelled `ume-rag.restart-unhealthy=true` (today `rag-clamav`) that Docker reports unhealthy. A container
+container labelled `ume-rag.restart-unhealthy=true` (today `rag-clamav` and `rag-renderer`) that Docker reports
+unhealthy. A container
 in its start period counts as starting, not unhealthy, so a slow first download does not loop.
 
 ```bash
@@ -328,7 +330,7 @@ the allow-lists are host names, resolved when it runs.
 
 | Network | May reach |
 |---|---|
-| `edge`, `data`, `ingestion`, `parser` | nothing (`edge` carries the published ports only) |
+| `edge`, `data`, `ingestion`, `parser`, `render` | nothing (`edge` carries the published ports only); `render` holds the renderer's Chromium, and the host is rejected for it too (`UME-RAG-INPUT`) |
 | `llm` (api, admin) | the gateway, the OIDC authority, the Open WebUI host, the OTLP endpoint, DNS |
 | `crawl` (worker) | the gateway, the OTLP endpoint, DNS, `UME_RAG_CRAWL_ALLOW`; then the public Internet, but no private, loopback, link-local or reserved range |
 | `mirror` (clamav) | `database.clamav.net:443`, or only freshclam's proxy |
@@ -472,6 +474,8 @@ Also for G1 and W2:
 | `rag-firewall.service` failed: "no DOCKER-USER chain" | Docker is not running, or runs without its iptables integration |
 | `install.sh` warns "Docker does not use the systemd cgroup driver" | The ingestion slice caps nothing: set `native.cgroupdriver=systemd` (production-setup.md), restart Docker, then `dc up -d --force-recreate` |
 | `escrow-keys.sh --verify`: "differs from the deployment's key" | A key was rotated after that escrow: escrow again and verify |
+| `rag-renderer` restarts in a loop; its log says "No usable sandbox" | Chromium cannot create the user namespaces of its sandbox: the seccomp profile is not applied (`images/renderer/seccomp.json` missing next to `deploy/`), or the host restricts unprivileged user namespaces (AppArmor on Ubuntu 23.10+). Don't turn the sandbox off: production-setup.md, *Renderer* |
+| `rag-renderer` exits at once: "UME_RAG_RENDER_WS_PATH is required" | `secrets/renderer.env` is missing: re-run `init-deployment.sh` (it keeps every other secret) |
 | The parser stays unhealthy for minutes after a start | It warms its slots and runs a self-test first; the worker reports it in its own health and retries |
 | Worker health unhealthy on `embedding-canary`; embed, preview and evaluation jobs wait with `embed.canary_mismatch` | The last embedding canary check of a profile came out below 0.999: the gateway's model alias now answers with another model, which would mix vector spaces. Ask the gateway team what changed; once the profile's model is restored, run **Check embedding canary** again (admin UI, Platform → Gateway models). The jobs continue when a check passes. A new model is a profile migration, not a fix here |
 

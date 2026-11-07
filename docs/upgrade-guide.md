@@ -9,6 +9,21 @@ without downtime. Migrations are expand/contract only, so "no" is the exception 
 
 ## Unreleased
 
+### Renderer (`rag-renderer`)
+
+- **Rolling update: yes.** No migration; a new container in the ingestion zone and a new network.
+- `compose.ingestion.yaml` adds `rag-renderer` (`images/renderer`, Chromium behind Playwright's `launch-server`) on
+  the new internal network `render` (172.30.18.0/24), which `rag-worker` joins. `init-deployment.sh` generates the
+  renderer's secret WebSocket path once (`secrets/.render-ws-path`) and writes `secrets/worker/Render__Endpoint` and
+  `secrets/renderer.env`. The release bundle carries the renderer's seccomp profile as `images/renderer/seccomp.json`
+  next to `deploy/`. The host firewall rejects the new subnet like the other internal ones.
+- **Apply:** keep `172.30.18.0/24` free (production-setup.md, *Host prerequisites*); re-run `init-deployment.sh` with
+  your options (it keeps every existing secret); a new `RENDERER_IMAGE` (or a built `ume-rag/renderer:latest`); then
+  `dc up -d --wait` and `sudo systemctl start rag-firewall.service`.
+- **Check:** `dc ps rag-renderer` is healthy (a restart loop with "No usable sandbox" in `dc logs rag-renderer`: the
+  host restricts user namespaces, production-setup.md, *Renderer*), and the firewall's dry run
+  (`deploy/host/docker-user-firewall.sh --dry-run`) rejects `172.30.18.0/24` in `UME-RAG-INPUT`.
+
 ### ClamAV 1.4.6
 
 - **Rolling update: yes.** No migration and no configuration change.

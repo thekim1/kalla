@@ -4,12 +4,14 @@
 # the released image by digest.
 #
 #   API_IMAGE=... ADMIN_IMAGE=... WORKER_IMAGE=... MIGRATIONS_IMAGE=... PARSER_IMAGE=... CLAMAV_IMAGE=... \
-#   POSTGRES_IMAGE=... deploy/build-release-bundle.sh VERSION OUTPUT_DIR
+#   RENDERER_IMAGE=... POSTGRES_IMAGE=... deploy/build-release-bundle.sh VERSION OUTPUT_DIR
 #
 # Each *_IMAGE is a full reference pinned by digest (registry/repo[:tag]@sha256:<64 hex>); an unset or unpinned one
 # fails. Writes OUTPUT_DIR/ume-rag-VERSION.tar.gz: one top-level directory ume-rag-VERSION/ holding deploy/ (the Compose
 # files, the deployment scripts, postgres/, pgbackrest/, host/, the ClamAV confs init-deployment.sh copies, and redis/,
-# proxy/ and otel/ once they exist) and docs/ (the operator documents), so the documented commands work unchanged.
+# proxy/ and otel/ once they exist), docs/ (the operator documents) and images/renderer/seccomp.json (the renderer's
+# seccomp profile, at the path compose.ingestion.yaml names relative to deploy/), so the documented commands work
+# unchanged.
 #
 # Every ${X_IMAGE:-default} (or ${X_IMAGE:?message}) in the bundled Compose files becomes ${X_IMAGE:-<released image>},
 # so the variables still override the release. The bundle fails when a Compose file names an image variable that is
@@ -22,7 +24,7 @@ version="${1:?$usage}"
 out="${2:?$usage}"
 die() { echo "error: $*" >&2; exit 1; }
 
-images=(API_IMAGE ADMIN_IMAGE WORKER_IMAGE MIGRATIONS_IMAGE PARSER_IMAGE CLAMAV_IMAGE POSTGRES_IMAGE)
+images=(API_IMAGE ADMIN_IMAGE WORKER_IMAGE MIGRATIONS_IMAGE PARSER_IMAGE CLAMAV_IMAGE RENDERER_IMAGE POSTGRES_IMAGE)
 # A reference pinned by digest; the character set also keeps it safe in the sed replacement below.
 pinned='^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$'
 
@@ -41,7 +43,7 @@ out="$(cd "$out" && pwd)"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 dest="$stage/$name/deploy"
-mkdir -p "$dest" "$stage/$name/docs"
+mkdir -p "$dest" "$stage/$name/docs" "$stage/$name/images/renderer"
 
 cd "$here"
 cp compose.prod.yaml compose.ingestion.yaml compose.host-24g.yaml compose.clamav-conf.yaml compose.openwebui.yaml \
@@ -54,6 +56,8 @@ done
 # init-deployment.sh writes its ClamAV confs (24 GB profile, --freshclam-proxy) from deploy/clamav/ in the bundle.
 mkdir -p "$dest/clamav"
 cp "$repo/images/clamav/clamd.conf" "$repo/images/clamav/freshclam.conf" "$dest/clamav/"
+# compose.ingestion.yaml names the renderer's seccomp profile as ../images/renderer/seccomp.json.
+cp "$repo/images/renderer/seccomp.json" "$stage/$name/images/renderer/"
 # The operator documents (platform plan §10: the upgrade guide ships with the release).
 cp "$repo/docs/production-setup.md" "$repo/docs/runbook.md" "$repo/docs/upgrade-guide.md" "$repo/docs/test-host.md" \
   "$stage/$name/docs/"

@@ -193,6 +193,7 @@ them, build on another machine and push to a registry (`docs/production-setup.md
 ```bash
 docker build -f images/postgres/Dockerfile -t ume-rag/postgres:latest .
 docker build -t ume-rag/clamav:latest images/clamav
+docker build -t ume-rag/renderer:latest images/renderer
 docker build -t ume-rag/parser:latest src/parser
 (cd src/admin-ui && npm ci && npm run build)
 for p in Api Worker MigrationService; do dotnet publish src/Ume.Rag.$p -c Release -t:PublishContainer; done

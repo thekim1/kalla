@@ -1,0 +1,9 @@
+{
+  "headless": true,
+  "chromiumSandbox": true,
+  "port": 3000,
+  "host": "0.0.0.0",
+  "args": [
+    "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
+  ]
+}
