@@ -575,10 +575,17 @@ backup_note=""
      (--backup-target local): not a backup off the host."
 proxy_note=""
 if [ "$proxy" = 1 ]; then
+  # proxy/nginx.conf from the example, as the gateway's init-deployment.sh writes its own (#468).
+  sed -e "s/@API_HOST@/$api_host/g" -e "s/@ADMIN_HOST@/$admin_host/g" -e "s/@UPSTREAM@/$upstream_host/g" \
+      -e "s/@API_PORT@/$api_port/g" -e "s/@ADMIN_PORT@/$admin_port/g" \
+      -e "s/@OPENWEBUI_HOST@/$owui_host/g" -e "s/@OPENWEBUI_PORT@/3000/g" \
+      "$here/proxy/nginx.conf.example" > "$here/proxy/nginx.conf"
+  [ -z "$owui_host" ] || sed -i 's/^#owui \{0,1\}//' "$here/proxy/nginx.conf"
   proxy_note="
-Reverse proxy: forward https://$api_host to https://$upstream_host:$api_port and https://$admin_host to
-https://$upstream_host:$admin_port, preserving the Host header; client_max_body_size 60m and proxy_request_buffering off
-on PUT /api/upload-batches/{batchId}/files/{n} of the admin host (admin design §2.2), the gateway's 1 MB elsewhere.
+Reverse proxy: $here/proxy/nginx.conf is ready for nginx (add your certificates). For another proxy: forward
+https://$api_host to https://$upstream_host:$api_port and https://$admin_host to https://$upstream_host:$admin_port,
+preserving the Host header; client_max_body_size 60m and proxy_request_buffering off on
+PUT /api/upload-batches/{batchId}/files/{n} of the admin host (admin design §2.2), 1 MB elsewhere.
 Restrict those ports to the proxy with the host firewall."
   if [ -z "$proxy_sources" ]; then
     proxy_note="$proxy_note

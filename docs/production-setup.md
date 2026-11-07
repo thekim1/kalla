@@ -346,7 +346,10 @@ internal `render` network. Internal certificates last 825 days: re-issue them wi
 
 The listeners default to loopback (`127.0.0.1:8543` and `:9543`). Behind the municipal reverse proxy, run
 `init-deployment.sh --proxy` with two distinct host names (and `--upstream-host` if the proxy reaches this host by
-another name): the listeners bind to `0.0.0.0`, so restrict those ports to the proxy. The script prints the routes:
+another name): the listeners bind to `0.0.0.0`, so restrict those ports to the proxy (`--proxy-address`). It writes
+`deploy/proxy/nginx.conf` from `deploy/proxy/nginx.conf.example` (as the gateway's `init-deployment.sh` does, #468): rag-api,
+the admin host and, with `--openwebui-host`, Open WebUI, ready for nginx once your certificates are added. For another
+proxy the script prints the routes:
 each host name forwarded over HTTPS to its port, preserving the `Host` header; `client_max_body_size 60m` and
 `proxy_request_buffering off` on `PUT /api/upload-batches/{batchId}/files/{n}` of the admin host, 1 MB elsewhere.
 Add the proxy's addresses to the trusted proxies (admin UI, Settings, *Network*) and have it set `X-Forwarded-For`:
