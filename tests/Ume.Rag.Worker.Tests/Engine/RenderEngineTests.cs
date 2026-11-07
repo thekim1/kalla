@@ -111,6 +111,43 @@ public sealed class RenderEngineTests(RagDatabaseFixture database, FakeGatewayFa
         }
     }
 
+    [Fact]
+    public async Task A_slow_render_does_not_raise_the_hosts_latency()
+    {
+        // A-13: the render's time (subrequests, their pacing, the ready rule) is not the host's response time; fed into
+        // LatencyEwmaMs it lengthened every later subrequest's interval until each page ran past Render:PageTimeout.
+        _renderer.Render = async (request, _) =>
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(1500), Ct);
+            return FakeRenderer.Page(EngineKit.Page($"renderad {request.Url.AbsolutePath} {_tag}"));
+        };
+        await using var site = await EngineKit.SiteAsync((name, _) => Task.FromResult(EngineKit.Html(EngineKit.Page($"skal {name} {_tag}"))));
+        var seed = await EngineKit.SeedCrawlAsync(database, new
+        {
+            startUrls = new[] { site.Url("/p/a").AbsoluteUri, site.Url("/p/b").AbsoluteUri },
+            exclude = Array.Empty<string>(),
+            crawlWindow = "00:00-00:00",
+            fetchMode = "browser",
+        });
+        await EngineKit.PauseOtherSourcesAsync(database, seed);
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, settings: Renderer,
+            services: s => s.AddSingleton<IRenderer>(_renderer));
+        try
+        {
+            (await EngineKit.WaitForRunAsync(database, await EngineKit.SyncNowAsync(database, seed))).Added.ShouldBe(2);
+
+            _renderer.Requests.Count.ShouldBe(2);
+            var host = site.Url("/").Authority;
+            (await Sql.ScalarAsync<long>(database.Connection(null), """SELECT count(*) FROM content."CrawlHosts" WHERE "Host" = $1""", host)).ShouldBe(1);
+            var latency = await Sql.ScalarAsync<int?>(database.Connection(null), """SELECT "LatencyEwmaMs" FROM content."CrawlHosts" WHERE "Host" = $1""", host);
+            (latency ?? 0).ShouldBeLessThan(1000, "the host's latency is its responses' time, not the 1.5 s renders");
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
     private async Task<string[]> FetchModesAsync(SourceSeed seed) =>
         [.. (await Sql.ScalarAsync<string>(database.Connection(null), """
             SELECT string_agg("FetchMode", ',' ORDER BY "CanonicalIdentity") FROM content."Documents" WHERE "SourceId" = $1 AND "DeletedAt" IS NULL

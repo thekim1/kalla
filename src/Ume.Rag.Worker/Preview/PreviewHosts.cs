@@ -57,7 +57,7 @@ internal static class PreviewHosts
     }
 
     /// <summary>What a fetch outcome tells the host budget (as the URL-list fetch reports it).</summary>
-    public static HostResponse Response(FetchOutcome outcome, TimeSpan latency) => outcome switch
+    public static HostResponse Response(FetchOutcome outcome, TimeSpan? latency) => outcome switch
     {
         FetchOutcome.Content or FetchOutcome.NotModified => new HostResponse(HostResponseKind.Success, latency),
         FetchOutcome.Transient { Reason: "rate_limited" or FetchOutcomes.Challenge, RetryAfter: var retryAfter } => new HostResponse(HostResponseKind.RateLimited, latency, retryAfter),

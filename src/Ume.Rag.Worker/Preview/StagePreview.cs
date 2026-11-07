@@ -287,7 +287,7 @@ public sealed partial class StagePreview(
         {
             var started = time.GetTimestamp();
             var outcome = await connector.FetchAsync(context, item, cancellationToken);
-            await lease.CompleteAsync(PreviewHosts.Response(outcome, time.GetElapsedTime(started)), cancellationToken);
+            await lease.CompleteAsync(PreviewHosts.Response(outcome, PageLatency.Of(outcome, time.GetElapsedTime(started))), cancellationToken);
             return Content(outcome, level, index, canonical.Value!, null);
         }
     }

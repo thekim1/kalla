@@ -204,7 +204,7 @@ public sealed class UrlListSource(
                     var revalidate = (await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken)).Fetch;
                     var outcome = await connector.FetchAsync(new FetchContext(source.SourceId, source.Classification, run.Id, source.Settings, revalidate),
                         item, cancellationToken);
-                    await granted.Lease.CompleteAsync(Response(outcome, time.GetElapsedTime(started)), cancellationToken);
+                    await granted.Lease.CompleteAsync(Response(outcome, PageLatency.Of(outcome, time.GetElapsedTime(started))), cancellationToken);
                     result = await ingest.HandleAsync(fetch, outcome, cancellationToken);
                 }
 
@@ -252,7 +252,7 @@ public sealed class UrlListSource(
         await commit.CommitAsync(cancellationToken);
     }
 
-    private static HostResponse Response(FetchOutcome outcome, TimeSpan latency) => outcome switch
+    private static HostResponse Response(FetchOutcome outcome, TimeSpan? latency) => outcome switch
     {
         FetchOutcome.Content or FetchOutcome.NotModified => new HostResponse(HostResponseKind.Success, latency),
         FetchOutcome.Transient { Reason: "rate_limited" or FetchOutcomes.Challenge, RetryAfter: var retryAfter } => new HostResponse(HostResponseKind.RateLimited, latency, retryAfter),
