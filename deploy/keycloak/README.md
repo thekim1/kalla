@@ -10,7 +10,7 @@ the job.
 
 | File | What it holds | Where it goes |
 |---|---|---|
-| `rag-additions.json` | `"realm": "ume"`; the 7 `rag-*` realm roles; the clients `ume-rag-admin` (confidential, code + PKCE S256), `open-webui` (confidential, code, legacy callback `/oauth/oidc/callback`) and `ume-rag-api` (audience only, no flow), all with *full scope allowed* off; the role scope mappings of `ume-rag-admin`, so its `roles` claim carries the `rag-*` roles and no gateway role | The gateway's additions directory (production and test) |
+| `rag-additions.json` | `"realm": "ume"`; the 7 `rag-*` realm roles; the clients `ume-rag-admin` (confidential, code + PKCE S256), `open-webui` (confidential, code, callback `/oauth/oidc/login/callback`: Open WebUI v0.12.5, which still serves the legacy `/oauth/oidc/callback` too) and `ume-rag-api` (audience only, no flow), all with *full scope allowed* off; the role scope mappings of `ume-rag-admin`, so its `roles` claim carries the `rag-*` roles and no gateway role | The gateway's additions directory (production and test) |
 | `rag-additions.local.json` | **Test or dev realms only:** the two sign-in clients again, with the pilot URIs plus the local AppHost redirect URIs, web origins and post-logout URIs (issue #95 part 3) | A test realm's additions directory, next to `rag-additions.json`. **Never in production** |
 | `standalone/10-rag-realm.json` | **A standalone Ume.Rag realm only:** the realm itself, with the realm-wide settings the gateway's base file holds in the shared realm (password policy, brute-force protection, no self-registration, the user profile with `departmentCodes` and `teamCodes`) | In place of the gateway's base file, see *Standalone* |
 

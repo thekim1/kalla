@@ -411,8 +411,8 @@ if (File.Exists(Path.Combine(builder.AppHostDirectory, "..", "admin-ui", "packag
 // It forwards each user as an HS256 JWT that rag-api checks (identity §5.2). Local accounts sign in (the first is Open WebUI's admin); the pilot signs in
 // over OIDC through deploy/compose.openwebui.yaml (item 18). Same pin as the Compose file; update both together.
 const string OpenWebUiImage = "ghcr.io/open-webui/open-webui";
-const string OpenWebUiTag = "v0.12.3";
-const string OpenWebUiDigest = "a537bbe1e6b428820f52ed4a029d7fff97062e24d5cf32c365fba36fd0542def";
+const string OpenWebUiTag = "v0.12.5";
+const string OpenWebUiDigest = "03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded";
 const string DevOpenWebUiClientId = "01929b6e-0000-7000-8000-0000000c11e7"; // DevSeeder.DevClientId
 var openWebUiClientId = e2e ? null : builder.Configuration["OpenWebUi:ClientId"];
 if (openWebUiClientId is { Length: > 0 } && !Guid.TryParse(openWebUiClientId, out _))

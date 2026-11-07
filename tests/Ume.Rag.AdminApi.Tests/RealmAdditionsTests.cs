@@ -281,7 +281,7 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
         Strings(all["ume-rag-admin"].GetProperty("redirectUris")).ShouldBe(
             ["https://rag-admin.example.invalid/signin-oidc", "https://localhost:5174/signin-oidc", "https://localhost:7402/signin-oidc"], ignoreOrder: true);
         Strings(all["open-webui"].GetProperty("redirectUris")).ShouldBe(
-            ["https://chat.example.invalid/oauth/oidc/callback", "http://localhost:8080/oauth/oidc/callback"], ignoreOrder: true);
+            ["https://chat.example.invalid/oauth/oidc/login/callback", "http://localhost:8080/oauth/oidc/login/callback"], ignoreOrder: true);
 
         using var roles = JsonDocument.Parse(await admin.GetStringAsync("roles", Ct));
         RagRoles.Append("gateway-admin").ShouldBeSubsetOf(roles.RootElement.EnumerateArray().Select(r => r.GetProperty("name").GetString()!));
