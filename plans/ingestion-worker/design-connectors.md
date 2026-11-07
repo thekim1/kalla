@@ -26,8 +26,8 @@ Citations: `onyx/…` = `~/git/rag-platforms/onyx/backend/onyx/…`, `owui/…` 
 | 4 | Sharing | Documents belong to one source; raw blobs are content-addressed, parse output and embeddings cached by content (P1). **P2 (weakness review §1)**: one frontier row per (level, URL) with one **claim** per source, one request serves every claim, and a fetch younger than 12 h is reused by scheduled runs (§6.2) |
 | 5 | Crawl runs | Every scheduled crawl is a full **traversal** with stored outlinks, skipping unchanged pages by conditional GET or reliable sitemap `lastmod`; `not-seen` deletions only after a **complete** traversal, complete when ≥ 99 % of seeds are resolved (weakness review §3); URLs that leave the sitemap get a removal check; an alert after 3 runs without a complete traversal (§5.4) |
 | 6 | Egress | `IEgressGuard` resolves once and connects only to the checked addresses (`ConnectCallback`), max 5 redirects re-checked per hop; host firewall as second layer plus a startup canary; cookies never stored or sent (§7) |
-| 7 | Renderer | **P2**, and only if a P1-start check shows that pilot sites need JavaScript (umea.se does not); `IRenderer` stays as a seam; short pages are an info note in the crawl report (§8) |
-| 8 | Render coexistence | Removed (simplification pass): no document variants; the fetch mode will be a document attribute (§8.4) |
+| 7 | Renderer | **Now** (user, 2026-11-07): a `browser` source (`fetchMode`) is rendered by headless Chromium in a browser-only container driven by the worker, every browser request fetched by the worker's guarded client (§8) |
+| 8 | Render coexistence | No document variants; the fetch mode is a document attribute (`Documents.FetchMode`, §8.1) |
 | 9 | Uploads | Identity = (source, **upload slot**); the content hash is the version, so a replace keeps the document id; the file name is the document's `DisplayName`, never `Title` (§9) |
 | 10 | Attachments | P2 with email (Z1); none in P1 (§10) |
 | 11 | ClamAV | Own `INSTREAM` client; fail closed (no file enters parsing unscanned); quarantine blob kept 30 days, metadata only in the UI (§11) |
@@ -397,7 +397,7 @@ are not built yet.
 | Exclusions | robots-disallowed, out of scope, off-site, excluded by pattern or type, `noindex`: counts + top path prefixes |
 | Traps | kind, pattern, count, example |
 | Duplicates | groups of URLs with equal content hash; folded aliases; canonicals elsewhere not verified (§3.3); suggested setting |
-| Short pages | info note: pages with < 200 visible characters while the HTML is > 5 KB; never `degraded` because rendering is off (rendering is not part of P1, §8.1) |
+| Short pages | info note: pages with < 200 visible characters while the HTML is > 5 KB, with a pointer to the source's `fetchMode` (§8.1) when it is `http`; never `degraded` |
 | Site profile | profile version used; empty-root rate, boilerplate share and text yield against the previous run (P2: the re-learn trigger, §5.6) |
 | Noise | pages whose hash changed but whose parsed output did not (§12.2), by host |
 | Deletions | proposed / applied / held, by reason (§13) |
@@ -439,7 +439,6 @@ The fields below are set by hand in P1; the "Derived from the sample" column is 
 | `ignoreQueryParams` | preset list plus parameters whose values differ between fetches of the same page; a trailing `*` is a prefix | URL normalisation (§3.1 rule 7) |
 | `excludedTypes` | default `image/*`, `video/*` | scope (§5.2): by extension at admission and by response Content-Type at fetch, so an extensionless file of an excluded type is neither stored nor ingested |
 | `lastmodReliable` | `lastmod` against visible dates and content-hash changes across runs; never `true` before the 500-URL sample has passed (§5.4) | `lastmod` skip and default incremental runs (§5.4) |
-| `javascriptNeeded` | raw text yield of the sampled pages | the P1-start renderer check (§8.1) |
 
 - **Learning** (P2; deterministic, no LLM): when a crawl source's host has no profile (at its first preview or first
   sync) a `preview` job of kind `site-profile` samples 30–50 pages from the sitemap, spread over path sections and
@@ -624,7 +623,7 @@ public interface IEgressGuard
     // Resolves once; throws EgressBlockedException (→ outcome blocked, event 5101) if any address is not allowed.
     ValueTask<IReadOnlyList<IPAddress>> ResolveAsync(string asciiHost, EgressPurpose purpose, CancellationToken ct);
 }
-public enum EgressPurpose { Fetch, Robots, Sitemap, Preflight, Preview }   // Render added with the renderer (P2)
+public enum EgressPurpose { Fetch, Robots, Sitemap, Preflight, Preview, Render }   // Render: the browser's requests (§8.3)
 ```
 
 | Topic | Rule |
@@ -640,54 +639,135 @@ public enum EgressPurpose { Fetch, Robots, Sitemap, Preflight, Preview }   // Re
 | Canary | at startup in Production the worker opens a raw socket (bypassing the guard) to `169.254.169.254:80` and to a private address outside the allow-list; a successful connect means the firewall is missing: critical log, health `degraded`, crawling disabled until fixed. It runs in every worker instance that runs `fetch`, so each host's firewall is checked. Not built yet |
 | Event 5101 `rag.egress.blocked` | Warning; at most once a minute per (source, reason) with `Count`. Attributes: `Reason` (`private_address`, `embedded_address`, `scheme`, `port`, `userinfo`, `blocked_host`, `redirect_downgrade`), `AddressClass` (`loopback`, `rfc1918`, `link_local`, `cgnat`, `ula`, `multicast`, `reserved`), `Purpose`, `SourceId`, `RunId`, `Classification`, `HostHash` (HMAC); the host name itself only for `public` sources |
 
-## 8. Renderer (P2, conditional)
+## 8. Renderer (JavaScript pages)
+
+Decided 2026-11-07 (Decisions "JavaScript rendering", user): some sites the platform will crawl build their pages in
+the browser, so the worker renders them with headless Chromium. Untrusted JavaScript runs in a browser-only container
+that can reach nothing but the worker; all crawling logic (frontier, host budgets, egress guard, robots, change
+detection, storage) stays in the worker (§8.7 lists the options weighed).
 
 ### 8.1 When to render
 
-Not in P1. At P1 start a check over the pilot sites (the site profile's `javascriptNeeded`, §5.6, and the crawl
-report's short-page note, §5.5) decides whether any pilot site needs JavaScript; umea.se is server-rendered
-(simplification pass §13.1), so none is expected. Only if one does is a renderer built, in P2: a source then either
-renders or not (a source setting), identity stays the final URL, and the fetch mode is a document attribute. Short
-pages are an info note in the crawl report, never `degraded` because rendering is off.
+- **Per source, explicit:** the source setting `fetchMode` = `http` (default) or `browser`, and an optional
+  `readySelector` (CSS; default: the host profile's `mainRoot`). Every page of a `browser` source is rendered; HTTP
+  stays the default for every other source. Path rules and automatic detection may follow once the first sites are
+  measured (§8.8); short text alone is not a reliable signal (some valid pages are only a heading). Uploaded HTML is
+  never rendered. The site profile's `javascriptNeeded` field is removed.
+- **Hint, not a decision:** the source form's preflight (admin §4.7) fetches each start URL raw and rendered and shows
+  both main-text word counts, with "This site seems to need JavaScript" when the raw count is under half the rendered
+  one; the editor switches `fetchMode`. The crawl report's short-page note (§5.5) and the `parse.empty` text point to
+  the same setting.
+- **Fetch mode** is a document attribute (`Documents.FetchMode` `http`/`browser`, data-model §2.2); identity stays the
+  final URL of the main document's HTTP redirects (§3.2), whatever the page's script does.
 
-### 8.2 Contract (`IRenderer`, the seam)
-
-**Later (P2):** the seam as it will be written with a renderer; it is not in the code yet.
+### 8.2 Contract (`IRenderer`, `Connectors/Render/`)
 
 ```csharp
 public interface IRenderer
 {
     ValueTask<RenderResult> RenderAsync(RenderRequest request, IRenderFetcher fetcher, CancellationToken ct);
 }
-public sealed record RenderRequest(Uri Url, FetchedResponse MainDocument, TimeSpan Timeout, RenderWait WaitFor,
-    string? Selector, long MaxDomBytes, int MaxSubrequests, long MaxTransferBytes);
-public sealed record RenderResult(Uri FinalUrl, string Html, string? Title, IReadOnlyList<Link> Links,
-    RenderStats Stats, bool Truncated);
+public interface IRenderFetcher   // the worker's guarded fetch for every request the browser makes
+{
+    ValueTask<RenderResponse> FetchAsync(RenderSubrequest request, CancellationToken ct);
+}
+public sealed record RenderRequest(Uri Url, FetchedBody MainDocument, string? ReadySelector, RenderLimits Limits);
+public sealed record RenderResult(string Html, RenderStats Stats, IReadOnlyList<DataRequest> DataRequests, bool Ready);
+public sealed record DataRequest(Uri Url, string ContentHash);          // recorded for the later replay check (§8.5)
 ```
 
-The interface is backend-agnostic (answered 14); P1 has no interface, no implementation and no `rag-renderer`
-container.
+One fetch path for every HTTP source: **`PageFetcher`** (fetch → render for a `browser` source → store) is used
+by the crawl connector, the URL-list connector, the preflight and the stage preview; it replaces their three copies
+of fetch-then-`RawContentWriter.StoreAsync`. `PlaywrightRenderer` is the implementation; another backend (a lighter
+engine, a hosted service for anti-bot sites) can sit behind `IRenderer` later.
 
-### 8.3 Egress rule for a P2 renderer
+### 8.3 How a page is rendered
 
-**Later (P2):** decided now so the seam fits: the worker **fetches every browser request itself** with the guarded client
-(`IRenderFetcher`) and fulfils it (`Page.RouteAsync("**/*")` → `FulfillAsync`), as Open WebUI does
-(`owui/retrieval/web/utils.py:850-900`), because a route handler that only checks URLs leaves Chromium free to resolve
-again (rebinding) and does not see redirect hops (`onyx/utils/playwright_fetch.py:407`). Chromium then opens no
-network connection, the renderer sits only on the internal `ingestion` network, one fresh context per page, no
-cookies, downloads aborted, per-host concurrency 1 (answered 2); no render lease in `CrawlHosts` (§23).
+- **Process:** the worker drives the browser with Playwright .NET (`BrowserType.ConnectAsync`) over WebSocket to
+  `rag-renderer`, which runs only Playwright's `run-server` with Chromium (repo-and-deployment §5.4); the NuGet and
+  the server are the same exact version. One browser per worker connection, a warm pool of contexts, the browser
+  recycled after `Render:RecycleAfterPages` (200).
+- **Every request through the worker:** `RouteAsync("**/*")` sends each browser request to `IRenderFetcher`, which
+  fetches it with the guarded `HttpFetcher` (`EgressPurpose.Render`: guard, DNS pinning, robots.txt, caps, no
+  cookies, https → http refused) and answers with `FulfillAsync`. The main document is the body the worker already
+  fetched. Chromium itself opens no connection: `rag-renderer` sits only on the internal `render` network (no route
+  out, no DNS), so anything the route misses (WebSocket, DNS prefetch, a future API) fails closed. Service workers
+  blocked, downloads aborted, WebSockets routed and closed, no cookies or storage kept (a fresh context per page).
+- **Not fetched:** images, fonts, media, and requests to the tracker list (`Render:BlockedHosts`, a built-in list of
+  analytics, tag-manager and chat-widget hosts; the profile may add or exempt hosts). Fulfilled with an empty 204.
+- **Asset cache:** scripts and stylesheets are cached in the worker per (level, URL) for the run, within
+  `Render:AssetCacheMb` (128) and their `Cache-Control`; content-hashed bundles load once per run, not once per page.
+- **Ready:** the worker knows every open request, so a page is ready when `load` has fired and no request has been
+  open for `Render:QuietPeriod` (100 ms), or when `ReadySelector` (the profile's `mainRoot`) holds text; hard limit
+  `Render:PageTimeout` (20 s). No fixed network-idle wait.
+- **Output:** the DOM serialised after `<script>`, `<noscript>`, `<style>`, `<template>`, inline event handlers and
+  `<iframe>`s are removed; it is the document's raw content (`text/html`), and everything downstream (links, §12 noise
+  hash, raw blob, parse with the site profile) runs on it unchanged. Links are the rendered DOM's `<a href>`;
+  navigation done only in script is not followed.
+- **Limits:** at most `Render:MaxRequests` (50) and `Render:MaxBytes` (20 MB) per page; past them the remaining
+  requests get 204 (fact `truncated`). A main-frame navigation by script is aborted (fact `render.navigated`). A page
+  is kept only when it reached **ready**: with `readySelector` set, the selector must hold text; otherwise the quiet
+  period must have been reached before the deadline.
+- **Capacity:** `Render:MaxConcurrent` (2) renders per worker and `Render:MaxPerHost` (1) per host, to tune from
+  measurements. A fetch job **takes a render slot only when one is free**; otherwise it is released back to the queue
+  (`render.busy`, a short delay, no attempt counted), so browser work never holds the `fetch` slots that HTTP sources
+  need. The frontier, host budgets, retries and run reporting stay as they are.
+- **Politeness:** every request that leaves the worker (main document, data, uncached assets) counts against the host
+  budget's pacing (§6.3) like any fetch; cache hits and blocked requests don't. A page that needs ten uncached requests
+  on a host paced at 1 request/s costs about ten seconds of that host's budget: the host's request rate, not the
+  number of browsers, is the ceiling, so blocking and caching matter most.
 
-### 8.4 Rendered and non-rendered content of one URL
+### 8.4 Failures keep the last good content
 
-Removed (simplification pass): no `origin`/`rendered` document variants; identity is the final URL and the fetch mode
-is a document attribute (§8.1).
+No fallback to the raw HTML for a `browser` source: storing the empty shell would empty the document. A render that is
+not ready by `Render:PageTimeout` ends `render.timeout`; no renderer connection ends `render.unavailable`; no
+`Render:Endpoint` ends `render.not_configured` (no attempt counted; shown on the source page). All three are transient
+(retry after 5 min) and, like every failed fetch, **keep the document's last good content and chunks**. For the
+traversal a failed render counts as **not reached with its last good links**: the crawl continues from the links
+stored with the document's current content (`PageLinks.LoadAsync`, as a 304 does, §5.4), so the pages below it are
+neither missed nor proposed for deletion, and the run's completeness rule (§5.4) counts it as a failure. A render
+that fails all its attempts ends `failed` like any fetch (§15).
 
-### 8.5 Alternatives considered: a self-hosted crawler service
+### 8.5 Change detection for rendered pages
 
-A self-hosted Firecrawl was rejected (plan answered 14, 2026-10-29): the hard parts here (frontier and claims,
-per-host budgets, change detection, deletion guard, crawl rules, egress guard, site profiles, run integration) would
-still be ours, and it adds a second queue stack and an AGPL-3.0 component. If anti-bot sites ever matter, such a
-service can sit behind `IRenderer` (§8.2).
+An unchanged HTML shell, or a 304, says nothing about content loaded by script, so a `browser` source sends no
+conditional GET and **renders every page on every traversal**; only a `lastmod` skip (§5.4) on a host whose `lastmod`
+is reliable avoids the render. The noise hash (§12.2) of the rendered DOM decides "changed"; an unchanged rendered
+text gives the same parse and chunk outputs, so the engine's stage cache (6a §8) and the embedding cache keep the rest
+of the pipeline cheap.
+
+**Later, after measurement (§8.8): replay check.** A render records its data requests (`fetch`/XHR, `GET`, JSON or
+text) with their content hashes next to the page's links. The next fetch could replay them with the guarded client, no
+browser, and treat the page as unchanged when the shell and every data hash match; a manifest with a non-`GET` or a
+URL that changes per view always renders, and every page renders at least every `Render:MaxReplayAge` (7 days)
+regardless. Adopted only if the measurements show re-rendering is the cost that matters and the change scenario of
+§8.8 passes with it.
+
+### 8.6 Telemetry
+
+Event 5101 with `Purpose = Render` for a refused browser request (SIEM alert, identity §10); metrics
+`rag.worker.render.duration` (by outcome), `rag.worker.render.requests` (fetched, cached, blocked),
+`rag.worker.render.slots` (in use, busy releases); run item facts `fetchMode`, `renderMs`, `requests`, `truncated`;
+the crawl report counts rendered pages, render failures and pages kept from the last good content.
+
+### 8.7 Options weighed (2026-11-07)
+
+| Option | Verdict |
+|---|---|
+| **Browser-only container, the worker drives it** (chosen) | All crawling logic in one place; the renderer is stateless and reaches nothing but the worker. The extra hop per intercepted request costs milliseconds, small next to network latency and mostly avoided by the asset cache. |
+| Chromium in the worker image | Rejected: untrusted JavaScript would run next to the database credentials, the blob store and the gateway keys; ~500 MB more on the worker. |
+| The crawler inside the browser image (a Node service, Crawlee or a self-hosted Firecrawl) | Rejected: the same exposure, and frontier, guard and change detection twice in two languages (plan answered 14). |
+| The browser fetching through an egress proxy | Rejected: HTTPS can't be inspected without a private CA in the browser, and the guard's DNS pinning and redirect checks can't be enforced. |
+| A lighter engine (Lightpanda, CDP-compatible) | Not now; measured next to Chromium in the spike (to-verify #29), and can sit behind `IRenderer` if it renders the target sites. |
+| Automatic per-page detection (render only when the raw text is short) | Not in the first version: short text is not a reliable signal, and a shell with enough navigation text would be stored empty. |
+
+### 8.8 Measured before and after the first version
+
+Scenarios: the existing HTTP-only crawl (baseline, unchanged by the renderer); a mixed crawl with about 5 % `browser`
+pages; a JavaScript-only site, including a content change behind an unchanged shell (must be picked up on the next
+traversal). Measures: pages/hour, render p50/p95, requests per page (fetched, cached, blocked), renderer and worker
+peak memory, extracted text against what a browser shows, and **chat latency (p95) during the crawl** on the same
+host. Results in to-verify #29; the defaults of `Render:*` are set from them.
 
 ## 9. Uploads
 
@@ -767,7 +847,7 @@ item Z1; in P1 email files are refused (§9.2), so no connector creates child do
 
 | Stage | Check | Unchanged → |
 |---|---|---|
-| 1 | conditional GET (§4) or `lastmod` skip (§5.4); SharePoint (P2): delta reports no change | `NotModified`: validators and `FetchedAt` updated, document touched, `EnsureCurrent`, run item `unchanged`; no blob read |
+| 1 | conditional GET (§4; never for a `browser` source, §8.5) or `lastmod` skip (§5.4); SharePoint (P2): delta reports no change | `NotModified`: validators and `FetchedAt` updated, document touched, `EnsureCurrent`, run item `unchanged`; no blob read |
 | 2 | `ContentHash` = SHA-256 over the **normalised** content: HTML per §12.2 (the rules version is part of the hash input, below), everything else the raw bytes | no new blob, no new execution id; as above |
 
 Stage 1 saves nothing on hosts without validators and without reliable `lastmod`; stage 2 always applies (umea.se:
@@ -841,6 +921,7 @@ documents shown on save is not built.
 | `maxDepth`, `maxPages` | crawl | scope | raise: traversal now; lower: next traversal, never deletes (a limit makes it partial). Lowering also starts a traversal (the hashes cannot tell raising from lowering), still never deleting; a lowered `maxDepth` skips the deeper documents instead of marking the traversal partial |
 | `ignoreQueryParams`, `directoryIndexNames` | url-list, crawl | identity | full re-sync: every URL re-canonicalised and fetched; old identities not re-found removed at reconcile (exempt, count shown on save). A crawl's removals are `identity-changed`, and an identity no longer canonical under the current rules counts as changed too (covering site-profile `identityRule`/`ignoreQueryParams`); a URL list's old identities are removed as `removed-from-list` (exempt, same effect) |
 | `noiseSelectors` | url-list, crawl | behaviour | next sync; pages whose hash changes re-process once |
+| `fetchMode` (`http`/`browser`), `readySelector` (§8.1) | url-list, crawl | behaviour | a sync now that fetches every page again in the new mode (no conditional GET, no `lastmod` skip on that run); pages whose hash changes re-process once |
 | `conditionalGet`, `revalidateEvery` (1–100, default 4), `timeoutSeconds` (5–120, default 30) | url-list, crawl | behaviour | next sync |
 | `maxFileSizeMb` | upload | behaviour | new uploads only |
 | `piiMode` (`hold` default, `report`; Decisions table, 2026-11-01) | url-list, crawl, upload | cosmetic | none: read at each document's next swap (processing design §9.5); sets already `held` stay held until cleared or re-processed |
@@ -852,7 +933,7 @@ A source never moves between collections (a new source is created), so `collecti
 
 The schemas in `contracts/sources/v1/` hold the settings above per type, each with its `x-effect`.
 - `url-list`: `urls`, `ignoreQueryParams`, `directoryIndexNames`, `noiseSelectors`, `conditionalGet`,
-  `revalidateEvery`, `timeoutSeconds`.
+  `revalidateEvery`, `timeoutSeconds`, `fetchMode` (default `http`), `readySelector` (default `null`).
 - `crawl`: the URL-list behaviour and identity settings, plus `startUrls`, `sitemaps`, `extraHosts`, `include`,
   `exclude`, `demote`, `maxDepth` (0–50, default 10), `maxPages` (1–1,000,000, default 10,000), `crawlWindow`
   (default `22:00-06:00`) and `incrementalSchedule` (default `null`).
@@ -1118,11 +1199,10 @@ max 500 (§13.2); holds after rejection (§13.3).
 - The Sitevision fingerprint and the preset's session parameters (`sv.*` query parameters seen in umea.se's
   robots.txt) on two or three other Sitevision municipal sites.
 - P2: site-profile re-learn thresholds (empty-root rate, boilerplate share, text yield) on the umea.se corpus.
-- At P1 start: whether any pilot site needs JavaScript (decides the P2 renderer), and the pilot source inventory's
-  share of legacy Office, RTF and email files (decides whether they stay deferred).
-- P2 renderer only: Playwright .NET `RouteAsync("**/*")` + `FulfillAsync` for every resource type (module scripts,
-  CORS preflights), fulfilled redirects, `ServiceWorkers = Block`, and requests that bypass routing (WebSockets, DNS
-  prefetch).
+- The pilot source inventory's share of legacy Office, RTF and email files (decides whether they stay deferred).
+- Renderer (to-verify #29, the first item): Playwright .NET `RouteAsync("**/*")` + `FulfillAsync` for every resource
+  type (module scripts, CORS preflights), fulfilled redirects, `ServiceWorkers = Block`, and requests that bypass
+  routing (WebSockets, DNS prefetch).
 
 ## 23. Deferred or removed (simplification pass)
 
@@ -1130,7 +1210,7 @@ Per [`../archive/passes/simplification-pass.md`](../archive/passes/simplificatio
 
 | Item | Where it went |
 |---|---|
-| Renderer (`rag-renderer`, Playwright, render leases `CrawlHosts.RenderLease*`, JavaScript-only score, `render` source setting, `headless-render` fallback node, render metrics and health, `EgressPurpose.Render`) | P2, only if the P1-start check finds a pilot site that needs JavaScript (§1, §13.1); `IRenderer` seam and its egress rule kept (§8) |
+| Renderer (`rag-renderer`, Playwright, render leases `CrawlHosts.RenderLease*`, JavaScript-only score, `render` source setting, `headless-render` fallback node, render metrics and health, `EgressPurpose.Render`) | Back in scope (user, 2026-11-07) as §8 describes it: per-source `fetchMode`, no render leases, no JavaScript-only score, no fallback node |
 | Document variants `origin`/`rendered` (`Documents.Variant`, `RenderRecommendedAt`, `:r` dedup suffix, `variant-changed` exempt reason) | Removed: fetch mode will be a document attribute (§1) |
 | `degraded` `render.not_enabled` for short pages | Removed: info note in the crawl report (§1) |
 | Shared documents across sources (`DocumentSources` references, mirrored references, one pipeline per URL plus `EnsureCurrent` for the others, `shared` outcome) | Removed: documents per source, reuse by frontier and content-addressed caches (§2) |

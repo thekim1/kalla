@@ -77,6 +77,69 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** every other code item of both streams.
 - **Read:** Decisions "7-day rule in development"; identity §5.3.
 
+### [ ] A-9 Renderer spike (to-verify #29)
+- **Do:** prove the risky parts before building: Playwright .NET `ConnectAsync` to a `playwright run-server` container
+  on an internal network; `RouteAsync("**/*")` + `FulfillAsync` from a worker-side fetch for every resource type
+  (module scripts, CORS preflights, redirects); service workers blocked; WebSockets routed and closed; DNS prefetch and
+  anything unrouted fail closed on the internal network; Chromium's sandbox under Compose (seccomp profile vs
+  `--no-sandbox`); exact version pairing of the NuGet and the server. Measure the §8.8 scenarios on a fixture SPA and
+  on 2–3 real JavaScript sites (the user names them), Chromium and Lightpanda side by side. Throwaway code in a
+  scratch project; the result goes into to-verify #29 and the `Render:*` defaults.
+- **Paths:** `plans/work/results-a.md` (results); scratch code outside the repo or under `tests/spikes/` (not shipped).
+- **Done when:** results-a #29 records each check (pass/fail with evidence) and the measurements; the design points
+  that change are listed for main.
+- **Waits on:** the user's list of JavaScript sites for the real-site measurements (the fixture SPA can go first).
+- **Read:** Decisions "JavaScript rendering"; connectors §8, §22; repo-and-deployment §5.4.
+
+### [ ] A-10 Renderer image and deployment
+- **Do:** `images/renderer/Dockerfile` (official Playwright image by digest, `run-server` only, user 10002); Compose
+  service `rag-renderer` on a new internal `render` network (172.30.18.0/24) with the hardening and limits of
+  repo-and-deployment §5.4; `rag-worker` joins `render` and gets `Render__Endpoint`; the AppHost adds the container
+  (on by default, `Render:Mode` `off` skips it); `docker-user-firewall.sh` knows `render` (no egress); the images CI job
+  builds and tests it; `docs/network-and-ports.md` and `production-setup.md` updated.
+- **Paths:** `images/renderer/**`, `deploy/**`, `src/Ume.Rag.AppHost/**`, `.github/workflows/**`, `docs/**`.
+- **Done when:** the image builds in CI; a Compose config check shows the renderer only on `render`; a container test
+  shows it cannot resolve or reach anything outside `render`.
+- **Waits on:** A-9 (versions, sandbox decision).
+- **Read:** repo-and-deployment §5.4, §6.1; connectors §8.3.
+
+### [ ] A-11 Worker: `PageFetcher` and the Playwright renderer
+- **Do:** `Connectors/Render/` (`IRenderer`, `IRenderFetcher`, `PlaywrightRenderer`, the asset cache, blocked hosts,
+  limits, ready detection, DOM serialisation without scripts) and `PageFetcher` (fetch → render for a `browser`
+  source → `RawContentWriter.StoreAsync`), used by the crawl and URL-list connectors, the preflight and the stage
+  preview in place of their own copies. `EgressPurpose.Render`; render slots taken only when free, else the job is
+  released (`render.busy`, no attempt); `render.timeout`/`unavailable`/`not_configured` transient; a failed render keeps
+  the last good content and its links for the traversal; no conditional GET for `browser` sources;
+  `Documents.FetchMode` (migration); metrics and facts of §8.6; remove `SiteProfile.JavascriptNeeded`.
+- **Paths:** `src/Ume.Rag.Worker/**`, `src/Ume.Rag.Pipelines/**` (settings records), `src/Ume.Rag.Infrastructure/**`
+  (migration), `contracts/sources/v1/**`, their tests.
+- **Done when:** unit tests with a fake renderer (slot release, failures keep content and links, no fallback to the
+  shell, settings effect); an integration test against the real renderer container rendering a fixture SPA through the
+  worker's guard (a request to a private address is refused with 5101 `Purpose = Render`); the HTTP-only crawl tests
+  unchanged.
+- **Waits on:** A-9; A-10 for the integration test.
+- **Read:** connectors §8, §12, §5.4 (deletions); engine design (job release); data-model §2.2.
+
+### [ ] A-12 Settings and UI for `browser` sources
+- **Do:** source settings `fetchMode` and `readySelector` in the URL-list and crawl forms (generic forms where they
+  apply); the preflight's raw-vs-rendered word counts and the "seems to need JavaScript" hint; crawl report counts
+  (rendered, render failures, kept from last good content); `render.*` texts in `messages.ts`; the stage preview shows
+  the fetch mode. Built on a `main-session/` branch (admin API/UI paths are stream B's).
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/admin-ui/**`, `src/Ume.Rag.Worker/Preview/**`.
+- **Done when:** vitest and API tests; a browser check of the source form with a `browser` source and its preflight
+  (screenshot in the PR).
+- **Waits on:** A-11.
+- **Read:** connectors §8.1, §12.3; admin §4.7, §5.5.3.
+
+### [ ] A-13 Renderer live check (§8.8)
+- **Do:** run the §8.8 scenarios on the local stack: the HTTP-only baseline, a mixed crawl with about 5 % `browser`
+  pages, and a JavaScript-only site from the user's list including a content change behind an unchanged shell; record
+  pages/hour, render p50/p95, requests per page, peak memory, text against a browser and chat p95 during the crawl.
+- **Paths:** `plans/work/results-a.md`.
+- **Done when:** results recorded; `Render:*` defaults adjusted in a follow-up PR if the numbers say so.
+- **Waits on:** A-11, A-12; the user's site list.
+- **Read:** connectors §8.8.
+
 ## Live (the live block, see the roadmap)
 
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass

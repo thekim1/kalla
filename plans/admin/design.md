@@ -544,7 +544,7 @@ pass §9) and `pg_notify('rag_jobs', class)` in the same transaction as any conf
 | Admin action | Class / kind | Dedup key | Priority | Result read from |
 |---|---|---|---|---|
 | Preview (sample pages) | `preview` `stage-preview` (≤ 5 `documentIds`, `urls` or `uploadIds`; `collectionId`; optional `embed`); for a crawl host without a profile first `preview` `site-profile` (learns it; before/after; **P2**, weakness review §1: in P1 the host's manual profile or the Sitevision preset is applied) | – | – | `Jobs.Result` + preview blobs |
-| Preflight (unsaved source) | `preview` `preflight` (URL lists: first 20 URLs; the unsaved settings as an object, checked first against the sources schema, V25) | – | – | `Jobs.Result`: worst state, one `<area>.<code>` code per check (no Swedish text; the UI maps codes to text in `messages.ts`), `estimatedPages`, `cms` |
+| Preflight (unsaved source) | `preview` `preflight` (URL lists: first 20 URLs; the unsaved settings as an object, checked first against the sources schema, V25) | – | – | `Jobs.Result`: worst state, one `<area>.<code>` code per check (no Swedish text; the UI maps codes to text in `messages.ts`), `estimatedPages`, `cms`, and per start URL the raw and rendered main-text word counts with `render.suggested` when the raw count is under half (connectors §8.1; needs the renderer) |
 | PII highlights | `preview` `stage-preview` until the personal-data stage, `piiSpans: true` | `pii-preview:{documentId}` | – | preview blobs (24 h) |
 | Publish plan | `preview` `publish-plan` (P1: every document of the collection; from effect tags in P2, weakness review §1) | `plan:{pipelineId}` | – | `Jobs.Result` |
 | Evaluation run (retrieval settings saved, **Kör utvärdering**) | `eval` `on-demand` (`variants` in one job; optional `candidateSettings`, runs marked `candidate`) | `eval:{collectionId}` | – | `EvaluationRuns` |
@@ -842,6 +842,12 @@ Borttagning väntar på beslut · körning 30 okt. 01:12
   Exempel (50)  │ https://www.umea.se/bygga/…/altan │ senast sedd 23 okt. │ 200 │    [Ladda ner alla (CSV)]
   [Behåll dokumenten]  [Ta bort 212 dokument]
 ```
+
+**JavaScript pages** (connectors design §8; Decisions "JavaScript rendering"): the URL-list and crawl forms have *Fetch
+pages with* *HTTP* (default) / *A browser (JavaScript)* (`fetchMode`) and, for the browser, an optional *Content is
+ready when this element has text* (`readySelector`, CSS). The preflight shows the raw and rendered word counts per start
+URL and, when the raw page holds under half the text, "This site seems to need JavaScript" with a button that switches
+the setting. The crawl report counts rendered pages, render failures and pages kept from their last good content.
 
 #### 5.5.4 Assistent with test panel
 

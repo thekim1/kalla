@@ -46,7 +46,7 @@ contracts/skill/v1/                  manifest.schema.json (`ume-rag.json` skill 
 contracts/admin/v1/                  error-codes.json (admin API error codes; CI checks the UI's texts cover every code, admin design §4.1)
 images/
   postgres/Dockerfile                stock pgvector image (digest-pinned) + PGDG `pgbackrest` package and `pgbackrest.conf` (§5.2)
-  renderer/Dockerfile                P2, only if needed: Playwright server + Chromium headless shell
+  renderer/Dockerfile                Playwright run-server + Chromium (connectors design §8)
   clamav/Dockerfile                  ClamAV + freshclam updating directly from database.clamav.net (decided: no mirror, §5.5); clamd.conf, freshclam.conf, test.sh (image test)
 templates/mcp-server/                P2: `dotnet new ume-mcp-server` template, packaged as `Ume.Rag.Templates` (contents: tools design §8.1)
 infra/entra/                         Bicep (Graph extension) for RAG's own app registrations, applied by entra.yml (§8.1)
@@ -157,7 +157,7 @@ No `site/` (the gateway's GitHub Pages product page) until the user-facing name 
 | | `Microsoft.ML.Tokenizers` | 2.0.1 | NuGet-checked (chunk sizing) |
 | Ingestion | `AngleSharp` 1.8.6, `SmartReader` 0.11.1 | as listed | NuGet-checked (the worker parses HTML, text, Markdown and CSV only; every PDF goes to the parser) |
 | | `Microsoft.Graph` | 6.9.0 | NuGet-checked; P2, worker only (SharePoint). The P2 Graph member-group lookup needs no SDK: the admin copies the gateway's plain `GraphTokenClient` + `HttpClient` (identity design §2.4, gateway design §4.4) |
-| | `Microsoft.Playwright` | same as renderer image (§5.4) | P2, only with the renderer; *to verify*; exact match required |
+| | `Microsoft.Playwright` | same as renderer image (§5.4) | the worker's renderer client; exact match with the server required (to-verify #29) |
 | | `Cronos` | 0.13.0 (2026-04-29; syntax and DST tests with the scheduler) | schedules (worker) |
 | Pipelines | JSON Schema 2020-12 validator `LateApexEarlySpeed.Json.Schema` | 4.2.2 (BSD-3-Clause; to-verify #17: `JsonSchema.Net` 9.x binaries ship under an Open Source Maintenance Fee Agreement, so they are not used; Corvus' validator was checked first and left out because its analyzers flow into every consuming project) | P1, `Ume.Rag.Pipelines` (template parameter schemas, admin and worker; generic schema-driven admin forms) |
 | Text | `sv_SE` Hunspell word list (LibreOffice dictionaries, pinned commit and SHA-256) | – | embedded resource of `SwedishDecompounder` (data-model §3.1); licence in postponed P2 |
@@ -291,7 +291,7 @@ Admin settings (admin design §2.2–§2.3, §4.10): `Admin:GatewayAdminUrl` (cr
 P2 `OrgSync:MaxAgeHours` 24 with the Graph member-group lookup (identity design §2.1); key `OrgSync__DataApiKey`, §6.3).
 
 Worker settings besides `Worker:*` (connectors design §7, §8): `Crawl:AllowedPrivateRanges` (fed from
-`UME_RAG_CRAWL_ALLOW`, §7.1); `Crawl:CompletenessRule` (`Ratio` default, `Strict`; connectors design §5.4); P2 with the renderer `Renderer:MaxPages` (2). Platform-wide crawl values live in `config."Settings".Crawl`.
+`UME_RAG_CRAWL_ALLOW`, §7.1); `Crawl:CompletenessRule` (`Ratio` default, `Strict`; connectors design §5.4); the renderer's `Render:Endpoint` (the `rag-renderer` WebSocket URL; empty: no renderer, `browser` sources wait with `render.not_configured`), `Render:MaxConcurrent` (2), `Render:MaxPerHost` (1), `Render:PageTimeout` (20 s), `Render:MaxRequests` (50), `Render:MaxBytes` (20 MB), `Render:QuietPeriod` (100 ms), `Render:AssetCacheMb` (128), `Render:RecycleAfterPages` (200), `Render:BlockedHosts` (connectors design §8.3). Platform-wide crawl values live in `config."Settings".Crawl`.
 
 Platform settings (data-model §5): `Config:MaxUnconfirmedSeconds` (90 s grace window for security-relevant decisions
 on every service).
@@ -428,8 +428,7 @@ vectors when we run against a real local gateway.
 All Dockerfiles: digest-pinned `FROM`, multi-stage, `apt-get` versions from the pinned base only, no package caches,
 `LABEL org.opencontainers.image.source/version/revision`, `USER` numeric, no shell needed at runtime for the .NET
 images (chiseled). Compose adds `read_only`, `cap_drop: [ALL]`, `no-new-privileges` (the gateway's `x-hardened`
-anchor). The renderer image (`images/renderer/`, Playwright server + Chromium) is built only if the renderer is
-adopted (P2, §5.4).
+anchor). The renderer image (`images/renderer/`, Playwright server + Chromium, §5.4) is built with the others.
 
 ### 5.2 Postgres (stock image + pgBackRest)
 
@@ -466,12 +465,15 @@ pages per request, 2 000 pages per document, 120 s deadline, inspect 10 s (parse
 a second target (`--target gpu`). A `test` target runs the offline tests during the build. Port **8000**: plain HTTP
 in dev, TLS through `PARSER_TLS_*` in production Compose. Size budget ≤ 4.0 GB with the NER model; measured 2.88 GB.
 
-### 5.4 Renderer image (P2, only if needed)
+### 5.4 Renderer image (`images/renderer/Dockerfile`)
 
-**Later (P2):** built only if a P1-start check shows that pilot sites need JavaScript (umea.se is server-rendered; simplification
-pass §1, §13). The design stays in connectors design §8 (Playwright server + Chromium headless shell, exact
-`playwright-core` = `Microsoft.Playwright` version, worker-side SSRF on every browser request, no egress, Chromium
-sandbox via Chrome's seccomp profile).
+Decided 2026-11-07 (Decisions "JavaScript rendering"; connectors design §8): the official Playwright image pinned by
+digest, running only `playwright run-server` (the exact version of the worker's `Microsoft.Playwright`) with Chromium;
+no other process, no logic, no volumes. User 10002, `read_only` with a `tmpfs` `/tmp`, `cap_drop: [ALL]`,
+`no-new-privileges`, Chromium's sandbox through Chrome's seccomp profile (or `--no-sandbox` if the spike shows the
+profile cannot work under Compose; the network isolation is the boundary either way, to-verify #29), `shm_size` 1 GB,
+memory 2 GB and 2 CPUs by default (`compose.host-24g.yaml` may raise them), `pids_limit`. Only on the internal
+`render` network (§6.1): Chromium has no route out and no DNS; the worker fetches and fulfils every request.
 
 ### 5.5 ClamAV image (`images/clamav/Dockerfile`)
 
@@ -519,9 +521,10 @@ allowed to reach it, and the egress chain matches such endpoints by their origin
 | `data` | 172.30.2.0/24 | **yes** | postgres, rag-api(+b), rag-admin(+b), rag-worker, rag-migrate | none |
 | `backup` | 172.30.16.0/24 | no | postgres (pgBackRest `archive-push` and backups, §7.4) | firewall: only the S3 endpoint of the backup target (`UME_RAG_BACKUP_ENDPOINT`); none with a mounted share (§7.4) |
 | `llm` | 172.30.3.0/24 | no | rag-api(+b), rag-worker, rag-admin(+b) | firewall: the gateway's address and port (gateway's `llm` name); for api and admin, whose default route it holds, also the OIDC authority (`UME_RAG_OIDC_AUTHORITY`: the shared Keycloak in the pilot, `login.microsoftonline.com` with Entra from P2; from P2 Graph for the admin's member-group lookup and the api's JWKS, Graph and OBO, identity design §7–§9), the Open WebUI host (the api's feedback import, chat design §14.2) and the OTLP endpoint |
-| `ingestion` | 172.30.4.0/24 | **yes** | rag-worker, rag-clamav (P2: rag-renderer, if adopted) | none |
+| `ingestion` | 172.30.4.0/24 | **yes** | rag-worker, rag-clamav | none |
+| `render` | 172.30.18.0/24 | **yes** | rag-worker, rag-renderer (connectors design §8.3) | none: the renderer has no other network, so Chromium reaches nothing but the worker |
 | `parser` | 172.30.5.0/24 | **yes** | rag-worker, rag-parser | none (parser has no other network) |
-| `crawl` | 172.30.6.0/24 | no | rag-worker (default route; a P2 renderer is **not** on it: the worker fetches and fulfils every browser request, connectors design §8.3) | firewall: the gateway and the OTLP endpoint (the worker's calls leave here), the allow-list `UME_RAG_CRAWL_ALLOW` (municipal hosts), then nothing private (RFC 1918, CGNAT, loopback, link-local, documentation, multicast, reserved), the rest of the Internet; app-level `IEgressGuard` in addition |
+| `crawl` | 172.30.6.0/24 | no | rag-worker (default route; the renderer is **not** on it: the worker fetches and fulfils every browser request, connectors design §8.3) | firewall: the gateway and the OTLP endpoint (the worker's calls leave here), the allow-list `UME_RAG_CRAWL_ALLOW` (municipal hosts), then nothing private (RFC 1918, CGNAT, loopback, link-local, documentation, multicast, reserved), the rest of the Internet; app-level `IEgressGuard` in addition |
 | `mirror` | 172.30.7.0/24 | no | rag-clamav | firewall: only `database.clamav.net:443` (decided: no internal mirror), or only freshclam's proxy (`UME_RAG_FRESHCLAM_PROXY`) |
 | `openwebui` | 172.30.17.0/24 | no | open-webui (optional, `compose.openwebui.yaml`) | firewall: rag-api's public URL (through the proxy) and the OIDC provider; none without `UME_RAG_OPENWEBUI_HOST` |
 | `mcp` (P2) | *to allocate* | **yes** | rag-api(+b) and rag-admin(+b) (in-process tool hub; skill gate, discovery, drift polling), hosted MCP servers; never rag-worker | none |
@@ -660,7 +663,7 @@ Redis and one object store (single node on its own encrypted disk) on the data h
 |---|---|
 | Networks | routed LAN + host firewall + TLS, no Docker overlay; each host publishes only the ports its peers need on its LAN address (D: 5432, 6379 TLS, 443 S3); `deploy/host/docker-user-firewall.sh` gains a peer list per role; `pg_hba.conf` lists each peer host per role; every host with `fetch` gets the same `crawl` network, firewall script and `UME_RAG_CRAWL_ALLOW`, with its own egress canary |
 | Compose files | `compose.data.yaml`, `compose.api.yaml`, `compose.admin.yaml`, `compose.ingestion.yaml` (exists), `compose.parser.yaml`; `init-deployment.sh --role data\|api\|ingestion\|processing\|all` writes that host's `.env`, certificates and only its secrets |
-| Host-local only | parser (each parser host runs its own `parse` worker on its internal `parser` network), clamd and a P2 renderer if adopted (one per fetch host): never published on the LAN |
+| Host-local only | parser (each parser host runs its own `parse` worker on its internal `parser` network), clamd and the renderer (one per fetch host): never published on the LAN |
 | Blobs | the object store replaces the `rag-blobs` volume beyond one host; the upload copy (§7.4) by bucket replication or `rclone`/server tooling |
 | Must be single | Postgres primary (plus a streaming standby on another host, required before production beyond the pilot, §7.4), Redis, object store, migrations (one-shot), lease leaders |
 | Connections | Σ over instances of pool + LISTEN per role within the role's limit (data-model §1.1), checked at deploy time by `deploy/postgres/connection-budget.sh` |
@@ -716,13 +719,13 @@ from `deploy/.env` lines `UME_RAG_EMBEDDING_MODEL`, `_DIMENSIONS`, `_REQUEST_DIM
 are its own and carry the gateway's existing per-key `MaxConcurrentRequests` cap, so a misconfigured worker fleet
 cannot starve chat's query embeddings. A separate query-embedding route/replica follows only when its trigger fires
 (query embedding p95 during ingestion > 2 × idle).
-Ownership: 999 (postgres; P2 redis), 1654 (.NET services, the upload copy), 10001 (parser), 10002 (P2 renderer), 1000
+Ownership: 999 (postgres; P2 redis), 1654 (.NET services, the upload copy), 10001 (parser), 10002 (renderer), 1000
 (clamav, Open WebUI).
 
 ### 7.2 `build-release-bundle.sh`
 
 Same as the gateway's: `API_IMAGE ADMIN_IMAGE WORKER_IMAGE MIGRATIONS_IMAGE PARSER_IMAGE CLAMAV_IMAGE
-POSTGRES_IMAGE` (`ume-rag/postgres`; + `RENDERER_IMAGE` if adopted), each pinned by digest, are written into every `${X_IMAGE:-…}` default; the
+POSTGRES_IMAGE` (`ume-rag/postgres`), `RENDERER_IMAGE`, each pinned by digest, are written into every `${X_IMAGE:-…}` default; the
 script fails on an unpinned image. Output `ume-rag-X.Y.Z.tar.gz` with `deploy/` (compose files, scripts,
 `postgres/`, `pgbackrest/`, `redis/`, `proxy/`, `otel/`, `host/`). No Portainer stack in P0/P1 (§12.9).
 
@@ -893,7 +896,7 @@ p50/p95/p99).
   1001–3003 (2008, 3003 added by gateway release 2; 2007 with the P2 Graph lookup); ours **5001–6999**: `5001 rag.auth.failed`, `5002 rag.access.denied`, `5003 rag.residency.refused`,
   `5004 rag.config.stale_refused`, `5005 rag.ceiling.refused`, `5101 rag.egress.blocked` (SSRF), `5102
   rag.malware.detected`, `5103 rag.pii.flagged`, `6001 rag.admin.change`, `6002 rag.admin.signin`, `6003
-  rag.admin.signout`, `6004 rag.conversation.access`; 5101/5102 attributes per connectors design §7, §11 (SIEM: any 5102; P2 with the renderer: 5101 from `Render`); the engine design adds `5105 rag.pipeline.refused` and log scopes `ExecutionId`, `Stage`; the parser design adds `5104 rag.parser.limit_exceeded` (worker); identity adds `5006 rag.auth.throttled`, `5007` (reserved for the P2 Graph member-group lookup), `5008 rag.key.unexpected_use`, `5009 rag.mcp.client_refused`, `5010 rag.obo.refused`,
+  rag.admin.signout`, `6004 rag.conversation.access`; 5101/5102 attributes per connectors design §7, §11 (SIEM: any 5102; 5101 from `Render`); the engine design adds `5105 rag.pipeline.refused` and log scopes `ExecutionId`, `Stage`; the parser design adds `5104 rag.parser.limit_exceeded` (worker); identity adds `5006 rag.auth.throttled`, `5007` (reserved for the P2 Graph member-group lookup), `5008 rag.key.unexpected_use`, `5009 rag.mcp.client_refused`, `5010 rag.obo.refused`,
   `6005 rag.admin.session.extended`, `6006 rag.admin.access.denied`, `6007 rag.admin.data.read`; the chat design adds `5011 rag.gateway.delegation_missing`; the tools design adds (from `rag-api` and `rag-admin`) `5012 rag.tool.definition_changed`,
   `5013 rag.tool.upstream_refused`, `5014 rag.content.tag_neutralised`, `5015 rag.tool.result_refused` (tools design §9.3)
   (full table: identity design §10). Names and ids are a public contract (add, never rename).
@@ -946,7 +949,7 @@ connection budget can no longer be fixed per host. What changes against Compose:
 
 | Compose | Kubernetes |
 |---|---|
-| internal networks, firewall on bridges | NetworkPolicies: parser ingress only from worker, egress none; crawl egress via an egress gateway or CIDR policy |
+| internal networks, firewall on bridges | NetworkPolicies: parser and renderer ingress only from worker, egress none; crawl egress via an egress gateway or CIDR policy |
 | CPU shares, slice | requests/limits, `PriorityClass` `rag-data-plane` > `rag-ingestion`, ResourceQuota per namespace (`ume-rag`, `ume-rag-ingestion`) |
 | one host | ingestion on its own node pool (`nodeSelector` + taint); data plane never schedules OCR (plan §2) |
 | file blob volume | S3-compatible or Azure Blob only (no RWX volume) |
@@ -1018,7 +1021,7 @@ decided form of the simplification pass (2026-10-30).
 | 9 | Portainer | The gateway ships `compose.portainer.yaml`; operations may expect it | Skip in P0/P1 (init-deployment covers the pilot host); add if operations ask |
 | 10 | Supply chain in both repos | Gateway pins actions by tag and signs nothing | Propose for both repos together (compatibility): actions pinned by SHA, `attest-build-provenance` on images |
 | 11 | Pilot key service | Envelope encryption needs a production `IKeyProvider` from P1 (for `internal` blobs; chat content keys only once A1 allows stored content, weakness review §4) | **Postponed: file key provider in the pilot** with the rules in plan §8a (`--key-provider file --allow-file-keys`, chat master keys only in api/admin, the blob master key in worker/admin and read-only in api (§6.3), long-lived keys escrowed (§7.4), no `sensitive` data); Azure Key Vault later via the `rewrap` command (`../postponed-decisions.md` K1) |
-| 12 | Package versions | Docling, FastAPI, MCP SDK (2.3.0 checked, knowledge design), Playwright (P2, if the renderer is adopted), Cronos, the JSON Schema validator (engine design §23), Azure Key Vault SDK, `Aspire.Hosting.Python`, the `pgvector/pgvector` tag for 0.8.7 on Postgres 17 (0.8.7 checked, knowledge design), ClamAV tag, Open WebUI tag, the pgBackRest package | Exact versions and digests, under the 7-day rule of §2.3 (suspended until go-live; every pin younger than 7 days is reviewed before go-live). Recorded: ClamAV `1.4.6_base` by digest (§5.1); Open WebUI v0.12.3 by digest (§4.1); JSON Schema validator `LateApexEarlySpeed.Json.Schema` 4.2.2 (§2.2); parser `docling-slim` 2.142.0 (§5.3) |
+| 12 | Package versions | Docling, FastAPI, MCP SDK (2.3.0 checked, knowledge design), Playwright (the renderer, to-verify #29), Cronos, the JSON Schema validator (engine design §23), Azure Key Vault SDK, `Aspire.Hosting.Python`, the `pgvector/pgvector` tag for 0.8.7 on Postgres 17 (0.8.7 checked, knowledge design), ClamAV tag, Open WebUI tag, the pgBackRest package | Exact versions and digests, under the 7-day rule of §2.3 (suspended until go-live; every pin younger than 7 days is reviewed before go-live). Recorded: ClamAV `1.4.6_base` by digest (§5.1); Open WebUI v0.12.3 by digest (§4.1); JSON Schema validator `LateApexEarlySpeed.Json.Schema` 4.2.2 (§2.2); parser `docling-slim` 2.142.0 (§5.3) |
 | 13 | Aspire minor | `kernel-memory-and-dotnet.md` lists `Aspire.Hosting.PostgreSQL` 13.6.4; the gateway pins 13.6.1 | Stay on 13.6.1 with the gateway; upgrade both together |
 | 14 | Blob volume shared by admin and worker | File volume works only on one host; uploads arrive at the admin | Accepted for the pilot (plan §12.1); S3/Azure Blob is a precondition of §6.4 |
 | 15 | ClamAV updates | Plan §2 assumed a controlled mirror | **Decided: direct, no mirror**: freshclam updates from `database.clamav.net`, allowed through the host firewall for the `mirror` network only |
@@ -1034,7 +1037,8 @@ See [`../archive/passes/simplification-pass.md`](../archive/passes/simplificatio
 | Tier SQL files, tier loop, tier test matrix, per-tier buckets, `Tier` log scope (§5) | Removed: separate deployment if ever needed (T1/K2) |
 | `rag-tools` container, role `ume_rag_tools`, `tools`/`tools-egress` networks, `ToolHub__*`, its secrets (§10) | P2 hub in-process in `rag-api` and `rag-admin`; a separate service only with the first external, OBO or write tool (P3) |
 | `tools/Ume.Rag.McpGen`, `Microsoft.OpenApi`; `Mcp:AskAssistantTimeout` (§10) | Dropped; P3 |
-| Renderer image, resource and settings, `Microsoft.Playwright`; `PdfPig` (§1, §9) | P2 if needed; removed (every PDF to the parser) |
+| Renderer image, resource and settings, `Microsoft.Playwright` | back in scope (user, 2026-11-07; §5.4, connectors design §8) |
+| `PdfPig` (§1, §9) | removed (every PDF to the parser) |
 | EasyOCR, `ocr_bakeoff.py`, `tesseract-ocr-eng`, `PARSER_OCR_DEFAULT`; `NER_LANES`; LibreOffice, `soffice-sandboxed`, `office.py`, `mail/` and `python-oxmsg` (§1) | Dropped; P2 with legacy Office, RTF and email |
 | Vue Flow and the canvas budget; Open WebUI task model, SQL pruning and the pruning sidecar (§1, §2) | Dropped; generation off, feedback pruning via its API, chat copies open (W2) |
 | `Gateway__ServiceKey`, `Gateway:AttributionMode`, `Gateway:SendResidencyCeiling`, interim keys; shared Entra registration (§6, §7) | Replaced: keys per level and deployable; RAG's own registrations |

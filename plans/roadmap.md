@@ -22,6 +22,9 @@ Three tracks:
 
 1. **Code leftovers**, small and mostly unblocked: [`work/stream-a.md`](work/stream-a.md),
    [`work/stream-b.md`](work/stream-b.md), [`work/main.md`](work/main.md).
+   **JavaScript rendering** (user, 2026-11-07; connectors design §8): some sites the platform will crawl need it, so
+   the renderer is built now (stream A, A-9 to A-13: spike, image, worker, settings and UI, live check). It is not a
+   go-live gate for the umea.se pilot, which is server-rendered.
 2. **The live block**, run in one go once its inputs exist (order where the inputs allow):
    1. gateway and Keycloak for the pilot (gateway session: release 1, EU routes, pilot keys, shared realm);
    2. U1 with the web editors, then the umea.se crawl in full and the `lastmod` sample's first pass;
@@ -57,9 +60,9 @@ work split is written when P1b is live.
   and E1 are solved; owner-team edit scoping.
 - **Assistants:** version diff, per-assistant test-question sets, templates and presets (architecture plan item 3),
   copy; unused-assistant attention items; the drawn Map.
-- **Ingestion:** site-profile learning and re-learning, a crawl frontier shared between sources, SharePoint, a
-  renderer if sources need JavaScript, legacy Office/RTF/e-mail/archives (Z1), parse-profile proposals, adaptive
-  embedding concurrency.
+- **Ingestion:** site-profile learning and re-learning, a crawl frontier shared between sources, SharePoint, the
+  renderer's replay check and path rules (after measurement), legacy Office/RTF/e-mail/archives (Z1), parse-profile
+  proposals, adaptive embedding concurrency.
 - **Answer quality:** nightly answer judge, publish plans from effect tags, rerank (a separate gateway release with an
   on-prem reranker), on-prem models when hardware exists (M2).
 - **Tools and skills:** skills with know-how and tools, the in-process tool hub (`hosted` servers, read-only tools),
