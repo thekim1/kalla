@@ -133,7 +133,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** A-11.
 - **Read:** connectors §8.1, §12.3; admin §4.7, §5.5.3.
 
-### [ ] A-13 Renderer live check (§8.8)
+### [x] A-13 Renderer live check (§8.8)
 - **Do:** run the §8.8 scenarios on the local stack: the HTTP-only baseline, a mixed crawl with about 5 % `browser`
   pages, and a JavaScript-only site from the user's list including a content change behind an unchanged shell; record
   pages/hour, render p50/p95, requests per page, peak memory, text against a browser and chat p95 during the crawl.
