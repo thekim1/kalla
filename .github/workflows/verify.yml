@@ -266,7 +266,7 @@ jobs:
               --gateway-key-file Eu="$d/keys/eu" --gateway-key-file worker:Eu="$d/keys/worker-eu" \
               --gateway-key-file External="$d/keys/external" --openwebui-host chat.example.se \
               --openwebui-api-key-file "$d/keys/owui-key" --openwebui-oidc-client-secret-file "$d/keys/owui-secret" \
-              --org-sync-url https://data.example.se/v1/ --org-sync-key-file "$d/keys/data-api" \
+              --org-sync-url https://data.example.se/v1/ --org-sync-key-file "$d/keys/data-api" --proxy-address 10.1.2.3 \
               --backup-target local --allow-file-keys --no-chown --yes "$@"
           }
           generated() {
@@ -297,6 +297,15 @@ jobs:
             | jq -e '.services["rag-admin"].environment.OrgSync__BaseUrl == "https://data.example.se"' >/dev/null
           if out="$(init --org-sync-url http://data.example.se 2>&1)"; then echo "an http:// Data API was accepted"; exit 1; fi
           grep -q 'org-sync-url must be an https:// URL' <<< "$out"
+          # The published ports admit only the proxy (#453): --proxy-address lands in .env, the firewall rejects the rest.
+          grep -qx 'UME_RAG_PROXY_SOURCES=10.1.2.3' "$d/deploy/.env"
+          if out="$(init --proxy-address proxy.example.se 2>&1)"; then echo "a host name was accepted as --proxy-address"; exit 1; fi
+          printf 'UME_RAG_API_PORT=8543\nUME_RAG_ADMIN_PORT=9543\nUME_RAG_PROXY_SOURCES=10.1.2.3\n' > "$d/proxy.env"
+          rules="$(bash deploy/host/docker-user-firewall.sh --dry-run --env-file "$d/proxy.env" --dns 192.0.2.53)"
+          grep -qF -- '-A UME-RAG-EGRESS -s 10.1.2.3 -p tcp -m conntrack --ctstate DNAT --ctorigdstport 8543 -j RETURN' <<< "$rules"
+          grep -qF -- '-A UME-RAG-EGRESS -p tcp -m conntrack --ctstate DNAT --ctorigdstport 9543 -j REJECT' <<< "$rules"
+          # Item 3: Open WebUI without --proxy says it can't reach rag-api.
+          grep -q "Without --proxy, Open WebUI can't reach rag-api" "$d/init.log"
           docker compose -f "$d/deploy/compose.openwebui.yaml" --env-file "$d/deploy/.env" config --quiet
           docker compose --env-file "$d/deploy/.env" config --quiet
       - name: Pilot caps, Open WebUI key restriction and the feedback service account

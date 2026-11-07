@@ -162,6 +162,7 @@ added by hand. After the first run the files belong to the containers' users, so
 | `--role all` | `all` | multi-host roles come with P2 |
 | `--proxy` | – | a reverse proxy terminates public TLS: two distinct host names, listeners on `0.0.0.0` |
 | `--upstream-host HOST` | the host name | the address the proxy uses to reach this host |
+| `--proxy-address ADDR[,ADDR]` | – | the proxy's IPv4 source addresses or CIDRs: the host firewall accepts new connections to the published ports only from these (`UME_RAG_PROXY_SOURCES`). Without it, restrict the ports in a network firewall |
 | `--api-cert`, `--api-key`, `--admin-cert`, `--admin-key FILE` | – | certificates from your PKI for the public listeners (all four) instead of the internal CA |
 | `--certs-dir DIR`, `--secrets-dir DIR` | `deploy/certs`, `deploy/secrets` | where the files go |
 | `--no-chown` | – | leave the files owned by you |
