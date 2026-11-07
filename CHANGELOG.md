@@ -40,6 +40,17 @@ P1a code on FakeGateway and fixtures (code first, live testing last); nothing de
   reproducibility test (#137).
 - Pilot stack: test-host run book, the Open WebUI feedback service account and `deploy/openwebui-feedback-key.sh`,
   the runbook's public-records routes, `deploy/tests/pilot-stack.sh` (#135).
+- JavaScript rendering: `images/renderer` (Playwright 1.64.1 `launch-server`, Chromium with its sandbox, secret
+  WebSocket path, WebRTC off) on the internal `render` network; the worker drives it and fetches every browser request
+  through its egress guard; `PageFetcher` as the one fetch path; source settings `fetchMode`, `readySelector`,
+  `scrollToLoad`; `Documents.FetchMode`; the preflight compares raw and rendered text (#459, #462, #463, #472).
+- Politeness profiles per host in `Settings.Crawl.hostOverrides` (presets, rate, connections, `Crawl-delay`, window,
+  back-off, breaker, robots.txt ignore with a reason, User-Agent) with the ceilings `Crawl:MaxHostRate` and
+  `Crawl:MaxHostConnections`, V37 and a host table in the admin UI (#461).
+- Crawler: meta refresh as a redirect hop, `redirect.cookie_required`, sniffing a missing or `octet-stream` type,
+  a soft-404 fingerprint per host (`http.soft_404`), challenge pages as `http.challenge`, sitemap retries and text
+  sitemaps (#460).
+- Settings model fields as pickers that grey out models the platform's key may not use (#473).
 
 ### Changed
 
@@ -56,6 +67,11 @@ P1a code on FakeGateway and fixtures (code first, live testing last); nothing de
   `failed` (`clamav.unavailable`) (#143).
 - Open WebUI: password sign-in off (`ENABLE_PASSWORD_AUTH=false`, on only while the key script runs) and
   `DEFAULT_USER_ROLE=user` for OIDC sign-ins (#135).
+- A URL that failed at any depth in a run is never a `not-seen` deletion candidate in that run, not only a seed
+  (#460).
+- Site-profile identity rules match with the non-backtracking engine and no timeout: under load a timeout kept a
+  URL's path form and gave one page two documents (#475).
+- `Retrieval:GatewayRerankTimeout` defaults to 1.5 s (was 500 ms) for the Foundry reranker (#439).
 
 ## 0.1.0 (2026-10-31)
 
