@@ -142,7 +142,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** A-11, A-12; the user's site list.
 - **Read:** connectors §8.8.
 
-### [ ] A-14 Politeness profiles per host (connectors §6.6)
+### [x] A-14 Politeness profiles per host (connectors §6.6)
 - **Do:** widen `HostOverride` into the §6.6 profile (preset and members; `robots: ignore` with `reason`, `userAgent`)
   and read it in `PlatformCrawlSettings`; apply it in the host budget (rate, connections, `Crawl-delay`, latency term,
   back-off caps, circuit breaker), the crawl window, `RobotsCache` (ignore per host; `Sitemap:` lines still read) and

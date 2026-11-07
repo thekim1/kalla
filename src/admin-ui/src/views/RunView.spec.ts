@@ -42,6 +42,29 @@ describe('Run (admin design §5.5.3; #278 slice 2)', () => {
     expect(items).toHaveBeenLastCalledWith('r1', expect.objectContaining({ outcome: 'failed' }))
   })
 
+  it('names the websites fetched with their own politeness and why robots.txt was ignored (connectors design §6.6)', async () => {
+    setActivePinia(createPinia())
+    const none = {
+      requestsPerSecond: null, maxConnections: null, crawlDelay: null, adaptToLatency: null, crawlWindow: null, maxRetryAfterSeconds: null,
+      maxBackoffFactor: null, breakerOff: null, breakerThreshold: null, breakerPauseMinutes: null, robotsIgnoredReason: null, userAgent: null, renderPerHost: null,
+    }
+    vi.spyOn(api.runs, 'get').mockResolvedValue({
+      ...run,
+      report: {
+        ...run.report,
+        politeness: [{ ...none, host: 'www.umea.se', preset: 'fast', requestsPerSecond: 20, crawlWindow: 'any', breakerOff: true, robotsIgnoredReason: 'own site, web team consent' }],
+      },
+    })
+    vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
+
+    const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test=politeness]').text()).toContain(
+      'www.umea.se: Fast (10 a second, any time) · 20 requests a second · any time · circuit breaker off · robots.txt ignored: own site, web team consent',
+    )
+  })
+
   it('shows the deletion decision when the guard held deletions back', async () => {
     setActivePinia(createPinia())
     vi.spyOn(api.runs, 'get').mockResolvedValue({ ...run, run: { ...run.run, state: 'awaiting-deletion-confirmation', proposedDeletions: 212 } })

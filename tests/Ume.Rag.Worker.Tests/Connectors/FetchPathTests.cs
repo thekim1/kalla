@@ -335,7 +335,7 @@ public sealed class FetchPathTests : IAsyncLifetime
     {
         var guard = ConnectorTestKit.Guard(_site.Resolver(), new FixedEgressPolicy(_site.Port, _site.SecurePort), "127.0.0.1/32");
         using var client = new CrawlHttpClient(guard);
-        var fetcher = new HttpFetcher(client, guard, TimeProvider.System);
+        var fetcher = new HttpFetcher(client, guard, new FixedCrawlPolicy(), TimeProvider.System);
 
         var result = await fetcher.FetchAsync(Request(_site.SecureUrl("/page")), TestContext.Current.CancellationToken);
 
@@ -357,7 +357,7 @@ public sealed class FetchPathTests : IAsyncLifetime
     {
         var guard = ConnectorTestKit.Guard(_site.Resolver(), new FixedEgressPolicy(), "127.0.0.1/32");
         using var client = new CrawlHttpClient(guard);
-        var fetcher = new HttpFetcher(client, guard, TimeProvider.System);
+        var fetcher = new HttpFetcher(client, guard, new FixedCrawlPolicy(), TimeProvider.System);
 
         (await fetcher.FetchAsync(Request(_site.Url("/page")), TestContext.Current.CancellationToken))
             .ShouldBe(new HttpFetchResult.Refused(RunItemOutcome.Blocked, "egress.port"));
@@ -373,7 +373,7 @@ public sealed class FetchPathTests : IAsyncLifetime
 
         using (var client = new CrawlHttpClient(guard))
         {
-            var fetcher = new HttpFetcher(client, guard, TimeProvider.System);
+            var fetcher = new HttpFetcher(client, guard, new FixedCrawlPolicy(), TimeProvider.System);
             var first = await fetcher.FetchAsync(Request(url), TestContext.Current.CancellationToken);
             await using ((first.ShouldBeOfType<HttpFetchResult.Ok>()).Body)
             {
@@ -384,7 +384,7 @@ public sealed class FetchPathTests : IAsyncLifetime
 
         using (var client = new CrawlHttpClient(guard))
         {
-            var fetcher = new HttpFetcher(client, guard, TimeProvider.System);
+            var fetcher = new HttpFetcher(client, guard, new FixedCrawlPolicy(), TimeProvider.System);
             (await fetcher.FetchAsync(Request(url), TestContext.Current.CancellationToken))
                 .ShouldBe(new HttpFetchResult.Refused(RunItemOutcome.Blocked, "egress.private_address"));
             dns.Calls("rebind.test").ShouldBe(2);

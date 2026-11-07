@@ -604,10 +604,33 @@ export interface RunSummary {
   finishedAt: IsoDateTime | null
 }
 
-/** A crawl run's report (worker `CrawlSourceRunner`): completeness, the verdict, removal checks and demote counts. */
+/**
+ * A scope host crawled with a non-default politeness profile (worker `PolitenessReportEntry`, connectors design §6.6):
+ * its preset and only the members that differ from its kind's defaults (null otherwise).
+ */
+export interface PolitenessReportEntry {
+  host: string
+  preset: string
+  requestsPerSecond: number | null
+  maxConnections: number | null
+  crawlDelay: 'honour' | 'ignore' | null
+  adaptToLatency: boolean | null
+  crawlWindow: 'source' | 'any' | null
+  maxRetryAfterSeconds: number | null
+  maxBackoffFactor: number | null
+  breakerOff: boolean | null
+  breakerThreshold: number | null
+  breakerPauseMinutes: number | null
+  robotsIgnoredReason: string | null
+  userAgent: string | null
+  renderPerHost: number | null
+}
+
+/** A crawl run's report (worker `CrawlSourceRunner`): completeness, the verdict, removal checks, demote counts and non-default politeness. */
 export interface CrawlReport {
   completeness?: { complete: boolean; reasons: string[]; seeds: number; seedsResolved: number; seedsFailed: number; incremental: boolean }
   verdict?: { runFailure: string | null; runDegradation: string | null }
+  politeness?: PolitenessReportEntry[]
   [section: string]: unknown
 }
 

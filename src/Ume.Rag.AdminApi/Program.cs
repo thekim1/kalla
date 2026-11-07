@@ -47,6 +47,10 @@ builder.Services.AddSingleton(sp => new Ume.Rag.Infrastructure.Access.PolicySnap
 builder.Services.AddSingleton<Ume.Rag.Domain.Access.IAccessPolicy>(new Ume.Rag.Domain.Access.AccessPolicy(new HashSet<string>(
     builder.Configuration.GetSection("Knowledge:OpenToClientKinds").Get<string[]>() ?? ["internal"], StringComparer.Ordinal)));
 builder.Services.AddOptions<AdminOptions>().BindConfiguration(AdminOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+// The ceilings V37 checks host politeness profiles against (connectors design §6.6): the worker's Crawl keys and Render:MaxConcurrent.
+builder.Services.AddOptions<CrawlCeilingOptions>().BindConfiguration(CrawlCeilingOptions.SectionName)
+    .Configure<IConfiguration>((o, configuration) => o.MaxRenderPerHost = configuration.GetValue("Render:MaxConcurrent", o.MaxRenderPerHost))
+    .ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<OidcOptions>().BindConfiguration(OidcOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<OidcOptions>, OidcOptionsValidator>(); // role groups: rag- names or Entra ids (#413)
 builder.Services.AddSingleton(TimeProvider.System);

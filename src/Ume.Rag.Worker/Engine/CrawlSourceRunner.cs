@@ -292,7 +292,8 @@ public sealed class CrawlSourceRunner(
     /// in any run, <c>persistent-failure</c>, <c>not-seen</c> only after a complete traversal and never for a URL that
     /// failed in the run, and the settings-change effects of <see cref="SettingsCandidates"/>: <c>scope-narrowed</c>, <c>identity-changed</c>,
     /// nothing beyond a lowered <c>maxDepth</c>), and the report's sections: completeness with the incomplete-traversal
-    /// count and alert, the run's verdict, the removal checks and the <c>demote</c> patterns with the live documents they match.
+    /// count and alert, the run's verdict, the removal checks, the <c>demote</c> patterns with the live documents they match and
+    /// the scope hosts crawled with a non-default politeness profile (connectors design §6.6).
     /// </summary>
     public async Task<CrawlReconcile> PrepareReconcileAsync(SourceContext source, RunRow run, IReadOnlyList<SourceDocument> all,
         IReadOnlyDictionary<Guid, string> explicitGone, CancellationToken cancellationToken)
@@ -320,6 +321,7 @@ public sealed class CrawlSourceRunner(
             ["verdict"] = new { verdict.RunFailure, verdict.RunDegradation },
             ["removalChecks"] = RemovalSection.From(await RemovalOutcomesAsync(source, run.Id, cancellationToken)),
             ["demote"] = settings.Demote.Select(d => new { d.Pattern, d.Factor, Documents = live.Count(UrlPattern.Parse(d.Pattern).Matches) }).ToList(),
+            ["politeness"] = PolitenessReportEntry.For(crawl.Scope.Hosts, policy.Current),
         };
         var empty = verdict.Complete && !all.Any(d => d.DeletedAt is null && d.LastRunId == run.Id);
         return new CrawlReconcile(verdict, candidates, empty, JsonSerializer.Serialize(report, JsonSerializerOptions.Web));

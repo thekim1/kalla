@@ -59,7 +59,11 @@ public enum HostResponseKind
 /// <param name="Kind">The response's class.</param>
 /// <param name="Latency">Time to the response headers, or null when no response came.</param>
 /// <param name="RetryAfter">A 429/503's <c>Retry-After</c>.</param>
-public sealed record HostResponse(HostResponseKind Kind, TimeSpan? Latency, TimeSpan? RetryAfter = null);
+public sealed record HostResponse(HostResponseKind Kind, TimeSpan? Latency, TimeSpan? RetryAfter = null)
+{
+    /// <summary>The host profile's caps of a rate limit (§6.6); the budget sets them from the host's profile.</summary>
+    public BackoffLimits Backoff { get; init; } = BackoffLimits.Default;
+}
 
 /// <summary>
 /// The budget arithmetic of connectors design §6.3–§6.4, pure so the database statement and the in-memory store of the
@@ -87,34 +91,28 @@ public static class HostBudgetPolicy
     /// <summary>A slot further away than this is not taken or waited for in process: the job requeues without an attempt at it.</summary>
     public static readonly TimeSpan MaxInProcessWait = TimeSpan.FromSeconds(1);
 
-    /// <summary>The default budget of a host of <paramref name="kind"/>, with the platform admin's override applied.</summary>
-    public static (double RequestsPerSecond, int MaxConnections) Budget(HostKind kind, HostOverride? hostOverride)
-    {
-        var (rate, connections) = kind == HostKind.Municipal
-            ? (MunicipalRequestsPerSecond, MunicipalConnections)
-            : (ExternalRequestsPerSecond, ExternalConnections);
-        return (hostOverride?.RequestsPerSecond is > 0.0 and var r ? r : rate, hostOverride?.MaxConnections is > 0 and var c ? c : connections);
-    }
-
     /// <summary>
     /// <c>max(1/rate, Crawl-delay, latency) × BackoffFactor</c>, where latency is <c>LatencyEwma / 4</c> on municipal hosts
-    /// and <c>LatencyEwma</c> on external ones; <c>Crawl-delay</c> only lowers the rate and counts up to 60 s.
+    /// and <c>LatencyEwma</c> on external ones; <c>Crawl-delay</c> only lowers the rate and counts up to 60 s. The host's
+    /// profile (§6.6) may drop the <c>Crawl-delay</c> term (<c>crawlDelay: ignore</c>) or the latency term
+    /// (<c>adaptToLatency: false</c>), and caps the factor at its <c>backoff.maxFactor</c>.
     /// </summary>
-    public static TimeSpan Interval(CrawlHostState state)
+    public static TimeSpan Interval(CrawlHostState state, PolitenessProfile profile)
     {
         ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(profile);
         var seconds = 1 / state.RequestsPerSecond;
-        if (state.CrawlDelaySeconds is > 0 and var delay)
+        if (profile.HonourCrawlDelay && state.CrawlDelaySeconds is > 0 and var delay)
         {
             seconds = Math.Max(seconds, Math.Min(delay, MaxCrawlDelay.TotalSeconds));
         }
 
-        if (state.LatencyEwmaMs is > 0 and var latency)
+        if (profile.AdaptToLatency && state.LatencyEwmaMs is > 0 and var latency)
         {
             seconds = Math.Max(seconds, latency / 1000.0 / (state.Kind == HostKind.Municipal ? 4 : 1));
         }
 
-        return TimeSpan.FromSeconds(seconds * Math.Max(1, state.BackoffFactor));
+        return TimeSpan.FromSeconds(seconds * Math.Clamp(state.BackoffFactor, 1, profile.Backoff.MaxFactor));
     }
 
     /// <summary>
@@ -140,7 +138,9 @@ public static class HostBudgetPolicy
     /// <summary>
     /// The response's effect (§6.4): a rate limit sets <c>NextAllowedAt = now + Retry-After</c> (default 60 s) and doubles
     /// the back-off up to 16, or pauses the host when <c>Retry-After</c> exceeds 1 h; a success decays the back-off by 0.95
-    /// down to 1; every response with a latency feeds <c>LatencyEwmaMs</c>.
+    /// down to 1; every response with a latency feeds <c>LatencyEwmaMs</c>. The host's profile (§6.6,
+    /// <see cref="HostResponse.Backoff"/>) caps the wait at its <c>maxRetryAfterSeconds</c> and the factor at its
+    /// <c>maxFactor</c>; a <c>Retry-After</c> above 1 h still pauses the host.
     /// </summary>
     public static CrawlHostState Apply(CrawlHostState state, HostResponse response, DateTimeOffset now)
     {
@@ -162,13 +162,13 @@ public static class HostBudgetPolicy
                 return updated with { BackoffFactor = Math.Max(1, updated.BackoffFactor * BackoffDecay) };
             case HostResponseKind.RateLimited:
                 var wait = response.RetryAfter is { } retryAfter && retryAfter > TimeSpan.Zero ? retryAfter : DefaultRetryAfter;
-                var backoff = Math.Min(MaxBackoff, updated.BackoffFactor * 2);
+                var backoff = Math.Max(1, Math.Min(response.Backoff.MaxFactor, updated.BackoffFactor * 2));
                 if (wait > MaxRetryAfter)
                 {
                     return updated with { BackoffFactor = backoff, PausedUntil = now + wait };
                 }
 
-                var until = now + wait;
+                var until = now + (wait < response.Backoff.MaxRetryAfter ? wait : response.Backoff.MaxRetryAfter);
                 return updated with { BackoffFactor = backoff, NextAllowedAt = until > updated.NextAllowedAt ? until : updated.NextAllowedAt };
             default:
                 return updated;

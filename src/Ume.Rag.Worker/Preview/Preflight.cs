@@ -275,10 +275,12 @@ public sealed partial class Preflight(
     {
         var entry = await robots.GetAsync(origin, cancellationToken);
         var target = origin.GetLeftPart(UriPartial.Authority);
-        return entry.Status switch
+        return entry switch
         {
-            RobotsStatus.Ok => Check(Robots, PreflightState.Pass, "robots.ok", target),
-            RobotsStatus.Missing => Check(Robots, PreflightState.Pass, "robots.missing", target),
+            // The host's politeness profile ignores robots.txt (connectors design §6.6): nothing it says refuses a page.
+            { Ignored: true, EgressRefusal: null } => Check(Robots, PreflightState.Pass, "robots.ignored", target),
+            { Status: RobotsStatus.Ok } => Check(Robots, PreflightState.Pass, "robots.ok", target),
+            { Status: RobotsStatus.Missing } => Check(Robots, PreflightState.Pass, "robots.missing", target),
             _ => Check(entry.EgressRefusal is null ? Robots : Egress, unreachable, entry.EgressRefusal ?? CrawlConnector.RobotsUnreachable, target),
         };
     }

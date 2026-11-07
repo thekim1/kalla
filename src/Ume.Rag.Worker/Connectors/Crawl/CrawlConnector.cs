@@ -378,7 +378,7 @@ public sealed class CrawlConnector(
         {
             var robotsUrl = new Uri(origin + "/robots.txt");
             var entry = await robots.GetAsync(robotsUrl, cancellationToken);
-            if (entry.Status == RobotsStatus.Unreachable)
+            if (entry.Status == RobotsStatus.Unreachable && !entry.Ignored)
             {
                 yield return new SitemapRoot(robotsUrl, false, new ListingEvent<CrawlCheckpoint>.Failure(robotsUrl.AbsoluteUri, RobotsUnreachable));
                 continue;

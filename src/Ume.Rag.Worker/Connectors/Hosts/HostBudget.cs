@@ -92,8 +92,10 @@ public sealed class HostLease : IDisposable
 /// connection of the host's in-process cap (P1: one worker instance; the Redis lease is P2). A slot more than 1 s away is
 /// neither taken nor waited for: the job requeues at it without an attempt and the row is left as it was, so waiting jobs
 /// never push the slots further out (a livelock on a busy 1 req/s host, pilot crawl 2026-11-01). Responses feed back-off,
-/// latency and the circuit breaker (≥ 50 of the last 100 responses 5xx, timeouts or 404 → paused 30 minutes). The breaker
-/// window and the connection semaphores are per instance; the row is the authority for slots and pauses.
+/// latency and the circuit breaker (by default ≥ 50 of the last 100 responses 5xx, timeouts or 404 → paused 30 minutes). The breaker
+/// window and the connection semaphores are per instance; the row is the authority for slots and pauses. Every number
+/// comes from the host's politeness profile (§6.6, <see cref="CrawlPolicy.ProfileOf"/>): rate, connections, the interval's
+/// terms, the back-off caps and the breaker's threshold and pause, or no breaker.
 /// </summary>
 public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy, TimeProvider time)
 {
@@ -104,24 +106,17 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
     public const string BreakerPause = "crawl.breaker";
 
     public const int BreakerWindow = 100;
-    public const int BreakerThreshold = 50;
-    public static readonly TimeSpan BreakerPauseLength = TimeSpan.FromMinutes(30);
 
     /// <summary>How long a request waits for a free connection before its job requeues (slot pacing makes this rare).</summary>
     public static readonly TimeSpan ConnectionWait = TimeSpan.FromSeconds(10);
 
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _connections = new(StringComparer.Ordinal);
+    // By host and cap: a changed maxConnections takes effect with a new semaphore, the old one drains with its leases.
+    private readonly ConcurrentDictionary<(string Host, int Cap), SemaphoreSlim> _connections = new();
     private readonly ConcurrentDictionary<string, BreakerWindowState> _windows = new(StringComparer.Ordinal);
 
     /// <summary>The host's row with the kind and budget the current settings give it.</summary>
-    public Task<CrawlHostState> EnsureHostAsync(string host, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(host);
-        var current = policy.Current;
-        var kind = current.KindOf(host);
-        var (rate, connections) = HostBudgetPolicy.Budget(kind, current.OverrideOf(host));
-        return store.EnsureAsync(new CrawlHostState { Host = host, Kind = kind, RequestsPerSecond = rate, MaxConnections = connections }, cancellationToken);
-    }
+    public async Task<CrawlHostState> EnsureHostAsync(string host, CancellationToken cancellationToken) =>
+        (await EnsureAsync(host, cancellationToken)).State;
 
     /// <summary>Keeps the host's robots.txt facts on its row: <c>Crawl-delay</c> feeds the interval (§5.1).</summary>
     public Task RecordRobotsAsync(string host, RobotsEntry entry, CancellationToken cancellationToken)
@@ -133,7 +128,7 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
 
     public async Task<HostSlot> AcquireAsync(string host, CancellationToken cancellationToken)
     {
-        var state = await EnsureHostAsync(host, cancellationToken);
+        var (state, profile) = await EnsureAsync(host, cancellationToken);
         var now = time.GetUtcNow();
         if (state.BlockedAt is not null)
         {
@@ -145,7 +140,7 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
             return new HostSlot.Refused(Paused, paused);
         }
 
-        var interval = HostBudgetPolicy.Interval(state);
+        var interval = HostBudgetPolicy.Interval(state, profile);
         if (await store.TryTakeSlotAsync(host, interval, HostBudgetPolicy.MaxInProcessWait, cancellationToken) is not { } slot)
         {
             return new HostSlot.Refused(Paused, null);
@@ -165,7 +160,7 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
 
         // A slot lost to the connection wait costs one interval; it happens only while a request has held the connection
         // longer than ConnectionWait, so it cannot repeat without a request in flight.
-        var connections = _connections.GetOrAdd(host, _ => new SemaphoreSlim(state.MaxConnections, state.MaxConnections));
+        var connections = _connections.GetOrAdd((host, state.MaxConnections), key => new SemaphoreSlim(key.Cap, key.Cap));
         using var timeout = new CancellationTokenSource(ConnectionWait, time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         try
@@ -182,17 +177,23 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
 
     internal async Task<HostVerdict> CompleteAsync(string host, HostResponse response, CancellationToken cancellationToken)
     {
-        var state = await store.RecordResponseAsync(host, response, cancellationToken);
+        var profile = policy.Current.ProfileOf(host);
+        var state = await store.RecordResponseAsync(host, response with { Backoff = profile.Backoff }, cancellationToken);
         var now = time.GetUtcNow();
         if (response.Kind == HostResponseKind.RateLimited && state.PausedUntil is { } until && until > now)
         {
             return new HostVerdict(until, RetryAfterPause);
         }
 
-        var window = _windows.GetOrAdd(host, _ => new BreakerWindowState());
-        if (window.Add(response.Kind == HostResponseKind.Failure))
+        if (profile.Breaker is not { } breaker)
         {
-            var pause = now + BreakerPauseLength;
+            return HostVerdict.Running;
+        }
+
+        var window = _windows.GetOrAdd(host, _ => new BreakerWindowState());
+        if (window.Add(response.Kind == HostResponseKind.Failure, breaker.FailuresOf(BreakerWindow)))
+        {
+            var pause = now + breaker.Pause;
             await store.PauseAsync(host, pause, cancellationToken);
             return new HostVerdict(pause, BreakerPause);
         }
@@ -200,7 +201,18 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
         return HostVerdict.Running;
     }
 
-    /// <summary>The last <see cref="BreakerWindow"/> responses of a host; trips at <see cref="BreakerThreshold"/> failures and starts over.</summary>
+    private async Task<(CrawlHostState State, PolitenessProfile Profile)> EnsureAsync(string host, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        var current = policy.Current;
+        var profile = current.ProfileOf(host);
+        var state = await store.EnsureAsync(
+            new CrawlHostState { Host = host, Kind = current.KindOf(host), RequestsPerSecond = profile.RequestsPerSecond, MaxConnections = profile.MaxConnections },
+            cancellationToken);
+        return (state, profile);
+    }
+
+    /// <summary>The last <see cref="BreakerWindow"/> responses of a host; trips at the profile's share of failures and starts over.</summary>
     private sealed class BreakerWindowState
     {
         private readonly bool[] _failures = new bool[BreakerWindow];
@@ -208,7 +220,7 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
         private int _next;
         private int _count;
 
-        public bool Add(bool failure)
+        public bool Add(bool failure, int threshold)
         {
             lock (_lock)
             {
@@ -224,7 +236,7 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
                     _count++;
                 }
 
-                if (_count < BreakerThreshold)
+                if (_count < threshold)
                 {
                     return false;
                 }

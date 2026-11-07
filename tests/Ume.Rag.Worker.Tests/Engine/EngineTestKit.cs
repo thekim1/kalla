@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Entities;
+using Ume.Rag.Pipelines.Crawl;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.TestKit;
@@ -24,7 +25,7 @@ internal sealed record SourceSeed(Guid SourceId, Guid CollectionId, Guid Departm
 internal sealed class FastCrawlPolicy : ICrawlPolicySource
 {
     public CrawlPolicy Current { get; } = new(["site.test"],
-        new Dictionary<string, HostOverride>(StringComparer.OrdinalIgnoreCase));
+        new Dictionary<string, HostPoliteness>(StringComparer.OrdinalIgnoreCase));
 }
 
 /// <summary>

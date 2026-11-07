@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Ume.Rag.Domain.Entities;
 using Ume.Rag.Infrastructure.Blobs;
+using Ume.Rag.Pipelines.Crawl;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.Sources;
@@ -58,7 +59,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         var store = new PostgresCrawlHostStore(Worker);
         var host = $"{Guid.NewGuid():N}.example";
         var state = await store.EnsureAsync(new CrawlHostState { Host = host, Kind = HostKind.Municipal, RequestsPerSecond = 10, MaxConnections = 4 }, Ct);
-        var interval = HostBudgetPolicy.Interval(state);
+        var interval = HostBudgetPolicy.Interval(state, PolitenessProfile.Municipal);
 
         // Eight takers at once (within the worker role's connection cap), five slots each; the wait allows all 40 (4 s).
         var taken = await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ =>
@@ -96,8 +97,8 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         var policy = new FixedCrawlPolicy();
         var budget = new HostBudget(hosts, policy, TimeProvider.System);
         var host = $"{Guid.NewGuid():N}.example";
-        policy.Overrides[host] = new HostOverride(RequestsPerSecond: 4);
-        var interval = HostBudgetPolicy.Interval(await budget.EnsureHostAsync(host, Ct));
+        policy.Overrides[host] = new HostPoliteness { RequestsPerSecond = 4 };
+        var interval = HostBudgetPolicy.Interval(await budget.EnsureHostAsync(host, Ct), policy.Current.ProfileOf(host));
         interval.ShouldBe(TimeSpan.FromMilliseconds(250));
         var bound = TimeSpan.FromSeconds(60);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Ct);
@@ -273,7 +274,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         var hosts = new RecordingHostStore(new PostgresCrawlHostStore(Worker));
         var store = new PostgresCrawlStore(Worker);
         var policy = new FixedCrawlPolicy();
-        policy.Overrides[$"{TestSite.Host}:{_site.Port}"] = new HostOverride(20, 4);
+        policy.Overrides[TestSite.Host] = FixedCrawlPolicy.Budget(20);
         await using var first = CrawlRig.Create(_site, policy, batch: 2, hosts: hosts, store: (store, store));
         await using var second = CrawlRig.Create(_site, policy, batch: 2, hosts: hosts, store: (store, store));
         var a = Context(Settings());
@@ -477,7 +478,7 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
             await db.SaveChangesAsync(Ct);
         }
 
-        var source = new PlatformCrawlSettingsSource(Worker, TimeProvider.System, NullLogger<PlatformCrawlSettingsSource>.Instance);
+        var source = new PlatformCrawlSettingsSource(Worker, Options.Create(new CrawlOptions()), TimeProvider.System, NullLogger<PlatformCrawlSettingsSource>.Instance);
         (await source.RefreshAsync(Ct)).ShouldBeTrue();
 
         var egress = ((IEgressPolicySource)source).Current;
@@ -485,10 +486,12 @@ public sealed class ConnectorStoreTests(RagDatabaseFixture database) : IAsyncLif
         egress.AllowedPorts.ShouldBe([8443]);
         egress.BlockedHosts.ShouldContain("bad.example");
         crawl.KindOf("www.umea.se").ShouldBe(HostKind.Municipal);
-        HostBudgetPolicy.Budget(crawl.KindOf("www.umea.se"), crawl.OverrideOf("www.umea.se")).ShouldBe((2.0, 4));
+        var profile = crawl.ProfileOf("www.umea.se");
+        (profile.Preset, profile.RequestsPerSecond, profile.MaxConnections).ShouldBe(("municipal", 2.0, 4));
 
         await using var nowhere = Npgsql.NpgsqlDataSource.Create("Host=127.0.0.1;Port=1;Timeout=1");
-        var unreachable = new PlatformCrawlSettingsSource(new Infrastructure.Jobs.JobDatabase(nowhere), TimeProvider.System, NullLogger<PlatformCrawlSettingsSource>.Instance);
+        var unreachable = new PlatformCrawlSettingsSource(new Infrastructure.Jobs.JobDatabase(nowhere), Options.Create(new CrawlOptions()), TimeProvider.System,
+            NullLogger<PlatformCrawlSettingsSource>.Instance);
         (await unreachable.RefreshAsync(Ct)).ShouldBeFalse();
         ((IEgressPolicySource)unreachable).Current.ShouldBe(EgressPolicy.Default);
     }

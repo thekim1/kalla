@@ -12,14 +12,15 @@ import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { pollDelay } from '@/composables/useJobPoll'
+import { reportDifferences } from '@/platform/politeness'
 import { useLoadable } from '@/stores/loadable'
 import { formatDateTime, formatNumber } from '@/utils/format'
-import { RUN_OUTCOME_LABEL, RUN_PAGE, RUN_STATE_LABEL } from '@/utils/labels'
+import { PLATFORM, RUN_OUTCOME_LABEL, RUN_PAGE, RUN_STATE_LABEL } from '@/utils/labels'
 import { jobMessage } from '@/utils/messages'
 
 // Körning (admin design §5.5.3, §5.4 step 6; #278 slice 2): live counters while it runs (polled as §4.7), the crawl
-// report (completeness and its reasons, the verdict), the deletion decision when the guard held deletions back, and the
-// run's documents with their outcome and reason in Swedish.
+// report (completeness and its reasons, the verdict, the websites fetched with their own politeness, connectors design
+// §6.6), the deletion decision when the guard held deletions back, and the run's documents with their outcome and reason.
 const props = defineProps<{ id: string }>()
 const run = useLoadable<Run | null>(null)
 const items = useLoadable<RunItem[]>([])
@@ -35,6 +36,17 @@ const columns: Column[] = [
 ]
 const summary = computed(() => run.data.value?.run)
 const completeness = computed(() => run.data.value?.report?.completeness)
+// "www.umea.se: Fast · 20 requests a second · robots.txt ignored: own site, web team consent"
+const politeness = computed(() =>
+  (run.data.value?.report?.politeness ?? []).map((p) => ({
+    host: p.host,
+    text: [
+      PLATFORM.politeness.presets[p.preset] ?? p.preset,
+      ...reportDifferences(p),
+      ...(p.robotsIgnoredReason ? [RUN_PAGE.robotsIgnored(p.robotsIgnoredReason)] : []),
+    ].join(' · '),
+  })),
+)
 const verdictReasons = computed(() =>
   [run.data.value?.report?.verdict?.runFailure, run.data.value?.report?.verdict?.runDegradation].filter((r): r is string => !!r),
 )
@@ -89,6 +101,12 @@ onBeforeUnmount(() => {
         </template>
         <p v-if="completeness" class="mt-2 text-small text-fg-2">{{ RUN_PAGE.seeds(completeness.seedsResolved, completeness.seeds) }}</p>
         <p v-for="r in verdictReasons" :key="r" class="mt-2 text-warn">{{ jobMessage(r) }}</p>
+      </UiCard>
+      <UiCard v-if="politeness.length" class="mb-6" data-test="politeness">
+        <h2 class="mb-2 font-medium">{{ RUN_PAGE.politeness }}</h2>
+        <ul class="grid gap-1">
+          <li v-for="p in politeness" :key="p.host"><span class="font-mono">{{ p.host }}</span>: {{ p.text }}</li>
+        </ul>
       </UiCard>
 
       <h2 class="mb-3 text-title-3">{{ RUN_PAGE.items }}</h2>

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using Ume.Rag.Pipelines.Crawl;
 using Ume.Rag.Worker.Connectors.Hosts;
 
 namespace Ume.Rag.Worker.Tests.Connectors;
@@ -14,10 +15,11 @@ public sealed class HostBudgetTests
     [Fact]
     public void Budgets_are_10_per_second_and_4_connections_municipal_1_and_1_external_and_overridable()
     {
-        HostBudgetPolicy.Budget(HostKind.Municipal, null).ShouldBe((10.0, 4));
-        HostBudgetPolicy.Budget(HostKind.External, null).ShouldBe((1.0, 1));
-        HostBudgetPolicy.Budget(HostKind.External, new HostOverride(RequestsPerSecond: 2)).ShouldBe((2.0, 1));
-        var policy = new CrawlPolicy(["umea.se", "*.umea.se"], new Dictionary<string, HostOverride>());
+        var policy = new CrawlPolicy(["umea.se", "*.umea.se"], new Dictionary<string, HostPoliteness> { ["example.org"] = new() { RequestsPerSecond = 2 } });
+        Budget(policy, "www.umea.se").ShouldBe((10.0, 4));
+        Budget(policy, "other.example").ShouldBe((1.0, 1));
+        // Overrides are keyed by host name: a port does not matter.
+        Budget(policy, "example.org:8443").ShouldBe((2.0, 1));
         policy.KindOf("umea.se").ShouldBe(HostKind.Municipal);
         policy.KindOf("www.umea.se:8443").ShouldBe(HostKind.Municipal);
         policy.KindOf("notumea.se").ShouldBe(HostKind.External);
@@ -27,15 +29,17 @@ public sealed class HostBudgetTests
     [Fact]
     public void The_interval_is_the_largest_of_rate_crawl_delay_and_latency_times_the_backoff()
     {
-        HostBudgetPolicy.Interval(Host(HostKind.Municipal)).ShouldBe(TimeSpan.FromMilliseconds(100));
-        HostBudgetPolicy.Interval(Host()).ShouldBe(TimeSpan.FromSeconds(1));
+        var municipal = PolitenessProfile.Municipal;
+        var polite = PolitenessProfile.Polite;
+        HostBudgetPolicy.Interval(Host(HostKind.Municipal), municipal).ShouldBe(TimeSpan.FromMilliseconds(100));
+        HostBudgetPolicy.Interval(Host(), polite).ShouldBe(TimeSpan.FromSeconds(1));
         // Crawl-delay only lowers the rate, and counts up to 60 s.
-        HostBudgetPolicy.Interval(Host() with { CrawlDelaySeconds = 5 }).ShouldBe(TimeSpan.FromSeconds(5));
-        HostBudgetPolicy.Interval(Host() with { CrawlDelaySeconds = 600 }).ShouldBe(TimeSpan.FromSeconds(60));
+        HostBudgetPolicy.Interval(Host() with { CrawlDelaySeconds = 5 }, polite).ShouldBe(TimeSpan.FromSeconds(5));
+        HostBudgetPolicy.Interval(Host() with { CrawlDelaySeconds = 600 }, polite).ShouldBe(TimeSpan.FromSeconds(60));
         // Latency: a quarter on municipal hosts, all of it on external ones.
-        HostBudgetPolicy.Interval(Host(HostKind.Municipal) with { LatencyEwmaMs = 2000 }).ShouldBe(TimeSpan.FromMilliseconds(500));
-        HostBudgetPolicy.Interval(Host() with { LatencyEwmaMs = 2000 }).ShouldBe(TimeSpan.FromSeconds(2));
-        HostBudgetPolicy.Interval(Host() with { BackoffFactor = 4 }).ShouldBe(TimeSpan.FromSeconds(4));
+        HostBudgetPolicy.Interval(Host(HostKind.Municipal) with { LatencyEwmaMs = 2000 }, municipal).ShouldBe(TimeSpan.FromMilliseconds(500));
+        HostBudgetPolicy.Interval(Host() with { LatencyEwmaMs = 2000 }, polite).ShouldBe(TimeSpan.FromSeconds(2));
+        HostBudgetPolicy.Interval(Host() with { BackoffFactor = 4 }, polite).ShouldBe(TimeSpan.FromSeconds(4));
     }
 
     [Fact]
@@ -46,7 +50,7 @@ public sealed class HostBudgetTests
         for (var i = 0; i < 100; i++)
         {
             // A wait long enough for all 100 (10 s).
-            (state, var slot) = HostBudgetPolicy.TakeSlot(state, HostBudgetPolicy.Interval(state), Start, TimeSpan.FromSeconds(10));
+            (state, var slot) = HostBudgetPolicy.TakeSlot(state, HostBudgetPolicy.Interval(state, PolitenessProfile.Municipal), Start, TimeSpan.FromSeconds(10));
             slot!.Taken.ShouldBeTrue();
             slots.Add(slot.At);
         }
@@ -164,7 +168,7 @@ public sealed class HostBudgetTests
         var time = new FakeTimeProvider(Start);
         var store = new InMemoryCrawlHostStore(time);
         var policy = new FixedCrawlPolicy();
-        policy.Overrides["example.org"] = new HostOverride(1000, 4);
+        policy.Overrides["example.org"] = FixedCrawlPolicy.Budget(1000);
         var budget = new HostBudget(store, policy, time);
         HostVerdict verdict = HostVerdict.Running;
         for (var i = 0; i < 99 && verdict.PausedUntil is null; i++)
@@ -190,7 +194,7 @@ public sealed class HostBudgetTests
         // Real time: a 1000 req/s override makes the slot waits a millisecond; the gates below decide the overlap.
         var store = new InMemoryCrawlHostStore(TimeProvider.System);
         var policy = new FixedCrawlPolicy("kommun.example");
-        policy.Overrides["kommun.example"] = new HostOverride(RequestsPerSecond: 1000);
+        policy.Overrides["kommun.example"] = new HostPoliteness { RequestsPerSecond = 1000 };
         var budget = new HostBudget(store, policy, TimeProvider.System);
         var inFlight = 0;
         var maxInFlight = 0;
@@ -230,10 +234,16 @@ public sealed class HostBudgetTests
         egress.AllowedPorts.ShouldBe([8443]);
         egress.BlockedHosts.ShouldContain("BAD.example");
         crawl.KindOf("www.umea.se").ShouldBe(HostKind.Municipal);
-        crawl.OverrideOf("www.umea.se").ShouldBe(new HostOverride(2.5, 2));
+        Budget(crawl, "www.umea.se").ShouldBe((2.5, 2));
         crawl.IncompleteRunsAlert.ShouldBe(5);
         PlatformCrawlSettings.Parse("{}").Crawl.KindOf("www.umea.se").ShouldBe(HostKind.External);
         PlatformCrawlSettings.Parse("{}").Crawl.IncompleteRunsAlert.ShouldBe(3);
+    }
+
+    private static (double Rate, int Connections) Budget(CrawlPolicy policy, string host)
+    {
+        var profile = policy.ProfileOf(host);
+        return (profile.RequestsPerSecond, profile.MaxConnections);
     }
 
     private static void InterlockedMax(ref int target, int value)
