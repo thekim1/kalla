@@ -157,6 +157,15 @@ public sealed class RealmImport(IReadOnlyList<string> realmFiles, IReadOnlyList<
         return id;
     }
 
+    /// <summary>Adds the user to a group by name (the operator's shared groups, #468).</summary>
+    public async Task JoinGroupAsync(string userId, string group)
+    {
+        using var admin = await AdminAsync();
+        var id = await IdOfAsync(admin, $"groups?exact=true&search={Uri.EscapeDataString(group)}");
+        using var joined = await admin.PutAsync($"users/{userId}/groups/{id}", null);
+        joined.StatusCode.ShouldBe(HttpStatusCode.NoContent, await joined.Content.ReadAsStringAsync());
+    }
+
     /// <summary>The access token Keycloak would issue to <paramref name="clientId"/> for the user (the admin console's evaluate tab).</summary>
     public static async Task<JsonDocument> ExampleTokenAsync(HttpClient admin, string clientId, string userId)
     {
@@ -184,8 +193,13 @@ public sealed class RealmImport(IReadOnlyList<string> realmFiles, IReadOnlyList<
 /// </summary>
 public sealed class RealmAdditionsFixture : IAsyncLifetime
 {
+    // The operator's site file of shared groups (#468) goes last: it names realm roles of both systems, so it sorts after
+    // rag-additions*.json, as deploy/keycloak/README.md says.
     public static readonly string[] Additions =
-        [Path.Combine("deploy", "keycloak", "rag-additions.json"), Path.Combine("deploy", "keycloak", "rag-additions.local.json")];
+    [
+        Path.Combine("deploy", "keycloak", "rag-additions.json"), Path.Combine("deploy", "keycloak", "rag-additions.local.json"),
+        Path.Combine("deploy", "keycloak", "examples", "site-groups.json"),
+    ];
 
     public RealmAdditionsFixture()
     {
@@ -232,6 +246,7 @@ public sealed class RealmAdditionsFixture : IAsyncLifetime
         await Import.CreateUserAsync("rag-editor-user", UserPassword, ["rag-pipeline-editor"], departments);
         await Import.CreateUserAsync("rag-admin-user", UserPassword, ["rag-platform-admin", "rag-department-admin", "gateway-admin"], departments);
         await Import.CreateUserAsync("rag-department-admin-user", UserPassword, ["rag-department-admin"], departments);
+        await Import.JoinGroupAsync(await Import.CreateUserAsync("shared-admin-user", UserPassword, [], departments), "ume-admins");
     }
 
     public async ValueTask DisposeAsync()
@@ -320,10 +335,35 @@ public sealed partial class RealmAdditionsTests(RealmAdditionsFixture keycloak) 
         using var role = await admin.GetAsync("roles/made-by-hand-role", Ct);
         role.StatusCode.ShouldBe(HttpStatusCode.OK);
         using var users = JsonDocument.Parse(await admin.GetStringAsync("users?briefRepresentation=true", Ct));
-        users.RootElement.GetArrayLength().ShouldBe(3);
+        users.RootElement.GetArrayLength().ShouldBe(4);
+        // The operator's shared group and its membership survive the re-run too (groups are no-delete, #468).
+        var shared = await RealmImport.IdOfAsync(admin, "users?exact=true&username=shared-admin-user");
+        using (var groups = JsonDocument.Parse(await admin.GetStringAsync($"users/{shared}/groups", Ct)))
+        {
+            groups.RootElement.EnumerateArray().Select(g => g.GetProperty("name").GetString()).ShouldContain("ume-admins");
+        }
+
         var user = await RealmImport.IdOfAsync(admin, "users?exact=true&username=rag-admin-user");
         using var mappings = JsonDocument.Parse(await admin.GetStringAsync($"users/{user}/role-mappings/realm", Ct));
         new[] { "rag-platform-admin", "rag-department-admin", "gateway-admin" }.ShouldBeSubsetOf(mappings.RootElement.EnumerateArray().Select(r => r.GetProperty("name").GetString()!));
+    }
+
+    [Fact]
+    public async Task One_shared_group_gives_each_system_its_own_role_and_no_other()
+    {
+        // Decisions "Shared sign-in with the gateway" (#468): the operator's group ume-admins (examples/site-groups.json)
+        // maps gateway-admin and rag-platform-admin. Its member has no direct role, and each client's token carries only
+        // its own system's role, because full scope allowed is off and each client maps only its own roles.
+        using var admin = await keycloak.Import.AdminAsync();
+        var user = await RealmImport.IdOfAsync(admin, "users?exact=true&username=shared-admin-user");
+
+        using (var rag = await RealmImport.ExampleTokenAsync(admin, "ume-rag-admin", user))
+        {
+            Claim(rag, "roles").ShouldBe(["rag-platform-admin"]);
+        }
+
+        using var gateway = await RealmImport.ExampleTokenAsync(admin, "ume-admin", user);
+        Claim(gateway, "roles").ShouldBe(["gateway-admin"]);
     }
 
     [Fact]

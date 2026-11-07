@@ -150,6 +150,10 @@
         "description": "LLM gateway: everything"
       },
       {
+        "name": "department-admin",
+        "description": "LLM gateway: own departments"
+      },
+      {
         "name": "viewer",
         "description": "LLM gateway: read-only"
       }
@@ -224,6 +228,7 @@
       "client": "ume-admin",
       "roles": [
         "gateway-admin",
+        "department-admin",
         "viewer"
       ]
     }
