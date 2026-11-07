@@ -33,7 +33,7 @@ public sealed class TemplateTests
     [Theory]
     [InlineData("website", "crawl", new[] { "fetch", "detect", "parse", "clean", "chunk", "personal-data", "embed", "index" }, new[] { "chunkTokens", "ocr", "overlapPercent", "pathRules", "tables" })]
     [InlineData("url-list", "url-list", new[] { "fetch", "detect", "parse", "clean", "chunk", "personal-data", "embed", "index" }, new[] { "chunkTokens", "ocr", "overlapPercent", "pathRules", "tables" })]
-    [InlineData("files", "upload", new[] { "fetch", "scan", "detect", "parse", "clean", "chunk", "personal-data", "embed", "index" }, new[] { "chunkTokens", "ocr", "overlapPercent", "tables" })]
+    [InlineData("files", "upload", new[] { "fetch", "scan", "detect", "parse", "clean", "chunk", "personal-data", "embed", "index" }, new[] { "chunkTokens", "ocr", "overlapPercent", "pathRules", "tables" })]
     public void Templates_match_engine_13_1(string name, string sourceType, string[] stages, string[] parameters)
     {
         var template = Repository.Templates.Find(name, 1).ShouldNotBeNull().Template;
@@ -66,6 +66,7 @@ public sealed class TemplateTests
     [Theory]
     [InlineData("website")]
     [InlineData("url-list")]
+    [InlineData("files")]
     public void The_path_rules_parameter_is_labelled_topics(string name)
     {
         var labels = Repository.Templates.Find(name, 1)!.ParamsSchema["properties"]!["pathRules"]!["x-labels"]!;

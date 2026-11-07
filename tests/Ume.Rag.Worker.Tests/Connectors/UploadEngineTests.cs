@@ -18,7 +18,8 @@ namespace Ume.Rag.Worker.Tests.Connectors;
 /// and blob, event 5102 and a degraded run; the same bytes in a second department are a second document whose embeddings
 /// come from the cache; a replace keeps the document and swaps its set; a delete removes the document and an add on the
 /// deleted slot revives it. An <c>internal</c> upload stored plain or with a damaged segment fails
-/// <c>upload.blob_damaged</c> once; a <c>public</c> upload is stored as received.
+/// <c>upload.blob_damaged</c> once; a <c>public</c> upload is stored as received. A <c>path</c> rule of the
+/// <c>files</c> template matches the upload's display name and tags its chunks (processing design §7).
 /// </summary>
 [Collection(RagDatabaseGroup3.Name)]
 public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -205,6 +206,35 @@ public sealed class UploadEngineTests(RagDatabaseFixture database, FakeGatewayFa
             File.ReadAllBytes(UploadPath(seed, slot, note)).ShouldBe(note, "a public upload is not envelope-encrypted");
             (await EngineKit.LiveChunksAsync(database, seed)).ShouldBeGreaterThanOrEqualTo(1);
             (await SlotStateAsync(slot)).ShouldBe(UploadStates.Clean);
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task A_path_rule_on_the_display_name_tags_the_chunks_of_a_matching_upload()
+    {
+        var marker = Guid.NewGuid().ToString("N");
+        var seed = await SeedUploadAsync();
+        await EngineKit.PublishAsync(database, seed, "files", """{"pathRules":[{"match":"bygglov-*.md","on":"path","tags":["Bygglov"]}]}""");
+        await using var site = await EngineKit.SiteAsync((_, _) => Task.FromResult(EngineKit.Html(EngineKit.Page("unused"))));
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, logs: _logs);
+        try
+        {
+            var run = await CommitAsync(seed,
+                (UploadOperation.Add, Guid.NewGuid(), "bygglov-ansokan.md", Note("Ansökan " + marker)),
+                (UploadOperation.Add, Guid.NewGuid(), "avfall.md", Note("Avfall " + marker)));
+
+            (await EngineKit.WaitForRunAsync(database, run)).ShouldBe(new RunCounters(RunStates.Succeeded, 2, 0, 0, 0, 0, 0));
+            (await Sql.ScalarAsync<string>(database.Connection(null), """
+                SELECT string_agg(DISTINCT d."DisplayName" || '=' || array_to_string(c."Tags", ','), ';'
+                                  ORDER BY d."DisplayName" || '=' || array_to_string(c."Tags", ','))
+                FROM content."Chunks" c JOIN content."Documents" d ON d."LiveChunkSetId" = c."ChunkSetId"
+                WHERE d."SourceId" = $1 AND c."DeletedAt" IS NULL
+                """, seed.SourceId)).ShouldBe("avfall.md=;bygglov-ansokan.md=bygglov",
+                "the rule's glob matches the file name, so only that upload's chunks carry the (lower-cased) topic");
         }
         finally
         {
