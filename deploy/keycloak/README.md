@@ -12,6 +12,7 @@ the job.
 |---|---|---|
 | `rag-additions.json` | `"realm": "ume"`; the 7 `rag-*` realm roles; the clients `ume-rag-admin` (confidential, code + PKCE S256), `open-webui` (confidential, code, callback `/oauth/oidc/login/callback`: Open WebUI v0.12.5, which still serves the legacy `/oauth/oidc/callback` too) and `ume-rag-api` (audience only, no flow), all with *full scope allowed* off; the role scope mappings of `ume-rag-admin`, so its `roles` claim carries the `rag-*` roles and no gateway role | The gateway's additions directory (production and test) |
 | `rag-additions.local.json` | **Test or dev realms only:** the two sign-in clients again, with the pilot URIs plus the local AppHost redirect URIs, web origins and post-logout URIs (issue #95 part 3) | A test realm's additions directory, next to `rag-additions.json`. **Never in production** |
+| `examples/site-groups.json` | **An example, not an additions file:** the operator's shared groups with role mappings for both products (#468, *One group for both products* below) | Copy, adapt and name it so it sorts after `rag-additions.json` |
 | `standalone/10-rag-realm.json` | **A standalone Ume.Rag realm only:** the realm itself, with the realm-wide settings the gateway's base file holds in the shared realm (password policy, brute-force protection, no self-registration, the user profile with `departmentCodes` and `teamCodes`) | In place of the gateway's base file, see *Standalone* |
 
 The additions declare no realm settings and no `userProfile`. keycloak-config-cli replaces the whole user profile with
@@ -61,6 +62,41 @@ Group names are therefore shared across the realm:
   can't grant an Ume.Rag role by sharing its name. Don't give a gateway group a `rag-` name.
 - **Member groups** on a department (*Organisation* page) give department scope only, never a role. They are meant to
   be the same groups the gateway uses (identity design §2.1), so a gateway group of that name counts on purpose.
+
+**One group for both products** (Decisions "Shared sign-in with the gateway", #468). A person gets the roles of the
+gateway and of Ume.Rag through one group membership: a Keycloak group that carries realm-role mappings for **both**
+systems, for example `ume-admins` → `gateway-admin` + `rag-platform-admin`. The groups are the operator's data, made in
+the admin console (*Groups* → *Role mapping*) or in a **site file** next to the additions, never in `rag-additions.json`.
+`examples/site-groups.json` is a starting point:
+
+```json
+{
+  "realm": "ume",
+  "groups": [
+    { "name": "ume-admins", "realmRoles": ["gateway-admin", "rag-platform-admin"] },
+    { "name": "ume-department-admins", "realmRoles": ["department-admin", "rag-department-admin"] },
+    { "name": "ume-viewers", "realmRoles": ["viewer", "rag-viewer"] }
+  ]
+}
+```
+
+- **Name the site file so it sorts after `rag-additions.json`** (for example `site-groups.json`). The import applies
+  the files in name order, and a group can only name realm roles that already exist: a file named `90-groups.json`
+  comes before `rag-additions.json` and fails with *Cannot find realm role 'rag-platform-admin'*.
+- Each client still carries only its own roles: `ume-rag-admin`'s `roles` claim has the `rag-*` roles and the
+  gateway's `ume-admin` only gateway roles (full scope allowed is off on both). Department scope still comes from the
+  user's `departmentCodes` attribute, and a department admin needs it in both products.
+- The `rag-` rule above stays: a group that grants a RAG role through `Oidc:RoleGroups` is named `rag-…`. Shared groups
+  like `ume-admins` grant roles through Keycloak's role mappings instead, so they need no `Oidc:RoleGroups` entry.
+- **Entra ID directly** (P2, `infra/entra/`): one app registration per product, with app roles named as that product's
+  roles (`rag-platform-admin`, …, and the gateway's `gateway-admin`, …), and the **same security group** assigned in both.
+- The gateway documents the same model in its `docs/keycloak.md` (*Realm files*, *One group for several systems*;
+  thekim1/llmgateway#79).
+- **Standalone Ume.Rag** (its own Keycloak, below) uses the same site file with only the `rag-*` roles.
+
+`RealmAdditionsTests.One_shared_group_gives_each_system_its_own_role_and_no_other` imports `examples/site-groups.json`
+after the additions and checks that a member of `ume-admins` (with no direct role) gets `rag-platform-admin` from
+`ume-rag-admin` and `gateway-admin` from `ume-admin`, and nothing else.
 
 **PKCE on `open-webui`** is not required yet. Requiring it in Keycloak (`pkce.code.challenge.method` `S256`) only works
 once Open WebUI sends a challenge (`OAUTH_CODE_CHALLENGE_METHOD=S256`), so the two are set together. `ume-rag-admin`
