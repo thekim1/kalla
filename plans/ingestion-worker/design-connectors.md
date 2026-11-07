@@ -350,8 +350,10 @@ with an example pattern in the report.
   §5.1) and the page limit was not hit (`CrawlRuns.Complete`). A seed is **resolved** when it was fetched, returned
   304, was skipped by `lastmod`, or is `Gone`. Only then are documents not reached in this run deletion candidates
   (`not-seen`). A document whose URL is a **failed seed** of the run (a depth-0 frontier row of the run whose document
-  the run did not see) is never a deletion candidate in that run; its failures count towards `persistent-failure`
-  (§13.1). The deletion guard (§13.2) applies on top. The deployment value `Crawl:CompletenessRule` selects the rule:
+  the run did not see), or whose URL **failed at any depth** in the run (its latest run item is `failed`: a 403, a
+  soft 404, a challenge, a failed render; 2026-11-07, found in A-15), is never a `not-seen` candidate in that run; its
+  failures count towards `persistent-failure` (§13.1). Pages skipped by trap detection or a limit are not protected
+  this way. The deletion guard (§13.2) applies on top. The deployment value `Crawl:CompletenessRule` selects the rule:
   `Ratio` (the default, above) or `Strict` (complete only when no seed failed). (Reasoning: weakness review §3; under
   "no seed failed" one failing URL among 14,000 blocked every `not-seen` deletion.) Acceptance test C7 (§18) covers a
   partial crawl.
