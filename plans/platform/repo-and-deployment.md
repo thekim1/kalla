@@ -883,7 +883,8 @@ p50/p95/p99).
   Npgsql (and, from P2, Redis) tracing comes from the Aspire client integrations. The parser writes JSON logs to
   stdout only in P1 (no OTel, no OTLP egress; Decisions "Parser telemetry is logs only in P1", #453); the worker's
   spans around the parse call carry its timing. From P2 the parser adds `opentelemetry-instrumentation-fastapi` with
-  the same endpoint, and the worker's `traceparent` makes fetch → scan → parse → embed one trace. Chat traces continue into the gateway (it already traces incoming requests).
+  the same endpoint, and the worker's `traceparent` makes fetch → scan → parse → embed one trace.
+  Chat traces continue into the gateway (it already traces incoming requests).
 - **No content in telemetry** (plan §8a): no prompts, chunk text, document titles or URLs of `sensitive` sources;
   query strings stripped (gateway); the worker's trace filter also removes `url.full` and `server.address` from fetch
   spans (connectors design §16). A unit test scans captured telemetry from a test chat for the test content.

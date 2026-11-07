@@ -640,7 +640,8 @@ The mirror feeds pickers and V8's first check; V8's `/v1/models` call at save is
 asks the gateway what it will serve at that ceiling. The mirror is the gateway's whole catalogue, not what the
 platform's key may use, so every model picker greys out a model whose `available` is `false` ("Not available to this
 platform's key") and cannot choose it; with `null` every mirror model stays choosable with "Availability unknown"
-(Decisions "Model pickers show what the key may use", #447). Failures keep the last mirror; after 3 failed runs the Overview
+(Decisions "Model pickers show what the key may use", #447).
+Failures keep the last mirror; after 3 failed runs the Overview
 shows "Synkningen mot AI-gatewayen fungerar inte sedan {tid}" to platform admins, metric `rag.admin.sync{kind,outcome}`.
 A stale mirror narrows or keeps sign-in scope, never widens it (identity §2.6). The sync status is held in memory per
 instance (`GET /api/organisation/sync`); the run history and the 3-failures banner come with `Settings` and the
