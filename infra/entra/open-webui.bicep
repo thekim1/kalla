@@ -14,7 +14,7 @@ resource app 'Microsoft.Graph/applications@v1.0' = {
   signInAudience: 'AzureADMyOrg'
   web: {
     redirectUris: [
-      'https://${openWebUiHost}/oauth/oidc/callback'
+      'https://${openWebUiHost}/oauth/oidc/login/callback'
     ]
     implicitGrantSettings: {
       enableAccessTokenIssuance: false

@@ -607,8 +607,8 @@ Without --proxy, Open WebUI can't reach rag-api: its connection uses rag-api's p
 which this host serves on $bind only, and https://$owui_host needs the reverse proxy too. Use --proxy for a working
 Open WebUI; without it, these files only render."
   owui_note="$owui_proxy
-Open WebUI (optional): register the redirect URI https://$owui_host/oauth/oidc/callback (the legacy callback path,
-identity design §5.3) on its OIDC client '$owui_client'.$owui_todo
+Open WebUI (optional): register the redirect URI https://$owui_host/oauth/oidc/login/callback (identity design
+§5.3) on its OIDC client '$owui_client'.$owui_todo
 Then: docker compose -f deploy/compose.openwebui.yaml --env-file deploy/.env up -d --wait
 and, as root, $here/openwebui-feedback-key.sh (the feedback service account's API key for rag-api)."
 fi
