@@ -141,12 +141,14 @@ export const api = {
       version: string | null
     }) =>
       http.put<AssistantDraft>(`/api/assistants/${id}/draft`, body),
-    publish: (id: string, body: { version: string; draftVersion: string; confirmBaseChanged?: boolean }) => http.post<Assistant>(`/api/assistants/${id}/publish`, body),
+    publish: (id: string, body: { version: string; draftVersion: string; confirmBaseChanged?: boolean; confirmGeneralKnowledge?: boolean }) =>
+      http.post<Assistant>(`/api/assistants/${id}/publish`, body),
     audiences: (id: string, body: { clientIds: string[]; version: string }) => http.put<Assistant>(`/api/assistants/${id}/audiences`, body),
     test: (id: string, body: { question: string; target?: 'Draft' | 'Published' }) => http.post<AssistantTestResult>(`/api/assistants/${id}/test`, body),
     versions: (id: string) => http.get<AssistantVersionSummary[]>(`/api/assistants/${id}/versions`),
     version: (id: string, number: number) => http.get<AssistantVersion>(`/api/assistants/${id}/versions/${number}`),
-    restore: (id: string, number: number, version: string) => http.post<Assistant>(`/api/assistants/${id}/versions/${number}/restore`, { version }),
+    restore: (id: string, number: number, version: string, confirmGeneralKnowledge = false) =>
+      http.post<Assistant>(`/api/assistants/${id}/versions/${number}/restore`, { version, confirmGeneralKnowledge }),
     archive: (id: string, version: string) => http.post<Assistant>(`/api/assistants/${id}/archive`, { version }),
     unarchive: (id: string, version: string) => http.post<Assistant>(`/api/assistants/${id}/unarchive`, { version }),
     retention: (id: string, body: { historyMode: string; retentionDays: number; version: string }) => http.put<Assistant>(`/api/assistants/${id}/retention`, body),

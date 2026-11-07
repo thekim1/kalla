@@ -58,12 +58,8 @@ public sealed partial class ChatService(IPolicySnapshotSource snapshots, IAccess
             throw NotFound(chat.Model);
         }
 
+        // The published level runs, public included: V36 is a confirmed warning at publish (#445, chat design §7.3).
         var settings = resolved.Settings(assistant);
-        if (assistant.Classification == Classification.Public)
-        {
-            // V36 holds at run time too: a public assistant is always off (chat design §7.3).
-            settings = settings with { GeneralKnowledge = GeneralKnowledge.Off };
-        }
 
         var language = settings.AlwaysSwedish ? LanguageGuess.Swedish : LanguageGuess.Detect(chat.Question);
         var ceiling = gatewayOptions.Value.Cap(Ceiling(who, assistant, snapshot)); // Gateway:MaxResidency (M2, #237)

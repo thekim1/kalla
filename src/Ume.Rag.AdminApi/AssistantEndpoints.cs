@@ -102,6 +102,7 @@ public static class AssistantEndpoints
                     await CheckTeamAsync(admin, assistant.DepartmentId, request.OwnerTeamId, attempt);
                     var before = AssistantAudit.Of(assistant);
                     var levelChanged = request.Classification != assistant.Classification;
+                    var confirmed = false;
                     assistant.Name = request.Name.Trim();
                     assistant.OwnerTeamId = request.OwnerTeamId;
                     assistant.Classification = request.Classification;
@@ -113,18 +114,20 @@ public static class AssistantEndpoints
                         // Dependants are re-checked against the published version (admin design §4.6): V3, V7, V9 and V8.
                         var version = await admin.Db.AssistantVersions.AsNoTracking().SingleAsync(v => v.Id == published, attempt);
                         var audience = await AudienceClientsAsync(admin, assistant.Id, attempt);
-                        Refuse(await AssistantRules.CheckAsync(admin, assistant, version, audience, attempt));
+                        Refuse(await AssistantRules.CheckAsync(admin, assistant, version, audience, attempt, confirmGeneralKnowledge: request.ConfirmGeneralKnowledge));
                         await models.EnsureServableAsync(version.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt);
+                        confirmed = AssistantRules.NeedsGeneralKnowledgeConfirmation(assistant, version.QuerySteps);
                     }
 
-                    return new AdminChange<Assistant>(assistant, "update", AuditEntityTypes.Assistant, assistant.Id, before, AssistantAudit.Of(assistant))
+                    object after = confirmed ? new { assistant = AssistantAudit.Of(assistant), generalKnowledgeConfirmed = true } : AssistantAudit.Of(assistant);
+                    return new AdminChange<Assistant>(assistant, "update", AuditEntityTypes.Assistant, assistant.Id, before, after)
                     {
                         DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
                     };
                 }, ct);
                 return await DetailAsync(admin, saved, ct);
             })
-            .RequireAuthorization(AdminPolicies.Edit).WithName("UpdateAssistant").WithSummary("Change the assistant's own fields (a level change re-checks V3, V7, V8, V9)");
+            .RequireAuthorization(AdminPolicies.Edit).WithName("UpdateAssistant").WithSummary("Change the assistant's own fields (a level change re-checks V3, V7, V8, V9, V36)");
 
         assistants.MapGet("/{id:guid}/draft", async (Guid id, AdminContext admin, CancellationToken ct) =>
             {
@@ -221,10 +224,11 @@ public static class AssistantEndpoints
                     }
 
                     var audience = await AudienceClientsAsync(admin, id, attempt);
-                    Refuse(await AssistantRules.CheckAsync(admin, assistant, draft, audience, attempt, publishing: true));
+                    Refuse(await AssistantRules.CheckAsync(admin, assistant, draft, audience, attempt, publishing: true, confirmGeneralKnowledge: request.ConfirmGeneralKnowledge));
                     await models.EnsureServableAsync(draft.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt);
 
                     var before = AssistantAudit.Of(assistant);
+                    var confirmed = AssistantRules.NeedsGeneralKnowledgeConfirmation(assistant, draft.QuerySteps);
                     if (published is not null)
                     {
                         published.State = AssistantVersionStates.Superseded;
@@ -238,8 +242,10 @@ public static class AssistantEndpoints
                     assistant.DraftVersionId = null;
                     assistant.UpdatedAt = admin.Now;
                     assistant.UpdatedBy = admin.Actor;
-                    return new AdminChange<Assistant>(assistant, "publish", AuditEntityTypes.Assistant, assistant.Id, before,
-                        new { assistant = AssistantAudit.Of(assistant), version = DraftAudit.Of(draft) })
+                    object after = confirmed
+                        ? new { assistant = AssistantAudit.Of(assistant), version = DraftAudit.Of(draft), generalKnowledgeConfirmed = true }
+                        : new { assistant = AssistantAudit.Of(assistant), version = DraftAudit.Of(draft) };
+                    return new AdminChange<Assistant>(assistant, "publish", AuditEntityTypes.Assistant, assistant.Id, before, after)
                     {
                         DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
                     };
@@ -312,7 +318,7 @@ public static class AssistantEndpoints
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("GetAssistantVersion").WithSummary("One version's settings");
 
-        assistants.MapPost("/{id:guid}/versions/{number}/restore", async (Guid id, string number, VersionRequest request, AdminContext admin, GatewayModelCheck models,
+        assistants.MapPost("/{id:guid}/versions/{number}/restore", async (Guid id, string number, RestoreRequest request, AdminContext admin, GatewayModelCheck models,
                 CancellationToken ct) =>
             {
                 var saved = await admin.WriteAsync(async attempt =>
@@ -336,8 +342,9 @@ public static class AssistantEndpoints
 
                     // Exactly as publish (admin design §4.5): V34, then every assistant rule as refusals and V8's /v1/models call.
                     var audience = await AudienceClientsAsync(admin, id, attempt);
-                    Refuse(await AssistantRules.CheckAsync(admin, assistant, restored, audience, attempt, publishing: true));
+                    Refuse(await AssistantRules.CheckAsync(admin, assistant, restored, audience, attempt, publishing: true, confirmGeneralKnowledge: request.ConfirmGeneralKnowledge));
                     await models.EnsureServableAsync(restored.GatewayModel!, AssistantRules.Ceiling(assistant, audience), attempt);
+                    var confirmed = AssistantRules.NeedsGeneralKnowledgeConfirmation(assistant, restored.QuerySteps);
 
                     var before = AssistantAudit.Of(assistant);
                     if (assistant.PublishedVersionId is { } current)
@@ -352,8 +359,10 @@ public static class AssistantEndpoints
                     assistant.PublishedVersionId = restored.Id;
                     assistant.UpdatedAt = admin.Now;
                     assistant.UpdatedBy = admin.Actor;
-                    return new AdminChange<Assistant>(assistant, "restore", AuditEntityTypes.Assistant, assistant.Id, before,
-                        new { assistant = AssistantAudit.Of(assistant), version = DraftAudit.Of(restored), restoredFrom = source.Number })
+                    object after = confirmed
+                        ? new { assistant = AssistantAudit.Of(assistant), version = DraftAudit.Of(restored), restoredFrom = source.Number, generalKnowledgeConfirmed = true }
+                        : new { assistant = AssistantAudit.Of(assistant), version = DraftAudit.Of(restored), restoredFrom = source.Number };
+                    return new AdminChange<Assistant>(assistant, "restore", AuditEntityTypes.Assistant, assistant.Id, before, after)
                     {
                         DepartmentId = assistant.DepartmentId, Classification = assistant.Classification,
                     };
@@ -541,7 +550,7 @@ public sealed record RuleProblem(AdminErrorCode Code, IReadOnlyDictionary<string
 /// ≥ the level), V8's ceiling (the ladder of max(level, ceilings of the audience clients that store history)), V9
 /// (<c>sensitive</c> only for clients without history when the policy says so), V11 (≤ 20 collections, each of the
 /// assistant's department or shared with it, ≤ 20 topics per link in the chunk tag format), V15 (not-found texts and links), V17 (query step ranges), V34 (the definition resolves;
-/// description and contact set) and V36 (a <c>public</c> assistant keeps <c>answer.generalKnowledge</c> <c>off</c>). Returned as problems: refusals on publish, warnings on draft save.
+/// description and contact set) and V36 (a <c>public</c> assistant with general knowledge needs <c>confirmGeneralKnowledge</c>, #445). Returned as problems: refusals on publish, warnings on draft save.
 /// </summary>
 public static class AssistantRules
 {
@@ -555,7 +564,7 @@ public static class AssistantRules
     }
 
     public static async Task<IReadOnlyList<RuleProblem>> CheckAsync(AdminContext admin, Assistant assistant, AssistantVersion version, IReadOnlyList<Client> audience,
-        CancellationToken ct, bool publishing = false)
+        CancellationToken ct, bool publishing = false, bool confirmGeneralKnowledge = false)
     {
         ArgumentNullException.ThrowIfNull(admin);
         ArgumentNullException.ThrowIfNull(assistant);
@@ -622,7 +631,12 @@ public static class AssistantRules
 
         problems.AddRange(await AudienceRulesAsync(admin, assistant, audience, ct));
         problems.AddRange(QuerySteps(version.QuerySteps));
-        problems.AddRange(GeneralKnowledgeForLevel(assistant, version.QuerySteps));
+        if (!confirmGeneralKnowledge && NeedsGeneralKnowledgeConfirmation(assistant, version.QuerySteps))
+        {
+            problems.Add(new RuleProblem(AdminErrorCodes.GeneralKnowledgePublicUnconfirmed,
+                new Dictionary<string, string> { ["level"] = assistant.Classification, ["generalKnowledge"] = GeneralKnowledgeValue(version.QuerySteps)! }, []));
+        }
+
         problems.AddRange(await NotFoundAsync(admin, version.NotFound, ct));
         return problems;
     }
@@ -722,18 +736,18 @@ public static class AssistantRules
     }
 
     /// <summary>
-    /// V36 (chat design §7.3, §10.4): a <c>public</c> assistant answers only from its sources; <c>supplement</c>,
-    /// <c>fallback</c> and <c>open</c> need level <c>internal</c> or higher.
+    /// V36 (Decisions "General knowledge on a public assistant", #445): a <c>public</c> assistant whose version uses general
+    /// knowledge (<c>supplement</c>, <c>fallback</c> or <c>open</c>) needs an explicit confirmation.
     /// </summary>
-    private static IEnumerable<RuleProblem> GeneralKnowledgeForLevel(Assistant assistant, string json)
+    public static bool NeedsGeneralKnowledgeConfirmation(Assistant assistant, string querySteps)
     {
-        var value = (JsonNode.Parse(json) as JsonObject)?["answer"]?["generalKnowledge"] is JsonValue g && g.GetValueKind() == JsonValueKind.String ? g.GetValue<string>() : null;
-        if (assistant.Classification == Classification.Public && value is not null && value != Ume.Rag.Answering.Chat.GeneralKnowledgeLevels.Off)
-        {
-            yield return new RuleProblem(AdminErrorCodes.GeneralKnowledgeNotAllowedForLevel,
-                new Dictionary<string, string> { ["level"] = assistant.Classification, ["generalKnowledge"] = value }, []);
-        }
+        ArgumentNullException.ThrowIfNull(assistant);
+        return assistant.Classification == Classification.Public && GeneralKnowledgeValue(querySteps) is { } value
+            && value != Ume.Rag.Answering.Chat.GeneralKnowledgeLevels.Off;
     }
+
+    private static string? GeneralKnowledgeValue(string json) =>
+        (JsonNode.Parse(json) as JsonObject)?["answer"]?["generalKnowledge"] is JsonValue g && g.GetValueKind() == JsonValueKind.String ? g.GetValue<string>() : null;
 
     /// <summary>V15 (chat design §9.4, §10.1): texts ≤ 1,000 characters, ≤ 5 links, https, hosts in <c>Settings.Chat.allowedLinkHosts</c>.</summary>
     private static async Task<IEnumerable<RuleProblem>> NotFoundAsync(AdminContext admin, string json, CancellationToken ct)
@@ -861,6 +875,9 @@ public sealed record AssistantUpdateRequest : AssistantFields
 {
     [Required]
     public string? Version { get; init; }
+
+    /// <summary>V36 (#445): confirms general knowledge on an assistant whose level changes to <c>public</c>.</summary>
+    public bool ConfirmGeneralKnowledge { get; init; }
 }
 
 public sealed record DraftRequest : AdminRequest
@@ -916,6 +933,18 @@ public sealed record PublishRequest : AdminRequest
     public string? DraftVersion { get; init; }
 
     public bool ConfirmBaseChanged { get; init; }
+
+    /// <summary>V36 (#445): confirms general knowledge on a <c>public</c> assistant.</summary>
+    public bool ConfirmGeneralKnowledge { get; init; }
+}
+
+/// <summary>A restore's body: the assistant's <c>version</c> and the V36 confirmation (#445).</summary>
+public sealed record RestoreRequest : AdminRequest
+{
+    [Required]
+    public string? Version { get; init; }
+
+    public bool ConfirmGeneralKnowledge { get; init; }
 }
 
 public sealed record AudiencesRequest : AdminRequest

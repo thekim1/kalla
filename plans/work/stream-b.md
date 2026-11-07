@@ -173,7 +173,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** every other code item of both streams.
 - **Read:** Decisions "7-day rule in development"; identity §5.3.
 
-### [ ] B-18 General knowledge on a public assistant: warn and confirm (#445)
+### [x] B-18 General knowledge on a public assistant: warn and confirm (#445)
 - **Do:** V36 turns from a refusal into a confirmed warning: draft save returns `general_knowledge_public_unconfirmed`
   as a warning; publish, restore and `PUT /api/assistants/{id}` with a level change to `public` answer 409 with that
   code until the body carries `confirmGeneralKnowledge: true`, and the audit event records `generalKnowledgeConfirmed`.

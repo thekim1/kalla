@@ -317,9 +317,9 @@
       "message": "The setting {field} is outside its allowed range."
     },
     {
-      "code": "general_knowledge_not_allowed_for_level",
+      "code": "general_knowledge_public_unconfirmed",
       "status": 409,
-      "message": "An assistant at level {level} answers only from its knowledge bases; general knowledge needs level internal or higher."
+      "message": "General knowledge ({generalKnowledge}) on a public assistant is not recommended: citizens may get general answers that are wrong for Ume\u00E5 kommun. Confirm to go ahead."
     },
     {
       "code": "link_host_not_allowed",
