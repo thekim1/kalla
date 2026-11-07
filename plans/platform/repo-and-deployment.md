@@ -291,7 +291,7 @@ Admin settings (admin design §2.2–§2.3, §4.10): `Admin:GatewayAdminUrl` (cr
 P2 `OrgSync:MaxAgeHours` 24 with the Graph member-group lookup (identity design §2.1); key `OrgSync__DataApiKey`, §6.3).
 
 Worker settings besides `Worker:*` (connectors design §7, §8): `Crawl:AllowedPrivateRanges` (fed from
-`UME_RAG_CRAWL_ALLOW`, §7.1); `Crawl:MaxHostRate` (50 req/s) and `Crawl:MaxHostConnections` (16), the ceilings of a host's politeness profile (connectors design §6.6); `Crawl:CompletenessRule` (`Ratio` default, `Strict`; connectors design §5.4); the renderer's `Render:Endpoint` (the `rag-renderer` WebSocket URL; empty: no renderer, `browser` sources wait with `render.not_configured`), `Render:MaxConcurrent` (2), `Render:MaxPerHost` (1), `Render:PageTimeout` (20 s), `Render:MaxRequests` (50), `Render:MaxBytes` (20 MB), `Render:QuietPeriod` (100 ms), `Render:AssetCacheMb` (128), `Render:RecycleAfterPages` (100), `Render:BlockedHosts` (connectors design §8.3). Platform-wide crawl values live in `config."Settings".Crawl`.
+`UME_RAG_CRAWL_ALLOW`, §7.1); `Crawl:MaxHostRate` (50 req/s) and `Crawl:MaxHostConnections` (16), the ceilings of a host's politeness profile (connectors design §6.6); `Crawl:CompletenessRule` (`Ratio` default, `Strict`; connectors design §5.4); the renderer's `Render:Endpoint` (the `rag-renderer` WebSocket URL with its secret path, a secret; empty: no renderer, `browser` sources wait with `render.not_configured`), `Render:MaxConcurrent` (2), `Render:MaxPerHost` (1), `Render:PageTimeout` (20 s), `Render:MaxRequests` (50), `Render:MaxBytes` (20 MB), `Render:QuietPeriod` (100 ms), `Render:AssetCacheMb` (128), `Render:Viewport` (1280×2000), `Render:BlockedHosts` (connectors design §8.3). Platform-wide crawl values live in `config."Settings".Crawl`.
 
 Platform settings (data-model §5): `Config:MaxUnconfirmedSeconds` (90 s grace window for security-relevant decisions
 on every service).
@@ -467,13 +467,21 @@ in dev, TLS through `PARSER_TLS_*` in production Compose. Size budget ≤ 4.0 GB
 
 ### 5.4 Renderer image (`images/renderer/Dockerfile`)
 
-Decided 2026-11-07 (Decisions "JavaScript rendering"; connectors design §8): the official Playwright image pinned by
-digest, running only `playwright run-server` (the exact version of the worker's `Microsoft.Playwright`) with Chromium;
-no other process, no logic, no volumes. User 10002, `read_only` with a `tmpfs` `/tmp`, `cap_drop: [ALL]`,
-`no-new-privileges`, Chromium's sandbox through Chrome's seccomp profile (or `--no-sandbox` if the spike shows the
-profile cannot work under Compose; the network isolation is the boundary either way, to-verify #29), `shm_size` 1 GB,
-memory 2 GB and 2 CPUs by default (`compose.host-24g.yaml` may raise them), `pids_limit`. Only on the internal
-`render` network (§6.1): Chromium has no route out and no DNS; the worker fetches and fulfils every request.
+Decided 2026-11-07 (Decisions "JavaScript rendering"; connectors design §8), checked in the spike (A-9, results-a row
+29): the official Playwright image pinned by digest (`mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a7…`,
+2.56 GB with Firefox and WebKit; a Chromium-only image is worth trying in A-10) plus `playwright-core` installed at
+build time from a lockfile (`npm ci`; the image carries no Playwright package, and `npx` would download at start,
+which fails without a network). It runs only `node …/cli.js launch-server --browser chromium --config <file>` with
+`{ chromiumSandbox: true, wsPath: <secret from the environment> }` (`run-server` launches with `--no-sandbox` and
+ignores the client's sandbox option); WebRTC disabled by a Chromium flag in the config. No other process, no logic, no
+volumes. User 10002, `read_only` with a sized `tmpfs` `/tmp` (no `shm_size`: Playwright passes
+`--disable-dev-shm-usage`), `cap_drop: [ALL]`, `no-new-privileges`, and a **seccomp profile kept in
+`images/renderer/`: Moby's default plus `clone`, `unshare` and `chroot`**, so Chromium's own sandbox (user namespaces
+and its seccomp filter) works; Docker's default profile fails it. To check on the production Linux host: Ubuntu's
+`apparmor_restrict_unprivileged_userns` may block the user namespaces. Memory 2 GB and 2 CPUs by default
+(`compose.host-24g.yaml` may raise them; the spike peaked at 215 MB), `pids_limit`, a health check; one shared browser
+per container, so a restart is the recycle. Only on the internal `render` network (§6.1): Chromium has no route out
+and no external DNS; the worker fetches and fulfils every request.
 
 ### 5.5 ClamAV image (`images/clamav/Dockerfile`)
 
@@ -522,7 +530,7 @@ allowed to reach it, and the egress chain matches such endpoints by their origin
 | `backup` | 172.30.16.0/24 | no | postgres (pgBackRest `archive-push` and backups, §7.4) | firewall: only the S3 endpoint of the backup target (`UME_RAG_BACKUP_ENDPOINT`); none with a mounted share (§7.4) |
 | `llm` | 172.30.3.0/24 | no | rag-api(+b), rag-worker, rag-admin(+b) | firewall: the gateway's address and port (gateway's `llm` name); for api and admin, whose default route it holds, also the OIDC authority (`UME_RAG_OIDC_AUTHORITY`: the shared Keycloak in the pilot, `login.microsoftonline.com` with Entra from P2; from P2 Graph for the admin's member-group lookup and the api's JWKS, Graph and OBO, identity design §7–§9), the Open WebUI host (the api's feedback import, chat design §14.2) and the OTLP endpoint |
 | `ingestion` | 172.30.4.0/24 | **yes** | rag-worker, rag-clamav | none |
-| `render` | 172.30.18.0/24 | **yes** | rag-worker, rag-renderer (connectors design §8.3) | none: the renderer has no other network, so Chromium reaches nothing but the worker |
+| `render` | 172.30.18.0/24 | **yes** | rag-worker, rag-renderer (connectors design §8.3) | none: the renderer has no other network, so Chromium reaches nothing but the worker; the host's `INPUT` rule rejects the subnet (the bridge gateway answers at the IP level, A-9) |
 | `parser` | 172.30.5.0/24 | **yes** | rag-worker, rag-parser | none (parser has no other network) |
 | `crawl` | 172.30.6.0/24 | no | rag-worker (default route; the renderer is **not** on it: the worker fetches and fulfils every browser request, connectors design §8.3) | firewall: the gateway and the OTLP endpoint (the worker's calls leave here), the allow-list `UME_RAG_CRAWL_ALLOW` (municipal hosts), then nothing private (RFC 1918, CGNAT, loopback, link-local, documentation, multicast, reserved), the rest of the Internet; app-level `IEgressGuard` in addition |
 | `mirror` | 172.30.7.0/24 | no | rag-clamav | firewall: only `database.clamav.net:443` (decided: no internal mirror), or only freshclam's proxy (`UME_RAG_FRESHCLAM_PROXY`) |

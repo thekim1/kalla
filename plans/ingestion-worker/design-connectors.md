@@ -697,10 +697,10 @@ detection, storage) stays in the worker (§8.7 lists the options weighed).
 ### 8.1 When to render
 
 - **Per source, explicit:** the source setting `fetchMode` = `http` (default) or `browser`, and an optional
-  `readySelector` (CSS; default: the host profile's `mainRoot`). Every page of a `browser` source is rendered; HTTP
-  stays the default for every other source. Path rules and automatic detection may follow once the first sites are
-  measured (§8.8); short text alone is not a reliable signal (some valid pages are only a heading). Uploaded HTML is
-  never rendered. The site profile's `javascriptNeeded` field is removed.
+  `readySelector` (CSS naming the loaded content; default none: the quiet rule, §8.3). Every page of a `browser` source
+  is rendered; HTTP stays the default for every other source. Path rules and automatic detection may follow once the
+  first sites are measured (§8.8); short text alone is not a reliable signal (some valid pages are only a heading).
+  Uploaded HTML is never rendered. The site profile's `javascriptNeeded` field is removed.
 - **Hint, not a decision:** the source form's preflight (admin §4.7) fetches each start URL raw and rendered and shows
   both main-text word counts, with "This site seems to need JavaScript" when the raw count is under half the rendered
   one; the editor switches `fetchMode`. The crawl report's short-page note (§5.5) and the `parse.empty` text point to
@@ -737,47 +737,69 @@ engine, a hosted service for anti-bot sites) can sit behind `IRenderer` later.
 
 ### 8.3 How a page is rendered
 
+Checked in the spike (A-9, results-a row 29, 2026-11-07; Playwright 1.64.1, Chromium 156).
+
 - **Process:** the worker drives the browser with Playwright .NET (`BrowserType.ConnectAsync`) over WebSocket to
-  `rag-renderer`, which runs only Playwright's `run-server` with Chromium (repo-and-deployment §5.4); the NuGet and
-  the server are the same exact version. One browser per worker connection, a warm pool of contexts, the browser
-  recycled after `Render:RecycleAfterPages` (100).
+  `rag-renderer`, which runs only Playwright's `launch-server` with Chromium, its sandbox on (repo-and-deployment
+  §5.4). `Render:Endpoint` includes a **secret path** (`wsPath`): the server's version check accepts any client and a
+  page's own WebSocket could otherwise reach the port. The NuGet and the server are the same exact version (the server
+  itself checks only major.minor, so the pin is ours). One shared browser, a fresh context per page, a warm pool of
+  contexts. The NuGet runs Playwright's Node driver as a child of the worker (≈ 135 MB on disk, ≈ 150–175 MB RSS).
 - **Every request through the worker:** `RouteAsync("**/*")` sends each browser request to `IRenderFetcher`, which
-  fetches it with the guarded `HttpFetcher` (`EgressPurpose.Render`: guard, DNS pinning, robots.txt, caps, no
-  cookies, https → http refused) and answers with `FulfillAsync`. The main document is the body the worker already
-  fetched. Chromium itself opens no connection: `rag-renderer` sits only on the internal `render` network (no route
-  out, no DNS), so anything the route misses (WebSocket, DNS prefetch, a future API) fails closed. Service workers
-  blocked, downloads aborted, WebSockets routed and closed, no cookies or storage kept (a fresh context per page).
-- **Not fetched:** images, fonts, media, and requests to the tracker list (`Render:BlockedHosts`, a built-in list of
-  analytics, tag-manager and chat-widget hosts; the profile may add or exempt hosts). Fulfilled with an empty 204.
+  fetches it with the guarded `HttpFetcher` (`EgressPurpose.Render`: guard, DNS pinning, robots.txt, caps,
+  https → http refused) with the request's method, headers and body, and answers with `FulfillAsync` (status,
+  headers without `content-encoding`/`content-length`, body). The main document is the body the worker already
+  fetched. **Redirects are followed by the worker and the final response fulfilled**: a fulfilled 30x does not work
+  (Playwright continues the hop unrouted, and it fails closed); a redirected module script whose relative imports
+  then resolve against the original URL breaks, and is counted (`render.redirected_module`). CORS preflights are
+  answered inside Playwright and never reach the worker, so the worker applies its own **method policy**: `GET` and
+  `HEAD` anywhere in scope of the guard, `POST` only to the page's own site, every other method refused (204).
+- **Fails closed:** `rag-renderer` sits only on the internal `render` network (no route out, no external DNS: Docker's
+  resolver answers but resolves nothing outside), so anything the route misses fails. Service workers blocked;
+  **`RouteWebSocketAsync` is mandatory** and closes every WebSocket; WebRTC disabled (it otherwise puts mDNS and IGMP
+  on the bridge); the host's `INPUT` rule rejects the `render` subnet (the bridge gateway is reachable at the IP
+  level, repo-and-deployment §6.1).
+- **Not fetched:** images, fonts, media, iframe documents (an empty page; the output drops iframes, below) and requests
+  to the tracker list (`Render:BlockedHosts`, a built-in list of analytics, tag-manager and chat-widget hosts; the
+  profile may add or exempt hosts). Fulfilled with an empty 204.
 - **Asset cache:** scripts and stylesheets are cached in the worker per (level, URL) for the run, within
-  `Render:AssetCacheMb` (128) and their `Cache-Control`; content-hashed bundles load once per run, not once per page.
-- **Ready:** the worker knows every open request, so a page is ready when `load` has fired and no request has been
-  open for `Render:QuietPeriod` (100 ms), or when `ReadySelector` (the profile's `mainRoot`) holds text; hard limit
-  `Render:PageTimeout` (20 s). No fixed network-idle wait.
-- **Output:** the DOM serialised with open shadow roots flattened into it and the bodies of same-host, in-scope iframes
-  inlined (their requests already went through the worker), after `<script>`, `<noscript>`, `<style>`, `<template>`,
-  inline event handlers and the remaining `<iframe>`s are removed; it is the document's raw content (`text/html`), and
-  everything downstream (links, §12 noise hash, raw blob, parse with the site profile) runs on it unchanged. Links are
-  the rendered DOM's `<a href>`; navigation done only in script is not followed.
+  `Render:AssetCacheMb` (128), skipping `no-store`; Playwright's routing disables the browser's own cache, so this is
+  the only one. Measured on a fixture SPA: 6.3 requests fetched, 5.7 from the cache and 5 blocked per page, against 18
+  fetched without them; p50 519 ms against 778 ms.
+- **Ready:** the worker knows every open request: a page is ready when `load` has fired and no routed request has
+  been open for `Render:QuietPeriod` (100 ms), or when `readySelector` names the **loaded content** and it holds text
+  (a selector on a container that shows a "Loading…" placeholder is ready too early, 0 of 5 in the spike; the default
+  is the quiet rule, not the profile's `mainRoot`); hard limit `Render:PageTimeout` (20 s). No network-idle wait (it
+  added ≈ 400 ms per page).
+- **Lazy content:** content that loads on scroll is missing at ready (the spike: 0 of 40 items). A source's
+  `scrollToLoad` scrolls to the bottom until the height stops growing (at most 10 steps), each step ending on the
+  quiet rule (+≈ 950 ms and +5 requests on the fixture); `Render:Viewport` (default 1280×2000) is the cheaper partial
+  remedy, loading what fits without extra steps.
+- **Output:** `page.ContentAsync()` (it serialises in Playwright's isolated world, so page script cannot tamper with
+  it), then cleaned in the worker with AngleSharp (≈ 15 ms): `<script>`, `<noscript>`, `<style>`, `<template>` (except
+  `template[shadowrootmode]` once open shadow roots are serialised), inline `on*` handlers and `<iframe>`s removed. It
+  is the document's raw content (`text/html`), and everything downstream (links, §12 noise hash, raw blob, parse with
+  the site profile) runs on it unchanged. Links are the rendered DOM's `<a href>` plus the discovered ones below.
+  **Later:** open shadow roots and same-host iframe bodies inlined (needs the iframe documents fetched, which the first
+  version does not).
 - **Browser operations bounded** (Crawlee review): creating a context or page times out after 15 s and closing one
   after 5 s; a timeout or failure drops the connection and reconnects (`render.unavailable` for that page); the
-  connection is closed after 60 s idle, so the renderer frees its memory between crawl windows; the browser is
-  recycled after `Render:RecycleAfterPages` (100).
-- **Script navigation and meta refresh:** a main-frame navigation by script or meta refresh before ready is treated as
-  a redirect hop (§3.2: the worker fetches the target with the guard, scope and robots checks, at most 5 hops in all);
-  after ready it is aborted and its target recorded as a discovered link. `window.open` popups and downloads are
-  aborted and their URLs recorded as discovered links (a PDF behind a script button is found that way).
-- **Cookies within one page only:** a context keeps a cookie jar for its page's lifetime: `Set-Cookie` from fulfilled
-  responses is applied, and the jar's cookies are sent on that page's later requests (a data API that needs the
-  shell's session or CSRF cookie works). The jar is dropped with the context; nothing is carried across pages or
-  stored.
-- **Optional scroll for lazy content:** a source's `scrollToLoad` (off by default) scrolls to the bottom after ready,
-  up to 3 steps, each ending on the quiet period again, within `MaxRequests` and `PageTimeout` (the spike measures it
-  against a tall viewport).
+  connection is closed after 60 s idle. With one shared browser per `launch-server`, the browser is recycled by
+  restarting the container (its memory limit and health check), not per page count.
+- **Script navigation and meta refresh:** a main-frame navigation by script or meta refresh arrives in the route as a
+  document request; it is **answered with 204, which keeps the current document** (aborting it would replace the
+  page with an error page), and its target is recorded: before ready as a redirect hop (§3.2: the worker fetches the
+  target with the guard, scope and robots checks, at most 5 hops in all, and renders that instead), after ready as a
+  discovered link. Popups (`window.open`) and downloads bypass the route: their URLs are taken from the context's
+  `Page` and the page's `Download` events and recorded as discovered links, and popups are closed at once (they fail
+  closed on the `render` network anyway). A PDF behind a script button is found that way.
+- **Cookies within one page only:** `Set-Cookie` of fulfilled responses is passed to the browser, which applies it to
+  the page's context, and the browser's `Cookie` header on later routed requests is forwarded by the worker (as a
+  header; `CrawlHttpClient` keeps `UseCookies = false`). The context and its cookies are dropped after the page;
+  nothing is carried across pages or stored. (Spike: a data API that needs the shell's cookie answered 401 without
+  this, the content with it.)
 - **Limits:** at most `Render:MaxRequests` (50) and `Render:MaxBytes` (20 MB) per page; past them the remaining
-  requests get 204 (fact `truncated`). A main-frame navigation by script is aborted (fact `render.navigated`). A page
-  is kept only when it reached **ready**: with `readySelector` set, the selector must hold text; otherwise the quiet
-  period must have been reached before the deadline.
+  requests get 204 (fact `truncated`). A page is kept only when it reached **ready**.
 - **Capacity:** `Render:MaxConcurrent` (2) renders per worker and `Render:MaxPerHost` (1) per host, to tune from
   measurements. A fetch job **takes a render slot only when one is free**; otherwise it is released back to the queue
   (`render.busy`, a short delay, no attempt counted), so browser work never holds the `fetch` slots that HTTP sources
@@ -786,6 +808,8 @@ engine, a hosted service for anti-bot sites) can sit behind `IRenderer` later.
   budget's pacing (§6.3) like any fetch; cache hits and blocked requests don't. A page that needs ten uncached requests
   on a host paced at 1 request/s costs about ten seconds of that host's budget: the host's request rate, not the
   number of browsers, is the ceiling, so blocking and caching matter most.
+- **Measured (fixture, 100 ms latency, one at a time, p50):** a static page 144 ms over HTTP and 261 ms rendered; a
+  client-rendered page 519 ms with the cache and blocking; renderer peak 215 MB. Real sites: A-13.
 
 ### 8.4 Failures keep the last good content
 
@@ -828,7 +852,7 @@ the crawl report counts rendered pages, render failures and pages kept from the 
 | Chromium in the worker image | Rejected: untrusted JavaScript would run next to the database credentials, the blob store and the gateway keys; ~500 MB more on the worker. |
 | The crawler inside the browser image (a Node service, Crawlee or a self-hosted Firecrawl) | Rejected: the same exposure, and frontier, guard and change detection twice in two languages (plan answered 14). |
 | The browser fetching through an egress proxy | Rejected: HTTPS can't be inspected without a private CA in the browser, and the guard's DNS pinning and redirect checks can't be enforced. |
-| A lighter engine (Lightpanda, CDP-compatible) | Not now; measured next to Chromium in the spike (to-verify #29), and can sit behind `IRenderer` if it renders the target sites. |
+| A lighter engine (Lightpanda, CDP-compatible) | Not now. The spike: `ConnectOverCDPAsync`, contexts and route + fulfil work, 14 MB peak against Chromium's 215 MB, about the same speed on the fixture; bypass, scroll and sandbox not checked. Measured again on the real sites (A-13); can sit behind `IRenderer`. |
 | Automatic per-page detection (render only when the raw text is short) | Not in the first version: short text is not a reliable signal, and a shell with enough navigation text would be stored empty. |
 
 ### 8.8 Measured before and after the first version
