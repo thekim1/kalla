@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Cookie SPA</title></head>
+<body><main id="app">Laddar…</main>
+<script>
+fetch('/api/session-data', { credentials: 'same-origin' })
+  .then(r => r.ok ? r.json() : { text: 'COOKIE-MISSING status ' + r.status })
+  .then(d => { document.getElementById('app').textContent = d.text; });
+</script></body></html>

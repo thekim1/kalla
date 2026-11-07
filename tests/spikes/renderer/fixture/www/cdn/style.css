@@ -1,0 +1,2 @@
+@font-face { font-family: Spike; src: url("http://cdn.test/font.woff2") format("woff2"); }
+body { font-family: Spike, sans-serif; background: url("http://cdn.test/img.png"); }

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Renderer spike (A-9). Not in UmeRag.slnx; throwaway. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>RendererSpike</RootNamespace>
+    <!-- Only the linux-x64 Node driver (the spike runs in the worker's base image). -->
+    <PlaywrightPlatform>linux-x64</PlaywrightPlatform>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Playwright" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The worker's egress guard and DNS-pinned client (connectors design §7), reused as they are; AngleSharp comes with it. -->
+    <ProjectReference Include="..\..\..\..\src\Ume.Rag.Worker\Ume.Rag.Worker.csproj" />
+  </ItemGroup>
+</Project>

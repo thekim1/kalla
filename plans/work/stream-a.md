@@ -77,7 +77,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** every other code item of both streams.
 - **Read:** Decisions "7-day rule in development"; identity §5.3.
 
-### [ ] A-9 Renderer spike (to-verify #29)
+### [x] A-9 Renderer spike (to-verify #29)
 - **Do:** prove the risky parts before building: Playwright .NET `ConnectAsync` to a `playwright run-server` container
   on an internal network; `RouteAsync("**/*")` + `FulfillAsync` from a worker-side fetch for every resource type
   (module scripts, CORS preflights, redirects); service workers blocked; WebSockets routed and closed; DNS prefetch and

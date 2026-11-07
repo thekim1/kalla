@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><title>SW</title></head><body><p id="r">pending</p>
+<script>
+const r = document.getElementById('r');
+r.textContent = 'secure=' + window.isSecureContext + ' api=' + ('serviceWorker' in navigator);
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready)
+    .then(() => { r.textContent += ' SW-REGISTERED'; }, e => { r.textContent += ' SW-ERROR ' + e.name; });
+  setTimeout(() => { r.textContent += ' done'; }, 2000);
+} else { r.textContent += ' done'; }
+</script></body></html>
