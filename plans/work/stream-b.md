@@ -216,7 +216,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** Decisions "Model pickers show what the key may use"; admin §4.5 (`/api/gateway/models`), §4.6 V8/V32,
   §4.10.
 
-### [x] B-21 One connection pool in rag-api (M-3, #127)
+### [x] B-21 One connection pool in rag-api (M-3, #127) (#485)
 - **Do:** rag-api registers a second keyed `NpgsqlDataSource` (`"retrieval"`, `Answering/KnowledgeExtensions.cs:40`,
   `Retrieval/Postgres/RetrievalDataSource.cs`) next to `ragdb` on the same connection string, which can double the
   connections per instance and breaks `MaxConcurrentSearches = ⌊(pool − 3) ÷ 2⌋` (knowledge §6.6, data-model §1.1:
