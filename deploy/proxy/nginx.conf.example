@@ -1,0 +1,101 @@
+# nginx in front of Ume.Rag (re-encrypting to the HTTPS listeners), in the shape of the gateway's deploy/proxy (#468).
+# deploy/init-deployment.sh --proxy fills in the @placeholders@ and writes proxy/nginx.conf; with --openwebui-host it
+# also enables the lines marked #owui. Add your own ssl_certificate / ssl_certificate_key (your PKI or Let's Encrypt).
+# Pass the Host header through unchanged: the admin UI builds its OIDC redirect URIs from it.
+# Restrict the published ports to this proxy: init-deployment.sh --proxy-address (the host firewall) or a network firewall.
+
+# WebSocket upgrade (Open WebUI's live connection); other requests keep the pooled keep-alive connection.
+map $http_upgrade $ume_rag_connection { default upgrade; '' ''; }
+
+upstream ume_rag_api {
+    server @UPSTREAM@:@API_PORT@;
+    keepalive 32;
+}
+upstream ume_rag_admin {
+    server @UPSTREAM@:@ADMIN_PORT@;
+}
+#owui upstream ume_rag_openwebui {
+#owui     server @UPSTREAM@:@OPENWEBUI_PORT@;
+#owui }
+
+# rag-api: chat completions (streamed), knowledge, MCP, the OpenAI-compatible model list.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name @API_HOST@;
+    # ssl_certificate     /etc/ssl/@API_HOST@.crt;
+    # ssl_certificate_key /etc/ssl/@API_HOST@.key;
+
+    client_max_body_size 1m;           # questions and chat history; files are never sent here
+    location / {
+        proxy_pass https://ume_rag_api;
+        proxy_http_version 1.1;
+        proxy_set_header Connection '';
+        proxy_set_header Host $host;
+        # The client's address, for key IP allow-lists and security events. List this proxy under the trusted proxies
+        # (admin UI, Settings, Network), or rag-api ignores the header.
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_buffering off;           # stream answer tokens as they arrive (SSE)
+        proxy_read_timeout 600s;       # long answers
+        proxy_send_timeout 600s;
+        proxy_connect_timeout 5s;
+        # The listener presents the internal CA's certificate. To verify it, copy certs/ca.pem to the proxy and enable:
+        # proxy_ssl_verify on; proxy_ssl_trusted_certificate /etc/ssl/ume-rag-internal-ca.pem;
+        # proxy_ssl_name rag-api;
+    }
+}
+
+# rag-admin: the admin UI and its API (BFF).
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name @ADMIN_HOST@;
+    # ssl_certificate     /etc/ssl/@ADMIN_HOST@.crt;
+    # ssl_certificate_key /etc/ssl/@ADMIN_HOST@.key;
+
+    client_max_body_size 1m;
+    location / {
+        proxy_pass https://ume_rag_admin;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_connect_timeout 5s;
+        # proxy_ssl_verify on; proxy_ssl_trusted_certificate /etc/ssl/ume-rag-internal-ca.pem;
+        # proxy_ssl_name rag-admin;
+    }
+    # Uploads (admin design §2.2): one file per request, up to 60 MB, passed straight through (no proxy temp files).
+    location ~ ^/api/upload-batches/[0-9a-fA-F-]+/files/[0-9]+$ {
+        client_max_body_size 60m;
+        proxy_request_buffering off;
+        proxy_pass https://ume_rag_admin;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_connect_timeout 5s;
+    }
+}
+
+# Open WebUI (optional, compose.openwebui.yaml): plain HTTP on the host; this proxy terminates TLS.
+#owui server {
+#owui     listen 443 ssl;
+#owui     http2 on;
+#owui     server_name @OPENWEBUI_HOST@;
+#owui     # ssl_certificate     /etc/ssl/@OPENWEBUI_HOST@.crt;
+#owui     # ssl_certificate_key /etc/ssl/@OPENWEBUI_HOST@.key;
+#owui
+#owui     client_max_body_size 1m;           # file uploads are off in our configuration
+#owui     location / {
+#owui         proxy_pass http://ume_rag_openwebui;
+#owui         proxy_http_version 1.1;
+#owui         proxy_set_header Upgrade $http_upgrade;  # its live connection (WebSocket)
+#owui         proxy_set_header Connection $ume_rag_connection;
+#owui         proxy_set_header Host $host;
+#owui         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#owui         proxy_set_header X-Forwarded-Proto https;
+#owui         proxy_buffering off;           # streamed answers
+#owui         proxy_read_timeout 600s;
+#owui         proxy_connect_timeout 5s;
+#owui     }
+#owui }

@@ -327,6 +327,23 @@ jobs:
           grep -q "Without --proxy, Open WebUI can't reach rag-api" "$d/init.log"
           docker compose -f "$d/deploy/compose.openwebui.yaml" --env-file "$d/deploy/.env" config --quiet
           docker compose --env-file "$d/deploy/.env" config --quiet
+      - name: init-deployment.sh --proxy writes an nginx config that nginx accepts
+        # deploy/proxy/nginx.conf.example in the gateway's shape (#468): rendered for rag-api, rag-admin and Open WebUI,
+        # then nginx -t with throwaway certificates (the pinned image of the AppHost's fixture site).
+        run: |
+          d="$RUNNER_TEMP/proxy"; mkdir -p "$d/keys" "$d/certs"; cp -r deploy "$d/deploy"; printf 'k\n' > "$d/keys/eu"
+          bash "$d/deploy/init-deployment.sh" --oidc-authority https://keycloak.example.se/realms/ume --gateway-url https://llm.example.se \
+            --api-host rag-api.example.se --admin-host rag-admin.example.se --upstream-host 127.0.0.1 --proxy \
+            --openwebui-host chat.example.se --gateway-key-file Eu="$d/keys/eu" --backup-target local --allow-file-keys --no-chown --yes > "$d/init.log"
+          conf="$d/deploy/proxy/nginx.conf"
+          if grep -n '@[A-Z_]*@' "$conf"; then echo "placeholders left in nginx.conf"; exit 1; fi
+          grep -q 'server_name chat.example.se;' "$conf"
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout "$d/certs/k.pem" -out "$d/certs/c.pem" -days 1 -subj /CN=ci >/dev/null 2>&1
+          chmod 644 "$d/certs/k.pem"
+          sed -e 's|# ssl_certificate     /etc/ssl/[^;]*;|ssl_certificate /certs/c.pem;|' -e 's|# ssl_certificate_key /etc/ssl/[^;]*;|ssl_certificate_key /certs/k.pem;|' \
+            "$conf" > "$d/test.conf"
+          docker run --rm -v "$d/test.conf:/etc/nginx/conf.d/default.conf:ro" -v "$d/certs:/certs:ro" \
+            docker.io/nginxinc/nginx-unprivileged:1.31.6-alpine@sha256:884e0b7f42f303641b0f4e78755aea647521dca0b89ca3be7992ad78b5c07434 nginx -t
       - name: Pilot caps, Open WebUI key restriction and the feedback service account
         # Offline: docker compose config over the base files, the 24 GB overlay and the Open WebUI file (P1b item 17).
         run: bash deploy/tests/pilot-stack.sh
