@@ -216,6 +216,46 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Read:** Decisions "Model pickers show what the key may use"; admin §4.5 (`/api/gateway/models`), §4.6 V8/V32,
   §4.10.
 
+### [ ] B-21 One connection pool in rag-api (M-3, #127)
+- **Do:** rag-api registers a second keyed `NpgsqlDataSource` (`"retrieval"`, `Answering/KnowledgeExtensions.cs:40`,
+  `Retrieval/Postgres/RetrievalDataSource.cs`) next to `ragdb` on the same connection string, which can double the
+  connections per instance and breaks `MaxConcurrentSearches = ⌊(pool − 3) ÷ 2⌋` (knowledge §6.6, data-model §1.1:
+  one pool per process). Move retrieval onto `ragdb` (it maps pgvector since #118); remove the keyed pool.
+- **Paths:** `src/Ume.Rag.Answering/**`, `src/Ume.Rag.Retrieval/**`, `src/Ume.Rag.Api/**`, their tests.
+- **Done when:** one `NpgsqlDataSource` per process (a DI test); retrieval and integration tests pass.
+- **Waits on:** –
+- **Read:** knowledge §6.6; data-model §1.1.
+
+### [ ] B-22 Publish checks the worker supports the template version (M-3, #298)
+- **Do:** pipeline publish calls `PipelineValidator.ValidateForPublish` (rules 1–4, with the live workers' supported
+  template versions) instead of `Validate` (`PipelineEndpoints.cs:227`), so engine §4 rule 4 / admin V24 hold during a
+  rolling update.
+- **Paths:** `src/Ume.Rag.AdminApi/**`, its tests.
+- **Done when:** an admin API test refuses a publish whose template version no live worker supports.
+- **Waits on:** –
+- **Read:** engine §4; admin §4.6 V24.
+
+### [ ] B-23 Small admin gaps from the deviation review (M-3)
+- **Do:** (1) the feedback import alert after 4 failed runs (chat §14.3; today only `LastOutcome`,
+  `FeedbackEndpoints.cs:99-107`); (2) the collection page's sources table shows documents and the last run (the API
+  returns both, `CollectionView.vue:92-96`, admin §5.5.2); (3) the deletion card's "at most 20 % (at least 5)" comes from
+  the configured deletion guard (`labels.ts:1032`, `DeletionGuardSettings`); (4) `deploy/keycloak/rag-additions.json`'s
+  `open-webui` description no longer says "legacy callback path".
+- **Paths:** `src/Ume.Rag.Api/**`, `src/Ume.Rag.AdminApi/**`, `src/admin-ui/**`, `deploy/keycloak/**`, their tests.
+- **Done when:** a test per point (vitest for 2 and 3; an API or importer test for 1; the realm-additions test for 4).
+- **Waits on:** –
+- **Read:** chat §14.3; admin §5.5.2, §5.5.3.
+
+### [ ] B-24 Restore a deleted uploaded file (M-3, #309)
+- **Do:** `POST /api/sources/{id}/files/restore` within the upload grace (connectors §9.3, admin §4.5 files row): the
+  UI promises "Within 14 days the platform team can bring them back" (`labels.ts:580`, `:1044`) and no route exists.
+  Build the route (platform admin) and a *Restore* action on the files list for deleted slots, or change the texts if
+  the design decides otherwise (ask main first).
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Worker/**` (if the restore needs a job), `src/admin-ui/**`.
+- **Done when:** a deleted file restored within the grace is searchable again after its sync; tests on both sides.
+- **Waits on:** –
+- **Read:** connectors §9.3, §13.4; admin §4.5.
+
 ## Live (the live block, see the roadmap)
 
 ### [x] B-L1 Status green against the real gateway

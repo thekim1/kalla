@@ -42,7 +42,7 @@ package source had to be checked for this step.
 | 14 | Writer | Bounded channel (bytes and items), batches of ≤ 200 turns / 250 ms, encryption in the writer (built when A1 allows stored content; P1 writes metadata only), one transaction per batch, no journal (no content outside the encrypted tables); loss bound stated (§12) |
 | 15 | Feedback | `POST /v1/feedback` + a 15-minute import of Open WebUI ratings via its admin API, mapped by chat id and the forwarded message id; comments encrypted under the message's bucket key (P1 pilot in mode `none`: ratings only, comments stay in Open WebUI); department roles see ratings in P1, comments only `rag-reviewer` and `rag-department-admin` (§14, answered 4, 7; admin design §3) |
 | 16 | Attachments C1 | P1: refused with `attachments_not_supported`, uploads off in Open WebUI. P2: chat-scoped storage in the `chat` schema under the chat bucket keys, parsed by the worker, written back through the API, searched only within that conversation (§15, answered 5–6) |
-| 17 | Latency | Chat overhead < 10 ms p95 excluding condense and retrieval; 0 Postgres statements and 0 Redis commands of our own per message (P1 has no Redis); measured by benchmarks, interaction audit, a `benchmarks/compare`-style run and the R1 test (§16) |
+| 17 | Latency | Chat overhead < 10 ms p95 excluding condense and retrieval; 0 Postgres statements and 0 Redis commands of our own per message (P1 has no Redis); measured by benchmarks, a `benchmarks/compare`-style run and the R1 test (§16) |
 | 18 | `ume` extension | Clients other than Open WebUI opt in per request with a body member `ume`; the answer carries `outcome`, `degraded` and, when asked, related documents and follow-up suggestions, after the answer text (§3.8) |
 | 19 | Related documents | Up to 10 retrieved documents, one per document by best rank, with link, collection, rank and `cited`, from the turn's own retrieval; empty on coverage `Low` (§9.7) |
 | 20 | Follow-up suggestions | Up to 5, one call to the condense model after the answer, `Chat:FollowUpTimeout` 2 s, never stored (§9.8) |
@@ -1153,11 +1153,8 @@ retrieval) + (time our first content byte is flushed − time the gateway's firs
    `PromptBuilder` with 10 documents and 8,000 tokens, `TokenBudget`, `AnswerFilter` over a 2 KB answer fed in chunks
    of 1, 7 and 50 characters, chunk re-serialisation, `LanguageGuess`; allocation per message is the regression gate
    (`docs/performance-improvement-plan.md:94-101`).
-2. **Interaction audit** (copy of `benchmarks/Ume.LlmGateway.Benchmarks/InteractionAudit.cs:11-40`, Npgsql and Redis
-   activities under the request activity): a warm chat message issues **0 Postgres statements from the chat role**
-   (the knowledge role's 3: K, V, H+D), **0 Redis commands** (P2 with Redis: 1 for the rate limit plus ≤ 1 for the
-   embedding cache), **0 config queries**; the writer's statements counted separately as background (the gateway reports 0.7 per
-   message, `docs/performance.md:308`). Asserted in CI.
+2. ~~Interaction audit~~ dropped (user, 2026-11-07, M-3): never built; the statement counts it would assert are
+   covered by the R1 release test and the hot-path benchmarks (#333).
 3. **Overhead run** in the style of `benchmarks/compare` (`benchmarks/compare/README.md:1-15`, k6 `k6/chat.js`):
    Open WebUI-shaped requests against `rag-api` with FakeGateway (`FirstTokenMs=400`) and a fixture collection;
    reports chat overhead p50/p95/p99 from `rag.chat.overhead`, TTFT minus the fake's first token, throughput, CPU per
@@ -1340,7 +1337,7 @@ Unit (`Ume.Rag.Api.Tests`) and API tests against FakeGateway (scripted answers p
 - **Related documents**: three chunks of one document give one entry with the best rank; N limits the list; `cited`
   and `number` match the annotations; an uploaded PDF's `url` is a grant link with `#page=`, a crawled page's its
   URL; `Low` (not-found and `fallback`), unavailable and conversational give `[]`; `Low` after a failed condense gives
-  a list; no extra retrieval, embedding or SQL (interaction audit).
+  a list; no extra retrieval or embedding call (the fake gateway and retriever count them).
 - **Follow-ups**: scripted output "1. Hur …?\n- Vad …?\n…" gives clean lines, at most N; lines with `[1]`, a link,
   `@`, `19800101-1234` or `090-16 10 00`, over 150 characters or equal to the question are dropped; timeout → `[]`
   and `[DONE]` within the budget + 100 ms; `Chat:FollowUpTimeout` 0, a fixed text, a conversational message, an

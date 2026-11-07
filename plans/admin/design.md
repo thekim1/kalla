@@ -395,7 +395,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET /api/site-profiles` (`host`, `level`) | Admin; from P1b's source page also Read for the hosts of the caller's sources (matching sources to hosts needs the worker's canonical hosts) | level, host, CMS preset, applied version, origin (`learned`/`manual`/`preset`), last re-learn, sources using it, open proposal |
+| `GET /api/site-profiles` (`host`, `level`) | Admin (P2, user 2026-11-07: also Read for the hosts of the caller's sources on the source page; matching sources to hosts needs the worker's canonical hosts) | level, host, CMS preset, applied version, origin (`learned`/`manual`/`preset`), last re-learn, sources using it, open proposal |
 | `GET /api/site-profiles/{id}/versions`, `GET …/versions/{v}` | Admin | versioned JSON, check results of a proposal (words lost per sample page, empty pages, boilerplate share), sample before/after texts |
 | `POST /api/site-profiles/{id}/versions/{v}/approve`, `/reject` (P2) | Admin | a `proposed` version (re-learned profile that failed the auto-apply check); `command` `approve-site-profile`/`reject-site-profile`; audited |
 | `POST /api/site-profiles` `{ host, level, presetId?, profile }` | Admin | a host's first profile as a `manual` version; `command` `edit-site-profile` (dedup `site-profile:{level}:{host}`); audited |
@@ -484,7 +484,7 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 | `GET /openapi/v1.json` | Admin | the generic forms read each operation's request schema from the OpenAPI document; the resources, list columns and actions are a registry in the UI (§5.8) |
 
 **Feedback, conversations, audit, overview** — §8, §9; `GET /api/overview` returns the attention items of §5.5.1 for
-the caller's scope.
+the caller's scope (P2; user 2026-11-07).
 
 ### 4.6 Cross-rules (V1–V37; V20 and V27 retired)
 
@@ -530,7 +530,7 @@ kept so references stay stable.
 | V29 | data protection: history modes other than `none` refused until stored chat content is built after A1 (weakness review §4); `internal`/`sensitive` ⇒ chat encryption required; default ≤ max ≤ 90; changes apply to messages written afterwards (their expiry-month bucket); bucket-key destruction cannot be switched on before A1 is recorded as answered | `policy_rule` | policy save | data-model `CK_DataProtectionPolicies_*`, simplification pass §5 |
 | V30 | `Settings` ranges as the `CK_Settings_*` checks (guard 1–100 %, min/max counts, sample sizes, …) | `setting_out_of_range` | settings save | data-model §2.1 |
 | V31 | embedding profile fixed per collection (`platform-default`); other profiles only `Admin` (P3) | `profile_admin_only` | collection save | R3 |
-| V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` and `Settings.Retrieval.rerankModel` are `chat` rows, `Settings.Retrieval.gatewayRerankModel` a `rerank` row (empty = unset, knowledge §6.7), of `GatewayModels` servable at most at the platform ceiling: `Eu` until M2 (on-prem models once the on-prem hardware exists, register M2) (`SkillGateModel` also `SupportsTools`); on save each set model is also listed by the gateway's `/v1/models` at the platform ceiling, as V8 (#447) | `settings_model_residency`, `model_not_listed` (409), `gateway_unavailable` (503) | settings save; model sync changed residency (warning on Overview) | processing §13.1, chat §5, tools §3.7 |
+| V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` and `Settings.Retrieval.rerankModel` are `chat` rows, `Settings.Retrieval.gatewayRerankModel` a `rerank` row (empty = unset, knowledge §6.7), of `GatewayModels` servable at most at the platform ceiling: `Eu` until M2 (on-prem models once the on-prem hardware exists, register M2) (`SkillGateModel` also `SupportsTools`); on save each set model is also listed by the gateway's `/v1/models` at the platform ceiling, as V8 (#447) | `settings_model_residency`, `model_not_listed` (409), `gateway_unavailable` (503) | settings save; model sync changed residency (warning on Overview, P2 with the attention items) | processing §13.1, chat §5, tools §3.7 |
 | V33 | assistant test questions: ≤ 30 per assistant; question 1–2,000 characters; expected behaviour 1–2,000; expected phrase ≤ 200; an expected document must belong to a collection the draft or published version links (unlinking it later marks the question in the report, never refuses) | `test_question_invalid`, `test_question_document_unlinked` | test-question save | §7.4 |
 | V34 | publish and restore: the definition resolves (collections not deleted, skills not retired and usable by the department, the model a `chat` row of `GatewayModels`); description and contact are set; a draft created before the current published version (lower `Number`) is published only when confirmed | `version_link_missing`, `assistant_contact_missing`, `draft_base_changed` | publish; restore | §4.5, simplification pass §15 |
 | V35 | narrowing a collection's sharing (to a lower level, or removing a department from `selected`) is refused while a published assistant of a department that loses access links it; the refusal lists the assistants and their departments | `collection_shared_in_use` | sharing save | §3.2, §4.5 |
@@ -621,7 +621,7 @@ panel ships in the same P1 release as the chat role, so it never runs a differen
 
 | Input | Output (JSON, non-streamed through the chat client; ≤ 60 s by its timeouts) |
 |---|---|
-| `question`; optional `history[]` (≤ 10 messages, to test condense); assistant id and `target` (`draft` default, `published`); optional `collectionIds` subset | `retrieval`: searched collections (with a not-published flag), coverage `{status, bestDistance, threshold, collection}`, candidates `{rank, title, url or file name, headingPath, text (600 characters, expandable), distance, keywordRank, vectorRank, fused, cited}`, timings; `condense` `{used, skipped, question}`; `prompt` token budget per part against the limit; `answer` `{raw, delivered, filtered[] (kind, text), citations [n] → document, outcome, language}`; `gateway` `{model, residency, latencyMs, ttftMs, inputTokens, outputTokens, costUsd}`; `usesTools`; P2 `toolCalls[]` `{tool, state, durationMs, arguments (admin view), resultExcerpt}`, skill inclusion (static/progressive) |
+| `question` (≤ 2,000 characters); optional `history[]` (≤ 10 messages of ≤ 4,000 characters, to test condense); assistant id and `target` (`draft` default, `published`) | `target` and `versionNumber`; `retrieval`: searched collections (with a not-published flag), coverage `{status, bestDistance, threshold, collection}`, `degraded`, candidates `{rank, documentId, title, url or file name, headingPath, text (600 characters, expandable), truncated, distance, keywordRank, vectorRank, fused, cited}`, timings; `condense` `{used, outcome}`; `answer` `{raw, delivered, filtered (counts per kind), citations [n] → document, outcome, language}`; `gateway` `{model, residency, latencyMs, inputTokens, outputTokens}`; `durationMs` (`AssistantTestEndpoints.cs`). **P2** (user, 2026-11-07, M-3): a `collectionIds` subset, the condense step's rewritten question and why it was skipped, the prompt token budget per part, `filtered[]` as (kind, text), `ttftMs` and `costUsd`; `usesTools`, `toolCalls[]` `{tool, state, durationMs, arguments (admin view), resultExcerpt}` and skill inclusion with tools |
 
 - Rate: 20 test questions per minute per user on the full panel (the retrieval-only variant has no limit), metric
   `rag.admin.test_panel{outcome}`; no audit entry, no 6007 (the content is the caller's own department's).
@@ -777,7 +777,10 @@ warning above the form); name, description, contact person; collections (the new
 └────────────────────────────────────────┘ └───────────────────────────┘ └───────────────────────────────────┘
 ```
 
-Attention item sources: runs `awaiting-deletion-confirmation`; evaluation reports ≥ 5 points worse than the previous run
+**Attention items are P2** (user, 2026-11-07, M-3): P1's Översikt shows the setup checklists and sync health; the
+items below, and V32's Overview warning, come with `GET /api/overview`'s attention list in P2. Until then each signal is
+seen on its own page (run page, source page, feedback import state, gateway status). Attention item sources: runs
+`awaiting-deletion-confirmation`; evaluation reports ≥ 5 points worse than the previous run
 (after a publish or nightly); PII-flagged documents in `public` collections; degraded runs; sources with ≥ 3 failed
 runs; sources with N (default 3) runs without a complete traversal (simplification pass §2); feedback import failing ≥ 4
 runs; org or model sync failing; template versions without a supporting worker; from P2 (weakness review §1): site-profile proposals (platform

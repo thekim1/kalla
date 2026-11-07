@@ -956,9 +956,9 @@ through the gateway; retrieval should stay below ~15 % of it.
 
 **Measured by**: micro-benchmarks (`tests/Ume.Rag.Benchmarks/RetrievalBenchmarks.cs`, BenchmarkDotNet as the
 gateway's `PipelineBenchmarks`: fusion + diversity over 200 candidates, section assembly, citations and grants;
-allocations are the regression gate, `docs/performance-improvement-plan.md:94-101`); an **interaction audit** (copy of
-`benchmarks/Ume.LlmGateway.Benchmarks/InteractionAudit.cs:11-16`): a warm retrieval issues exactly **3 Postgres round
-trips** (K, V, H+D), **0 Redis commands** (P2 with Redis: ≤ 1, the L2 GET on an L1 miss) and 0 config queries; a
+allocations are the regression gate, `docs/performance-improvement-plan.md:94-101`); a warm retrieval's **3 Postgres round
+trips** (K, V, H+D) and 0 config queries are the design, checked in the R1 test (the gateway-style interaction audit
+was dropped, user 2026-11-07, M-3); a
 **retrieval load test** (k6 from `benchmarks/compare/k6`, synthetic 100k-chunk corpus embedded by FakeGateway with one
 3,000-chunk and one 60,000-chunk collection, p50/p95 per stage from `rag.retrieval.stage.duration`), which decides
 `exactScanMaxChunks` and the frequent-term guard (§20); and the **R1 release test** (repo-and-deployment §8.3):

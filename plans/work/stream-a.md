@@ -168,6 +168,15 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "Crawlee review: ideas adopted"; connectors §3.2, §4, §5.1, §5.3.
 
+### [ ] A-16 `files` template gets `pathRules` (M-3, #349)
+- **Do:** the Decisions row "M-2 open design calls" says path rules on the display name can tag uploads, but
+  `src/Ume.Rag.MigrationService/Templates/files.v1.json` has no `pathRules` parameter. Add it (same schema as the
+  website template's), so an upload's display name can set topics; the processing already reads `pathRules`.
+- **Paths:** `src/Ume.Rag.MigrationService/Templates/**`, `contracts/**` if the template contract lists parameters, tests.
+- **Done when:** a test: an upload whose display name matches a rule gets the topic on its chunks.
+- **Waits on:** –
+- **Read:** Decisions "M-2 open design calls"; processing §7.
+
 ## Live (the live block, see the roadmap)
 
 ### [ ] A-L1 umea.se inventory and the `lastmod` sample's first pass
