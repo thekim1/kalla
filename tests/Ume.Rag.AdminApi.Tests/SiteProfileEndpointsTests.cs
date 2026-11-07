@@ -51,6 +51,15 @@ public sealed class SiteProfileEndpointsTests(AdminDatabaseFixture database)
             (await Json(invalid)).GetProperty("errorCodes").GetProperty("profile.mainRoot")[0].GetProperty("code").GetString().ShouldBe("site_profile_invalid");
         }
 
+        // #476: the identity rule runs on the non-backtracking engine (as the worker compiles it), which lacks lookarounds.
+        var lookahead = UmeaProfile();
+        lookahead["identityRule"]!["pattern"] = @"^/(?=\d)(?<id>\d+)\.html$";
+        using (var invalid = await admin.PostAsJsonAsync("/api/site-profiles", new { host, level = "public", profile = lookahead }, Ct))
+        {
+            invalid.StatusCode.ShouldBe(HttpStatusCode.BadRequest, await invalid.Content.ReadAsStringAsync(Ct));
+            (await Json(invalid)).GetProperty("errorCodes").GetProperty("profile.identityRule.pattern")[0].GetProperty("code").GetString().ShouldBe("site_profile_invalid");
+        }
+
         using var created = await admin.PostAsJsonAsync("/api/site-profiles", new { host, level = "public", presetId = "sitevision", profile = UmeaProfile() }, Ct);
         created.StatusCode.ShouldBe(HttpStatusCode.Accepted, await created.Content.ReadAsStringAsync(Ct));
         var jobId = (await Json(created)).GetProperty("jobId").GetGuid();

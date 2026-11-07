@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Ume.Rag.Domain;
 using Ume.Rag.Domain.Admin;
@@ -177,7 +178,23 @@ public static class SiteProfileEndpoints
                 new Dictionary<string, string> { ["field"] = field.Length > 0 ? field : "profile", ["problem"] = problem });
         }
 
-        return ContractJson.Deserialize<ProfileContract>(profile);
+        var contract = ContractJson.Deserialize<ProfileContract>(profile);
+        if (contract.IdentityRule is { Pattern: { Length: > 0 } pattern })
+        {
+            // The worker compiles the identity rule with the non-backtracking engine (#471): a construct it lacks would make
+            // the rule silently ignored, so refuse it at save (#476).
+            try
+            {
+                _ = new Regex(pattern, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+            {
+                throw AdminFaults.Field("profile.identityRule.pattern", AdminErrorCodes.SiteProfileInvalid,
+                    new Dictionary<string, string> { ["field"] = "identityRule/pattern", ["problem"] = "the regular expression does not compile with the non-backtracking engine: " + ex.Message });
+            }
+        }
+
+        return contract;
     }
 
     /// <summary>
