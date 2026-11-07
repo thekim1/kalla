@@ -1,9 +1,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Worker.Connectors.Crawl;
-using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Http;
-using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Uploads;
 using Ume.Rag.Worker.Connectors.UrlList;
@@ -72,12 +70,11 @@ public static class EngineExtensions
         services.TryAddSingleton<IChunkSetStore, PostgresChunkSetStore>();
         builder.AddRagProcessing();
 
-        services.TryAddSingleton<HostBudget>();
         services.TryAddSingleton<UrlListConnector>();
         services.TryAddSingleton<UploadConnector>();
         services.TryAddSingleton<SiteProfileCanonicalRules>();
-        services.TryAddSingleton(sp => new CrawlConnector(sp.GetRequiredService<HttpFetcher>(), sp.GetRequiredService<RobotsCache>(),
-            sp.GetRequiredService<IMalwareScanner>(), sp.GetRequiredService<Domain.Ports.IBlobStore>(), sp.GetRequiredService<TimeProvider>(),
+        services.TryAddSingleton(sp => new CrawlConnector(sp.GetRequiredService<HttpFetcher>(), sp.GetRequiredService<PageFetcher>(),
+            sp.GetRequiredService<RobotsCache>(), sp.GetRequiredService<Domain.Ports.IBlobStore>(), sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<SiteProfileCanonicalRules>()));
         services.TryAddSingleton<FetchTopUp>();
         services.TryAddSingleton<CrawlTraversal>();

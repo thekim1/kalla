@@ -9,12 +9,15 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Egress;
+using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Http;
 using Ume.Rag.Worker.Connectors.Malware;
+using Ume.Rag.Worker.Connectors.Render;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.UrlList;
 
@@ -162,8 +165,14 @@ internal sealed class TestSite : IAsyncDisposable
 
     public FakeDnsResolver Resolver() => new FakeDnsResolver().Add(Host, "127.0.0.1").Add(SecureHost, "127.0.0.1");
 
-    /// <summary>The production fetch path, wired to this site; <paramref name="policy"/> gives the hosts' politeness profiles (User-Agent, robots.txt).</summary>
-    public FetchPath Fetch(IMalwareScanner? scanner = null, FakeDnsResolver? dns = null, string? allowedPrivateRanges = "127.0.0.1/32", FixedCrawlPolicy? policy = null)
+    /// <summary>
+    /// The production fetch path, wired to this site; <paramref name="policy"/> gives the hosts' politeness profiles (User-Agent,
+    /// robots.txt). <paramref name="renderer"/> renders <c>browser</c> sources' pages (none: every render is
+    /// <c>render.unavailable</c>) under <paramref name="render"/> (default: not configured); <paramref name="budget"/> is the
+    /// host budget the rendered pages' requests are paced by.
+    /// </summary>
+    public FetchPath Fetch(IMalwareScanner? scanner = null, FakeDnsResolver? dns = null, string? allowedPrivateRanges = "127.0.0.1/32", FixedCrawlPolicy? policy = null,
+        IRenderer? renderer = null, RenderOptions? render = null, HostBudget? budget = null)
     {
         policy ??= new FixedCrawlPolicy();
         var guard = ConnectorTestKit.Guard(dns ?? Resolver(), new FixedEgressPolicy(Port, SecurePort), allowedPrivateRanges);
@@ -172,8 +181,14 @@ internal sealed class TestSite : IAsyncDisposable
         var blobRoot = Directory.CreateTempSubdirectory("ume-rag-connector-blobs-");
         var blobs = new FileSystemBlobStore(Options.Create(new BlobStoreOptions { Root = blobRoot.FullName }), TimeProvider.System);
         var robots = new RobotsCache(fetcher, policy, TimeProvider.System);
-        var connector = new UrlListConnector(fetcher, robots, scanner ?? new ScriptedScanner(ScanResult.Clean), blobs, TimeProvider.System);
-        return new FetchPath(client, fetcher, robots, connector, blobs, blobRoot);
+        budget ??= new HostBudget(new InMemoryCrawlHostStore(TimeProvider.System), policy, TimeProvider.System);
+        var renderOptions = Options.Create(render ?? new RenderOptions());
+        var metrics = new RenderMetrics(ConnectorTestKit.Meters);
+        var fetchers = new RenderFetchers(client, guard, policy, budget, new RenderAssetCache(renderOptions), new RenderBlocklist(renderOptions), TimeProvider.System);
+        var pages = new PageFetcher(fetcher, scanner ?? new ScriptedScanner(ScanResult.Clean), renderer ?? new FakeRenderer(), fetchers, policy, metrics, renderOptions,
+            TimeProvider.System, NullLogger<PageFetcher>.Instance);
+        var connector = new UrlListConnector(pages, robots, blobs);
+        return new FetchPath(client, fetcher, robots, pages, connector, blobs, blobRoot, budget, new RenderSlots(renderOptions, policy, metrics), fetchers);
     }
 
     public async ValueTask DisposeAsync()
@@ -199,9 +214,13 @@ internal sealed record FetchPath(
     CrawlHttpClient Client,
     HttpFetcher Fetcher,
     RobotsCache Robots,
+    PageFetcher Pages,
     UrlListConnector Connector,
     FileSystemBlobStore Blobs,
-    DirectoryInfo BlobRoot) : IAsyncDisposable
+    DirectoryInfo BlobRoot,
+    HostBudget Budget,
+    RenderSlots Renders,
+    RenderFetchers RenderFetchers) : IAsyncDisposable
 {
     public ValueTask DisposeAsync()
     {

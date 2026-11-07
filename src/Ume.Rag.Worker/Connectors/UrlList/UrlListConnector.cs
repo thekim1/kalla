@@ -1,9 +1,10 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Http;
-using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Urls;
 
@@ -25,10 +26,21 @@ public sealed record UrlListSettings
     /// <summary>CSS selectors removed before the content hash (§12.2).</summary>
     public IReadOnlyList<string> NoiseSelectors { get; init; } = [];
 
-    /// <summary>Send the stored validators (§4); off sends a plain GET every time.</summary>
+    /// <summary>Send the stored validators (§4); off sends a plain GET every time. Never for a <c>browser</c> source (§8.5).</summary>
     public bool ConditionalGet { get; init; } = true;
 
+    /// <summary><c>browser</c>: every HTML page is rendered (§8.1).</summary>
+    public FetchMode FetchMode { get; init; } = FetchMode.Http;
+
+    /// <summary>CSS naming the loaded content of a rendered page (§8.3); null for the quiet rule.</summary>
+    public string? ReadySelector { get; init; }
+
+    /// <summary>Scroll a rendered page until it stops growing (§8.3).</summary>
+    public bool ScrollToLoad { get; init; }
+
     public CanonicalizerOptions Canonicalizer() => new() { IgnoreQueryParams = IgnoreQueryParams, DirectoryIndexNames = DirectoryIndexNames };
+
+    public PageSettings Pages() => new(FetchMode, ReadySelector, ScrollToLoad, NoiseSelectors);
 }
 
 /// <summary>The listing position, so a resumed <c>sync</c> continues after the last committed batch (§2.3).</summary>
@@ -40,24 +52,24 @@ public sealed record UrlListCheckpoint : ConnectorCheckpoint
 }
 
 /// <summary>
-/// Exactly the listed URLs, at depth 0, never following links (connectors design §4): a conditional GET with the stored
-/// validators, redirects re-checked hop by hop, robots.txt honoured as everywhere (§5.1), files malware-scanned before
-/// they are stored (§11), and the content hash over noise-normalised HTML or the raw bytes (§12). The raw blob is written
-/// once under <c>raw/{level}/{contentHash}</c>; the runner (engine) writes frontier rows, documents and run items.
+/// Exactly the listed URLs, at depth 0, never following links (connectors design §4): through <see cref="PageFetcher"/>, a
+/// conditional GET with the stored validators (none for a <c>browser</c> source, whose pages are rendered, §8), redirects
+/// re-checked hop by hop, robots.txt honoured as everywhere (§5.1), files malware-scanned before they are stored (§11),
+/// and the content hash over noise-normalised HTML or the raw bytes (§12). The raw blob is written once under
+/// <c>raw/{level}/{contentHash}</c>; the runner (engine) writes frontier rows, documents and run items.
 /// </summary>
-public sealed class UrlListConnector(
-    HttpFetcher fetcher,
-    RobotsCache robots,
-    IMalwareScanner scanner,
-    IBlobStore blobs,
-    TimeProvider time) : IFetchConnector<UrlListCheckpoint>, IIdListingConnector, IRetryFailedConnector
+public sealed class UrlListConnector(PageFetcher pages, RobotsCache robots, IBlobStore blobs)
+    : IFetchConnector<UrlListCheckpoint>, IIdListingConnector, IRetryFailedConnector
 {
     public const string Type = "url-list";
 
     /// <summary>Items between checkpoints: one committed batch of claims and run items (§2.3).</summary>
     public const int CheckpointEvery = 1000;
 
-    private readonly RawContentWriter _writer = new(scanner, blobs, time);
+    private static readonly JsonSerializerOptions SettingsJson = new(JsonSerializerOptions.Web)
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.KebabCaseLower, allowIntegerValues: false) },
+    };
 
     public string SourceType => Type;
 
@@ -128,21 +140,13 @@ public sealed class UrlListConnector(
         var validators = settings.ConditionalGet && !context.Revalidate ? item.Hints.Stored : null;
         var request = new HttpFetchRequest(url, EgressPurpose.Fetch, validators, MediaTypes.DocumentFormats, settings.Canonicalizer(),
             robots.CheckAsync);
-        var result = await fetcher.FetchAsync(request, cancellationToken);
-        if (result is not HttpFetchResult.Ok ok)
-        {
-            return FetchOutcomes.From(result);
-        }
-
-        await using (ok.Body)
-        {
-            return (await _writer.StoreAsync(context, ok, settings.NoiseSelectors, settings.Canonicalizer(), extractLinks: false, softNotFound: null, cancellationToken)).Outcome;
-        }
+        return (await pages.FetchAsync(new PageRequest(context, request, blobs, settings.Pages()), cancellationToken)).Outcome;
     }
 
     private static UrlListCheckpoint Checkpoint(int position) =>
         new() { SchemaVersion = UrlListCheckpoint.CurrentSchemaVersion, Position = position };
 
+    /// <summary>The settings this connector reads; members of other source types (a crawl source's, in a stage preview) are ignored.</summary>
     internal static UrlListSettings Settings(JsonElement settings) =>
-        settings.Deserialize<UrlListSettings>(JsonSerializerOptions.Web) ?? new UrlListSettings();
+        settings.Deserialize<UrlListSettings>(SettingsJson) ?? new UrlListSettings();
 }

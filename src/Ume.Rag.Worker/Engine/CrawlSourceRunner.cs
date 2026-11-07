@@ -25,6 +25,9 @@ namespace Ume.Rag.Worker.Engine;
 /// <param name="Report">The crawl report's sections, a JSON object merged into <c>Runs.Report</c> in the reconcile commit.</param>
 public sealed record CrawlReconcile(TraversalVerdict Verdict, IReadOnlyList<DeletionCandidate> Candidates, bool EmptyListing, string Report);
 
+/// <summary>The crawl report's renderer counts (connectors design §8.6): pages rendered, render failures, and of those the pages kept from their last good content.</summary>
+public sealed record RenderSection(int Rendered, int Failures, int KeptFromLastGood);
+
 /// <summary>
 /// The engine's part of a <c>crawl</c> source (connectors design §5, §6.0; engine design §9.2). Listing: the run's mode
 /// (incremental only on hosts whose profile marks <c>lastmod</c> reliable, <c>revalidateEvery</c>) is fixed in
@@ -102,6 +105,17 @@ public sealed class CrawlSourceRunner(
         ORDER BY i."Identity", i."CreatedAt" DESC, i."Id" DESC
         """;
 
+    // The run's rendered pages (a fetched item whose document's content is the rendered DOM; a lastmod skip renders nothing),
+    // its render failures (attempts used up), and those of them whose document kept its last good content.
+    private const string RenderSql = """
+        SELECT count(*) FILTER (WHERE i."Outcome" IN ('added', 'updated', 'unchanged', 'degraded') AND d."FetchMode" = 'browser'
+                                  AND i."Reason" IS DISTINCT FROM 'crawl.lastmod_skip')::int,
+               count(*) FILTER (WHERE i."Outcome" = 'failed' AND i."Reason" LIKE 'render.%')::int,
+               count(*) FILTER (WHERE i."Outcome" = 'failed' AND i."Reason" LIKE 'render.%' AND d."Id" IS NOT NULL AND d."ContentHash" IS NOT NULL)::int
+        FROM content."RunItems" i LEFT JOIN content."Documents" d ON d."Id" = i."DocumentId"
+        WHERE i."RunId" = $1
+        """;
+
     // rag.crawl.incomplete_runs: the most consecutive incomplete traversals of any active crawl source (its latest report).
     private const string IncompleteRunsSql = """
         SELECT coalesce(max(c), 0)::int FROM (
@@ -147,15 +161,18 @@ public sealed class CrawlSourceRunner(
 
     /// <summary>
     /// Phase <c>list</c> of a <c>sync</c> run. When the run's identity settings differ from the last applied ones
-    /// (<see cref="SettingsEffects"/>), it is a full revalidating traversal: every URL re-canonicalised and fetched.
+    /// (<see cref="SettingsEffects"/>), it is a full revalidating traversal: every URL re-canonicalised and fetched; so it is
+    /// when <c>fetchMode</c>, <c>readySelector</c> or <c>scrollToLoad</c> changed (every page fetched again in the new mode,
+    /// no validators, no <c>lastmod</c> skip; §12.3).
     /// </summary>
     public async Task<JobResult> ListAsync(SourceContext source, RunRow run, SyncPayload payload, LeasedJob job, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(payload);
-        var identityChanged = (await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken)).Identity;
-        var context = await StartAsync(source, run, payload.Incremental && !identityChanged, payload.Force || identityChanged, cancellationToken);
+        var change = await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken);
+        var full = change.Identity || change.Fetch;
+        var context = await StartAsync(source, run, payload.Incremental && !full, payload.Force || full, cancellationToken);
         var from = payload.ResumeFromCheckpoint
             ? await checkpoints.GetAsync<CrawlCheckpoint>(source.SourceId, CheckpointKind.Run, run.Id, cancellationToken) ?? new CrawlCheckpoint()
             : new CrawlCheckpoint();
@@ -292,8 +309,9 @@ public sealed class CrawlSourceRunner(
     /// in any run, <c>persistent-failure</c>, <c>not-seen</c> only after a complete traversal and never for a URL that
     /// failed in the run, and the settings-change effects of <see cref="SettingsCandidates"/>: <c>scope-narrowed</c>, <c>identity-changed</c>,
     /// nothing beyond a lowered <c>maxDepth</c>), and the report's sections: completeness with the incomplete-traversal
-    /// count and alert, the run's verdict, the removal checks, the <c>demote</c> patterns with the live documents they match and
-    /// the scope hosts crawled with a non-default politeness profile (connectors design §6.6).
+    /// count and alert, the run's verdict, the removal checks, the <c>demote</c> patterns with the live documents they match,
+    /// the scope hosts crawled with a non-default politeness profile (connectors design §6.6) and, for a <c>browser</c>
+    /// source, the renderer counts (§8.6).
     /// </summary>
     public async Task<CrawlReconcile> PrepareReconcileAsync(SourceContext source, RunRow run, IReadOnlyList<SourceDocument> all,
         IReadOnlyDictionary<Guid, string> explicitGone, CancellationToken cancellationToken)
@@ -323,6 +341,11 @@ public sealed class CrawlSourceRunner(
             ["demote"] = settings.Demote.Select(d => new { d.Pattern, d.Factor, Documents = live.Count(UrlPattern.Parse(d.Pattern).Matches) }).ToList(),
             ["politeness"] = PolitenessReportEntry.For(crawl.Scope.Hosts, policy.Current),
         };
+        if (settings.FetchMode == FetchMode.Browser)
+        {
+            report["render"] = await RenderSectionAsync(run.Id, cancellationToken);
+        }
+
         var empty = verdict.Complete && !all.Any(d => d.DeletedAt is null && d.LastRunId == run.Id);
         return new CrawlReconcile(verdict, candidates, empty, JsonSerializer.Serialize(report, JsonSerializerOptions.Web));
     }
@@ -384,6 +407,15 @@ public sealed class CrawlSourceRunner(
         }
 
         return released.Count;
+    }
+
+    private async Task<RenderSection> RenderSectionAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(RenderSql, connection) { Parameters = { Db.P(runId) } };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
+        return new RenderSection(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
     }
 
     private async Task<IReadOnlySet<Guid>> FailedInRunAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)

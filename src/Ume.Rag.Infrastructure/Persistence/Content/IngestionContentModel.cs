@@ -174,6 +174,7 @@ internal static class IngestionContentModel
             {
                 ClassificationCheck(t, "Documents");
                 ValuesCheck(t, "Documents", "IdentityKind", IdentityKinds.All);
+                ValuesCheck(t, "Documents", "FetchMode", FetchModes.All);
             });
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Classification).HasMaxLength(20);
@@ -181,6 +182,7 @@ internal static class IngestionContentModel
             e.Property(x => x.MediaType).HasMaxLength(200);
             e.Property(x => x.Language).HasMaxLength(20);
             e.Property(x => x.DisplayName).HasMaxLength(300);
+            e.Property(x => x.FetchMode).HasMaxLength(20).HasDefaultValue(FetchModes.Http);
             e.Property(x => x.ParseStrategy).HasMaxLength(30);
             e.Property(x => x.ParseOutcome).HasMaxLength(30);
             e.Property(x => x.PiiClearedBy).HasMaxLength(200);

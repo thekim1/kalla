@@ -322,6 +322,15 @@ public static class IdentityKinds
     public static IReadOnlyList<string> All { get; } = [Url, Upload];
 }
 
+/// <summary><c>Documents.FetchMode</c> (data-model §2.2, connectors design §8.1): how the current content was fetched.</summary>
+public static class FetchModes
+{
+    public const string Http = "http";
+    public const string Browser = "browser";
+
+    public static IReadOnlyList<string> All { get; } = [Http, Browser];
+}
+
 /// <summary>One document per (source, identity) (<c>content."Documents"</c>, data-model §2.2).</summary>
 public sealed class Document
 {
@@ -372,6 +381,10 @@ public sealed class Document
     public DateTimeOffset? FetchedAt { get; set; }
     public string? CanonicalHint { get; set; }
     public Guid? SiteProfileVersionId { get; set; }
+
+    /// <summary><see cref="FetchModes"/>: rendered by the browser or taken from the HTTP response.</summary>
+    public string FetchMode { get; set; } = FetchModes.Http;
+
     public string? ParseStrategy { get; set; }
     public Guid? ParseProfileId { get; set; }
     public string? ParseOutcome { get; set; }

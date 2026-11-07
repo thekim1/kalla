@@ -13,19 +13,25 @@ namespace Ume.Rag.Worker.Engine;
 /// <summary>Which effect tags of a source's settings differ from the settings it last acted on (connectors design §12.3).</summary>
 /// <param name="Identity">An <c>identity</c> member changed: a full re-sync, old identities not re-found removed <c>identity-changed</c>.</param>
 /// <param name="Scope">A <c>scope</c> member changed: a traversal now; narrowing removals <c>scope-narrowed</c>.</param>
-public sealed record SettingsChange(bool Identity, bool Scope)
+/// <param name="Fetch">
+/// <c>fetchMode</c>, <c>readySelector</c> or <c>scrollToLoad</c> changed (§12.3): a sync now that fetches every page again in the
+/// new mode, without validators and <c>lastmod</c> skips.
+/// </param>
+public sealed record SettingsChange(bool Identity, bool Scope, bool Fetch = false)
 {
     public static SettingsChange None { get; } = new(false, false);
 
-    /// <summary>The change needs a run now (§12.4); <c>behaviour</c> and <c>cosmetic</c> changes wait for the next sync.</summary>
-    public bool NeedsRun => Identity || Scope;
+    /// <summary>
+    /// The change needs a run now (§12.4); other <c>behaviour</c> changes and <c>cosmetic</c> ones wait for the next sync.
+    /// </summary>
+    public bool NeedsRun => Identity || Scope || Fetch;
 }
 
 /// <summary>
 /// Settings-change effects (connectors design §12.3, §12.4). Every run stores the per-tag hashes of the settings it opened
 /// with (<c>Runs.SettingsHashes</c>, <see cref="SourceSettings.Hashes"/>: the tags are the schemas' <c>x-effect</c>). The
 /// scheduler compares an idle source's current hashes with its newest <c>sync</c> run's and enqueues a <c>config-change</c>
-/// sync when the scope or identity hash differs (<see cref="ChangedAsync"/>); a run compares its own hashes with
+/// sync when the scope, identity or fetch hash differs (<see cref="ChangedAsync"/>); a run compares its own hashes with
 /// the last <c>sync</c> run that applied its settings (finished, and for a crawl a complete traversal;
 /// <see cref="SinceAppliedAsync"/>), so a lost or cancelled <c>config-change</c> run leaves the effect to the next sync.
 /// </summary>
@@ -72,7 +78,8 @@ public static partial class SettingsEffects
         applied is null || current is null
             ? SettingsChange.None
             : new SettingsChange(!string.Equals(applied.Identity, current.Identity, StringComparison.Ordinal),
-                !string.Equals(applied.Scope, current.Scope, StringComparison.Ordinal));
+                !string.Equals(applied.Scope, current.Scope, StringComparison.Ordinal),
+                !string.Equals(applied.Fetch, current.Fetch, StringComparison.Ordinal));
 
     /// <summary>What changed between the settings the source last applied and the ones <paramref name="runId"/> opened with.</summary>
     public static async Task<SettingsChange> SinceAppliedAsync(JobDatabase database, Guid sourceId, Guid runId, CancellationToken cancellationToken)
@@ -86,8 +93,8 @@ public static partial class SettingsEffects
 
     /// <summary>
     /// The scheduler's part (§12.4): one <c>config-change</c> <c>sync</c> (dedup <c>sync:{sourceId}</c>) for each idle source
-    /// whose scope or identity hash differs from its newest <c>sync</c> run's, except <paramref name="skip"/> (a scheduled
-    /// sync is enqueued already). Behaviour and cosmetic changes enqueue nothing. Returns the requests, for the caller's enqueue.
+    /// whose scope, identity or fetch hash differs from its newest <c>sync</c> run's, except <paramref name="skip"/> (a scheduled
+    /// sync is enqueued already). Other behaviour changes and cosmetic ones enqueue nothing. Returns the requests, for the caller's enqueue.
     /// </summary>
     public static async Task<IReadOnlyList<JobRequest>> ChangedAsync(NpgsqlTransaction transaction, IReadOnlySet<Guid> skip, ILogger logger,
         CancellationToken cancellationToken)
@@ -117,7 +124,7 @@ public static partial class SettingsEffects
             {
                 DedupKey = JobDedupKeys.Sync(sourceId),
             });
-            LogChanged(logger, sourceId, change.Scope, change.Identity);
+            LogChanged(logger, sourceId, change.Scope, change.Identity, change.Fetch);
         }
 
         return jobs;
@@ -146,6 +153,6 @@ public static partial class SettingsEffects
         return ContractJson.Deserialize<SettingsHashes>(document.RootElement);
     }
 
-    [LoggerMessage(LogLevel.Information, "Source {SourceId}: settings changed (scope {Scope}, identity {Identity}); config-change sync enqueued")]
-    private static partial void LogChanged(ILogger logger, Guid sourceId, bool scope, bool identity);
+    [LoggerMessage(LogLevel.Information, "Source {SourceId}: settings changed (scope {Scope}, identity {Identity}, fetch {Fetch}); config-change sync enqueued")]
+    private static partial void LogChanged(ILogger logger, Guid sourceId, bool scope, bool identity, bool fetch);
 }

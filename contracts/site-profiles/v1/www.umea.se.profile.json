@@ -15,6 +15,5 @@
   },
   "ignoreQueryParams": ["sv.*", "open.*", "state", "profiling", "contactPage", "contactUserId", "addToCart"],
   "excludedTypes": ["image/*", "video/*"],
-  "lastmodReliable": false,
-  "javascriptNeeded": false
+  "lastmodReliable": false
 }

@@ -5,10 +5,12 @@ using Ume.Rag.Infrastructure.Blobs;
 using Ume.Rag.Pipelines.Definitions;
 using Ume.Rag.Pipelines.Jobs;
 using Ume.Rag.Pipelines.Json;
+using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Http;
 using Ume.Rag.Worker.Connectors.Malware;
+using Ume.Rag.Worker.Connectors.Render;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Uploads;
 using Ume.Rag.Worker.Connectors.UrlList;
@@ -24,7 +26,7 @@ namespace Ume.Rag.Worker.Preview;
 /// <summary>
 /// <c>stage-preview</c> (engine design §11; admin design §4.7, §6.4): up to five existing documents (their raw blobs), URLs
 /// (fetched live through the URL-list connector, so the egress guard, robots.txt and the malware scan apply, after a slot of
-/// the host's politeness budget) or upload slots (through the upload connector) through the pipeline version, draft or
+/// the host's politeness budget; rendered when the source's <c>fetchMode</c> is <c>browser</c>, after a render slot) or upload slots (through the upload connector) through the pipeline version, draft or
 /// published, up to <c>untilStage</c>, within a 2-minute deadline. Every write goes to <c>previews/{jobId}/</c>
 /// (<see cref="PreviewBlobs"/>); the one <c>content</c> write is the host budget's <c>CrawlHosts</c> row, and the job's
 /// <c>Result</c>. With <c>basePreviewJobId</c> the earlier preview's raw content and stage outputs are reused, so only the
@@ -37,11 +39,12 @@ public sealed partial class StagePreview(
     INodeOutputStore nodeOutputs,
     IBlobStore blobs,
     PreviewSegment segment,
-    HttpFetcher fetcher,
+    PageFetcher pages,
     RobotsCache robots,
     IMalwareScanner scanner,
     IUploadSlotReader slots,
     HostBudget budget,
+    RenderSlots renders,
     TimeProvider time,
     ILogger<StagePreview> logger)
 {
@@ -259,15 +262,17 @@ public sealed partial class StagePreview(
         CancellationToken cancellationToken)
     {
         var settings = source?.Settings ?? EmptySettings;
-        var canonical = UrlCanonicalizer.Canonicalize(url, (settings.Deserialize<UrlListSettings>(JsonSerializerOptions.Web) ?? new()).Canonicalizer());
+        var listSettings = UrlListConnector.Settings(settings);
+        var canonical = UrlCanonicalizer.Canonicalize(url, listSettings.Canonicalizer());
         if (!canonical.IsValid)
         {
             throw new StageFatalException(Outcome.Failed, canonical.Refusal!);
         }
 
         var item = new WorkItem(IdentityKind.Url, canonical.Value!, canonical.ToUri(), 0, WorkHints.None);
-        var connector = new UrlListConnector(fetcher, robots, scanner, store.Blobs, time);
+        var connector = new UrlListConnector(pages, robots, store.Blobs);
         var context = new FetchContext(source?.SourceId ?? Guid.Empty, level, run.JobId, settings, Revalidate: true);
+        using var render = listSettings.FetchMode == FetchMode.Browser ? await RenderSlotAsync(item.Url!.Authority, cancellationToken) : null;
         var (lease, refusal) = await PreviewHosts.SlotAsync(budget, item.Url!.Authority, time, cancellationToken);
         if (lease is null)
         {
@@ -280,6 +285,26 @@ public sealed partial class StagePreview(
             var outcome = await connector.FetchAsync(context, item, cancellationToken);
             await lease.CompleteAsync(PreviewHosts.Response(outcome, time.GetElapsedTime(started)), cancellationToken);
             return Content(outcome, level, index, canonical.Value!, null);
+        }
+    }
+
+    /// <summary>A render slot for a page of <paramref name="host"/>, waited for within the preview's deadline; no renderer fails the fetch stage.</summary>
+    private async Task<RenderLease> RenderSlotAsync(string host, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            switch (renders.TryAcquire(host))
+            {
+                case RenderSlot.Granted granted:
+                    return granted.Lease;
+                case RenderSlot.Refused { Reason: RenderReasons.Busy, Delay: var delay }:
+                    await Task.Delay(delay, time, cancellationToken);
+                    break;
+                case RenderSlot.Refused refused:
+                    throw new StageFatalException(Outcome.Failed, refused.Reason);
+                default:
+                    throw new InvalidOperationException("Unexpected render slot.");
+            }
         }
     }
 

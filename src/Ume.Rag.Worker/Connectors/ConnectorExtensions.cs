@@ -6,6 +6,7 @@ using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Http;
 using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Connectors.Persistence;
+using Ume.Rag.Worker.Connectors.Render;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Uploads;
 
@@ -14,8 +15,9 @@ namespace Ume.Rag.Worker.Connectors;
 public static class ConnectorExtensions
 {
     /// <summary>
-    /// The fetch path's shared parts (connectors design §7, §11): <c>Crawl:*</c> and <c>ClamAv:*</c> options, the egress
-    /// guard and the one crawl HTTP client, the fetcher, robots.txt, the malware scanner and its readiness check, the
+    /// The fetch path's shared parts (connectors design §7, §8, §11): <c>Crawl:*</c>, <c>Render:*</c> and <c>ClamAv:*</c>
+    /// options, the egress guard and the one crawl HTTP client, the fetcher, the renderer and the page fetcher, robots.txt,
+    /// the host budget, the malware scanner and its readiness check, the
     /// <c>Settings.Crawl</c> policies and the connectors' Postgres stores (on the queue's <c>JobDatabase</c>: call after
     /// <c>AddRagJobQueue</c>). Without
     /// <c>ClamAv:Host</c> the Development environment gets the EICAR-only scanner; every other environment fails closed.
@@ -23,8 +25,13 @@ public static class ConnectorExtensions
     public static IHostApplicationBuilder AddRagConnectors(this IHostApplicationBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        builder.Services.AddOptions<CrawlOptions>().BindConfiguration(CrawlOptions.SectionName).ValidateOnStart();
+        builder.Services.AddOptions<CrawlOptions>().BindConfiguration(CrawlOptions.SectionName)
+            .Configure<IConfiguration>((o, configuration) =>
+                o.MaxRenderPerHost = configuration.GetValue($"{RenderOptions.SectionName}:{nameof(RenderOptions.MaxConcurrent)}", new RenderOptions().MaxConcurrent))
+            .ValidateOnStart();
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<CrawlOptions>, CrawlOptionsValidator>());
+        builder.Services.AddOptions<RenderOptions>().BindConfiguration(RenderOptions.SectionName).ValidateOnStart();
+        builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<RenderOptions>, RenderOptionsValidator>());
         builder.Services.AddOptions<ClamAvOptions>().BindConfiguration(ClamAvOptions.SectionName);
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.TryAddSingleton<ConnectorMetrics>();
@@ -50,6 +57,15 @@ public static class ConnectorExtensions
         builder.Services.TryAddSingleton(sp => new CrawlHttpClient(sp.GetRequiredService<IEgressGuard>()));
         builder.Services.TryAddSingleton<HttpFetcher>();
         builder.Services.TryAddSingleton<RobotsCache>();
+        // The renderer (connectors design §8): one connection to rag-renderer per worker, its slots, cache and per-page fetch.
+        builder.Services.TryAddSingleton<HostBudget>();
+        builder.Services.TryAddSingleton<RenderMetrics>();
+        builder.Services.TryAddSingleton<RenderBlocklist>();
+        builder.Services.TryAddSingleton<RenderAssetCache>();
+        builder.Services.TryAddSingleton<RenderSlots>();
+        builder.Services.TryAddSingleton<RenderFetchers>();
+        builder.Services.TryAddSingleton<IRenderer, PlaywrightRenderer>();
+        builder.Services.TryAddSingleton<PageFetcher>();
 
         var developmentFake = builder.Environment.IsDevelopment()
             && string.IsNullOrWhiteSpace(builder.Configuration[$"{ClamAvOptions.SectionName}:{nameof(ClamAvOptions.Host)}"]);

@@ -11,6 +11,8 @@
     <PackageReference Include="Cronos" />
     <PackageReference Include="Markdig" />
     <PackageReference Include="Microsoft.ML.Tokenizers" />
+    <!-- The renderer's client (connectors design §8.3); it ships Playwright's Node driver, run as a child of the worker. -->
+    <PackageReference Include="Microsoft.Playwright" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Ume.Rag.Worker.Tests" />

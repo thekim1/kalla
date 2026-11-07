@@ -55,9 +55,6 @@ public sealed record SiteProfile
 
     [Description("Changed by hand only from the recorded 500-URL lastmod sample (to-verify #170); until then false and the host gets full traversals.")]
     public bool LastmodReliable { get; init; }
-
-    [Description("Raw text yield says the host needs JavaScript (the renderer is P2).")]
-    public bool JavascriptNeeded { get; init; }
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

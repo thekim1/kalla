@@ -37,3 +37,16 @@ public enum PiiMode
     /// </summary>
     Report,
 }
+
+/// <summary>
+/// The source setting <c>fetchMode</c> (connectors design §8.1, Decisions "JavaScript rendering"): how a URL-list or crawl
+/// source's HTML pages are fetched.
+/// </summary>
+public enum FetchMode
+{
+    /// <summary>The HTTP response is the content (the default).</summary>
+    Http,
+
+    /// <summary>Every HTML page is rendered by headless Chromium, every browser request fetched by the worker (§8.3).</summary>
+    Browser,
+}

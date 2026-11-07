@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace Ume.Rag.Worker.Connectors.Egress;
 
-/// <summary>Why a request leaves the worker (event 5101's <c>Purpose</c>); <c>Render</c> comes with the P2 renderer.</summary>
+/// <summary>Why a request leaves the worker (event 5101's <c>Purpose</c>).</summary>
 public enum EgressPurpose
 {
     Fetch,
@@ -12,6 +12,9 @@ public enum EgressPurpose
     Sitemap,
     Preflight,
     Preview,
+
+    /// <summary>A request the browser made while rendering a page, fetched by the worker (connectors design §8.3).</summary>
+    Render,
 }
 
 /// <summary>The guard's verdict on a URL or an address; <see cref="Reason"/> and <see cref="AddressClass"/> are 5101's attributes.</summary>

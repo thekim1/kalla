@@ -4,12 +4,14 @@ using Ume.Rag.Domain.Entities;
 using Ume.Rag.Domain.Ports;
 using Ume.Rag.Infrastructure.Jobs;
 using Ume.Rag.Pipelines.Jobs;
+using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Http;
 using Ume.Rag.Worker.Connectors.Persistence;
+using Ume.Rag.Worker.Connectors.Render;
 using Ume.Rag.Worker.Connectors.UrlList;
 using Ume.Rag.Worker.Jobs;
 using Outcome = Ume.Rag.Pipelines.Jobs.RunItemOutcome;
@@ -22,10 +24,13 @@ namespace Ume.Rag.Worker.Engine;
 /// the list's 5,000), committed per checkpoint with the connector checkpoint and the refused URLs' run items; a listing that
 /// runs past 2 minutes yields to a continuation. A <c>config-change</c> run (the list changed, connectors design §12.3)
 /// claims only the added URLs: a listed URL with a live document is marked listed for the run without a fetch, and the
-/// reconcile removes the URLs no longer listed (<c>removed-from-list</c>, exempt). Release: each host keeps at most
+/// reconcile removes the URLs no longer listed (<c>removed-from-list</c>, exempt); when <c>fetchMode</c>,
+/// <c>readySelector</c> or <c>scrollToLoad</c> changed since the settings last applied, the run claims and fetches every
+/// URL again without validators (§12.3). Release: each host keeps at most
 /// <c>Crawl:FetchBatchPerHost</c> fetches queued or running, topped up after the listing and whenever one of its fetches ends; a released row whose job is gone is
-/// enqueued again (dedup <c>fetch:{sourceId}:{urlHash}</c>). Fetch: the row's host slot (§6.3), the connector's conditional
-/// GET, then <see cref="DocumentIngest"/>, which completes the frontier row in the document's commit.
+/// enqueued again (dedup <c>fetch:{sourceId}:{urlHash}</c>). Fetch: a <c>browser</c> source's render slot first (none free:
+/// <c>render.busy</c>, released without an attempt, §8.3), the row's host slot (§6.3), the connector's conditional GET (or
+/// render), then <see cref="DocumentIngest"/>, which completes the frontier row in the document's commit.
 /// </summary>
 public sealed class UrlListSource(
     UrlListConnector connector,
@@ -33,6 +38,7 @@ public sealed class UrlListSource(
     ICrawlRunStore crawlRuns,
     IConnectorCheckpointStore checkpoints,
     HostBudget budget,
+    RenderSlots renders,
     RunStore runs,
     DocumentIngest ingest,
     IJobQueue queue,
@@ -70,7 +76,8 @@ public sealed class UrlListSource(
         var from = payload.ResumeFromCheckpoint
             ? await checkpoints.GetAsync<UrlListCheckpoint>(source.SourceId, CheckpointKind.Run, run.Id, cancellationToken) ?? new UrlListCheckpoint()
             : new UrlListCheckpoint();
-        var live = run.Trigger == RunTriggers.ConfigChange ? await LiveUrlsAsync(source.SourceId, cancellationToken) : null;
+        var refetch = (await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken)).Fetch;
+        var live = run.Trigger == RunTriggers.ConfigChange && !refetch ? await LiveUrlsAsync(source.SourceId, cancellationToken) : null;
         var started = time.GetTimestamp();
         var admissions = new List<FrontierAdmission>();
         var refused = new List<RunItemRow>();
@@ -155,6 +162,28 @@ public sealed class UrlListSource(
         }
 
         var fetch = new FetchCase(source, run, pipeline, job, IdentityKinds.Url, row.Url, Db.Bytes(row.UrlHash));
+        RenderLease? render = null;
+        if (UrlListConnector.Settings(source.Settings).FetchMode == FetchMode.Browser)
+        {
+            switch (renders.TryAcquire(row.Host))
+            {
+                case RenderSlot.Granted granted:
+                    render = granted.Lease;
+                    break;
+                case RenderSlot.Refused refused:
+                    return new JobResult.TransientError(refused.Reason, refused.Delay, CountsAttempt: false);
+            }
+        }
+
+        using (render)
+        {
+            return await FetchInSlotAsync(source, run, fetch, row, cancellationToken);
+        }
+    }
+
+    /// <summary>The row's host slot, the fetch and its commit; the host is topped up after a commit.</summary>
+    private async Task<JobResult> FetchInSlotAsync(SourceContext source, RunRow run, FetchCase fetch, FrontierRow row, CancellationToken cancellationToken)
+    {
         JobResult result;
         switch (await budget.AcquireAsync(row.Host, cancellationToken))
         {
@@ -171,7 +200,9 @@ public sealed class UrlListSource(
                     var item = new WorkItem(IdentityKind.Url, row.Url, new Uri(row.Url), 0,
                         new WorkHints(row.ETag is null && row.LastModified is null ? null : new Validators(row.ETag, row.LastModified), row.ContentHash));
                     var started = time.GetTimestamp();
-                    var outcome = await connector.FetchAsync(new FetchContext(source.SourceId, source.Classification, run.Id, source.Settings, Revalidate: false),
+                    // A changed fetchMode, readySelector or scrollToLoad fetches every page again in full (§12.3).
+                    var revalidate = (await SettingsEffects.SinceAppliedAsync(database, source.SourceId, run.Id, cancellationToken)).Fetch;
+                    var outcome = await connector.FetchAsync(new FetchContext(source.SourceId, source.Classification, run.Id, source.Settings, revalidate),
                         item, cancellationToken);
                     await granted.Lease.CompleteAsync(Response(outcome, time.GetElapsedTime(started)), cancellationToken);
                     result = await ingest.HandleAsync(fetch, outcome, cancellationToken);

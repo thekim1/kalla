@@ -7,7 +7,7 @@ using Ume.Rag.Pipelines.Json;
 using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Http;
-using Ume.Rag.Worker.Connectors.Malware;
+using Ume.Rag.Worker.Connectors.Render;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Sitemaps;
 using Ume.Rag.Worker.Connectors.Urls;
@@ -35,15 +35,19 @@ public sealed record CrawlCheckpoint : ConnectorCheckpoint
 /// <summary>A crawl source's bound settings with their scope and canonicaliser options.</summary>
 public sealed record CrawlSource(CrawlSettings Settings, CrawlScope Scope, CanonicalizerOptions Canonicalizer);
 
-/// <summary>A fetched page: the outcome and, for content and 304s, its links and robots directives (§5.4).</summary>
+/// <summary>
+/// A fetched page: the outcome and, for content and 304s, its links and robots directives (§5.4); for a failed render the
+/// links stored with the document's last good content (§8.4).
+/// </summary>
 public sealed record CrawlPage(FetchOutcome Outcome, PageLinks? Links);
 
 /// <summary>
 /// The <c>crawl</c> source (connectors design §5): listing yields the seeds at depth 0 (start URLs and every sitemap URL
 /// in scope, from the source's <c>sitemaps</c>, each scope origin's robots.txt <c>Sitemap:</c> lines and its
 /// <c>/sitemap.xml</c> and <c>/sitemap_index.xml</c>; XML or plain text; sitemap index depth ≤ 2; at most
-/// <c>maxPages</c>; a transient sitemap failure retried twice, §5.1), and fetching returns the page with its links.
-/// Every URL is requested (conditionally when validators are stored) unless the traversal skips it by <c>lastmod</c>
+/// <c>maxPages</c>; a transient sitemap failure retried twice, §5.1), and fetching returns the page with its links
+/// through <see cref="PageFetcher"/> (rendered for a <c>browser</c> source, §8).
+/// Every URL is requested (conditionally when validators are stored, never for a <c>browser</c> source) unless the traversal skips it by <c>lastmod</c>
 /// (<see cref="CrawlTraversal"/>, only on hosts whose site profile marks <c>lastmod</c> reliable); a URL that left the
 /// sitemap is probed by <see cref="ProbeAsync"/> (the removal check, §5.4).
 /// A listing that missed seeds (an unreachable robots.txt, a failed or truncated sitemap, the page limit) ends
@@ -53,7 +57,7 @@ public sealed record CrawlPage(FetchOutcome Outcome, PageLinks? Links);
 /// (<see cref="SiteProfileCanonicalRules"/>; none without <paramref name="hostRules"/>, so every host keeps the default).
 /// </summary>
 public sealed class CrawlConnector(
-    HttpFetcher fetcher, RobotsCache robots, IMalwareScanner scanner, IBlobStore blobs, TimeProvider time, SiteProfileCanonicalRules? hostRules = null)
+    HttpFetcher fetcher, PageFetcher pages, RobotsCache robots, IBlobStore blobs, TimeProvider time, SiteProfileCanonicalRules? hostRules = null)
     : IFetchConnector<CrawlCheckpoint>, IRetryFailedConnector
 {
     public const string Type = SourceTypes.Crawl;
@@ -84,7 +88,6 @@ public sealed class CrawlConnector(
     /// <summary>The probed sitemap paths of every scope origin, in order; their absence is no failure (§5.1).</summary>
     private static readonly string[] GuessedSitemaps = ["/sitemap.xml", "/sitemap_index.xml"];
 
-    private readonly RawContentWriter _writer = new(scanner, blobs, time);
     private readonly ConcurrentDictionary<Guid, (string Raw, CrawlSource Source)> _sources = new();
 
     public string SourceType => Type;
@@ -233,9 +236,12 @@ public sealed class CrawlConnector(
         (await FetchPageAsync(context, item, null, cancellationToken)).Outcome;
 
     /// <summary>
-    /// One GET (conditional when validators are stored and the run does not revalidate), redirects re-checked against the
-    /// scope (§3.2), the content stored with its outlinks; a 304 returns the stored outlinks of the last content. An HTML
-    /// page whose main text matches <paramref name="softNotFound"/> (the host's fingerprint, §5.3) ends <c>http.soft_404</c>.
+    /// One GET (conditional when validators are stored and the run does not revalidate; never for a <c>browser</c> source),
+    /// redirects re-checked against the scope (§3.2), the page rendered for a <c>browser</c> source and the content stored
+    /// with its outlinks; a 304 returns the stored outlinks of the last content, and so does a failed render (§8.4: the
+    /// traversal continues from the last good links, so nothing below the page is missed or proposed for deletion). An
+    /// HTML page whose main text matches <paramref name="softNotFound"/> (the host's fingerprint, §5.3) ends
+    /// <c>http.soft_404</c>.
     /// </summary>
     public async Task<CrawlPage> FetchPageAsync(FetchContext context, WorkItem item, string? softNotFound, CancellationToken cancellationToken)
     {
@@ -246,23 +252,27 @@ public sealed class CrawlConnector(
         var validators = source.Settings.ConditionalGet && !context.Revalidate ? item.Hints.Stored : null;
         var request = new HttpFetchRequest(url, EgressPurpose.Fetch, validators, source.Scope.AcceptedMediaTypes(url), source.Canonicalizer, robots.CheckAsync,
             InScope: target => InScope(source, target));
-        var result = await fetcher.FetchAsync(request, cancellationToken);
-        switch (result)
+        var page = await pages.FetchAsync(new PageRequest(context, request, blobs, PageSettingsOf(source.Settings))
         {
-            case HttpFetchResult.Ok ok:
-                await using (ok.Body)
-                {
-                    var stored = await _writer.StoreAsync(context, ok, source.Settings.NoiseSelectors, source.Canonicalizer, extractLinks: true, softNotFound,
-                        cancellationToken);
-                    return new CrawlPage(stored.Outcome, stored.Links);
-                }
-
-            case HttpFetchResult.NotModified when item.Hints.ContentHash is { } hash:
-                var links = await PageLinks.LoadAsync(blobs, context.Classification, hash, cancellationToken);
-                return new CrawlPage(FetchOutcomes.From(result), links ?? PageLinks.None);
+            ExtractLinks = true,
+            SoftNotFound = softNotFound,
+        }, cancellationToken);
+        switch (page.Outcome)
+        {
+            case FetchOutcome.NotModified when item.Hints.ContentHash is { } hash:
+                return new CrawlPage(page.Outcome, await PageLinks.LoadAsync(blobs, context.Classification, hash, cancellationToken) ?? PageLinks.None);
+            case FetchOutcome.Transient { Reason: var reason } when reason.StartsWith(RenderReasons.Prefix, StringComparison.Ordinal) && item.Hints.ContentHash is { } hash:
+                return new CrawlPage(page.Outcome, await PageLinks.LoadAsync(blobs, context.Classification, hash, cancellationToken));
             default:
-                return new CrawlPage(FetchOutcomes.From(result), null);
+                return new CrawlPage(page.Outcome, page.Links);
         }
+    }
+
+    /// <summary>The fetch settings of a crawl source.</summary>
+    public static PageSettings PageSettingsOf(CrawlSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return new PageSettings(settings.FetchMode, settings.ReadySelector, settings.ScrollToLoad, settings.NoiseSelectors);
     }
 
     /// <summary>
@@ -310,7 +320,7 @@ public sealed class CrawlConnector(
 
         await using (ok.Body)
         {
-            return (await _writer.FingerprintAsync(ok.Body, source.Settings.NoiseSelectors, cancellationToken), null);
+            return (await pages.FingerprintAsync(ok.Body, source.Settings.NoiseSelectors, cancellationToken), null);
         }
     }
 

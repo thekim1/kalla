@@ -20,6 +20,18 @@ internal static class SettingPatterns
 /// <summary>Descriptions shared by the source settings.</summary>
 internal static class SettingDescriptions
 {
+    public const string FetchMode =
+        "http: the HTTP response is the content. browser: every HTML page is rendered by headless Chromium in the renderer, every request it makes " +
+        "fetched by the worker (connectors design §8). A change starts a sync that fetches every page again.";
+
+    public const string ReadySelector =
+        "browser only: CSS naming the loaded content; the page is ready when it holds text. Null: ready when no request has been open for " +
+        "Render:QuietPeriod after load (connectors design §8.3). A change starts a sync that fetches every page again.";
+
+    public const string ScrollToLoad =
+        "browser only: scroll to the bottom until the page stops growing (at most 10 steps) for content loaded on scroll. A change starts a sync " +
+        "that fetches every page again.";
+
     /// <summary>
     /// <c>piiMode</c> (Decisions table, 2026-11-01). Cosmetic: the mode is read at each swap, so a change needs no run and no
     /// re-processing; sets already swapped keep their state until their next swap or a clearance.
@@ -72,6 +84,20 @@ public sealed record UrlListSettings
     [Description("Whole-request timeout in seconds; the HTML and file body limits of connectors design §4 still apply.")]
     [Range(5, 120)]
     public int TimeoutSeconds { get; init; } = 30;
+
+    [Effect(SettingEffect.Behaviour, Refetch = true)]
+    [Description(SettingDescriptions.FetchMode)]
+    public FetchMode FetchMode { get; init; } = FetchMode.Http;
+
+    [Effect(SettingEffect.Behaviour, Refetch = true)]
+    [Description(SettingDescriptions.ReadySelector)]
+    [MinLength(1)]
+    [MaxLength(500)]
+    public string? ReadySelector { get; init; }
+
+    [Effect(SettingEffect.Behaviour, Refetch = true)]
+    [Description(SettingDescriptions.ScrollToLoad)]
+    public bool ScrollToLoad { get; init; }
 
     [Effect(SettingEffect.Cosmetic)]
     [Description(SettingDescriptions.PiiMode)]
@@ -164,6 +190,20 @@ public sealed record CrawlSettings
     [Description("Whole-request timeout in seconds; the HTML and file body limits of connectors design §4 still apply.")]
     [Range(5, 120)]
     public int TimeoutSeconds { get; init; } = 30;
+
+    [Effect(SettingEffect.Behaviour, Refetch = true)]
+    [Description(SettingDescriptions.FetchMode)]
+    public FetchMode FetchMode { get; init; } = FetchMode.Http;
+
+    [Effect(SettingEffect.Behaviour, Refetch = true)]
+    [Description(SettingDescriptions.ReadySelector)]
+    [MinLength(1)]
+    [MaxLength(500)]
+    public string? ReadySelector { get; init; }
+
+    [Effect(SettingEffect.Behaviour, Refetch = true)]
+    [Description(SettingDescriptions.ScrollToLoad)]
+    public bool ScrollToLoad { get; init; }
 
     [Effect(SettingEffect.Cosmetic)]
     [Description("Night window HH:MM-HH:MM, Europe/Stockholm (connectors design §6.5); manual sync ignores it.")]

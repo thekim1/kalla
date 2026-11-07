@@ -71,6 +71,9 @@ public sealed class SourceSettingsTests
     [InlineData("incrementalSchedule", "\"0 3 * * *\"", SettingEffect.Cosmetic)]
     [InlineData("revalidateEvery", "8", SettingEffect.Behaviour)]
     [InlineData("piiMode", "\"report\"", SettingEffect.Cosmetic)]
+    [InlineData("fetchMode", "\"browser\"", SettingEffect.Behaviour)]
+    [InlineData("readySelector", "\"#app article\"", SettingEffect.Behaviour)]
+    [InlineData("scrollToLoad", "true", SettingEffect.Behaviour)]
     public void A_change_moves_exactly_its_tag(string member, string value, SettingEffect effect)
     {
         var before = Repository.Json(Umea);
@@ -85,6 +88,30 @@ public sealed class SourceSettingsTests
         (old.Scope != current.Scope).ShouldBe(effect == SettingEffect.Scope);
         (old.Behaviour != current.Behaviour).ShouldBe(effect == SettingEffect.Behaviour);
     }
+
+    [Theory]
+    [InlineData(SourceTypes.Crawl, "fetchMode", "\"browser\"", true)]
+    [InlineData(SourceTypes.Crawl, "readySelector", "\"#app article\"", true)]
+    [InlineData(SourceTypes.Crawl, "scrollToLoad", "true", true)]
+    [InlineData(SourceTypes.UrlList, "fetchMode", "\"browser\"", true)]
+    [InlineData(SourceTypes.Crawl, "noiseSelectors", "[\"#cookie-banner\"]", false)]
+    [InlineData(SourceTypes.UrlList, "conditionalGet", "false", false)]
+    public void Only_the_fetch_settings_move_the_fetch_hash(string sourceType, string member, string value, bool moves)
+    {
+        var json = sourceType == SourceTypes.Crawl ? """{"startUrls":["https://www.umea.se/"]}""" : """{"urls":["https://www.umea.se/"]}""";
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        node[member] = System.Text.Json.Nodes.JsonNode.Parse(value);
+
+        var after = JsonSerializer.SerializeToElement(node);
+        ContractSchemas.Validator(SourceSettings.SettingsType(sourceType)).Validate(after).ShouldBeEmpty();
+        (SourceSettings.Hashes(sourceType, Repository.Json(json)).Fetch != SourceSettings.Hashes(sourceType, after).Fetch).ShouldBe(moves);
+    }
+
+    [Theory]
+    [InlineData("""{"startUrls":["https://www.umea.se/"],"fetchMode":"chrome"}""")]
+    [InlineData("""{"startUrls":["https://www.umea.se/"],"readySelector":""}""")]
+    public void Invalid_fetch_settings_fail_the_schema(string json) =>
+        ContractSchemas.Validator(typeof(CrawlSettings)).Validate(Repository.Json(json)).ShouldNotBeEmpty();
 
     [Fact]
     public void Settings_without_the_p1b_members_still_validate_and_hash_alike()
