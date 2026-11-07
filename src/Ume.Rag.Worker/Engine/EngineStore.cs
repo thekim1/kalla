@@ -39,6 +39,9 @@ public sealed record FetchedDocument(Guid SourceId, string Classification, strin
 
     /// <summary>The frontier row's sitemap <c>lastmod</c> (<see cref="DocumentRow.SitemapLastMod"/>).</summary>
     public DateTimeOffset? SitemapLastMod { get; init; }
+
+    /// <summary><c>Documents.FetchMode</c>: how this content was fetched (<c>http</c>, or <c>browser</c> for a rendered DOM).</summary>
+    public string FetchMode { get; init; } = Domain.Entities.FetchModes.Http;
 }
 
 /// <param name="Document">The row after the upsert.</param>
@@ -117,8 +120,8 @@ public sealed class DocumentStore(JobDatabase database)
     private const string InsertSql = $"""
         INSERT INTO content."Documents" ("Id", "SourceId", "Classification", "IdentityKind", "CanonicalIdentity", "IdentityHash", "ContentHash",
                                         "ContentHashVersion", "Url", "DisplayName", "CanonicalHint", "FetchedAt", "CurrentExecutionId", "LastRunId",
-                                        "FirstSeenAt", "LastSeenAt", "HttpLastModified", "SitemapLastMod")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $12, $12, $15, $16)
+                                        "FirstSeenAt", "LastSeenAt", "HttpLastModified", "SitemapLastMod", "FetchMode")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $12, $12, $15, $16, $17)
         ON CONFLICT ("SourceId", "IdentityKind", "IdentityHash") DO NOTHING
         RETURNING {Columns}
         """;
@@ -132,7 +135,7 @@ public sealed class DocumentStore(JobDatabase database)
                "CanonicalHint" = $6, "HeldAt" = NULL, "HeldBy" = NULL, "ConsecutiveFailures" = 0,
                "CurrentExecutionId" = CASE WHEN $9 THEN $7 ELSE "CurrentExecutionId" END,
                "ContentHash" = CASE WHEN $9 THEN $8 ELSE "ContentHash" END,
-               "ContentHashVersion" = $10, "HttpLastModified" = $11, "SitemapLastMod" = $12,
+               "ContentHashVersion" = $10, "HttpLastModified" = $11, "SitemapLastMod" = $12, "FetchMode" = $13,
                "DeletedAt" = NULL, "PurgeAfter" = NULL
          WHERE "Id" = $1
         RETURNING {Columns}
@@ -225,7 +228,7 @@ public sealed class DocumentStore(JobDatabase database)
                     Db.P(Guid.CreateVersion7()), Db.P(fetched.SourceId), Db.P(fetched.Classification), Db.P(fetched.IdentityKind),
                     Db.P(fetched.CanonicalIdentity), Db.P(identityHash), Db.P(fetched.ContentHash), Db.P(fetched.ContentHashVersion), Db.P(fetched.Url),
                     Db.P(fetched.DisplayName), Db.P(fetched.CanonicalHint), Db.P(at), Db.P(Guid.CreateVersion7()), Db.P(runId),
-                    Db.P(Db.Utc(fetched.HttpLastModified)), Db.P(Db.Utc(fetched.SitemapLastMod)),
+                    Db.P(Db.Utc(fetched.HttpLastModified)), Db.P(Db.Utc(fetched.SitemapLastMod)), Db.P(fetched.FetchMode),
                 },
             };
             await using var reader = await insert.ExecuteReaderAsync(cancellationToken);
@@ -245,7 +248,7 @@ public sealed class DocumentStore(JobDatabase database)
                 {
                     Db.P(id.Value), Db.P(at), Db.P(runId), Db.P(fetched.Url), Db.P(fetched.DisplayName), Db.P(fetched.CanonicalHint),
                     Db.P(Guid.CreateVersion7()), Db.P(fetched.ContentHash), Db.P(changed), Db.P(fetched.ContentHashVersion),
-                    Db.P(Db.Utc(fetched.HttpLastModified)), Db.P(Db.Utc(fetched.SitemapLastMod)),
+                    Db.P(Db.Utc(fetched.HttpLastModified)), Db.P(Db.Utc(fetched.SitemapLastMod)), Db.P(fetched.FetchMode),
                 },
             };
             await using (var reader = await update.ExecuteReaderAsync(cancellationToken))

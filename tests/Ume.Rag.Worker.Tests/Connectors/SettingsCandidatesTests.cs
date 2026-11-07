@@ -23,7 +23,7 @@ public sealed class SettingsCandidatesTests
     private static readonly TraversalVerdict Partial = new(false, ["crawl.limit_pages"], null, null);
 
     [Fact]
-    public void Only_scope_and_identity_tags_need_a_run_and_unknown_hashes_need_nothing()
+    public void Only_scope_identity_and_fetch_changes_need_a_run_and_unknown_hashes_need_nothing()
     {
         var before = Hashes(new { startUrls = new[] { "https://www.umea.se/" } });
 
@@ -35,6 +35,11 @@ public sealed class SettingsCandidatesTests
         SettingsEffects.Compare(before, Hashes(new { startUrls = new[] { "https://www.umea.se/" }, ignoreQueryParams = new[] { "lang" } }))
             .ShouldBe(new SettingsChange(true, false));
         SettingsEffects.Compare(null, before).ShouldBe(SettingsChange.None);
+        var browser = SettingsEffects.Compare(before, Hashes(new { startUrls = new[] { "https://www.umea.se/" }, fetchMode = "browser" }));
+        browser.ShouldBe(new SettingsChange(false, false, Fetch: true));
+        browser.NeedsRun.ShouldBeTrue("a fetchMode change starts a sync that fetches every page again (§12.3)");
+        SettingsEffects.Compare(before, Hashes(new { startUrls = new[] { "https://www.umea.se/" }, noiseSelectors = new[] { "#x" } })).NeedsRun
+            .ShouldBeFalse("another behaviour change waits for the next sync");
         SettingsEffects.HashesJson(SourceTypes.Crawl, JsonSerializer.SerializeToElement(new { unknown = 1 })).ShouldBeNull();
     }
 

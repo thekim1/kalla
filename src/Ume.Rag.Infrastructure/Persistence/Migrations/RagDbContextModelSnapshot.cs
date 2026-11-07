@@ -1572,6 +1572,13 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<string>("FetchMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("http");
+
                     b.Property<DateTimeOffset?>("FetchedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1682,6 +1689,8 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.ToTable("Documents", "content", t =>
                         {
                             t.HasCheckConstraint("CK_Documents_Classification", "\"Classification\" IN ('public', 'internal', 'sensitive')");
+
+                            t.HasCheckConstraint("CK_Documents_FetchMode", "\"FetchMode\" IN ('http', 'browser')");
 
                             t.HasCheckConstraint("CK_Documents_IdentityKind", "\"IdentityKind\" IN ('url', 'upload')");
                         });

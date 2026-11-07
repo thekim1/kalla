@@ -182,6 +182,9 @@ public sealed record FetchFacts(Uri? FinalUrl, string CanonicalIdentity, IReadOn
 {
     /// <summary>Run item facts (<c>&lt;area&gt;.&lt;code&gt;</c>), e.g. <c>upload.declared_type_differs</c>.</summary>
     public IReadOnlyList<string> Notes { get; init; } = [];
+
+    /// <summary><c>Documents.FetchMode</c>: <c>browser</c> when the content is the rendered DOM (connectors design §8.1).</summary>
+    public string FetchMode { get; init; } = Domain.Entities.FetchModes.Http;
 }
 
 /// <summary>What one fetch produced (§2.1, outcomes §15). Reasons are <c>&lt;area&gt;.&lt;code&gt;</c>, never library text.</summary>

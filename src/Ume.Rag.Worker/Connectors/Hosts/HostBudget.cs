@@ -57,14 +57,17 @@ public sealed record HostVerdict(DateTimeOffset? PausedUntil, string? Reason)
     public static HostVerdict Running { get; } = new(null, null);
 }
 
-/// <summary>One in-flight request's hold on its host: a connection of the in-process cap (§6.3).</summary>
+/// <summary>
+/// One in-flight request's hold on its host: a connection of the in-process cap (§6.3), or none for a request made under a
+/// connection the caller already holds (<see cref="HostBudget.PaceAsync"/>).
+/// </summary>
 public sealed class HostLease : IDisposable
 {
     private readonly HostBudget _budget;
-    private readonly SemaphoreSlim _connections;
+    private readonly SemaphoreSlim? _connections;
     private int _released;
 
-    internal HostLease(HostBudget budget, string host, SemaphoreSlim connections)
+    internal HostLease(HostBudget budget, string host, SemaphoreSlim? connections)
     {
         _budget = budget;
         Host = host;
@@ -81,7 +84,7 @@ public sealed class HostLease : IDisposable
     {
         if (Interlocked.Exchange(ref _released, 1) == 0)
         {
-            _connections.Release();
+            _connections?.Release();
         }
     }
 }
@@ -126,7 +129,16 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
         return store.RecordRobotsAsync(host, entry.Status, entry.FetchedAt, delay, cancellationToken);
     }
 
-    public async Task<HostSlot> AcquireAsync(string host, CancellationToken cancellationToken)
+    public Task<HostSlot> AcquireAsync(string host, CancellationToken cancellationToken) => AcquireAsync(host, connection: true, cancellationToken);
+
+    /// <summary>
+    /// A slot of the host's pacing without a connection of its cap: a further request made while the caller holds the
+    /// host's lease (the requests a rendered page makes to its own host, connectors design §8.3), so it neither waits for
+    /// its own connection nor goes unpaced. Complete the lease with the response like any other.
+    /// </summary>
+    public Task<HostSlot> PaceAsync(string host, CancellationToken cancellationToken) => AcquireAsync(host, connection: false, cancellationToken);
+
+    private async Task<HostSlot> AcquireAsync(string host, bool connection, CancellationToken cancellationToken)
     {
         var (state, profile) = await EnsureAsync(host, cancellationToken);
         var now = time.GetUtcNow();
@@ -156,6 +168,11 @@ public sealed class HostBudget(ICrawlHostStore store, ICrawlPolicySource policy,
         if (wait > TimeSpan.Zero)
         {
             await Task.Delay(wait, time, cancellationToken);
+        }
+
+        if (!connection)
+        {
+            return new HostSlot.Granted(new HostLease(this, host, null));
         }
 
         // A slot lost to the connection wait costs one interval; it happens only while a request has held the connection

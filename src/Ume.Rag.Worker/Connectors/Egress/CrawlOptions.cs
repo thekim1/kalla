@@ -41,8 +41,14 @@ public sealed class CrawlOptions
     /// <summary>The most connections a host's politeness profile may set (<c>Crawl:MaxHostConnections</c>, §6.6).</summary>
     public int MaxHostConnections { get; set; } = PolitenessCeilings.DefaultMaxHostConnections;
 
-    /// <summary>The ceilings the worker clamps host profiles to; <c>renderPerHost</c> keeps the default <c>Render:MaxConcurrent</c> until the renderer has options.</summary>
-    public PolitenessCeilings Ceilings() => new(MaxHostRate, MaxHostConnections, PolitenessCeilings.DefaultMaxRenderPerHost);
+    /// <summary>
+    /// The most a host's <c>renderPerHost</c> may be: <c>Render:MaxConcurrent</c>, set from that key at start (as the admin
+    /// API does), not from this section.
+    /// </summary>
+    public int MaxRenderPerHost { get; set; } = PolitenessCeilings.DefaultMaxRenderPerHost;
+
+    /// <summary>The ceilings the worker clamps host profiles to.</summary>
+    public PolitenessCeilings Ceilings() => new(MaxHostRate, MaxHostConnections, MaxRenderPerHost);
 
     public IReadOnlyList<IPNetwork> AllowedNetworks() =>
         [.. (AllowedPrivateRanges ?? string.Empty)

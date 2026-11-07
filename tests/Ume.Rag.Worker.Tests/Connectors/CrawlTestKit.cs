@@ -7,6 +7,7 @@ using Ume.Rag.Worker.Connectors;
 using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Hosts;
+using Ume.Rag.Worker.Connectors.Render;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Uploads;
 
@@ -524,9 +525,12 @@ internal sealed class CrawlRig : IAsyncDisposable
     /// <param name="hosts">The <c>CrawlHosts</c> store; in memory when null.</param>
     /// <param name="store">The frontier and run store; in memory when null.</param>
     /// <param name="rule"><c>Crawl:CompletenessRule</c>.</param>
+    /// <param name="renderer">The renderer of <c>browser</c> sources (none: every render is <c>render.unavailable</c>).</param>
+    /// <param name="render"><c>Render:*</c> (default: no endpoint, <c>render.not_configured</c>).</param>
     public static CrawlRig Create(
         TestSite site, FixedCrawlPolicy? policy = null, int batch = 10, FakeDnsResolver? dns = null, ICrawlHostStore? hosts = null,
-        (ICrawlFrontierStore Frontier, ICrawlRunStore Runs)? store = null, Worker.Connectors.Deletion.CompletenessRule rule = Worker.Connectors.Deletion.CompletenessRule.Ratio)
+        (ICrawlFrontierStore Frontier, ICrawlRunStore Runs)? store = null, Worker.Connectors.Deletion.CompletenessRule rule = Worker.Connectors.Deletion.CompletenessRule.Ratio,
+        IRenderer? renderer = null, RenderOptions? render = null)
     {
         if (policy is null)
         {
@@ -537,19 +541,18 @@ internal sealed class CrawlRig : IAsyncDisposable
             }
         }
 
-        var path = site.Fetch(dns: dns, policy: policy);
+        var budget = new HostBudget(hosts ?? new InMemoryCrawlHostStore(TimeProvider.System), policy, TimeProvider.System);
+        var path = site.Fetch(dns: dns, policy: policy, renderer: renderer, render: render, budget: budget);
 
         var profiles = new InMemorySiteProfiles();
         var profileClock = new FakeTimeProvider();
-        var connector = new CrawlConnector(path.Fetcher, path.Robots, new ScriptedScanner(Worker.Connectors.Malware.ScanResult.Clean), path.Blobs, TimeProvider.System,
-            new SiteProfileCanonicalRules(profiles, profileClock));
+        var connector = new CrawlConnector(path.Fetcher, path.Pages, path.Robots, path.Blobs, TimeProvider.System, new SiteProfileCanonicalRules(profiles, profileClock));
         var memory = store is null ? new InMemoryCrawlStore() : null;
         var (frontier, runs) = store ?? (memory!, memory!);
         var queue = new RecordingJobQueue();
-        var budget = new HostBudget(hosts ?? new InMemoryCrawlHostStore(TimeProvider.System), policy, TimeProvider.System);
         var options = Options.Create(new CrawlOptions { FetchBatchPerHost = batch, CompletenessRule = rule });
         var topUp = new FetchTopUp(frontier, runs, queue, policy, options, TimeProvider.System);
-        var traversal = new CrawlTraversal(connector, path.Robots, budget, policy, frontier, runs, topUp, path.Blobs, queue,
+        var traversal = new CrawlTraversal(connector, path.Robots, budget, path.Renders, policy, frontier, runs, topUp, path.Blobs, queue,
             new LastmodReliability(profiles, profileClock), options, TimeProvider.System);
         return new CrawlRig(path, connector, traversal, frontier, runs, memory, queue, topUp, profiles, profileClock);
     }
@@ -559,6 +562,13 @@ internal sealed class CrawlRig : IAsyncDisposable
     /// fetch until none is left; returns the context the run continued with and the fetch results by URL.
     /// </summary>
     public async Task<(CrawlRunContext Context, Dictionary<string, CrawlFetchResult> Results)> RunAsync(CrawlRunContext context)
+    {
+        context = await ListAsync(context);
+        return (context, await DrainAsync(context));
+    }
+
+    /// <summary>The first half of <see cref="RunAsync"/>: the run opened, its seeds admitted and released as queued fetch jobs.</summary>
+    public async Task<CrawlRunContext> ListAsync(CrawlRunContext context)
     {
         var ct = TestContext.Current.CancellationToken;
         context = await Traversal.StartAsync(context, ct);
@@ -579,7 +589,7 @@ internal sealed class CrawlRig : IAsyncDisposable
         }
 
         await TopUp.TopUpAsync(context, null, null, ct);
-        return (context, await DrainAsync(context));
+        return context;
     }
 
     /// <summary><see cref="RunAsync"/> for a run that stays as given (no incremental downgrade expected).</summary>

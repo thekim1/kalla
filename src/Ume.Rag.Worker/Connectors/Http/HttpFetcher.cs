@@ -56,6 +56,12 @@ public abstract record HttpFetchResult
     {
         /// <summary>The response's <c>X-Robots-Tag</c> values joined by commas (§5.2); null when absent.</summary>
         public string? RobotsTag { get; init; }
+
+        /// <summary>
+        /// The response's <c>Set-Cookie</c> values: never stored or sent by the fetcher, handed only to the browser that renders
+        /// this page (connectors design §8.3, cookies within one page).
+        /// </summary>
+        public IReadOnlyList<string> SetCookies { get; init; } = [];
     }
 
     public sealed record NotModified(Validators Validators, Uri FinalUrl) : HttpFetchResult;
@@ -296,7 +302,8 @@ public sealed class HttpFetcher(CrawlHttpClient client, IEgressGuard guard, ICra
 
             var identity = UrlCanonicalizer.Canonicalize(url.AbsoluteUri, request.Canonicalizer).Value ?? url.AbsoluteUri;
             var robotsTag = response.Headers.TryGetValues("X-Robots-Tag", out var tags) ? string.Join(",", tags) : null;
-            return (new HttpFetchResult.Ok(captured, ValidatorsOf(response, null), url, identity) { RobotsTag = robotsTag }, null, false);
+            var setCookies = response.Headers.TryGetValues("Set-Cookie", out var cookies) ? cookies.ToList() : [];
+            return (new HttpFetchResult.Ok(captured, ValidatorsOf(response, null), url, identity) { RobotsTag = robotsTag, SetCookies = setCookies }, null, false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

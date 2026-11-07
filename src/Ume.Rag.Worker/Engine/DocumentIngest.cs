@@ -87,6 +87,7 @@ public sealed partial class DocumentIngest(
                 {
                     HttpLastModified = content.Validators.LastModifiedDate,
                     SitemapLastMod = fetch.SitemapLastMod,
+                    FetchMode = content.Facts.FetchMode,
                 };
                 var upsert = await documents.UpsertFetchedAsync(fetched, fetch.Run.Id, now, cancellationToken);
                 var frontier = Frontier(fetch, 200, content.Validators, fetched.ContentHash);

@@ -13,14 +13,15 @@ namespace Ume.Rag.Worker.Connectors.Http;
 public sealed record StoredContent(FetchOutcome Outcome, PageLinks? Links);
 
 /// <summary>
-/// The store step every HTTP connector shares (connectors design §11, §12): files are malware-scanned before they are
-/// stored (fail closed; a finding goes to <c>quarantine/{sourceId}/{sha256}</c>), the content hash is taken over
-/// noise-normalised HTML or the raw bytes, and the raw blob is written once under <c>raw/{level}/{contentHash}</c>. A
-/// crawl also gets the page's links, extracted before normalisation and stored next to the raw blob (§5.4), and an HTML
+/// The store step of <see cref="PageFetcher"/>, which every HTTP connector shares (connectors design §11, §12): files are
+/// malware-scanned before they are stored (fail closed; a finding goes to <c>quarantine/{sourceId}/{sha256}</c>), the
+/// content hash is taken over noise-normalised HTML or the raw bytes, and the raw blob is written once under
+/// <c>raw/{level}/{contentHash}</c>. A crawl also gets the page's links, extracted before normalisation (with the links a
+/// rendered page discovered besides its <c>&lt;a href&gt;</c>, §8.3) and stored next to the raw blob (§5.4), and an HTML
 /// page whose main text matches the host's soft-404 fingerprint (§5.3) is <c>failed</c> <c>http.soft_404</c> before
 /// anything is stored.
 /// </summary>
-public sealed class RawContentWriter(IMalwareScanner scanner, IBlobStore blobs, TimeProvider time)
+public sealed class RawContentWriter(IMalwareScanner scanner, TimeProvider time)
 {
     /// <summary>A file waits this long when ClamAV has no verdict (§11, fail closed).</summary>
     public static readonly TimeSpan ScanRetry = TimeSpan.FromSeconds(30);
@@ -28,19 +29,23 @@ public sealed class RawContentWriter(IMalwareScanner scanner, IBlobStore blobs, 
     private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
     /// <param name="context">The fetch's source, level and run.</param>
+    /// <param name="blobs">Where the raw blob, its links and a quarantined file go (a preview's own prefix for previews).</param>
     /// <param name="ok">The fetched body.</param>
     /// <param name="noiseSelectors">The source's <c>noiseSelectors</c> (§12.2).</param>
     /// <param name="canonicalizer">The rules for the declared canonical.</param>
     /// <param name="extractLinks">Extract and store the page's links (a crawl).</param>
     /// <param name="softNotFound">The host's soft-404 fingerprint for the run (<see cref="SoftNotFound"/>); null for none.</param>
+    /// <param name="discovered">Links a rendered page found besides its <c>&lt;a href&gt;</c> (§8.3), added to its links.</param>
     /// <param name="cancellationToken">Cancels the step.</param>
     public async Task<StoredContent> StoreAsync(
         FetchContext context,
+        IBlobStore blobs,
         HttpFetchResult.Ok ok,
         IReadOnlyList<string> noiseSelectors,
         CanonicalizerOptions canonicalizer,
         bool extractLinks,
         string? softNotFound,
+        IReadOnlyList<Uri> discovered,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -87,7 +92,7 @@ public sealed class RawContentWriter(IMalwareScanner scanner, IBlobStore blobs, 
 
             if (extractLinks)
             {
-                links = LinkExtractor.Extract(document, ok.FinalUrl, ok.RobotsTag);
+                links = LinkExtractor.Extract(document, ok.FinalUrl, ok.RobotsTag).With(discovered);
             }
 
             contentHash = HtmlNoiseNormalizer.Hash(HtmlNoiseNormalizer.Normalize(document, FetchDay(), noiseSelectors));

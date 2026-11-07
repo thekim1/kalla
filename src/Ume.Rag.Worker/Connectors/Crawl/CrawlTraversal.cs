@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
 using Ume.Rag.Domain.Ports;
+using Ume.Rag.Pipelines.Sources;
 using Ume.Rag.Worker.Connectors.Deletion;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Http;
+using Ume.Rag.Worker.Connectors.Render;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Urls;
 
@@ -70,6 +72,9 @@ public sealed record FrontierDone(FrontierRow Row, FrontierFacts? Facts, bool Se
 /// <c>noindex</c>/<c>nofollow</c> honoured on external hosts and recorded on municipal ones, and the host topped up.
 /// Per host and run (§5.3): the first fetch sends the soft-404 probe in its slot (<see cref="SoftNotFound"/>), and a
 /// repeated challenge page ends the host's part of the run (<c>http.challenge</c>, the host paused for the run).
+/// A <c>browser</c> source's row takes a render slot before its host slot (§8.3; none free: <c>render.busy</c>, requeued
+/// without an attempt), sends no soft-404 probe, and a failed render admits the links of the page's last good content
+/// before it is requeued (§8.4).
 /// Freshness (§5.4, weakness review §3): on hosts whose site profile marks <c>lastmod</c> reliable a URL whose sitemap
 /// <c>lastmod</c> is not newer than its last fetch is skipped without a request (not in a revalidating run) and its
 /// stored outlinks expanded; incremental runs fetch only changed and new seeds; after a complete listing the URLs that
@@ -82,6 +87,7 @@ public sealed class CrawlTraversal(
     CrawlConnector connector,
     RobotsCache robots,
     HostBudget budget,
+    RenderSlots renders,
     ICrawlPolicySource policy,
     ICrawlFrontierStore frontier,
     ICrawlRunStore runs,
@@ -254,6 +260,33 @@ public sealed class CrawlTraversal(
             return await NotReachedAsync(context, row, FetchOutcomes.Challenge, cancellationToken);
         }
 
+        // A browser source's page takes a render slot first, before its host slot and its request (§8.3): none free, the job
+        // goes back to the queue without an attempt and without spending the host's budget.
+        var source = await connector.SourceAsync(run.SourceId, run.Classification, context.Settings, cancellationToken);
+        var browser = source.Settings.FetchMode == FetchMode.Browser;
+        RenderLease? render = null;
+        if (browser)
+        {
+            switch (renders.TryAcquire(row.Host))
+            {
+                case RenderSlot.Granted granted:
+                    render = granted.Lease;
+                    break;
+                case RenderSlot.Refused refused:
+                    return new CrawlFetchResult.Requeue(refused.Delay, refused.Reason, CountsAttempt: false);
+            }
+        }
+
+        using (render)
+        {
+            return await FetchInSlotAsync(context, row, url, browser, cancellationToken);
+        }
+    }
+
+    /// <summary>The host slot and the fetch of a released row (the soft-404 probe first, once per host and run, on HTTP sources).</summary>
+    private async Task<CrawlFetchResult> FetchInSlotAsync(CrawlRunContext context, FrontierRow row, Uri url, bool browser, CancellationToken cancellationToken)
+    {
+        var run = context.Run;
         while (true)
         {
             switch (await budget.AcquireAsync(row.Host, cancellationToken))
@@ -275,14 +308,15 @@ public sealed class CrawlTraversal(
                 case HostSlot.Granted granted:
                     using (granted.Lease)
                     {
-                        if (_softNotFound.Claim(run.RunId, row.Host))
+                        // A rendered page is never compared with the raw fingerprint, so a browser source sends no probe.
+                        if (!browser && _softNotFound.Claim(run.RunId, row.Host))
                         {
                             // The host's first fetch in the run sends the soft-404 probe in this slot, then asks for its own.
                             await ProbeNotFoundAsync(context, row, url, granted.Lease, cancellationToken);
                             continue;
                         }
 
-                        return await FetchAsync(context, row, granted.Lease, cancellationToken);
+                        return await FetchAsync(context, row, granted.Lease, browser, cancellationToken);
                     }
 
                 default:
@@ -382,10 +416,10 @@ public sealed class CrawlTraversal(
         }
     }
 
-    private async Task<CrawlFetchResult> FetchAsync(CrawlRunContext context, FrontierRow row, HostLease lease, CancellationToken cancellationToken)
+    private async Task<CrawlFetchResult> FetchAsync(CrawlRunContext context, FrontierRow row, HostLease lease, bool browser, CancellationToken cancellationToken)
     {
         var run = context.Run;
-        var softNotFound = await _softNotFound.GetAsync(run.RunId, row.Host, cancellationToken);
+        var softNotFound = browser ? null : await _softNotFound.GetAsync(run.RunId, row.Host, cancellationToken);
         var hasValidators = row.ETag is not null || row.LastModified is not null;
         // A 304 expands the stored outlinks; without them the page is fetched in full so its links are not lost.
         var conditional = hasValidators && row.ContentHash is { } stored && await blobs.ExistsAsync(PageLinks.KeyOf(run.Classification, stored), cancellationToken);
@@ -436,7 +470,8 @@ public sealed class CrawlTraversal(
     }
 
     /// <summary>
-    /// The outcome of one URL for the run: requeued when transient; otherwise the frontier row's completion for the engine's
+    /// The outcome of one URL for the run: requeued when transient (a failed render first admits the links of the
+    /// document's last good content, §8.4, as a 304 would); otherwise the frontier row's completion for the engine's
     /// commit (its facts kept when no request was made, a failed seed counted there), links admitted (in an incremental run
     /// only from a changed page; a repeated admission is a no-op) and a canonical folded when verified.
     /// </summary>
@@ -446,6 +481,12 @@ public sealed class CrawlTraversal(
         var run = context.Run;
         if (page.Outcome is FetchOutcome.Transient transient)
         {
+            if (page.Links is { } lastGood && row.ContentHash is { } lastHash && !context.Incremental)
+            {
+                // The pages below a page that failed to render are neither missed nor proposed for deletion.
+                await AdmitAsync(context, row, lastGood, lastHash, runFacts, cancellationToken);
+            }
+
             return new CrawlFetchResult.Requeue(transient.RetryAfter, transient.Reason, transient.CountsAttempt);
         }
 
@@ -476,27 +517,19 @@ public sealed class CrawlTraversal(
         var admitted = 0;
         if (page.Links is { } links && contentHash is not null)
         {
-            var municipal = policy.Current.KindOf(row.Host) == HostKind.Municipal;
-            var follow = !links.NoFollow || municipal;
-            if (links.NoIndex && municipal)
-            {
-                runFacts.Add(NoIndexIgnored);
-            }
-
-            if (links.NoFollow && municipal)
-            {
-                runFacts.Add(NoFollowIgnored);
-            }
-
-            if (links.NoIndex && !municipal && outcome is FetchOutcome.Content)
+            if (links.NoIndex && policy.Current.KindOf(row.Host) != HostKind.Municipal && outcome is FetchOutcome.Content)
             {
                 outcome = new FetchOutcome.Skipped(NoIndex);
             }
 
             // An incremental run expands links only from changed pages (§5.4).
-            if (follow && !row.Leaf && (!context.Incremental || changed))
+            if (!context.Incremental || changed)
             {
-                admitted = await AdmitLinksAsync(context, row, links.Links, contentHash, cancellationToken);
+                admitted = await AdmitAsync(context, row, links, contentHash, runFacts, cancellationToken);
+            }
+            else
+            {
+                Directives(row, links, runFacts);
             }
         }
 
@@ -508,6 +541,34 @@ public sealed class CrawlTraversal(
 
         // A lastmod skip made no request: LastFetchedAt stays the last real fetch, which later lastmod values are compared with.
         return new CrawlFetchResult.Done(outcome, fold, admitted, runFacts, new FrontierDone(row, requested ? facts : null, seedFailed, admitted > 0));
+    }
+
+    /// <summary>
+    /// The page's links admitted under its robots directives (<c>nofollow</c> honoured on external hosts, recorded on
+    /// municipal ones; a leaf row admits none); returns the links admitted.
+    /// </summary>
+    private async Task<int> AdmitAsync(CrawlRunContext context, FrontierRow row, PageLinks links, string contentHash, List<string> runFacts,
+        CancellationToken cancellationToken)
+    {
+        var follow = Directives(row, links, runFacts);
+        return follow && !row.Leaf ? await AdmitLinksAsync(context, row, links.Links, contentHash, cancellationToken) : 0;
+    }
+
+    /// <summary>Records the directives a municipal host's page carries but we ignore (§5.2); returns whether its links are followed.</summary>
+    private bool Directives(FrontierRow row, PageLinks links, List<string> runFacts)
+    {
+        var municipal = policy.Current.KindOf(row.Host) == HostKind.Municipal;
+        if (links.NoIndex && municipal)
+        {
+            runFacts.Add(NoIndexIgnored);
+        }
+
+        if (links.NoFollow && municipal)
+        {
+            runFacts.Add(NoFollowIgnored);
+        }
+
+        return !links.NoFollow || municipal;
     }
 
     private async Task<int> AdmitLinksAsync(CrawlRunContext context, FrontierRow row, IReadOnlyList<string> links, string contentHash, CancellationToken cancellationToken)

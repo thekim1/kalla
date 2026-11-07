@@ -52,6 +52,8 @@
     <PackageVersion Include="AngleSharp" Version="1.8.6" />
     <!-- Markdown blocks for the plain-text parser (processing design §3.7); BSD-2-Clause, 1.5.1 of 2026-10-28 (7-day rule suspended, P1 README §1a). -->
     <PackageVersion Include="Markdig" Version="1.5.1" />
+    <!-- The renderer's client (connectors design §8.3): exactly the version of images/renderer's launch-server (playwright-core 1.64.1); 1.64.1 of 2026-10-22 (7-day rule suspended). -->
+    <PackageVersion Include="Microsoft.Playwright" Version="[1.64.1]" />
   </ItemGroup>
   <ItemGroup Label="Testing">
     <PackageVersion Include="xunit.v3" Version="4.0.2" />

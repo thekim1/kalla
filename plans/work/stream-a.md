@@ -103,7 +103,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** A-9 (versions, sandbox decision).
 - **Read:** repo-and-deployment §5.4, §6.1; connectors §8.3.
 
-### [ ] A-11 Worker: `PageFetcher` and the Playwright renderer
+### [x] A-11 Worker: `PageFetcher` and the Playwright renderer
 - **Do:** `Connectors/Render/` (`IRenderer`, `IRenderFetcher`, `PlaywrightRenderer`, the asset cache, blocked hosts,
   limits, ready detection, DOM serialisation without scripts) and `PageFetcher` (fetch → render for a `browser` source →
   `RawContentWriter.StoreAsync`), used by the crawl and URL-list connectors, the preflight and the stage preview in

@@ -11,7 +11,6 @@ using Ume.Rag.Worker.Connectors.Crawl;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Hosts;
 using Ume.Rag.Worker.Connectors.Http;
-using Ume.Rag.Worker.Connectors.Malware;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Urls;
 using Ume.Rag.Worker.Jobs;
@@ -36,8 +35,8 @@ namespace Ume.Rag.Worker.Preview;
 public sealed partial class Preflight(
     PreviewConfig config,
     HttpFetcher fetcher,
+    PageFetcher pages,
     RobotsCache robots,
-    IMalwareScanner scanner,
     IBlobStore blobs,
     HostBudget budget,
     TimeProvider time,
@@ -161,7 +160,7 @@ public sealed partial class Preflight(
         }
 
         // The crawl's own listing: start URLs, then every sitemap's URLs in scope (index depth ≤ 2), up to the estimate cap.
-        var connector = new CrawlConnector(fetcher, robots, scanner, new PreviewBlobs(blobs.ForLevel(level), jobId), time);
+        var connector = new CrawlConnector(fetcher, pages, robots, new PreviewBlobs(blobs.ForLevel(level), jobId), time);
         var estimate = ContractJson.ToElement(settings with { MaxPages = EstimateCap });
         var listed = 0;
         await foreach (var listing in connector.ListAsync(new ListingContext(jobId, level, jobId, estimate), new CrawlCheckpoint(), cancellationToken))

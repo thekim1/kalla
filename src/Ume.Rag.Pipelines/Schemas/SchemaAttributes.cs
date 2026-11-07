@@ -10,6 +10,12 @@ namespace Ume.Rag.Pipelines.Schemas;
 public sealed class EffectAttribute(SettingEffect effect) : Attribute
 {
     public SettingEffect Effect { get; } = effect;
+
+    /// <summary>
+    /// A <c>behaviour</c> member whose change starts a sync that fetches every page again (§12.3: <c>fetchMode</c>,
+    /// <c>readySelector</c>, <c>scrollToLoad</c>): hashed into <see cref="SettingsHashes.Fetch"/> besides its tag.
+    /// </summary>
+    public bool Refetch { get; set; }
 }
 
 /// <summary>Constraints on the items of an array member, exported into its <c>items</c> schema.</summary>

@@ -23,6 +23,36 @@ public sealed record PageLinks(IReadOnlyList<string> Links, bool NoIndex, bool N
 
     public static BlobKey KeyOf(string classification, string contentHash) => new($"raw/{classification}/{contentHash}.links.json.gz");
 
+    /// <summary>
+    /// These links and <paramref name="discovered"/> (a rendered page's script navigations, popups and downloads, §8.3) in
+    /// the default canonical form, distinct, at most <see cref="LinkExtractor.MaxLinks"/>.
+    /// </summary>
+    public PageLinks With(IReadOnlyList<Uri> discovered)
+    {
+        ArgumentNullException.ThrowIfNull(discovered);
+        if (discovered.Count == 0)
+        {
+            return this;
+        }
+
+        var links = new List<string>(Links);
+        var seen = new HashSet<string>(Links, StringComparer.Ordinal);
+        foreach (var url in discovered)
+        {
+            if (links.Count >= LinkExtractor.MaxLinks)
+            {
+                break;
+            }
+
+            if (UrlCanonicalizer.Canonicalize(url.AbsoluteUri).Value is { } link && seen.Add(link))
+            {
+                links.Add(link);
+            }
+        }
+
+        return this with { Links = links };
+    }
+
     /// <summary>Writes the outlinks once (write-once: an existing key is left as it is).</summary>
     public async Task StoreAsync(IBlobStore blobs, string classification, string contentHash, CancellationToken cancellationToken)
     {
