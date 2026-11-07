@@ -16,7 +16,9 @@ public sealed record StoredContent(FetchOutcome Outcome, PageLinks? Links);
 /// The store step every HTTP connector shares (connectors design §11, §12): files are malware-scanned before they are
 /// stored (fail closed; a finding goes to <c>quarantine/{sourceId}/{sha256}</c>), the content hash is taken over
 /// noise-normalised HTML or the raw bytes, and the raw blob is written once under <c>raw/{level}/{contentHash}</c>. A
-/// crawl also gets the page's links, extracted before normalisation and stored next to the raw blob (§5.4).
+/// crawl also gets the page's links, extracted before normalisation and stored next to the raw blob (§5.4), and an HTML
+/// page whose main text matches the host's soft-404 fingerprint (§5.3) is <c>failed</c> <c>http.soft_404</c> before
+/// anything is stored.
 /// </summary>
 public sealed class RawContentWriter(IMalwareScanner scanner, IBlobStore blobs, TimeProvider time)
 {
@@ -25,12 +27,20 @@ public sealed class RawContentWriter(IMalwareScanner scanner, IBlobStore blobs, 
 
     private static readonly TimeZoneInfo Stockholm = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm");
 
+    /// <param name="context">The fetch's source, level and run.</param>
+    /// <param name="ok">The fetched body.</param>
+    /// <param name="noiseSelectors">The source's <c>noiseSelectors</c> (§12.2).</param>
+    /// <param name="canonicalizer">The rules for the declared canonical.</param>
+    /// <param name="extractLinks">Extract and store the page's links (a crawl).</param>
+    /// <param name="softNotFound">The host's soft-404 fingerprint for the run (<see cref="SoftNotFound"/>); null for none.</param>
+    /// <param name="cancellationToken">Cancels the step.</param>
     public async Task<StoredContent> StoreAsync(
         FetchContext context,
         HttpFetchResult.Ok ok,
         IReadOnlyList<string> noiseSelectors,
         CanonicalizerOptions canonicalizer,
         bool extractLinks,
+        string? softNotFound,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -80,8 +90,12 @@ public sealed class RawContentWriter(IMalwareScanner scanner, IBlobStore blobs, 
                 links = LinkExtractor.Extract(document, ok.FinalUrl, ok.RobotsTag);
             }
 
-            var fetchDay = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), Stockholm).DateTime);
-            contentHash = HtmlNoiseNormalizer.Hash(HtmlNoiseNormalizer.Normalize(document, fetchDay, noiseSelectors));
+            contentHash = HtmlNoiseNormalizer.Hash(HtmlNoiseNormalizer.Normalize(document, FetchDay(), noiseSelectors));
+            if (softNotFound is not null && string.Equals(SoftNotFound.Fingerprint(document), softNotFound, StringComparison.Ordinal))
+            {
+                // A "page not found" served with 200: never stored, so it never replaces a document's good content.
+                return new(new FetchOutcome.Failed(SoftNotFound.Reason), null);
+            }
         }
         else
         {
@@ -106,6 +120,24 @@ public sealed class RawContentWriter(IMalwareScanner scanner, IBlobStore blobs, 
             new FetchFacts(ok.FinalUrl, ok.FinalIdentity, ok.Redirects, canonicalHint));
         return new(outcome, links);
     }
+
+    /// <summary>The soft-404 fingerprint of a fetched HTML body (§5.3, <see cref="SoftNotFound.Fingerprint"/>); null for other types or no main text.</summary>
+    public async Task<string?> FingerprintAsync(FetchedBody body, IReadOnlyList<string> noiseSelectors, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        if (!MediaTypes.IsHtml(body.MediaType))
+        {
+            return null;
+        }
+
+        await using var stream = body.OpenRead();
+        using var document = await new HtmlParser().ParseDocumentAsync(stream, cancellationToken);
+        HtmlNoiseNormalizer.Normalize(document, FetchDay(), noiseSelectors);
+        return SoftNotFound.Fingerprint(document);
+    }
+
+    /// <summary>The fetch day in Europe/Stockholm, for the date rule of the noise normalisation (§12.2).</summary>
+    private DateOnly FetchDay() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), Stockholm).DateTime);
 }
 
 /// <summary>The fetch results other than a body, as run item outcomes (connectors design §4, §15).</summary>
@@ -113,6 +145,9 @@ public static class FetchOutcomes
 {
     /// <summary>When a 429 or 503 names no <c>Retry-After</c> (§6.4).</summary>
     public static readonly TimeSpan DefaultRetryAfter = TimeSpan.FromSeconds(60);
+
+    /// <summary>A bot challenge or WAF block (§5.3): transient, the host backs off as on a 429.</summary>
+    public const string Challenge = "http.challenge";
 
     /// <summary>Response codes of §4: 404/410 gone, 401/403 failed, 429/503 back off without an attempt, other 5xx retry.</summary>
     public static FetchOutcome FromStatus(HttpFetchResult.Status status)
@@ -133,7 +168,7 @@ public static class FetchOutcomes
     /// <summary>
     /// Every result but <see cref="HttpFetchResult.Ok"/>: a permanent redirect out of scope is <c>http.moved_out_of_scope</c>
     /// (a deletion candidate for a known document), a temporary one <c>redirect.out_of_scope</c> (a sign-in wall, never a
-    /// deletion, §3.2).
+    /// deletion, §3.2); a challenge page is transient <c>http.challenge</c> (§5.3).
     /// </summary>
     public static FetchOutcome From(HttpFetchResult result) => result switch
     {
@@ -145,6 +180,8 @@ public static class FetchOutcomes
         HttpFetchResult.OutOfScope => new FetchOutcome.Skipped("redirect.out_of_scope"),
         HttpFetchResult.Error { Transient: true } transient => new FetchOutcome.Transient(transient.Reason, null, CountsAttempt: true),
         HttpFetchResult.Error error => new FetchOutcome.Failed(error.Reason),
+        // Counts an attempt, unlike a 429: a challenge that never lifts ends the item failed instead of requeuing it for ever.
+        HttpFetchResult.Challenge challenge => new FetchOutcome.Transient(Challenge, challenge.RetryAfter ?? DefaultRetryAfter, CountsAttempt: true),
         _ => throw new InvalidOperationException($"Unexpected fetch result {result.GetType().Name}."),
     };
 }

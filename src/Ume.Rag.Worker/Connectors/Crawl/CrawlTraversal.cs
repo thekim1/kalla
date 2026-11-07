@@ -4,6 +4,7 @@ using Ume.Rag.Domain.Ports;
 using Ume.Rag.Worker.Connectors.Deletion;
 using Ume.Rag.Worker.Connectors.Egress;
 using Ume.Rag.Worker.Connectors.Hosts;
+using Ume.Rag.Worker.Connectors.Http;
 using Ume.Rag.Worker.Connectors.Robots;
 using Ume.Rag.Worker.Connectors.Urls;
 
@@ -67,6 +68,8 @@ public sealed record FrontierDone(FrontierRow Row, FrontierFacts? Facts, bool Se
 /// frontier, each released URL fetched within its host's budget, the outcome written to the frontier row, links
 /// admitted by scope, depth, traps and <c>maxPages</c> (BFS by depth), canonical aliases folded only when verified,
 /// <c>noindex</c>/<c>nofollow</c> honoured on external hosts and recorded on municipal ones, and the host topped up.
+/// Per host and run (§5.3): the first fetch sends the soft-404 probe in its slot (<see cref="SoftNotFound"/>), and a
+/// repeated challenge page ends the host's part of the run (<c>http.challenge</c>, the host paused for the run).
 /// Freshness (§5.4, weakness review §3): on hosts whose site profile marks <c>lastmod</c> reliable a URL whose sitemap
 /// <c>lastmod</c> is not newer than its last fetch is skipped without a request (not in a revalidating run) and its
 /// stored outlinks expanded; incremental runs fetch only changed and new seeds; after a complete listing the URLs that
@@ -100,7 +103,12 @@ public sealed class CrawlTraversal(
     /// <summary>Run item fact: the URL left the sitemap and was re-requested (§5.4).</summary>
     public const string RemovalCheck = "crawl.removal_check";
 
+    /// <summary>Challenge pages from one host in a run before its part of the run ends (§5.3): the first only backs off.</summary>
+    public const int ChallengesBeforePause = 2;
+
     private readonly ConcurrentDictionary<Guid, TrapDetector> _traps = new();
+    private readonly SoftNotFoundFingerprints _softNotFound = new();
+    private readonly ConcurrentDictionary<(Guid Run, string Host), int> _challenges = new();
 
     /// <summary>
     /// Opens the run's <c>CrawlRuns</c> row with the source's limits (kept when it exists: a resumed listing) and returns
@@ -238,30 +246,47 @@ public sealed class CrawlTraversal(
             return await FinishAsync(context, row, skipped, [LastmodSkip], requested: false, null, cancellationToken);
         }
 
-        switch (await budget.AcquireAsync(row.Host, cancellationToken))
+        if (_challenges.GetValueOrDefault((run.RunId, row.Host)) >= ChallengesBeforePause)
         {
-            case HostSlot.Later later:
-                return new CrawlFetchResult.Requeue(later.Delay, later.Reason, CountsAttempt: false);
-            case HostSlot.Refused { Reason: HostBudget.Blocked }:
-                await runs.PauseHostAsync(run.RunId, row.Host, HostBudget.Blocked, null, cancellationToken);
-                return await NotReachedAsync(context, row, HostBudget.Blocked, cancellationToken);
-            case HostSlot.Refused refused:
-                var record = await runs.GetAsync(run.RunId, cancellationToken);
-                var pauses = record?.PausedHosts.GetValueOrDefault(row.Host)?.Count ?? 0;
-                if (pauses >= FetchTopUp.MaxPausesPerRun || refused.Until is not { } until)
-                {
-                    return await NotReachedAsync(context, row, HostBudget.Paused, cancellationToken);
-                }
+            // As a blocked host: every row recorded as a pause, so the top-up stops releasing the host's rows.
+            await runs.PauseHostAsync(run.RunId, row.Host, FetchOutcomes.Challenge, null, cancellationToken);
+            return await NotReachedAsync(context, row, FetchOutcomes.Challenge, cancellationToken);
+        }
 
-                return new CrawlFetchResult.Requeue(until - time.GetUtcNow(), HostBudget.Paused, CountsAttempt: false);
-            case HostSlot.Granted granted:
-                using (granted.Lease)
-                {
-                    return await FetchAsync(context, row, granted.Lease, cancellationToken);
-                }
+        while (true)
+        {
+            switch (await budget.AcquireAsync(row.Host, cancellationToken))
+            {
+                case HostSlot.Later later:
+                    return new CrawlFetchResult.Requeue(later.Delay, later.Reason, CountsAttempt: false);
+                case HostSlot.Refused { Reason: HostBudget.Blocked }:
+                    await runs.PauseHostAsync(run.RunId, row.Host, HostBudget.Blocked, null, cancellationToken);
+                    return await NotReachedAsync(context, row, HostBudget.Blocked, cancellationToken);
+                case HostSlot.Refused refused:
+                    var record = await runs.GetAsync(run.RunId, cancellationToken);
+                    var pauses = record?.PausedHosts.GetValueOrDefault(row.Host)?.Count ?? 0;
+                    if (pauses >= FetchTopUp.MaxPausesPerRun || refused.Until is not { } until)
+                    {
+                        return await NotReachedAsync(context, row, HostBudget.Paused, cancellationToken);
+                    }
 
-            default:
-                throw new InvalidOperationException("Unexpected host slot.");
+                    return new CrawlFetchResult.Requeue(until - time.GetUtcNow(), HostBudget.Paused, CountsAttempt: false);
+                case HostSlot.Granted granted:
+                    using (granted.Lease)
+                    {
+                        if (_softNotFound.Claim(run.RunId, row.Host))
+                        {
+                            // The host's first fetch in the run sends the soft-404 probe in this slot, then asks for its own.
+                            await ProbeNotFoundAsync(context, row, url, granted.Lease, cancellationToken);
+                            continue;
+                        }
+
+                        return await FetchAsync(context, row, granted.Lease, cancellationToken);
+                    }
+
+                default:
+                    throw new InvalidOperationException("Unexpected host slot.");
+            }
         }
     }
 
@@ -301,6 +326,12 @@ public sealed class CrawlTraversal(
         var verdict = TraversalCompleteness.Evaluate(record, open, cancelled, options.Value.CompletenessRule, context.Incremental);
         await runs.SetCompleteAsync(run.RunId, verdict.Complete, cancellationToken);
         _traps.TryRemove(run.RunId, out _);
+        _softNotFound.Drop(run.RunId);
+        foreach (var key in _challenges.Keys.Where(k => k.Run == run.RunId))
+        {
+            _challenges.TryRemove(key, out _);
+        }
+
         return verdict;
     }
 
@@ -324,9 +355,36 @@ public sealed class CrawlTraversal(
             : null;
     }
 
+    /// <summary>
+    /// The soft-404 probe of the row's host (§5.3), in the slot of <paramref name="lease"/>: its answer feeds the host budget
+    /// like any response, and its fingerprint (or none) is kept for the run. A probe that throws is released.
+    /// </summary>
+    private async Task ProbeNotFoundAsync(CrawlRunContext context, FrontierRow row, Uri url, HostLease lease, CancellationToken cancellationToken)
+    {
+        var run = context.Run;
+        try
+        {
+            var started = time.GetTimestamp();
+            var (fingerprint, outcome) = await connector.ProbeNotFoundAsync(context.FetchContext, url, cancellationToken);
+            var latency = time.GetElapsedTime(started);
+            var verdict = await lease.CompleteAsync(outcome is null ? new HostResponse(HostResponseKind.Success, latency) : Response(outcome, latency), cancellationToken);
+            _softNotFound.Set(run.RunId, row.Host, fingerprint);
+            if (verdict.PausedUntil is { } until)
+            {
+                await runs.PauseHostAsync(run.RunId, row.Host, verdict.Reason!, until, cancellationToken);
+            }
+        }
+        catch
+        {
+            _softNotFound.Release(run.RunId, row.Host);
+            throw;
+        }
+    }
+
     private async Task<CrawlFetchResult> FetchAsync(CrawlRunContext context, FrontierRow row, HostLease lease, CancellationToken cancellationToken)
     {
         var run = context.Run;
+        var softNotFound = await _softNotFound.GetAsync(run.RunId, row.Host, cancellationToken);
         var hasValidators = row.ETag is not null || row.LastModified is not null;
         // A 304 expands the stored outlinks; without them the page is fetched in full so its links are not lost.
         var conditional = hasValidators && row.ContentHash is { } stored && await blobs.ExistsAsync(PageLinks.KeyOf(run.Classification, stored), cancellationToken);
@@ -343,7 +401,7 @@ public sealed class CrawlTraversal(
             // The removal check (§5.4): HEAD, GET when refused. A live URL is kept; a full traversal fetches it as usual
             // so its content stays current, an incremental run only records it as reached.
             runFacts.Add(RemovalCheck);
-            var probe = await connector.ProbeAsync(context.FetchContext, item, cancellationToken);
+            var probe = await connector.ProbeAsync(context.FetchContext, item, softNotFound, cancellationToken);
             if (probe is null && context.Incremental)
             {
                 page = new CrawlPage(new FetchOutcome.NotModified(new Validators(row.ETag, row.LastModified), KnownPathForm(row)), null);
@@ -351,18 +409,26 @@ public sealed class CrawlTraversal(
             }
             else
             {
-                page = probe ?? await connector.FetchPageAsync(context.FetchContext, item, cancellationToken);
+                page = probe ?? await connector.FetchPageAsync(context.FetchContext, item, softNotFound, cancellationToken);
             }
         }
         else
         {
-            page = await connector.FetchPageAsync(context.FetchContext, item, cancellationToken);
+            page = await connector.FetchPageAsync(context.FetchContext, item, softNotFound, cancellationToken);
         }
 
         var verdict = await lease.CompleteAsync(Response(page.Outcome, time.GetElapsedTime(started)), cancellationToken);
         if (verdict.PausedUntil is { } until)
         {
             await runs.PauseHostAsync(run.RunId, row.Host, verdict.Reason!, until, cancellationToken);
+        }
+
+        if (page.Outcome is FetchOutcome.Transient { Reason: FetchOutcomes.Challenge }
+            && _challenges.AddOrUpdate((run.RunId, row.Host), 1, (_, n) => n + 1) >= ChallengesBeforePause)
+        {
+            // Repeated in the run (§5.3): the host is paused for the run and says why; the last good content stays.
+            await runs.PauseHostAsync(run.RunId, row.Host, FetchOutcomes.Challenge, null, cancellationToken);
+            return await NotReachedAsync(context, row, FetchOutcomes.Challenge, cancellationToken);
         }
 
         return await FinishAsync(context, row, page, runFacts, requested: true, status, cancellationToken);
@@ -559,8 +625,9 @@ public sealed class CrawlTraversal(
     private static HostResponse Response(FetchOutcome outcome, TimeSpan latency) => outcome switch
     {
         FetchOutcome.Content or FetchOutcome.NotModified => new HostResponse(HostResponseKind.Success, latency),
-        FetchOutcome.Transient { Reason: "rate_limited", RetryAfter: var retryAfter } => new HostResponse(HostResponseKind.RateLimited, latency, retryAfter),
-        FetchOutcome.Transient { Reason: "http.5xx" or "net.timeout" } or FetchOutcome.Gone { Reason: "http.404" } => new HostResponse(HostResponseKind.Failure, latency),
+        FetchOutcome.Transient { Reason: "rate_limited" or FetchOutcomes.Challenge, RetryAfter: var retryAfter } => new HostResponse(HostResponseKind.RateLimited, latency, retryAfter),
+        FetchOutcome.Transient { Reason: "http.5xx" or "net.timeout" } or FetchOutcome.Gone { Reason: "http.404" } or FetchOutcome.Failed { Reason: SoftNotFound.Reason } =>
+            new HostResponse(HostResponseKind.Failure, latency),
         _ => new HostResponse(HostResponseKind.Neutral, latency),
     };
 

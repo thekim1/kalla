@@ -157,7 +157,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** Decisions "Configurable politeness per host"; connectors §5.1, §6.3–§6.6; admin §4.6 V37.
 
-### [ ] A-15 HTTP crawler gaps from the Crawlee review
+### [x] A-15 HTTP crawler gaps from the Crawlee review
 - **Do:** meta refresh as a redirect hop and `redirect.cookie_required` (§3.2); sniff a missing or `octet-stream`
   Content-Type (§4); soft-404 fingerprint per host and run (`http.soft_404`) and challenge pages as `http.challenge`
   (§5.3); sitemap retries, plain-text sitemaps and `/sitemap_index.xml` (§5.1); `messages.ts` texts for the new codes.

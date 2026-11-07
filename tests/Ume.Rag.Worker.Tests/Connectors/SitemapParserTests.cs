@@ -4,7 +4,7 @@ using Ume.Rag.Worker.Connectors.Sitemaps;
 
 namespace Ume.Rag.Worker.Tests.Connectors;
 
-/// <summary>The sitemap parser (connectors design §5.1, §18): index, gzip, XXE refused, size limits, <c>lastmod</c>.</summary>
+/// <summary>The sitemap parser (connectors design §5.1, §18): index, gzip, plain text, XXE refused, size limits, <c>lastmod</c>.</summary>
 public sealed class SitemapParserTests
 {
     [Fact]
@@ -56,6 +56,44 @@ public sealed class SitemapParserTests
         var document = await SitemapParser.ParseAsync(compressed, TestContext.Current.CancellationToken);
 
         document.Entries.Single().Location.ShouldBe("https://www.umea.se/z");
+    }
+
+    [Fact]
+    public async Task Reads_a_plain_text_sitemap_one_url_per_line()
+    {
+        var text = "\uFEFF https://www.umea.se/a\r\n\r\nhttps://www.umea.se/b?x=1\n# not a URL\n/relative\nHTTPS://www.umea.se/c  \n";
+
+        var document = await ParseAsync(text);
+
+        document.IsIndex.ShouldBeFalse();
+        document.Error.ShouldBeNull();
+        document.Entries.ShouldBe([
+            new SitemapEntry("https://www.umea.se/a", null),
+            new SitemapEntry("https://www.umea.se/b?x=1", null),
+            new SitemapEntry("HTTPS://www.umea.se/c", null),
+        ]);
+    }
+
+    [Fact]
+    public async Task Reads_a_gzipped_plain_text_sitemap()
+    {
+        using var compressed = new MemoryStream();
+        await using (var gzip = new GZipStream(compressed, CompressionLevel.Fastest, leaveOpen: true))
+        {
+            await gzip.WriteAsync("https://www.umea.se/z\n"u8.ToArray(), TestContext.Current.CancellationToken);
+        }
+
+        compressed.Position = 0;
+        var document = await SitemapParser.ParseAsync(compressed, TestContext.Current.CancellationToken);
+
+        document.Entries.ShouldBe([new SitemapEntry("https://www.umea.se/z", null)]);
+    }
+
+    [Fact]
+    public async Task A_text_file_without_urls_is_invalid_and_xml_after_white_space_is_still_xml()
+    {
+        (await ParseAsync("Not found\n")).Error.ShouldBe(SitemapParser.RefusedSyntax);
+        (await ParseAsync("\n  <urlset><url><loc>https://www.umea.se/a</loc></url></urlset>")).Entries.Single().Location.ShouldBe("https://www.umea.se/a");
     }
 
     [Theory]

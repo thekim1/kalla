@@ -150,7 +150,7 @@ public sealed class FreshnessRulesTests
         section.Complete.ShouldBeFalse();
         section.Reasons.ShouldBe([TraversalCompleteness.HostPaused, TraversalCompleteness.SeedsFailed]);
         section.Rule.ShouldBe("ratio");
-        (section.Seeds, section.SeedsResolved, section.SeedsFailed, section.FailedSeedsProtected).ShouldBe((14_100, 13_900, 200, 200));
+        (section.Seeds, section.SeedsResolved, section.SeedsFailed, section.FailedProtected).ShouldBe((14_100, 13_900, 200, 200));
         section.ResolvedShare.ShouldBe(0.9858);
         section.PausedHosts.ShouldBe(new Dictionary<string, string> { ["www.umea.se"] = CrawlConnector.RobotsUnreachable });
         section.ConsecutiveIncomplete.ShouldBe(3);

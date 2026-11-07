@@ -136,7 +136,7 @@ public sealed class UrlListConnector(
 
         await using (ok.Body)
         {
-            return (await _writer.StoreAsync(context, ok, settings.NoiseSelectors, settings.Canonicalizer(), extractLinks: false, cancellationToken)).Outcome;
+            return (await _writer.StoreAsync(context, ok, settings.NoiseSelectors, settings.Canonicalizer(), extractLinks: false, softNotFound: null, cancellationToken)).Outcome;
         }
     }
 

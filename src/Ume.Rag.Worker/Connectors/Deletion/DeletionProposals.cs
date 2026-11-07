@@ -39,26 +39,26 @@ public static class DeletionCandidates
     /// answer of this run (<c>http.404</c>, <c>http.410</c>, <c>http.moved_out_of_scope</c>, <c>robots.disallow</c>) is a
     /// candidate in any run; 401/403/5xx/TLS on ≥ 4 consecutive runs and ≥ 14 days unseen is <c>persistent-failure</c>;
     /// documents this run did not reach are <c>not-seen</c> only when <paramref name="traversal"/> is complete, and never
-    /// the document of a seed that failed in this run.
+    /// the document of a URL that failed in this run (a seed, or a failed URL at any depth).
     /// </summary>
     /// <param name="runId">The reconciling run.</param>
     /// <param name="documents">The source's documents.</param>
     /// <param name="traversal">The run's completeness.</param>
     /// <param name="explicitGone">Reasons of this run's explicit answers, by document.</param>
-    /// <param name="failedSeeds">Documents whose URL is a seed that failed in this run.</param>
+    /// <param name="failedInRun">Documents whose URL failed in this run (a failed seed, or a failed URL at any depth): never <c>not-seen</c>.</param>
     /// <param name="now">The reconcile time.</param>
     public static IReadOnlyList<DeletionCandidate> FromTraversal(
         Guid runId,
         IReadOnlyList<SourceDocument> documents,
         TraversalVerdict traversal,
         IReadOnlyDictionary<Guid, string> explicitGone,
-        IReadOnlySet<Guid> failedSeeds,
+        IReadOnlySet<Guid> failedInRun,
         DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(traversal);
         ArgumentNullException.ThrowIfNull(explicitGone);
-        ArgumentNullException.ThrowIfNull(failedSeeds);
+        ArgumentNullException.ThrowIfNull(failedInRun);
         var candidates = new List<DeletionCandidate>();
         foreach (var document in documents.Where(d => d.DeletedAt is null && d.HeldAt is null))
         {
@@ -70,7 +70,7 @@ public static class DeletionCandidates
             {
                 candidates.Add(new DeletionCandidate(document.Id, DeletionReasons.PersistentFailure));
             }
-            else if (traversal.Complete && document.LastRunId != runId && !failedSeeds.Contains(document.Id))
+            else if (traversal.Complete && document.LastRunId != runId && !failedInRun.Contains(document.Id))
             {
                 candidates.Add(new DeletionCandidate(document.Id, DeletionReasons.NotSeen));
             }

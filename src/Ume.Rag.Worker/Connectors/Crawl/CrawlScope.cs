@@ -268,9 +268,15 @@ public sealed class CrawlScope
     internal static string? TypeOf(string canonicalUrl)
     {
         var path = new Uri(canonicalUrl).AbsolutePath;
-        var segment = path[(path.LastIndexOf('/') + 1)..];
-        var dot = segment.LastIndexOf('.');
-        return dot < 0 ? null : TypesByExtension.GetValueOrDefault(segment[(dot + 1)..]);
+        return TypeOfName(path[(path.LastIndexOf('/') + 1)..]);
+    }
+
+    /// <summary>The media type a file name's extension names (a URL's last segment, a <c>Content-Disposition</c> name), or null.</summary>
+    internal static string? TypeOfName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        var dot = name.LastIndexOf('.');
+        return dot < 0 ? null : TypesByExtension.GetValueOrDefault(name[(dot + 1)..]);
     }
 
     private IReadOnlyList<string> ExcludedTypesOf(string host) => _excludedTypesByHost.GetValueOrDefault(host) ?? _excludedTypes;

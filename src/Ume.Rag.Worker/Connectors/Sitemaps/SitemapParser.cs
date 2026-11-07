@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
+using System.Text;
 using System.Xml;
 
 namespace Ume.Rag.Worker.Connectors.Sitemaps;
@@ -16,7 +17,9 @@ public sealed record SitemapDocument(bool IsIndex, IReadOnlyList<SitemapEntry> E
 /// <summary>
 /// The sitemaps.org protocol (connectors design §5.1): <see cref="XmlReader"/> with DTDs prohibited and no resolver, so
 /// XXE and entity expansion are refused; gzip detected by its magic bytes; at most 50,000 entries and 50 MB uncompressed
-/// per file. Any namespace is accepted, since real sitemaps get it wrong.
+/// per file. Any namespace is accepted, since real sitemaps get it wrong. A file whose first character (after a byte-order
+/// mark and white space) is not <c>&lt;</c> is a plain-text sitemap: one URL per line, lines that are not absolute
+/// http(s) URLs skipped, and none at all <c>sitemap.invalid</c>.
 /// </summary>
 public static class SitemapParser
 {
@@ -26,6 +29,9 @@ public static class SitemapParser
     public const string RefusedDtd = "sitemap.dtd";
     public const string RefusedSize = "sitemap.too_large";
     public const string RefusedSyntax = "sitemap.invalid";
+
+    /// <summary>Enough of the start of a file to tell XML from plain text.</summary>
+    private const int SniffBytes = 64;
 
     public static async Task<SitemapDocument> ParseAsync(Stream content, CancellationToken cancellationToken)
     {
@@ -40,6 +46,57 @@ public static class SitemapParser
         }
 
         await using var limited = new LimitedStream(source, MaxUncompressedBytes);
+        // Filled as the file is read, so a refusal keeps what was read before it.
+        var read = new Reading();
+        try
+        {
+            var head = new byte[SniffBytes];
+            var peekedHead = await limited.ReadAtLeastAsync(head, SniffBytes, throwOnEndOfStream: false, cancellationToken);
+            var file = new PrefixedStream(head.AsMemory(0, peekedHead), limited);
+            if (IsPlainText(head.AsSpan(0, peekedHead)))
+            {
+                await ReadTextAsync(file, read, cancellationToken);
+                return read.Document(read.Entries.Count == 0 ? RefusedSyntax : null);
+            }
+
+            await ReadXmlAsync(file, read, cancellationToken);
+        }
+        catch (XmlException e) when (e.Message.Contains("DTD", StringComparison.Ordinal))
+        {
+            return read.Document(RefusedDtd);
+        }
+        catch (XmlException)
+        {
+            return read.Document(RefusedSyntax);
+        }
+        catch (InvalidDataException)
+        {
+            // A gzip stream that does not decompress.
+            return read.Document(RefusedSyntax);
+        }
+        catch (LimitExceededException)
+        {
+            return read.Document(RefusedSize);
+        }
+
+        return read.Document(null);
+    }
+
+    /// <summary>Plain text when the first character after a UTF-8 byte-order mark and white space is not <c>&lt;</c>; an empty or blank start is XML (and fails as such).</summary>
+    private static bool IsPlainText(ReadOnlySpan<byte> head)
+    {
+        if (head.StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]))
+        {
+            head = head[3..];
+        }
+
+        var first = head.IndexOfAnyExcept(" \t\r\n"u8);
+        return first >= 0 && head[first] != (byte)'<';
+    }
+
+    /// <summary>The <c>url</c> or <c>sitemap</c> entries of an XML sitemap into <paramref name="read"/>.</summary>
+    private static async Task ReadXmlAsync(Stream content, Reading read, CancellationToken cancellationToken)
+    {
         var settings = new XmlReaderSettings
         {
             Async = true,
@@ -50,80 +107,77 @@ public static class SitemapParser
             IgnoreProcessingInstructions = true,
         };
 
-        var entries = new List<SitemapEntry>();
-        var isIndex = false;
-        var truncated = false;
         string? location = null;
         DateTimeOffset? lastModified = null;
-        try
+        using var reader = XmlReader.Create(content, settings);
+        // ReadElementContentAsStringAsync leaves the reader on the next node, so only other nodes advance it.
+        var more = await reader.ReadAsync();
+        while (more)
         {
-            using var reader = XmlReader.Create(limited, settings);
-            // ReadElementContentAsStringAsync leaves the reader on the next node, so only other nodes advance it.
-            var more = await reader.ReadAsync();
-            while (more)
+            cancellationToken.ThrowIfCancellationRequested();
+            if (reader.NodeType == XmlNodeType.Element && reader.LocalName == "loc")
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (reader.NodeType == XmlNodeType.Element && reader.LocalName == "loc")
-                {
-                    location = (await reader.ReadElementContentAsStringAsync()).Trim();
-                    more = !reader.EOF;
-                    continue;
-                }
-
-                if (reader.NodeType == XmlNodeType.Element && reader.LocalName == "lastmod")
-                {
-                    lastModified = ParseLastModified((await reader.ReadElementContentAsStringAsync()).Trim());
-                    more = !reader.EOF;
-                    continue;
-                }
-
-                if (reader.NodeType == XmlNodeType.Element)
-                {
-                    switch (reader.LocalName)
-                    {
-                        case "sitemapindex":
-                            isIndex = true;
-                            break;
-                        case "url" or "sitemap":
-                            location = null;
-                            lastModified = null;
-                            break;
-                    }
-                }
-                else if (reader.NodeType == XmlNodeType.EndElement && reader.LocalName is "url" or "sitemap" && !string.IsNullOrEmpty(location))
-                {
-                    if (entries.Count == MaxEntries)
-                    {
-                        truncated = true;
-                        break;
-                    }
-
-                    entries.Add(new SitemapEntry(location, lastModified));
-                    location = null;
-                }
-
-                more = await reader.ReadAsync();
+                location = (await reader.ReadElementContentAsStringAsync()).Trim();
+                more = !reader.EOF;
+                continue;
             }
-        }
-        catch (XmlException e) when (e.Message.Contains("DTD", StringComparison.Ordinal))
-        {
-            return new(isIndex, entries, truncated, RefusedDtd);
-        }
-        catch (XmlException)
-        {
-            return new(isIndex, entries, truncated, RefusedSyntax);
-        }
-        catch (InvalidDataException)
-        {
-            // A gzip stream that does not decompress.
-            return new(isIndex, entries, truncated, RefusedSyntax);
-        }
-        catch (LimitExceededException)
-        {
-            return new(isIndex, entries, truncated, RefusedSize);
-        }
 
-        return new(isIndex, entries, truncated, null);
+            if (reader.NodeType == XmlNodeType.Element && reader.LocalName == "lastmod")
+            {
+                lastModified = ParseLastModified((await reader.ReadElementContentAsStringAsync()).Trim());
+                more = !reader.EOF;
+                continue;
+            }
+
+            if (reader.NodeType == XmlNodeType.Element)
+            {
+                switch (reader.LocalName)
+                {
+                    case "sitemapindex":
+                        read.IsIndex = true;
+                        break;
+                    case "url" or "sitemap":
+                        location = null;
+                        lastModified = null;
+                        break;
+                }
+            }
+            else if (reader.NodeType == XmlNodeType.EndElement && reader.LocalName is "url" or "sitemap" && !string.IsNullOrEmpty(location))
+            {
+                if (read.Entries.Count == MaxEntries)
+                {
+                    read.Truncated = true;
+                    return;
+                }
+
+                read.Entries.Add(new SitemapEntry(location, lastModified));
+                location = null;
+            }
+
+            more = await reader.ReadAsync();
+        }
+    }
+
+    /// <summary>A plain-text sitemap's absolute http(s) URLs into <paramref name="read"/>, one per line.</summary>
+    private static async Task ReadTextAsync(Stream content, Reading read, CancellationToken cancellationToken)
+    {
+        using var reader = new StreamReader(content, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            var url = line.Trim();
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (read.Entries.Count == MaxEntries)
+            {
+                read.Truncated = true;
+                return;
+            }
+
+            read.Entries.Add(new SitemapEntry(url, null));
+        }
     }
 
     /// <summary>W3C datetime as sitemaps use it: <c>YYYY</c>, <c>YYYY-MM</c>, <c>YYYY-MM-DD</c>, or a full date-time; UTC when no zone.</summary>
@@ -140,6 +194,17 @@ public static class SitemapParser
     }
 
     private sealed class LimitExceededException : IOException;
+
+    private sealed class Reading
+    {
+        public List<SitemapEntry> Entries { get; } = [];
+
+        public bool IsIndex { get; set; }
+
+        public bool Truncated { get; set; }
+
+        public SitemapDocument Document(string? error) => new(IsIndex, Entries, Truncated, error);
+    }
 
     /// <summary>Reads the bytes already peeked, then the rest of the stream; the caller keeps owning the stream.</summary>
     private sealed class PrefixedStream(ReadOnlyMemory<byte> prefix, Stream rest) : Stream
