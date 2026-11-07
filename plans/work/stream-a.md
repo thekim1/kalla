@@ -122,7 +122,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** A-9; A-10 for the integration test.
 - **Read:** connectors §8, §12, §5.4 (deletions); engine design (job release); data-model §2.2.
 
-### [ ] A-12 Settings and UI for `browser` sources
+### [x] A-12 Settings and UI for `browser` sources
 - **Do:** source settings `fetchMode` and `readySelector` in the URL-list and crawl forms (generic forms where they
   apply); the preflight's raw-vs-rendered word counts and the "seems to need JavaScript" hint; crawl report counts
   (rendered, render failures, kept from last good content); `render.*` texts in `messages.ts`; the stage preview shows
