@@ -574,7 +574,8 @@ third lines above are the `off` frame (default). The other levels replace them; 
 
 Without sources the citation line is dropped too and no `<sources>` block is sent. General-knowledge text never
 carries markers (§9.2 is unchanged). The level never widens access: the same collections, levels and ceiling apply,
-and a `public` assistant is always `off` (admin V36).
+and a `public` assistant runs the level its published version names: a level other than `off` on a `public`
+assistant was confirmed at publish (admin V36, #445), so the runtime does not override it.
 
 **No-sources frame** (conversational messages, §6.2, every `generalKnowledge` level): the first two lines are replaced by "Inga källor har hämtats
 för detta meddelande. Svara kort och vänligt. Svara inte på sakfrågor om kommunen utan källor; be användaren ställa

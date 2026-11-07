@@ -585,12 +585,16 @@ test already calls `/v1/info` from the worker container (repo-and-deployment §8
 
 ### 13.2 Traces, metrics, logs
 
-- **Traces**: `opentelemetry-instrumentation-fastapi`, OTLP to `OTEL_EXPORTER_OTLP_ENDPOINT` (same collector as the
+**P1: logs only** (Decisions "Parser telemetry is logs only in P1", #453): structured JSON logs to stdout, no
+OpenTelemetry, no OTLP endpoint and no egress for it; the worker's spans around the parse call carry the timing. The
+traces and metrics below are **P2**.
+
+- **Traces** (P2): `opentelemetry-instrumentation-fastapi`, OTLP to `OTEL_EXPORTER_OTLP_ENDPOINT` (same collector as the
   .NET services); the worker sends `traceparent`, so fetch → scan → inspect → parse → embed is one trace. Slots report
   timings back over the pipe and the supervisor records child spans (`parser.docling`, `parser.text_layer`,
   `parser.signals`) with explicit start and end times, so slot processes need no exporter. Span attributes: format,
   page count, range, pipeline, OCR mode, table mode, slot, outcome code, bytes. **Never** file names, titles or text.
-- **Metrics** (meter `Ume.Rag.Parser`, names in the platform's `rag.` style):
+- **Metrics** (P2; meter `Ume.Rag.Parser`, names in the platform's `rag.` style):
 
 | Metric | Type | Dimensions |
 |---|---|---|

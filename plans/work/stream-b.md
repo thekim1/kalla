@@ -173,6 +173,49 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** every other code item of both streams.
 - **Read:** Decisions "7-day rule in development"; identity §5.3.
 
+### [ ] B-18 General knowledge on a public assistant: warn and confirm (#445)
+- **Do:** V36 turns from a refusal into a confirmed warning: draft save returns `general_knowledge_public_unconfirmed`
+  as a warning; publish, restore and `PUT /api/assistants/{id}` with a level change to `public` answer 409 with that
+  code until the body carries `confirmGeneralKnowledge: true`, and the audit event records `generalKnowledgeConfirmed`.
+  The Utkast tab keeps all four choices enabled for `public` and shows the warning under the group; *Publicera
+  utkastet*, restore and the level change (B-19) ask one extra confirmation and resend with the flag. Remove the
+  run-time override in `ChatService` (`Classification.Public` → `GeneralKnowledge.Off`): the published level runs.
+  Texts only in `labels.ts`/`messages.ts`.
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/Ume.Rag.Answering/**`, `src/admin-ui/**`, their tests.
+- **Done when:** rules tests: warning on save, 409 without the flag and success with it on publish, restore and level
+  change, audit field set; a chat test runs `fallback` on a `public` assistant with the §10.4 caveat line; vitest: the
+  radios are enabled and the confirmation is asked.
+- **Waits on:** –
+- **Read:** Decisions "General knowledge on a public assistant"; admin §4.5 (publish, restore, assistants), §4.6 V36,
+  §5.5.4; chat §7.3, §10.4.
+
+### [ ] B-19 Level change in the edit drawer (#446)
+- **Do:** add the level to the collection's *Edit* drawer (in the `⋯` menu; create the drawer with name, contact and
+  level if the page has none) and to the assistant's *Ändra* drawer, `edit` right, saved with the other fields through
+  the existing `PUT`s. Show the API's refusals (`collection_level_conflict`, `assistant_below_collection`, V3/V7/V8/V9)
+  in the drawer with `affected[]` by name; a change to `public` with general knowledge on asks B-18's confirmation.
+- **Paths:** `src/admin-ui/**` (`CollectionView.vue`, `AssistantView.vue`, drawers, labels), the admin API only if a
+  field is missing.
+- **Done when:** vitest: the level field saves, a refusal lists the affected objects; a browser check of both drawers
+  (screenshot in the PR).
+- **Waits on:** B-18 for the confirmation (the rest can go first).
+- **Read:** Decisions "Level change in the edit drawer"; admin §4.5, §5.5.2, §5.5.4.
+
+### [ ] B-20 Model pickers show what the key may use (#447)
+- **Do:** `GET /api/gateway/models?level=` adds `available` (`true`/`false`/`null`) per row from the gateway's
+  `/v1/models` called with the platform's key at the level's ceiling (no `level`: the platform ceiling), cached 5
+  minutes per ceiling; `null` when the gateway can't be asked. Every model picker (assistant model; Settings:
+  evaluation, judge, condense, skill gate, `rerankModel`, `gatewayRerankModel`) greys out `available: false` with "Not
+  available to this platform's key" and keeps every model choosable with "Availability unknown" on `null`. V32 also
+  calls `/v1/models` on save (`model_not_listed` 409, `gateway_unavailable` 503), as V8 does on publish.
+- **Paths:** `src/Ume.Rag.AdminApi/**`, `src/admin-ui/**` (the assistant picker; the Settings forms' model fields,
+  coordinating with stream A where the generic forms live), FakeGateway if its `/v1/models` needs a key filter.
+- **Done when:** API tests for `available` true/false/null and the cache; a V32 test refuses an unlisted model; vitest:
+  a greyed-out model can't be chosen; checked live on the real gateway (15 mirror models, 5 available).
+- **Waits on:** –
+- **Read:** Decisions "Model pickers show what the key may use"; admin §4.5 (`/api/gateway/models`), §4.6 V8/V32,
+  §4.10.
+
 ## Live (the live block, see the roadmap)
 
 ### [x] B-L1 Status green against the real gateway

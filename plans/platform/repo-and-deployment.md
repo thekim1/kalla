@@ -206,7 +206,7 @@ src/parser/
 |---|---|
 | Lock tool | **uv** (lockfile with hashes for every wheel; `uv sync --frozen --no-dev` in the image). pip-tools rejected: two tools for one job |
 | npm-policy equivalent | `[tool.uv] no-build = true` (wheels only, so no package runs `setup.py`: same intent as `ignore-scripts`), `exclude-newer` 7 days before the lock date (same intent as `min-release-age`), `uv lock --check` in CI, `pip-audit` against the export |
-| Packages | `docling-slim` with selected extras (2.145 reviewed, parser design §12), `pypdfium2`, `defusedxml`, `psutil`, `pillow`, `transformers`/`tokenizers`/`safetensors` (NER, already pulled in by `docling-ibm-models`), `fastapi`, `uvicorn`, `pydantic`, `python-multipart`, `opentelemetry-instrumentation-fastapi` + OTLP exporter; dev: `pytest`, `ruff`, `pip-audit`. Exact versions *to verify* at lock time (V1) |
+| Packages | `docling-slim` with selected extras (2.145 reviewed, parser design §12), `pypdfium2`, `defusedxml`, `psutil`, `pillow`, `transformers`/`tokenizers`/`safetensors` (NER, already pulled in by `docling-ibm-models`), `fastapi`, `uvicorn`, `pydantic`, `python-multipart` (`opentelemetry-instrumentation-fastapi` + OTLP exporter in P2: parser telemetry is logs only in P1, #453); dev: `pytest`, `ruff`, `pip-audit`. Exact versions *to verify* at lock time (V1) |
 | PyTorch | CPU wheels from the PyTorch CPU index (`[[tool.uv.index]]` with `explicit = true`), saving ~2 GB against the CUDA build |
 | Models | Docling layout and TableFormer, KB BERT NER (`KBLab/bert-base-swedish-cased-ner`, rev `f3c83af`, `/opt/models/kb-ner`) downloaded at **image build** by `scripts/download_models.py` with pinned revisions and SHA-256 into `/opt/models`; runtime sets `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, Docling `artifacts_path=/opt/models`; `test_offline.py` converts a PDF with networking disabled |
 | OCR | **Tesseract 5 CLI, `swe` only** (Debian package); P1 acceptance check: å/ä/ö recall ≥ 95 % on a 20-page Umeå sample (parser design §9.3; postponed P1 closed) |
@@ -880,9 +880,10 @@ p50/p95/p99).
 - **ServiceDefaults copied**: OTel logs (formatted message + scopes), metrics (`AddMeter("Ume.Rag")`, ASP.NET Core,
   HttpClient, runtime) and traces (`AddSource(appName)`, `AddSource("Ume.Rag")`, health filtered, `url.query` removed);
   JSON console outside Development; OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` (`UME_RAG_OTEL_ENDPOINT`) is set.
-  Npgsql (and, from P2, Redis) tracing comes from the Aspire client integrations. The parser uses
-  `opentelemetry-instrumentation-fastapi` with the same endpoint; the worker propagates `traceparent`, so one trace
-  covers fetch → scan → parse → embed. Chat traces continue into the gateway (it already traces incoming requests).
+  Npgsql (and, from P2, Redis) tracing comes from the Aspire client integrations. The parser writes JSON logs to
+  stdout only in P1 (no OTel, no OTLP egress; Decisions "Parser telemetry is logs only in P1", #453); the worker's
+  spans around the parse call carry its timing. From P2 the parser adds `opentelemetry-instrumentation-fastapi` with
+  the same endpoint, and the worker's `traceparent` makes fetch → scan → parse → embed one trace. Chat traces continue into the gateway (it already traces incoming requests).
 - **No content in telemetry** (plan §8a): no prompts, chunk text, document titles or URLs of `sensitive` sources;
   query strings stripped (gateway); the worker's trace filter also removes `url.full` and `server.address` from fetch
   spans (connectors design §16). A unit test scans captured telemetry from a test chat for the test content.

@@ -73,8 +73,8 @@ per assistant"; frames in chat §7.3; code in `src/Ume.Rag.Answering/Chat/Assist
 | `open` | uses the sources when relevant, else answers as a general assistant | general answer with the caveat | not recommended: the KB stops being the authority |
 
 Rules that hold at every level: the injection, citation and no-invented-municipal-facts rules; general-knowledge
-text never carries citation markers; search unavailable stays the fixed text; a `public` assistant is always `off`
-(V36, `src/Ume.Rag.Answering/Chat/ChatService.cs:45-49`), which does not apply here. Anyone with `edit` on the
+text never carries citation markers; search unavailable stays the fixed text; a `public` assistant needs a confirmation
+for any level but `off` (V36, #445), which does not apply here. Anyone with `edit` on the
 assistant changes the level as a versioned draft field.
 
 ## 5. Retrieval and answer settings

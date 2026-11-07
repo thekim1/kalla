@@ -352,7 +352,7 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 | `GET /api/organisation/departments/names` | Read | every active department's id and name, outside the caller's scope too (the *Selected departments* picker of the Sharing tab); names only, as pickers read platform objects (§3.2) |
 | `PUT /api/organisation/departments/{id}/member-groups` `{ memberGroups }` | Admin | member groups by hand until gateway release 2 (§4.10): ≤ 50 values, trimmed, empty ones dropped, de-duplicated and sorted; departments carry no `version`, so the save has no concurrency check (last write wins, audited `member-groups` on the department); the sync never touches the field |
 | `GET /api/organisation/sync`, `POST /api/organisation/sync` | Admin | last runs and outcome (held in memory per instance, §4.10); run now |
-| `GET /api/gateway/models` | Read | `GatewayModels` with `modelKind` (`chat`/`embedding`), residencies, `SupportsTools`, context window, prices, `Source` |
+| `GET /api/gateway/models` `?level=` | Read | `GatewayModels` with `modelKind` (`chat`/`embedding`/`rerank`), residencies, `SupportsTools`, context window, prices, `Source`, and **`available`** (`true`/`false`/`null`): listed by the gateway's `/v1/models` called with the platform's key at the level's ceiling (`level` = an assistant level; absent: the platform ceiling), cached 5 minutes per ceiling; `null` when the gateway could not be asked (#447) |
 | `POST /api/gateway/sync`; `PUT /api/gateway/models/{name}` | Admin | run the model sync now; manual row (aliases, `SupportsTools` until the catalogue has `features`; not built yet) |
 | `GET /api/gateway/status` | Admin | per level key: one `x-ume-max-residency` embedding call and (from gateway release 2, P2) the delegation echo; each profile's canary: recorded, last check time and similarity |
 | `GET /api/gateway/canary-check` | Admin | each active profile's last canary check from the database (`{ profileId, profile, recorded, similarity, passed, checkedAt }`, `passed` null when never checked); makes **no** gateway call, so opening the page costs nothing |
@@ -446,11 +446,11 @@ separated by a comma (`Edit, EditPipelines`) mean either suffices (a combined po
 
 | Method and path | Policy | Notes |
 |---|---|---|
-| `GET/POST /api/assistants`, `GET/PUT/DELETE /api/assistants/{id}` | Read / Edit / Manage (delete) | the assistant's own fields, saved directly under the V-rules: name, slug, owner team, classification, **description** (≤ 500 characters) and **contact** (`ContactName`, `ContactEmail`); create takes an optional `templateId` (P2, weakness review §1) and starts with only a draft prefilled from the template (or `Settings.Chat` defaults), so `PublishedVersionId` is null and no client lists it; the detail carries `state` (`active`/`archived`), `publishedVersion`, `draft { number, updatedAt, baseChanged }`, `usesTools` (derived, never written: a linked skill's served version links a tool not excluded) and `lastUsedAt` |
+| `GET/POST /api/assistants`, `GET/PUT/DELETE /api/assistants/{id}` | Read / Edit / Manage (delete) | the assistant's own fields, saved directly under the V-rules: name, slug, owner team, classification (a change to `public` with general knowledge on takes `confirmGeneralKnowledge`, V36), **description** (≤ 500 characters) and **contact** (`ContactName`, `ContactEmail`); create takes an optional `templateId` (P2, weakness review §1) and starts with only a draft prefilled from the template (or `Settings.Chat` defaults), so `PublishedVersionId` is null and no client lists it; the detail carries `state` (`active`/`archived`), `publishedVersion`, `draft { number, updatedAt, baseChanged }`, `usesTools` (derived, never written: a linked skill's served version links a tool not excluded) and `lastUsedAt` |
 | `GET/PUT/DELETE /api/assistants/{id}/draft` | Read / Edit / Edit | the version fields: instructions, model, collection links (`collectionLinks: [{collectionId, tags[]}]`; one link per collection, the first wins; topics trimmed and de-duplicated, otherwise kept as typed, so a bad topic stays in the draft as a V11 `topic_invalid` warning), skills (with excluded tools), query steps, P2 agent limits, not-found texts and links. One draft per assistant (`DraftVersionId`), created on the first edit as a copy of the published version with `Number` + 1; saving applies field rules and returns the assistant V-rules as `warnings[]` (never refused, so work in progress can be saved); `DELETE` discards it |
-| `POST /api/assistants/{id}/publish` `{ draftVersion, version, confirmBaseChanged? }` | Edit | V34, then every assistant rule (V3–V17) as refusals and V8's `/v1/models` call; one transaction (§4.4) marks the draft `published` and the previous one `superseded`, sets `PublishedVersionId` and clears `DraftVersionId` (data-model §2.1); starts the test run (§7.4; P2). A draft created before the current published version (a restore happened since; its `Number` is lower) answers 409 `draft_base_changed` (with the diff from P2) until confirmed |
+| `POST /api/assistants/{id}/publish` `{ draftVersion, version, confirmBaseChanged?, confirmGeneralKnowledge? }` | Edit | V34, then every assistant rule (V3–V17) as refusals and V8's `/v1/models` call; one transaction (§4.4) marks the draft `published` and the previous one `superseded`, sets `PublishedVersionId` and clears `DraftVersionId` (data-model §2.1); starts the test run (§7.4; P2). A draft created before the current published version (a restore happened since; its `Number` is lower) answers 409 `draft_base_changed` (with the diff from P2) until confirmed |
 | `GET /api/assistants/{id}/versions`, `GET …/versions/{n}`, `GET …/versions/{n}/diff?against={m}` (`m` = a number or `draft`; **diff P2**, weakness review §1) | Read | number, state, who and when, restored-from, test-run summary (P2); the diff is structured: changed settings by name, collections and skills added or removed, and a line diff of instructions and not-found texts (in-house Myers diff over ≤ 20,000 characters, no package) |
-| `POST /api/assistants/{id}/versions/{n}/restore` `{ version }` | Edit | one click: a **new** version with version n's settings (`RestoredFromVersionId`), published at once exactly as publish; an open draft is kept (its base is now older); refused with the list when a link no longer resolves (V34); restoring the draft or the published version is refused (409 `version_not_restorable`) |
+| `POST /api/assistants/{id}/versions/{n}/restore` `{ version, confirmGeneralKnowledge? }` | Edit | one click: a **new** version with version n's settings (`RestoredFromVersionId`), published at once exactly as publish; an open draft is kept (its base is now older); refused with the list when a link no longer resolves (V34); restoring the draft or the published version is refused (409 `version_not_restorable`) |
 | `POST /api/assistants/{id}/copy` `{ name, slug, departmentId, ownerTeamId }` (P2, weakness review §1) | Read (source) + Edit (target department) | new assistant with only a draft = the source's published version (its draft if never published); test questions copied; audiences, keys, versions and statistics not copied; V11/V12 for the target department as warnings; audited `assistant.copy` |
 | `POST /api/assistants/{id}/archive`, `/unarchive` | Edit | `State = archived` hides the assistant from every client (identity §4.3 step 5) and keeps versions, audiences and statistics; unarchive returns `State = active` with the same published version |
 | `GET/POST/PUT/DELETE /api/assistants/{id}/test-questions[/{qid}]` (P2, weakness review §1) | Read / Edit | V33; the expected document is picked by title search in the draft's collections |
@@ -528,11 +528,11 @@ kept so references stay stable.
 | V29 | data protection: history modes other than `none` refused until stored chat content is built after A1 (weakness review §4); `internal`/`sensitive` ⇒ chat encryption required; default ≤ max ≤ 90; changes apply to messages written afterwards (their expiry-month bucket); bucket-key destruction cannot be switched on before A1 is recorded as answered | `policy_rule` | policy save | data-model `CK_DataProtectionPolicies_*`, simplification pass §5 |
 | V30 | `Settings` ranges as the `CK_Settings_*` checks (guard 1–100 %, min/max counts, sample sizes, …) | `setting_out_of_range` | settings save | data-model §2.1 |
 | V31 | embedding profile fixed per collection (`platform-default`); other profiles only `Admin` (P3) | `profile_admin_only` | collection save | R3 |
-| V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` are `chat` rows of `GatewayModels` servable at most at the platform ceiling: `Eu` until M2 (on-prem models once the on-prem hardware exists, register M2) (`SkillGateModel` also `SupportsTools`) | `settings_model_residency` | settings save; model sync changed residency (warning on Overview) | processing §13.1, chat §5, tools §3.7 |
+| V32 | platform model settings `Settings.EvaluationModel`, `Settings.EvaluationJudgeModel`, `Settings.Chat.CondenseModel`, `Settings.Tools.SkillGateModel` are `chat` rows of `GatewayModels` servable at most at the platform ceiling: `Eu` until M2 (on-prem models once the on-prem hardware exists, register M2) (`SkillGateModel` also `SupportsTools`); on save each set model is also listed by the gateway's `/v1/models` at the platform ceiling, as V8 (#447) | `settings_model_residency`, `model_not_listed` (409), `gateway_unavailable` (503) | settings save; model sync changed residency (warning on Overview) | processing §13.1, chat §5, tools §3.7 |
 | V33 | assistant test questions: ≤ 30 per assistant; question 1–2,000 characters; expected behaviour 1–2,000; expected phrase ≤ 200; an expected document must belong to a collection the draft or published version links (unlinking it later marks the question in the report, never refuses) | `test_question_invalid`, `test_question_document_unlinked` | test-question save | §7.4 |
 | V34 | publish and restore: the definition resolves (collections not deleted, skills not retired and usable by the department, the model a `chat` row of `GatewayModels`); description and contact are set; a draft created before the current published version (lower `Number`) is published only when confirmed | `version_link_missing`, `assistant_contact_missing`, `draft_base_changed` | publish; restore | §4.5, simplification pass §15 |
 | V35 | narrowing a collection's sharing (to a lower level, or removing a department from `selected`) is refused while a published assistant of a department that loses access links it; the refusal lists the assistants and their departments | `collection_shared_in_use` | sharing save | §3.2, §4.5 |
-| V36 | an assistant of level `public` has `answer.generalKnowledge` `off`; `supplement`, `fallback` and `open` need level `internal` or higher | `general_knowledge_not_allowed_for_level` | publish; restore; level change | chat §7.3, §10.4 |
+| V36 | an assistant of level `public` with `answer.generalKnowledge` other than `off` needs an explicit confirmation (Decisions "General knowledge on a public assistant", #445): a `warnings[]` entry on draft save; publish, restore and a level change to `public` answer 409 until the request carries `confirmGeneralKnowledge: true`, which the audit event records as `generalKnowledgeConfirmed` | `general_knowledge_public_unconfirmed` (409) | draft save (warning); publish; restore; level change | chat §7.3, §10.4 |
 
 ### 4.7 Jobs for the worker
 
@@ -637,7 +637,10 @@ panel ships in the same P1 release as the chat role, so it never runs a differen
 | Route aliases | none today (`DataEndpoints.cs:139-160`) | manual rows `Kind = route`, `Residencies` = its targets' residencies, `Source = manual`; servable at a ceiling when any target is within it; replaced by a synced `/v1/catalog/routes` when the gateway adds it. Multi-target model names are routes, so they are not in the synced catalogue (nor in the FakeGateway's) |
 
 The mirror feeds pickers and V8's first check; V8's `/v1/models` call at save is the authoritative check, because it
-asks the gateway what it will serve at that ceiling. Failures keep the last mirror; after 3 failed runs the Overview
+asks the gateway what it will serve at that ceiling. The mirror is the gateway's whole catalogue, not what the
+platform's key may use, so every model picker greys out a model whose `available` is `false` ("Not available to this
+platform's key") and cannot choose it; with `null` every mirror model stays choosable with "Availability unknown"
+(Decisions "Model pickers show what the key may use", #447). Failures keep the last mirror; after 3 failed runs the Overview
 shows "Synkningen mot AI-gatewayen fungerar inte sedan {tid}" to platform admins, metric `rag.admin.sync{kind,outcome}`.
 A stale mirror narrows or keeps sign-in scope, never widens it (identity §2.6). The sync status is held in memory per
 instance (`GET /api/organisation/sync`); the run history and the 3-failures banner come with `Settings` and the
@@ -811,6 +814,11 @@ Topics (set by path rules on the sources, Processing › Topics)
 A department the knowledge base is shared with opens it read-only: Overview (owner, contact, level, document count)
 and Topics, nothing else.
 
+**Edit** in the `⋯` menu opens a drawer with the collection's own fields: name, contact and **level** (`edit` on the
+collection; Decisions "Level change in the edit drawer", #446). A level change is saved with the rest; a refusal
+(`collection_level_conflict`: sources above the new level; `assistant_below_collection`: published assistants below
+it) is shown in the drawer after **Save** with the affected objects by name.
+
 #### 5.5.3 Källa (webbplats) and the deletion decision
 
 ```
@@ -868,7 +876,9 @@ Utkast  Testa  Testfrågor (8)  Versioner (3)  Målgrupp  Lagring  Statistik
   users get): a radio group *Off: only the knowledge bases* (`off`, default), *Supplement: knowledge bases first,
   general knowledge for explanations* (`supplement`), *Fallback: as Supplement, and answer from general knowledge when
   nothing is found* (`fallback`), *Open: knowledge bases and general knowledge* (`open`), each with one line of help on
-  what happens when nothing is found. For a `public` assistant the other three are disabled with the V36 reason. A
+  what happens when nothing is found. For a `public` assistant all four stay enabled; any choice but `off` shows the
+  warning "Not recommended for a public assistant: citizens may get general answers that are wrong for Umeå kommun"
+  under the group, and **Publicera utkastet** then asks for one extra confirmation (V36, #445). A
   published version with a level other than `off`
   version shows the badge `[General knowledge]` on the assistant page and in the assistant list. The test panel runs
   the chosen mode, so a weak question shows the caveat line.
@@ -877,7 +887,9 @@ Utkast  Testa  Testfrågor (8)  Versioner (3)  Målgrupp  Lagring  Statistik
 - **Badges**: `[Utkast]` alone before the first publish; `[Publicerad: version n]` afterwards, plus `[Utkast ändrat …]`
   while a draft exists; `[Arkiverad]` when archived. **Använder verktyg** is a derived label (P2), never a
   setting: it appears when a linked skill's served version carries tools, and the Färdigheter field explains that such
-  a skill switches the assistant to the agent loop. Description and contact (name and e-mail) are the assistant's own
+  a skill switches the assistant to the agent loop. Description, contact (name and e-mail) and **level** (in the
+  *Ändra* drawer, #446; the published version is re-checked, V3/V7/V8/V9/V36, refusals shown in the drawer, and a
+  change to `public` with general knowledge on asks the V36 confirmation) are the assistant's own
   fields, saved directly, like Målgrupp and Lagring; everything in the Utkast tab is versioned.
 - **Publicera utkastet** opens a dialog with the diff against the published version (P2), the remaining warnings (refusals
   block) and the cost of the test run (P2); after publish (P2) the Testfrågor tab shows the
