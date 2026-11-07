@@ -4,6 +4,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { api } from '@/api'
 import { ApiError } from '@/api/client'
 import type { Source, UploadFile } from '@/api/types'
+import { useAuthStore } from '@/stores/auth'
+import { bffUser } from '@/test/fixtures'
 import SourceFiles from './SourceFiles.vue'
 import SourceQuarantine from './SourceQuarantine.vue'
 
@@ -74,6 +76,48 @@ describe('Files (admin design §4.5, connectors §9)', () => {
     await flushPromises()
     expect(commit).toHaveBeenLastCalledWith('b3', { files: [], deletes: ['u2'] })
     wrapper.unmount()
+  })
+
+  it('lets a platform admin restore a removed file within 14 days (connectors §9.3)', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-platform-admin'] })
+    auth.status = 'authenticated'
+    const days = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString()
+    const files = vi.spyOn(api.sources, 'files').mockImplementation(async (_id, query) => (query?.deleted
+      ? { items: [{ ...slot('u3', 'taxa-2025.pdf', 'deleted'), deletedAt: days(3) }, { ...slot('u4', 'gammal.pdf', 'deleted'), deletedAt: days(15) }], next: null }
+      : { items: [slot('u1', 'taxa.pdf', 'indexed')], next: null }))
+    const restore = vi.spyOn(api.sources, 'restoreFiles').mockResolvedValue({ batchId: 'b', jobId: 'j', entries: 1 })
+    const wrapper = mount(SourceFiles, { props: { source, canEdit: true }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.find('[data-test^=restore-]').exists()).toBe(false) // only among the removed files
+
+    await wrapper.get('[data-test=show-deleted]').trigger('click')
+    await flushPromises()
+    expect(files).toHaveBeenLastCalledWith('s1', expect.objectContaining({ deleted: true }))
+    expect(wrapper.find('[data-test=restore-u4]').exists()).toBe(false)
+    expect(wrapper.get('[data-test=restore-expired-u4]').text()).toContain('can no longer be restored')
+
+    await wrapper.get('[data-test=restore-u3]').trigger('click')
+    await flushPromises()
+    ;[...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Restore').at(-1)!.click()
+    await flushPromises()
+    expect(restore).toHaveBeenCalledWith('s1', ['u3'])
+    expect(wrapper.emitted('committed')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('offers no restore to a department admin', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = bffUser({ roles: ['rag-department-admin'] })
+    auth.status = 'authenticated'
+    vi.spyOn(api.sources, 'files').mockResolvedValue({ items: [{ ...slot('u3', 'taxa-2025.pdf', 'deleted'), deletedAt: new Date().toISOString() }], next: null })
+    const wrapper = mount(SourceFiles, { props: { source, canEdit: true } })
+    await flushPromises()
+    await wrapper.get('[data-test=show-deleted]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test^=restore-]').exists()).toBe(false)
   })
 
   it('shows quarantined files as metadata only', async () => {

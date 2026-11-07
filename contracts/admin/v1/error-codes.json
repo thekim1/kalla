@@ -380,6 +380,11 @@
       "code": "crawl_politeness_invalid",
       "status": 400,
       "message": "The politeness setting {field} for {host} is invalid: {problem}"
+    },
+    {
+      "code": "file_not_restorable",
+      "status": 409,
+      "message": "The file {name} cannot be restored: it is not deleted, or its 14 days have passed."
     }
   ]
 }

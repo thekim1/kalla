@@ -8,6 +8,7 @@ import InlineError from '@/components/ui/InlineError.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatDecimal } from '@/utils/format'
 import { FILES } from '@/utils/labels'
@@ -16,11 +17,17 @@ import { problemMessage } from '@/utils/problem'
 
 // Filer of an upload source (admin design §4.5, connectors §9.1, §9.3): choose files, send each to one upload batch
 // (per-file state, retry a failed one), commit them as one sync; the source's slots with their state; Ersätt sends new
-// bytes into a slot (same document); selected slots are deleted through a batch with deletes only. Restore within the
-// 14-day grace is not offered here yet.
+// bytes into a slot (same document); selected slots are deleted through a batch with deletes only. A platform admin
+// restores a removed file within the 14-day grace (connectors §9.3, B-24): a batch that re-adds the slot.
 const props = defineProps<{ source: Source; canEdit: boolean }>()
 const emit = defineEmits<{ (e: 'committed'): void }>()
 const ui = useUiStore()
+const auth = useAuthStore()
+/** The grace of a removed upload (connectors §9.3, §13.4); the API checks it again. */
+const RESTORE_GRACE_MS = 14 * 24 * 60 * 60 * 1000
+const canRestore = computed(() => auth.hasAnyRole(['rag-platform-admin']))
+const restoring = ref<UploadFile | null>(null)
+const restorable = (f: UploadFile) => f.deletedAt !== null && Date.now() - Date.parse(f.deletedAt) < RESTORE_GRACE_MS
 
 interface Pending {
   file: File
@@ -131,6 +138,15 @@ async function deleteSelected(): Promise<void> {
   await load()
 }
 
+async function restore(): Promise<void> {
+  const file = restoring.value
+  if (!file) return
+  await api.sources.restoreFiles(props.source.id, [file.id])
+  ui.notify(FILES.restored(file.fileName))
+  emit('committed')
+  await load()
+}
+
 async function toggleDeleted(): Promise<void> {
   showDeleted.value = !showDeleted.value
   selected.value = []
@@ -189,6 +205,12 @@ onMounted(() => load())
         <UiButton v-if="canEdit && !showDeleted" size="sm" :aria-label="FILES.replaceLabel(f.fileName)" :data-test="`replace-${f.id}`" @click="startReplace(f)">
           {{ FILES.replace }}
         </UiButton>
+        <template v-if="showDeleted && canRestore">
+          <UiButton v-if="restorable(f)" size="sm" :aria-label="FILES.restoreLabel(f.fileName)" :data-test="`restore-${f.id}`" @click="restoring = f">
+            {{ FILES.restore }}
+          </UiButton>
+          <span v-else class="text-small text-fg-3" :data-test="`restore-expired-${f.id}`">{{ FILES.restoreExpired }}</span>
+        </template>
       </li>
     </ul>
     <UiButton v-if="next" class="mt-3" size="sm" @click="load(true)">{{ FILES.more }}</UiButton>
@@ -196,6 +218,10 @@ onMounted(() => load())
     <ConfirmDialog
       v-model:open="deleting" :title="FILES.deleteTitle(selected.length)" :consequence="FILES.deleteConsequence" :confirm-label="FILES.deleteSelected(selected.length)"
       danger :action="deleteSelected"
+    />
+    <ConfirmDialog
+      :open="restoring !== null" :title="FILES.restoreTitle(restoring?.fileName ?? '')" :consequence="FILES.restoreConsequence"
+      :confirm-label="FILES.restore" :action="restore" @update:open="(open: boolean) => { if (!open) restoring = null }"
     />
   </UiCard>
 </template>

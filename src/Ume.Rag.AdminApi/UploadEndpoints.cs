@@ -30,6 +30,9 @@ public static class UploadEndpoints
     /// <summary>The upload request's body limit: a 50 MB file plus headroom (to-verify #32).</summary>
     public const long FileRequestLimit = 60L * 1024 * 1024;
 
+    /// <summary>A deleted file can be restored this long after its delete (connectors §9.3, §13.4: the document's grace).</summary>
+    public static readonly TimeSpan RestoreGrace = TimeSpan.FromDays(14);
+
     public const string FileNameHeader = "X-File-Name";
     public const string UploadIdHeader = "X-Upload-Id";
 
@@ -95,6 +98,73 @@ public static class UploadEndpoints
                 return new KeysetPage<QuarantinedFileDto, Guid?>([.. rows.Take(take)], rows.Count > take ? rows[take - 1].Id : null);
             })
             .RequireAuthorization(AdminPolicies.Read).WithTags("Uploads").WithName("ListQuarantine").WithSummary("A source's quarantined files: metadata only (keyset)");
+
+        // Restore within the grace (connectors §9.3: "restore adds the entry back and the document is revived", §13.4): a new
+        // batch whose manifest re-adds each deleted slot with its own name, size and hash, so the worker's sync treats it as an
+        // add on a deleted slot (a restore), fetches the kept upload blob again and revives the document. Platform admin, as the
+        // UI's "the platform team can bring them back" says.
+        api.MapPost("/sources/{id:guid}/files/restore", async (Guid id, FileRestoreRequest request, AdminContext admin, IBlobStore blobs, CancellationToken ct) =>
+            {
+                var source = await SourceEndpoints.Scoped(admin).AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw AdminFaults.Of(AdminErrorCodes.NotFound);
+                if (source.Type != Domain.Entities.SourceTypes.Upload)
+                {
+                    throw AdminFaults.Of(AdminErrorCodes.NotAnUploadSource);
+                }
+
+                var ids = request.UploadIds.Distinct().ToList();
+                if (ids.Count is 0 or > MaxFilesPerBatch)
+                {
+                    throw AdminFaults.Field("uploadIds", AdminErrorCodes.InvalidValue);
+                }
+
+                var since = admin.Now - RestoreGrace;
+                var slots = await admin.Db.Uploads.AsNoTracking().Where(u => u.SourceId == source.Id && ids.Contains(u.Id)).ToListAsync(ct);
+                foreach (var uploadId in ids)
+                {
+                    var slot = slots.SingleOrDefault(s => s.Id == uploadId) ?? throw AdminFaults.Field("uploadIds", AdminErrorCodes.NotFound);
+                    if (slot.DeletedAt is not { } deletedAt || deletedAt < since ||
+                        !await blobs.ExistsAsync(new BlobKey($"uploads/{source.Id:D}/{slot.Id:D}/{Convert.ToHexStringLower(slot.Sha256)}"), ct))
+                    {
+                        throw AdminFaults.Of(AdminErrorCodes.FileNotRestorable, new Dictionary<string, string> { ["name"] = slot.FileName });
+                    }
+                }
+
+                var batchId = Guid.CreateVersion7();
+                var manifest = new UploadBatchManifest
+                {
+                    BatchId = batchId,
+                    SourceId = source.Id,
+                    CommittedBy = admin.Actor,
+                    CommittedAt = admin.Now,
+                    Entries =
+                    [
+                        .. slots.OrderBy(s => s.Id).Select(s => new UploadManifestEntry
+                        {
+                            Operation = UploadOperation.Add, UploadId = s.Id, FileName = s.FileName, DeclaredMediaType = s.DeclaredMediaType, Bytes = s.Bytes,
+                            Sha256 = Convert.ToHexStringLower(s.Sha256),
+                        }),
+                    ],
+                };
+                await blobs.PutAsync(new BlobKey($"uploads/{source.Id:D}/batches/{batchId:D}.json"),
+                    new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(manifest, ContractJson.Options)), null, ct);
+                return await admin.WriteAsync(async attempt =>
+                {
+                    var collection = await admin.Db.Collections.AsNoTracking().SingleAsync(c => c.Id == source.CollectionId, attempt);
+                    var job = new JobRequest(JobClasses.Sync, collection.DepartmentId, source.Classification,
+                        JsonSerializer.Serialize(new SyncPayload { SourceId = source.Id, Kind = SyncKind.Sync, Trigger = RunTrigger.Upload, BatchId = batchId }, ContractJson.Options))
+                    {
+                        DedupKey = JobDedupKeys.SyncUpload(batchId),
+                        TeamId = collection.OwnerTeamId,
+                    };
+                    return new AdminChange<UploadCommitted>(new UploadCommitted(batchId, job.Id, manifest.Entries.Count), "upload-restore", AuditEntityTypes.Source, source.Id,
+                        null, new { batchId, entries = manifest.Entries.Select(e => new { e.UploadId, e.FileName, e.Bytes, e.Sha256 }) })
+                    {
+                        DepartmentId = collection.DepartmentId, Classification = source.Classification, Jobs = [job],
+                    };
+                }, ct);
+            })
+            .RequireAuthorization(AdminPolicies.Admin).WithTags("Uploads").WithName("RestoreSourceFiles")
+            .WithSummary("Restore deleted files within the 14-day grace (platform admin): a batch that re-adds the slots");
 
         var batches = api.MapGroup("/upload-batches").WithTags("Uploads");
 
@@ -424,6 +494,13 @@ public sealed record UploadBatchCreated(Guid BatchId, int MaxFiles, long MaxByte
 public sealed record UploadedFile(int N, Guid UploadId, string Operation, string FileName, long Bytes, string Sha256);
 
 public sealed record UploadCommitted(Guid BatchId, Guid JobId, int Entries);
+
+public sealed record FileRestoreRequest : AdminRequest
+{
+    /// <summary>Deleted upload slots of the source to restore (connectors §9.3).</summary>
+    [MaxLength(UploadEndpoints.MaxFilesPerBatch)]
+    public IReadOnlyList<Guid> UploadIds { get; init; } = [];
+}
 
 public sealed record UploadCommitRequest : AdminRequest
 {
