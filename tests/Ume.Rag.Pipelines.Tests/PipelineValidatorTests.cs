@@ -86,9 +86,9 @@ public sealed class PipelineValidatorTests
     [Fact]
     public void Rule_3_refuses_a_parameter_the_template_does_not_declare()
     {
-        var error = Validator.Validate(Definition("""{"pathRules":[]}""", template: "files")).Errors.ShouldHaveSingleItem();
+        var error = Validator.Validate(Definition("""{"colour":"blue"}""", template: "files")).Errors.ShouldHaveSingleItem();
         error.Code.ShouldBe(PipelineValidationCodes.ParamUnknown);
-        error.Param.ShouldBe("pathRules");
+        error.Param.ShouldBe("colour");
     }
 
     [Theory]

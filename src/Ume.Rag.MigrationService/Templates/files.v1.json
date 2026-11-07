@@ -58,6 +58,87 @@
         "maximum": 30
       },
       "default": 15
+    },
+    "pathRules": {
+      "stage": "chunk",
+      "schema": {
+        "$ref": "#/$defs/pathRules"
+      },
+      "default": []
+    }
+  },
+  "labels": {
+    "pathRules": {
+      "sv": "Ämnen",
+      "en": "Topics"
+    }
+  },
+  "defs": {
+    "pathRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "match",
+        "on"
+      ],
+      "properties": {
+        "match": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "on": {
+          "enum": [
+            "path",
+            "path-regex",
+            "host",
+            "title-regex",
+            "mediaType"
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "pattern": "^[\\p{L}\\p{N}-]{1,50}$"
+          }
+        },
+        "documentType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      },
+      "if": {
+        "properties": {
+          "on": {
+            "enum": [
+              "path-regex",
+              "title-regex"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "match": {
+            "format": "regex"
+          }
+        }
+      }
+    },
+    "pathRules": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/pathRule"
+      }
     }
   }
 }
