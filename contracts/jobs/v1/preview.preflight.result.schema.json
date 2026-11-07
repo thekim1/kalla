@@ -19,7 +19,7 @@
         "properties": {
           "check": {
             "type": "string",
-            "description": "The check: reachability, robots, sitemaps, pages, egress, cms or render (new names may be added). A render entry is information (pass, or warn for render.suggested while the settings fetch with http): render.suggested or render.compared with the counts, render.not_configured (once, no counts), render.busy, render.timeout or render.unavailable.",
+            "description": "The check: reachability, robots, sitemaps, pages, egress, cms or render (new names may be added). A render entry is information (pass, or warn for render.suggested while the settings fetch with http and for render.empty): render.suggested, render.empty or render.compared with the counts, render.not_configured (once, no counts), render.busy, render.timeout or render.unavailable.",
             "pattern": "^[a-z][a-z0-9-]{0,49}$"
           },
           "state": {

@@ -25,8 +25,12 @@ namespace Ume.Rag.Worker.Engine;
 /// <param name="Report">The crawl report's sections, a JSON object merged into <c>Runs.Report</c> in the reconcile commit.</param>
 public sealed record CrawlReconcile(TraversalVerdict Verdict, IReadOnlyList<DeletionCandidate> Candidates, bool EmptyListing, string Report);
 
-/// <summary>The crawl report's renderer counts (connectors design §8.6): pages rendered, render failures, and of those the pages kept from their last good content.</summary>
-public sealed record RenderSection(int Rendered, int Failures, int KeptFromLastGood);
+/// <summary>
+/// The crawl report's renderer counts (connectors design §8.6): pages rendered (every ready render whose content was stored,
+/// with or without main text), of those the pages whose main text was empty (<c>parse.empty</c>, e.g. ready before the
+/// content loaded), render failures, and of those the pages kept from their last good content.
+/// </summary>
+public sealed record RenderSection(int Rendered, int Empty, int Failures, int KeptFromLastGood);
 
 /// <summary>
 /// The engine's part of a <c>crawl</c> source (connectors design §5, §6.0; engine design §9.2). Listing: the run's mode
@@ -105,11 +109,13 @@ public sealed class CrawlSourceRunner(
         ORDER BY i."Identity", i."CreatedAt" DESC, i."Id" DESC
         """;
 
-    // The run's rendered pages (a fetched item whose document's content is the rendered DOM; a lastmod skip renders nothing),
-    // its render failures (attempts used up), and those of them whose document kept its last good content.
+    // The run's rendered pages (a fetched item whose document's content is the rendered DOM, including a page whose main
+    // text was empty, skipped parse.empty; a lastmod skip renders nothing), those with an empty main text, its render
+    // failures (attempts used up), and those of them whose document kept its last good content.
     private const string RenderSql = """
-        SELECT count(*) FILTER (WHERE i."Outcome" IN ('added', 'updated', 'unchanged', 'degraded') AND d."FetchMode" = 'browser'
-                                  AND i."Reason" IS DISTINCT FROM 'crawl.lastmod_skip')::int,
+        SELECT count(*) FILTER (WHERE (i."Outcome" IN ('added', 'updated', 'unchanged', 'degraded') OR (i."Outcome" = 'skipped' AND i."Reason" = 'parse.empty'))
+                                  AND d."FetchMode" = 'browser' AND i."Reason" IS DISTINCT FROM 'crawl.lastmod_skip')::int,
+               count(*) FILTER (WHERE i."Outcome" = 'skipped' AND i."Reason" = 'parse.empty' AND d."FetchMode" = 'browser')::int,
                count(*) FILTER (WHERE i."Outcome" = 'failed' AND i."Reason" LIKE 'render.%')::int,
                count(*) FILTER (WHERE i."Outcome" = 'failed' AND i."Reason" LIKE 'render.%' AND d."Id" IS NOT NULL AND d."ContentHash" IS NOT NULL)::int
         FROM content."RunItems" i LEFT JOIN content."Documents" d ON d."Id" = i."DocumentId"
@@ -415,7 +421,7 @@ public sealed class CrawlSourceRunner(
         await using var command = new NpgsqlCommand(RenderSql, connection) { Parameters = { Db.P(runId) } };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         await reader.ReadAsync(cancellationToken);
-        return new RenderSection(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
+        return new RenderSection(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3));
     }
 
     private async Task<IReadOnlySet<Guid>> FailedInRunAsync(SourceContext source, Guid runId, CancellationToken cancellationToken)

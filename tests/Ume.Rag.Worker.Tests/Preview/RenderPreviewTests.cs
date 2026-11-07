@@ -17,7 +17,8 @@ namespace Ume.Rag.Worker.Tests.Preview;
 /// <summary>
 /// The renderer in the previews on a fake renderer (connectors design §8.1; admin design §4.7, §5.5.3): the preflight renders
 /// the first HTML pages through the production fetch path and compares their raw and rendered main-text words, suggesting the
-/// browser when the raw page holds under half; without a renderer it says so once; the stage preview shows the fetch mode.
+/// browser when the raw page holds under half and warning when the rendered page has (almost) no main text; without a renderer
+/// it says so once; the stage preview shows the fetch mode.
 /// </summary>
 [Collection(RagDatabaseGroup3.Name)]
 public sealed class RenderPreviewTests(RagDatabaseFixture database, FakeGatewayFactory gateway) : IClassFixture<FakeGatewayFactory>, IAsyncLifetime
@@ -86,6 +87,37 @@ public sealed class RenderPreviewTests(RagDatabaseFixture database, FakeGatewayF
             // The render goes through the production path with the form's readySelector and scrollToLoad.
             var shellRender = _renderer.Requests.First(r => r.Url.AbsolutePath == "/p/shell");
             (shellRender.ReadySelector, shellRender.ScrollToLoad).ShouldBe(("#app h1", true));
+        }
+        finally
+        {
+            await EngineKit.PauseAsync(database, seed);
+        }
+    }
+
+    [Fact]
+    public async Task A_render_with_an_empty_main_text_warns_to_name_the_loaded_content()
+    {
+        // A-13: a single-page app declared ready before its data arrived rendered an empty <main>, reported as render.compared.
+        _renderer.Render = (_, _) => Task.FromResult(FakeRenderer.Page(
+            "<!doctype html><html lang=\"sv\"><head><title>Bygglov</title></head><body><main></main></body></html>"));
+        await using var site = await EngineKit.SiteAsync((_, _) => Task.FromResult(EngineKit.Html(Shell)));
+        var seed = await EngineKit.SeedUrlListAsync(database, [site.Url("/p/a")]);
+        await using var worker = await EngineKit.StartWorkerAsync(database, site, gateway, _blobs, settings: Renderer,
+            services: s => s.AddSingleton<IRenderer>(_renderer));
+        try
+        {
+            string[] startUrls = [site.Url("/p/app").AbsoluteUri];
+            var result = await ResultAsync<PreflightResult>(await EnqueueAsync(seed, new PreflightPayload
+            {
+                CollectionId = seed.CollectionId,
+                SourceType = "crawl",
+                Settings = JsonSerializer.SerializeToElement(new { startUrls, fetchMode = "browser" }),
+            }));
+
+            var render = result.Checks.Where(c => c.Check == Preflight.Render).ShouldHaveSingleItem();
+            (render.Code, render.State, render.Target).ShouldBe((Preflight.RenderEmpty, PreflightState.Warn, startUrls[0]));
+            (render.Facts!.Value.GetProperty("rawWords").GetInt32(), render.Facts.Value.GetProperty("renderedWords").GetInt32()).ShouldBe((1, 0));
+            result.State.ShouldBe(PreflightState.Warn);
         }
         finally
         {
