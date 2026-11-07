@@ -190,7 +190,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** connectors §8.1, §8.4, §8.8; `plans/work/results-a.md` "item A-13 (live sites)".
 
-### [ ] A-18 Crawl concurrency probe (local, many hosts)
+### [x] A-18 Crawl concurrency probe (local, many hosts)
 - **Do:** a test in `Ume.Rag.Worker.Tests` with trait `Category=Scale` (excluded from CI and the default run) that
   starts the worker through `EngineKit` against one test site answering many virtual hosts (the test resolver maps
   `h01.scale.test` … `hNN.scale.test` to it; deterministic Swedish pages with links, configurable latency, a share of
