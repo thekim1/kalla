@@ -196,6 +196,11 @@ with equal content hash and suggests a setting or an exclude pattern (§5.5).
 - Target outside the source scope: permanent (301/308) on a known document → deletion candidate
   `http.moved_out_of_scope`; temporary (302/303/307, typically a sign-in wall) → `skipped` `redirect.out_of_scope`,
   never a deletion. Target blocked by robots → `blocked` (6a §10.2).
+- **Meta refresh** (Crawlee review, 2026-11-07): an HTML 200 whose `<meta http-equiv="refresh">` names another URL
+  with a delay ≤ 5 s is a redirect hop like a 302 (counted in the 5, guard, scope and robots re-checked); a longer
+  delay or the same URL is ignored. A rendered page's script navigation is handled the same way (§8.3).
+- **Cookie loops:** a loop whose hops set cookies ends `failed` `redirect.cookie_required` instead of
+  `redirect.limit` (we never send cookies, §4), so the report names the cause.
 
 ### 3.3 `rel=canonical`: trusted only when verified
 
@@ -239,9 +244,15 @@ frontier request, the content-addressed raw blob and the parse and embedding cac
   no `Last-Modified`, `Cache-Control: no-store`) get a plain GET; change detection then rests on sitemap `lastmod`
   (crawl, §5.4) and the content hash (§12).
 - **Cookies are never stored or sent** (`UseCookies = false`, `Set-Cookie` ignored; umea.se sets session cookies).
-- **robots.txt is honoured for URL lists too**, with the same rules as the crawl (§5.1 "always"). A listed URL that
+- **Missing or generic Content-Type** (Crawlee review): a response without `Content-Type`, or with
+  `application/octet-stream`, is not refused on the header alone: the first bytes are sniffed (`MediaTypeSniffer`, the
+  detect stage's), then the URL's extension and the `Content-Disposition` filename; an allowed type found that way is
+  fetched as that type (ClamAV still scans it), anything else ends `unsupported` `http.content_type` as before.
+- **robots.txt is honoured for URL lists too**, with the same rules as the crawl (§5.1; a host's politeness profile may
+  set `ignore` with a reason, §6.6). A listed URL that
   robots disallows ends `skipped` `robots.disallow`.
-- **User agent** `UmeaKommunBot/1.0`. The about-page URL is not in it yet: it waits for user item U1 (§22).
+- **User agent** `UmeaKommunBot/1.0` by default; a host's politeness profile may set another (§6.6). The about-page URL
+  is not in it yet: it waits for user item U1 (§22).
 - **Frontier admission**: a URL-list run admits its URLs through a `CrawlRuns` row like a crawl (`MaxPages` 5,000,
   `MaxDepth` 0), so both use the same frontier code (§6.0).
 
@@ -268,9 +279,10 @@ only the headers are read).
 
 - **Seeds** = start URLs + URLs from sitemaps (depth 0). Sitemaps come from the source's `sitemaps`, every
   `Sitemap:` line of the scope hosts' robots.txt, and `/sitemap.xml` if it exists.
-- **robots.txt** (RFC 9309, own parser of ~250 lines: the group matching `UmeaKommunBot` (case-insensitive) else
-  `*`; longest match wins, `Allow` beats `Disallow` on ties; `*` and `$`; 500 KiB parse cap). Cached per host in
-  `CrawlHosts` + blob `crawl/{host}/robots.txt` (data-model §9) for 24 h. Fetch outcomes: 2xx parse; 4xx →
+- **robots.txt** (respected unless the host's politeness profile says `ignore` with a reason, §6.6; RFC 9309, own parser
+  of ~250 lines: the group matching `UmeaKommunBot` (case-insensitive) else `*`; longest match wins, `Allow` beats
+  `Disallow` on ties; `*` and `$`; 500 KiB parse cap). Cached per host in `CrawlHosts` + blob `crawl/{host}/robots.txt`
+  (data-model §9) for 24 h. Fetch outcomes: 2xx parse; 4xx →
   **allow all** (RFC 9309 "unavailable"); 5xx or unreachable → **disallow all** for the run (`RobotsStatus =
   unreachable`; the run's seeds on that host fail and the host counts as **paused** for the run, so the traversal is
   incomplete and nothing is `not-seen` however few seeds the host has, §5.4). A robots 429 counts as unreachable
@@ -288,7 +300,10 @@ only the headers are read).
   `sitemapindex.xml` → one `sitemap1.xml.gz` with 24,184 URLs, all with `lastmod`. A sitemap that cannot be read
   **pauses its host** for the run (once), like an unreachable robots.txt, instead of counting as one failed seed;
   otherwise one failed sitemap among several would leave the ratio rule (§5.4) satisfied and allow mass `not-seen`
-  proposals for the URLs it lists.
+  proposals for the URLs it lists. Before that, a transient failure (5xx, timeout, 429 with `Retry-After` ≤ 60 s) is
+  retried twice within the host budget (Crawlee review, 2026-11-07), so one bad moment does not block the run's
+  deletions. Plain-text sitemaps (one URL per line, sitemaps.org) are read too, and `/sitemap_index.xml` is probed
+  after `/sitemap.xml`.
 
 ### 5.2 Scope
 
@@ -315,6 +330,8 @@ with an example pattern in the report.
 | Calendars | a path or query value parses as a date/year outside [now − 5 y, now + 2 y], or > 100 date-like URLs under one path prefix | not admitted (`trap.calendar`) |
 | Session ids | removed by normalisation (§3.1 rule 7–8); > 20 URLs whose only difference is one unknown parameter → that parameter is reported as a candidate for `ignoreQueryParams` (and proposed to the site profile, §5.6) | report |
 | Soft-404 / duplicate fan-out | ≥ 20 URLs in a run with the same content hash | their links are expanded once per content hash (a page already expanded adds nothing new) |
+| Soft-404 pages (Crawlee review, 2026-11-07) | once per host and run, a request to a random non-existent path (`/{12 random letters}-ume-rag-404`); when it answers 200, the normalised main text's hash is the host's soft-404 fingerprint | a page with that fingerprint ends `failed` `http.soft_404` (counts like a 404 toward the persistent-failure rule of §13.1, never an instant deletion), so a "page not found" served with 200 never replaces a document's good content |
+| Challenge pages | known markers of bot challenges and WAF blocks (Cloudflare challenge/turnstile, Incapsula, a `cf-mitigated` header) on a 200 or 403 | `Transient` `http.challenge`: the last good content stays, the host backs off as on a 429 (§6.4); repeated in a run, the host is paused and the run says why. Never an attempt to get past the challenge |
 | Default excludes in the `website` template form | `**/sok?*`, `**/search?*`, `**?*sort=*`, `**?*print=*`, `**/login*`, `**/logout*` | editable |
 
 ### 5.4 Traversal, incremental runs and deletions
@@ -401,6 +418,11 @@ are not built yet.
 | Site profile | profile version used; empty-root rate, boilerplate share and text yield against the previous run (P2: the re-learn trigger, §5.6) |
 | Noise | pages whose hash changed but whose parsed output did not (§12.2), by host |
 | Deletions | proposed / applied / held, by reason (§13) |
+
+**Later (Crawlee review, 2026-11-07):** the report adds failures that recovered after a retry (per reason) and a retry
+histogram, groups failing and trapped URLs into path patterns (`/nyheter/_/arkiv`, the longest common segment run
+with placeholders, given up when half the pattern would be placeholders) instead of example URLs, and counts HTTP vs
+browser fetches and detection verdicts once automatic detection exists (§8.1).
 
 ### 5.6 Site profiles (learned per host)
 
@@ -588,10 +610,9 @@ slot pacing bounds in-flight requests as well. A refused slot requeues the job a
 `Security__CrawlKeyPepper`; lease 60 s); a refused lease requeues the job `rate_limited`. With Redis down each
 instance allows ⌈`MaxConnections` ÷ k⌉, k = live `fetch` instances (heartbeat < 45 s).
 
-**The crawler rules stay** (answered 4; performance pass answered 7): ≤ 10 req/s per municipal host and the night
-window (§6.5). Higher rates for allow-listed municipal hosts and a **daytime trickle** (e.g. 2 req/s outside the
-window) are per-host settings in `Settings.Crawl.HostOverrides`, **off by default**, enabled only with the web team's
-written consent ([`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §2.3, §10.1).
+**These are the defaults** (answered 4; performance pass answered 7): ≤ 10 req/s per municipal host and the night
+window (§6.5). Every member is configurable per host by a platform admin in `Settings.Crawl.HostOverrides`, within
+the deployment's ceilings (§6.6; Decisions "Configurable politeness per host", 2026-11-07).
 
 ### 6.4 Back-off and circuit breaker
 
@@ -611,8 +632,35 @@ day; answered 4). A traversal not finished at 06:00 pauses and continues the nex
 and shows "waiting for crawl window". At 10 req/s a 10,000-page municipal site takes ~17 minutes (umea.se's ≈ 14,100
 HTML and PDF URLs ~24 minutes); at 1 req/s an external one ~2.8 h, both inside one window. Manual "sync now" and URL
 lists (nightly by default) ignore the window; a `retry-failed` crawl run follows the window unless its trigger is
-`manual`. A daytime trickle outside the window exists only as an off-by-default per-host override with the web team's
-written consent (§6.3).
+`manual`. A host whose politeness profile says `crawlWindow: any` is crawled at any time (§6.6).
+
+### 6.6 Politeness profiles per host (configurable)
+
+Decided 2026-11-07 (Decisions "Configurable politeness per host", user): the rules of §5.1, §6.3–§6.5 are the
+**defaults**; a platform admin may make the crawler less (or more) polite **per host** in
+`Settings.Crawl.HostOverrides` (the existing setting, widened; audited as `settings.update`). Politeness is per host,
+not per source, because the host budget is shared by every source, preview and level that reaches the host.
+
+| Member | Default | Range |
+|---|---|---|
+| `preset` | `polite` (external) / `municipal` (hosts in `MunicipalHosts`) | `polite`, `municipal`, `fast`, `custom`; a preset fills the members below, explicit members override it |
+| `requestsPerSecond` | 1 / 10 (§6.3) | 0.1–`Crawl:MaxHostRate` (default 50) |
+| `maxConnections` | 1 / 4 | 1–`Crawl:MaxHostConnections` (default 16) |
+| `crawlDelay` | `honour` (capped at 60 s) | `honour`, `ignore` |
+| `adaptToLatency` | `true` (the `LatencyEwma` term of the interval) | `true`, `false` |
+| `crawlWindow` | `source` (the source's `crawlWindow`, §6.5) | `source`, `any` (daytime crawling allowed) |
+| `backoff` | 429/503 honour `Retry-After` (≤ 1 h), factor ×2 up to 16 | `maxRetryAfterSeconds` (≤ 3,600), `maxFactor` (1–16); a 429/503 is always honoured for its `Retry-After` up to that cap |
+| `circuitBreaker` | ≥ 50 % of the last 100 responses failing → pause 30 min | `threshold` (0.2–1.0), `pauseMinutes` (1–120), or `off` |
+| `robots` | `respect` | `respect`, `ignore` **with a required `reason`** (e.g. "own site, web team consent 2026-11-10"): robots.txt is then neither asked for seeds' `Disallow` nor for redirect hops; its `Sitemap:` lines are still read; meta/`X-Robots-Tag` `noindex` handling (§5.2) is unchanged |
+| `userAgent` | `UmeaKommunBot/1.0` | any string (1–256 printable ASCII), e.g. a browser's; sent on every request to the host (HTTP and the renderer's fetches); robots.txt groups are still matched against `UmeaKommunBot` |
+| `renderPerHost` | 1 (§8.3) | 1–`Render:MaxConcurrent` |
+
+Presets: `polite` = the external defaults; `municipal` = the municipal defaults; `fast` = 10 req/s, 4 connections,
+`crawlDelay` `ignore`, `adaptToLatency` `false`, `crawlWindow` `any`, the back-off and breaker unchanged. `robots` and
+`userAgent` are never part of a preset: each is set explicitly per host. The ceilings (`Crawl:MaxHostRate`,
+`Crawl:MaxHostConnections`) are deployment knobs, so a typo in the admin UI cannot turn the crawler into a load test.
+The crawl report and the source page show a host's non-default politeness ("crawled at 10 req/s, robots.txt ignored:
+own site, web team consent"). Every override is per host; there is no global "ignore robots" switch.
 
 ## 7. Egress / SSRF guard
 
@@ -657,6 +705,12 @@ detection, storage) stays in the worker (§8.7 lists the options weighed).
   both main-text word counts, with "This site seems to need JavaScript" when the raw count is under half the rendered
   one; the editor switches `fetchMode`. The crawl report's short-page note (§5.5) and the `parse.empty` text point to
   the same setting.
+- **Later: automatic detection** (`fetchMode` `auto`, after §8.8; Crawlee review). A render already has the raw body,
+  so a detection costs no extra request: compare raw and rendered main text (under `mainRoot`), link set and
+  `OutputHash`; count verdicts per (host, first one or two path segments), no learned model; sample every page of a
+  section at first (5), then 10 %, and every page while a section's verdicts disagree; an HTTP-path check renders a
+  page anyway when its main text is missing or under half the last good version's. Verdicts become a site-profile
+  proposal for an admin, never applied silently.
 - **Fetch mode** is a document attribute (`Documents.FetchMode` `http`/`browser`, data-model §2.2); identity stays the
   final URL of the main document's HTTP redirects (§3.2), whatever the page's script does.
 
@@ -686,7 +740,7 @@ engine, a hosted service for anti-bot sites) can sit behind `IRenderer` later.
 - **Process:** the worker drives the browser with Playwright .NET (`BrowserType.ConnectAsync`) over WebSocket to
   `rag-renderer`, which runs only Playwright's `run-server` with Chromium (repo-and-deployment §5.4); the NuGet and
   the server are the same exact version. One browser per worker connection, a warm pool of contexts, the browser
-  recycled after `Render:RecycleAfterPages` (200).
+  recycled after `Render:RecycleAfterPages` (100).
 - **Every request through the worker:** `RouteAsync("**/*")` sends each browser request to `IRenderFetcher`, which
   fetches it with the guarded `HttpFetcher` (`EgressPurpose.Render`: guard, DNS pinning, robots.txt, caps, no
   cookies, https → http refused) and answers with `FulfillAsync`. The main document is the body the worker already
@@ -700,10 +754,26 @@ engine, a hosted service for anti-bot sites) can sit behind `IRenderer` later.
 - **Ready:** the worker knows every open request, so a page is ready when `load` has fired and no request has been
   open for `Render:QuietPeriod` (100 ms), or when `ReadySelector` (the profile's `mainRoot`) holds text; hard limit
   `Render:PageTimeout` (20 s). No fixed network-idle wait.
-- **Output:** the DOM serialised after `<script>`, `<noscript>`, `<style>`, `<template>`, inline event handlers and
-  `<iframe>`s are removed; it is the document's raw content (`text/html`), and everything downstream (links, §12 noise
-  hash, raw blob, parse with the site profile) runs on it unchanged. Links are the rendered DOM's `<a href>`;
-  navigation done only in script is not followed.
+- **Output:** the DOM serialised with open shadow roots flattened into it and the bodies of same-host, in-scope iframes
+  inlined (their requests already went through the worker), after `<script>`, `<noscript>`, `<style>`, `<template>`,
+  inline event handlers and the remaining `<iframe>`s are removed; it is the document's raw content (`text/html`), and
+  everything downstream (links, §12 noise hash, raw blob, parse with the site profile) runs on it unchanged. Links are
+  the rendered DOM's `<a href>`; navigation done only in script is not followed.
+- **Browser operations bounded** (Crawlee review): creating a context or page times out after 15 s and closing one
+  after 5 s; a timeout or failure drops the connection and reconnects (`render.unavailable` for that page); the
+  connection is closed after 60 s idle, so the renderer frees its memory between crawl windows; the browser is
+  recycled after `Render:RecycleAfterPages` (100).
+- **Script navigation and meta refresh:** a main-frame navigation by script or meta refresh before ready is treated as
+  a redirect hop (§3.2: the worker fetches the target with the guard, scope and robots checks, at most 5 hops in all);
+  after ready it is aborted and its target recorded as a discovered link. `window.open` popups and downloads are
+  aborted and their URLs recorded as discovered links (a PDF behind a script button is found that way).
+- **Cookies within one page only:** a context keeps a cookie jar for its page's lifetime: `Set-Cookie` from fulfilled
+  responses is applied, and the jar's cookies are sent on that page's later requests (a data API that needs the
+  shell's session or CSRF cookie works). The jar is dropped with the context; nothing is carried across pages or
+  stored.
+- **Optional scroll for lazy content:** a source's `scrollToLoad` (off by default) scrolls to the bottom after ready,
+  up to 3 steps, each ending on the quiet period again, within `MaxRequests` and `PageTimeout` (the spike measures it
+  against a tall viewport).
 - **Limits:** at most `Render:MaxRequests` (50) and `Render:MaxBytes` (20 MB) per page; past them the remaining
   requests get 204 (fact `truncated`). A main-frame navigation by script is aborted (fact `render.navigated`). A page
   is kept only when it reached **ready**: with `readySelector` set, the selector must hold text; otherwise the quiet
@@ -921,7 +991,7 @@ documents shown on save is not built.
 | `maxDepth`, `maxPages` | crawl | scope | raise: traversal now; lower: next traversal, never deletes (a limit makes it partial). Lowering also starts a traversal (the hashes cannot tell raising from lowering), still never deleting; a lowered `maxDepth` skips the deeper documents instead of marking the traversal partial |
 | `ignoreQueryParams`, `directoryIndexNames` | url-list, crawl | identity | full re-sync: every URL re-canonicalised and fetched; old identities not re-found removed at reconcile (exempt, count shown on save). A crawl's removals are `identity-changed`, and an identity no longer canonical under the current rules counts as changed too (covering site-profile `identityRule`/`ignoreQueryParams`); a URL list's old identities are removed as `removed-from-list` (exempt, same effect) |
 | `noiseSelectors` | url-list, crawl | behaviour | next sync; pages whose hash changes re-process once |
-| `fetchMode` (`http`/`browser`), `readySelector` (§8.1) | url-list, crawl | behaviour | a sync now that fetches every page again in the new mode (no conditional GET, no `lastmod` skip on that run); pages whose hash changes re-process once |
+| `fetchMode` (`http`/`browser`), `readySelector`, `scrollToLoad` (§8.1, §8.3) | url-list, crawl | behaviour | a sync now that fetches every page again in the new mode (no conditional GET, no `lastmod` skip on that run); pages whose hash changes re-process once |
 | `conditionalGet`, `revalidateEvery` (1–100, default 4), `timeoutSeconds` (5–120, default 30) | url-list, crawl | behaviour | next sync |
 | `maxFileSizeMb` | upload | behaviour | new uploads only |
 | `piiMode` (`hold` default, `report`; Decisions table, 2026-11-01) | url-list, crawl, upload | cosmetic | none: read at each document's next swap (processing design §9.5); sets already `held` stay held until cleared or re-processed |
@@ -932,8 +1002,8 @@ documents shown on save is not built.
 A source never moves between collections (a new source is created), so `collectionId` is not editable.
 
 The schemas in `contracts/sources/v1/` hold the settings above per type, each with its `x-effect`.
-- `url-list`: `urls`, `ignoreQueryParams`, `directoryIndexNames`, `noiseSelectors`, `conditionalGet`,
-  `revalidateEvery`, `timeoutSeconds`, `fetchMode` (default `http`), `readySelector` (default `null`).
+- `url-list`: `urls`, `ignoreQueryParams`, `directoryIndexNames`, `noiseSelectors`, `conditionalGet`, `revalidateEvery`,
+  `timeoutSeconds`, `fetchMode` (default `http`), `readySelector` (default `null`), `scrollToLoad` (default `false`).
 - `crawl`: the URL-list behaviour and identity settings, plus `startUrls`, `sitemaps`, `extraHosts`, `include`,
   `exclude`, `demote`, `maxDepth` (0–50, default 10), `maxPages` (1–1,000,000, default 10,000), `crawlWindow`
   (default `22:00-06:00`) and `incrementalSchedule` (default `null`).

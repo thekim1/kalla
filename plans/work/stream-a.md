@@ -105,12 +105,14 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 
 ### [ ] A-11 Worker: `PageFetcher` and the Playwright renderer
 - **Do:** `Connectors/Render/` (`IRenderer`, `IRenderFetcher`, `PlaywrightRenderer`, the asset cache, blocked hosts,
-  limits, ready detection, DOM serialisation without scripts) and `PageFetcher` (fetch → render for a `browser`
-  source → `RawContentWriter.StoreAsync`), used by the crawl and URL-list connectors, the preflight and the stage
-  preview in place of their own copies. `EgressPurpose.Render`; render slots taken only when free, else the job is
-  released (`render.busy`, no attempt); `render.timeout`/`unavailable`/`not_configured` transient; a failed render keeps
-  the last good content and its links for the traversal; no conditional GET for `browser` sources;
-  `Documents.FetchMode` (migration); metrics and facts of §8.6; remove `SiteProfile.JavascriptNeeded`.
+  limits, ready detection, DOM serialisation without scripts) and `PageFetcher` (fetch → render for a `browser` source →
+  `RawContentWriter.StoreAsync`), used by the crawl and URL-list connectors, the preflight and the stage preview in
+  place of their own copies. `EgressPurpose.Render`; render slots taken only when free, else the job is released
+  (`render.busy`, no attempt); `render.timeout`/`unavailable`/`not_configured` transient; a failed render keeps the last
+  good content and its links for the traversal; no conditional GET for `browser` sources; `Documents.FetchMode`
+  (migration); metrics and facts of §8.6; remove `SiteProfile.JavascriptNeeded`; the Crawlee-review points of §8.3
+  (bounded browser operations, script navigation/popups/downloads, per-page cookie jar, shadow DOM and same-host
+  iframes, `scrollToLoad`).
 - **Paths:** `src/Ume.Rag.Worker/**`, `src/Ume.Rag.Pipelines/**` (settings records), `src/Ume.Rag.Infrastructure/**`
   (migration), `contracts/sources/v1/**`, their tests.
 - **Done when:** unit tests with a fake renderer (slot release, failures keep content and links, no fallback to the
@@ -139,6 +141,32 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Done when:** results recorded; `Render:*` defaults adjusted in a follow-up PR if the numbers say so.
 - **Waits on:** A-11, A-12; the user's site list.
 - **Read:** connectors §8.8.
+
+### [ ] A-14 Politeness profiles per host (connectors §6.6)
+- **Do:** widen `HostOverride` into the §6.6 profile (preset and members; `robots: ignore` with `reason`, `userAgent`)
+  and read it in `PlatformCrawlSettings`; apply it in the host budget (rate, connections, `Crawl-delay`, latency term,
+  back-off caps, circuit breaker), the crawl window, `RobotsCache` (ignore per host; `Sitemap:` lines still read) and
+  `HttpFetcher` (User-Agent per host, also for the renderer's fetches); deployment ceilings `Crawl:MaxHostRate` and
+  `Crawl:MaxHostConnections`; V37 in the admin API; the host-politeness table and drawer in the crawl settings (admin
+  UI, on a `main-session/` branch); the crawl report and source page show non-default politeness.
+- **Paths:** `src/Ume.Rag.Worker/Connectors/**`, `src/Ume.Rag.Worker/Engine/**`, `src/Ume.Rag.AdminApi/**`,
+  `src/admin-ui/**`, their tests.
+- **Done when:** worker tests per member (a `fast` host is paced at 10 req/s, `crawlDelay: ignore`, `crawlWindow: any`,
+  robots ignored with a reason, a custom User-Agent on the wire); V37 tests (ceilings, missing reason); vitest for the
+  table.
+- **Waits on:** –
+- **Read:** Decisions "Configurable politeness per host"; connectors §5.1, §6.3–§6.6; admin §4.6 V37.
+
+### [ ] A-15 HTTP crawler gaps from the Crawlee review
+- **Do:** meta refresh as a redirect hop and `redirect.cookie_required` (§3.2); sniff a missing or `octet-stream`
+  Content-Type (§4); soft-404 fingerprint per host and run (`http.soft_404`) and challenge pages as `http.challenge`
+  (§5.3); sitemap retries, plain-text sitemaps and `/sitemap_index.xml` (§5.1); `messages.ts` texts for the new codes.
+- **Paths:** `src/Ume.Rag.Worker/Connectors/**`, `src/admin-ui/src/utils/messages.ts`, their tests.
+- **Done when:** a test per point against the fake HTTP server (a meta-refresh chain, a PDF as `octet-stream` with
+  `Content-Disposition`, a 200 not-found page that would have replaced good content, a challenge page keeping the last
+  good content, a sitemap that fails once and then answers).
+- **Waits on:** –
+- **Read:** Decisions "Crawlee review: ideas adopted"; connectors §3.2, §4, §5.1, §5.3.
 
 ## Live (the live block, see the roadmap)
 

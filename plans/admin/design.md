@@ -61,7 +61,7 @@ gateway counterpart.
 | 4 | Roles | **`rag-reviewer`** (answered 3): policies `Review`, `FeedbackComments`, `Read`. Feedback **comments**: `rag-reviewer` and `rag-department-admin`. **Full conversations: `rag-reviewer` only.** No administrative role implies conversation content (§3). Roles: **P1** realm roles `rag-*` on the shared Keycloak's client `ume-rag-admin`, audit actor `sub`; **P2** app roles on RAG's own Entra registration `ume-rag-admin`, actor `oid` (fallback `sub`) (identity §1.1, §1.6, 2026-10-31) |
 | 5 | Concurrency | Every editable aggregate carries `version` (Postgres `xmin`); a mismatch is 409 `concurrent_change` (§4.3) |
 | 6 | Write path | One transaction: **`SELECT … FOR UPDATE` on `config."ConfigVersion"` first** (serialises admin config writes) → cross-rules → entity change → outbox trigger (version bump) → audit row with that `ConfigVersion` → optional job rows; `pg_notify` at commit (§4.4) |
-| 7 | Validation | Field rules on request records; **cross-rules** in one `ConfigRules` service: **V1–V36 with V20 and V27 retired (34 rules)** (§4.6), run on save, on dependent changes and again before publish, under the version lock; CHECK violations (23514) answer 400 |
+| 7 | Validation | Field rules on request records; **cross-rules** in one `ConfigRules` service: **V1–V37 with V20 and V27 retired (35 rules)** (§4.6), run on save, on dependent changes and again before publish, under the version lock; CHECK violations (23514) answer 400 |
 | 8 | Jobs | The admin inserts `content."Jobs"` rows only (preview, sync, command, eval); every result is read from `Jobs.Result`, `Runs`, `EvaluationRuns` (§4.7) |
 | 9 | Pilot UI | P1 has **dedicated pages only for the department journey** (collection, source, preview, publish with the evaluation report, assistant, test panel, audience, feedback, limited review), built for non-specialists (answered 2): setup checklist, template parameters with defaults, preflight and preview before saving, impact before scope changes (§5.4) |
 | 10 | Pipelines | A pipeline is a **template + parameters**; the source form shows the template's parameters; pipeline editors edit parameters. No node editor, no canvas (dropped from the roadmap) (§6) |
@@ -484,7 +484,7 @@ publish → skill gate (run in the admin, tools §3.7), gate report, serve, roll
 **Feedback, conversations, audit, overview** — §8, §9; `GET /api/overview` returns the attention items of §5.5.1 for
 the caller's scope.
 
-### 4.6 Cross-rules (V1–V36; V20 and V27 retired)
+### 4.6 Cross-rules (V1–V37; V20 and V27 retired)
 
 Run by `ConfigRules` under the `ConfigVersion` lock (§4.4) on save of the entity, on every change that can break a
 dependant (column *Re-checked when*), and again inside the publish transaction. A failing dependant lists every
@@ -533,6 +533,7 @@ kept so references stay stable.
 | V34 | publish and restore: the definition resolves (collections not deleted, skills not retired and usable by the department, the model a `chat` row of `GatewayModels`); description and contact are set; a draft created before the current published version (lower `Number`) is published only when confirmed | `version_link_missing`, `assistant_contact_missing`, `draft_base_changed` | publish; restore | §4.5, simplification pass §15 |
 | V35 | narrowing a collection's sharing (to a lower level, or removing a department from `selected`) is refused while a published assistant of a department that loses access links it; the refusal lists the assistants and their departments | `collection_shared_in_use` | sharing save | §3.2, §4.5 |
 | V36 | an assistant of level `public` with `answer.generalKnowledge` other than `off` needs an explicit confirmation (Decisions "General knowledge on a public assistant", #445): a `warnings[]` entry on draft save; publish, restore and a level change to `public` answer 409 until the request carries `confirmGeneralKnowledge: true`, which the audit event records as `generalKnowledgeConfirmed` | `general_knowledge_public_unconfirmed` (409) | draft save (warning); publish; restore; level change | chat §7.3, §10.4 |
+| V37 | a host's politeness profile in `Settings.Crawl.HostOverrides` (connectors §6.6): members within their ranges and the deployment's ceilings (`Crawl:MaxHostRate`, `Crawl:MaxHostConnections`); `robots: ignore` needs a non-empty `reason`; `userAgent` 1–256 printable ASCII; the host is a canonical host without a port | `crawl_politeness_invalid` | settings save | connectors §6.6 |
 
 ### 4.7 Jobs for the worker
 
@@ -1016,12 +1017,14 @@ clients, keys, templates, assistant templates (simplification pass §15; P2, wea
 gateway models, organisation mirror (read); P2 department settings (owner-team scoping, also for department admins).
 
 - One **Plattformsobjekt** page (`/plattform`, platform admins) lists the resources; each opens a list and a form in a
-  drawer. A registry in the UI (`platform/resources.ts`) names each resource's list, create, update and action
-  endpoints and its list columns; the form's fields come from that operation's request schema in the OpenAPI document
-  (`/openapi/v1.json`, generated from the same DataAnnotations the API validates with, so the form and the server
-  agree; Admin-only, the audience of these forms). Controls follow the table of §6.3; `jsonb` members (e.g. a site
-  profile, `Settings.Crawl`) are a JSON text area validated by the server. A new, rotated or revealed key's secret is
-  shown once with a copy button.
+  drawer. A registry in the UI (`platform/resources.ts`) names each resource's list, create, update and action endpoints
+  and its list columns; the form's fields come from that operation's request schema in the OpenAPI document
+  (`/openapi/v1.json`, generated from the same DataAnnotations the API validates with, so the form and the server agree;
+  Admin-only, the audience of these forms). Controls follow the table of §6.3; `jsonb` members (e.g. a site profile,
+  `Settings.Crawl`) are a JSON text area validated by the server, except the crawl section's **host politeness**
+  (connectors §6.6), which is a table (host, preset, the members that differ, the robots reason) with a drawer per host,
+  since a mistake there changes how hard we hit someone's site. A new, rotated or revealed key's secret is shown once
+  with a copy button.
 - Labels are the schema `title` (else the property name) and `description` as help.
 - A field whose meaning the schema cannot carry gets a hint under it from `PLATFORM.fieldHints` (`labels.ts`). Keys'
   `requestsPerMinute`: "Chat messages per minute for apps that use this key as one shared user (integration and
