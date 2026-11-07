@@ -94,7 +94,7 @@ describe('Run (admin design §5.5.3; #278 slice 2)', () => {
     setActivePinia(createPinia())
     vi.spyOn(api.runs, 'get').mockResolvedValue({ ...run, run: { ...run.run, state: 'awaiting-deletion-confirmation', proposedDeletions: 212 } })
     vi.spyOn(api.runs, 'items').mockResolvedValue({ items: [], next: null })
-    const deletions = vi.spyOn(api.runs, 'deletions').mockResolvedValue({ items: [], next: null })
+    const deletions = vi.spyOn(api.runs, 'deletions').mockResolvedValue({ items: [], next: null, guard: { percent: 20, minCount: 5, maxCount: 500 } })
 
     const wrapper = mount(RunView, { props: { id: 'r1' }, global: { stubs: { RouterLink: true } } })
     await flushPromises()

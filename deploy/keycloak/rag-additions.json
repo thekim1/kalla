@@ -109,7 +109,7 @@
     {
       "clientId": "open-webui",
       "name": "Open WebUI (OIDC sign-in)",
-      "description": "Open WebUI's own sign-in (identity design 5.3, 11.2): the legacy callback path. Redirect URIs: the pilot host (the local AppHost ones are in rag-additions.local.json, for test realms only).",
+      "description": "Open WebUI's own sign-in (identity design 5.3, 11.2): callback /oauth/oidc/login/callback. Redirect URIs: the pilot host (the local AppHost ones are in rag-additions.local.json, for test realms only).",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,

@@ -106,8 +106,9 @@ onMounted(async () => {
       <ul v-else class="grid gap-1 text-small">
         <li v-for="i in summary.imports" :key="i.clientId">
           <span class="font-medium">{{ i.clientName }}</span>
-          <UiBadge class="ml-1" :tone="i.lastOutcome === 'ok' ? 'ok' : i.lastOutcome ? 'warn' : 'neutral'" :label="FEEDBACK.importOutcome(i.lastOutcome)" />
+          <UiBadge class="ml-1" :tone="i.alert ? 'danger' : i.lastOutcome === 'ok' ? 'ok' : i.lastOutcome ? 'warn' : 'neutral'" :label="FEEDBACK.importOutcome(i.lastOutcome)" />
           <span class="block text-fg-3">{{ FEEDBACK.importLine(formatDateTime(i.lastRunAt), i.unmapped) }}</span>
+          <span v-if="i.alert" class="block text-danger" role="alert" data-test="import-alert">{{ FEEDBACK.importAlert(i.failedRuns) }}</span>
         </li>
       </ul>
     </UiCard>

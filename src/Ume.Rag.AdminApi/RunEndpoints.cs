@@ -124,7 +124,10 @@ public static class RunEndpoints
                 }
 
                 var rows = (await Rows(proposals.OrderBy(p => p.DocumentId).Take(take + 1)).ToListAsync(ct)).OrderBy(p => p.DocumentId).ToList();
-                return Results.Ok(new KeysetPage<DeletionProposalDto, Guid?>([.. rows.Take(take)], rows.Count > take ? rows[take - 1].DocumentId : null));
+                // The guard's limits for the card's explanation (§5.5.3): every reader, not only the platform admin of Settings.
+                var settings = await admin.Db.Settings.AsNoTracking().SingleOrDefaultAsync(ct) ?? new PlatformSettings();
+                return Results.Ok(new DeletionProposalPage([.. rows.Take(take)], rows.Count > take ? rows[take - 1].DocumentId : null,
+                    new DeletionGuardLimits(settings.DeletionGuardPercent, settings.DeletionGuardMinCount, settings.DeletionGuardMaxCount)));
             })
             .RequireAuthorization(AdminPolicies.Read).WithName("ListDeletionProposals").WithSummary("A run's deletion proposals (keyset, or format=csv for all)");
 
@@ -209,6 +212,12 @@ public static class Csv
 
 /// <summary>A keyset page (admin design §4.1): the items and the <c>after</c> value of the next page, null at the end.</summary>
 public sealed record KeysetPage<T, TKey>(IReadOnlyList<T> Items, TKey Next);
+
+/// <summary>The configured deletion guard (<c>Settings.DeletionGuard*</c>, connectors §13.2).</summary>
+public sealed record DeletionGuardLimits(int Percent, int MinCount, int MaxCount);
+
+/// <summary>A page of a run's deletion proposals with the guard's limits (admin §5.5.3).</summary>
+public sealed record DeletionProposalPage(IReadOnlyList<DeletionProposalDto> Items, Guid? Next, DeletionGuardLimits Guard);
 
 public sealed record RunSummary(
     Guid Id, string Kind, string Trigger, string State, string? Phase, int Added, int Updated, int Unchanged, int Deleted, int Failed, int ProposedDeletions,

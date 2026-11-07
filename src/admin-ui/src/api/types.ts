@@ -273,6 +273,18 @@ export interface SourceUpdate {
 }
 
 /** `GET /api/runs/{id}/deletions`: a document the run proposes to delete (connectors §13). */
+/** The configured deletion guard (`Settings.DeletionGuard*`, connectors §13.2). */
+export interface DeletionGuardLimits {
+  percent: number
+  minCount: number
+  maxCount: number
+}
+
+/** `GET /api/runs/{id}/deletions`: a page of proposals with the guard's limits. */
+export interface DeletionProposalPage extends KeysetPage<DeletionProposal> {
+  guard: DeletionGuardLimits
+}
+
 export interface DeletionProposal {
   documentId: string
   title: string | null
@@ -946,7 +958,15 @@ export interface FeedbackItem {
 /** `GET /api/feedback/summary`: the period's totals and the Open WebUI import health. */
 export interface FeedbackSummary {
   totals: { answers: number; notFound: number; thumbsUp: number; thumbsDown: number }
-  imports: { clientId: string; clientName: string; lastRunAt: IsoDateTime | null; lastOutcome: string | null; unmapped: number }[]
+  imports: {
+    clientId: string
+    clientName: string
+    lastRunAt: IsoDateTime | null
+    lastOutcome: string | null
+    unmapped: number
+    failedRuns: number
+    alert: boolean
+  }[]
 }
 
 /** `POST /api/access/explain` (identity design §4.9): the first failing policy step and its stable reason. */

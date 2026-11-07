@@ -30,7 +30,10 @@ describe('Feedback (admin design §8.1)', () => {
     const list = vi.spyOn(api.feedback, 'list').mockResolvedValue({ items: [item(), item({ id: 'f2', rating: 1, reasonCategory: null, outcome: 'not-found', citedDocuments: [] })], next: null })
     vi.spyOn(api.feedback, 'summary').mockResolvedValue({
       totals: { answers: 200, notFound: 12, thumbsUp: 41, thumbsDown: 9 },
-      imports: [{ clientId: 'c1', clientName: 'Open WebUI (pilot)', lastRunAt: '2026-11-02T09:15:00Z', lastOutcome: 'ok', unmapped: 2 }],
+      imports: [
+        { clientId: 'c1', clientName: 'Open WebUI (pilot)', lastRunAt: '2026-11-02T09:15:00Z', lastOutcome: 'ok', unmapped: 2, failedRuns: 0, alert: false },
+        { clientId: 'c2', clientName: 'Open WebUI (test)', lastRunAt: '2026-11-02T09:15:00Z', lastOutcome: 'failed:401', unmapped: 0, failedRuns: 4, alert: true },
+      ],
     })
     vi.spyOn(api.assistants, 'list').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
     const mark = vi.spyOn(api.feedback, 'setReviewState').mockResolvedValue({ id: 'f1', reviewState: 'reviewed' })
@@ -43,6 +46,10 @@ describe('Feedback (admin design §8.1)', () => {
     expect(totals).toMatch(/6\s*%/)
     expect(totals).toContain('41 up, 9 down')
     expect(wrapper.get('[data-test=imports]').text()).toContain('2 could not be matched')
+    // chat §14.3: the alert after 4 failed runs in a row, on that client only (B-23).
+    const alerts = wrapper.findAll('[data-test=import-alert]')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]!.text()).toContain('The last 4 imports failed')
     expect(wrapper.text()).toContain('Not factually correct')
     expect(wrapper.text()).toContain('version 3')
     expect(wrapper.text()).toContain('Altan och uteplats')

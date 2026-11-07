@@ -92,6 +92,8 @@ const tabs = computed(() => shared.value ? [
 const sourceColumns: Column[] = [
   { key: 'name', label: COLLECTION.sourceName },
   { key: 'type', label: COLLECTION.sourceType },
+  { key: 'lastRun', label: COLLECTION.sourceLastRun },
+  { key: 'documents', label: COLLECTION.sourceDocuments, align: 'right' },
   { key: 'state', label: COLLECTION.sourceState },
 ]
 const documentColumns: Column[] = [
@@ -269,6 +271,13 @@ onMounted(load)
           <DataTable :columns="sourceColumns" :rows="sources.data.value" :row-key="(s) => s.id" :caption="COLLECTION.sources" clickable @row-click="openSource">
             <template #cell-name="{ row }"><span class="font-medium">{{ row.name }}</span></template>
             <template #cell-type="{ row }">{{ SOURCE_TYPE_LABEL[row.type as SourceSummary['type']] }}</template>
+            <template #cell-lastRun="{ row }">
+              <template v-if="row.lastRun">
+                <span class="tabular">{{ formatDateTime(row.lastRun.finishedAt ?? row.lastRun.startedAt) }}</span> · {{ RUN_STATE_LABEL[row.lastRun.state] ?? row.lastRun.state }}
+              </template>
+              <span v-else class="text-fg-3">{{ COLLECTION.sourceNoRun }}</span>
+            </template>
+            <template #cell-documents="{ row }"><span class="tabular">{{ formatNumber(row.documents) }}</span></template>
             <template #cell-state="{ row }">{{ COLLECTION.sourceStates[row.state] ?? row.state }}</template>
           </DataTable>
         </AsyncState>

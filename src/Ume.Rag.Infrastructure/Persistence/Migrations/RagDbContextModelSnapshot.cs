@@ -2146,6 +2146,9 @@ namespace Ume.Rag.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("FailedRuns")
+                        .HasColumnType("integer");
+
                     b.Property<string>("LastOutcome")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");

@@ -104,7 +104,8 @@ public static class FeedbackEndpoints
                                      join c in admin.Db.Clients.AsNoTracking() on s.ClientId equals c.Id
                                      where admin.IsPlatformAdmin || served.Contains(s.ClientId)
                                      orderby c.Name
-                                     select new FeedbackImportHealth(c.Id, c.Name, s.LastRunAt, s.LastOutcome, s.Unmapped))
+                                     select new FeedbackImportHealth(c.Id, c.Name, s.LastRunAt, s.LastOutcome, s.Unmapped, s.FailedRuns,
+                                         s.FailedRuns >= FeedbackImportState.AlertAfterFailedRuns))
                     .ToListAsync(ct);
                 return new FeedbackSummary(sums, imports);
             })
@@ -200,7 +201,8 @@ public sealed record FeedbackItem(
 
 public sealed record FeedbackTotals(int Answers, int NotFound, int ThumbsUp, int ThumbsDown);
 
-public sealed record FeedbackImportHealth(Guid ClientId, string ClientName, DateTimeOffset? LastRunAt, string? LastOutcome, int Unmapped);
+/// <summary>One Open WebUI client's import health; <paramref name="Alert"/> from <see cref="FeedbackImportState.AlertAfterFailedRuns"/> failed runs in a row (chat §14.3).</summary>
+public sealed record FeedbackImportHealth(Guid ClientId, string ClientName, DateTimeOffset? LastRunAt, string? LastOutcome, int Unmapped, int FailedRuns, bool Alert);
 
 public sealed record FeedbackSummary(FeedbackTotals Totals, IReadOnlyList<FeedbackImportHealth> Imports);
 

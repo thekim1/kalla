@@ -235,7 +235,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** engine §4; admin §4.6 V24.
 
-### [ ] B-23 Small admin gaps from the deviation review (M-3)
+### [x] B-23 Small admin gaps from the deviation review (M-3) (#487)
 - **Do:** (1) the feedback import alert after 4 failed runs (chat §14.3; today only `LastOutcome`,
   `FeedbackEndpoints.cs:99-107`); (2) the collection page's sources table shows documents and the last run (the API
   returns both, `CollectionView.vue:92-96`, admin §5.5.2); (3) the deletion card's "at most 20 % (at least 5)" comes from

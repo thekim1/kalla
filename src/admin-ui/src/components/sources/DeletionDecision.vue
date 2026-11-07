@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { api } from '@/api'
-import type { DeletionProposal } from '@/api/types'
+import type { DeletionGuardLimits, DeletionProposal } from '@/api/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
@@ -20,6 +20,7 @@ const auth = useAuthStore()
 const ui = useUiStore()
 const items = ref<DeletionProposal[]>([])
 const next = ref<string | null>(null)
+const guard = ref<DeletionGuardLimits | null>(null)
 const deciding = ref<'' | 'keep' | 'remove'>('')
 const canDecide = computed(() => auth.hasAnyRole(['rag-platform-admin', 'rag-department-admin']))
 const count = computed(() => formatNumber(props.proposedCount))
@@ -29,6 +30,7 @@ async function load(append = false): Promise<void> {
   if (!page) return
   items.value = append ? [...items.value, ...page.items] : page.items
   next.value = page.next
+  guard.value = page.guard
 }
 
 async function keep(): Promise<void> {
@@ -49,7 +51,7 @@ onMounted(() => load())
 <template>
   <UiCard :title="DELETIONS.title" data-test="deletions">
     <p>{{ DELETIONS.summary(count) }}</p>
-    <p class="mt-1 text-small text-fg-2">{{ DELETIONS.why }}</p>
+    <p v-if="guard" class="mt-1 text-small text-fg-2" data-test="guard">{{ DELETIONS.why(guard) }}</p>
     <h3 class="mb-1 mt-4 font-medium">{{ DELETIONS.examples }}</h3>
     <ul class="grid gap-2">
       <li v-for="p in items" :key="p.documentId" class="border-b border-border pb-2 text-small">

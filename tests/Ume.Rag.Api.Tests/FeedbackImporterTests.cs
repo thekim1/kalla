@@ -1,6 +1,7 @@
 using System.Diagnostics.Metrics;
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -15,7 +16,8 @@ namespace Ume.Rag.Api.Tests;
 /// The Open WebUI feedback import (chat design §14.2–§14.3, §13.3) against a recorded <c>/api/v1/evaluations/feedbacks/list</c>
 /// page in Open WebUI v0.12.5's shape (unchanged since v0.12.3) (<c>FeedbackListResponse</c> of <c>FeedbackUserResponse</c>, <c>models/feedbacks.py</c>):
 /// the rating maps to the right message, the comment and the user's details are dropped, a foreign model is skipped, a
-/// young unmapped item holds the watermark back, and feedback older than the client's retention is deleted.
+/// young unmapped item holds the watermark back, feedback older than the client's retention is deleted, and failed runs
+/// in a row alert from the fourth.
 /// </summary>
 public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<KnowledgeFixture>
 {
@@ -156,5 +158,56 @@ public sealed class FeedbackImporterTests(KnowledgeFixture db) : IClassFixture<K
             (reader.GetInt64(0), reader.GetString(1), reader.GetInt32(2), reader.GetInt32(3))
                 .ShouldBe((now.AddHours(-2).ToUnixTimeSeconds(), "ok", 1, 1));
         }
+    }
+
+    /// <summary>Open WebUI that answers 401 while <see cref="Failing"/>, else an empty feedback list.</summary>
+    private sealed class FlakyOpenWebUi : HttpMessageHandler
+    {
+        public bool Failing { get; set; } = true;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(Failing
+                ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"items": [], "total": 0}""", Encoding.UTF8, "application/json") });
+    }
+
+    [Fact]
+    public async Task Four_failed_runs_in_a_row_alert_and_a_good_run_clears_the_count()
+    {
+        var clientId = Guid.CreateVersion7();
+        await using var api = NpgsqlDataSource.Create(db.Connection(RagDatabase.Api));
+        using var openWebUi = new FlakyOpenWebUi();
+        var options = Options.Create(new OpenWebUiOptions { ClientId = clientId.ToString(), BaseUrl = new Uri("http://owui.test/"), AdminApiKey = "sk-feedback-test" });
+        using var meters = new Meters();
+        var logs = new CapturingLoggerProvider();
+        using var loggers = new LoggerFactory([logs]);
+        var importer = new FeedbackImporter(new Clients(openWebUi), api, new Snapshot(PolicySnapshot.Empty with { Version = 1 }), options, TimeProvider.System, meters,
+            loggers.CreateLogger<FeedbackImporter>());
+
+        async Task<(int FailedRuns, string Outcome)> StateAsync()
+        {
+            await using var read = api.CreateCommand($"""SELECT "FailedRuns", "LastOutcome" FROM chat."FeedbackImportState" WHERE "ClientId" = '{clientId}'""");
+            await using var reader = await read.ExecuteReaderAsync(Ct);
+            (await reader.ReadAsync(Ct)).ShouldBeTrue();
+            return (reader.GetInt32(0), reader.GetString(1));
+        }
+
+        int Alerts() => logs.Entries.Count(e => e.Level == LogLevel.Error && e.Message.Contains("feedback import alert", StringComparison.Ordinal));
+
+        for (var run = 1; run <= 3; run++)
+        {
+            (await importer.RunOnceAsync(Ct)).ShouldBeFalse();
+            (await StateAsync()).ShouldBe((run, "failed:401"));
+        }
+
+        Alerts().ShouldBe(0);
+        (await importer.RunOnceAsync(Ct)).ShouldBeFalse();
+        (await StateAsync()).ShouldBe((FeedbackImportState.AlertAfterFailedRuns, "failed:401"));
+        Alerts().ShouldBe(1);
+
+        openWebUi.Failing = false;
+        (await importer.RunOnceAsync(Ct)).ShouldBeTrue();
+        (await StateAsync()).ShouldBe((0, "ok"));
+        Alerts().ShouldBe(1);
     }
 }
