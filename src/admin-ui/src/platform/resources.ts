@@ -1,5 +1,6 @@
 import { http } from '@/api/client'
 import { PLATFORM } from '@/utils/labels'
+import type { ModelField } from './modelFields'
 
 /**
  * The platform objects with a generic form (admin design §5.8). Each entry names its endpoints as written in the
@@ -55,6 +56,8 @@ export interface PlatformResource {
   panel?: 'embedding-canary'
   /** A row whose edit is a form of its own instead of the generic one. */
   form?: (row: Row) => 'crawl-settings' | undefined
+  /** The row's edit fields that pick a gateway model (#466); the form then loads the mirror with its availability. */
+  modelFields?: (row: Row) => readonly ModelField[] | undefined
 }
 
 export function urlOf(path: string, row: Row | null, key: string): string {
@@ -78,6 +81,19 @@ function sharingOf(row: Row): SharingSummary {
 }
 
 const SETTINGS_SECTIONS = ['network', 'retention', 'deletion-guard', 'crawl', 'evaluation', 'retrieval', 'chat', 'pii', 'worker'] as const
+
+/** The settings sections' model fields, as V32 checks them (`rerankModel` is a chat model; `gatewayRerankModel` a rerank model). */
+const SETTINGS_MODEL_FIELDS: Partial<Record<(typeof SETTINGS_SECTIONS)[number], readonly ModelField[]>> = {
+  evaluation: [
+    { name: 'evaluationModel', modelKind: 'chat' },
+    { name: 'evaluationJudgeModel', modelKind: 'chat' },
+  ],
+  chat: [{ name: 'condenseModel', modelKind: 'chat', in: 'value' }],
+  retrieval: [
+    { name: 'rerankModel', modelKind: 'chat', in: 'value' },
+    { name: 'gatewayRerankModel', modelKind: 'rerank', in: 'value' },
+  ],
+}
 
 const L = PLATFORM.resources
 
@@ -130,6 +146,7 @@ export const platformResources: PlatformResource[] = [
     load: (row) => http.get<Row>(`/api/settings/${String(row.section)}`),
     // The crawl section's host politeness is a table with a drawer per host, not JSON (admin design §5.8).
     form: (row) => (row.section === 'crawl' ? 'crawl-settings' : undefined),
+    modelFields: (row) => SETTINGS_MODEL_FIELDS[row.section as (typeof SETTINGS_SECTIONS)[number]],
   },
   {
     id: 'data-protection',

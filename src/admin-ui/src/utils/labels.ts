@@ -603,6 +603,11 @@ export const PLATFORM = {
     portalUrl: 'Portal URL',
     isEnabled: 'Enabled',
     memberGroups: 'Member groups',
+    evaluationModel: 'Model for test questions',
+    evaluationJudgeModel: 'Judge model',
+    condenseModel: 'Condense model',
+    rerankModel: 'Rerank model (chat)',
+    gatewayRerankModel: 'Rerank model (gateway)',
   } as Record<string, string>,
   /** Hints under generic form fields, before the API schema's own description. */
   fieldHints: {
@@ -796,6 +801,7 @@ export const PLATFORM = {
     invalidNumber: 'Enter a number.',
     listHint: 'One value per line.',
     jsonHint: 'JSON; the server checks the content.',
+    membersAbove: 'The models are chosen above, not here.',
     secretOnce: 'The key is shown only now. Copy it and store it safely.',
     copy: 'Copy',
   },
@@ -1369,4 +1375,7 @@ export const EDIT_DRAWER = {
 export const MODEL_AVAILABILITY = {
   notAvailable: 'Not available to this platform’s key',
   unknown: 'Availability unknown: the AI gateway could not be asked, so every model can be chosen. Publishing checks it.',
+  /** The platform settings' pickers (#466): V32 checks the model when the section is saved, not at a publish. */
+  unknownOnSave: 'Availability unknown: the AI gateway could not be asked, so every model can be chosen. Saving checks it.',
+  notListed: 'Not among the gateway’s models of this kind',
 } as const

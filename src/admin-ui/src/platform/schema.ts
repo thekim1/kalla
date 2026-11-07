@@ -28,7 +28,7 @@ export type OpenApiDocument = {
   components?: { schemas?: Record<string, JsonSchema> }
 }
 
-export type FieldKind = 'switch' | 'select' | 'number' | 'text' | 'list' | 'json'
+export type FieldKind = 'switch' | 'select' | 'number' | 'text' | 'list' | 'json' | 'model'
 
 export interface FieldSpec {
   name: string
@@ -38,6 +38,10 @@ export interface FieldSpec {
   required: boolean
   nullable: boolean
   options?: string[]
+  /** A `model` field's kind: its picker offers the gateway mirror's models of this kind (modelFields.ts). */
+  modelKind?: 'chat' | 'rerank'
+  /** Set on a member of a JSON field: the field it is edited out of and sent back in. */
+  parent?: string
 }
 
 let document: Promise<OpenApiDocument> | null = null
