@@ -424,6 +424,7 @@ vectors when we run against a real local gateway.
 | `ume-rag/postgres` | `images/postgres/Dockerfile` (a few lines, §5.2) | stock `pgvector/pgvector`, digest-pinned (pgvector 0.8.7 on Postgres 17, tag *to verify*) + PGDG `pgbackrest` package | 999 (`postgres`) | read-only, tmpfs `/tmp` (pgBackRest lock path), `/var/run/postgresql` | `pg_isready -d ragdb` | stock image + the `pgbackrest` package, *to verify* |
 | `ume-rag/parser` | `src/parser/Dockerfile` | `python:3.12-slim-trixie` (digest-pinned; parser design §12) | 10001 | read-only, tmpfs `/tmp` (1 GB: tmpfs counts against the memory limit) | `python -m ume_parser.health` (HTTPS GET `/health/ready`, exit code; no curl) | budget ≤ 4.0 GB with the NER model (measured 2.88 GB; torch CPU + models; Tesseract `swe` only; no LibreOffice, EasyOCR or `python-oxmsg`; parser design §12) |
 | `ume-rag/clamav` | `images/clamav/Dockerfile` | `clamav/clamav-debian:1.4.6_base` (1.4 LTS, `_base` = no bundled signatures; digest-pinned; 1.4.6 from `v0.1.0`) | 1000 (the image's `clamav`; entrypoint `/init-unprivileged`) | read-only, volume `/var/lib/clamav`, tmpfs `/tmp` (clamd's local socket) | a real scan of a small file through clamd (`clamdscan`), not `--ping`: after a failed reload clamd still answers PONG with no engine (§5.5) | 223 MB (measured) + ~110 MB signatures in the volume |
+| `ume-rag/renderer` | `images/renderer/Dockerfile` (§5.4) | `mcr.microsoft.com/playwright:v1.64.1-noble`, digest-pinned, Chromium headless shell only, flattened | 10002 | read-only, tmpfs `/tmp` (512 MB) | TCP connect to port 3000 (no secret) | 1.48 GB (A-10) |
 
 All Dockerfiles: digest-pinned `FROM`, multi-stage, `apt-get` versions from the pinned base only, no package caches,
 `LABEL org.opencontainers.image.source/version/revision`, `USER` numeric, no shell needed at runtime for the .NET
@@ -564,6 +565,7 @@ verify* on the host image).
 | rag-worker | ingestion | 1.5 | 256 | 512m | 1.5g | 2g | 512 | `DOTNET_GCHeapHardLimitPercent=0x4B` |
 | rag-parser | ingestion | **4.0** (half the host; development: 2.0, 1 worker × 2 threads) | 128 | 2g | 3.5g (1 worker × 4 threads) | 6g (2 workers × 2 threads) | 256 | `PARSER_WORKERS`, `PARSER_THREADS`, `PARSER_SLOT_MAX_RSS_MB`, `NER_*`; the NER process (`ner-0`, ≈ 0.5 GB model) shares this limit with a 2 800 MB slot watchdog, tight at 3.5g: measured in P0/R1 (*to verify*) |
 | rag-clamav | ingestion | 1.0 | 128 | 1.2g | 1.5g | 3g | 128 | `ConcurrentDatabaseReload`, `TestDatabases` §5.5; 1.05–1.13 GiB with signatures loaded (measured) |
+| rag-renderer | ingestion | 2.0 | 128 | 256m | 2g | 2g | 512 | one shared Chromium (§5.4); 167–215 MB peak measured on fixtures (A-9, A-10); real sites in A-13. The worker also carries Playwright's Node driver (≈ 150–175 MB RSS), inside its own limit |
 | `rag-ingestion.slice` | ingestion | `CPUQuota=500%` | `CPUWeight=25` | – | `MemoryMax=7G` | `MemoryMax=11G` | – | zone cap |
 | open-webui (optional) | edge | 1.0 | 512 | 512m | not co-hosted | 1.5g | 256 | §12.8 |
 | `ume-mcp-<name>` (P2) | tools-hosted | 0.5 each | 256 | – | 384m each | 384m each | – | hosted MCP servers, `compose.mcp.yaml` (tools design §8.3) |
@@ -573,7 +575,9 @@ on any host with 2 cores or more (the CI runner included): postgres 2.0, parser 
 `compose.host-24g.yaml` restores the pilot caps (postgres 3.0, parser 4.0). The pilot's CPU sizing is set again before
 go-live with the R1 release test (§8.3). Memory limits are unchanged.
 
-Sum of memory limits (ingestion containers counted at the slice cap, the one-shot migrator included), pilot with one
+The renderer is inside `rag-ingestion.slice`, so the sum of the ingestion containers' limits (8.5 GB on a 16 GB host) is
+above the slice's `MemoryMax=7G`: the slice is the cap, and the parser, ClamAV and the renderer do not peak together
+(to measure in A-13 and R1). Sum of memory limits (ingestion containers counted at the slice cap, the one-shot migrator included), pilot with one
 slot (six long-running containers, no Redis): 16 GB host ≈ 12 GB (OS and Docker keep ~2 GB; limits are not all
 reached at once); 24 GB host ≈ 18.75 GB, ≈ 20.25 GB with Open WebUI. P2 adds the b slots, Redis (256m,
 [`../archive/passes/performance-pass.md`](../archive/passes/performance-pass.md) §3.12) and 384m per hosted MCP server (`ume-mcp-kommun`): ≈ 14.1 GB on a
