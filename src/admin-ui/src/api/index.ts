@@ -111,6 +111,9 @@ export const api = {
       http.get<KeysetPage<UploadFile>>(`/api/sources/${id}/files`, query),
     quarantine: (id: string, after?: string) => http.get<KeysetPage<QuarantinedFile>>(`/api/sources/${id}/quarantine`, { after, limit: 50 }),
     uploadBatch: (id: string) => http.post<UploadBatch>(`/api/sources/${id}/upload-batches`),
+    /** Deleted files back within the 14-day grace (platform admin; connectors §9.3): a batch that re-adds the slots. */
+    restoreFiles: (id: string, uploadIds: string[]) =>
+      http.post<{ batchId: string; jobId: string; entries: number }>(`/api/sources/${id}/files/restore`, { uploadIds }),
     piiReport: (id: string) => http.get<PiiReport>(`/api/sources/${id}/pii-report`),
     preflight: (body: { collectionId: string; type: string; settings: Record<string, unknown> }) =>
       http.post<{ jobId: string }>('/api/sources/preflight', body),

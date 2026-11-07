@@ -251,6 +251,9 @@ public static class AdminErrorCodes
     /// </summary>
     public static AdminErrorCode CrawlPolitenessInvalid { get; } = new("crawl_politeness_invalid", 400, "The politeness setting {field} for {host} is invalid: {problem}");
 
+    /// <summary>A file restore names a slot that is not deleted, past the 14-day grace, or whose bytes are gone (connectors §9.3).</summary>
+    public static AdminErrorCode FileNotRestorable { get; } = new("file_not_restorable", 409, "The file {name} cannot be restored: it is not deleted, or its 14 days have passed.");
+
     public static IReadOnlyList<AdminErrorCode> All { get; } =
         [InvalidValue, PlatformRule, NotFound, ConcurrentChange, AlreadyExists, InUse, ConfigBusy, SyncOff, SyncFailed, ModelResidency, ModelNotListed,
             GatewayUnavailable, GatewayKeyMissing, PolicyRule, NotInScope, NoEmbeddingProfile, CollectionInUse, CollectionLevelConflict, AssistantBelowCollection,
@@ -259,5 +262,5 @@ public static class AdminErrorCodes
             SourcePaused, SlugTaken, UploadBatchCommitted, KeyNotRotatable, KeyRevoked, KeySecretUnavailable, KeyScopeInvalid, KeyScopeRequired,
             KeysUnavailable, NoEvaluationSet, QuestionNotHuman, QuestionEditPending, SiteProfileInvalid, SiteProfileVersionApplied, NoDepartment,
             NoDraft, DraftIsOnlyVersion, DraftBaseChanged, AssistantContactMissing, VersionLinkMissing, TooManyCollections, CollectionNotShared, TopicInvalid, CollectionSharedInUse,
-            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid];
+            AudienceAboveCeiling, ClientStoresHistory, QueryStepsInvalid, GeneralKnowledgePublicUnconfirmed, LinkHostNotAllowed, EvaluationModelUnset, SearchUnavailable, VersionNotRestorable, RetentionOutsidePolicy, TestAnswerFailed, PipelineParamsInvalid, PublicationNotReady, PublicationStale, VersionNotRollbackable, SettingsModelResidency, CrawlPolitenessInvalid, FileNotRestorable];
 }

@@ -71,6 +71,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   link_host_not_allowed: 'A link must be https to an allowed site, and at most 5 links.',
   settings_model_residency: 'The model {model} cannot be used for {setting}: it is not a {kind} model the AI gateway offers at {ceiling}.',
   crawl_politeness_invalid: 'The politeness setting {field} for {host} is not valid: {problem}',
+  file_not_restorable: 'The file {name} cannot be brought back: it is not deleted, or its 14 days have passed.',
   evaluation_model_unset: 'No model is chosen for creating test questions. A platform administrator chooses it under Settings.',
   version_not_restorable: 'Version {number} is the draft or the published version and cannot be restored.',
   retention_outside_policy: 'The information class {level} allows history {modes} and at most {maxDays} days.',

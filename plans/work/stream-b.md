@@ -246,7 +246,7 @@ waiting, take the next one. Live items need the inputs named in *Waits on*; don'
 - **Waits on:** –
 - **Read:** chat §14.3; admin §5.5.2, §5.5.3.
 
-### [ ] B-24 Restore a deleted uploaded file (M-3, #309)
+### [x] B-24 Restore a deleted uploaded file (M-3, #309)
 - **Do:** `POST /api/sources/{id}/files/restore` within the upload grace (connectors §9.3, admin §4.5 files row): the
   UI promises "Within 14 days the platform team can bring them back" (`labels.ts:580`, `:1044`) and no route exists.
   Build the route (platform admin) and a *Restore* action on the files list for deleted slots, or change the texts if

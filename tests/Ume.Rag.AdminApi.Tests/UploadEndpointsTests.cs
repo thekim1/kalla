@@ -311,4 +311,72 @@ public sealed class UploadEndpointsTests(AdminDatabaseFixture database) : IDispo
         (await stranger.GetAsync($"/api/sources/{sourceId}/files", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await stranger.GetAsync($"/api/sources/{sourceId}/quarantine", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
+
+    [Fact]
+    public async Task A_platform_admin_restores_a_deleted_file_within_the_grace_through_a_batch_that_re_adds_the_slot()
+    {
+        // B-24, connectors §9.3: "restore adds the entry back and the document is revived" (the worker's add on a deleted slot,
+        // UploadEngineTests in the worker tests). Here: the route's checks, the manifest it writes and the upload sync it starts.
+        var (sourceId, code) = await UploadSourceAsync();
+        var now = DateTimeOffset.UtcNow;
+        Upload Slot(string name, DateTimeOffset? deleted) => new()
+        {
+            SourceId = sourceId, Classification = Classification.Internal, BatchId = Guid.CreateVersion7(), FileName = name, DeclaredMediaType = "application/pdf",
+            Bytes = 1234, Sha256 = RandomNumberGenerator.GetBytes(32), State = deleted is null ? UploadStates.Indexed : UploadStates.Deleted, UploadedBy = "anna",
+            UploadedAt = now.AddDays(-30), DeletedAt = deleted,
+        };
+        var (recent, old, live, gone) = (Slot("taxa-2025.pdf", now.AddDays(-3)), Slot("gammal.pdf", now.AddDays(-15)), Slot("taxa-2026.pdf", null), Slot("borta.pdf", now.AddDays(-1)));
+        await using (var db = TestPostgres.Context(database.Connection(null)))
+        {
+            db.Uploads.AddRange(recent, old, live, gone);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using var factory = Factory();
+        foreach (var kept in new[] { recent, old, live }) // the upload blobs are tombstoned, not deleted, until the purge; "gone"'s is purged
+        {
+            var path = Path.Combine(_blobs, "uploads", sourceId.ToString("D"), kept.Id.ToString("D"), Convert.ToHexStringLower(kept.Sha256));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllBytesAsync(path, "URB2"u8.ToArray(), Ct);
+        }
+
+        using var departmentAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.DepartmentAdmin, code);
+        using var platformAdmin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin, code);
+        Task<HttpResponseMessage> Restore(HttpClient client, params Guid[] ids) =>
+            client.PostAsJsonAsync($"/api/sources/{sourceId}/files/restore", new { uploadIds = ids }, Ct);
+
+        (await Restore(departmentAdmin, recent.Id)).StatusCode.ShouldBe(HttpStatusCode.Forbidden); // "the platform team can bring them back"
+        foreach (var (slot, why) in new[] { (old, "past the 14 days"), (live, "not deleted"), (gone, "bytes purged") })
+        {
+            using var refused = await Restore(platformAdmin, recent.Id, slot.Id);
+            refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, why);
+            var problem = await Json(refused);
+            (problem.GetProperty("code").GetString(), problem.GetProperty("params").GetProperty("name").GetString()).ShouldBe(("file_not_restorable", slot.FileName), why);
+        }
+
+        Guid batch;
+        using (var restored = await Restore(platformAdmin, recent.Id))
+        {
+            restored.StatusCode.ShouldBe(HttpStatusCode.OK, await restored.Content.ReadAsStringAsync(Ct));
+            var body = await Json(restored);
+            body.GetProperty("entries").GetInt32().ShouldBe(1);
+            batch = body.GetProperty("batchId").GetGuid();
+        }
+
+        using var manifest = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(_blobs, "uploads", sourceId.ToString("D"), "batches", $"{batch:D}.json"), Ct));
+        ContractSchemaCheck(manifest.RootElement);
+        var entry = manifest.RootElement.GetProperty("entries").EnumerateArray().ShouldHaveSingleItem();
+        (entry.GetProperty("operation").GetString(), entry.GetProperty("uploadId").GetGuid(), entry.GetProperty("fileName").GetString(),
+                entry.GetProperty("bytes").GetInt64(), entry.GetProperty("sha256").GetString())
+            .ShouldBe(("add", recent.Id, "taxa-2025.pdf", 1234L, Convert.ToHexStringLower(recent.Sha256)));
+
+        await using var check = TestPostgres.Context(database.Connection(null));
+        var job = await check.Jobs.AsNoTracking().SingleAsync(j => j.DedupKey == $"sync-upload:{batch}", Ct);
+        using (var payload = JsonDocument.Parse(job.Payload))
+        {
+            (payload.RootElement.GetProperty("trigger").GetString(), payload.RootElement.GetProperty("batchId").GetGuid()).ShouldBe(("upload", batch));
+        }
+
+        (await check.AuditLog.AsNoTracking().CountAsync(a => a.EntityType == "source" && a.EntityId == sourceId.ToString() && a.Action == "upload-restore", Ct)).ShouldBe(1);
+    }
 }
