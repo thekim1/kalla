@@ -44,7 +44,7 @@ public static class SettingsEndpoints
         });
         var ceilings = ((IEndpointRouteBuilder)api).ServiceProvider.GetRequiredService<IOptions<CrawlCeilingOptions>>();
         Section(settings, "crawl", s => new JsonSectionSettings(Json(s.Crawl), Version(s)), (JsonSectionRequest r, PlatformSettings s) => s.Crawl = r.Value.ToJsonString(),
-            (r, _, _) =>
+            (r, _, _, _) =>
             {
                 CrawlPolitenessRule.Ensure(r.Value, ceilings.Value.Ceilings());
                 return Task.CompletedTask;
@@ -54,16 +54,16 @@ public static class SettingsEndpoints
             s.EvaluationModel = r.EvaluationModel;
             s.EvaluationJudgeModel = r.EvaluationJudgeModel;
             s.EvaluationMaxQuestions = r.EvaluationMaxQuestions;
-        }, (r, db, ct) => PlatformModelRules.EnsureAsync(db, [("Settings.EvaluationModel", r.EvaluationModel), ("Settings.EvaluationJudgeModel", r.EvaluationJudgeModel)], ct));
+        }, (r, db, models, ct) => PlatformModelRules.EnsureAsync(db, models, [("Settings.EvaluationModel", r.EvaluationModel), ("Settings.EvaluationJudgeModel", r.EvaluationJudgeModel)], ct));
         Section(settings, "retrieval", s => new JsonSectionSettings(Json(s.Retrieval), Version(s)), (RetrievalSectionRequest r, PlatformSettings s) => s.Retrieval = r.Value.ToJsonString(),
-            async (r, db, ct) =>
+            async (r, db, models, ct) =>
             {
-                await PlatformModelRules.EnsureAsync(db, [("Settings.Retrieval.RerankModel", StringOf(r.Value["rerankModel"]))], ct);
-                await PlatformModelRules.EnsureAsync(db, [("Settings.Retrieval.GatewayRerankModel", StringOf(r.Value["gatewayRerankModel"]))], ct,
+                await PlatformModelRules.EnsureAsync(db, models, [("Settings.Retrieval.RerankModel", StringOf(r.Value["rerankModel"]))], ct);
+                await PlatformModelRules.EnsureAsync(db, models, [("Settings.Retrieval.GatewayRerankModel", StringOf(r.Value["gatewayRerankModel"]))], ct,
                     GatewayModelModelKinds.Rerank);
             });
         Section(settings, "chat", s => new JsonSectionSettings(Json(s.Chat), Version(s)), (JsonSectionRequest r, PlatformSettings s) => s.Chat = r.Value.ToJsonString(),
-            (r, db, ct) => PlatformModelRules.EnsureAsync(db,
+            (r, db, models, ct) => PlatformModelRules.EnsureAsync(db, models,
                 [("Settings.Chat.CondenseModel", r.Value["condenseModel"] is JsonValue m && m.TryGetValue<string>(out var model) ? model : null)], ct));
         Section(settings, "pii", PiiSettings.Of, (PiiSettingsRequest r, PlatformSettings s) =>
         {
@@ -84,10 +84,11 @@ public static class SettingsEndpoints
 
     /// <summary>
     /// One section: GET (the row or the defaults) and PUT (version-checked, audited <c>settings.update</c> with the section's
-    /// before/after). <paramref name="check"/> runs the section's database rules (V32) inside the write, before the change.
+    /// before/after). <paramref name="check"/> runs the section's database rules (V32, with its <c>/v1/models</c> call) inside the
+    /// write, before the change.
     /// </summary>
     private static void Section<TDto, TRequest>(RouteGroupBuilder group, string name, Func<PlatformSettings, TDto> read, Action<TRequest, PlatformSettings> apply,
-        Func<TRequest, RagDbContext, CancellationToken, Task>? check = null)
+        Func<TRequest, RagDbContext, GatewayModelCheck, CancellationToken, Task>? check = null)
         where TRequest : SettingsRequest
     {
         var title = string.Concat(name.Split('-').Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
@@ -95,7 +96,7 @@ public static class SettingsEndpoints
                 read(await admin.Db.Settings.AsNoTracking().SingleOrDefaultAsync(ct) ?? new PlatformSettings()))
             .RequireAuthorization(AdminPolicies.Admin).WithName($"Get{title}Settings").WithSummary($"Platform settings: {name}");
 
-        group.MapPut($"/{name}", async (TRequest request, AdminContext admin, AdminClientAddresses addresses, CancellationToken ct) =>
+        group.MapPut($"/{name}", async (TRequest request, AdminContext admin, AdminClientAddresses addresses, GatewayModelCheck models, CancellationToken ct) =>
             {
                 var saved = await admin.WriteAsync(async attempt =>
                 {
@@ -117,7 +118,7 @@ public static class SettingsEndpoints
 
                     if (check is not null)
                     {
-                        await check(request, admin.Db, attempt);
+                        await check(request, admin.Db, models, attempt);
                     }
 
                     var before = row.Version == 0 ? null : (object?)read(row);
@@ -162,32 +163,37 @@ public static class CrawlPolitenessRule
 /// V32 (admin design §4.6): a platform model setting names a <c>chat</c> row of <c>GatewayModels</c> servable at the platform
 /// ceiling (<see cref="Ceiling"/>): the evaluation models, the condense model and the chat rerank model (Decisions "Rerank pulled
 /// forward"); <c>gatewayRerankModel</c> names a <c>rerank</c> row (B-16). An empty setting is allowed (unset): rerank is
-/// optional. The skill-gate model is P2 (tools section not mapped).
+/// optional. The skill-gate model is P2 (tools section not mapped). Each set model is also listed by the gateway's
+/// <c>/v1/models</c> at the platform ceiling, as V8 (#447: <c>model_not_listed</c>, <c>gateway_unavailable</c>,
+/// <c>gateway_key_missing</c>).
 /// </summary>
 public static class PlatformModelRules
 {
     /// <summary>The platform ceiling of model settings: <c>Eu</c> until on-prem models exist (M2).</summary>
     public const Residency Ceiling = Residency.Eu;
 
-    public static async Task EnsureAsync(RagDbContext db, IReadOnlyList<(string Setting, string? Model)> settings, CancellationToken ct,
+    public static async Task EnsureAsync(RagDbContext db, GatewayModelCheck models, IReadOnlyList<(string Setting, string? Model)> settings, CancellationToken ct,
         string modelKind = GatewayModelModelKinds.Chat)
     {
         ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(models);
         ArgumentNullException.ThrowIfNull(settings);
-        foreach (var (setting, model) in settings)
+        var set = settings.Where(s => !string.IsNullOrWhiteSpace(s.Model)).ToList();
+        // The mirror's kind and residency first, for every setting, so a wrong model is named before the gateway is asked.
+        foreach (var (setting, model) in set)
         {
-            if (string.IsNullOrWhiteSpace(model))
-            {
-                continue;
-            }
-
             var row = await db.GatewayModels.AsNoTracking().SingleOrDefaultAsync(m => m.Name == model, ct);
             if (row is null || row.ModelKind != modelKind ||
                 !row.Residencies.Any(r => ResidencyCeiling.TryParse(r, out var residency) && residency <= Ceiling))
             {
                 throw AdminFaults.Of(AdminErrorCodes.SettingsModelResidency,
-                    new Dictionary<string, string> { ["model"] = model, ["setting"] = setting, ["kind"] = modelKind, ["ceiling"] = ResidencyCeiling.ToHeader(Ceiling) });
+                    new Dictionary<string, string> { ["model"] = model!, ["setting"] = setting, ["kind"] = modelKind, ["ceiling"] = ResidencyCeiling.ToHeader(Ceiling) });
             }
+        }
+
+        foreach (var (_, model) in set)
+        {
+            await models.EnsureServableAsync(model!, Ceiling, ct);
         }
     }
 }

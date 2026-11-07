@@ -53,6 +53,45 @@ public sealed class GatewayModelCheck(RagDbContext db, GatewayApi gateway, IOpti
 }
 
 /// <summary>
+/// Which mirror models the platform's key may use (#447, admin design §4.5): the gateway's <c>/v1/models</c> at a ceiling
+/// (capped by <c>Gateway:MaxResidency</c>), cached 5 minutes per ceiling. Null when the gateway could not be asked (no key
+/// for the level, unreachable, refused); a failure is not cached, so the next picker load asks again.
+/// </summary>
+public sealed class GatewayModelAvailability(GatewayApi gateway, IOptions<GatewayOptions> options, TimeProvider time)
+{
+    public static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(5);
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Residency, (DateTimeOffset At, IReadOnlySet<string> Models)> _cache = new();
+
+    public async Task<IReadOnlySet<string>?> ListedAsync(Residency ceiling, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(options.Value.BaseUrl))
+        {
+            return null; // no gateway configured here: availability unknown
+        }
+
+        ceiling = options.Value.Cap(ceiling);
+        var now = time.GetUtcNow();
+        if (_cache.TryGetValue(ceiling, out var cached) && now - cached.At < CacheFor)
+        {
+            return cached.Models;
+        }
+
+        try
+        {
+            var models = await gateway.ListModelsAsync(ceiling, cancellationToken);
+            _cache[ceiling] = (now, models);
+            return models;
+        }
+        catch (Exception ex) when (ex is GatewayKeyMissingException or GatewayUnavailableException or GatewayRefusedException or GatewayResidencyException
+                                       or GatewayCallRefusedException)
+        {
+            return null;
+        }
+    }
+}
+
+/// <summary>
 /// One level's key check: one embedding call at that ceiling (admin design §4.5 <c>GET /api/gateway/status</c>).
 /// <c>Outcome</c>: <c>ok</c>, <c>not_configured</c> (no key here), <c>refused</c> (4xx), <c>unavailable</c>, <c>residency_refused</c>;
 /// <c>Residency</c> the residency that answered (or the refused one), <c>Code</c> the gateway's error code.
@@ -67,9 +106,12 @@ public sealed record EmbeddingProfileCanaryStatus(Guid Id, string Name, string G
 public sealed record GatewayStatus(bool Configured, string? Model, IReadOnlyList<GatewayLevelStatus> Levels, GatewayModelSyncStatus Sync,
     IReadOnlyList<EmbeddingProfileCanaryStatus> Profiles);
 
-/// <summary>A row of the model mirror.</summary>
+/// <summary>
+/// A row of the model mirror. <see cref="Available"/>: listed by the gateway's <c>/v1/models</c> with the platform's key at
+/// the requested ceiling, null when the gateway could not be asked (#447).
+/// </summary>
 public sealed record GatewayModelDto(string Name, string Kind, string ModelKind, IReadOnlyList<string> Residencies, string Source, bool SupportsTools, int? ContextWindow,
-    decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd, DateTimeOffset? SyncedAt);
+    decimal? InputPerMillionUsd, decimal? CachedInputPerMillionUsd, decimal? OutputPerMillionUsd, DateTimeOffset? SyncedAt, bool? Available);
 
 /// <summary>The gateway area (admin design §4.5): the model mirror, its sync, the key status per level and the embedding canary check.</summary>
 public static class GatewayEndpoints
@@ -82,11 +124,22 @@ public static class GatewayEndpoints
         ArgumentNullException.ThrowIfNull(api);
         var gateway = api.MapGroup("/gateway").WithTags("Gateway");
 
-        gateway.MapGet("/models", async (RagDbContext db, CancellationToken ct) =>
-            (await db.GatewayModels.AsNoTracking().OrderBy(m => m.Name).ToListAsync(ct))
-                .Select(m => new GatewayModelDto(m.Name, m.Kind, m.ModelKind, m.Residencies, m.Source, m.SupportsTools, m.ContextWindow, m.InputPerMillionUsd,
-                    m.CachedInputPerMillionUsd, m.OutputPerMillionUsd, m.SyncedAt)).ToList())
-            .RequireAuthorization(AdminPolicies.Read).WithName("ListGatewayModels").WithSummary("The gateway model mirror with residencies and prices");
+        gateway.MapGet("/models", async (string? level, RagDbContext db, GatewayModelAvailability availability, CancellationToken ct) =>
+            {
+                // level = an assistant's level (its ceiling); absent: the platform ceiling of the Settings pickers (V32).
+                if (level is not null && !Classification.IsValid(level))
+                {
+                    throw AdminFaults.Field("level", AdminErrorCodes.InvalidValue);
+                }
+
+                var ceiling = level is null ? PlatformModelRules.Ceiling : ResidencyCeiling.ForLevel(level);
+                var listed = await availability.ListedAsync(ceiling, ct);
+                return (await db.GatewayModels.AsNoTracking().OrderBy(m => m.Name).ToListAsync(ct))
+                    .Select(m => new GatewayModelDto(m.Name, m.Kind, m.ModelKind, m.Residencies, m.Source, m.SupportsTools, m.ContextWindow, m.InputPerMillionUsd,
+                        m.CachedInputPerMillionUsd, m.OutputPerMillionUsd, m.SyncedAt, listed?.Contains(m.Name))).ToList();
+            })
+            .RequireAuthorization(AdminPolicies.Read).WithName("ListGatewayModels")
+            .WithSummary("The gateway model mirror with residencies, prices and whether the platform's key may use each model (?level=)");
 
         gateway.MapPost("/sync", async (HttpContext http, GatewayModelSync sync, CancellationToken ct) =>
             !sync.Enabled

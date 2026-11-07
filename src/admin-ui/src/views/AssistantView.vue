@@ -26,7 +26,7 @@ import ExplainAccess from '@/components/assistants/ExplainAccess.vue'
 import KnowledgeLinks from '@/components/assistants/KnowledgeLinks.vue'
 import AssistantEditDrawer from '@/components/assistants/AssistantEditDrawer.vue'
 import { formatDateTime } from '@/utils/format'
-import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL } from '@/utils/labels'
+import { ASSISTANT, COMMON, EDIT_DRAWER, LEVEL_LABEL, MODEL_AVAILABILITY } from '@/utils/labels'
 import { ERROR_MESSAGES, formatMessage } from '@/utils/messages'
 import { problemMessage } from '@/utils/problem'
 
@@ -107,7 +107,17 @@ const rerankHint = computed(() => {
   return rerankers.value.length === 0 ? ASSISTANT.rerankNone : ASSISTANT.rerankHint
 })
 const rerankOf = (v: unknown): string => (v === 'chat' || v === 'gateway' ? v : '')
-const modelOptions = computed(() => [{ value: '', label: ASSISTANT.noModel }, ...models.value.filter((m) => m.modelKind === 'chat').map((m) => ({ value: m.name, label: m.name }))])
+// #447: a model the platform's key may not use at the assistant's ceiling is greyed out; unknown availability keeps every model choosable.
+const modelOptions = computed(() => [
+  { value: '', label: ASSISTANT.noModel },
+  ...models.value.filter((m) => m.modelKind === 'chat').map((m) => ({
+    value: m.name, label: m.available === false ? `${m.name} — ${MODEL_AVAILABILITY.notAvailable}` : m.name, disabled: m.available === false,
+  })),
+])
+const modelHint = computed(() => {
+  const chat = models.value.filter((m) => m.modelKind === 'chat')
+  return chat.length && chat.every((m) => m.available == null) ? `${ASSISTANT.modelHint} ${MODEL_AVAILABILITY.unknown}` : ASSISTANT.modelHint
+})
 /** §5.4 step 13: once published, a link to each audience client's own UI (`PortalUrl`), where the model has its slug. */
 const portals = computed(() =>
   assistant.data.value?.publishedVersion && !archived.value
@@ -211,7 +221,7 @@ async function load(): Promise<void> {
   retentionDays.value = String(a.retentionDays)
   await fillFrom(a)
   ;[models.value, collections.value, clients.value] = await Promise.all([
-    api.gateway.models().catch(() => []),
+    api.gateway.models(a.classification).catch(() => []),
     api.collections.list({ pageSize: 200, view: 'all' }).then((p) => p.items).catch(() => []),
     api.clients.list().catch(() => []),
   ])
@@ -286,6 +296,12 @@ async function loadPolicy(): Promise<void> {
   if (policy.value || !assistant.data.value) return
   policy.value = await api.dataProtection.get(assistant.data.value.classification).catch(() => null)
 }
+
+// Availability is per ceiling (#447): ask again when the assistant's level changes.
+watch(() => assistant.data.value?.classification, async (level, before) => {
+  if (!level || !before || level === before) return
+  models.value = await api.gateway.models(level).catch(() => models.value)
+})
 
 watch(tab, (t) => {
   if (t === 'versions') void loadVersions()
@@ -387,7 +403,7 @@ onMounted(load)
           <summary class="cursor-pointer font-medium">{{ ASSISTANT.advanced }}</summary>
           <div class="mt-4 grid gap-5">
             <p class="text-small text-fg-2">{{ ASSISTANT.advancedHint }}</p>
-            <SelectField id="assistant-model" v-model="model" :label="ASSISTANT.model" :hint="ASSISTANT.modelHint" :options="modelOptions" />
+            <SelectField id="assistant-model" v-model="model" :label="ASSISTANT.model" :hint="modelHint" :options="modelOptions" data-test="model" />
             <TextField id="assistant-top-k" v-model="advanced.topK" :label="ASSISTANT.topK" inputmode="numeric" :error="advancedErrors.topK" />
             <SelectField
               id="assistant-rerank" v-model="advanced.rerank" :label="ASSISTANT.rerank" :hint="rerankHint" :options="rerankOptions"

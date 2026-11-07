@@ -827,6 +827,11 @@ export interface GatewayModel {
   /** What the model serves (data-model §2.1); route aliases are `chat`. Only chat models answer. */
   modelKind: 'chat' | 'embedding' | 'rerank'
   residencies: string[]
+  /**
+   * Whether the platform's key may use it at the asked ceiling (#447): `false` greys it out in a picker, `null` when the
+   * gateway could not be asked (every model stays choosable).
+   */
+  available?: boolean | null
 }
 
 export interface AssistantTestResult {

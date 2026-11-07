@@ -167,7 +167,8 @@ export const api = {
     explain: (body: ExplainAccessRequest) => http.post<AccessExplanation>('/api/access/explain', body),
   },
   gateway: {
-    models: () => http.get<GatewayModel[]>('/api/gateway/models'),
+    /** `level`: an assistant's level, so `available` is at its ceiling; absent: the platform ceiling (Settings, V32). */
+    models: (level?: string) => http.get<GatewayModel[]>(level ? `/api/gateway/models?level=${encodeURIComponent(level)}` : '/api/gateway/models'),
   },
   pipelines: {
     get: (id: string) => http.get<Pipeline>(`/api/pipelines/${id}`),

@@ -99,8 +99,6 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
         await using var factory = database.HeaderFactory();
         using var admin = await AdminDatabaseFixture.UserAsync(factory, RagRoles.PlatformAdmin);
         var evaluation = await Json(await admin.GetAsync("/api/settings/evaluation", Ct));
-        var chatSection = await Json(await admin.GetAsync("/api/settings/chat", Ct));
-        var retrievalSection = await Json(await admin.GetAsync("/api/settings/retrieval", Ct));
         var version = evaluation.GetProperty("version").GetString();
 
         foreach (var (path, body) in new (string, object)[]
@@ -120,21 +118,7 @@ public sealed class PlatformSettingsTests(AdminDatabaseFixture database)
             (await Code(refused)).ShouldBe(AdminErrorCodes.SettingsModelResidency.Code);
         }
 
-        // A chat model within Eu saves; then the shared database gets its settings back.
-        var saved = await Json(await admin.PutAsJsonAsync("/api/settings/evaluation", new { evaluationModel = chat, evaluationJudgeModel = chat, evaluationMaxQuestions = 100, version }, Ct));
-        saved.GetProperty("evaluationModel").GetString().ShouldBe(chat);
-        saved = await Json(await admin.PutAsJsonAsync("/api/settings/chat", new { value = new { condenseModel = chat }, version = saved.GetProperty("version").GetString() }, Ct));
-        saved = await Json(await admin.PutAsJsonAsync("/api/settings/retrieval", new { value = new { rerankModel = chat }, version = saved.GetProperty("version").GetString() }, Ct));
-        saved.GetProperty("value").GetProperty("rerankModel").GetString().ShouldBe(chat);
-        saved = await Json(await admin.PutAsJsonAsync("/api/settings/retrieval", new { value = new { gatewayRerankModel = rerank }, version = saved.GetProperty("version").GetString() }, Ct));
-        saved.GetProperty("value").GetProperty("gatewayRerankModel").GetString().ShouldBe(rerank);
-        saved = await Json(await admin.PutAsJsonAsync("/api/settings/retrieval", new { value = retrievalSection.GetProperty("value"), version = saved.GetProperty("version").GetString() }, Ct));
-        saved = await Json(await admin.PutAsJsonAsync("/api/settings/evaluation", new
-        {
-            evaluationModel = evaluation.GetProperty("evaluationModel").GetString(), evaluationJudgeModel = evaluation.GetProperty("evaluationJudgeModel").GetString(),
-            evaluationMaxQuestions = evaluation.GetProperty("evaluationMaxQuestions").GetInt32(), version = saved.GetProperty("version").GetString(),
-        }, Ct));
-        await Json(await admin.PutAsJsonAsync("/api/settings/chat", new { value = chatSection.GetProperty("value"), version = saved.GetProperty("version").GetString() }, Ct));
+        // A valid model saves only when the gateway also lists it (V32 at the gateway, #447): GatewayModelAvailabilityTests.
     }
 
     [Fact]

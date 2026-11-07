@@ -7,7 +7,7 @@ import type { Assistant, AssistantDraft, ClientSummary } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { bffUser, collectionSummary } from '@/test/fixtures'
 import { button } from '@/test/helpers'
-import { ASSISTANT } from '@/utils/labels'
+import { ASSISTANT, MODEL_AVAILABILITY } from '@/utils/labels'
 import AssistantView from './AssistantView.vue'
 
 const assistant: Assistant = {
@@ -332,6 +332,39 @@ describe('Assistant (admin design §5.5.4; #278 slice 3)', () => {
     expect(publish).toHaveBeenCalledTimes(1)
     expect(wrapper.find('[data-test=published]').exists()).toBe(false)
     confirm.mockRestore()
+  })
+
+  it('greys out a model the platform\'s key may not use at the assistant\'s ceiling, and asks at its level (#447)', async () => {
+    signIn(['rag-department-admin'])
+    mocks()
+    const models = vi.spyOn(api.gateway, 'models').mockResolvedValue([
+      { name: 'ume/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: true },
+      { name: 'claude-opus-5-5', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: false },
+      { name: 'bge-m3', kind: 'model', modelKind: 'embedding', residencies: ['OnPrem'], available: true },
+    ])
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+
+    expect(models).toHaveBeenCalledWith('internal')
+    const options = [...wrapper.get<HTMLSelectElement>('#assistant-model').element.options].map((o) => ({ value: o.value, label: o.text, disabled: o.disabled }))
+    expect(options).toContainEqual({ value: 'ume/chat-eu', label: 'ume/chat-eu', disabled: false })
+    expect(options).toContainEqual({ value: 'claude-opus-5-5', label: `claude-opus-5-5 — ${MODEL_AVAILABILITY.notAvailable}`, disabled: true })
+    expect(options.some((o) => o.value === 'bge-m3')).toBe(false)
+    expect(wrapper.text()).not.toContain(MODEL_AVAILABILITY.unknown)
+  })
+
+  it('keeps every model choosable with a hint when the gateway could not be asked (#447)', async () => {
+    signIn(['rag-department-admin'])
+    mocks()
+    vi.spyOn(api.gateway, 'models').mockResolvedValue([
+      { name: 'ume/chat-eu', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: null },
+      { name: 'claude-opus-5-5', kind: 'model', modelKind: 'chat', residencies: ['Eu'], available: null },
+    ])
+    const wrapper = mount(AssistantView, { props: { id: 'a1' } })
+    await flushPromises()
+    const disabled = [...wrapper.get<HTMLSelectElement>('#assistant-model').element.options].filter((o) => o.value).map((o) => o.disabled)
+    expect(disabled).toEqual([false, false])
+    expect(wrapper.text()).toContain(MODEL_AVAILABILITY.unknown)
   })
 
   it('tests the draft, publishes it, and sets the audience', async () => {

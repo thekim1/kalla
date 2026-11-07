@@ -1345,3 +1345,9 @@ export const EDIT_DRAWER = {
   levelHint: 'Changing the information class is checked against the sources, the knowledge bases and the assistants it affects. If something stops it, it is listed here.',
   refused: 'Not saved:',
 } as const
+
+/** The model pickers' availability flag (#447): models the platform's key may use at the ceiling. */
+export const MODEL_AVAILABILITY = {
+  notAvailable: 'Not available to this platform’s key',
+  unknown: 'Availability unknown: the AI gateway could not be asked, so every model can be chosen. Publishing checks it.',
+} as const
