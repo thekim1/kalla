@@ -223,11 +223,18 @@ public static class PipelineEndpoints
             ["schema"] = PipelineDefinition.CurrentSchema, ["template"] = pipeline.TemplateId, ["templateVersion"] = templateVersion,
             ["params"] = request.Parameters.ValueKind == JsonValueKind.Object ? JsonNode.Parse(request.Parameters.GetRawText()) : new JsonObject(),
         };
-        // V24: parameters valid for the template version, the template matching the sources' type.
-        var validation = new PipelineValidator(TemplateCatalog.BuiltIn).Validate(JsonSerializer.SerializeToElement(definition), sourceType);
+        // V24 (engine §4 rules 1–4): parameters valid for the template version, the template matching the sources' type, and
+        // every stage version of the template run by a live worker in each job class that hosts it (a rolling update).
+        var validation = new PipelineValidator(TemplateCatalog.BuiltIn).ValidateForPublish(JsonSerializer.SerializeToElement(definition), sourceType,
+            await LiveWorkersAsync(admin, ct), admin.Now);
         if (!validation.IsValid)
         {
             var first = validation.Errors[0];
+            if (first.Code == PipelineValidationCodes.StageVersionUnsupported)
+            {
+                throw AdminFaults.Of(AdminErrorCodes.TemplateUnsupported, new Dictionary<string, string> { ["type"] = sourceType ?? pipeline.TemplateId });
+            }
+
             throw AdminFaults.Field(first.Param is { } param ? "parameters." + param : "parameters", AdminErrorCodes.PipelineParamsInvalid,
                 new Dictionary<string, string> { ["param"] = first.Param ?? "-", ["message"] = first.Message });
         }
@@ -257,6 +264,21 @@ public static class PipelineEndpoints
         {
             DepartmentId = pipeline.DepartmentId ?? collection?.DepartmentId, Jobs = [job],
         };
+    }
+
+    /// <summary>
+    /// The worker instances whose heartbeat is inside <see cref="PipelineValidator.SupportHeartbeatWindow"/>, with their
+    /// <c>WorkerNodeSupport</c> rows (engine §4 rule 4, §5.2).
+    /// </summary>
+    private static async Task<IReadOnlyCollection<WorkerSupport>> LiveWorkersAsync(AdminContext admin, CancellationToken ct)
+    {
+        var since = admin.Now - PipelineValidator.SupportHeartbeatWindow;
+        var instances = await admin.Db.WorkerInstances.AsNoTracking().Where(w => w.LastHeartbeatAt > since).ToListAsync(ct);
+        var ids = instances.Select(w => w.InstanceId).ToList();
+        var support = (await admin.Db.WorkerNodeSupport.AsNoTracking().Where(s => ids.Contains(s.InstanceId)).ToListAsync(ct))
+            .ToLookup(s => s.InstanceId);
+        return instances.Select(w => new WorkerSupport(w.InstanceId, w.LastHeartbeatAt, w.Classes,
+            support[w.InstanceId].Select(s => new StageVersion(s.NodeType, s.TypeVersion)).ToList())).ToList();
     }
 
     /// <summary>
