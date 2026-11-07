@@ -421,8 +421,10 @@ public static class SourceRules
             {
                 _ = new Regex(pattern[3..], RegexOptions.NonBacktracking | RegexOptions.CultureInvariant, PatternTimeout);
             }
-            catch (ArgumentException ex)
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
             {
+                // NotSupportedException: a construct the non-backtracking engine lacks (lookarounds, backreferences, atomic
+                // groups), which the worker would refuse too (#476).
                 throw Invalid($"{path}/{i}", "the regular expression does not compile: " + ex.Message);
             }
         }

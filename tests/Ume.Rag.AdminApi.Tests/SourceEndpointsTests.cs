@@ -157,6 +157,13 @@ public sealed class SourceEndpointsTests(AdminDatabaseFixture database)
             .ShouldBe("source_settings_invalid");
         (await Refused(new { type = "url-list", name = "A", classification = "internal", settings = UrlList("https://a.se/x", "https://a.se/x") }, "settings.urls"))
             .ShouldBe("source_settings_invalid");
+        // #476: re: patterns run on the non-backtracking engine, which lacks lookarounds, backreferences and atomic groups.
+        foreach (var unsupported in new[] { "re:^/(?=a)a", @"re:^/(a)\1", "re:^/(?>a+)b" })
+        {
+            (await Refused(new { type = "crawl", name = "A", classification = "internal", settings = new { startUrls = new[] { "https://a.se/" }, include = new[] { unsupported } } },
+                "settings.include.0")).ShouldBe("source_settings_invalid");
+        }
+
         (await Refused(new { type = "url-list", name = "A", classification = "sensitive", settings = UrlList("https://a.se/x") }, "classification"))
             .ShouldBe("source_above_collection");
         (await Refused(new { type = "url-list", name = "A", classification = "internal", settings = UrlList("https://a.se/x"), containsThirdPartyText = false }, "containsThirdPartyText"))
